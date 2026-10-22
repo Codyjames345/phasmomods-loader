@@ -4,8 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
-#include <iterator>
 #include <map>
 #include <random>
 #include <unordered_map>
@@ -70,8 +68,6 @@ constexpr ULONGLONG kRoomMs = 2000;        // a still flame's room is looked up 
 constexpr float kRoomMove = 0.25f;         // metres a flame moves before its room is looked up again
 constexpr float kShowStep = 0.004f;        // blueness change worth redrawing
 constexpr int kMaxDepth = 8;               // how deep a flame's objects are searched for its renderers
-constexpr ULONGLONG kReportMs = 5000;      // the host's flame report in mods.log (FINDINGS 20)
-constexpr int kReportFlames = 12;          // lit flames listed per report
 
 struct Color {
   float r, g, b, a;
@@ -190,7 +186,7 @@ std::vector<Flame> g_flames;
 std::vector<Look> g_looks;
 std::vector<Candelabra> g_candelabras;
 std::vector<Grey> g_greys;
-ULONGLONG g_nextScan = 0, g_nextSend = 0, g_lastHeard = 0, g_nextReport = 0;
+ULONGLONG g_nextScan = 0, g_nextSend = 0, g_lastHeard = 0;
 std::unordered_map<int, float> g_heard;  // view id -> blueness, from the host's last message
 std::unordered_map<void*, float> g_candleBlue;  // Candle -> its bluest flame, for the sanity detour
 std::mt19937 g_random{std::random_device{}()};
@@ -319,7 +315,8 @@ void* own_texture(void* texture) {
 void paint(const Tinted& t, float blueness) {
   if (!alive(t.material)) return;
   const Rgb warm{t.warm.r, t.warm.g, t.warm.b};
-  const FlameColours stops = flame_colours(g_green);
+  const bool lantern = t.property == api.lanternTint || t.property == api.lanternBase;
+  const FlameColours stops = lantern ? lantern_colours(g_green) : flame_colours(g_green);
   const Rgb c = tint(warm, stops.pale, stops.deep, blueness);
   const Color out{c.r, c.g, c.b, t.warm.a};
   api.setColor(t.material, t.property, &out);
@@ -593,8 +590,6 @@ struct GhostNow {
   int state = -1;
   bool calm = false;
   bool hasEvidence = false;
-  int given[8]{};  // the evidence the ghost gives, as the difficulty left it
-  int givenCount = 0;
 };
 
 GhostNow ghost_now(void* level) {
@@ -606,64 +601,15 @@ GhostNow ghost_now(void* level) {
   g.room = il2cpp::field<void*>(level, kLevelGhostRoom);
   void* info = il2cpp::field<void*>(ai, kAiInfo);
   auto* given = alive(info) ? il2cpp::field<il2cpp::List*>(info, kInfoEvidence) : nullptr;
-  for (int i = 0; given && given->items && i < given->size; ++i) {
-    const int evidence = given->items->data<int>()[i];
-    g.hasEvidence |= evidence == kEvidence;
-    if (g.givenCount < static_cast<int>(std::size(g.given))) g.given[g.givenCount++] = evidence;
-  }
+  for (int i = 0; given && given->items && i < given->size; ++i) g.hasEvidence |= given->items->data<int>()[i] == kEvidence;
   return g;
 }
 
 bool placed(const Flame& f) { return f.kind == Kind::Candelabra || il2cpp::field<bool>(f.candle, kEquipmentPlaced); }
 
-int room_index(void* level, void* room) {
-  auto* rooms = il2cpp::field<il2cpp::Array*>(level, kLevelRooms);
-  for (uintptr_t i = 0; room && rooms && i < rooms->max_length; ++i)
-    if (rooms->data<void*>()[i] == room) return static_cast<int>(i);
-  return -1;
-}
-
-const char* kind_name(Kind kind) {
-  switch (kind) {
-    case Kind::Tier2: return "tier 2";
-    case Kind::Tier3: return "tier 3";
-    case Kind::Candelabra: return "candelabra";
-    case Kind::Tier1:
-    default: return "tier 1";
-  }
-}
-
-// What the host sees every few seconds while a flame set down is burning, so mods.log shows which
-// step stops a flame turning blue: the ghost's room and state, the evidence it gives, whether its
-// flames turn green, and each such flame's room and blueness. Until FINDINGS 20 is closed; quiet
-// otherwise.
-void report(void* level, const GhostNow& ghost, ULONGLONG now) {
-  if (now < g_nextReport) return;
-  int lit = 0;
-  for (const Flame& f : g_flames) lit += il2cpp::field<bool>(f.fire, kFireLit) && placed(f) ? 1 : 0;
-  if (!lit) return;
-  g_nextReport = now + kReportMs;
-  char given[48] = "";
-  for (int i = 0, n = 0; i < ghost.givenCount && n < static_cast<int>(sizeof given); ++i)
-    n += std::snprintf(given + n, sizeof given - n, i ? ",%d" : "%d", ghost.given[i]);
-  auto* sources = il2cpp::field<il2cpp::List*>(level, kLevelFireSources);
-  PG_LOG("flames: ghost in room %d, state %d (calm %d), gives [%s] (flame %d, green %d); %zu flames (%d set down and lit) of %d fire sources, %zu candelabras",
-         room_index(level, ghost.room), ghost.state, ghost.calm, given, ghost.hasEvidence, g_green, g_flames.size(), lit,
-         sources ? sources->size : -1, g_candelabras.size());
-  int listed = 0;
-  for (Flame& f : g_flames) {
-    if (!il2cpp::field<bool>(f.fire, kFireLit) || !placed(f)) continue;
-    if (listed++ == kReportFlames) break;
-    PG_LOG("flames:   %s flame %d: placed %d, in room %d, ghost time %.0f%%, %.0f%% blue, burns %.0fs more, %zu materials",
-           kind_name(f.kind), f.view, placed(f), room_index(level, room_of(f, level, now)), f.ghostTime * 100,
-           f.blueness * 100, il2cpp::field<float>(f.candle, kCandleRemaining), f.materials.size());
-  }
-}
-
 void host_step(void* level, float dt, ULONGLONG now) {
   const GhostNow ghost = ghost_now(level);
   g_givesFlame = ghost.hasEvidence;
-  report(level, ghost, now);
   std::uniform_real_distribution<float> roll(0.0f, 1.0f);
   for (Flame& f : g_flames) {
     Inputs in;

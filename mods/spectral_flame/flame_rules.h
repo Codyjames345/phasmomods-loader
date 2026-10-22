@@ -150,9 +150,27 @@ struct FlameColours {
   Rgb deep;
 };
 
-/** A flame's stops: blue, or the Hydra's greens (`green`). The same for candles and the lantern. */
+/** A candle flame's stops: blue, or the Hydra's greens (`green`). */
 inline FlameColours flame_colours(bool green) {
   return green ? FlameColours{kFlamePaleGreen, kFlameDeepGreen} : FlameColours{kFlamePale, kFlameDeep};
+}
+
+// A candle's grey sprite shows its body at about half its tint's linear light (its core 0.85, its rim
+// 0.2), and a light is matched to that body. The lantern's flame ("Lantern Flame": noise between its
+// two colours, no sprite) shows its colours at full strength, where ACES washes a pale stop out: the
+// pale green a grey mint, the pale blue all but white. So a lantern takes the candle's stops at the
+// body's linear light, and shows as a candle flame's body does.
+constexpr float kCandleBody = 0.5f;
+
+/** A colour as set on a material, at `k` times its linear light. */
+inline Rgb dimmed(Rgb c, float k) {
+  return {to_gamma(to_linear(c.r) * k), to_gamma(to_linear(c.g) * k), to_gamma(to_linear(c.b) * k)};
+}
+
+/** A lantern flame's stops, blue or the Hydra's greens: on screen, a candle flame's body. */
+inline FlameColours lantern_colours(bool green) {
+  const FlameColours candle = flame_colours(green);
+  return {dimmed(candle.pale, kCandleBody), dimmed(candle.deep, kCandleBody)};
 }
 
 /** A light's stops for its brightness `b`: blue, or the Hydra's greens, as its flame shows them. */

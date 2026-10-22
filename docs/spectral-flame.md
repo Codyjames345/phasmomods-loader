@@ -1,7 +1,8 @@
 # Spectral Flame
 
-Status: in development. The code is the authority on what is implemented; `FINDINGS.md` lists what
-has not run in the game yet. Design: `docs/superpowers/specs/2026-10-20-spectral-flame-design.md`.
+Status: tested in the game (2026-10-23): candles, lanterns and candelabras, flame ghosts, vanilla
+ghosts and the Hydra's greens, hidden evidence included. The code is the authority on what is
+implemented. Design: `docs/superpowers/specs/2026-10-20-spectral-flame-design.md`.
 
 An eighth evidence type, a separate mod of the suite (`mods/spectral_flame`). A candle or lantern
 left burning where the ghost spends its time slowly turns blue. It tells investigators where the
@@ -25,12 +26,14 @@ which requires this mod. Otherwise nothing changes: no journal row, no blue, no 
 | Blow-outs | A ghost that gives Spectral Flame cannot blow out a flame set down until it has been fully blue, so nothing interrupts the test; afterwards it may, though the flame has faded a little since, and while fully blue it also blows it out now and then (about once every 75 s). Picking the flame up or putting it out starts the test over. Other ghosts blow candles out as the game's do, so a flame blown out before it has been fully blue rules Spectral Flame out, as a thrown writing book rules out Ghost Writing. |
 
 The flame turns hotter as it goes: from its own yellow-white to white-hot, then a pale sky blue at
-the false positive's limit, then a deep blue, the same for candles and the lantern. The whole flame
+the false positive's limit, then a deep blue, the same on screen for candles and the lantern. The whole flame
 takes the colour, tip and base too. The game's candle flame picture is itself orange and yellow
 around a white core, so no tint could turn it blue; in a contract where Spectral Flame can be given,
 every candle flame shows a grey copy of that picture from the start instead, tinted so it looks as
 the game's own does (on screen within a few levels of 255 from core to base), and the colour then
-tints it evenly. The lantern's flame blends two colours of its own, and both turn. The glow at the
+tints it evenly. The lantern's flame blends two colours of its own, and both turn; it has no
+picture to darken them, so it takes each colour at half the light, the brightness of a candle
+flame's body, or its pale stop would wash out to a grey mint or an all but white blue. The glow at the
 top of a Tier 1 or Tier 2 candle's wax turns with its flame.
 
 The colours are chosen through the game's own picture pipeline (its colour space, Unity's colour

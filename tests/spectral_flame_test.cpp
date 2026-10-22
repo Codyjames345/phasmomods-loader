@@ -269,17 +269,25 @@ void a_flame_goes_pale_at_half_and_deep_blue_at_full() {
   CHECK(near(hot.r, hot.g) && near(hot.g, hot.b) && saturation(on_screen(hot, 0.5f)) < 0.02f);  // white-hot
 }
 
-void a_lantern_goes_through_the_same_colours() {
-  // Both its colours, from the lantern's own: the same stops as a candle's, so the same on screen.
+void a_lantern_shows_what_a_candle_flame_shows() {
+  // Its "Lantern Flame" shader has no sprite: it shows its colours at full strength, where a candle's
+  // grey sprite shows its body at half. With the candle's own stops its pale green showed a grey mint
+  // (188, 238, 204), as in the user's screenshot, and its pale blue all but white.
   for (bool green : {false, true}) {
-    const FlameColours stops = flame_colours(green);
+    const FlameColours candle = flame_colours(green), stops = lantern_colours(green);
+    CHECK(saturation(on_screen(candle.pale, 1)) < 0.25f);  // the problem
     for (Rgb own : {kLanternTint, kLanternBase}) {
+      // Both its colours, from the lantern's own, through the same stops.
       CHECK(same(tint(own, stops.pale, stops.deep, 0), own));
       CHECK(same(tint(own, stops.pale, stops.deep, kFalseCap), stops.pale));
       CHECK(same(tint(own, stops.pale, stops.deep, 1), stops.deep));
       const Rgb hot = tint(own, stops.pale, stops.deep, kFalseCap / 2);
       CHECK(near(hot.r, hot.g) && near(hot.g, hot.b));
     }
+    // On screen each stop is a candle flame's body, the colour its light was matched to.
+    CHECK(same(on_screen(stops.pale, 1), on_screen(candle.pale, kCandleBody)));
+    CHECK(same(on_screen(stops.deep, 1), on_screen(candle.deep, kCandleBody)));
+    CHECK(saturation(on_screen(stops.pale, 1)) > 0.35f && saturation(on_screen(stops.deep, 1)) > 0.95f);
   }
 }
 
@@ -455,7 +463,7 @@ int main() {
   inert_without_a_carrier();
   the_model_shows_the_games_own_flames();
   a_flame_goes_pale_at_half_and_deep_blue_at_full();
-  a_lantern_goes_through_the_same_colours();
+  a_lantern_shows_what_a_candle_flame_shows();
   a_light_shows_its_flames_colour();
   the_hydras_flame_burns_green();
   a_grey_texel_keeps_its_brightness_and_alpha();
