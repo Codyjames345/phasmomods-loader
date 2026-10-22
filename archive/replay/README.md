@@ -20,7 +20,7 @@ planned but not started:
 The code here is the 2D version, kept as it was and not built. It has never run inside the game;
 only its offline tests (`tests/replay_test.cpp`) have run. Its live checks were:
 
-> In the phasmomods-loader repository, play a private contract with Replay on every
+> In this repository, play a private contract with Replay on every
 > client and make something happen: a hunt that catches someone, a near miss, a crucifix burn. Back
 > in the lobby check mods.log for "replay: contract over, N frames, M moments" on the host and that
 > every client shows the panel about ten seconds later, with the right floor's rooms, moving dots,

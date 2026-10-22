@@ -88,7 +88,7 @@ bool fail(const char* reason) {
   return true;
 }
 
-/** Log a control's state and ancestry, for checking placement from pg.log alone. */
+/** Log a control's state and ancestry, for checking placement from mods.log alone. */
 void describe_control(const char* label, void* toggle) {
   if (!diagnostics.available || !game::alive(toggle)) {
     PG_LOG("lobby: %s inspection unavailable (object=%p)", label, toggle);

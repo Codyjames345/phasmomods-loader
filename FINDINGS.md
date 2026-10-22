@@ -43,7 +43,7 @@ reports an entry whose problem is already gone.
   fix belongs with the other null-local-Player cases (senses.cpp's VoiceVolume hook).
 
   Prompt:
-  > In PlayableGhost, the ghost player's client has no local Player (mods/playable_ghost/body.cpp:214
+  > In this repository, the ghost player's client has no local Player (mods/playable_ghost/body.cpp:214
   > clears Network+0x28), and LightningController.PlayLightningNetworked (GameAssembly RVA 0x2319F40,
   > decompile it with re\decomp.mjs) throws a NullReferenceException on it in heavy rain. Confirm it in
   > a heavy-rain contract with a ghost player (the game log shows the exception at each strike), then
@@ -66,7 +66,7 @@ reports an entry whose problem is already gone.
   because it rewrites Custom Ghosts files that other sessions were changing at the time.
 
   Prompt:
-  > In PlayableGhost, move these helpers into core and use them from every mod: distance_to_room
+  > In this repository, move these helpers into core and use them from every mod: distance_to_room
   > (mods/custom_ghosts/behaviour.cpp, mods/ghost_tells/world.cpp), the LevelController +0x50 room list
   > and room-at-point lookup (mods/custom_ghosts/kikimora.cpp, mods/ghost_tells/world.cpp), the running
   > placed-video-camera scan and its view test (mods/custom_ghosts/brownie.cpp, mods/ghost_tells/goryo.cpp),
@@ -120,7 +120,7 @@ reports an entry whose problem is already gone.
   asks the ghost-tells service).
 
   Prompt:
-  > In PlayableGhost, test in Phasmophobia build 25811160 with Ghost Tells on every client (two
+  > In this repository, test in Phasmophobia build 25811160 with Ghost Tells on every client (two
   > clients, private lobby), on a custom difficulty that forces each of the six
   > ghosts in turn (Spirit, Mare, Shade, Yurei, Goryo, Onryo). Check mods.log for "GhostTells: on for
   > this contract" and each ghost's lines (spirit:, mare:, shade:, yurei:, goryo:, onryo:). Spirit:
@@ -165,7 +165,7 @@ reports an entry whose problem is already gone.
   up to a second) may log a NullReferenceException.
 
   Prompt:
-  > In PlayableGhost, test in Phasmophobia build 25811160 with Spectral Flame and Custom Ghosts on
+  > In this repository, test in Phasmophobia build 25811160 with Spectral Flame and Custom Ghosts on
   > every client (two clients, private lobby). Open a journal's Ghosts tab: all 45 ghosts must show in
   > three columns with no overlap. In Custom 1, step through the Ghost Type option: all 45 ghosts
   > must come in alphabetical order (Asterion first, Black Shuck after Banshee, Yurei last). Pick a
@@ -234,7 +234,7 @@ reports an entry whose problem is already gone.
   - The journal's ghost page and the Ghosts tab's list with 45 entries: every name fits its button.
 
   Prompt:
-  > In PlayableGhost, play private contracts in Phasmophobia build 25811160 with Spectral Flame and
+  > In this repository, play private contracts in Phasmophobia build 25811160 with Spectral Flame and
   > Custom Ghosts on every client (two clients), forcing each flame ghost in turn (custom difficulty,
   > or Playable Ghost's pick). For each, check its strength, weakness and tell as docs/custom-ghosts.md
   > describes, and mods.log for each module's "resolve ok" and its own lines. Fix what differs, and
@@ -252,7 +252,7 @@ reports an entry whose problem is already gone.
   method is found the same way, in a live session.
 
   Prompt:
-  > In PlayableGhost, add an offline check that every (class, method, argument count) the host and the
+  > In this repository, add an offline check that every (class, method, argument count) the host and the
   > mods resolve through il2cpp::method_ptr / il2cpp::method (core/il2cpp.h) exists in re/names.tsv,
   > the method table of the supported game build. Decide whether to scan the sources for the literal
   > calls or to record the lookups each test's fake receives; overloads by argument count must match.
@@ -317,7 +317,7 @@ reports an entry whose problem is already gone.
   a true one in everything), so a Tier 1 turns fully blue in about 120 / (3p − 1) s of real time.
 
   Prompt:
-  > In PlayableGhost, play private contracts in Phasmophobia build 25811160 with Spectral Flame and
+  > In this repository, play private contracts in Phasmophobia build 25811160 with Spectral Flame and
   > Custom Ghosts on every client (two clients), a custom difficulty giving 3 evidence, the ghost type
   > forced to a flame ghost (Draugr, Kikimora or Brownie), then a vanilla ghost. With mods.log's
   > "flames:" report: a Tier 1 Firelight set down in the ghost room turns white-hot, pale sky blue
@@ -341,7 +341,7 @@ reports an entry whose problem is already gone.
   the scene file and decompiled code.
 
   Prompt:
-  > In PlayableGhost, play through host/mods_panel.cpp, host/menu_panel.cpp, host/consent.cpp and
+  > In this repository, play through host/mods_panel.cpp, host/menu_panel.cpp, host/consent.cpp and
   > host/join_guard.h in Phasmophobia build 25811160 with two clients. Check: the notice appears as the
   > game's pinned popup over the main menu; the Mods tape sits where News would and opens the panel;
   > switching a mod and Apply restarts the mods (mods.log: "restarting the mods", each mod stopped and
@@ -360,7 +360,7 @@ reports an entry whose problem is already gone.
   switches those actions back on by itself.
 
   Prompt:
-  > In the phasmomods-loader repository, die in a private contract with Afterlife running.
+  > In this repository, die in a private contract with Afterlife running.
   > Check the hint, hold Crouch: the view is the ghost's, turning with it; you cannot move or touch
   > anything. Hold Crouch again: you are back where you were, and for a minute the hint counts down and
   > nothing can be picked up or thrown; afterwards you can. Check mods.log for "afterlife: haunting
@@ -382,7 +382,7 @@ reports an entry whose problem is already gone.
   is under their Player object.
 
   Prompt:
-  > In the phasmomods-loader repository, play the ghost in a private contract as a Kormos,
+  > In this repository, play the ghost in a private contract as a Kormos,
   > a Deogen, a Dayan, a Raiju and a Yokai in turn (pick the type), and check each sense against what
   > the ghost should know; then as a Mimic pick copies with Crouch and check the copy changes when the
   > game's timer fires. With an investigator, use a crucifix, salt, the music box, a tarot card, the
@@ -400,7 +400,7 @@ reports an entry whose problem is already gone.
   checks do not know. A review of the custom ghosts found it; it was not traced to a visible fault.
 
   Prompt:
-  > In the phasmomods-loader repository, find the listeners of the UnityEvent that
+  > In this repository, find the listeners of the UnityEvent that
   > GhostInfo.SyncValuesNetworked invokes (decompile with re/decomp.mjs) and check whether any reads the
   > behaviour type (+0x2C). If one does, set the behaviour type before calling the original (and keep
   > GetFullEvidence working, which needs the custom entry in the collection), then test a custom ghost.
@@ -427,7 +427,7 @@ reports an entry whose problem is already gone.
   again should no longer break scent), and whether baths and showers are Sinks at all is unknown.
 
   Prompt:
-  > In the phasmomods-loader repository, run a private contract where every client runs
+  > In this repository, run a private contract where every client runs
   > Custom Ghosts, with a custom type (pick it as the playable ghost). Check mods.log for "registry:
   > 5 custom ghosts added" and "pages: custom ghosts added to a journal" on each client; open the
   > journal: 35 ghost buttons in alphabetical order that fit the page, Ghosts-tab entries that open
@@ -454,7 +454,7 @@ reports an entry whose problem is already gone.
   mod channels on event 197, presence announcements, the launcher's mod list and session file.
 
   Prompt:
-  > In the phasmomods-loader repository, build, open dist\PhasmoMods\ModLauncher.exe,
+  > In this repository, build, open dist\PhasmoMods\ModLauncher.exe,
   > tick Playable Ghost and attach to a running game at the main menu. Check in
   > %LOCALAPPDATA%\PhasmoMods\mods.log: "ModHost active", "mods: loaded playable-ghost", the
   > banner covering the menu with clicks not reaching it, "consent: agreed" after I agree, then
@@ -473,7 +473,7 @@ reports an entry whose problem is already gone.
   game's Controls_Torch text; the key falls back to T.
 
   Prompt:
-  > In PlayableGhost, host a contract as the ghost player in a private lobby and watch
+  > In this repository, host a contract as the ghost player in a private lobby and watch
   > %LOCALAPPDATA%\PhasmoMods\mods.log. Check: "native roll granted" lines appear for each kind
   > (interaction, event, ability, fuse box) and native interactions stop while you act; a hunt is
   > offered only after a passed roll and is withdrawn at the next hunt check; you can move only
@@ -492,7 +492,7 @@ reports an entry whose problem is already gone.
   is redrawn mid-contract among the remaining volunteers.
 
   Prompt:
-  > In PlayableGhost mods/playable_ghost/session.cpp, a new master after migration has inRound_ == false even when a
+  > In mods/playable_ghost/session.cpp, a new master after migration has inRound_ == false even when a
   > contract is running (start_round is master-only, called from mods/playable_ghost/round.cpp tick). Make the
   > inherited contract state known to every client (for example from the ASSIGN or LOCK messages or
   > a LevelController check) so draw_ghost never runs mid-contract, and add a session test where the
@@ -522,7 +522,7 @@ reports an entry whose problem is already gone.
   Player.log.
 
   Prompt:
-  > In PlayableGhost, mods/playable_ghost/round.cpp detour_spawn holds the native ghost spawn for up to kPickMs.
+  > In mods/playable_ghost/round.cpp, detour_spawn holds the native ghost spawn for up to kPickMs.
   > Run a contract with a ghost player, let the pick run its full 30 seconds, and read Player.log
   > for exceptions during that window. If any system throws per frame, find what it needs and
   > decide whether to shorten the hold or hold something narrower than the whole spawn.
@@ -537,7 +537,7 @@ reports an entry whose problem is already gone.
   less on harder ones.
 
   Prompt:
-  > In PlayableGhost mods/playable_ghost/reward.cpp, log mainReward and the difficulty multiplier at the end of a
+  > In mods/playable_ghost/reward.cpp, log mainReward and the difficulty multiplier at the end of a
   > contract on two different difficulties. If mainReward changes with the difficulty, base the
   > ghost payout on mainReward divided by the multiplier (or find the unscaled value) so
   > mods/playable_ghost/payout.h's inverse scaling holds; extend tests/payout_test.cpp to match.
@@ -552,7 +552,7 @@ reports an entry whose problem is already gone.
   also sends indices, which suggests the order is shared, but it is not verified.
 
   Prompt:
-  > In PlayableGhost, mods/playable_ghost/picker.cpp builds the room list from round::room_name(i) over
+  > In mods/playable_ghost/picker.cpp, the picker builds the room list from round::room_name(i) over
   > LevelController+0x50 and sends indices; mods/playable_ghost/round.cpp forces the host's roll to that index.
   > Confirm in game, on two clients, that index i names the same room on both (log the names). If
   > not, send room names and resolve them on the host instead.
