@@ -110,9 +110,8 @@ inline constexpr Ghost kGhosts[] = {
      "Between surges a Knell crawls at a third of its speed; run on its slow beat.", nullptr, nullptr},
     {kAsterion, "Asterion", {kWriting, kDots, kSpectralFlame},
      "The Minotaur of the labyrinth, by its own name. It makes a maze of any house it hunts in.",
-     "Every door an Asterion passes in a hunt slams shut behind it.",
-     "An Asterion cannot open a closed door; it must batter it down, loudly, and the door stays broken "
-     "open after.", nullptr, nullptr},
+     "A closed door never stops an Asterion for good: it batters it down, and the door stays broken open.",
+     "Battering a door down takes an Asterion a few seconds, and it can be heard far away.", nullptr, nullptr},
     {kTempest, "Tempest", {kSpiritBox, kUltraviolet, kSpectralFlame},
      "A storm spirit of the old weather lore. It moves with the lightning, and the wilder the night, the "
      "more often it strikes.",

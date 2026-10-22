@@ -191,7 +191,8 @@ reports an entry whose problem is already gone.
   - Hydra: the stripped model copies (apparition.cpp: scripts, colliders, rigidbodies and sounds
   destroyed before waking) render, animate from the copied Animator parameters and flicker with
   the real model; the smudge read at GhostAI+0xF8; the false heads' NavMeshAgents.
-  - Asterion: doors closed by Door+0xB0 against the leaf's local angle on HingeDoor+0x194's axis;
+  - Asterion: no door closes behind it; each closed door in its way costs it 3 s and stays jammed
+  open. Doors closed by Door+0xB0 against the leaf's local angle on HingeDoor+0x194's axis;
   GhostForceDoor leaves UV prints only for a ghost with Ultraviolet (the game's check is assumed);
   CreateDoorSlamNoise as the bang; DisableOrEnableDoor(false) keeps a jammed door open; the leaf
   Rigidbody's worldCenterOfMass is the middle of the leaf (a door is in its way when its heading

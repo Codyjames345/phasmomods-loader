@@ -2,13 +2,12 @@
 
 #include <cmath>
 
-// The Asterion's rules for one door, kept free of game calls so they can be tested offline. In a hunt
-// every door it passes slams shut behind it; a closed door in its way stops it while it batters the
-// door for a few seconds, then bursts it open, and that door stays jammed open for the contract.
+// The Asterion's rules for one door, kept free of game calls so they can be tested offline. It never
+// closes a door; a closed door in its way stops it while it batters the door for a few seconds, then
+// bursts it open, and that door stays jammed open for the contract.
 namespace pg::custom {
 
 constexpr float kAsterionReach = 1.1f;     // metres from the middle of a door's leaf: the door is in reach
-constexpr float kAsterionPassed = 1.8f;    // metres: a door it was at and has left behind
 constexpr float kAsterionBatter = 3.0f;    // seconds of battering before the door gives way
 constexpr float kAsterionBang = 0.6f;      // seconds between bangs
 constexpr float kAsterionClosedAngle = 12; // degrees from the door's closed angle still counted closed
@@ -40,12 +39,11 @@ inline bool door_ahead(float hx, float hz, float cx, float cz, float wx, float w
          std::fabs(hx * wx + hz * wz) < kAsterionAcross * speed * width;
 }
 
-enum class DoorAction { None, Bang, Burst, Slam };
+enum class DoorAction { None, Bang, Burst };
 
 struct DoorTrack {
   enum class State { Free, Battering, Jammed } state = State::Free;
-  bool reached = false;  // in this hunt it came within reach of the door
-  float battered = 0;    // seconds of battering so far
+  float battered = 0;  // seconds of battering so far
   int bangs = 0;
 
   /**
@@ -56,7 +54,6 @@ struct DoorTrack {
     if (state == State::Jammed) return DoorAction::None;
     if (!hunting) {
       state = State::Free;
-      reached = false;
       battered = 0;
       bangs = 0;
       return DoorAction::None;
@@ -81,12 +78,6 @@ struct DoorTrack {
         bangs = 1;
         return DoorAction::Bang;
       }
-      reached = true;
-      return DoorAction::None;
-    }
-    if (reached && distance >= kAsterionPassed) {
-      reached = false;
-      return closed ? DoorAction::None : DoorAction::Slam;
     }
     return DoorAction::None;
   }

@@ -135,16 +135,15 @@ void the_flame_ghost_messages_round_trip() {
   CHECK(net_msg::kind_of(viewing.data(), viewing.size()) == net_msg::kViewing);
 }
 
-void the_asterion_slams_and_batters_doors() {
+void the_asterion_batters_doors() {
   CHECK(std::fabs(delta_angle(350, 10) - 20) < 0.001f && std::fabs(delta_angle(10, 350) + 20) < 0.001f);
   CHECK(door_closed(91, 90) && door_closed(-5, 355) && !door_closed(140, 90));
-  // Passing an open door: it slams shut once the ghost has left it behind.
+  // Passing an open door: it leaves it alone, now and once it has left it behind.
   DoorTrack open;
   CHECK(open.step(true, 3, false, true, 0.1f) == DoorAction::None);
   CHECK(open.step(true, 0.8f, false, true, 0.1f) == DoorAction::None);
-  CHECK(open.step(true, 1.5f, false, false, 0.1f) == DoorAction::None);
-  CHECK(open.step(true, 2.0f, false, false, 0.1f) == DoorAction::Slam);
-  CHECK(open.step(true, 2.5f, true, false, 0.1f) == DoorAction::None);  // once
+  CHECK(open.step(true, 2.0f, false, false, 0.1f) == DoorAction::None);
+  CHECK(open.step(true, 2.5f, false, false, 0.1f) == DoorAction::None && !open.battering());
   // A closed door in its way: bangs every 0.6 s for 3 s, then bursts, then stays jammed open.
   DoorTrack shut;
   CHECK(shut.step(true, 1.0f, true, true, 0.1f) == DoorAction::Bang && shut.battering());
@@ -697,7 +696,7 @@ int main() {
   the_knell_moves_on_a_strict_beat();
   the_hydra_grows_heads();
   the_flame_ghost_messages_round_trip();
-  the_asterion_slams_and_batters_doors();
+  the_asterion_batters_doors();
   the_lithobolia_aims_true();
   the_lithobolia_only_throws_at_people();
   the_gremlin_leaves_watched_equipment_alone();

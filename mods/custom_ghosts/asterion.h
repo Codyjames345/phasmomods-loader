@@ -1,9 +1,9 @@
 #pragma once
 
 // The Asterion (asterion_rule.h) in the game, on the host: each hinged door but the front door is
-// tracked through its hunts. Doors it passes slam shut behind it (Door.GhostForceDoor); a closed door
-// in its way stops it while it batters it (the game's door slam noise, every client), then it forces
-// the door open and jams it so nobody can close it again. Main thread.
+// tracked through its hunts. It never closes a door; a closed door in its way stops it while it batters
+// it (the game's door slam noise, every client), then it forces the door open (Door.GhostForceDoor) and
+// jams it so nobody can close it again. Main thread.
 namespace pg::custom::asterion {
 
 bool resolve();

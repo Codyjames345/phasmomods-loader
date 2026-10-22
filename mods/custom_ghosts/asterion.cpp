@@ -138,10 +138,6 @@ void tick(void* ghost, int type) {
         t.nextForce = now + kKeepJammedMs;
         PG_LOG("asterion: a door is broken open");
         break;
-      case DoorAction::Slam:
-        api.forceDoor(t.door, false, -1, true, nullptr);
-        api.slamNoise(t.door, nullptr);
-        break;
       case DoorAction::None: break;
     }
     if (t.track.battering()) g.battering = true;
