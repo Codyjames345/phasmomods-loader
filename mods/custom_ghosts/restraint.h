@@ -9,7 +9,8 @@
 //  - Brownie: nothing while an investigator or a running video camera has it in view (brownie.h).
 //  - Tempest: lightning strikes as each of its events begins (tempest.h), through the same hook.
 //  - Bogeyman: its AI's hunts begin from a closet (bogeyman.h), through the same hook, and outside hunts
-//    most of its AI's door interactions near a closet are on the closet's door (GhostActivity.GetDoorToOpen).
+//    most of its AI's idle door interactions are on a closet door its door sensor detects, when there is
+//    one (GhostActivity.GetDoorToOpen).
 // The game's own AI is held back through GhostActivity.TryInteract and GhostAI.ChangeState; a player
 // controlling the ghost asks held_back() through the service (core/services.h) before acting.
 namespace pg::custom::restraint {

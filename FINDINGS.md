@@ -212,9 +212,11 @@ reports an entry whose problem is already gone.
   and every client sees it there. It goes for them when two are in sight: the game's own sight test
   (0x214BB40, called for each player through the trampoline) passes only the youngest of those it sees,
   leaving out those beyond 7 m in an open room, and the game's first-seen pick (0x214D480) then targets
-  them. Most of its door interactions are closets: GhostActivity.GetDoorToOpen (0x2005FC0) returns a
-  closet's door 3 in 4 times when one is within 4 m, and the game's door interaction (ChangeState(5) on
-  the door's PhotonObjectInteract, Door +0x98) opens or closes it, with prints.
+  them. Most of its door interactions are closets: when GhostActivity.GetDoorToOpen (0x2005FC0), called
+  from the idle door chance (0x2007C60, told apart by return address), has picked a door, 3 in 4 times
+  it returns instead a closet door that the door sensor (GhostActivity +0x20) detects, as Sensor.IsDetected
+  on the door's GameObject reports, and the game's door interaction (ChangeState(5) on the door's
+  PhotonObjectInteract, Door +0x98) opens or closes it, with prints.
   - Speed rules (behaviour.cpp, speed_rule.h): no speed blip every 2 s in any custom hunt (the base
   refresh detour); at 50% and 150% ghost speed and in Blood Moon each custom ghost's speed scales
   once, as a vanilla ghost's does.

@@ -2,6 +2,8 @@
 
 #include <windows.h>
 
+#include <intrin.h>
+
 #include <random>
 
 #include "echo.h"
@@ -16,6 +18,8 @@
 #include "lithobolia.h"
 #include "tempest.h"
 
+#pragma intrinsic(_ReturnAddress)
+
 namespace pg::custom::restraint {
 namespace {
 
@@ -25,9 +29,12 @@ constexpr int kStateHunting = 2;           // GhostAI.State: a hunt begins
 constexpr int kStateAppear = 8;            // GhostAI.State: it shows itself (an event)
 constexpr uintptr_t kTryThrowRva = 0x2701C50;  // Prop.TryThrow(bool, bool): the hunt state's throw (state 6 never reaches it)
 // GhostActivity.GetDoorToOpen(): a door its door sensor (+0x20) detects, at random, never the main door
-// (in a hunt only one marked at Door +0x82), or null. The idle roll's door chance (0x2007C60) then runs
-// ChangeState(5) on its PhotonObjectInteract (Door +0x98).
+// (in a hunt only one marked at Door +0x82), or null. Its callers: the idle door chance (0x2007C60, from
+// the sensor's pulse handlers after TryInteract), which runs ChangeState(5) on the door's
+// PhotonObjectInteract (Door +0x98); the hunt state (0x2147380, 0x2151D40); and an obfuscated copy of the
+// door chance with no call sites (0x20112A0).
 constexpr uintptr_t kGetDoorToOpenRva = 0x2005FC0;
+constexpr uintptr_t kDoorChanceRva = 0x2007C60, kDoorChanceLength = 0xF6;  // the idle door chance's code
 constexpr int kDormantSkipPercent = 75;    // the AI's interactions and events lost while the Echo is dormant
 
 using TryInteract_t = void (*)(void*, const void*);
@@ -60,13 +67,19 @@ void detour_try_interact(void* activity, const void* method) {
   g_tryInteract(activity, method);
 }
 
-// The door the AI's door interactions use (its idle roll's door chance; the hunt state asks too). Outside
-// hunts the Bogeyman's AI on the host often takes a closet's door instead (bogeyman.h closet_door), and the
-// game interacts with it as with any door it picks. A ghost player's aimed door stays theirs.
+// The door the game's door pick returns. When it is the Bogeyman's AI's idle door interaction on the host
+// (called from the door chance, outside hunts, nobody steering) and the pick found a door, 3 in 4 times
+// the ghost takes a closet door its door sensor detects instead (bogeyman.h closet_door), and the game
+// interacts with that as with any door it picks. No pick, another caller (the hunt state's), a ghost
+// player's aimed door or any other ghost: the game's own pick, unchanged. The caller is told apart by
+// return address, which holds while this is the only detour on GetDoorToOpen; behind another mod's
+// detour the address is that detour's, and the pick stays the game's.
 void* detour_get_door_to_open(void* activity, const void* method) {
   hooks::Guard guard;
+  const void* caller = _ReturnAddress();
   void* door = g_getDoorToOpen(activity, method);
-  if (g_ghost && g_type == kBogeyman && activity == game::ghost_activity(g_ghost) && game::is_master() && !g_steered &&
+  if (door && game::alive(door) && game::in_function(caller, kDoorChanceRva, kDoorChanceLength) && g_ghost &&
+      g_type == kBogeyman && activity == game::ghost_activity(g_ghost) && game::is_master() && !g_steered &&
       game::ghost_state(g_ghost) != kStateHunting)
     if (void* closet = bogeyman::closet_door(g_ghost)) return closet;
   return door;

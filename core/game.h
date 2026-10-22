@@ -112,6 +112,12 @@ void* ghost_state_object(void* ghostAi);  // current IState (GhostAI+0x28 machin
  * player: the call vanilla Footstep.OnEnable makes for the local player. False for null or dead.
  */
 bool ghost_sees(void* ghostAi, void* player);
+/**
+ * Whether a SensorToolkit sensor detects this GameObject now (Sensor.IsDetected): whether it is one of the
+ * sensor's signal objects, the objects Sensor.GetDetectedComponents<T> reads its components from. False for
+ * null or destroyed.
+ */
+bool sensor_detects(void* sensor, void* gameObject);
 Vector3 agent_destination(void* agent);
 void start_coroutine(void* behaviour, void* routine);  // MonoBehaviour.StartCoroutine(IEnumerator)
 bool any_players_in_room(void* levelRoom);            // LevelRoom.AnyPlayersInRoom

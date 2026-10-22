@@ -30,6 +30,7 @@ constexpr size_t kHuntTarget = 0x48;         // hunt state: the player it has de
 constexpr size_t kPlayerCloset = 0x30;       // Player: the ClosetZone they hide in, or null
 constexpr size_t kDoorKind = 0x108;          // Door: None 0, Main 1, Secondary 2, PermanentLock 3
 constexpr int kMainDoor = 1;                 // GhostActivity.GetDoorToOpen never picks the main door
+constexpr size_t kActivityDoorSensor = 0x20; // GhostActivity: the RangeSensor its door pick reads (TryInteract pulses it)
 constexpr uintptr_t kCheckClosetRva = 0x262DE80;  // ClosetZone.CheckCloset()
 constexpr uintptr_t kForceDoorRva = 0x264C3C0;    // Door.GhostForceDoor(bool open, float strength, bool skipRattle)
 // NavMesh.SamplePosition(Vector3 source, out NavMeshHit hit, float maxDistance, int areaMask): the game's own
@@ -244,14 +245,16 @@ void tick(void* ghost, int type, bool steered) {
 bool in_open_room() { return g.open; }
 
 void* closet_door(void* ghost) {
-  if (!api.ok || !ghost) return nullptr;
-  const Vector3 at = game::position(game::transform_of(ghost));
-  std::vector<void*> doors;
+  void* activity = api.ok && ghost ? game::ghost_activity(ghost) : nullptr;
+  void* sensor = activity ? il2cpp::field<void*>(activity, kActivityDoorSensor) : nullptr;
+  if (!sensor) return nullptr;
+  std::vector<void*> doors;  // the closet doors the game's own pick could have returned
   for (const Hiding& h : g.places) {
-    if (!h.closet || !game::alive(h.object.get()) || game::distance(at, {h.at.x, h.at.y, h.at.z}) > kBogeymanCreakReach) continue;
+    if (!h.closet || !game::alive(h.object.get())) continue;
     for (size_t side : {kClosetLeftDoor, kClosetRightDoor})
       if (void* door = il2cpp::field<void*>(h.object.get(), side);
-          door && game::alive(door) && il2cpp::field<int>(door, kDoorKind) != kMainDoor)
+          door && game::alive(door) && il2cpp::field<int>(door, kDoorKind) != kMainDoor &&
+          game::sensor_detects(sensor, game::game_object_of(door)))
         doors.push_back(door);
   }
   if (doors.empty() || std::uniform_real_distribution<float>(0, 1)(g_random) >= kBogeymanClosetDoorShare) return nullptr;

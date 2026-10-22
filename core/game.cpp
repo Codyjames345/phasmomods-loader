@@ -459,11 +459,12 @@ void* ghost_state_object(void* g) {
   void* machine = il2cpp::field<void*>(g, 0x28);
   return machine ? il2cpp::field<void*>(machine, 0x10) : nullptr;
 }
+bool sensor_detects(void* sensor, void* gameObject) {
+  return sensor && gameObject && alive(sensor) && alive(gameObject) && api.sensorIsDetected(sensor, gameObject, nullptr);
+}
 bool ghost_sees(void* ghostAi, void* player) {
   if (!alive(ghostAi) || !living(player)) return false;
-  void* sensor = il2cpp::field<void*>(ghostAi, kGhostVisionSensor);
-  void* go = alive(sensor) ? game_object_of(player) : nullptr;
-  return go && api.sensorIsDetected(sensor, go, nullptr);
+  return sensor_detects(il2cpp::field<void*>(ghostAi, kGhostVisionSensor), game_object_of(player));
 }
 Vector3 agent_destination(void* a) { return api.getDestination(a, nullptr); }
 

@@ -5,7 +5,7 @@
 // sight it walks to the hiding places (the game's ClosetZones and HidingSpots), nearest first, and
 // searches each closet as the game's own hunt does (ClosetZone.CheckCloset). In an open room it is slow
 // (behaviour.cpp) and drops prey beyond a short sight. Outside hunts most of its AI's door interactions
-// near a closet are on the closet's door.
+// are on a closet door, when its door sensor detects one.
 namespace pg::custom::bogeyman {
 
 bool resolve();
@@ -14,9 +14,10 @@ bool resolve();
 void tick(void* ghost, int type, bool steered);
 // It stands in an open room now (its speed falls there).
 bool in_open_room();
-// Its AI's door interaction outside hunts (restraint.cpp, GhostActivity.GetDoorToOpen): with a closet
-// within kBogeymanCreakReach, 3 in 4 times one of its doors (never a main door, as the game's own pick),
-// chosen at random; otherwise null, and the game's own pick stands.
+// Its AI's idle door interaction, once the game's own pick has found a door (restraint.cpp,
+// GhostActivity.GetDoorToOpen): 3 in 4 times, a closet door its door sensor (GhostActivity +0x20, the one the
+// game's pick reads) detects now, at random and never a main door, as the game's pick; null when it detects
+// none or the roll fails, and the game's own pick stands.
 void* closet_door(void* ghost);
 // Right after the game has begun its AI's hunt on the host (never a player's): it steps out of the closet
 // nearest the youngest player its hunt may go for, other than the one they hide in, when one lies on their

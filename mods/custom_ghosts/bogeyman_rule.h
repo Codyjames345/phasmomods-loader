@@ -9,7 +9,7 @@
 // closet nearest the youngest living player (lowest prestige, then lowest level), and in a hunt it goes
 // for the youngest of the players it sees. With nobody in sight it searches the hiding places, nearest
 // first, each once per hunt; in an open room it is slow and loses sight of its prey sooner. Outside
-// hunts, most of its door interactions near a closet are on the closet's door.
+// hunts, most of its door interactions are on a closet door when one is in reach.
 namespace pg::custom {
 
 constexpr float kBogeymanOpenArea = 30.0f;  // square metres of floor: a room this big is open
@@ -17,8 +17,7 @@ constexpr float kBogeymanOpenSpeed = 0.8f;  // times the game's hunt speed in an
 constexpr float kBogeymanOpenSight = 7.0f;  // metres: in an open room it loses prey farther than this
 constexpr float kBogeymanArrived = 0.8f;    // metres from a hiding place's spot: it searches it
 constexpr float kBogeymanGiveUp = 8.0f;     // seconds on one hiding place it cannot reach before the next
-constexpr float kBogeymanClosetDoorShare = 0.75f;  // of its door interactions with a closet within reach, the share on a closet door
-constexpr float kBogeymanCreakReach = 4.0f;   // metres from the ghost a closet may be for its door interactions
+constexpr float kBogeymanClosetDoorShare = 0.75f;  // of its door interactions with a closet door in reach, the share on one
 constexpr float kBogeymanLurkReach = 10.0f;   // metres from the chosen player a closet it starts a hunt from may be
 constexpr float kBogeymanSameFloor = 2.0f;    // metres of height between a closet and the player: on their floor
 
