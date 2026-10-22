@@ -1,0 +1,3 @@
+// The launcher's icon (tools/make_icon.ps1 draws it). Explorer shows the first icon in the file;
+// the window loads it by this id (kIcon in tools/launcher.cpp).
+1 ICON "launcher.ico"

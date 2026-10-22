@@ -1,0 +1,6 @@
+# Line endings are decided here rather than per machine, because core.autocrlf is a user
+# setting and would otherwise overrule the repository. Batch files keep CRLF, which
+# cmd.exe needs to parse labels reliably.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf

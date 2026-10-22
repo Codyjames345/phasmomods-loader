@@ -1,0 +1,5 @@
+{
+  "validate": "powershell -NoProfile -ExecutionPolicy Bypass -File ./validate.ps1",
+  "_citedHosts": "Documentation sites linked from docs/ and from the vendored MinHook README and workflow.",
+  "citedHosts": ["docs.unity3d.com", "docs.microsoft.com", "img.shields.io", "opensource.org", "www.codeproject.com"]
+}
