@@ -360,7 +360,7 @@ reports an entry whose problem is already gone.
   switches those actions back on by itself.
 
   Prompt:
-  > In PhasmoMods (the PlayableGhost source folder), die in a private contract with Afterlife running.
+  > In the phasmomods-loader repository, die in a private contract with Afterlife running.
   > Check the hint, hold Crouch: the view is the ghost's, turning with it; you cannot move or touch
   > anything. Hold Crouch again: you are back where you were, and for a minute the hint counts down and
   > nothing can be picked up or thrown; afterwards you can. Check mods.log for "afterlife: haunting
@@ -382,7 +382,7 @@ reports an entry whose problem is already gone.
   is under their Player object.
 
   Prompt:
-  > In PhasmoMods (the PlayableGhost source folder), play the ghost in a private contract as a Kormos,
+  > In the phasmomods-loader repository, play the ghost in a private contract as a Kormos,
   > a Deogen, a Dayan, a Raiju and a Yokai in turn (pick the type), and check each sense against what
   > the ghost should know; then as a Mimic pick copies with Crouch and check the copy changes when the
   > game's timer fires. With an investigator, use a crucifix, salt, the music box, a tarot card, the
@@ -400,7 +400,7 @@ reports an entry whose problem is already gone.
   checks do not know. A review of the custom ghosts found it; it was not traced to a visible fault.
 
   Prompt:
-  > In PhasmoMods (the PlayableGhost source folder), find the listeners of the UnityEvent that
+  > In the phasmomods-loader repository, find the listeners of the UnityEvent that
   > GhostInfo.SyncValuesNetworked invokes (decompile with re/decomp.mjs) and check whether any reads the
   > behaviour type (+0x2C). If one does, set the behaviour type before calling the original (and keep
   > GetFullEvidence working, which needs the custom entry in the collection), then test a custom ghost.
@@ -427,7 +427,7 @@ reports an entry whose problem is already gone.
   again should no longer break scent), and whether baths and showers are Sinks at all is unknown.
 
   Prompt:
-  > In PhasmoMods (the PlayableGhost source folder), run a private contract where every client runs
+  > In the phasmomods-loader repository, run a private contract where every client runs
   > Custom Ghosts, with a custom type (pick it as the playable ghost). Check mods.log for "registry:
   > 5 custom ghosts added" and "pages: custom ghosts added to a journal" on each client; open the
   > journal: 35 ghost buttons in alphabetical order that fit the page, Ghosts-tab entries that open
@@ -454,7 +454,7 @@ reports an entry whose problem is already gone.
   mod channels on event 197, presence announcements, the launcher's mod list and session file.
 
   Prompt:
-  > In PhasmoMods (the PlayableGhost source folder), build, open dist\PhasmoMods\ModLauncher.exe,
+  > In the phasmomods-loader repository, build, open dist\PhasmoMods\ModLauncher.exe,
   > tick Playable Ghost and attach to a running game at the main menu. Check in
   > %LOCALAPPDATA%\PhasmoMods\mods.log: "ModHost active", "mods: loaded playable-ghost", the
   > banner covering the menu with clicks not reaching it, "consent: agreed" after I agree, then
@@ -474,7 +474,7 @@ reports an entry whose problem is already gone.
 
   Prompt:
   > In PlayableGhost, host a contract as the ghost player in a private lobby and watch
-  > %LOCALAPPDATA%\PlayableGhost\pg.log. Check: "native roll granted" lines appear for each kind
+  > %LOCALAPPDATA%\PhasmoMods\mods.log. Check: "native roll granted" lines appear for each kind
   > (interaction, event, ability, fuse box) and native interactions stop while you act; a hunt is
   > offered only after a passed roll and is withdrawn at the next hunt check; you can move only
   > during a wander and within its reach; after losing a target in a hunt the search ends where
@@ -573,7 +573,7 @@ reports an entry whose problem is already gone.
   Prompt:
   > PlayableGhost (mods/playable_ghost/round.cpp, mods/playable_ghost/body.cpp, mods/playable_ghost/equipment.cpp, mods/playable_ghost/reward.cpp) has never run
   > through a complete contract inside Phasmophobia build 25811160. Play one contract as the ghost
-  > player and one as an investigator with a second client, watch %LOCALAPPDATA%\PlayableGhost\pg.log
+  > player and one as an investigator with a second client, watch %LOCALAPPDATA%\PhasmoMods\mods.log
   > and Player.log, and fix whatever the hooks get wrong. Check: the picker appears, the truck door
   > refuses to open with the popup until the pick ends, the house key appears in the truck for every
   > client, the ghost player's investigator is invisible to everyone and takes no part (left out of
