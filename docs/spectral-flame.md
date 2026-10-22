@@ -20,6 +20,7 @@ which requires this mod. Otherwise nothing changes: no journal row, no blue, no 
 | How fast | A fully blue flame takes 60 s of ghost time in its room (Tier 1 and candelabras), 50 s (Tier 2) or 40 s (Tier 3, the lantern). Whenever the ghost is away it drops back towards yellow at half that speed: fully blue to none in 120 s for a Tier 1. A ghost that spends p of its time in the room turns a Tier 1 flame fully blue in about 120 / (3p − 1) s of real time (under two minutes at 70%), and never below a third. |
 | The false positive | Any ghost turns a flame halfway, a pale washed-out blue, in the same time a true flame takes to turn fully blue, and no further. A false flame is half a true one in everything, fading included, so whatever the ghost does it is half as blue as a true flame would be: half a minute in, a true flame already looks the way a false one ends up, and players who know the speed can tell them apart before the minute is up. |
 | The evidence | Only a ghost that gives Spectral Flame takes a flame past the pale blue to a deep blue. Difficulty that hides evidence can hide it, as any other. |
+| The Hydra | Its flame turns green where any other ghost's turns blue, in the same time: pale green at the false positive's limit, and a deep green only when Spectral Flame is one of its given evidence. Where the difficulty withholds it (zero evidence included) the flame still stops at the pale green, so a pale green flame names the Hydra whatever the evidence. |
 | What it costs | A bluer flame is hotter and burns down faster, twice as fast at full blue, so candles spread through the house to find the ghost room cost the candles a test needs. A flame more than half blue no longer eases sanity drain as Firelight does. |
 | Blow-outs | A ghost that gives Spectral Flame cannot blow out a flame set down until it has been fully blue, so nothing interrupts the test; afterwards it may, though the flame has faded a little since, and while fully blue it also blows it out now and then (about once every 75 s). Picking the flame up or putting it out starts the test over. Other ghosts blow candles out as the game's do, so a flame blown out before it has been fully blue rules Spectral Flame out, as a thrown writing book rules out Ghost Writing. |
 
@@ -30,6 +31,12 @@ orange renders white. Every light on the candle and its flames follows its blues
 flame's own hue (a Tier 2 Firelight's own "Point light.1" included), so the walls take the same cold
 cast as the flame, visible from the doorway or on a video camera. The blue light is darker than the
 warm one, as a blue flame is: one bright enough to match would show as a pale cyan.
+
+For the Hydra the same path ends in green: white-hot, then a pale green at the limit, then a deep
+green. The game ships no green flame, so the deep green takes the hue of its D.O.T.S. green (the
+"DOTS Reveal" material, 0.098, 1, 0) at the deep blue's brightness, and the pale greens are the pale
+blues with their channels turned, as bright and as washed out, so players see the pale green as
+plainly not the pale blue. The lights on the walls turn green with it.
 
 ## The journal
 
@@ -50,4 +57,8 @@ It marks, crosses out and filters the ghost list like the others.
 * The ghost's evidence is the list the game kept for it after the difficulty removed evidence
   (`GhostInfo`, sent to every client by its `SyncEvidence`). A custom difficulty giving no evidence
   gives no Spectral Flame either.
+* Every client asks Custom Ghosts which ghost types turn a flame green (the service
+  `custom-ghosts.v1`, version 5, `greenFlame`), with the ghost's own type (`GhostInfo +0x28`, written
+  on every client by the ghost's sync), once a second; a flame already showing a colour is repainted
+  when the answer changes. Without Custom Ghosts every flame turns blue.
 * Other mods ask whether it can be given through the service `spectral-flame.v1` (`core/services.h`).

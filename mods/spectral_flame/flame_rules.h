@@ -16,7 +16,8 @@
 // little. Any ghost takes a flame to the false-positive cap, a pale blue; only a ghost that gives
 // Spectral Flame takes it beyond, to a deep blue. A false flame is half a true one in everything, so
 // it is always half as blue as a true flame would be: players who know the speed tell them apart
-// before the minute is up. A bluer flame is hotter and burns down faster.
+// before the minute is up. A bluer flame is hotter and burns down faster. The Hydra's flame turns
+// green instead, pale green at the cap, so it names the Hydra even where its evidence is withheld.
 namespace pg::flame {
 
 constexpr int kEvidence = 8;  // the game's evidence value for Spectral Flame (after D.O.T.S., 7)
@@ -102,6 +103,14 @@ constexpr Rgb kFlameDeep{0.03f, 0.18f, 1.3f};  // on screen, a deep blue
 constexpr Rgb kFlamePale{0.44f, 0.8f, 2};      // x the deep blue's brightness: on screen, a light sky blue
 constexpr Rgb kLightPale{0.55f, 0.7f, 1};      // x the light's own brightness
 
+// The Hydra's greens, where any other ghost's flame turns blue. The game ships no green flame, so the
+// deep green has the hue of its D.O.T.S. green ("DOTS Reveal" _UV_Color 0.098, 1, 0) at the deep
+// blue's brightness. The pale greens are the pale blues with their channels turned (blue to green,
+// green to red, red to blue), as bright and as washed out as the blues, and far from them on screen.
+constexpr Rgb kSpectralGreen{0.13f, 1.3f, 0};   // on screen, a deep green
+constexpr Rgb kFlamePaleGreen{0.8f, 2, 0.44f};  // x the deep colour's brightness: on screen, a pale green
+constexpr Rgb kLightPaleGreen{0.7f, 1, 0.55f};  // x the light's own brightness
+
 inline float brightness(Rgb c) { return std::max({c.r, c.g, c.b}); }
 inline Rgb scaled(Rgb c, float k) { return {c.r * k, c.g * k, c.b * k}; }
 
@@ -113,6 +122,25 @@ inline Rgb flame_pale(Rgb deep) { return scaled(kFlamePale, brightness(deep)); }
 /** A light's colours at the false-positive cap and at full blue, for its brightness `b`. */
 inline Rgb light_pale(float b) { return scaled(kLightPale, b); }
 inline Rgb light_deep(float b) { return scaled(kFlameDeep, b / brightness(kFlameDeep)); }
+
+/** The two stops a flame or light passes through: at the false-positive cap and at full. */
+struct FlameColours {
+  Rgb pale;
+  Rgb deep;
+};
+
+/** A flame's stops for a flame whose deep blue is `deep`: blue, or the Hydra's greens (`green`). */
+inline FlameColours flame_colours(Rgb deep, bool green) {
+  if (!green) return {flame_pale(deep), deep};
+  const float b = brightness(deep);
+  return {scaled(kFlamePaleGreen, b), scaled(kSpectralGreen, b / brightness(kSpectralGreen))};
+}
+
+/** A light's stops for its brightness `b`: blue, or the Hydra's greens at the flame's own hue. */
+inline FlameColours light_colours(float b, bool green) {
+  if (!green) return {light_pale(b), light_deep(b)};
+  return {scaled(kLightPaleGreen, b), scaled(kSpectralGreen, b / brightness(kSpectralGreen))};
+}
 
 /**
  * A flame or light colour at `blueness`, hotter as it goes: the warm colour itself at 0, white-hot

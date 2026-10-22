@@ -30,7 +30,7 @@ struct PgSpectralFlameService {
 // "custom-ghosts": the custom ghost types' own abilities, for a player controlling one.
 #define PG_SERVICE_CUSTOM_GHOSTS "custom-ghosts.v1"
 struct PgCustomGhostsService {
-  uint32_t version;  // 4
+  uint32_t version;  // 5
   // The ability of a ghost type, by its GhostType; null when it has none (or is not a custom type).
   const char* (*abilityName)(int type);
   const char* (*abilityDescription)(int type);
@@ -47,6 +47,9 @@ struct PgCustomGhostsService {
   // Version 4. Host only: the freshest points of the scent trails the Black Shuck follows in a hunt, as
   // x, y, z triples in `xyz` (room for maxPoints); returns how many were written.
   int (*scent)(float* xyz, int maxPoints);
+  // Version 5. Any client: a flame turns green instead of blue for a ghost of this type, by its
+  // GhostType (the Hydra), pale green at Spectral Flame's false-positive cap.
+  bool (*greenFlame)(int type);
 };
 
 // "ghost-tells": the new tells of six vanilla ghosts, for a player controlling one of them.

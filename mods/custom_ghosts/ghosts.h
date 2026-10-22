@@ -118,7 +118,7 @@ inline constexpr Ghost kGhosts[] = {
      "In a hunt a Tempest cannot be seen, except when lightning strikes; then it is very fast.",
      "Between strikes a Tempest is slow, and the clearer the night, the rarer its lightning.", nullptr, nullptr},
     {kHydra, "Hydra", {kOrbs, kDots, kSpectralFlame},
-     "The many-headed serpent: cut off one head and two grow back.",
+     "The many-headed serpent: cut off one head and two grow back. Its flame burns green.",
      "Smudge a Hydra in a hunt and it splits into apparitions, only one of them real; smudge it again "
      "and there are more.",
      "A Hydra's false heads are harmless and make no sound as they walk.", nullptr, nullptr},

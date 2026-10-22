@@ -118,6 +118,9 @@ int scent(float* xyz, int maxPoints) {
   }
 }
 
+// The Hydra's Spectral Flame burns green, a tell even with the evidence withheld.
+bool green_flame(int type) { return type == pg::custom::kHydra; }
+
 // Every message on the channel: the flame ghosts' ('C' 'G' 'F') to their own, the rest to the Echo.
 void receive(int sender, const uint8_t* data, size_t size) {
   using namespace pg::custom;
@@ -133,7 +136,8 @@ void receive(int sender, const uint8_t* data, size_t size) {
   }
 }
 
-constexpr PgCustomGhostsService kService{4, &ability_name, &ability_description, &use_ability, &sense, &held_back, &scent};
+constexpr PgCustomGhostsService kService{5, &ability_name, &ability_description, &use_ability, &sense, &held_back, &scent,
+                                         &green_flame};
 
 bool start(const PgHostApi* api) {
   using namespace pg;

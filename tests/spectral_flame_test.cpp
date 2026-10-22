@@ -38,6 +38,7 @@ State run(State s, const Inputs& in, float seconds) {
 float blue_after(const Inputs& in, float seconds) { return run({}, in, seconds).blueness; }
 
 bool near(float a, float b, float tolerance = 0.01f) { return std::fabs(a - b) <= tolerance; }
+bool same(Rgb a, Rgb b) { return near(a.r, b.r) && near(a.g, b.g) && near(a.b, b.b); }
 
 float saturation(Rgb c) {
   const float hi = std::max({c.r, c.g, c.b});
@@ -216,6 +217,53 @@ void a_light_goes_pale_at_half_and_deep_blue_at_full() {
   }
 }
 
+void the_hydras_flame_burns_green() {
+  const Rgb warm{10.7f, 3.6f, 1.5f};  // the candle's own HDR tint
+  const FlameColours blue = flame_colours(kFlameDeep, false), green = flame_colours(kFlameDeep, true);
+  CHECK(same(blue.deep, kFlameDeep) && same(blue.pale, flame_pale(kFlameDeep)));  // other ghosts unchanged
+  CHECK(green.deep.g > green.deep.b && green.deep.g > green.deep.r);    // green, not blue
+  CHECK(green.pale.g > green.pale.b);                                    // the pale stop is pale green too
+  CHECK(near(brightness(green.deep), brightness(kFlameDeep), 0.05f));
+  CHECK(same(tint(warm, green.pale, green.deep, kFalseCap), green.pale));  // withheld evidence: the cap, pale green
+  CHECK(same(tint(warm, green.pale, green.deep, 1), green.deep));
+  for (float texture : {0.5f, 1.0f}) {
+    // On screen the false tell is a pale green, as washed out as the pale blue and plainly not it; the
+    // true flame a deep green.
+    const Rgb paleShown = on_screen(green.pale, texture), deepShown = on_screen(green.deep, texture);
+    const Rgb paleBlueShown = on_screen(blue.pale, texture);
+    CHECK(paleShown.g > paleShown.r && paleShown.r > paleShown.b);
+    CHECK(saturation(paleShown) > 0.3f && saturation(paleShown) < 0.75f);
+    CHECK(paleBlueShown.b > paleShown.b + 0.2f);
+    CHECK(saturation(deepShown) > 0.95f && deepShown.g > deepShown.r + 0.5f);
+  }
+  // The same way there: orange, then white-hot, then green; never through pink.
+  for (float b = 0; b <= 1.0001f; b += 0.01f) {
+    const Rgb c = tint(warm, green.pale, green.deep, b);
+    CHECK(!(c.r > c.g + 0.01f && c.b > c.g + 0.01f));
+  }
+  const Rgb hot = tint(warm, green.pale, green.deep, kFalseCap / 2);
+  CHECK(near(hot.r, hot.g) && near(hot.g, hot.b));
+}
+
+void the_hydras_light_turns_green() {
+  const Rgb warm{1, 0.62f, 0.3f};
+  const float b = brightness(warm);
+  const FlameColours blue = light_colours(b, false), green = light_colours(b, true);
+  CHECK(same(blue.pale, light_pale(b)) && same(blue.deep, light_deep(b)));  // other ghosts unchanged
+  const Rgb half = tint(warm, green.pale, green.deep, kFalseCap);
+  const Rgb full = tint(warm, green.pale, green.deep, 1);
+  CHECK(saturation(half) < 0.5f && half.g >= half.r && half.r >= half.b);
+  CHECK(saturation(full) > 0.95f && full.g > 3 * full.r && full.g > 3 * full.b);
+  CHECK(near(brightness(full), b));
+  // At the flame's own hue, as the blue light is.
+  const Rgb flame = flame_colours(kFlameDeep, true).deep;
+  CHECK(near(full.r / full.g, flame.r / flame.g, 0.001f) && near(full.b / full.g, flame.b / flame.g, 0.001f));
+  for (float t = 0; t <= 1.0001f; t += 0.01f) {
+    const Rgb c = tint(warm, green.pale, green.deep, t);
+    CHECK(!(c.r > c.g + 0.01f && c.b > c.g + 0.01f));  // never pink
+  }
+}
+
 void messages_round_trip() {
   const std::vector<std::pair<int, float>> flames = {{1001, 0.0f}, {-7, 0.5f}, {2147483647, 1.0f}};
   const std::vector<uint8_t> bytes = encode(flames);
@@ -259,6 +307,8 @@ int main() {
   a_flame_goes_pale_at_half_and_deep_blue_at_full();
   a_lantern_goes_to_the_same_blue();
   a_light_goes_pale_at_half_and_deep_blue_at_full();
+  the_hydras_flame_burns_green();
+  the_hydras_light_turns_green();
   messages_round_trip();
   a_false_flame_reads_the_same_on_every_client();
   return g_failures ? 1 : 0;

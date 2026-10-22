@@ -322,6 +322,12 @@ reports an entry whose problem is already gone.
   same time, and every flame drops back to yellow at half the speed it turns (a false flame is half
   a true one in everything), so a Tier 1 turns fully blue in about 120 / (3p − 1) s of real time.
 
+  2026-10-22: the Hydra's flame turns green instead (Custom Ghosts' service, version 5, asked with
+  GhostInfo+0x28 on every client), with the hue of the game's D.O.T.S. green. Unverified: a Hydra's
+  flame turns pale green at the cap on zero evidence and full green with evidence given, its lights
+  following; other ghosts stay blue; the host report's "green 1" for a Hydra; the pale green reads as
+  plainly not the pale blue on screen.
+
   Prompt:
   > In this repository, play private contracts in Phasmophobia build 25811160 with Spectral Flame and
   > Custom Ghosts on every client (two clients), a custom difficulty giving 3 evidence, the ghost type
@@ -334,7 +340,10 @@ reports an entry whose problem is already gone.
   > before it has been fully blue ("stays lit" lines), and may afterwards; it does not burn out before
   > it is fully blue. With the vanilla ghost it reaches the pale blue only after a minute of ghost time,
   > goes no further, and the ghost may blow it out. A fully blue candle no longer eases sanity drain. The other client sees the
-  > same colours. Then a contract with Custom Ghosts off: no row and no tint.
+  > same colours. Then the Hydra, once on zero evidence and once with 3 evidence given: its flame
+  > turns pale green at the cap on zero evidence and full green with evidence given, the light on the
+  > walls green with it, on both clients ("green 1" in the report); every other ghost's stays blue.
+  > Then a contract with Custom Ghosts off: no row and no tint.
 
 ## 19. The Mods panel, the themed notice and the join guard have never run inside the game
 

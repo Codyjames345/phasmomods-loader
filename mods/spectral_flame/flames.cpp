@@ -17,7 +17,9 @@
 #include "hooks.h"
 #include "il2cpp.h"
 #include "log.h"
+#include "mod_glue.h"
 #include "net.h"
+#include "services.h"
 
 namespace pg::flame::flames {
 namespace {
@@ -47,6 +49,9 @@ constexpr size_t kAiInfo = 0x38;              // GhostAI: GhostInfo
 // GhostInfo: List<int>, the evidence the ghost gives as the difficulty left it (SyncEvidence, every
 // client); empty when the difficulty gives none. The host's GhostController+0x30 is the same list.
 constexpr size_t kInfoEvidence = 0x30;
+// GhostInfo: the ghost's GhostType, what it is (SyncValuesNetworked writes it on every client; Custom
+// Ghosts' registry sends its own types there).
+constexpr size_t kInfoType = 0x28;
 constexpr size_t kSanityCandles = 0x60;       // PlayerSanity: List<Candle> near the player
 constexpr uintptr_t kSanityUpdateRva = 0xDA9430;  // PlayerSanity.Update
 constexpr uintptr_t kBlowOutRva = 0x652090;       // FireSource.BlowOutFire(bool byGhost)
@@ -137,6 +142,7 @@ std::unordered_map<void*, float> g_candleBlue;  // Candle -> its bluest flame, f
 std::mt19937 g_random{std::random_device{}()};
 bool g_enabled = false;
 bool g_givesFlame = false;  // host: the ghost gives Spectral Flame, as of the last step
+bool g_green = false;       // the ghost's flames turn green (the Hydra), as of the last scan
 
 using SanityUpdate_t = void (*)(void*, const void*);
 SanityUpdate_t g_sanityUpdate = nullptr;
@@ -151,12 +157,12 @@ void each_item(il2cpp::List* list, F visit) {
     if (void* item = list->items->data<void*>()[i]) visit(item);
 }
 
-/** Recolour a light or material back to `original` or towards blue. */
+/** Recolour a light or material back to `original` or towards blue (green for the Hydra). */
 void paint(const Lit& l, float blueness) {
   if (!alive(l.light)) return;
   const Rgb warm{l.original.r, l.original.g, l.original.b};
-  const float b = brightness(warm);
-  const Rgb c = tint(warm, light_pale(b), light_deep(b), blueness);
+  const FlameColours stops = light_colours(brightness(warm), g_green);
+  const Rgb c = tint(warm, stops.pale, stops.deep, blueness);
   const Color out{c.r, c.g, c.b, l.original.a};
   api.setLightColor(l.light, &out, nullptr);
 }
@@ -164,7 +170,8 @@ void paint(const Lit& l, float blueness) {
 void paint(const Tinted& t, float blueness) {
   if (!alive(t.material)) return;
   const Rgb warm{t.original.r, t.original.g, t.original.b};
-  const Rgb c = tint(warm, flame_pale(kFlameDeep), kFlameDeep, blueness);
+  const FlameColours stops = flame_colours(kFlameDeep, g_green);
+  const Rgb c = tint(warm, stops.pale, stops.deep, blueness);
   const Color out{c.r, c.g, c.b, t.original.a};
   api.setColor(t.material, t.property, &out);
 }
@@ -193,6 +200,31 @@ void clear_all() {
   g_heard.clear();
   g_level = nullptr;
   g_givesFlame = false;
+  g_green = false;
+}
+
+/**
+ * Whether the ghost's flames turn green: Custom Ghosts names the types whose do (the Hydra), by the
+ * ghost's own type, which every client knows. Blue without Custom Ghosts (or before its version 5).
+ */
+bool green_ghost() {
+  void* ai = game::ghost_ai();
+  void* info = alive(ai) ? il2cpp::field<void*>(ai, kAiInfo) : nullptr;
+  if (!alive(info)) return false;
+  const auto* s = static_cast<const PgCustomGhostsService*>(mod::host().service(PG_SERVICE_CUSTOM_GHOSTS));
+  return s && s->version >= 5 && s->greenFlame && s->greenFlame(il2cpp::field<int>(info, kInfoType));
+}
+
+/** Once the ghost's colour is known (or changes), every flame and light showing one is repainted in it. */
+void set_green(bool green) {
+  if (green == g_green) return;
+  g_green = green;
+  for (Flame& f : g_flames)
+    if (f.shown != 0) f.shown = -1;
+  for (Look& l : g_looks)
+    if (l.shown != 0) l.shown = -1;
+  for (Candelabra& c : g_candelabras)
+    if (c.shown != 0) c.shown = -1;
 }
 
 /** The flame materials in a transform's subtree, added to `f` once each. */
@@ -377,8 +409,9 @@ const char* kind_name(Kind kind) {
 }
 
 // What the host sees every few seconds while a flame set down is burning, so mods.log shows which
-// step stops a flame turning blue: the ghost's room and state, the evidence it gives, and each such
-// flame's room and blueness. Until FINDINGS 20 is closed; quiet otherwise.
+// step stops a flame turning blue: the ghost's room and state, the evidence it gives, whether its
+// flames turn green, and each such flame's room and blueness. Until FINDINGS 20 is closed; quiet
+// otherwise.
 void report(void* level, const GhostNow& ghost, ULONGLONG now) {
   if (now < g_nextReport) return;
   int lit = 0;
@@ -389,8 +422,8 @@ void report(void* level, const GhostNow& ghost, ULONGLONG now) {
   for (int i = 0, n = 0; i < ghost.givenCount && n < static_cast<int>(sizeof given); ++i)
     n += std::snprintf(given + n, sizeof given - n, i ? ",%d" : "%d", ghost.given[i]);
   auto* sources = il2cpp::field<il2cpp::List*>(level, kLevelFireSources);
-  PG_LOG("flames: ghost in room %d, state %d (calm %d), gives [%s] (flame %d); %zu flames (%d set down and lit) of %d fire sources, %zu candelabras",
-         room_index(level, ghost.room), ghost.state, ghost.calm, given, ghost.hasEvidence, g_flames.size(), lit,
+  PG_LOG("flames: ghost in room %d, state %d (calm %d), gives [%s] (flame %d, green %d); %zu flames (%d set down and lit) of %d fire sources, %zu candelabras",
+         room_index(level, ghost.room), ghost.state, ghost.calm, given, ghost.hasEvidence, g_green, g_flames.size(), lit,
          sources ? sources->size : -1, g_candelabras.size());
   int listed = 0;
   for (Flame& f : g_flames) {
@@ -602,6 +635,7 @@ void tick(bool enabled) {
   if (now >= g_nextScan) {
     g_nextScan = now + kScanMs;
     scan(level);
+    set_green(green_ghost());
   }
   if (game::is_master()) host_step(level, dt, now);
   else client_step(now);
