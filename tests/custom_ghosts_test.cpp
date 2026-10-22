@@ -1,6 +1,8 @@
 // Offline tests for the custom ghosts' data and rules (mods/custom_ghosts/ghosts.h, trail.h).
 // Run: build\custom_ghosts_test.exe
 #include <cmath>
+#include <fstream>
+#include <iterator>
 #include <set>
 #include <string>
 #include <vector>
@@ -75,6 +77,12 @@ void every_page_tells_its_story() {
     CHECK(clean(g.weakness, kMaxLine));
     if (g.abilityDescription) CHECK(clean(g.abilityDescription, kMaxLine));
   }
+  // The docs say "player" and carry no em dash either.
+  std::ifstream in(std::string(PG_SOURCE_DIR) + "/docs/custom-ghosts.md", std::ios::binary);
+  const std::string docs((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  CHECK(!docs.empty());
+  CHECK(docs.find("investigator") == std::string::npos && docs.find("Investigator") == std::string::npos);
+  CHECK(docs.find("\xE2\x80\x94") == std::string::npos);
 }
 
 void the_flame_ghosts_carry_the_flame() {

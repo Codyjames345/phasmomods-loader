@@ -68,7 +68,7 @@ inline constexpr Ghost kGhosts[] = {
      "A Draugr never leaves its room for good, and in a hunt it slows to a crawl the further it strays from it.", nullptr, nullptr},
     {kBlackShuck, "Black Shuck", {kUltraviolet, kFreezing, kDots},
      "The phantom hound of the East Anglian roads, blind but never lost. It cannot see or hear you; it "
-     "follows your scent, step for step, until salt, water or rain breaks it.",
+     "follows your scent, step for step, until salt, running water or rain breaks it.",
      "In a hunt a Black Shuck follows the exact path its prey walked, round every corner and into hiding places, though it cannot see or hear.",
      "Salt, running water or rain breaks a Black Shuck's scent, and it loses anyone on the other side.", nullptr, nullptr},
     {kLithobolia, "Lithobolia", {kSpiritBox, kFreezing, kSpectralFlame},
@@ -111,7 +111,7 @@ inline constexpr Ghost kGhosts[] = {
      "The slow toll of a funeral bell, on a beat that never changes. Relentless in a hunt, it surges and "
      "crawls on a two-second beat you can hear in its steps.",
      "In a hunt a Knell surges to great speed on every other beat.",
-     "Between surges a Knell crawls at about a third of its speed; run on its slow beat.", nullptr, nullptr},
+     "Between surges a Knell crawls at about a third of the base speed; run on its slow beat.", nullptr, nullptr},
     {kAsterion, "Asterion", {kWriting, kDots, kSpectralFlame},
      "The Minotaur of the labyrinth, by its own name. A battering brute that makes a maze of any house, "
      "doors only slow it, and it never closes one.",
