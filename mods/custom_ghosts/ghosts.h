@@ -11,7 +11,7 @@
 // kept free of game calls so it can be tested offline.
 //
 // Each custom ghost is a new GhostType (31 and up, after the game's last type, Deildegast = 30) for
-// everything that names or judges it: the type roll, evidence, the journal, the investigators' guess
+// everything that names or judges it: the type roll, evidence, the journal, the players' guess
 // and the results. For the ghost's AI its behaviour type (GhostInfo +0x2C) is GhostType.None, so no
 // vanilla type's rules apply to it; only its own rules, below, set it apart.
 namespace pg::custom {
@@ -43,73 +43,78 @@ struct Ghost {
 
 inline constexpr Ghost kGhosts[] = {
     {kEcho, "Echo", {kSpiritBox, kFreezing, kDots},
-     "A spirit with no voice of its own. It speaks only with the voices of the living, repeating what "
-     "they have said to draw them close.",
-     "An Echo can call out in the voice of anyone it has heard, from wherever it waits, and it repeats "
-     "what players do in its room: the switch or door you just used is the next thing it touches.",
+     "The nymph of Greek myth, cursed to repeat only what others say. A lonely mimic, it stays quiet "
+     "unless someone speaks near it, then answers in their voice.",
+     "An Echo can call out in the voice of anyone it has heard, and it repeats what players do in its "
+     "room: the switch or door you just used is the next thing it touches.",
      "With nobody speaking near it for a while, an Echo falls quiet and rarely acts.",
-     "Speak", "Call out with the last words an investigator said, in their own voice."},
+     "Speak", "Call out with the last words a player said, in their own voice."},
     {kDullahan, "Dullahan", {kEmf, kOrbs, kWriting},
-     "A headless rider that charges down whatever lies straight ahead of it. Legend says it cannot turn "
-     "its mount easily.",
+     "The headless rider of Irish legend, which charges down whatever lies straight ahead. Its mount "
+     "cannot turn, so in the house it is fast on a long run and all but stops at a corner.",
      "A Dullahan is very fast on long, straight runs.",
      "A Dullahan turns slowly and loses most of its speed at every corner.", nullptr, nullptr},
     {kKikimora, "Kikimora", {kUltraviolet, kWriting, kSpectralFlame},
-     "A household spirit that lives behind the stove and cannot bear clutter. It tidies away whatever the "
-     "living leave lying around, usually somewhere they will not think to look.",
+     "The Slavic household spirit behind the stove, fussy about other people's mess. It tidies away "
+     "whatever the living leave lying around in the dark, somewhere they will not think to look.",
      "A Kikimora carries off equipment left on the floor and hides it in another room.",
      "A Kikimora will not touch anything in a room with the lights on.",
      "Tidy away", "Carry off the nearest equipment lying in a dark room and hide it in another dark, empty room."},
     {kDraugr, "Draugr", {kEmf, kFreezing, kSpectralFlame},
-     "The restless dead of the old barrows, which guard their resting place and everything in it. Blue fire "
-     "burns over the mounds where they lie.",
+     "The restless dead of the Norse barrows, jealous guardians of their resting place and all that lies in "
+     "it. In the house it keeps to its room, fast beside it and slow far from it, and wakes early when "
+     "something is taken.",
      "Carry anything out of a Draugr's room and it may hunt while your sanity is still high.",
      "A Draugr never leaves its room for good, and in a hunt it slows to a crawl the further it strays from it.", nullptr, nullptr},
     {kBlackShuck, "Black Shuck", {kUltraviolet, kFreezing, kDots},
-     "A phantom hound of the old roads. It follows the scent of the living, step for step.",
+     "The phantom hound of the East Anglian roads, blind but never lost. It cannot see or hear you; it "
+     "follows your scent, step for step, until salt, water or rain breaks it.",
      "In a hunt a Black Shuck follows the exact path its prey walked, round every corner and into hiding places, though it cannot see or hear.",
-     "Salt or running water breaks a Black Shuck's scent, and it loses anyone on the other side.", nullptr, nullptr},
+     "Salt, running water or rain breaks a Black Shuck's scent, and it loses anyone on the other side.", nullptr, nullptr},
     {kLithobolia, "Lithobolia", {kSpiritBox, kFreezing, kSpectralFlame},
-     "Named for the stone-throwing devil that pelted a New Hampshire house in 1682. It does not throw "
-     "things about; it throws them at you.",
+     "Named for the stone-throwing devil that pelted a New Hampshire house in 1682. A spiteful thrower "
+     "that wants a target, it throws only at players it can see, never at an empty room.",
      "A Lithobolia throws only at players it can see, and a hit costs more than a fright.",
      "With nobody in sight a Lithobolia throws nothing at all.",
      "Throw", "Throw the nearest loose object at a player in sight."},
     {kGremlin, "Gremlin", {kEmf, kDots, kSpectralFlame},
-     "The saboteur airmen blamed for every failing engine. It cannot leave a working machine alone.",
+     "The saboteur airmen blamed for every failing engine in the Second World War. It cannot leave a "
+     "running machine alone, unless someone is standing by it.",
      "A Gremlin switches off equipment that has been set down and left running.",
      "A Gremlin will not touch equipment someone is holding or standing beside.",
      "Short out", "Switch off the nearest placed equipment that nobody is holding or standing beside."},
     {kBrownie, "Brownie", {kEmf, kWriting, kSpectralFlame},
-     "A household spirit of Scotland that works only while nobody is watching, and leaves the moment it "
-     "is seen.",
+     "The Scottish house spirit that works only while nobody is watching. Unseen it is quick and quiet "
+     "in a hunt; watched, it slows to a walk, and outside a hunt it does nothing in view.",
      "A Brownie is very fast in a hunt while nobody looks at it, and its footsteps are hard to hear.",
      "A Brownie slows to less than a walk while anyone looks at it.", nullptr, nullptr},
     {kBogeyman, "Bogeyman", {kUltraviolet, kOrbs, kSpectralFlame},
-     "The thing in the closet. It knows every place a frightened person hides. It always comes for the "
-     "youngest.",
+     "The thing in the closet, which knows every place a frightened child hides. It lurks there, picks on "
+     "the youngest player, and starts each hunt from the closet nearest them.",
      "A Bogeyman's hunts begin from the closet or locker nearest the youngest player, and it goes for them "
      "first.",
      "A Bogeyman is slow in open rooms and loses sight of its prey there sooner.", nullptr, nullptr},
     {kLethe, "Lethe", {kOrbs, kFreezing, kSpectralFlame},
-     "Named for the river of forgetting in the underworld. It has forgotten who it was, and makes the "
-     "living forget too.",
+     "Named for the river of forgetting in the underworld. It has forgotten who it was and makes the "
+     "living forget too: photos fade, and in a hunt it loses you a second after you leave its sight.",
      "Photos, videos and recordings of a Lethe fade from the journal a few minutes after they are taken, "
      "unless someone looks at them first.",
-     "A Lethe forgets its prey: once it loses sight of someone in a hunt, it gives up the chase quickly.",
+     "A Lethe forgets its prey: once it loses sight of someone in a hunt, it forgets them within a second.",
      nullptr, nullptr},
     {kMesmer, "Mesmer", {kSpiritBox, kDots, kSpectralFlame},
-     "Named for the showman whose audiences saw whatever he wished. No two witnesses agree on what a Mesmer "
-     "showed them.",
-     "Each investigator sees a Mesmer differently, and the truck's sanity monitor shows the team saner than "
+     "Named for the showman whose audiences saw whatever he wished. An illusionist with a different face "
+     "for everyone, no two players agree on what a Mesmer showed them.",
+     "Each player sees a Mesmer differently, and the truck's sanity monitor shows the team saner than "
      "they are.",
      "A Mesmer cannot fool a camera: video, photos and the D.O.T.S. projector show it as it is.", nullptr, nullptr},
     {kKnell, "Knell", {kSpiritBox, kOrbs, kSpectralFlame},
-     "The slow toll of a funeral bell. It moves to a beat, and the beat never changes.",
+     "The slow toll of a funeral bell, on a beat that never changes. Relentless in a hunt, it surges and "
+     "crawls on a two-second beat you can hear in its steps.",
      "In a hunt a Knell surges to great speed on every other beat.",
-     "Between surges a Knell crawls at a third of its speed; run on its slow beat.", nullptr, nullptr},
+     "Between surges a Knell crawls at about a third of its speed; run on its slow beat.", nullptr, nullptr},
     {kAsterion, "Asterion", {kWriting, kDots, kSpectralFlame},
-     "The Minotaur of the labyrinth, by its own name. It makes a maze of any house it hunts in.",
+     "The Minotaur of the labyrinth, by its own name. A battering brute that makes a maze of any house, "
+     "doors only slow it, and it never closes one.",
      "A closed door never stops an Asterion for good: it batters it down, and the door stays broken open.",
      "Battering a door down takes an Asterion a few seconds, and it can be heard far away.", nullptr, nullptr},
     {kTempest, "Tempest", {kSpiritBox, kUltraviolet, kSpectralFlame},
@@ -118,7 +123,8 @@ inline constexpr Ghost kGhosts[] = {
      "In a hunt a Tempest cannot be seen, except when lightning strikes; then it is very fast.",
      "Between strikes a Tempest is slow, and the clearer the night, the rarer its lightning.", nullptr, nullptr},
     {kHydra, "Hydra", {kOrbs, kDots, kSpectralFlame},
-     "The many-headed serpent: cut off one head and two grow back. Its flame burns green.",
+     "The many-headed serpent of Lerna: cut off one head and two grow back. Its flame burns green as "
+     "marsh fire, and every smudge grows it another head.",
      "Smudge a Hydra in a hunt and it splits into apparitions, only one of them real; smudge it again "
      "and there are more.",
      "A Hydra's false heads are harmless and make no sound as they walk.", nullptr, nullptr},

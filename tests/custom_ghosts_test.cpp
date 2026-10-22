@@ -61,6 +61,22 @@ void every_custom_ghost_is_identifiable() {
   CHECK(taken.size() == 30 + static_cast<size_t>(kGhostCount));  // every ghost has a combination of its own
 }
 
+void every_page_tells_its_story() {
+  // pages.cpp applies no length limit; these are the current longest entries plus a margin.
+  constexpr size_t kMaxDescription = 260, kMaxStrength = 180, kMaxLine = 140;
+  const auto clean = [](const char* text, size_t most) {
+    const std::string s = text ? text : "";
+    return !s.empty() && s.size() <= most && s.find("investigator") == std::string::npos &&
+           s.find("Investigator") == std::string::npos && s.find("\xE2\x80\x94") == std::string::npos;
+  };
+  for (const Ghost& g : kGhosts) {
+    CHECK(clean(g.description, kMaxDescription));
+    CHECK(clean(g.strength, kMaxStrength));  // strengths carry a mechanic or two
+    CHECK(clean(g.weakness, kMaxLine));
+    if (g.abilityDescription) CHECK(clean(g.abilityDescription, kMaxLine));
+  }
+}
+
 void the_flame_ghosts_carry_the_flame() {
   const auto has = [](int type, int e) {
     const Ghost* g = find(type);
@@ -690,6 +706,7 @@ int main() {
   the_echo_remembers_the_last_phrase();
   voices_survive_the_trip();
   every_custom_ghost_is_identifiable();
+  every_page_tells_its_story();
   names_answer_the_games_keys();
   the_flame_ghosts_carry_the_flame();
   the_flame_ghosts_are_the_designed_ones();
