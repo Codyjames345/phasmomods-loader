@@ -430,6 +430,11 @@ reports an entry whose problem is already gone.
   kill reach (+0xBC, +0xC0) at 0 while the game's vision sensor does not see its prey. A sink counts
   as running water while DOTween.IsTweening reports its fill tween playing (a tap turned on and off
   again should no longer break scent), and whether baths and showers are Sinks at all is unknown.
+  The Echo's repeat rests on detours of the RPCs every client runs for a switch's use
+  (LightSwitch.Use 0x26E5940, a player's when its byGhost flag is clear) and a player's door grab
+  (Door.NetworkedGrabbedDoor 0x264D150), on LightSwitch +0xD0 and LevelRoom +0x28 for its room, and on
+  the game's own light and door states (GhostAI.ChangeState 4 and 5) started from TryInteract, which
+  run wherever the ghost stands.
 
   Prompt:
   > In this repository, run a private contract where every client runs
@@ -447,7 +452,10 @@ reports an entry whose problem is already gone.
   > a trail at a running tap and outdoors in rain but not at a tap turned on and off again (try a
   > bath and a shower too and note whether they break it), and a ghost player seeing the darkened
   > hunt view with the scent marks, Kikimora moving dark-room equipment (seen moving on every
-  > client), Echo repeating a phrase in a teammate's voice from the ghost.
+  > client), Echo repeating a phrase in a teammate's voice from the ghost, and with voice chat off,
+  > a light switched or a door moved in the Echo's room is the next thing it touches within a minute
+  > ("echo: a player used a" and "echo: repeats a player's" in the host's log; EMF at that switch or
+  > door), also when a client other than the host used it and while the ghost was elsewhere.
 
 ## 11. The mod host, its consent notice and mod loading have never run inside the game
 

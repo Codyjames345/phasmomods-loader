@@ -8,6 +8,7 @@
 #include <random>
 #include <vector>
 
+#include "echo_rule.h"
 #include "game.h"
 #include "hooks.h"
 #include "il2cpp.h"
@@ -40,6 +41,26 @@ constexpr ULONGLONG kMinGapMs = 45000, kMaxGapMs = 90000;  // between the AI's w
 constexpr int kChunksPerFrame = 10;
 constexpr float kPitch = 0.96f;                // a shade low: almost, but not quite, their voice
 
+// The repeat (echo_rule.h). Ghidra decompiles of build 25811160, 2026-10-22.
+constexpr size_t kGhostInfo = 0x38;            // GhostAI: GhostInfo
+constexpr size_t kInfoFavouriteRoom = 0x70;    // GhostInfo: favourite LevelRoom
+constexpr size_t kSwitchRoom = 0xD0;           // LightSwitch: its LevelRoom
+constexpr size_t kRoomDoors = 0x28;            // LevelRoom: Door[] (the Yurei's ability picks from it)
+constexpr size_t kDoorInteract = 0x98;         // Door: its PhotonObjectInteract
+// LightSwitch.Use(bool on, bool prints, bool byGhost, bool counted): the RPC LightSwitch.UseLightSwitch sends
+// to every client for each use, a player's (byGhost false) or the ghost's, so the host sees every one.
+constexpr uintptr_t kSwitchUseRva = 0x26E5940;
+// Door.NetworkedGrabbedDoor(): the RPC Door.GrabbedDoor sends to every client when a player grabs an unlocked
+// door (its only callers are DragRigidbodyUse, the player's grab; ClothDoor's override calls it first).
+constexpr uintptr_t kDoorGrabbedRva = 0x264D150;
+// The ghost's own interactions with a given object, as the sensor's light-switch pick (0x2014DA0) and the
+// idle door chance (0x2007C60) start them: GhostAI.ChangeState(light, the switch's PhotonObjectInteract,
+// forced) and ChangeState(door, the door's PhotonObjectInteract). The light state (Enter 0x21899B0) switches
+// a lit switch off, and an unlit one on when forced or 1 in 2, through UseLightSwitch(true, true, false):
+// the game's prints and EMF. The door state (Enter 0x20D1920) moves an unlocked door through
+// Door.GhostOpenDoorEvent or GhostOpenDoorAnimated, its own pick. Both return the AI to idle.
+constexpr int kStateLight = 4, kStateDoor = 5;  // GhostAI.State
+
 // Messages on this mod's channel: 'C' 'G' version type, then:
 //   SPEAK  speaker:i32 source:i32 clip:u16 x:f32 y:f32 z:f32    (host to all: who speaks, who sends, where)
 //   CHUNK  clip:u16 index:u8 count:u8 mu-law bytes             (the source to all)
@@ -65,11 +86,17 @@ struct Api {
   void (*play)(void*, const void*) = nullptr;
   void (*destroyAfter)(void*, float, const void*) = nullptr;
   bool (*talking)(void*, float, const void*) = nullptr;
+  il2cpp::Object* interactType = nullptr;  // PhotonObjectInteract, the object a ghost's interaction is given
   bool ok = false;
 } api;
 
 using TapRead_t = int (*)(void*, int, il2cpp::Array*, int, int, int, const void*);
+using SwitchUse_t = void (*)(void*, bool, bool, bool, bool, const void*);
+using DoorGrabbed_t = void (*)(void*, const void*);
+using ChangeState_t = void (*)(void*, int, void*, bool, const void*);
 TapRead_t g_tapRead = nullptr;
+SwitchUse_t g_switchUse = nullptr;
+DoorGrabbed_t g_doorGrabbed = nullptr;
 
 struct Pending {
   int speaker = 0, source = 0;
@@ -93,6 +120,7 @@ struct State {
   uint16_t outgoingClip = 0;
   size_t outgoingNext = 0;
   uint16_t nextClip = 1;
+  Repeat<il2cpp::Held> repeat;                  // host: the switch or door its AI repeats next
 } g;
 
 std::mt19937 g_random{static_cast<unsigned>(GetTickCount64())};
@@ -251,6 +279,43 @@ void listen(ULONGLONG now) {
   if (room && game::alive(room) && api.talking(room, 0.1f, nullptr)) g.lastHeard = now;  // the host's own voice too
 }
 
+/** The Echo's favourite room, on the host while it haunts the contract; null otherwise. */
+void* favourite_room() {
+  if (!g.recording || !g.ghost || !game::alive(g.ghost) || !game::is_master()) return nullptr;
+  void* info = il2cpp::field<void*>(g.ghost, kGhostInfo);
+  void* room = info ? il2cpp::field<void*>(info, kInfoFavouriteRoom) : nullptr;
+  return room && game::alive(room) ? room : nullptr;
+}
+
+/** Whether `door` is one of the room's doors. */
+bool door_of(void* room, void* door) {
+  auto* doors = il2cpp::field<il2cpp::Array*>(room, kRoomDoors);
+  for (uintptr_t i = 0; doors && i < doors->max_length; ++i)
+    if (doors->data<void*>()[i] == door) return true;
+  return false;
+}
+
+/** Note a player's use of a light switch or door for the repeat; it counts when the object is in its room. */
+void player_used(void* object, bool inItsRoom, const char* what) {
+  g.repeat.used(object, inItsRoom, GetTickCount64());
+  if (inItsRoom) PG_LOG("echo: a player used a %s in its room", what);
+}
+
+/** Every client runs each use of a switch; the host notes a player's (not the ghost's) for the repeat. */
+void detour_switch_use(void* lightSwitch, bool on, bool prints, bool byGhost, bool counted, const void* method) {
+  hooks::Guard guard;
+  g_switchUse(lightSwitch, on, prints, byGhost, counted, method);
+  if (void* room = !byGhost && lightSwitch ? favourite_room() : nullptr)
+    player_used(lightSwitch, il2cpp::field<void*>(lightSwitch, kSwitchRoom) == room, "light switch");
+}
+
+/** Every client runs each player's grab of a door; the host notes it for the repeat. */
+void detour_door_grabbed(void* door, const void* method) {
+  hooks::Guard guard;
+  g_doorGrabbed(door, method);
+  if (void* room = door ? favourite_room() : nullptr) player_used(door, door_of(room, door), "door");
+}
+
 }  // namespace
 
 bool resolve() {
@@ -261,7 +326,8 @@ bool resolve() {
   api.voiceType = il2cpp::type_object(il2cpp::cls("Assembly-CSharp.dll", "", "PlayerVoice"));
   api.audioSourceType = source ? il2cpp::type_object(source) : nullptr;
   api.single = il2cpp::cls("mscorlib.dll", "System", "Single");
-  bool ok = api.voiceType && api.audioSourceType && api.single;
+  api.interactType = il2cpp::type_object(il2cpp::cls("Assembly-CSharp.dll", "", "PhotonObjectInteract"));
+  bool ok = api.voiceType && api.audioSourceType && api.single && api.interactType;
   ok &= bind(api.findObjects, object, "FindObjectsOfType", 1);
   ok &= bind(api.createClip, clip, "Create", 5);
   ok &= bind(api.setData, clip, "SetData", 2);
@@ -280,7 +346,11 @@ bool resolve() {
 
 bool create_hooks() {
   return hooks::create(game::game_assembly_address(kTapReadRva), reinterpret_cast<void*>(&detour_tap_read),
-                       reinterpret_cast<void**>(&g_tapRead), "VivoxParticipantTap.DoAudioFilterRead");
+                       reinterpret_cast<void**>(&g_tapRead), "VivoxParticipantTap.DoAudioFilterRead") &&
+         hooks::create(game::game_assembly_address(kSwitchUseRva), reinterpret_cast<void*>(&detour_switch_use),
+                       reinterpret_cast<void**>(&g_switchUse), "LightSwitch.Use") &&
+         hooks::create(game::game_assembly_address(kDoorGrabbedRva), reinterpret_cast<void*>(&detour_door_grabbed),
+                       reinterpret_cast<void**>(&g_doorGrabbed), "Door.NetworkedGrabbedDoor");
 }
 
 void receive(int sender, const uint8_t* data, size_t size) {
@@ -337,6 +407,7 @@ void tick(void* ghost, bool steered, bool recording) {
       g.tapActor.clear();
       g.lastAudio.clear();
       g.holders.clear();
+      g.repeat = {};
     }
     g.recording = recording;
   }
@@ -350,8 +421,9 @@ void tick(void* ghost, bool steered, bool recording) {
   report_heard(now);
   if (ghost != g.ghost) {
     g.ghost = ghost;
-    g.lastHeard = now;  // a new Echo starts awake
+    g.lastHeard = now;  // a new Echo starts awake, with nothing to repeat
     g.nextWords = now + kMinGapMs;
+    g.repeat = {};
   }
   if (!g.ghost) return;
   listen(now);
@@ -365,5 +437,20 @@ void reset() {
 }
 
 bool dormant_now() { return dormant(); }
+
+bool repeat_pending() { return g.ghost && g.repeat.pending(GetTickCount64()); }
+
+bool repeat(void* ghost) {
+  if (!api.ok || !ghost || !game::is_master() || game::ghost_state(ghost) == game::kStateHunting) return false;
+  void* object = g.repeat.take(GetTickCount64());
+  if (!object || !game::alive(object)) return false;
+  const bool door = il2cpp::is_kind(object, "Door");
+  void* interact = door ? il2cpp::field<void*>(object, kDoorInteract) : game::get_component(object, api.interactType);
+  if (!interact || !game::alive(interact)) return false;
+  // Forced, as the voodoo doll's interaction is (NormalInteraction(true)): an unlit switch is used every time.
+  reinterpret_cast<ChangeState_t>(game::change_state())(ghost, door ? kStateDoor : kStateLight, interact, !door, nullptr);
+  PG_LOG("echo: repeats a player's %s", door ? "door" : "light switch");
+  return true;
+}
 
 }  // namespace pg::custom::echo

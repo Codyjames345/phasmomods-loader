@@ -15,7 +15,7 @@ switches Custom Ghosts off.
 
 | Ghost | Evidence | Strength | Weakness |
 | --- | --- | --- | --- |
-| Echo | Spirit Box, Freezing Temperatures, D.O.T.S. | Calls out in the voice of an investigator it has heard, from wherever it is | With nobody heard near it for a minute it falls quiet: most of its interactions and events do not happen |
+| Echo | Spirit Box, Freezing Temperatures, D.O.T.S. | Calls out in the voice of an investigator it has heard, from wherever it is, and repeats what players do in its room: within a minute of a player using a light switch or a door in its favourite room, its next interaction uses that same switch or door (only the latest such use counts), dormant or not | With nobody heard near it for a minute it falls quiet: most of its interactions and events do not happen |
 | Dullahan | EMF 5, Ghost Orbs, Ghost Writing | Very fast in a hunt on long, straight runs (3.4 m/s, twice the game's base speed) | Turns slowly (45 degrees a second) and loses most of its speed at every corner (0.43 m/s facing away from its path) |
 | Kikimora | Ultraviolet, Ghost Writing, Spectral Flame | Carries off equipment lying loose near it and hides it in another dark, empty room, leaving EMF where it was | Never touches anything in a room with the lights on |
 | Draugr | EMF 5, Freezing Temperatures, Spectral Flame | While anything taken from its room is outside it, it may hunt from 65% sanity | Never changes favourite room; in a hunt it runs at 2.8 m/s in its room and slows 0.15 m/s for every metre away from it, to a crawl of 0.3 m/s from about 17 m |
@@ -107,7 +107,8 @@ A player can be any of them. Their rules apply as to the AI ghost, except where 
 (the Black Shuck does not follow trails for a player, who sees the scent trail in a hunt instead, in
 the darkened view Playable Ghost gives the Kormos, and hunts by their own judgement; the game's sight
 and hearing stay as they are for them; a Bogeyman player's hunts begin where they stand, its sight
-does not favour the youngest for them, and the doors it opens are the ones they choose). The Echo's ability ("Speak") and the Kikimora's ("Tidy away") are the
+does not favour the youngest for them, and the doors it opens are the ones they choose; an Echo player's
+interactions are the ones they aim, never a repeat of what the others did). The Echo's ability ("Speak") and the Kikimora's ("Tidy away") are the
 ghost player's ability for those types, granted at the vanilla rate of the ability roll. Their
 weaknesses bind a player too: a dormant Echo cannot interact or cause events until a voice wakes it
 (the AI loses three in four), and a Kikimora touches nothing in a room with the lights on. The

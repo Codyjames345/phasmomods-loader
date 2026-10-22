@@ -51,15 +51,25 @@ int g_type = 0;
 bool g_steered = false;  // a player controls the ghost
 std::mt19937 g_random{static_cast<unsigned>(GetTickCount64())};
 
-/** The AI's attempt fails: always where the rule is absolute, 3 in 4 for a dormant Echo. */
+/**
+ * The AI's attempt fails: always where the rule is absolute, 3 in 4 for a dormant Echo. A dormant Echo's
+ * AI never loses the interaction that carries a player's use waiting to be repeated (echo.h repeat_pending);
+ * events carry no repeat, and a ghost player's interactions are their own, so those stay held back.
+ */
 bool skip(Kind kind) {
   if (!held_back(g_type, kind)) return false;
+  if (g_type == kEcho && kind == kInteract && !g_steered && echo::repeat_pending()) return false;
   return g_type != kEcho || std::uniform_int_distribution<int>(0, 99)(g_random) < kDormantSkipPercent;
 }
 
 void detour_try_interact(void* activity, const void* method) {
   hooks::Guard guard;
   if (g_ghost && activity == game::ghost_activity(g_ghost) && skip(kInteract)) return;
+  // The Echo's AI uses the switch or door a player just used in its room instead (the ghost is the host's:
+  // game::is_master).
+  if (g_ghost && g_type == kEcho && activity == game::ghost_activity(g_ghost) && game::is_master() && !g_steered &&
+      echo::repeat(g_ghost))
+    return;
   // The Gremlin's interaction may be sabotage instead (the ghost is the host's: game::is_master).
   if (g_ghost && g_type == kGremlin && activity == game::ghost_activity(g_ghost) && game::is_master() &&
       gremlin::interact(g_ghost))

@@ -9,7 +9,9 @@
 // client that heard the chosen investigator sends their last phrase to everyone as telephone-quality
 // audio, and every client plays it from where the ghost is. The Echo's weakness: with nobody heard
 // near it for a minute it falls quiet, and most of its interactions and events do not happen.
-// Nothing is written to disk; recordings are dropped when the contract ends. Main thread.
+// Nothing is written to disk; recordings are dropped when the contract ends. It also repeats what players
+// do (echo_rule.h): the host notes each player's use of a light switch or a door in its favourite room, and
+// its AI's next interaction within a minute uses that same switch or door. Main thread.
 namespace pg::custom::echo {
 
 bool resolve();
@@ -23,5 +25,10 @@ void tick(void* ghost, bool steered, bool recording);
 bool speak(void* ghost, int actor);
 void reset();
 bool dormant_now();  // host: the Echo has heard nobody near it for a minute
+bool repeat_pending();  // host: a player's use in its room waits for the AI's next interaction
+// The AI's interaction roll for the Echo on the host: true when it used the switch or door a player last used
+// in its room, within a minute, through the game's own light or door interaction (the game's interaction is
+// then skipped).
+bool repeat(void* ghost);
 
 }  // namespace pg::custom::echo

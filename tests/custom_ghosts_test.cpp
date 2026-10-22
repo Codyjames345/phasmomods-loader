@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "difficulty_rule.h"
+#include "echo_rule.h"
 #include "ghosts.h"
 #include "grid_rule.h"
 #include "gremlin_rule.h"
@@ -563,6 +564,31 @@ void the_echos_phrase_comes_from_a_client_that_holds_it() {
   CHECK(h.holder_of(5, 1, 7000, 5000, everyone) == 0);
 }
 
+void the_echo_repeats_what_players_do() {
+  int a, b;
+  Repeat r;
+  r.used(&a, false, 0);
+  CHECK(r.take(1000) == nullptr);                 // outside its room: ignored
+  r.used(&a, true, 0);
+  r.used(&b, true, 5000);
+  CHECK(r.take(6000) == &b);                      // the most recent use
+  CHECK(r.take(7000) == nullptr);                 // once
+  r.used(&a, true, 10000);
+  CHECK(r.take(10000 + kEchoRepeatMs + 1) == nullptr);  // too late
+}
+
+void a_repeat_waits_for_the_echos_next_interaction() {
+  int a;
+  Repeat r;
+  CHECK(!r.pending(0));
+  r.used(&a, false, 0);
+  CHECK(!r.pending(0));                           // outside its room: nothing waits
+  r.used(&a, true, 1000);
+  CHECK(r.pending(1000 + kEchoRepeatMs));         // still within the minute
+  CHECK(!r.pending(1000 + kEchoRepeatMs + 1));    // too late
+  CHECK(r.take(2000) == &a && !r.pending(2000));  // taken: nothing waits any more
+}
+
 void a_trail_no_longer_recorded_goes_cold() {
   trail::Trail t;
   const trail::Breaks none;
@@ -673,6 +699,8 @@ int main() {
   own_speed_goes_through_the_games_multipliers();
   a_rule_that_stops_writes_the_games_own_default();
   the_echos_phrase_comes_from_a_client_that_holds_it();
+  the_echo_repeats_what_players_do();
+  a_repeat_waits_for_the_echos_next_interaction();
   a_trail_no_longer_recorded_goes_cold();
   the_ghosts_tab_list_becomes_a_grid_that_keeps_its_layout();
   each_preset_remembers_its_custom_ghost();

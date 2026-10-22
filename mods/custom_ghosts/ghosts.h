@@ -45,7 +45,8 @@ inline constexpr Ghost kGhosts[] = {
     {kEcho, "Echo", {kSpiritBox, kFreezing, kDots},
      "A spirit with no voice of its own. It speaks only with the voices of the living, repeating what "
      "they have said to draw them close.",
-     "An Echo can call out in the voice of anyone it has heard, from wherever it waits.",
+     "An Echo can call out in the voice of anyone it has heard, from wherever it waits, and it repeats "
+     "what players do in its room: the switch or door you just used is the next thing it touches.",
      "With nobody speaking near it for a while, an Echo falls quiet and rarely acts.",
      "Speak", "Call out with the last words an investigator said, in their own voice."},
     {kDullahan, "Dullahan", {kEmf, kOrbs, kWriting},
