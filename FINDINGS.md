@@ -340,31 +340,45 @@ reports an entry whose problem is already gone.
   2026-10-22: the user's screenshot (a Tier 2 Firelight at full blue) showed an orange flame with a
   blue tint, and the top of the wax still yellow. The flame shader draws its sprite times _TintColour,
   and the game's "Candle flame" sprite is coloured (white core, yellow body, orange tip), so its yellow
-  and orange stay olive under any blue. Each flame's _CandleSprite now fades in six steps to a grey
-  copy read back at run time (Blit, ReadPixels; the game's own grey "Candle flame White" is not loaded
-  in contracts), grey from white-hot on. The wax glow is the Candle Melt shader's _EmissionColor,
-  which Candle.UseNetworked sets to Candle+0x450 when a Tier 1 or 2 candle lights: it now turns with
-  its flame, only while lit. The lantern's _Color_1 is painted from the same pair as its _Color_2, so
-  a Hydra's lantern turns fully green. Unverified: the read-back works ("reads back for its grey
-  steps" in mods.log, not "could not be read back") and the grey copy matches the game's sprite in
-  shape, with no frame hitch worth noticing; the flame shows one even hue at full blue and green, tip
-  and base included; the six steps read as one fade, not jumps; the wax glow turns and stays dark
-  once the candle is out ("wax glows" counted in the "shows through" line, with the glow colour); a
-  candle relit after turning shows its own colours; nothing is left grey after a contract.
+  and orange stay olive under any blue. The wax glow is the Candle Melt shader's _EmissionColor, which
+  Candle.UseNetworked sets to Candle+0x450 when a Tier 1 or 2 candle lights: it now turns with its
+  flame, only while lit. The lantern's _Color_1 is painted from the same pair as its _Color_2, so a
+  Hydra's lantern turns fully green.
+
+  Then, at the user's request: every candle flame shows a grey copy of its sprite from the moment it
+  is found (read back at run time with Blit and ReadPixels; the game's own grey "Candle flame White"
+  is not loaded in contracts), tinted by a least-squares match so it starts as the game's own; the
+  colour comes late (it follows the ghost time to the fourth power, white-hot at about 42 s and pale
+  at about 50 s of a Tier 1's 60 s), fades evenly when the ghost leaves and holds when it returns; and
+  the colours were rechosen through a model of the game's own pipeline (tests/urp_display.h: linear
+  colour space, Unity's pow 2.2 above 1, read from UnityPlayer, and URP's ACES, the mode the game's
+  volume sets). That model shows ACES turning the old deep blue's core purple a stop brighter, and the
+  Hydra's old greens lime and yellow-green, so the deep blue is dimmer and both greens are new; each
+  light takes its flame's on-screen colour. Unverified: mods.log shows "shows grey, matched by" for
+  the candle flame sprite (not "could not be made grey") with no frame hitch worth noticing; an
+  untouched candle looks as the game's own (in the truck, in a hand, set down); the flame stays near
+  its own colour for most of the build and turns in its last seconds, one even hue at full blue and
+  green, tip and base included, a deep blue and not purple; the light on the walls the flame's own
+  hue; the wax glow turns and stays dark once the candle is out; a candle relit after turning shows
+  its own colours; the game's own sprite and tint come back after a contract. The model leaves out
+  bloom, the room's other lights and any colour grading of the contract's volume, and takes exposure
+  as unchanged (one profile has post-exposure −0.25); a different exposure would shift every stop.
 
   Prompt:
   > In this repository, play private contracts in Phasmophobia build 25811160 with Spectral Flame and
   > Custom Ghosts on every client (two clients), a custom difficulty giving 3 evidence, the ghost type
   > forced to a flame ghost (Draugr, Kikimora or Brownie), then a vanilla ghost. With mods.log's
-  > "flames:" report: a Tier 1 Firelight set down in the ghost room turns white-hot, pale sky blue
-  > after about half a minute of ghost time there and fully deep blue after a minute (Tier 2 50 s,
-  > Tier 3 lantern 40 s; longer in real time as the ghost comes and goes, and while it is away the
-  > flame drops back at half speed), hunts included, with the light on the walls following; the whole
-  > flame one even blue at full, tip and base included, and the glow at the top of the wax blue with
-  > it (dark again once the candle is out); mods.log shows "reads back for its grey steps";
+  > "flames:" report: every Firelight looks as the game's own until it turns (mods.log shows "shows
+  > grey, matched by"); a Tier 1 Firelight set down in the ghost room stays near its own colour for
+  > most of a minute of ghost time there, turns white-hot at about 42 s, pale sky blue at about 50 s
+  > and fully deep blue at a minute (Tier 2 50 s, Tier 3 lantern 40 s, the same way; longer in real
+  > time as the ghost comes and goes, and while it is away the flame fades evenly at half speed, not
+  > jumping back when the ghost returns), hunts included, with the light on the walls the flame's own
+  > hue; the whole flame one even deep blue at full, tip and base included, not purple, and the glow
+  > at the top of the wax blue with it (dark again once the candle is out);
   > it stays yellow in your hand and starts over when picked up; it does not go out from the ghost
   > before it has been fully blue ("stays lit" lines), and may afterwards; it does not burn out before
-  > it is fully blue. With the vanilla ghost it reaches the pale blue only after a minute of ghost time,
+  > it is fully blue. With the vanilla ghost it reaches the pale blue only at a minute of ghost time,
   > goes no further, and the ghost may blow it out. A fully blue candle no longer eases sanity drain. The other client sees the
   > same colours. Then the Hydra, once on zero evidence and once with 3 evidence given: its flame
   > turns pale green at the cap on zero evidence and full green with evidence given, the light on the

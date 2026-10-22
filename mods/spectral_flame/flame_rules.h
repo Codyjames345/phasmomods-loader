@@ -10,14 +10,18 @@
 // The Spectral Flame rules: how blue a flame is, what that costs, and the message that tells every
 // client. Pure arithmetic, free of game calls, so it is tested offline (tests/spectral_flame_test.cpp).
 //
-// A flame's blueness (0..1) builds while the ghost spends time in the flame's room, hunting or not,
-// and drops back to yellow at half that speed otherwise. It answers where the ghost lingers, never
-// where it is now: every second counts, so short visits add up, but a ghost walking past changes
-// little. Any ghost takes a flame to the false-positive cap, a pale blue; only a ghost that gives
-// Spectral Flame takes it beyond, to a deep blue. A false flame is half a true one in everything, so
-// it is always half as blue as a true flame would be: players who know the speed tell them apart
-// before the minute is up. A bluer flame is hotter and burns down faster. The Hydra's flame turns
-// green instead, pale green at the cap, so it names the Hydra even where its evidence is withheld.
+// A flame's ghost time builds while the ghost spends time in the flame's room, hunting or not, and
+// drains at half that speed otherwise. It answers where the ghost lingers, never where it is now:
+// every second counts, so short visits add up, but a ghost walking past changes little. The colour
+// comes late: the flame looks its own for most of the build and turns most in its last seconds, so
+// it is not obvious straight away. It fades evenly once the ghost is away and holds while the ghost
+// is back until the ghost time catches up, so it never follows the ghost in and out of the room. Any
+// ghost takes a flame to the false-positive cap, a pale blue; only a ghost that gives Spectral Flame
+// takes it beyond, to a deep blue. A false flame is half a true one in everything, so it is always
+// half as blue as a true flame would be: players who know the speed tell them apart. A bluer flame
+// is hotter and burns down faster. The Hydra's flame turns green instead, pale green at the cap, so
+// it names the Hydra even where its evidence is withheld. Only the time differs between Firelight
+// tiers.
 namespace pg::flame {
 
 constexpr int kEvidence = 8;  // the game's evidence value for Spectral Flame (after D.O.T.S., 7)
@@ -27,6 +31,7 @@ enum class Kind { Tier1, Tier2, Tier3, Candelabra };
 constexpr float kFalseCap = 0.5f;       // as far as a ghost without the evidence takes a flame
 constexpr float kComfortLimit = 0.5f;   // bluer than this, a flame stops easing sanity drain
 constexpr float kBlowOutSeconds = 75;   // at full blue, the ghost's extra blow-out comes about this often
+constexpr float kLate = 4;              // the colour follows the ghost time to this power: most comes last
 
 /**
  * Ghost time in the flame's room for a fully blue flame (with the evidence)
@@ -51,18 +56,24 @@ struct Inputs {
 };
 
 struct State {
-  float blueness = 0;
-  bool full = false;  // it has been fully blue since it was set down and lit: the test is over
+  float ghostTime = 0;  // the ghost's time in the room, built up and drained, as blueness (0..the flame's top)
+  float blueness = 0;   // how blue the flame shows
+  bool full = false;    // it has been fully blue since it was set down and lit: the test is over
 };
+
+/** How far along its colours a flame is, for the share (0..1) of its build the ghost time has reached. */
+inline float late(float share) { return std::pow(std::clamp(share, 0.0f, 1.0f), kLate); }
 
 /** A flame's state after `dt` seconds. */
 inline State step(State s, const Inputs& in, float dt) {
   if (!in.lit || !in.placed) return {};  // picking it up or putting it out starts it over
   const float top = in.hasEvidence ? 1 : kFalseCap;
   const float rate = top / build_seconds(in.kind);  // per second of ghost time in the room
-  float next = in.ghostInRoom ? s.blueness + dt * rate : s.blueness - dt * rate / 2;
-  next = std::clamp(next, 0.0f, top);
-  return {next, s.full || next >= 1};
+  const float time = std::clamp(in.ghostInRoom ? s.ghostTime + dt * rate : s.ghostTime - dt * rate / 2, 0.0f, top);
+  const float built = top * late(time / top);
+  const float faded = s.blueness - dt * rate / 2;  // as fast as the ghost time drains
+  const float blueness = std::min(top, in.ghostInRoom ? std::max(s.blueness, built) : std::max(built, faded));
+  return {time, blueness, s.full || blueness >= 1};
 }
 
 /**
@@ -92,37 +103,46 @@ struct Rgb {
   float r, g, b;
 };
 
-// The colours a flame passes through. A flame's tint is HDR (the candle's is 10.7, 3.6, 1.5; the
-// lantern's 42.7, 12.3, 3.4), and a blue that bright tone-maps to white, so both blues are far dimmer,
-// about as bright as the game's own blue flames (its "Gas Flame Blue" is 0, 0.55, 1, which shows as
-// teal; the deep blue here has less green). The pale blue is twice as bright with red and green added
-// back. Lights are LDR and keep their strongest channel, at the flame's own hues; a blue light looks
-// darker than the warm one (about a quarter of its luminance at full blue), as a blue flame does,
-// since a light bright enough to match would tone-map to the pale cyan the deep blue is meant to leave.
-constexpr Rgb kFlameDeep{0.03f, 0.18f, 1.3f};  // on screen, a deep blue
-constexpr Rgb kFlamePale{0.44f, 0.8f, 2};      // x the deep blue's brightness: on screen, a light sky blue
-constexpr Rgb kLightPale{0.55f, 0.7f, 1};      // x the light's own brightness
-
-// The Hydra's greens, where any other ghost's flame turns blue. The game ships no green flame, so the
-// deep green has the hue of its D.O.T.S. green ("DOTS Reveal" _UV_Color 0.098, 1, 0) at the deep
-// blue's brightness. The pale greens are a mint green as bright as the pale blues, with no more red
-// than blue: this stop is the Hydra's whole tell without evidence, and a yellower pale green would
-// show close to a lit candle's own warm white.
-constexpr Rgb kSpectralGreen{0.13f, 1.3f, 0};    // on screen, a deep green
-constexpr Rgb kFlamePaleGreen{0.3f, 2, 0.45f};   // x the deep colour's brightness: on screen, a mint green
-constexpr Rgb kLightPaleGreen{0.55f, 1, 0.65f};  // x the light's own brightness
-
 inline float brightness(Rgb c) { return std::max({c.r, c.g, c.b}); }
 inline Rgb scaled(Rgb c, float k) { return {c.r * k, c.g * k, c.b * k}; }
 
 inline Rgb mix(Rgb a, Rgb b, float t) { return {a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t}; }
 
-/** A flame's pale blue, the false-positive cap, for a flame whose deep blue is `deep`. */
-inline Rgb flame_pale(Rgb deep) { return scaled(kFlamePale, brightness(deep)); }
+/**
+ * A colour channel as set on a material or light (Material.SetColor, Light.color) in linear light, as
+ * Unity hands it to the shader in a linear colour space project like this one: the sRGB curve below
+ * 1 and pow 2.2 above (UnityPlayer's GammaToLinearSpace); and back.
+ */
+inline float to_linear(float v) {
+  if (v <= 0.04045f) return v / 12.92f;
+  if (v < 1) return std::pow((v + 0.055f) / 1.055f, 2.4f);
+  return std::pow(v, 2.2f);
+}
+inline float to_gamma(float v) {
+  if (v <= 0.0031308f) return v * 12.92f;
+  if (v < 1) return 1.055f * std::pow(v, 1 / 2.4f) - 0.055f;
+  return std::pow(v, 1 / 2.2f);
+}
 
-/** A light's colours at the false-positive cap and at full blue, for its brightness `b`. */
-inline Rgb light_pale(float b) { return scaled(kLightPale, b); }
-inline Rgb light_deep(float b) { return scaled(kFlameDeep, b / brightness(kFlameDeep)); }
+// The colours a flame passes through, as set on its material. Unity takes them to linear light (pow
+// 2.2 above 1) before the shader multiplies them by the flame's grey sprite, and the game's volume
+// tonemaps with ACES. Chosen through that pipeline (tests/urp_display.h): the pale blue shows as a
+// light sky blue; the deep blue as a fully saturated deep blue, core to rim, a stop darker or brighter
+// too; the Hydra's pale green as a mint, red under blue, never a candle's warm white; its deep green as
+// a saturated green. Any brighter and ACES turns the deep blue's core purple and washes the green out
+// to lime. The game's own "Gas Flame Blue" (0, 0.55, 1) shows teal.
+constexpr Rgb kFlamePale{0.572f, 1.04f, 2.6f};
+constexpr Rgb kFlameDeep{0.02f, 0.15f, 1};
+constexpr Rgb kFlamePaleGreen{0.4f, 1.5f, 0.9f};
+constexpr Rgb kFlameDeepGreen{0, 0.7f, 0.15f};
+
+// A light takes the colour its flame shows on screen (the flame's body, through the same pipeline),
+// at the light's own brightness, so a wall it lights shows the flame's own hue. A blue or green light
+// is darker than the warm one, as such a flame is.
+constexpr Rgb kLightPale{0.59f, 0.71f, 1};
+constexpr Rgb kLightDeep{0, 0.01f, 1};
+constexpr Rgb kLightPaleGreen{0.59f, 1, 0.74f};
+constexpr Rgb kLightDeepGreen{0, 1, 0.01f};
 
 /** The two stops a flame or light passes through: at the false-positive cap and at full. */
 struct FlameColours {
@@ -130,17 +150,15 @@ struct FlameColours {
   Rgb deep;
 };
 
-/** A flame's stops for a flame whose deep blue is `deep`: blue, or the Hydra's greens (`green`). */
-inline FlameColours flame_colours(Rgb deep, bool green) {
-  if (!green) return {flame_pale(deep), deep};
-  const float b = brightness(deep);
-  return {scaled(kFlamePaleGreen, b), scaled(kSpectralGreen, b / brightness(kSpectralGreen))};
+/** A flame's stops: blue, or the Hydra's greens (`green`). The same for candles and the lantern. */
+inline FlameColours flame_colours(bool green) {
+  return green ? FlameColours{kFlamePaleGreen, kFlameDeepGreen} : FlameColours{kFlamePale, kFlameDeep};
 }
 
-/** A light's stops for its brightness `b`: blue, or the Hydra's greens at the flame's own hue. */
+/** A light's stops for its brightness `b`: blue, or the Hydra's greens, as its flame shows them. */
 inline FlameColours light_colours(float b, bool green) {
-  if (!green) return {light_pale(b), light_deep(b)};
-  return {scaled(kLightPaleGreen, b), scaled(kSpectralGreen, b / brightness(kSpectralGreen))};
+  return green ? FlameColours{scaled(kLightPaleGreen, b), scaled(kLightDeepGreen, b)}
+               : FlameColours{scaled(kLightPale, b), scaled(kLightDeep, b)};
 }
 
 /**
@@ -159,28 +177,46 @@ inline Rgb tint(Rgb warm, Rgb pale, Rgb deep, float blueness) {
   return mix(pale, deep, (t - kFalseCap) / (1 - kFalseCap));
 }
 
-// The flame's texture. The game's "Candle flame" sprite is coloured (a white core, a yellow body, an
-// orange tip) and its shader multiplies it by the tint, so no tint turns it blue: the yellow and orange
-// stay olive. As a flame turns, its texture fades in steps to a grey copy of the same sprite, all grey
-// by the white-hot stop, and the tint alone gives the flame its hue from there on.
-constexpr int kGreySteps = 6;
+// The candle flame's sprite. The game's "Candle flame" sprite is coloured (a white core, a yellow body,
+// an orange tip) and its shader multiplies it by the tint, so no tint could turn it blue: its yellow
+// and orange stay olive. A candle flame always shows a grey copy instead, with the tint that shows it
+// as the game's own sprite did; the tint alone then gives the whole flame its colour.
 
-/** The step a flame's texture is at for `blueness`: 0 the game's own, up to kGreySteps, grey. */
-inline int grey_step(float blueness) {
-  const float t = std::clamp(blueness / (kFalseCap / 2), 0.0f, 1.0f);
-  return static_cast<int>(std::lround(t * kGreySteps));
+/** Make a texel (8-bit RGBA as the texture stores it) grey, of its own brightness; alpha is kept. */
+inline void to_grey(uint8_t* rgba) {
+  const float y = 0.2126f * rgba[0] + 0.7152f * rgba[1] + 0.0722f * rgba[2];
+  for (int i = 0; i < 3; ++i) rgba[i] = static_cast<uint8_t>(std::clamp(std::lround(y), 0L, 255L));
 }
 
-/** Move a texel (8-bit RGBA as the texture stores it) `amount` (0..1) of the way to its own grey. */
-inline void to_grey(uint8_t* rgba, float amount) {
-  const float y = 0.2126f * rgba[0] + 0.7152f * rgba[1] + 0.0722f * rgba[2];
-  for (int i = 0; i < 3; ++i)
-    rgba[i] = static_cast<uint8_t>(std::clamp(std::lround(rgba[i] + (y - rgba[i]) * amount), 0L, 255L));
+/**
+ * What a sprite's grey copy needs multiplied in, channel by channel, to show as the sprite did: the
+ * least-squares fit of the sprite to its grey copy, in linear light (as the shader samples both),
+ * each texel weighted by how much it shows (its alpha, squared, as the flame is alpha-blended).
+ * (1, 1, 1) for a grey sprite, or one where nothing shows.
+ */
+inline Rgb grey_match(const uint8_t* rgba, size_t texels) {
+  double cross[3] = {0, 0, 0}, grey = 0;
+  for (size_t i = 0; i < texels; ++i) {
+    const uint8_t* t = rgba + i * 4;
+    uint8_t g[4] = {t[0], t[1], t[2], t[3]};
+    to_grey(g);
+    const double w = (t[3] / 255.0) * (t[3] / 255.0), y = to_linear(g[0] / 255.0f);
+    for (int c = 0; c < 3; ++c) cross[c] += w * to_linear(t[c] / 255.0f) * y;
+    grey += w * y * y;
+  }
+  if (grey <= 0) return {1, 1, 1};
+  return {static_cast<float>(cross[0] / grey), static_cast<float>(cross[1] / grey), static_cast<float>(cross[2] / grey)};
+}
+
+/** The tint (as set on the material) that shows a grey copy as `tint` showed the sprite `match` fits. */
+inline Rgb grey_tint(Rgb tint, Rgb match) {
+  return {to_gamma(to_linear(tint.r) * match.r), to_gamma(to_linear(tint.g) * match.g),
+          to_gamma(to_linear(tint.b) * match.b)};
 }
 
 // The host's message to every client: byte 1 (its kind), a little-endian u16 count, then per flame
-// its fire source's PhotonView id (i32, little-endian) and its blueness (u8, 0..255, rounded down so
-// a flame at the false-positive cap never reads past it on a client).
+// its fire source's PhotonView id (i32, little-endian) and how blue it shows (u8, 0..255, rounded down
+// so a flame at the false-positive cap never reads past it on a client).
 constexpr uint8_t kFlamesMessage = 1;
 constexpr size_t kMaxPerMessage = 100;  // 503 bytes, within the host's 511
 

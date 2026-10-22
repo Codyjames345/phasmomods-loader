@@ -131,22 +131,21 @@ struct Api {
 struct Tinted {  // a flame material, recoloured
   il2cpp::Held material;
   int property;
-  Color original;
-  il2cpp::Held sprite;  // a candle flame's own texture, greyed as it turns (flame_rules.h grey_step)
-  int greyShown = 0;    // the grey step its texture shows
+  Color original;       // the game's own, put back when the contract ends
+  Color warm;           // its colour at none: the game's own, or what shows the grey sprite as the game's
+  il2cpp::Held sprite;  // a candle flame's own sprite, which shows grey for the contract (flame_rules.h)
 };
 struct Glow {  // a candle's wax, lit from within while it burns
   il2cpp::Held material;
   Color original;  // the glow the game gives it when lit (Candle+0x450)
 };
-// Grey copies of one flame texture, one per step from its own colours to grey, made the first time a
-// flame needs each and kept for the contract.
-struct Greys {
+// A grey copy of one flame sprite, made from the sprite the first time a flame shows it, with the tint
+// that shows it as the sprite did, and kept for the contract.
+struct Grey {
   il2cpp::Held source;
-  int width = 0, height = 0;
-  std::vector<uint8_t> texels;          // the source's, RGBA as stored
-  std::vector<il2cpp::Held> steps;      // steps[k - 1]: k of kGreySteps of the way to grey
-  bool failed = false;                  // it could not be read back: flames keep the game's texture
+  il2cpp::Held texture;
+  Rgb match{1, 1, 1};  // flame_rules.h grey_match
+  bool failed = false;  // it could not be made: flames keep the game's sprite and their own tint
 };
 struct Lit {  // a light, recoloured
   il2cpp::Held light;
@@ -167,6 +166,7 @@ struct Flame {
   il2cpp::Held candle;  // Candle it belongs to
   Kind kind = Kind::Tier1;
   int view = 0;            // PhotonView id: what the host's message names it by
+  float ghostTime = 0;     // host: the ghost's time in its room, built up and drained (flame_rules.h)
   float blueness = 0;      // host: worked out here; others: as received
   bool full = false;       // host: it has been fully blue since it was set down and lit
   float shown = 0;         // what its colours show
@@ -189,7 +189,7 @@ il2cpp::Held g_level;  // the LevelController the flames belong to
 std::vector<Flame> g_flames;
 std::vector<Look> g_looks;
 std::vector<Candelabra> g_candelabras;
-std::vector<Greys> g_greys;
+std::vector<Grey> g_greys;
 ULONGLONG g_nextScan = 0, g_nextSend = 0, g_lastHeard = 0, g_nextReport = 0;
 std::unordered_map<int, float> g_heard;  // view id -> blueness, from the host's last message
 std::unordered_map<void*, float> g_candleBlue;  // Candle -> its bluest flame, for the sanity detour
@@ -231,32 +231,29 @@ void* new_texture(int width, int height) {
 }
 
 /**
- * The texels of a flame texture, which the game keeps unreadable: drawn into a render texture and
- * read back from it. RenderTexture.active is put back however the read ends.
+ * The texels of a flame sprite, which the game keeps unreadable: drawn into a render texture and read
+ * back from it. RenderTexture.active is put back however the read ends.
  */
-bool read_back(Greys& g) {
-  g.width = api.width(g.source, nullptr);
-  g.height = api.height(g.source, nullptr);
-  if (g.width <= 0 || g.height <= 0) return false;
-  void* target = api.getTemporary(g.width, g.height, 0, kFormatArgb32, kReadWriteSrgb, nullptr);
+bool read_back(void* source, int width, int height, std::vector<uint8_t>& out) {
+  void* target = api.getTemporary(width, height, 0, kFormatArgb32, kReadWriteSrgb, nullptr);
   if (!target) return false;
   void* previous = api.activeTarget(nullptr);
   il2cpp::Held readable;
   bool ok = false;
   try {
-    api.blit(g.source, target, nullptr);
+    api.blit(source, target, nullptr);
     api.setActiveTarget(target, nullptr);
-    readable = new_texture(g.width, g.height);
-    const Rect all{0, 0, static_cast<float>(g.width), static_cast<float>(g.height)};
+    readable = new_texture(width, height);
+    const Rect all{0, 0, static_cast<float>(width), static_cast<float>(height)};
     if (readable) api.readPixels(readable, &all, 0, 0, nullptr);
     il2cpp::Array* texels = readable ? api.getPixels(readable, nullptr) : nullptr;
-    if (texels && texels->max_length == static_cast<uintptr_t>(g.width) * g.height) {
+    if (texels && texels->max_length == static_cast<uintptr_t>(width) * height) {
       const uint8_t* rgba = texels->data<uint8_t>();
-      g.texels.assign(rgba, rgba + texels->max_length * 4);
+      out.assign(rgba, rgba + texels->max_length * 4);
       ok = true;
     }
   } catch (const Il2CppExceptionWrapper& e) {
-    il2cpp::log_exception("flames: reading a flame texture back threw", e.ex);
+    il2cpp::log_exception("flames: reading a flame sprite back threw", e.ex);
   }
   api.setActiveTarget(previous, nullptr);
   api.releaseTemporary(target, nullptr);
@@ -265,80 +262,74 @@ bool read_back(Greys& g) {
 }
 
 /**
- * Grey step `step` (1..kGreySteps) of a flame texture already read back, sampled as the game's own,
- * made into `slot`: it is held from the start, so it goes with the contract whatever happens, and
- * left empty unless it is whole.
+ * The grey copy of `g.source`, sampled as the game's own sprite, and the tint match for it. The copy
+ * is held from the start, so it goes with the contract whatever happens, and is kept only when whole.
  */
-void make_step(const Greys& g, int step, il2cpp::Held& slot) {
-  slot = new_texture(g.width, g.height);
-  il2cpp::Array* texels = slot ? api.getPixels(slot, nullptr) : nullptr;
-  if (!texels || texels->max_length * 4 != g.texels.size()) {
-    game::destroy(slot);
-    slot = nullptr;
-    return;
+bool make_grey(Grey& g) {
+  const int width = api.width(g.source, nullptr), height = api.height(g.source, nullptr);
+  std::vector<uint8_t> texels;
+  if (width <= 0 || height <= 0 || !read_back(g.source, width, height, texels)) return false;
+  g.match = grey_match(texels.data(), texels.size() / 4);
+  g.texture = new_texture(width, height);
+  il2cpp::Array* copy = g.texture ? api.getPixels(g.texture, nullptr) : nullptr;
+  if (!copy || copy->max_length * 4 != texels.size()) return false;
+  uint8_t* rgba = copy->data<uint8_t>();
+  for (size_t i = 0; i < texels.size(); i += 4) {
+    std::copy_n(texels.data() + i, 4, rgba + i);
+    to_grey(rgba + i);
   }
-  uint8_t* rgba = texels->data<uint8_t>();
-  const float amount = static_cast<float>(step) / kGreySteps;
-  for (size_t i = 0; i < g.texels.size(); i += 4) {
-    std::copy_n(g.texels.data() + i, 4, rgba + i);
-    to_grey(rgba + i, amount);
-  }
-  api.setPixels(slot, texels, nullptr);
-  api.setWrapMode(slot, api.wrapMode(g.source, nullptr), nullptr);
-  api.setFilterMode(slot, api.filterMode(g.source, nullptr), nullptr);
-  api.apply(slot, true, true, nullptr);  // its mipmaps, then gone from memory but on the GPU
+  api.setPixels(g.texture, copy, nullptr);
+  api.setWrapMode(g.texture, api.wrapMode(g.source, nullptr), nullptr);
+  api.setFilterMode(g.texture, api.filterMode(g.source, nullptr), nullptr);
+  api.apply(g.texture, true, true, nullptr);  // its mipmaps, then gone from memory but on the GPU
+  PG_LOG("flames: a flame sprite (%dx%d) shows grey, matched by (%.3f, %.3f, %.3f)", width, height, g.match.r,
+         g.match.g, g.match.b);
+  return true;
 }
 
-/** The texture a flame whose own is `source` shows at grey step `step`: `source` itself at 0. */
-void* grey_texture(void* source, int step) {
-  if (step <= 0 || !alive(source)) return source;
-  Greys* g = nullptr;
-  for (Greys& known : g_greys)
-    if (known.source == source) g = &known;
-  if (!g) {
-    g = &g_greys.emplace_back();
-    g->source = source;
-    g->steps.resize(kGreySteps);
-    g->failed = !read_back(*g);
-    if (g->failed) PG_LOG("flames: a flame texture could not be read back: its flames keep the game's colours under the tint");
-    else PG_LOG("flames: a flame texture (%dx%d) reads back for its grey steps", g->width, g->height);
+/** The grey copy of the flame sprite `source`, made the first time it is asked for; null if it cannot be. */
+const Grey* grey_of(void* source) {
+  if (!api.textures || !alive(source)) return nullptr;
+  for (const Grey& known : g_greys)
+    if (known.source == source) return known.failed ? nullptr : &known;
+  Grey& g = g_greys.emplace_back();
+  g.source = source;
+  try {
+    g.failed = !make_grey(g);
+  } catch (const Il2CppExceptionWrapper& e) {
+    il2cpp::log_exception("flames: making a grey flame sprite threw", e.ex);
+    g.failed = true;
   }
-  if (g->failed) return source;
-  il2cpp::Held& slot = g->steps[step - 1];
-  if (!alive(slot)) {
-    try {
-      make_step(*g, step, slot);
-    } catch (const Il2CppExceptionWrapper& e) {
-      il2cpp::log_exception("flames: making a grey flame texture threw", e.ex);
-      game::destroy(slot);
-      slot = nullptr;
-      g->failed = true;
-    }
+  if (g.failed) {
+    game::destroy(g.texture);
+    g.texture = nullptr;
+    PG_LOG("flames: a flame sprite could not be made grey: its flames keep the game's sprite under the tint");
+    return nullptr;
   }
-  return alive(slot) ? slot.get() : source;
+  return &g;
 }
 
-/** The flame texture `texture` is a grey step of, or `texture` itself. */
+/** The game's own sprite, for `texture` itself or a grey copy of it. */
 void* own_texture(void* texture) {
-  for (const Greys& g : g_greys)
-    for (const il2cpp::Held& step : g.steps)
-      if (texture && step == texture) return g.source;
+  for (const Grey& g : g_greys)
+    if (texture && g.texture == texture) return g.source;
   return texture;
 }
 
-void paint(Tinted& t, float blueness) {
+void paint(const Tinted& t, float blueness) {
   if (!alive(t.material)) return;
-  const Rgb warm{t.original.r, t.original.g, t.original.b};
-  const FlameColours stops = flame_colours(kFlameDeep, g_green);
+  const Rgb warm{t.warm.r, t.warm.g, t.warm.b};
+  const FlameColours stops = flame_colours(g_green);
   const Rgb c = tint(warm, stops.pale, stops.deep, blueness);
-  const Color out{c.r, c.g, c.b, t.original.a};
+  const Color out{c.r, c.g, c.b, t.warm.a};
   api.setColor(t.material, t.property, &out);
-  // The game's flame sprite is coloured, so the tint alone leaves its orange olive: the texture greys
-  // as the flame turns, and from white-hot on the tint gives the whole flame its hue.
-  if (t.sprite && grey_step(blueness) != t.greyShown) {
-    t.greyShown = grey_step(blueness);
-    api.setTexture(t.material, api.candleSprite, grey_texture(t.sprite, t.greyShown), nullptr);
-  }
+}
+
+/** The game's own colour, and its own sprite, back on a flame material. */
+void restore(const Tinted& t) {
+  if (!alive(t.material)) return;
+  api.setColor(t.material, t.property, &t.original);
+  if (t.sprite && alive(t.sprite)) api.setTexture(t.material, api.candleSprite, t.sprite, nullptr);
 }
 
 /**
@@ -359,17 +350,16 @@ void paint(const Look& l, float blueness) {
 }
 
 void paint(Flame& f) {
-  for (Tinted& t : f.materials) paint(t, f.blueness);
+  for (const Tinted& t : f.materials) paint(t, f.blueness);
   const bool lit = il2cpp::field<bool>(f.fire, kFireLit);
   for (const Glow& g : f.glows) paint(g, f.blueness, lit);
   f.shown = f.blueness;
 }
 
 void release(Flame& f) {
-  f.blueness = 0;
-  if (alive(f.fire)) paint(f);
-  else
-    for (Tinted& t : f.materials) paint(t, 0);
+  for (const Tinted& t : f.materials) restore(t);
+  const bool lit = alive(f.fire) && il2cpp::field<bool>(f.fire, kFireLit);
+  for (const Glow& g : f.glows) paint(g, 0, lit);
   f = Flame{};
 }
 
@@ -381,9 +371,8 @@ void clear_all() {
   for (Flame& f : g_flames) release(f);
   for (const Look& l : g_looks) paint(l, 0);
   for (Candelabra& c : g_candelabras) release(c);
-  // Every flame shows its own texture again, so the grey copies go with the contract.
-  for (Greys& g : g_greys)
-    for (il2cpp::Held& step : g.steps) game::destroy(step);
+  // Every flame shows its own sprite again, so the grey copies go with the contract.
+  for (Grey& g : g_greys) game::destroy(g.texture);
   g_flames.clear();
   g_looks.clear();
   g_candelabras.clear();
@@ -431,16 +420,27 @@ void collect(Flame& f, void* transform, int depth) {
     bool known = false;
     for (const Tinted& t : f.materials) known |= t.material == material;
     if (material && !known) {
-      Tinted t{material, property, {}};
+      Tinted t{material, property, {}, {}};
       api.getColor(material, property, &t.original);
-      if (property == api.candleTint && api.textures && api.hasProperty(material, api.candleSprite))
-        t.sprite = own_texture(api.getTexture(material, api.candleSprite, nullptr));
+      t.warm = t.original;
+      // A candle flame shows its sprite's grey copy from now on, with the tint that shows it as the
+      // game's own did; the tint alone then colours the whole flame.
+      if (property == api.candleTint && api.textures && api.hasProperty(material, api.candleSprite)) {
+        void* sprite = own_texture(api.getTexture(material, api.candleSprite, nullptr));
+        if (const Grey* grey = grey_of(sprite)) {
+          t.sprite = sprite;
+          api.setTexture(material, api.candleSprite, grey->texture, nullptr);
+          const Rgb warm = grey_tint({t.original.r, t.original.g, t.original.b}, grey->match);
+          t.warm = {warm.r, warm.g, warm.b, t.original.a};
+        }
+      }
       f.materials.push_back(std::move(t));
       // A lantern's flame is noise between two colours; both turn, so none of the game's blue stays
       // in a green flame.
       if (property == api.lanternTint && api.hasProperty(material, api.lanternBase)) {
-        Tinted base{material, api.lanternBase, {}};
+        Tinted base{material, api.lanternBase, {}, {}};
         api.getColor(material, api.lanternBase, &base.original);
+        base.warm = base.original;
         f.materials.push_back(std::move(base));
       }
     }
@@ -566,6 +566,10 @@ void scan(void* level) {
     f.view = api.viewId(view, nullptr);
     const int tier = storeItem ? il2cpp::field<int>(storeItem, kStoreItemTier) : 0;
     f.kind = holder ? Kind::Candelabra : tier == 2 ? Kind::Tier3 : tier == 1 ? Kind::Tier2 : Kind::Tier1;
+    // Its visuals from the start, so a candle flame shows its grey sprite (as the game's own) before
+    // it ever turns, in the truck, in a hand or set down alike.
+    find_visuals(f, fires_of(owner) == 1);
+    paint(f);
     g_flames.push_back(std::move(f));
   });
 }
@@ -650,10 +654,9 @@ void report(void* level, const GhostNow& ghost, ULONGLONG now) {
   for (Flame& f : g_flames) {
     if (!il2cpp::field<bool>(f.fire, kFireLit) || !placed(f)) continue;
     if (listed++ == kReportFlames) break;
-    PG_LOG("flames:   %s flame %d: placed %d, in room %d, %.0f%% blue, burns %.0fs more, %zu materials%s",
-           kind_name(f.kind), f.view, placed(f), room_index(level, room_of(f, level, now)), f.blueness * 100,
-           il2cpp::field<float>(f.candle, kCandleRemaining), f.materials.size(),
-           f.found ? "" : " (not looked for yet)");
+    PG_LOG("flames:   %s flame %d: placed %d, in room %d, ghost time %.0f%%, %.0f%% blue, burns %.0fs more, %zu materials",
+           kind_name(f.kind), f.view, placed(f), room_index(level, room_of(f, level, now)), f.ghostTime * 100,
+           f.blueness * 100, il2cpp::field<float>(f.candle, kCandleRemaining), f.materials.size());
   }
 }
 
@@ -669,7 +672,8 @@ void host_step(void* level, float dt, ULONGLONG now) {
     in.ghostInRoom = in.lit && in.placed && ghost.room && room_of(f, level, now) == ghost.room;
     in.hasEvidence = ghost.hasEvidence;
     in.kind = f.kind;
-    const State next = step({f.blueness, f.full}, in, dt);
+    const State next = step({f.ghostTime, f.blueness, f.full}, in, dt);
+    f.ghostTime = next.ghostTime;
     f.blueness = next.blueness;
     f.full = next.full;
     // Now and then the calm ghost in its room puts out a fully blue flame (BlowOutFire, as the game's own).
@@ -786,7 +790,7 @@ void detour_blow_out(void* fire, bool byGhost, const void* method) {
   hooks::Guard guard;
   if (byGhost && g_enabled && g_givesFlame && game::is_master()) {
     for (const Flame& f : g_flames) {
-      if (f.fire != fire || ghost_may_blow_out(placed(f), g_givesFlame, {f.blueness, f.full})) continue;
+      if (f.fire != fire || ghost_may_blow_out(placed(f), g_givesFlame, {f.ghostTime, f.blueness, f.full})) continue;
       PG_LOG("flames: flame %d stays lit: the ghost cannot blow it out before it has been fully blue", f.view);
       return;
     }
