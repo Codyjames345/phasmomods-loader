@@ -201,7 +201,10 @@ reports an entry whose problem is already gone.
   message and PlayerSanity.ChangeSanity(+5) on the hit player's client. No throw with nobody in
   sight (the game's sensor, GhostAI+0xA0, via Sensor.IsDetected); hunt throws (Prop.TryThrow from
   the hunt state, only while hunting) fly at the hunt target (+0x48) when the sensor sees it within 8 m, else the throw is swallowed; the AI only.
-  - Lethe: it drops its target one second after the game's sensor loses them.
+  - Lethe: one second after the hunt's own sight test (0x214BB40, through the trampoline) stops passing
+  for the player its hunt still looks for (its last player, +0x58, kept when its chase drops its target
+  +0x48), it clears them there and from +0x50, as the game's kill does, and no longer wanders where it
+  lost them ("lethe: it forgets its prey").
   - Gremlin: Equipment.Use through each class's override switches a device off for every client;
   IRLightSensor is the D.O.T.S. projector (its prefab says so).
   - Bogeyman: ClosetZone.CheckCloset searches a closet as the game's hunt does; clearing the hunt
@@ -217,7 +220,12 @@ reports an entry whose problem is already gone.
   from the idle door chance (0x2007C60, told apart by return address), has picked a door, 3 in 4 times
   it returns instead a closet door that the door sensor (GhostActivity +0x20) detects, as Sensor.IsDetected
   on the door's GameObject reports, and the game's door interaction (ChangeState(5) on the door's
-  PhotonObjectInteract, Door +0x98) opens or closes it, with prints.
+  PhotonObjectInteract, Door +0x98) opens or closes it, with prints. A lone player beyond 7 m in an open
+  room fails its sight test, so it does not chase them. Its walk to the hiding places, like the Black
+  Shuck's trail steering, waits out the hunt-start delay (hunt state +0x8C below 0, as the hunt's gate
+  0x213F6F0 reads it). When the delay ends the gate sends the ghost towards GhostAI +0xDC (through
+  0x2155C00): check that the Bogeyman still stands by the closet it stepped out of then, and that the
+  youngest player has that delay to react.
   - Speed rules (behaviour.cpp, speed_rule.h): no speed blip every 2 s in any custom hunt (the base
   refresh detour); at 50% and 150% ghost speed and in Blood Moon each custom ghost's speed scales
   once, as a vanilla ghost's does.
@@ -326,7 +334,11 @@ reports an entry whose problem is already gone.
   GhostInfo+0x28 on every client), with the hue of the game's D.O.T.S. green. Unverified: a Hydra's
   flame turns pale green at the cap on zero evidence and full green with evidence given, its lights
   following; other ghosts stay blue; the host report's "green 1" for a Hydra; the pale green reads as
-  plainly not the pale blue on screen.
+  plainly not the pale blue on screen; the pale and deep greens are told apart on screen (20 to 32
+  degrees of hue apart offline, separated mostly by saturation). A Hydra's Tier 3 lantern may read
+  blue-green: the branch paints only the Lantern Flame's _Color_2 (flames.cpp:237), while the shader
+  lerps between _Color_1 (the game's blue) and _Color_2; painting _Color_1 from the same flame_colours
+  pair is planned in the separate Spectral Flame recolour work.
 
   Prompt:
   > In this repository, play private contracts in Phasmophobia build 25811160 with Spectral Flame and
@@ -342,7 +354,8 @@ reports an entry whose problem is already gone.
   > goes no further, and the ghost may blow it out. A fully blue candle no longer eases sanity drain. The other client sees the
   > same colours. Then the Hydra, once on zero evidence and once with 3 evidence given: its flame
   > turns pale green at the cap on zero evidence and full green with evidence given, the light on the
-  > walls green with it, on both clients ("green 1" in the report); every other ghost's stays blue.
+  > walls green with it, on both clients ("green 1" in the report), the pale green plainly not the
+  > deep one; on a Tier 3 lantern, note whether it reads green or blue-green; every other ghost's stays blue.
   > Then a contract with Custom Ghosts off: no row and no tint.
 
 ## 19. The Mods panel, the themed notice and the join guard have never run inside the game
@@ -428,11 +441,12 @@ reports an entry whose problem is already gone.
   GhostData entries made with il2cpp_object_new (no Unity object behind them), behaviour type
   GhostType.None set in GhostAI.Init and GhostInfo.SyncValuesNetworked, the localisation keys, the
   journal clones (ghost buttons, Ghosts-tab entries and pages, the grid cell height, the journal's
-  lists, map, page array and the ghost sync controller's button array), the NavMeshAgent.set_speed
-  hook, the Draugr's room survey, the Kikimora's ownership takeover and teleport, and the Echo's
-  Vivox tap capture, clip transfer and playback. LevelStats.SendData reports the ghost type to the
-  game's analytics as text, so a custom ghost is reported as "31" to "35"; the mod does not touch
-  telemetry. The Black Shuck's hunt rests on detours of the hunt state's sense tests by RVA (sight
+  lists, map, page array and the ghost sync controller's button array), the hunt speed written into
+  the hunt state (base +0xB0, line-of-sight speed-up +0xB4, put back after the game's two-second base
+  refresh 0x214C2A0), the Draugr's room survey, the Kikimora's ownership takeover and teleport, and
+  the Echo's Vivox tap capture, clip transfer and playback. LevelStats.SendData reports the ghost type
+  to the game's analytics as text, so a custom ghost is reported as "31" to "35"; the mod does not
+  touch telemetry. The Black Shuck's hunt rests on detours of the hunt state's sense tests by RVA (sight
   0x214BB40, voice 0x214DDA0, electronics 0x21554D0), its set-target 0x2150AB0 handing a hidden
   player to its closet search 0x213B840, and NavMeshAgent.SetDestination; on the game's own
   eligibility test 0x214FD80 and closet setter 0x213FA10; on its writes to the hunt state's target,
@@ -443,9 +457,11 @@ reports an entry whose problem is already gone.
   The Echo's repeat rests on detours of the RPCs every client runs for a switch's use
   (LightSwitch.Use 0x26E5940, a player's when its byGhost and counted flags are both clear) and a
   player's door grab (Door.NetworkedGrabbedDoor 0x264D150), on LightSwitch +0xD0 and LevelRoom +0x28
-  for its room, on the ghost's interaction sensor (GhostActivity +0x20, pulsed by TryInteract)
-  detecting the object while the ghost stands where it last pulsed, and on the game's own light and
-  door states (GhostAI.ChangeState 4 and 5) started from TryInteract.
+  for its room, on the ghost's interaction sensor (GhostActivity +0x20) detecting the object when the
+  repeat pulses it where the ghost stands, as TryInteract does (RangeSensor.SetBoxShape 0x3E99F90, then
+  the sensor class's vtable entry +0x178), with its OnPulsed delegate (+0x128, the ghost's whole
+  interaction) set aside for that pulse and put back, and on the game's own light and door states
+  (GhostAI.ChangeState 4 and 5) started from TryInteract.
 
   Prompt:
   > In this repository, run a private contract where every client runs
@@ -467,7 +483,9 @@ reports an entry whose problem is already gone.
   > a light switched or a door moved in the Echo's room is the next thing it touches within a minute
   > ("echo: a player used a" and "echo: repeats a player's" in the host's log; EMF at that switch or
   > door), also when a client other than the host used it, never before the ghost comes near it,
-  > and that a dormant Echo still loses most of its other interactions.
+  > still within the minute while the Echo is dormant (nobody talking), with no other interaction
+  > (prints, EMF, a door or switch moving) at the moment of each repeat's check, and that a dormant
+  > Echo still loses most of its other interactions.
 
 ## 11. The mod host, its consent notice and mod loading have never run inside the game
 
