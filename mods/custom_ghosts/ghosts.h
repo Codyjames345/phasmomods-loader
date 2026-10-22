@@ -99,7 +99,7 @@ inline constexpr Ghost kGhosts[] = {
      "living forget too: photos fade, and in a hunt it loses you a second after you leave its sight.",
      "Photos, videos and recordings of a Lethe fade from the journal a few minutes after they are taken, "
      "unless someone looks at them first.",
-     "A Lethe forgets its prey: once it loses sight of someone in a hunt, it forgets them within a second.",
+     "A Lethe forgets its prey: once it loses sight of someone in a hunt, it gives up the chase within a second.",
      nullptr, nullptr},
     {kMesmer, "Mesmer", {kSpiritBox, kDots, kSpectralFlame},
      "Named for the showman whose audiences saw whatever he wished. An illusionist with a different face "
