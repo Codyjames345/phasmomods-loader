@@ -50,5 +50,9 @@ void* choose_target(int type, void* ghost, void* proposed);
 // Whether the ghost's hunt may go for this player, by the game's own test: alive, not in the truck, not
 // already killed in this hunt. False while it is not hunting.
 bool may_go_for(void* ghost, void* player);
+// Whether the game's own sight test (0x214BB40, through the detour's trampoline, so no custom policy and no
+// re-entry) passes for this player in the ghost's hunt; false for a player the hunt may not go for. Like
+// the game's, a pass records the player in the hunt's seen set.
+bool hunt_sees(void* ghost, void* player);
 
 }  // namespace pg::custom::behaviour

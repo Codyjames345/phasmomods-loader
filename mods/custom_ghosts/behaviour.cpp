@@ -47,6 +47,7 @@ constexpr size_t kHuntCloset = 0xD8;              // hunt state: the ClosetZone 
 constexpr size_t kPlayerRoom = 0x50;              // Player: the LevelRoom they are in
 constexpr size_t kGhostSmudge = 0xF8;             // GhostAI: the WhiteSage while smudged in a hunt
 constexpr size_t kPlayerCloset = 0x30;            // Player: the ClosetZone they hide in, or null
+constexpr size_t kPlayerSightParts = 0x80;        // Player: the components the hunt's sight test looks for (it throws on null)
 constexpr size_t kSinkWater = 0x20;               // Sink: the water surface Transform its fill tween moves
 constexpr size_t kSinkUsed = 0x74;                // Sink: set by its first Use, which shows the water and starts the fill
 constexpr size_t kLevelValuesWeather = 0x98;      // LevelValues: the contract's weather settings
@@ -544,6 +545,11 @@ void* choose_target(int type, void* ghost, void* proposed) {
 bool may_go_for(void* ghost, void* player) {
   if (!ghost || game::ghost_state(ghost) != game::kStateHunting) return false;  // another state's fields are not a hunt's
   return game::living(player) && eligible(game::ghost_state_object(ghost), player);
+}
+
+bool hunt_sees(void* ghost, void* player) {
+  if (!may_go_for(ghost, player) || !il2cpp::field<void*>(player, kPlayerSightParts)) return false;
+  return g_huntSees(game::ghost_state_object(ghost), player, false, nullptr);  // the trampoline: never this mod's detour
 }
 
 bool resolve() {

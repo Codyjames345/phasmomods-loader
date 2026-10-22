@@ -8,6 +8,8 @@
 //  - Gremlin: some of its interactions switch off running electronics instead (gremlin.h).
 //  - Brownie: nothing while an investigator or a running video camera has it in view (brownie.h).
 //  - Tempest: lightning strikes as each of its events begins (tempest.h), through the same hook.
+//  - Bogeyman: its AI's hunts begin from a closet (bogeyman.h), through the same hook, and outside hunts
+//    most of its AI's door interactions near a closet are on the closet's door (GhostActivity.GetDoorToOpen).
 // The game's own AI is held back through GhostActivity.TryInteract and GhostAI.ChangeState; a player
 // controlling the ghost asks held_back() through the service (core/services.h) before acting.
 namespace pg::custom::restraint {
@@ -16,8 +18,8 @@ enum Kind { kInteract = 0, kEvent = 1 };
 
 bool create_hooks();  // before hooks::enable_all
 // The custom ghost haunting the contract (on the host; null otherwise) and its type, every frame.
-// `steered`: a player controls it, so the Lithobolia's hunt throws stay the game's own and the
-// Bogeyman's hunts begin where it stands.
+// `steered`: a player controls it, so the Lithobolia's hunt throws stay the game's own, the Bogeyman's
+// hunts begin where it stands and its doors are the ones the player picks.
 void tick(void* ghost, int type, bool steered);
 // The rule holds now (no roll): the action would not happen.
 bool held_back(int type, Kind kind);

@@ -218,11 +218,20 @@ void the_bogeyman_stalks_the_youngest() {
   CHECK(youngest({{0, 50, 3, false}}) == -1);                              // the dead are never picked
   CHECK(youngest({{1, 5, 2, true}, {0, 90, 9, true}}) == 1);               // prestige first
   CHECK(youngest({{0, 20, 9, true}, {0, 20, 2, true}, {0, 30, 1, true}}) == 1);  // then level, then nearest
+  // A player whose progress cannot be read comes after every player whose progress can.
+  CHECK(youngest({{kUnknownProgress, kUnknownProgress, 1, true}, {3, 90, 9, true}}) == 1);
+  CHECK(youngest({{kUnknownProgress, kUnknownProgress, 1, true}}) == 0);
+  // In an open room it loses sight beyond 7 m: such a player neither stays its prey nor counts among those
+  // it picks the youngest from.
+  CHECK(open_sight_lost(true, 7.5f) && !open_sight_lost(true, 7.0f) && !open_sight_lost(false, 20.0f));
 }
 
 void the_bogeyman_lurks_in_the_nearest_closet() {
   CHECK(lurk_place({{0, 0, 12}}, {0, 0, 0}) == -1);                        // none within 10 m: it starts where it is
   CHECK(lurk_place({{0, 0, 8}, {0, 0, 3}}, {0, 0, 0}) == 1);
+  CHECK(lurk_place({{0, 0, 10}}, {0, 0, 0}) == 0);                         // exactly 10 m is within reach
+  CHECK(lurk_place({{4, 3.5f, 0}}, {0, 0, 0}) == -1);                      // 4 m along but 3.5 m up: another floor
+  CHECK(lurk_place({{9, 1.5f, 0}}, {0, 0, 0}) == 0);                       // a step up on their floor: its true distance
 }
 
 void the_brownie_works_unseen() {

@@ -27,8 +27,17 @@ constexpr size_t kClosetRightDoor = 0x30;    // ClosetZone: Door
 constexpr size_t kClosetNavSpot = 0x48;      // ClosetZone: Transform where a searcher stands
 constexpr size_t kLevelGhostRoom = 0x38;     // LevelController: the room the ghost is in
 constexpr size_t kHuntTarget = 0x48;         // hunt state: the player it has detected, or null
+constexpr size_t kPlayerCloset = 0x30;       // Player: the ClosetZone they hide in, or null
+constexpr size_t kDoorKind = 0x108;          // Door: None 0, Main 1, Secondary 2, PermanentLock 3
+constexpr int kMainDoor = 1;                 // GhostActivity.GetDoorToOpen never picks the main door
 constexpr uintptr_t kCheckClosetRva = 0x262DE80;  // ClosetZone.CheckCloset()
 constexpr uintptr_t kForceDoorRva = 0x264C3C0;    // Door.GhostForceDoor(bool open, float strength, bool skipRattle)
+// NavMesh.SamplePosition(Vector3 source, out NavMeshHit hit, float maxDistance, int areaMask): the game's own
+// ghost warps (GhostController.WarpGhostToFavouriteRoom, GhostAI's) sample their point first, in area mask 1.
+// Its hunt's chase samples a closet's nav spot within 1 m (the constant at 0x5582B24).
+constexpr uintptr_t kSamplePositionRva = 0x518F100;
+constexpr float kNavSpotSample = 1.0f;
+constexpr int kWalkableArea = 1;
 // Each player's progress as the lobby board shows it, on every client: ServerManager.UpdatePlayerLevelInformation
 // (0xB64E70), the buffered RPC each player sends with their saved experience, level and prestige, writes them
 // into their Network.PlayerSpot (+0x28, +0x2C, +0x30); ProfileCard.UpdateUI (0x13BE4B0) shows the level,
@@ -38,6 +47,15 @@ constexpr size_t kSpotPrestige = 0x30;       // Network.PlayerSpot: prestige (0 
 constexpr float kCreakStrength = 0.6f;       // a slow creak, not a slam
 constexpr ULONGLONG kScanMs = 5000;
 
+struct NavMeshHit {  // UnityEngine.AI.NavMeshHit (class dump), 0x24 bytes
+  Vector3 position;  // +0x0
+  Vector3 normal;    // +0xC
+  float distance;    // +0x18
+  int mask;          // +0x1C
+  int hit;           // +0x20
+};
+static_assert(sizeof(NavMeshHit) == 0x24);
+
 struct Api {
   il2cpp::Object* closetType = nullptr;
   il2cpp::Object* spotType = nullptr;
@@ -46,6 +64,7 @@ struct Api {
   void (*forceDoor)(void*, bool, float, bool, const void*) = nullptr;
   // NavMeshAgent.Warp (0x518C510): the game's own ghost teleport (GhostController.WarpGhostToFavouriteRoom, the Twins).
   bool (*warp)(void*, Vector3, const void*) = nullptr;
+  bool (*samplePosition)(Vector3, NavMeshHit*, float, int, const void*) = nullptr;  // kSamplePositionRva
   bool ok = false;
 } api;
 
@@ -114,16 +133,16 @@ void* spot_of(void* player) {
   return nullptr;
 }
 
-/** A player's level within their prestige, as the lobby board shows it (kSpotLevel); 0 when unknown. */
+/** A player's level within their prestige, as the lobby board shows it (kSpotLevel); kUnknownProgress without a spot. */
 int player_level(void* player) {
   void* spot = spot_of(player);
-  return spot ? il2cpp::field<int>(spot, kSpotLevel) : 0;
+  return spot ? il2cpp::field<int>(spot, kSpotLevel) : kUnknownProgress;
 }
 
-/** A player's prestige, as the lobby board shows it (kSpotPrestige); 0 when unknown. */
+/** A player's prestige, as the lobby board shows it (kSpotPrestige); kUnknownProgress without a spot. */
 int player_prestige(void* player) {
   void* spot = spot_of(player);
-  return spot ? il2cpp::field<int>(spot, kSpotPrestige) : 0;
+  return spot ? il2cpp::field<int>(spot, kSpotPrestige) : kUnknownProgress;
 }
 
 /** The youngest of these players (bogeyman_rule.h youngest) among those its hunt may go for; null for none. */
@@ -159,7 +178,8 @@ bool resolve() {
   ok &= il2cpp::bind(api.warp, il2cpp::cls("UnityEngine.AIModule.dll", "UnityEngine.AI", "NavMeshAgent"), "Warp", 1);
   api.checkCloset = reinterpret_cast<decltype(api.checkCloset)>(game::game_assembly_address(kCheckClosetRva));
   api.forceDoor = reinterpret_cast<decltype(api.forceDoor)>(game::game_assembly_address(kForceDoorRva));
-  api.ok = ok && api.checkCloset && api.forceDoor;
+  api.samplePosition = reinterpret_cast<decltype(api.samplePosition)>(game::game_assembly_address(kSamplePositionRva));
+  api.ok = ok && api.checkCloset && api.forceDoor && api.samplePosition;
   PG_LOG("bogeyman: resolve %s", api.ok ? "ok" : "unavailable (it hunts as any ghost)");
   return true;  // optional: the Bogeyman still hunts
 }
@@ -189,7 +209,7 @@ void tick(void* ghost, int type, bool steered) {
   const Vector3 at = game::position(game::transform_of(ghost));
   if (void* prey = il2cpp::field<void*>(state, kHuntTarget)) {
     // In an open room its sight is short: prey beyond it is lost.
-    if (g.open && game::alive(prey) && game::distance(at, game::position(game::transform_of(prey))) > kBogeymanOpenSight) {
+    if (game::alive(prey) && open_sight_lost(g.open, game::distance(at, game::position(game::transform_of(prey))))) {
       il2cpp::set_ref_field(state, kHuntTarget, nullptr);
     } else {
       g.goalSince = now;  // a chase is not time spent failing to reach the hiding place
@@ -223,29 +243,33 @@ void tick(void* ghost, int type, bool steered) {
 
 bool in_open_room() { return g.open; }
 
-bool creak(void* ghost) {
-  if (!api.ok || !ghost || std::uniform_real_distribution<float>(0, 1)(g_random) >= kBogeymanClosetDoorShare) return false;
+void* closet_door(void* ghost) {
+  if (!api.ok || !ghost) return nullptr;
   const Vector3 at = game::position(game::transform_of(ghost));
+  std::vector<void*> doors;
   for (const Hiding& h : g.places) {
     if (!h.closet || !game::alive(h.object.get()) || game::distance(at, {h.at.x, h.at.y, h.at.z}) > kBogeymanCreakReach) continue;
-    if (open_door(h.object.get())) {
-      PG_LOG("bogeyman: a closet door creaks open");
-      return true;
-    }
+    for (size_t side : {kClosetLeftDoor, kClosetRightDoor})
+      if (void* door = il2cpp::field<void*>(h.object.get(), side);
+          door && game::alive(door) && il2cpp::field<int>(door, kDoorKind) != kMainDoor)
+        doors.push_back(door);
   }
-  return false;
+  if (doors.empty() || std::uniform_real_distribution<float>(0, 1)(g_random) >= kBogeymanClosetDoorShare) return nullptr;
+  return doors[std::uniform_int_distribution<size_t>(0, doors.size() - 1)(g_random)];
 }
 
 void hunt_begins(void* ghost) {
-  if (!api.ok || !ghost || !game::alive(ghost)) return;
+  void* agent = api.ok && ghost && game::alive(ghost) ? game::ghost_agent(ghost) : nullptr;
+  if (!agent || !game::alive(agent)) return;
   std::vector<void*> players;
   game::each_player([&](void* p) { players.push_back(p); });
   void* chosen = youngest_of(ghost, players);
   if (!chosen) return;
+  void* theirs = il2cpp::field<void*>(chosen, kPlayerCloset);  // it does not step out of the closet they hide in
   std::vector<Place> closets;
   std::vector<size_t> placeOf;  // closets[i] is g.places[placeOf[i]]
   for (size_t i = 0; i < g.places.size(); ++i)
-    if (g.places[i].closet && game::alive(g.places[i].object.get())) {
+    if (g.places[i].closet && g.places[i].object.get() != theirs && game::alive(g.places[i].object.get())) {
       closets.push_back(g.places[i].at);
       placeOf.push_back(i);
     }
@@ -254,7 +278,12 @@ void hunt_begins(void* ghost) {
   if (lurk < 0) return;  // no closet near them: it starts where it is
   const size_t index = placeOf[lurk];
   const Place spot = g.places[index].at;  // the closet's nav spot, where a searcher stands
-  if (!api.warp(game::ghost_agent(ghost), {spot.x, spot.y, spot.z}, nullptr)) {
+  NavMeshHit hit{};
+  if (!api.samplePosition({spot.x, spot.y, spot.z}, &hit, kNavSpotSample, kWalkableArea, nullptr)) {
+    PG_LOG("bogeyman: no NavMesh at the closet nearest the youngest player; the hunt begins where it is");
+    return;
+  }
+  if (!api.warp(agent, hit.position, nullptr)) {
     PG_LOG("bogeyman: the teleport to a closet failed; the hunt begins where it is");
     return;
   }
@@ -265,9 +294,11 @@ void hunt_begins(void* ghost) {
 }
 
 void* choose_target(void* ghost, void* proposed) {
+  const Vector3 at = game::position(game::transform_of(ghost));
   std::vector<void*> detected;
   game::each_player([&](void* p) {
-    if (game::ghost_sees(ghost, p) && behaviour::may_go_for(ghost, p)) detected.push_back(p);
+    if (behaviour::hunt_sees(ghost, p) && !open_sight_lost(g.open, game::distance(at, game::position(game::transform_of(p)))))
+      detected.push_back(p);
   });
   if (detected.size() < 2) return proposed;
   return youngest_of(ghost, detected) == proposed ? proposed : nullptr;
