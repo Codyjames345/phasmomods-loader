@@ -56,5 +56,5 @@ reported as working.
 
 ## Development environment checks
 
-The workspace has no Git repository or CI pipeline. Local validation does not
+The repository has no CI pipeline. Local validation does not
 constitute a CI pass. Gameplay checks remain in FINDINGS entry 1.

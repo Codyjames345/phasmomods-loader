@@ -8,7 +8,25 @@ An entry is deleted in the change that fixes it. `/fix` takes a number or a few 
 a heading and does both halves; `/finding` writes a new entry; `harness-findings verify`
 reports an entry whose problem is already gone.
 
-<!-- next: 30 -->
+<!-- next: 31 -->
+
+## 30. The reverse-engineering scripts point at setup steps that do not exist
+
+  re/decomp.mjs:3
+
+  decomp.mjs says the one-time Ghidra import is described in re/README.md, and that file has never
+  existed. callers.mjs, decomp.mjs and slimpe.mjs all read re/names.tsv, which is git-ignored because
+  it is derived from the game's binaries, so a fresh clone has no way to rebuild what they need
+  except from notes kept outside the repository.
+
+  Prompt:
+  > re/decomp.mjs:3 refers to re/README.md for the one-time Ghidra import, and that file does not
+  > exist. Write re/README.md describing how to set up the reverse-engineering tools from a clean
+  > clone: generating a Cpp2IL DiffableCs dump from copies of the game files (never inside the game
+  > folder), building re/names.tsv with re/names.mjs, the headless Ghidra import into re/ghidra that
+  > decomp.mjs expects, and the GHIDRA_INSTALL_DIR variable. re/ghidra, re/out, re/names.tsv and
+  > re/import.log are git-ignored (see .gitignore). Name no path that exists on only one machine;
+  > read the install locations from variables or arguments instead. Run each documented command once.
 
 ## 29. The game's storm lightning throws on the ghost player's client in heavy rain
 
