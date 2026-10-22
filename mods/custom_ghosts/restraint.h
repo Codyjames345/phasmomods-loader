@@ -3,8 +3,8 @@
 // What a custom ghost may not do right now, whoever drives it. Runs on the host. Main thread.
 //  - Echo: while dormant (nobody heard near it for a minute) its interactions and events mostly fail;
 //    the AI loses 3 in 4 of them, a player cannot act at all until a voice wakes it. Through the same hook
-//    its AI's next interaction repeats a player's use of a switch or door in its room (echo.h repeat),
-//    dormant or not.
+//    its AI repeats a player's use of a switch or door in its room once its interaction sensor detects it
+//    (echo.h repeat); a repeat is never lost to dormancy, every other interaction is as before.
 //  - Kikimora: never touches anything in a room with the lights on.
 //  - Lithobolia: its throws go at an investigator in sight (lithobolia.h), through the same hook.
 //  - Gremlin: some of its interactions switch off running electronics instead (gremlin.h).

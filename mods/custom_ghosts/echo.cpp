@@ -47,8 +47,12 @@ constexpr size_t kInfoFavouriteRoom = 0x70;    // GhostInfo: favourite LevelRoom
 constexpr size_t kSwitchRoom = 0xD0;           // LightSwitch: its LevelRoom
 constexpr size_t kRoomDoors = 0x28;            // LevelRoom: Door[] (the Yurei's ability picks from it)
 constexpr size_t kDoorInteract = 0x98;         // Door: its PhotonObjectInteract
+constexpr size_t kActivitySensor = 0x20;       // GhostActivity: the RangeSensor its interactions read (TryInteract pulses it)
+constexpr float kStill = 0.5f;                 // metres: the ghost still stands where its sensor last pulsed
 // LightSwitch.Use(bool on, bool prints, bool byGhost, bool counted): the RPC LightSwitch.UseLightSwitch sends
-// to every client for each use, a player's (byGhost false) or the ghost's, so the host sees every one.
+// to every client for each use, so the host sees every one. A player's use (the interact handler 0x26DEC60)
+// clears every flag. The ghost's uses set byGhost; the switch's own sensor handler (0x26E4600) clears it but
+// sets counted, which adds a ghost interaction to LevelStats +0x9C. Neither is a player's.
 constexpr uintptr_t kSwitchUseRva = 0x26E5940;
 // Door.NetworkedGrabbedDoor(): the RPC Door.GrabbedDoor sends to every client when a player grabs an unlocked
 // door (its only callers are DragRigidbodyUse, the player's grab; ClothDoor's override calls it first).
@@ -58,7 +62,11 @@ constexpr uintptr_t kDoorGrabbedRva = 0x264D150;
 // forced) and ChangeState(door, the door's PhotonObjectInteract). The light state (Enter 0x21899B0) switches
 // a lit switch off, and an unlit one on when forced or 1 in 2, through UseLightSwitch(true, true, false):
 // the game's prints and EMF. The door state (Enter 0x20D1920) moves an unlocked door through
-// Door.GhostOpenDoorEvent or GhostOpenDoorAnimated, its own pick. Both return the AI to idle.
+// Door.GhostOpenDoorEvent or GhostOpenDoorAnimated, its own pick. Both return the AI to idle. Door.GhostForceDoor
+// (0x264C3C0) is not the call: it starts the door's force coroutine directly, as the Yurei's ability does,
+// while the door state is the ghost's ordinary door interaction and picks the move as the game's own do. Neither
+// state sends the grab RPC below (the door's coroutines send ForceDropDoorNetworked and PlayDoorSlamNoise), so
+// a repeat is never noted as a player's use.
 constexpr int kStateLight = 4, kStateDoor = 5;  // GhostAI.State
 
 // Messages on this mod's channel: 'C' 'G' version type, then:
@@ -121,6 +129,8 @@ struct State {
   size_t outgoingNext = 0;
   uint16_t nextClip = 1;
   Repeat<il2cpp::Held> repeat;                  // host: the switch or door its AI repeats next
+  bool pulsed = false;                          // host: the game's TryInteract pulsed its sensor at pulsedAt
+  Vector3 pulsedAt{};
 } g;
 
 std::mt19937 g_random{static_cast<unsigned>(GetTickCount64())};
@@ -301,12 +311,24 @@ void player_used(void* object, bool inItsRoom, const char* what) {
   if (inItsRoom) PG_LOG("echo: a player used a %s in its room", what);
 }
 
-/** Every client runs each use of a switch; the host notes a player's (not the ghost's) for the repeat. */
+/** Every client runs each use of a switch; the host notes a player's (neither flag set) for the repeat. */
 void detour_switch_use(void* lightSwitch, bool on, bool prints, bool byGhost, bool counted, const void* method) {
   hooks::Guard guard;
   g_switchUse(lightSwitch, on, prints, byGhost, counted, method);
-  if (void* room = !byGhost && lightSwitch ? favourite_room() : nullptr)
+  if (void* room = !byGhost && !counted && lightSwitch ? favourite_room() : nullptr)
     player_used(lightSwitch, il2cpp::field<void*>(lightSwitch, kSwitchRoom) == room, "light switch");
+}
+
+/**
+ * Whether the ghost's interaction sensor detects `object` from where the ghost stands now. Its detections
+ * change only when it is pulsed (for the AI, by each TryInteract), so they count only while the ghost still
+ * stands where the last TryInteract pulsed it.
+ */
+bool in_reach(void* ghost, void* object) {
+  void* activity = game::ghost_activity(ghost);
+  void* sensor = activity ? il2cpp::field<void*>(activity, kActivitySensor) : nullptr;
+  return sensor && g.pulsed && game::distance(game::position(game::transform_of(ghost)), g.pulsedAt) <= kStill &&
+         game::sensor_detects(sensor, game::game_object_of(object));
 }
 
 /** Every client runs each player's grab of a door; the host notes it for the repeat. */
@@ -408,6 +430,7 @@ void tick(void* ghost, bool steered, bool recording) {
       g.lastAudio.clear();
       g.holders.clear();
       g.repeat = {};
+      g.pulsed = false;
     }
     g.recording = recording;
   }
@@ -424,6 +447,7 @@ void tick(void* ghost, bool steered, bool recording) {
     g.lastHeard = now;  // a new Echo starts awake, with nothing to repeat
     g.nextWords = now + kMinGapMs;
     g.repeat = {};
+    g.pulsed = false;
   }
   if (!g.ghost) return;
   listen(now);
@@ -438,12 +462,12 @@ void reset() {
 
 bool dormant_now() { return dormant(); }
 
-bool repeat_pending() { return g.ghost && g.repeat.pending(GetTickCount64()); }
-
 bool repeat(void* ghost) {
   if (!api.ok || !ghost || !game::is_master() || game::ghost_state(ghost) == game::kStateHunting) return false;
-  void* object = g.repeat.take(GetTickCount64());
-  if (!object || !game::alive(object)) return false;
+  const ULONGLONG now = GetTickCount64();
+  void* object = g.repeat.pending(now);
+  if (!object || !game::alive(object) || !in_reach(ghost, object)) return false;  // it waits, within its minute
+  g.repeat.take(now);
   const bool door = il2cpp::is_kind(object, "Door");
   void* interact = door ? il2cpp::field<void*>(object, kDoorInteract) : game::get_component(object, api.interactType);
   if (!interact || !game::alive(interact)) return false;
@@ -451,6 +475,11 @@ bool repeat(void* ghost) {
   reinterpret_cast<ChangeState_t>(game::change_state())(ghost, door ? kStateDoor : kStateLight, interact, !door, nullptr);
   PG_LOG("echo: repeats a player's %s", door ? "door" : "light switch");
   return true;
+}
+
+void sensor_pulsed(void* ghost) {
+  g.pulsed = ghost != nullptr;
+  if (ghost) g.pulsedAt = game::position(game::transform_of(ghost));
 }
 
 }  // namespace pg::custom::echo

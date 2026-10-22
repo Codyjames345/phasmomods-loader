@@ -11,7 +11,8 @@
 // near it for a minute it falls quiet, and most of its interactions and events do not happen.
 // Nothing is written to disk; recordings are dropped when the contract ends. It also repeats what players
 // do (echo_rule.h): the host notes each player's use of a light switch or a door in its favourite room, and
-// its AI's next interaction within a minute uses that same switch or door. Main thread.
+// within a minute its AI's next interaction once its interaction sensor detects that switch or door uses it.
+// Main thread.
 namespace pg::custom::echo {
 
 bool resolve();
@@ -25,10 +26,12 @@ void tick(void* ghost, bool steered, bool recording);
 bool speak(void* ghost, int actor);
 void reset();
 bool dormant_now();  // host: the Echo has heard nobody near it for a minute
-bool repeat_pending();  // host: a player's use in its room waits for the AI's next interaction
 // The AI's interaction roll for the Echo on the host: true when it used the switch or door a player last used
 // in its room, within a minute, through the game's own light or door interaction (the game's interaction is
-// then skipped).
+// then skipped). It does so only once the ghost's interaction sensor, pulsed where it stands, detects that
+// switch or door; until then the use waits.
 bool repeat(void* ghost);
+// The game's own TryInteract ran for the Echo's AI on the host, pulsing its interaction sensor where it stands.
+void sensor_pulsed(void* ghost);
 
 }  // namespace pg::custom::echo

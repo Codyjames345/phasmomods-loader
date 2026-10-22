@@ -431,10 +431,11 @@ reports an entry whose problem is already gone.
   as running water while DOTween.IsTweening reports its fill tween playing (a tap turned on and off
   again should no longer break scent), and whether baths and showers are Sinks at all is unknown.
   The Echo's repeat rests on detours of the RPCs every client runs for a switch's use
-  (LightSwitch.Use 0x26E5940, a player's when its byGhost flag is clear) and a player's door grab
-  (Door.NetworkedGrabbedDoor 0x264D150), on LightSwitch +0xD0 and LevelRoom +0x28 for its room, and on
-  the game's own light and door states (GhostAI.ChangeState 4 and 5) started from TryInteract, which
-  run wherever the ghost stands.
+  (LightSwitch.Use 0x26E5940, a player's when its byGhost and counted flags are both clear) and a
+  player's door grab (Door.NetworkedGrabbedDoor 0x264D150), on LightSwitch +0xD0 and LevelRoom +0x28
+  for its room, on the ghost's interaction sensor (GhostActivity +0x20, pulsed by TryInteract)
+  detecting the object while the ghost stands where it last pulsed, and on the game's own light and
+  door states (GhostAI.ChangeState 4 and 5) started from TryInteract.
 
   Prompt:
   > In this repository, run a private contract where every client runs
@@ -455,7 +456,8 @@ reports an entry whose problem is already gone.
   > client), Echo repeating a phrase in a teammate's voice from the ghost, and with voice chat off,
   > a light switched or a door moved in the Echo's room is the next thing it touches within a minute
   > ("echo: a player used a" and "echo: repeats a player's" in the host's log; EMF at that switch or
-  > door), also when a client other than the host used it and while the ghost was elsewhere.
+  > door), also when a client other than the host used it, never before the ghost comes near it,
+  > and that a dormant Echo still loses most of its other interactions.
 
 ## 11. The mod host, its consent notice and mod loading have never run inside the game
 

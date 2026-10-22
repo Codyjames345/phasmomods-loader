@@ -584,9 +584,33 @@ void a_repeat_waits_for_the_echos_next_interaction() {
   r.used(&a, false, 0);
   CHECK(!r.pending(0));                           // outside its room: nothing waits
   r.used(&a, true, 1000);
-  CHECK(r.pending(1000 + kEchoRepeatMs));         // still within the minute
+  CHECK(r.pending(1000 + kEchoRepeatMs) == &a);   // still within the minute
+  CHECK(r.pending(2000) == &a);                   // looking does not take it
   CHECK(!r.pending(1000 + kEchoRepeatMs + 1));    // too late
   CHECK(r.take(2000) == &a && !r.pending(2000));  // taken: nothing waits any more
+}
+
+void a_use_outside_its_room_leaves_the_last_one_in_it() {
+  int a, b;
+  Repeat r;
+  r.used(&a, true, 0);
+  r.used(&b, false, 1000);                        // only uses in its room count
+  CHECK(r.take(2000) == &a);
+}
+
+void a_repeat_replaces_the_dormancy_roll() {
+  int rolls = 0;
+  auto roll = [&rolls](int value) {
+    return [&rolls, value] {
+      ++rolls;
+      return value;
+    };
+  };
+  CHECK(echo_roll(true, true, roll(0)) == EchoRoll::Repeat && rolls == 0);  // the repeat is the interaction: no roll
+  CHECK(echo_roll(false, true, roll(kEchoDormantLoss - 1)) == EchoRoll::Lost && rolls == 1);
+  CHECK(echo_roll(false, true, roll(kEchoDormantLoss)) == EchoRoll::Game && rolls == 2);  // 3 in 4 lost, 1 kept
+  CHECK(echo_roll(false, false, roll(0)) == EchoRoll::Game && rolls == 2);  // awake: the game's own, no roll
+  CHECK(kEchoDormantLoss == 75);
 }
 
 void a_trail_no_longer_recorded_goes_cold() {
@@ -701,6 +725,8 @@ int main() {
   the_echos_phrase_comes_from_a_client_that_holds_it();
   the_echo_repeats_what_players_do();
   a_repeat_waits_for_the_echos_next_interaction();
+  a_use_outside_its_room_leaves_the_last_one_in_it();
+  a_repeat_replaces_the_dormancy_roll();
   a_trail_no_longer_recorded_goes_cold();
   the_ghosts_tab_list_becomes_a_grid_that_keeps_its_layout();
   each_preset_remembers_its_custom_ghost();

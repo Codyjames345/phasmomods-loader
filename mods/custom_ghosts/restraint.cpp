@@ -7,6 +7,7 @@
 #include <random>
 
 #include "echo.h"
+#include "echo_rule.h"
 #include "game.h"
 #include "ghosts.h"
 #include "hooks.h"
@@ -35,7 +36,6 @@ constexpr uintptr_t kTryThrowRva = 0x2701C50;  // Prop.TryThrow(bool, bool): the
 // door chance with no call sites (0x20112A0).
 constexpr uintptr_t kGetDoorToOpenRva = 0x2005FC0;
 constexpr uintptr_t kDoorChanceRva = 0x2007C60, kDoorChanceLength = 0xF6;  // the idle door chance's code
-constexpr int kDormantSkipPercent = 75;    // the AI's interactions and events lost while the Echo is dormant
 
 using TryInteract_t = void (*)(void*, const void*);
 using ChangeState_t = void (*)(void*, int, void*, bool, const void*);
@@ -51,30 +51,30 @@ int g_type = 0;
 bool g_steered = false;  // a player controls the ghost
 std::mt19937 g_random{static_cast<unsigned>(GetTickCount64())};
 
-/**
- * The AI's attempt fails: always where the rule is absolute, 3 in 4 for a dormant Echo. A dormant Echo's
- * AI never loses the interaction that carries a player's use waiting to be repeated (echo.h repeat_pending);
- * events carry no repeat, and a ghost player's interactions are their own, so those stay held back.
- */
+/** A roll in 0..99 for the rules that lose a share of the AI's attempts. */
+int percent_roll() { return std::uniform_int_distribution<int>(0, 99)(g_random); }
+
+/** The AI's attempt fails: always where the rule is absolute, 3 in 4 for a dormant Echo (echo_rule.h). */
 bool skip(Kind kind) {
   if (!held_back(g_type, kind)) return false;
-  if (g_type == kEcho && kind == kInteract && !g_steered && echo::repeat_pending()) return false;
-  return g_type != kEcho || std::uniform_int_distribution<int>(0, 99)(g_random) < kDormantSkipPercent;
+  return g_type != kEcho || echo_dormant_loses(percent_roll());
 }
 
 void detour_try_interact(void* activity, const void* method) {
   hooks::Guard guard;
-  if (g_ghost && activity == game::ghost_activity(g_ghost) && skip(kInteract)) return;
-  // The Echo's AI uses the switch or door a player just used in its room instead (the ghost is the host's:
-  // game::is_master).
-  if (g_ghost && g_type == kEcho && activity == game::ghost_activity(g_ghost) && game::is_master() && !g_steered &&
-      echo::repeat(g_ghost))
+  const bool own = g_ghost && activity == game::ghost_activity(g_ghost);
+  if (own && g_type == kEcho) {
+    // The Echo's AI uses the switch or door a player just used in its room, once its sensor detects it (the
+    // ghost is the host's: game::is_master), with no dormancy roll; otherwise a dormant Echo loses 3 in 4.
+    const bool repeated = game::is_master() && !g_steered && echo::repeat(g_ghost);
+    if (echo_roll(repeated, held_back(kEcho, kInteract), percent_roll) != EchoRoll::Game) return;
+  } else if (own && skip(kInteract)) {
     return;
+  }
   // The Gremlin's interaction may be sabotage instead (the ghost is the host's: game::is_master).
-  if (g_ghost && g_type == kGremlin && activity == game::ghost_activity(g_ghost) && game::is_master() &&
-      gremlin::interact(g_ghost))
-    return;
+  if (own && g_type == kGremlin && game::is_master() && gremlin::interact(g_ghost)) return;
   g_tryInteract(activity, method);
+  if (own && g_type == kEcho && !g_steered) echo::sensor_pulsed(g_ghost);
 }
 
 // The door the game's door pick returns. When it is the Bogeyman's AI's idle door interaction on the host
