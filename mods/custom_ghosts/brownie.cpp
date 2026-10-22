@@ -67,6 +67,7 @@ bool viewed_from(void* viewer, Vector3 eye, Vector3 target, float cone, float ra
  * hunting Myling's (quiet_step_distance). Runs on every client: footsteps are spawned by an RPC.
  */
 void detour_footstep_play(void* footstep, float volume, void* name, const void* method) {
+  hooks::Guard guard;
   g_footstepPlay(footstep, volume, name, method);
   void* ghost = g.haunting.get();
   if (!footstep || !ghost || il2cpp::field<void*>(footstep, kFootstepGhost) != ghost) return;
@@ -122,7 +123,7 @@ void tick_host(void* ghost, int type) {
 
 void tick_all(void* ghost, int type) {
   const bool brownie = ghost && type == kBrownie && game::alive(ghost);
-  g.haunting = brownie ? il2cpp::Held(ghost) : il2cpp::Held();
+  g.haunting = brownie ? ghost : nullptr;  // the same ghost keeps its handle
 }
 
 bool available() { return api.ok; }

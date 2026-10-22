@@ -64,8 +64,9 @@ void detour_try_interact(void* activity, const void* method) {
   hooks::Guard guard;
   const bool own = g_ghost && activity == game::ghost_activity(g_ghost);
   if (own && g_type == kEcho) {
-    // The Echo's AI uses the switch or door a player just used in its room, once its sensor detects it (the
-    // ghost is the host's: game::is_master), with no dormancy roll; otherwise a dormant Echo loses 3 in 4.
+    // The Echo's AI uses the switch or door a player just used in its room, once its sensor, pulsed where it
+    // stands, detects it (the ghost is the host's: game::is_master), with no dormancy roll; otherwise a dormant
+    // Echo loses 3 in 4.
     const bool repeated = game::is_master() && !g_steered && echo::repeat(g_ghost);
     if (echo_roll(repeated, held_back(kEcho, kInteract), percent_roll) != EchoRoll::Game) return;
   } else if (own && skip(kInteract)) {
@@ -74,7 +75,6 @@ void detour_try_interact(void* activity, const void* method) {
   // The Gremlin's interaction may be sabotage instead (the ghost is the host's: game::is_master).
   if (own && g_type == kGremlin && game::is_master() && gremlin::interact(g_ghost)) return;
   g_tryInteract(activity, method);
-  if (own && g_type == kEcho && !g_steered) echo::sensor_pulsed(g_ghost);
 }
 
 // The door the game's door pick returns. When it is the Bogeyman's AI's idle door interaction on the host

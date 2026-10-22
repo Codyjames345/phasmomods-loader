@@ -18,6 +18,36 @@ inline bool lethe_fades(float age, bool viewed) { return !viewed && age >= kLeth
 /** Whether prey out of sight for `unseen` seconds is forgotten. */
 inline bool lethe_forgets(float unseen) { return unseen >= kLetheGiveUp; }
 
+/**
+ * The time the player its hunt still looks for has been out of the game's sight. The count is that player's
+ * own: it starts over for another player, for nobody, while they are in sight, and once they are forgotten.
+ * `Keep` holds the player between frames: il2cpp::Held in the game; a plain pointer in the offline tests.
+ */
+template <class Keep = void*>
+class LetheMemory {
+ public:
+  /** `lost` (null for nobody) was `seen` or not for `dt` seconds; true when it forgets them now. */
+  bool forgets(void* lost, bool seen, float dt) {
+    if (lost != static_cast<void*>(prey_)) {
+      prey_ = lost;
+      unseen_ = 0;
+    }
+    if (!lost || seen) {
+      unseen_ = 0;
+      return false;
+    }
+    unseen_ += dt;
+    if (!lethe_forgets(unseen_)) return false;
+    prey_ = nullptr;
+    unseen_ = 0;
+    return true;
+  }
+
+ private:
+  Keep prey_{};
+  float unseen_ = 0;
+};
+
 /** When an appearance at `at` (seconds) replays, for a roll `r` in 0..1. */
 inline float lethe_replay_at(float at, float r) { return at + kLetheReplayMin + (kLetheReplayMax - kLetheReplayMin) * r; }
 

@@ -66,6 +66,7 @@ struct Api {
   // NavMeshAgent.Warp (0x518C510): the game's own ghost teleport (GhostController.WarpGhostToFavouriteRoom, the Twins).
   bool (*warp)(void*, Vector3, const void*) = nullptr;
   bool (*samplePosition)(Vector3, NavMeshHit*, float, int, const void*) = nullptr;  // kSamplePositionRva
+  int (*frameCount)(const void*) = nullptr;  // Time.get_frameCount: its sight is worked out once a frame
   bool ok = false;
 } api;
 
@@ -83,6 +84,10 @@ struct State {
   ULONGLONG goalSince = 0;  // when it set out for the goal
   bool open = false;
   ULONGLONG nextScan = 0;
+  // The players its hunt's sight test passes in frame inSightFrame (Time.frameCount), less those lost beyond its
+  // short sight (in_sight). Cleared by every tick, and never read in another frame.
+  std::vector<il2cpp::Held> inSight;
+  int inSightFrame = -1;
 } g;
 
 std::mt19937 g_random{static_cast<unsigned>(GetTickCount64())};
@@ -146,15 +151,36 @@ int player_prestige(void* player) {
   return spot ? il2cpp::field<int>(spot, kSpotPrestige) : kUnknownProgress;
 }
 
-/** The youngest of these players (bogeyman_rule.h youngest) among those its hunt may go for; null for none. */
-void* youngest_of(void* ghost, const std::vector<void*>& players) {
+/**
+ * The youngest of these players (bogeyman_rule.h youngest) among those its hunt may go for; null for none.
+ * `Players` holds them as raw pointers or il2cpp::Held.
+ */
+template <class Players>
+void* youngest_of(void* ghost, const Players& players) {
   const Vector3 at = game::position(game::transform_of(ghost));
   std::vector<Candidate> candidates;
   for (void* p : players)
     candidates.push_back({player_prestige(p), player_level(p), game::distance(at, game::position(game::transform_of(p))),
                           behaviour::may_go_for(ghost, p)});
   const int chosen = youngest(candidates);
-  return chosen < 0 ? nullptr : players[chosen];
+  return chosen < 0 ? nullptr : static_cast<void*>(players[chosen]);
+}
+
+/**
+ * The players the game's own sight test passes in its hunt, leaving out those beyond its short sight in an open
+ * room: worked out once a frame, however many sight tests the game makes in it.
+ */
+const std::vector<il2cpp::Held>& in_sight(void* ghost) {
+  const int frame = api.frameCount ? api.frameCount(nullptr) : -1;
+  if (frame >= 0 && frame == g.inSightFrame) return g.inSight;
+  g.inSight.clear();
+  g.inSightFrame = frame;
+  const Vector3 at = game::position(game::transform_of(ghost));
+  game::each_player([&](void* p) {
+    if (behaviour::hunt_sees(ghost, p) && !open_sight_lost(g.open, game::distance(at, game::position(game::transform_of(p)))))
+      g.inSight.emplace_back(p);
+  });
+  return g.inSight;
 }
 
 /** Open one of a closet's doors slowly with the game's own ghost door push; false when it has none. */
@@ -177,6 +203,8 @@ bool resolve() {
   bool ok = api.closetType != nullptr;
   ok &= il2cpp::bind(api.findObjects, il2cpp::cls("UnityEngine.CoreModule.dll", "UnityEngine", "Object"), "FindObjectsOfType", 1);
   ok &= il2cpp::bind(api.warp, il2cpp::cls("UnityEngine.AIModule.dll", "UnityEngine.AI", "NavMeshAgent"), "Warp", 1);
+  // Without it the sight is worked out at every sight test instead (as before the cache), so it is not required.
+  il2cpp::bind(api.frameCount, il2cpp::cls("UnityEngine.CoreModule.dll", "UnityEngine", "Time"), "get_frameCount", 0);
   api.checkCloset = reinterpret_cast<decltype(api.checkCloset)>(game::game_assembly_address(kCheckClosetRva));
   api.forceDoor = reinterpret_cast<decltype(api.forceDoor)>(game::game_assembly_address(kForceDoorRva));
   api.samplePosition = reinterpret_cast<decltype(api.samplePosition)>(game::game_assembly_address(kSamplePositionRva));
@@ -187,6 +215,8 @@ bool resolve() {
 
 void tick(void* ghost, int type, bool steered) {
   g.open = false;
+  g.inSight.clear();  // a new frame: its sight is worked out afresh
+  g.inSightFrame = -1;
   if (!api.ok || !ghost || type != kBogeyman || !game::alive(ghost)) {
     if (g.level) reset();
     return;
@@ -207,6 +237,10 @@ void tick(void* ghost, int type, bool steered) {
   }
   void* state = game::ghost_state_object(ghost);
   if (!state) return;
+  if (!behaviour::hunt_begun(ghost)) {  // until the start delay ends the game's own hunt moves it nowhere: nor does this
+    g.goalSince = now;
+    return;
+  }
   const Vector3 at = game::position(game::transform_of(ghost));
   if (void* prey = il2cpp::field<void*>(state, kHuntTarget)) {
     // In an open room its sight is short: prey beyond it is lost.
@@ -297,14 +331,17 @@ void hunt_begins(void* ghost) {
 }
 
 void* choose_target(void* ghost, void* proposed) {
-  const Vector3 at = game::position(game::transform_of(ghost));
-  std::vector<void*> detected;
-  game::each_player([&](void* p) {
-    if (behaviour::hunt_sees(ghost, p) && !open_sight_lost(g.open, game::distance(at, game::position(game::transform_of(p)))))
-      detected.push_back(p);
-  });
-  if (detected.size() < 2) return proposed;
-  return youngest_of(ghost, detected) == proposed ? proposed : nullptr;
+  if (!proposed) return nullptr;
+  const float distance = game::distance(game::position(game::transform_of(ghost)), game::position(game::transform_of(proposed)));
+  switch (bogeyman_pick(g.open, distance, [&] { return in_sight(ghost).size(); })) {
+    case BogeymanPick::Lost:
+      return nullptr;  // beyond its short sight in an open room, alone in sight or not
+    case BogeymanPick::Proposed:
+      return proposed;
+    case BogeymanPick::Youngest:
+      break;
+  }
+  return youngest_of(ghost, in_sight(ghost)) == proposed ? proposed : nullptr;
 }
 
 void reset() { g = State{}; }

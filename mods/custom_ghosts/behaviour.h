@@ -43,9 +43,9 @@ int scent(float* xyz, int maxPoints);
 // function keeps exactly one detour. The Black Shuck keeps only the player it follows by scent, and only
 // while the game may go for them (alive, not in the truck, not already killed); in a Search, once their
 // trail has led it to their hiding place, it keeps nobody, so the game's own closet search finds them
-// unseen (shuck_rule.h shuck_target). The Bogeyman's AI sees as the game does, and of the players the game's
-// sight test passes it keeps only the youngest when it detects more than one (bogeyman.h choose_target).
-// Any other type keeps what the game proposed.
+// unseen (shuck_rule.h shuck_target). The Bogeyman's AI sees as the game does, but never beyond its short
+// sight in an open room, and of the players the game's sight test passes it keeps only the youngest when it
+// detects more than one (bogeyman.h choose_target). Any other type keeps what the game proposed.
 void* choose_target(int type, void* ghost, void* proposed);
 // Whether the ghost's hunt may go for this player, by the game's own test: alive, not in the truck, not
 // already killed in this hunt. False while it is not hunting.
@@ -54,5 +54,12 @@ bool may_go_for(void* ghost, void* player);
 // re-entry) passes for this player in the ghost's hunt; false for a player the hunt may not go for. Like
 // the game's, a pass records the player in the hunt's seen set.
 bool hunt_sees(void* ghost, void* player);
+// Whether the ghost's hunt is past its start delay (hunt state +0x8C below 0): until then the game's own
+// hunt runs no chase, speed or kill, so no custom rule steers it either. False while it is not hunting.
+bool hunt_begun(void* ghost);
+// The ghost's hunt stops chasing, searching for and wandering around this player, as the game's own kill and
+// closet search clear them (its target +0x48, last player +0x58, search player +0x50 and the closet it was
+// searching). Nothing while it is not hunting.
+void forget(void* ghost, void* player);
 
 }  // namespace pg::custom::behaviour

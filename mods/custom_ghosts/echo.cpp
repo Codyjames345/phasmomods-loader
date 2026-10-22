@@ -48,7 +48,17 @@ constexpr size_t kSwitchRoom = 0xD0;           // LightSwitch: its LevelRoom
 constexpr size_t kRoomDoors = 0x28;            // LevelRoom: Door[] (the Yurei's ability picks from it)
 constexpr size_t kDoorInteract = 0x98;         // Door: its PhotonObjectInteract
 constexpr size_t kActivitySensor = 0x20;       // GhostActivity: the RangeSensor its interactions read (TryInteract pulses it)
-constexpr float kStill = 0.5f;                 // metres: the ghost still stands where its sensor last pulsed
+constexpr size_t kActivityBox = 0x60;          // GhostActivity: Vector3, that sensor's box half extents (Start sets them by map size)
+// The sensor's pulse, as TryInteract (0x2007470) runs it: RangeSensor.SetBoxShape(GhostActivity +0x60), then the
+// sensor's pulse through its class's vtable entry at +0x178 (method pointer, then MethodInfo at +0x180; the code
+// there, BasePulsableSensor.Pulse 0x3F31DB0 and its twin 0x3BCAAF0, completes any pending pulse and runs the
+// sensor's test). The test (RangeSensor 0x3E9D600) rebuilds the detections, then invokes the sensor's OnPulsed
+// delegate (+0x128) at once. GhostActivity.Start (0x2007150) adds the ghost's whole interaction to it (the
+// handler 0x200A860: the door chance, a light switch, a prop, or else ChangeState(3)) and nothing else to this
+// sensor; OnDestroy (0x2007060) removes it.
+constexpr uintptr_t kSetBoxShapeRva = 0x3E99F90;  // RangeSensor.SetBoxShape(Vector3): +0xF8 = 1 (box), +0x100 the extents
+constexpr size_t kPulseSlot = 0x178;           // Il2CppClass: the vtable entry TryInteract calls to pulse the sensor
+constexpr size_t kSensorOnPulsed = 0x128;      // RangeSensor: the OnPulsed delegate (add_OnPulsed 0x3EA0350)
 // LightSwitch.Use(bool on, bool prints, bool byGhost, bool counted): the RPC LightSwitch.UseLightSwitch sends
 // to every client for each use, so the host sees every one. A player's use (the interact handler 0x26DEC60)
 // clears every flag. The ghost's uses set byGhost; the switch's own sensor handler (0x26E4600) clears it but
@@ -95,6 +105,7 @@ struct Api {
   void (*destroyAfter)(void*, float, const void*) = nullptr;
   bool (*talking)(void*, float, const void*) = nullptr;
   il2cpp::Object* interactType = nullptr;  // PhotonObjectInteract, the object a ghost's interaction is given
+  void (*setBoxShape)(void*, Vector3, const void*) = nullptr;  // kSetBoxShapeRva
   bool ok = false;
 } api;
 
@@ -129,8 +140,6 @@ struct State {
   size_t outgoingNext = 0;
   uint16_t nextClip = 1;
   Repeat<il2cpp::Held> repeat;                  // host: the switch or door its AI repeats next
-  bool pulsed = false;                          // host: the game's TryInteract pulsed its sensor at pulsedAt
-  Vector3 pulsedAt{};
 } g;
 
 std::mt19937 g_random{static_cast<unsigned>(GetTickCount64())};
@@ -320,14 +329,39 @@ void detour_switch_use(void* lightSwitch, bool on, bool prints, bool byGhost, bo
 }
 
 /**
- * Whether the ghost's interaction sensor detects `object` from where the ghost stands now. Its detections
- * change only when it is pulsed (for the AI, by each TryInteract), so they count only while the ghost still
- * stands where the last TryInteract pulsed it.
+ * Pulse the ghost's interaction sensor where the ghost stands now, as TryInteract does, and nothing more: its
+ * OnPulsed delegate, which would run the ghost's whole interaction, is set aside for the pulse and put back
+ * whatever happens. False when the sensor could not be pulsed.
  */
+bool pulse_sensor(void* activity, void* sensor) {
+  if (!il2cpp::is_kind(sensor, "RangeSensor")) return false;  // the box and +0x128 are a RangeSensor's
+  const auto* klass = static_cast<const char*>(il2cpp::class_of(sensor));
+  using Pulse_t = void (*)(void*, const void*);
+  const Pulse_t pulse = klass ? *reinterpret_cast<const Pulse_t*>(klass + kPulseSlot) : nullptr;
+  if (!pulse) return false;
+  const void* method = *reinterpret_cast<const void* const*>(klass + kPulseSlot + sizeof(void*));
+  api.setBoxShape(sensor, il2cpp::field<Vector3>(activity, kActivityBox), nullptr);
+  il2cpp::Held onPulsed(il2cpp::field<void*>(sensor, kSensorOnPulsed));  // kept alive while set aside
+  il2cpp::set_ref_field(sensor, kSensorOnPulsed, nullptr);
+  bool pulsed = true;
+  try {
+    pulse(sensor, method);
+  } catch (const Il2CppExceptionWrapper& e) {
+    il2cpp::log_exception("echo: pulsing the interaction sensor threw", e.ex);
+    pulsed = false;
+  } catch (...) {
+    PG_LOG("echo: pulsing the interaction sensor threw");
+    pulsed = false;
+  }
+  il2cpp::set_ref_field(sensor, kSensorOnPulsed, onPulsed.get());
+  return pulsed;
+}
+
+/** Whether the ghost's interaction sensor, pulsed where the ghost stands now, detects `object`. */
 bool in_reach(void* ghost, void* object) {
   void* activity = game::ghost_activity(ghost);
   void* sensor = activity ? il2cpp::field<void*>(activity, kActivitySensor) : nullptr;
-  return sensor && g.pulsed && game::distance(game::position(game::transform_of(ghost)), g.pulsedAt) <= kStill &&
+  return sensor && game::alive(sensor) && pulse_sensor(activity, sensor) &&
          game::sensor_detects(sensor, game::game_object_of(object));
 }
 
@@ -361,7 +395,8 @@ bool resolve() {
   ok &= bind(api.play, source, "Play", 0);
   ok &= bind(api.destroyAfter, object, "Destroy", 2);
   api.talking = reinterpret_cast<decltype(api.talking)>(game::game_assembly_address(kTalkingRva));
-  api.ok = ok && api.talking;
+  api.setBoxShape = reinterpret_cast<decltype(api.setBoxShape)>(game::game_assembly_address(kSetBoxShapeRva));
+  api.ok = ok && api.talking && api.setBoxShape;
   PG_LOG("echo: resolve %s", api.ok ? "ok" : "FAILED");
   return api.ok;
 }
@@ -430,7 +465,6 @@ void tick(void* ghost, bool steered, bool recording) {
       g.lastAudio.clear();
       g.holders.clear();
       g.repeat = {};
-      g.pulsed = false;
     }
     g.recording = recording;
   }
@@ -447,7 +481,6 @@ void tick(void* ghost, bool steered, bool recording) {
     g.lastHeard = now;  // a new Echo starts awake, with nothing to repeat
     g.nextWords = now + kMinGapMs;
     g.repeat = {};
-    g.pulsed = false;
   }
   if (!g.ghost) return;
   listen(now);
@@ -475,11 +508,6 @@ bool repeat(void* ghost) {
   reinterpret_cast<ChangeState_t>(game::change_state())(ghost, door ? kStateDoor : kStateLight, interact, !door, nullptr);
   PG_LOG("echo: repeats a player's %s", door ? "door" : "light switch");
   return true;
-}
-
-void sensor_pulsed(void* ghost) {
-  g.pulsed = ghost != nullptr;
-  if (ghost) g.pulsedAt = game::position(game::transform_of(ghost));
 }
 
 }  // namespace pg::custom::echo

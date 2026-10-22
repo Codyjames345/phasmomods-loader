@@ -10,7 +10,8 @@ namespace pg::custom::bogeyman {
 
 bool resolve();
 // Every frame on the host, before behaviour::tick: ghost is the custom ghost's GhostAI (null for
-// none), type its type, steered whether a player controls it (then it does not choose where to go).
+// none), type its type, steered whether a player controls it (then it does not choose where to go). In a
+// hunt it walks nowhere of its own until the hunt's start delay is over (behaviour::hunt_begun).
 void tick(void* ghost, int type, bool steered);
 // It stands in an open room now (its speed falls there).
 bool in_open_room();
@@ -25,10 +26,11 @@ void* closet_door(void* ghost);
 // it there (NavMesh.SamplePosition at the closet's nav spot, then NavMeshAgent.Warp, as vanilla warps do),
 // and that closet's door opens. Otherwise the hunt begins where it is.
 void hunt_begins(void* ghost);
-// Its rule in the hunt's target policy (behaviour::choose_target): while the game's own sight test passes
-// for more than one player its hunt may go for (leaving out those beyond its short sight in an open room),
-// it keeps proposed only if they are the youngest of them, so the game's own target code goes for the
-// youngest; with fewer it keeps proposed.
+// Its rule in the hunt's target policy (behaviour::choose_target, bogeyman_rule.h bogeyman_pick): never
+// proposed when they are beyond its short sight in an open room; else, while the game's own sight test passes
+// for more than one player its hunt may go for (leaving out those beyond that sight), it keeps proposed only
+// if they are the youngest of them, so the game's own target code goes for the youngest; with fewer it keeps
+// proposed. Those players are worked out once a frame, however many sight tests the game makes in it.
 void* choose_target(void* ghost, void* proposed);
 void reset();
 

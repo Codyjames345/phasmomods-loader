@@ -12,7 +12,8 @@ namespace pg::custom::lithobolia {
 
 bool resolve();
 // The host: the ghost is about to throw `prop` (a PhotonObjectInteract); true when the Lithobolia
-// throws it at someone itself or swallows it for want of anyone in sight (the game's throw is skipped).
+// throws it at someone itself or swallows it, for want of anyone in sight or while its last throw is still
+// in flight (the game's throw is skipped).
 bool intercept(void* ghost, void* prop);
 // The host: the hunt is about to call Prop.TryThrow on `prop` (a Prop); true when the Lithobolia flies it
 // at the hunt's target, or swallows the throw unless the ghost's sensor sees that target within range.

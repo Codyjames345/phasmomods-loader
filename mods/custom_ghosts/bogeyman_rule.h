@@ -63,6 +63,19 @@ inline bool open_room(float floorArea) { return floorArea >= kBogeymanOpenArea; 
 /** Whether it has lost sight of a player this many metres away: only in an open room, beyond kBogeymanOpenSight. */
 inline bool open_sight_lost(bool inOpenRoom, float distance) { return inOpenRoom && distance > kBogeymanOpenSight; }
 
+enum class BogeymanPick { Lost, Proposed, Youngest };  // what its hunt's sight test answers for a player
+
+/**
+ * What its hunt's sight test answers for a player the game's own test sees, `distance` metres away: lost
+ * beyond its short sight in an open room, whoever else is in sight; else that player while fewer than two are
+ * in its sight (`inSight()`, counted only when needed); else only the youngest of those in sight.
+ */
+template <class InSight>
+BogeymanPick bogeyman_pick(bool inOpenRoom, float distance, InSight inSight) {
+  if (open_sight_lost(inOpenRoom, distance)) return BogeymanPick::Lost;
+  return inSight() < 2 ? BogeymanPick::Proposed : BogeymanPick::Youngest;
+}
+
 /**
  * The index of the youngest living candidate: the lowest prestige, then the lowest level within it,
  * then the nearest; -1 for none. "Youngest" is the least progressed, as the lobby board shows players.

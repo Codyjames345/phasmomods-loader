@@ -250,6 +250,23 @@ void the_bogeyman_stalks_the_youngest() {
   CHECK(open_sight_lost(true, 7.5f) && !open_sight_lost(true, 7.0f) && !open_sight_lost(false, 20.0f));
 }
 
+void the_bogeyman_loses_prey_beyond_its_short_sight() {
+  int counted = 0;
+  auto inSight = [&counted](size_t n) {
+    return [&counted, n] {
+      ++counted;
+      return n;
+    };
+  };
+  // Beyond 7 m in an open room a player is lost even when nobody else is in sight, and nobody is counted.
+  CHECK(bogeyman_pick(true, 7.5f, inSight(1)) == BogeymanPick::Lost && counted == 0);
+  CHECK(bogeyman_pick(true, 7.5f, inSight(3)) == BogeymanPick::Lost && counted == 0);
+  CHECK(bogeyman_pick(true, 7.0f, inSight(1)) == BogeymanPick::Proposed && counted == 1);  // within its sight
+  CHECK(bogeyman_pick(false, 20.0f, inSight(1)) == BogeymanPick::Proposed);  // not open: the game's own sight
+  CHECK(bogeyman_pick(false, 20.0f, inSight(2)) == BogeymanPick::Youngest);  // two in sight: the youngest
+  CHECK(bogeyman_pick(true, 3.0f, inSight(2)) == BogeymanPick::Youngest && counted == 4);
+}
+
 void the_bogeyman_lurks_in_the_nearest_closet() {
   CHECK(lurk_place({{0, 0, 12}}, {0, 0, 0}) == -1);                        // none within 10 m: it starts where it is
   CHECK(lurk_place({{0, 0, 8}, {0, 0, 3}}, {0, 0, 0}) == 1);
@@ -287,6 +304,19 @@ void the_lethe_makes_them_forget() {
   // Only what records its activity fades: the ghost, its writing, its sounds; not bones or cursed objects.
   CHECK(lethe_activity(5) && lethe_activity(13) && lethe_activity(26) && lethe_activity(43));
   CHECK(!lethe_activity(4) && !lethe_activity(6) && !lethe_activity(9) && !lethe_activity(16) && !lethe_activity(20));
+}
+
+void the_lethe_forgets_the_player_it_lost() {
+  int a, b;
+  LetheMemory<> m;
+  CHECK(!m.forgets(&a, false, 0.5f));            // half a second out of the game's sight: still looked for
+  CHECK(m.forgets(&a, false, 0.5f));             // a second: forgotten
+  CHECK(!m.forgets(&a, false, 0.75f));           // looked for again: the count starts over
+  CHECK(!m.forgets(&a, true, 0.5f));             // in sight: the count starts over
+  CHECK(!m.forgets(&a, false, 0.75f));
+  CHECK(!m.forgets(&b, false, 0.5f));            // another player: their own count, not a's
+  CHECK(!m.forgets(nullptr, false, 5.0f));       // nobody looked for: nothing to forget
+  CHECK(!m.forgets(&b, false, 0.75f) && m.forgets(&b, false, 0.25f));  // b's count started over
 }
 
 void the_tempest_strikes_with_the_weather() {
@@ -728,9 +758,11 @@ int main() {
   the_bogeyman_searches_the_hiding_places();
   the_bogeyman_stalks_the_youngest();
   the_bogeyman_lurks_in_the_nearest_closet();
+  the_bogeyman_loses_prey_beyond_its_short_sight();
   the_brownie_works_unseen();
   the_brownie_steps_quietly_as_a_myling();
   the_lethe_makes_them_forget();
+  the_lethe_forgets_the_player_it_lost();
   the_tempest_strikes_with_the_weather();
   the_tempest_opens_each_hunt_with_a_strike();
   the_mesmer_shows_each_their_own();

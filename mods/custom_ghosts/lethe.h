@@ -6,7 +6,9 @@
 // The Lethe (lethe_rule.h) in the game.
 //  - Deja vu: the host records each appearance it makes (GhostAI.Appear / UnAppear: where, facing,
 //    which form, how long) and plays each once more a few minutes later, exactly so.
-//  - It forgets its prey: in a hunt, a target out of its sight for a moment is dropped.
+//  - It forgets its prey: in a hunt, the player it still looks for after losing sight of them (the hunt's
+//    last player, +0x58) is dropped once the hunt's own sight test has failed for them for a second
+//    (lethe_rule.h LetheMemory), so it stops searching where it lost them.
 //  - Media fades: the host times every filled photo, video and sound slot of the journal; a slot nobody
 //    looked at (any client with the journal's media pages open says so) fades after three minutes on
 //    every client, through the game's own removal (JournalMedia.RemoveMedia). Main thread.

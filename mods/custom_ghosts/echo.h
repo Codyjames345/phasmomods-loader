@@ -28,10 +28,10 @@ void reset();
 bool dormant_now();  // host: the Echo has heard nobody near it for a minute
 // The AI's interaction roll for the Echo on the host: true when it used the switch or door a player last used
 // in its room, within a minute, through the game's own light or door interaction (the game's interaction is
-// then skipped). It does so only once the ghost's interaction sensor, pulsed where it stands, detects that
-// switch or door; until then the use waits.
+// then skipped). It does so only once the ghost's interaction sensor detects that switch or door; until then
+// the use waits. With a use waiting, each call pulses that sensor where the ghost stands now, as TryInteract
+// does, with the ghost's own interaction (the sensor's OnPulsed delegate) set aside, so only its detections
+// change: a dormant Echo, which skips most of the game's TryInteracts, still sees what is in reach.
 bool repeat(void* ghost);
-// The game's own TryInteract ran for the Echo's AI on the host, pulsing its interaction sensor where it stands.
-void sensor_pulsed(void* ghost);
 
 }  // namespace pg::custom::echo

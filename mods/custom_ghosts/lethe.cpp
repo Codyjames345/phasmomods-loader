@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "behaviour.h"
 #include "flame_net.h"
 #include "game.h"
 #include "ghosts.h"
@@ -30,7 +31,9 @@ using il2cpp::Vector3;
 constexpr uintptr_t kAppearRva = 0x2020FB0;    // GhostAI.Appear(int form): RPC to every client
 constexpr uintptr_t kUnAppearRva = 0x202E140;  // GhostAI.UnAppear(): RPC to every client
 constexpr size_t kGhostAppeared = 0xA8;        // GhostAI: showing itself
-constexpr size_t kHuntTarget = 0x48;           // hunt state: the player it has detected, or null
+// Hunt state: the player it last went for. Its chase (0x214FC40) clears its target (+0x48) the first frame the
+// sight test fails for them and keeps them here, wandering near where it lost them (+0x78) while it is set.
+constexpr size_t kHuntLastPlayer = 0x58;
 constexpr size_t kPlayerJournal = 0xC8;        // Player: JournalController
 constexpr size_t kJournalOpen = 0xB8;          // JournalController: open
 constexpr size_t kJournalPhotoPage = 0x70;     // JournalController: Journal_PhotoPage
@@ -74,7 +77,7 @@ struct State {
   bool replaying = false;
   int replayState = -1;  // the AI's state when the replay began
   ULONGLONG replayEnds = 0;
-  float unseen = 0;
+  LetheMemory<il2cpp::Held> memory;  // the player its hunt still looks for, and how long they are out of sight
   std::map<std::pair<int, int>, Slot> slots;
   ULONGLONG nextMediaCheck = 0, lastViewing = 0, nextReport = 0, lastTick = 0;
 } g;
@@ -137,18 +140,17 @@ void host_deja_vu(void* ghost, ULONGLONG now) {
   }
 }
 
-/** The host: in a hunt, prey the ghost's own vision sensor has lost for a moment is forgotten. */
+/**
+ * The host: in a hunt, the player it still looks for (kHuntLastPlayer) is forgotten once the hunt's own sight
+ * test (its vision sensor, GhostAI +0xA0, not a ray of ours) has failed for them for a moment: the hunt stops
+ * wandering where it lost them, as the game's own kill clears them.
+ */
 void host_forget_prey(void* ghost, float dt) {
   void* state = game::ghost_state(ghost) == game::kStateHunting ? game::ghost_state_object(ghost) : nullptr;
-  void* prey = state ? il2cpp::field<void*>(state, kHuntTarget) : nullptr;
-  if (!prey || !game::alive(prey)) {
-    g.unseen = 0;
-    return;
-  }
-  g.unseen = game::ghost_sees(ghost, prey) ? 0 : g.unseen + dt;  // the game's own sensor, not a ray of ours
-  if (lethe_forgets(g.unseen)) {
-    il2cpp::set_ref_field(state, kHuntTarget, nullptr);
-    g.unseen = 0;
+  void* lost = state ? il2cpp::field<void*>(state, kHuntLastPlayer) : nullptr;
+  if (lost && !game::alive(lost)) lost = nullptr;
+  if (g.memory.forgets(lost, lost && behaviour::hunt_sees(ghost, lost), dt)) {
+    behaviour::forget(ghost, lost);
     PG_LOG("lethe: it forgets its prey");
   }
 }

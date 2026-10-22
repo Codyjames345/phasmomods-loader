@@ -155,7 +155,8 @@ bool throw_at_visible(void* ghost, void* prop) {
 }
 
 bool intercept(void* ghost, void* prop) {
-  if (!api.ok || !ghost || g.item || !throwable(prop)) return false;
+  if (!api.ok || !ghost || !throwable(prop)) return false;
+  if (g.item) return true;  // one throw at a time: the game's own, possibly at nobody, is swallowed too
   throw_at_visible(ghost, prop);
   return true;  // nobody in sight: the throw is swallowed
 }

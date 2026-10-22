@@ -44,6 +44,9 @@ constexpr size_t kHuntKilled = 0x70;              // hunt state: the players it 
 constexpr size_t kHuntKillReach = 0xBC;           // hunt state: metres within which its kill takes a player at once (1.1)
 constexpr size_t kHuntSlowKillReach = 0xC0;       // hunt state: metres within which it takes them after +0xC4 s (1.5)
 constexpr size_t kHuntCloset = 0xD8;              // hunt state: the ClosetZone its closet search is for, or null
+// Hunt state: seconds left of the hunt-start delay. Its Execute (0x213FE90) runs no chase, speed or kill
+// while its gate (0x213F6F0) counts this down; the gate passes once it is below 0.
+constexpr size_t kHuntStartDelay = 0x8C;
 constexpr size_t kPlayerRoom = 0x50;              // Player: the LevelRoom they are in
 constexpr size_t kGhostSmudge = 0xF8;             // GhostAI: the WhiteSage while smudged in a hunt
 constexpr size_t kPlayerCloset = 0x30;            // Player: the ClosetZone they hide in, or null
@@ -96,6 +99,10 @@ struct Api {
   void (*desiredVelocity)(void*, Vector3*) = nullptr;
   float (*angularSpeed)(void*) = nullptr;
   void (*setAngularSpeed)(void*, float, const void*) = nullptr;
+  // The hunt's seen set's runtime class (a List of players) and its Contains and Add, found on first use.
+  il2cpp::Class* seenClass = nullptr;
+  const il2cpp::Method* seenContains = nullptr;
+  const il2cpp::Method* seenAdd = nullptr;
 } api;
 
 using RefreshBase_t = void (*)(void*, const void*);
@@ -179,6 +186,9 @@ void detour_change_room(void* controller, void* room, const void* method) {
   g_changeRoom(controller, room, method);
 }
 
+/** Whether this hunt state's start delay is over (kHuntStartDelay below 0), so the game's chase, speed and kill run. */
+bool begun(void* hunt) { return il2cpp::field<float>(hunt, kHuntStartDelay) < 0; }
+
 /** Whether a ghost of `type` rules the senses of this hunt state: its AI hunts on the host, nobody steering it. */
 bool ai_hunts(int type, void* hunt) {
   return g.type == type && g.hunting && !g.steered && hunt && g.ghost &&
@@ -191,16 +201,21 @@ bool eligible(void* hunt, void* player) {
   return api.eligible(hunt, player, nullptr);
 }
 
-/** A one-argument bool method of a hunt state's player set (Contains, Add), found on its runtime class. */
-bool set_call(void* set, const char* name, void* player) {
-  const il2cpp::Method* m = set ? il2cpp::method(il2cpp::class_of(set), name, 1) : nullptr;
+/** Call a one-argument bool method of a hunt state's player set (Contains, Add); false without it. */
+bool set_call(void* set, const il2cpp::Method* m, void* player) {
   return m && reinterpret_cast<bool (*)(void*, void*, const void*)>(*reinterpret_cast<void* const*>(m))(set, player, m);
 }
 
 /** Record `player` in the hunt's seen set, as its own sight test does for each player it sees. */
 void record_seen(void* hunt, void* player) {
   void* seen = il2cpp::field<void*>(hunt, kHuntSeen);
-  if (seen && !set_call(seen, "Contains", player)) set_call(seen, "Add", player);
+  if (!seen) return;
+  if (il2cpp::Class* klass = il2cpp::class_of(seen); klass != api.seenClass) {  // once: every hunt's set is one class
+    api.seenClass = klass;
+    api.seenContains = il2cpp::method(klass, "Contains", 1);
+    api.seenAdd = il2cpp::method(klass, "Add", 1);
+  }
+  if (!set_call(seen, api.seenContains, player)) set_call(seen, api.seenAdd, player);
 }
 
 // The hunt's sight test, which every target it sets or keeps passes. The Black Shuck is blind: it
@@ -414,18 +429,25 @@ void record_trails(ULONGLONG now) {
 }
 
 /**
- * It has lost its prey: the hunt's chase of, search for and wander around them end as the game's own
- * clearings end them (its kill clears its target, search player and last player; its closet search gives up
- * by clearing the search player, then the closet its search was for), and their trail is ignored for
- * kTrailMs, so it casts about for other trails instead of waiting at the break.
+ * The hunt's chase of, search for and wander around `player` end as the game's own clearings end them (its
+ * kill clears its target, search player and last player; its closet search gives up by clearing the search
+ * player, then the closet its search was for).
  */
-void lose_prey(void* hunt, void* player, ULONGLONG now) {
+void forget_in(void* hunt, void* player) {
   if (il2cpp::field<void*>(hunt, kHuntTarget) == player) il2cpp::set_ref_field(hunt, kHuntTarget, nullptr);
   if (il2cpp::field<void*>(hunt, kHuntLastPlayer) == player) il2cpp::set_ref_field(hunt, kHuntLastPlayer, nullptr);
   if (il2cpp::field<void*>(hunt, kHuntSearched) == player) {
     il2cpp::set_ref_field(hunt, kHuntSearched, nullptr);
     api.setCloset(hunt, nullptr, nullptr);
   }
+}
+
+/**
+ * It has lost its prey: the hunt forgets them (forget_in), and their trail is ignored for kTrailMs, so it
+ * casts about for other trails instead of waiting at the break.
+ */
+void lose_prey(void* hunt, void* player, ULONGLONG now) {
+  forget_in(hunt, player);
   if (const auto it = g.trails.find(player); it != g.trails.end()) it->second.ignoredUntil = now + trail::kTrailMs;
   g.prey = nullptr;
 }
@@ -464,7 +486,7 @@ void tick_shuck(bool hunting, bool steered, ULONGLONG now) {
   record_trails(now);
   g.move = ShuckMove::Native;
   void* state = hunting && !steered ? game::ghost_state_object(g.ghost) : nullptr;
-  if (!state) {
+  if (!state || !begun(state)) {  // until the start delay ends, the game's own hunt does not move it either
     g.prey = nullptr;
     hold_kill(nullptr, false);
     return;
@@ -501,7 +523,7 @@ void tick_shuck(bool hunting, bool steered, ULONGLONG now) {
   const bool smudged = game::alive(il2cpp::field<void*>(g.ghost, kGhostSmudge));
   g.move = shuck_move(smudged, prey != nullptr, followable, hidden, otherTrail);
   if (followable) g.prey = prey;
-  hold_kill(state, g.move == ShuckMove::Follow && !g_huntSees(state, prey, false, nullptr));
+  hold_kill(state, g.move == ShuckMove::Follow && !hunt_sees(g.ghost, prey));
   switch (g.move) {
     case ShuckMove::Follow:
       if (il2cpp::field<void*>(state, kHuntTarget) != prey) api.setTarget(state, prey, nullptr);
@@ -550,6 +572,16 @@ bool may_go_for(void* ghost, void* player) {
 bool hunt_sees(void* ghost, void* player) {
   if (!may_go_for(ghost, player) || !il2cpp::field<void*>(player, kPlayerSightParts)) return false;
   return g_huntSees(game::ghost_state_object(ghost), player, false, nullptr);  // the trampoline: never this mod's detour
+}
+
+bool hunt_begun(void* ghost) {
+  void* hunt = ghost && game::ghost_state(ghost) == game::kStateHunting ? game::ghost_state_object(ghost) : nullptr;
+  return hunt && begun(hunt);
+}
+
+void forget(void* ghost, void* player) {
+  void* hunt = ghost && game::ghost_state(ghost) == game::kStateHunting ? game::ghost_state_object(ghost) : nullptr;
+  if (hunt && player) forget_in(hunt, player);
 }
 
 bool resolve() {
