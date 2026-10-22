@@ -45,6 +45,18 @@ float saturation(Rgb c) {
   return hi > 0 ? (hi - std::min({c.r, c.g, c.b})) / hi : 0;
 }
 
+// Hue in degrees (red 0, green 120, blue 240), and how far apart two colours' hues are round the wheel.
+float hue(Rgb c) {
+  const float hi = std::max({c.r, c.g, c.b}), d = hi - std::min({c.r, c.g, c.b});
+  if (d <= 0) return 0;
+  const float h = hi == c.r ? (c.g - c.b) / d : hi == c.g ? (c.b - c.r) / d + 2 : (c.r - c.g) / d + 4;
+  return std::fmod(h * 60 + 360, 360.0f);
+}
+float hues_apart(Rgb a, Rgb b) {
+  const float d = std::fabs(hue(a) - hue(b));
+  return std::min(d, 360 - d);
+}
+
 // What a flame tint looks like on screen, roughly: the flame texture scales the tint, then a filmic
 // tone curve (Narkowicz's ACES fit) maps HDR to the display. The game's own curve may differ.
 Rgb on_screen(Rgb tint, float texture) {
@@ -227,14 +239,20 @@ void the_hydras_flame_burns_green() {
   CHECK(same(tint(warm, green.pale, green.deep, kFalseCap), green.pale));  // withheld evidence: the cap, pale green
   CHECK(same(tint(warm, green.pale, green.deep, 1), green.deep));
   for (float texture : {0.5f, 1.0f}) {
-    // On screen the false tell is a pale green, as washed out as the pale blue and plainly not it; the
-    // true flame a deep green.
+    // On screen the false tell is a mint green, as washed out as the pale blue and plainly not it, off
+    // the warm side of the wheel (red no higher than blue) so it never passes for a lit candle; the
+    // true flame a deep green, far more saturated than the pale one.
     const Rgb paleShown = on_screen(green.pale, texture), deepShown = on_screen(green.deep, texture);
-    const Rgb paleBlueShown = on_screen(blue.pale, texture);
-    CHECK(paleShown.g > paleShown.r && paleShown.r > paleShown.b);
+    CHECK(paleShown.g > paleShown.r && paleShown.g > paleShown.b && paleShown.b >= paleShown.r - 0.02f);
     CHECK(saturation(paleShown) > 0.3f && saturation(paleShown) < 0.75f);
-    CHECK(paleBlueShown.b > paleShown.b + 0.2f);
+    CHECK(hues_apart(paleShown, on_screen(blue.pale, texture)) >= 60);
     CHECK(saturation(deepShown) > 0.95f && deepShown.g > deepShown.r + 0.5f);
+    CHECK(saturation(deepShown) > saturation(paleShown) + 0.3f);
+    // Nor like the warm and white-hot stops it passes through on the way.
+    const Rgb warmShown = on_screen(warm, texture);
+    const Rgb hotShown = on_screen(tint(warm, green.pale, green.deep, kFalseCap / 2), texture);
+    CHECK(hues_apart(paleShown, warmShown) >= 60);
+    CHECK(saturation(paleShown) > saturation(warmShown) + 0.15f && saturation(paleShown) > saturation(hotShown) + 0.3f);
   }
   // The same way there: orange, then white-hot, then green; never through pink.
   for (float b = 0; b <= 1.0001f; b += 0.01f) {
@@ -252,7 +270,8 @@ void the_hydras_light_turns_green() {
   CHECK(same(blue.pale, light_pale(b)) && same(blue.deep, light_deep(b)));  // other ghosts unchanged
   const Rgb half = tint(warm, green.pale, green.deep, kFalseCap);
   const Rgb full = tint(warm, green.pale, green.deep, 1);
-  CHECK(saturation(half) < 0.5f && half.g >= half.r && half.r >= half.b);
+  CHECK(saturation(half) < 0.5f && half.g > half.r && half.g > half.b && half.b >= half.r - 0.02f);
+  CHECK(hues_apart(half, warm) >= 60 && hues_apart(half, light_pale(b)) >= 60);  // not warm, not the pale blue
   CHECK(saturation(full) > 0.95f && full.g > 3 * full.r && full.g > 3 * full.b);
   CHECK(near(brightness(full), b));
   // At the flame's own hue, as the blue light is.

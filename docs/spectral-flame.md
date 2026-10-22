@@ -34,9 +34,10 @@ warm one, as a blue flame is: one bright enough to match would show as a pale cy
 
 For the Hydra the same path ends in green: white-hot, then a pale green at the limit, then a deep
 green. The game ships no green flame, so the deep green takes the hue of its D.O.T.S. green (the
-"DOTS Reveal" material, 0.098, 1, 0) at the deep blue's brightness, and the pale greens are the pale
-blues with their channels turned, as bright and as washed out, so players see the pale green as
-plainly not the pale blue. The lights on the walls turn green with it.
+"DOTS Reveal" material, 0.098, 1, 0) at the deep blue's brightness. The pale green is a mint green
+as bright as the pale blue, with no more red than blue, so players see it as plainly neither the
+pale blue nor a lit candle's warm white: on zero evidence that stop is the Hydra's whole tell. The
+lights on the walls turn green with it.
 
 ## The journal
 

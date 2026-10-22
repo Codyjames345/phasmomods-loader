@@ -105,11 +105,12 @@ constexpr Rgb kLightPale{0.55f, 0.7f, 1};      // x the light's own brightness
 
 // The Hydra's greens, where any other ghost's flame turns blue. The game ships no green flame, so the
 // deep green has the hue of its D.O.T.S. green ("DOTS Reveal" _UV_Color 0.098, 1, 0) at the deep
-// blue's brightness. The pale greens are the pale blues with their channels turned (blue to green,
-// green to red, red to blue), as bright and as washed out as the blues, and far from them on screen.
-constexpr Rgb kSpectralGreen{0.13f, 1.3f, 0};   // on screen, a deep green
-constexpr Rgb kFlamePaleGreen{0.8f, 2, 0.44f};  // x the deep colour's brightness: on screen, a pale green
-constexpr Rgb kLightPaleGreen{0.7f, 1, 0.55f};  // x the light's own brightness
+// blue's brightness. The pale greens are a mint green as bright as the pale blues, with no more red
+// than blue: this stop is the Hydra's whole tell without evidence, and a yellower pale green would
+// show close to a lit candle's own warm white.
+constexpr Rgb kSpectralGreen{0.13f, 1.3f, 0};    // on screen, a deep green
+constexpr Rgb kFlamePaleGreen{0.3f, 2, 0.45f};   // x the deep colour's brightness: on screen, a mint green
+constexpr Rgb kLightPaleGreen{0.55f, 1, 0.65f};  // x the light's own brightness
 
 inline float brightness(Rgb c) { return std::max({c.r, c.g, c.b}); }
 inline Rgb scaled(Rgb c, float k) { return {c.r * k, c.g * k, c.b * k}; }
