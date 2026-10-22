@@ -27,7 +27,11 @@ which requires this mod. Otherwise nothing changes: no journal row, no blue, no 
 The flame turns hotter as it goes: from orange to white-hot, then a pale sky blue at the false
 positive's limit, then a deep blue (the same for candles and the lantern). Both blues are far dimmer
 than the orange flame, about as bright as the game's own blue flame, since a blue as bright as the
-orange renders white. Every light on the candle and its flames follows its bluest flame at the
+orange renders white. The whole flame takes the colour, tip and base too: the game's candle flame
+picture is itself orange and yellow around a white core, so on the way to white-hot it fades, in six
+steps, to a grey copy of the same picture, which the colour then tints evenly. The glow at the top of
+a Tier 1 or Tier 2 candle's wax turns with its flame. The lantern's flame blends two colours, and
+both turn. Every light on the candle and its flames follows its bluest flame at the
 flame's own hue (a Tier 2 Firelight's own "Point light.1" included), so the walls take the same cold
 cast as the flame, visible from the doorway or on a video camera. The blue light is darker than the
 warm one, as a blue flame is: one bright enough to match would show as a pale cyan.
@@ -49,8 +53,11 @@ It marks, crosses out and filters the ghost list like the others.
 
 * The host works out each flame's blueness every frame (`mods/spectral_flame/flame_rules.h`, tested
   offline) and sends every client the blue ones four times a second on the mod's channel; every client
-  shows the colour (each flame's own material; each candle's lights once per candle, with its
-  bluest flame), burns a blue candle down faster and keeps it out of the sanity effect. The host
+  shows the colour (each flame's own material and its candle's wax glow; each candle's lights once
+  per candle, with its bluest flame), burns a blue candle down faster and keeps it out of the sanity
+  effect. The grey flame pictures are made on every client the first time a flame needs each step:
+  the game's picture is drawn into a render texture, read back, greyed (`flame_rules.h` `to_grey`,
+  tested offline) and kept until the contract ends; a flame at none shows the game's own. The host
   also rolls the extra blow-out through the game's own `FireSource.BlowOutFire`, so the
   interaction EMF and every client's candle follow as for any blow-out, and holds back the ghost's
   own `BlowOutFire` calls on a flame still turning (they also complete the candle objective, which

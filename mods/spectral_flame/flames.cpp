@@ -26,8 +26,9 @@ namespace {
 
 // Build 25811160 (verified by the host at load); obfuscated names, so by offset. Read in REA
 // decompiles of FireSource.Start/Update/BlowOutFire, Candle.Update/PutDown, Candlebra.Start,
-// PlayerSanity.Update (2026-10-20), and Equipment.PlaceNetworked/GrabNetworked and
-// GhostInfo.SyncValues/SyncEvidence (2026-10-21, after a contract showed the placed read wrong).
+// PlayerSanity.Update (2026-10-20), Equipment.PlaceNetworked/GrabNetworked and
+// GhostInfo.SyncValues/SyncEvidence (2026-10-21, after a contract showed the placed read wrong), and
+// Candle.UseNetworked with the flame and wax shaders' disassembly (2026-10-22, the colours on screen).
 constexpr size_t kLevelGhostRoom = 0x38;      // LevelController: the room the ghost is in
 constexpr size_t kLevelRooms = 0x50;          // LevelController: LevelRoom[]
 constexpr size_t kLevelFireSources = 0xC0;    // LevelController: List<FireSource> (each adds itself in Start)
@@ -37,6 +38,11 @@ constexpr size_t kFireOwner = 0x40;           // FireSource: the Equipment it be
 constexpr size_t kFireLit = 0xB0;             // FireSource: burning
 constexpr size_t kCandleObjects = 0x3D0;      // Candle: CandleObject[] (each +0x18 its FireSource)
 constexpr size_t kCandleObjectFire = 0x18;
+// CandleObject: Renderer[], its wax. Candle.UseNetworked sets each one's _EmissionColor to the candle's
+// glow (Candle+0x450) when it lights and to black when it goes out, on every client (Tier 1 and 2; the
+// Tier 3 lantern has none). The wax shader ("Candle Melt") lights the top of the candle with it.
+constexpr size_t kCandleObjectWax = 0x10;
+constexpr size_t kCandleGlow = 0x450;         // Candle: Color, its wax's glow while lit
 constexpr size_t kCandleRemaining = 0x464;    // Candle: seconds left to burn
 constexpr size_t kEquipmentStoreItem = 0x180; // Equipment: StoreItem (null for a house's own candles)
 // Equipment: set down. PlaceNetworked sets it and GrabNetworked clears it, on every client. (Candle's
@@ -70,6 +76,13 @@ constexpr int kReportFlames = 12;          // lit flames listed per report
 struct Color {
   float r, g, b, a;
 };
+struct Rect {
+  float x, y, width, height;
+};
+
+constexpr int kFormatArgb32 = 0;      // RenderTextureFormat.ARGB32
+constexpr int kReadWriteSrgb = 2;     // RenderTextureReadWrite.sRGB: read back as the texture stores it
+constexpr int kDontUnloadUnused = 32; // HideFlags.DontUnloadUnusedAsset: ours until the contract ends
 
 struct Api {
   il2cpp::Class* candle = nullptr;
@@ -87,7 +100,31 @@ struct Api {
   bool (*hasProperty)(void*, int) = nullptr;               // Material.HasProperty (icall)
   void (*getColor)(void*, int, Color*) = nullptr;          // Material.GetColorImpl_Injected (icall)
   void (*setColor)(void*, int, const Color*) = nullptr;    // Material.SetColorImpl_Injected (icall)
-  int candleTint = 0, lanternTint = 0;  // "_TintColour" (Candle Flame shader), "_Color_2" (Lantern Flame)
+  void* (*getTexture)(void*, int, const void*) = nullptr;        // Material.GetTexture(int)
+  void (*setTexture)(void*, int, void*, const void*) = nullptr;  // Material.SetTexture(int, Texture)
+  // A grey copy of a flame texture: read back through a render texture (the game's are not readable).
+  il2cpp::Class* texture2D = nullptr;
+  void (*texture2DCtor)(void*, int, int, const void*) = nullptr;  // Texture2D(width, height): RGBA32, mips
+  int (*width)(void*, const void*) = nullptr;
+  int (*height)(void*, const void*) = nullptr;
+  int (*wrapMode)(void*, const void*) = nullptr;
+  void (*setWrapMode)(void*, int, const void*) = nullptr;
+  int (*filterMode)(void*, const void*) = nullptr;
+  void (*setFilterMode)(void*, int, const void*) = nullptr;
+  void* (*getTemporary)(int, int, int, int, int, const void*) = nullptr;
+  void (*releaseTemporary)(void*, const void*) = nullptr;
+  void* (*activeTarget)(const void*) = nullptr;            // RenderTexture.active
+  void (*setActiveTarget)(void*, const void*) = nullptr;
+  void (*blit)(void*, void*, const void*) = nullptr;       // Graphics.Blit(Texture, RenderTexture)
+  void (*readPixels)(void*, const Rect*, int, int, const void*) = nullptr;
+  il2cpp::Array* (*getPixels)(void*, const void*) = nullptr;   // Texture2D.GetPixels32()
+  void (*setPixels)(void*, il2cpp::Array*, const void*) = nullptr;
+  void (*apply)(void*, bool, bool, const void*) = nullptr;     // Texture2D.Apply(mipmaps, no longer readable)
+  void (*setHideFlags)(void*, int, const void*) = nullptr;
+  // "_TintColour" and "_CandleSprite" (Candle Flame shader: the sprite times the tint), "_Color_2" and
+  // "_Color_1" (Lantern Flame: noise between the two), "_EmissionColor" (the wax's glow).
+  int candleTint = 0, candleSprite = 0, lanternTint = 0, lanternBase = 0, emission = 0;
+  bool textures = false;  // the texture calls above are bound
   bool ok = false;
 } api;
 
@@ -95,6 +132,21 @@ struct Tinted {  // a flame material, recoloured
   il2cpp::Held material;
   int property;
   Color original;
+  il2cpp::Held sprite;  // a candle flame's own texture, greyed as it turns (flame_rules.h grey_step)
+  int greyShown = 0;    // the grey step its texture shows
+};
+struct Glow {  // a candle's wax, lit from within while it burns
+  il2cpp::Held material;
+  Color original;  // the glow the game gives it when lit (Candle+0x450)
+};
+// Grey copies of one flame texture, one per step from its own colours to grey, made the first time a
+// flame needs each and kept for the contract.
+struct Greys {
+  il2cpp::Held source;
+  int width = 0, height = 0;
+  std::vector<uint8_t> texels;          // the source's, RGBA as stored
+  std::vector<il2cpp::Held> steps;      // steps[k - 1]: k of kGreySteps of the way to grey
+  bool failed = false;                  // it could not be read back: flames keep the game's texture
 };
 struct Lit {  // a light, recoloured
   il2cpp::Held light;
@@ -123,6 +175,7 @@ struct Flame {
   ULONGLONG roomAgain = 0;
   bool found = false;      // its flame renderers have been looked for
   std::vector<Tinted> materials;
+  std::vector<Glow> glows;  // the wax of its own candle
 };
 
 struct Candelabra {
@@ -136,6 +189,7 @@ il2cpp::Held g_level;  // the LevelController the flames belong to
 std::vector<Flame> g_flames;
 std::vector<Look> g_looks;
 std::vector<Candelabra> g_candelabras;
+std::vector<Greys> g_greys;
 ULONGLONG g_nextScan = 0, g_nextSend = 0, g_lastHeard = 0, g_nextReport = 0;
 std::unordered_map<int, float> g_heard;  // view id -> blueness, from the host's last message
 std::unordered_map<void*, float> g_candleBlue;  // Candle -> its bluest flame, for the sanity detour
@@ -167,21 +221,155 @@ void paint(const Lit& l, float blueness) {
   api.setLightColor(l.light, &out, nullptr);
 }
 
-void paint(const Tinted& t, float blueness) {
+/** A readable Texture2D of the game's own kind (RGBA32 with mipmaps), kept until the contract ends. */
+void* new_texture(int width, int height) {
+  il2cpp::Object* texture = il2cpp::object_new(api.texture2D);
+  if (!texture) return nullptr;
+  api.texture2DCtor(texture, width, height, nullptr);
+  api.setHideFlags(texture, kDontUnloadUnused, nullptr);
+  return texture;
+}
+
+/**
+ * The texels of a flame texture, which the game keeps unreadable: drawn into a render texture and
+ * read back from it. RenderTexture.active is put back however the read ends.
+ */
+bool read_back(Greys& g) {
+  g.width = api.width(g.source, nullptr);
+  g.height = api.height(g.source, nullptr);
+  if (g.width <= 0 || g.height <= 0) return false;
+  void* target = api.getTemporary(g.width, g.height, 0, kFormatArgb32, kReadWriteSrgb, nullptr);
+  if (!target) return false;
+  void* previous = api.activeTarget(nullptr);
+  il2cpp::Held readable;
+  bool ok = false;
+  try {
+    api.blit(g.source, target, nullptr);
+    api.setActiveTarget(target, nullptr);
+    readable = new_texture(g.width, g.height);
+    const Rect all{0, 0, static_cast<float>(g.width), static_cast<float>(g.height)};
+    if (readable) api.readPixels(readable, &all, 0, 0, nullptr);
+    il2cpp::Array* texels = readable ? api.getPixels(readable, nullptr) : nullptr;
+    if (texels && texels->max_length == static_cast<uintptr_t>(g.width) * g.height) {
+      const uint8_t* rgba = texels->data<uint8_t>();
+      g.texels.assign(rgba, rgba + texels->max_length * 4);
+      ok = true;
+    }
+  } catch (const Il2CppExceptionWrapper& e) {
+    il2cpp::log_exception("flames: reading a flame texture back threw", e.ex);
+  }
+  api.setActiveTarget(previous, nullptr);
+  api.releaseTemporary(target, nullptr);
+  game::destroy(readable);
+  return ok;
+}
+
+/**
+ * Grey step `step` (1..kGreySteps) of a flame texture already read back, sampled as the game's own,
+ * made into `slot`: it is held from the start, so it goes with the contract whatever happens, and
+ * left empty unless it is whole.
+ */
+void make_step(const Greys& g, int step, il2cpp::Held& slot) {
+  slot = new_texture(g.width, g.height);
+  il2cpp::Array* texels = slot ? api.getPixels(slot, nullptr) : nullptr;
+  if (!texels || texels->max_length * 4 != g.texels.size()) {
+    game::destroy(slot);
+    slot = nullptr;
+    return;
+  }
+  uint8_t* rgba = texels->data<uint8_t>();
+  const float amount = static_cast<float>(step) / kGreySteps;
+  for (size_t i = 0; i < g.texels.size(); i += 4) {
+    std::copy_n(g.texels.data() + i, 4, rgba + i);
+    to_grey(rgba + i, amount);
+  }
+  api.setPixels(slot, texels, nullptr);
+  api.setWrapMode(slot, api.wrapMode(g.source, nullptr), nullptr);
+  api.setFilterMode(slot, api.filterMode(g.source, nullptr), nullptr);
+  api.apply(slot, true, true, nullptr);  // its mipmaps, then gone from memory but on the GPU
+}
+
+/** The texture a flame whose own is `source` shows at grey step `step`: `source` itself at 0. */
+void* grey_texture(void* source, int step) {
+  if (step <= 0 || !alive(source)) return source;
+  Greys* g = nullptr;
+  for (Greys& known : g_greys)
+    if (known.source == source) g = &known;
+  if (!g) {
+    g = &g_greys.emplace_back();
+    g->source = source;
+    g->steps.resize(kGreySteps);
+    g->failed = !read_back(*g);
+    if (g->failed) PG_LOG("flames: a flame texture could not be read back: its flames keep the game's colours under the tint");
+    else PG_LOG("flames: a flame texture (%dx%d) reads back for its grey steps", g->width, g->height);
+  }
+  if (g->failed) return source;
+  il2cpp::Held& slot = g->steps[step - 1];
+  if (!alive(slot)) {
+    try {
+      make_step(*g, step, slot);
+    } catch (const Il2CppExceptionWrapper& e) {
+      il2cpp::log_exception("flames: making a grey flame texture threw", e.ex);
+      game::destroy(slot);
+      slot = nullptr;
+      g->failed = true;
+    }
+  }
+  return alive(slot) ? slot.get() : source;
+}
+
+/** The flame texture `texture` is a grey step of, or `texture` itself. */
+void* own_texture(void* texture) {
+  for (const Greys& g : g_greys)
+    for (const il2cpp::Held& step : g.steps)
+      if (texture && step == texture) return g.source;
+  return texture;
+}
+
+void paint(Tinted& t, float blueness) {
   if (!alive(t.material)) return;
   const Rgb warm{t.original.r, t.original.g, t.original.b};
   const FlameColours stops = flame_colours(kFlameDeep, g_green);
   const Rgb c = tint(warm, stops.pale, stops.deep, blueness);
   const Color out{c.r, c.g, c.b, t.original.a};
   api.setColor(t.material, t.property, &out);
+  // The game's flame sprite is coloured, so the tint alone leaves its orange olive: the texture greys
+  // as the flame turns, and from white-hot on the tint gives the whole flame its hue.
+  if (t.sprite && grey_step(blueness) != t.greyShown) {
+    t.greyShown = grey_step(blueness);
+    api.setTexture(t.material, api.candleSprite, grey_texture(t.sprite, t.greyShown), nullptr);
+  }
+}
+
+/**
+ * The wax's glow follows its flame, at the flame's hue and the glow's own brightness, as a light does.
+ * Only while the flame burns: out, the game has darkened the wax, and it stays so.
+ */
+void paint(const Glow& g, float blueness, bool lit) {
+  if (!lit || !alive(g.material)) return;
+  const Rgb warm{g.original.r, g.original.g, g.original.b};
+  const FlameColours stops = light_colours(brightness(warm), g_green);
+  const Rgb c = tint(warm, stops.pale, stops.deep, blueness);
+  const Color out{c.r, c.g, c.b, g.original.a};
+  api.setColor(g.material, api.emission, &out);
 }
 
 void paint(const Look& l, float blueness) {
   for (const Lit& light : l.lights) paint(light, blueness);
 }
 
+void paint(Flame& f) {
+  for (Tinted& t : f.materials) paint(t, f.blueness);
+  const bool lit = il2cpp::field<bool>(f.fire, kFireLit);
+  for (const Glow& g : f.glows) paint(g, f.blueness, lit);
+  f.shown = f.blueness;
+}
+
 void release(Flame& f) {
-  for (const Tinted& t : f.materials) paint(t, 0);
+  f.blueness = 0;
+  if (alive(f.fire)) paint(f);
+  else
+    for (Tinted& t : f.materials) paint(t, 0);
   f = Flame{};
 }
 
@@ -193,9 +381,13 @@ void clear_all() {
   for (Flame& f : g_flames) release(f);
   for (const Look& l : g_looks) paint(l, 0);
   for (Candelabra& c : g_candelabras) release(c);
+  // Every flame shows its own texture again, so the grey copies go with the contract.
+  for (Greys& g : g_greys)
+    for (il2cpp::Held& step : g.steps) game::destroy(step);
   g_flames.clear();
   g_looks.clear();
   g_candelabras.clear();
+  g_greys.clear();
   g_candleBlue.clear();
   g_heard.clear();
   g_level = nullptr;
@@ -235,18 +427,42 @@ void collect(Flame& f, void* transform, int depth) {
     int property = 0;
     if (shared && api.hasProperty(shared, api.candleTint)) property = api.candleTint;
     else if (shared && api.hasProperty(shared, api.lanternTint)) property = api.lanternTint;
-    if (property) {
-      void* material = api.material(renderer, nullptr);  // this renderer's own copy
-      bool known = false;
-      for (const Tinted& t : f.materials) known |= t.material == material;
-      if (material && !known) {
-        Tinted t{material, property, {}};
-        api.getColor(material, property, &t.original);
-        f.materials.push_back(std::move(t));
+    void* material = property ? api.material(renderer, nullptr) : nullptr;  // this renderer's own copy
+    bool known = false;
+    for (const Tinted& t : f.materials) known |= t.material == material;
+    if (material && !known) {
+      Tinted t{material, property, {}};
+      api.getColor(material, property, &t.original);
+      if (property == api.candleTint && api.textures && api.hasProperty(material, api.candleSprite))
+        t.sprite = own_texture(api.getTexture(material, api.candleSprite, nullptr));
+      f.materials.push_back(std::move(t));
+      // A lantern's flame is noise between two colours; both turn, so none of the game's blue stays
+      // in a green flame.
+      if (property == api.lanternTint && api.hasProperty(material, api.lanternBase)) {
+        Tinted base{material, api.lanternBase, {}};
+        api.getColor(material, api.lanternBase, &base.original);
+        f.materials.push_back(std::move(base));
       }
     }
   }
   for (int i = 0; i < game::child_count(transform); ++i) collect(f, game::child(transform, i), depth + 1);
+}
+
+/** The wax of the flame's own candle (Tier 1 and 2), which glows near the flame while it burns. */
+void collect_glows(Flame& f) {
+  if (f.kind == Kind::Tier3) return;
+  const Color glow = il2cpp::field<Color>(f.candle, kCandleGlow);
+  auto* objects = il2cpp::field<il2cpp::Array*>(f.candle, kCandleObjects);
+  for (uintptr_t i = 0; objects && i < objects->max_length; ++i) {
+    void* o = objects->data<void*>()[i];
+    if (!o || il2cpp::field<void*>(o, kCandleObjectFire) != f.fire.get()) continue;
+    auto* wax = il2cpp::field<il2cpp::Array*>(o, kCandleObjectWax);
+    for (uintptr_t k = 0; wax && k < wax->max_length; ++k) {
+      void* renderer = wax->data<void*>()[k];
+      void* material = alive(renderer) ? api.material(renderer, nullptr) : nullptr;  // as the game sets it
+      if (material && api.hasProperty(material, api.emission)) f.glows.push_back({material, glow});
+    }
+  }
 }
 
 void find_visuals(Flame& f, bool onlyFlameOfItsCandle) {
@@ -256,7 +472,12 @@ void find_visuals(Flame& f, bool onlyFlameOfItsCandle) {
   // A lantern's flame sits on each of its models (held, set down, in the truck), apart from its fire
   // source: a candle with one flame has all of them for that flame.
   if (onlyFlameOfItsCandle) collect(f, game::transform_of(f.candle), 0);
-  PG_LOG("flames: flame %d shows through %zu materials", f.view, f.materials.size());
+  collect_glows(f);
+  int sprites = 0;
+  for (const Tinted& t : f.materials) sprites += t.sprite ? 1 : 0;
+  const Color glow = il2cpp::field<Color>(f.candle, kCandleGlow);
+  PG_LOG("flames: flame %d shows through %zu materials (%d with a sprite) and %zu wax glows (%.2f, %.2f, %.2f)",
+         f.view, f.materials.size(), sprites, f.glows.size(), glow.r, glow.g, glow.b);
 }
 
 void add_light(Look& l, void* light) {
@@ -488,8 +709,7 @@ void show_and_burn(float dt) {
     burning[f.candle] = burning[f.candle] || il2cpp::field<bool>(f.fire, kFireLit);
     if (std::fabs(f.blueness - f.shown) >= kShowStep || (f.blueness == 0 && f.shown != 0)) {
       if (!f.found) find_visuals(f, fires_of(f.candle) == 1);
-      for (const Tinted& t : f.materials) paint(t, f.blueness);
-      f.shown = f.blueness;
+      paint(f);
     }
   }
   // Each candle's lights, with its bluest flame; looked for when it first turns blue.
@@ -602,10 +822,39 @@ bool resolve() {
   ok &= api.propertyId && api.hasProperty && api.getColor && api.setColor;
   if (ok) {
     api.candleTint = api.propertyId(il2cpp::string_new("_TintColour"));
+    api.candleSprite = api.propertyId(il2cpp::string_new("_CandleSprite"));
     api.lanternTint = api.propertyId(il2cpp::string_new("_Color_2"));
+    api.lanternBase = api.propertyId(il2cpp::string_new("_Color_1"));
+    api.emission = api.propertyId(il2cpp::string_new("_EmissionColor"));
   }
+  // The grey flame textures. Without them a flame is still tinted, as before, over the game's colours.
+  il2cpp::Class* material = il2cpp::cls(kCore, "UnityEngine", "Material");
+  il2cpp::Class* texture = il2cpp::cls(kCore, "UnityEngine", "Texture");
+  il2cpp::Class* renderTexture = il2cpp::cls(kCore, "UnityEngine", "RenderTexture");
+  api.texture2D = il2cpp::cls(kCore, "UnityEngine", "Texture2D");
+  bool textures = api.texture2D != nullptr;
+  textures &= il2cpp::bind(api.getTexture, material, "GetTextureImpl", 1);
+  textures &= il2cpp::bind(api.setTexture, material, "SetTextureImpl", 2);
+  textures &= il2cpp::bind(api.texture2DCtor, api.texture2D, ".ctor", 2);
+  textures &= il2cpp::bind(api.width, texture, "get_width", 0);
+  textures &= il2cpp::bind(api.height, texture, "get_height", 0);
+  textures &= il2cpp::bind(api.wrapMode, texture, "get_wrapMode", 0);
+  textures &= il2cpp::bind(api.setWrapMode, texture, "set_wrapMode", 1);
+  textures &= il2cpp::bind(api.filterMode, texture, "get_filterMode", 0);
+  textures &= il2cpp::bind(api.setFilterMode, texture, "set_filterMode", 1);
+  textures &= il2cpp::bind(api.getTemporary, renderTexture, "GetTemporary", 5);
+  textures &= il2cpp::bind(api.releaseTemporary, renderTexture, "ReleaseTemporary", 1);
+  textures &= il2cpp::bind(api.activeTarget, renderTexture, "get_active", 0);
+  textures &= il2cpp::bind(api.setActiveTarget, renderTexture, "set_active", 1);
+  textures &= il2cpp::bind(api.blit, il2cpp::cls(kCore, "UnityEngine", "Graphics"), "Blit", 2);
+  textures &= il2cpp::bind(api.readPixels, api.texture2D, "ReadPixels", 3);
+  textures &= il2cpp::bind(api.getPixels, api.texture2D, "GetPixels32", 0);
+  textures &= il2cpp::bind(api.setPixels, api.texture2D, "SetPixels32", 1);
+  textures &= il2cpp::bind(api.apply, api.texture2D, "Apply", 2);
+  textures &= il2cpp::bind(api.setHideFlags, il2cpp::cls(kCore, "UnityEngine", "Object"), "set_hideFlags", 1);
+  api.textures = ok && textures;
   api.ok = ok;
-  PG_LOG("flames: resolve %s", ok ? "ok" : "FAILED");
+  PG_LOG("flames: resolve %s%s", ok ? "ok" : "FAILED", ok && !textures ? " (no grey flame textures: tint only)" : "");
   return ok;
 }
 

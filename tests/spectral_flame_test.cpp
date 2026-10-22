@@ -64,6 +64,16 @@ Rgb on_screen(Rgb tint, float texture) {
   return {curve(tint.r * texture), curve(tint.g * texture), curve(tint.b * texture)};
 }
 
+// The same for one texel of a coloured texture (8-bit sRGB, as the game stores it): the shader
+// multiplies the tint by the texel channel by channel, in linear light.
+Rgb on_screen(Rgb tint, const uint8_t* texel) {
+  auto linear = [](uint8_t v) {
+    const float c = v / 255.0f;
+    return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
+  };
+  return on_screen({tint.r * linear(texel[0]), tint.g * linear(texel[1]), tint.b * linear(texel[2])}, 1);
+}
+
 void rises_only_with_the_ghost_in_the_room() {
   CHECK(blue_after(in_room(), 40) > 0.1f);
   CHECK(blue_after(away(), 60) == 0);  // a ghost elsewhere never turns it blue
@@ -283,6 +293,55 @@ void the_hydras_light_turns_green() {
   }
 }
 
+void the_flame_texture_turns_grey_by_white_hot() {
+  CHECK(grey_step(0) == 0);
+  CHECK(grey_step(0.001f) == 0);  // a flame only just turning keeps the game's own texture
+  CHECK(grey_step(kFalseCap / 2) == kGreySteps && grey_step(kFalseCap) == kGreySteps && grey_step(1) == kGreySteps);
+  std::vector<bool> seen(kGreySteps + 1);
+  int last = 0;
+  for (float b = 0; b <= 1.0001f; b += 0.001f) {
+    const int s = grey_step(b);
+    CHECK(s >= last && s <= kGreySteps);  // only ever greyer as it turns
+    if (s >= 0 && s <= kGreySteps) seen[s] = true;
+    last = s;
+  }
+  CHECK(std::all_of(seen.begin(), seen.end(), [](bool v) { return v; }));  // through every step, none skipped
+}
+
+void a_grey_texel_keeps_its_brightness_and_alpha() {
+  uint8_t orange[4] = {255, 140, 30, 200};
+  to_grey(orange, 0);
+  CHECK(orange[0] == 255 && orange[1] == 140 && orange[2] == 30 && orange[3] == 200);  // untouched at none
+  to_grey(orange, 1);
+  CHECK(orange[0] == orange[1] && orange[1] == orange[2] && orange[3] == 200);  // grey, alpha kept
+  CHECK(orange[0] > 30 && orange[0] < 255);  // between its darkest and brightest channels
+  uint8_t white[4] = {255, 255, 255, 255}, black[4] = {0, 0, 0, 0};
+  to_grey(white, 1);
+  to_grey(black, 1);
+  CHECK(white[0] == 255 && white[1] == 255 && white[2] == 255);
+  CHECK(black[0] == 0 && black[1] == 0 && black[2] == 0);
+  uint8_t half[4] = {255, 140, 30, 255}, full[4] = {255, 140, 30, 255};
+  to_grey(half, 0.5f);
+  to_grey(full, 1);
+  CHECK(half[0] < 255 && half[0] > full[0] && half[2] > 30 && half[2] < full[2]);  // part of the way
+}
+
+void the_sprites_orange_shows_blue_once_grey() {
+  // Texels of the game's coloured "Candle flame" sprite (sharedassets2): the yellow-orange of its tip
+  // and of the band at its base. Multiplied by the deep blue they stay olive and dark, the tinted
+  // orange flame players saw; once grey, the whole flame takes the tint's own hue.
+  const uint8_t tip[4] = {241, 197, 43, 160}, base[4] = {236, 187, 40, 154};
+  for (const uint8_t* texel : {tip, base}) {
+    uint8_t grey[4] = {texel[0], texel[1], texel[2], texel[3]};
+    to_grey(grey, 1);
+    const Rgb before = on_screen(kFlameDeep, texel), after = on_screen(kFlameDeep, grey);
+    CHECK(before.b < 2.5f * before.g);  // the problem: not the deep blue
+    CHECK(saturation(after) > 0.95f && after.b > 2.5f * after.g);
+    const Rgb green = on_screen(flame_colours(kFlameDeep, true).deep, grey);
+    CHECK(saturation(green) > 0.95f && green.g > 3 * green.r && green.g > 3 * green.b);  // the Hydra's too
+  }
+}
+
 void messages_round_trip() {
   const std::vector<std::pair<int, float>> flames = {{1001, 0.0f}, {-7, 0.5f}, {2147483647, 1.0f}};
   const std::vector<uint8_t> bytes = encode(flames);
@@ -328,6 +387,9 @@ int main() {
   a_light_goes_pale_at_half_and_deep_blue_at_full();
   the_hydras_flame_burns_green();
   the_hydras_light_turns_green();
+  the_flame_texture_turns_grey_by_white_hot();
+  a_grey_texel_keeps_its_brightness_and_alpha();
+  the_sprites_orange_shows_blue_once_grey();
   messages_round_trip();
   a_false_flame_reads_the_same_on_every_client();
   return g_failures ? 1 : 0;

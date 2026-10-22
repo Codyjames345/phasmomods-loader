@@ -335,10 +335,22 @@ reports an entry whose problem is already gone.
   flame turns pale green at the cap on zero evidence and full green with evidence given, its lights
   following; other ghosts stay blue; the host report's "green 1" for a Hydra; the pale green reads as
   plainly not the pale blue on screen; the pale and deep greens are told apart on screen (20 to 32
-  degrees of hue apart offline, separated mostly by saturation). A Hydra's Tier 3 lantern may read
-  blue-green: the branch paints only the Lantern Flame's _Color_2 (flames.cpp:237), while the shader
-  lerps between _Color_1 (the game's blue) and _Color_2; painting _Color_1 from the same flame_colours
-  pair is planned in the separate Spectral Flame recolour work.
+  degrees of hue apart offline, separated mostly by saturation).
+
+  2026-10-22: the user's screenshot (a Tier 2 Firelight at full blue) showed an orange flame with a
+  blue tint, and the top of the wax still yellow. The flame shader draws its sprite times _TintColour,
+  and the game's "Candle flame" sprite is coloured (white core, yellow body, orange tip), so its yellow
+  and orange stay olive under any blue. Each flame's _CandleSprite now fades in six steps to a grey
+  copy read back at run time (Blit, ReadPixels; the game's own grey "Candle flame White" is not loaded
+  in contracts), grey from white-hot on. The wax glow is the Candle Melt shader's _EmissionColor,
+  which Candle.UseNetworked sets to Candle+0x450 when a Tier 1 or 2 candle lights: it now turns with
+  its flame, only while lit. The lantern's _Color_1 is painted from the same pair as its _Color_2, so
+  a Hydra's lantern turns fully green. Unverified: the read-back works ("reads back for its grey
+  steps" in mods.log, not "could not be read back") and the grey copy matches the game's sprite in
+  shape, with no frame hitch worth noticing; the flame shows one even hue at full blue and green, tip
+  and base included; the six steps read as one fade, not jumps; the wax glow turns and stays dark
+  once the candle is out ("wax glows" counted in the "shows through" line, with the glow colour); a
+  candle relit after turning shows its own colours; nothing is left grey after a contract.
 
   Prompt:
   > In this repository, play private contracts in Phasmophobia build 25811160 with Spectral Flame and
@@ -347,7 +359,9 @@ reports an entry whose problem is already gone.
   > "flames:" report: a Tier 1 Firelight set down in the ghost room turns white-hot, pale sky blue
   > after about half a minute of ghost time there and fully deep blue after a minute (Tier 2 50 s,
   > Tier 3 lantern 40 s; longer in real time as the ghost comes and goes, and while it is away the
-  > flame drops back at half speed), hunts included, with the light on the walls following;
+  > flame drops back at half speed), hunts included, with the light on the walls following; the whole
+  > flame one even blue at full, tip and base included, and the glow at the top of the wax blue with
+  > it (dark again once the candle is out); mods.log shows "reads back for its grey steps";
   > it stays yellow in your hand and starts over when picked up; it does not go out from the ghost
   > before it has been fully blue ("stays lit" lines), and may afterwards; it does not burn out before
   > it is fully blue. With the vanilla ghost it reaches the pale blue only after a minute of ghost time,
@@ -355,7 +369,7 @@ reports an entry whose problem is already gone.
   > same colours. Then the Hydra, once on zero evidence and once with 3 evidence given: its flame
   > turns pale green at the cap on zero evidence and full green with evidence given, the light on the
   > walls green with it, on both clients ("green 1" in the report), the pale green plainly not the
-  > deep one; on a Tier 3 lantern, note whether it reads green or blue-green; every other ghost's stays blue.
+  > deep one; on a Tier 3 lantern it reads fully green, not blue-green; every other ghost's stays blue.
   > Then a contract with Custom Ghosts off: no row and no tint.
 
 ## 19. The Mods panel, the themed notice and the join guard have never run inside the game

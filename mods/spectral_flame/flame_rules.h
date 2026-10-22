@@ -159,6 +159,25 @@ inline Rgb tint(Rgb warm, Rgb pale, Rgb deep, float blueness) {
   return mix(pale, deep, (t - kFalseCap) / (1 - kFalseCap));
 }
 
+// The flame's texture. The game's "Candle flame" sprite is coloured (a white core, a yellow body, an
+// orange tip) and its shader multiplies it by the tint, so no tint turns it blue: the yellow and orange
+// stay olive. As a flame turns, its texture fades in steps to a grey copy of the same sprite, all grey
+// by the white-hot stop, and the tint alone gives the flame its hue from there on.
+constexpr int kGreySteps = 6;
+
+/** The step a flame's texture is at for `blueness`: 0 the game's own, up to kGreySteps, grey. */
+inline int grey_step(float blueness) {
+  const float t = std::clamp(blueness / (kFalseCap / 2), 0.0f, 1.0f);
+  return static_cast<int>(std::lround(t * kGreySteps));
+}
+
+/** Move a texel (8-bit RGBA as the texture stores it) `amount` (0..1) of the way to its own grey. */
+inline void to_grey(uint8_t* rgba, float amount) {
+  const float y = 0.2126f * rgba[0] + 0.7152f * rgba[1] + 0.0722f * rgba[2];
+  for (int i = 0; i < 3; ++i)
+    rgba[i] = static_cast<uint8_t>(std::clamp(std::lround(rgba[i] + (y - rgba[i]) * amount), 0L, 255L));
+}
+
 // The host's message to every client: byte 1 (its kind), a little-endian u16 count, then per flame
 // its fire source's PhotonView id (i32, little-endian) and its blueness (u8, 0..255, rounded down so
 // a flame at the false-positive cap never reads past it on a client).
