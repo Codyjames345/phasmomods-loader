@@ -22,6 +22,7 @@ function Invoke-Git([string[]]$GitArguments) {
 }
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "The version must be MAJOR.MINOR.PATCH, not '$Version'." }
+if ((Invoke-Git @('branch', '--show-current')) -join '' -ne 'main') { throw 'Releases are made from main. Switch to main first.' }
 if (@(Invoke-Git @('status', '--porcelain')).Count) { throw 'The working tree has uncommitted changes. Commit or stash them first.' }
 
 $versionFile = Join-Path $root 'VERSION'

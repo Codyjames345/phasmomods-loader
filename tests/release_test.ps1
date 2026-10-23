@@ -54,6 +54,14 @@ function Assert-ReleaseFailure([string]$Fixture, [string]$Version, [string]$Mess
 }
 
 try {
+    # refuses to release from another branch or a detached head
+    $fixture = New-ReleaseFixture 'other branch'
+    Invoke-Git $fixture @('switch', '--quiet', '--create', 'topic') | Out-Null
+    Assert-ReleaseFailure $fixture '0.2.0' 'Releases are made from main'
+    $fixture = New-ReleaseFixture 'detached head'
+    Invoke-Git $fixture @('checkout', '--quiet', '--detach') | Out-Null
+    Assert-ReleaseFailure $fixture '0.2.0' 'Releases are made from main'
+
     # refuses a dirty tree
     $fixture = New-ReleaseFixture 'untracked file'
     Set-Content -LiteralPath (Join-Path $fixture 'stray.txt') -Value 'stray'
