@@ -4,7 +4,8 @@
 
 #include <MinHook.h>
 
-#include <algorithm>
+#include <cstdint>
+#include <cstring>
 #include <map>
 #include <mutex>
 #include <vector>
@@ -17,34 +18,60 @@ std::atomic<int> g_inflight{0};
 
 namespace {
 
+// Each hook is one link of its target's chain. The link's relay jumps to its detour, and MinHook
+// patches the relay, not the detour, when a newer link chains on the same target.
 struct Created {
-  void* target;   // the game function
-  void* at;       // what MinHook patched: the target, or the detour that ran first before this one
+  void* target;  // the game function
+  void* at;      // what MinHook patched: the target, or the relay of the link before this one
   void* detour;
-  void* earlier;  // the detour that ran first for the target before this one, or null
-  bool patched;   // false: a twin reached through the patch the same create_shared made at `at`
   bool enabled;
 };
 
 bool g_initialised = false;
 std::mutex g_mutex;
-// Each hooked game function and the detour that currently runs first for it. A second hook on the
-// same function hooks that detour instead, so the newest detour runs first and its trampoline
+// Each hooked game function and the relay of the link that currently runs first for it. A second
+// hook on the same function hooks that relay, so the newest detour runs first and its trampoline
 // reaches the one before it.
-std::map<void*, void*> g_first;
+std::map<void*, void*> g_head;
 std::vector<Created> g_created;  // in creation order
 size_t g_groupStart = 0;         // hooks from here on belong to the open group
 
-void* first_detour(void* target) {
-  auto first = g_first.find(target);
-  return first == g_first.end() ? nullptr : first->second;
+// The relays: `jmp [rip+0]` and the detour's address, 16 bytes each, in executable blocks of the
+// host's own. A detour may run on several targets (hook_entry's all-twins hook does that), so
+// patching the detour to chain on one target would put the newer hook on all of them; patching the
+// link's own relay puts it on that target's chain alone. A relay is never freed or reused: a call
+// may still be passing through one after its link is removed.
+constexpr size_t kRelayBytes = 16;
+constexpr size_t kRelayBlock = 0x10000;
+uint8_t* g_relays = nullptr;  // the current block
+size_t g_relaysUsed = kRelayBlock / kRelayBytes;
+
+// Writes a relay to `detour` in the next free slot, which stays free until take_relay.
+void* write_relay(void* detour) {
+  if (g_relaysUsed == kRelayBlock / kRelayBytes) {
+    void* block = VirtualAlloc(nullptr, kRelayBlock, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READ);
+    if (!block) return nullptr;
+    g_relays = static_cast<uint8_t*>(block);
+    g_relaysUsed = 0;
+  }
+  uint8_t* relay = g_relays + g_relaysUsed * kRelayBytes;
+  DWORD old = 0;
+  // The page keeps execute access throughout: other relays on it may be running.
+  if (!VirtualProtect(relay, kRelayBytes, PAGE_EXECUTE_READWRITE, &old)) return nullptr;
+  const uint8_t jump[6] = {0xFF, 0x25, 0, 0, 0, 0};  // jmp [rip+0]: the address that follows
+  std::memcpy(relay, jump, sizeof jump);
+  std::memcpy(relay + sizeof jump, &detour, sizeof detour);
+  std::memset(relay + sizeof jump + sizeof detour, 0xCC, kRelayBytes - sizeof jump - sizeof detour);
+  VirtualProtect(relay, kRelayBytes, old, &old);
+  FlushInstructionCache(GetCurrentProcess(), relay, kRelayBytes);
+  return relay;
 }
 
-// How many hooked functions `detour` runs first for: more than one for a hook on a method's twins.
-size_t runs_first_for(void* detour) {
-  size_t n = 0;
-  for (const auto& [target, first] : g_first) n += first == detour;
-  return n;
+void take_relay() { ++g_relaysUsed; }
+
+void* head(void* target) {
+  auto first = g_head.find(target);
+  return first == g_head.end() ? nullptr : first->second;
 }
 
 bool repeated(void* target, void* detour, const char* name) {
@@ -78,84 +105,23 @@ bool create(void* target, void* detour, void** original, const char* name) {
   }
   std::lock_guard lock(g_mutex);
   if (repeated(target, detour, name)) return false;
-  void* earlier = first_detour(target);
-  void* at = earlier ? earlier : target;
-  // Chaining onto a detour that runs first on every twin of a method would run this hook on all of
-  // them too, which a hook on one body must not do.
-  if (earlier && runs_first_for(earlier) > 1) {
-    PG_LOG("hooks: %s refused at %p: every twin of this method is hooked as one, so a hook on this body "
-           "alone would run on all of them; hook the method by entry with every twin",
-           name, target);
+  void* relay = write_relay(detour);
+  if (!relay) {
+    PG_LOG("hooks: create %s at %p failed: no memory for its relay", name, target);
     return false;
   }
-  MH_STATUS s = MH_CreateHook(at, detour, original);
+  void* earlier = head(target);
+  void* at = earlier ? earlier : target;
+  MH_STATUS s = MH_CreateHook(at, relay, original);
   if (s != MH_OK) {
     PG_LOG("hooks: create %s at %p failed: %s", name, at, MH_StatusToString(s));
     return false;
   }
-  g_first[target] = detour;
-  g_created.push_back({target, at, detour, earlier, true, false});
+  take_relay();
+  g_head[target] = relay;
+  g_created.push_back({target, at, detour, false});
   if (at == target) PG_LOG("hooks: created %s at %p", name, target);
   else PG_LOG("hooks: created %s at %p, chained ahead of an earlier detour", name, target);
-  return true;
-}
-
-bool create_shared(std::span<void* const> bodies, void* detour, void** original, const char* name) {
-  if (bodies.empty() || !detour) {
-    PG_LOG("hooks: %s has no target", name);
-    return false;
-  }
-  std::lock_guard lock(g_mutex);
-  for (size_t i = 0; i < bodies.size(); ++i) {
-    if (!bodies[i]) {
-      PG_LOG("hooks: %s has no target", name);
-      return false;
-    }
-    // A body listed twice would count towards the bodies an earlier detour runs first on, and so
-    // pass for every twin while one of them goes without this detour.
-    if (std::find(bodies.begin(), bodies.begin() + i, bodies[i]) != bodies.begin() + i) {
-      PG_LOG("hooks: %s refused at %p: the body is listed twice", name, bodies[i]);
-      return false;
-    }
-    if (repeated(bodies[i], detour, name)) return false;
-  }
-  // Every body must lead with the same detour, one that runs on exactly these bodies (an earlier
-  // hook on all of them), or with none. Otherwise this hook would skip a detour that runs on some
-  // body, or run through one that a hook on a single body placed.
-  void* earlier = first_detour(bodies[0]);
-  bool shared = !earlier || runs_first_for(earlier) == bodies.size();
-  for (void* body : bodies) shared = shared && first_detour(body) == earlier;
-  if (!shared) {
-    PG_LOG("hooks: %s refused at %p: a hook on some of this method's twins only is already there, so a hook on "
-           "every twin would mix the two",
-           name, bodies[0]);
-    return false;
-  }
-  const size_t start = g_created.size();
-  if (earlier) {
-    // That detour runs first on every body, so one patch on it puts this detour ahead on all.
-    MH_STATUS s = MH_CreateHook(earlier, detour, original);
-    if (s != MH_OK) {
-      PG_LOG("hooks: create %s at %p failed: %s", name, earlier, MH_StatusToString(s));
-      return false;
-    }
-    for (size_t i = 0; i < bodies.size(); ++i) g_created.push_back({bodies[i], earlier, detour, earlier, i == 0, false});
-  } else {
-    // Each body gets its own patch; only the first body's trampoline is `original`, as twins are the
-    // same behaviour.
-    for (size_t i = 0; i < bodies.size(); ++i) {
-      MH_STATUS s = MH_CreateHook(bodies[i], detour, i == 0 ? original : nullptr);
-      if (s != MH_OK) {
-        PG_LOG("hooks: create %s at %p failed: %s", name, bodies[i], MH_StatusToString(s));
-        remove_since(start);
-        return false;
-      }
-      g_created.push_back({bodies[i], bodies[i], detour, nullptr, true, false});
-    }
-  }
-  for (void* body : bodies) g_first[body] = detour;
-  PG_LOG("hooks: created %s at %p on %zu bodies%s", name, bodies[0], bodies.size(),
-         earlier ? ", chained ahead of an earlier detour" : "");
   return true;
 }
 
@@ -163,7 +129,7 @@ bool enable_all() {
   std::lock_guard lock(g_mutex);
   bool queued = false;
   for (size_t i = g_groupStart; i < g_created.size(); ++i) {
-    if (g_created[i].enabled || !g_created[i].patched) continue;
+    if (g_created[i].enabled) continue;
     if (MH_QueueEnableHook(g_created[i].at) != MH_OK) return false;
     queued = true;
   }
@@ -188,12 +154,11 @@ void remove_since(size_t start) {
   while (g_created.size() > start) {
     const Created c = g_created.back();
     g_created.pop_back();
-    if (c.patched) {
-      if (c.enabled) MH_DisableHook(c.at);
-      MH_RemoveHook(c.at);
-    }
-    if (c.earlier) g_first[c.target] = c.earlier;
-    else g_first.erase(c.target);
+    if (c.enabled) MH_DisableHook(c.at);
+    MH_RemoveHook(c.at);
+    // The link before this one leads again: its relay is what this one patched.
+    if (c.at == c.target) g_head.erase(c.target);
+    else g_head[c.target] = c.at;
   }
   if (g_groupStart > start) g_groupStart = start;
 }
@@ -215,7 +180,7 @@ void rollback_to(size_t mark) {
   std::lock_guard lock(g_mutex);
   const size_t removed = g_created.size() > mark ? g_created.size() - mark : 0;
   remove_since(mark);
-  PG_LOG("hooks: removed %zu mod hook(s)", removed);
+  PG_LOG("hooks: removed %zu hook(s)", removed);
 }
 
 void shutdown() {

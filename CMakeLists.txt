@@ -243,7 +243,7 @@ pg_test(ghost_tells)
 pg_test(score)
 pg_test(typestate)
 pg_test(perceive)
-pg_test(hooks host/hooks.cpp host/entry_hooks.cpp host/context.cpp core/log.cpp)
+pg_test(hooks host/hooks.cpp host/entry_hooks.cpp host/context.cpp sdk/api/game_api.cpp core/log.cpp)
 target_include_directories(hooks_test PRIVATE sdk/api sdk/map)
 target_link_libraries(hooks_test PRIVATE minhook)
 # A mod for the tests that load one (mods_test, gamecheck): it requires GhostAI.UnAppear and Camera.

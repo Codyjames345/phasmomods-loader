@@ -1,9 +1,11 @@
 // Offline tests for the host's hooks (host/hooks.cpp) on local functions, with the real MinHook:
 // chaining, refused repeats, per-mod groups and rolling a group back; hooks by entry over a method's
-// twins (host/entry_hooks.cpp) and the caller context (host/context.cpp). Run: build\hooks_test.exe
+// twins (host/entry_hooks.cpp), the game API's typed hooks with one chain per body (sdk/api), and the
+// caller context (host/context.cpp). Run: build\hooks_test.exe
 #include <windows.h>
 
 #include <initializer_list>
+#include <map>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -11,6 +13,7 @@
 #include <vector>
 
 #include "entry_hooks.h"
+#include "game_api.h"
 #include "hooks.h"
 #include "log.h"
 #include "mod_api.h"
@@ -79,59 +82,12 @@ __declspec(noinline) int folded(int x) {
   return y + 13;
 }
 
-// Pairs for the refused mixes of twin policies, one pair per case.
-__declspec(noinline) int all_first_a(int x) {
-  volatile int y = x;
-  return y + 14;
-}
-__declspec(noinline) int all_first_b(int x) {
-  volatile int y = x;
-  volatile int zero = 0;
-  return y + zero + 14;
-}
-__declspec(noinline) int one_first_a(int x) {
-  volatile int y = x;
-  return y + 15;
-}
-__declspec(noinline) int one_first_b(int x) {
-  volatile int y = x;
-  volatile int zero = 0;
-  return y + zero + 15;
-}
-__declspec(noinline) int raw_first_a(int x) {
-  volatile int y = x;
-  return y + 16;
-}
-__declspec(noinline) int raw_first_b(int x) {
-  volatile int y = x;
-  volatile int zero = 0;
-  return y + zero + 16;
-}
-
-__declspec(noinline) int dup_a(int x) {
-  volatile int y = x;
-  return y + 18;
-}
-__declspec(noinline) int dup_b(int x) {
-  volatile int y = x;
-  volatile int zero = 0;
-  return y + zero + 18;
-}
-
 Fn g_origTwin = nullptr, g_origTwin2 = nullptr, g_origSolo = nullptr, g_origSolo2 = nullptr, g_origFolded = nullptr;
 __declspec(noinline) int detour_twin(int x) { return g_origTwin(x) * 100; }
 __declspec(noinline) int detour_twin2(int x) { return g_origTwin2(x) + 5; }
 __declspec(noinline) int detour_solo(int x) { return g_origSolo(x) * 100; }
 __declspec(noinline) int detour_solo2(int x) { return g_origSolo2(x) + 7; }
 __declspec(noinline) int detour_folded(int x) { return g_origFolded(x) * 100; }
-// Each case's first hook, and the later hook that is refused (it never runs, so it never calls on).
-Fn g_origAllFirst = nullptr, g_origOneFirst = nullptr, g_origRawFirst = nullptr, g_origDup = nullptr,
-   g_origRefused = nullptr;
-__declspec(noinline) int detour_all_first(int x) { return g_origAllFirst(x) * 100; }
-__declspec(noinline) int detour_one_first(int x) { return g_origOneFirst(x) * 100; }
-__declspec(noinline) int detour_raw_first(int x) { return g_origRawFirst(x) * 100; }
-__declspec(noinline) int detour_dup(int x) { return g_origDup(x) * 100; }
-__declspec(noinline) int detour_refused(int x) { return g_origRefused(x) + 9; }
 
 bool hook_entry(Fn canonical, std::initializer_list<void*> twins, Fn detour, Fn* original, const char* name, bool all) {
   const std::vector<void*> list(twins);
@@ -172,65 +128,6 @@ void canonical_only_leaves_twin() {
   CHECK(call(solo_b, 1) == 13);
 }
 
-// A hook that would mix twin policies on one method is refused with nothing patched: it would run
-// on bodies its policy excludes, or skip a detour that runs on one of them.
-void refused(bool hooked, size_t before, const char* why) {
-  CHECK(!hooked);
-  CHECK(pg::hooks::mark() == before);
-  CHECK(logged(why));
-  CHECK(g_origRefused == nullptr);  // no success with the original left unset
-}
-
-void all_twins_then_canonical_only_refused() {
-  CHECK(hook_entry(all_first_a, {p(all_first_b)}, detour_all_first, &g_origAllFirst, "all first", true));
-  CHECK(pg::hooks::enable_all());
-  g_log.clear();
-  const size_t before = pg::hooks::mark();
-  refused(hook_entry(all_first_a, {p(all_first_b)}, detour_refused, &g_origRefused, "only after all", false), before,
-          "only after all refused");
-  // A raw hook on the twin is refused the same way.
-  refused(pg::hooks::create(p(all_first_b), p(detour_refused), reinterpret_cast<void**>(&g_origRefused), "raw on twin"),
-          before, "raw on twin refused");
-  CHECK(pg::hooks::enable_all());
-  CHECK(call(all_first_a, 1) == 1500 && call(all_first_b, 1) == 1500);
-}
-
-void canonical_only_then_all_twins_refused() {
-  CHECK(hook_entry(one_first_a, {p(one_first_b)}, detour_one_first, &g_origOneFirst, "one first", false));
-  CHECK(pg::hooks::enable_all());
-  g_log.clear();
-  const size_t before = pg::hooks::mark();
-  refused(hook_entry(one_first_a, {p(one_first_b)}, detour_refused, &g_origRefused, "all after one", true), before,
-          "all after one refused");
-  CHECK(pg::hooks::enable_all());
-  CHECK(call(one_first_a, 1) == 1600 && call(one_first_b, 1) == 16);
-}
-
-void raw_on_twin_then_all_twins_refused() {
-  CHECK(pg::hooks::create(p(raw_first_b), p(detour_raw_first), reinterpret_cast<void**>(&g_origRawFirst), "raw first"));
-  CHECK(pg::hooks::enable_all());
-  g_log.clear();
-  const size_t before = pg::hooks::mark();
-  refused(hook_entry(raw_first_a, {p(raw_first_b)}, detour_refused, &g_origRefused, "all after raw", true), before,
-          "all after raw refused");
-  CHECK(pg::hooks::enable_all());
-  CHECK(call(raw_first_a, 1) == 17 && call(raw_first_b, 1) == 1700);
-}
-
-// create_shared takes each body once. [A, A] on top of a detour that runs first on {A, B} matches
-// that detour's count of bodies, yet would leave B without the new detour.
-void repeated_body_refused() {
-  CHECK(hook_entry(dup_a, {p(dup_b)}, detour_dup, &g_origDup, "dup", true));
-  CHECK(pg::hooks::enable_all());
-  g_log.clear();
-  const size_t before = pg::hooks::mark();
-  void* const twice[] = {p(dup_a), p(dup_a)};
-  refused(pg::hooks::create_shared(twice, p(detour_refused), reinterpret_cast<void**>(&g_origRefused), "twice"),
-          before, "twice refused");
-  CHECK(pg::hooks::enable_all());
-  CHECK(call(dup_a, 1) == 1900 && call(dup_b, 1) == 1900);
-}
-
 void folded_twin_hooked_once() {
   g_log.clear();
   const size_t before = pg::hooks::mark();
@@ -241,9 +138,273 @@ void folded_twin_hooked_once() {
   CHECK(call(folded, 1) == 1400);
 }
 
-// The caller context, on a tracked test method (the game's convention: its MethodInfo comes last).
+// One chain per body. A method's two bodies, with the game's convention (its MethodInfo comes last),
+// and what ran for a call, in order: the detours by name, then the body that ran ("A" or "B").
+std::string g_trace;
+void step(const char* name) {
+  if (!g_trace.empty()) g_trace += ' ';
+  g_trace += name;
+}
+
+using GameFn = int (*)(int, const void*);
+__declspec(noinline) int body_a(int x, const void*) {
+  step("A");
+  volatile int y = x;
+  return y + 21;
+}
+__declspec(noinline) int body_b(int x, const void*) {
+  step("B");
+  volatile int y = x;
+  volatile int zero = 0;
+  return y + zero + 21;
+}
+
+// What a call entering through `body` ran.
+std::string trace(GameFn body) {
+  g_trace.clear();
+  GameFn volatile through = body;
+  CHECK(through(1, nullptr) == 22);
+  return g_trace;
+}
+
+// Two mods' game API on the same method: each declares its own entry for it, so each has its own
+// typed hook, as two mod DLLs do.
+constexpr pg::sdk::EntryDesc kTwinMod1{.key = "Test.Twin", .kind = pg::sdk::Kind::Method};
+constexpr pg::sdk::EntryDesc kTwinMod2{.key = "Test.Twin", .kind = pg::sdk::Kind::Method};
+constexpr pg::api::Method<kTwinMod1, int(int)> TwinMod1{};
+constexpr pg::api::Method<kTwinMod2, int(int)> TwinMod2{};
+int d1(pg::api::Original<TwinMod1> original, int x) {
+  step("D1");
+  return original(x);
+}
+int d2(pg::api::Original<TwinMod2> original, int x) {
+  step("D2");
+  return original(x);
+}
+
+// An unmigrated mod's raw hook on one body, and a 2.0 mod's hook_entry: plain detours, each with
+// one `original`.
+GameFn g_origRaw = nullptr, g_origLegacy = nullptr;
+__declspec(noinline) int raw_detour(int x, const void* method) {
+  step("R");
+  return g_origRaw(x, method);
+}
+__declspec(noinline) int legacy_detour(int x, const void* method) {
+  step("L");
+  return g_origLegacy(x, method);
+}
+bool raw_on(GameFn body) {
+  return pg::hooks::create(reinterpret_cast<void*>(body), reinterpret_cast<void*>(&raw_detour),
+                           reinterpret_cast<void**>(&g_origRaw), "raw");
+}
+bool legacy(bool allTwins) {
+  void* const twins[] = {reinterpret_cast<void*>(&body_b)};
+  return pg::entry_hooks::hook(reinterpret_cast<void*>(&body_a), twins, reinterpret_cast<void*>(&legacy_detour),
+                               reinterpret_cast<void**>(&g_origLegacy), "legacy", allTwins);
+}
+
+// The test's host contract: the method entries below, hooked through the host's own per-body hooks.
+std::map<std::string, PgGameEntry> g_entries;
+std::vector<std::vector<void*>> g_twinLists;
+void give(const char* key, void* code, std::vector<void*> twins) {
+  std::vector<void*>& list = g_twinLists.emplace_back(std::move(twins));
+  PgGameEntry e{};
+  e.kind = PG_ENTRY_METHOD;
+  e.code = code;
+  e.twins = list.data();
+  e.twinCount = static_cast<uint32_t>(list.size());
+  g_entries[key] = e;
+}
+const PgGameEntry* test_entry(const char* key) {
+  const auto it = g_entries.find(key);
+  return it == g_entries.end() ? nullptr : &it->second;
+}
+bool test_hook_body(const char* key, uint32_t index, void* detour, void** original, const char* name) {
+  const PgGameEntry* e = test_entry(key);
+  return e && pg::entry_hooks::hook_body(e->code, {e->twins, e->twinCount}, index, detour, original, name);
+}
+uint32_t test_body_count(const char* key) {
+  const PgGameEntry* e = test_entry(key);
+  return e ? static_cast<uint32_t>(pg::entry_hooks::bodies(e->code, {e->twins, e->twinCount}).size()) : 0;
+}
+void test_log(const char* line) { PG_LOG("%s", line); }
+bool test_enable() { return pg::hooks::enable_all(); }
+
+PgHostApi test_host() {
+  PgHostApi host{};
+  host.version = PGMOD_API_VERSION;
+  host.log = &test_log;
+  host.enable_hooks = &test_enable;
+  host.game_entry = &test_entry;
+  host.hook_body = &test_hook_body;
+  host.body_count = &test_body_count;
+  return host;
+}
+
+// Twins A and B with different chains: an all-twins hook D1, then a CanonicalOnly hook D2 on A. A
+// call through B runs D1 and then B's own code; a call through A runs D2, then D1, then A's code.
+void original_follows_the_entered_body() {
+  const size_t before = pg::hooks::mark();
+  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
+  CHECK(pg::api::hook<TwinMod2>(&d2, "d2", pg::api::Twins::CanonicalOnly));
+  CHECK(pg::hooks::enable_all());
+  CHECK(trace(&body_b) == "D1 B");
+  CHECK(trace(&body_a) == "D2 D1 A");
+  pg::hooks::rollback_to(before);
+  CHECK(trace(&body_a) == "A");
+  CHECK(trace(&body_b) == "B");
+}
+
+// Hooks with different twin policies coexist on one method in either order, typed or not: a hook on
+// one body never runs for a call that entered through another.
+void mixed_policies_now_coexist() {
+  const size_t before = pg::hooks::mark();
+  CHECK(pg::api::hook<TwinMod2>(&d2, "d2", pg::api::Twins::CanonicalOnly));
+  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
+  CHECK(pg::hooks::enable_all());
+  CHECK(trace(&body_a) == "D1 D2 A");
+  CHECK(trace(&body_b) == "D1 B");
+  pg::hooks::rollback_to(before);
+
+  // A 2.0 mod's all-twins hook_entry, then a CanonicalOnly hook. Its one detour runs on both
+  // bodies and continues on the canonical chain (the limit hook_entry documents), yet D2 stays on A.
+  CHECK(legacy(true));
+  CHECK(pg::api::hook<TwinMod2>(&d2, "d2", pg::api::Twins::CanonicalOnly));
+  CHECK(pg::hooks::enable_all());
+  CHECK(trace(&body_a) == "D2 L A");
+  CHECK(trace(&body_b) == "L A");
+  pg::hooks::rollback_to(before);
+
+  // A CanonicalOnly hook_entry, then an all-twins hook.
+  CHECK(legacy(false));
+  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
+  CHECK(pg::hooks::enable_all());
+  CHECK(trace(&body_a) == "D1 L A");
+  CHECK(trace(&body_b) == "D1 B");
+  pg::hooks::rollback_to(before);
+
+  // An all-twins hook, then an all-twins hook_entry over it: the entry's detour leads on both.
+  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
+  CHECK(legacy(true));
+  CHECK(pg::hooks::enable_all());
+  CHECK(trace(&body_a) == "L D1 A");
+  CHECK(trace(&body_b) == "L D1 A");
+  pg::hooks::rollback_to(before);
+  CHECK(trace(&body_a) == "A" && trace(&body_b) == "B");
+}
+
+// A raw hook on a twin, before or after an all-twins hook, joins that twin's chain alone.
+void raw_create_on_a_twin() {
+  const size_t before = pg::hooks::mark();
+  CHECK(raw_on(&body_b));
+  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
+  CHECK(pg::hooks::enable_all());
+  CHECK(trace(&body_a) == "D1 A");
+  CHECK(trace(&body_b) == "D1 R B");
+  pg::hooks::rollback_to(before);
+
+  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
+  CHECK(raw_on(&body_b));
+  CHECK(pg::hooks::enable_all());
+  CHECK(trace(&body_a) == "D1 A");
+  CHECK(trace(&body_b) == "R D1 B");
+  pg::hooks::rollback_to(before);
+  CHECK(trace(&body_a) == "A" && trace(&body_b) == "B");
+}
+
+// One mod hooks a method once: a second typed hook on it is refused and the first keeps its detour.
+int d1_again(pg::api::Original<TwinMod1> original, int x) {
+  step("D1 again");
+  return original(x);
+}
+void second_typed_hook_refused() {
+  const size_t before = pg::hooks::mark();
+  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::CanonicalOnly));
+  CHECK(!pg::api::hook<TwinMod1>(&d1_again, "d1 again", pg::api::Twins::All));
+  CHECK(pg::hooks::mark() - before == 1);
+  CHECK(pg::hooks::enable_all());
+  CHECK(trace(&body_a) == "D1 A");
+  CHECK(trace(&body_b) == "B");
+  pg::hooks::rollback_to(before);
+}
+
+// A method with more bodies than a typed hook has slots for: an all-twins hook is refused with a log
+// line and nothing patched. A CanonicalOnly hook needs one slot and is made.
+__declspec(noinline) int many_body(int x, const void*) {
+  step("M");
+  volatile int y = x;
+  return y + 23;
+}
+constexpr pg::sdk::EntryDesc kMany{.key = "Test.Many", .kind = pg::sdk::Kind::Method};
+constexpr pg::api::Method<kMany, int(int)> Many{};
+int many_detour(pg::api::Original<Many> original, int x) {
+  step("DM");
+  return original(x);
+}
+// Never called: the twins only have to be distinct addresses.
+const char g_notCode[16] = {};
+std::vector<void*> eight_twins() {
+  std::vector<void*> twins;
+  for (int i = 1; i <= 8; ++i) twins.push_back(const_cast<char*>(g_notCode + i));
+  return twins;
+}
+
+void more_than_eight_bodies_refused() {
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
+  CHECK(!pg::api::hook<Many>(&many_detour, "many", pg::api::Twins::All));
+  CHECK(pg::hooks::mark() == before);
+  CHECK(logged("Test.Many has 9 bodies, more than the 8 a hook covers; nothing was hooked"));
+  CHECK(pg::api::hook<Many>(&many_detour, "many", pg::api::Twins::CanonicalOnly));
+  CHECK(pg::hooks::mark() - before == 1);
+  CHECK(pg::hooks::enable_all());
+  g_trace.clear();
+  GameFn volatile through = &many_body;
+  CHECK(through(1, nullptr) == 24 && g_trace == "DM M");
+  pg::hooks::rollback_to(before);
+}
+
+// The mods restart: every per-body hook since the mark goes, newest first, and each body's chain is
+// as it was, with the host's own hook made before the mark still in place. The mods hook again.
+GameFn g_origHost = nullptr;
+__declspec(noinline) int host_detour(int x, const void* method) {
+  step("H");
+  return g_origHost(x, method);
+}
+void rollback_per_body() {
+  CHECK(pg::hooks::create(reinterpret_cast<void*>(&body_a), reinterpret_cast<void*>(&host_detour),
+                          reinterpret_cast<void**>(&g_origHost), "host"));
+  CHECK(pg::hooks::enable_all());
+  const size_t beforeMods = pg::hooks::mark();
+  pg::hooks::begin_group();
+  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
+  CHECK(pg::api::hook<TwinMod2>(&d2, "d2", pg::api::Twins::CanonicalOnly));
+  CHECK(raw_on(&body_b));
+  CHECK(legacy(true));
+  CHECK(pg::hooks::enable_all());
+  CHECK(trace(&body_a) == "L D2 D1 H A");
+  CHECK(trace(&body_b) == "L D2 D1 H A");  // hook_entry's detour continues on the canonical chain
+  g_log.clear();
+  pg::hooks::rollback_to(beforeMods);
+  CHECK(logged("removed 6 hook(s)"));
+  CHECK(trace(&body_a) == "H A");
+  CHECK(trace(&body_b) == "B");
+  pg::hooks::begin_group();
+  CHECK(pg::api::hook<TwinMod1>(&d1, "d1 restarted", pg::api::Twins::All));
+  CHECK(raw_on(&body_b));
+  CHECK(pg::hooks::enable_all());
+  CHECK(trace(&body_a) == "D1 H A");
+  CHECK(trace(&body_b) == "R D1 B");
+  pg::hooks::rollback_to(beforeMods);
+  CHECK(trace(&body_a) == "H A" && trace(&body_b) == "B");
+}
+
+// The caller context, on a tracked test method with a twin (the game's convention: its MethodInfo
+// comes last).
 constexpr pg::sdk::EntryDesc kTestF{.key = "Test.F", .kind = pg::sdk::Kind::Method};
 constexpr pg::api::Method<kTestF, int(int)> TestF{};
+constexpr pg::sdk::EntryDesc kTestMany{.key = "Test.ManyTracked", .kind = pg::sdk::Kind::Method};
+constexpr pg::api::Method<kTestMany, int(int)> TestMany{};
 
 int g_depthInside = -1, g_depthElsewhere = -1;
 __declspec(noinline) int tracked(int x, const void*) {
@@ -253,31 +414,57 @@ __declspec(noinline) int tracked(int x, const void*) {
   volatile int y = x;
   return y + 1;
 }
-int call_tracked(int x) {
-  int (*volatile through)(int, const void*) = tracked;
+__declspec(noinline) int tracked_twin(int x, const void*) {
+  g_depthInside = pg::context::depth("Test.F");
+  volatile int y = x;
+  volatile int zero = 0;
+  return y + zero + 1;
+}
+int call_tracked(GameFn body, int x) {
+  GameFn volatile through = body;
   return through(x, nullptr);
 }
 
 const PgGameEntry* fake_lookup(const char* key) {
+  static void* const twins[] = {reinterpret_cast<void*>(&tracked_twin)};
   static PgGameEntry entry{};
   entry.kind = PG_ENTRY_METHOD;
   entry.code = reinterpret_cast<void*>(&tracked);
-  return std::string(key) == "Test.F" ? &entry : nullptr;
+  entry.twins = twins;
+  entry.twinCount = 1;
+  static const std::vector<void*> many = eight_twins();
+  static PgGameEntry manyEntry{};
+  manyEntry.kind = PG_ENTRY_METHOD;
+  manyEntry.code = reinterpret_cast<void*>(&many_body);
+  manyEntry.twins = many.data();
+  manyEntry.twinCount = static_cast<uint32_t>(many.size());
+  if (std::string(key) == "Test.F") return &entry;
+  if (std::string(key) == "Test.ManyTracked") return &manyEntry;
+  return nullptr;
 }
 
-void depth_inside_tracked_call() {
+void tracking_counts_every_body() {
   CHECK(pg::context::depth("Test.F") == 0);
   pg::context::track<TestF>();
+  pg::context::track<TestMany>();
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
   CHECK(pg::context::install(&fake_lookup));
+  CHECK(pg::hooks::mark() - before == 2);  // one hook per body of Test.F, none on Test.ManyTracked
+  CHECK(logged("Test.ManyTracked has 9 bodies, more than the 8 a hook covers"));
   CHECK(pg::hooks::enable_all());
-  CHECK(call_tracked(1) == 2);
+  CHECK(call_tracked(&tracked, 1) == 2);
   CHECK(g_depthInside == 1);
   CHECK(g_depthElsewhere == 0);  // another thread never sees this one's depth
   CHECK(pg::context::depth("Test.F") == 0);
   g_depthInside = -1;
+  CHECK(call_tracked(&tracked_twin, 1) == 2);
+  CHECK(g_depthInside == 1);  // entered through the twin, counted all the same
+  CHECK(pg::context::depth("Test.F") == 0);
+  g_depthInside = -1;
   bool caught = false;
   try {
-    call_tracked(-1);
+    call_tracked(&tracked, -1);
   } catch (const std::runtime_error&) {
     caught = true;
   }
@@ -339,12 +526,20 @@ int main() {
   twin_calls_reach_detour();
   second_hook_chains_on_twins();
   canonical_only_leaves_twin();
-  all_twins_then_canonical_only_refused();
-  canonical_only_then_all_twins_refused();
-  raw_on_twin_then_all_twins_refused();
-  repeated_body_refused();
   folded_twin_hooked_once();
-  depth_inside_tracked_call();
+
+  give("Test.Twin", reinterpret_cast<void*>(&body_a), {reinterpret_cast<void*>(&body_b)});
+  give("Test.Many", reinterpret_cast<void*>(&many_body), eight_twins());
+  const PgHostApi host = test_host();
+  std::string missing;
+  CHECK(pg::api::bind(&host, missing));
+  original_follows_the_entered_body();
+  mixed_policies_now_coexist();
+  raw_create_on_a_twin();
+  second_typed_hook_refused();
+  more_than_eight_bodies_refused();
+  rollback_per_body();
+  tracking_counts_every_body();
 
   shutdown();
   CHECK(call(target, 1) == 2 && call(other, 1) == 5);

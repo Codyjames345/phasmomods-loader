@@ -37,6 +37,7 @@
 //
 // Managed strings, arrays, lists, alive checks and GC holds are in runtime.h and held.h.
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -44,8 +45,10 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 #include "entry.h"
+#include "hooks.h"
 #include "mod_api.h"
 
 namespace pg::api {
@@ -124,8 +127,13 @@ const void* object_of(Obj obj, Rest...) {
   static_assert(std::is_pointer_v<Obj>, "an instance method's first parameter is the object, a pointer");
   return obj;
 }
-// The host contract's hook_entry, or false (logged) before bind.
-bool hook(const char* key, void* detour, void** original, const char* name, bool allTwins);
+// Hooks bodies 0 to n - 1 of the method entry `key` through the host contract's hook_body, where n
+// is 1, or with `allTwins` its body_count: body i with entry(i), its `original` into originals[i].
+// Stops at the first body the host refuses. False (logged) before bind, without a detour, when the
+// method has more bodies than kMaxBodies (each with nothing hooked), or when a body was refused (the
+// host logs why); `created` is how many bodies were hooked, from body 0 on.
+bool hook_bodies(const char* key, bool hasDetour, void* (*entry)(uint32_t), void** originals, const char* name,
+                 bool allTwins, uint32_t& created);
 // The host contract's inside_entry, or 0 before bind.
 int32_t inside(const char* key);
 
@@ -455,17 +463,103 @@ struct Type {
 /// whichever body the game calls), or only the canonical body.
 enum class Twins { All, CanonicalOnly };
 
-/// Hooks the game method M names (a Method wrapper, e.g. phasmo::GhostAI::ChangeState) through the
-/// host's single MinHook instance. The hook is created, not enabled: the host contract's enable_hooks
-/// enables it. `original` receives what reaches the canonical body; `name` names the hook in the log
-/// (the entry's key when null). False when M did not resolve (logged once) or the host could not
-/// hook it (the host logs why). Main thread.
+/// The most bodies (the canonical body and its twins) a typed hook covers: the game API makes one
+/// entry function per body, and it makes this many. An all-twins hook on a method with more bodies
+/// is refused (logged) and hooks nothing.
+inline constexpr uint32_t kMaxBodies = 8;
+
+template <class W>
+struct OriginalOf;
+
+/// What a hook's detour calls to go on with the game's call: the next detour in the chain of the
+/// body the call came in through, or that body itself. It passes the game's MethodInfo on. Valid
+/// only during the detour's call: do not keep it. Main thread, as the hooked call.
+template <const sdk::EntryDesc& D, class R, class... A>
+struct OriginalOf<Method<D, R(A...)>> {
+  R (*code)(A..., const void*);
+  const void* method;
+  R operator()(A... a) const { return code(a..., method); }
+};
+
+/// The `original` a detour of a hook on M (a Method wrapper) receives.
 template <auto& M>
-bool hook(void* detour, void** original, const char* name, Twins twins = Twins::All) {
+using Original = OriginalOf<std::remove_cvref_t<decltype(M)>>;
+
+namespace detail {
+
+// One entry function per body slot, for the Method wrapper W and the handler H that runs for each
+// call (H::run(original, args...)): body_entry<I> is what is hooked on body I, and `original[I]` is
+// what continues that body's chain. Each body_entry<I> reads its own slot, so no two of them are the
+// same code and the linker never folds them into one. Each holds a hooks::Guard while it runs.
+template <class W, class H>
+struct Bodies;
+
+template <const sdk::EntryDesc& D, class R, class... A, class H>
+struct Bodies<Method<D, R(A...)>, H> {
+  using Code = R (*)(A..., const void*);
+  static inline Code original[kMaxBodies] = {};
+
+  template <uint32_t I>
+  static R body_entry(A... a, const void* method) {
+    hooks::Guard guard;
+    return H::run(OriginalOf<Method<D, R(A...)>>{original[I], method}, a...);
+  }
+
+  template <uint32_t... I>
+  static constexpr std::array<Code, kMaxBodies> make(std::integer_sequence<uint32_t, I...>) {
+    return {&body_entry<I>...};
+  }
+  static constexpr std::array<Code, kMaxBodies> entries = make(std::make_integer_sequence<uint32_t, kMaxBodies>{});
+
+  // The entry function hooked on body `i`, below kMaxBodies.
+  static void* entry(uint32_t i) { return reinterpret_cast<void*>(entries[i]); }
+};
+
+// The handler of hook<M>: the mod's detour, given the body's original. One per wrapper, so a mod
+// hooks a method once.
+template <class W>
+struct Hooked;
+
+template <const sdk::EntryDesc& D, class R, class... A>
+struct Hooked<Method<D, R(A...)>> {
+  using Detour = R (*)(OriginalOf<Method<D, R(A...)>>, A...);
+  static inline Detour detour = nullptr;
+
+  static R run(OriginalOf<Method<D, R(A...)>> original, A... a) {
+    const Detour d = detour;
+    return d ? d(original, a...) : original(a...);
+  }
+};
+
+}  // namespace detail
+
+/// Hooks the game method M names (a Method wrapper, e.g. phasmo::GhostAI::ChangeState) through the
+/// host's single MinHook instance, with `detour` written as
+///
+///   R detour(pg::api::Original<M> original, A... args)
+///
+/// for M's R(A...). `original(args...)` goes on with the call: the next detour in the chain of the
+/// body the call came in through, or that body itself. Each body (the canonical body and, with
+/// Twins::All, each twin) has its own chain, so another hook on one body never runs for a call
+/// that entered through another. The hook is created, not enabled: the host contract's
+/// enable_hooks enables it. `name` names the hook in the log (the entry's key when null). A mod
+/// hooks a method once: a second hook<M> is refused (the host logs it) and the first keeps its
+/// detour. False when M did not resolve (logged once), when `detour` is null, when an all-twins hook
+/// meets a method with more than kMaxBodies bodies (logged, nothing hooked), or when the host could
+/// not hook a body (it logs why); the bodies hooked before that one stay hooked and run `detour`, so
+/// a mod returns false from its start and the host removes them. Main thread.
+template <auto& M>
+bool hook(typename detail::Hooked<std::remove_cvref_t<decltype(M)>>::Detour detour, const char* name,
+          Twins twins = Twins::All) {
   using W = std::remove_cvref_t<decltype(M)>;
   static_assert(W::desc.kind == sdk::Kind::Method, "hook takes a Method wrapper");
   if (!W::use::entry()) return false;
-  return detail::hook(W::desc.key, detour, original, name ? name : W::desc.key, twins == Twins::All);
+  using B = detail::Bodies<W, detail::Hooked<W>>;
+  uint32_t created = 0;
+  const bool ok = detail::hook_bodies(W::desc.key, detour != nullptr, &B::entry, reinterpret_cast<void**>(B::original),
+                                      name ? name : W::desc.key, twins == Twins::All, created);
+  if (created > 0) detail::Hooked<W>::detour = detour;  // before anything enables the new hooks
+  return ok;
 }
 
 /// Whether a call of the game method M names is running on this thread, as the host's hook on it

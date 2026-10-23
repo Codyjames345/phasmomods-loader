@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <cstddef>
-#include <span>
 
 // MinHook detours. The host owns the only MinHook instance (host/hooks.cpp); in a mod these calls
 // go to the host (core/mod_glue.cpp), which chains a second detour on an already hooked function.
@@ -10,14 +9,13 @@
 namespace pg::hooks {
 
 bool init();  // host only
-// Refuses a repeat, and a target whose first detour runs on every twin of a method (create_shared):
-// a hook there would run on all of them.
+// Hooks the one function `target` (a game method's body, never its twins with it): each target has
+// its own chain, in which the newest detour runs first and its `original` reaches the one before it,
+// or the target. The host chains through a relay of its own per hook, never by patching a detour, so
+// a detour hooked on several targets carries no later hook on one of them over to the others (its
+// one `original` still reaches only the target it was hooked on last). Refuses a repeat of the same
+// detour on the same target.
 bool create(void* target, void* detour, void** original, const char* name);
-// Host only. One detour on several distinct bodies (a method and its twins), chained like create.
-// `original` reaches the first body's chain. Refused, with nothing patched, when a body is listed
-// twice, and unless every body has no hook yet or every body leads with the same detour and that
-// detour runs on exactly these bodies.
-bool create_shared(std::span<void* const> bodies, void* detour, void** original, const char* name);
 bool enable_all();  // enables the hooks created since the open group began
 // Host only. Each mod's start is a group: rollback_group disables and removes the hooks created
 // since begin_group, for a mod that did not start. rollback_to removes every hook created since

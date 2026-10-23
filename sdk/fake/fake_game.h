@@ -36,8 +36,9 @@ namespace pg::fake {
 void reset();
 
 /// A complete host contract in which only the game functions are live: game_entry answers from the
-/// entries given below, hook_entry records the hook (see hooked) and hands back the fake method as
-/// `original`, set_reference stores the reference and counts the write (see barrier_writes), and
+/// entries given below, hook_entry and hook_body record the hook (see hooked) and hand back the fake
+/// method as `original` (a fake method has one body: body_count is 1, and hook_body takes body 0
+/// only), set_reference stores the reference and counts the write (see barrier_writes), and
 /// inside_entry is always 0. The runtime services of version 2.1 work on the fake's memory:
 /// string_new and string_utf8 convert between UTF-8 and UTF-16 as the host does; string_utf8,
 /// array_length, array_data, list_count and list_items check that they were given a fake string,
@@ -84,7 +85,7 @@ void* list(const std::vector<void*>& items);
 /// The engine object `unityObject` is destroyed: alive answers false for it until reset.
 void destroy(const void* unityObject);
 
-/// The keys hooked through hook_entry since reset, in order.
+/// The keys hooked through hook_entry or hook_body since reset, in order, once per body hooked.
 std::vector<std::string> hooked();
 /// How many managed references were stored through set_reference or a reference static_field (the GC
 /// write barrier) since reset.

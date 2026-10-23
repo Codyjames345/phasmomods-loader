@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -21,6 +22,11 @@
 #include "log.h"
 #include "runtime.h"
 #include "utf16.h"
+
+// Hooks' detours hold a hooks::Guard; a mod's glue counts them, a test does here.
+namespace pg::hooks {
+std::atomic<int> g_inflight{0};
+}  // namespace pg::hooks
 
 namespace {
 
@@ -239,13 +245,27 @@ void unresolved_required_call_does_nothing() {
   CHECK(count_logged("GhostAI.UnAppear is not available in this game build") == 1);
 }
 
+int g_detourCalls = 0;
+void unappear_detour(api::Original<phasmo::GhostAI::UnAppear> original, void* ghost) {
+  ++g_detourCalls;
+  original(ghost);
+}
+
 void hook_by_entry() {
   fake_everything_but("");
   CHECK(bound());
-  void* original = nullptr;
-  CHECK(api::hook<phasmo::GhostAI::UnAppear>(reinterpret_cast<void*>(&fake_unappear), &original, "test"));
+  CHECK(api::hook<phasmo::GhostAI::UnAppear>(&unappear_detour, "test"));
   CHECK(fake::hooked() == std::vector<std::string>{"GhostAI.UnAppear"});
   CHECK(!api::inside<phasmo::GhostAI::UnAppear>());
+  // The game calling the hooked body reaches the detour, and its original reaches the method.
+  using W = std::remove_cvref_t<decltype(phasmo::GhostAI::UnAppear)>;
+  using Entry = void (*)(void*, const void*);
+  int ghost = 0;
+  g_sawGhost = nullptr;
+  reinterpret_cast<Entry>(api::detail::Bodies<W, api::detail::Hooked<W>>::entry(0))(&ghost, nullptr);
+  CHECK(g_detourCalls == 1 && g_sawGhost == &ghost);
+  CHECK(!api::hook<phasmo::GhostAI::UnAppear>(nullptr, "no detour"));
+  CHECK(count_logged("GhostAI.UnAppear: the hook was given no detour; nothing was hooked") == 1);
 }
 
 // The shared UTF-16 to UTF-8 encoder the host's string_utf8 uses: a surrogate pair becomes one

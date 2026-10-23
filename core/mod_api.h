@@ -97,11 +97,15 @@ struct PgHostApi {
   // no such entry, it did not resolve in this game build, or it is a GameAssembly export (only the
   // host may use one, so a mod that requires an export is never started).
   const PgGameEntry* (*game_entry)(const char* key);
-  // A MinHook detour on the method entry `key` names, not yet enabled (enable_hooks enables it), and
-  // chained like create_hook. `original` reaches the canonical body. With `allTwins` every twin of
-  // the method is hooked as well, so the detour runs whichever body the game calls; otherwise only
-  // the canonical body. False when the entry is unknown, unresolved or not a method, or when the
-  // host cannot hook entries yet (it logs that).
+  // A MinHook detour on the method entry `key` names, not yet enabled (enable_hooks enables it).
+  // Without `allTwins` it is hook_body on body 0, the canonical body. With `allTwins` the one
+  // `detour` is hooked on every body, each in that body's own chain, and `original` receives body
+  // 0's: a call that entered through a twin runs this detour and then continues on the canonical
+  // body's chain, skipping the detours older than this one on the twin and running those on the
+  // canonical body instead. Twins are the same behaviour, so the game is unaffected, but mods may
+  // be: use hook_body (version 2.1), which keeps every call on its own body's chain. Nothing is
+  // hooked unless every body is. False when the entry is unknown, unresolved or not a method, or when
+  // the host cannot hook it (it logs that).
   bool (*hook_entry)(const char* key, void* detour, void** original, const char* name, bool allTwins);
   // Stores the managed reference `value` into the managed object `obj` at `offset` through the
   // runtime's GC write barrier: the only correct way to write a reference field.
@@ -182,6 +186,21 @@ struct PgHostApi {
   // Stores the `size` bytes at `in` into the static field. For a managed reference `in` points at
   // the pointer, which is stored through the runtime's GC write barrier.
   bool (*static_set)(const char* key, const void* in, size_t size);
+
+  // Also added in version 2.1: hooks per body. A method's bodies are its canonical body (index 0)
+  // and then each distinct twin (PgGameEntry::twins, less any folded onto an earlier body), in order.
+  // Each body has its own chain: the newest detour on a body runs first for the calls that enter
+  // through that body, and its `original` reaches the next detour of that body's chain, or the body
+  // itself. A detour that serves several bodies must therefore be a separate function per body, so it
+  // knows which body's `original` to call (the game API's hook<M> makes one per body).
+
+  // A MinHook detour on body `bodyIndex` of the method entry `key`, not yet enabled (enable_hooks
+  // enables it), chained on that body alone. False when the entry is unknown, unresolved or not a
+  // method, when `bodyIndex` is not below body_count, or when the host cannot hook it (it logs that).
+  bool (*hook_body)(const char* key, uint32_t bodyIndex, void* detour, void** original, const char* name);
+  // How many bodies the method entry `key` has: 1 for a method without twins; 0 when the entry is
+  // unknown, unresolved or not a method.
+  uint32_t (*body_count)(const char* key);
 };
 
 enum PgModFlags : uint32_t {

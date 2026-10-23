@@ -126,10 +126,15 @@ const PgGameEntry* api_game_entry(const char* key) {
     return nullptr;  // an allocation failure while looking it up: treat the entry as unresolved
   }
 }
+// The resolved method entry `key` names, or null when it is unknown, unresolved or not a method.
+const PgGameEntry* method_entry(const char* key) {
+  const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
+  return e && e->kind == PG_ENTRY_METHOD && e->code ? e : nullptr;
+}
 bool api_hook_entry(const char* key, void* detour, void** original, const char* name, bool allTwins) {
   try {
-    const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
-    if (!e || e->kind != PG_ENTRY_METHOD || !e->code) {
+    const PgGameEntry* e = method_entry(key);
+    if (!e) {
       PG_LOG("suite: game entry %s is unknown, unresolved or not a method; nothing hooked", key ? key : "?");
       return false;
     }
@@ -137,6 +142,27 @@ bool api_hook_entry(const char* key, void* detour, void** original, const char* 
   } catch (...) {
     PG_LOG("suite: exception while hooking game entry %s", key ? key : "?");
     return false;
+  }
+}
+bool api_hook_body(const char* key, uint32_t bodyIndex, void* detour, void** original, const char* name) {
+  try {
+    const PgGameEntry* e = method_entry(key);
+    if (!e) {
+      PG_LOG("suite: game entry %s is unknown, unresolved or not a method; nothing hooked", key ? key : "?");
+      return false;
+    }
+    return entry_hooks::hook_body(e->code, {e->twins, e->twinCount}, bodyIndex, detour, original, name ? name : key);
+  } catch (...) {
+    PG_LOG("suite: exception while hooking game entry %s", key ? key : "?");
+    return false;
+  }
+}
+uint32_t api_body_count(const char* key) {
+  try {
+    const PgGameEntry* e = method_entry(key);
+    return e ? static_cast<uint32_t>(entry_hooks::bodies(e->code, {e->twins, e->twinCount}).size()) : 0;
+  } catch (...) {
+    return 0;  // an allocation failure while listing the bodies: treat the entry as unresolved
   }
 }
 void api_set_reference(void* obj, int32_t offset, void* value) {
@@ -410,7 +436,7 @@ bool start(void* gameAssembly, void* unityPlayer) {
            &api_string_new, &api_string_utf8, &api_array_length, &api_array_data, &api_array_new,
            &api_list_count, &api_list_items, &api_type_object, &api_object_new, &api_is_instance,
            &api_alive, &api_virtual_method, &api_gc_hold, &api_gc_release, &api_log_exception,
-           &api_static_get, &api_static_set};
+           &api_static_get, &api_static_set, &api_hook_body, &api_body_count};
   hostnet::set_receiver(hostnet::kHostChannel, &on_presence);
   mods::load(g_dataDirectory);
   if (mods::loaded().empty()) {

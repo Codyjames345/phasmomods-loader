@@ -231,22 +231,28 @@ itself; only the members the mod's code actually uses become required.
 ### Hooking and caller context
 
 ```cpp
-// A game method's code takes the MethodInfo as its last argument, so the detour and `original` do too.
-void (*original)(void*, int32_t, void*, bool, const void*) = nullptr;
-const bool hooked = pg::api::hook<phasmo::GhostAI::ChangeState>(
-    reinterpret_cast<void*>(&detour), reinterpret_cast<void**>(&original), "my hook", pg::api::Twins::All);
+// The detour takes the method's own arguments after `original`; the MethodInfo is passed on for it.
+void detour(pg::api::Original<phasmo::GhostAI::ChangeState> original, void* ghost, int32_t state, void* interact,
+            bool force) {
+  original(ghost, state, interact, force);  // the rest of the chain of the body the game called
+}
+const bool hooked = pg::api::hook<phasmo::GhostAI::ChangeState>(&detour, "my hook", pg::api::Twins::All);
 ```
 
 `hook<M>` creates a MinHook detour on the method through the host's single MinHook instance. It is
 created, not enabled: call `enable_hooks` (or `hooks::enable_all()`). Hooks chain: the newest detour
-runs first and its `original` reaches the previous one.
+runs first and its `original` reaches the previous one. A mod hooks a method once; a second `hook<M>`
+in the same mod is refused and the first keeps its detour.
 
 The obfuscator makes same-behaviour copies of some methods (twins). With `Twins::All` (the default)
-every twin is hooked as well, so the detour runs whichever body the game calls. With
+every twin is hooked as well, so the detour runs whichever body the game calls; with
 `Twins::CanonicalOnly` only the canonical body is hooked, which is what existing code hooked by raw
-address and so what a migration uses. The host refuses a hook that mixes the two policies on one
-method (an all-twins hook over a canonical-only one, or the reverse), and an all-twins hook over a raw
-hook on a twin, and logs why. A twin folded onto the canonical address is hooked once.
+address and so what a migration uses. Each body has its own chain, and `original` continues the chain
+of the body the call came in through, so hooks of either policy, and raw hooks on one body, coexist on
+one method in any order: a hook on the canonical body alone never runs for a call through a twin. The
+game API makes one entry function per body for this, up to `pg::api::kMaxBodies` (8); an all-twins
+hook on a method with more bodies is refused and logged, with nothing hooked. A twin folded onto the
+canonical address is one body, hooked once.
 
 `pg::api::inside<M>()` tells whether a call of M is running on this thread, from a thread-local depth
 the host's own hook on M keeps (`inside_entry` in the host contract). It answers only for methods the
@@ -262,7 +268,10 @@ older mods. Version 2.0 added these members, after the services of version 1:
 
 - `game_entry(key)`: the resolved `PgGameEntry` for a map key (type, method, code, twins, field
   offset, enum value), or null when unknown or unresolved.
-- `hook_entry(key, detour, original, name, allTwins)`: the hook above.
+- `hook_entry(key, detour, original, name, allTwins)`: a hook by entry with one detour. Since 2.1 it is
+  made from per-body hooks: without `allTwins` it hooks body 0, with it every body, and `original`
+  receives body 0's chain. So a call that entered through a twin goes on along the canonical body's
+  chain, past the twin's own older detours. The game API no longer calls it; `hook_body` replaced it.
 - `set_reference(obj, offset, value)`: stores a managed reference through the GC write barrier. The
   only correct way to write a reference field; `Field<D, void*>::set` calls it.
 - `inside_entry(key)`: the thread-local depth above.
@@ -289,6 +298,10 @@ that is unknown, unresolved or of the wrong kind:
   while the game plays. False, touching nothing, for a key that is not a resolved static field, a
   `size` other than the field's (checked before the class is initialised, so no static constructor
   runs), or a static constructor that threw (logged once per key).
+- `hook_body(key, bodyIndex, detour, original, name)` and `body_count(key)`, after `static_set`: a
+  method's bodies are its canonical body (index 0) and each distinct twin, and `hook_body` hooks one of
+  them, chained on that body alone. `body_count` is 0 for an entry that is unknown, unresolved or not a
+  method. `hook<M>` is built on these.
 
 A mod's exports are `pgmod_info`, `pgmod_start`, `pgmod_tick`, `pgmod_stop` and (version 2 onwards,
 exported by linking `pgmod`) `pgmod_requires`.
@@ -310,7 +323,7 @@ The other givers are `field(d, offset)`, `static_field(d, storage, size, referen
 `value(d, n)` and `type(d, klass)`. A static field reads and writes the test's own storage, and a
 `size` other than the one given answers as the host does for a field it cannot reach. An entry not
 given stays
-unresolved, as in a build that lacks it. `hooked()` lists the keys hooked through `hook_entry`, and
+unresolved, as in a build that lacks it. `hooked()` lists the keys hooked through `hook_entry` or `hook_body`, and
 `barrier_writes()` counts reference stores. A fake object begins with its class pointer;
 `parent(klass, parentClass)` declares inheritance, which `Type::is` and `virtual_call` follow, and
 `override_method(d, klass, fn)` gives a class its override. `method(d, fn, owner)` names the

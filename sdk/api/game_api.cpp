@@ -65,12 +65,28 @@ const void* virtual_method(const void* obj, const char* methodKey) {
   return g_host ? g_host->virtual_method(obj, methodKey) : nullptr;
 }
 
-bool hook(const char* key, void* detour, void** original, const char* name, bool allTwins) {
+bool hook_bodies(const char* key, bool hasDetour, void* (*entry)(uint32_t), void** originals, const char* name,
+                 bool allTwins, uint32_t& created) {
+  created = 0;
   if (!g_host) {
     PG_LOG("%s cannot be hooked before the game API is bound", key);
     return false;
   }
-  return g_host->hook_entry(key, detour, original, name, allTwins);
+  if (!hasDetour) {
+    PG_LOG("%s: the hook was given no detour; nothing was hooked", key);
+    return false;
+  }
+  const uint32_t count = allTwins ? g_host->body_count(key) : 1;
+  if (count > kMaxBodies) {
+    PG_LOG("%s has %u bodies, more than the %u a hook covers; nothing was hooked", key, count, kMaxBodies);
+    return false;
+  }
+  for (; created < count; ++created)
+    if (!g_host->hook_body(key, created, entry(created), &originals[created], name)) break;
+  if (created == count && count > 0) return true;
+  if (created > 0) PG_LOG("%s is hooked on %u of its %u bodies only", key, created, count);
+  else if (count == 0) PG_LOG("%s is not a method the host can hook; nothing was hooked", key);
+  return false;
 }
 
 int32_t inside(const char* key) { return g_host ? g_host->inside_entry(key) : 0; }
