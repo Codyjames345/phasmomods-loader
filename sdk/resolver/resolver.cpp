@@ -129,16 +129,24 @@ class Resolver {
     const int owner = d.owner ? result_of(d.owner).type : -1;
     if (d.kind == Kind::EnumValue && (owner < 0 || !model_.types[owner].isEnum))
       return missing(r, std::format("owner {} is not an enum", d.owner ? d.owner : "(none)"));
-    if (!d.name) return missing(r, "shape matching not supported yet");
+    if (!d.name) {
+      if (d.kind == Kind::EnumValue) return missing(r, "an enum value is found by name only");
+      if (d.kind != Kind::Type && !d.type)
+        return missing(r, std::format("a {} found by shape needs its type", kind_name(d.kind)));
+    }
 
-    // The pipeline: candidates, then every check the entry declares, then unique or report.
-    std::vector<Candidate> candidates = by_name(d, owner);
+    // The pipeline: candidates, then every check the entry declares, then unique or report. The hint
+    // takes no part: every candidate is checked, and it only names what changed.
+    std::vector<Candidate> candidates = d.name ? by_name(d, owner) : by_shape(d, owner);
     const size_t named = candidates.size();
     // A method named without its parameters cannot tell overloads apart, and no other check may
     // choose among them for it.
-    if (d.kind == Kind::Method && d.params.empty() && named > 1) return decide(d, r, candidates, named, owner);
+    if (d.kind == Kind::Method && d.name && d.params.empty() && named > 1)
+      return decide(d, r, candidates, named, owner);
     std::erase_if(candidates, [&](Candidate& c) { return !fits(d, c); });
     decide(d, r, candidates, named, owner);
+    if (r.status == Status::Resolved && d.hint && r.currentName != d.hint)
+      r.detail = std::format("renamed from {}", d.hint);
   }
 
   // An entry depends on others: it is Blocked unless each of them resolved.
@@ -177,6 +185,20 @@ class Resolver {
     return out;
   }
 
+  // Candidates by shape: every type, or every member of the owner of the entry's kind. The checks
+  // in fits then keep those of the declared shape.
+  std::vector<Candidate> by_shape(const EntryDesc& d, int owner) const {
+    std::vector<Candidate> out;
+    if (d.kind == Kind::Type) {
+      for (size_t t = 0; t < model_.types.size(); ++t) out.push_back({static_cast<int>(t), -1});
+      return out;
+    }
+    const ModelType& type = model_.types[owner];
+    const size_t count = d.kind == Kind::Method ? type.methods.size() : type.fields.size();
+    for (size_t m = 0; m < count; ++m) out.push_back({owner, static_cast<int>(m)});
+    return out;
+  }
+
   // Whether a candidate passes the checks the entry declares.
   bool fits(const EntryDesc& d, Candidate& c) const {
     const ModelType& type = model_.types[c.type];
@@ -187,14 +209,21 @@ class Resolver {
         // A null namespace means the global one for a top-level type, and any for a nested type.
         if (d.ns ? type.ns != d.ns : (!d.owner && !type.ns.empty())) return false;
         const int declaring = d.owner ? result_of(d.owner).type : -1;
-        return type.declaring == declaring;
+        if (type.declaring != declaring) return false;
+        // Values make it an enum; a type found by shape without them is not one.
+        if (!d.values.empty() ? !type.isEnum : (!d.name && type.isEnum)) return false;
+        for (const char* value : d.values)
+          if (std::none_of(type.fields.begin(), type.fields.end(),
+                           [&](const ModelField& f) { return f.hasLiteral && f.name == value; }))
+            return false;
+        return has_field_types(d.fieldTypes, type, c);
       }
       case Kind::Method: {
         const ModelMethod& m = type.methods[c.member];
         if (m.isStatic != wantStatic) return false;
         if (d.type && !type_matches(d.type, m.ret, m.retIndex, c)) return false;
-        // No params: matched by name alone, any arity.
-        if (d.params.empty()) return true;
+        // No params: matched by name alone, any arity. Found by shape, it takes none.
+        if (d.name && d.params.empty()) return true;
         if (d.params.size() != m.params.size()) return false;
         for (size_t p = 0; p < d.params.size(); ++p) {
           const int index = p < m.paramIndex.size() ? m.paramIndex[p] : -1;
@@ -214,16 +243,59 @@ class Resolver {
     return false;
   }
 
+  // Whether the type has an instance field of each listed type, a field of its own for each. An
+  // "@Key" type matches fewer fields than a plain one of the same name, so those are placed first.
+  bool has_field_types(std::span<const char* const> wants, const ModelType& type, Candidate& c) const {
+    std::vector<const char*> order(wants.begin(), wants.end());
+    std::stable_partition(order.begin(), order.end(), [](const char* want) { return entry_ref(want).has_value(); });
+    std::vector<bool> used(type.fields.size(), false);
+    for (const char* want : order) {
+      // A field the model says is that type comes before one only its name says may be.
+      bool found = false;
+      for (const bool allowUnsure : {false, true}) {
+        for (size_t f = 0; f < type.fields.size() && !found; ++f) {
+          const ModelField& field = type.fields[f];
+          if (used[f] || field.isStatic || field.hasLiteral) continue;
+          Candidate trial = c;
+          if (!type_matches(want, field.type, field.typeIndex, trial)) continue;
+          if (!allowUnsure && trial.unsure != c.unsure) continue;
+          c = std::move(trial);
+          found = used[f] = true;
+        }
+      }
+      if (!found) return false;
+    }
+    return true;
+  }
+
+  // How the entry looks for what it names: "named X", or its shape.
+  std::string wanted(const EntryDesc& d) const {
+    if (d.name) return std::format("named {}", d.name);
+    const char* scope = (d.flags & kStatic) ? "static " : "";
+    switch (d.kind) {
+      case Kind::Method: {
+        std::string params;
+        for (const char* p : d.params) params += (params.empty() ? "" : ",") + std::string(p);
+        return std::format("of shape {}{}({})", scope, d.type, params);
+      }
+      case Kind::Field:
+        return std::format("of shape {}{}", scope, d.type);
+      default:
+        return "of that shape";
+    }
+  }
+
   void decide(const EntryDesc& d, Result& r, const std::vector<Candidate>& candidates, size_t named,
               int owner) const {
     const std::string where = owner >= 0 ? " in " + describe_type(owner) : "";
+    const std::string what = wanted(d);
     if (candidates.empty()) {
-      if (named == 0) return missing(r, std::format("no {} named {}{}", kind_name(d.kind), d.name, where));
-      return missing(r, std::format("no {} named {}{} matches ({} by name)", kind_name(d.kind), d.name, where, named));
+      if (named == 0 || !d.name) return missing(r, std::format("no {} {}{}", kind_name(d.kind), what, where));
+      return missing(r, std::format("no {} {}{} matches ({} by name)", kind_name(d.kind), what, where, named));
     }
     if (candidates.size() > 1) {
       r.status = Status::Ambiguous;
-      r.detail = std::format("{} {}s named {}{} match", candidates.size(), kind_name(d.kind), d.name, where);
+      r.detail = std::format("{} {}s {}{} match", candidates.size(), kind_name(d.kind), what, where);
       for (const Candidate& c : candidates) r.candidates.push_back(describe(d.kind, c));
       return;
     }
@@ -231,8 +303,8 @@ class Resolver {
     const Candidate& c = candidates.front();
     if (!c.unsure.empty()) {
       r.status = Status::Ambiguous;
-      r.detail = std::format("{} types are named {}, and the model does not say which {} {}{} uses",
-                             typesNamed_.at(c.unsure), c.unsure, kind_name(d.kind), d.name, where);
+      r.detail = std::format("{} types are named {}, and the model does not say which the {} {}{} uses",
+                             typesNamed_.at(c.unsure), c.unsure, kind_name(d.kind), what, where);
       r.candidates.push_back(describe(d.kind, c));
       return;
     }

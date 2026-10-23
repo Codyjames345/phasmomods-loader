@@ -1,3 +1,4 @@
+#include <format>
 #include <string>
 #include <vector>
 
@@ -284,6 +285,190 @@ void required_resolved_ignores_optional() {
   CHECK(!run({&kGhostAI, &required}, model).required_resolved());
 }
 
+constexpr const char* kStateValues[] = {"idle", "wander", "hunting"};
+constexpr EntryDesc kStateByValues{.key = "GhostState", .owner = "GhostAI", .hint = "ദശസറ", .values = kStateValues};
+
+void enum_type_by_values() {
+  ModelBuilder b;
+  const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+  const int mood = b.type("Assembly-CSharp", "", "ബഹജഭ", ai, true);
+  b.literal(mood, "calm", 0);
+  b.literal(mood, "angry", 1);
+  const int state = b.type("Assembly-CSharp", "", "ദശസറ", ai, true);
+  b.literal(state, "idle", 0);
+  b.literal(state, "wander", 1);
+  b.literal(state, "hunting", 2);
+  b.literal(state, "favouriteRoom", 3);
+  const GameModel model = b.build();
+  constexpr EntryDesc hunting{.key = "GhostState.hunting", .kind = Kind::EnumValue, .owner = "GhostState",
+                              .name = "hunting"};
+  const Resolution r = run({&kGhostAI, &kStateByValues, &hunting}, model);
+  const Result* s = r.find("GhostState");
+  CHECK(s && s->status == Status::Resolved && s->type == state);
+  CHECK(s && s->currentName == "ദശസറ");
+  CHECK(s && s->detail.empty());
+  CHECK(r.find("GhostState.hunting")->value == 2);
+
+  // A class that is not an enum is not found by values, nor an enum without values.
+  ModelBuilder c;
+  const int ai2 = c.type("Assembly-CSharp", "", "GhostAI");
+  const int notEnum = c.type("Assembly-CSharp", "", "ദശസറ", ai2);
+  c.literal(notEnum, "idle", 0);
+  c.literal(notEnum, "wander", 1);
+  c.literal(notEnum, "hunting", 2);
+  CHECK(run({&kGhostAI, &kStateByValues}, c.build()).find("GhostState")->status == Status::Missing);
+  constexpr EntryDesc anyNested{.key = "Nested", .owner = "GhostAI"};
+  const Resolution n = run({&kGhostAI, &anyNested}, model);
+  CHECK(n.find("Nested")->status == Status::Missing);
+}
+
+void type_by_field_types() {
+  ModelBuilder b;
+  const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+  const int a = b.type("Assembly-CSharp", "", "ബഹജഭ");
+  b.field(a, "x", "GhostAI", 0x10, false, ai);
+  b.field(a, "y", "float", 0x18);
+  const int c = b.type("Assembly-CSharp", "", "ദശസറ");
+  b.field(c, "x", "GhostAI", 0x10, false, ai);
+  b.field(c, "y", "float", 0x18);
+  b.field(c, "z", "float", 0x1c);
+  const int d = b.type("Assembly-CSharp", "", "സറദബ");
+  b.field(d, "x", "GhostAI", 0x10, true, ai);  // static, so not an instance field
+  b.field(d, "y", "float", 0x18);
+  b.field(d, "z", "float", 0x1c);
+  b.type("Assembly-CSharp", "Other", "ജഭദശ");
+  const GameModel model = b.build();
+
+  // Each listed type needs a field of its own.
+  static constexpr const char* kTwoFloats[] = {"@GhostAI", "float", "float"};
+  constexpr EntryDesc twoFloats{.key = "Brain", .assembly = "Assembly-CSharp", .fieldTypes = kTwoFloats};
+  const Resolution r = run({&kGhostAI, &twoFloats}, model);
+  const Result* brain = r.find("Brain");
+  CHECK(brain && brain->status == Status::Resolved && brain->type == c);
+
+  static constexpr const char* kOneFloat[] = {"@GhostAI", "float"};
+  constexpr EntryDesc oneFloat{.key = "Brain", .assembly = "Assembly-CSharp", .fieldTypes = kOneFloat};
+  const Resolution o = run({&kGhostAI, &oneFloat}, model);
+  const Result* any = o.find("Brain");
+  CHECK(any && any->status == Status::Ambiguous && any->candidates.size() == 2);
+}
+
+void field_by_unique_type() {
+  Game g;
+  g.b.field(g.ghostAI, "ദശ", "float", 0x48);
+  g.b.field(g.ghostAI, "സറ", "NavMeshAgent", 0x50, true);
+  const GameModel model = g.b.build();
+  constexpr EntryDesc agent{.key = "GhostAI.agent", .kind = Kind::Field, .owner = "GhostAI", .type = "NavMeshAgent"};
+  const Resolution r = run({&kGhostAI, &agent}, model);
+  const Result* a = r.find("GhostAI.agent");
+  CHECK(a && a->status == Status::Resolved);
+  CHECK(a && a->offset == 0x40);
+  CHECK(a && a->currentName == "agent");
+
+  // The static one is found only as static.
+  constexpr EntryDesc shared{.key = "GhostAI.shared", .kind = Kind::Field, .flags = kStatic, .owner = "GhostAI",
+                             .type = "NavMeshAgent"};
+  const Resolution s = run({&kGhostAI, &shared}, model);
+  CHECK(s.find("GhostAI.shared")->status == Status::Resolved && s.find("GhostAI.shared")->offset == 0x50);
+
+  // A field found by shape needs its type.
+  constexpr EntryDesc untyped{.key = "GhostAI.untyped", .kind = Kind::Field, .owner = "GhostAI"};
+  CHECK(run({&kGhostAI, &untyped}, model).find("GhostAI.untyped")->status == Status::Missing);
+}
+
+void field_shape_with_many_candidates_is_ambiguous() {
+  ModelBuilder b;
+  b.type("Assembly-CSharp", "", "GhostAI");
+  for (int i = 0; i < 13; ++i) b.field(0, "b" + std::to_string(i), "bool", 0x60 + i);
+  b.field(0, "f", "float", 0x70);
+  const GameModel model = b.build();
+  constexpr EntryDesc flag{.key = "GhostAI.flag", .kind = Kind::Field, .owner = "GhostAI", .type = "bool"};
+  const Resolution r = run({&kGhostAI, &flag}, model);
+  const Result* f = r.find("GhostAI.flag");
+  CHECK(f && f->status == Status::Ambiguous);
+  CHECK(f && f->candidates.size() == 13);
+  for (int i = 0; i < 13; ++i)
+    CHECK(f && has(f->candidates, std::format("b{}: bool at {:#x}", i, 0x60 + i)));
+  CHECK(f && f->offset == 0);
+}
+
+void stale_hint_never_decides() {
+  ModelBuilder b;
+  b.type("Assembly-CSharp", "", "GhostAI");
+  b.field(0, "ദശസറ", "float", 0x40);
+  b.field(0, "ബഹജഭ", "bool", 0x44);
+  const GameModel model = b.build();
+  constexpr EntryDesc flag{.key = "GhostAI.flag", .kind = Kind::Field, .owner = "GhostAI", .hint = "ദശസറ",
+                           .type = "bool"};
+  const Resolution r = run({&kGhostAI, &flag}, model);
+  const Result* f = r.find("GhostAI.flag");
+  CHECK(f && f->status == Status::Resolved);
+  CHECK(f && f->offset == 0x44);
+  CHECK(f && f->currentName == "ബഹജഭ");
+  CHECK(f && f->detail == "renamed from ദശസറ");
+
+  // With no field of the wanted type, the hint is not taken either.
+  constexpr EntryDesc agent{.key = "GhostAI.agent", .kind = Kind::Field, .owner = "GhostAI", .hint = "ദശസറ",
+                            .type = "NavMeshAgent"};
+  const Resolution m = run({&kGhostAI, &agent}, model);
+  CHECK(m.find("GhostAI.agent")->status == Status::Missing);
+  CHECK(m.find("GhostAI.agent")->currentName.empty());
+}
+
+void hint_cannot_break_a_tie() {
+  ModelBuilder b;
+  b.type("Assembly-CSharp", "", "GhostAI");
+  b.field(0, "ദശസറ", "bool", 0x40);
+  b.field(0, "ബഹജഭ", "bool", 0x41);
+  const GameModel model = b.build();
+  constexpr EntryDesc flag{.key = "GhostAI.flag", .kind = Kind::Field, .owner = "GhostAI", .hint = "ദശസറ",
+                           .type = "bool"};
+  const Resolution r = run({&kGhostAI, &flag}, model);
+  const Result* f = r.find("GhostAI.flag");
+  CHECK(f && f->status == Status::Ambiguous);
+  CHECK(f && f->candidates.size() == 2);
+  CHECK(f && f->offset == 0 && f->currentName.empty());
+}
+
+void method_by_shape() {
+  ModelBuilder b;
+  const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+  b.method(ai, "ദശ", "void", {}, 0x1000);
+  b.method(ai, "സറ", "void", {"float"}, 0x1100);
+  b.method(ai, "ബഹ", "bool", {"float"}, 0x1200);
+  b.method(ai, "ജഭ", "bool", {"float"}, 0x1300, true);
+  b.method(ai, "ദബ", "void", {"float", "int"}, 0x1400);
+  const GameModel model = b.build();
+
+  // Empty params: takes no parameters.
+  constexpr EntryDesc noArgs{.key = "GhostAI.Tick", .kind = Kind::Method, .owner = "GhostAI", .hint = "ദശ",
+                             .type = "void"};
+  const Resolution r = run({&kGhostAI, &noArgs}, model);
+  const Result* tick = r.find("GhostAI.Tick");
+  CHECK(tick && tick->status == Status::Resolved && tick->rva == 0x1000);
+  CHECK(tick && tick->currentName == "ദശ" && tick->detail.empty());
+
+  // Return type, every param in order, and static-ness all count.
+  static constexpr const char* kFloat[] = {"float"};
+  constexpr EntryDesc voidFloat{.key = "GhostAI.Set", .kind = Kind::Method, .owner = "GhostAI", .type = "void",
+                                .params = kFloat};
+  CHECK(run({&kGhostAI, &voidFloat}, model).find("GhostAI.Set")->rva == 0x1100);
+  constexpr EntryDesc boolFloat{.key = "GhostAI.Test", .kind = Kind::Method, .owner = "GhostAI", .type = "bool",
+                                .params = kFloat};
+  CHECK(run({&kGhostAI, &boolFloat}, model).find("GhostAI.Test")->rva == 0x1200);
+  constexpr EntryDesc staticBool{.key = "GhostAI.Check", .kind = Kind::Method, .flags = kStatic,
+                                 .owner = "GhostAI", .type = "bool", .params = kFloat};
+  CHECK(run({&kGhostAI, &staticBool}, model).find("GhostAI.Check")->rva == 0x1300);
+  static constexpr const char* kIntFloat[] = {"int", "float"};
+  constexpr EntryDesc swapped{.key = "GhostAI.Swapped", .kind = Kind::Method, .owner = "GhostAI", .type = "void",
+                              .params = kIntFloat};
+  CHECK(run({&kGhostAI, &swapped}, model).find("GhostAI.Swapped")->status == Status::Missing);
+
+  // A method found by shape needs its return type.
+  constexpr EntryDesc noRet{.key = "GhostAI.NoRet", .kind = Kind::Method, .owner = "GhostAI", .params = kFloat};
+  CHECK(run({&kGhostAI, &noRet}, model).find("GhostAI.NoRet")->status == Status::Missing);
+}
+
 }  // namespace
 
 int main() {
@@ -300,5 +485,12 @@ int main() {
   cycle_is_missing();
   code_needs_an_image();
   required_resolved_ignores_optional();
+  enum_type_by_values();
+  type_by_field_types();
+  field_by_unique_type();
+  field_shape_with_many_candidates_is_ambiguous();
+  stale_hint_never_decides();
+  hint_cannot_break_a_tie();
+  method_by_shape();
   return g_failures ? 1 : 0;
 }
