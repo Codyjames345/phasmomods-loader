@@ -15,7 +15,5 @@
         @{ Name = 'mods/spectral-flame/mod.ini'; Source = 'mods/spectral_flame/mod.ini' }
         @{ Name = 'mods/ghost-tells/GhostTells.dll'; Source = 'build/GhostTells.dll' }
         @{ Name = 'mods/ghost-tells/mod.ini'; Source = 'mods/ghost_tells/mod.ini' }
-        @{ Name = 'mods/afterlife/Afterlife.dll'; Source = 'build/Afterlife.dll' }
-        @{ Name = 'mods/afterlife/mod.ini'; Source = 'mods/afterlife/mod.ini' }
     )
 }

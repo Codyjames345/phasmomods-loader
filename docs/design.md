@@ -276,13 +276,9 @@ belongs to the Echo alone (Custom Ghosts).
 
 ## Companion mods
 
-Features beyond the playable ghost are separate mods, each optional in the launcher:
+Features beyond the playable ghost are separate mods, each optional in the launcher. The README
+lists them.
 
-* **Afterlife** (`mods/afterlife`): a dead investigator holds Crouch to watch through the ghost's
-  eyes, and again to return to their body. While watching they cannot move or touch anything, and
-  for a minute after it they still cannot touch anything, so they cannot spot the ghost and point it
-  out by throwing things. Nothing about the ghost is shown but what it sees. Otherwise dead players
-  play as in vanilla.
 Bigger Lobbies (private rooms for eight) was archived to `archive/bigger_lobbies` on 2026-10-20.
 The game's Photon servers cap a room at four players, so it cannot work. Its README there gives
 the details.
@@ -290,3 +286,7 @@ the details.
 Replay (the contract's top moments shown in the lobby) was archived to `archive/replay` on
 2026-10-22, together with an approved design and plan to film those moments in the house and play
 them on the lobby truck's monitor. Its README there says how to bring it back.
+
+Afterlife (a dead investigator watching through the ghost's eyes) was archived to
+`archive/afterlife` on 2026-10-23, before it had run inside the game. Its README there says how to
+bring it back.

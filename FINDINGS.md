@@ -292,23 +292,6 @@ reports an entry whose problem is already gone.
   > joiner with a different mod list leaves with the note naming the difference; a client without
   > the mod stays (every current mod has PG_MOD_VANILLA_PEERS).
 
-## 15. Afterlife has never run inside the game
-
-  mods/afterlife/haunt.cpp:1
-
-  Switching off the dead investigator's camera and rendering from a new Camera at the ghost's head
-  (URP may need its additional camera data, and the copied culling mask may not suit a dead player),
-  freezing the dead player's movement, and switching off Interact, Primary Use and Secondary Use for
-  the lock are unverified, as is whether Crouch reaches a dead player's input and whether the game
-  switches those actions back on by itself.
-
-  Prompt:
-  > In this repository, die in a private contract with Afterlife running.
-  > Check the hint, hold Crouch: the view is the ghost's, turning with it; you cannot move or touch
-  > anything. Hold Crouch again: you are back where you were, and for a minute the hint counts down and
-  > nothing can be picked up or thrown; afterwards you can. Check mods.log for "afterlife: haunting
-  > with the ghost" and fix what is wrong.
-
 ## 14. The ghost's senses, alerts, Mimic choice and disguise have never run inside the game
 
   mods/playable_ghost/marks.cpp:1

@@ -12,11 +12,11 @@ the same mods. Each mod is its own DLL under `mods/`:
 | Playable Ghost | `mods/playable_ghost` | One player plays the ghost; the game supplies speeds, evidence, abilities and hunt rules. |
 | Spectral Flame | `mods/spectral_flame` | An eighth evidence: a candle, lantern or candelabra burns blue where the ghost lingers ([details](docs/spectral-flame.md)). |
 | Custom Ghosts | `mods/custom_ghosts` | Fifteen new ghost types with their own evidence, journal pages and rules; needs Spectral Flame ([details](docs/custom-ghosts.md)). |
-| Afterlife | `mods/afterlife` | Dead investigators can watch through the ghost's eyes, then touch nothing for a minute. |
 
 `archive/` holds mods that are kept but not built. Bigger Lobbies is there because the game's
 Photon servers cap a room at four players. Replay is there with an approved plan to film each
-round's top moments for the lobby truck's monitor, for another time.
+round's top moments for the lobby truck's monitor, for another time. Afterlife, which let
+dead investigators watch through the ghost's eyes, is kept there too.
 
 `core/` is shared by the host and every mod (IL2CPP access, game bindings, UI
 built from game classes, and the host contract in `core/mod_api.h`); `host/` is

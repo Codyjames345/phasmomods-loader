@@ -202,8 +202,8 @@ int main() {
   scan_catches_known_cases();
   const fs::path root = PG_SOURCE_DIR;
   std::vector<Hit> hits;
-  for (const char* dir : {"core", "host", "mods/playable_ghost", "mods/afterlife", "mods/custom_ghosts",
-                          "mods/spectral_flame", "mods/ghost_tells"})
+  for (const char* dir : {"core", "host", "mods/playable_ghost", "mods/custom_ghosts", "mods/spectral_flame",
+                          "mods/ghost_tells"})
     for (const auto& entry : fs::recursive_directory_iterator(root / dir)) {
       const auto ext = entry.path().extension();
       if (!entry.is_regular_file() || (ext != ".cpp" && ext != ".h")) continue;
