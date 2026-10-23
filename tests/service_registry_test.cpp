@@ -9,7 +9,7 @@ const int kFirst = 1, kSecond = 2;
 
 // A name already published is refused, so a later mod cannot take over a table that other mods
 // already found under it: the first table stays.
-void publish_twice_is_refused() {
+void service_name_published_once() {
   pg::services::Registry services;
   CHECK(services.publish("ghost-tells.v1", &kFirst));
   CHECK(!services.publish("ghost-tells.v1", &kSecond));
@@ -34,7 +34,7 @@ void unknown_and_cleared_names_are_null() {
 }  // namespace
 
 int main() {
-  publish_twice_is_refused();
+  service_name_published_once();
   unknown_and_cleared_names_are_null();
   return g_failures ? 1 : 0;
 }

@@ -11,11 +11,12 @@
 // the others, asks for the game entries each requires (pgmod_requires) and prints
 // "would switch off <mod id>: <keys>" for each one the host would not start on this build.
 // Exit 0 when every required entry it can check resolved and no mod would be switched off, 1 when
-// one did not or one would, 2 on bad arguments or unreadable input.
+// one did not or one would, 2 on bad arguments, unreadable input or an exception (its reason printed).
 #include <windows.h>
 
 #include <algorithm>
 #include <cstdio>
+#include <exception>
 #include <filesystem>
 #include <format>
 #include <string>
@@ -130,18 +131,35 @@ bool exports(const std::filesystem::path& dll, std::string_view name) {
   return CodeImage(image).exported(name) != 0;
 }
 
-// The DLLs in `dir` and in its subfolders (a release keeps each mod in its own), sorted. False when
-// a folder cannot be read.
-bool dlls_in(const std::filesystem::path& dir, std::vector<std::filesystem::path>& out) {
+// Calls `take` with each entry of `dir`. False when `dir` cannot be listed, when moving to the next
+// entry fails, or when `take` says it could not read an entry. Nothing here throws: the iterator
+// moves with increment(error), never the throwing operator++ a range-for uses.
+template <class Take>
+bool each_entry(const std::filesystem::path& dir, Take take) {
   std::error_code error;
+  for (std::filesystem::directory_iterator it(dir, error), end; !error && it != end; it.increment(error))
+    if (!take(*it)) return false;
+  return !error;
+}
+
+// The DLLs in `dir` and in its subfolders (a release keeps each mod in its own), sorted. False when
+// a folder or an entry in it cannot be read. Each entry's kind is asked with its own error_code, so
+// one entry's failure is never cleared by the next one's success.
+bool dlls_in(const std::filesystem::path& dir, std::vector<std::filesystem::path>& out) {
   std::vector<std::filesystem::path> folders{dir};
-  for (const auto& e : std::filesystem::directory_iterator(dir, error))
+  const bool listed = each_entry(dir, [&](const std::filesystem::directory_entry& e) {
+    std::error_code error;
     if (e.is_directory(error)) folders.push_back(e.path());
-  if (error) return false;
+    return !error;
+  });
+  if (!listed) return false;
   for (const std::filesystem::path& folder : folders) {
-    for (const auto& e : std::filesystem::directory_iterator(folder, error))
+    const bool read = each_entry(folder, [&](const std::filesystem::directory_entry& e) {
+      std::error_code error;
       if (e.is_regular_file(error) && _wcsicmp(e.path().extension().c_str(), L".dll") == 0) out.push_back(e.path());
-    if (error) return false;
+      return !error;
+    });
+    if (!read) return false;
   }
   std::sort(out.begin(), out.end());
   return true;
@@ -193,9 +211,8 @@ int check_mods(const std::filesystem::path& dir, const Resolution& resolution) {
   return unreadable ? -1 : off;
 }
 
-}  // namespace
-
-int wmain(int argc, wchar_t** argv) {
+// The check itself; wmain contains what it throws.
+int run(int argc, wchar_t** argv) {
   Args args;
   if (!parse(argc, argv, args)) {
     std::fputs(kUsage, stderr);
@@ -264,4 +281,19 @@ int wmain(int argc, wchar_t** argv) {
     }
   }
   return !failed && switchedOff == 0 ? 0 : 1;
+}
+
+}  // namespace
+
+// Anything thrown (a filesystem or allocation failure the code above does not foresee) is unreadable
+// input: exit 2 with the reason, never an unhandled exception.
+int wmain(int argc, wchar_t** argv) {
+  try {
+    return run(argc, argv);
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "gamecheck: stopped by an exception: %s\n", e.what());
+  } catch (...) {
+    std::fprintf(stderr, "gamecheck: stopped by an exception\n");
+  }
+  return 2;
 }

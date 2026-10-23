@@ -28,6 +28,9 @@ struct Published {
 };
 std::vector<Published> g_published;  // one per result, in the same order; built once, never resized
 uintptr_t g_base = 0;                // the loaded GameAssembly the entries were published for
+// The entries were published. Mods keep pointers to them (and to their twins) for the process
+// lifetime, so they are never published again: that would reallocate them under the mods.
+bool g_publishedOnce = false;
 // The runtime's il2cpp_resolve_icall, kept for resolve_icalls; null when no model was built.
 void* (*g_resolveIcall)(const char* name) = nullptr;
 
@@ -78,11 +81,27 @@ void publish_one(size_t i) {
   }
 }
 
-void publish(uintptr_t base) {
+// False, publishing nothing and logging why, once the entries were published.
+bool publish(uintptr_t base) {
+  if (g_publishedOnce) {
+    PG_LOG("game map: already published; a second publish is refused and the entries stay as they are");
+    return false;
+  }
+  g_publishedOnce = true;
   g_base = base;
   g_published.assign(g_resolution.results.size(), {});
   for (size_t i = 0; i < g_resolution.results.size(); ++i) publish_one(i);
+  return true;
 }
+
+#ifdef PG_GAME_MAP_TEST
+// tests/game_map_test.cpp only, which includes this file: forgets the published entries, so the
+// next test may publish afresh. The host never forgets them.
+void forget_published() {
+  g_publishedOnce = false;
+  g_published.clear();
+}
+#endif
 
 // An icall left for the main thread: the worker never asks the runtime (see build_and_resolve).
 bool icall_pending(const sdk::Result& r) {
@@ -145,6 +164,10 @@ std::string build_and_resolve(void* gameAssembly, void* stopEvent, unsigned long
 }  // namespace
 
 bool resolve(void* gameAssembly, void* stopEvent, unsigned long long deadline) {
+  if (g_publishedOnce) {
+    PG_LOG("game map: already resolved; a second resolve is refused and the entries stay as published");
+    return false;
+  }
   const ULONGLONG start = GetTickCount64();
   std::string failure = "an unknown exception was thrown";
   try {

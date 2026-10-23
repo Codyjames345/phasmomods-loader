@@ -17,7 +17,9 @@ inline constexpr unsigned long long kHooksBudgetMs = 10000;
 // "game map: <r>/<n> resolved in <ms> ms". Runs on the attached worker thread after il2cpp::init.
 // Between types and before resolving it checks the stop event and the deadline, less kHooksBudgetMs:
 // when either says stop, or no model can be built, it abandons the map (every entry unresolved, the
-// reason logged once) and returns false. Nothing thrown escapes.
+// reason logged once) and returns false. Nothing thrown escapes. It runs once: mods keep the
+// published entries for the process lifetime, so a second call is refused (logged), returns false
+// and leaves every entry as published.
 bool resolve(void* gameAssembly, void* stopEvent, unsigned long long deadline);
 
 // An entry's result by key, or null before resolve or for an unknown key.

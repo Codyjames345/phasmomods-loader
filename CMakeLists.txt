@@ -304,7 +304,7 @@ target_compile_definitions(runtime_model_test PRIVATE PG_SOURCE_DIR="${CMAKE_SOU
 pg_test(game_map sdk/runtime/runtime_model.cpp)
 target_include_directories(game_map_test PRIVATE sdk/map sdk/runtime)
 target_link_libraries(game_map_test PRIVATE pgsdk_resolver)
-target_compile_definitions(game_map_test PRIVATE PG_HOST)
+target_compile_definitions(game_map_test PRIVATE PG_HOST PG_GAME_MAP_TEST)
 # The host's static field access, with core/il2cpp.cpp compiled in and its exports faked.
 pg_test(il2cpp_static core/log.cpp)
 target_include_directories(il2cpp_static_test PRIVATE sdk/runtime sdk/resolver)
@@ -312,6 +312,10 @@ pg_test(map)
 target_include_directories(map_test PRIVATE sdk/map)
 target_link_libraries(map_test PRIVATE pgsdk_resolver)
 target_compile_definitions(map_test PRIVATE PG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+# gamecheck's failure paths that the built tool cannot be driven into; it supplies its own dump reader.
+pg_test(gamecheck_main)
+target_include_directories(gamecheck_main_test PRIVATE sdk/map sdk/offline)
+target_link_libraries(gamecheck_main_test PRIVATE pgsdk_resolver)
 add_test(NAME gamecheck COMMAND ${CMAKE_COMMAND} -DGAMECHECK=$<TARGET_FILE:gamecheck>
   -DWORK=${CMAKE_BINARY_DIR}/gamecheck_test -DFAKE_MOD=$<TARGET_FILE:pg_fake_mod>
   -DFAKE_MOD_1=$<TARGET_FILE:pg_fake_mod_1>

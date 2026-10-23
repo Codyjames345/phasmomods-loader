@@ -70,6 +70,7 @@ void reset() {
   icallAnswer = nullptr;
   icallsAsked.clear();
   messages.clear();
+  pg::gamemap::forget_published();
 }
 
 bool logged(const char* text) {
@@ -154,7 +155,8 @@ void entry_carries_the_resolved_result() {
   Result hunting{.desc = &pg::map::GhostState_hunting, .status = Status::Resolved, .value = 2};
   Result awake{.desc = &pg::map::GhostAI_Awake, .status = Status::Missing};
   pg::gamemap::g_resolution.results = {ghost, unAppear, state, hunting, awake};
-  pg::gamemap::publish(0x10000);
+  reset();
+  CHECK(pg::gamemap::publish(0x10000));
 
   const PgGameEntry* g = pg::gamemap::entry("GhostAI");
   CHECK(g && g->kind == PG_ENTRY_TYPE && g->klass == &klass);
@@ -180,7 +182,8 @@ void entry_without_code_has_no_address() {
   pg::gamemap::g_model.types.push_back(type);
   Result awake{.desc = &pg::map::GhostAI_Awake, .status = Status::Resolved, .type = 0, .member = 0, .rva = 0};
   pg::gamemap::g_resolution.results = {awake};
-  pg::gamemap::publish(0x10000);
+  reset();
+  CHECK(pg::gamemap::publish(0x10000));
   const PgGameEntry* m = pg::gamemap::entry("GhostAI.Awake");
   CHECK(m && m->kind == PG_ENTRY_METHOD && m->code == nullptr);
 }
@@ -226,7 +229,8 @@ void exports_and_statics_are_published() {
   Result shutdown{.desc = &pg::map::GameAssembly_il2cpp_shutdown, .status = Status::Resolved, .rva = 0x3844C0};
   Result instance{.desc = &pg::map::LevelController_instance, .status = Status::Resolved, .type = 0, .member = 0};
   pg::gamemap::g_resolution.results = {shutdown, instance};
-  pg::gamemap::publish(0x10000000);
+  reset();
+  CHECK(pg::gamemap::publish(0x10000000));
 
   const PgGameEntry* x = pg::gamemap::entry("GameAssembly.il2cpp_shutdown");
   CHECK(x && x->kind == PG_ENTRY_EXPORT && x->code == reinterpret_cast<void*>(0x103844C0));
@@ -238,8 +242,30 @@ void exports_and_statics_are_published() {
   CHECK(pg::gamemap::mod_entry("LevelController.instance") == s);
 
   pg::gamemap::g_resolution.results = {};
-  pg::gamemap::publish(0x10000000);
+  reset();
+  CHECK(pg::gamemap::publish(0x10000000));
   CHECK(!shutdownExport.available() && shutdownExport.address() == nullptr);
+}
+
+// Mods keep the published entries, and their twins, for the process lifetime. A second resolve or
+// publish is refused and logged: every entry stays where and as it was published.
+void publish_twice_is_refused() {
+  reset();
+  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  int setBoolID = 0;
+  icallAnswer = &setBoolID;
+  pg::gamemap::resolve_icalls();
+  const PgGameEntry* const kept = pg::gamemap::entry("Animator.SetBoolID");
+  CHECK(kept && kept->code == &setBoolID);
+
+  messages.clear();
+  icallAnswer = nullptr;
+  CHECK(!pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(count_logged("game map: already resolved; a second resolve is refused") == 1);
+  CHECK(classesRead == 400);  // nothing was read again
+  CHECK(!pg::gamemap::publish(0x20000));
+  CHECK(count_logged("game map: already published; a second publish is refused") == 1);
+  CHECK(pg::gamemap::entry("Animator.SetBoolID") == kept && kept->code == &setBoolID);
 }
 
 }  // namespace
@@ -312,5 +338,6 @@ int main() {
   entry_without_code_has_no_address();
   icall_resolves_at_activation();
   exports_and_statics_are_published();
+  publish_twice_is_refused();
   return g_failures ? 1 : 0;
 }
