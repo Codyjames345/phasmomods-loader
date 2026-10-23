@@ -227,19 +227,26 @@ struct Table {
 
 enum class Ref { None, Entries, Bytes, Unknown };
 
-// Whether the instruction reads in-function data through a register holding the image base (a bit
-// per register in imageBase), and in which shape. target receives the data's RVA.
+// Whether the instruction names in-function data by its RVA, and in which shape. A disp32 inside
+// the function's own RVA range is never a field offset, so whatever the registers it is a table
+// read: of case RVAs when the image base (a bit per register in imageBase) is the base of a scale-4
+// read, of case indices when it is the base or the index of a scale-1 movzx, and Unknown otherwise.
+// target receives the data's RVA.
 Ref table_ref(const Insn& in, uint32_t imageBase, uint64_t rva, uint64_t end, uint64_t& target) {
   const hde64s& h = in.hs;
-  if (!in.ok() || !(h.flags & F_MODRM) || h.modrm_mod != 2) return Ref::None;
+  if (!in.ok() || !(h.flags & F_MODRM) || h.modrm_mod == 3 || !(h.flags & F_DISP32) || rip_relative(h))
+    return Ref::None;
   target = h.disp.disp32;
   if (target < rva || target >= end) return Ref::None;
   const bool sib = h.modrm_rm == 4;
+  const bool hasBase = !(sib && h.modrm_mod == 0 && h.sib_base == 5);
   const int base = (sib ? h.sib_base : h.modrm_rm) | h.rex_b << 3;
-  if (!(imageBase >> base & 1)) return Ref::None;  // a field at a large offset, not the image
-  const bool indexed = sib && (h.sib_index | h.rex_x << 3) != 4;
-  if (indexed && h.sib_scale == 2 && h.opcode == 0x8B) return Ref::Entries;
-  if (indexed && h.sib_scale == 0 && h.opcode == 0x0F && h.opcode2 == 0xB6) return Ref::Bytes;
+  const int index = sib ? h.sib_index | h.rex_x << 3 : 4;
+  const bool baseIsImage = hasBase && (imageBase >> base & 1);
+  const bool indexIsImage = index != 4 && (imageBase >> index & 1);
+  if (h.modrm_mod != 2 || index == 4) return Ref::Unknown;
+  if (h.sib_scale == 2 && h.opcode == 0x8B && baseIsImage) return Ref::Entries;
+  if (h.sib_scale == 0 && h.opcode == 0x0F && h.opcode2 == 0xB6 && (baseIsImage || indexIsImage)) return Ref::Bytes;
   return Ref::Unknown;
 }
 

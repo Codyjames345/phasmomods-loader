@@ -233,17 +233,24 @@ void normalized_masks_own_flag() {
 // A switch as MSVC compiles it, shaped like the real one at 0x4E3230: the case number indexes the
 // case RVAs after the code, read relative to the image base, and jumps there. With `bytes` it first
 // indexes a byte table of case indices that follows them. `sib` 0x80 is [r8+rax*4+disp].
-std::vector<uint8_t> switch_method(uint64_t start, bool bytes, uint8_t sib = 0x80) {
+// `byIndex` reads the byte table with the image base as the index, [rax+r8+BYTES], and without
+// `imageBase` r8 is copied from rcx rather than set to the image base.
+std::vector<uint8_t> switch_method(uint64_t start, bool bytes, uint8_t sib = 0x80, bool byIndex = false,
+                                   bool imageBase = true) {
   Asm a{start};
   a.raw({0x48, 0x83, 0xEC, 0x28});                         // sub rsp, 0x28
   a.raw({0x83, 0xFA, static_cast<uint8_t>(bytes ? 3 : 2)});  // cmp edx, n
   a.raw({0x77, 0x00});                                     // ja default
   const size_t ja = a.bytes.size() - 1;
   a.raw({0x48, 0x63, 0xC2});           // movsxd rax, edx
-  a.rel({0x4C, 0x8D, 0x05}, 0);        // lea r8, [__ImageBase]
+  if (imageBase)
+    a.rel({0x4C, 0x8D, 0x05}, 0);  // lea r8, [__ImageBase]
+  else
+    a.raw({0x49, 0x89, 0xC8});     // mov r8, rcx
   size_t byteRef = 0;
   if (bytes) {
-    a.raw({0x41, 0x0F, 0xB6, 0x84, 0x00, 0, 0, 0, 0});  // movzx eax, byte ptr [r8+rax+BYTES]
+    // movzx eax, byte ptr [r8+rax+BYTES], or [rax+r8+BYTES]
+    a.raw({static_cast<uint8_t>(byIndex ? 0x42 : 0x41), 0x0F, 0xB6, 0x84, 0x00, 0, 0, 0, 0});
     byteRef = a.bytes.size() - 4;
   }
   a.raw({0x41, 0x8B, 0x94, sib, 0, 0, 0, 0});  // mov edx, [r8+rax*4+TABLE]
@@ -290,7 +297,45 @@ void switch_tables_are_data() {
   }
 }
 
+void byte_table_indexed_by_the_image_base() {
+  const std::vector<uint8_t> fn = switch_method(0x4000, true, 0x80, true);
+  const CodeFacts f = read_code(fn, 0x4000);
+  CHECK(f.complete);
+  CHECK(f.accesses.size() == 3);
+  size_t byteTables = 0;
+  for (const std::string& t : f.normalized) byteTables += t.starts_with("db ");
+  CHECK(byteTables == 1);
+  CHECK(f.normalized == read_code(switch_method(0x7340, true, 0x80, true), 0x7340).normalized);
+}
+
 void unknown_in_function_data_is_incomplete() {
+  // In-function RVAs read through registers not known to hold the image base.
+  for (const bool bytes : {false, true}) {
+    const CodeFacts f = read_code(switch_method(0x4000, bytes, 0x80, false, false), 0x4000);
+    CHECK(!f.complete);
+  }
+  // A byte table with no case table to index.
+  Asm c{0x1000};
+  c.rel({0x4C, 0x8D, 0x05}, 0);                          // lea r8, [__ImageBase]
+  c.raw({0x41, 0x0F, 0xB6, 0x84, 0x00});                 // movzx eax, byte ptr [r8+rax+BYTES]
+  c.dd(0x1000 + c.bytes.size() + 5);
+  c.raw({0xC3, 0x00, 0x01});
+  CHECK(!read_code(c.bytes, 0x1000).complete);
+  // A case table whose first entry is not in the function.
+  Asm d{0x1000};
+  d.rel({0x4C, 0x8D, 0x05}, 0);                          // lea r8, [__ImageBase]
+  d.raw({0x41, 0x8B, 0x94, 0x80});                       // mov edx, [r8+rax*4+TABLE]
+  d.dd(0x1000 + d.bytes.size() + 4 + 3);
+  d.raw({0x41, 0xFF, 0xE0});                             // jmp r8
+  d.dd(0xFFFFFFFF);
+  CHECK(!read_code(d.bytes, 0x1000).complete);
+  // An in-function disp32 with no base register.
+  Asm e{0x1000};
+  e.raw({0x8B, 0x04, 0x85});  // mov eax, [rax*4+TABLE]
+  e.dd(0x1008);
+  e.raw({0xC3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
+  CHECK(!read_code(e.bytes, 0x1000).complete);
+
   // A table read at scale 8: not a shape the reader knows.
   CHECK(!read_code(switch_method(0x4000, false, 0xC0), 0x4000).complete);
   // A case that lands inside an instruction.
@@ -356,6 +401,7 @@ int main() {
   rip_and_rsp_are_not_field_accesses();
   normalized_masks_own_flag();
   switch_tables_are_data();
+  byte_table_indexed_by_the_image_base();
   unknown_in_function_data_is_incomplete();
   undecodable_instructions_fail_closed();
   return g_failures ? 1 : 0;
