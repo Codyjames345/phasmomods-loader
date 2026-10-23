@@ -106,14 +106,15 @@ bool attribute_hex(std::string_view line, std::string_view key, uint64_t& value)
   return parse_hex(line.substr(open + 1, close - open - 1), value);
 }
 
-// An enum member's number; one past the u64 range wraps like the compiler's own constant.
+// An integer constant's number, from the whole text; one past the i64 range wraps like the compiler's
+// own constant. "0.5", "1E-05" and "True" are no integers.
 bool parse_literal(std::string_view text, int64_t& value) {
   text = trim(text);
   if (text.empty()) return false;
   const char* end = text.data() + text.size();
-  if (std::from_chars(text.data(), end, value).ec == std::errc()) return true;
+  if (const auto r = std::from_chars(text.data(), end, value); r.ec == std::errc() && r.ptr == end) return true;
   uint64_t big = 0;
-  if (std::from_chars(text.data(), end, big).ec != std::errc()) return false;
+  if (const auto r = std::from_chars(text.data(), end, big); r.ec != std::errc() || r.ptr != end) return false;
   value = static_cast<int64_t>(big);
   return true;
 }
@@ -291,15 +292,17 @@ void parse_file(const std::string& text, const std::string& assembly, const std:
         if (word == "static") f.isStatic = true;
         if (word == "const") f.isStatic = f.hasLiteral = true;
       }
-      if (f.hasLiteral) {
-        const std::string_view value = trim(decl.substr(before_equals(decl).size()));
-        if (value.starts_with('=')) parse_literal(value.substr(1), f.literal);
-      }
       // The runtime counts a value type's instance fields from its boxed form, after the object header.
       if (type.isValueType && !f.isStatic) f.offset += 0x10;
       size_t first = 0;
       while (first + 1 < w.size() && is_modifier(w[first])) ++first;
       f.type = canonical_type(join_words(w, first, w.size() - 1));
+      // An integer or enum constant's literal is its number. Any other constant's stays 0, as in the
+      // runtime model: a float's "360" is no integer.
+      if (f.hasLiteral && f.type != "float" && f.type != "double") {
+        const std::string_view value = trim(decl.substr(before_equals(decl).size()));
+        if (value.starts_with('=')) parse_literal(value.substr(1), f.literal);
+      }
       type.fields.push_back(std::move(f));
       continue;
     }
@@ -400,7 +403,7 @@ bool load_dump(const fs::path& diffableCsRoot, std::span<const std::string> asse
   const TypeNames names(model);
   for (ModelType& type : model.types) {
     for (ModelField& f : type.fields)
-      if (!f.hasLiteral) f.typeIndex = names.find(f.type);
+      if (f.typeIndex < 0) f.typeIndex = names.find(f.type);  // an enum's members already name it
     for (ModelMethod& m : type.methods) {
       m.retIndex = names.find(m.ret);
       for (size_t i = 0; i < m.params.size(); ++i) m.paramIndex[i] = names.find(m.params[i]);

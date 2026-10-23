@@ -8,7 +8,6 @@
 #include <cstdio>
 #include <filesystem>
 #include <format>
-#include <set>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -41,16 +40,6 @@ bool parse(int argc, wchar_t** argv, Args& out) {
     *target = argv[++i];
   }
   return !out.dump.empty() && !out.image.empty();
-}
-
-const char* status_word(Status s) {
-  switch (s) {
-    case Status::Resolved: return "OK";
-    case Status::Missing: return "MISSING";
-    case Status::Ambiguous: return "AMBIGUOUS";
-    case Status::Blocked: return "BLOCKED";
-  }
-  return "?";
 }
 
 const char* kind_word(Kind k) {
@@ -119,11 +108,7 @@ int wmain(int argc, wchar_t** argv) {
     return 2;
   }
 
-  // Only the assemblies the map names: more would only add look-alike types.
-  std::set<std::string> named;
-  for (const EntryDesc* e : pg::map::kAllEntries)
-    if (e->assembly) named.insert(e->assembly);
-  const std::vector<std::string> assemblies(named.begin(), named.end());
+  const std::vector<std::string> assemblies = assemblies_of(pg::map::kAllEntries);
   GameModel model;
   std::string error;
   size_t unparsed = 0;

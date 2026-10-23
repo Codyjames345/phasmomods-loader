@@ -31,6 +31,8 @@ add_library(pgcore STATIC
   core/notice.cpp
   core/bindings.cpp)
 target_include_directories(pgcore PUBLIC core)
+# il2cpp.cpp fills the game model's RuntimeApi (sdk/runtime).
+target_include_directories(pgcore PRIVATE sdk/runtime sdk/resolver)
 pg_options(pgcore)
 
 # The game SDK's resolver: finds the game's types, members and code from the map, by shape.
@@ -64,9 +66,11 @@ add_library(ModHost SHARED
   host/mods.cpp
   host/menu_panel.cpp
   host/mods_panel.cpp
-  host/room_actions.cpp)
-target_include_directories(ModHost PRIVATE host)
-target_link_libraries(ModHost PRIVATE pgcore minhook bcrypt)
+  host/room_actions.cpp
+  host/game_map.cpp
+  sdk/runtime/runtime_model.cpp)
+target_include_directories(ModHost PRIVATE host sdk/map sdk/runtime)
+target_link_libraries(ModHost PRIVATE pgcore pgsdk_resolver minhook bcrypt)
 pg_options(ModHost)
 target_compile_definitions(ModHost PRIVATE PG_SUITE_VERSION="${PG_SUITE_VERSION}")
 
@@ -203,7 +207,7 @@ pg_test(ghostbook mods/playable_ghost/ghostbook.cpp)
 pg_test(room_pick)
 pg_test(tether)
 pg_test(startup)
-target_include_directories(startup_test PRIVATE third_party/minhook/include)
+target_include_directories(startup_test PRIVATE third_party/minhook/include sdk/api sdk/resolver sdk/runtime)
 target_compile_definitions(startup_test PRIVATE PG_SUITE_VERSION="${PG_SUITE_VERSION}")
 pg_test(build_check)
 target_link_libraries(build_check_test PRIVATE bcrypt)
@@ -255,6 +259,10 @@ pg_test(sdk_dump sdk/offline/dump_model.cpp)
 target_include_directories(sdk_dump_test PRIVATE sdk/offline)
 target_link_libraries(sdk_dump_test PRIVATE pgsdk_resolver)
 target_compile_definitions(sdk_dump_test PRIVATE PG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+pg_test(runtime_model sdk/runtime/runtime_model.cpp sdk/offline/dump_model.cpp)
+target_include_directories(runtime_model_test PRIVATE sdk/runtime sdk/offline)
+target_link_libraries(runtime_model_test PRIVATE pgsdk_resolver)
+target_compile_definitions(runtime_model_test PRIVATE PG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 pg_test(map)
 target_include_directories(map_test PRIVATE sdk/map)
 target_link_libraries(map_test PRIVATE pgsdk_resolver)

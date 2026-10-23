@@ -7,6 +7,7 @@
 
 #include "build_check.h"
 #include "game.h"
+#include "game_map.h"
 #include "hooks.h"
 #include "il2cpp.h"
 #include "log.h"
@@ -116,6 +117,8 @@ DWORD WINAPI worker(void*) {
       } else if (!il2cpp::init(g_gameAssembly, g_stop, g_deadline)) {
         PG_LOG("ModHost inactive: runtime initialization failed");
       } else if (pg::startup::permitted(g_stop, g_deadline, "resolution")) {
+        // An unresolved entry switches off only the mods that need it, never the host.
+        pg::gamemap::resolve(g_gameAssembly);
         if (!(pg::game::resolve() && pg::suite::resolve())) {
           PG_LOG("ModHost inactive: game binding resolution failed");
         } else if (pg::startup::permitted(g_stop, g_deadline, "hooks")) {

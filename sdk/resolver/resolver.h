@@ -39,6 +39,13 @@ struct Resolution {
   bool required_resolved() const;
 };
 
+// "OK", "MISSING", "AMBIGUOUS" or "BLOCKED", as the reports write a status.
+const char* status_word(Status status);
+
+// The assemblies the entries name, each once and sorted: the only ones a model needs, since more would
+// only add look-alike types.
+std::vector<std::string> assemblies_of(std::span<const EntryDesc* const> entries);
+
 class CodeImage;
 
 // Resolves every entry against the model, each after the entries it refers to. Without an image,

@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "log.h"
+#include "runtime_model.h"
 #include "startup.h"
 
 namespace il2cpp {
@@ -79,6 +80,34 @@ bool resolve_exports(void* gameAssembly) {
   p_il2cpp_format_stack_trace = reinterpret_cast<decltype(p_il2cpp_format_stack_trace)>(
       GetProcAddress(m, "il2cpp_format_stack_trace"));  // optional: diagnostics only
   return true;
+}
+
+/** The exports the game model reads: those already resolved, and the metadata readers only it uses. */
+bool runtime_api(void* gameAssembly, pg::sdk::RuntimeApi& out) {
+  auto m = static_cast<HMODULE>(gameAssembly);
+  out.domain_get = p_il2cpp_domain_get;
+  out.domain_get_assemblies = p_il2cpp_domain_get_assemblies;
+  out.assembly_get_image = p_il2cpp_assembly_get_image;
+  out.image_get_name = p_il2cpp_image_get_name;
+  out.class_get_name = p_il2cpp_class_get_name;
+  out.class_get_fields = p_il2cpp_class_get_fields;
+  out.field_get_type = p_il2cpp_field_get_type;
+  out.field_static_get_value = p_il2cpp_field_static_get_value;
+  out.type_get_name = p_il2cpp_type_get_name;
+  out.free_memory = p_il2cpp_free;
+  bool ok = true;
+#define R(field, name) ok &= resolve(m, out.field, #name);
+  R(image_get_class_count, il2cpp_image_get_class_count) R(image_get_class, il2cpp_image_get_class)
+  R(class_get_namespace, il2cpp_class_get_namespace) R(class_get_declaring_type, il2cpp_class_get_declaring_type)
+  R(class_is_enum, il2cpp_class_is_enum) R(class_is_valuetype, il2cpp_class_is_valuetype)
+  R(class_enum_basetype, il2cpp_class_enum_basetype) R(class_from_type, il2cpp_class_from_type)
+  R(class_get_methods, il2cpp_class_get_methods) R(method_get_name, il2cpp_method_get_name)
+  R(method_get_param_count, il2cpp_method_get_param_count) R(method_get_param, il2cpp_method_get_param)
+  R(method_get_return_type, il2cpp_method_get_return_type) R(method_get_flags, il2cpp_method_get_flags)
+  R(field_get_name, il2cpp_field_get_name) R(field_get_offset, il2cpp_field_get_offset)
+  R(field_get_flags, il2cpp_field_get_flags) R(type_get_type, il2cpp_type_get_type)
+#undef R
+  return ok;
 }
 
 /** Resolve the runtime API and attach this worker only while startup is still permitted. */

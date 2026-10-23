@@ -984,6 +984,12 @@ void pattern_inside_method() {
   }
 }
 
+void assemblies_named_once_sorted() {
+  constexpr EntryDesc kCamera{.key = "Camera", .name = "Camera", .assembly = "UnityEngine.CoreModule"};
+  const EntryDesc* entries[] = {&kGhostAI, &kCamera, &kGhostState, &kAgent, &kGhostAI};
+  CHECK((assemblies_of(entries) == std::vector<std::string>{"Assembly-CSharp", "UnityEngine.CoreModule"}));
+}
+
 }  // namespace
 
 int main() {
@@ -1024,5 +1030,6 @@ int main() {
   unreadable_code_is_never_a_twin();
   calls_and_called_by_include_twins();
   pattern_inside_method();
+  assemblies_named_once_sorted();
   return g_failures ? 1 : 0;
 }

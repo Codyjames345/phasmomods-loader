@@ -680,6 +680,25 @@ bool Resolution::required_resolved() const {
   });
 }
 
+const char* status_word(Status status) {
+  switch (status) {
+    case Status::Resolved: return "OK";
+    case Status::Missing: return "MISSING";
+    case Status::Ambiguous: return "AMBIGUOUS";
+    case Status::Blocked: return "BLOCKED";
+  }
+  return "?";
+}
+
+std::vector<std::string> assemblies_of(std::span<const EntryDesc* const> entries) {
+  std::vector<std::string> out;
+  for (const EntryDesc* e : entries)
+    if (e->assembly) out.emplace_back(e->assembly);
+  std::sort(out.begin(), out.end());
+  out.erase(std::unique(out.begin(), out.end()), out.end());
+  return out;
+}
+
 Resolution resolve(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image) {
   return Resolver(entries, model, image).run();
 }

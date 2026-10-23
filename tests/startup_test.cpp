@@ -22,6 +22,8 @@ bool startThrows = false;
 int tornDown = 0;
 int resolved = 0, created = 0, attached = 0, starts = 0, ticks = 0, activeLogs = 0, threads = 0;
 int detached = 0;
+int mapped = 0, mappedInOrder = 0;  // map resolutions; those attached and before the game bindings
+bool mapOk = true;
 bool parkedAttached = false;  // the worker waited for shutdown while still attached to IL2CPP
 std::vector<std::string> messages;
 void (*frame)(void*, const void*) = nullptr;
@@ -146,6 +148,14 @@ bool verify_game_assembly(void*) { return gameHash; }
 /** Model the independent audited UnityPlayer check. */
 bool verify_unity_player(void*) { return unityHash; }
 }
+namespace pg::gamemap {
+/** Count map resolution and whether it ran attached, before the game bindings. */
+bool resolve(void*) {
+  ++mapped;
+  if (attached > detached && resolved == 0) ++mappedInOrder;
+  return mapOk;
+}
+}
 namespace pg::game {
 /** Count every entry to game resolution after binary verification. */
 bool resolve() { ++resolved; return true; }
@@ -194,6 +204,8 @@ void reset() {
   gameHash = unityHash = startOk = eventOk = threadOk = true;
   deliverFrame = releaseFrame = enabled = stopped = false;
   startThrows = false;
+  mapOk = true;
+  mapped = mappedInOrder = 0;
   tornDown = 0;
   resolved = created = attached = starts = ticks = activeLogs = threads = detached = 0;
   parkedAttached = false;
@@ -214,7 +226,7 @@ bool logged(const char* text) {
 /** Exercise real startup rejection, deadlines, start ordering, and allocation failures. */
 int main() {
   reset(); gameHash = false; run_worker();
-  CHECK(resolved == 0 && created == 0 && activeLogs == 0);
+  CHECK(resolved == 0 && created == 0 && activeLogs == 0 && mapped == 0);
   reset(); unityHash = false; run_worker();
   CHECK(resolved == 0 && created == 0 && activeLogs == 0);
   reset(); stopped = true; run_worker();
@@ -222,7 +234,7 @@ int main() {
   reset(); modulesAt = 100000; run_worker();
   CHECK(clockMs <= 60000 && created == 0); CHECK(logged("module timeout"));
   reset(); runtimeAt = 100000; run_worker();
-  CHECK(clockMs <= 60000 && attached == 0 && created == 0); CHECK(logged("runtime timeout"));
+  CHECK(clockMs <= 60000 && attached == 0 && created == 0 && mapped == 0); CHECK(logged("runtime timeout"));
   reset(); modulesAt = 59000; runtimeAt = 100000; run_worker();
   CHECK(clockMs <= 60000 && attached == 0); CHECK(logged("runtime timeout"));
   reset(); run_worker();
@@ -238,6 +250,11 @@ int main() {
   // The game's own quit (il2cpp_shutdown) waits for every attached thread: the worker must not be
   // attached while it waits for shutdown, or quitting the game hangs.
   CHECK(attached == 1 && !parkedAttached && detached == 1);
+  // The map resolves once, on the attached worker, before the game bindings.
+  CHECK(mapped == 1 && mappedInOrder == 1);
+  // A map that does not resolve leaves the host active: only the mods that need it stay off.
+  reset(); mapOk = false; deliverFrame = true; run_worker();
+  CHECK(mapped == 1 && starts == 1 && activeLogs == 1 && ticks == 1);
   reset(); deliverFrame = releaseFrame = true; frameAt = 59999; run_worker();
   CHECK(activeLogs == 1 && ticks == 1 && tornDown == 1 && !enabled);
   CHECK(startupFinishedAt == 60000);
