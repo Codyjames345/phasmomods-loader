@@ -50,6 +50,11 @@ public class Ghost : MonoBehaviourPun
 	private Dictionary<String, Nullable`1<Int32>> seen; //Field offset: 0xE0
 	[Token(Token = "0x4000008")]
 	private const string tag = "http://made.up/a"; //Field offset: 0x0
+	[Token(Token = "0x4000009")]
+	private const string lines = "first
+second"; //Field offset: 0x0
+	[Token(Token = "0x400000A")]
+	private const int limit = 50; //Field offset: 0x0
 
 	[Token(Token = "0x1700001")]
 	public bool IsAwake
@@ -77,5 +82,9 @@ public class Ghost : MonoBehaviourPun
 	[Address(RVA = "0x1600", Offset = "0xA00", Length = "0x8")]
 	[Token(Token = "0x6000007")]
 	public Ghost() { }
+
+	[Address(RVA = "0x1700", Offset = "0xB00", Length = "0x8")]
+	[Token(Token = "0x6000008")]
+	private static Ghost() { }
 
 }

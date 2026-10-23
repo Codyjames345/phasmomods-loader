@@ -80,9 +80,12 @@ void parameter_modifiers_generics_and_static() {
   const ModelMethod* counts = method(*ghost, "Counts");
   CHECK(counts && counts->rva == 0);
   CHECK(counts && counts->ret == "Dictionary<string,int>");
-  // A constructor is a method without a return type.
-  const ModelMethod* ctor = method(*ghost, "Ghost");
-  CHECK(ctor && ctor->ret == "void" && ctor->rva == 0x1600);
+  // Constructors carry the runtime's names.
+  const ModelMethod* ctor = method(*ghost, ".ctor");
+  CHECK(ctor && ctor->ret == "void" && ctor->rva == 0x1600 && !ctor->isStatic);
+  const ModelMethod* cctor = method(*ghost, ".cctor");
+  CHECK(cctor && cctor->ret == "void" && cctor->rva == 0x1700 && cctor->isStatic);
+  CHECK(method(*ghost, "Ghost") == nullptr);
   // A property accessor's address is not taken by anything else, and the property is no method.
   CHECK(method(*ghost, "IsAwake") == nullptr);
   const ModelMethod* getter = method(*ghost, "get_IsAwake");
@@ -98,17 +101,26 @@ void field_offsets_and_static() {
   const ModelField* instance = nullptr;
   const ModelField* seen = nullptr;
   const ModelField* tag = nullptr;
+  const ModelField* lines = nullptr;
+  const ModelField* limit = nullptr;
   for (const ModelField& f : ghost->fields) {
     if (f.name == "awake") awake = &f;
     if (f.name == "instance") instance = &f;
     if (f.name == "seen") seen = &f;
     if (f.name == "tag") tag = &f;
+    if (f.name == "lines") lines = &f;
+    if (f.name == "limit") limit = &f;
   }
   CHECK(awake && awake->offset == 0xD8 && !awake->isStatic && awake->type == "bool");
   CHECK(instance && instance->isStatic && instance->type == "Ghost" && instance->typeIndex == index_of(m, ghost));
   CHECK(seen && seen->offset == 0xE0 && seen->type == "Dictionary<string,Nullable<int>>" && seen->typeIndex == -1);
-  CHECK(tag && tag->isStatic && tag->type == "string");  // a constant; its "//" is no comment
-  CHECK(ghost->fields.size() == 4);
+  CHECK(tag && tag->isStatic && tag->hasLiteral && tag->type == "string");  // its "//" is no comment
+  CHECK(lines && lines->isStatic && lines->hasLiteral);  // a constant holding a line break
+  CHECK(limit && limit->hasLiteral && limit->literal == 50);
+  CHECK(awake && instance && !awake->hasLiteral && !instance->hasLiteral);
+  CHECK(ghost->fields.size() == 6);
+  // The members after a constant that spans lines are still read.
+  CHECK(method(*ghost, "ChangeState") != nullptr && method(*ghost, ".cctor") != nullptr);
 }
 
 void namespace_from_path() {
@@ -139,7 +151,8 @@ void struct_is_a_value_type() {
   const GameModel m = load();
   const ModelType* pair = find(m, "Pair");
   CHECK(pair && pair->isValueType && !pair->isEnum);
-  CHECK(pair && pair->fields.size() == 2 && pair->fields[1].offset == 8);
+  // Offsets include the object header, as the runtime reports them (the dump prints 0x0 and 0x8).
+  CHECK(pair && pair->fields.size() == 2 && pair->fields[0].offset == 0x10 && pair->fields[1].offset == 0x18);
 }
 
 void only_the_named_assemblies_are_read() {
@@ -160,10 +173,19 @@ void unreadable_root_reports_error() {
   CHECK(error.find("NoSuchAssembly") != std::string::npos);
 }
 
+void nothing_is_left_unparsed() {
+  GameModel m;
+  std::string error;
+  size_t unparsed = 99;
+  CHECK(load_dump(kRoot, std::vector<std::string>{"Assembly-CSharp", "UnityEngine.CoreModule"}, m, error, &unparsed));
+  CHECK(unparsed == 0);
+}
+
 }  // namespace
 
 int main() {
   nested_enum_with_literals();
+  nothing_is_left_unparsed();
   method_rva_and_params();
   parameter_modifiers_generics_and_static();
   field_offsets_and_static();

@@ -132,6 +132,14 @@ std::string parameter_type(std::string_view text) {
   return canonical_type(prefix + join_words(w, 0, w.size()));
 }
 
+// Whether a constant string's declaration continues on the next line: the dump writes the value raw, so
+// a value holding a line break spans lines, and one holding quotes cannot be told apart by counting
+// them. The declaration ends at the line that carries the field offset comment.
+bool continues(std::string_view line) {
+  return line.find("//Field offset:") == std::string_view::npos && line.find("const string ") != std::string_view::npos &&
+         line.find("= \"") != std::string_view::npos;
+}
+
 struct Declaration {
   std::string name;
   std::string ret;
@@ -158,7 +166,7 @@ bool parse_method(std::string_view line, Declaration& out) {
     if (retEnd > 0 && (w[retEnd - 1] == "implicit" || w[retEnd - 1] == "explicit")) --retEnd;
     out.ret = canonical_type(join_words(w, 0, retEnd));
   } else if (w.size() == 1) {
-    out.name = std::string(w[0]);
+    out.name = out.isStatic ? ".cctor" : ".ctor";
     out.ret = "void";
   } else {
     out.name = std::string(w.back());
@@ -197,13 +205,17 @@ struct Frame {
 };
 
 // Reads one file's types into the model, nesting by tab depth.
-void parse_file(const std::string& text, const std::string& assembly, const std::string& ns, GameModel& model) {
+// A line that looks like a member but is neither a field, a method nor an enum member is counted in
+// `unparsed`.
+void parse_file(const std::string& text, const std::string& assembly, const std::string& ns, GameModel& model,
+                size_t& unparsed) {
   std::vector<Frame> stack;
   uint64_t pendingRva = 0;
   int64_t nextLiteral = 0;
   std::istringstream in(text);
   std::string raw;
   while (std::getline(in, raw)) {
+    for (std::string more; continues(raw) && std::getline(in, more);) raw += "\n" + more;
     int depth = 0;
     while (depth < static_cast<int>(raw.size()) && raw[depth] == '\t') ++depth;
     std::string_view line = trim(raw);
@@ -232,15 +244,22 @@ void parse_file(const std::string& text, const std::string& assembly, const std:
       nextLiteral = 0;
       continue;
     }
+    if (stack.empty()) {
+      if (!line.starts_with("namespace ")) ++unparsed;  // a line outside any type
+      continue;
+    }
     // A member sits one tab inside its type; deeper lines are a property's accessors.
-    if (stack.empty() || depth != stack.back().depth + 1) continue;
+    if (depth != stack.back().depth + 1) continue;
     ModelType& type = model.types[stack.back().type];
 
     if (type.isEnum) {
       const std::string_view member = line.substr(0, line.find(','));
       const size_t eq = member.find('=');
       int64_t value = nextLiteral;
-      if (eq != std::string_view::npos && !parse_literal(member.substr(eq + 1), value)) continue;
+      if (eq != std::string_view::npos && !parse_literal(member.substr(eq + 1), value)) {
+        ++unparsed;
+        continue;
+      }
       ModelField f;
       f.name = std::string(trim(member.substr(0, eq)));
       f.type = type.name;
@@ -261,12 +280,23 @@ void parse_file(const std::string& text, const std::string& assembly, const std:
       std::string_view decl = trim(line.substr(0, mark));
       if (decl.ends_with(';')) decl.remove_suffix(1);
       std::vector<std::string_view> w = words(before_equals(decl));
-      if (w.size() < 2) continue;
+      if (w.size() < 2) {
+        ++unparsed;
+        continue;
+      }
       ModelField f;
       f.name = std::string(w.back());
       f.offset = static_cast<int32_t>(offset);
-      for (const std::string_view word : w)
-        if (word == "static" || word == "const") f.isStatic = true;
+      for (const std::string_view word : w) {
+        if (word == "static") f.isStatic = true;
+        if (word == "const") f.isStatic = f.hasLiteral = true;
+      }
+      if (f.hasLiteral) {
+        const std::string_view value = trim(decl.substr(before_equals(decl).size()));
+        if (value.starts_with('=')) parse_literal(value.substr(1), f.literal);
+      }
+      // The runtime counts a value type's instance fields from its boxed form, after the object header.
+      if (type.isValueType && !f.isStatic) f.offset += 0x10;
       size_t first = 0;
       while (first + 1 < w.size() && is_modifier(w[first])) ++first;
       f.type = canonical_type(join_words(w, first, w.size() - 1));
@@ -279,7 +309,11 @@ void parse_file(const std::string& text, const std::string& assembly, const std:
     Declaration d;
     std::string_view decl = line;
     if (const size_t mark = decl.rfind("//Length:"); mark != std::string_view::npos) decl = trim(decl.substr(0, mark));
-    if (decl.find('(') == std::string_view::npos || !parse_method(decl, d)) continue;
+    if (decl.find('(') == std::string_view::npos) continue;
+    if (!parse_method(decl, d)) {
+      ++unparsed;
+      continue;
+    }
     ModelMethod m;
     m.name = std::move(d.name);
     m.ret = std::move(d.ret);
@@ -325,13 +359,14 @@ bool read_file(const fs::path& path, std::string& text) {
 }  // namespace
 
 bool load_dump(const fs::path& diffableCsRoot, std::span<const std::string> assemblies, GameModel& out,
-               std::string& error) {
+               std::string& error, size_t* unparsed) {
   std::error_code ec;
   if (!fs::is_directory(diffableCsRoot, ec)) {
     error = "cannot read the dump folder " + diffableCsRoot.generic_string();
     return false;
   }
   GameModel model;
+  size_t count = 0;
   for (const std::string& assembly : assemblies) {
     const fs::path folder = diffableCsRoot / fs::path(std::u8string(assembly.begin(), assembly.end()));
     if (!fs::is_directory(folder, ec)) {
@@ -358,7 +393,7 @@ bool load_dump(const fs::path& diffableCsRoot, std::span<const std::string> asse
         if (!ns.empty()) ns += '.';
         for (const char8_t c : part.u8string()) ns += static_cast<char>(c);
       }
-      parse_file(text, assembly, ns, model);
+      parse_file(text, assembly, ns, model, count);
     }
   }
 
@@ -371,6 +406,7 @@ bool load_dump(const fs::path& diffableCsRoot, std::span<const std::string> asse
       for (size_t i = 0; i < m.params.size(); ++i) m.paramIndex[i] = names.find(m.params[i]);
     }
   }
+  if (unparsed) *unparsed = count;
   out = std::move(model);
   return true;
 }

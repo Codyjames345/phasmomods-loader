@@ -17,8 +17,13 @@ namespace pg::sdk {
 // typeIndex, retIndex and paramIndex name the model type whose short name the string is, when exactly
 // one type has that name, and are -1 otherwise.
 //
+// Every line that looks like a member yet is neither a field, a method nor an enum member is counted in
+// *unparsed when given; the caller reports it. A non-zero count means the model may be missing members.
+// The runtime's conventions apply: constructors are ".ctor" and ".cctor", constants are literals, and a
+// value type's instance field offsets include the 0x10 object header (the dump prints them unboxed).
+//
 // On failure it returns false with the reason, naming the path, in error.
 bool load_dump(const std::filesystem::path& diffableCsRoot, std::span<const std::string> assemblies,
-               GameModel& out, std::string& error);
+               GameModel& out, std::string& error, size_t* unparsed = nullptr);
 
 }  // namespace pg::sdk
