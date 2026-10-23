@@ -12,12 +12,12 @@ struct PgGameEntry;
 // Hooks by game map entry (the host contract's hook_entry): a method's canonical body and its twins.
 namespace pg::entry_hooks {
 
-// Hooks the method body `canonical` with `detour` through hooks::create (chained, not enabled) and,
-// with `allTwins`, each of `twins` as well through its own trampoline. Every body runs the same
-// detour, and `original` reaches the canonical chain: twins are the same behaviour, so a call that
-// entered through a twin may continue there. An address this call already hooked (a twin folded
-// onto the canonical body, or listed twice) is skipped. When any hook fails, the hooks this call
-// created are removed and it returns false.
+// Hooks the method body `canonical` with `detour` (chained, not enabled): through hooks::create, or
+// with `allTwins` through hooks::create_shared on the canonical body and every twin. Every body runs
+// the same detour, and `original` reaches the canonical chain: twins are the same behaviour, so a call
+// that entered through a twin may continue there. A twin folded onto another body, or listed twice,
+// is hooked once. A hook that would mix the two policies on one method is refused (logged), as is
+// any failure, with nothing patched.
 bool hook(void* canonical, std::span<void* const> twins, void* detour, void** original, const char* name,
           bool allTwins);
 

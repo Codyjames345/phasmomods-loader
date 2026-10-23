@@ -79,11 +79,47 @@ __declspec(noinline) int folded(int x) {
   return y + 13;
 }
 
-Fn g_origTwin = nullptr, g_origTwin2 = nullptr, g_origSolo = nullptr, g_origFolded = nullptr;
+// Pairs for the refused mixes of twin policies, one pair per case.
+__declspec(noinline) int all_first_a(int x) {
+  volatile int y = x;
+  return y + 14;
+}
+__declspec(noinline) int all_first_b(int x) {
+  volatile int y = x;
+  volatile int zero = 0;
+  return y + zero + 14;
+}
+__declspec(noinline) int one_first_a(int x) {
+  volatile int y = x;
+  return y + 15;
+}
+__declspec(noinline) int one_first_b(int x) {
+  volatile int y = x;
+  volatile int zero = 0;
+  return y + zero + 15;
+}
+__declspec(noinline) int raw_first_a(int x) {
+  volatile int y = x;
+  return y + 16;
+}
+__declspec(noinline) int raw_first_b(int x) {
+  volatile int y = x;
+  volatile int zero = 0;
+  return y + zero + 16;
+}
+
+Fn g_origTwin = nullptr, g_origTwin2 = nullptr, g_origSolo = nullptr, g_origSolo2 = nullptr, g_origFolded = nullptr;
 __declspec(noinline) int detour_twin(int x) { return g_origTwin(x) * 100; }
 __declspec(noinline) int detour_twin2(int x) { return g_origTwin2(x) + 5; }
 __declspec(noinline) int detour_solo(int x) { return g_origSolo(x) * 100; }
+__declspec(noinline) int detour_solo2(int x) { return g_origSolo2(x) + 7; }
 __declspec(noinline) int detour_folded(int x) { return g_origFolded(x) * 100; }
+// Each case's first hook, and the later hook that is refused (it never runs, so it never calls on).
+Fn g_origAllFirst = nullptr, g_origOneFirst = nullptr, g_origRawFirst = nullptr, g_origRefused = nullptr;
+__declspec(noinline) int detour_all_first(int x) { return g_origAllFirst(x) * 100; }
+__declspec(noinline) int detour_one_first(int x) { return g_origOneFirst(x) * 100; }
+__declspec(noinline) int detour_raw_first(int x) { return g_origRawFirst(x) * 100; }
+__declspec(noinline) int detour_refused(int x) { return g_origRefused(x) + 9; }
 
 bool hook_entry(Fn canonical, std::initializer_list<void*> twins, Fn detour, Fn* original, const char* name, bool all) {
   const std::vector<void*> list(twins);
@@ -104,6 +140,7 @@ void second_hook_chains_on_twins() {
   const size_t before = pg::hooks::mark();
   CHECK(hook_entry(twin_a, {p(twin_b)}, detour_twin2, &g_origTwin2, "twin 2", true));
   CHECK(pg::hooks::enable_all());
+  CHECK(g_origTwin2 != nullptr);
   CHECK(call(twin_a, 1) == 1205);
   CHECK(call(twin_b, 1) == 1205);
   pg::hooks::rollback_to(before);
@@ -111,11 +148,61 @@ void second_hook_chains_on_twins() {
   CHECK(call(twin_b, 1) == 1200);
 }
 
+// CanonicalOnly hooks stay on the canonical body, and a second one chains ahead of the first.
 void canonical_only_leaves_twin() {
   CHECK(hook_entry(solo_a, {p(solo_b)}, detour_solo, &g_origSolo, "solo", false));
   CHECK(pg::hooks::enable_all());
   CHECK(call(solo_a, 1) == 1300);
   CHECK(call(solo_b, 1) == 13);
+  CHECK(hook_entry(solo_a, {p(solo_b)}, detour_solo2, &g_origSolo2, "solo 2", false));
+  CHECK(pg::hooks::enable_all());
+  CHECK(call(solo_a, 1) == 1307);
+  CHECK(call(solo_b, 1) == 13);
+}
+
+// A hook that would mix twin policies on one method is refused with nothing patched: it would run
+// on bodies its policy excludes, or skip a detour that runs on one of them.
+void refused(bool hooked, size_t before, const char* why) {
+  CHECK(!hooked);
+  CHECK(pg::hooks::mark() == before);
+  CHECK(logged(why));
+  CHECK(g_origRefused == nullptr);  // no success with the original left unset
+}
+
+void all_twins_then_canonical_only_refused() {
+  CHECK(hook_entry(all_first_a, {p(all_first_b)}, detour_all_first, &g_origAllFirst, "all first", true));
+  CHECK(pg::hooks::enable_all());
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
+  refused(hook_entry(all_first_a, {p(all_first_b)}, detour_refused, &g_origRefused, "only after all", false), before,
+          "only after all refused");
+  // A raw hook on the twin is refused the same way.
+  refused(pg::hooks::create(p(all_first_b), p(detour_refused), reinterpret_cast<void**>(&g_origRefused), "raw on twin"),
+          before, "raw on twin refused");
+  CHECK(pg::hooks::enable_all());
+  CHECK(call(all_first_a, 1) == 1500 && call(all_first_b, 1) == 1500);
+}
+
+void canonical_only_then_all_twins_refused() {
+  CHECK(hook_entry(one_first_a, {p(one_first_b)}, detour_one_first, &g_origOneFirst, "one first", false));
+  CHECK(pg::hooks::enable_all());
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
+  refused(hook_entry(one_first_a, {p(one_first_b)}, detour_refused, &g_origRefused, "all after one", true), before,
+          "all after one refused");
+  CHECK(pg::hooks::enable_all());
+  CHECK(call(one_first_a, 1) == 1600 && call(one_first_b, 1) == 16);
+}
+
+void raw_on_twin_then_all_twins_refused() {
+  CHECK(pg::hooks::create(p(raw_first_b), p(detour_raw_first), reinterpret_cast<void**>(&g_origRawFirst), "raw first"));
+  CHECK(pg::hooks::enable_all());
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
+  refused(hook_entry(raw_first_a, {p(raw_first_b)}, detour_refused, &g_origRefused, "all after raw", true), before,
+          "all after raw refused");
+  CHECK(pg::hooks::enable_all());
+  CHECK(call(raw_first_a, 1) == 17 && call(raw_first_b, 1) == 1700);
 }
 
 void folded_twin_hooked_once() {
@@ -226,6 +313,9 @@ int main() {
   twin_calls_reach_detour();
   second_hook_chains_on_twins();
   canonical_only_leaves_twin();
+  all_twins_then_canonical_only_refused();
+  canonical_only_then_all_twins_refused();
+  raw_on_twin_then_all_twins_refused();
   folded_twin_hooked_once();
   depth_inside_tracked_call();
 

@@ -3,27 +3,15 @@
 #include <algorithm>
 #include <vector>
 
-#include "log.h"
-
 namespace pg::entry_hooks {
 
 bool hook(void* canonical, std::span<void* const> twins, void* detour, void** original, const char* name,
           bool allTwins) {
-  const size_t before = hooks::mark();
-  if (!hooks::create(canonical, detour, original, name)) return false;
-  if (!allTwins) return true;
-  std::vector<void*> done{canonical};
-  for (void* twin : twins) {
-    if (!twin || std::find(done.begin(), done.end(), twin) != done.end()) continue;  // folded or repeated
-    done.push_back(twin);
-    // The twin's own trampoline is never called: the detour's `original` continues on the canonical chain.
-    if (!hooks::create(twin, detour, nullptr, name)) {
-      PG_LOG("hooks: %s could not hook every twin; none of its hooks stay", name);
-      hooks::rollback_to(before);
-      return false;
-    }
-  }
-  return true;
+  if (!allTwins) return hooks::create(canonical, detour, original, name);
+  std::vector<void*> bodies{canonical};
+  for (void* twin : twins)  // a twin folded onto another body, or listed twice, is one body
+    if (twin && std::find(bodies.begin(), bodies.end(), twin) == bodies.end()) bodies.push_back(twin);
+  return hooks::create_shared(bodies, detour, original, name);
 }
 
 }  // namespace pg::entry_hooks
