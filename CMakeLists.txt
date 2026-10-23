@@ -38,6 +38,7 @@ file(GLOB PGSDK_RESOLVER_SOURCES CONFIGURE_DEPENDS sdk/resolver/*.cpp)
 add_library(pgsdk_resolver STATIC ${PGSDK_RESOLVER_SOURCES})
 target_include_directories(pgsdk_resolver PUBLIC sdk/api sdk/resolver)
 target_link_libraries(pgsdk_resolver PUBLIC minhook)
+target_include_directories(pgsdk_resolver PRIVATE third_party/minhook/src/hde)
 pg_options(pgsdk_resolver)
 
 # A mod's side of the host contract (core/mod_api.h).
@@ -242,3 +243,5 @@ pg_test(sdk_types)
 target_link_libraries(sdk_types_test PRIVATE pgsdk_resolver)
 pg_test(sdk_resolver)
 target_link_libraries(sdk_resolver_test PRIVATE pgsdk_resolver)
+pg_test(sdk_code)
+target_link_libraries(sdk_code_test PRIVATE pgsdk_resolver)
