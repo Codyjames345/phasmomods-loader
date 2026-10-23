@@ -3,7 +3,7 @@
 Native mods for private Phasmophobia lobbies, started together by one launcher.
 `ModHost.dll` verifies the game build, asks every player to agree to a notice
 (ban risk, voice recording, progress at their own risk), then starts the mods
-ticked in `ModLauncher.exe`. The **Mods** button on the game's main menu switches
+ticked in `PhasmoMods Loader.exe`. The **Mods** button on the game's main menu switches
 mods on and off without restarting, and a modded lobby admits only players with
 the same mods. Each mod is its own DLL under `mods/`:
 

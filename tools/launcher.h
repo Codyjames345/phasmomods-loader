@@ -15,6 +15,8 @@ inline constexpr wchar_t kVersion[] = PG_WIDEN(PG_SUITE_VERSION);
 #endif
 /** Quote an argument so Windows parsing preserves every character. */
 std::wstring quote(std::wstring_view value);
+/** The launch option to paste into Steam for the executable at `executable`. */
+std::wstring steam_launch_option(const std::wstring& executable);
 /** Join arguments without involving a command shell. */
 std::wstring command_line(const std::vector<std::wstring>& arguments);
 /** Preserve an explicit Unity file log or append the reserved fresh log path. */

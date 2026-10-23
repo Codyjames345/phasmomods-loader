@@ -51,7 +51,7 @@ void WINAPI sleep_for(DWORD) {
 
 /** Resolve a synthetic launcher location whose adjacent DLL cannot exist. */
 DWORD WINAPI module_path(HMODULE, LPWSTR path, DWORD length) {
-  const auto executable = fixturePath + L"\\ModLauncher.exe";
+  const auto executable = fixturePath + L"\\PhasmoMods Loader.exe";
   if (executable.size() + 1 > length) return length;
   wcscpy_s(path, length, executable.c_str());
   return static_cast<DWORD>(executable.size());
@@ -321,6 +321,12 @@ void version_matches_version_file() {
   CHECK(std::regex_match(version, std::regex(R"(\d+\.\d+\.\d+)")));
 }
 
+/** The executable's name has a space, so the Steam launch option must quote its path. */
+void launch_option_quotes_spaced_name() {
+  CHECK(pg::launcher::steam_launch_option(L"C:\\Games\\PhasmoMods Loader.exe") ==
+        L"\"C:\\Games\\PhasmoMods Loader.exe\" --steam %command%");
+}
+
 /** Exercise argument preservation and conservative startup detection without a game. */
 int main() {
   wchar_t directory[MAX_PATH], path[MAX_PATH];
@@ -336,6 +342,7 @@ int main() {
   startup_wait();
   concurrent_startup();
   version_matches_version_file();
+  launch_option_quotes_spaced_name();
   CHECK(DeleteFileW(fixturePath.c_str()));
   return failures ? 1 : 0;
 }

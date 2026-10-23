@@ -80,7 +80,7 @@ try {
             $env:PATH = $originalPath
         }
     }
-    foreach ($missing in @('ModLauncher.exe', 'ModHost.dll', 'PlayableGhost.dll')) {
+    foreach ($missing in @('PhasmoMods Loader.exe', 'ModHost.dll', 'PlayableGhost.dll')) {
         $fixture = New-PackageFixture $missing
         Remove-Item -LiteralPath (Join-Path $fixture "build/$missing")
         Assert-PackageFailure $fixture 'missing|Cannot find'
@@ -108,6 +108,7 @@ try {
         $zip.Dispose()
     }
     if (@($names | Where-Object { $_.Contains('\') }).Count) { throw 'The release ZIP stores entry names with backslashes.' }
+    if (-not ($names -contains 'PhasmoMods Loader.exe') -or ($names -contains 'ModLauncher.exe')) { throw 'The release ZIP must hold PhasmoMods Loader.exe and no ModLauncher.exe.' }
     if (-not ($names -contains 'mods/playable-ghost/PlayableGhost.dll')) { throw 'The release ZIP does not keep the mods folder layout.' }
     Expand-Archive -LiteralPath (Join-Path $fixture 'dist/PhasmoMods.zip') -DestinationPath $extracted
     $expected = @(@($payload | ForEach-Object { $_.Name }) + 'manifest.json' | Sort-Object)

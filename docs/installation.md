@@ -56,7 +56,7 @@ it makes the host remove players without it, with the game's own kick.
 ## Install and launch
 
 1. Extract `PhasmoMods.zip` to a permanent folder outside the game directory.
-2. Open `ModLauncher.exe` and tick the mods to start. Your choice is saved, and
+2. Open `PhasmoMods Loader.exe` and tick the mods to start. Your choice is saved, and
    you can change it later from the **Mods** button in the game.
 3. Start Phasmophobia through Steam, wait for the main menu, then choose
    **Attach to running game** in the launcher.
@@ -70,7 +70,7 @@ The launcher waits for the menu and loads the ticked mods. The option has this
 form, with the path to your extracted launcher:
 
 ```text
-"<folder>\ModLauncher.exe" --steam %command%
+"<folder>\PhasmoMods Loader.exe" --steam %command%
 ```
 
 Restart the game before loading another version or trying again after a failed

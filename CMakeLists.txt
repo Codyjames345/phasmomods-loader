@@ -168,6 +168,7 @@ set_target_properties(velopack PROPERTIES
 
 add_executable(ModLauncher WIN32 tools/launcher.cpp tools/launcher.rc)
 target_link_libraries(ModLauncher PRIVATE pgloader velopack user32 shell32 gdi32)
+set_target_properties(ModLauncher PROPERTIES OUTPUT_NAME "PhasmoMods Loader")
 pg_options(ModLauncher)
 target_compile_definitions(ModLauncher PRIVATE UNICODE _UNICODE PG_SUITE_VERSION="${PG_SUITE_VERSION}")
 add_custom_command(TARGET ModLauncher POST_BUILD
