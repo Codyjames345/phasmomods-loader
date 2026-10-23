@@ -40,8 +40,8 @@ describes what is in the code now.
 ### The rules every mod follows
 
 - **Main thread only.** The host calls `pgmod_start`, `pgmod_tick` and `pgmod_stop` on Unity's main
-  thread, and the game API runs there too. Do not call it from another thread. Any thread may call only the host
-  contract's `log`.
+  thread, and the game API runs there too. Do not call it from another thread. Only the host contract's `log` may be
+  called from any thread; everything else runs on the main thread.
 - **Never keep a raw managed reference across frames.** The garbage collector moves and frees
   managed objects. Keep one in an `il2cpp::Held` (`core/il2cpp.h`), as `mods/ghost_tells/shade.cpp`
   does with its ghost. `tests/held_scan_test.cpp` fails the build on a raw `void*` kept at namespace
@@ -71,9 +71,9 @@ A mod is a DLL and a `mod.ini` in its own folder, `mods/<folder>/` beside `ModHo
   cannot run without.
 
 Where the host finds mods. When the launcher started the game, the host runs the DLLs the launcher
-listed for that process (each copy's `mod.ini` sits beside it). Otherwise it reads every folder in
-`mods` beside the host, in name order, and skips a folder whose `mod.ini` is missing or invalid (the
-log says why). The host loads every mod it finds at once and keeps it loaded. Which mods start is the
+listed for that process (each copy's manifest sits beside it as `<copy>.ini`). Otherwise it reads every folder in
+`mods` beside the host, in name order, and skips a folder with no `mod.ini` silently and a folder whose `mod.ini`
+is invalid with a log line that says why. The host loads every mod it finds at once and keeps it loaded. Which mods start is the
 player's choice, saved in `launcher.ini` (`enabled=` and the mod ids) and changed from the Mods panel.
 A mod with `requires=` starts after that mod, and stays off when that mod is not chosen or did not
 start.
@@ -168,8 +168,8 @@ host's `game_entry`, and returns false with the missing keys logged when a requi
 resolve. The host does not start a mod whose required entries are missing and logs which. A mod
 without `pgmod_requires` requires nothing.
 
-Ghost Tells today lists exactly one key, `GhostAI.UnAppear`. Every wrapper header is included only for
-what the mod's code calls: including `GhostAI.h` requires nothing by itself.
+Ghost Tells today lists exactly one key, `GhostAI.UnAppear`. Including a header requires nothing by
+itself; only the members the mod's code actually uses become required.
 
 ### Hooking and caller context
 
