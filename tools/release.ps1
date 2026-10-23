@@ -1,5 +1,5 @@
 # Bump the suite version, commit it and tag it. Usage: tools\release.ps1 -Version <x.y.z> [-Push]
-# -Push also sends main and the new tag to origin, which starts the release workflow.
+# -Push also sends main and the new tag to origin together, which starts the release workflow.
 param(
     [Parameter(Mandatory)][string]$Version,
     [switch]$Push
@@ -37,12 +37,24 @@ Set-Content -LiteralPath $versionFile -Value $Version
 Invoke-Git @('add', '--', 'VERSION') | Out-Null
 Invoke-Git @('commit', '--quiet', '--message', "Release $Version",
     '--message', "Raise the suite version from $current to $Version. Pushing the $tag tag builds and publishes the release.") | Out-Null
-Invoke-Git @('tag', '--annotate', $tag, '--message', "Release $Version") | Out-Null
+# From here on a failure leaves the release commit (and perhaps the tag) behind, so it says how to
+# undo them or retry.
+$tagged = $false
+try {
+    Invoke-Git @('tag', '--annotate', $tag, '--message', "Release $Version") | Out-Null
+    $tagged = $true
+    if ($Push) {
+        # Atomic: origin gets main and the tag together or neither.
+        Invoke-Git @('push', '--atomic', 'origin', 'main', $tag) | Out-Null
+    }
+} catch {
+    $undo = if ($tagged) { "git tag --delete $tag, then git reset --hard HEAD~1" } else { 'git reset --hard HEAD~1' }
+    $retry = if ($tagged) { "Or fix the cause and retry with: git push --atomic origin main $tag" } else { "Or fix the cause and tag it with: git tag --annotate $tag --message `"Release $Version`"" }
+    throw "$($_.Exception.Message)`nThe release $Version was committed but not pushed; nothing reached origin. To undo it (VERSION goes back to $current), run: $undo. $retry"
+}
 
 if ($Push) {
-    Invoke-Git @('push', 'origin', 'main') | Out-Null
-    Invoke-Git @('push', 'origin', $tag) | Out-Null
     Write-Output "Released $Version and pushed main and $tag to origin."
 } else {
-    Write-Output "Released $Version locally. Push it with: git push origin main $tag"
+    Write-Output "Released $Version locally. Push it with: git push --atomic origin main $tag"
 }

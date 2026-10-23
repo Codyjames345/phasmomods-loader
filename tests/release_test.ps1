@@ -113,6 +113,32 @@ try {
     & (Join-Path $fixture 'tools/release.ps1') -Version '0.2.0' -Push | Out-Null
     $pushed = (Invoke-Git $origin @('for-each-ref', '--format=%(refname)')) -join ','
     if ($pushed -ne 'refs/heads/main,refs/tags/v0.2.0') { throw "The release pushed the wrong refs: $pushed" }
+
+    # a rejected push sends nothing and says how to undo the local release or retry
+    $fixture = New-ReleaseFixture 'rejected push'
+    $origin = Join-Path $testRoot 'rejected origin.git'
+    Invoke-Git $testRoot @('init', '--quiet', '--bare', $origin) | Out-Null
+    Invoke-Git $fixture @('remote', 'add', 'origin', $origin) | Out-Null
+    Invoke-Git $fixture @('push', '--quiet', 'origin', 'main') | Out-Null
+    $other = Join-Path $testRoot 'rejected other'
+    Invoke-Git $testRoot @('clone', '--quiet', $origin, $other) | Out-Null
+    Invoke-Git $other @('config', 'user.name', 'Release Test') | Out-Null
+    Invoke-Git $other @('config', 'user.email', 'release-test@example.invalid') | Out-Null
+    Invoke-Git $other @('config', 'commit.gpgsign', 'false') | Out-Null
+    Invoke-Git $other @('commit', '--quiet', '--allow-empty', '--message', 'Ahead') | Out-Null
+    Invoke-Git $other @('push', '--quiet', 'origin', 'main') | Out-Null
+    $originRefs = (Invoke-Git $origin @('for-each-ref', '--format=%(refname) %(objectname)')) -join ','
+    $message = ''
+    try {
+        & (Join-Path $fixture 'tools/release.ps1') -Version '0.2.0' -Push | Out-Null
+        throw 'The release unexpectedly pushed to an origin that is ahead.'
+    } catch {
+        $message = $_.Exception.Message
+    }
+    foreach ($step in @('git tag --delete v0.2.0', 'git reset --hard HEAD~1', 'git push --atomic origin main v0.2.0')) {
+        if (-not $message.Contains($step)) { throw "The rejected push did not name '$step': $message" }
+    }
+    if ((Invoke-Git $origin @('for-each-ref', '--format=%(refname) %(objectname)')) -join ',' -ne $originRefs) { throw 'A rejected push changed origin.' }
     Write-Output 'Release tests passed: the script refuses unsafe releases and bumps, tags and pushes only on request.'
 } finally {
     Remove-TestRoot $testRoot
