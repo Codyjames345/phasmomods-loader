@@ -360,6 +360,15 @@ void append_log(const std::wstring& message) {
   std::ofstream(file, std::ios::binary | std::ios::app) << text::narrow(stamp + message) << "\r\n";
 }
 
+/** Check for updates on this thread, waiting at most kUpdateLimit. A check that cannot start reports CarryOn. */
+update::Report update_now(const std::vector<std::wstring>& launcherArguments) {
+  update::Report report{update::Outcome::CarryOn, L"Could not check for updates. Starting the installed version."};
+  try {
+    report = update::run(update::velopack_backend(), update::restart_arguments(launcherArguments), kUpdateLimit);
+  } catch (...) { /* An update that cannot start never stops the game: keep the prepared report. */ }
+  return report;
+}
+
 /** Keep the small instruction window alive while one background attach operation finishes. */
 struct WindowState {
   Package package;
@@ -548,7 +557,7 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
     try {
       state.updateReport = {update::Outcome::CarryOn, L"Could not check for updates. Starting the installed version."};
       state.worker = std::thread([target = &state, executable] {
-        try { target->updateReport = update::run(update::velopack_backend(), update::restart_arguments({executable}), kUpdateLimit); }
+        try { target->updateReport = update_now({executable}); }
         catch (...) { /* Keep the prepared report. */ }
         target->completed.store(true, std::memory_order_release);
       });
@@ -585,23 +594,24 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     auto result = pg::launcher::adjacent_host(hostPath, executable);
     if (result.outcome == pg::loader::Outcome::ready && values.size() == 1)
       return pg::launcher::show_window(instance, executable, hostPath);
-    if (result.outcome == pg::loader::Outcome::ready) {
-      if (values.size() > 2 && values[1] == L"--steam") {
-        // Update before the game starts. Steam shows no window, so anything but a restart goes to the log.
-        pg::update::Report update{pg::update::Outcome::CarryOn, L"Could not check for updates. Starting the installed version."};
-        try {
-          update = pg::update::run(pg::update::velopack_backend(), pg::update::restart_arguments(values),
-                                   pg::launcher::kUpdateLimit);
-        } catch (...) { /* An update that cannot start never stops the game: keep the prepared report. */ }
-        if (update.outcome == pg::update::Outcome::Restarting) return 0;
-        pg::launcher::append_log(update.message);
-        std::wstring problems;
-        const auto mods = pg::launcher::discover_mods(std::filesystem::path(executable).parent_path() / L"mods", problems);
-        const pg::launcher::Package package{hostPath, pg::launcher::all_dlls(mods)};
-        result = pg::launcher::launch_steam({values.begin() + 2, values.end()}, package);
-      } else result = pg::launcher::failure(pg::loader::Outcome::invalid_target,
-        L"Open PhasmoMods Loader without arguments, or copy its Steam launch option into Steam.");
-    }
+    const bool steam = values.size() > 2 && values[1] == L"--steam";
+    if (result.outcome != pg::loader::Outcome::ready) {
+      // A damaged install still updates, which is how it repairs itself.
+      const auto update = pg::launcher::update_now(values);
+      if (update.outcome == pg::update::Outcome::Restarting) return 0;
+      if (steam) pg::launcher::append_log(update.message);
+      if (!update.message.empty()) result.detail += L"\r\n" + update.message;
+    } else if (steam) {
+      // Update before the game starts. Steam shows no window, so anything but a restart goes to the log.
+      const auto update = pg::launcher::update_now(values);
+      if (update.outcome == pg::update::Outcome::Restarting) return 0;
+      pg::launcher::append_log(update.message);
+      std::wstring problems;
+      const auto mods = pg::launcher::discover_mods(std::filesystem::path(executable).parent_path() / L"mods", problems);
+      const pg::launcher::Package package{hostPath, pg::launcher::all_dlls(mods)};
+      result = pg::launcher::launch_steam({values.begin() + 2, values.end()}, package);
+    } else result = pg::launcher::failure(pg::loader::Outcome::invalid_target,
+      L"Open PhasmoMods Loader without arguments, or copy its Steam launch option into Steam.");
     if (result.outcome == pg::loader::Outcome::active) return 0;
     MessageBoxW(nullptr, pg::launcher::describe(result).c_str(), pg::launcher::kName, MB_OK | MB_ICONWARNING);
   } catch (...) {
