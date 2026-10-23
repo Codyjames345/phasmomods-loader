@@ -48,10 +48,19 @@ struct Report {
  * download. When `limit` passes first, run returns CarryOn and the worker is told it was
  * abandoned: it starts neither a download nor an apply afterwards. The worker shares ownership
  * of `backend`, so it stays valid however long an abandoned call takes. `arguments` are copied.
+ * Once an apply has started, run waits for it without a limit. Velopack's apply only starts its
+ * updater, which waits for this program to exit, and returns, so that wait is short.
  */
 Report run(std::shared_ptr<Backend> backend, const std::vector<std::wstring>& arguments,
            std::chrono::milliseconds limit);
 
 /** The launcher's own arguments after argv[0], unchanged, for the restarted launcher. */
 std::vector<std::wstring> restart_arguments(const std::vector<std::wstring>& launcherArguments);
+
+/**
+ * The Velopack backend (tools/update_velopack.cpp). It updates from the folder that the
+ * environment variable PG_UPDATE_SOURCE names when that folder exists, and from the project's
+ * GitHub releases otherwise.
+ */
+std::shared_ptr<Backend> velopack_backend();
 }

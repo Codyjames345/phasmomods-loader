@@ -166,7 +166,7 @@ set_target_properties(velopack PROPERTIES
   IMPORTED_IMPLIB ${CMAKE_SOURCE_DIR}/third_party/velopack/velopack_libc.lib
   INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/third_party/velopack)
 
-add_executable(ModLauncher WIN32 tools/launcher.cpp tools/launcher.rc)
+add_executable(ModLauncher WIN32 tools/launcher.cpp tools/update.cpp tools/update_velopack.cpp tools/launcher.rc)
 target_link_libraries(ModLauncher PRIVATE pgloader velopack user32 shell32 gdi32)
 set_target_properties(ModLauncher PROPERTIES OUTPUT_NAME "PhasmoMods Loader")
 pg_options(ModLauncher)

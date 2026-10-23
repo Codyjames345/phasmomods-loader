@@ -1,5 +1,6 @@
 #include "launcher.h"
 #include "inject.h"
+#include "update.h"
 #include "text_files.h"
 #include "win_handle.h"
 #include <windows.h>
@@ -7,6 +8,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <atomic>
+#include <chrono>
 #include <fstream>
 #include <thread>
 #include <utility>
@@ -149,14 +151,19 @@ std::vector<std::wstring> all_dlls(const std::vector<ModEntry>& mods) {
   return dlls;
 }
 
-/** %LOCALAPPDATA%\PhasmoMods\launcher.ini, or empty when the folder is unavailable. */
-fs::path selection_file() {
+/** %LOCALAPPDATA%\PhasmoMods\`name`, or empty when the folder is unavailable. */
+fs::path data_file(const wchar_t* name) {
   std::wstring local(32768, L'\0');
   const DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", local.data(), static_cast<DWORD>(local.size()));
   if (!length || length >= local.size()) return {};
   local.resize(length);
-  return fs::path(local) / L"PhasmoMods" / L"launcher.ini";
+  return fs::path(local) / L"PhasmoMods" / name;
 }
+
+/** %LOCALAPPDATA%\PhasmoMods\launcher.ini, or empty when the folder is unavailable. */
+fs::path selection_file() { return data_file(L"launcher.ini"); }
+
+fs::path launcher_log() { return data_file(L"launcher.log"); }
 
 /** Resolve the packaged host beside the launcher, independent of Steam's directory. */
 Result adjacent_host(std::wstring& path, std::wstring& executable) {
@@ -337,6 +344,21 @@ std::wstring describe(const Result& result) {
 constexpr wchar_t kName[] = L"PhasmoMods Loader";      // the message boxes' title
 constexpr wchar_t kTitle[] = L"PhasmoMods Loader " PG_WIDEN(PG_SUITE_VERSION);  // the window's title
 constexpr int kIcon = 1;                               // tools/launcher.rc
+constexpr std::chrono::seconds kUpdateLimit{10};       // the longest an update check delays play
+
+/** Add a timestamped line to launcher_log(), for what `--steam` mode cannot show in a window. */
+void append_log(const std::wstring& message) {
+  const fs::path file = launcher_log();
+  if (file.empty() || message.empty()) return;
+  std::error_code error;
+  fs::create_directories(file.parent_path(), error);
+  SYSTEMTIME now{};
+  GetLocalTime(&now);
+  wchar_t stamp[32];
+  swprintf_s(stamp, L"%04u-%02u-%02u %02u:%02u:%02u ", now.wYear, now.wMonth, now.wDay,
+             now.wHour, now.wMinute, now.wSecond);
+  std::ofstream(file, std::ios::binary | std::ios::app) << text::narrow(stamp + message) << "\r\n";
+}
 
 /** Keep the small instruction window alive while one background attach operation finishes. */
 struct WindowState {
@@ -346,11 +368,14 @@ struct WindowState {
   fs::path selectionPath;
   std::vector<HWND> boxes;
   std::wstring launchOption;
+  std::wstring usualStatus;  // the status box's text when nothing is running
   HWND status = nullptr;
   HWND attachButton = nullptr;
   bool busy = false;
+  bool updating = false;  // the worker is checking for updates, not attaching
   bool closing = false;
   Result result;
+  update::Report updateReport;
   std::atomic<bool> completed{false};
   std::thread worker;
 };
@@ -435,6 +460,16 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
       KillTimer(window, 1);
       if (state->worker.joinable()) state->worker.join();
       state->busy = false;
+      if (state->updating) {
+        state->updating = false;
+        // Velopack's updater applies the new version once this program exits, then starts it.
+        if (state->updateReport.outcome == update::Outcome::Restarting) { DestroyWindow(window); return 0; }
+        set_controls(state, true);
+        SetFocus(state->attachButton);
+        SetWindowTextW(state->status, (state->updateReport.message.empty() ? state->usualStatus : state->updateReport.message).c_str());
+        if (state->closing) DestroyWindow(window);
+        return 0;
+      }
       set_controls(state, true);
       SetWindowTextW(state->status, describe(state->result).c_str());
       if (state->closing) DestroyWindow(window);
@@ -500,11 +535,30 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
   control(L"STATIC", L"To load automatically, copy this command into Steam's Launch Options:", 0, 18, y + 74, 600, 24, 0);
   control(L"EDIT", state.launchOption.c_str(), WS_TABSTOP | WS_BORDER | ES_READONLY | ES_AUTOHSCROLL, 18, y + 101, 600, 26, 103);
   control(L"BUTTON", L"&Copy Steam launch option", WS_TABSTOP, 18, y + 135, 205, 30, 102);
-  const std::wstring status = problems.empty() ? L"Keep this folder outside the game directory. Restart the game to change the mods' versions." : problems;
-  state.status = control(L"EDIT", status.c_str(),
+  state.usualStatus = problems.empty() ? L"Keep this folder outside the game directory. Restart the game to change the mods' versions." : problems;
+  state.status = control(L"EDIT", state.usualStatus.c_str(),
     WS_TABSTOP | ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL, 18, y + 186, 600, 75, 104);
   ShowWindow(window, SW_SHOW);
   SetFocus(state.attachButton);
+  // Check for updates on the worker before Attach is usable; WM_TIMER shows the result.
+  if (SetTimer(window, 1, 100, nullptr)) {
+    state.busy = state.updating = true;
+    set_controls(&state, false);
+    SetWindowTextW(state.status, L"Checking for updates...");
+    try {
+      state.updateReport = {update::Outcome::CarryOn, L"Could not check for updates. Starting the installed version."};
+      state.worker = std::thread([target = &state, executable] {
+        try { target->updateReport = update::run(update::velopack_backend(), update::restart_arguments({executable}), kUpdateLimit); }
+        catch (...) { /* Keep the prepared report. */ }
+        target->completed.store(true, std::memory_order_release);
+      });
+    } catch (...) {
+      KillTimer(window, 1);
+      state.busy = state.updating = false;
+      set_controls(&state, true);
+      SetWindowTextW(state.status, state.usualStatus.c_str());
+    }
+  }
   MSG message{};
   while (GetMessageW(&message, nullptr, 0, 0) > 0) {
     if (!IsDialogMessageW(window, &message)) { TranslateMessage(&message); DispatchMessageW(&message); }
@@ -532,12 +586,20 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     if (result.outcome == pg::loader::Outcome::ready && values.size() == 1)
       return pg::launcher::show_window(instance, executable, hostPath);
     if (result.outcome == pg::loader::Outcome::ready) {
-      std::wstring problems;
-      const auto mods = pg::launcher::discover_mods(std::filesystem::path(executable).parent_path() / L"mods", problems);
-      const pg::launcher::Package package{hostPath, pg::launcher::all_dlls(mods)};
-      if (values.size() > 2 && values[1] == L"--steam")
+      if (values.size() > 2 && values[1] == L"--steam") {
+        // Update before the game starts. Steam shows no window, so anything but a restart goes to the log.
+        pg::update::Report update{pg::update::Outcome::CarryOn, L"Could not check for updates. Starting the installed version."};
+        try {
+          update = pg::update::run(pg::update::velopack_backend(), pg::update::restart_arguments(values),
+                                   pg::launcher::kUpdateLimit);
+        } catch (...) { /* An update that cannot start never stops the game: keep the prepared report. */ }
+        if (update.outcome == pg::update::Outcome::Restarting) return 0;
+        pg::launcher::append_log(update.message);
+        std::wstring problems;
+        const auto mods = pg::launcher::discover_mods(std::filesystem::path(executable).parent_path() / L"mods", problems);
+        const pg::launcher::Package package{hostPath, pg::launcher::all_dlls(mods)};
         result = pg::launcher::launch_steam({values.begin() + 2, values.end()}, package);
-      else result = pg::launcher::failure(pg::loader::Outcome::invalid_target,
+      } else result = pg::launcher::failure(pg::loader::Outcome::invalid_target,
         L"Open PhasmoMods Loader without arguments, or copy its Steam launch option into Steam.");
     }
     if (result.outcome == pg::loader::Outcome::active) return 0;

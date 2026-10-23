@@ -327,6 +327,16 @@ void launch_option_quotes_spaced_name() {
         L"\"C:\\Games\\PhasmoMods Loader.exe\" --steam %command%");
 }
 
+/** The launcher's log is in the data directory, which nothing Velopack runs ever writes. */
+void launcher_log_is_in_data_directory() {
+  std::vector<wchar_t> saved(32768);
+  const DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", saved.data(), static_cast<DWORD>(saved.size()));
+  const std::filesystem::path temp = std::filesystem::path(fixturePath).parent_path() / L"pgl appdata";
+  CHECK(SetEnvironmentVariableW(L"LOCALAPPDATA", temp.c_str()));
+  CHECK(pg::launcher::launcher_log() == temp / L"PhasmoMods" / L"launcher.log");
+  SetEnvironmentVariableW(L"LOCALAPPDATA", length && length < saved.size() ? saved.data() : nullptr);
+}
+
 /** Exercise argument preservation and conservative startup detection without a game. */
 int main() {
   wchar_t directory[MAX_PATH], path[MAX_PATH];
@@ -343,6 +353,7 @@ int main() {
   concurrent_startup();
   version_matches_version_file();
   launch_option_quotes_spaced_name();
+  launcher_log_is_in_data_directory();
   CHECK(DeleteFileW(fixturePath.c_str()));
   return failures ? 1 : 0;
 }

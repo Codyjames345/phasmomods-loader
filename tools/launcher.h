@@ -54,6 +54,8 @@ std::vector<ModEntry> discover_mods(const std::filesystem::path& folder, std::ws
 /** The ids ticked in the saved selection; every mod when nothing has been saved yet. */
 std::vector<std::string> saved_selection(const std::filesystem::path& launcherIni, const std::vector<ModEntry>& mods);
 bool save_selection(const std::filesystem::path& launcherIni, const std::vector<std::string>& ids);
+/** %LOCALAPPDATA%\PhasmoMods\launcher.log, where `--steam` records update results; empty when the folder is unavailable. */
+std::filesystem::path launcher_log();
 /** Every installed mod's DLL, in the order they were found: the host loads them all and starts the saved choice. */
 std::vector<std::wstring> all_dlls(const std::vector<ModEntry>& mods);
 }
