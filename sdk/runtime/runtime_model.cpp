@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <functional>
 #include <string_view>
 #include <unordered_map>
 
@@ -54,7 +55,8 @@ int integer_width(int kind, bool& isSigned) {
 
 class Builder {
  public:
-  Builder(const RuntimeApi& api, std::span<const uint8_t> module) : api_(api), module_(module) {}
+  Builder(const RuntimeApi& api, std::span<const uint8_t> module, const std::function<bool()>& proceed)
+      : api_(api), module_(module), proceed_(proceed) {}
 
   // Every class of every named image, before any member, so members can name any of them.
   bool add_types(std::span<const std::string> assemblies) {
@@ -65,6 +67,7 @@ class Builder {
       if (!image) return false;
       const size_t classes = api_.image_get_class_count(image);
       for (size_t i = 0; i < classes; ++i) {
+        if (!proceeding()) return false;
         void* klass = api_.image_get_class(image, i);
         if (!klass || index_.contains(klass)) continue;
         index_.emplace(klass, static_cast<int>(model_.types.size()));
@@ -80,8 +83,9 @@ class Builder {
     return true;
   }
 
-  void add_members() {
+  bool add_members() {
     for (ModelType& t : model_.types) {
+      if (!proceeding()) return false;
       void* klass = t.runtime;
       void* declaring = api_.class_get_declaring_type(klass);
       t.declaring = index_of(declaring);
@@ -93,6 +97,7 @@ class Builder {
       add_fields(t);
       add_methods(t);
     }
+    return true;
   }
 
   GameModel take() { return std::move(model_); }
@@ -106,6 +111,8 @@ class Builder {
     }
     return nullptr;
   }
+
+  bool proceeding() const { return !proceed_ || proceed_(); }
 
   int index_of(const void* klass) const {
     const auto it = index_.find(klass);
@@ -198,6 +205,7 @@ class Builder {
 
   const RuntimeApi& api_;
   std::span<const uint8_t> module_;
+  const std::function<bool()>& proceed_;
   GameModel model_;
   std::unordered_map<const void*, int> index_;
 };
@@ -214,12 +222,11 @@ std::span<const uint8_t> loaded_module(uintptr_t base) {
 }
 
 bool load_runtime(const RuntimeApi& api, uintptr_t gameAssemblyBase, std::span<const std::string> assemblies,
-                  GameModel& out) {
+                  GameModel& out, const std::function<bool()>& proceed) {
   const std::span<const uint8_t> module = loaded_module(gameAssemblyBase);
   if (module.empty() || !complete(api)) return false;
-  Builder builder(api, module);
-  if (!builder.add_types(assemblies)) return false;
-  builder.add_members();
+  Builder builder(api, module, proceed);
+  if (!builder.add_types(assemblies) || !builder.add_members()) return false;
   out = builder.take();
   return true;
 }

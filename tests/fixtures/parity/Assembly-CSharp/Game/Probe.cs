@@ -47,6 +47,12 @@ public class Probe : MonoBehaviour
 	private const bool ready = True; //Field offset: 0x0
 	[Token(Token = "0x400000D")]
 	private const Mode start = 5; //Field offset: 0x0
+	[Token(Token = "0x400000E")]
+	private const char letter = 65; //Field offset: 0x0
+	[Token(Token = "0x400000F")]
+	private const long big = -5; //Field offset: 0x0
+	[Token(Token = "0x4000010")]
+	private const Probe nothing = null; //Field offset: 0x0
 	[Token(Token = "0x400000A")]
 	public const string tag = "a//b"; //Field offset: 0x0
 

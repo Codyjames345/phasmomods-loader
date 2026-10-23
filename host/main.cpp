@@ -118,7 +118,7 @@ DWORD WINAPI worker(void*) {
         PG_LOG("ModHost inactive: runtime initialization failed");
       } else if (pg::startup::permitted(g_stop, g_deadline, "resolution")) {
         // An unresolved entry switches off only the mods that need it, never the host.
-        pg::gamemap::resolve(g_gameAssembly);
+        pg::gamemap::resolve(g_gameAssembly, g_stop, g_deadline);
         if (!(pg::game::resolve() && pg::suite::resolve())) {
           PG_LOG("ModHost inactive: game binding resolution failed");
         } else if (pg::startup::permitted(g_stop, g_deadline, "hooks")) {

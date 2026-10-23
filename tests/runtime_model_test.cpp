@@ -161,6 +161,8 @@ const FakeType kInt{kI4, nullptr, "System.Int32"};
 const FakeType kSByte{kI1, nullptr, "System.SByte"};
 const FakeType kByte{kU1, nullptr, "System.Byte"};
 const FakeType kBoolean{kBool, nullptr, "System.Boolean"};
+const FakeType kChar{0x03, nullptr, "System.Char"};
+const FakeType kLong{0x0A, nullptr, "System.Int64"};
 const FakeType kFloat{kR4, nullptr, "System.Single"};
 const FakeType kStringType{kString, nullptr, "System.String"};
 const FakeType kVoid{0x01, nullptr, "System.Void"};
@@ -390,6 +392,9 @@ struct Probe {
                     {"turn", &kFloat, 0, kFieldStatic | kFieldLiteral, 0x43B40000, 4},
                     {"ready", &kBoolean, 0, kFieldStatic | kFieldLiteral, 1, 1},
                     {"start", &modeType, 0, kFieldStatic | kFieldLiteral, 5, 1},
+                    {"letter", &kChar, 0, kFieldStatic | kFieldLiteral, 65, 2},
+                    {"big", &kLong, 0, kFieldStatic | kFieldLiteral, -5, 8},
+                    {"nothing", &probeType, 0, kFieldStatic | kFieldLiteral},
                     {"tag", &kStringType, 0, kFieldStatic | kFieldLiteral}};
     probe.methods = {{base + 0x1200, "Find", &kBoolean, {&probeRef, &modeType}},
                      {base + 0x1300, "Pick", &modeType, {&vector3}, kMethodStatic},
@@ -461,6 +466,14 @@ void runtime_matches_dump() {
   CHECK(unparsed == 0);
   CHECK(runtime.types.size() == 3);
   same_model(runtime, dump);
+  // Both read a value only for an integer or enum constant: a char written as 65 stays 0.
+  const int probeType = find(dump, "Probe");
+  if (probeType < 0) return;
+  const ModelType& p = dump.types[probeType];
+  CHECK(field(p, "big") && field(p, "big")->literal == -5);
+  CHECK(field(p, "start") && field(p, "start")->literal == 5);
+  CHECK(field(p, "letter") && field(p, "letter")->literal == 0);
+  CHECK(field(p, "nothing") && field(p, "nothing")->literal == 0);
 }
 
 }  // namespace

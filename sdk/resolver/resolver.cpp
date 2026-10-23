@@ -399,7 +399,8 @@ class Resolver {
         r.rva = type.methods[c.member].rva;
         r.currentName = type.methods[c.member].name;
         for (const int m : c.same) {
-          if (type.methods[m].rva == r.rva) r.aliases.push_back(type.methods[m].name);
+          // rva 0 is no address, so it never makes an alias.
+          if (r.rva != 0 && type.methods[m].rva == r.rva) r.aliases.push_back(type.methods[m].name);
           else r.twins.push_back(type.methods[m].rva);
         }
         std::sort(r.twins.begin(), r.twins.end());

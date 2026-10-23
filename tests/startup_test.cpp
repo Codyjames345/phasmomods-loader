@@ -150,8 +150,9 @@ bool verify_unity_player(void*) { return unityHash; }
 }
 namespace pg::gamemap {
 /** Count map resolution and whether it ran attached, before the game bindings. */
-bool resolve(void*) {
+bool resolve(void*, void* stopEvent, unsigned long long deadline) {
   ++mapped;
+  CHECK(stopEvent == g_stop && deadline == g_deadline);
   if (attached > detached && resolved == 0) ++mappedInOrder;
   return mapOk;
 }

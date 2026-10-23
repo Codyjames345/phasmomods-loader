@@ -811,6 +811,23 @@ void folded_alias_is_one_behaviour() {
   CHECK(h && h->aliases.size() == 1 && h->twins.empty());
 }
 
+// rva 0 is no address (abstract, extern, or code one model places elsewhere): two methods there are
+// no aliases, and the entry stays Ambiguous.
+void zero_rva_is_never_an_alias() {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.method(ai, "ഞത", "void", {"float"}, 0);
+  m.method(ai, "ദശ", "void", {"float"}, 0);
+  Code code;
+  static constexpr const char* kFloat[] = {"float"};
+  constexpr EntryDesc shape{.key = "GhostAI.Init", .kind = Kind::Method, .owner = "GhostAI", .type = "void",
+                            .params = kFloat};
+  const Resolution s = code.run({&kGhostAI, &shape}, m.build());
+  const Result* r = s.find("GhostAI.Init");
+  CHECK(r && r->status == Status::Ambiguous && r->candidates.size() == 2);
+  CHECK(r && r->aliases.empty() && r->rva == 0);
+}
+
 static constexpr const char* kPlayer[] = {"Player"};
 constexpr EntryDesc kLookAtPlayer{.key = "GhostAI.LookAtPlayer", .kind = Kind::Method, .owner = "GhostAI",
                                   .name = "LookAtPlayer", .params = kPlayer};
@@ -1024,6 +1041,7 @@ int main() {
   field_facts_on_a_struct_fail_closed();
   unreadable_code_never_decides();
   folded_alias_is_one_behaviour();
+  zero_rva_is_never_an_alias();
   identical_twins_are_one_behaviour();
   twins_calling_one_helper();
   decoy_with_other_metadata_is_not_a_twin();

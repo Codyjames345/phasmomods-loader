@@ -141,6 +141,16 @@ bool continues(std::string_view line) {
          line.find("= \"") != std::string_view::npos;
 }
 
+// Whether a constant of this canonical type has an integer value: an integer type, or a named type,
+// since a constant of a named type is an enum value (or null).
+bool integer_or_enum(std::string_view type) {
+  constexpr std::string_view kIntegers[] = {"sbyte", "byte", "short", "ushort", "int", "uint", "long", "ulong"};
+  constexpr std::string_view kOthers[] = {"bool", "char", "float", "double", "decimal", "string", "object"};
+  if (std::find(std::begin(kIntegers), std::end(kIntegers), type) != std::end(kIntegers)) return true;
+  if (std::find(std::begin(kOthers), std::end(kOthers), type) != std::end(kOthers)) return false;
+  return !type.empty() && type.find_first_of("<[*&") == std::string_view::npos;
+}
+
 struct Declaration {
   std::string name;
   std::string ret;
@@ -299,7 +309,7 @@ void parse_file(const std::string& text, const std::string& assembly, const std:
       f.type = canonical_type(join_words(w, first, w.size() - 1));
       // An integer or enum constant's literal is its number. Any other constant's stays 0, as in the
       // runtime model: a float's "360" is no integer.
-      if (f.hasLiteral && f.type != "float" && f.type != "double") {
+      if (f.hasLiteral && integer_or_enum(f.type)) {
         const std::string_view value = trim(decl.substr(before_equals(decl).size()));
         if (value.starts_with('=')) parse_literal(value.substr(1), f.literal);
       }
