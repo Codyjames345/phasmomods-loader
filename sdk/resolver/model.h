@@ -22,6 +22,7 @@ struct ModelField {
   bool isStatic = false;
   bool hasLiteral = false;  // an enum value or a constant: literal holds it
   int64_t literal = 0;
+  void* runtime = nullptr;  // the FieldInfo* in the host, null offline
 };
 
 struct ModelMethod {

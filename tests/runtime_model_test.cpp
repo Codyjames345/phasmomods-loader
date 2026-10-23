@@ -277,6 +277,7 @@ void enumerates_types_methods_fields() {
 
   const ModelField* st = field(g, "state");
   CHECK(st && st->offset == 0x18 && !st->isStatic && !st->hasLiteral && st->typeIndex == state);
+  CHECK(st && st->runtime != nullptr && std::string(fake_api().field_get_name(st->runtime)) == "state");
   const ModelField* instance = field(g, "instance");
   CHECK(instance && instance->offset == 0x8 && instance->isStatic && instance->typeIndex == ghost);
   // A class outside the model's assemblies is no model type.

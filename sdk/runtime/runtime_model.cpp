@@ -172,6 +172,7 @@ class Builder {
       // A constant has no storage; the dump gives it offset 0.
       f.offset = f.hasLiteral ? 0 : static_cast<int32_t>(api_.field_get_offset(field));
       if (f.hasLiteral && type) f.literal = literal(field, type);
+      f.runtime = field;
       t.fields.push_back(std::move(f));
     }
   }

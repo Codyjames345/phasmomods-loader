@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "game_api.h"
 #include "hooks.h"
 #include "il2cpp.h"
 #include "log.h"
@@ -30,11 +31,16 @@ void receive(int32_t sender, const uint8_t* data, size_t size) {
 namespace mod {
 
 bool bind(const PgHostApi* api, const PgModInfo* info) {
-  if (!api || api->version != PGMOD_API_VERSION || !info) return false;
+  if (!api || !pg_api_compatible(api->version, PGMOD_API_VERSION) || !info) return false;
   g_host = api;
   g_info = info;
   g_prefix = std::string("[") + info->id + "] ";
   log::set_sink(api->log, g_prefix.c_str());
+  std::string missing;
+  if (!api::bind(api, missing)) {
+    PG_LOG("game entries this game build lacks: %s", missing.c_str());
+    return false;
+  }
   return il2cpp::resolve_exports(api->gameAssembly);
 }
 
@@ -107,3 +113,14 @@ bool send(const uint8_t* data, size_t size, To to, bool reliable, int actor) {
 
 }  // namespace net
 }  // namespace pg
+
+// The mod's required game entries, for the host before it starts the mod (core/mod_api.h). Nothing
+// thrown may leave it; should listing fail, the mod's own bind still refuses a missing entry.
+extern "C" __declspec(dllexport) size_t pgmod_requires(const char* const** keys) {
+  try {
+    return pg::api::used_required(keys);
+  } catch (...) {
+    *keys = nullptr;
+    return 0;
+  }
+}

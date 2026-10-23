@@ -6,6 +6,7 @@
 // GhostAI.Hunting does to them. Notes read from decompiled code are from build 25811160.
 
 #include "entry.h"
+#include "game_api.h"
 
 namespace pg::map {
 
@@ -111,3 +112,58 @@ inline constexpr pg::sdk::EntryDesc GhostAI_postHuntCooldown{
     .owner = "GhostAI", .hint = "ടഴദബടഠഹടന", .type = "bool", .facts = GhostAI_postHuntCooldown_facts};
 
 }  // namespace pg::map
+
+// The game API for GhostAI (sdk/api/game_api.h). Every member is called on Unity's main thread. One
+// that did not resolve in the running game build logs "<key> is not available in this game build"
+// once and returns its type's default (0, false, null) without touching the game.
+namespace phasmo {
+
+/// The ghost's AI component, one per contract. `ghost` below is the GhostAI object.
+struct GhostAI {
+  /// The GhostAI type: klass() and is(obj). Unresolved: null and false.
+  static constexpr pg::api::Type<pg::map::GhostAI> type{};
+  /// The ghost's current state, a GhostState number: state.get(ghost), state.set(ghost, n).
+  /// ChangeState also starts the new state's behaviour. Unresolved: reads 0, writes nothing.
+  static constexpr pg::api::Field<pg::map::GhostAI_state, int32_t> state{};
+  /// The ghost's NavMeshAgent, a managed reference: agent.get(ghost); agent.set goes through the GC
+  /// write barrier. Unresolved: reads null, writes nothing.
+  static constexpr pg::api::Field<pg::map::GhostAI_agent, void*> agent{};
+  /// Whether a hunt is on: isHunting.get(ghost). Unresolved: reads false, writes nothing.
+  static constexpr pg::api::Field<pg::map::GhostAI_isHunting, bool> isHunting{};
+  /// Set when a hunt starts, cleared by Awake (the post-hunt cooldown): postHuntCooldown.get(ghost).
+  /// Unresolved: reads false, writes nothing.
+  static constexpr pg::api::Field<pg::map::GhostAI_postHuntCooldown, bool> postHuntCooldown{};
+  /// Unity's Awake: Awake(ghost). The game calls it once; a mod usually hooks it rather than calls
+  /// it. Unresolved: does nothing.
+  static constexpr pg::api::Method<pg::map::GhostAI_Awake, void(void*)> Awake{};
+  /// The Photon RPC that starts (true) or ends (false) a hunt on this client, its body run directly:
+  /// Hunting(ghost, start, number, info), `info` pointing at a PhotonMessageInfo. Unresolved: does
+  /// nothing.
+  static constexpr pg::api::Method<pg::map::GhostAI_Hunting, void(void*, bool, int32_t, const void*)> Hunting{};
+  /// Changes the ghost's state: ChangeState(ghost, state, interact, force), with a GhostState number,
+  /// a PhotonObjectInteract or null, and whether to force the change. Unresolved: does nothing.
+  static constexpr pg::api::Method<pg::map::GhostAI_ChangeState, void(void*, int32_t, void*, bool)> ChangeState{};
+  /// Ends an appearance on every client (an RPC) when the ghost is showing itself: UnAppear(ghost).
+  /// Unresolved: does nothing.
+  static constexpr pg::api::Method<pg::map::GhostAI_UnAppear, void(void*)> UnAppear{};
+  /// Turns the ghost to face a player, on this client only: LookAtPlayer(ghost, player). Unresolved:
+  /// does nothing.
+  static constexpr pg::api::Method<pg::map::GhostAI_LookAtPlayer, void(void*, void*)> LookAtPlayer{};
+  /// Stops the ghost wandering for `seconds`: TemporarilyStopWander(ghost, seconds). Unresolved: does
+  /// nothing.
+  static constexpr pg::api::Method<pg::map::GhostAI_TemporarilyStopWander, void(void*, float)> TemporarilyStopWander{};
+};
+
+/// The ghost's states: the numbers GhostAI::state holds and GhostAI::ChangeState takes.
+namespace GhostState {
+/// The GhostState enum type: klass() and is(obj). Unresolved: null and false.
+inline constexpr pg::api::Type<pg::map::GhostState> type{};
+/// The ghost stands still: idle(). Unresolved: 0.
+inline constexpr pg::api::EnumValue<pg::map::GhostState_idle> idle{};
+/// The ghost wanders: wander(). Unresolved: 0.
+inline constexpr pg::api::EnumValue<pg::map::GhostState_wander> wander{};
+/// The ghost hunts: hunting(). Unresolved: 0.
+inline constexpr pg::api::EnumValue<pg::map::GhostState_hunting> hunting{};
+}  // namespace GhostState
+
+}  // namespace phasmo

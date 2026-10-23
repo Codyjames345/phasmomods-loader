@@ -9,6 +9,7 @@
 
 #include "consent.h"
 #include "game.h"
+#include "game_map.h"
 #include "hooks.h"
 #include "il2cpp.h"
 #include "join_guard.h"
@@ -113,6 +114,35 @@ const void* api_service(const char* name) {
   }
 }
 
+const PgGameEntry* api_game_entry(const char* key) {
+  try {
+    return key ? gamemap::entry(key) : nullptr;
+  } catch (...) {
+    return nullptr;  // an allocation failure while looking it up: treat the entry as unresolved
+  }
+}
+// Hooks by entry come with the entry hooks (sdk Task 10); until then a mod is told, never crashed.
+bool api_hook_entry(const char* key, void*, void**, const char*, bool) {
+  PG_LOG("suite: hooking game entry %s is not available yet", key ? key : "?");
+  return false;
+}
+void api_set_reference(void* obj, int32_t offset, void* value) {
+  if (!obj) return;
+  try {
+    il2cpp::set_ref_field(obj, static_cast<size_t>(offset), value);
+  } catch (const Il2CppExceptionWrapper& e) {
+    il2cpp::log_exception("suite: managed exception while storing a reference", e.ex);
+  } catch (...) {
+    PG_LOG("suite: exception while storing a reference");
+  }
+}
+int32_t api_inside_entry(const char* key) {
+  static bool told = false;  // a mod may ask every frame: once is enough
+  if (!told) PG_LOG("suite: tracking calls of game entry %s is not available yet", key ? key : "?");
+  told = true;
+  return 0;
+}
+
 void on_presence(int32_t sender, const uint8_t* data, size_t size) {
   if (game::private_room()) g_presence.receive(sender, data, size, GetTickCount64());
 }
@@ -188,7 +218,8 @@ bool start(void* gameAssembly, void* unityPlayer) {
   }
   g_api = {PGMOD_API_VERSION, gameAssembly, unityPlayer, g_dataDirectory.c_str(),
            &api_log, &api_create_hook, &api_enable_hooks, &api_send, &api_set_receiver,
-           &api_peer_has_mod, &api_register_service, &api_service};
+           &api_peer_has_mod, &api_register_service, &api_service,
+           &api_game_entry, &api_hook_entry, &api_set_reference, &api_inside_entry};
   hostnet::set_receiver(hostnet::kHostChannel, &on_presence);
   mods::load(g_dataDirectory);
   if (mods::loaded().empty()) {

@@ -95,6 +95,7 @@ void builds_and_resolves_within_budget() {
   CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
   CHECK(classesRead == 400);
   CHECK(all_unresolved(nullptr) && pg::gamemap::result("GhostAI")->status == Status::Missing);
+  CHECK(pg::gamemap::entry("GhostAI") == nullptr);  // unresolved: mods receive nothing
   CHECK(!logged("abandoned"));
   CHECK(logged("game map: 0/23 resolved in 0 ms"));
 }
@@ -125,6 +126,43 @@ void slow_build_leaves_the_hooks_budget() {
   // It stops at the first check with less than 10 s left, so the hooks keep their share.
   CHECK(clockMs >= 50000 && clockMs < 50150);
   CHECK(all_unresolved("the startup budget ran out"));
+}
+
+// What mods receive through the host contract: each resolved entry's runtime class, method and
+// field, its code and twins as addresses in the loaded module, its offset or value; nothing for an
+// entry that did not resolve or that the map lacks.
+void entry_carries_the_resolved_result() {
+  int klass = 0, methodInfo = 0, fieldInfo = 0;
+  ModelType type;
+  type.runtime = &klass;
+  type.methods.push_back({});
+  type.methods[0].runtime = &methodInfo;
+  type.fields.push_back({});
+  type.fields[0].runtime = &fieldInfo;
+  pg::gamemap::g_model = {};
+  pg::gamemap::g_model.types.push_back(type);
+  Result ghost{.desc = &pg::map::GhostAI, .status = Status::Resolved, .type = 0};
+  Result unAppear{.desc = &pg::map::GhostAI_UnAppear, .status = Status::Resolved, .type = 0, .member = 0,
+                  .rva = 0x100, .twins = {0x200, 0x300}};
+  Result state{.desc = &pg::map::GhostAI_state, .status = Status::Resolved, .type = 0, .member = 0, .offset = 0x40};
+  Result hunting{.desc = &pg::map::GhostState_hunting, .status = Status::Resolved, .value = 2};
+  Result awake{.desc = &pg::map::GhostAI_Awake, .status = Status::Missing};
+  pg::gamemap::g_resolution.results = {ghost, unAppear, state, hunting, awake};
+  pg::gamemap::publish(0x10000);
+
+  const PgGameEntry* g = pg::gamemap::entry("GhostAI");
+  CHECK(g && g->kind == PG_ENTRY_TYPE && g->klass == &klass);
+  const PgGameEntry* m = pg::gamemap::entry("GhostAI.UnAppear");
+  CHECK(m && m->kind == PG_ENTRY_METHOD && m->klass == &klass && m->method == &methodInfo);
+  CHECK(m && m->code == reinterpret_cast<void*>(0x10100) && m->twinCount == 2);
+  CHECK(m && m->twinCount == 2 && m->twins[0] == reinterpret_cast<void*>(0x10200) &&
+        m->twins[1] == reinterpret_cast<void*>(0x10300));
+  const PgGameEntry* f = pg::gamemap::entry("GhostAI.state");
+  CHECK(f && f->kind == PG_ENTRY_FIELD && f->offset == 0x40 && f->field == &fieldInfo && !f->code);
+  const PgGameEntry* v = pg::gamemap::entry("GhostState.hunting");
+  CHECK(v && v->kind == PG_ENTRY_ENUM_VALUE && v->value == 2);
+  CHECK(pg::gamemap::entry("GhostAI.Awake") == nullptr);
+  CHECK(pg::gamemap::entry("No.SuchEntry") == nullptr);
 }
 
 }  // namespace
@@ -189,5 +227,6 @@ int main() {
   stop_during_build_abandons_promptly();
   spent_budget_reads_nothing();
   slow_build_leaves_the_hooks_budget();
+  entry_carries_the_resolved_result();
   return g_failures ? 1 : 0;
 }

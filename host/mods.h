@@ -24,6 +24,7 @@ struct Mod {
   std::string build;        // the first 16 hex digits of its DLL's SHA-256: which build it is
   std::string description;  // from its mod.ini, for the Mods panel
   std::string required;     // from its mod.ini: the id of the mod it cannot run without, or empty
+  std::vector<std::string> entries;  // from its pgmod_requires: the game entries it cannot run without
 };
 
 struct Found {
@@ -40,6 +41,10 @@ struct Found {
 std::vector<Found> find(const std::filesystem::path& dataDirectory, const std::filesystem::path& hostFolder,
                         unsigned long pid);
 void load(const std::wstring& dataDirectory);
+// Loads exactly the mods in `found` (what load does with every installed mod), each with the game
+// entries its pgmod_requires names. A mod built against another major version of the host contract,
+// or a newer minor one, is refused.
+void load(const std::filesystem::path& dataDirectory, const std::vector<Found>& found);
 const std::vector<Mod>& loaded();
 
 std::vector<modlist::Manifest> manifests();  // the loaded mods' ids, names and requirements
@@ -48,7 +53,8 @@ bool save_chosen(const std::vector<std::string>& ids);
 
 // Starts the loaded mods named in `ids` that are not running, each after the mod it requires and
 // otherwise in load order, each as its own hook group (a mod that fails to start has its hooks
-// removed). A mod whose requirement is not chosen, or did not start, stays off.
+// removed). A mod whose requirement is not chosen, or did not start, stays off, and so does a mod
+// one of whose game entries api->game_entry does not give (the log names them).
 void start(const PgHostApi* api, const std::vector<std::string>& ids);
 void tick_all();
 void stop_all();  // newest first; their hooks stay until the host removes them

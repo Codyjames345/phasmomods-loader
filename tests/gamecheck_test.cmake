@@ -23,3 +23,23 @@ foreach(case "no-such-dump" "unreadable-image")
   endif()
 endforeach()
 message(STATUS "A failed run leaves no address table.")
+
+# --mods: after the summary, each mod whose required entries did not resolve is named with them. The
+# fake mod requires GhostAI.UnAppear (unresolved in the fixture dump) and Camera (resolved). A file
+# that is not a mod is passed over.
+set(mods "${WORK}/mods")
+file(MAKE_DIRECTORY "${mods}/fake")
+file(COPY "${FAKE_MOD}" DESTINATION "${mods}/fake")
+file(WRITE "${mods}/not-a-mod.dll" "not a PE file")
+execute_process(COMMAND "${GAMECHECK}" --dump "${DUMP}" --image "${GAMECHECK}" --mods "${mods}"
+  RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
+if(NOT code EQUAL 1)
+  message(FATAL_ERROR "--mods: gamecheck exited ${code}, expected 1\n${out}${err}")
+endif()
+string(FIND "${out}" "entries:" summary)
+string(FIND "${out}" "would switch off fake-mod: GhostAI.UnAppear\n" line)
+# The line ends after the one key: the resolved Camera is not named.
+if(summary EQUAL -1 OR line LESS summary)
+  message(FATAL_ERROR "--mods: no switch-off line naming only GhostAI.UnAppear after the summary\n${out}${err}")
+endif()
+message(STATUS "--mods names the mod that would be switched off and what it lacks.")

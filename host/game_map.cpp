@@ -11,6 +11,7 @@
 #include "il2cpp.h"
 #include "image.h"
 #include "log.h"
+#include "mod_api.h"
 #include "runtime_model.h"
 
 namespace pg::gamemap {
@@ -18,6 +19,54 @@ namespace {
 
 sdk::GameModel g_model;
 sdk::Resolution g_resolution;
+
+// An entry as mods receive it, with the storage its twins point at.
+struct Published {
+  PgGameEntry entry{};
+  std::vector<void*> twins;  // a method's twins' code addresses
+};
+std::vector<Published> g_published;  // one per result, in the same order; built once, never resized
+
+uint32_t kind_of(sdk::Kind kind) {
+  switch (kind) {
+    case sdk::Kind::Type: return PG_ENTRY_TYPE;
+    case sdk::Kind::Method: return PG_ENTRY_METHOD;
+    case sdk::Kind::Field: return PG_ENTRY_FIELD;
+    case sdk::Kind::EnumValue: return PG_ENTRY_ENUM_VALUE;
+    case sdk::Kind::Code: return PG_ENTRY_CODE;
+  }
+  return 0;
+}
+
+// Builds what mods receive for every resolved entry: the runtime's class, method and field from the
+// kept model, code as addresses in the loaded module at `base`.
+void publish(uintptr_t base) {
+  g_published.assign(g_resolution.results.size(), {});
+  for (size_t i = 0; i < g_resolution.results.size(); ++i) {
+    const sdk::Result& r = g_resolution.results[i];
+    if (r.status != sdk::Status::Resolved) continue;
+    Published& p = g_published[i];
+    PgGameEntry& e = p.entry;
+    e.kind = kind_of(r.desc->kind);
+    const sdk::ModelType* type = r.type >= 0 && size_t(r.type) < g_model.types.size() ? &g_model.types[r.type] : nullptr;
+    if (type) e.klass = type->runtime;
+    switch (r.desc->kind) {
+      case sdk::Kind::Method:
+        if (type && r.member >= 0 && size_t(r.member) < type->methods.size()) e.method = type->methods[r.member].runtime;
+        for (const uint64_t twin : r.twins) p.twins.push_back(reinterpret_cast<void*>(base + twin));
+        e.twins = p.twins.data();
+        e.twinCount = static_cast<uint32_t>(p.twins.size());
+        [[fallthrough]];
+      case sdk::Kind::Code: e.code = reinterpret_cast<void*>(base + r.rva); break;
+      case sdk::Kind::Field:
+        if (type && r.member >= 0 && size_t(r.member) < type->fields.size()) e.field = type->fields[r.member].runtime;
+        e.offset = r.offset;
+        break;
+      case sdk::Kind::EnumValue: e.value = r.value; break;
+      case sdk::Kind::Type: break;
+    }
+  }
+}
 
 // Why resolution may not go on: startup was cancelled, or less than kHooksBudget of the deadline is
 // left. Null while it may.
@@ -82,6 +131,7 @@ bool resolve(void* gameAssembly, void* stopEvent, unsigned long long deadline) {
   }
   if (failure.empty()) log_failures();
   else abandon(failure);
+  publish(reinterpret_cast<uintptr_t>(gameAssembly));
   size_t resolved = 0;
   for (const sdk::Result& r : g_resolution.results) resolved += r.status == sdk::Status::Resolved;
   PG_LOG("game map: %zu/%zu resolved in %llu ms", resolved, std::size(map::kAllEntries), GetTickCount64() - start);
@@ -90,7 +140,12 @@ bool resolve(void* gameAssembly, void* stopEvent, unsigned long long deadline) {
 
 const sdk::Result* result(std::string_view key) { return g_resolution.find(key); }
 
-// The host contract does not carry game entries yet.
-const PgGameEntry* entry(const char*) { return nullptr; }
+const PgGameEntry* entry(const char* key) {
+  if (!key || g_published.size() != g_resolution.results.size()) return nullptr;
+  for (size_t i = 0; i < g_resolution.results.size(); ++i)
+    if (std::string_view(g_resolution.results[i].desc->key) == key)
+      return g_resolution.results[i].status == sdk::Status::Resolved ? &g_published[i].entry : nullptr;
+  return nullptr;
+}
 
 }  // namespace pg::gamemap

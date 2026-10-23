@@ -44,13 +44,15 @@ target_include_directories(pgsdk_resolver PRIVATE third_party/minhook/src/hde)
 pg_options(pgsdk_resolver)
 
 # The offline check (tools/gamecheck.ps1): the map resolved against a Cpp2IL dump and GameAssembly.dll.
+# With --mods it also loads mod DLLs and names those the host would switch off.
 add_executable(gamecheck sdk/offline/gamecheck.cpp sdk/offline/dump_model.cpp)
-target_include_directories(gamecheck PRIVATE sdk/map sdk/offline)
+target_include_directories(gamecheck PRIVATE core sdk/map sdk/offline)
 target_link_libraries(gamecheck PRIVATE pgsdk_resolver)
 pg_options(gamecheck)
 
-# A mod's side of the host contract (core/mod_api.h).
-add_library(pgmod STATIC core/mod_glue.cpp)
+# A mod's side of the host contract (core/mod_api.h) and the game API it calls (sdk/api, sdk/map).
+add_library(pgmod STATIC core/mod_glue.cpp sdk/api/game_api.cpp)
+target_include_directories(pgmod PUBLIC sdk/api sdk/map)
 target_link_libraries(pgmod PUBLIC pgcore)
 pg_options(pgmod)
 
@@ -247,8 +249,16 @@ pg_test(perceive)
 pg_test(afterlife)
 pg_test(hooks host/hooks.cpp core/log.cpp)
 target_link_libraries(hooks_test PRIVATE minhook)
+# A mod for the tests that load one (mods_test, gamecheck): it requires GhostAI.UnAppear and Camera.
+add_library(pg_fake_mod SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pg_fake_mod PRIVATE pgmod)
+pg_options(pg_fake_mod)
 pg_test(mods host/mods.cpp host/hooks.cpp host/build_check.cpp core/log.cpp)
 target_link_libraries(mods_test PRIVATE minhook bcrypt)
+target_compile_definitions(mods_test PRIVATE PG_FAKE_MOD="$<TARGET_FILE:pg_fake_mod>")
+add_dependencies(mods_test pg_fake_mod)
+pg_test(game_api sdk/api/game_api.cpp sdk/fake/fake_game.cpp core/log.cpp)
+target_include_directories(game_api_test PRIVATE sdk/api sdk/map sdk/fake)
 pg_test(sdk_types)
 target_link_libraries(sdk_types_test PRIVATE pgsdk_resolver)
 pg_test(sdk_resolver)
@@ -271,4 +281,5 @@ target_include_directories(map_test PRIVATE sdk/map)
 target_link_libraries(map_test PRIVATE pgsdk_resolver)
 target_compile_definitions(map_test PRIVATE PG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME gamecheck COMMAND ${CMAKE_COMMAND} -DGAMECHECK=$<TARGET_FILE:gamecheck>
-  -DWORK=${CMAKE_BINARY_DIR}/gamecheck_test -P ${CMAKE_SOURCE_DIR}/tests/gamecheck_test.cmake)
+  -DWORK=${CMAKE_BINARY_DIR}/gamecheck_test -DFAKE_MOD=$<TARGET_FILE:pg_fake_mod>
+  -DDUMP=${CMAKE_SOURCE_DIR}/tests/fixtures/diffable -P ${CMAKE_SOURCE_DIR}/tests/gamecheck_test.cmake)
