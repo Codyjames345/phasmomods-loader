@@ -76,6 +76,11 @@ void a_leave_that_did_not_start_is_asked_again() {
   CHECK(again.judge(lobby(2, 1, {1, 2}, joinguard::kRetryMs), q).leave);
 }
 
+void mismatch_message_tells_how_to_update() {
+  const std::string text = joinguard::mismatch_message({kGhost}, {kGhostOther}, &name_of);
+  CHECK(text.substr(text.rfind('\n') + 1) == "Restart the game through PhasmoMods Loader to update, then join again.");
+}
+
 void a_joiner_with_the_same_mods_stays() {
   Presence p;
   Guard guard(&name_of);
@@ -200,6 +205,7 @@ int main() {
   a_leave_that_did_not_start_is_asked_again();
   a_kick_that_failed_is_tried_again();
   a_new_host_enforces_at_once();
+  mismatch_message_tells_how_to_update();
   a_joiner_with_the_same_mods_stays();
   a_joiner_in_a_vanilla_lobby_stays();
   the_host_kicks_a_mismatched_modder_who_does_not_leave();

@@ -49,6 +49,10 @@ void chooses_the_saved_mods_or_all_of_them() {
   CHECK(chosen("enabled=\n", installed).empty());  // an empty choice stays empty
 }
 
+void a_new_mod_stays_off_after_a_saved_choice() {
+  CHECK(chosen("enabled=ghost-tells\n", {"ghost-tells", "new-mod"}) == std::vector<std::string>{"ghost-tells"});
+}
+
 Manifest manifest(const char* id, const char* required = "") {
   Manifest m;
   m.id = id;
@@ -143,6 +147,7 @@ int main() {
   rejects_unsafe_manifests();
   reads_and_writes_the_selection();
   chooses_the_saved_mods_or_all_of_them();
+  a_new_mod_stays_off_after_a_saved_choice();
   reads_the_session_file();
   requires_is_parsed();
   requirements_follow_a_toggle();
