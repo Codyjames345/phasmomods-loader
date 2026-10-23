@@ -91,7 +91,7 @@ try {
     # bumps and tags, and pushes nothing without -Push
     $fixture = New-ReleaseFixture 'bump and tag'
     $origin = Join-Path $testRoot 'bump origin.git'
-    Invoke-Git $testRoot @('init', '--quiet', '--bare', $origin) | Out-Null
+    Invoke-Git $testRoot @('init', '--quiet', '--bare', '--initial-branch', 'main', $origin) | Out-Null
     Invoke-Git $fixture @('remote', 'add', 'origin', $origin) | Out-Null
     $previousHead = (Invoke-Git $fixture @('rev-parse', 'HEAD')) -join ''
     & (Join-Path $fixture 'tools/release.ps1') -Version '0.2.0' | Out-Null
@@ -108,7 +108,7 @@ try {
     # -Push sends main and the tag to origin
     $fixture = New-ReleaseFixture 'push'
     $origin = Join-Path $testRoot 'push origin.git'
-    Invoke-Git $testRoot @('init', '--quiet', '--bare', $origin) | Out-Null
+    Invoke-Git $testRoot @('init', '--quiet', '--bare', '--initial-branch', 'main', $origin) | Out-Null
     Invoke-Git $fixture @('remote', 'add', 'origin', $origin) | Out-Null
     & (Join-Path $fixture 'tools/release.ps1') -Version '0.2.0' -Push | Out-Null
     $pushed = (Invoke-Git $origin @('for-each-ref', '--format=%(refname)')) -join ','
@@ -117,7 +117,7 @@ try {
     # a rejected push sends nothing and says how to undo the local release or retry
     $fixture = New-ReleaseFixture 'rejected push'
     $origin = Join-Path $testRoot 'rejected origin.git'
-    Invoke-Git $testRoot @('init', '--quiet', '--bare', $origin) | Out-Null
+    Invoke-Git $testRoot @('init', '--quiet', '--bare', '--initial-branch', 'main', $origin) | Out-Null
     Invoke-Git $fixture @('remote', 'add', 'origin', $origin) | Out-Null
     Invoke-Git $fixture @('push', '--quiet', 'origin', 'main') | Out-Null
     $other = Join-Path $testRoot 'rejected other'
