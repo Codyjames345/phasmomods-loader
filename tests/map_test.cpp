@@ -7,6 +7,7 @@
 #include <fstream>
 #include <regex>
 #include <set>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -93,10 +94,23 @@ void every_entry_has_a_note() {
   }
 }
 
+// Every string an entry carries.
+std::vector<const char*> strings_of(const pg::sdk::EntryDesc& e) {
+  std::vector<const char*> out{e.key, e.name, e.hint, e.owner, e.assembly, e.ns, e.type, e.within};
+  for (const std::span<const char* const> list : {e.params, e.fieldTypes, e.values})
+    out.insert(out.end(), list.begin(), list.end());
+  for (const pg::sdk::Fact& f : e.facts) out.push_back(f.method);
+  return out;
+}
+
 void no_anticheat_entries() {
   for (const pg::sdk::EntryDesc* e : pg::map::kAllEntries)
-    for (const char* text : {e->key, e->name, e->hint, e->owner})
-      for (const std::string_view word : {"SelfReport", "Moderation"}) CHECK(!contains_ci(text, word));
+    for (const char* text : strings_of(*e))
+      for (const std::string_view word : {"SelfReport", "Moderation"}) {
+        const bool clean = !contains_ci(text, word);
+        if (!clean) std::printf("%s names %s: %s\n", e->key, std::string(word).c_str(), text);
+        CHECK(clean);
+      }
   for (const Declared& d : declared())
     for (const std::string_view word : {"SelfReport", "Moderation"}) CHECK(!contains_ci(d.name.c_str(), word));
 }

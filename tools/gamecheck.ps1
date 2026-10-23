@@ -18,6 +18,10 @@ $game = Join-Path $dump 'game'
 $cs = Join-Path $dump 'cs'
 $record = Join-Path $dump 'build.txt'
 $check = Join-Path $root 'build\gamecheck.exe'
+$addresses = Join-Path $root 're\map-addresses.tsv'
+# The last build's addresses go first, so no failure below leaves them for the RE scripts.
+Remove-Item -LiteralPath $addresses -Force -ErrorAction SilentlyContinue
+if (Test-Path -LiteralPath $addresses) { throw "Cannot remove $addresses." }
 if (-not (Test-Path -LiteralPath $check)) { throw "Build first: $check is missing." }
 
 $files = @('GameAssembly.dll', 'Phasmophobia.exe', 'Phasmophobia_Data\globalgamemanagers',
@@ -46,7 +50,7 @@ if (-not $current) {
 }
 
 $diffable = Join-Path $cs 'DiffableCs'
-& $check --dump $diffable --image (Join-Path $game 'GameAssembly.dll') --addresses (Join-Path $root 're\map-addresses.tsv')
+& $check --dump $diffable --image (Join-Path $game 'GameAssembly.dll') --addresses $addresses
 $code = $LASTEXITCODE
 & node (Join-Path $root 're\names.mjs') $diffable
 if ($LASTEXITCODE -ne 0) { throw 'node re\names.mjs failed.' }

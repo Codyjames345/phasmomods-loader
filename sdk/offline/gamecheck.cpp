@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include "all.h"
@@ -111,6 +112,12 @@ int wmain(int argc, wchar_t** argv) {
     std::fputs(kUsage, stderr);
     return 2;
   }
+  // The previous build's addresses must not outlive a failed check: the RE scripts would read them.
+  std::error_code removeError;
+  if (!args.addresses.empty() && !std::filesystem::remove(args.addresses, removeError) && removeError) {
+    std::fprintf(stderr, "gamecheck: cannot remove %s\n", utf8(args.addresses).c_str());
+    return 2;
+  }
 
   // Only the assemblies the map names: more would only add look-alike types.
   std::set<std::string> named;
@@ -160,6 +167,7 @@ int wmain(int argc, wchar_t** argv) {
       std::fprintf(out, "%s\t%s\t%s\t%s\n", r.desc->key, kind_word(r.desc->kind), value_of(r).c_str(), length.c_str());
     }
     if (std::fclose(out) != 0) {
+      std::filesystem::remove(args.addresses, removeError);
       std::fprintf(stderr, "gamecheck: cannot write %s\n", utf8(args.addresses).c_str());
       return 2;
     }

@@ -259,3 +259,5 @@ pg_test(map)
 target_include_directories(map_test PRIVATE sdk/map)
 target_link_libraries(map_test PRIVATE pgsdk_resolver)
 target_compile_definitions(map_test PRIVATE PG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME gamecheck COMMAND ${CMAKE_COMMAND} -DGAMECHECK=$<TARGET_FILE:gamecheck>
+  -DWORK=${CMAKE_BINARY_DIR}/gamecheck_test -P ${CMAKE_SOURCE_DIR}/tests/gamecheck_test.cmake)

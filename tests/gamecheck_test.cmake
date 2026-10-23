@@ -1,0 +1,25 @@
+# A failed gamecheck run leaves no address table behind: the RE scripts would read the previous
+# build's addresses from it. Run by ctest with -DGAMECHECK=<exe> -DWORK=<scratch dir>.
+file(REMOVE_RECURSE "${WORK}")
+file(MAKE_DIRECTORY "${WORK}")
+set(table "${WORK}/map-addresses.tsv")
+
+foreach(case "no-such-dump" "unreadable-image")
+  file(WRITE "${table}" "GhostAI.Hunting\tmethod\t0x1\t0x1\n")
+  if(case STREQUAL "no-such-dump")
+    set(args --dump "${WORK}/no-such-dump" --image "${GAMECHECK}")
+  else()
+    # A dump folder with the assemblies the map names, and an image that is not a PE32+ file.
+    file(MAKE_DIRECTORY "${WORK}/dump/Assembly-CSharp" "${WORK}/dump/UnityEngine.CoreModule")
+    file(WRITE "${WORK}/not-an-image.dll" "not a PE file")
+    set(args --dump "${WORK}/dump" --image "${WORK}/not-an-image.dll")
+  endif()
+  execute_process(COMMAND "${GAMECHECK}" ${args} --addresses "${table}" RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
+  if(NOT code EQUAL 2)
+    message(FATAL_ERROR "${case}: gamecheck exited ${code}, expected 2")
+  endif()
+  if(EXISTS "${table}")
+    message(FATAL_ERROR "${case}: the previous address table survived a failed run")
+  endif()
+endforeach()
+message(STATUS "A failed run leaves no address table.")

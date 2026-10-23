@@ -14,7 +14,10 @@ inline constexpr const char* GhostAI_Hunting_params[] = {"bool", "int", "PhotonM
 inline constexpr const char* GhostAI_LookAtPlayer_params[] = {"Player"};
 inline constexpr const char* GhostAI_TemporarilyStopWander_params[] = {"float"};
 inline constexpr const char* GhostState_values[] = {"idle", "wander", "hunting"};
-// Hunting stores five bools, four of them from registers. Of those four, Awake stores only to isHunting.
+// Hunting stores five bools, four of them from registers. Of those four, only isHunting's offset
+// starts a store in Awake: Awake also clears the bool at 0x109, but inside a 16-bit store at 0x108,
+// and the resolver keys a store by its start offset. Should Awake come to store at 0x109 on its own,
+// the entry fails closed (Ambiguous), never to the wrong field.
 inline constexpr pg::sdk::Fact GhostAI_isHunting_facts[] = {
     {.is = pg::sdk::Fact::Is::Stores, .method = "GhostAI.Hunting"},
     {.is = pg::sdk::Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1, .negate = true},
@@ -40,8 +43,8 @@ inline constexpr pg::sdk::EntryDesc GhostState_wander{.key = "GhostState.wander"
                                                       .confidence = pg::sdk::Confidence::Decompiled,
                                                       .owner = "GhostState", .name = "wander"};
 
-/// The ghost hunts: ChangeState enters it only when isHunting is clear or its third argument forces
-/// it, and stores idle instead while a flag of LevelValues is set. Decompiled.
+/// The ghost hunts. ChangeState stores it (idle instead while a flag of LevelValues is set), then
+/// starts its state object only when isHunting is clear or its third argument forces it. Decompiled.
 inline constexpr pg::sdk::EntryDesc GhostState_hunting{.key = "GhostState.hunting", .kind = pg::sdk::Kind::EnumValue,
                                                        .confidence = pg::sdk::Confidence::Decompiled,
                                                        .owner = "GhostState", .name = "hunting"};
@@ -69,7 +72,7 @@ inline constexpr pg::sdk::EntryDesc GhostAI_Hunting{.key = "GhostAI.Hunting", .k
                                                     .name = "Hunting", .params = GhostAI_Hunting_params};
 
 /// Changes the ghost's state: it stores the state and starts that state's object, but only while a
-/// flag of the ghost's PhotonView is set (likely its ownership); otherwise it logs an error. Decompiled.
+/// flag of the ghost's PhotonView (+0x68) is set; otherwise it logs an error. Decompiled.
 inline constexpr pg::sdk::EntryDesc GhostAI_ChangeState{.key = "GhostAI.ChangeState", .kind = pg::sdk::Kind::Method,
                                                         .confidence = pg::sdk::Confidence::Decompiled,
                                                         .owner = "GhostAI", .name = "ChangeState",
