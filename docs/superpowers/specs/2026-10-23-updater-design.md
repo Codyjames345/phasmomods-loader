@@ -65,9 +65,10 @@ zip to extract. This matters more than for most apps for two reasons:
 ### Install and layout (Claude's calls)
 
 - Players install once with Velopack's `Setup.exe`, which installs per user, without
-  administrator rights, into `%LOCALAPPDATA%\PhasmoModsLoader`. Velopack keeps a stable
-  `PhasmoMods Loader.exe` there that always starts the current version, so the Steam launch option and
-  shortcuts never change after an update.
+  administrator rights, into `%LOCALAPPDATA%\PhasmoModsLoader`. There is no stable
+  `PhasmoMods Loader.exe` at that root: Velopack keeps the running version in `current\`, so the
+  stable path is `current\PhasmoMods Loader.exe`, which an update replaces in place. The Steam launch
+  option and shortcuts therefore never change after an update.
 - The install folder is deliberately not `%LOCALAPPDATA%\PhasmoMods`, the existing data directory
   (`launcher.ini`, consent, logs, the host's copies in `bin`). Velopack replaces and uninstalls its
   own folder, and must never be able to touch player data.

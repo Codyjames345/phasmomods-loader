@@ -75,7 +75,7 @@ PhasmoMods Loader waits for the menu and loads the ticked mods. The program show
 exact text to copy. It has this form:
 
 ```text
-"<install folder>\PhasmoMods Loader.exe" --steam %command%
+"<install folder>\current\PhasmoMods Loader.exe" --steam %command%
 ```
 
 Restart the game before loading another version or trying again after a failed
@@ -83,10 +83,12 @@ initialization. To change which mods run, use the **Mods** button in the game.
 
 ## Updates
 
-PhasmoMods Loader checks GitHub for a newer release each time it starts, waits at most
-ten seconds, and then carries on with the version you have. When it finds one, it
-installs the update and restarts itself, with the same Steam launch option. With no
-network, it starts the installed version unchanged.
+PhasmoMods Loader checks GitHub for the latest release each time it starts, waits at
+most ten seconds, and then carries on with the version you have. When the latest
+release differs from yours, newer or older, it installs that release and restarts
+itself, with the same Steam launch option. A release that is taken down therefore
+moves everyone back to the one before it. With no network, it starts the installed
+version unchanged.
 
 ## Moving from the portable folder
 
