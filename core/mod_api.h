@@ -34,7 +34,7 @@ enum PgEntryKind : uint32_t {
   PG_ENTRY_CODE,        // an address inside a method's code
   // Added in version 2.1.
   PG_ENTRY_ICALL,       // a Unity engine function the runtime registered by name, with its code
-  PG_ENTRY_EXPORT,      // a function GameAssembly.dll exports, with its code; only the host uses one
+  PG_ENTRY_EXPORT,      // a function GameAssembly.dll exports; host only, game_entry never gives one
 };
 
 // A game entry as the host resolved it in the running game. The host keeps it for the process
@@ -92,7 +92,8 @@ struct PgHostApi {
   // Added in version 2.0. Mods reach these through the game API (sdk/api/game_api.h).
 
   // The game entry `key` names (its map key, e.g. "GhostAI.ChangeState"), or null when the map has
-  // no such entry or it did not resolve in this game build.
+  // no such entry, it did not resolve in this game build, or it is a GameAssembly export (only the
+  // host may use one, so a mod that requires an export is never started).
   const PgGameEntry* (*game_entry)(const char* key);
   // A MinHook detour on the method entry `key` names, not yet enabled (enable_hooks enables it), and
   // chained like create_hook. `original` reaches the canonical body. With `allTwins` every twin of
@@ -169,7 +170,8 @@ struct PgHostApi {
   // the game plays (a tick, a detour), on the main thread; the host never touches a static field
   // while it resolves the map at startup. Each answers false without reading or writing the field
   // for a null pointer, for a key that is unknown, unresolved or not a static field, when `size` is
-  // not the size of the field's value (a pointer's for a managed reference), and when the class's
+  // not the size of the field's value (a pointer's for a managed reference; this is checked before
+  // the class is initialised, so a refused call runs no static constructor), and when the class's
   // initialisation throws (logged once per key).
 
   // Copies the static field's value, `size` bytes, into `out`. For a managed reference `out`

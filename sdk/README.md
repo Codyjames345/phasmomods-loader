@@ -151,7 +151,7 @@ Six kinds of wrapper, from `sdk/api/game_api.h`:
 | --- | --- | --- |
 | `pg::api::Method<D, R(A...)>` | `static constexpr ... UnAppear{}` | `UnAppear(ghost)`; `available()` says whether it resolved. For an instance method the first parameter is the object. A call runs the declared body; `virtual_call(ghost, ...)` runs the override the object's class runs, as C# calls a virtual method, and refuses (logged once, nothing called) a null object or one not of the declaring type. |
 | `pg::api::Field<D, T>` | `Field<D, int32_t>` | `get(obj)`, `set(obj, v)`. `T` is a plain value or `void*` for a managed reference, whose `set` goes through the GC write barrier (the host's `set_reference`). |
-| `pg::api::StaticField<D, T>` | `StaticField<D, void*>` | `get()`, `set(v)`: a static field, one value for the class, read and written by the host (`static_get`, `static_set`). A reference's `set` goes through the GC write barrier. The first access runs the class's static constructor if it has not run, as the game's own first use would, so use it while the game plays (a tick, a detour), never at startup. When the host cannot read it (a `T` of the wrong size, a static constructor that threw) it logs once and gives the default. |
+| `pg::api::StaticField<D, T>` | `StaticField<D, void*>` | `get()`, `set(v)`: a static field, one value for the class, read and written by the host (`static_get`, `static_set`). A reference's `set` goes through the GC write barrier. The first access runs the class's static constructor if it has not run, as the game's own first use would, so use it while the game plays (a tick, a detour), never at startup. When the host cannot read it (a `T` of the wrong size, a static constructor that threw) it logs once and gives the default. `T` is a number, a bool, an enum or `void*`: a struct does not compile, since a whole copy would store any reference inside it without the write barrier. |
 | `pg::api::Icall<D, R(A...)>` | `static constexpr ... SetBoolID{}` | `SetBoolID(animator, id, value)`: a Unity engine function the runtime registered by its icall name. It is native code, so it takes no MethodInfo. |
 | `pg::api::EnumValue<D>` | `idle{}` | `idle()` gives the value's number in this build. |
 | `pg::api::Type<D>` | `type{}` | `klass()` gives the `Il2CppClass*`; `is(obj)` tells whether an object is of the type or a derived one (an interface type never matches); `type_object()` gives its `System.Type` (C#'s `typeof`); `make()` a new object, fields zeroed and no constructor run (not for engine objects, which come from `AddComponent` or `Instantiate`); `make_array(n)` a new array of the type. |
@@ -162,7 +162,8 @@ does nothing. A field read of a null object gives the default; a write to one do
 
 GameAssembly's exports (`il2cpp_shutdown`) are not for mods. `pg::api::Export<D>` gives one's
 `address()` to the host's own code only: it exists where `PG_HOST` is defined (ModHost), and the host
-contract's `hook_entry` refuses an export.
+contract's `game_entry` gives a mod null for one, so a mod that requires an export is never started
+(gamecheck's `--mods` reports it as switched off).
 
 ### Strings, arrays, lists and engine objects
 
@@ -259,10 +260,11 @@ that is unknown, unresolved or of the wrong kind:
 - `log_exception(where, exception)`: logs a caught managed exception with its stack.
 - `static_get(key, out, size)` and `static_set(key, in, size)`, after `log_exception`: a static
   field's value, `size` bytes, read into `out` or written from `in` (a reference through the GC write
-  barrier, `in` pointing at the pointer). Each first runs the class's static constructor if it has not
-  run, so the host never calls them while it resolves the map at startup, and a mod calls them only
+  barrier, `in` pointing at the pointer). Each runs the class's static constructor if it has not run
+  yet, so the host never calls them while it resolves the map at startup, and a mod calls them only
   while the game plays. False, touching nothing, for a key that is not a resolved static field, a
-  `size` other than the field's, or a static constructor that threw (logged once per key).
+  `size` other than the field's (checked before the class is initialised, so no static constructor
+  runs), or a static constructor that threw (logged once per key).
 
 A mod's exports are `pgmod_info`, `pgmod_start`, `pgmod_tick`, `pgmod_stop` and (version 2 onwards,
 exported by linking `pgmod`) `pgmod_requires`.
@@ -383,12 +385,15 @@ check the entry declares.
 Two kinds are found by name outside the metadata, with no owner, shape or facts:
 
 - **An icall** (`Kind::Icall`), a Unity engine function, by its icall name
-  (`"UnityEngine.Animator::SetBoolID"`), through the runtime's `il2cpp_resolve_icall` at startup.
+  (`"UnityEngine.Animator::SetBoolID"`), through the runtime's `il2cpp_resolve_icall` on the main
+  thread when the host activates, before any mod starts. The startup worker never asks: the runtime's
+  icall table is not locked, and the engine may still be registering icalls then.
   Only the running game registers icalls, so the offline check cannot resolve one: it lists it as
   checked at startup only and never counts it as a failure.
 - **An export** (`Kind::Export`), a function GameAssembly.dll exports (`"il2cpp_shutdown"`), from the
   module's export table, in the game and offline alike. A name exported twice, or forwarded to
-  another module, is `Missing`. Only the host may use an export.
+  another module, is `Missing`. Only the host may use an export: the host contract never gives one to
+a mod.
 
 A static field is a `Field` entry flagged `kStatic`, found like any field. The resolver only reads the
 metadata; the field's value is read when a mod asks for it, never at startup.

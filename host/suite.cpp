@@ -119,7 +119,7 @@ const void* api_service(const char* name) {
 
 const PgGameEntry* api_game_entry(const char* key) {
   try {
-    return key ? gamemap::entry(key) : nullptr;
+    return key ? gamemap::mod_entry(key) : nullptr;
   } catch (...) {
     return nullptr;  // an allocation failure while looking it up: treat the entry as unresolved
   }
@@ -272,6 +272,10 @@ const PgGameEntry* static_field(const char* key) {
   return e;
 }
 
+// Whether a managed exception's stack from a static field access was logged: once in all, since a
+// failed static constructor throws again on every access.
+bool g_staticStackLogged = false;
+
 // A static field access that failed: logged once per key, with `why`. Called from catch handlers too,
 // so it throws nothing.
 void static_refused(const char* key, const char* why) {
@@ -298,8 +302,7 @@ bool static_access(const char* key, const char* what, F access) {
     if (access(e)) return true;
     static_refused(key, "the size given is not the size of its value");
   } catch (const Il2CppExceptionWrapper& ex) {
-    static bool stackLogged = false;  // the stack once; a failed static constructor throws on every access
-    if (!std::exchange(stackLogged, true)) il2cpp::log_exception((std::string("suite: ") + what).c_str(), ex.ex);
+    if (!std::exchange(g_staticStackLogged, true)) il2cpp::log_exception((std::string("suite: ") + what).c_str(), ex.ex);
     static_refused(key, "a managed exception was thrown");
   } catch (...) {
     static_refused(key, "an exception was thrown");
@@ -391,6 +394,7 @@ bool resolve() {
 bool create_hooks() { return hostnet::create_hooks() && context::install(&gamemap::entry); }
 
 bool start(void* gameAssembly, void* unityPlayer) {
+  gamemap::resolve_icalls();  // on the main thread, before any mod starts
   g_dataDirectory = data_directory();
   if (g_dataDirectory.empty()) {
     PG_LOG("suite: the local application-data folder is unavailable; set LOCALAPPDATA and restart the game");

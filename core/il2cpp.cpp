@@ -264,20 +264,22 @@ size_t value_size(Field* field, bool& reference) {
 
 }  // namespace
 
+// The size is checked first: the field type's layout is known from the metadata the game map read at
+// startup, and a refused access must not run the owner's static constructor.
 bool static_get(Class* klass, Field* field, void* out, size_t size) {
   if (!klass || !field || !out) return false;
-  p_il2cpp_runtime_class_init(klass);  // runs the static constructor once, as the game's first use does
   bool reference = false;
   if (value_size(field, reference) != size) return false;
+  p_il2cpp_runtime_class_init(klass);  // runs the static constructor once, as the game's first use does
   p_il2cpp_field_static_get_value(field, out);
   return true;
 }
 
 bool static_set(Class* klass, Field* field, const void* in, size_t size) {
   if (!klass || !field || !in) return false;
-  p_il2cpp_runtime_class_init(klass);
   bool reference = false;
   if (value_size(field, reference) != size) return false;
+  p_il2cpp_runtime_class_init(klass);
   // As il2cpp_field_set_value (set_reference_field): a reference is passed itself, and stored through
   // the GC write barrier; a value type's bytes are passed by address. This build's static store
   // (GameAssembly RVA 0x3A66C0) takes the same path.

@@ -81,12 +81,14 @@ void set_reference_field(void* obj, Field* field, void* value);
 // Static field whose declared type name equals typeName (fields are obfuscated).
 void* static_field_by_type(Class* klass, const char* typeName);
 /** Copy the static `field` of `klass` into `out`, after running the class's static constructor if it
- *  has not run. False, reading nothing, when `size` is not the size of the field's value (a
- *  pointer's for a reference). Game time on the main thread only: never while the game starts. */
+ *  has not run. False, reading nothing and initialising nothing, when `size` is not the size of the
+ *  field's value (a pointer's for a reference). Game time on the main thread only: never while the
+ *  game starts. */
 bool static_get(Class* klass, Field* field, void* out, size_t size);
 /** Store `size` bytes at `in` into the static `field` of `klass` (a reference through the GC write
  *  barrier, `in` pointing at it), after running the class's static constructor if it has not run.
- *  False, writing nothing, on a size mismatch. Game time on the main thread only. */
+ *  False, writing nothing and initialising nothing, on a size mismatch. Game time on the main thread
+ *  only. */
 bool static_set(Class* klass, Field* field, const void* in, size_t size);
 String* string_new(const char* utf8);
 // A managed exception's stack trace as the runtime formats it (empty if unavailable).

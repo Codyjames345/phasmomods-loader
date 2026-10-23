@@ -21,7 +21,7 @@
 // pgmod_tick, except the registration a wrapper makes while the mod's DLL loads.
 //
 // Exports of GameAssembly.dll (Export below) are for the host's own code only: a mod never sees the
-// handle, and the host contract's hook_entry refuses an export.
+// handle, and the host contract's game_entry answers null for an export.
 //
 // Managed strings, arrays, lists, alive checks and GC holds are in runtime.h and held.h.
 
@@ -199,8 +199,10 @@ struct Field {
   }
 };
 
-/// A static field of type T, one value for the whole class. T is a plain value or void* for a managed
-/// reference. Reading or writing it first runs the class's static constructor when that has not run
+/// A static field of type T, one value for the whole class. T is a number, a bool, an enum, or void* for
+/// a managed reference. A struct is not supported: its bytes are copied whole, which would bypass the
+/// GC write barrier for any managed reference inside it, and the API cannot tell whether one does.
+/// Reading or writing it first runs the class's static constructor when that has not run
 /// yet, as the game's own first use would, so use it only from code that runs while the game plays
 /// (pgmod_tick, a hook's detour), never from a DLL's initialisation; the host never reads a static
 /// field while it resolves the map at startup. Main thread.
@@ -208,9 +210,9 @@ template <const sdk::EntryDesc& D, class T>
 struct StaticField {
   static_assert(D.kind == sdk::Kind::Field && (D.flags & sdk::kStatic),
                 "StaticField wraps a map entry of kind Field flagged kStatic");
-  static_assert(std::is_trivially_copyable_v<T>, "a field is read and written as plain bytes");
-  static_assert(!std::is_pointer_v<T> || std::is_same_v<T, void*>,
-                "a managed reference field is StaticField<D, void*>");
+  static_assert(std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_same_v<T, void*>,
+                "a static field is a number, a bool, an enum, or void* for a managed reference; a struct "
+                "may hold references, which a whole copy would store without the GC write barrier");
   static constexpr const sdk::EntryDesc& desc = D;
   using use = Use<D>;
 
@@ -280,8 +282,8 @@ const PgGameEntry* game_entry(const char* key);
 }  // namespace host_only
 
 /// A function GameAssembly.dll exports, such as il2cpp_shutdown. Host code only: it exists where
-/// PG_HOST is defined (ModHost), a mod never sees it, and the host contract's hook_entry refuses an
-/// export. The host hooks one through its own MinHook instance. Main thread, after the map resolved
+/// PG_HOST is defined (ModHost), a mod never sees it, and the host contract's game_entry answers null
+/// for an export. The host hooks one through its own MinHook instance. Main thread, after the map resolved
 /// at startup.
 template <const sdk::EntryDesc& D>
 struct Export {

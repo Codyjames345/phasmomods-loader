@@ -185,16 +185,31 @@ void entry_without_code_has_no_address() {
   CHECK(m && m->kind == PG_ENTRY_METHOD && m->code == nullptr);
 }
 
-// An icall resolves at startup through the runtime's il2cpp_resolve_icall, by its name.
-void icall_resolves_through_the_runtime() {
+// The worker never asks the runtime for an icall: its table is unlocked and the engine's registration
+// is not known to be done. At activation, on the main thread, each icall is resolved and published;
+// one the runtime does not answer then is logged as missing, once.
+void icall_resolves_at_activation() {
   reset();
+  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(icallsAsked.empty());
+  CHECK(pg::gamemap::entry("Animator.SetBoolID") == nullptr);
+  CHECK(!logged("Animator.SetBoolID"));  // not final yet
+
   int setBoolID = 0;
   icallAnswer = &setBoolID;
-  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  pg::gamemap::resolve_icalls();
   CHECK((icallsAsked == std::vector<std::string>{"UnityEngine.Animator::SetBoolID"}));
   const PgGameEntry* e = pg::gamemap::entry("Animator.SetBoolID");
   CHECK(e && e->kind == PG_ENTRY_ICALL && e->code == &setBoolID && !e->method);
-  CHECK(logged("game map: 1/27 resolved"));
+  CHECK(pg::gamemap::result("Animator.SetBoolID")->status == Status::Resolved);
+  CHECK(logged("game map: 1/1 icalls resolved on the main thread"));
+
+  reset();
+  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  pg::gamemap::resolve_icalls();  // the runtime does not answer
+  CHECK(pg::gamemap::entry("Animator.SetBoolID") == nullptr);
+  CHECK(count_logged("game map: MISSING Animator.SetBoolID") == 1);
+  CHECK(logged("game map: 0/1 icalls resolved on the main thread"));
 }
 
 // An export's address is in the loaded module; a static field carries its FieldInfo like any field.
@@ -217,8 +232,10 @@ void exports_and_statics_are_published() {
   CHECK(x && x->kind == PG_ENTRY_EXPORT && x->code == reinterpret_cast<void*>(0x103844C0));
   constexpr pg::api::Export<pg::map::GameAssembly_il2cpp_shutdown> shutdownExport{};
   CHECK(shutdownExport.available() && shutdownExport.address() == x->code);
+  CHECK(pg::gamemap::mod_entry("GameAssembly.il2cpp_shutdown") == nullptr);  // mods never see an export
   const PgGameEntry* s = pg::gamemap::entry("LevelController.instance");
   CHECK(s && s->kind == PG_ENTRY_FIELD && s->field == &fieldInfo && s->klass == &klass && !s->code);
+  CHECK(pg::gamemap::mod_entry("LevelController.instance") == s);
 
   pg::gamemap::g_resolution.results = {};
   pg::gamemap::publish(0x10000000);
@@ -293,7 +310,7 @@ int main() {
   slow_build_leaves_the_hooks_budget();
   entry_carries_the_resolved_result();
   entry_without_code_has_no_address();
-  icall_resolves_through_the_runtime();
+  icall_resolves_at_activation();
   exports_and_statics_are_published();
   return g_failures ? 1 : 0;
 }

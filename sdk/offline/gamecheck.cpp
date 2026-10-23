@@ -160,14 +160,15 @@ int check_mods(const std::filesystem::path& dir, const Resolution& resolution) {
       unreadable = true;
       continue;
     }
-    // A mod without pgmod_requires requires no game entry.
+    // A mod without pgmod_requires requires no game entry. One that requires an export is never
+    // started: the host gives exports to its own code only.
     std::string lacking;
     if (const auto listRequired = reinterpret_cast<PgModRequiresFn>(GetProcAddress(module, "pgmod_requires"))) {
       const char* const* keys = nullptr;
       const size_t n = listRequired(&keys);
       for (size_t i = 0; keys && i < n; ++i) {
         const Result* r = keys[i] ? resolution.find(keys[i]) : nullptr;
-        if (keys[i] && (!r || (r->status != Status::Resolved && !startup_only(*r))))
+        if (keys[i] && (!r || r->desc->kind == Kind::Export || (r->status != Status::Resolved && !startup_only(*r))))
           lacking += (lacking.empty() ? "" : ", ") + std::string(keys[i]);
       }
     }

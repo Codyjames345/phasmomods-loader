@@ -27,6 +27,9 @@ struct Published {
   std::vector<void*> twins;  // a method's twins' code addresses
 };
 std::vector<Published> g_published;  // one per result, in the same order; built once, never resized
+uintptr_t g_base = 0;                // the loaded GameAssembly the entries were published for
+// The runtime's il2cpp_resolve_icall, kept for resolve_icalls; null when no model was built.
+void* (*g_resolveIcall)(const char* name) = nullptr;
 
 uint32_t kind_of(sdk::Kind kind) {
   switch (kind) {
@@ -41,39 +44,49 @@ uint32_t kind_of(sdk::Kind kind) {
   return 0;
 }
 
-// Builds what mods receive for every resolved entry: the runtime's class, method and field from the
-// kept model, code and exports as addresses in the loaded module at `base`, an icall's code as the
-// runtime gave it.
-void publish(uintptr_t base) {
-  g_published.assign(g_resolution.results.size(), {});
-  for (size_t i = 0; i < g_resolution.results.size(); ++i) {
-    const sdk::Result& r = g_resolution.results[i];
-    if (r.status != sdk::Status::Resolved) continue;
-    Published& p = g_published[i];
-    PgGameEntry& e = p.entry;
-    e.kind = kind_of(r.desc->kind);
-    const sdk::ModelType* type = r.type >= 0 && size_t(r.type) < g_model.types.size() ? &g_model.types[r.type] : nullptr;
-    if (type) e.klass = type->runtime;
-    switch (r.desc->kind) {
-      case sdk::Kind::Method:
-        if (type && r.member >= 0 && size_t(r.member) < type->methods.size()) e.method = type->methods[r.member].runtime;
-        for (const uint64_t twin : r.twins) p.twins.push_back(reinterpret_cast<void*>(base + twin));
-        e.twins = p.twins.data();
-        e.twinCount = static_cast<uint32_t>(p.twins.size());
-        [[fallthrough]];
-      // rva 0 is no code: base + 0 would be the PE header. The resolver never resolves one; this
-      // keeps a call through the entry from ever reaching it.
-      case sdk::Kind::Code:
-      case sdk::Kind::Export: e.code = r.rva ? reinterpret_cast<void*>(base + r.rva) : nullptr; break;
-      case sdk::Kind::Icall: e.code = reinterpret_cast<void*>(r.address); break;
-      case sdk::Kind::Field:
-        if (type && r.member >= 0 && size_t(r.member) < type->fields.size()) e.field = type->fields[r.member].runtime;
-        e.offset = r.offset;
-        break;
-      case sdk::Kind::EnumValue: e.value = r.value; break;
-      case sdk::Kind::Type: break;
-    }
+// Builds what mods receive for the resolved entry at index i: the runtime's class, method and field
+// from the kept model, code and exports as addresses in the loaded module at g_base, an icall's code
+// as the runtime gave it. An unresolved entry gets nothing.
+void publish_one(size_t i) {
+  const uintptr_t base = g_base;
+  const sdk::Result& r = g_resolution.results[i];
+  Published& p = g_published[i];
+  p = {};
+  if (r.status != sdk::Status::Resolved) return;
+  PgGameEntry& e = p.entry;
+  e.kind = kind_of(r.desc->kind);
+  const sdk::ModelType* type = r.type >= 0 && size_t(r.type) < g_model.types.size() ? &g_model.types[r.type] : nullptr;
+  if (type) e.klass = type->runtime;
+  switch (r.desc->kind) {
+    case sdk::Kind::Method:
+      if (type && r.member >= 0 && size_t(r.member) < type->methods.size()) e.method = type->methods[r.member].runtime;
+      for (const uint64_t twin : r.twins) p.twins.push_back(reinterpret_cast<void*>(base + twin));
+      e.twins = p.twins.data();
+      e.twinCount = static_cast<uint32_t>(p.twins.size());
+      [[fallthrough]];
+    // rva 0 is no code: base + 0 would be the PE header. The resolver never resolves one; this
+    // keeps a call through the entry from ever reaching it.
+    case sdk::Kind::Code:
+    case sdk::Kind::Export: e.code = r.rva ? reinterpret_cast<void*>(base + r.rva) : nullptr; break;
+    case sdk::Kind::Icall: e.code = reinterpret_cast<void*>(r.address); break;
+    case sdk::Kind::Field:
+      if (type && r.member >= 0 && size_t(r.member) < type->fields.size()) e.field = type->fields[r.member].runtime;
+      e.offset = r.offset;
+      break;
+    case sdk::Kind::EnumValue: e.value = r.value; break;
+    case sdk::Kind::Type: break;
   }
+}
+
+void publish(uintptr_t base) {
+  g_base = base;
+  g_published.assign(g_resolution.results.size(), {});
+  for (size_t i = 0; i < g_resolution.results.size(); ++i) publish_one(i);
+}
+
+// An icall left for the main thread: the worker never asks the runtime (see build_and_resolve).
+bool icall_pending(const sdk::Result& r) {
+  return r.desc->kind == sdk::Kind::Icall && r.status == sdk::Status::Missing && r.detail == sdk::kCheckedAtStartup;
 }
 
 // Why resolution may not go on: startup was cancelled, or less than kHooksBudget of the deadline is
@@ -84,9 +97,10 @@ const char* stop_reason(void* stopEvent, unsigned long long deadline) {
   return nullptr;
 }
 
+// Every entry that did not resolve, less the icalls resolve_icalls decides later.
 void log_failures() {
   for (const sdk::Result& r : g_resolution.results) {
-    if (r.status == sdk::Status::Resolved) continue;
+    if (r.status == sdk::Status::Resolved || icall_pending(r)) continue;
     PG_LOG("game map: %s %s (%s)", sdk::status_word(r.status), r.desc->key, r.detail.c_str());
     for (const std::string& c : r.candidates) PG_LOG("game map:     %s", c.c_str());
   }
@@ -96,6 +110,7 @@ void log_failures() {
 void abandon(const std::string& reason) {
   g_model = {};
   g_resolution = {};
+  g_resolveIcall = nullptr;
   for (const sdk::EntryDesc* e : map::kAllEntries) {
     sdk::Result r;
     r.desc = e;
@@ -119,12 +134,11 @@ std::string build_and_resolve(void* gameAssembly, void* stopEvent, unsigned long
   // The loaded module's own memory, only read.
   const sdk::CodeImage image(sdk::loaded_module(base));
   if (!image.valid()) PG_LOG("game map: the loaded GameAssembly has no readable function table");
-  // The icalls the engine registered, by name. A lookup reads the runtime's table and runs no game
-  // code. Static fields are never read here: that can run a class's static constructor.
-  const sdk::IcallLookup icalls = [&](const char* name) -> const void* {
-    return api.resolve_icall ? api.resolve_icall(name) : nullptr;
-  };
-  g_resolution = sdk::resolve(map::kAllEntries, g_model, image.valid() ? &image : nullptr, icalls);
+  // No icall lookup here: the runtime's icall table is not locked, and nothing proves the engine has
+  // registered every icall by now. resolve_icalls asks on the main thread at activation. Static
+  // fields are never read here either: that can run a class's static constructor.
+  g_resolveIcall = api.resolve_icall;
+  g_resolution = sdk::resolve(map::kAllEntries, g_model, image.valid() ? &image : nullptr);
   return {};
 }
 
@@ -151,6 +165,38 @@ bool resolve(void* gameAssembly, void* stopEvent, unsigned long long deadline) {
   return failure.empty();
 }
 
+void resolve_icalls() {
+  try {
+    std::vector<size_t> pending;
+    std::vector<const sdk::EntryDesc*> entries;
+    for (size_t i = 0; i < g_resolution.results.size(); ++i)
+      if (icall_pending(g_resolution.results[i])) {
+        pending.push_back(i);
+        entries.push_back(g_resolution.results[i].desc);
+      }
+    if (pending.empty() || g_published.size() != g_resolution.results.size()) return;
+    const sdk::IcallLookup lookup = [](const char* name) -> const void* {
+      return g_resolveIcall ? g_resolveIcall(name) : nullptr;
+    };
+    sdk::Resolution icalls = sdk::resolve(entries, sdk::GameModel{}, nullptr, lookup);
+    size_t resolved = 0;
+    for (size_t k = 0; k < pending.size(); ++k) {
+      sdk::Result& r = g_resolution.results[pending[k]];
+      r = std::move(icalls.results[k]);
+      publish_one(pending[k]);
+      if (r.status == sdk::Status::Resolved) ++resolved;
+      else PG_LOG("game map: %s %s (%s)", sdk::status_word(r.status), r.desc->key, r.detail.c_str());
+    }
+    PG_LOG("game map: %zu/%zu icalls resolved on the main thread", resolved, pending.size());
+  } catch (const Il2CppExceptionWrapper& e) {
+    il2cpp::log_exception("game map: managed exception while resolving icalls", e.ex);
+  } catch (const std::exception& e) {
+    PG_LOG("game map: the icalls could not be resolved: %s", e.what());
+  } catch (...) {
+    PG_LOG("game map: the icalls could not be resolved");
+  }
+}
+
 const sdk::Result* result(std::string_view key) { return g_resolution.find(key); }
 
 const PgGameEntry* entry(const char* key) {
@@ -159,6 +205,15 @@ const PgGameEntry* entry(const char* key) {
     if (std::string_view(g_resolution.results[i].desc->key) == key)
       return g_resolution.results[i].status == sdk::Status::Resolved ? &g_published[i].entry : nullptr;
   return nullptr;
+}
+
+}  // namespace pg::gamemap
+
+namespace pg::gamemap {
+
+const PgGameEntry* mod_entry(const char* key) {
+  const PgGameEntry* e = entry(key);
+  return e && e->kind != PG_ENTRY_EXPORT ? e : nullptr;
 }
 
 }  // namespace pg::gamemap
