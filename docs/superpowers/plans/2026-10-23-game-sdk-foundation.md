@@ -374,7 +374,7 @@
 
 **Interfaces:**
 - Produces in `core/mod_api.h`:
-  - `#define PGMOD_API_VERSION 2u`
+  - Versioning (spec addendum "Third-party mods"): `#define PGMOD_API_MAJOR 2u`, `#define PGMOD_API_MINOR 0u`, `#define PGMOD_API_VERSION ((PGMOD_API_MAJOR << 16) | PGMOD_API_MINOR)`. The host accepts a mod whose major equals its own and whose minor is no newer, and `PgHostApi` only grows at the end. `bool pg_api_compatible(uint32_t host, uint32_t mod)` is an inline helper in `mod_api.h`, tested in `mods_test` (same major and older minor: accepted; newer minor: refused; other major: refused).
   - `enum PgEntryKind : uint32_t { PG_ENTRY_TYPE = 1, PG_ENTRY_METHOD, PG_ENTRY_FIELD, PG_ENTRY_ENUM_VALUE, PG_ENTRY_CODE };`
   - `struct PgGameEntry { uint32_t kind; void* klass; const void* method; void* code; void* const* twins; uint32_t twinCount; int32_t offset; void* field; int64_t value; };`
   - New `PgHostApi` members, appended:
@@ -423,7 +423,7 @@
   And in `mods_test`:
   - `mod_with_unresolved_requirement_stays_off`: a fake mod whose `pgmod_requires` lists a key the host lacks is not started, and the log line names the key.
 - [ ] **Step 2: Run** `ctest --test-dir build -R "game_api|mods" --output-on-failure`. Expected: it fails to compile.
-- [ ] **Step 3: Implement** all of it. `mod::bind` checks `PGMOD_API_VERSION == 2` and calls `api::bind`. Every mod's `PgModInfo` already uses `PGMOD_API_VERSION`, so the five mods are rebuilt with no source change. `gamecheck --mods <dir>` loads each mod DLL in the folder, calls `pgmod_requires`, and after the summary prints `would switch off <mod id>: <keys>` for each failure.
+- [ ] **Step 3: Implement** all of it. `mod::bind` checks `pg_api_compatible(api->version, PGMOD_API_VERSION)`, `host/mods.cpp` uses the same check where it compares `apiVersion` today, and `mod::bind` then calls `api::bind`. Every mod's `PgModInfo` already uses `PGMOD_API_VERSION`, so the five mods are rebuilt with no source change. `gamecheck --mods <dir>` loads each mod DLL in the folder, calls `pgmod_requires`, and after the summary prints `would switch off <mod id>: <keys>` for each failure.
 - [ ] **Step 4: Run** `.\validate.ps1`. Expected: pass.
 - [ ] **Step 5: Commit.**
 
@@ -499,4 +499,5 @@ Each stage gets its own plan when the previous one has landed, because it builds
   - The source scan test rejecting raw addresses, offsets, obfuscated names and direct IL2CPP use outside `sdk/`.
   - The memory notes' RE facts move into entries and overviews.
   - Twins of hooked methods are investigated and reported to the user.
+- **Third-party mods** (spec addendum, decided 2026-10-23), with stage 2: the `%LOCALAPPDATA%\PhasmoMods\mods` folder in the launcher and host; `author=` in mod.ini; hashed channels 64-255 for channel-0 mods; the consent line for other authors; the generated game API reference and the guides; the documentation test; the template mod; the `PhasmoMods-SDK-<version>.zip` built by package.ps1 and attached by the release workflow.
 - **Stage 3, map the remaining systems.** One task per system from the spec's list, each starting with its written inventory in `sdk/systems/<system>.md`. Then batch decompilation, naming, notes at `Decompiled` confidence or better, and the coverage report test, which must reach zero.

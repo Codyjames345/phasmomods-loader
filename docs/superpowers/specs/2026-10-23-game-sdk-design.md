@@ -41,8 +41,8 @@ shapes rather than by where they were in the last build.
 
 ## Non-goals
 
-- A public modding API frozen for outside modders. The authors are the user and Claude agents in
-  this project; the interface changes when the suite needs it to (decided by the user).
+- ~~A public modding API frozen for outside modders.~~ Reversed by the user on 2026-10-23: other
+  people build their own mods with the SDK. See "Third-party mods" at the end.
 - New mod features or behaviour changes. The migration keeps every mod's behaviour exactly as it is.
 - A new loading method. Loading stays as it is: the launcher injects into a running game.
 - Delivering updates to players. The user asked for an automatic updater on 2026-10-23. It is its
@@ -432,3 +432,63 @@ before.
 - The order of work, and how the systems are split between agents.
 - Whether system overviews are Markdown beside the headers or comments at the top of an index
   header, as long as there is one per system and nothing is said in two places.
+
+## Third-party mods (added 2026-10-23)
+
+The user, mid-build: "make sure that the SDK is fully documented and contains everything that someone
+would need to know to make their own mod without reverse engineering the game. I will bundle my mods
+with the mod loader, but I'd like for other people to be able to use the documented SDK to make their
+own mods and be able to toggle them in-game the same way the included mods are."
+
+### Decided by the user
+
+- Players put other people's mods in `%LOCALAPPDATA%\PhasmoMods\mods\<mod folder>\` (a DLL and its
+  `mod.ini`), beside the settings, so loader updates never touch them. The bundled mods stay in the
+  install folder and update with the loader.
+- Every GitHub release carries a `PhasmoMods-SDK-<version>.zip`: the headers, the libraries to link,
+  the generated game API reference and the guides, a template mod that builds out of the box, and
+  the fake game backend for offline tests. Modders never need the source tree.
+- Compatibility is versioned like a library. Within a major version, releases only add: a mod built
+  against an older minor version keeps loading without a rebuild. Game API entries are never removed
+  or changed silently; they are marked deprecated first and removed only in a major release. A major
+  release refuses older mods and the loader names the mods that need rebuilding.
+
+### How it works (Claude's calls)
+
+- **Same treatment as bundled mods.** A third-party mod appears in the launcher's list, the in-game
+  Mods panel, the consent notice and the join guard exactly as a bundled one does; it is switched on
+  and off the same way, and starts off when it first appears (the updater's rule).
+- **Discovery.** The launcher and the host read both folders. A mod id found in both is taken from
+  the install folder and the other copy is reported. `mod.ini` gains an optional `author=` line, and
+  the Mods panel shows the author for third-party mods.
+- **Network channels.** Bundled mods keep their fixed channels (1 to 63, reserved). A third-party mod
+  declares channel 0, and the host gives it a channel from 64 to 255 derived from a stable hash of its
+  mod id, so every client agrees without negotiation; two installed mods that land on the same channel
+  are both refused with a message naming them.
+- **Versioning.** `PGMOD_API_VERSION` becomes a major and a minor number. The host accepts a mod with
+  the same major and a minor no newer than its own. `PgHostApi` and every published struct only ever
+  grow at the end. Each game API entry and host contract function records the minor version that
+  added it, and deprecation is an attribute that the build turns into a compiler warning.
+- **Consent.** When any third-party mod is installed, the notice adds one line: mods from other
+  authors run with the same access to the game and the computer as the game itself.
+- **Documentation**, in the SDK zip and in `sdk/` in the repository:
+  - A game API reference generated in the build from the map headers: every class, method, field,
+    enum value and scene fact, with its behaviour note, confidence, threading and network notes, and
+    the version that added it. Generated, so it can never drift from the map.
+  - The system overviews (`sdk/systems/`).
+  - Guides: getting started with the template; the mod lifecycle (`pgmod_info`, start, tick, stop,
+    `pgmod_requires`); the host contract (logging, hooks by entry, caller context, network messages
+    and channels, services between mods, peer checks); building UI from the game's own widgets (the
+    vanilla-UI rule); testing with the fake backend; packaging and installing; what the consent
+    notice and the join guard do with a mod; the anti-cheat and private-lobby rules.
+  - A documentation test fails the build when any map entry, public header declaration or host
+    contract function has no documentation.
+- **When it ships.** The SDK zip is published once stage 2 (every mod on the game API) is done,
+  because until then the bundled mods still use the IL2CPP layer directly and the API is not yet the
+  only way in. The mods folder, the channel scheme and the versioning land with stage 2 as well; the
+  versioning rule is applied to the host contract from its version 2 (foundation Task 9) onwards.
+
+### Changes to the anti-goals for outside authors
+
+- Nothing in the SDK or its documentation describes the anti-cheat, how it detects mods, or how to
+  avoid it. The guides state the private-lobby rule and the ban risk, nothing more.
