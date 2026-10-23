@@ -2,8 +2,10 @@
 # Cpp2IL, and runs build\gamecheck.exe on the dump and the copied GameAssembly.dll. It writes the dump
 # to re\dump, the map's addresses to re\map-addresses.tsv and the RVA name table to re\names.tsv, all
 # gitignored. It never runs game code and never writes in the game folder.
-# usage: tools\gamecheck.ps1 [-GameDir <dir>] [-Cpp2Il <exe>] [-IfConfigured]
-param([string]$GameDir = $env:PG_GAME_DIR, [string]$Cpp2Il = $env:PG_CPP2IL, [switch]$IfConfigured)
+# With -Mods <dir> it also loads each mod DLL under <dir> and reports the mods the host would not start on
+# this build. -IfConfigured exits quietly when the game or Cpp2IL is not set.
+# usage: tools\gamecheck.ps1 [-GameDir <dir>] [-Cpp2Il <exe>] [-Mods <dir>] [-IfConfigured]
+param([string]$GameDir = $env:PG_GAME_DIR, [string]$Cpp2Il = $env:PG_CPP2IL, [string]$Mods, [switch]$IfConfigured)
 $ErrorActionPreference = 'Stop'
 
 if (-not $GameDir -or -not $Cpp2Il) {
@@ -50,7 +52,9 @@ if (-not $current) {
 }
 
 $diffable = Join-Path $cs 'DiffableCs'
-& $check --dump $diffable --image (Join-Path $game 'GameAssembly.dll') --addresses $addresses
+$checkArgs = @('--dump', $diffable, '--image', (Join-Path $game 'GameAssembly.dll'), '--addresses', $addresses)
+if ($Mods) { $checkArgs += @('--mods', (Resolve-Path -LiteralPath $Mods).Path) }
+& $check @checkArgs
 $code = $LASTEXITCODE
 & node (Join-Path $root 're\names.mjs') $diffable
 if ($LASTEXITCODE -ne 0) { throw 'node re\names.mjs failed.' }

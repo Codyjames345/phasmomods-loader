@@ -73,10 +73,11 @@ Measured on a fresh Cpp2IL dump of build 25811160, 2026-10-23:
   (`GhostAI.ChangeState`, `LightningController.PlayLocalLightning`,
   `LightningController.PlayLightningNetworked`). Other private methods and every parameter are
   obfuscated.
-- The obfuscator adds same-signature twins of real methods. `GhostAI.Init(x)` has a twin
+- The obfuscator adds same-signature copies of real methods. `GhostAI.Init(x)` has an alias
   `ഞയറജഭബഠഴമ(x)`; the linker folded both to one address (0x2022A70). `GhostAI.SetGhostModel` has a
-  twin `ഞതപശഝമരജഡ` at a different address (0x2023DB0 vs 0x2024EA0). So a signature alone does not
-  identify a method, and the game may call either twin.
+  same-signature look-alike `ഞതപശഝമരജഡ` at a different address (0x2023DB0 vs 0x2024EA0); their lengths
+  differ, so it is not a twin by the strict rule. So a signature alone does not identify a method, and
+  a hook must know which bodies are the same behaviour.
 - We have one game build, so whether obfuscated names survive an update is unknown. The design must
   work whether they do or not.
 - Some behaviour exists only as code inlined into another method (the sensor pulse inside

@@ -78,8 +78,8 @@ template <const sdk::EntryDesc& D, class Sig>
 struct Method;
 
 /// A game method, called as R(A...). For an instance method the first parameter is the object
-/// (`this`). A struct parameter larger than 8 bytes is passed as a pointer to it, as the x64 calling
-/// convention does. Main thread.
+/// (`this`). A struct parameter whose size is not 1, 2, 4 or 8 bytes is passed as a pointer to it, as the x64
+/// calling convention does. Main thread.
 template <const sdk::EntryDesc& D, class R, class... A>
 struct Method<D, R(A...)> {
   static_assert(D.kind == sdk::Kind::Method, "Method wraps a map entry of kind Method");
