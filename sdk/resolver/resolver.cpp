@@ -5,6 +5,8 @@
 #include <optional>
 #include <unordered_map>
 
+#include "code.h"
+#include "image.h"
 #include "types.h"
 
 namespace pg::sdk {
@@ -46,6 +48,51 @@ const char* kind_name(Kind kind) {
   return "entry";
 }
 
+const char* fact_name(Fact::Is is) {
+  switch (is) {
+    case Fact::Is::Stores: return "Stores";
+    case Fact::Is::StoresConst: return "StoresConst";
+    case Fact::Is::Loads: return "Loads";
+    case Fact::Is::Calls: return "Calls";
+    case Fact::Is::CalledBy: return "CalledBy";
+  }
+  return "fact";
+}
+
+int hex_digit(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+// A pattern's bytes, -1 for a wildcard: two hex digits or "??" per byte, the bytes separated by
+// spaces.
+std::optional<std::vector<int>> parse_pattern(std::string_view text) {
+  std::vector<int> out;
+  for (size_t i = 0; i < text.size();) {
+    if (text[i] == ' ') {
+      ++i;
+      continue;
+    }
+    if (i + 1 >= text.size() || (i + 2 < text.size() && text[i + 2] != ' ')) return std::nullopt;
+    if (text[i] == '?' && text[i + 1] == '?') {
+      out.push_back(-1);
+    } else {
+      const int hi = hex_digit(text[i]), lo = hex_digit(text[i + 1]);
+      if (hi < 0 || lo < 0) return std::nullopt;
+      out.push_back(hi << 4 | lo);
+    }
+    i += 2;
+  }
+  if (out.empty()) return std::nullopt;
+  return out;
+}
+
+// What a fact says of a candidate. Unread: the code it needs could not be fully read, so it says
+// nothing either way.
+enum class Verdict { Yes, No, Unread };
+
 // A type or one of its members: member is -1 for a type.
 struct Candidate {
   int type = -1;
@@ -53,6 +100,12 @@ struct Candidate {
   // A type name the candidate uses for an "@Key" type that several model types share, when the model
   // does not say which of them it means. Such a candidate cannot be accepted.
   std::string unsure;
+  // Why a fact could not judge the candidate: the code it needs could not be fully read. Such a
+  // candidate cannot be accepted either.
+  std::string unread;
+  // A method's same behaviour: the owner's other methods of its signature at its own RVA (aliases)
+  // or with a body that reads the same (twins).
+  std::vector<int> same;
 };
 
 class Resolver {
@@ -120,7 +173,15 @@ class Resolver {
     if (blocked(d, r)) return;
     if (d.kind == Kind::Code || !d.facts.empty()) {
       if (!image_) return missing(r, "no code image");
-      return missing(r, d.kind == Kind::Code ? "patterns not supported yet" : "facts not supported yet");
+      if (d.kind == Kind::Code) return resolve_code(d, r);
+    }
+    for (const Fact& fact : d.facts) {
+      if (entries_[index_.at(fact.method)]->kind != Kind::Method)
+        return missing(r, std::format("the fact's {} is not a method entry", fact.method));
+      const bool aboutField = fact.is != Fact::Is::Calls && fact.is != Fact::Is::CalledBy;
+      if (d.kind != (aboutField ? Kind::Field : Kind::Method))
+        return missing(r, std::format("a {} fact applies to a {}", fact_name(fact.is),
+                                      aboutField ? "field" : "method"));
     }
 
     if (d.owner && entries_[index_.at(d.owner)]->kind != Kind::Type)
@@ -146,6 +207,14 @@ class Resolver {
     if (d.kind == Kind::Method && d.name && d.params.empty() && named > 1)
       return decide(d, r, candidates, named, owner);
     std::erase_if(candidates, [&](Candidate& c) { return !fits(d, c); });
+    // A fact that cannot read its code keeps the candidate, marked so it is never accepted.
+    for (const Fact& fact : d.facts)
+      std::erase_if(candidates, [&](Candidate& c) {
+        const Verdict v = judge(fact, c);
+        if (v == Verdict::Unread && c.unread.empty()) c.unread = unread_detail(fact, c);
+        return v == (fact.negate ? Verdict::Yes : Verdict::No);
+      });
+    if (d.kind == Kind::Method && image_) same_behaviour(candidates);
     decide(d, r, candidates, named, owner);
     if (r.status == Status::Resolved && d.hint && r.currentName != d.hint)
       r.detail = std::format("renamed from {}", d.hint);
@@ -304,9 +373,13 @@ class Resolver {
       if (named == 0 || !d.name) return missing(r, std::format("no {} {}{}", kind_name(d.kind), what, where));
       return missing(r, std::format("no {} {}{} matches ({} by name)", kind_name(d.kind), what, where, named));
     }
-    if (candidates.size() > 1) {
+    const auto unread = std::find_if(candidates.begin(), candidates.end(),
+                                     [](const Candidate& c) { return !c.unread.empty(); });
+    if (candidates.size() > 1 || unread != candidates.end()) {
       r.status = Status::Ambiguous;
-      r.detail = std::format("{} {}s {}{} match", candidates.size(), kind_name(d.kind), what, where);
+      r.detail = std::format("{} {}{} {}{} match", candidates.size(), kind_name(d.kind),
+                             candidates.size() > 1 ? "s" : "", what, where);
+      if (unread != candidates.end()) r.detail += ", and " + unread->unread;
       for (const Candidate& c : candidates) r.candidates.push_back(describe(d.kind, c));
       return;
     }
@@ -330,6 +403,12 @@ class Resolver {
       case Kind::Method:
         r.rva = type.methods[c.member].rva;
         r.currentName = type.methods[c.member].name;
+        for (const int m : c.same) {
+          if (type.methods[m].rva == r.rva) r.aliases.push_back(type.methods[m].name);
+          else r.twins.push_back(type.methods[m].rva);
+        }
+        std::sort(r.twins.begin(), r.twins.end());
+        r.twins.erase(std::unique(r.twins.begin(), r.twins.end()), r.twins.end());
         break;
       case Kind::Field:
         r.offset = type.fields[c.member].offset;
@@ -342,6 +421,139 @@ class Resolver {
       case Kind::Code:
         break;
     }
+  }
+
+  // The facts of the function that starts at rva, read once. Null when no function starts there.
+  const CodeFacts* code_at(uint64_t rva) const {
+    if (rva == 0 || image_->function_start(rva) != rva) return nullptr;
+    auto it = code_.find(rva);
+    if (it == code_.end()) it = code_.emplace(rva, read_code(image_->function(rva), rva)).first;
+    return &it->second;
+  }
+
+  // Whether the function at rva was read in full, so that facts about it can decide.
+  bool readable(uint64_t rva) const {
+    const CodeFacts* code = code_at(rva);
+    return code && code->complete;
+  }
+
+  // A resolved method's bodies: its own, then its twins'.
+  static std::vector<uint64_t> bodies(const Result& method) {
+    std::vector<uint64_t> out{method.rva};
+    out.insert(out.end(), method.twins.begin(), method.twins.end());
+    return out;
+  }
+
+  // What a fact says of a candidate, before negate. The field facts read the fact method's accesses,
+  // Calls the candidate's calls, and CalledBy the fact method's calls. The fact method counts with
+  // its twins.
+  Verdict judge(const Fact& fact, const Candidate& c) const {
+    const Result& method = result_of(fact.method);
+    const ModelType& type = model_.types[c.type];
+    bool yes = false;
+    if (fact.is == Fact::Is::Calls) {
+      const uint64_t rva = type.methods[c.member].rva;
+      if (!readable(rva)) return Verdict::Unread;
+      const std::vector<uint64_t> targets = bodies(method);
+      for (const uint64_t target : code_at(rva)->callTargets)
+        yes = yes || std::find(targets.begin(), targets.end(), target) != targets.end();
+      return yes ? Verdict::Yes : Verdict::No;
+    }
+    for (const uint64_t body : bodies(method)) {
+      if (!readable(body)) return Verdict::Unread;
+      const CodeFacts& code = *code_at(body);
+      if (fact.is == Fact::Is::CalledBy) {
+        const uint64_t rva = type.methods[c.member].rva;
+        yes = yes || std::find(code.callTargets.begin(), code.callTargets.end(), rva) != code.callTargets.end();
+        continue;
+      }
+      const int32_t offset = type.fields[c.member].offset;
+      for (const Access& a : code.accesses) {
+        if (a.disp != offset) continue;
+        if (fact.is == Fact::Is::Stores) yes = yes || a.store;
+        if (fact.is == Fact::Is::StoresConst) yes = yes || (a.hasImm && a.imm == fact.value);
+        if (fact.is == Fact::Is::Loads) yes = yes || !a.store;
+      }
+    }
+    return yes ? Verdict::Yes : Verdict::No;
+  }
+
+  // Why a fact could not judge the candidate: whose code it could not read.
+  std::string unread_detail(const Fact& fact, const Candidate& c) const {
+    const std::string whose = fact.is == Fact::Is::Calls ? model_.types[c.type].methods[c.member].name : fact.method;
+    return std::format("the code of {} could not be fully read for its {} fact", whose, fact_name(fact.is));
+  }
+
+  // Whether two methods are one behaviour: one body (an alias), or bodies of one length that read the
+  // same once placed (twins). Code not fully read must also match byte for byte, since what the
+  // reader could not decode may name an address that differs between the two.
+  bool one_behaviour(const ModelMethod& a, const ModelMethod& b) const {
+    if (a.rva == 0 || b.rva == 0) return false;
+    if (a.rva == b.rva) return true;
+    const CodeFacts* ca = code_at(a.rva);
+    const CodeFacts* cb = code_at(b.rva);
+    if (!ca || !cb) return false;
+    const std::span<const uint8_t> fa = image_->function(a.rva), fb = image_->function(b.rva);
+    if (fa.size() != fb.size() || ca->normalized != cb->normalized) return false;
+    return (ca->complete && cb->complete) || std::equal(fa.begin(), fa.end(), fb.begin());
+  }
+
+  // Method candidates that are all one behaviour count as one, and the lowest RVA is canonical. The
+  // one left gathers every other method of the owner with its signature that is the same behaviour.
+  void same_behaviour(std::vector<Candidate>& candidates) const {
+    if (candidates.empty()) return;
+    const ModelType& type = model_.types[candidates.front().type];
+    const auto method = [&](const Candidate& c) -> const ModelMethod& { return type.methods[c.member]; };
+    const auto canonical = std::min_element(candidates.begin(), candidates.end(),
+                                            [&](const Candidate& a, const Candidate& b) {
+                                              return std::pair(method(a).rva, a.member) <
+                                                     std::pair(method(b).rva, b.member);
+                                            });
+    for (const Candidate& c : candidates)
+      if (!one_behaviour(method(*canonical), method(c))) return;
+    Candidate kept = std::move(*canonical);
+    for (const Candidate& c : candidates) {
+      if (kept.unread.empty()) kept.unread = c.unread;
+      if (kept.unsure.empty()) kept.unsure = c.unsure;
+    }
+    const ModelMethod& self = method(kept);
+    for (size_t m = 0; m < type.methods.size(); ++m) {
+      const ModelMethod& other = type.methods[m];
+      if (static_cast<int>(m) == kept.member || other.ret != self.ret || other.params != self.params ||
+          other.isStatic != self.isStatic)
+        continue;
+      if (one_behaviour(self, other)) kept.same.push_back(static_cast<int>(m));
+    }
+    candidates.assign(1, std::move(kept));
+  }
+
+  // A code entry: the one place in the method `within` where the pattern matches.
+  void resolve_code(const EntryDesc& d, Result& r) const {
+    if (!d.pattern || !d.within) return missing(r, "a code entry needs a pattern and a method to search");
+    if (entries_[index_.at(d.within)]->kind != Kind::Method)
+      return missing(r, std::format("{} is not a method entry", d.within));
+    const auto pattern = parse_pattern(d.pattern);
+    if (!pattern) return missing(r, std::format("bad pattern \"{}\"", d.pattern));
+    const Result& method = result_of(d.within);
+    if (method.rva == 0 || image_->function_start(method.rva) != method.rva)
+      return missing(r, std::format("no function starts at {} ({:#x})", d.within, method.rva));
+    const std::span<const uint8_t> fn = image_->function(method.rva);
+    std::vector<uint64_t> matches;
+    for (size_t at = 0; at + pattern->size() <= fn.size(); ++at) {
+      size_t i = 0;
+      while (i < pattern->size() && ((*pattern)[i] < 0 || (*pattern)[i] == fn[at + i])) ++i;
+      if (i == pattern->size()) matches.push_back(method.rva + at);
+    }
+    if (matches.empty()) return missing(r, std::format("the pattern is not in {}", d.within));
+    if (matches.size() > 1) {
+      r.status = Status::Ambiguous;
+      r.detail = std::format("the pattern is in {} {} times", d.within, matches.size());
+      for (const uint64_t at : matches) r.candidates.push_back(std::format("{:#x}", at));
+      return;
+    }
+    r.status = Status::Resolved;
+    r.type = method.type;
+    r.rva = matches.front() + d.patternOffset;
   }
 
   // An entry's type string against a model type string and, when the model knows it, the index of
@@ -404,6 +616,7 @@ class Resolver {
   const CodeImage* image_;
   std::unordered_map<std::string_view, size_t> index_;  // the first entry with each key
   std::unordered_map<std::string, int> typesNamed_;     // how many model types have each name
+  mutable std::unordered_map<uint64_t, CodeFacts> code_;  // read once per function start
   Resolution out_;
   std::vector<int> order_, low_;
   std::vector<bool> onStack_;

@@ -22,7 +22,9 @@ struct Result {
   std::vector<std::string> candidates;  // the candidates of an Ambiguous entry, readable
   int type = -1;    // the type, or a member's owner type, as an index into GameModel::types
   int member = -1;  // index into the owner's fields (Field, EnumValue) or methods (Method)
-  uint64_t rva = 0;
+  uint64_t rva = 0;  // a method's canonical body, or a code entry's address
+  // A method's same behaviour at other addresses: bodies that read the same once placed (twins), and
+  // the names of other methods folded onto its own body (aliases).
   std::vector<uint64_t> twins;
   std::vector<std::string> aliases;
   int32_t offset = 0;  // a field's offset

@@ -4,9 +4,11 @@
 
 #include "check.h"
 #include "entry.h"
+#include "image.h"
 #include "model.h"
 #include "resolver.h"
 #include "sdk_fixture.h"
+#include "sdk_image_fixture.h"
 
 using namespace pg::sdk;
 
@@ -515,6 +517,351 @@ void method_by_shape() {
   CHECK(run({&kGhostAI, &noRet}, model).find("GhostAI.NoRet")->status == Status::Missing);
 }
 
+// Machine code for the fingerprint tests: functions placed in an image, and the model's methods at
+// the same RVAs.
+struct Code {
+  ImageBuilder b;
+  std::vector<uint8_t> mapped;
+
+  void function(uint32_t rva, std::vector<uint8_t> bytes) { b.function(rva, bytes); }
+  Resolution run(std::vector<const EntryDesc*> entries, const GameModel& model) {
+    mapped = b.build();
+    const CodeImage image(mapped);
+    return resolve(entries, model, &image);
+  }
+};
+
+// An instruction at `at` with a rel32 to target after `head`: a call, or a rip-relative operand.
+std::vector<uint8_t> rel(uint64_t at, std::vector<uint8_t> head, uint64_t target) {
+  const auto v = static_cast<uint32_t>(static_cast<int32_t>(target - (at + head.size() + 4)));
+  for (int i = 0; i < 4; ++i) head.push_back(static_cast<uint8_t>(v >> (8 * i)));
+  return head;
+}
+
+std::vector<uint8_t> join(std::initializer_list<std::vector<uint8_t>> parts) {
+  std::vector<uint8_t> out;
+  for (const auto& p : parts) out.insert(out.end(), p.begin(), p.end());
+  return out;
+}
+
+const std::vector<uint8_t> kRet{0xC3};
+const std::vector<uint8_t> kVzeroupper{0xC5, 0xF8, 0x77};  // VEX: the reader cannot account for it
+const std::vector<uint8_t> kLoad40{0x48, 0x8B, 0x41, 0x40};  // mov rax, [rcx+0x40]
+// mov [rdi+0xF3], bpl; mov byte ptr [rdi+0xD8], 1; movzx eax, byte ptr [rdi+0xE0]
+const std::vector<uint8_t> kHuntingBody{0x40, 0x88, 0xAF, 0xF3, 0x00, 0x00, 0x00, 0xC6, 0x87, 0xD8, 0x00,
+                                        0x00, 0x00, 0x01, 0x0F, 0xB6, 0x87, 0xE0, 0x00, 0x00, 0x00};
+
+constexpr EntryDesc kHuntingMethod{.key = "GhostAI.Hunting", .kind = Kind::Method, .owner = "GhostAI",
+                                   .name = "Hunting"};
+
+// GhostAI with four bools, and Hunting at 0x1000 which writes two of them and reads a third.
+struct Bools {
+  ModelBuilder m;
+  Code code;
+  explicit Bools(bool readable = true) {
+    const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+    for (const int32_t offset : {0xD8, 0xE0, 0xF3, 0xF4}) m.field(ai, std::format("b{:x}", offset), "bool", offset);
+    m.field(ai, "speed", "float", 0xF8);
+    m.method(ai, "Hunting", "void", {}, 0x1000);
+    code.function(0x1000, join({readable ? std::vector<uint8_t>{} : kVzeroupper, kHuntingBody, kRet}));
+  }
+  // The bool with these facts. The entry lives as long as the results that point at it.
+  const Result* flag(std::span<const Fact> facts) {
+    entry = {.key = "GhostAI.flag", .kind = Kind::Field, .owner = "GhostAI", .type = "bool", .facts = facts};
+    results = code.run({&kGhostAI, &kHuntingMethod, &entry}, m.build());
+    return results.find("GhostAI.flag");
+  }
+  EntryDesc entry;
+  Resolution results;
+};
+
+void stores_const_picks_cooldown() {
+  Bools g;
+  static constexpr Fact cooldown[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1}};
+  const Result* f = g.flag(cooldown);
+  CHECK(f && f->status == Status::Resolved);
+  CHECK(f && f->offset == 0xD8);
+  CHECK(f && f->currentName == "bd8");
+
+  static constexpr Fact two[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 2}};
+  CHECK(g.flag(two)->status == Status::Missing);
+
+  static constexpr Fact loads[] = {{.is = Fact::Is::Loads, .method = "GhostAI.Hunting"}};
+  const Result* l = g.flag(loads);
+  CHECK(l && l->status == Status::Resolved && l->offset == 0xE0);
+
+  // Without facts the shape alone cannot choose.
+  CHECK(g.flag({})->status == Status::Ambiguous);
+  CHECK(g.flag({})->candidates.size() == 4);
+}
+
+void negated_fact_picks_flag() {
+  Bools g;
+  static constexpr Fact facts[] = {
+      {.is = Fact::Is::Stores, .method = "GhostAI.Hunting"},
+      {.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1, .negate = true}};
+  const Result* f = g.flag(facts);
+  CHECK(f && f->status == Status::Resolved);
+  CHECK(f && f->offset == 0xF3);
+
+  // Neither stored nor loaded: the one left untouched.
+  static constexpr Fact untouched[] = {{.is = Fact::Is::Stores, .method = "GhostAI.Hunting", .negate = true},
+                                       {.is = Fact::Is::Loads, .method = "GhostAI.Hunting", .negate = true}};
+  const Result* u = g.flag(untouched);
+  CHECK(u && u->status == Status::Resolved && u->offset == 0xF4);
+}
+
+void fact_on_unresolved_method_blocks() {
+  Bools g;
+  static constexpr Fact facts[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Gone", .value = 1}};
+  constexpr EntryDesc gone{.key = "GhostAI.Gone", .kind = Kind::Method, .owner = "GhostAI", .name = "Gone"};
+  constexpr EntryDesc flag{.key = "GhostAI.flag", .kind = Kind::Field, .owner = "GhostAI", .type = "bool",
+                           .facts = facts};
+  const Resolution r = g.code.run({&kGhostAI, &gone, &flag}, g.m.build());
+  CHECK(r.find("GhostAI.Gone")->status == Status::Missing);
+  const Result* f = r.find("GhostAI.flag");
+  CHECK(f && f->status == Status::Blocked);
+  CHECK(f && f->detail.find("GhostAI.Gone") != std::string::npos);
+}
+
+// A fact names a method entry, and its kind fits the entry: Stores, StoresConst and Loads are about
+// fields, Calls and CalledBy about methods.
+void fact_kinds_must_fit() {
+  Bools g;
+  static constexpr Fact onField[] = {{.is = Fact::Is::Stores, .method = "GhostAI.b"}};
+  constexpr EntryDesc b{.key = "GhostAI.b", .kind = Kind::Field, .owner = "GhostAI", .name = "bd8"};
+  constexpr EntryDesc flag{.key = "GhostAI.flag", .kind = Kind::Field, .owner = "GhostAI", .type = "bool",
+                           .facts = onField};
+  const Resolution r = g.code.run({&kGhostAI, &b, &flag}, g.m.build());
+  CHECK(r.find("GhostAI.flag")->status == Status::Missing);
+  CHECK(r.find("GhostAI.flag")->detail.find("not a method entry") != std::string::npos);
+
+  static constexpr Fact calls[] = {{.is = Fact::Is::Calls, .method = "GhostAI.Hunting"}};
+  CHECK(g.flag(calls)->status == Status::Missing);
+  static constexpr Fact stores[] = {{.is = Fact::Is::Stores, .method = "GhostAI.Hunting"}};
+  constexpr EntryDesc method{.key = "GhostAI.method", .kind = Kind::Method, .owner = "GhostAI", .type = "void",
+                             .facts = stores};
+  const Resolution m = g.code.run({&kGhostAI, &kHuntingMethod, &method}, g.m.build());
+  CHECK(m.find("GhostAI.method")->status == Status::Missing);
+}
+
+// Fail closed: facts read from code the reader could not fully account for never decide.
+void unreadable_code_never_decides() {
+  Bools g(false);
+  static constexpr Fact cooldown[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1}};
+  const Result* f = g.flag(cooldown);
+  CHECK(f && f->status == Status::Ambiguous);
+  CHECK(f && f->detail.find("could not be fully read") != std::string::npos);
+  CHECK(f && f->offset == 0);
+
+  // A lone candidate whose own code is unreadable is not taken on a Calls fact either.
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.method(ai, "Helper", "int", {}, 0x1000);
+  m.method(ai, "ദശ", "void", {}, 0x1100);
+  m.method(ai, "സറ", "void", {}, 0x1200);
+  Code code;
+  code.function(0x1000, kRet);
+  code.function(0x1100, join({kVzeroupper, rel(0x1103, {0xE8}, 0x1000), kRet}));
+  code.function(0x1200, join({kLoad40, kRet}));
+  constexpr EntryDesc helper{.key = "GhostAI.Helper", .kind = Kind::Method, .owner = "GhostAI", .name = "Helper"};
+  static constexpr Fact calls[] = {{.is = Fact::Is::Calls, .method = "GhostAI.Helper"}};
+  constexpr EntryDesc caller{.key = "GhostAI.Caller", .kind = Kind::Method, .owner = "GhostAI", .type = "void",
+                             .facts = calls};
+  const Resolution r = code.run({&kGhostAI, &helper, &caller}, m.build());
+  const Result* c = r.find("GhostAI.Caller");
+  CHECK(c && c->status == Status::Ambiguous);
+  CHECK(c && c->detail.find("could not be fully read") != std::string::npos);
+  CHECK(c && c->candidates.size() == 1 && c->rva == 0);
+}
+
+void folded_alias_is_one_behaviour() {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.method(ai, "Init", "void", {"float"}, 0x1000);
+  m.method(ai, "ഞത", "void", {"float"}, 0x1000);
+  Code code;
+  code.function(0x1000, join({kLoad40, kRet}));
+  static constexpr const char* kFloat[] = {"float"};
+  constexpr EntryDesc init{.key = "GhostAI.Init", .kind = Kind::Method, .owner = "GhostAI", .name = "Init",
+                           .params = kFloat};
+  const Resolution r = code.run({&kGhostAI, &init}, m.build());
+  const Result* i = r.find("GhostAI.Init");
+  CHECK(i && i->status == Status::Resolved && i->rva == 0x1000);
+  CHECK(i && i->currentName == "Init");
+  CHECK(i && i->aliases == std::vector<std::string>{"ഞത"});
+  CHECK(i && i->twins.empty());
+
+  // Found by shape, both are candidates, and they are one behaviour.
+  constexpr EntryDesc shape{.key = "GhostAI.Init", .kind = Kind::Method, .owner = "GhostAI", .type = "void",
+                            .params = kFloat};
+  const Resolution s = code.run({&kGhostAI, &shape}, m.build());
+  const Result* h = s.find("GhostAI.Init");
+  CHECK(h && h->status == Status::Resolved && h->rva == 0x1000);
+  CHECK(h && h->aliases.size() == 1 && h->twins.empty());
+}
+
+static constexpr const char* kPlayer[] = {"Player"};
+constexpr EntryDesc kLookAtPlayer{.key = "GhostAI.LookAtPlayer", .kind = Kind::Method, .owner = "GhostAI",
+                                  .name = "LookAtPlayer", .params = kPlayer};
+
+void identical_twins_are_one_behaviour() {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.method(ai, "LookAtPlayer", "void", {"Player"}, 0x1000);
+  m.method(ai, "ദശ", "void", {"Player"}, 0x1100);
+  m.method(ai, "സറ", "void", {"Player"}, 0x1200);
+  m.method(ai, "ബഹ", "void", {}, 0x1300);            // the same body, another signature
+  m.method(ai, "ജഭ", "void", {"Player"}, 0x1400, true);  // the same body, static
+  Code code;
+  for (const uint32_t at : {0x1000, 0x1100, 0x1200, 0x1300, 0x1400}) code.function(at, join({kLoad40, kRet}));
+  const Resolution r = code.run({&kGhostAI, &kLookAtPlayer}, m.build());
+  const Result* l = r.find("GhostAI.LookAtPlayer");
+  CHECK(l && l->status == Status::Resolved && l->rva == 0x1000);
+  CHECK(l && l->twins == std::vector<uint64_t>({0x1100, 0x1200}));
+  CHECK(l && l->aliases.empty());
+
+  // Found by shape, the three are one behaviour, and the lowest RVA is canonical.
+  constexpr EntryDesc shape{.key = "GhostAI.Look", .kind = Kind::Method, .owner = "GhostAI", .type = "void",
+                            .params = kPlayer};
+  const Resolution s = code.run({&kGhostAI, &shape}, m.build());
+  const Result* h = s.find("GhostAI.Look");
+  CHECK(h && h->status == Status::Resolved && h->rva == 0x1000);
+  CHECK(h && h->currentName == "LookAtPlayer");
+  CHECK(h && h->twins.size() == 2);
+}
+
+// Twins sit at other addresses, so a call to the same helper has other bytes: they are compared as
+// read, with the target made absolute.
+void twins_calling_one_helper() {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.method(ai, "LookAtPlayer", "void", {"Player"}, 0x1000);
+  m.method(ai, "ദശ", "void", {"Player"}, 0x1100);
+  Code code;
+  for (const uint32_t at : {0x1000, 0x1100}) code.function(at, join({rel(at, {0xE8}, 0x9000), kRet}));
+  const Resolution r = code.run({&kGhostAI, &kLookAtPlayer}, m.build());
+  const Result* l = r.find("GhostAI.LookAtPlayer");
+  CHECK(l && l->status == Status::Resolved && l->twins == std::vector<uint64_t>{0x1100});
+}
+
+void decoy_with_other_metadata_is_not_a_twin() {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.method(ai, "UnAppear", "void", {}, 0x1000);
+  m.method(ai, "ദശ", "void", {}, 0x1100);
+  // The same bytes at another address: the rip-relative operand names another metadata item.
+  Code code;
+  const std::vector<uint8_t> body = join({rel(0x1000, {0x48, 0x8D, 0x05}, 0x9000), kRet});
+  code.function(0x1000, body);
+  code.function(0x1100, body);
+  constexpr EntryDesc unAppear{.key = "GhostAI.UnAppear", .kind = Kind::Method, .owner = "GhostAI",
+                               .name = "UnAppear"};
+  const Resolution r = code.run({&kGhostAI, &unAppear}, m.build());
+  const Result* u = r.find("GhostAI.UnAppear");
+  CHECK(u && u->status == Status::Resolved && u->rva == 0x1000);
+  CHECK(u && u->twins.empty() && u->aliases.empty());
+
+  // Found by shape they are two behaviours.
+  constexpr EntryDesc shape{.key = "GhostAI.Un", .kind = Kind::Method, .owner = "GhostAI", .type = "void"};
+  CHECK(code.run({&kGhostAI, &shape}, m.build()).find("GhostAI.Un")->status == Status::Ambiguous);
+}
+
+// Code the reader could not fully account for is a twin only byte for byte.
+void unreadable_twins_only_byte_identical() {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.method(ai, "Same", "void", {"int"}, 0x1000);
+  m.method(ai, "ദശ", "void", {"int"}, 0x1100);
+  m.method(ai, "Calls", "void", {"float"}, 0x1200);
+  m.method(ai, "സറ", "void", {"float"}, 0x1300);
+  Code code;
+  for (const uint32_t at : {0x1000, 0x1100}) code.function(at, join({kVzeroupper, kLoad40, kRet}));
+  for (const uint32_t at : {0x1200, 0x1300}) code.function(at, join({kVzeroupper, rel(at + 3, {0xE8}, 0x9000), kRet}));
+  static constexpr const char* kInt[] = {"int"};
+  static constexpr const char* kFloat[] = {"float"};
+  constexpr EntryDesc same{.key = "GhostAI.Same", .kind = Kind::Method, .owner = "GhostAI", .name = "Same",
+                           .params = kInt};
+  constexpr EntryDesc calls{.key = "GhostAI.Calls", .kind = Kind::Method, .owner = "GhostAI", .name = "Calls",
+                            .params = kFloat};
+  const Resolution r = code.run({&kGhostAI, &same, &calls}, m.build());
+  CHECK(r.find("GhostAI.Same")->twins == std::vector<uint64_t>{0x1100});
+  CHECK(r.find("GhostAI.Calls")->status == Status::Resolved);
+  CHECK(r.find("GhostAI.Calls")->twins.empty());
+}
+
+void calls_and_called_by_include_twins() {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.method(ai, "LookAtPlayer", "void", {"Player"}, 0x1000);
+  m.method(ai, "ദശ", "void", {"Player"}, 0x1100);
+  m.method(ai, "Hunting", "void", {}, 0x1200);
+  m.method(ai, "സറ", "int", {}, 0x1300);
+  m.method(ai, "ബഹ", "int", {}, 0x1400);
+  m.method(ai, "ജഭ", "int", {}, 0x1500);
+  Code code;
+  for (const uint32_t at : {0x1000, 0x1100}) code.function(at, join({kLoad40, kRet}));
+  code.function(0x1200, join({rel(0x1200, {0xE8}, 0x1400), kRet}));
+  code.function(0x1300, join({rel(0x1300, {0xE8}, 0x1100), kRet}));  // calls the twin
+  code.function(0x1400, join({kLoad40, kLoad40, kRet}));
+  code.function(0x1500, join({{0x0F, 0x1F, 0x00}, kRet}));
+
+  static constexpr Fact calls[] = {{.is = Fact::Is::Calls, .method = "GhostAI.LookAtPlayer"}};
+  constexpr EntryDesc looker{.key = "GhostAI.Looker", .kind = Kind::Method, .owner = "GhostAI", .type = "int",
+                             .facts = calls};
+  static constexpr Fact calledBy[] = {{.is = Fact::Is::CalledBy, .method = "GhostAI.Hunting"}};
+  constexpr EntryDesc step{.key = "GhostAI.Step", .kind = Kind::Method, .owner = "GhostAI", .type = "int",
+                           .facts = calledBy};
+  static constexpr Fact neither[] = {{.is = Fact::Is::CalledBy, .method = "GhostAI.Hunting", .negate = true},
+                                     {.is = Fact::Is::Calls, .method = "GhostAI.LookAtPlayer", .negate = true}};
+  constexpr EntryDesc idle{.key = "GhostAI.Idle", .kind = Kind::Method, .owner = "GhostAI", .type = "int",
+                           .facts = neither};
+  const Resolution r = code.run({&kGhostAI, &kLookAtPlayer, &kHuntingMethod, &looker, &step, &idle}, m.build());
+  CHECK(r.find("GhostAI.LookAtPlayer")->twins == std::vector<uint64_t>{0x1100});
+  CHECK(r.find("GhostAI.Looker")->status == Status::Resolved && r.find("GhostAI.Looker")->rva == 0x1300);
+  CHECK(r.find("GhostAI.Step")->status == Status::Resolved && r.find("GhostAI.Step")->rva == 0x1400);
+  CHECK(r.find("GhostAI.Idle")->status == Status::Resolved && r.find("GhostAI.Idle")->rva == 0x1500);
+}
+
+void pattern_inside_method() {
+  Bools g;
+  g.m.method(0, "Twice", "void", {"int"}, 0x1100);
+  // Twice holds Hunting's stores twice over. A search of Hunting does not reach into it.
+  g.code.function(0x1100, join({kHuntingBody, kHuntingBody, kRet}));
+  const GameModel model = g.m.build();
+  constexpr EntryDesc store{.key = "GhostAI.storeCooldown", .kind = Kind::Code, .pattern = "C6 87 ?? ?? ?? ?? 01",
+                            .within = "GhostAI.Hunting"};
+  const Resolution r = g.code.run({&kGhostAI, &kHuntingMethod, &store}, model);
+  const Result* s = r.find("GhostAI.storeCooldown");
+  CHECK(s && s->status == Status::Resolved);
+  CHECK(s && s->rva == 0x1007);
+
+  constexpr EntryDesc imm{.key = "GhostAI.storeCooldown", .kind = Kind::Code, .pattern = "c6 87 ?? ?? ?? ?? 01",
+                          .within = "GhostAI.Hunting", .patternOffset = 6};
+  CHECK(g.code.run({&kGhostAI, &kHuntingMethod, &imm}, model).find("GhostAI.storeCooldown")->rva == 0x100D);
+
+  static constexpr const char* kInt[] = {"int"};
+  constexpr EntryDesc twice{.key = "GhostAI.Twice", .kind = Kind::Method, .owner = "GhostAI", .name = "Twice",
+                            .params = kInt};
+  constexpr EntryDesc both{.key = "GhostAI.storeCooldown", .kind = Kind::Code, .pattern = "C6 87 ?? ?? ?? ?? 01",
+                           .within = "GhostAI.Twice"};
+  const Resolution t = g.code.run({&kGhostAI, &twice, &both}, model);
+  const Result* a = t.find("GhostAI.storeCooldown");
+  CHECK(a && a->status == Status::Ambiguous && a->candidates.size() == 2 && a->rva == 0);
+
+  constexpr EntryDesc none{.key = "GhostAI.storeCooldown", .kind = Kind::Code, .pattern = "C6 87 ?? ?? ?? ?? 02",
+                           .within = "GhostAI.Hunting"};
+  CHECK(g.code.run({&kGhostAI, &kHuntingMethod, &none}, model).find("GhostAI.storeCooldown")->status ==
+        Status::Missing);
+  for (const char* bad : {"", "C6 8", "C6 87 ?", "C6 GG", "C687"}) {
+    const EntryDesc malformed{.key = "GhostAI.storeCooldown", .kind = Kind::Code, .pattern = bad,
+                              .within = "GhostAI.Hunting"};
+    const Resolution b = g.code.run({&kGhostAI, &kHuntingMethod, &malformed}, model);
+    CHECK(b.find("GhostAI.storeCooldown")->status == Status::Missing);
+    CHECK(b.find("GhostAI.storeCooldown")->detail.find("pattern") != std::string::npos);
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -540,5 +887,17 @@ int main() {
   stale_hint_never_decides();
   hint_cannot_break_a_tie();
   method_by_shape();
+  stores_const_picks_cooldown();
+  negated_fact_picks_flag();
+  fact_on_unresolved_method_blocks();
+  fact_kinds_must_fit();
+  unreadable_code_never_decides();
+  folded_alias_is_one_behaviour();
+  identical_twins_are_one_behaviour();
+  twins_calling_one_helper();
+  decoy_with_other_metadata_is_not_a_twin();
+  unreadable_twins_only_byte_identical();
+  calls_and_called_by_include_twins();
+  pattern_inside_method();
   return g_failures ? 1 : 0;
 }
