@@ -60,6 +60,10 @@ game classes, and the host contract in `core/mod_api.h`); `host/` is the host; `
 holds PhasmoMods Loader and the injector. `archive/` holds mods that are kept but not
 built: Bigger Lobbies, which the game's Photon servers cap at four players, and Replay.
 
+Agents and contributors who work on how mods reach the game start at [sdk/README.md](sdk/README.md):
+it explains the game SDK (the map of game types and methods, the game API mods call, the offline check
+`tools/gamecheck.ps1`) and where reverse-engineering facts are recorded.
+
 See the [design](docs/design.md), [the suite plan](docs/superpowers/plans/2026-10-20-mod-suite.md),
 [loading evidence](docs/loading-investigation.md) and [outstanding findings](FINDINGS.md)
 for implementation and verification limits.

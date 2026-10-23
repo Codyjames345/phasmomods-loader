@@ -1,6 +1,7 @@
 #include "shade.h"
 
 #include "brownie_rule.h"
+#include "GhostAI.h"
 #include "game.h"
 #include "gate.h"
 #include "hold.h"
@@ -16,11 +17,7 @@ namespace {
 
 using il2cpp::Vector3;
 
-constexpr uintptr_t kUnAppearRva = 0x202E140;  // GhostAI.UnAppear(): RPC to every client
 constexpr int kStateIdle = 0;
-
-using UnAppear_t = void (*)(void*, const void*);
-UnAppear_t g_unAppear = nullptr;
 
 struct State {
   il2cpp::Held ghost;
@@ -66,9 +63,8 @@ bool company_rule(gate::Kind kind) {
 }  // namespace
 
 bool resolve() {
-  g_unAppear = reinterpret_cast<UnAppear_t>(game::game_assembly_address(kUnAppearRva));
   gate::add_rule(&company_rule);
-  return g_unAppear != nullptr;
+  return true;
 }
 
 void tick_host(void* ghost, int type, float dt) {
@@ -82,7 +78,7 @@ void tick_host(void* ghost, int type, float dt) {
   const bool showing = world::appeared(ghost) && !hunting && !cursed_pull(game::ghost_state(ghost));
   if (g.gaze.step(showing, showing && stared_at(ghost), dt)) {
     gate::change_state(ghost, kStateIdle);  // its event ends here
-    if (world::appeared(ghost)) g_unAppear(ghost, nullptr);
+    if (world::appeared(ghost)) phasmo::GhostAI::UnAppear(ghost);
     PG_LOG("shade: stared at, it vanishes");
   }
   if (g.falter.step(hunting, hunting && group_in_sight(ghost), dt)) {
