@@ -6,3 +6,4 @@ if ($LASTEXITCODE -ne 0) { throw 'The native build failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'The native tests failed.' }
 & (Join-Path $PSScriptRoot 'tests/package_test.ps1')
 & (Join-Path $PSScriptRoot 'tests/stage_test.ps1')
+& (Join-Path $PSScriptRoot 'tests/release_test.ps1')

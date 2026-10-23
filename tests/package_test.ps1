@@ -74,6 +74,7 @@ try {
         New-Item -ItemType Directory -Path (Join-Path $fixture 'tests') | Out-Null
         Set-Content -LiteralPath (Join-Path $fixture 'tests/package_test.ps1') -Value '# Fixture package checks do not recurse.'
         Set-Content -LiteralPath (Join-Path $fixture 'tests/stage_test.ps1') -Value '# Fixture stage checks run on their own.'
+        Set-Content -LiteralPath (Join-Path $fixture 'tests/release_test.ps1') -Value '# Fixture release checks run on their own.'
         $buildExit = if ($failure -eq 'native build') { 7 } else { 0 }
         $testExit = if ($failure -eq 'native tests') { 7 } else { 0 }
         Set-Content -LiteralPath (Join-Path $fixture 'build.ps1') -Value "exit $buildExit"
