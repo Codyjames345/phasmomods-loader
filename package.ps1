@@ -14,16 +14,6 @@ foreach ($file in $payload) {
         throw "The release is missing $($file.Source). Build and validate the project before packaging."
     }
 }
-if (-not $PSBoundParameters.ContainsKey('Vpk')) {
-    Push-Location $root
-    try {
-        & dotnet tool restore | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw 'Cannot restore the pinned vpk tool.' }
-    } finally {
-        Pop-Location
-    }
-}
-
 $dist = Join-Path $root 'dist'
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 $stage = Join-Path $dist ('.pack-' + [guid]::NewGuid().ToString('N'))
@@ -31,7 +21,13 @@ $content = Join-Path $stage 'content'
 $output = Join-Path $stage 'releases'
 $releases = Join-Path $dist 'releases'
 New-Item -ItemType Directory -Path $content, $output | Out-Null
+# dotnet finds .config/dotnet-tools.json by searching up from the current folder, so work from the project root.
+Push-Location $root
 try {
+    if (-not $PSBoundParameters.ContainsKey('Vpk')) {
+        & dotnet tool restore | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot restore the pinned vpk tool.' }
+    }
     foreach ($file in $payload) {
         $destination = Join-Path $content $file.Name
         New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
@@ -47,6 +43,7 @@ try {
     [IO.Directory]::Move($output, $releases)
     Get-ChildItem -LiteralPath $releases -File | Select-Object Name, Length
 } finally {
+    Pop-Location
     $resolvedStage = [IO.Path]::GetFullPath($stage)
     $distPrefix = [IO.Path]::GetFullPath($dist).TrimEnd('\') + '\'
     if (-not $resolvedStage.StartsWith($distPrefix, [StringComparison]::OrdinalIgnoreCase)) {

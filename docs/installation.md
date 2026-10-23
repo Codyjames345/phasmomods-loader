@@ -19,7 +19,6 @@ only in private lobbies with friends who have agreed to them.
 | Spectral Flame | An eighth evidence. A candle, lantern or candelabra left burning where the ghost spends its time slowly turns blue. A new row on the journal's evidence page. |
 | Custom Ghosts | Fifteen new ghost types, each with its own journal page, evidence and tells: the Echo, Dullahan, Kikimora, Draugr and Black Shuck, and ten that carry Spectral Flame (Lithobolia, Gremlin, Brownie, Bogeyman, Lethe, Mesmer, Knell, Asterion, Tempest, Hydra). Needs Spectral Flame, which switches on with it. |
 | Ghost Tells | Three new tells each for the Spirit, Mare, Shade, Yurei, Goryo and Onryo, so they can be told apart by how they behave. Their journal pages name the new tells. |
-| Afterlife | A dead investigator holds Crouch to watch through the ghost's eyes, and cannot touch anything while watching or for a minute after. |
 
 Playing the ghost: Interact, Primary Use (tap: an event; hold: a hunt), Secondary Use (the type's
 ability), the torch key (the fuse box) and Crouch held while tapping Primary Use (an event in an
@@ -94,9 +93,9 @@ network, it starts the installed version unchanged.
 Earlier builds came as a ZIP that you extracted to a folder.
 
 1. Run `PhasmoModsLoader-win-Setup.exe`.
-2. In Steam, change Phasmophobia's launch option to
-   `"%LOCALAPPDATA%\PhasmoModsLoader\PhasmoMods Loader.exe" --steam %command%`,
-   or copy the new text from the installed program.
+2. Open the installed PhasmoMods Loader and copy the Steam launch option it shows.
+   In Steam, open Phasmophobia's **Properties > General > Launch Options** and paste it
+   over the old one.
 3. Delete the old extracted folder.
 
 Your settings carry over: the ticked mods, your agreement to the notice and the logs

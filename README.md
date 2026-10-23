@@ -12,7 +12,6 @@ players with the same mods. Each mod is its own DLL under `mods/`:
 | Spectral Flame | `mods/spectral_flame` | An eighth evidence: a candle, lantern or candelabra burns blue where the ghost lingers ([details](docs/spectral-flame.md)). |
 | Custom Ghosts | `mods/custom_ghosts` | Fifteen new ghost types with their own evidence, journal pages and rules; needs Spectral Flame ([details](docs/custom-ghosts.md)). |
 | Ghost Tells | `mods/ghost_tells` | Three new tells each for six vanilla ghosts ([details](docs/ghost-tells.md)). |
-| Afterlife | `mods/afterlife` | Dead investigators can watch through the ghost's eyes, then touch nothing for a minute. |
 
 ## Read this first
 
