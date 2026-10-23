@@ -248,8 +248,11 @@ The obfuscator makes same-behaviour copies of some methods (twins). With `Twins:
 every twin is hooked as well, so the detour runs whichever body the game calls; with
 `Twins::CanonicalOnly` only the canonical body is hooked, which is what existing code hooked by raw
 address and so what a migration uses. Each body has its own chain, and `original` continues the chain
-of the body the call came in through, so hooks of either policy, and raw hooks on one body, coexist on
-one method in any order: a hook on the canonical body alone never runs for a call through a twin. The
+of the body the call came in through, so typed hooks of either policy, and raw hooks on one body,
+coexist on one method in any order: a hook on the canonical body alone never runs for a call through
+a twin. That stops holding once a 2.0 mod's all-twins `hook_entry` is on the method: its one detour
+continues every call on the canonical body's chain, so a call through a twin also runs the hooks on
+the canonical body below it (the limit `hook_entry` documents in `core/mod_api.h`). The
 game API makes one entry function per body for this, up to `pg::api::kMaxBodies` (8); an all-twins
 hook on a method with more bodies is refused and logged, with nothing hooked. A twin folded onto the
 canonical address is one body, hooked once.

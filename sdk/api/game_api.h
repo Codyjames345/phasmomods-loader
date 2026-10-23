@@ -546,8 +546,9 @@ struct Hooked<Method<D, R(A...)>> {
 /// hooks a method once: a second hook<M> is refused (the host logs it) and the first keeps its
 /// detour. False when M did not resolve (logged once), when `detour` is null, when an all-twins hook
 /// meets a method with more than kMaxBodies bodies (logged, nothing hooked), or when the host could
-/// not hook a body (it logs why); the bodies hooked before that one stay hooked and run `detour`, so
-/// a mod returns false from its start and the host removes them. Main thread.
+/// not hook a body (it logs why). After such a partial failure the bodies hooked before it stay
+/// hooked (the contract cannot unhook them) but run no detour: each passes the call straight on, as
+/// if nothing were hooked, until the host removes them when the mod's start fails. Main thread.
 template <auto& M>
 bool hook(typename detail::Hooked<std::remove_cvref_t<decltype(M)>>::Detour detour, const char* name,
           Twins twins = Twins::All) {
@@ -558,7 +559,9 @@ bool hook(typename detail::Hooked<std::remove_cvref_t<decltype(M)>>::Detour deto
   uint32_t created = 0;
   const bool ok = detail::hook_bodies(W::desc.key, detour != nullptr, &B::entry, reinterpret_cast<void**>(B::original),
                                       name ? name : W::desc.key, twins == Twins::All, created);
-  if (created > 0) detail::Hooked<W>::detour = detour;  // before anything enables the new hooks
+  // Before anything enables the new hooks. A partial hook runs no detour, and any detour left from
+  // an earlier attempt goes with it.
+  if (created > 0) detail::Hooked<W>::detour = ok ? detour : nullptr;
   return ok;
 }
 

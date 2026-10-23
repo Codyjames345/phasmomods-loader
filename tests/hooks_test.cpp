@@ -4,6 +4,7 @@
 // caller context (host/context.cpp). Run: build\hooks_test.exe
 #include <windows.h>
 
+#include <cstdint>
 #include <initializer_list>
 #include <map>
 #include <span>
@@ -364,6 +365,46 @@ void more_than_eight_bodies_refused() {
   pg::hooks::rollback_to(before);
 }
 
+// A typed hook that the host refuses on a later body is partial: the body hooked before it stays
+// hooked (the contract cannot unhook it) but runs no detour, as if nothing were hooked.
+__declspec(noinline) int partial_body(int x, const void*) {
+  step("P");
+  volatile int y = x;
+  return y + 25;
+}
+constexpr pg::sdk::EntryDesc kPartial{.key = "Test.Partial", .kind = pg::sdk::Kind::Method};
+constexpr pg::api::Method<kPartial, int(int)> Partial{};
+int partial_detour(pg::api::Original<Partial> original, int x) {
+  step("DP");
+  return original(x);
+}
+// A twin MinHook cannot hook: a 1-byte `ret` with no padding after or before it to patch.
+void* unhookable_twin() {
+  static void* code = [] {
+    auto* page = static_cast<uint8_t*>(VirtualAlloc(nullptr, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    if (!page) return static_cast<void*>(nullptr);
+    for (int i = 0; i < 32; ++i) page[i] = 0x41;  // not padding (0x00, 0x90 or 0xCC)
+    page[16] = 0xC3;
+    DWORD old = 0;
+    VirtualProtect(page, 0x1000, PAGE_EXECUTE_READ, &old);
+    return static_cast<void*>(page + 16);
+  }();
+  return code;
+}
+
+void partial_hook_runs_no_detour() {
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
+  CHECK(!pg::api::hook<Partial>(&partial_detour, "partial", pg::api::Twins::All));
+  CHECK(logged("Test.Partial is hooked on 1 of its 2 bodies only"));
+  CHECK(pg::hooks::mark() - before == 1);
+  CHECK(pg::hooks::enable_all());
+  g_trace.clear();
+  GameFn volatile through = &partial_body;
+  CHECK(through(1, nullptr) == 26 && g_trace == "P");
+  pg::hooks::rollback_to(before);
+}
+
 // The mods restart: every per-body hook since the mark goes, newest first, and each body's chain is
 // as it was, with the host's own hook made before the mark still in place. The mods hook again.
 GameFn g_origHost = nullptr;
@@ -530,6 +571,7 @@ int main() {
 
   give("Test.Twin", reinterpret_cast<void*>(&body_a), {reinterpret_cast<void*>(&body_b)});
   give("Test.Many", reinterpret_cast<void*>(&many_body), eight_twins());
+  give("Test.Partial", reinterpret_cast<void*>(&partial_body), {unhookable_twin()});
   const PgHostApi host = test_host();
   std::string missing;
   CHECK(pg::api::bind(&host, missing));
@@ -538,6 +580,7 @@ int main() {
   raw_create_on_a_twin();
   second_typed_hook_refused();
   more_than_eight_bodies_refused();
+  partial_hook_runs_no_detour();
   rollback_per_body();
   tracking_counts_every_body();
 

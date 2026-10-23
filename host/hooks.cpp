@@ -62,7 +62,8 @@ void* write_relay(void* detour) {
   std::memcpy(relay, jump, sizeof jump);
   std::memcpy(relay + sizeof jump, &detour, sizeof detour);
   std::memset(relay + sizeof jump + sizeof detour, 0xCC, kRelayBytes - sizeof jump - sizeof detour);
-  VirtualProtect(relay, kRelayBytes, old, &old);
+  if (!VirtualProtect(relay, kRelayBytes, old, &old))
+    PG_LOG("hooks: the relay at %p stays writable: restoring its protection failed (%lu)", relay, GetLastError());
   FlushInstructionCache(GetCurrentProcess(), relay, kRelayBytes);
   return relay;
 }
@@ -100,7 +101,7 @@ bool init() {
 
 bool create(void* target, void* detour, void** original, const char* name) {
   if (!target || !detour) {
-    PG_LOG("hooks: %s has no target", name);
+    PG_LOG("hooks: %s has no %s", name, target ? "detour" : "target");
     return false;
   }
   std::lock_guard lock(g_mutex);
