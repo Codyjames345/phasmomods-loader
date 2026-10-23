@@ -23,10 +23,12 @@ struct ModelBuilder {
     return static_cast<int>(model.types.size()) - 1;
   }
 
-  void field(int type, std::string name, std::string type_, int32_t offset, bool isStatic = false) {
+  void field(int type, std::string name, std::string type_, int32_t offset, bool isStatic = false,
+             int typeIndex = -1) {
     pg::sdk::ModelField f;
     f.name = std::move(name);
     f.type = std::move(type_);
+    f.typeIndex = typeIndex;
     f.offset = offset;
     f.isStatic = isStatic;
     model.types[type].fields.push_back(std::move(f));
@@ -37,17 +39,22 @@ struct ModelBuilder {
     pg::sdk::ModelField f;
     f.name = std::move(name);
     f.type = model.types[enumType].name;
+    f.typeIndex = enumType;
     f.isStatic = true;
     f.hasLiteral = true;
     f.literal = value;
     model.types[enumType].fields.push_back(std::move(f));
   }
 
+  // paramIndex left empty means no param's type is known.
   void method(int type, std::string name, std::string ret, std::vector<std::string> params, uint64_t rva,
-              bool isStatic = false) {
+              bool isStatic = false, std::vector<int> paramIndex = {}, int retIndex = -1) {
     pg::sdk::ModelMethod m;
     m.name = std::move(name);
     m.ret = std::move(ret);
+    m.retIndex = retIndex;
+    if (paramIndex.empty()) paramIndex.assign(params.size(), -1);
+    m.paramIndex = std::move(paramIndex);
     m.params = std::move(params);
     m.rva = rva;
     m.isStatic = isStatic;

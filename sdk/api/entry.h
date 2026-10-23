@@ -38,7 +38,9 @@ struct EntryDesc {
   const char* hint = nullptr;      // the obfuscated name in the last mapped build
   const char* assembly = nullptr;  // image name without ".dll"
   const char* ns = nullptr;        // null: the global namespace for a top-level type, any for a nested one
-  // A field's type or a method's return type. "@Key" means the type that entry Key resolved to.
+  // A field's type or a method's return type. "@Key" means the very type that entry Key resolved to,
+  // not just its name: where the model says which type a member uses, it must be that one, and where
+  // it does not, a name several types share makes the entry Ambiguous. The same holds in params.
   const char* type = nullptr;
   // A method's parameter types. Empty means the method is matched by name alone, at any arity, so
   // overloads make it Ambiguous.

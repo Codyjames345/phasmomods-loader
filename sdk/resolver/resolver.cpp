@@ -50,6 +50,9 @@ const char* kind_name(Kind kind) {
 struct Candidate {
   int type = -1;
   int member = -1;
+  // A type name the candidate uses for an "@Key" type that several model types share, when the model
+  // does not say which of them it means. Such a candidate cannot be accepted.
+  std::string unsure;
 };
 
 class Resolver {
@@ -61,6 +64,7 @@ class Resolver {
       out_.results[i].desc = entries[i];
       index_.try_emplace(entries[i]->key, i);
     }
+    for (const ModelType& type : model.types) ++typesNamed_[type.name];
   }
 
   Resolution run() && {
@@ -130,7 +134,10 @@ class Resolver {
     // The pipeline: candidates, then every check the entry declares, then unique or report.
     std::vector<Candidate> candidates = by_name(d, owner);
     const size_t named = candidates.size();
-    std::erase_if(candidates, [&](const Candidate& c) { return !fits(d, c); });
+    // A method named without its parameters cannot tell overloads apart, and no other check may
+    // choose among them for it.
+    if (d.kind == Kind::Method && d.params.empty() && named > 1) return decide(d, r, candidates, named, owner);
+    std::erase_if(candidates, [&](Candidate& c) { return !fits(d, c); });
     decide(d, r, candidates, named, owner);
   }
 
@@ -171,7 +178,7 @@ class Resolver {
   }
 
   // Whether a candidate passes the checks the entry declares.
-  bool fits(const EntryDesc& d, const Candidate& c) const {
+  bool fits(const EntryDesc& d, Candidate& c) const {
     const ModelType& type = model_.types[c.type];
     const bool wantStatic = (d.flags & kStatic) != 0;
     switch (d.kind) {
@@ -185,17 +192,19 @@ class Resolver {
       case Kind::Method: {
         const ModelMethod& m = type.methods[c.member];
         if (m.isStatic != wantStatic) return false;
-        if (d.type && !type_matches(d.type, m.ret)) return false;
+        if (d.type && !type_matches(d.type, m.ret, m.retIndex, c)) return false;
         // No params: matched by name alone, any arity.
         if (d.params.empty()) return true;
         if (d.params.size() != m.params.size()) return false;
-        for (size_t p = 0; p < d.params.size(); ++p)
-          if (!type_matches(d.params[p], m.params[p])) return false;
+        for (size_t p = 0; p < d.params.size(); ++p) {
+          const int index = p < m.paramIndex.size() ? m.paramIndex[p] : -1;
+          if (!type_matches(d.params[p], m.params[p], index, c)) return false;
+        }
         return true;
       }
       case Kind::Field: {
         const ModelField& f = type.fields[c.member];
-        return !f.hasLiteral && f.isStatic == wantStatic && (!d.type || type_matches(d.type, f.type));
+        return !f.hasLiteral && f.isStatic == wantStatic && (!d.type || type_matches(d.type, f.type, f.typeIndex, c));
       }
       case Kind::EnumValue:
         return type.fields[c.member].hasLiteral;
@@ -220,6 +229,13 @@ class Resolver {
     }
 
     const Candidate& c = candidates.front();
+    if (!c.unsure.empty()) {
+      r.status = Status::Ambiguous;
+      r.detail = std::format("{} types are named {}, and the model does not say which {} {}{} uses",
+                             typesNamed_.at(c.unsure), c.unsure, kind_name(d.kind), d.name, where);
+      r.candidates.push_back(describe(d.kind, c));
+      return;
+    }
     const ModelType& type = model_.types[c.type];
     r.status = Status::Resolved;
     r.type = c.type;
@@ -245,16 +261,23 @@ class Resolver {
     }
   }
 
-  // An entry's type string against a canonical model type string.
-  bool type_matches(const char* want, const std::string& have) const {
-    if (const auto ref = entry_ref(want)) {
-      const auto it = index_.find(ref->key);
-      if (it == index_.end() || entries_[it->second]->kind != Kind::Type) return false;
-      const Result& target = out_.results[it->second];
-      if (target.status != Status::Resolved) return false;
-      return canonical_type(model_.types[target.type].name + std::string(ref->suffix)) == have;
-    }
-    return canonical_type(want) == have;
+  // An entry's type string against a model type string and, when the model knows it, the index of
+  // the type that string names. "@Key" means the very type entry Key resolved to: a known index must
+  // be that type, and an unknown one is trusted by name only when no other model type shares the
+  // name. Otherwise the candidate is marked unsure.
+  bool type_matches(const char* want, const std::string& have, int haveIndex, Candidate& c) const {
+    const auto ref = entry_ref(want);
+    if (!ref) return canonical_type(want) == have;
+    const auto it = index_.find(ref->key);
+    if (it == index_.end() || entries_[it->second]->kind != Kind::Type) return false;
+    const Result& target = out_.results[it->second];
+    if (target.status != Status::Resolved) return false;
+    const std::string& name = model_.types[target.type].name;
+    if (canonical_type(name + std::string(ref->suffix)) != have) return false;
+    // The index names the type itself, by reference or not, so it is only known for those forms.
+    if (haveIndex >= 0 && (ref->suffix.empty() || ref->suffix == "&")) return haveIndex == target.type;
+    if (typesNamed_.at(name) > 1) c.unsure = name;
+    return true;
   }
 
   // "UnityEngine.Physics" or "GhostAI/GhostState".
@@ -297,6 +320,7 @@ class Resolver {
   const GameModel& model_;
   const CodeImage* image_;
   std::unordered_map<std::string_view, size_t> index_;  // the first entry with each key
+  std::unordered_map<std::string, int> typesNamed_;     // how many model types have each name
   Resolution out_;
   std::vector<int> order_, low_;
   std::vector<bool> onStack_;

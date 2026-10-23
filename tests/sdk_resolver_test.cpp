@@ -92,6 +92,27 @@ void method_by_name_without_params_is_ambiguous_with_overloads() {
   CHECK(ray && ray->rva == 0);
 }
 
+// Leaving out kStatic must not choose between a static and an instance overload.
+void method_by_name_ignores_static_among_overloads() {
+  ModelBuilder b;
+  const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+  b.method(ai, "Foo", "void", {"Player"}, 0x3000, true);
+  b.method(ai, "Foo", "void", {}, 0x3100);
+  const GameModel model = b.build();
+  constexpr EntryDesc foo{.key = "GhostAI.Foo", .kind = Kind::Method, .owner = "GhostAI", .name = "Foo"};
+  const Resolution res = run({&kGhostAI, &foo}, model);
+  const Result* r = res.find("GhostAI.Foo");
+  CHECK(r && r->status == Status::Ambiguous);
+  CHECK(r && r->candidates.size() == 2);
+  CHECK(r && r->rva == 0);
+
+  // Listed params still let static-ness filter.
+  static constexpr const char* kPlayer[] = {"Player"};
+  constexpr EntryDesc fooPlayer{.key = "GhostAI.FooPlayer", .kind = Kind::Method, .owner = "GhostAI",
+                                .name = "Foo", .params = kPlayer};
+  CHECK(run({&kGhostAI, &fooPlayer}, model).find("GhostAI.FooPlayer")->status == Status::Missing);
+}
+
 void field_by_name() {
   Game g;
   const GameModel model = g.b.build();
@@ -137,6 +158,58 @@ void at_type_resolves_through_entry() {
   const GameModel otherModel = other.build();
   const Resolution o = run({&kGhostAI, &kGhostState, &kChangeState}, otherModel);
   CHECK(o.find("GhostAI.ChangeState")->status == Status::Missing);
+}
+
+// "@GhostState" means the type the entry resolved to, not any type of that name.
+void at_type_is_the_resolved_type_not_its_name() {
+  // Two GhostStates: the one nested in GhostAI, and another in its own namespace.
+  const auto model_with = [](bool knownIndex, bool pointsAtOther, bool shareName) {
+    ModelBuilder b;
+    const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+    const int state = b.type("Assembly-CSharp", "", "GhostState", ai, true);
+    const int other = b.type("Assembly-CSharp", "Other", shareName ? "GhostState" : "OtherState");
+    const int target = pointsAtOther ? other : state;
+    const std::string name = pointsAtOther && !shareName ? "OtherState" : "GhostState";
+    b.method(ai, "ChangeState", "void", {name, "PhotonObjectInteract", "PhotonObjectInteract[]"}, 0x1000, false,
+             {knownIndex ? target : -1, -1, -1});
+    return b.build();
+  };
+
+  // A known index on a different, same-named type does not match.
+  const GameModel elsewhere = model_with(true, true, true);
+  CHECK(run({&kGhostAI, &kGhostState, &kChangeState}, elsewhere).find("GhostAI.ChangeState")->status ==
+        Status::Missing);
+
+  // A known index on the resolved type matches, though the name is shared.
+  const GameModel known = model_with(true, false, true);
+  const Resolution kr = run({&kGhostAI, &kGhostState, &kChangeState}, known);
+  const Result* k = kr.find("GhostAI.ChangeState");
+  CHECK(k && k->status == Status::Resolved && k->rva == 0x1000);
+
+  // An unknown index with a shared name cannot be trusted.
+  const GameModel unsure = model_with(false, false, true);
+  const Resolution ur = run({&kGhostAI, &kGhostState, &kChangeState}, unsure);
+  const Result* u = ur.find("GhostAI.ChangeState");
+  CHECK(u && u->status == Status::Ambiguous);
+  CHECK(u && u->detail.find("GhostState") != std::string::npos);
+  CHECK(u && u->rva == 0);
+
+  // An unknown index with a unique name falls back to the name.
+  const GameModel unique = model_with(false, false, false);
+  const Resolution nr = run({&kGhostAI, &kGhostState, &kChangeState}, unique);
+  const Result* n = nr.find("GhostAI.ChangeState");
+  CHECK(n && n->status == Status::Resolved && n->rva == 0x1000);
+
+  // Fields follow the same rule.
+  ModelBuilder f;
+  const int ai = f.type("Assembly-CSharp", "", "GhostAI");
+  f.type("Assembly-CSharp", "", "GhostState", ai, true);
+  const int other = f.type("Assembly-CSharp", "Other", "GhostState");
+  f.field(ai, "state", "GhostState", 0x48, false, other);
+  const GameModel fields = f.build();
+  constexpr EntryDesc state{.key = "GhostAI.state", .kind = Kind::Field, .owner = "GhostAI", .name = "state",
+                            .type = "@GhostState"};
+  CHECK(run({&kGhostAI, &kGhostState, &state}, fields).find("GhostAI.state")->status == Status::Missing);
 }
 
 void missing_owner_blocks_members() {
@@ -217,9 +290,11 @@ int main() {
   type_by_name();
   method_by_name_and_params();
   method_by_name_without_params_is_ambiguous_with_overloads();
+  method_by_name_ignores_static_among_overloads();
   field_by_name();
   enum_value_by_name();
   at_type_resolves_through_entry();
+  at_type_is_the_resolved_type_not_its_name();
   missing_owner_blocks_members();
   dependency_order_is_independent_of_declaration_order();
   cycle_is_missing();
