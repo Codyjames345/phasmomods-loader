@@ -4,6 +4,7 @@
 
 #include <MinHook.h>
 
+#include <algorithm>
 #include <map>
 #include <mutex>
 #include <vector>
@@ -105,12 +106,18 @@ bool create_shared(std::span<void* const> bodies, void* detour, void** original,
     return false;
   }
   std::lock_guard lock(g_mutex);
-  for (void* body : bodies) {
-    if (!body) {
+  for (size_t i = 0; i < bodies.size(); ++i) {
+    if (!bodies[i]) {
       PG_LOG("hooks: %s has no target", name);
       return false;
     }
-    if (repeated(body, detour, name)) return false;
+    // A body listed twice would count towards the bodies an earlier detour runs first on, and so
+    // pass for every twin while one of them goes without this detour.
+    if (std::find(bodies.begin(), bodies.begin() + i, bodies[i]) != bodies.begin() + i) {
+      PG_LOG("hooks: %s refused at %p: the body is listed twice", name, bodies[i]);
+      return false;
+    }
+    if (repeated(bodies[i], detour, name)) return false;
   }
   // Every body must lead with the same detour, one that runs on exactly these bodies (an earlier
   // hook on all of them), or with none. Otherwise this hook would skip a detour that runs on some

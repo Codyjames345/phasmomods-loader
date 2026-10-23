@@ -14,8 +14,9 @@ bool init();  // host only
 // a hook there would run on all of them.
 bool create(void* target, void* detour, void** original, const char* name);
 // Host only. One detour on several distinct bodies (a method and its twins), chained like create.
-// `original` reaches the first body's chain. Refused, with nothing patched, unless every body has
-// no hook yet or every body leads with the same detour and that detour runs on exactly these bodies.
+// `original` reaches the first body's chain. Refused, with nothing patched, when a body is listed
+// twice, and unless every body has no hook yet or every body leads with the same detour and that
+// detour runs on exactly these bodies.
 bool create_shared(std::span<void* const> bodies, void* detour, void** original, const char* name);
 bool enable_all();  // enables the hooks created since the open group began
 // Host only. Each mod's start is a group: rollback_group disables and removes the hooks created
