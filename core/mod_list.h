@@ -1,12 +1,16 @@
 #pragma once
 
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "text_files.h"
+
 // The plain-text files that say which mods exist and which are switched on. Shared by the launcher
-// (tools/launcher.cpp) and the host (host/mods.cpp); kept free of Windows calls so it can be tested
-// offline. All text is UTF-8 with LF or CRLF line ends.
+// (tools/launcher.cpp) and the host (host/mods.cpp); kept free of Windows calls (only standard file
+// streams) so it can be tested offline. All text is UTF-8 with LF or CRLF line ends.
 //
 //  mods/<folder>/mod.ini              one mod: "id=", "name=", "dll=", "description=" lines, and an
 //                                     optional "requires=" naming the one mod it cannot run without
@@ -211,6 +215,28 @@ inline std::vector<std::string> chosen(std::string_view launcherIni, const std::
   bool present = false;
   std::vector<std::string> ids = parse_enabled(launcherIni, present);
   return present ? ids : installed;
+}
+
+/** Save `ids` as the choice in the launcher.ini at `file`, creating its folder. */
+inline bool save_choice(const std::filesystem::path& file, const std::vector<std::string>& ids) {
+  std::error_code error;
+  std::filesystem::create_directories(file.parent_path(), error);
+  std::ofstream out(file, std::ios::binary | std::ios::trunc);
+  out << write_enabled(ids);
+  return static_cast<bool>(out);
+}
+
+/**
+ * The mods to start, from the launcher.ini at `file` (chosen()). On the first run, with no choice
+ * saved, every installed mod starts and that set is saved, so a mod a later update brings is not in
+ * it and starts off until the player ticks it. With no mod installed nothing is saved.
+ */
+inline std::vector<std::string> load_choice(const std::filesystem::path& file, const std::vector<std::string>& installed) {
+  const std::string text = text::read_file(file);
+  bool present = false;
+  parse_enabled(text, present);
+  if (!present && !installed.empty()) save_choice(file, installed);  // unsaved, it is simply asked again
+  return chosen(text, installed);
 }
 
 /** The DLL paths in a session file, in order. */

@@ -134,15 +134,11 @@ std::vector<std::string> saved_selection(const fs::path& launcherIni, const std:
     manifests.push_back(m.manifest);
   }
   // A choice saved before a mod gained a requirement still ticks what that mod needs.
-  return modlist::with_requirements(modlist::chosen(read_file(launcherIni), installed), manifests);
+  return modlist::with_requirements(modlist::load_choice(launcherIni, installed), manifests);
 }
 
 bool save_selection(const fs::path& launcherIni, const std::vector<std::string>& ids) {
-  std::error_code error;
-  fs::create_directories(launcherIni.parent_path(), error);
-  std::ofstream out(launcherIni, std::ios::binary | std::ios::trunc);
-  out << modlist::write_enabled(ids);
-  return static_cast<bool>(out);
+  return modlist::save_choice(launcherIni, ids);
 }
 
 std::vector<std::wstring> all_dlls(const std::vector<ModEntry>& mods) {

@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
 
 #include "build_check.h"
 #include "hooks.h"
@@ -153,14 +152,10 @@ std::vector<std::string> chosen() {
   std::vector<std::string> installed;
   for (const Mod& m : g_mods) installed.emplace_back(m.info->id);
   // A choice saved before a mod gained a requirement still starts what that mod needs.
-  return modlist::with_requirements(modlist::chosen(read_file(g_dataDirectory / L"launcher.ini"), installed), manifests());
+  return modlist::with_requirements(modlist::load_choice(g_dataDirectory / L"launcher.ini", installed), manifests());
 }
 
-bool save_chosen(const std::vector<std::string>& ids) {
-  std::ofstream out(g_dataDirectory / L"launcher.ini", std::ios::binary | std::ios::trunc);
-  out << modlist::write_enabled(ids);
-  return static_cast<bool>(out);
-}
+bool save_chosen(const std::vector<std::string>& ids) { return modlist::save_choice(g_dataDirectory / L"launcher.ini", ids); }
 
 std::vector<modlist::Manifest> manifests() {
   std::vector<modlist::Manifest> all;

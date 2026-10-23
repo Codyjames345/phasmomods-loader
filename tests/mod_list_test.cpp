@@ -3,6 +3,10 @@
 
 #include "check.h"
 
+#include <windows.h>
+
+#include <filesystem>
+
 using namespace pg::modlist;
 
 namespace {
@@ -51,6 +55,23 @@ void chooses_the_saved_mods_or_all_of_them() {
 
 void a_new_mod_stays_off_after_a_saved_choice() {
   CHECK(chosen("enabled=ghost-tells\n", {"ghost-tells", "new-mod"}) == std::vector<std::string>{"ghost-tells"});
+}
+
+void the_first_choice_is_saved_so_later_mods_start_off() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / (L"pg-choice-" + std::to_wstring(GetCurrentProcessId()));
+  std::error_code error;
+  fs::remove_all(root, error);
+  const fs::path ini = root / "data" / "launcher.ini";
+  CHECK(load_choice(ini, {}).empty());  // no mods yet: nothing to choose, nothing saved
+  CHECK(!fs::exists(ini));
+  CHECK(load_choice(ini, {"a", "b"}) == (std::vector<std::string>{"a", "b"}));  // the first run: every mod
+  bool present = false;
+  CHECK(parse_enabled(pg::text::read_file(ini), present) == (std::vector<std::string>{"a", "b"}) && present);
+  CHECK(load_choice(ini, {"a", "b", "c"}) == (std::vector<std::string>{"a", "b"}));  // an update brought c
+  CHECK(save_choice(ini, {"c"}));
+  CHECK(load_choice(ini, {"a", "b", "c"}) == std::vector<std::string>{"c"});
+  fs::remove_all(root, error);
 }
 
 Manifest manifest(const char* id, const char* required = "") {
@@ -148,6 +169,7 @@ int main() {
   reads_and_writes_the_selection();
   chooses_the_saved_mods_or_all_of_them();
   a_new_mod_stays_off_after_a_saved_choice();
+  the_first_choice_is_saved_so_later_mods_start_off();
   reads_the_session_file();
   requires_is_parsed();
   requirements_follow_a_toggle();
