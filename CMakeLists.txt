@@ -41,6 +41,12 @@ target_link_libraries(pgsdk_resolver PUBLIC minhook)
 target_include_directories(pgsdk_resolver PRIVATE third_party/minhook/src/hde)
 pg_options(pgsdk_resolver)
 
+# The offline check (tools/gamecheck.ps1): the map resolved against a Cpp2IL dump and GameAssembly.dll.
+add_executable(gamecheck sdk/offline/gamecheck.cpp sdk/offline/dump_model.cpp)
+target_include_directories(gamecheck PRIVATE sdk/map sdk/offline)
+target_link_libraries(gamecheck PRIVATE pgsdk_resolver)
+pg_options(gamecheck)
+
 # A mod's side of the host contract (core/mod_api.h).
 add_library(pgmod STATIC core/mod_glue.cpp)
 target_link_libraries(pgmod PUBLIC pgcore)
@@ -249,3 +255,7 @@ pg_test(sdk_dump sdk/offline/dump_model.cpp)
 target_include_directories(sdk_dump_test PRIVATE sdk/offline)
 target_link_libraries(sdk_dump_test PRIVATE pgsdk_resolver)
 target_compile_definitions(sdk_dump_test PRIVATE PG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+pg_test(map)
+target_include_directories(map_test PRIVATE sdk/map)
+target_link_libraries(map_test PRIVATE pgsdk_resolver)
+target_compile_definitions(map_test PRIVATE PG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
