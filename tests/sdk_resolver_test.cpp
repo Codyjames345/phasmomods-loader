@@ -1,5 +1,6 @@
 #include <format>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "check.h"
@@ -583,9 +584,10 @@ struct Bools {
   // The bool with these facts. The entry lives as long as the results that point at it.
   const Result* flag(std::span<const Fact> facts) {
     entry = {.key = "GhostAI.flag", .kind = Kind::Field, .owner = "GhostAI", .type = "bool", .facts = facts};
-    results = code.run({&kGhostAI, &kHuntingMethod, &entry}, m.build());
+    results = code.run({&kGhostAI, hunting, &entry}, m.build());
     return results.find("GhostAI.flag");
   }
+  const EntryDesc* hunting = &kHuntingMethod;
   EntryDesc entry;
   Resolution results;
 };
@@ -643,6 +645,52 @@ void negated_fact_needs_this() {
   static constexpr Fact cooldown[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1}};
   const Result* c = g.flag(cooldown);
   CHECK(c && c->status == Status::Ambiguous && c->candidates.size() == 2);
+}
+
+// rcx is the field owner's `this` only in an instance method of that owner that returns nothing
+// through a hidden buffer. Otherwise a negated fact has no access through this to remove on.
+void negated_fact_needs_the_owners_instance_method() {
+  static constexpr Fact facts[] = {
+      {.is = Fact::Is::Stores, .method = "GhostAI.Hunting"},
+      {.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1, .negate = true}};
+  static constexpr EntryDesc staticHunting{.key = "GhostAI.Hunting", .kind = Kind::Method, .flags = kStatic,
+                                           .owner = "GhostAI", .name = "Hunting"};
+  const auto with = [](auto change) {
+    Bools g;
+    change(g.m.model.types[0].methods[0]);
+    if (g.m.model.types[0].methods[0].isStatic) g.hunting = &staticHunting;
+    const Result* f = g.flag(facts);
+    CHECK(f && g.results.find("GhostAI.Hunting")->status == Status::Resolved);
+    return std::pair(f ? f->status : Status::Missing, f ? f->detail : std::string());
+  };
+  // A static method's rcx is its first argument.
+  const auto [staticStatus, staticDetail] = with([](ModelMethod& m) { m.isStatic = true; });
+  CHECK(staticStatus == Status::Ambiguous);
+  CHECK(staticDetail.find("not proven to hold this") != std::string::npos);
+  // A struct returned through a hidden buffer takes rcx, and this moves to rdx.
+  CHECK(with([](ModelMethod& m) { m.ret = "Vector3"; }).first == Status::Ambiguous);
+  CHECK(with([](ModelMethod& m) { m.ret = "decimal"; }).first == Status::Ambiguous);
+  // Values that come back in a register leave rcx alone.
+  CHECK(with([](ModelMethod& m) { m.ret = "int"; }).first == Status::Resolved);
+  CHECK(with([](ModelMethod& m) { m.ret = "GameObject[]"; }).first == Status::Resolved);
+  CHECK(with([](ModelMethod& m) { m.ret = "string"; }).first == Status::Resolved);
+
+  // A method of another type has another layout.
+  Bools g;
+  g.m.model.types[0].methods[0].name = "Other";
+  const int ev = g.m.type("Assembly-CSharp", "", "GhostEvent");
+  g.m.method(ev, "Hunting", "void", {}, 0x1000);
+  constexpr EntryDesc event{.key = "GhostEvent", .name = "GhostEvent", .assembly = "Assembly-CSharp", .ns = ""};
+  constexpr EntryDesc hunting{.key = "GhostEvent.Hunting", .kind = Kind::Method, .owner = "GhostEvent",
+                              .name = "Hunting"};
+  static constexpr Fact eventFacts[] = {
+      {.is = Fact::Is::Stores, .method = "GhostEvent.Hunting"},
+      {.is = Fact::Is::StoresConst, .method = "GhostEvent.Hunting", .value = 1, .negate = true}};
+  constexpr EntryDesc flag{.key = "GhostAI.flag", .kind = Kind::Field, .owner = "GhostAI", .type = "bool",
+                           .facts = eventFacts};
+  const Resolution r = g.code.run({&kGhostAI, &event, &hunting, &flag}, g.m.build());
+  CHECK(r.find("GhostEvent.Hunting")->status == Status::Resolved);
+  CHECK(r.find("GhostAI.flag")->status == Status::Ambiguous);
 }
 
 void fact_on_unresolved_method_blocks() {
@@ -940,6 +988,7 @@ int main() {
   stores_const_picks_cooldown();
   negated_fact_picks_flag();
   negated_fact_needs_this();
+  negated_fact_needs_the_owners_instance_method();
   fact_on_unresolved_method_blocks();
   fact_kinds_must_fit();
   unreadable_code_never_decides();

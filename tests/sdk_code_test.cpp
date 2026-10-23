@@ -246,7 +246,9 @@ void this_registers() {
   // mov rdi, rcx; call; mov byte ptr [rdi+8], 1
   CHECK((this_bases({0x48, 0x8B, 0xF9, 0xE8, 0xF8, 0x0F, 0x00, 0x00, 0xC6, 0x47, 0x08, 0x01}) ==
          std::vector<bool>{true}));
-  // ... but not one made after the call: call; mov rdi, rcx; mov byte ptr [rdi+8], 1
+  // ... but not one made after a copy into rcx: mov rcx, rdx; mov rdi, rcx; mov byte ptr [rdi+8], 1
+  CHECK((this_bases({0x48, 0x8B, 0xCA, 0x48, 0x8B, 0xF9, 0xC6, 0x47, 0x08, 0x01}) == std::vector<bool>{false}));
+  // ... nor one made after the call: call; mov rdi, rcx; mov byte ptr [rdi+8], 1
   CHECK((this_bases({0xE8, 0xFB, 0x0F, 0x00, 0x00, 0x48, 0x8B, 0xF9, 0xC6, 0x47, 0x08, 0x01}) ==
          std::vector<bool>{false}));
   // ... nor one some calls skip: test edx, edx; je +3; mov rdi, rcx; call; mov byte ptr [rdi+8], 1

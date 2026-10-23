@@ -328,21 +328,24 @@ uint16_t this_registers(std::span<const uint8_t> fn, uint64_t rva, const std::ve
     if (in.ok() && in.hs.opcode >= 0x50 && in.hs.opcode <= 0x57)
       pushed |= 1u << ((in.hs.opcode & 7) | in.hs.rex_b << 3);
   const size_t run = entry_run(fn, rva, code);
+  bool rcxWritten = false;  // by anything so far, copies included
   for (size_t i = 0; i < code.size(); ++i) {
     const Insn& in = code[i];
     if (in.kind == Kind::Entry || in.kind == Kind::Bytes) continue;
     const hde64s& h = in.hs;
     uint32_t writes = register_writes(in);
+    const bool writesRcx = (writes >> kRcx & 1) != 0;
     if (in.ok() && h.rex_w && (h.opcode == 0x89 || h.opcode == 0x8B) && h.modrm_mod == 3) {
       const int reg = h.modrm_reg | h.rex_r << 3, rm = h.modrm_rm | h.rex_b << 3;
       auto [to, from] = h.opcode == 0x8B ? std::pair(reg, rm) : std::pair(rm, reg);
-      if (from == kRcx && i < run && !(otherWrite >> kRcx & 1)) from = kEntryThis;
+      if (from == kRcx && i < run && !rcxWritten) from = kEntryThis;
       copies.emplace_back(to, from);
       writes &= ~(1u << to);
     } else if (in.ok() && h.opcode >= 0x58 && h.opcode <= 0x5F) {
       writes &= ~(pushed & (1u << ((h.opcode & 7) | h.rex_b << 3)));
     }
     otherWrite |= writes;
+    rcxWritten = rcxWritten || writesRcx;
   }
   const uint32_t allowed = ~otherWrite & ~(1u << kRsp) & 0xFFFF;
   auto copied_from = [&](int to, uint32_t from) {

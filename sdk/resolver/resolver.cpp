@@ -475,6 +475,8 @@ class Resolver {
         yes = yes || std::find(targets.begin(), targets.end(), target) != targets.end();
       return yes ? Verdict::Yes : Verdict::No;
     }
+    // An access's this is the candidate's owner only when rcx came in as that owner's this.
+    const bool ownersThis = method.type == c.type && rcx_is_this(model_.types[method.type].methods[method.member]);
     bool throughThis = false;
     for (const uint64_t body : bodies(method)) {
       if (!readable(body)) return unreadable(fact.method);
@@ -490,7 +492,7 @@ class Resolver {
                                               : fact.is == Fact::Is::StoresConst ? a.hasImm && a.imm == fact.value
                                                                                  : !a.store);
         yes = yes || hit;
-        throughThis = throughThis || (hit && a.thisBase);
+        throughThis = throughThis || (hit && a.thisBase && ownersThis);
       }
     }
     if (fact.negate && yes && !throughThis && fact.is != Fact::Is::CalledBy) {
@@ -499,6 +501,22 @@ class Resolver {
       return Verdict::Unread;
     }
     return yes ? Verdict::Yes : Verdict::No;
+  }
+
+  // Whether the method gets `this` in rcx: an instance method, and its return value comes back in a
+  // register rather than through a hidden buffer, which takes rcx and moves `this` to rdx. The model
+  // has no sizes, so only returns known to fit a register count: nothing, a primitive other than
+  // decimal, an enum, a reference (string, object, an array, a pointer, a by-reference return).
+  // Any other type may be a struct.
+  bool rcx_is_this(const ModelMethod& m) const {
+    if (m.isStatic) return false;
+    static constexpr std::string_view kInRegister[] = {
+        "void", "bool", "byte", "sbyte", "char",  "short",  "ushort", "int",    "uint",
+        "long", "ulong", "float", "double", "string", "object", "IntPtr", "UIntPtr"};
+    const std::string_view ret = m.ret;
+    if (std::find(std::begin(kInRegister), std::end(kInRegister), ret) != std::end(kInRegister)) return true;
+    if (ret.ends_with("[]") || ret.ends_with('*') || ret.ends_with('&')) return true;
+    return m.retIndex >= 0 && model_.types[m.retIndex].isEnum;
   }
 
   // Whether two methods are one behaviour: one body (an alias), or fully read bodies of one length
