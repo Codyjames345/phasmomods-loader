@@ -1,5 +1,6 @@
 #include "update.h"
 #include <condition_variable>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -25,7 +26,7 @@ void finish(Job& job, Outcome outcome, std::wstring message) {
   job.finished.notify_all();
 }
 
-void work(const std::shared_ptr<Job>& job, Backend* backend, const std::vector<std::wstring>& arguments) {
+void work_steps(const std::shared_ptr<Job>& job, Backend* backend, const std::vector<std::wstring>& arguments) {
   const Check check = backend->check();
   if (check.kind == Check::Kind::Failed) {
     finish(*job, Outcome::CarryOn,
@@ -60,13 +61,29 @@ void work(const std::shared_ptr<Job>& job, Backend* backend, const std::vector<s
   }
   finish(*job, Outcome::Restarting, L"Updated to " + widen(check.version) + L". Restarting.");
 }
+
+/** The worker body: nothing a backend throws may leave this thread, or the launcher would terminate. */
+void work(const std::shared_ptr<Job>& job, Backend& backend, const std::vector<std::wstring>& arguments) {
+  const std::wstring tail = L"). Starting the installed version.";
+  try {
+    work_steps(job, &backend, arguments);
+  } catch (const std::exception& error) {
+    finish(*job, Outcome::CarryOn, L"The update failed (" + widen(error.what()) + tail);
+  } catch (...) {
+    finish(*job, Outcome::CarryOn, L"The update failed (unknown error" + tail);
+  }
+}
 }
 
-Report run(Backend& backend, const std::vector<std::wstring>& arguments, std::chrono::milliseconds limit) {
-  if (!backend.installed()) return {Outcome::NotInstalled, L""};
+Report run(std::shared_ptr<Backend> backend, const std::vector<std::wstring>& arguments,
+           std::chrono::milliseconds limit) {
+  try {
+    if (!backend->installed()) return {Outcome::NotInstalled, L""};
+  } catch (...) {
+    return {Outcome::NotInstalled, L""};
+  }
   auto job = std::make_shared<Job>();
-  Backend* const target = &backend;
-  std::thread([job, target, arguments] { work(job, target, arguments); }).detach();
+  std::thread([job, backend, arguments] { work(job, *backend, arguments); }).detach();
 
   std::unique_lock<std::mutex> lock(job->mutex);
   job->finished.wait_for(lock, limit, [&] { return job->done; });

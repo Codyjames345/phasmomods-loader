@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,8 +14,9 @@ struct Check {
 
 /**
  * The update source and installer. The Velopack backend implements it; tests fake it.
- * `run` calls it from a worker thread that can outlive `run`, so a Backend must outlive
- * that worker: give it static or process lifetime, never a scope that `run`'s caller leaves.
+ * `run` calls it from a worker thread that can outlive `run`, which is why `run` co-owns it.
+ * Any method may throw (the Velopack wrapper does on every native error); the layer catches it
+ * and carries on with the installed version.
  */
 class Backend {
  public:
@@ -44,10 +46,11 @@ struct Report {
 /**
  * Check, download and apply on a worker thread, waiting at most `limit` for the check and
  * download. When `limit` passes first, run returns CarryOn and the worker is told it was
- * abandoned: it starts neither a download nor an apply afterwards. The worker keeps using `backend`, which
- * therefore must outlive it (see Backend). `arguments` are copied.
+ * abandoned: it starts neither a download nor an apply afterwards. The worker shares ownership
+ * of `backend`, so it stays valid however long an abandoned call takes. `arguments` are copied.
  */
-Report run(Backend& backend, const std::vector<std::wstring>& arguments, std::chrono::milliseconds limit);
+Report run(std::shared_ptr<Backend> backend, const std::vector<std::wstring>& arguments,
+           std::chrono::milliseconds limit);
 
 /** The launcher's own arguments after argv[0], unchanged, for the restarted launcher. */
 std::vector<std::wstring> restart_arguments(const std::vector<std::wstring>& launcherArguments);
