@@ -74,7 +74,8 @@ inline std::string mismatch_message(const std::vector<presence::Mod>& host, cons
   if (!onlyHost.empty()) text += "\nOnly the host has: " + onlyHost + ".";
   if (!onlyMine.empty()) text += "\nOnly you have: " + onlyMine + ".";
   if (!other.empty()) text += "\nDifferent versions: " + other + ".";
-  return text + "\n\nSwitch on the same mods from the Mods button, or join another lobby.";
+  return text + "\n\nSwitch on the same mods from the Mods button, or join another lobby.\n"
+                "Restart the game through PhasmoMods Loader to update, then join again.";
 }
 
 class Guard {

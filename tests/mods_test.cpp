@@ -1,9 +1,13 @@
-// Offline tests for which mod DLLs the host loads (host/mods.cpp find). Run: build\mods_test.exe
+// Offline tests for which mod DLLs the host loads (host/mods.cpp find), which versions of the host
+// contract it accepts, and which mods it starts. Run: build\mods_test.exe
 #include <windows.h>
 
 #include <filesystem>
 #include <fstream>
+#include <string>
+#include <vector>
 
+#include "log.h"
 #include "mods.h"
 
 #include "check.h"
@@ -18,9 +22,65 @@ void write(const fs::path& file, const std::string& text) {
   std::ofstream(file, std::ios::binary) << text;
 }
 
+std::vector<std::string> g_lines;
+void capture(const char* line) { g_lines.emplace_back(line); }
+
+bool logged(const std::string& text) {
+  for (const std::string& l : g_lines)
+    if (l.find(text) != std::string::npos) return true;
+  return false;
+}
+
+// Same major and a minor no newer than the host's: accepted. Anything else: refused.
+void api_versions() {
+  constexpr uint32_t host = (2u << 16) | 3u;
+  CHECK(pg_api_compatible(host, (2u << 16) | 3u));
+  CHECK(pg_api_compatible(host, (2u << 16) | 0u));
+  CHECK(!pg_api_compatible(host, (2u << 16) | 4u));
+  CHECK(!pg_api_compatible(host, (1u << 16) | 0u));
+  CHECK(!pg_api_compatible(host, (3u << 16) | 0u));
+  CHECK(!pg_api_compatible(host, 1u));  // version 1 had no major number
+  CHECK(pg_api_compatible(PGMOD_API_VERSION, PGMOD_API_VERSION));
+}
+
+// The game entries a fake host has resolved: only those named in g_resolved.
+std::vector<std::string> g_resolved;
+const PgGameEntry kEntry{PG_ENTRY_METHOD};
+const PgGameEntry* game_entry(const char* key) {
+  for (const std::string& k : g_resolved)
+    if (k == key) return &kEntry;
+  return nullptr;
+}
+
+// The fake mod (tests/fixtures/fake_mod) requires Camera and GhostAI.UnAppear. It stays off while the
+// host lacks one of them, and the log names what it lacks.
+void mod_with_unresolved_requirement_stays_off(const fs::path& data) {
+  pg::log::set_sink(&capture, "");
+  pg::mods::load(data, {{PG_FAKE_MOD, "", ""}});
+  CHECK(pg::mods::loaded().size() == 1);
+  CHECK(pg::mods::loaded().size() == 1 &&
+        pg::mods::loaded()[0].entries == (std::vector<std::string>{"Camera", "GhostAI.UnAppear"}));
+  PgHostApi api{};
+  api.version = PGMOD_API_VERSION;
+  api.game_entry = &game_entry;
+
+  g_resolved = {"Camera"};
+  g_lines.clear();
+  pg::mods::start(&api, {"fake-mod"});
+  CHECK(pg::mods::started_ids().empty());
+  CHECK(logged("mods: fake-mod needs game entries this game build lacks (GhostAI.UnAppear); it stays off"));
+
+  g_resolved = {"Camera", "GhostAI.UnAppear"};
+  pg::mods::start(&api, {"fake-mod"});
+  CHECK(pg::mods::started_ids() == std::vector<std::string>{"fake-mod"});
+  pg::mods::stop_all();
+  pg::log::set_sink(nullptr, nullptr);
+}
+
 }  // namespace
 
 int main() {
+  api_versions();
   wchar_t temporary[MAX_PATH];
   CHECK(GetTempPathW(MAX_PATH, temporary) > 0);
   const fs::path root = fs::path(temporary) / (L"pg-mods-" + std::to_wstring(GetCurrentProcessId()));
@@ -58,6 +118,8 @@ int main() {
   CHECK(pg::mods::save_chosen({"first", "second"}));
   CHECK(pg::mods::chosen() == (std::vector<std::string>{"first", "second"}));
   CHECK(pg::mods::started_allow_vanilla());  // nothing runs
+
+  mod_with_unresolved_requirement_stays_off(data);
 
   fs::remove_all(root, error);
   return g_failures ? 1 : 0;

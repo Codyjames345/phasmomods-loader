@@ -1,5 +1,6 @@
 #include "launcher.h"
 #include "inject.h"
+#include "update.h"
 #include "text_files.h"
 #include "win_handle.h"
 #include <windows.h>
@@ -7,6 +8,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <atomic>
+#include <chrono>
 #include <fstream>
 #include <thread>
 #include <utility>
@@ -40,6 +42,11 @@ std::wstring command_line(const std::vector<std::wstring>& arguments) {
     output += quote(argument);
   }
   return output;
+}
+
+/** The Steam launch option: the path is always quoted, because the program's name has a space. */
+std::wstring steam_launch_option(const std::wstring& executable) {
+  return quote(executable) + L" --steam %command%";
 }
 
 /** Require an observable file log while retaining existing argument values. */
@@ -127,15 +134,11 @@ std::vector<std::string> saved_selection(const fs::path& launcherIni, const std:
     manifests.push_back(m.manifest);
   }
   // A choice saved before a mod gained a requirement still ticks what that mod needs.
-  return modlist::with_requirements(modlist::chosen(read_file(launcherIni), installed), manifests);
+  return modlist::with_requirements(modlist::load_choice(launcherIni, installed), manifests);
 }
 
 bool save_selection(const fs::path& launcherIni, const std::vector<std::string>& ids) {
-  std::error_code error;
-  fs::create_directories(launcherIni.parent_path(), error);
-  std::ofstream out(launcherIni, std::ios::binary | std::ios::trunc);
-  out << modlist::write_enabled(ids);
-  return static_cast<bool>(out);
+  return modlist::save_choice(launcherIni, ids);
 }
 
 std::vector<std::wstring> all_dlls(const std::vector<ModEntry>& mods) {
@@ -144,26 +147,31 @@ std::vector<std::wstring> all_dlls(const std::vector<ModEntry>& mods) {
   return dlls;
 }
 
-/** %LOCALAPPDATA%\PhasmoMods\launcher.ini, or empty when the folder is unavailable. */
-fs::path selection_file() {
+/** %LOCALAPPDATA%\PhasmoMods\`name`, or empty when the folder is unavailable. */
+fs::path data_file(const wchar_t* name) {
   std::wstring local(32768, L'\0');
   const DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", local.data(), static_cast<DWORD>(local.size()));
   if (!length || length >= local.size()) return {};
   local.resize(length);
-  return fs::path(local) / L"PhasmoMods" / L"launcher.ini";
+  return fs::path(local) / L"PhasmoMods" / name;
 }
+
+/** %LOCALAPPDATA%\PhasmoMods\launcher.ini, or empty when the folder is unavailable. */
+fs::path selection_file() { return data_file(L"launcher.ini"); }
+
+fs::path launcher_log() { return data_file(L"launcher.log"); }
 
 /** Resolve the packaged host beside the launcher, independent of Steam's directory. */
 Result adjacent_host(std::wstring& path, std::wstring& executable) {
   executable.assign(32768, L'\0');
   DWORD length = GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
   if (!length || length >= executable.size())
-    return failure(Outcome::file_error, L"The launcher location could not be read. Extract the package again.", GetLastError());
+    return failure(Outcome::file_error, L"The location of PhasmoMods Loader could not be read. Extract the package again.", GetLastError());
   executable.resize(length);
   path = (fs::path(executable).parent_path() / L"ModHost.dll").wstring();
   const DWORD attributes = GetFileAttributesW(path.c_str());
   if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY))
-    return failure(Outcome::file_error, L"ModHost.dll is missing. Extract the complete package beside the launcher.", GetLastError());
+    return failure(Outcome::file_error, L"ModHost.dll is missing. Extract the complete package beside PhasmoMods Loader.", GetLastError());
   return {Outcome::ready, 0, {}, {}};
 }
 
@@ -173,16 +181,16 @@ Result load_once(DWORD pid, const Package& package) {
   Handle lock(CreateMutexW(nullptr, FALSE, name.c_str()));
   DWORD error = GetLastError();
   if (!lock.value)
-    return failure(Outcome::process_error, L"The mod loading lock could not be created. Close other launchers and try again.", error);
+    return failure(Outcome::process_error, L"The mod loading lock could not be created. Close other copies of PhasmoMods Loader and try again.", error);
   if (error == ERROR_ALREADY_EXISTS)
-    return failure(Outcome::already_loaded, L"Another launcher is loading this game. Wait for it to finish.");
+    return failure(Outcome::already_loaded, L"Another copy of PhasmoMods Loader is loading this game. Wait for it to finish.");
   return loader::load(pid, package.host.c_str(), package.mods);
 }
 
 /** Attach only to the single game instance selected by the shared identity check. */
 Result attach(const Package& package) {
   if (package.mods.empty())
-    return failure(Outcome::invalid_target, L"No mods were found. Extract the complete package, with its mods folder, beside the launcher.");
+    return failure(Outcome::invalid_target, L"No mods were found. Extract the complete package, with its mods folder, beside PhasmoMods Loader.");
   DWORD pid = 0;
   auto result = loader::find_game(pid);
   return result.outcome == Outcome::ready ? load_once(pid, package) : result;
@@ -251,7 +259,7 @@ Result reserve_log(std::wstring& path) {
     std::to_wstring(GetTickCount64()) + L".log")).wstring();
   Handle file(CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_NEW, 0, nullptr));
   if (file.value == INVALID_HANDLE_VALUE)
-    return failure(Outcome::file_error, L"A fresh game log could not be created. Close the launcher and try again.", GetLastError());
+    return failure(Outcome::file_error, L"A fresh game log could not be created. Close PhasmoMods Loader and try again.", GetLastError());
   return {Outcome::ready, 0, {}, {}};
 }
 
@@ -268,22 +276,22 @@ Result wait_menu(HANDLE process, LogCursor& cursor) {
     if (result.outcome != Outcome::ready) return result;
     Sleep(200);
   }
-  return failure(Outcome::activation_timeout, L"The main menu was not confirmed within five minutes. Once it appears, open the launcher and choose Attach.");
+  return failure(Outcome::activation_timeout, L"The main menu was not confirmed within five minutes. Once it appears, open PhasmoMods Loader and choose Attach.");
 }
 
 /** Launch exactly Steam's supplied game command and keep its returned process identity. */
 Result launch_steam(std::vector<std::wstring> arguments, const Package& package) {
   if (arguments.empty() || !fs::path(arguments[0]).is_absolute() ||
       _wcsicmp(fs::path(arguments[0]).filename().c_str(), L"Phasmophobia.exe") != 0)
-    return failure(Outcome::invalid_target, L"The Steam game command is missing or invalid. Copy the launch option from the launcher again.");
+    return failure(Outcome::invalid_target, L"The Steam game command is missing or invalid. Copy the launch option from PhasmoMods Loader again.");
   // The named object's lifetime reserves startup before a game PID exists.
   SetLastError(ERROR_SUCCESS);
   Handle startupLock(CreateMutexW(nullptr, FALSE, L"Local\\PhasmoModSteamLauncher"));
   const DWORD lockError = GetLastError();
   if (!startupLock.value)
-    return failure(Outcome::process_error, L"The game startup lock could not be created. Close other launchers and try again.", lockError);
+    return failure(Outcome::process_error, L"The game startup lock could not be created. Close other copies of PhasmoMods Loader and try again.", lockError);
   if (lockError == ERROR_ALREADY_EXISTS)
-    return failure(Outcome::already_loaded, L"Another launcher is starting Phasmophobia. Wait for it to finish.");
+    return failure(Outcome::already_loaded, L"Another copy of PhasmoMods Loader is starting Phasmophobia. Wait for it to finish.");
   DWORD existingPid = 0;
   auto result = loader::find_game(existingPid);
   if (result.outcome == Outcome::ready)
@@ -308,8 +316,11 @@ Result launch_steam(std::vector<std::wstring> arguments, const Package& package)
   STARTUPINFOW startup{};
   startup.cb = sizeof(startup);
   PROCESS_INFORMATION child{};
+  // The game runs in its own folder, as from a normal Steam launch, not in the launcher's (after an
+  // update restart that is Velopack's current folder).
+  const std::wstring gameFolder = fs::path(arguments[0]).parent_path().wstring();
   if (!CreateProcessW(arguments[0].c_str(), command.data(), nullptr, nullptr, FALSE,
-                      0, nullptr, nullptr, &startup, &child))
+                      0, nullptr, gameFolder.c_str(), &startup, &child))
     return failure(Outcome::process_error, L"Phasmophobia could not start. Check its Steam installation and launch options.", GetLastError());
   Handle process(child.hProcess), thread(child.hThread);
   if (package.mods.empty())
@@ -329,8 +340,35 @@ std::wstring describe(const Result& result) {
 }
 
 #ifndef PG_LAUNCHER_TEST
-constexpr wchar_t kTitle[] = L"PhasmoMods Launcher";  // the window's and its message boxes' title
+constexpr wchar_t kName[] = L"PhasmoMods Loader";      // the message boxes' title
+constexpr wchar_t kTitle[] = L"PhasmoMods Loader " PG_WIDEN(PG_SUITE_VERSION);  // the window's title
 constexpr int kIcon = 1;                               // tools/launcher.rc
+constexpr std::chrono::seconds kUpdateLimit{10};       // the longest an update check delays play
+constexpr UINT kUpdateFound = WM_APP + 1;              // sent by the worker; lParam is the version (std::string*)
+
+/** Add a timestamped line to launcher_log(), for what `--steam` mode cannot show in a window. */
+void append_log(const std::wstring& message) {
+  const fs::path file = launcher_log();
+  if (file.empty() || message.empty()) return;
+  std::error_code error;
+  fs::create_directories(file.parent_path(), error);
+  SYSTEMTIME now{};
+  GetLocalTime(&now);
+  wchar_t stamp[32];
+  swprintf_s(stamp, L"%04u-%02u-%02u %02u:%02u:%02u ", now.wYear, now.wMonth, now.wDay,
+             now.wHour, now.wMinute, now.wSecond);
+  std::ofstream(file, std::ios::binary | std::ios::app) << text::narrow(stamp + message) << "\r\n";
+}
+
+/** Check for updates on this thread, waiting at most kUpdateLimit. A check that cannot start reports CarryOn. */
+update::Report update_now(const std::vector<std::wstring>& launcherArguments, update::Progress progress = {}) {
+  update::Report report{update::Outcome::CarryOn, L"Could not check for updates. Starting the installed version."};
+  try {
+    report = update::run(update::velopack_backend(), update::restart_arguments(launcherArguments), kUpdateLimit,
+                         std::move(progress));
+  } catch (...) { /* An update that cannot start never stops the game: keep the prepared report. */ }
+  return report;
+}
 
 /** Keep the small instruction window alive while one background attach operation finishes. */
 struct WindowState {
@@ -340,11 +378,14 @@ struct WindowState {
   fs::path selectionPath;
   std::vector<HWND> boxes;
   std::wstring launchOption;
+  std::wstring usualStatus;  // the status box's text when nothing is running
   HWND status = nullptr;
   HWND attachButton = nullptr;
   bool busy = false;
-  bool closing = false;
+  bool updating = false;  // the worker is checking for updates, not attaching
+  std::atomic<bool> closing{false};  // the window was closed while busy: it goes when the worker ends
   Result result;
+  update::Report updateReport;
   std::atomic<bool> completed{false};
   std::thread worker;
 };
@@ -382,7 +423,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
     case WM_COMMAND:
       if (LOWORD(wParam) == 101 && !state->busy) {
         if (!SetTimer(window, 1, 100, nullptr)) {
-          SetWindowTextW(state->status, L"The launcher could not monitor loading. Close it and try again.");
+          SetWindowTextW(state->status, L"PhasmoMods Loader could not monitor loading. Close it and try again.");
           return 0;
         }
         state->busy = true;
@@ -390,7 +431,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
         set_controls(state, false);
         SetWindowTextW(state->status, L"Loading the mods. Waiting for the game to confirm...");
         try {
-          state->result = failure(Outcome::process_error, L"The launcher could not finish loading. Restart it and try again.");
+          state->result = failure(Outcome::process_error, L"PhasmoMods Loader could not finish loading. Restart it and try again.");
           state->worker = std::thread([state] {
             try { state->result = attach(state->package); }
             catch (...) { /* Keep the prepared failure without allocating in this path. */ }
@@ -400,7 +441,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
           KillTimer(window, 1);
           state->busy = false;
           set_controls(state, true);
-          SetWindowTextW(state->status, L"The loading task could not start. Close the launcher and try again.");
+          SetWindowTextW(state->status, L"The loading task could not start. Close PhasmoMods Loader and try again.");
         }
       } else if (LOWORD(wParam) >= 200 && LOWORD(wParam) < 200 + state->boxes.size() && !state->busy) {
         // A mod is ticked with what it requires and unticked with what requires it.
@@ -417,7 +458,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
           SendMessageW(state->boxes[i], BM_SETCHECK,
                        modlist::enabled(state->ticked, state->mods[i].manifest.id) ? BST_CHECKED : BST_UNCHECKED, 0);
         if (!save_selection(state->selectionPath, state->ticked))
-          SetWindowTextW(state->status, L"The launcher could not save which mods are ticked. Check access to your local application-data folder.");
+          SetWindowTextW(state->status, L"PhasmoMods Loader could not save which mods are ticked. Check access to your local application-data folder.");
       } else if (LOWORD(wParam) == 102) {
         const bool copied = copy_option(window, state->launchOption);
         SetWindowTextW(state->status, copied ? L"Copied. In Steam, open Phasmophobia > Properties > General and paste into Launch Options. Keep %command% at the end." :
@@ -429,11 +470,28 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
       KillTimer(window, 1);
       if (state->worker.joinable()) state->worker.join();
       state->busy = false;
+      if (state->updating) {
+        state->updating = false;
+        // Velopack's updater applies the new version once this program exits, then starts it unless
+        // the window was closing.
+        if (state->updateReport.outcome == update::Outcome::Restarting) { DestroyWindow(window); return 0; }
+        set_controls(state, true);
+        SetFocus(state->attachButton);
+        // Why the update failed comes first, then the usual text, which names any broken mods.
+        const std::wstring& why = state->updateReport.message;
+        SetWindowTextW(state->status, (why.empty() ? state->usualStatus : why + L"\r\n" + state->usualStatus).c_str());
+        if (state->closing) DestroyWindow(window);
+        return 0;
+      }
       set_controls(state, true);
       SetWindowTextW(state->status, describe(state->result).c_str());
       if (state->closing) DestroyWindow(window);
       return 0;
     }
+    case kUpdateFound:
+      SetWindowTextW(state->status, (L"Updating to " + widen(*reinterpret_cast<const std::string*>(lParam)) +
+                                     L". PhasmoMods Loader restarts when it is done.").c_str());
+      return 0;
     case WM_CLOSE:
       if (state->busy) { state->closing = true; ShowWindow(window, SW_HIDE); }
       else DestroyWindow(window);
@@ -451,7 +509,7 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
   state.selectionPath = selection_file();
   state.ticked = saved_selection(state.selectionPath, state.mods);
   state.package = {hostPath, all_dlls(state.mods)};
-  state.launchOption = quote(executable) + L" --steam %command%";
+  state.launchOption = steam_launch_option(executable);
   WNDCLASSEXW type{};
   type.cbSize = sizeof(type);
   type.lpfnWndProc = window_proc;
@@ -485,7 +543,7 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
     state.boxes.push_back(box);
   }
   if (state.mods.empty()) {
-    control(L"STATIC", L"No mods were found. Extract the complete package, with its mods folder, beside the launcher.", 0, 18, y, 600, 26, 0);
+    control(L"STATIC", L"No mods were found. Extract the complete package, with its mods folder, beside PhasmoMods Loader.", 0, 18, y, 600, 26, 0);
     y += 30;
   }
   y += 10;
@@ -494,11 +552,37 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
   control(L"STATIC", L"To load automatically, copy this command into Steam's Launch Options:", 0, 18, y + 74, 600, 24, 0);
   control(L"EDIT", state.launchOption.c_str(), WS_TABSTOP | WS_BORDER | ES_READONLY | ES_AUTOHSCROLL, 18, y + 101, 600, 26, 103);
   control(L"BUTTON", L"&Copy Steam launch option", WS_TABSTOP, 18, y + 135, 205, 30, 102);
-  const std::wstring status = problems.empty() ? L"Keep this folder outside the game directory. Restart the game to change the mods' versions." : problems;
-  state.status = control(L"EDIT", status.c_str(),
+  state.usualStatus = problems.empty() ? L"Keep this folder outside the game directory. Restart the game to change the mods' versions." : problems;
+  state.status = control(L"EDIT", state.usualStatus.c_str(),
     WS_TABSTOP | ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL, 18, y + 186, 600, 75, 104);
   ShowWindow(window, SW_SHOW);
   SetFocus(state.attachButton);
+  // Check for updates on the worker before Attach is usable; WM_TIMER shows the result.
+  if (SetTimer(window, 1, 100, nullptr)) {
+    state.busy = state.updating = true;
+    set_controls(&state, false);
+    SetWindowTextW(state.status, L"Checking for updates...");
+    try {
+      state.updateReport = {update::Outcome::CarryOn, L"Could not check for updates. Starting the installed version."};
+      state.worker = std::thread([target = &state, window, executable] {
+        try {
+          update::Progress progress;
+          // Sent, not posted: the version string lives only for this call, and the window outlives the worker.
+          progress.found = [window](const std::string& version) {
+            SendMessageW(window, kUpdateFound, 0, reinterpret_cast<LPARAM>(&version));
+          };
+          progress.restart = [target] { return !target->closing; };  // closed: install, but do not come back
+          target->updateReport = update_now({executable}, std::move(progress));
+        } catch (...) { /* Keep the prepared report. */ }
+        target->completed.store(true, std::memory_order_release);
+      });
+    } catch (...) {
+      KillTimer(window, 1);
+      state.busy = state.updating = false;
+      set_controls(&state, true);
+      SetWindowTextW(state.status, state.usualStatus.c_str());
+    }
+  }
   MSG message{};
   while (GetMessageW(&message, nullptr, 0, 0) > 0) {
     if (!IsDialogMessageW(window, &message)) { TranslateMessage(&message); DispatchMessageW(&message); }
@@ -510,8 +594,11 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
 }
 
 #ifndef PG_LAUNCHER_TEST
+#include "Velopack.hpp"
+
 /** Enter either Steam wrapping or the attach UI without spawning Steam recursively. */
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+  Velopack::VelopackApp::Build().Run();
   try {
     int count = 0;
     auto arguments = CommandLineToArgvW(GetCommandLineW(), &count);
@@ -522,19 +609,28 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     auto result = pg::launcher::adjacent_host(hostPath, executable);
     if (result.outcome == pg::loader::Outcome::ready && values.size() == 1)
       return pg::launcher::show_window(instance, executable, hostPath);
-    if (result.outcome == pg::loader::Outcome::ready) {
+    const bool steam = values.size() > 2 && values[1] == L"--steam";
+    if (result.outcome != pg::loader::Outcome::ready) {
+      // A damaged install still updates, which is how it repairs itself.
+      const auto update = pg::launcher::update_now(values);
+      if (update.outcome == pg::update::Outcome::Restarting) return 0;
+      if (steam) pg::launcher::append_log(update.message);
+      if (!update.message.empty()) result.detail += L"\r\n" + update.message;
+    } else if (steam) {
+      // Update before the game starts. Steam shows no window, so anything but a restart goes to the log.
+      const auto update = pg::launcher::update_now(values);
+      if (update.outcome == pg::update::Outcome::Restarting) return 0;
+      pg::launcher::append_log(update.message);
       std::wstring problems;
       const auto mods = pg::launcher::discover_mods(std::filesystem::path(executable).parent_path() / L"mods", problems);
       const pg::launcher::Package package{hostPath, pg::launcher::all_dlls(mods)};
-      if (values.size() > 2 && values[1] == L"--steam")
-        result = pg::launcher::launch_steam({values.begin() + 2, values.end()}, package);
-      else result = pg::launcher::failure(pg::loader::Outcome::invalid_target,
-        L"Open the launcher without arguments, or copy its Steam launch option into Steam.");
-    }
+      result = pg::launcher::launch_steam({values.begin() + 2, values.end()}, package);
+    } else result = pg::launcher::failure(pg::loader::Outcome::invalid_target,
+      L"Open PhasmoMods Loader without arguments, or copy its Steam launch option into Steam.");
     if (result.outcome == pg::loader::Outcome::active) return 0;
-    MessageBoxW(nullptr, pg::launcher::describe(result).c_str(), pg::launcher::kTitle, MB_OK | MB_ICONWARNING);
+    MessageBoxW(nullptr, pg::launcher::describe(result).c_str(), pg::launcher::kName, MB_OK | MB_ICONWARNING);
   } catch (...) {
-    MessageBoxW(nullptr, L"The launcher could not finish. Close it and try again.", pg::launcher::kTitle, MB_OK | MB_ICONERROR);
+    MessageBoxW(nullptr, L"PhasmoMods Loader could not finish. Close it and try again.", pg::launcher::kName, MB_OK | MB_ICONERROR);
   }
   return 1;
 }

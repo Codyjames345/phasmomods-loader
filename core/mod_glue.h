@@ -4,9 +4,13 @@
 
 // A mod's side of the host contract (core/mod_api.h). pgmod_start calls bind first; from then on the
 // mod's log lines go to the host's log, pg::hooks goes through the host's MinHook, pg::net uses the
-// mod's own channel, and the IL2CPP API is resolved for this module. Main thread.
+// mod's own channel, the game API (sdk/api/game_api.h) reaches the entries the host resolved, and
+// the IL2CPP API is resolved for this module. Linking this also exports the mod's pgmod_requires.
+// Main thread.
 namespace pg::mod {
 
+// False when `api` is not a compatible host contract (pg_api_compatible), when a game entry the mod
+// requires did not resolve (logged with their keys), or when the IL2CPP API cannot be resolved.
 bool bind(const PgHostApi* api, const PgModInfo* info);
 const PgHostApi& host();
 const PgModInfo& info();

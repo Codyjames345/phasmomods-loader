@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <regex>
+#include <string>
 #include "../tools/launcher.h"
 #include "../tools/inject.h"
 
@@ -16,7 +18,7 @@ pg::loader::Outcome candidate = pg::loader::Outcome::no_process;
 bool spawnSucceeds = false;
 int spawnCalls = 0, loadCalls = 0;
 DWORD loadedPid = 0;
-std::wstring spawnedApplication, spawnedCommand, fixturePath;
+std::wstring spawnedApplication, spawnedCommand, spawnedDirectory, fixturePath;
 bool inheritedDefaults = false;
 ULONGLONG ticks = 0;
 DWORD processState = WAIT_TIMEOUT;
@@ -49,7 +51,7 @@ void WINAPI sleep_for(DWORD) {
 
 /** Resolve a synthetic launcher location whose adjacent DLL cannot exist. */
 DWORD WINAPI module_path(HMODULE, LPWSTR path, DWORD length) {
-  const auto executable = fixturePath + L"\\ModLauncher.exe";
+  const auto executable = fixturePath + L"\\PhasmoMods Loader.exe";
   if (executable.size() + 1 > length) return length;
   wcscpy_s(path, length, executable.c_str());
   return static_cast<DWORD>(executable.size());
@@ -62,8 +64,9 @@ BOOL WINAPI create_process(LPCWSTR app, LPWSTR command, LPSECURITY_ATTRIBUTES pr
   ++spawnCalls;
   spawnedApplication = app;
   spawnedCommand = command;
+  spawnedDirectory = directory ? directory : L"";
   inheritedDefaults = !processSecurity && !threadSecurity && !inheritHandles && !flags &&
-    !environment && !directory && startup->cb == sizeof(STARTUPINFOW);
+    !environment && startup->cb == sizeof(STARTUPINFOW);
   if (concurrentLaunch) {
     concurrentLaunch = false;
     overlappingOutcome = pg::launcher::launch_steam({app, L"-logFile", fixturePath}, {L"unused.dll", {L"mod.dll"}}).outcome;
@@ -227,6 +230,7 @@ void orchestration() {
   CHECK(loadCalls == 0 && spawnCalls == 1);
   CHECK(inheritedDefaults && spawnedApplication == arguments[0]);
   CHECK(spawnedCommand == command_line(arguments));
+  CHECK(spawnedDirectory == L"C:\\Games with spaces");  // the game's own folder, not the launcher's
   spawnSucceeds = true;
   CHECK(launch_steam(arguments, package).outcome == Outcome::active);
   CHECK(loadCalls == 1 && loadedPid == GetCurrentProcessId());
@@ -307,6 +311,34 @@ void concurrent_startup() {
   CHECK(spawnCalls == beforeSpawn + 2 && discoveryCalls == beforeDiscovery + 2);
 }
 
+/** The compiled-in suite version is the one in the VERSION file, and that file holds MAJOR.MINOR.PATCH. */
+void version_matches_version_file() {
+  std::ifstream file(PG_SOURCE_DIR "/VERSION");
+  std::string line;
+  CHECK(static_cast<bool>(std::getline(file, line)));
+  const char* blanks = " \t\r\n";
+  const auto first = line.find_first_not_of(blanks), last = line.find_last_not_of(blanks);
+  const std::string version = first == std::string::npos ? "" : line.substr(first, last - first + 1);
+  CHECK(version == PG_SUITE_VERSION);
+  CHECK(std::regex_match(version, std::regex(R"(\d+\.\d+\.\d+)")));
+}
+
+/** The executable's name has a space, so the Steam launch option must quote its path. */
+void launch_option_quotes_spaced_name() {
+  CHECK(pg::launcher::steam_launch_option(L"C:\\Games\\PhasmoMods Loader.exe") ==
+        L"\"C:\\Games\\PhasmoMods Loader.exe\" --steam %command%");
+}
+
+/** The launcher's log is in the data directory, which nothing Velopack runs ever writes. */
+void launcher_log_is_in_data_directory() {
+  std::vector<wchar_t> saved(32768);
+  const DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", saved.data(), static_cast<DWORD>(saved.size()));
+  const std::filesystem::path temp = std::filesystem::path(fixturePath).parent_path() / L"pgl appdata";
+  CHECK(SetEnvironmentVariableW(L"LOCALAPPDATA", temp.c_str()));
+  CHECK(pg::launcher::launcher_log() == temp / L"PhasmoMods" / L"launcher.log");
+  SetEnvironmentVariableW(L"LOCALAPPDATA", length && length < saved.size() ? saved.data() : nullptr);
+}
+
 /** Exercise argument preservation and conservative startup detection without a game. */
 int main() {
   wchar_t directory[MAX_PATH], path[MAX_PATH];
@@ -321,6 +353,9 @@ int main() {
   mod_folders();
   startup_wait();
   concurrent_startup();
+  version_matches_version_file();
+  launch_option_quotes_spaced_name();
+  launcher_log_is_in_data_directory();
   CHECK(DeleteFileW(fixturePath.c_str()));
   return failures ? 1 : 0;
 }

@@ -1,0 +1,10 @@
+1.2.161
+
+Source: velopack_libc_1.2.161.zip from https://github.com/velopack/velopack/releases/tag/1.2.161
+SHA-256 of that zip: 31de8f2cf05a47bd5328a9f98b0c41aec1582156f6075f1058b26941f7f17c20
+
+These files are byte-identical copies from the zip, renamed where noted:
+  velopack_libc.dll  lib/velopack_libc_win_x64_msvc.dll
+  velopack_libc.lib  lib/velopack_libc_win_x64_msvc.dll.lib
+  Velopack.h         include/Velopack.h
+  Velopack.hpp       include/Velopack.hpp

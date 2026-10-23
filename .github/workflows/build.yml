@@ -1,0 +1,86 @@
+# Validate every push and pull request. A tag vMAJOR.MINOR.PATCH also packs the release with Velopack
+# and publishes it on GitHub, which is where installed launchers look for updates.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # build.ps1 finds Visual Studio with vswhere and loads its developer environment, which supplies
+      # CMake and Ninja.
+      - name: Validate
+        shell: pwsh
+        run: .\validate.ps1
+
+  publish:
+    name: Publish the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: validate
+    runs-on: windows-latest
+    # One publish at a time, never cancelled halfway, so two tags cannot race to upload.
+    concurrency:
+      group: publish
+      cancel-in-progress: false
+    permissions:
+      contents: write # vpk creates the GitHub release and uploads its assets
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the whole history, so the next step can see whether main contains the tag
+      - name: Check the tag is on main
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -eq 1) {
+              Write-Error "The tag $env:TAG is on a commit that is not on main. Releases are made from main only."
+              exit 1
+          }
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Could not check whether main contains the tag $env:TAG (git exit code $LASTEXITCODE)."
+              exit 1
+          }
+      - name: Restore vpk
+        shell: pwsh
+        run: dotnet tool restore
+      - name: Check the tag matches VERSION
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $expected = 'v' + (Get-Content -LiteralPath VERSION -Raw).Trim()
+          if ($env:TAG -ne $expected) {
+              Write-Error "The tag is $env:TAG but VERSION says $expected."
+              exit 1
+          }
+      # package.ps1 validates again, then packs into dist/releases, which it replaces whole. Updates
+      # are therefore full packages, not deltas: a delta needs the previous release beside the new
+      # pack, and the script packs into an empty folder.
+      - name: Pack the release
+        shell: pwsh
+        run: .\package.ps1
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_URL: https://github.com/${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          dotnet tool run vpk upload github --repoUrl $env:REPO_URL --publish --tag $env:TAG `
+              --releaseName "PhasmoMods $env:TAG" --outputDir dist/releases --token $env:GH_TOKEN
+          if ($LASTEXITCODE -ne 0) { throw "vpk upload failed with exit code $LASTEXITCODE." }

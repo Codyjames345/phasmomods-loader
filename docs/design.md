@@ -16,7 +16,7 @@ game's own UI elements, the game's own key bindings, no mod menu.
 
 The playable ghost is one mod of a suite (`docs/superpowers/plans/2026-10-20-mod-suite.md`):
 `PlayableGhost.dll` is started by the suite's host, `ModHost.dll`, which a portable Windows x64
-launcher (`ModLauncher.exe`) loads from outside the game folder after the game reaches its main
+launcher (`PhasmoMods Loader.exe`) loads from outside the game folder after the game reaches its main
 menu, together with whichever mods are ticked in it. Steam command wrapping provides automatic
 loading; the launcher also offers attachment to a running game. See `installation.md` for setup
 and verification limits, and `loading-investigation.md` for the evidence behind this choice.

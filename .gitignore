@@ -9,11 +9,14 @@
 /.superpowers/
 
 # Reverse-engineering working files, kept out because they are derived from the game's own
-# binaries: the Ghidra project, decompiled output, the import log, and the RVA name table
-# that re/names.mjs builds from a Cpp2IL DiffableCs dump.
+# binaries: the Ghidra project, decompiled output, the import log, the RVA name table that
+# re/names.mjs builds from a Cpp2IL DiffableCs dump, and what tools/gamecheck.ps1 writes (the
+# copied game files and their dump, and every map entry's address in that build).
 /re/ghidra/
 /re/out/
 /re/names.tsv
 /re/import.log
+/re/dump/
+/re/map-addresses.tsv
 
 /.vscode

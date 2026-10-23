@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
 
 #include "build_check.h"
 #include "hooks.h"
@@ -65,6 +64,14 @@ Mod* loaded_mod(const std::string& id) {
   return nullptr;
 }
 
+/** The game entries `m` requires that the host did not resolve, separated by ", "; empty when none. */
+std::string unresolved_entries(const PgHostApi* api, const Mod& m) {
+  std::string lacking;
+  for (const std::string& key : m.entries)
+    if (!api->game_entry(key.c_str())) lacking += (lacking.empty() ? "" : ", ") + key;
+  return lacking;
+}
+
 std::string build_of(const fs::path& dll) {
   char hex[65];
   return build::sha256_file(dll.c_str(), hex) ? std::string(hex, 16) : std::string(16, '0');
@@ -108,11 +115,13 @@ std::vector<Found> find(const fs::path& dataDirectory, const fs::path& hostFolde
   return found;
 }
 
-void load(const std::wstring& dataDirectory) {
+void load(const std::wstring& dataDirectory) { load(dataDirectory, find(dataDirectory, host_folder(), GetCurrentProcessId())); }
+
+void load(const fs::path& dataDirectory, const std::vector<Found>& found) {
   g_mods.clear();
   g_startOrder.clear();
   g_dataDirectory = dataDirectory;
-  for (const Found& f : find(dataDirectory, host_folder(), GetCurrentProcessId())) {
+  for (const Found& f : found) {
     HMODULE module = LoadLibraryW(f.dll.c_str());
     if (!module) {
       PG_LOG("mods: could not load %ls (Windows error %lu)", f.dll.c_str(), GetLastError());
@@ -131,13 +140,20 @@ void load(const std::wstring& dataDirectory) {
       PG_LOG("mods: %ls is not a mod for this host", f.dll.c_str());
       continue;
     }
-    if (m.info->apiVersion != PGMOD_API_VERSION || m.info->channel == 0) {
+    if (!pg_api_compatible(PGMOD_API_VERSION, m.info->apiVersion) || m.info->channel == 0) {
       PG_LOG("mods: %s was built for another host version", m.info->id);
       continue;
     }
     if (duplicate(m.info)) {
       PG_LOG("mods: %s repeats the id or channel of a mod already loaded", m.info->id);
       continue;
+    }
+    // A mod built before the game API has no pgmod_requires and requires no game entry.
+    if (auto listRequired = reinterpret_cast<PgModRequiresFn>(GetProcAddress(module, "pgmod_requires"))) {
+      const char* const* keys = nullptr;
+      const size_t n = listRequired(&keys);
+      for (size_t i = 0; keys && i < n; ++i)
+        if (keys[i]) m.entries.emplace_back(keys[i]);
     }
     m.build = build_of(f.dll);
     m.description = f.description;
@@ -153,14 +169,10 @@ std::vector<std::string> chosen() {
   std::vector<std::string> installed;
   for (const Mod& m : g_mods) installed.emplace_back(m.info->id);
   // A choice saved before a mod gained a requirement still starts what that mod needs.
-  return modlist::with_requirements(modlist::chosen(read_file(g_dataDirectory / L"launcher.ini"), installed), manifests());
+  return modlist::with_requirements(modlist::load_choice(g_dataDirectory / L"launcher.ini", installed), manifests());
 }
 
-bool save_chosen(const std::vector<std::string>& ids) {
-  std::ofstream out(g_dataDirectory / L"launcher.ini", std::ios::binary | std::ios::trunc);
-  out << modlist::write_enabled(ids);
-  return static_cast<bool>(out);
-}
+bool save_chosen(const std::vector<std::string>& ids) { return modlist::save_choice(g_dataDirectory / L"launcher.ini", ids); }
 
 std::vector<modlist::Manifest> manifests() {
   std::vector<modlist::Manifest> all;
@@ -188,6 +200,10 @@ void start(const PgHostApi* api, const std::vector<std::string>& ids) {
     if (m.started) continue;
     if (!modlist::requirement_met(m.required, started_ids())) {
       PG_LOG("mods: %s needs %s, which did not start; it stays off", m.info->id, m.required.c_str());
+      continue;
+    }
+    if (const std::string lacking = unresolved_entries(api, m); !lacking.empty()) {
+      PG_LOG("mods: %s needs game entries this game build lacks (%s); it stays off", m.info->id, lacking.c_str());
       continue;
     }
     hooks::begin_group();

@@ -7,8 +7,16 @@
 #include "mod_list.h"
 
 namespace pg::launcher {
+#ifdef PG_SUITE_VERSION
+#define PG_WIDEN_(text) L##text
+#define PG_WIDEN(text) PG_WIDEN_(text)
+/** The suite version from the VERSION file. */
+inline constexpr wchar_t kVersion[] = PG_WIDEN(PG_SUITE_VERSION);
+#endif
 /** Quote an argument so Windows parsing preserves every character. */
 std::wstring quote(std::wstring_view value);
+/** The launch option to paste into Steam for the executable at `executable`. */
+std::wstring steam_launch_option(const std::wstring& executable);
 /** Join arguments without involving a command shell. */
 std::wstring command_line(const std::vector<std::wstring>& arguments);
 /** Preserve an explicit Unity file log or append the reserved fresh log path. */
@@ -46,6 +54,8 @@ std::vector<ModEntry> discover_mods(const std::filesystem::path& folder, std::ws
 /** The ids ticked in the saved selection; every mod when nothing has been saved yet. */
 std::vector<std::string> saved_selection(const std::filesystem::path& launcherIni, const std::vector<ModEntry>& mods);
 bool save_selection(const std::filesystem::path& launcherIni, const std::vector<std::string>& ids);
+/** %LOCALAPPDATA%\PhasmoMods\launcher.log, where `--steam` records update results; empty when the folder is unavailable. */
+std::filesystem::path launcher_log();
 /** Every installed mod's DLL, in the order they were found: the host loads them all and starts the saved choice. */
 std::vector<std::wstring> all_dlls(const std::vector<ModEntry>& mods);
 }

@@ -6,38 +6,62 @@ $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('pg package ' + [guid]::NewGui
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 $payload = (Import-PowerShellDataFile -LiteralPath (Join-Path $project 'tools/payload.psd1')).Payload
 
-<# Create a project with synthetic artifacts and a previous release to protect. #>
+<# Create a project with synthetic artifacts, a previous release to protect, and a fake vpk. The fake
+   records its arguments and the files it was asked to pack, writes a Setup.exe and a package into
+   its output folder, and exits with $VpkExit. #>
 function New-PackageFixture {
     [CmdletBinding(SupportsShouldProcess)]
-    param([string]$Name)
+    param([string]$Name, [int]$VpkExit = 0)
     $fixture = Join-Path $testRoot $Name
     if (-not $PSCmdlet.ShouldProcess($fixture, 'Create package fixture')) { return }
-    foreach ($directory in @('host', 'tools', 'dist/PhasmoMods')) {
+    foreach ($directory in @('tools', 'dist/PhasmoMods', 'dist/releases')) {
         New-Item -ItemType Directory -Path (Join-Path $fixture $directory) -Force | Out-Null
     }
     Copy-Item -LiteralPath (Join-Path $project 'package.ps1') -Destination $fixture
     Copy-Item -LiteralPath (Join-Path $project 'tools/payload.psd1') -Destination (Join-Path $fixture 'tools')
     Set-Content -LiteralPath (Join-Path $fixture 'validate.ps1') -Value '# Fixture validation succeeds.'
+    Set-Content -LiteralPath (Join-Path $fixture 'VERSION') -Value '0.1.0'
     Write-PayloadSources $fixture $payload
-    $source = 'constexpr char kGameAssemblySha256[] = "' + ('a' * 64) + '";' + [Environment]::NewLine +
-              'constexpr char kUnityPlayerSha256[] = "' + ('b' * 64) + '";'
-    Set-Content -LiteralPath (Join-Path $fixture 'host/build_check.cpp') -Value $source
-    Set-Content -LiteralPath (Join-Path $fixture 'dist/PhasmoMods.zip') -Value 'previous release'
+    Set-Content -LiteralPath (Join-Path $fixture 'dist/releases/previous-release.txt') -Value 'previous release'
     Set-Content -LiteralPath (Join-Path $fixture 'dist/PhasmoMods/Retired.dll') -Value 'stale file'
+    $fake = @'
+$here = Split-Path $MyInvocation.MyCommand.Path -Parent
+$args | Set-Content -LiteralPath (Join-Path $here 'vpk-args.txt')
+$packDir = $args[[array]::IndexOf($args, '--packDir') + 1]
+$outputDir = $args[[array]::IndexOf($args, '--outputDir') + 1]
+$base = (Get-Item -LiteralPath $packDir).FullName.TrimEnd('\') + '\'
+Get-ChildItem -LiteralPath $packDir -Recurse -File | ForEach-Object { $_.FullName.Substring($base.Length).Replace('\', '/') } |
+    Set-Content -LiteralPath (Join-Path $here 'vpk-content.txt')
+Set-Content -LiteralPath (Join-Path $outputDir 'PhasmoModsLoader-win-Setup.exe') -Value 'setup'
+Set-Content -LiteralPath (Join-Path $outputDir 'PhasmoModsLoader-0.1.0-full.nupkg') -Value 'package'
+exit __EXIT__
+'@
+    Set-Content -LiteralPath (Join-Path $fixture 'fake-vpk.ps1') -Value $fake.Replace('__EXIT__', "$VpkExit")
     return $fixture
+}
+
+<# Run the fixture's package script with its fake vpk. #>
+function Invoke-Package([string]$Fixture) {
+    & (Join-Path $Fixture 'package.ps1') -Vpk (Join-Path $Fixture 'fake-vpk.ps1') | Out-Null
+}
+
+<# List the previous release folder's names and hashes, to prove a failure leaves it alone. #>
+function Get-ReleaseState([string]$Fixture) {
+    $releases = Join-Path $Fixture 'dist/releases'
+    @(Get-ChildItem -LiteralPath $releases -Recurse -File | Sort-Object FullName |
+        ForEach-Object { $_.Name + ':' + (Get-FileHash -LiteralPath $_.FullName).Hash }) -join '|'
 }
 
 <# Require a specific failure and verify that it cannot replace the previous release. #>
 function Assert-PackageFailure([string]$Fixture, [string]$Message) {
-    $release = Join-Path $Fixture 'dist/PhasmoMods.zip'
-    $before = (Get-FileHash -LiteralPath $release).Hash
+    $before = Get-ReleaseState $Fixture
     try {
-        & (Join-Path $Fixture 'package.ps1') | Out-Null
+        Invoke-Package $Fixture
         throw 'Packaging unexpectedly succeeded.'
     } catch {
         if ($_.Exception.Message -notmatch $Message) { throw }
     }
-    if ((Get-FileHash -LiteralPath $release).Hash -ne $before) {
+    if ((Get-ReleaseState $Fixture) -ne $before) {
         throw 'A failed package attempt changed the previous release.'
     }
 }
@@ -50,6 +74,8 @@ try {
         New-Item -ItemType Directory -Path (Join-Path $fixture 'tests') | Out-Null
         Set-Content -LiteralPath (Join-Path $fixture 'tests/package_test.ps1') -Value '# Fixture package checks do not recurse.'
         Set-Content -LiteralPath (Join-Path $fixture 'tests/stage_test.ps1') -Value '# Fixture stage checks run on their own.'
+        Set-Content -LiteralPath (Join-Path $fixture 'tests/release_test.ps1') -Value '# Fixture release checks run on their own.'
+        Set-Content -LiteralPath (Join-Path $fixture 'tools/gamecheck.ps1') -Value 'exit 0 # The fixture has no game to check.'
         $buildExit = if ($failure -eq 'native build') { 7 } else { 0 }
         $testExit = if ($failure -eq 'native tests') { 7 } else { 0 }
         Set-Content -LiteralPath (Join-Path $fixture 'build.ps1') -Value "exit $buildExit"
@@ -80,64 +106,50 @@ try {
             $env:PATH = $originalPath
         }
     }
-    foreach ($missing in @('ModLauncher.exe', 'ModHost.dll', 'PlayableGhost.dll')) {
+    foreach ($missing in @('PhasmoMods Loader.exe', 'ModHost.dll', 'PlayableGhost.dll')) {
         $fixture = New-PackageFixture $missing
         Remove-Item -LiteralPath (Join-Path $fixture "build/$missing")
         Assert-PackageFailure $fixture 'missing|Cannot find'
     }
-    $fixture = New-PackageFixture 'archive failure'
-    # Inject a failure at the archive command in the isolated script, without overriding a system cmdlet.
-    $fixtureScript = Join-Path $fixture 'package.ps1'
-    $contents = Get-Content -LiteralPath $fixtureScript -Raw
-    $archiveCall = '(?m)^\s*New-ReleaseArchive \$content[^\r\n]*'
-    if ([regex]::Matches($contents, $archiveCall).Count -ne 1) { throw 'Cannot locate the archive boundary for failure injection.' }
-    Set-Content -LiteralPath $fixtureScript -Value ([regex]::Replace($contents, $archiveCall, "    throw 'expected archive failure'"))
-    Assert-PackageFailure $fixture 'expected archive failure'
-    $fixture = New-PackageFixture 'bad supported hashes'
-    Set-Content -LiteralPath (Join-Path $fixture 'host/build_check.cpp') -Value 'no supported hashes'
-    Assert-PackageFailure $fixture 'supported.*hash|hash.*supported'
 
+    $fixture = New-PackageFixture 'bad version'
+    Set-Content -LiteralPath (Join-Path $fixture 'VERSION') -Value 'one'
+    Assert-PackageFailure $fixture 'VERSION'
+
+    # pack passes version and id
     $fixture = New-PackageFixture 'successful release'
-    & (Join-Path $fixture 'package.ps1') | Out-Null
-    $extracted = Join-Path $fixture 'extracted'
-    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
-    $zip = [IO.Compression.ZipFile]::OpenRead((Join-Path $fixture 'dist/PhasmoMods.zip'))
-    try {
-        $names = @($zip.Entries | ForEach-Object { $_.FullName })
-    } finally {
-        $zip.Dispose()
+    Invoke-Package $fixture
+    $arguments = @(Get-Content -LiteralPath (Join-Path $fixture 'vpk-args.txt'))
+    $expectedPrefix = @('pack', '--packId', 'PhasmoModsLoader', '--packVersion', '0.1.0')
+    if (Compare-Object $expectedPrefix @($arguments[0..4]) -SyncWindow 0) { throw "vpk did not receive the pack command, id and version: $arguments" }
+    $mainExe = $arguments[[array]::IndexOf($arguments, '--mainExe') + 1]
+    if ($mainExe -ne 'PhasmoMods Loader.exe') { throw "vpk received the wrong main executable: $mainExe" }
+
+    # pack stages exactly the payload, and nothing from a stale dist/PhasmoMods
+    $staged = @(Get-Content -LiteralPath (Join-Path $fixture 'vpk-content.txt') | Sort-Object)
+    $expected = @($payload | ForEach-Object { $_.Name } | Sort-Object)
+    if (Compare-Object $expected $staged) { throw "vpk was given a folder that is not exactly the payload: $staged" }
+    if (-not (Test-Path -LiteralPath (Join-Path $fixture 'dist/releases/PhasmoModsLoader-win-Setup.exe'))) { throw 'Packaging did not publish Setup.exe to dist/releases.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $fixture 'dist/releases/PhasmoModsLoader-0.1.0-full.nupkg'))) { throw 'Packaging did not publish the full package to dist/releases.' }
+    if (Test-Path -LiteralPath (Join-Path $fixture 'dist/PhasmoMods.zip')) { throw 'Packaging still writes the old ZIP.' }
+    if (@(Get-ChildItem -LiteralPath (Join-Path $fixture 'dist') -Force | Where-Object { $_.Name -like '.*' }).Count) {
+        throw 'Packaging left a staging folder in dist.'
     }
-    if (@($names | Where-Object { $_.Contains('\') }).Count) { throw 'The release ZIP stores entry names with backslashes.' }
-    if (-not ($names -contains 'mods/playable-ghost/PlayableGhost.dll')) { throw 'The release ZIP does not keep the mods folder layout.' }
-    Expand-Archive -LiteralPath (Join-Path $fixture 'dist/PhasmoMods.zip') -DestinationPath $extracted
-    $expected = @(@($payload | ForEach-Object { $_.Name }) + 'manifest.json' | Sort-Object)
-    $actual = @(Get-ChildItem -LiteralPath $extracted -Recurse -File | ForEach-Object { $_.FullName.Substring($extracted.Length + 1).Replace('\', '/') } | Sort-Object)
-    if (Compare-Object $expected $actual) { throw 'The release archive does not contain exactly the payload, in its folders, and the manifest.' }
-    foreach ($file in $payload) {
-        if ((Get-Content -LiteralPath (Join-Path $extracted $file.Name) -Raw).Trim() -ne "fixture $($file.Source)") {
-            throw "The release holds the wrong file at $($file.Name)."
-        }
+
+    # failed pack leaves dist/releases untouched
+    $fixture = New-PackageFixture 'failed pack' -VpkExit 1
+    Assert-PackageFailure $fixture 'vpk'
+    if (@(Get-ChildItem -LiteralPath (Join-Path $fixture 'dist') -Force | Where-Object { $_.Name -like '.*' }).Count) {
+        throw 'A failed pack left a staging folder in dist.'
     }
-    $manifest = Get-Content -LiteralPath (Join-Path $extracted 'manifest.json') -Raw | ConvertFrom-Json
-    if ($manifest.gameplayVerified -ne $false) { throw 'Packaging claims unverified gameplay.' }
-    if ($manifest.supportedBinarySha256.'GameAssembly.dll' -ne ('a' * 64) -or
-        $manifest.supportedBinarySha256.'UnityPlayer.dll' -ne ('b' * 64)) {
-        throw 'Supported hashes were not derived from the native build checks.'
-    }
-    if (@($manifest.artifacts).Count -ne @($payload).Count) { throw 'The manifest must describe every payload file.' }
-    foreach ($artifact in $manifest.artifacts) {
-        $file = Get-Item -LiteralPath (Join-Path $extracted $artifact.name)
-        if ($file.Length -ne $artifact.bytes -or (Get-FileHash -LiteralPath $file.FullName).Hash -ne $artifact.sha256) {
-            throw "The manifest does not describe $($artifact.name)."
-        }
-    }
+
     $fixture = New-PackageFixture 'first release'
-    Remove-Item -LiteralPath (Join-Path $fixture 'dist/PhasmoMods.zip')
-    & (Join-Path $fixture 'package.ps1') | Out-Null
-    if (-not (Test-Path -LiteralPath (Join-Path $fixture 'dist/PhasmoMods.zip') -PathType Leaf)) {
+    Remove-Item -LiteralPath (Join-Path $fixture 'dist/releases') -Recurse
+    Invoke-Package $fixture
+    if (-not (Test-Path -LiteralPath (Join-Path $fixture 'dist/releases/PhasmoModsLoader-win-Setup.exe') -PathType Leaf)) {
         throw 'Packaging did not publish the first release.'
     }
-    Write-Output 'Package tests passed: failures preserve the release; the ZIP contains only verified payload files.'
+    Write-Output 'Package tests passed: failures preserve the release; vpk packs exactly the verified payload.'
 } finally {
     Remove-TestRoot $testRoot
 }

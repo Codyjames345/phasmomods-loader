@@ -8,7 +8,9 @@
 #include <vector>
 
 #include "consent.h"
+#include "entry_hooks.h"
 #include "game.h"
+#include "game_map.h"
 #include "hooks.h"
 #include "il2cpp.h"
 #include "join_guard.h"
@@ -113,6 +115,38 @@ const void* api_service(const char* name) {
   }
 }
 
+const PgGameEntry* api_game_entry(const char* key) {
+  try {
+    return key ? gamemap::entry(key) : nullptr;
+  } catch (...) {
+    return nullptr;  // an allocation failure while looking it up: treat the entry as unresolved
+  }
+}
+bool api_hook_entry(const char* key, void* detour, void** original, const char* name, bool allTwins) {
+  try {
+    const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
+    if (!e || e->kind != PG_ENTRY_METHOD || !e->code) {
+      PG_LOG("suite: game entry %s is unknown, unresolved or not a method; nothing hooked", key ? key : "?");
+      return false;
+    }
+    return entry_hooks::hook(e->code, {e->twins, e->twinCount}, detour, original, name ? name : key, allTwins);
+  } catch (...) {
+    PG_LOG("suite: exception while hooking game entry %s", key ? key : "?");
+    return false;
+  }
+}
+void api_set_reference(void* obj, int32_t offset, void* value) {
+  if (!obj) return;
+  try {
+    il2cpp::set_ref_field(obj, static_cast<size_t>(offset), value);
+  } catch (const Il2CppExceptionWrapper& e) {
+    il2cpp::log_exception("suite: managed exception while storing a reference", e.ex);
+  } catch (...) {
+    PG_LOG("suite: exception while storing a reference");
+  }
+}
+int32_t api_inside_entry(const char* key) { return context::depth(key); }
+
 void on_presence(int32_t sender, const uint8_t* data, size_t size) {
   if (game::private_room()) g_presence.receive(sender, data, size, GetTickCount64());
 }
@@ -178,7 +212,7 @@ bool resolve() {
   return ui::resolve() && hostnet::resolve() && room_actions::resolve() && menu_panel::resolve() && mods_panel::resolve();
 }
 
-bool create_hooks() { return hostnet::create_hooks(); }
+bool create_hooks() { return hostnet::create_hooks() && context::install(&gamemap::entry); }
 
 bool start(void* gameAssembly, void* unityPlayer) {
   g_dataDirectory = data_directory();
@@ -188,7 +222,8 @@ bool start(void* gameAssembly, void* unityPlayer) {
   }
   g_api = {PGMOD_API_VERSION, gameAssembly, unityPlayer, g_dataDirectory.c_str(),
            &api_log, &api_create_hook, &api_enable_hooks, &api_send, &api_set_receiver,
-           &api_peer_has_mod, &api_register_service, &api_service};
+           &api_peer_has_mod, &api_register_service, &api_service,
+           &api_game_entry, &api_hook_entry, &api_set_reference, &api_inside_entry};
   hostnet::set_receiver(hostnet::kHostChannel, &on_presence);
   mods::load(g_dataDirectory);
   if (mods::loaded().empty()) {

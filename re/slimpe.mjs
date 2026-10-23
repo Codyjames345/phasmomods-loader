@@ -3,17 +3,17 @@
 // The slim PE keeps the real image base and section addresses, so every address REA reports is a
 // real GameAssembly address. Only the selected RVA ranges carry code; the rest of the image is
 // uninitialised. Every method in names.tsv becomes an export, so pseudocode names its callees.
-// usage: node slimpe.mjs <GameAssembly.dll> <out.dll> <rvaFrom>-<rvaTo> [<rvaFrom>-<rvaTo> ...]
+// A map key (GhostAI.Hunting) in place of a range stands for that function, from its start for its length.
+// usage: node slimpe.mjs <GameAssembly.dll> <out.dll> <rvaFrom>-<rvaTo>|<key> [<rvaFrom>-<rvaTo>|<key> ...]
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { codeOf, namesFile, requireTables } from './map.mjs';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
 const [src, out, ...rangeArgs] = process.argv.slice(2);
 if (!src || !out || rangeArgs.length === 0) {
-  console.error('usage: node slimpe.mjs <GameAssembly.dll> <out.dll> <rvaFrom>-<rvaTo> ...');
+  console.error('usage: node slimpe.mjs <GameAssembly.dll> <out.dll> <rvaFrom>-<rvaTo>|<key> ...');
   process.exit(2);
 }
+requireTables();
 const ALIGN = 0x1000;
 const alignUp = (v, a = ALIGN) => Math.ceil(v / a) * a;
 const alignDown = (v, a = ALIGN) => Math.floor(v / a) * a;
@@ -35,7 +35,12 @@ const fileOffset = (rva) => {
 const codeEnd = Math.max(...sections.filter((s) => s.name === '.text' || s.name === 'il2cpp').map((s) => alignUp(s.va + s.vsize)));
 
 // Code ranges, page aligned and merged.
-const ranges = rangeArgs.map((r) => r.split('-').map((h) => parseInt(h, 16)))
+const range = (arg) => {
+  if (/^(0x)?[0-9a-f]+-(0x)?[0-9a-f]+$/i.test(arg)) return arg.split('-').map((h) => parseInt(h, 16));
+  const { start, length } = codeOf(arg);
+  return [start, start + length];
+};
+const ranges = rangeArgs.map(range)
   .map(([a, b]) => [alignDown(a), alignUp(b)]).sort((x, y) => x[0] - y[0])
   .reduce((acc, r) => {
     const last = acc[acc.length - 1];
@@ -56,7 +61,7 @@ const FILL_ASSEMBLIES = ['UnityEngine.CoreModule', 'PhotonUnityNetworking', 'Pho
 const ascii = (s) => s.replace(/[ഀ-ൿ]/g, (c) => (c.charCodeAt(0) - 0xd00).toString(16).padStart(2, '0'))
   .replace(/[^A-Za-z0-9_.$<>`]/g, '_');
 const byRva = new Map();
-for (const line of fs.readFileSync(path.join(here, 'names.tsv'), 'utf8').split('\n')) {
+for (const line of fs.readFileSync(namesFile, 'utf8').split('\n')) {
   const tab = line.indexOf('\t');
   if (tab <= 0) continue;
   const rva = parseInt(line.slice(0, tab), 16);

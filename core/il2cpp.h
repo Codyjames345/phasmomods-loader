@@ -11,6 +11,10 @@ struct Il2CppExceptionWrapper {
   void* ex;
 };
 
+namespace pg::sdk {
+struct RuntimeApi;
+}
+
 namespace il2cpp {
 
 struct Object {
@@ -57,6 +61,8 @@ bool init(void* gameAssembly, void* stopEvent, unsigned long long deadline);
 /** Resolve exports only, for a mod started on the main thread once the runtime is running. */
 bool resolve_exports(void* gameAssembly);
 void detach();                  // detach the thread that called init
+/** The exports the game model reads (sdk/runtime), after resolve_exports; false if one is missing. */
+bool runtime_api(void* gameAssembly, pg::sdk::RuntimeApi& out);
 
 Image* image(const char* fileName);  // e.g. "Assembly-CSharp.dll"
 Class* cls(const char* fileName, const char* ns, const char* name);
