@@ -13,31 +13,98 @@ namespace {
 
 constexpr size_t kFlagWindow = 6;  // the init check is among a method's first instructions
 
+// What a decoded item is: an instruction HDE64 read, one it could not (an error, or a form it does
+// not know, read only for its length), an entry of a switch's table of case addresses, or a switch's
+// byte table of case indices.
+enum class Kind { Instruction, Opaque, Entry, Bytes };
+
 struct Insn {
   hde64s hs;
   uint64_t at;
   size_t offset;
   size_t len;
-  bool ok;  // decoded without error; otherwise len only keeps the decoder moving
+  Kind kind;
+  bool ok() const { return kind == Kind::Instruction; }
 };
 
-std::vector<Insn> decode(std::span<const uint8_t> fn, uint64_t rva) {
-  std::vector<Insn> code;
-  for (size_t offset = 0; offset < fn.size();) {
-    // HDE reads past the instruction, so it decodes a zero-padded copy, never past the function.
-    uint8_t buffer[64] = {};
-    const size_t n = std::min<size_t>(fn.size() - offset, 16);
-    std::memcpy(buffer, fn.data() + offset, n);
-    Insn in{};
-    in.at = rva + offset;
-    in.offset = offset;
-    hde64_disasm(buffer, &in.hs);
-    in.ok = !(in.hs.flags & F_ERROR) && in.hs.len != 0 && in.hs.len <= n;
-    in.len = in.ok ? in.hs.len : std::clamp<size_t>(in.hs.len, 1, n);
-    code.push_back(in);
-    offset += in.len;
+bool legacy_prefix(uint8_t b) {
+  switch (b) {
+    case 0x66: case 0x67: case 0xF2: case 0xF3: case 0xF0:
+    case 0x2E: case 0x36: case 0x3E: case 0x26: case 0x64: case 0x65:
+      return true;
   }
-  return code;
+  return false;
+}
+
+// The length of a ModRM byte with its SIB and displacement.
+size_t modrm_length(const uint8_t* p) {
+  const uint8_t mod = p[0] >> 6, rm = p[0] & 7;
+  size_t n = 1;
+  if (mod != 3 && rm == 4) {
+    ++n;
+    if (mod == 0 && (p[1] & 7) == 5) n += 4;
+  }
+  if (mod == 0 && rm == 5) n += 4;
+  if (mod == 1) n += 1;
+  if (mod == 2) n += 4;
+  return n;
+}
+
+// The length of a form HDE64 marks as an error and then loses its place in: the 0F 38 and 0F 3A
+// opcode maps, VEX (C5, C4) and EVEX (62). 0 for any other instruction.
+size_t extended_length(const uint8_t* p) {
+  size_t i = 0;
+  while (i < 14 && legacy_prefix(p[i])) ++i;
+  const bool rex = (p[i] & 0xF0) == 0x40;
+  if (rex) ++i;
+  bool modrm = true, imm8 = false;
+  if (p[i] == 0x0F && (p[i + 1] == 0x38 || p[i + 1] == 0x3A)) {
+    imm8 = p[i + 1] == 0x3A;
+    i += 3;
+  } else if (!rex && (p[i] == 0xC5 || p[i] == 0xC4 || p[i] == 0x62)) {
+    unsigned map;
+    uint8_t op;
+    if (p[i] == 0xC5) {
+      map = 1, op = p[i + 2], i += 3;
+    } else if (p[i] == 0xC4) {
+      map = p[i + 1] & 0x1F, op = p[i + 3], i += 4;
+    } else {
+      map = p[i + 1] & 0x07, op = p[i + 4], i += 5;
+    }
+    if (map == 3) {
+      imm8 = true;
+    } else if (map == 1) {
+      modrm = op != 0x77;  // vzeroupper, vzeroall
+      imm8 = (op >= 0x70 && op <= 0x73) || op == 0xC2 || (op >= 0xC4 && op <= 0xC6);
+    } else if (map != 2) {
+      return 0;
+    }
+  } else {
+    return 0;
+  }
+  if (modrm) i += modrm_length(p + i);
+  return imm8 ? i + 1 : i;
+}
+
+// Decodes the instruction at offset, never reading past the function.
+Insn decode_one(std::span<const uint8_t> fn, uint64_t rva, size_t offset) {
+  // The decoders read past the instruction, so they read a zero-padded copy.
+  uint8_t buffer[64] = {};
+  const size_t n = std::min<size_t>(fn.size() - offset, 16);
+  std::memcpy(buffer, fn.data() + offset, n);
+  Insn in{};
+  in.at = rva + offset;
+  in.offset = offset;
+  if (const size_t len = extended_length(buffer); len != 0 && len <= n) {
+    in.kind = Kind::Opaque;
+    in.len = len;
+    return in;
+  }
+  hde64_disasm(buffer, &in.hs);
+  const bool ok = !(in.hs.flags & F_ERROR) && in.hs.len != 0 && in.hs.len <= n;
+  in.kind = ok ? Kind::Instruction : Kind::Opaque;
+  in.len = ok ? in.hs.len : std::clamp<size_t>(in.hs.len, 1, n);
+  return in;
 }
 
 size_t imm_size(const hde64s& h) {
@@ -98,7 +165,7 @@ bool writes(const hde64s& h) {
 
 std::optional<Access> access(const Insn& in) {
   const hde64s& h = in.hs;
-  if (!in.ok || !(h.flags & F_MODRM) || h.modrm_mod == 3) return std::nullopt;
+  if (!in.ok() || !(h.flags & F_MODRM) || h.modrm_mod == 3) return std::nullopt;
   if (h.modrm_mod == 0 && h.modrm_rm == 5) return std::nullopt;  // rip-relative
   if (h.opcode == 0x8D) return std::nullopt;                      // lea computes an address
   if (h.opcode == 0x0F && (h.opcode2 == 0x1F || h.opcode2 == 0x18 || h.opcode2 == 0x0D))
@@ -129,11 +196,11 @@ std::optional<uint64_t> init_flag(const std::vector<Insn>& code) {
   const size_t window = std::min(code.size(), kFlagWindow);
   for (size_t i = 0; i < window; ++i) {
     const hde64s& h = code[i].hs;
-    if (!code[i].ok || h.opcode != 0x80 || h.modrm_reg != 7 || !rip_relative(h) || h.imm.imm8 != 0) continue;
+    if (!code[i].ok() || h.opcode != 0x80 || h.modrm_reg != 7 || !rip_relative(h) || h.imm.imm8 != 0) continue;
     const uint64_t x = rip_target(code[i]);
     for (size_t j = i + 1; j < code.size(); ++j) {
       const hde64s& s = code[j].hs;
-      if (code[j].ok && s.opcode == 0xC6 && s.modrm_reg == 0 && rip_relative(s) && s.imm.imm8 == 1 &&
+      if (code[j].ok() && s.opcode == 0xC6 && s.modrm_reg == 0 && rip_relative(s) && s.imm.imm8 == 1 &&
           rip_target(code[j]) == x)
         return x;
     }
@@ -148,11 +215,152 @@ std::string hex(const uint8_t* p, size_t n) {
   return s;
 }
 
+// A switch's table inside the function, found from the instruction that indexes it. MSVC reads it
+// relative to the image base: `lea r, [__ImageBase]`, then `mov r32, [r + index*4 + TABLE]` for the
+// case RVAs, sometimes after `movzx r32, byte ptr [r + index + BYTES]` for a byte table of case
+// indices. Both lie after the function's code.
+struct Table {
+  size_t offset;
+  bool bytes;
+  size_t size = 0;
+};
+
+enum class Ref { None, Entries, Bytes, Unknown };
+
+// Whether the instruction reads in-function data through a register holding the image base (a bit
+// per register in imageBase), and in which shape. target receives the data's RVA.
+Ref table_ref(const Insn& in, uint32_t imageBase, uint64_t rva, uint64_t end, uint64_t& target) {
+  const hde64s& h = in.hs;
+  if (!in.ok() || !(h.flags & F_MODRM) || h.modrm_mod != 2) return Ref::None;
+  target = h.disp.disp32;
+  if (target < rva || target >= end) return Ref::None;
+  const bool sib = h.modrm_rm == 4;
+  const int base = (sib ? h.sib_base : h.modrm_rm) | h.rex_b << 3;
+  if (!(imageBase >> base & 1)) return Ref::None;  // a field at a large offset, not the image
+  const bool indexed = sib && (h.sib_index | h.rex_x << 3) != 4;
+  if (indexed && h.sib_scale == 2 && h.opcode == 0x8B) return Ref::Entries;
+  if (indexed && h.sib_scale == 0 && h.opcode == 0x0F && h.opcode2 == 0xB6) return Ref::Bytes;
+  return Ref::Unknown;
+}
+
+uint32_t entry_at(std::span<const uint8_t> fn, size_t offset) {
+  uint32_t v;
+  std::memcpy(&v, fn.data() + offset, 4);
+  return v;
+}
+
+bool by_offset(const Table& a, const Table& b) { return a.offset < b.offset; }
+
+// Sizes each table: case RVAs while they point into the function, then case indices while they
+// index one of those. Each ends at the next table at the latest. False when a table is empty.
+bool size_tables(std::span<const uint8_t> fn, uint64_t rva, std::vector<Table>& tables) {
+  size_t cases = 0;
+  for (const bool bytes : {false, true})
+    for (size_t i = 0; i < tables.size(); ++i) {
+      Table& t = tables[i];
+      if (t.bytes != bytes) continue;
+      const size_t limit = i + 1 < tables.size() ? tables[i + 1].offset : fn.size();
+      if (!t.bytes) {
+        while (t.offset + t.size + 4 <= limit && entry_at(fn, t.offset + t.size) - rva < fn.size()) t.size += 4;
+        cases = std::max(cases, t.size / 4);
+      } else {
+        while (t.offset + t.size < limit && fn[t.offset + t.size] < cases) ++t.size;
+      }
+      if (t.size == 0) return false;
+    }
+  return true;
+}
+
+// Decodes the function, reading the sized tables (sorted by offset) as data. desync is set when an
+// instruction runs into a table.
+std::vector<Insn> decode(std::span<const uint8_t> fn, uint64_t rva, const std::vector<Table>& tables, bool& desync) {
+  std::vector<Insn> code;
+  size_t next = 0;
+  for (size_t offset = 0; offset < fn.size();) {
+    while (next < tables.size() && tables[next].offset < offset) ++next;
+    if (next < tables.size() && tables[next].offset == offset) {
+      const Table& t = tables[next++];
+      const size_t step = t.bytes ? t.size : 4;
+      for (size_t at = offset; at < offset + t.size; at += step) {
+        Insn d{};
+        d.at = rva + at;
+        d.offset = at;
+        d.len = step;
+        d.kind = t.bytes ? Kind::Bytes : Kind::Entry;
+        code.push_back(d);
+      }
+      offset += t.size;
+      continue;
+    }
+    const Insn in = decode_one(fn, rva, offset);
+    if (next < tables.size() && tables[next].offset < offset + in.len) desync = true;
+    code.push_back(in);
+    offset += in.len;
+  }
+  return code;
+}
+
+// A decoding whose tables agree with the instructions that read them.
+struct Layout {
+  std::vector<Insn> code;
+  std::vector<std::pair<size_t, uint64_t>> refs;  // each table-reading instruction and its table's RVA
+  bool sure = false;  // settled, in sync, and every in-function read is of a known table shape
+};
+
+Layout lay_out(std::span<const uint8_t> fn, uint64_t rva) {
+  const uint64_t end = rva + fn.size();
+  // Decoding finds the tables and the tables change the decoding, so it repeats until both agree.
+  std::vector<Table> tables;
+  for (int round = 0; round < 4; ++round) {
+    Layout out;
+    bool desync = false, unknown = false;
+    out.code = decode(fn, rva, tables, desync);
+    std::vector<Table> found;
+    uint32_t imageBase = 0;
+    for (size_t i = 0; i < out.code.size(); ++i) {
+      const Insn& in = out.code[i];
+      if (in.ok() && in.hs.opcode == 0x8D && rip_relative(in.hs) && rip_target(in) == 0)
+        imageBase |= 1u << (in.hs.modrm_reg | in.hs.rex_r << 3);  // lea r, [__ImageBase]
+      uint64_t target = 0;
+      const Ref ref = table_ref(in, imageBase, rva, end, target);
+      if (ref == Ref::None) continue;
+      if (ref == Ref::Unknown) {
+        unknown = true;
+        continue;
+      }
+      out.refs.emplace_back(i, target);
+      const Table t{static_cast<size_t>(target - rva), ref == Ref::Bytes};
+      const auto same = std::find_if(found.begin(), found.end(), [&](const Table& f) { return f.offset == t.offset; });
+      if (same == found.end()) found.push_back(t);
+      else if (same->bytes != t.bytes) unknown = true;
+    }
+    std::sort(found.begin(), found.end(), by_offset);
+    const bool settled = std::equal(found.begin(), found.end(), tables.begin(), tables.end(),
+                                    [](const Table& a, const Table& b) {
+                                      return a.offset == b.offset && a.bytes == b.bytes;
+                                    });
+    if (settled) {
+      out.sure = !desync && !unknown;
+      return out;
+    }
+    tables = std::move(found);
+    if (!size_tables(fn, rva, tables)) {
+      out.sure = false;
+      return out;
+    }
+  }
+  Layout out;
+  bool desync = false;
+  out.code = decode(fn, rva, tables, desync);
+  return out;
+}
+
 }  // namespace
 
 CodeFacts read_code(std::span<const uint8_t> fn, uint64_t rva) {
   CodeFacts facts;
-  const std::vector<Insn> code = decode(fn, rva);
+  const Layout layout = lay_out(fn, rva);
+  const std::vector<Insn>& code = layout.code;
   const std::optional<uint64_t> flag = init_flag(code);
   const uint64_t end = rva + fn.size();
   auto inside = [&](uint64_t target) { return target >= rva && target < end; };
@@ -160,23 +368,47 @@ CodeFacts read_code(std::span<const uint8_t> fn, uint64_t rva) {
   auto place = [&](uint64_t target) {
     return inside(target) ? std::format("+{:x}", target - rva) : std::format("@{:x}", target);
   };
+  // Every in-function branch and case must land where an instruction begins.
+  std::vector<bool> starts(fn.size());
+  for (const Insn& in : code)
+    if (in.kind == Kind::Instruction || in.kind == Kind::Opaque) starts[in.offset] = true;
+  bool complete = layout.sure;
+  auto lands = [&](uint64_t target) { complete = complete && inside(target) && starts[target - rva]; };
 
-  for (const Insn& in : code) {
+  for (size_t i = 0; i < code.size(); ++i) {
+    const Insn& in = code[i];
     const hde64s& h = in.hs;
     const uint8_t* p = fn.data() + in.offset;
-    if (!in.ok) {
+    if (in.kind == Kind::Entry) {
+      const uint64_t target = entry_at(fn, in.offset);
+      lands(target);
+      facts.normalized.push_back("dd " + place(target));
+      continue;
+    }
+    if (in.kind == Kind::Bytes) {
+      facts.normalized.push_back("db " + hex(p, in.len));
+      continue;
+    }
+    if (in.kind == Kind::Opaque) {
+      complete = false;
       facts.normalized.push_back("?" + hex(p, in.len));
       continue;
     }
     if (const auto a = access(in)) facts.accesses.push_back(*a);
     const size_t imm = imm_size(h);
+    const auto ref = std::find_if(layout.refs.begin(), layout.refs.end(), [&](const auto& r) { return r.first == i; });
+    const bool readsTable = ref != layout.refs.end();
     if (h.flags & F_RELATIVE) {
       const uint64_t target = branch_target(in);
       if ((h.opcode == 0xE8 || h.opcode == 0xE9) && (h.flags & F_IMM32) && !inside(target))
         facts.callTargets.push_back(target);
+      if (inside(target)) lands(target);
       facts.normalized.push_back(hex(p, in.len - imm) + " " + place(target));
-    } else if (rip_relative(h)) {
-      const uint64_t target = rip_target(in);
+    } else if (rip_relative(h) || readsTable) {
+      // The 32-bit displacement names an address: rip-relative, or a table's RVA.
+      const uint64_t target = readsTable ? ref->second : rip_target(in);
+      // In-function data read rip-relative is in no table this reader knows.
+      if (!readsTable && inside(target) && h.opcode != 0x8D) complete = false;
       const size_t head = in.len - imm - 4;
       std::string token = hex(p, head) + " " + (target == flag ? std::string("FLAG") : place(target));
       if (imm) token += " " + hex(p + head + 4, imm);
@@ -185,6 +417,7 @@ CodeFacts read_code(std::span<const uint8_t> fn, uint64_t rva) {
       facts.normalized.push_back(hex(p, in.len));
     }
   }
+  facts.complete = complete;
   return facts;
 }
 

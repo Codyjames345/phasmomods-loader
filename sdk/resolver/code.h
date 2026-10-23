@@ -26,11 +26,19 @@ struct CodeFacts {
   // become their absolute address, in-function branch targets become offsets from the start, and
   // the method's own runtime-metadata init flag becomes FLAG.
   std::vector<std::string> normalized;
+  // False when the reader could not account for every byte: an instruction it cannot decode or whose
+  // effect it does not know (VEX, 0F 38, 0F 3A), a desync, in-function data of an unknown shape, or a
+  // branch or case that lands inside an instruction. The facts above are then partial: callers must
+  // not pick a candidate on them, nor compare twins through them.
+  bool complete = true;
 };
 
 // Decodes the function `fn` placed at `rva`. The init flag is the X of the first
 // `cmp byte ptr [rip+X], 0` among the first six instructions, when a later `mov byte ptr [rip+X], 1`
-// sets it. An instruction that does not decode becomes an opaque token and gives no facts.
+// sets it. A switch's tables inside the function (MSVC's case RVAs and byte case indices, read
+// relative to the image base) are read as data: `dd +off` per case and one `db` token per byte
+// table, and the instructions that index them name them as `+off`. An instruction that does not
+// decode becomes an opaque `?` token, gives no facts, and makes the facts incomplete.
 CodeFacts read_code(std::span<const uint8_t> fn, uint64_t rva);
 
 }  // namespace pg::sdk

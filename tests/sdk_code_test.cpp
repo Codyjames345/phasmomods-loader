@@ -29,6 +29,13 @@ struct Asm {
     for (int i = 0; i < 4; ++i) bytes.push_back(static_cast<uint8_t>(v >> (8 * i)));
     raw(tail);
   }
+  void put32(size_t at, uint64_t v) {
+    for (int i = 0; i < 4; ++i) bytes[at + i] = static_cast<uint8_t>(v >> (8 * i));
+  }
+  void dd(uint64_t v) {
+    bytes.resize(bytes.size() + 4);
+    put32(bytes.size() - 4, v);
+  }
 };
 
 std::vector<uint8_t> filled(size_t n, uint8_t b = 0x90) { return std::vector<uint8_t>(n, b); }
@@ -136,6 +143,7 @@ void call_targets() {
   CHECK((f.callTargets == std::vector<uint64_t>{0x5000, 0x6000}));
   CHECK(f.normalized.size() == 7);
   CHECK(f.accesses.empty());
+  CHECK(f.complete);
 }
 
 void byte_store_with_imm() {
@@ -148,6 +156,7 @@ void byte_store_with_imm() {
   CHECK(a.store);
   CHECK(a.hasImm);
   CHECK(a.imm == 1);
+  CHECK(f.complete);
 }
 
 void register_store_has_no_imm() {
@@ -221,6 +230,119 @@ void normalized_masks_own_flag() {
   CHECK(method(0x1000, 0x8000, 0x8100, 0x8200) != method(0x3000, 0x8010, 0x8100, 0x8200));
 }
 
+// A switch as MSVC compiles it, shaped like the real one at 0x4E3230: the case number indexes the
+// case RVAs after the code, read relative to the image base, and jumps there. With `bytes` it first
+// indexes a byte table of case indices that follows them. `sib` 0x80 is [r8+rax*4+disp].
+std::vector<uint8_t> switch_method(uint64_t start, bool bytes, uint8_t sib = 0x80) {
+  Asm a{start};
+  a.raw({0x48, 0x83, 0xEC, 0x28});                         // sub rsp, 0x28
+  a.raw({0x83, 0xFA, static_cast<uint8_t>(bytes ? 3 : 2)});  // cmp edx, n
+  a.raw({0x77, 0x00});                                     // ja default
+  const size_t ja = a.bytes.size() - 1;
+  a.raw({0x48, 0x63, 0xC2});           // movsxd rax, edx
+  a.rel({0x4C, 0x8D, 0x05}, 0);        // lea r8, [__ImageBase]
+  size_t byteRef = 0;
+  if (bytes) {
+    a.raw({0x41, 0x0F, 0xB6, 0x84, 0x00, 0, 0, 0, 0});  // movzx eax, byte ptr [r8+rax+BYTES]
+    byteRef = a.bytes.size() - 4;
+  }
+  a.raw({0x41, 0x8B, 0x94, sib, 0, 0, 0, 0});  // mov edx, [r8+rax*4+TABLE]
+  const size_t tableRef = a.bytes.size() - 4;
+  a.raw({0x49, 0x03, 0xD0, 0xFF, 0xE2});  // add rdx, r8; jmp rdx
+  std::vector<uint64_t> cases;
+  for (const uint8_t disp : std::initializer_list<uint8_t>{0x20, 0x28, 0x30}) {
+    cases.push_back(a.here());
+    a.raw({0x48, 0x8B, 0x41, disp, 0x48, 0x83, 0xC4, 0x28, 0xC3});  // mov rax, [rcx+disp]; add rsp, 0x28; ret
+  }
+  const uint64_t fallback = a.here();
+  a.raw({0x33, 0xC0, 0x48, 0x83, 0xC4, 0x28, 0xC3});  // xor eax, eax; add rsp, 0x28; ret
+  a.bytes[ja] = static_cast<uint8_t>(fallback - (start + ja + 1));
+  while (a.bytes.size() % 4) a.raw({0xCC});
+  a.put32(tableRef, a.here());
+  for (const uint64_t c : cases) a.dd(c);
+  if (bytes) {
+    a.put32(byteRef, a.here());
+    a.raw({0x00, 0x01, 0x01, 0x02});
+  }
+  return a.bytes;
+}
+
+void switch_tables_are_data() {
+  for (const bool bytes : {false, true}) {
+    const std::vector<uint8_t> fn = switch_method(0x4000, bytes);
+    const CodeFacts f = read_code(fn, 0x4000);
+    CHECK(f.complete);
+    // Only the three cases' loads: nothing read from the tables as code.
+    CHECK(f.accesses.size() == 3);
+    for (const Access& a : f.accesses) CHECK(!a.store && (a.disp == 0x20 || a.disp == 0x28 || a.disp == 0x30));
+    CHECK(f.callTargets.empty());
+    size_t cases = 0, byteTables = 0;
+    for (const std::string& t : f.normalized) {
+      cases += t.starts_with("dd +");
+      byteTables += t.starts_with("db ");
+    }
+    CHECK(cases == 3);
+    CHECK(byteTables == (bytes ? 1u : 0u));
+    // Two copies at other places normalise equal, the tables' RVAs included.
+    const CodeFacts g = read_code(switch_method(0x7340, bytes), 0x7340);
+    CHECK(g.complete);
+    CHECK(f.normalized == g.normalized);
+  }
+}
+
+void unknown_in_function_data_is_incomplete() {
+  // A table read at scale 8: not a shape the reader knows.
+  CHECK(!read_code(switch_method(0x4000, false, 0xC0), 0x4000).complete);
+  // A case that lands inside an instruction.
+  std::vector<uint8_t> fn = switch_method(0x4000, false);
+  fn[fn.size() - 4] += 1;
+  CHECK(!read_code(fn, 0x4000).complete);
+  // A rip-relative read of data inside the function.
+  Asm a{0x1000};
+  a.rel({0x8B, 0x05}, 0x1008);  // mov eax, [rip+0x1008]
+  a.raw({0xC3, 0xCC, 0x00, 0x00, 0x00, 0x00});
+  CHECK(!read_code(a.bytes, 0x1000).complete);
+  // A lea of an in-function address is not a read.
+  Asm b{0x1000};
+  b.rel({0x48, 0x8D, 0x05}, 0x1007);  // lea rax, [rip+0x1007]
+  b.raw({0xC3});
+  CHECK(read_code(b.bytes, 0x1000).complete);
+}
+
+void undecodable_instructions_fail_closed() {
+  // vmovss xmm0, [rdi+0x20]: HDE64 would read C5 as an error, then FA as cli and the rest as a fake
+  // adc store to [rdi+0x20].
+  const CodeFacts f = facts({0xC5, 0xFA, 0x10, 0x47, 0x20, 0xC6, 0x87, 0xD8, 0x00, 0x00, 0x00, 0x01, 0xC3});
+  CHECK(!f.complete);
+  CHECK(f.normalized.size() == 3);
+  if (f.normalized.size() == 3) {
+    CHECK(f.normalized[0] == "?c5fa104720");
+    CHECK(f.normalized[1] == "c687d800000001");
+  }
+  CHECK(f.accesses.size() == 1);
+  if (f.accesses.size() == 1) CHECK(f.accesses[0].disp == 0xD8 && f.accesses[0].store);
+
+  // Each of these decodes to its own length, so the ret after it is read as a ret.
+  for (const std::vector<uint8_t>& insn : std::vector<std::vector<uint8_t>>{
+           {0x66, 0x0F, 0x38, 0x00, 0xC1},              // pshufb xmm0, xmm1
+           {0x66, 0x0F, 0x3A, 0x0F, 0xC1, 0x08},        // palignr xmm0, xmm1, 8
+           {0xC4, 0xE2, 0x79, 0x00, 0x44, 0x24, 0x10},  // vpshufb xmm0, xmm0, [rsp+0x10]
+           {0xC4, 0xE3, 0x79, 0x0F, 0xC1, 0x08},        // vpalignr xmm0, xmm0, xmm1, 8
+           {0xC5, 0xF9, 0x70, 0xC1, 0x1B},              // vpshufd xmm0, xmm1, 0x1B
+           {0xC5, 0xF8, 0x77},                          // vzeroupper
+           {0x62, 0xF1, 0x7C, 0x48, 0x10, 0x47, 0x01}}) {  // vmovups zmm0, [rdi+0x40]
+    std::vector<uint8_t> fn = insn;
+    fn.push_back(0xC3);
+    const CodeFacts g = read_code(fn, 0x1000);
+    CHECK(!g.complete);
+    CHECK(g.normalized.size() == 2);
+    CHECK(!g.normalized.empty() && g.normalized.back() == "c3");
+  }
+
+  // An opcode HDE64 rejects outright (push es is invalid in 64-bit mode).
+  CHECK(!facts({0x06, 0xC3}).complete);
+}
+
 }  // namespace
 
 int main() {
@@ -233,5 +355,8 @@ int main() {
   load_is_not_store();
   rip_and_rsp_are_not_field_accesses();
   normalized_masks_own_flag();
+  switch_tables_are_data();
+  unknown_in_function_data_is_incomplete();
+  undecodable_instructions_fail_closed();
   return g_failures ? 1 : 0;
 }
