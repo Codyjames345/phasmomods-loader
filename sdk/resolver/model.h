@@ -37,6 +37,7 @@ struct ModelType {
   std::string assembly, ns, name;
   int declaring = -1;  // index of the declaring type for a nested type
   bool isEnum = false;
+  bool isValueType = false;  // a struct or an enum
   std::vector<ModelField> fields;
   std::vector<ModelMethod> methods;
   void* runtime = nullptr;  // the Il2CppClass* in the host, null offline

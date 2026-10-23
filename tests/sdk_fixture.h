@@ -12,13 +12,15 @@
 struct ModelBuilder {
   pg::sdk::GameModel model;
 
-  int type(std::string assembly, std::string ns, std::string name, int declaring = -1, bool isEnum = false) {
+  int type(std::string assembly, std::string ns, std::string name, int declaring = -1, bool isEnum = false,
+           bool isValueType = false) {
     pg::sdk::ModelType t;
     t.assembly = std::move(assembly);
     t.ns = std::move(ns);
     t.name = std::move(name);
     t.declaring = declaring;
     t.isEnum = isEnum;
+    t.isValueType = isValueType || isEnum;
     model.types.push_back(std::move(t));
     return static_cast<int>(model.types.size()) - 1;
   }

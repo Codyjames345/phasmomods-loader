@@ -475,8 +475,14 @@ class Resolver {
         yes = yes || std::find(targets.begin(), targets.end(), target) != targets.end();
       return yes ? Verdict::Yes : Verdict::No;
     }
+    // A struct's own methods address its fields at the offset minus 0x10 (no object header), so a
+    // field fact on a struct would compare the wrong displacement.
+    if (fact.is != Fact::Is::CalledBy && type.isValueType) {
+      why = std::format("field facts on a struct are not supported ({} is a struct)", describe_type(c.type));
+      return Verdict::Unread;
+    }
     // An access's this is the candidate's owner only when rcx came in as that owner's this.
-    const bool ownersThis = method.type == c.type && rcx_is_this(model_.types[method.type].methods[method.member]);
+    const bool ownersThis = method.type == c.type && rcx_is_this(method.type, method.member);
     bool throughThis = false;
     for (const uint64_t body : bodies(method)) {
       if (!readable(body)) return unreadable(fact.method);
@@ -504,12 +510,15 @@ class Resolver {
   }
 
   // Whether the method gets `this` in rcx: an instance method, and its return value comes back in a
-  // register rather than through a hidden buffer, which takes rcx and moves `this` to rdx. The model
+  // register rather than through a hidden buffer, which takes rcx and moves `this` to rdx. A struct's
+  // this points at the value, not at an object, so rcx is never taken as the owner's this. The model
   // has no sizes, so only returns known to fit a register count: nothing, a primitive other than
   // decimal, an enum, a reference (string, object, an array, a pointer, a by-reference return).
   // Any other type may be a struct.
-  bool rcx_is_this(const ModelMethod& m) const {
-    if (m.isStatic) return false;
+  bool rcx_is_this(int owner, int member) const {
+    const ModelType& type = model_.types[owner];
+    const ModelMethod& m = type.methods[member];
+    if (m.isStatic || type.isValueType) return false;
     static constexpr std::string_view kInRegister[] = {
         "void", "bool", "byte", "sbyte", "char",  "short",  "ushort", "int",    "uint",
         "long", "ulong", "float", "double", "string", "object", "IntPtr", "UIntPtr"};

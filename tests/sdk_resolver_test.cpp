@@ -731,6 +731,30 @@ void fact_kinds_must_fit() {
   CHECK(n && n->status == Status::Missing && n->detail == "a fact needs a method");
 }
 
+// A struct's own methods address its fields at the offset minus 0x10, so a field fact on a struct
+// decides nothing: the entry stays Ambiguous, and `this` is never taken to be the struct.
+void field_facts_on_a_struct_fail_closed() {
+  Bools g;
+  g.m.model.types[0].isValueType = true;
+  static constexpr Fact cooldown[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1}};
+  const Result* f = g.flag(cooldown);
+  CHECK(f && f->status == Status::Ambiguous);
+  CHECK(f && f->offset == 0);
+  CHECK(f && f->detail.find("field facts on a struct are not supported") != std::string::npos);
+
+  static constexpr Fact untouched[] = {{.is = Fact::Is::Stores, .method = "GhostAI.Hunting", .negate = true}};
+  const Result* u = g.flag(untouched);
+  CHECK(u && u->status == Status::Ambiguous && u->offset == 0);
+
+  // Without a fact the struct's field is chosen as before, by shape.
+  ModelBuilder m;
+  const int pair = m.type("Assembly-CSharp", "", "GhostAI", -1, false, true);
+  m.field(pair, "agent", "NavMeshAgent", 0x40);
+  constexpr EntryDesc agent{.key = "GhostAI.agent", .kind = Kind::Field, .owner = "GhostAI", .type = "NavMeshAgent"};
+  const Resolution r = run({&kGhostAI, &agent}, m.build());
+  CHECK(r.find("GhostAI.agent")->status == Status::Resolved);
+}
+
 // Fail closed: facts read from code the reader could not fully account for never decide.
 void unreadable_code_never_decides() {
   Bools g(Hunting::Unreadable);
@@ -991,6 +1015,7 @@ int main() {
   negated_fact_needs_the_owners_instance_method();
   fact_on_unresolved_method_blocks();
   fact_kinds_must_fit();
+  field_facts_on_a_struct_fail_closed();
   unreadable_code_never_decides();
   folded_alias_is_one_behaviour();
   identical_twins_are_one_behaviour();
