@@ -8,11 +8,16 @@
 
 namespace pg::map {
 
+// The runtime has no metadata for an icall, so its params are never matched: they fix the arity of
+// its wrapper (sdk/api/game_api.h).
+inline constexpr const char* Animator_SetBoolID_params[] = {"int", "bool"};
+
 /// Sets an Animator's bool parameter by its hashed id (Animator.StringToHash): the engine function
 /// behind UnityEngine.Animator.SetBool(int, bool), called as SetBoolID(animator, id, value). Custom
 /// Ghosts' apparition calls it by this name. Inferred: Unity's documented API.
 inline constexpr pg::sdk::EntryDesc Animator_SetBoolID{.key = "Animator.SetBoolID", .kind = pg::sdk::Kind::Icall,
-                                                       .name = "UnityEngine.Animator::SetBoolID"};
+                                                       .name = "UnityEngine.Animator::SetBoolID",
+                                                       .params = Animator_SetBoolID_params};
 
 }  // namespace pg::map
 

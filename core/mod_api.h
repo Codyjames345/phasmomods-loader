@@ -85,7 +85,9 @@ struct PgHostApi {
   // the notice). The local actor answers for this client.
   bool (*peer_has_mod)(int32_t actor, const char* modId);
   // Named tables of C function pointers that cooperating mods publish for each other. A table must
-  // stay valid for the process lifetime. service returns null for a name nobody registered.
+  // stay valid for the process lifetime. A name is published once: registering a name already
+  // registered is refused (logged) and the first table stays. service returns null for a name
+  // nobody registered.
   void (*register_service)(const char* name, const void* table);
   const void* (*service)(const char* name);
 
@@ -203,8 +205,9 @@ typedef bool (*PgModStartFn)(const PgHostApi*);  // "pgmod_start": once, after c
 typedef void (*PgModTickFn)(void);               // "pgmod_tick": every frame once started
 typedef void (*PgModStopFn)(void);               // "pgmod_stop": once, when the host stops
 // "pgmod_requires" (optional, version 2 onwards; the game API's glue exports it): the keys of the game
-// entries the mod uses that are not marked optional. It points `keys` at an array the mod keeps for
-// its lifetime and returns its length. Callable at any time. The host does not start a mod while any
-// of these did not resolve, and logs which. A mod without this export requires no game entry.
+// entries the mod uses that are not marked optional. It points `keys` at an array the mod keeps,
+// unchanged, for as long as its DLL stays loaded, and returns its length. Callable at any time. The
+// host does not start a mod while any of these did not resolve, and logs which. A mod without this
+// export requires no game entry.
 typedef size_t (*PgModRequiresFn)(const char* const** keys);
 }

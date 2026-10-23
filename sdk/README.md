@@ -112,7 +112,8 @@ The lifecycle, every call on the main thread:
 - `pgmod_tick()`: every frame once started.
 - `pgmod_stop()`: once, when the host stops the mod (newest started first). The mod may be started
   again later, and its hooks stay until the host removes them.
-- `pgmod_requires`: the game entries the mod needs (see "What a mod requires").
+- `pgmod_requires`: the game entries the mod needs (see "What a mod requires"), in an array the mod
+  keeps, unchanged, for as long as its DLL stays loaded.
 - `pg::mod::guarded_start`, `guarded_tick` and `guarded_stop` (`core/mod_glue.h`) wrap the three
   bodies so that nothing thrown leaves the mod; `mods/ghost_tells/mod.cpp` shows all of it.
 
@@ -128,7 +129,9 @@ receivers when it stops. `peer_has_mod(actor, modId)` says whether that client r
 Services. `register_service(name, table)` publishes a table of C function pointers for other mods and
 `service(name)` returns it, or null when nobody registered that name. The table must stay valid for the
 process lifetime, so version it in the name (`"ghost-tells.v1"`) and make the caller check for null
-(`core/services.h` lists the bundled ones). The host forgets the services when it stops.
+(`core/services.h` lists the bundled ones). A name is published once: the host refuses a second
+`register_service` of a name already registered, logs it, and keeps the first table, so no mod can
+take over another's service. The host forgets the services when it stops.
 
 ### Calling the game
 
@@ -156,9 +159,28 @@ Six kinds of wrapper, from `sdk/api/game_api.h`:
 | `pg::api::EnumValue<D>` | `idle{}` | `idle()` gives the value's number in this build. |
 | `pg::api::Type<D>` | `type{}` | `klass()` gives the `Il2CppClass*`; `is(obj)` tells whether an object is of the type or a derived one (an interface type never matches); `type_object()` gives its `System.Type` (C#'s `typeof`); `make()` a new object, fields zeroed and no constructor run (not for engine objects, which come from `AddComponent` or `Instantiate`); `make_array(n)` a new array of the type. |
 
+Every wrapper has two members besides its calls: `desc`, the map entry it wraps (its key, kind and
+flags; `hook<M>` and `inside<M>` read it), and `use`, the entry's `pg::api::Use<D>`, whose `entry()`
+and `resolved()` make the entry required (see "What a mod requires").
+
+A wrapper's shape must be its entry's, or it does not compile. Where the entry lists `params`, a
+`Method` or `Icall` takes one argument per param, after the object unless the entry is `kStatic`
+(a method named without `params` is matched at any arity, so its wrapper is not checked). Where a
+field's `type` is a C# value type by name (`bool`, `int`, `float` and the like), a `Field` or
+`StaticField` whose `T` has another size does not compile. `tests/compile_fail_test.cmake` builds
+wrong wrappers of every kind and expects each to fail with its own `static_assert`.
+
+A call is never virtual: `UnAppear(ghost)` runs the body the map entry names, even when the object's
+class overrides it. Use `virtual_call` to run the override.
+
+A managed reference a wrapper gives (a `void*` field or return value, `type_object()`, `make()`,
+`make_array()`) is valid for the current frame only. Do not keep it across frames: keep the object
+in a `pg::api::Held`.
+
 A call that cannot reach the game never jumps to null. An entry that did not resolve logs
 `<key> is not available in this game build` once and returns the type's default (0, false, null) or
-does nothing. A field read of a null object gives the default; a write to one does nothing.
+does nothing. A field read of a null object gives the default; a write to one does nothing. "Once"
+holds across threads: each line's flag is atomic.
 
 GameAssembly's exports (`il2cpp_shutdown`) are not for mods. `pg::api::Export<D>` gives one's
 `address()` to the host's own code only: it exists where `PG_HOST` is defined (ModHost), and the host
@@ -191,7 +213,9 @@ Before `bind` every service answers as for a null object.
 ### What a mod requires
 
 What a mod requires is what its code calls. Every wrapper member is a template, so an entry is
-registered only when code in the mod uses it (`Use<D>::registered`). A call, a field `get` or `set`,
+registered only when code in the mod uses it: only `Use<D>::resolved` names the entry's
+registration, so naming a wrapper or `Use<D>` registers nothing (MSVC would otherwise register an
+entry wherever its `Use<D>` is named). A call, a field `get` or `set`,
 an enum value, `klass()`, `is()`, `type_object()`, `make()`, `make_array()`, `virtual_call`, `available()`, `hook<M>` and `inside<M>` all use it. The mod's
 `pgmod_requires` export lists exactly those entries' keys, less the entries whose map entry carries
 `kOptional`. That flag belongs to the entry, so it holds for every mod; a mod cannot make an entry
@@ -448,8 +472,10 @@ bad arguments.
 
 `-Mods <dir>` adds `--mods <dir>`: gamecheck loads each mod DLL under `<dir>`, reads its
 `pgmod_requires` and prints `would switch off <mod id>: <keys>` for each mod the host would not start
-on that build. `validate.ps1` runs `.\tools\gamecheck.ps1 -IfConfigured -Mods dist\PhasmoMods\mods`,
-the staged bundled mods, so it fails when a mod would be switched off.
+on that build, and `would not load <mod id> (contract <version>)` for a mod built against a host
+contract the host does not run (`pg_api_compatible`), which the host never loads. `validate.ps1`
+runs `.\tools\gamecheck.ps1 -IfConfigured -Mods dist\PhasmoMods\mods`, the staged bundled mods, so
+it fails when a mod would be switched off or would not load.
 
 Reading a function's code needs Ghidra, `GHIDRA_INSTALL_DIR` and a one-time import into `re/ghidra`.
 That import is not written down yet: `FINDINGS.md` item 30 describes the missing `re/README.md`.

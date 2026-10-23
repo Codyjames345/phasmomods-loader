@@ -224,6 +224,7 @@ pg_test(form)
 pg_test(mod_list)
 pg_test(presence)
 pg_test(join_guard)
+pg_test(service_registry)
 pg_test(consent)
 pg_test(consent_ui)
 pg_test(menu_panel)
@@ -254,6 +255,11 @@ add_library(pg_fake_mod_2_0 SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pg_fake_mod_2_0 PRIVATE pgmod)
 target_compile_definitions(pg_fake_mod_2_0 PRIVATE "PG_FAKE_MOD_API_VERSION=((2u << 16) | 0u)")
 pg_options(pg_fake_mod_2_0)
+# And as built against the first contract (version 1, no minor), for gamecheck's version check.
+add_library(pg_fake_mod_1 SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pg_fake_mod_1 PRIVATE pgmod)
+target_compile_definitions(pg_fake_mod_1 PRIVATE PG_FAKE_MOD_API_VERSION=1u)
+pg_options(pg_fake_mod_1)
 pg_test(mods host/mods.cpp host/hooks.cpp host/build_check.cpp core/log.cpp)
 target_link_libraries(mods_test PRIVATE minhook bcrypt)
 target_compile_definitions(mods_test PRIVATE PG_FAKE_MOD="$<TARGET_FILE:pg_fake_mod>"
@@ -261,6 +267,26 @@ target_compile_definitions(mods_test PRIVATE PG_FAKE_MOD="$<TARGET_FILE:pg_fake_
 add_dependencies(mods_test pg_fake_mod pg_fake_mod_2_0)
 pg_test(game_api sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp core/log.cpp)
 target_include_directories(game_api_test PRIVATE sdk/api sdk/map sdk/fake)
+# Wrappers that must not compile (PG_EXPECT_COMPILE_FAIL 1 to 7) and the same written right (0), built
+# only by the test, which expects each wrong one to fail with its static_assert. The test builds them
+# outside the developer environment validate.ps1 builds in, so it gets this configure's compiler
+# environment.
+foreach(case RANGE 0 7)
+  add_library(compile_fail_${case} OBJECT EXCLUDE_FROM_ALL tests/compile_fail/wrappers.cpp)
+  target_include_directories(compile_fail_${case} PRIVATE core sdk/api sdk/map)
+  target_compile_definitions(compile_fail_${case} PRIVATE PG_EXPECT_COMPILE_FAIL=${case})
+  pg_options(compile_fail_${case})
+endforeach()
+set(PG_COMPILER_ENVIRONMENT)
+foreach(var INCLUDE LIB LIBPATH PATH)
+  if(DEFINED ENV{${var}})
+    string(REPLACE ";" "\\;" value "$ENV{${var}}")
+    list(APPEND PG_COMPILER_ENVIRONMENT "${var}=${value}")
+  endif()
+endforeach()
+add_test(NAME wrapper_arity_matches_entry COMMAND ${CMAKE_COMMAND} -DBUILD=${CMAKE_BINARY_DIR}
+  -P ${CMAKE_SOURCE_DIR}/tests/compile_fail_test.cmake)
+set_tests_properties(wrapper_arity_matches_entry PROPERTIES ENVIRONMENT "${PG_COMPILER_ENVIRONMENT}")
 pg_test(sdk_types)
 target_link_libraries(sdk_types_test PRIVATE pgsdk_resolver)
 pg_test(sdk_resolver)
@@ -288,4 +314,5 @@ target_link_libraries(map_test PRIVATE pgsdk_resolver)
 target_compile_definitions(map_test PRIVATE PG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_test(NAME gamecheck COMMAND ${CMAKE_COMMAND} -DGAMECHECK=$<TARGET_FILE:gamecheck>
   -DWORK=${CMAKE_BINARY_DIR}/gamecheck_test -DFAKE_MOD=$<TARGET_FILE:pg_fake_mod>
+  -DFAKE_MOD_1=$<TARGET_FILE:pg_fake_mod_1>
   -DDUMP=${CMAKE_SOURCE_DIR}/tests/fixtures/diffable -P ${CMAKE_SOURCE_DIR}/tests/gamecheck_test.cmake)

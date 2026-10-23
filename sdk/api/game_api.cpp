@@ -34,21 +34,17 @@ bool register_use(Slot* slot) {
 const PgHostApi* host() { return g_host; }
 
 void report_unavailable(Slot& slot) {
-  if (slot.reported) return;
-  slot.reported = true;
-  PG_LOG("%s is not available in this game build", slot.desc->key);
+  if (!slot.reported.exchange(true)) PG_LOG("%s is not available in this game build", slot.desc->key);
 }
 
 void report_refused_call(Slot& slot) {
-  if (slot.refused) return;
-  slot.refused = true;
-  PG_LOG("%s: virtual_call on a null object or one not of its declaring type; nothing was called", slot.desc->key);
+  if (!slot.refused.exchange(true))
+    PG_LOG("%s: virtual_call on a null object or one not of its declaring type; nothing was called", slot.desc->key);
 }
 
 void report_refused_static(Slot& slot) {
-  if (slot.refused) return;
-  slot.refused = true;
-  PG_LOG("%s: the host could not read or write the static field; the default was used", slot.desc->key);
+  if (!slot.refused.exchange(true))
+    PG_LOG("%s: the host could not read or write the static field; the default was used", slot.desc->key);
 }
 
 bool static_get(const char* key, void* out, size_t size) { return g_host && g_host->static_get(key, out, size); }
@@ -98,11 +94,14 @@ bool bind(const PgHostApi* host, std::string& missing) {
 }
 
 size_t used_required(const char* const** keys) {
-  static std::vector<const char*> required;
-  required.clear();
-  for (const detail::Slot* slot : registry())
-    if (!optional(slot)) required.push_back(slot->desc->key);
-  std::sort(required.begin(), required.end(), key_less);
+  // Built once: every entry registered while the DLL loaded, so the list never changes after.
+  static const std::vector<const char*> required = [] {
+    std::vector<const char*> out;
+    for (const detail::Slot* slot : registry())
+      if (!optional(slot)) out.push_back(slot->desc->key);
+    std::sort(out.begin(), out.end(), key_less);
+    return out;
+  }();
   *keys = required.data();
   return required.size();
 }

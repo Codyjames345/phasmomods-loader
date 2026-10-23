@@ -52,3 +52,34 @@ if(icall EQUAL -1 OR NOT counted)
   message(FATAL_ERROR "the icall is not listed and counted as checked at startup only\n${out}${err}")
 endif()
 message(STATUS "An icall is listed as checked at startup only.")
+
+# gamecheck_mods_checks_api_version: a mod built against a contract the host does not run never
+# loads, whatever it requires, so it is named with its contract. The fake mod built against version 1
+# (the first contract, which had no minor) stands for one.
+set(old "${WORK}/old-mods")
+file(MAKE_DIRECTORY "${old}/fake")
+file(COPY "${FAKE_MOD_1}" DESTINATION "${old}/fake")
+execute_process(COMMAND "${GAMECHECK}" --dump "${DUMP}" --image "${GAMECHECK}" --mods "${old}"
+  RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
+if(NOT code EQUAL 1)
+  message(FATAL_ERROR "old contract: gamecheck exited ${code}, expected 1\n${out}${err}")
+endif()
+string(FIND "${out}" "would not load fake-mod (contract 1.0)\n" line)
+string(FIND "${out}" "would switch off fake-mod" switched)
+if(line EQUAL -1 OR NOT switched EQUAL -1)
+  message(FATAL_ERROR "old contract: no line saying fake-mod would not load (contract 1.0)\n${out}${err}")
+endif()
+message(STATUS "--mods names a mod built against another contract.")
+
+# gamecheck_unreadable_mods_dir_exits_2: a mods folder that does not exist, or a file given as one,
+# cannot be read, and that is unreadable input.
+file(WRITE "${WORK}/not-a-folder" "a file")
+foreach(dir "${WORK}/no-such-folder" "${WORK}/not-a-folder")
+  execute_process(COMMAND "${GAMECHECK}" --dump "${DUMP}" --image "${GAMECHECK}" --mods "${dir}"
+    RESULT_VARIABLE code OUTPUT_QUIET ERROR_VARIABLE err)
+  string(FIND "${err}" "gamecheck: cannot read the mods folder" said)
+  if(NOT code EQUAL 2 OR said EQUAL -1)
+    message(FATAL_ERROR "${dir}: gamecheck exited ${code}, expected 2 and why\n${err}")
+  endif()
+endforeach()
+message(STATUS "An unreadable mods folder exits 2.")

@@ -46,7 +46,8 @@ struct EntryDesc {
   // it does not, a name several types share makes the entry Ambiguous. The same holds in params.
   const char* type = nullptr;
   // A method's parameter types. Empty means the method is matched by name alone, at any arity, so
-  // overloads make it Ambiguous.
+  // overloads make it Ambiguous. An icall's are never matched (the runtime has no metadata for one);
+  // like a method's, they fix the number of arguments its wrapper takes (sdk/api/game_api.h).
   std::span<const char* const> params{};
   std::span<const char* const> fieldTypes{};  // a Type found by shape: field types it must have
   std::span<const char* const> values{};      // an enum Type found by shape: value names it must have

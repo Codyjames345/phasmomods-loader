@@ -3,7 +3,8 @@
 #include <windows.h>
 
 #include <algorithm>
-#include <map>
+#include <atomic>
+#include <mutex>
 #include <set>
 #include <string>
 #include <utility>
@@ -24,6 +25,7 @@
 #include "notice.h"
 #include "presence.h"
 #include "room_actions.h"
+#include "service_registry.h"
 #include "ui.h"
 
 namespace pg::suite {
@@ -32,7 +34,7 @@ namespace {
 std::wstring g_dataDirectory;
 PgHostApi g_api{};
 presence::Presence g_presence;
-std::map<std::string, const void*> g_services;  // every one a running mod's
+services::Registry g_services;  // every table a running mod's
 bool g_agreed = false;     // the player agreed to the notice: the mods are the host's to run
 size_t g_modHooks = 0;     // hooks::mark() before the first mod started: everything after is the mods'
 consent::Answer g_answer = consent::Answer::Pending;
@@ -103,15 +105,15 @@ bool api_peer_has_mod(int32_t actor, const char* id) {
 }
 void api_register_service(const char* name, const void* table) {
   try {
-    if (name) g_services[name] = table;
+    if (name && !g_services.publish(name, table))
+      PG_LOG("suite: service %s is already registered; the first table stays", name);
   } catch (...) {
-    PG_LOG("suite: could not register service %s", name);
+    PG_LOG("suite: could not register service %s", name ? name : "?");
   }
 }
 const void* api_service(const char* name) {
   try {
-    auto it = name ? g_services.find(name) : g_services.end();
-    return it == g_services.end() ? nullptr : it->second;
+    return g_services.find(name);
   } catch (...) {
     return nullptr;
   }
@@ -170,24 +172,23 @@ il2cpp::Class* type_class(const char* key) {
 }
 
 // A service handed an object of the wrong kind reads no layout from it. It logs that once per
-// service (`refused` is the service's own flag) and answers 0 or null.
-bool refuse_once(bool& refused, const char* service, const char* kind) {
-  if (!refused) {
-    refused = true;
+// service (`refused` is the service's own flag, atomic so two threads still log once) and answers 0
+// or null.
+bool refuse_once(std::atomic<bool>& refused, const char* service, const char* kind) {
+  if (!refused.exchange(true))
     PG_LOG("suite: a mod passed %s an object that is not %s; it answers 0 or null", service, kind);
-  }
   return false;
 }
 bool string_given(const void* obj, const char* service) {
-  static bool refused = false;
+  static std::atomic<bool> refused{false};
   return il2cpp::is_string(obj) || refuse_once(refused, service, "a System.String");
 }
 bool array_given(const void* obj, const char* service) {
-  static bool refused = false;
+  static std::atomic<bool> refused{false};
   return il2cpp::is_array(obj) || refuse_once(refused, service, "a managed array");
 }
 bool list_given(const void* obj, const char* service) {
-  static bool refused = false;
+  static std::atomic<bool> refused{false};
   return il2cpp::is_list(obj) || refuse_once(refused, service, "a System.Collections.Generic.List");
 }
 
@@ -274,13 +275,15 @@ const PgGameEntry* static_field(const char* key) {
 
 // Whether a managed exception's stack from a static field access was logged: once in all, since a
 // failed static constructor throws again on every access.
-bool g_staticStackLogged = false;
+std::atomic<bool> g_staticStackLogged{false};
 
 // A static field access that failed: logged once per key, with `why`. Called from catch handlers too,
 // so it throws nothing.
 void static_refused(const char* key, const char* why) {
   try {
+    static std::mutex mutex;
     static std::set<std::string> logged;
+    const std::lock_guard lock(mutex);
     if (logged.insert(key).second) PG_LOG("suite: static field %s: %s; it answers false", key, why);
   } catch (...) {
     // Logging is best effort; the caller answers false either way.
@@ -302,7 +305,7 @@ bool static_access(const char* key, const char* what, F access) {
     if (access(e)) return true;
     static_refused(key, "the size given is not the size of its value");
   } catch (const Il2CppExceptionWrapper& ex) {
-    if (!std::exchange(g_staticStackLogged, true)) il2cpp::log_exception((std::string("suite: ") + what).c_str(), ex.ex);
+    if (!g_staticStackLogged.exchange(true)) il2cpp::log_exception((std::string("suite: ") + what).c_str(), ex.ex);
     static_refused(key, "a managed exception was thrown");
   } catch (...) {
     static_refused(key, "an exception was thrown");

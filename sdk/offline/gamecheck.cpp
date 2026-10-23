@@ -6,8 +6,10 @@
 // cannot be checked without the running game: it is listed as checked at startup only, and never
 // counts as a failure. With --addresses it writes key, kind, value and length for each resolved
 // entry. With --mods it loads every mod DLL in <dir> and its subfolders (a DLL that exports
-// pgmod_info), asks each for the game entries it requires (pgmod_requires), and after the summary
-// prints "would switch off <mod id>: <keys>" for each mod the host would not start on this build.
+// pgmod_info), and after the summary prints "would not load <mod id> (contract <version>)" for each
+// mod built against a host contract this build's host does not run (pg_api_compatible), and, for
+// the others, asks for the game entries each requires (pgmod_requires) and prints
+// "would switch off <mod id>: <keys>" for each one the host would not start on this build.
 // Exit 0 when every required entry it can check resolved and no mod would be switched off, 1 when
 // one did not or one would, 2 on bad arguments or unreadable input.
 #include <windows.h>
@@ -87,6 +89,12 @@ std::string utf8(const std::filesystem::path& p) {
   return std::string(text.begin(), text.end());
 }
 
+// A host contract version as people write it: "2.1". Version 1, the first contract, had no minor.
+std::string contract(uint32_t version) {
+  if (version >> 16 == 0) return std::format("{}.0", version);
+  return std::format("{}.{}", version >> 16, version & 0xFFFFu);
+}
+
 // A well-formed icall entry, which only the running game can resolve. A malformed one is reported as
 // any other entry that did not resolve.
 bool startup_only(const Result& r) {
@@ -139,9 +147,9 @@ bool dlls_in(const std::filesystem::path& dir, std::vector<std::filesystem::path
   return true;
 }
 
-// Loads each mod in `dir` and prints, for each one the host would not start on this build, the
-// required entries that did not resolve. The number of such mods, or -1 when `dir` or a mod cannot
-// be read (reported).
+// Loads each mod in `dir` and prints, for each one the host would not start on this build, why: the
+// host contract it was built against, which the host refuses to load, or the required entries that
+// did not resolve. The number of such mods, or -1 when `dir` or a mod cannot be read (reported).
 int check_mods(const std::filesystem::path& dir, const Resolution& resolution) {
   std::vector<std::filesystem::path> dlls;
   if (!dlls_in(dir, dlls)) {
@@ -158,6 +166,11 @@ int check_mods(const std::filesystem::path& dir, const Resolution& resolution) {
     if (!mod || !mod->id) {
       std::fprintf(stderr, "gamecheck: cannot load the mod %s\n", utf8(dll).c_str());
       unreadable = true;
+      continue;
+    }
+    if (!pg_api_compatible(PGMOD_API_VERSION, mod->apiVersion)) {
+      std::printf("would not load %s (contract %s)\n", mod->id, contract(mod->apiVersion).c_str());
+      ++off;
       continue;
     }
     // A mod without pgmod_requires requires no game entry. One that requires an export is never

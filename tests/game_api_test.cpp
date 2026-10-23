@@ -3,8 +3,10 @@
 // requires, what an entry that did not resolve does, and the runtime services (sdk/api/runtime.h): strings, arrays, lists, type
 // objects, object creation, alive checks, virtual calls and GC holds. Run: build\game_api_test.exe
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -154,15 +156,34 @@ void enum_value() {
   CHECK(phasmo::GhostState::hunting() == 2);
 }
 
-void only_called_entries_are_required() {
+std::vector<std::string> required_keys() {
   const char* const* keys = nullptr;
   const size_t n = api::used_required(&keys);
-  std::vector<std::string> required(keys, keys + n);
-  const auto has = [&](const char* key) { return std::find(required.begin(), required.end(), key) != required.end(); };
-  CHECK(has("GhostAI.UnAppear"));
-  CHECK(!has("GhostAI.LookAtPlayer"));  // declared in GhostAI.h, never called here
-  CHECK(!has("Test.optionalCount"));    // called, but optional
-  CHECK(std::is_sorted(required.begin(), required.end()));
+  return std::vector<std::string>(keys, keys + n);
+}
+
+// Exactly the required entries this binary's code uses: GhostAI.LookAtPlayer, declared in GhostAI.h
+// and never called here, is not among them, nor the optional entries the tests call.
+void only_called_entries_are_required() {
+  CHECK((required_keys() == std::vector<std::string>{"Animator.SetBoolID", "Camera", "GhostAI", "GhostAI.UnAppear",
+                                                     "GhostAI.agent", "GhostAI.state", "GhostState.hunting",
+                                                     "LevelController.instance"}));
+  const char* const* first = nullptr;
+  const char* const* again = nullptr;
+  CHECK(api::used_required(&first) == api::used_required(&again) && first == again);  // kept, not rebuilt
+}
+
+// Naming an entry's use or a wrapper's class registers nothing; only a member that code calls does.
+// MSVC instantiates a class template's static data members along with the class, so a registration
+// kept in Use would happen here although nothing calls the entry. (An entry declared in an unnamed
+// namespace still registers when called: the virtual_call and static field tests resolve this
+// file's own.)
+void registration_needs_a_call() {
+  static_cast<void>(sizeof(api::Use<map::GhostAI_LookAtPlayer>));
+  static_cast<void>(sizeof(phasmo::GhostAI::TemporarilyStopWander));
+  const std::vector<std::string> required = required_keys();
+  CHECK(std::find(required.begin(), required.end(), "GhostAI.LookAtPlayer") == required.end());
+  CHECK(std::find(required.begin(), required.end(), "GhostAI.TemporarilyStopWander") == required.end());
 }
 
 void bind_names_missing_required() {
@@ -181,6 +202,29 @@ void unresolved_optional_call_returns_default() {
   CHECK(optionalCount(nullptr) == 0);
   CHECK(count_logged("Test.optionalCount is not available in this game build") == 1);
   CHECK(g_lines.size() == 1);
+}
+
+// Two threads that call an unresolved optional entry at the same moment log its line once between
+// them. Each round binds again, which makes the line due once more.
+void log_once_is_atomic() {
+  fake_everything_but("");
+  int wrong = 0;
+  for (int round = 0; round < 2000; ++round) {
+    CHECK(bound());
+    g_lines.clear();
+    std::atomic<int> ready{0};
+    const auto call = [&] {
+      ready.fetch_add(1);
+      while (ready.load() < 2) {
+      }
+      static_cast<void>(optionalCount(nullptr));
+    };
+    std::thread a(call), b(call);
+    a.join();
+    b.join();
+    wrong += count_logged("Test.optionalCount is not available in this game build") != 1;
+  }
+  CHECK(wrong == 0);
 }
 
 void unresolved_required_call_does_nothing() {
@@ -414,8 +458,10 @@ int main() {
   reference_set_uses_barrier();
   enum_value();
   only_called_entries_are_required();
+  registration_needs_a_call();
   bind_names_missing_required();
   unresolved_optional_call_returns_default();
+  log_once_is_atomic();
   unresolved_required_call_does_nothing();
   hook_by_entry();
   utf16_encoder();
