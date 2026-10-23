@@ -344,6 +344,7 @@ constexpr wchar_t kName[] = L"PhasmoMods Loader";      // the message boxes' tit
 constexpr wchar_t kTitle[] = L"PhasmoMods Loader " PG_WIDEN(PG_SUITE_VERSION);  // the window's title
 constexpr int kIcon = 1;                               // tools/launcher.rc
 constexpr std::chrono::seconds kUpdateLimit{10};       // the longest an update check delays play
+constexpr UINT kUpdateFound = WM_APP + 1;              // sent by the worker; lParam is the version (std::string*)
 
 /** Add a timestamped line to launcher_log(), for what `--steam` mode cannot show in a window. */
 void append_log(const std::wstring& message) {
@@ -360,10 +361,11 @@ void append_log(const std::wstring& message) {
 }
 
 /** Check for updates on this thread, waiting at most kUpdateLimit. A check that cannot start reports CarryOn. */
-update::Report update_now(const std::vector<std::wstring>& launcherArguments) {
+update::Report update_now(const std::vector<std::wstring>& launcherArguments, update::Progress progress = {}) {
   update::Report report{update::Outcome::CarryOn, L"Could not check for updates. Starting the installed version."};
   try {
-    report = update::run(update::velopack_backend(), update::restart_arguments(launcherArguments), kUpdateLimit);
+    report = update::run(update::velopack_backend(), update::restart_arguments(launcherArguments), kUpdateLimit,
+                         std::move(progress));
   } catch (...) { /* An update that cannot start never stops the game: keep the prepared report. */ }
   return report;
 }
@@ -381,7 +383,7 @@ struct WindowState {
   HWND attachButton = nullptr;
   bool busy = false;
   bool updating = false;  // the worker is checking for updates, not attaching
-  bool closing = false;
+  std::atomic<bool> closing{false};  // the window was closed while busy: it goes when the worker ends
   Result result;
   update::Report updateReport;
   std::atomic<bool> completed{false};
@@ -470,11 +472,14 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
       state->busy = false;
       if (state->updating) {
         state->updating = false;
-        // Velopack's updater applies the new version once this program exits, then starts it.
+        // Velopack's updater applies the new version once this program exits, then starts it unless
+        // the window was closing.
         if (state->updateReport.outcome == update::Outcome::Restarting) { DestroyWindow(window); return 0; }
         set_controls(state, true);
         SetFocus(state->attachButton);
-        SetWindowTextW(state->status, (state->updateReport.message.empty() ? state->usualStatus : state->updateReport.message).c_str());
+        // Why the update failed comes first, then the usual text, which names any broken mods.
+        const std::wstring& why = state->updateReport.message;
+        SetWindowTextW(state->status, (why.empty() ? state->usualStatus : why + L"\r\n" + state->usualStatus).c_str());
         if (state->closing) DestroyWindow(window);
         return 0;
       }
@@ -483,6 +488,10 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
       if (state->closing) DestroyWindow(window);
       return 0;
     }
+    case kUpdateFound:
+      SetWindowTextW(state->status, (L"Updating to " + widen(*reinterpret_cast<const std::string*>(lParam)) +
+                                     L". PhasmoMods Loader restarts when it is done.").c_str());
+      return 0;
     case WM_CLOSE:
       if (state->busy) { state->closing = true; ShowWindow(window, SW_HIDE); }
       else DestroyWindow(window);
@@ -555,9 +564,16 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
     SetWindowTextW(state.status, L"Checking for updates...");
     try {
       state.updateReport = {update::Outcome::CarryOn, L"Could not check for updates. Starting the installed version."};
-      state.worker = std::thread([target = &state, executable] {
-        try { target->updateReport = update_now({executable}); }
-        catch (...) { /* Keep the prepared report. */ }
+      state.worker = std::thread([target = &state, window, executable] {
+        try {
+          update::Progress progress;
+          // Sent, not posted: the version string lives only for this call, and the window outlives the worker.
+          progress.found = [window](const std::string& version) {
+            SendMessageW(window, kUpdateFound, 0, reinterpret_cast<LPARAM>(&version));
+          };
+          progress.restart = [target] { return !target->closing; };  // closed: install, but do not come back
+          target->updateReport = update_now({executable}, std::move(progress));
+        } catch (...) { /* Keep the prepared report. */ }
         target->completed.store(true, std::memory_order_release);
       });
     } catch (...) {

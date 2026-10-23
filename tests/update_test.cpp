@@ -23,6 +23,7 @@ struct FakeBackend : Backend {
   std::atomic<int> checks{0}, downloads{0}, applies{0};
   std::string downloaded;
   std::vector<std::wstring> applied;
+  bool appliedRestart = false;
 
   bool installed() override { return isInstalled; }
   std::string current() override { return version; }
@@ -37,9 +38,10 @@ struct FakeBackend : Backend {
     if (!downloadOk) error = downloadError;
     return downloadOk;
   }
-  bool apply_and_restart(const std::vector<std::wstring>& arguments, std::wstring& error) override {
+  bool apply(const std::vector<std::wstring>& arguments, bool restart, std::wstring& error) override {
     ++applies;
     applied = arguments;
+    appliedRestart = restart;
     if (!applyOk) error = applyError;
     return applyOk;
   }
@@ -75,6 +77,42 @@ void newer_version_restarts() {
   CHECK(fake->downloaded == "0.2.0");
   CHECK(fake->applies == 1);
   CHECK(fake->applied == kArguments);
+  CHECK(fake->appliedRestart);  // no one asked otherwise
+}
+
+void the_version_is_announced_before_the_apply() {
+  auto fake = std::make_shared<FakeBackend>();
+  fake->result = available("0.2.0");
+  std::string announced;
+  int appliesWhenAnnounced = -1;
+  Progress progress;
+  progress.found = [&](const std::string& version) {
+    announced = version;
+    appliesWhenAnnounced = fake->applies;
+  };
+  CHECK(run(fake, kArguments, 1s, progress).outcome == Outcome::Restarting);
+  CHECK(announced == "0.2.0");
+  CHECK(appliesWhenAnnounced == 0);
+  CHECK(fake->applies == 1);
+
+  // Nothing to install: nothing is announced.
+  announced.clear();
+  fake->result = {Check::Kind::UpToDate, "", L""};
+  CHECK(run(fake, kArguments, 1s, progress).outcome == Outcome::UpToDate);
+  fake->result = {Check::Kind::Failed, "", L"offline"};
+  CHECK(run(fake, kArguments, 1s, progress).outcome == Outcome::CarryOn);
+  CHECK(announced.empty());
+}
+
+void a_closing_window_applies_without_a_restart() {
+  auto fake = std::make_shared<FakeBackend>();
+  fake->result = available("0.2.0");
+  Progress progress;
+  progress.restart = [] { return false; };
+  const auto report = run(fake, kArguments, 1s, progress);
+  CHECK(report.outcome == Outcome::Restarting);  // the program must still exit for the update to install
+  CHECK(fake->applies == 1);
+  CHECK(!fake->appliedRestart);
 }
 
 void older_version_also_applies() {
@@ -192,6 +230,8 @@ int main() {
   not_installed_skips_quietly();
   same_version_is_up_to_date();
   newer_version_restarts();
+  the_version_is_announced_before_the_apply();
+  a_closing_window_applies_without_a_restart();
   older_version_also_applies();
   check_failure_carries_on();
   download_failure_keeps_installed();

@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -27,20 +28,28 @@ class Backend {
   virtual std::string current() = 0;
   virtual Check check() = 0;
   virtual bool download(const std::string& version, std::wstring& error) = 0;
-  /** Apply the downloaded version and start the new launcher with `arguments`. */
-  virtual bool apply_and_restart(const std::vector<std::wstring>& arguments, std::wstring& error) = 0;
+  /** Apply the downloaded version once this program exits, then, when `restart`, start the new launcher with `arguments`. */
+  virtual bool apply(const std::vector<std::wstring>& arguments, bool restart, std::wstring& error) = 0;
 };
 
 enum class Outcome {
   NotInstalled,  // not installed by Setup.exe: no update was tried
   UpToDate,
-  Restarting,    // the new version was applied and is starting
+  Restarting,    // the new version is applied once this program exits, which it must do now
   CarryOn,       // no update happened: start the installed version
 };
 
 struct Report {
   Outcome outcome = Outcome::CarryOn;
   std::wstring message;  // for the log or the user; empty for NotInstalled
+};
+
+/** What the caller hears from the worker while an update runs. Both are called on the worker thread; either may be empty. */
+struct Progress {
+  /** The check found `version`, and the update to it starts. Not called once `run` has stopped waiting. */
+  std::function<void(const std::string& version)> found;
+  /** Asked just before the apply: whether the new version starts once it is applied (empty: it does). */
+  std::function<bool()> restart;
 };
 
 /**
@@ -52,7 +61,7 @@ struct Report {
  * updater, which waits for this program to exit, and returns, so that wait is short.
  */
 Report run(std::shared_ptr<Backend> backend, const std::vector<std::wstring>& arguments,
-           std::chrono::milliseconds limit);
+           std::chrono::milliseconds limit, Progress progress = {});
 
 /** The launcher's own arguments after argv[0], unchanged, for the restarted launcher. */
 std::vector<std::wstring> restart_arguments(const std::vector<std::wstring>& launcherArguments);

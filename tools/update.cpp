@@ -26,7 +26,8 @@ void finish(Job& job, Outcome outcome, std::wstring message) {
   job.finished.notify_all();
 }
 
-void work_steps(const std::shared_ptr<Job>& job, Backend* backend, const std::vector<std::wstring>& arguments) {
+void work_steps(const std::shared_ptr<Job>& job, Backend* backend, const std::vector<std::wstring>& arguments,
+                const Progress& progress) {
   const Check check = backend->check();
   if (check.kind == Check::Kind::Failed) {
     finish(*job, Outcome::CarryOn,
@@ -38,8 +39,10 @@ void work_steps(const std::shared_ptr<Job>& job, Backend* backend, const std::ve
     return;
   }
   {
+    // Under the lock, so the caller hears of the update only while it still waits for it.
     std::lock_guard<std::mutex> lock(job->mutex);
     if (job->abandoned) return;
+    if (progress.found) progress.found(check.version);
   }
   std::wstring error;
   if (!backend->download(check.version, error)) {
@@ -53,20 +56,23 @@ void work_steps(const std::shared_ptr<Job>& job, Backend* backend, const std::ve
     if (job->abandoned) return;
     job->applying = true;
   }
-  if (!backend->apply_and_restart(arguments, error)) {
+  const bool restart = progress.restart ? progress.restart() : true;
+  if (!backend->apply(arguments, restart, error)) {
     finish(*job, Outcome::CarryOn,
            L"Could not install version " + widen(check.version) + L" (" + error +
              L"). Starting the installed version.");
     return;
   }
-  finish(*job, Outcome::Restarting, L"Updated to " + widen(check.version) + L". Restarting.");
+  finish(*job, Outcome::Restarting, L"Updated to " + widen(check.version) +
+         (restart ? L". Restarting." : L". It installs when PhasmoMods Loader closes."));
 }
 
 /** The worker body: nothing a backend throws may leave this thread, or the launcher would terminate. */
-void work(const std::shared_ptr<Job>& job, Backend& backend, const std::vector<std::wstring>& arguments) {
+void work(const std::shared_ptr<Job>& job, Backend& backend, const std::vector<std::wstring>& arguments,
+          const Progress& progress) {
   const std::wstring tail = L"). Starting the installed version.";
   try {
-    work_steps(job, &backend, arguments);
+    work_steps(job, &backend, arguments, progress);
   } catch (const std::exception& error) {
     finish(*job, Outcome::CarryOn, L"The update failed (" + widen(error.what()) + tail);
   } catch (...) {
@@ -76,14 +82,16 @@ void work(const std::shared_ptr<Job>& job, Backend& backend, const std::vector<s
 }
 
 Report run(std::shared_ptr<Backend> backend, const std::vector<std::wstring>& arguments,
-           std::chrono::milliseconds limit) {
+           std::chrono::milliseconds limit, Progress progress) {
   try {
     if (!backend->installed()) return {Outcome::NotInstalled, L""};
   } catch (...) {
     return {Outcome::NotInstalled, L""};
   }
   auto job = std::make_shared<Job>();
-  std::thread([job, backend, arguments] { work(job, *backend, arguments); }).detach();
+  std::thread([job, backend, arguments, progress = std::move(progress)] {
+    work(job, *backend, arguments, progress);
+  }).detach();
 
   std::unique_lock<std::mutex> lock(job->mutex);
   job->finished.wait_for(lock, limit, [&] { return job->done; });

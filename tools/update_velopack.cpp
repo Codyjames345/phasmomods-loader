@@ -90,16 +90,16 @@ class VelopackBackend : public Backend {
     return false;
   }
 
-  /** Starts Velopack's updater, which waits for this program to exit, applies, and restarts it. */
-  bool apply_and_restart(const std::vector<std::wstring>& arguments, std::wstring& error) override {
+  /** Starts Velopack's updater, which waits for this program to exit, applies, and restarts it when asked. */
+  bool apply(const std::vector<std::wstring>& arguments, bool restart, std::wstring& error) override {
     try {
       if (!manager_ || !update_) {
         error = L"no update was downloaded";
         return false;
       }
-      std::vector<std::string> restart;
-      for (const std::wstring& argument : arguments) restart.push_back(text::narrow(argument));
-      manager_->WaitExitThenApplyUpdates(*update_, false, true, restart);
+      std::vector<std::string> restartArguments;
+      for (const std::wstring& argument : arguments) restartArguments.push_back(text::narrow(argument));
+      manager_->WaitExitThenApplyUpdates(*update_, false, restart, restartArguments);
       return true;
     } catch (const std::exception& failure) {
       error = reason(failure);
