@@ -9,7 +9,9 @@
 namespace pg::hooks {
 
 bool init();  // host only
-bool create(void* target, void* detour, void** original, const char* name);  // refuses a repeat
+// Refuses a repeat. When `detour` already runs first for `target` (one detour hooked on a method's
+// twins, then chained onto), nothing is patched and `original` is left as it is.
+bool create(void* target, void* detour, void** original, const char* name);
 bool enable_all();  // enables the hooks created since the open group began
 // Host only. Each mod's start is a group: rollback_group disables and removes the hooks created
 // since begin_group, for a mod that did not start. rollback_to removes every hook created since

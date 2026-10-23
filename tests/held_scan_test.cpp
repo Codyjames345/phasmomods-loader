@@ -46,6 +46,8 @@ const Exempt kNotObjects[] = {
     {"host/hooks.cpp", "target", "a hooked function's code address"},
     {"host/hooks.cpp", "at", "a hooked function's code address"},
     {"host/hooks.cpp", "detour", "a detour's code address"},
+    {"host/hooks.cpp", "earlier", "a detour's code address"},
+    {"host/entry_hooks.h", "detour", "a tracking detour's code address"},
     {"host/net.cpp", "onEvent", "a method's code address, hooked"},
     {"mods/playable_ghost/equipment.cpp", "addLoadout", "a method's code address, hooked"},
     {"mods/playable_ghost/equipment.cpp", "addItem", "a method's code address, hooked"},

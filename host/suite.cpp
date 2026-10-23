@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "consent.h"
+#include "entry_hooks.h"
 #include "game.h"
 #include "game_map.h"
 #include "hooks.h"
@@ -121,10 +122,18 @@ const PgGameEntry* api_game_entry(const char* key) {
     return nullptr;  // an allocation failure while looking it up: treat the entry as unresolved
   }
 }
-// Hooks by entry come with the entry hooks (sdk Task 10); until then a mod is told, never crashed.
-bool api_hook_entry(const char* key, void*, void**, const char*, bool) {
-  PG_LOG("suite: hooking game entry %s is not available yet", key ? key : "?");
-  return false;
+bool api_hook_entry(const char* key, void* detour, void** original, const char* name, bool allTwins) {
+  try {
+    const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
+    if (!e || e->kind != PG_ENTRY_METHOD || !e->code) {
+      PG_LOG("suite: game entry %s is unknown, unresolved or not a method; nothing hooked", key ? key : "?");
+      return false;
+    }
+    return entry_hooks::hook(e->code, {e->twins, e->twinCount}, detour, original, name ? name : key, allTwins);
+  } catch (...) {
+    PG_LOG("suite: exception while hooking game entry %s", key ? key : "?");
+    return false;
+  }
 }
 void api_set_reference(void* obj, int32_t offset, void* value) {
   if (!obj) return;
@@ -136,12 +145,7 @@ void api_set_reference(void* obj, int32_t offset, void* value) {
     PG_LOG("suite: exception while storing a reference");
   }
 }
-int32_t api_inside_entry(const char* key) {
-  static bool told = false;  // a mod may ask every frame: once is enough
-  if (!told) PG_LOG("suite: tracking calls of game entry %s is not available yet", key ? key : "?");
-  told = true;
-  return 0;
-}
+int32_t api_inside_entry(const char* key) { return context::depth(key); }
 
 void on_presence(int32_t sender, const uint8_t* data, size_t size) {
   if (game::private_room()) g_presence.receive(sender, data, size, GetTickCount64());
@@ -208,7 +212,7 @@ bool resolve() {
   return ui::resolve() && hostnet::resolve() && room_actions::resolve() && menu_panel::resolve() && mods_panel::resolve();
 }
 
-bool create_hooks() { return hostnet::create_hooks(); }
+bool create_hooks() { return hostnet::create_hooks() && context::install(&gamemap::entry); }
 
 bool start(void* gameAssembly, void* unityPlayer) {
   g_dataDirectory = data_directory();
