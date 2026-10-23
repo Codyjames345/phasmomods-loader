@@ -316,8 +316,11 @@ Result launch_steam(std::vector<std::wstring> arguments, const Package& package)
   STARTUPINFOW startup{};
   startup.cb = sizeof(startup);
   PROCESS_INFORMATION child{};
+  // The game runs in its own folder, as from a normal Steam launch, not in the launcher's (after an
+  // update restart that is Velopack's current folder).
+  const std::wstring gameFolder = fs::path(arguments[0]).parent_path().wstring();
   if (!CreateProcessW(arguments[0].c_str(), command.data(), nullptr, nullptr, FALSE,
-                      0, nullptr, nullptr, &startup, &child))
+                      0, nullptr, gameFolder.c_str(), &startup, &child))
     return failure(Outcome::process_error, L"Phasmophobia could not start. Check its Steam installation and launch options.", GetLastError());
   Handle process(child.hProcess), thread(child.hThread);
   if (package.mods.empty())

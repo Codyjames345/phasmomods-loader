@@ -18,7 +18,7 @@ pg::loader::Outcome candidate = pg::loader::Outcome::no_process;
 bool spawnSucceeds = false;
 int spawnCalls = 0, loadCalls = 0;
 DWORD loadedPid = 0;
-std::wstring spawnedApplication, spawnedCommand, fixturePath;
+std::wstring spawnedApplication, spawnedCommand, spawnedDirectory, fixturePath;
 bool inheritedDefaults = false;
 ULONGLONG ticks = 0;
 DWORD processState = WAIT_TIMEOUT;
@@ -64,8 +64,9 @@ BOOL WINAPI create_process(LPCWSTR app, LPWSTR command, LPSECURITY_ATTRIBUTES pr
   ++spawnCalls;
   spawnedApplication = app;
   spawnedCommand = command;
+  spawnedDirectory = directory ? directory : L"";
   inheritedDefaults = !processSecurity && !threadSecurity && !inheritHandles && !flags &&
-    !environment && !directory && startup->cb == sizeof(STARTUPINFOW);
+    !environment && startup->cb == sizeof(STARTUPINFOW);
   if (concurrentLaunch) {
     concurrentLaunch = false;
     overlappingOutcome = pg::launcher::launch_steam({app, L"-logFile", fixturePath}, {L"unused.dll", {L"mod.dll"}}).outcome;
@@ -229,6 +230,7 @@ void orchestration() {
   CHECK(loadCalls == 0 && spawnCalls == 1);
   CHECK(inheritedDefaults && spawnedApplication == arguments[0]);
   CHECK(spawnedCommand == command_line(arguments));
+  CHECK(spawnedDirectory == L"C:\\Games with spaces");  // the game's own folder, not the launcher's
   spawnSucceeds = true;
   CHECK(launch_steam(arguments, package).outcome == Outcome::active);
   CHECK(loadCalls == 1 && loadedPid == GetCurrentProcessId());
