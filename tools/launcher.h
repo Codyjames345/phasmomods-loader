@@ -7,6 +7,12 @@
 #include "mod_list.h"
 
 namespace pg::launcher {
+#ifdef PG_SUITE_VERSION
+#define PG_WIDEN_(text) L##text
+#define PG_WIDEN(text) PG_WIDEN_(text)
+/** The suite version from the VERSION file. */
+inline constexpr wchar_t kVersion[] = PG_WIDEN(PG_SUITE_VERSION);
+#endif
 /** Quote an argument so Windows parsing preserves every character. */
 std::wstring quote(std::wstring_view value);
 /** Join arguments without involving a command shell. */

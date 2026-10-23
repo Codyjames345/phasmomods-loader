@@ -97,6 +97,7 @@ DWORD WINAPI worker(void*) {
   g_deadline = GetTickCount64() + 60000;
   pg::log::open();
   PG_LOG("ModHost loading");
+  PG_LOG("PhasmoMods version %s", PG_SUITE_VERSION);
   g_activation = Activation::Dormant;
   g_shutdownRequested = false;
   g_mainReleased = false;

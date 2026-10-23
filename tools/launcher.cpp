@@ -329,7 +329,7 @@ std::wstring describe(const Result& result) {
 }
 
 #ifndef PG_LAUNCHER_TEST
-constexpr wchar_t kTitle[] = L"PhasmoMods Launcher";  // the window's and its message boxes' title
+constexpr wchar_t kTitle[] = L"PhasmoMods " PG_WIDEN(PG_SUITE_VERSION);  // the window's and its message boxes' title
 constexpr int kIcon = 1;                               // tools/launcher.rc
 
 /** Keep the small instruction window alive while one background attach operation finishes. */
@@ -510,8 +510,11 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
 }
 
 #ifndef PG_LAUNCHER_TEST
+#include "Velopack.hpp"
+
 /** Enter either Steam wrapping or the attach UI without spawning Steam recursively. */
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+  Velopack::VelopackApp::Build().Run();
   try {
     int count = 0;
     auto arguments = CommandLineToArgvW(GetCommandLineW(), &count);

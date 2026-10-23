@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.24)
 project(PhasmoMods LANGUAGES C CXX ASM_MASM RC)
 
+# The suite version: one line in VERSION, compiled into the launcher and the host.
+file(STRINGS VERSION PG_SUITE_VERSION LIMIT_COUNT 1)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS VERSION)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -50,6 +54,7 @@ add_library(ModHost SHARED
 target_include_directories(ModHost PRIVATE host)
 target_link_libraries(ModHost PRIVATE pgcore minhook bcrypt)
 pg_options(ModHost)
+target_compile_definitions(ModHost PRIVATE PG_SUITE_VERSION="${PG_SUITE_VERSION}")
 
 # Mods. Each is one DLL with a mod.ini beside it in the release (tools/payload.psd1).
 add_library(PlayableGhost SHARED
@@ -154,10 +159,19 @@ target_include_directories(pgloader PUBLIC tools core)
 pg_options(pgloader)
 target_compile_definitions(pgloader PRIVATE PG_LOADER_NO_MAIN UNICODE _UNICODE)
 
+# Velopack's prebuilt C++ library (version in third_party/velopack/VERSION), used by the launcher's updater.
+add_library(velopack SHARED IMPORTED)
+set_target_properties(velopack PROPERTIES
+  IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/third_party/velopack/velopack_libc.dll
+  IMPORTED_IMPLIB ${CMAKE_SOURCE_DIR}/third_party/velopack/velopack_libc.lib
+  INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/third_party/velopack)
+
 add_executable(ModLauncher WIN32 tools/launcher.cpp tools/launcher.rc)
-target_link_libraries(ModLauncher PRIVATE pgloader user32 shell32 gdi32)
+target_link_libraries(ModLauncher PRIVATE pgloader velopack user32 shell32 gdi32)
 pg_options(ModLauncher)
-target_compile_definitions(ModLauncher PRIVATE UNICODE _UNICODE)
+target_compile_definitions(ModLauncher PRIVATE UNICODE _UNICODE PG_SUITE_VERSION="${PG_SUITE_VERSION}")
+add_custom_command(TARGET ModLauncher POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:velopack> $<TARGET_FILE_DIR:ModLauncher>)
 
 # Offline tests (no game required): ctest --test-dir build
 enable_testing()
@@ -175,13 +189,14 @@ pg_test(room_pick)
 pg_test(tether)
 pg_test(startup)
 target_include_directories(startup_test PRIVATE third_party/minhook/include)
+target_compile_definitions(startup_test PRIVATE PG_SUITE_VERSION="${PG_SUITE_VERSION}")
 pg_test(build_check)
 target_link_libraries(build_check_test PRIVATE bcrypt)
 pg_test(inject)
 target_compile_definitions(inject_test PRIVATE UNICODE _UNICODE)
 pg_test(launcher)
 target_link_libraries(launcher_test PRIVATE user32 shell32)
-target_compile_definitions(launcher_test PRIVATE UNICODE _UNICODE)
+target_compile_definitions(launcher_test PRIVATE UNICODE _UNICODE PG_SOURCE_DIR="${CMAKE_SOURCE_DIR}" PG_SUITE_VERSION="${PG_SUITE_VERSION}")
 pg_test(lobby mods/playable_ghost/session.cpp)
 pg_test(room_actions)
 pg_test(pages)

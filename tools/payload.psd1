@@ -5,8 +5,10 @@
     Payload = @(
         @{ Name = 'ModLauncher.exe'; Source = 'build/ModLauncher.exe' }
         @{ Name = 'ModHost.dll'; Source = 'build/ModHost.dll' }
+        @{ Name = 'velopack_libc.dll'; Source = 'build/velopack_libc.dll' }
         @{ Name = 'README.md'; Source = 'docs/installation.md' }
         @{ Name = 'MinHook-LICENSE.txt'; Source = 'third_party/minhook/LICENSE.txt' }
+        @{ Name = 'Velopack-LICENSE.txt'; Source = 'third_party/velopack/LICENSE.txt' }
         @{ Name = 'mods/playable-ghost/PlayableGhost.dll'; Source = 'build/PlayableGhost.dll' }
         @{ Name = 'mods/playable-ghost/mod.ini'; Source = 'mods/playable_ghost/mod.ini' }
         @{ Name = 'mods/custom-ghosts/CustomGhosts.dll'; Source = 'build/CustomGhosts.dll' }

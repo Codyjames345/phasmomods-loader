@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <regex>
+#include <string>
 #include "../tools/launcher.h"
 #include "../tools/inject.h"
 
@@ -307,6 +309,18 @@ void concurrent_startup() {
   CHECK(spawnCalls == beforeSpawn + 2 && discoveryCalls == beforeDiscovery + 2);
 }
 
+/** The compiled-in suite version is the one in the VERSION file, and that file holds MAJOR.MINOR.PATCH. */
+void version_matches_version_file() {
+  std::ifstream file(PG_SOURCE_DIR "/VERSION");
+  std::string line;
+  CHECK(static_cast<bool>(std::getline(file, line)));
+  const char* blanks = " \t\r\n";
+  const auto first = line.find_first_not_of(blanks), last = line.find_last_not_of(blanks);
+  const std::string version = first == std::string::npos ? "" : line.substr(first, last - first + 1);
+  CHECK(version == PG_SUITE_VERSION);
+  CHECK(std::regex_match(version, std::regex(R"(\d+\.\d+\.\d+)")));
+}
+
 /** Exercise argument preservation and conservative startup detection without a game. */
 int main() {
   wchar_t directory[MAX_PATH], path[MAX_PATH];
@@ -321,6 +335,7 @@ int main() {
   mod_folders();
   startup_wait();
   concurrent_startup();
+  version_matches_version_file();
   CHECK(DeleteFileW(fixturePath.c_str()));
   return failures ? 1 : 0;
 }
