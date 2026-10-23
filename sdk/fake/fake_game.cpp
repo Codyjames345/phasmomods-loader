@@ -9,6 +9,7 @@
 #include <string_view>
 #include <utility>
 
+#include "log.h"
 #include "utf16.h"
 
 namespace pg::fake {
@@ -22,11 +23,17 @@ int g_barrierWrites = 0;
 std::deque<std::vector<uint64_t>> g_memory;
 std::map<void*, void*> g_parents;                      // class -> the class it derives from
 std::map<std::pair<std::string, void*>, void*> g_overrides;  // (method key, class) -> fake MethodInfo
+std::map<std::string, void*> g_declared;               // method key -> its fake MethodInfo
 std::map<void*, void*> g_typeObjects;                  // class -> its fake System.Type object
 std::set<const void*> g_destroyed;
 std::map<uint32_t, void*> g_holds;                     // live GC handles
 uint32_t g_nextHandle = 0;
-int g_typeClass = 0;  // the class of the fake System.Type objects
+int g_typeClass = 0;    // the class of the fake System.Type objects
+int g_stringClass = 0;  // of the fake strings
+int g_arrayClass = 0;   // of the fake arrays
+int g_listClass = 0;    // of the fake lists
+// The services that read a fake object check its kind, as the host does, and log a mismatch once.
+bool g_refusedString = false, g_refusedArray = false, g_refusedList = false;
 
 // An array, and a string, is its class, its length, then its elements from kArrayData. A list is its
 // class, its backing array and its count.
@@ -52,6 +59,22 @@ void* new_array(void* klass, size_t elementBytes, size_t length) {
 }
 
 void* class_of(const void* obj) { return *static_cast<void* const*>(obj); }
+
+bool derives(void* klass, void* ancestor) {
+  for (void* k = klass; k; k = g_parents.count(k) ? g_parents[k] : nullptr)
+    if (k == ancestor) return true;
+  return false;
+}
+
+// Whether `obj` is of the fake class `kind`; a mismatch is logged once per kind.
+bool of_kind(const void* obj, const int& kind, bool& refused, const char* service, const char* what) {
+  if (obj && class_of(obj) == static_cast<const void*>(&kind)) return true;
+  if (obj && !refused) {
+    refused = true;
+    PG_LOG("fake: %s was given an object that is not %s; it answers 0 or null", service, what);
+  }
+  return false;
+}
 
 PgGameEntry& entry_for(const sdk::EntryDesc& d, uint32_t kind) {
   PgGameEntry& e = g_entries[d.key];
@@ -89,33 +112,50 @@ void* string_new(const char* utf8) {
   if (!utf8) return nullptr;
   const int n = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, nullptr, 0);  // with the NUL
   if (n <= 0) return nullptr;
-  void* str = new_array(nullptr, sizeof(char16_t), static_cast<size_t>(n - 1));
+  void* str = new_array(&g_stringClass, sizeof(char16_t), static_cast<size_t>(n - 1));
   std::vector<wchar_t> wide(static_cast<size_t>(n));
   MultiByteToWideChar(CP_UTF8, 0, utf8, -1, wide.data(), n);
   std::memcpy(static_cast<char*>(str) + kArrayData, wide.data(), sizeof(char16_t) * static_cast<size_t>(n - 1));
   return str;
 }
 
-size_t array_length(const void* arr) {
+// The length stored in a fake array or string.
+size_t stored_length(const void* arr) {
   size_t length = 0;
-  if (arr) std::memcpy(&length, static_cast<const char*>(arr) + sizeof(void*), sizeof length);
+  std::memcpy(&length, static_cast<const char*>(arr) + sizeof(void*), sizeof length);
   return length;
 }
 
-void* array_data(void* arr) { return arr ? static_cast<char*>(arr) + kArrayData : nullptr; }
+size_t array_length(const void* arr) {
+  return of_kind(arr, g_arrayClass, g_refusedArray, "array_length", "an array") ? stored_length(arr) : 0;
+}
+
+void* array_data(void* arr) {
+  return of_kind(arr, g_arrayClass, g_refusedArray, "array_data", "an array") ? static_cast<char*>(arr) + kArrayData
+                                                                              : nullptr;
+}
 
 size_t string_utf8(const void* str, char* out, size_t size) {
-  const auto* chars = str ? reinterpret_cast<const char16_t*>(static_cast<const char*>(str) + kArrayData) : nullptr;
-  return utf16_to_utf8(std::u16string_view(chars, array_length(str)), out, size);
+  if (!of_kind(str, g_stringClass, g_refusedString, "string_utf8", "a string")) {
+    if (out && size) out[0] = '\0';
+    return 0;
+  }
+  const auto* chars = reinterpret_cast<const char16_t*>(static_cast<const char*>(str) + kArrayData);
+  return utf16_to_utf8(std::u16string_view(chars, stored_length(str)), out, size);
 }
 
 void* array_new(const char* elementTypeKey, size_t length) {
-  return class_for(elementTypeKey) ? new_array(nullptr, kElementBytes, length) : nullptr;
+  return class_for(elementTypeKey) ? new_array(&g_arrayClass, kElementBytes, length) : nullptr;
 }
 
-int32_t list_count(const void* list) { return list ? static_cast<const FakeList*>(list)->count : 0; }
+int32_t list_count(const void* list) {
+  return of_kind(list, g_listClass, g_refusedList, "list_count", "a List") ? static_cast<const FakeList*>(list)->count : 0;
+}
 
-void* list_items(const void* list) { return list ? static_cast<const FakeList*>(list)->items : nullptr; }
+void* list_items(const void* list) {
+  return of_kind(list, g_listClass, g_refusedList, "list_items", "a List") ? static_cast<const FakeList*>(list)->items
+                                                                          : nullptr;
+}
 
 void* type_object(const char* typeKey) {
   void* const klass = class_for(typeKey);
@@ -132,10 +172,7 @@ void* object_new(const char* typeKey) {
 
 bool is_instance(const void* obj, const char* typeKey) {
   void* const klass = class_for(typeKey);
-  if (!obj || !klass) return false;
-  for (void* k = class_of(obj); k; k = g_parents.count(k) ? g_parents[k] : nullptr)
-    if (k == klass) return true;
-  return false;
+  return obj && klass && derives(class_of(obj), klass);
 }
 
 bool alive(const void* unityObject) { return unityObject && !g_destroyed.count(unityObject); }
@@ -143,11 +180,13 @@ bool alive(const void* unityObject) { return unityObject && !g_destroyed.count(u
 const void* virtual_method(const void* obj, const char* methodKey) {
   const PgGameEntry* e = game_entry(methodKey);
   if (!obj || !e || e->kind != PG_ENTRY_METHOD) return nullptr;
+  if (e->klass && !derives(class_of(obj), e->klass)) return nullptr;  // not of the declaring type
   for (void* k = class_of(obj); k; k = g_parents.count(k) ? g_parents[k] : nullptr) {
     const auto it = g_overrides.find({methodKey, k});
     if (it != g_overrides.end()) return it->second;
   }
-  return nullptr;
+  const auto declared = g_declared.find(methodKey);
+  return declared == g_declared.end() ? nullptr : declared->second;
 }
 
 uint32_t gc_hold(void* obj) {
@@ -184,14 +223,21 @@ void reset() {
   g_memory.clear();
   g_parents.clear();
   g_overrides.clear();
+  g_declared.clear();
   g_typeObjects.clear();
   g_destroyed.clear();
   g_holds.clear();
+  g_refusedString = g_refusedArray = g_refusedList = false;
 }
 
 const PgHostApi* host() { return &kHost; }
 
-void method(const sdk::EntryDesc& d, void* fn) { entry_for(d, PG_ENTRY_METHOD).code = fn; }
+void method(const sdk::EntryDesc& d, void* fn, void* owner) {
+  PgGameEntry& e = entry_for(d, PG_ENTRY_METHOD);
+  e.code = fn;
+  e.klass = owner;
+  g_declared[d.key] = allocate(sizeof(void*), fn);  // a MethodInfo begins with its code
+}
 
 void field(const sdk::EntryDesc& d, int32_t offset) { entry_for(d, PG_ENTRY_FIELD).offset = offset; }
 
@@ -206,12 +252,12 @@ void override_method(const sdk::EntryDesc& d, void* klass, void* fn) {
   g_overrides[{d.key, klass}] = info;
 }
 
-void* array(size_t elementSize, size_t length) { return new_array(nullptr, elementSize, length); }
+void* array(size_t elementSize, size_t length) { return new_array(&g_arrayClass, elementSize, length); }
 
 void* list(const std::vector<void*>& items) {
-  void* const backing = new_array(nullptr, sizeof(void*), items.size());
+  void* const backing = new_array(&g_arrayClass, sizeof(void*), items.size());
   if (!items.empty()) std::memcpy(array_data(backing), items.data(), sizeof(void*) * items.size());
-  auto* l = static_cast<FakeList*>(allocate(sizeof(FakeList), nullptr));
+  auto* l = static_cast<FakeList*>(allocate(sizeof(FakeList), &g_listClass));
   l->items = backing;
   l->count = static_cast<int32_t>(items.size());
   return l;

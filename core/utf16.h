@@ -10,9 +10,10 @@ namespace pg {
 // Converts UTF-16 text (a managed string's characters) to NUL-terminated UTF-8 in `out`, `size`
 // bytes including the NUL. A surrogate pair becomes one character and an unpaired surrogate becomes
 // U+FFFD. Text that does not fit is cut at a character boundary. Returns the length in bytes of the
-// whole text in UTF-8, without the NUL, so a caller can size its buffer; `out` may be null when
-// `size` is 0. Any thread.
+// whole text in UTF-8, without the NUL, so a caller can size its buffer. A null `out` is taken as
+// `size` 0. Any thread.
 inline size_t utf16_to_utf8(std::u16string_view text, char* out, size_t size) {
+  if (!out) size = 0;
   size_t total = 0;    // bytes of the whole text
   size_t written = 0;  // bytes in `out`
   bool fits = size > 0;

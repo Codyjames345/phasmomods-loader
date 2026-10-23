@@ -39,6 +39,12 @@ void report_unavailable(Slot& slot) {
   PG_LOG("%s is not available in this game build", slot.desc->key);
 }
 
+void report_refused_call(Slot& slot) {
+  if (slot.refused) return;
+  slot.refused = true;
+  PG_LOG("%s: virtual_call on a null object or one not of its declaring type; nothing was called", slot.desc->key);
+}
+
 bool is_instance(const void* obj, const char* typeKey) { return g_host && g_host->is_instance(obj, typeKey); }
 
 void* type_object(const char* typeKey) { return g_host ? g_host->type_object(typeKey) : nullptr; }
@@ -73,6 +79,7 @@ bool bind(const PgHostApi* host, std::string& missing) {
   for (detail::Slot* slot : registry()) {
     slot->entry = host->game_entry(slot->desc->key);
     slot->reported = false;
+    slot->refused = false;
     if (!slot->entry && !optional(slot)) lacking.push_back(slot->desc->key);
   }
   std::sort(lacking.begin(), lacking.end(), key_less);

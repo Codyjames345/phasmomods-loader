@@ -45,6 +45,16 @@ inline constexpr pg::sdk::EntryDesc kOptionalCount{.key = "Test.optionalCount", 
                                                    .name = "OptionalCount"};
 constexpr api::Method<kOptionalCount, int32_t(void*)> optionalCount{};
 
+// An optional GhostAI method returning a number, for virtual_call's refusals.
+inline constexpr pg::sdk::EntryDesc kTestCount{.key = "Test.count", .kind = pg::sdk::Kind::Method,
+                                               .flags = pg::sdk::kOptional, .owner = "GhostAI", .name = "Count"};
+constexpr api::Method<kTestCount, int32_t(void*)> testCount{};
+int g_countCalls = 0;
+int32_t fake_count(void*, const void*) {
+  ++g_countCalls;
+  return 7;
+}
+
 // An optional type no fake provides, so it never resolves.
 inline constexpr pg::sdk::EntryDesc kOptionalType{.key = "Test.OptionalType", .kind = pg::sdk::Kind::Type,
                                                   .flags = pg::sdk::kOptional, .name = "OptionalType"};
@@ -72,7 +82,7 @@ struct FakeObject {
 void fake_everything_but(const char* except) {
   fake::reset();
   if (std::string(except) != map::GhostAI_UnAppear.key)
-    fake::method(map::GhostAI_UnAppear, reinterpret_cast<void*>(&fake_unappear));
+    fake::method(map::GhostAI_UnAppear, reinterpret_cast<void*>(&fake_unappear), kGhostClass);
   fake::field(map::GhostAI_state, 0x40);
   fake::field(map::GhostAI_agent, 0x48);
   fake::value(map::GhostState_hunting, 2);
@@ -263,6 +273,45 @@ void virtual_call_reaches_override() {
   CHECK(g_sawGhost == derived && g_overrideGhost == nullptr);
 }
 
+// A null object, or one not of the method's declaring type, is refused once bound: nothing is
+// called, the default comes back, and it is logged once. Unbound, the declared body runs.
+void virtual_call_refuses_null_and_wrong_type() {
+  fake_everything_but("");
+  fake::method(kTestCount, reinterpret_cast<void*>(&fake_count), kGhostClass);
+  CHECK(bound());
+  void* camera[1] = {kCameraClass};
+  void* ghost[1] = {kGhostClass};
+  g_lines.clear();
+  g_countCalls = 0;
+  CHECK(testCount.virtual_call(camera) == 0);
+  CHECK(testCount.virtual_call(nullptr) == 0);
+  CHECK(g_countCalls == 0);
+  CHECK(count_logged("Test.count: virtual_call on a null object or one not of its declaring type") == 1);
+  CHECK(testCount.virtual_call(ghost) == 7 && g_countCalls == 1);  // the declared body, no override
+
+  std::string missing;
+  CHECK(!api::bind(nullptr, missing));  // unbound: the declared body, as a plain call
+  CHECK(testCount.virtual_call(camera) == 7 && g_countCalls == 2);
+}
+
+// A service given an object of the wrong kind reads nothing from it and logs that once.
+void wrong_kind_reads_nothing() {
+  fake_everything_but("");
+  CHECK(bound());
+  void* const text = api::make_string("abc");
+  void* const list = fake::list({text});
+  void* const arr = fake::array(sizeof(int32_t), 2);
+  g_lines.clear();
+  CHECK(api::Array<int32_t>{text}.size() == 0 && api::RefArray{list}.size() == 0);
+  CHECK(api::List{text}.size() == 0 && api::List{arr}.items() == nullptr);
+  CHECK(api::to_utf8(list).empty() && api::to_utf8(arr).empty());
+  CHECK(count_logged("is not a string") == 1);
+  CHECK(count_logged("is not an array") == 1);
+  CHECK(count_logged("is not a List") == 1);
+  CHECK(api::to_utf8(text) == "abc");
+  CHECK(fake::host()->string_utf8(text, nullptr, 8) == 3);  // a null `out` is size 0
+}
+
 void alive_false_for_destroyed() {
   fake_everything_but("");
   CHECK(bound());
@@ -309,6 +358,8 @@ int main() {
   type_object_and_make();
   is_follows_parents();
   virtual_call_reaches_override();
+  virtual_call_refuses_null_and_wrong_type();
+  wrong_kind_reads_nothing();
   alive_false_for_destroyed();
   held_uses_contract_handles();
   return g_failures ? 1 : 0;

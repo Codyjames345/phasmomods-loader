@@ -48,6 +48,8 @@ API(void, il2cpp_format_stack_trace, (const void* exception, char* output, int s
 API(uint32_t, il2cpp_gchandle_new, (void* obj, bool pinned))
 API(void, il2cpp_gchandle_free, (uint32_t handle))
 API(void*, il2cpp_class_get_element_class, (void* klass))
+API(const char*, il2cpp_class_get_namespace, (void* klass))
+API(int, il2cpp_class_get_rank, (const void* klass))
 #undef API
 
 void* g_thread = nullptr;
@@ -76,6 +78,7 @@ bool resolve_exports(void* gameAssembly) {
   R(il2cpp_get_corlib) R(il2cpp_gc_wbarrier_set_field) R(il2cpp_array_class_get) R(il2cpp_class_get_type) R(il2cpp_type_get_object)
   R(il2cpp_get_exception_argument_null) R(il2cpp_raise_exception) R(il2cpp_object_get_virtual_method)
   R(il2cpp_gchandle_new) R(il2cpp_gchandle_free) R(il2cpp_class_get_element_class)
+  R(il2cpp_class_get_namespace) R(il2cpp_class_get_rank)
 #undef R
   if (!ok) return false;
   p_il2cpp_format_stack_trace = reinterpret_cast<decltype(p_il2cpp_format_stack_trace)>(
@@ -190,6 +193,20 @@ bool is_instance(const void* obj, Class* klass) {
   for (void* k = class_of(obj); k; k = p_il2cpp_class_get_parent(k))
     if (k == klass) return true;
   return false;
+}
+
+bool is_string(const void* obj) {
+  static Class* const string = cls("mscorlib.dll", "System", "String");
+  return obj && string && class_of(obj) == string;  // System.String is sealed
+}
+
+bool is_array(const void* obj) { return obj && p_il2cpp_class_get_rank(class_of(obj)) > 0; }
+
+bool is_list(const void* obj) {
+  // A constructed List<T> keeps the generic definition's name and namespace.
+  Class* const klass = obj ? class_of(obj) : nullptr;
+  return klass && std::strcmp(p_il2cpp_class_get_name(klass), "List`1") == 0 &&
+         std::strcmp(p_il2cpp_class_get_namespace(klass), "System.Collections.Generic") == 0;
 }
 
 bool is_kind(const void* obj, const char* name) {

@@ -147,10 +147,10 @@ Four kinds of wrapper, from `sdk/api/game_api.h`:
 
 | Wrapper | Declared as | Use |
 | --- | --- | --- |
-| `pg::api::Method<D, R(A...)>` | `static constexpr ... UnAppear{}` | `UnAppear(ghost)`; `available()` says whether it resolved. For an instance method the first parameter is the object. A call runs the declared body; `virtual_call(ghost, ...)` runs the override the object's class runs, as C# calls a virtual method. |
+| `pg::api::Method<D, R(A...)>` | `static constexpr ... UnAppear{}` | `UnAppear(ghost)`; `available()` says whether it resolved. For an instance method the first parameter is the object. A call runs the declared body; `virtual_call(ghost, ...)` runs the override the object's class runs, as C# calls a virtual method, and refuses (logged once, nothing called) a null object or one not of the declaring type. |
 | `pg::api::Field<D, T>` | `Field<D, int32_t>` | `get(obj)`, `set(obj, v)`. `T` is a plain value or `void*` for a managed reference, whose `set` goes through the GC write barrier (the host's `set_reference`). |
 | `pg::api::EnumValue<D>` | `idle{}` | `idle()` gives the value's number in this build. |
-| `pg::api::Type<D>` | `type{}` | `klass()` gives the `Il2CppClass*`; `is(obj)` tells whether an object is of the type or a derived one; `type_object()` gives its `System.Type` (C#'s `typeof`); `make()` a new object, fields zeroed and no constructor run; `make_array(n)` a new array of the type. |
+| `pg::api::Type<D>` | `type{}` | `klass()` gives the `Il2CppClass*`; `is(obj)` tells whether an object is of the type or a derived one (an interface type never matches); `type_object()` gives its `System.Type` (C#'s `typeof`); `make()` a new object, fields zeroed and no constructor run (not for engine objects, which come from `AddComponent` or `Instantiate`); `make_array(n)` a new array of the type. |
 
 A call that cannot reach the game never jumps to null. An entry that did not resolve logs
 `<key> is not available in this game build` once and returns the type's default (0, false, null) or
@@ -173,7 +173,11 @@ if (pg::api::alive(camera)) ...                          // UnityEngine.Object's
 An index past the end logs once and touches nothing (a reference reads null, a value element is a
 zeroed scratch copy). `RefArray::set` stores through the GC write barrier. These views and the raw
 pointers they wrap are valid for the current frame only: keep the object itself in a `pg::api::Held`
-and make the view again. Before `bind` every service answers as for a null object.
+and make the view again. An element reference from `Array` and the array `List::items()` gives are
+valid only until the next managed call: a List replaces its backing array when it grows, so take
+`items()` again after any game call, and never store either. An object of the wrong kind (a list
+passed as a string, say) reads nothing: the host logs it once and the service answers 0 or null.
+Before `bind` every service answers as for a null object.
 
 ### What a mod requires
 
@@ -266,7 +270,8 @@ The other givers are `field(d, offset)`, `value(d, n)` and `type(d, klass)`. An 
 unresolved, as in a build that lacks it. `hooked()` lists the keys hooked through `hook_entry`, and
 `barrier_writes()` counts reference stores. A fake object begins with its class pointer;
 `parent(klass, parentClass)` declares inheritance, which `Type::is` and `virtual_call` follow, and
-`override_method(d, klass, fn)` gives a class its override. The runtime services work on the fake's
+`override_method(d, klass, fn)` gives a class its override. `method(d, fn, owner)` names the
+declaring class, so `virtual_call` refuses an object of another class. The runtime services work on the fake's
 own memory: `array(elementSize, n)` and `list(items)` make arrays and lists, `destroy(obj)` makes
 `alive` false, and `held()` counts the GC holds not yet released. `tests/game_api_test.cpp` shows
 every path.

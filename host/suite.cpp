@@ -167,26 +167,65 @@ il2cpp::Class* type_class(const char* key) {
   return e && e->kind == PG_ENTRY_TYPE ? e->klass : nullptr;
 }
 
+// A service handed an object of the wrong kind reads no layout from it. It logs that once per
+// service (`refused` is the service's own flag) and answers 0 or null.
+bool refuse_once(bool& refused, const char* service, const char* kind) {
+  if (!refused) {
+    refused = true;
+    PG_LOG("suite: a mod passed %s an object that is not %s; it answers 0 or null", service, kind);
+  }
+  return false;
+}
+bool string_given(const void* obj, const char* service) {
+  static bool refused = false;
+  return il2cpp::is_string(obj) || refuse_once(refused, service, "a System.String");
+}
+bool array_given(const void* obj, const char* service) {
+  static bool refused = false;
+  return il2cpp::is_array(obj) || refuse_once(refused, service, "a managed array");
+}
+bool list_given(const void* obj, const char* service) {
+  static bool refused = false;
+  return il2cpp::is_list(obj) || refuse_once(refused, service, "a System.Collections.Generic.List");
+}
+
 void* api_string_new(const char* utf8) {
   return contained("making a string", static_cast<void*>(nullptr),
                    [&]() -> void* { return utf8 ? il2cpp::string_new(utf8) : nullptr; });
 }
 size_t api_string_utf8(const void* str, char* out, size_t size) {
-  return contained("reading a string", size_t{0},
-                   [&] { return il2cpp::to_utf8(static_cast<const il2cpp::String*>(str), out, size); });
+  return contained("reading a string", size_t{0}, [&]() -> size_t {
+    if (out && size) out[0] = '\0';
+    if (!str || !string_given(str, "string_utf8")) return 0;
+    return il2cpp::to_utf8(static_cast<const il2cpp::String*>(str), out, size);
+  });
 }
 size_t api_array_length(const void* arr) {
-  return arr ? static_cast<size_t>(static_cast<const il2cpp::Array*>(arr)->max_length) : 0;
+  return contained("reading an array", size_t{0}, [&]() -> size_t {
+    return arr && array_given(arr, "array_length") ? static_cast<const il2cpp::Array*>(arr)->max_length : 0;
+  });
 }
-void* api_array_data(void* arr) { return arr ? static_cast<il2cpp::Array*>(arr)->data<char>() : nullptr; }
+void* api_array_data(void* arr) {
+  return contained("reading an array", static_cast<void*>(nullptr), [&]() -> void* {
+    return arr && array_given(arr, "array_data") ? static_cast<il2cpp::Array*>(arr)->data<char>() : nullptr;
+  });
+}
 void* api_array_new(const char* elementTypeKey, size_t length) {
   return contained("making an array", static_cast<void*>(nullptr), [&]() -> void* {
     il2cpp::Class* const klass = type_class(elementTypeKey);
     return klass ? il2cpp::array_new(klass, length) : nullptr;
   });
 }
-int32_t api_list_count(const void* list) { return list ? static_cast<const il2cpp::List*>(list)->size : 0; }
-void* api_list_items(const void* list) { return list ? static_cast<const il2cpp::List*>(list)->items : nullptr; }
+int32_t api_list_count(const void* list) {
+  return contained("reading a list", int32_t{0}, [&]() -> int32_t {
+    return list && list_given(list, "list_count") ? static_cast<const il2cpp::List*>(list)->size : 0;
+  });
+}
+void* api_list_items(const void* list) {
+  return contained("reading a list", static_cast<void*>(nullptr), [&]() -> void* {
+    return list && list_given(list, "list_items") ? static_cast<const il2cpp::List*>(list)->items : nullptr;
+  });
+}
 void* api_type_object(const char* typeKey) {
   return contained("making a type object", static_cast<void*>(nullptr),
                    [&]() -> void* { return il2cpp::type_object(type_class(typeKey)); });

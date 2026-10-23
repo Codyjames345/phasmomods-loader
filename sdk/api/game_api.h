@@ -40,6 +40,7 @@ struct Slot {
   const sdk::EntryDesc* desc;
   const PgGameEntry* entry;  // null before bind and when the entry did not resolve
   bool reported;             // its "not available" line was logged since the last bind
+  bool refused;              // a virtual_call it refused was logged since the last bind
 };
 
 // Adds a used entry to the mod's list. Runs while the mod's DLL loads; always true.
@@ -48,6 +49,9 @@ bool register_use(Slot* slot);
 const PgHostApi* host();
 // Logs "<key> is not available in this game build", once per bind.
 void report_unavailable(Slot& slot);
+// Logs that a virtual_call of the entry was refused (a null object or one not of its declaring
+// type), once per bind.
+void report_refused_call(Slot& slot);
 // The host contract's runtime services (core/mod_api.h, version 2.1) for an entry's key, or null,
 // false or 0 before bind.
 bool is_instance(const void* obj, const char* typeKey);
@@ -72,7 +76,7 @@ int32_t inside(const char* key);
 /// requires (unless D is kOptional); the accessors below do it only from the members a mod calls.
 template <const sdk::EntryDesc& D>
 struct Use {
-  static inline detail::Slot slot{&D, nullptr, false};
+  static inline detail::Slot slot{&D, nullptr, false, false};
   static inline const bool registered = detail::register_use(&slot);
 
   /// The resolved entry, or null when it did not resolve (logged once per bind). Main thread.
@@ -112,11 +116,11 @@ struct Method<D, R(A...)> {
     return reinterpret_cast<R (*)(A..., const void*)>(e->code)(a..., e->method);
   }
 
-  /// Calls the method as C# calls a virtual method: the override that the class of the object (the
-  /// first argument) runs, with that override's MethodInfo. Falls back to the declared body, as
-  /// operator() calls it, when nothing overrides the method, when the object is null or not of the
-  /// method's declaring type, or before bind. Unresolved: logs once and returns R{} without calling
-  /// anything.
+  /// Calls the method as C# calls a virtual method: the method the class of the object (the first
+  /// argument) runs, its override or else the declared body, with that method's MethodInfo. A null
+  /// object, or one not of the method's declaring type, is refused: nothing is called, R{} is
+  /// returned, and the refusal is logged once per bind. Before bind it calls the declared body, as
+  /// operator() does. Unresolved: logs once and returns R{} without calling anything.
   template <int = 0>
   R virtual_call(A... a) const {
     static_assert(!(D.flags & sdk::kStatic), "a static method has no object to dispatch on");
@@ -128,12 +132,15 @@ struct Method<D, R(A...)> {
     }
     void* code = e->code;
     const void* method = e->method;
-    const void* obj = detail::object_of(a...);
-    if (const void* chosen = obj ? detail::virtual_method(obj, D.key) : nullptr) {
+    if (detail::host()) {
+      const void* obj = detail::object_of(a...);
+      method = obj ? detail::virtual_method(obj, D.key) : nullptr;
       // core/mod_api.h: a MethodInfo's first member is the address of its code.
-      if (void* chosenCode = *static_cast<void* const*>(chosen)) {
-        code = chosenCode;
-        method = chosen;
+      code = method ? *static_cast<void* const*>(method) : nullptr;
+      if (!code) {
+        detail::report_refused_call(use::slot);
+        if constexpr (std::is_void_v<R>) return;
+        else return R{};
       }
     }
     return reinterpret_cast<R (*)(A..., const void*)>(code)(a..., method);
@@ -214,7 +221,8 @@ struct Type {
   }
 
   /// Whether the managed object `obj` is of this type or of a class derived from it (following the
-  /// class's parents). False for a null `obj`, and when the type did not resolve (logged once).
+  /// class's parents). An interface type never matches: the check does not look at the interfaces
+  /// a class implements. False for a null `obj`, and when the type did not resolve (logged once).
   template <int = 0>
   bool is(const void* obj) const {
     return use::entry() && obj && detail::is_instance(obj, D.key);
@@ -228,8 +236,9 @@ struct Type {
   }
 
   /// A new managed object of this class with every field zeroed. No constructor runs. Nothing else
-  /// refers to it yet, so keep it in a pg::api::Held (held.h) past the current frame. Unresolved:
-  /// logs once and returns null.
+  /// refers to it yet, so keep it in a pg::api::Held (held.h) past the current frame. Not for engine
+  /// objects: a Component or MonoBehaviour comes from AddComponent or Instantiate, never from
+  /// make(), which gives an object Unity knows nothing of. Unresolved: logs once and returns null.
   template <int = 0>
   void* make() const {
     return use::entry() ? detail::object_new(D.key) : nullptr;

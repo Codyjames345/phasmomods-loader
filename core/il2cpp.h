@@ -152,6 +152,10 @@ const char* class_name(Class* klass);
 bool is_class(const void* obj, const char* name);
 /** True when obj is non-null and its class is `klass` or derives from it (the class's parents). */
 bool is_instance(const void* obj, Class* klass);
+/** True when obj is a System.String, a managed array (any rank), or a System.Collections.Generic.List<T>. */
+bool is_string(const void* obj);
+bool is_array(const void* obj);
+bool is_list(const void* obj);
 /** True when obj is non-null and its class, or a class it derives from, is named `name`. */
 bool is_kind(const void* obj, const char* name);
 void* resolve_icall(const char* name);

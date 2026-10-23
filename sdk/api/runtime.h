@@ -11,7 +11,9 @@
 //
 // Lifetime: a managed string, array or list a mod reads here is the runtime's memory. Never keep a
 // raw pointer to one, or a view over it (Array, RefArray, List), across frames: keep the object in a
-// pg::api::Held and make the view again when it is needed.
+// pg::api::Held and make the view again when it is needed. An element reference from Array and the
+// array behind a List are valid only until the next managed call: a List replaces its backing array
+// when it grows, so take items() again after any game call, and never store either.
 
 #include <cstddef>
 #include <cstdint>
@@ -53,7 +55,8 @@ bool alive(const void* unityObject);
 
 /// A view over a managed array of value elements (T[], with T a primitive or a struct copied whole),
 /// valid for the current frame. size() is its length; operator[] gives element i in place, so it
-/// can be read or written. An index at or past size() logs once per process and gives a zeroed
+/// can be read or written; that reference is valid only until the next managed call. An object that
+/// is not an array has size 0 (the host logs that once). An index at or past size() logs once per process and gives a zeroed
 /// scratch element instead, so nothing outside the array is touched. A null `raw` has size 0.
 template <class T>
 struct Array {
@@ -103,8 +106,10 @@ struct RefArray {
 /// A view over a managed System.Collections.Generic.List of references (List<GameObject> and the
 /// like), valid for the current frame. size() is its count; operator[] reads item i (null past the
 /// count, logged once per process). items() is the backing array, whose length may exceed the
-/// count: for a List of values read it as Array<T>{list.items()}, indexes below size() only. A null
-/// `raw` has size 0.
+/// count: for a List of values read it as Array<T>{list.items()}, indexes below size() only. The
+/// List replaces that array when it grows, so it is valid only until the next managed call: take
+/// items() again after any game call and never store it. A null `raw`, or an object that is not a
+/// List (logged once by the host), has size 0.
 struct List {
   void* raw;
 

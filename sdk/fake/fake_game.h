@@ -38,19 +38,24 @@ void reset();
 /// entries given below, hook_entry records the hook (see hooked) and hands back the fake method as
 /// `original`, set_reference stores the reference and counts the write (see barrier_writes), and
 /// inside_entry is always 0. The runtime services of version 2.1 work on the fake's memory:
-/// string_new and string_utf8 convert between UTF-8 and UTF-16 as the host does; type_object gives
+/// string_new and string_utf8 convert between UTF-8 and UTF-16 as the host does; string_utf8,
+/// array_length, array_data, list_count and list_items check that they were given a fake string,
+/// array or list, and answer 0 or null otherwise, logged once per kind until reset; type_object gives
 /// one fake System.Type per class; object_new gives a zeroed object of 0x200 bytes and array_new an
 /// array of zeroed 16-byte elements, for a type given to type() (null otherwise); is_instance follows
 /// parent(); alive is false after destroy(); virtual_method answers with an override_method() of the
-/// object's class or a parent, or null (so virtual_call runs the declared fake); gc_hold and
+/// object's class or a parent, else the declared method, and null for a null object or one not of
+/// the method's owner class; gc_hold and
 /// gc_release count live holds (see held); log_exception does nothing. Every other function does
 /// nothing and answers false or null. The pointer stays valid for the process lifetime.
 const PgHostApi* host();
 
 // Giving an entry again replaces it.
 
-/// The method entry `d` resolves to `fn`, called as fn(args..., nullptr).
-void method(const sdk::EntryDesc& d, void* fn);
+/// The method entry `d` resolves to `fn`, called as fn(args..., nullptr). `owner`, when given, is
+/// its declaring class: virtual_call refuses an object not of it (or of a class derived from it).
+/// Through virtual_call the declared `fn` gets a non-null fake MethodInfo as its last argument.
+void method(const sdk::EntryDesc& d, void* fn, void* owner = nullptr);
 /// The field entry `d` resolves to `offset` from the start of the object.
 void field(const sdk::EntryDesc& d, int32_t offset);
 /// The enum value entry `d` resolves to the number `v`.

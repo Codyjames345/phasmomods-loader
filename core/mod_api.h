@@ -105,24 +105,33 @@ struct PgHostApi {
   // mods reach managed strings, arrays, lists and objects through these (sdk/api/runtime.h). Every
   // one runs on the main thread, never throws, and answers null, 0 or false for a null argument and
   // for a key that is unknown, unresolved or of the wrong kind. `typeKey` and `methodKey` are map
-  // keys of a Type and a Method entry.
+  // keys of a Type and a Method entry. The services that read a managed object check its kind
+  // first: one given an object of the wrong kind reads nothing from it, logs that once, and answers
+  // 0 or null.
 
   // A new managed string (System.String) holding the UTF-8 text `utf8`.
   void* (*string_new)(const char* utf8);
-  // Copies the managed string `str` into `out` as NUL-terminated UTF-8, `size` bytes including the
-  // NUL, cut at a character boundary (a surrogate pair is one character; an unpaired one becomes
-  // U+FFFD). Returns the whole string's length in UTF-8 bytes without the NUL, so a caller can size
-  // its buffer; `out` may be null when `size` is 0. A null `str` is the empty string.
+  // Copies the managed string `str` (a System.String) into `out` as NUL-terminated UTF-8, `size`
+  // bytes including the NUL, cut at a character boundary (a surrogate pair is one character; an
+  // unpaired one becomes U+FFFD). Returns the whole string's length in UTF-8 bytes without the NUL,
+  // so a caller can size its buffer. A null `out` is taken as `size` 0. A null `str` is the empty
+  // string; anything that is not a System.String answers 0 (logged once).
   size_t (*string_utf8)(const void* str, char* out, size_t size);
-  // The number of elements of the managed array `arr`.
+  // The number of elements of the managed array `arr` (any T[]); anything else answers 0 (logged
+  // once).
   size_t (*array_length)(const void* arr);
   // The address of element 0 of the managed array `arr`; elements follow at their type's size.
+  // Anything that is not an array answers null (logged once). The address is valid only until the
+  // next managed call: never store it.
   void* (*array_data)(void* arr);
   // A new managed array of `length` elements of the type `elementTypeKey` names, zeroed.
   void* (*array_new)(const char* elementTypeKey, size_t length);
-  // The number of items in the managed System.Collections.Generic.List `list`.
+  // The number of items in the managed System.Collections.Generic.List<T> `list`; anything else
+  // answers 0 (logged once).
   int32_t (*list_count)(const void* list);
-  // The managed array behind the List `list` (its capacity may exceed list_count).
+  // The managed array behind the List<T> `list` (its capacity may exceed list_count); anything else
+  // answers null (logged once). The List replaces this array when it grows, so it is valid only
+  // until the next managed call: take it again after any game call, and never store it.
   void* (*list_items)(const void* list);
   // The System.Type object of the type `typeKey` names (C#'s typeof).
   void* (*type_object)(const char* typeKey);
@@ -134,9 +143,10 @@ struct PgHostApi {
   // UnityEngine.Object's implicit bool: false for null and for an engine object that was destroyed.
   bool (*alive)(const void* unityObject);
   // The method the managed object `obj` runs for the method entry `methodKey` (a C# virtual call):
-  // the override in obj's class, or the declared method when nothing overrides it. Null when `obj`
-  // is not of the entry's declaring type. The result is a MethodInfo*, passed as the call's last
-  // argument, and its first member is the address of its code.
+  // the override in obj's class, or the declared method when nothing overrides it or the method is
+  // not virtual. Null when `obj` is null or not of the entry's declaring type. The result is a
+  // MethodInfo*, passed as the call's last argument, and its first member is the address of its
+  // code.
   const void* (*virtual_method)(const void* obj, const char* methodKey);
   // A strong GC handle on the managed object `obj` (0 for null): the runtime keeps the object while
   // native code keeps a pointer to it. Release it when the pointer is dropped.
