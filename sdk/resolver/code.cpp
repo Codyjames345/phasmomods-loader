@@ -570,8 +570,11 @@ CodeFacts read_code(std::span<const uint8_t> fn, uint64_t rva) {
   };
   // Every in-function branch and case must land where an instruction begins.
   std::vector<bool> starts(fn.size());
-  for (const Insn& in : code)
-    if (in.kind == Kind::Instruction || in.kind == Kind::Opaque) starts[in.offset] = true;
+  for (const Insn& in : code) {
+    if (in.kind != Kind::Instruction && in.kind != Kind::Opaque) continue;
+    starts[in.offset] = true;
+    facts.starts.push_back(in.at);
+  }
   bool complete = layout.sure;
   auto lands = [&](uint64_t target) { complete = complete && inside(target) && starts[target - rva]; };
 

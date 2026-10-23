@@ -57,7 +57,9 @@ void publish(uintptr_t base) {
         e.twins = p.twins.data();
         e.twinCount = static_cast<uint32_t>(p.twins.size());
         [[fallthrough]];
-      case sdk::Kind::Code: e.code = reinterpret_cast<void*>(base + r.rva); break;
+      // rva 0 is no code: base + 0 would be the PE header. The resolver never resolves one; this
+      // keeps a call through the entry from ever reaching it.
+      case sdk::Kind::Code: e.code = r.rva ? reinterpret_cast<void*>(base + r.rva) : nullptr; break;
       case sdk::Kind::Field:
         if (type && r.member >= 0 && size_t(r.member) < type->fields.size()) e.field = type->fields[r.member].runtime;
         e.offset = r.offset;

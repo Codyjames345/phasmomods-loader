@@ -33,6 +33,8 @@ struct CodeFacts {
   // become their absolute address, in-function branch targets become offsets from the start, and
   // the method's own runtime-metadata init flag becomes FLAG.
   std::vector<std::string> normalized;
+  // The rva where each instruction begins, in code order; a switch table's data is no instruction.
+  std::vector<uint64_t> starts;
   // False when the reader could not account for every byte: an instruction it cannot decode or whose
   // effect it does not know (VEX, 0F 38, 0F 3A), a desync, in-function data of an unknown shape, or a
   // branch or case that lands inside an instruction. The facts above are then partial: callers must

@@ -165,6 +165,20 @@ void entry_carries_the_resolved_result() {
   CHECK(pg::gamemap::entry("No.SuchEntry") == nullptr);
 }
 
+// A method result at rva 0 has no code of its own: mods receive no address for it, never the
+// module's base, where a call would run the PE header.
+void entry_without_code_has_no_address() {
+  ModelType type;
+  type.methods.push_back({});
+  pg::gamemap::g_model = {};
+  pg::gamemap::g_model.types.push_back(type);
+  Result awake{.desc = &pg::map::GhostAI_Awake, .status = Status::Resolved, .type = 0, .member = 0, .rva = 0};
+  pg::gamemap::g_resolution.results = {awake};
+  pg::gamemap::publish(0x10000);
+  const PgGameEntry* m = pg::gamemap::entry("GhostAI.Awake");
+  CHECK(m && m->kind == PG_ENTRY_METHOD && m->code == nullptr);
+}
+
 }  // namespace
 
 namespace il2cpp {
@@ -228,5 +242,6 @@ int main() {
   spent_budget_reads_nothing();
   slow_build_leaves_the_hooks_budget();
   entry_carries_the_resolved_result();
+  entry_without_code_has_no_address();
   return g_failures ? 1 : 0;
 }

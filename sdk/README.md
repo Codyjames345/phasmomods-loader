@@ -290,14 +290,20 @@ check the entry declares.
 3. **By facts about the machine code**, to separate candidates that shape cannot (GhostAI has 13
    unnamed bools). A `pg::sdk::Fact` has `is` (`Stores`, `StoresConst`, `Loads`, `Calls`, `CalledBy`),
    `method` (the key of the method whose code is read), `value` and `negate`:
-   - `Stores`/`Loads`: the fact method (or a twin of it) writes or reads the candidate field. A
-     positive fact matches an access at the field's offset through any register, so it can only
-     keep more candidates, never fewer.
+   - `Stores`/`Loads`: the fact method (or a twin of it) writes or reads the candidate field. When
+     the fact method is an instance method of the field's owner (and gets `this` in rcx), a fact
+     counts only an access through `this`; a candidate reached only through another register stays
+     undecided, so the entry is `Ambiguous`. In a static method or a method of another type no
+     register is known to hold the owner, so a positive fact matches an access at the field's
+     offset through any register. Such a cross-owner fact is weak: give the entry a second,
+     independent fact as well.
    - `StoresConst`: it stores the constant `value` there with an immediate `mov`.
    - `Calls`: the candidate method's code calls the fact method. `CalledBy`: the fact method calls
      the candidate.
    - `negate` turns a fact around. A negated **field** fact removes a candidate only for an access
-     through `this`; an access through any other register leaves it undecided.
+     through `this`; an access through any other register leaves it undecided. Negated `Calls` and
+     `CalledBy` facts are not supported yet (the reader does not see indirect or virtual calls), and
+     an entry with one is `Missing`.
    - Facts **fail closed**: when the code a fact needs cannot be fully read (an instruction it cannot
      decode, a desynchronised stream, data it does not recognise), the candidate stays and cannot be
      accepted, so the entry is `Ambiguous`, never a wrong pick.
@@ -308,7 +314,8 @@ check the entry declares.
 4. **By code pattern inside one method** (`Kind::Code`), for behaviour that exists only as code
    inlined into another method. `pattern` is hex bytes with `??` as a wildcard, `within` is the key
    of the method entry it is searched in, and it must match exactly once there. `patternOffset` moves
-   the result. A pattern is the last resort, and its note says why nothing better works.
+   the result, which must still start an instruction of that method, read in full. A pattern is the
+   last resort, and its note says why nothing better works.
 
 Identity. A type string `"@Key"` means the very type the entry `Key` resolved to, not just its name,
 and the same holds in `params` and `fieldTypes`. Where the model says which type a member uses, it
@@ -328,7 +335,8 @@ other body that is the same behaviour:
   A copy that references other metadata is not a twin (see the decoy in `systems/ghost-ai.md`).
 
 Several candidates that are all one behaviour count as one. The result is `Resolved` with the twins
-and aliases listed.
+and aliases listed. A method with no code of its own (abstract, extern, a shared generic, or code
+outside GameAssembly) has no address, so its entry is `Missing`.
 
 ### Confidence and the note
 

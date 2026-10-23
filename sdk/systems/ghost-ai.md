@@ -78,15 +78,18 @@ canonical body.
 ## How the fingerprints were chosen
 
 `GhostAI` has 13 unnamed instance bool fields. Shape alone cannot tell them apart, so a field is found
-by what `GhostAI.Hunting` and `GhostAI.Awake` do to it:
+by what `GhostAI.Hunting` and `GhostAI.ChangeState` do to it. Both reach the fields through a copy of
+`this` (`rdi` in `Hunting`, `rsi` in `ChangeState`), which the resolver requires of a fact in a method
+of the field's own type:
 
-- `Hunting` stores five bools, four of them from registers. Of those four, one is also stored by
-  `Awake`: that is `isHunting`. Its facts are `Stores Hunting`, `Stores Awake`, and `StoresConst
-  Hunting 1` negated (the value comes from a register, not a constant).
+- `Hunting` stores five bools, four of them from registers. Of those four, `ChangeState` reads only
+  one: that is `isHunting`. Its facts are `Stores Hunting`, `Loads ChangeState`, and `StoresConst
+  Hunting 1` negated (the value comes from a register, not a constant). Should `ChangeState` come to
+  read another of the four, `isHunting` fails closed (`Ambiguous`), never to the wrong field.
 - `postHuntCooldown` is the bool `Hunting` stores the constant 1 into: `StoresConst Hunting 1`.
-- `Awake` also clears a second bool, but inside a 16-bit store that starts at the neighbouring offset,
-  and the resolver keys a store by its start offset. Should `Awake` come to store at that bool's own
-  offset, `isHunting` fails closed (`Ambiguous`), never to the wrong field.
+- `Awake` clears `isHunting` as well, but through `rbx`, which it restores from the stack rather than
+  with a `pop`, so the reader cannot prove `rbx` holds `this` there. A fact on `Awake` decides nothing
+  (`Ambiguous`), which is why `isHunting` does not use one.
 - Proof that the facts decide: with the cooldown's fact removed, all 13 bool fields match
   (`AMBIGUOUS`); with the constant 2 in place of 1 it is `MISSING`.
 

@@ -15,14 +15,15 @@ inline constexpr const char* GhostAI_Hunting_params[] = {"bool", "int", "PhotonM
 inline constexpr const char* GhostAI_LookAtPlayer_params[] = {"Player"};
 inline constexpr const char* GhostAI_TemporarilyStopWander_params[] = {"float"};
 inline constexpr const char* GhostState_values[] = {"idle", "wander", "hunting"};
-// Hunting stores five bools, four of them from registers. Of those four, only isHunting's offset
-// starts a store in Awake: Awake also clears the bool at 0x109, but inside a 16-bit store at 0x108,
-// and the resolver keys a store by its start offset. Should Awake come to store at 0x109 on its own,
-// the entry fails closed (Ambiguous), never to the wrong field.
+// Hunting stores five bools through rdi, a copy of this, four of them from registers. Of those four,
+// ChangeState reads only isHunting, through rsi, its own copy of this, before it starts a state's
+// object. Awake clears isHunting too, but through rbx, which it restores from the stack rather than
+// with a pop, so the reader cannot prove rbx holds this there and an Awake fact would decide nothing.
+// Should ChangeState come to read another of the four, the entry fails closed (Ambiguous).
 inline constexpr pg::sdk::Fact GhostAI_isHunting_facts[] = {
     {.is = pg::sdk::Fact::Is::Stores, .method = "GhostAI.Hunting"},
     {.is = pg::sdk::Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1, .negate = true},
-    {.is = pg::sdk::Fact::Is::Stores, .method = "GhostAI.Awake"}};
+    {.is = pg::sdk::Fact::Is::Loads, .method = "GhostAI.ChangeState"}};
 inline constexpr pg::sdk::Fact GhostAI_postHuntCooldown_facts[] = {
     {.is = pg::sdk::Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1}};
 
@@ -98,8 +99,8 @@ inline constexpr pg::sdk::EntryDesc GhostAI_TemporarilyStopWander{
     .confidence = pg::sdk::Confidence::Decompiled, .owner = "GhostAI", .name = "TemporarilyStopWander",
     .params = GhostAI_TemporarilyStopWander_params};
 
-/// Whether a hunt is on. GhostAI.Hunting stores its first argument there, and Awake clears it.
-/// Decompiled.
+/// Whether a hunt is on. GhostAI.Hunting stores its first argument there, ChangeState reads it, and
+/// Awake clears it. Decompiled.
 inline constexpr pg::sdk::EntryDesc GhostAI_isHunting{.key = "GhostAI.isHunting", .kind = pg::sdk::Kind::Field,
                                                       .confidence = pg::sdk::Confidence::Decompiled,
                                                       .owner = "GhostAI", .hint = "ബഺണസഷ഻ഡറബ", .type = "bool",

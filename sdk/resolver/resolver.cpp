@@ -183,6 +183,9 @@ class Resolver {
       if (d.kind != (aboutField ? Kind::Field : Kind::Method))
         return missing(r, std::format("a {} fact applies to a {}", fact_name(fact.is),
                                       aboutField ? "field" : "method"));
+      // "Does not call" cannot fail closed yet: the call targets miss indirect and virtual calls and
+      // conditional tail jumps, and a call to one of the candidate's own twins is not counted.
+      if (!aboutField && fact.negate) return missing(r, "negated call facts are not supported yet");
     }
 
     if (d.owner && entries_[index_.at(d.owner)]->kind != Kind::Type)
@@ -388,6 +391,9 @@ class Resolver {
       return;
     }
     const ModelType& type = model_.types[c.type];
+    // rva 0 is no address: published, it would be the module's base, a call into its PE header.
+    if (d.kind == Kind::Method && type.methods[c.member].rva == 0)
+      return missing(r, "has no code of its own (abstract, extern or shared generic)");
     r.status = Status::Resolved;
     r.type = c.type;
     r.member = c.member;
@@ -399,8 +405,7 @@ class Resolver {
         r.rva = type.methods[c.member].rva;
         r.currentName = type.methods[c.member].name;
         for (const int m : c.same) {
-          // rva 0 is no address, so it never makes an alias.
-          if (r.rva != 0 && type.methods[m].rva == r.rva) r.aliases.push_back(type.methods[m].name);
+          if (type.methods[m].rva == r.rva) r.aliases.push_back(type.methods[m].name);
           else r.twins.push_back(type.methods[m].rva);
         }
         std::sort(r.twins.begin(), r.twins.end());
@@ -457,9 +462,11 @@ class Resolver {
   // method's calls. The fact method counts with its twins.
   //
   // A field fact cannot tell which object an access reaches unless its base register holds this.
-  // Counting every access only widens a positive fact, which is safe; a negated one removes a
-  // candidate only for an access through this, and one through any other register leaves it
-  // undecided.
+  // Where rcx came in as the owner's this, a fact counts only an access through this, either way:
+  // a hit through any other register leaves the candidate undecided, since after an update another
+  // object's field at the offset could make a lone wrong match. Elsewhere (a static method, or a
+  // method of another type) no register is known to hold the owner, so a positive fact counts every
+  // access, which makes it weak, and a negated one decides nothing.
   Verdict judge(const Fact& fact, const Candidate& c, std::string& why) const {
     const Result& method = result_of(fact.method);
     const ModelType& type = model_.types[c.type];
@@ -502,9 +509,9 @@ class Resolver {
         throughThis = throughThis || (hit && a.thisBase && ownersThis);
       }
     }
-    if (fact.negate && yes && !throughThis && fact.is != Fact::Is::CalledBy) {
-      why = std::format("the negated {} fact matches {} only through a register not proven to hold this",
-                        fact_name(fact.is), fact.method);
+    if (yes && !throughThis && (fact.negate || ownersThis) && fact.is != Fact::Is::CalledBy) {
+      why = std::format("the {}{} fact matches {} only through a register not proven to hold this",
+                        fact.negate ? "negated " : "", fact_name(fact.is), fact.method);
       return Verdict::Unread;
     }
     return yes ? Verdict::Yes : Verdict::No;
@@ -594,9 +601,21 @@ class Resolver {
       for (const uint64_t at : matches) r.candidates.push_back(std::format("{:#x}", at));
       return;
     }
+    // The result must be an instruction of the method, as read in full: a place inside an
+    // instruction or past the method's end names code the entry never meant.
+    const uint64_t at = matches.front() + d.patternOffset;
+    if (at < method.rva || at >= method.rva + fn.size())
+      return missing(r, std::format("the pattern's offset {} puts it outside {}", d.patternOffset, d.within));
+    if (!readable(method.rva))
+      return missing(r, std::format("the code of {} could not be fully read, so the pattern's place is not known "
+                                    "to start an instruction",
+                                    d.within));
+    const std::vector<uint64_t>& starts = code_at(method.rva)->starts;
+    if (!std::binary_search(starts.begin(), starts.end(), at))
+      return missing(r, std::format("the pattern's place {:#x} in {} is not where an instruction starts", at, d.within));
     r.status = Status::Resolved;
     r.type = method.type;
-    r.rva = matches.front() + d.patternOffset;
+    r.rva = at;
   }
 
   // An entry's type string against a model type string and, when the model knows it, the index of

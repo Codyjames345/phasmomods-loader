@@ -560,6 +560,7 @@ enum class Hunting {
   Plain,
   Unreadable,   // it starts with an instruction the reader cannot account for
   OtherObject,  // it also stores 1 at 0xF3 of another object, loaded from a field of this
+  OtherOnly,    // it also stores 2 at 0xF4 of another object, which this never does
 };
 
 // GhostAI with four bools, and Hunting at 0x1000 which writes two of them and reads a third through
@@ -577,9 +578,12 @@ struct Bools {
     const std::vector<uint8_t> call = rel(0x1000 + lead.size() + prologue.size(), {0xE8}, 0x9000);
     // mov rax, [rdi+0x40]; mov byte ptr [rax+0xF3], 1
     const std::vector<uint8_t> other{0x48, 0x8B, 0x47, 0x40, 0xC6, 0x80, 0xF3, 0x00, 0x00, 0x00, 0x01};
-    code.function(0x1000, join({lead, prologue, call, kHuntingBody,
-                                body == Hunting::OtherObject ? other : std::vector<uint8_t>{}, {0x5F},
-                                kRet}));  // pop rdi; ret
+    // mov rax, [rdi+0x40]; mov byte ptr [rax+0xF4], 2
+    const std::vector<uint8_t> otherOnly{0x48, 0x8B, 0x47, 0x40, 0xC6, 0x80, 0xF4, 0x00, 0x00, 0x00, 0x02};
+    const std::vector<uint8_t> tail = body == Hunting::OtherObject ? other
+                                      : body == Hunting::OtherOnly ? otherOnly
+                                                                   : std::vector<uint8_t>{};
+    code.function(0x1000, join({lead, prologue, call, kHuntingBody, tail, {0x5F}, kRet}));  // pop rdi; ret
   }
   // The bool with these facts. The entry lives as long as the results that point at it.
   const Result* flag(std::span<const Fact> facts) {
@@ -641,10 +645,38 @@ void negated_fact_needs_this() {
   CHECK(f && f->detail.find("not proven to hold this") != std::string::npos);
   CHECK(f && f->candidates.size() == 1 && f->candidates[0] == "bf3: bool at 0xf3");
 
-  // A positive fact counts any object: the other store still makes 0xF3 a candidate of StoresConst 1.
+  // A positive fact counts only this as well: the other object's store leaves 0xF3 undecided beside
+  // 0xD8, which this stores 1 to.
   static constexpr Fact cooldown[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1}};
   const Result* c = g.flag(cooldown);
   CHECK(c && c->status == Status::Ambiguous && c->candidates.size() == 2);
+}
+
+// In an instance method of the field's owner, a positive field fact counts only an access through
+// this. A store at the offset in another object, through rax, decides nothing, so after an update it
+// cannot make a lone wrong match.
+void positive_fact_needs_this_in_the_owners_method() {
+  Bools g(Hunting::OtherOnly);
+  static constexpr Fact two[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 2}};
+  const Result* f = g.flag(two);
+  CHECK(f && f->status == Status::Ambiguous && f->offset == 0);
+  CHECK(f && f->candidates.size() == 1 && f->candidates[0] == "bf4: bool at 0xf4");
+  CHECK(f && f->detail.find("not proven to hold this") != std::string::npos);
+
+  // Through rdi, a copy of this, a store decides.
+  static constexpr Fact one[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1}};
+  const Result* c = g.flag(one);
+  CHECK(c && c->status == Status::Resolved && c->offset == 0xD8);
+
+  // A static method has no this: its positive facts count any register, as cross-owner facts do,
+  // which is why such a fact needs a second, independent one.
+  static constexpr EntryDesc staticHunting{.key = "GhostAI.Hunting", .kind = Kind::Method, .flags = kStatic,
+                                           .owner = "GhostAI", .name = "Hunting"};
+  Bools s(Hunting::OtherOnly);
+  s.m.model.types[0].methods[0].isStatic = true;
+  s.hunting = &staticHunting;
+  const Result* weak = s.flag(two);
+  CHECK(weak && weak->status == Status::Resolved && weak->offset == 0xF4);
 }
 
 // rcx is the field owner's `this` only in an instance method of that owner that returns nothing
@@ -832,6 +864,21 @@ static constexpr const char* kPlayer[] = {"Player"};
 constexpr EntryDesc kLookAtPlayer{.key = "GhostAI.LookAtPlayer", .kind = Kind::Method, .owner = "GhostAI",
                                   .name = "LookAtPlayer", .params = kPlayer};
 
+// A method with no code of its own (abstract, extern, a shared generic, or code outside the module)
+// has rva 0. That is no address to call or hook, so the entry is Missing.
+void method_without_code_is_missing() {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.method(ai, "Abstract", "void", {}, 0);
+  constexpr EntryDesc e{.key = "GhostAI.Abstract", .kind = Kind::Method, .owner = "GhostAI", .name = "Abstract"};
+  Code code;
+  for (const Resolution& r : {run({&kGhostAI, &e}, m.build()), code.run({&kGhostAI, &e}, m.build())}) {
+    const Result* a = r.find("GhostAI.Abstract");
+    CHECK(a && a->status == Status::Missing && a->rva == 0);
+    CHECK(a && a->detail == "has no code of its own (abstract, extern or shared generic)");
+  }
+}
+
 void identical_twins_are_one_behaviour() {
   ModelBuilder m;
   const int ai = m.type("Assembly-CSharp", "", "GhostAI");
@@ -951,15 +998,34 @@ void calls_and_called_by_include_twins() {
   static constexpr Fact calledBy[] = {{.is = Fact::Is::CalledBy, .method = "GhostAI.Hunting"}};
   constexpr EntryDesc step{.key = "GhostAI.Step", .kind = Kind::Method, .owner = "GhostAI", .type = "int",
                            .facts = calledBy};
-  static constexpr Fact neither[] = {{.is = Fact::Is::CalledBy, .method = "GhostAI.Hunting", .negate = true},
-                                     {.is = Fact::Is::Calls, .method = "GhostAI.LookAtPlayer", .negate = true}};
-  constexpr EntryDesc idle{.key = "GhostAI.Idle", .kind = Kind::Method, .owner = "GhostAI", .type = "int",
-                           .facts = neither};
-  const Resolution r = code.run({&kGhostAI, &kLookAtPlayer, &kHuntingMethod, &looker, &step, &idle}, m.build());
+  const Resolution r = code.run({&kGhostAI, &kLookAtPlayer, &kHuntingMethod, &looker, &step}, m.build());
   CHECK(r.find("GhostAI.LookAtPlayer")->twins == std::vector<uint64_t>{0x1100});
   CHECK(r.find("GhostAI.Looker")->status == Status::Resolved && r.find("GhostAI.Looker")->rva == 0x1300);
   CHECK(r.find("GhostAI.Step")->status == Status::Resolved && r.find("GhostAI.Step")->rva == 0x1400);
-  CHECK(r.find("GhostAI.Idle")->status == Status::Resolved && r.find("GhostAI.Idle")->rva == 0x1500);
+}
+
+// A negated Calls or CalledBy fact cannot fail closed yet: the reader sees no indirect or virtual
+// call and no conditional tail jump, so "does not call" may be wrong. Such an entry is Missing.
+void negated_call_facts_are_refused() {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.method(ai, "Hunting", "void", {}, 0x1200);
+  m.method(ai, "ബഹ", "int", {}, 0x1400);
+  m.method(ai, "ജഭ", "int", {}, 0x1500);
+  Code code;
+  code.function(0x1200, join({rel(0x1200, {0xE8}, 0x1400), kRet}));
+  code.function(0x1400, join({kLoad40, kLoad40, kRet}));
+  code.function(0x1500, join({{0x0F, 0x1F, 0x00}, kRet}));
+  static constexpr Fact notCalledBy[] = {{.is = Fact::Is::CalledBy, .method = "GhostAI.Hunting", .negate = true}};
+  static constexpr Fact notCalls[] = {{.is = Fact::Is::Calls, .method = "GhostAI.Hunting", .negate = true}};
+  for (const std::span<const Fact> facts : {std::span<const Fact>(notCalledBy), std::span<const Fact>(notCalls)}) {
+    const EntryDesc idle{.key = "GhostAI.Idle", .kind = Kind::Method, .owner = "GhostAI", .type = "int",
+                         .facts = facts};
+    const Resolution r = code.run({&kGhostAI, &kHuntingMethod, &idle}, m.build());
+    const Result* i = r.find("GhostAI.Idle");
+    CHECK(i && i->status == Status::Missing && i->rva == 0);
+    CHECK(i && i->detail == "negated call facts are not supported yet");
+  }
 }
 
 void pattern_inside_method() {
@@ -975,9 +1041,20 @@ void pattern_inside_method() {
   CHECK(s && s->status == Status::Resolved);
   CHECK(s && s->rva == 0x1010);
 
-  constexpr EntryDesc imm{.key = "GhostAI.storeCooldown", .kind = Kind::Code, .pattern = "c6 87 ?? ?? ?? ?? 01",
-                          .within = "GhostAI.Hunting", .patternOffset = 6};
-  CHECK(g.code.run({&kGhostAI, &kHuntingMethod, &imm}, model).find("GhostAI.storeCooldown")->rva == 0x1016);
+  // The offset may move the result to another instruction's start: the movzx after the store.
+  constexpr EntryDesc next{.key = "GhostAI.storeCooldown", .kind = Kind::Code, .pattern = "c6 87 ?? ?? ?? ?? 01",
+                           .within = "GhostAI.Hunting", .patternOffset = 7};
+  CHECK(g.code.run({&kGhostAI, &kHuntingMethod, &next}, model).find("GhostAI.storeCooldown")->rva == 0x1017);
+  // Never inside an instruction (the store's immediate) or outside the method.
+  for (const int32_t offset : {6, 0x100, -0x20}) {
+    const EntryDesc moved{.key = "GhostAI.storeCooldown", .kind = Kind::Code, .pattern = "C6 87 ?? ?? ?? ?? 01",
+                          .within = "GhostAI.Hunting", .patternOffset = offset};
+    const Resolution m = g.code.run({&kGhostAI, &kHuntingMethod, &moved}, model);
+    const Result* s2 = m.find("GhostAI.storeCooldown");
+    CHECK(s2 && s2->status == Status::Missing && s2->rva == 0);
+    CHECK(s2 && s2->detail.find(offset == 6 ? "not where an instruction starts" : "outside GhostAI.Hunting") !=
+                    std::string::npos);
+  }
 
   static constexpr const char* kInt[] = {"int"};
   constexpr EntryDesc twice{.key = "GhostAI.Twice", .kind = Kind::Method, .owner = "GhostAI", .name = "Twice",
@@ -999,6 +1076,18 @@ void pattern_inside_method() {
     CHECK(b.find("GhostAI.storeCooldown")->status == Status::Missing);
     CHECK(b.find("GhostAI.storeCooldown")->detail.find("pattern") != std::string::npos);
   }
+}
+
+// A code entry's place counts only in code read in full: elsewhere the instruction starts are not
+// known.
+void pattern_needs_readable_code() {
+  Bools g(Hunting::Unreadable);
+  constexpr EntryDesc store{.key = "GhostAI.storeCooldown", .kind = Kind::Code, .pattern = "C6 87 ?? ?? ?? ?? 01",
+                            .within = "GhostAI.Hunting"};
+  const Resolution r = g.code.run({&kGhostAI, &kHuntingMethod, &store}, g.m.build());
+  const Result* s = r.find("GhostAI.storeCooldown");
+  CHECK(s && s->status == Status::Missing && s->rva == 0);
+  CHECK(s && s->detail.find("could not be fully read") != std::string::npos);
 }
 
 void assemblies_named_once_sorted() {
@@ -1035,6 +1124,7 @@ int main() {
   stores_const_picks_cooldown();
   negated_fact_picks_flag();
   negated_fact_needs_this();
+  positive_fact_needs_this_in_the_owners_method();
   negated_fact_needs_the_owners_instance_method();
   fact_on_unresolved_method_blocks();
   fact_kinds_must_fit();
@@ -1042,12 +1132,15 @@ int main() {
   unreadable_code_never_decides();
   folded_alias_is_one_behaviour();
   zero_rva_is_never_an_alias();
+  method_without_code_is_missing();
   identical_twins_are_one_behaviour();
   twins_calling_one_helper();
   decoy_with_other_metadata_is_not_a_twin();
   unreadable_code_is_never_a_twin();
   calls_and_called_by_include_twins();
+  negated_call_facts_are_refused();
   pattern_inside_method();
+  pattern_needs_readable_code();
   assemblies_named_once_sorted();
   return g_failures ? 1 : 0;
 }
