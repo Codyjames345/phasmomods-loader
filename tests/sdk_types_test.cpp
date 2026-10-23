@@ -37,8 +37,18 @@ int main() {
   same("System.UInt32", "uint", "uint");
   same("System.Char", "char", "char");
 
-  // A game class that shares a primitive's name is not the primitive.
+  // Checked against the real Cpp2IL dump of Steam build 25811160: System.Object is written
+  // `object` (559 parameters), and a bare `Object` is UnityEngine.Object (`Object prefab`).
   CHECK(canonical_type("UnityEngine.Object") == "Object");
+  CHECK(canonical_type("Object") == "Object");
+  // The dump writes nullables and tuples long-form, with arity backticks inside arguments too.
+  same("System.Nullable`1<System.Single>", "Nullable<Single>", "Nullable<float>");
+  CHECK(canonical_type("Nullable<InputBinding>") == "Nullable<InputBinding>");
+  CHECK(canonical_type("ValueTuple<CosmeticData, CosmeticMaterialOption>") ==
+        "ValueTuple<CosmeticData,CosmeticMaterialOption>");
+  CHECK(canonical_type("ValueTuple<String, Int32, Double, Nullable`1<ValueTuple`2<X, String>>>") ==
+        "ValueTuple<string,int,double,Nullable<ValueTuple<X,string>>>");
+  same("System.Collections.Generic.List`1<GhostAI/Nested>", "List<GhostAI/Nested>", "List<Nested>");
   // Nested generics, nested types and multi-dimensional arrays.
   same("System.Collections.Generic.List`1<System.Collections.Generic.List`1<System.Int32>>",
        "List<List<int>>", "List<List<int>>");
