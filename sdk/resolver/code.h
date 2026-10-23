@@ -16,6 +16,13 @@ struct Access {
   bool store;
   bool hasImm;
   int64_t imm;
+  int base;  // the base register, 0 (rax) to 15 (r15)
+  // The base provably holds `this` throughout the function: rcx when nothing in the function writes
+  // it (a call writes the volatile registers), or a register whose every write is a 64-bit copy of
+  // `this` or the pop restoring it where the function pushed it. A copy of rcx counts when no write to
+  // rcx comes before it in the instructions every call runs first, as in a prologue's mov rdi, rcx.
+  // Judged over the whole function, not per path, so it errs towards false.
+  bool thisBase;
 };
 
 struct CodeFacts {

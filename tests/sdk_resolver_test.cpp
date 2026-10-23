@@ -554,16 +554,31 @@ const std::vector<uint8_t> kHuntingBody{0x40, 0x88, 0xAF, 0xF3, 0x00, 0x00, 0x00
 constexpr EntryDesc kHuntingMethod{.key = "GhostAI.Hunting", .kind = Kind::Method, .owner = "GhostAI",
                                    .name = "Hunting"};
 
-// GhostAI with four bools, and Hunting at 0x1000 which writes two of them and reads a third.
+// How Hunting's body differs between the tests.
+enum class Hunting {
+  Plain,
+  Unreadable,   // it starts with an instruction the reader cannot account for
+  OtherObject,  // it also stores 1 at 0xF3 of another object, loaded from a field of this
+};
+
+// GhostAI with four bools, and Hunting at 0x1000 which writes two of them and reads a third through
+// rdi, a copy of this that it saves and restores. It also calls out, so rcx no longer holds this.
 struct Bools {
   ModelBuilder m;
   Code code;
-  explicit Bools(bool readable = true) {
+  explicit Bools(Hunting body = Hunting::Plain) {
     const int ai = m.type("Assembly-CSharp", "", "GhostAI");
     for (const int32_t offset : {0xD8, 0xE0, 0xF3, 0xF4}) m.field(ai, std::format("b{:x}", offset), "bool", offset);
     m.field(ai, "speed", "float", 0xF8);
     m.method(ai, "Hunting", "void", {}, 0x1000);
-    code.function(0x1000, join({readable ? std::vector<uint8_t>{} : kVzeroupper, kHuntingBody, kRet}));
+    const std::vector<uint8_t> lead = body == Hunting::Unreadable ? kVzeroupper : std::vector<uint8_t>{};
+    const std::vector<uint8_t> prologue{0x57, 0x48, 0x8B, 0xF9};  // push rdi; mov rdi, rcx
+    const std::vector<uint8_t> call = rel(0x1000 + lead.size() + prologue.size(), {0xE8}, 0x9000);
+    // mov rax, [rdi+0x40]; mov byte ptr [rax+0xF3], 1
+    const std::vector<uint8_t> other{0x48, 0x8B, 0x47, 0x40, 0xC6, 0x80, 0xF3, 0x00, 0x00, 0x00, 0x01};
+    code.function(0x1000, join({lead, prologue, call, kHuntingBody,
+                                body == Hunting::OtherObject ? other : std::vector<uint8_t>{}, {0x5F},
+                                kRet}));  // pop rdi; ret
   }
   // The bool with these facts. The entry lives as long as the results that point at it.
   const Result* flag(std::span<const Fact> facts) {
@@ -611,6 +626,25 @@ void negated_fact_picks_flag() {
   CHECK(u && u->status == Status::Resolved && u->offset == 0xF4);
 }
 
+// A negated fact removes a candidate only on an access through this. Another object's field at the
+// same offset leaves the candidate undecided.
+void negated_fact_needs_this() {
+  Bools g(Hunting::OtherObject);
+  static constexpr Fact facts[] = {
+      {.is = Fact::Is::Stores, .method = "GhostAI.Hunting"},
+      {.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1, .negate = true}};
+  const Result* f = g.flag(facts);
+  CHECK(f && f->status == Status::Ambiguous);
+  CHECK(f && f->candidates.size() == 1 && f->offset == 0);
+  CHECK(f && f->detail.find("not proven to hold this") != std::string::npos);
+  CHECK(f && f->candidates.size() == 1 && f->candidates[0] == "bf3: bool at 0xf3");
+
+  // A positive fact counts any object: the other store still makes 0xF3 a candidate of StoresConst 1.
+  static constexpr Fact cooldown[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1}};
+  const Result* c = g.flag(cooldown);
+  CHECK(c && c->status == Status::Ambiguous && c->candidates.size() == 2);
+}
+
 void fact_on_unresolved_method_blocks() {
   Bools g;
   static constexpr Fact facts[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Gone", .value = 1}};
@@ -643,11 +677,15 @@ void fact_kinds_must_fit() {
                              .facts = stores};
   const Resolution m = g.code.run({&kGhostAI, &kHuntingMethod, &method}, g.m.build());
   CHECK(m.find("GhostAI.method")->status == Status::Missing);
+
+  static constexpr Fact noMethod[] = {{.is = Fact::Is::StoresConst, .method = nullptr, .value = 1}};
+  const Result* n = g.flag(noMethod);
+  CHECK(n && n->status == Status::Missing && n->detail == "a fact needs a method");
 }
 
 // Fail closed: facts read from code the reader could not fully account for never decide.
 void unreadable_code_never_decides() {
-  Bools g(false);
+  Bools g(Hunting::Unreadable);
   static constexpr Fact cooldown[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1}};
   const Result* f = g.flag(cooldown);
   CHECK(f && f->status == Status::Ambiguous);
@@ -767,27 +805,39 @@ void decoy_with_other_metadata_is_not_a_twin() {
   CHECK(code.run({&kGhostAI, &shape}, m.build()).find("GhostAI.Un")->status == Status::Ambiguous);
 }
 
-// Code the reader could not fully account for is a twin only byte for byte.
-void unreadable_twins_only_byte_identical() {
+// Code the reader could not fully account for is never a twin, even byte for byte: what it could not
+// decode may name an address, and at another address the same bytes name another target. Only a
+// method at the very same address joins, as an alias.
+void unreadable_code_is_never_a_twin() {
   ModelBuilder m;
   const int ai = m.type("Assembly-CSharp", "", "GhostAI");
   m.method(ai, "Same", "void", {"int"}, 0x1000);
   m.method(ai, "ദശ", "void", {"int"}, 0x1100);
-  m.method(ai, "Calls", "void", {"float"}, 0x1200);
+  m.method(ai, "ഞത", "void", {"int"}, 0x1000);
+  m.method(ai, "Load", "void", {"float"}, 0x1200);
   m.method(ai, "സറ", "void", {"float"}, 0x1300);
   Code code;
   for (const uint32_t at : {0x1000, 0x1100}) code.function(at, join({kVzeroupper, kLoad40, kRet}));
-  for (const uint32_t at : {0x1200, 0x1300}) code.function(at, join({kVzeroupper, rel(at + 3, {0xE8}, 0x9000), kRet}));
+  // vmovss xmm0, dword ptr [rip+X]: the same bytes at both addresses read two different floats.
+  const std::vector<uint8_t> load = join({rel(0x1200, {0xC5, 0xFA, 0x10, 0x05}, 0x9000), kRet});
+  code.function(0x1200, load);
+  code.function(0x1300, load);
   static constexpr const char* kInt[] = {"int"};
   static constexpr const char* kFloat[] = {"float"};
   constexpr EntryDesc same{.key = "GhostAI.Same", .kind = Kind::Method, .owner = "GhostAI", .name = "Same",
                            .params = kInt};
-  constexpr EntryDesc calls{.key = "GhostAI.Calls", .kind = Kind::Method, .owner = "GhostAI", .name = "Calls",
+  constexpr EntryDesc named{.key = "GhostAI.Load", .kind = Kind::Method, .owner = "GhostAI", .name = "Load",
                             .params = kFloat};
-  const Resolution r = code.run({&kGhostAI, &same, &calls}, m.build());
-  CHECK(r.find("GhostAI.Same")->twins == std::vector<uint64_t>{0x1100});
-  CHECK(r.find("GhostAI.Calls")->status == Status::Resolved);
-  CHECK(r.find("GhostAI.Calls")->twins.empty());
+  constexpr EntryDesc shape{.key = "GhostAI.LoadShape", .kind = Kind::Method, .owner = "GhostAI", .type = "void",
+                            .params = kFloat};
+  const Resolution r = code.run({&kGhostAI, &same, &named, &shape}, m.build());
+  CHECK(r.find("GhostAI.Same")->status == Status::Resolved);
+  CHECK(r.find("GhostAI.Same")->twins.empty());
+  CHECK(r.find("GhostAI.Same")->aliases == std::vector<std::string>{"ഞത"});
+  CHECK(r.find("GhostAI.Load")->status == Status::Resolved);
+  CHECK(r.find("GhostAI.Load")->twins.empty());
+  CHECK(r.find("GhostAI.LoadShape")->status == Status::Ambiguous);
+  CHECK(r.find("GhostAI.LoadShape")->candidates.size() == 2);
 }
 
 void calls_and_called_by_include_twins() {
@@ -834,11 +884,11 @@ void pattern_inside_method() {
   const Resolution r = g.code.run({&kGhostAI, &kHuntingMethod, &store}, model);
   const Result* s = r.find("GhostAI.storeCooldown");
   CHECK(s && s->status == Status::Resolved);
-  CHECK(s && s->rva == 0x1007);
+  CHECK(s && s->rva == 0x1010);
 
   constexpr EntryDesc imm{.key = "GhostAI.storeCooldown", .kind = Kind::Code, .pattern = "c6 87 ?? ?? ?? ?? 01",
                           .within = "GhostAI.Hunting", .patternOffset = 6};
-  CHECK(g.code.run({&kGhostAI, &kHuntingMethod, &imm}, model).find("GhostAI.storeCooldown")->rva == 0x100D);
+  CHECK(g.code.run({&kGhostAI, &kHuntingMethod, &imm}, model).find("GhostAI.storeCooldown")->rva == 0x1016);
 
   static constexpr const char* kInt[] = {"int"};
   constexpr EntryDesc twice{.key = "GhostAI.Twice", .kind = Kind::Method, .owner = "GhostAI", .name = "Twice",
@@ -889,6 +939,7 @@ int main() {
   method_by_shape();
   stores_const_picks_cooldown();
   negated_fact_picks_flag();
+  negated_fact_needs_this();
   fact_on_unresolved_method_blocks();
   fact_kinds_must_fit();
   unreadable_code_never_decides();
@@ -896,7 +947,7 @@ int main() {
   identical_twins_are_one_behaviour();
   twins_calling_one_helper();
   decoy_with_other_metadata_is_not_a_twin();
-  unreadable_twins_only_byte_identical();
+  unreadable_code_is_never_a_twin();
   calls_and_called_by_include_twins();
   pattern_inside_method();
   return g_failures ? 1 : 0;

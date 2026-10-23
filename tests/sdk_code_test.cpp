@@ -205,6 +205,65 @@ void rip_and_rsp_are_not_field_accesses() {
   CHECK(f.accesses.size() == 1 && f.accesses[0].disp == 0x18);
 }
 
+// Whether each access's base provably holds `this` (rcx at entry), flow-insensitively.
+std::vector<bool> this_bases(std::initializer_list<uint8_t> b) {
+  std::vector<bool> out;
+  for (const Access& a : facts(b).accesses) out.push_back(a.thisBase);
+  return out;
+}
+
+void this_registers() {
+  // mov byte ptr [rcx+0xD8], 1
+  const CodeFacts f = facts({0xC6, 0x81, 0xD8, 0x00, 0x00, 0x00, 0x01});
+  CHECK(f.accesses.size() == 1 && f.accesses[0].base == 1 && f.accesses[0].thisBase);
+
+  // push rdi; mov rdi, rcx; mov byte ptr [rdi+0xD8], 1; mov byte ptr [rdi+0xF3], bpl;
+  // movss xmm7, xmm6; pop rdi; ret
+  CHECK((this_bases({0x57, 0x48, 0x8B, 0xF9, 0xC6, 0x87, 0xD8, 0x00, 0x00, 0x00, 0x01, 0x40, 0x88, 0xAF, 0xF3,
+                     0x00, 0x00, 0x00, 0xF3, 0x0F, 0x10, 0xFE, 0x5F, 0xC3}) == std::vector<bool>{true, true}));
+  // The copy written the other way: mov rdi, rcx as 89 /r.
+  CHECK((this_bases({0x48, 0x89, 0xCF, 0xC6, 0x47, 0x08, 0x01}) == std::vector<bool>{true}));
+
+  // push rdi; mov rdi, rcx; mov rax, [rdi+0x40]; mov byte ptr [rax+0xF3], 1; pop rdi; ret: rax holds
+  // another object.
+  const CodeFacts other = facts({0x57, 0x48, 0x8B, 0xF9, 0x48, 0x8B, 0x47, 0x40, 0xC6, 0x80, 0xF3, 0x00, 0x00,
+                                 0x00, 0x01, 0x5F, 0xC3});
+  CHECK(other.accesses.size() == 2);
+  if (other.accesses.size() == 2) {
+    CHECK(other.accesses[0].base == 7 && other.accesses[0].thisBase);
+    CHECK(other.accesses[1].base == 0 && !other.accesses[1].thisBase);
+  }
+
+  // A register written by anything but a copy of this is not this anywhere in the function.
+  // mov rdi, rcx; mov byte ptr [rdi+8], 1; mov rdi, [rdi+0x10]
+  CHECK((this_bases({0x48, 0x8B, 0xF9, 0xC6, 0x47, 0x08, 0x01, 0x48, 0x8B, 0x7F, 0x10}) ==
+         std::vector<bool>{false, false}));
+  // mov rdi, rcx; xor edi, edi; mov byte ptr [rdi+8], 1
+  CHECK((this_bases({0x48, 0x8B, 0xF9, 0x31, 0xFF, 0xC6, 0x47, 0x08, 0x01}) == std::vector<bool>{false}));
+  // mov byte ptr [rcx+8], 1; call: rcx is volatile across it.
+  CHECK((this_bases({0xC6, 0x41, 0x08, 0x01, 0xE8, 0xFB, 0x0F, 0x00, 0x00}) == std::vector<bool>{false}));
+  // A copy of rcx before anything writes it still holds this after a call:
+  // mov rdi, rcx; call; mov byte ptr [rdi+8], 1
+  CHECK((this_bases({0x48, 0x8B, 0xF9, 0xE8, 0xF8, 0x0F, 0x00, 0x00, 0xC6, 0x47, 0x08, 0x01}) ==
+         std::vector<bool>{true}));
+  // ... but not one made after the call: call; mov rdi, rcx; mov byte ptr [rdi+8], 1
+  CHECK((this_bases({0xE8, 0xFB, 0x0F, 0x00, 0x00, 0x48, 0x8B, 0xF9, 0xC6, 0x47, 0x08, 0x01}) ==
+         std::vector<bool>{false}));
+  // ... nor one some calls skip: test edx, edx; je +3; mov rdi, rcx; call; mov byte ptr [rdi+8], 1
+  CHECK((this_bases({0x85, 0xD2, 0x74, 0x03, 0x48, 0x8B, 0xF9, 0xE8, 0xF4, 0x0F, 0x00, 0x00, 0xC6, 0x47, 0x08,
+                     0x01}) == std::vector<bool>{false}));
+  // mov edi, ecx: a 32-bit copy drops the upper half.
+  CHECK((this_bases({0x8B, 0xF9, 0xC6, 0x47, 0x08, 0x01}) == std::vector<bool>{false}));
+  // mov rdi, rcx; mov byte ptr [rdi+8], 1; pop rdi with no push of rdi.
+  CHECK((this_bases({0x48, 0x8B, 0xF9, 0xC6, 0x47, 0x08, 0x01, 0x5F}) == std::vector<bool>{false}));
+  // An argument register never written holds no this: mov byte ptr [rdx+8], 1
+  CHECK((this_bases({0xC6, 0x42, 0x08, 0x01}) == std::vector<bool>{false}));
+  // Copies among themselves, never from rcx: mov rdi, rsi; mov rsi, rdi; mov byte ptr [rdi+8], 1
+  CHECK((this_bases({0x48, 0x8B, 0xFE, 0x48, 0x8B, 0xF7, 0xC6, 0x47, 0x08, 0x01}) == std::vector<bool>{false}));
+  // A byte register without REX names the high byte: mov rbx, rcx; mov bh, 1 writes rbx.
+  CHECK((this_bases({0x48, 0x8B, 0xD9, 0xB7, 0x01, 0xC6, 0x43, 0x08, 0x01}) == std::vector<bool>{false}));
+}
+
 // A method shaped like IL2CPP's: its runtime-metadata init check on `flag`, a load of `data`, and a
 // call. With `setFlag` 0 the init check sets some other byte, so the leading cmp is not its flag.
 std::vector<std::string> method(uint64_t start, uint64_t flag, uint64_t data, uint64_t setFlag = 0) {
@@ -399,6 +458,7 @@ int main() {
   register_store_has_no_imm();
   load_is_not_store();
   rip_and_rsp_are_not_field_accesses();
+  this_registers();
   normalized_masks_own_flag();
   switch_tables_are_data();
   byte_table_indexed_by_the_image_base();

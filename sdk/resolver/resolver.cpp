@@ -176,6 +176,7 @@ class Resolver {
       if (d.kind == Kind::Code) return resolve_code(d, r);
     }
     for (const Fact& fact : d.facts) {
+      if (!fact.method) return missing(r, "a fact needs a method");
       if (entries_[index_.at(fact.method)]->kind != Kind::Method)
         return missing(r, std::format("the fact's {} is not a method entry", fact.method));
       const bool aboutField = fact.is != Fact::Is::Calls && fact.is != Fact::Is::CalledBy;
@@ -207,13 +208,7 @@ class Resolver {
     if (d.kind == Kind::Method && d.name && d.params.empty() && named > 1)
       return decide(d, r, candidates, named, owner);
     std::erase_if(candidates, [&](Candidate& c) { return !fits(d, c); });
-    // A fact that cannot read its code keeps the candidate, marked so it is never accepted.
-    for (const Fact& fact : d.facts)
-      std::erase_if(candidates, [&](Candidate& c) {
-        const Verdict v = judge(fact, c);
-        if (v == Verdict::Unread && c.unread.empty()) c.unread = unread_detail(fact, c);
-        return v == (fact.negate ? Verdict::Yes : Verdict::No);
-      });
+    for (const Fact& fact : d.facts) std::erase_if(candidates, [&](Candidate& c) { return !keeps(fact, c); });
     if (d.kind == Kind::Method && image_) same_behaviour(candidates);
     decide(d, r, candidates, named, owner);
     if (r.status == Status::Resolved && d.hint && r.currentName != d.hint)
@@ -444,23 +439,45 @@ class Resolver {
     return out;
   }
 
-  // What a fact says of a candidate, before negate. The field facts read the fact method's accesses,
-  // Calls the candidate's calls, and CalledBy the fact method's calls. The fact method counts with
-  // its twins.
-  Verdict judge(const Fact& fact, const Candidate& c) const {
+  // Whether a fact keeps the candidate. A fact that cannot judge it keeps it, marked so that it is
+  // never accepted.
+  bool keeps(const Fact& fact, Candidate& c) const {
+    std::string why;
+    const Verdict v = judge(fact, c, why);
+    if (v == Verdict::Unread) {
+      if (c.unread.empty()) c.unread = std::move(why);
+      return true;
+    }
+    return (v == Verdict::Yes) != fact.negate;
+  }
+
+  // What a fact says of a candidate, before negate; why says what kept it from judging. The field
+  // facts read the fact method's accesses, Calls the candidate's calls, and CalledBy the fact
+  // method's calls. The fact method counts with its twins.
+  //
+  // A field fact cannot tell which object an access reaches unless its base register holds this.
+  // Counting every access only widens a positive fact, which is safe; a negated one removes a
+  // candidate only for an access through this, and one through any other register leaves it
+  // undecided.
+  Verdict judge(const Fact& fact, const Candidate& c, std::string& why) const {
     const Result& method = result_of(fact.method);
     const ModelType& type = model_.types[c.type];
+    const auto unreadable = [&](const std::string& whose) {
+      why = std::format("the code of {} could not be fully read for its {} fact", whose, fact_name(fact.is));
+      return Verdict::Unread;
+    };
     bool yes = false;
     if (fact.is == Fact::Is::Calls) {
-      const uint64_t rva = type.methods[c.member].rva;
-      if (!readable(rva)) return Verdict::Unread;
+      const ModelMethod& self = type.methods[c.member];
+      if (!readable(self.rva)) return unreadable(self.name);
       const std::vector<uint64_t> targets = bodies(method);
-      for (const uint64_t target : code_at(rva)->callTargets)
+      for (const uint64_t target : code_at(self.rva)->callTargets)
         yes = yes || std::find(targets.begin(), targets.end(), target) != targets.end();
       return yes ? Verdict::Yes : Verdict::No;
     }
+    bool throughThis = false;
     for (const uint64_t body : bodies(method)) {
-      if (!readable(body)) return Verdict::Unread;
+      if (!readable(body)) return unreadable(fact.method);
       const CodeFacts& code = *code_at(body);
       if (fact.is == Fact::Is::CalledBy) {
         const uint64_t rva = type.methods[c.member].rva;
@@ -469,33 +486,31 @@ class Resolver {
       }
       const int32_t offset = type.fields[c.member].offset;
       for (const Access& a : code.accesses) {
-        if (a.disp != offset) continue;
-        if (fact.is == Fact::Is::Stores) yes = yes || a.store;
-        if (fact.is == Fact::Is::StoresConst) yes = yes || (a.hasImm && a.imm == fact.value);
-        if (fact.is == Fact::Is::Loads) yes = yes || !a.store;
+        const bool hit = a.disp == offset && (fact.is == Fact::Is::Stores        ? a.store
+                                              : fact.is == Fact::Is::StoresConst ? a.hasImm && a.imm == fact.value
+                                                                                 : !a.store);
+        yes = yes || hit;
+        throughThis = throughThis || (hit && a.thisBase);
       }
+    }
+    if (fact.negate && yes && !throughThis && fact.is != Fact::Is::CalledBy) {
+      why = std::format("the negated {} fact matches {} only through a register not proven to hold this",
+                        fact_name(fact.is), fact.method);
+      return Verdict::Unread;
     }
     return yes ? Verdict::Yes : Verdict::No;
   }
 
-  // Why a fact could not judge the candidate: whose code it could not read.
-  std::string unread_detail(const Fact& fact, const Candidate& c) const {
-    const std::string whose = fact.is == Fact::Is::Calls ? model_.types[c.type].methods[c.member].name : fact.method;
-    return std::format("the code of {} could not be fully read for its {} fact", whose, fact_name(fact.is));
-  }
-
-  // Whether two methods are one behaviour: one body (an alias), or bodies of one length that read the
-  // same once placed (twins). Code not fully read must also match byte for byte, since what the
-  // reader could not decode may name an address that differs between the two.
+  // Whether two methods are one behaviour: one body (an alias), or fully read bodies of one length
+  // that read the same once placed (twins). Code not fully read is never a twin, not even byte for
+  // byte: what the reader could not decode may name an address, and the same bytes at another
+  // address name another target.
   bool one_behaviour(const ModelMethod& a, const ModelMethod& b) const {
     if (a.rva == 0 || b.rva == 0) return false;
     if (a.rva == b.rva) return true;
-    const CodeFacts* ca = code_at(a.rva);
-    const CodeFacts* cb = code_at(b.rva);
-    if (!ca || !cb) return false;
-    const std::span<const uint8_t> fa = image_->function(a.rva), fb = image_->function(b.rva);
-    if (fa.size() != fb.size() || ca->normalized != cb->normalized) return false;
-    return (ca->complete && cb->complete) || std::equal(fa.begin(), fa.end(), fb.begin());
+    if (!readable(a.rva) || !readable(b.rva)) return false;
+    return image_->function(a.rva).size() == image_->function(b.rva).size() &&
+           code_at(a.rva)->normalized == code_at(b.rva)->normalized;
   }
 
   // Method candidates that are all one behaviour count as one, and the lowest RVA is canonical. The
