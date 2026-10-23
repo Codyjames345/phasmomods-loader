@@ -33,6 +33,13 @@ add_library(pgcore STATIC
 target_include_directories(pgcore PUBLIC core)
 pg_options(pgcore)
 
+# The game SDK's resolver: finds the game's types, members and code from the map, by shape.
+file(GLOB PGSDK_RESOLVER_SOURCES CONFIGURE_DEPENDS sdk/resolver/*.cpp)
+add_library(pgsdk_resolver STATIC ${PGSDK_RESOLVER_SOURCES})
+target_include_directories(pgsdk_resolver PUBLIC sdk/api sdk/resolver)
+target_link_libraries(pgsdk_resolver PUBLIC minhook)
+pg_options(pgsdk_resolver)
+
 # A mod's side of the host contract (core/mod_api.h).
 add_library(pgmod STATIC core/mod_glue.cpp)
 target_link_libraries(pgmod PUBLIC pgcore)
@@ -231,3 +238,5 @@ pg_test(hooks host/hooks.cpp core/log.cpp)
 target_link_libraries(hooks_test PRIVATE minhook)
 pg_test(mods host/mods.cpp host/hooks.cpp host/build_check.cpp core/log.cpp)
 target_link_libraries(mods_test PRIVATE minhook bcrypt)
+pg_test(sdk_types)
+target_link_libraries(sdk_types_test PRIVATE pgsdk_resolver)
