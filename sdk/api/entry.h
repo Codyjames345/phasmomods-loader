@@ -37,9 +37,11 @@ struct EntryDesc {
   const char* name = nullptr;      // the real name, or null when obfuscated
   const char* hint = nullptr;      // the obfuscated name in the last mapped build
   const char* assembly = nullptr;  // image name without ".dll"
-  const char* ns = nullptr;
+  const char* ns = nullptr;        // null: the global namespace for a top-level type, any for a nested one
   // A field's type or a method's return type. "@Key" means the type that entry Key resolved to.
   const char* type = nullptr;
+  // A method's parameter types. Empty means the method is matched by name alone, at any arity, so
+  // overloads make it Ambiguous.
   std::span<const char* const> params{};
   std::span<const char* const> fieldTypes{};  // a Type found by shape: field types it must have
   std::span<const char* const> values{};      // an enum Type found by shape: value names it must have
