@@ -2,8 +2,9 @@
 
 // The fake game backend: a host contract for testing a mod's game logic offline, without the game.
 // A test says what each map entry the code under test uses resolves to (a C++ function standing in
-// for a game method, an offset into a test buffer standing in for a field, an enum number, a class
-// pointer), then binds the game API to fake::host() and calls the mod's code:
+// for a game method or an icall, an offset into a test buffer standing in for a field, a test
+// variable standing in for a static field, an enum number, a class pointer), then binds the game API
+// to fake::host() and calls the mod's code:
 //
 //   pg::fake::reset();
 //   pg::fake::method(pg::map::GhostAI_UnAppear, reinterpret_cast<void*>(&fake_unappear));
@@ -46,8 +47,10 @@ void reset();
 /// parent(); alive is false after destroy(); virtual_method answers with an override_method() of the
 /// object's class or a parent, else the declared method, and null for a null object or one not of
 /// the method's owner class; gc_hold and
-/// gc_release count live holds (see held); log_exception does nothing. Every other function does
-/// nothing and answers false or null. The pointer stays valid for the process lifetime.
+/// gc_release count live holds (see held); log_exception does nothing. static_get and static_set
+/// copy between the caller and the storage given to static_field(), and answer false for a key not
+/// given there or a size other than the one given. Every other function does nothing and answers
+/// false or null. The pointer stays valid for the process lifetime.
 const PgHostApi* host();
 
 // Giving an entry again replaces it.
@@ -58,6 +61,11 @@ const PgHostApi* host();
 void method(const sdk::EntryDesc& d, void* fn, void* owner = nullptr);
 /// The field entry `d` resolves to `offset` from the start of the object.
 void field(const sdk::EntryDesc& d, int32_t offset);
+/// The static field entry `d` resolves to `size` bytes at `storage`, which the test keeps alive.
+/// With `reference`, a store through static_set counts as a GC write barrier (see barrier_writes).
+void static_field(const sdk::EntryDesc& d, void* storage, size_t size, bool reference = false);
+/// The icall entry `d` resolves to `fn`, called as fn(args...) with no MethodInfo.
+void icall(const sdk::EntryDesc& d, void* fn);
 /// The enum value entry `d` resolves to the number `v`.
 void value(const sdk::EntryDesc& d, int64_t v);
 /// The type entry `d` resolves to `klass`, which the fake compares with an object's first pointer.
@@ -78,7 +86,8 @@ void destroy(const void* unityObject);
 
 /// The keys hooked through hook_entry since reset, in order.
 std::vector<std::string> hooked();
-/// How many managed references were stored through set_reference (the GC write barrier) since reset.
+/// How many managed references were stored through set_reference or a reference static_field (the GC
+/// write barrier) since reset.
 int barrier_writes();
 /// How many GC handles from gc_hold are not yet released.
 int held();

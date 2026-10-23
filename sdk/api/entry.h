@@ -5,8 +5,11 @@
 
 namespace pg::sdk {
 
-// What a map entry names in the game.
-enum class Kind : uint8_t { Type, Method, Field, EnumValue, Code };
+// What a map entry names in the game. A static field is a Field flagged kStatic. An Icall is a Unity
+// engine function the runtime registers under the icall name in `name`
+// ("UnityEngine.Animator::SetBoolID"); only the running game can resolve one. An Export is a function
+// GameAssembly.dll exports under `name` ("il2cpp_shutdown"); only the host may use one.
+enum class Kind : uint8_t { Type, Method, Field, EnumValue, Code, Icall, Export };
 
 // How an entry's identification was established. A note never claims more than this.
 enum class Confidence : uint8_t { Inferred, Decompiled, Live };
@@ -34,7 +37,7 @@ struct EntryDesc {
   Confidence confidence = Confidence::Inferred;
   uint32_t flags = 0;
   const char* owner = nullptr;     // key of the declaring Type entry
-  const char* name = nullptr;      // the real name, or null when obfuscated
+  const char* name = nullptr;      // the real name, or null when obfuscated; an icall's or export's name
   const char* hint = nullptr;      // the obfuscated name in the last mapped build
   const char* assembly = nullptr;  // image name without ".dll"
   const char* ns = nullptr;        // null: the global namespace for a top-level type, any for a nested one

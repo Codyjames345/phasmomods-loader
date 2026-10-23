@@ -44,6 +44,8 @@ const char* kind_name(Kind kind) {
     case Kind::Field: return "field";
     case Kind::EnumValue: return "enum value";
     case Kind::Code: return "code";
+    case Kind::Icall: return "icall";
+    case Kind::Export: return "export";
   }
   return "entry";
 }
@@ -110,8 +112,9 @@ struct Candidate {
 
 class Resolver {
  public:
-  Resolver(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image)
-      : entries_(entries), model_(model), image_(image) {
+  Resolver(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image,
+           const IcallLookup& icalls)
+      : entries_(entries), model_(model), image_(image), icalls_(icalls) {
     out_.results.resize(entries.size());
     for (size_t i = 0; i < entries.size(); ++i) {
       out_.results[i].desc = entries[i];
@@ -171,6 +174,7 @@ class Resolver {
     Result& r = out_.results[i];
     if (index_.at(d.key) != i) return missing(r, "duplicate key");
     if (blocked(d, r)) return;
+    if (d.kind == Kind::Icall || d.kind == Kind::Export) return resolve_by_name_outside_metadata(d, r);
     if (d.kind == Kind::Code || !d.facts.empty()) {
       if (!image_) return missing(r, "no code image");
       if (d.kind == Kind::Code) return resolve_code(d, r);
@@ -316,6 +320,8 @@ class Resolver {
       case Kind::EnumValue:
         return type.fields[c.member].hasLiteral;
       case Kind::Code:
+      case Kind::Icall:
+      case Kind::Export:
         break;
     }
     return false;
@@ -420,6 +426,8 @@ class Resolver {
         r.currentName = type.fields[c.member].name;
         break;
       case Kind::Code:
+      case Kind::Icall:
+      case Kind::Export:
         break;
     }
   }
@@ -618,6 +626,26 @@ class Resolver {
     r.rva = at;
   }
 
+  // An icall, through the running runtime, or an export, from the image's export table: found by
+  // its name alone, with no owner, shape or facts.
+  void resolve_by_name_outside_metadata(const EntryDesc& d, Result& r) const {
+    if (!d.name) return missing(r, std::format("an {} entry needs its name", kind_name(d.kind)));
+    if (d.owner || !d.facts.empty() || d.pattern)
+      return missing(r, std::format("an {} entry is found by its name alone", kind_name(d.kind)));
+    if (d.kind == Kind::Icall) {
+      if (!icalls_) return missing(r, std::string(kCheckedAtStartup));
+      const void* code = icalls_(d.name);
+      if (!code) return missing(r, std::format("the runtime has no icall {}", d.name));
+      r.address = reinterpret_cast<uintptr_t>(code);
+    } else {
+      if (!image_) return missing(r, "no code image");
+      r.rva = image_->exported(d.name);
+      if (r.rva == 0) return missing(r, std::format("the image exports no {}", d.name));
+    }
+    r.status = Status::Resolved;
+    r.currentName = d.name;
+  }
+
   // An entry's type string against a model type string and, when the model knows it, the index of
   // the type that string names. "@Key" means the very type entry Key resolved to: a known index must
   // be that type, and an unknown one is trusted by name only when no other model type shares the
@@ -661,6 +689,8 @@ class Resolver {
       case Kind::EnumValue:
         return std::format("{} = {}", type.fields[c.member].name, type.fields[c.member].literal);
       case Kind::Code:
+      case Kind::Icall:
+      case Kind::Export:
         break;
     }
     return {};
@@ -676,6 +706,7 @@ class Resolver {
   std::span<const EntryDesc* const> entries_;
   const GameModel& model_;
   const CodeImage* image_;
+  const IcallLookup& icalls_;
   std::unordered_map<std::string_view, size_t> index_;  // the first entry with each key
   std::unordered_map<std::string, int> typesNamed_;     // how many model types have each name
   mutable std::unordered_map<uint64_t, CodeFacts> code_;  // read once per function start
@@ -719,8 +750,9 @@ std::vector<std::string> assemblies_of(std::span<const EntryDesc* const> entries
   return out;
 }
 
-Resolution resolve(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image) {
-  return Resolver(entries, model, image).run();
+Resolution resolve(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image,
+                   const IcallLookup& icalls) {
+  return Resolver(entries, model, image, icalls).run();
 }
 
 }  // namespace pg::sdk

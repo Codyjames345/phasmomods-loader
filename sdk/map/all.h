@@ -3,8 +3,11 @@
 // Every map entry, in one list for the resolver. A new entry goes in its type's header and here;
 // tests/map_test.cpp fails on one that is missing.
 
+#include "Animator.h"
 #include "Camera.h"
+#include "GameAssembly.h"
 #include "GhostAI.h"
+#include "LevelController.h"
 
 namespace pg::map {
 
@@ -32,6 +35,10 @@ inline constexpr const pg::sdk::EntryDesc* kAllEntries[] = {
     &Camera_set_nearClipPlane,
     &Camera_get_farClipPlane,
     &Camera_set_farClipPlane,
+    &LevelController,
+    &LevelController_instance,
+    &Animator_SetBoolID,
+    &GameAssembly_il2cpp_shutdown,
 };
 
 }  // namespace pg::map

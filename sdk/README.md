@@ -19,9 +19,11 @@ build.
 ## What exists today, and what does not
 
 Exists: the map and its resolver (at startup in the game, and offline), the game API, host contract
-2.1 with its runtime services, hooks by entry, the fake backend, `tools/gamecheck.ps1`, and two mapped types (GhostAI with 15
-entries, Unity's Camera with 8). One mod call goes through the game API: Ghost Tells' Shade calls
-`phasmo::GhostAI::UnAppear`.
+2.1 with its runtime services and static fields, hooks by entry, the fake backend,
+`tools/gamecheck.ps1`, and four mapped types (GhostAI with 15 entries, Unity's Camera with 8,
+LevelController with its static instance, Unity's Animator with one icall), plus one GameAssembly
+export the host may use (`il2cpp_shutdown`). One mod call goes through the game API: Ghost Tells'
+Shade calls `phasmo::GhostAI::UnAppear`.
 
 Does not exist yet. These arrive with stage 2, when every bundled mod is on the game API:
 
@@ -143,18 +145,24 @@ const int32_t state = phasmo::GhostAI::state.get(ghost);     // compare it with 
 phasmo::GhostAI::ChangeState(ghost, phasmo::GhostState::idle(), nullptr, false);
 ```
 
-Four kinds of wrapper, from `sdk/api/game_api.h`:
+Six kinds of wrapper, from `sdk/api/game_api.h`:
 
 | Wrapper | Declared as | Use |
 | --- | --- | --- |
 | `pg::api::Method<D, R(A...)>` | `static constexpr ... UnAppear{}` | `UnAppear(ghost)`; `available()` says whether it resolved. For an instance method the first parameter is the object. A call runs the declared body; `virtual_call(ghost, ...)` runs the override the object's class runs, as C# calls a virtual method, and refuses (logged once, nothing called) a null object or one not of the declaring type. |
 | `pg::api::Field<D, T>` | `Field<D, int32_t>` | `get(obj)`, `set(obj, v)`. `T` is a plain value or `void*` for a managed reference, whose `set` goes through the GC write barrier (the host's `set_reference`). |
+| `pg::api::StaticField<D, T>` | `StaticField<D, void*>` | `get()`, `set(v)`: a static field, one value for the class, read and written by the host (`static_get`, `static_set`). A reference's `set` goes through the GC write barrier. The first access runs the class's static constructor if it has not run, as the game's own first use would, so use it while the game plays (a tick, a detour), never at startup. When the host cannot read it (a `T` of the wrong size, a static constructor that threw) it logs once and gives the default. |
+| `pg::api::Icall<D, R(A...)>` | `static constexpr ... SetBoolID{}` | `SetBoolID(animator, id, value)`: a Unity engine function the runtime registered by its icall name. It is native code, so it takes no MethodInfo. |
 | `pg::api::EnumValue<D>` | `idle{}` | `idle()` gives the value's number in this build. |
 | `pg::api::Type<D>` | `type{}` | `klass()` gives the `Il2CppClass*`; `is(obj)` tells whether an object is of the type or a derived one (an interface type never matches); `type_object()` gives its `System.Type` (C#'s `typeof`); `make()` a new object, fields zeroed and no constructor run (not for engine objects, which come from `AddComponent` or `Instantiate`); `make_array(n)` a new array of the type. |
 
 A call that cannot reach the game never jumps to null. An entry that did not resolve logs
 `<key> is not available in this game build` once and returns the type's default (0, false, null) or
 does nothing. A field read of a null object gives the default; a write to one does nothing.
+
+GameAssembly's exports (`il2cpp_shutdown`) are not for mods. `pg::api::Export<D>` gives one's
+`address()` to the host's own code only: it exists where `PG_HOST` is defined (ModHost), and the host
+contract's `hook_entry` refuses an export.
 
 ### Strings, arrays, lists and engine objects
 
@@ -249,6 +257,12 @@ that is unknown, unresolved or of the wrong kind:
   the address of its code.
 - `gc_hold(obj)` and `gc_release(handle)`: strong GC handles, which `pg::api::Held` uses.
 - `log_exception(where, exception)`: logs a caught managed exception with its stack.
+- `static_get(key, out, size)` and `static_set(key, in, size)`, after `log_exception`: a static
+  field's value, `size` bytes, read into `out` or written from `in` (a reference through the GC write
+  barrier, `in` pointing at the pointer). Each first runs the class's static constructor if it has not
+  run, so the host never calls them while it resolves the map at startup, and a mod calls them only
+  while the game plays. False, touching nothing, for a key that is not a resolved static field, a
+  `size` other than the field's, or a static constructor that threw (logged once per key).
 
 A mod's exports are `pgmod_info`, `pgmod_start`, `pgmod_tick`, `pgmod_stop` and (version 2 onwards,
 exported by linking `pgmod`) `pgmod_requires`.
@@ -266,7 +280,10 @@ pg::api::bind(pg::fake::host(), missing);
 phasmo::GhostAI::UnAppear(ghost);  // runs fake_unappear(ghost, nullptr)
 ```
 
-The other givers are `field(d, offset)`, `value(d, n)` and `type(d, klass)`. An entry not given stays
+The other givers are `field(d, offset)`, `static_field(d, storage, size, reference)`, `icall(d, fn)`,
+`value(d, n)` and `type(d, klass)`. A static field reads and writes the test's own storage, and a
+`size` other than the one given answers as the host does for a field it cannot reach. An entry not
+given stays
 unresolved, as in a build that lacks it. `hooked()` lists the keys hooked through `hook_entry`, and
 `barrier_writes()` counts reference stores. A fake object begins with its class pointer;
 `parent(klass, parentClass)` declares inheritance, which `Type::is` and `virtual_call` follow, and
@@ -310,12 +327,13 @@ inline constexpr pg::sdk::EntryDesc GhostAI_UnAppear{.key = "GhostAI.UnAppear", 
 ```
 
 The fields: `key` (what `game_entry` and `pgmod_requires` use), `kind` (`Type`, `Method`, `Field`,
-`EnumValue`, `Code`), `confidence`, `flags` (`kStatic`, `kOptional`, `kTrack`; `kTrack` is not read
-by anything yet), `owner` (the declaring Type entry's key), `name` or `hint`, `assembly` and `ns` (for
-a type; a null `ns` means the global namespace for a top-level type and any for a nested one), `type`
-(a field's type or a method's return type), `params`, `fieldTypes`, `values`, `facts`, and for a Code
-entry `pattern`, `within`, `patternOffset`. A map header ends with its `phasmo::` wrappers; add one
-for each entry a mod may use.
+`EnumValue`, `Code`, `Icall`, `Export`), `confidence`, `flags` (`kStatic`, `kOptional`, `kTrack`;
+`kStatic` makes a field a static one; `kTrack` is not read by anything yet), `owner` (the declaring
+Type entry's key), `name` or `hint` (an icall's or export's name, as the runtime knows it),
+`assembly` and `ns` (for a type; a null `ns` means the global namespace for a top-level type and any
+for a nested one), `type` (a field's type or a method's return type), `params`, `fieldTypes`,
+`values`, `facts`, and for a Code entry `pattern`, `within`, `patternOffset`. A map header ends with
+its `phasmo::` wrappers; add one for each entry a mod may use (an export gets none).
 
 ### How the resolver finds an entry
 
@@ -362,6 +380,19 @@ check the entry declares.
    the result, which must still start an instruction of that method, read in full. A pattern is the
    last resort, and its note says why nothing better works.
 
+Two kinds are found by name outside the metadata, with no owner, shape or facts:
+
+- **An icall** (`Kind::Icall`), a Unity engine function, by its icall name
+  (`"UnityEngine.Animator::SetBoolID"`), through the runtime's `il2cpp_resolve_icall` at startup.
+  Only the running game registers icalls, so the offline check cannot resolve one: it lists it as
+  checked at startup only and never counts it as a failure.
+- **An export** (`Kind::Export`), a function GameAssembly.dll exports (`"il2cpp_shutdown"`), from the
+  module's export table, in the game and offline alike. A name exported twice, or forwarded to
+  another module, is `Missing`. Only the host may use an export.
+
+A static field is a `Field` entry flagged `kStatic`, found like any field. The resolver only reads the
+metadata; the field's value is read when a mod asks for it, never at startup.
+
 Identity. A type string `"@Key"` means the very type the entry `Key` resolved to, not just its name,
 and the same holds in `params` and `fieldTypes`. Where the model says which type a member uses, it
 must be that type; where it does not, a name that several types share makes the entry `Ambiguous`.
@@ -405,9 +436,10 @@ and `-Cpp2Il`. The game and Cpp2IL paths never come from the repository.
 --output-as diffable-cs` only when their hashes changed, and runs `build\gamecheck.exe --dump <dir>
 --image <GameAssembly.dll> --addresses re\map-addresses.tsv [--mods <dir>]`. It prints one line per
 entry (`OK`, `MISSING`, `AMBIGUOUS` or `BLOCKED`, the key, the value, then twins, aliases and
-`renamed from`), then a summary. It never runs game code and never writes in the game folder. Exit 0
-when every required entry resolved and no mod would be switched off, 1 when one did not or one would,
-2 on bad arguments.
+`renamed from`; `STARTUP`, the key and the icall's name for an icall, checked at startup only), then
+a summary. It never runs game code and never writes in the game folder. Exit 0 when every required
+entry it can check resolved and no mod would be switched off, 1 when one did not or one would, 2 on
+bad arguments.
 
 `-Mods <dir>` adds `--mods <dir>`: gamecheck loads each mod DLL under `<dir>`, reads its
 `pgmod_requires` and prints `would switch off <mod id>: <keys>` for each mod the host would not start

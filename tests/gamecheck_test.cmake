@@ -43,3 +43,12 @@ if(summary EQUAL -1 OR line LESS summary)
   message(FATAL_ERROR "--mods: no switch-off line naming only GhostAI.UnAppear after the summary\n${out}${err}")
 endif()
 message(STATUS "--mods names the mod that would be switched off and what it lacks.")
+
+# An icall cannot be checked without the running game: it is listed as checked at startup only and
+# counted apart from the entries that failed.
+string(FIND "${out}" "STARTUP Animator.SetBoolID UnityEngine.Animator::SetBoolID (checked at startup only)\n" icall)
+string(REGEX MATCH "missing, [0-9]+ ambiguous, [0-9]+ blocked, 1 checked at startup only\n" counted "${out}")
+if(icall EQUAL -1 OR NOT counted)
+  message(FATAL_ERROR "the icall is not listed and counted as checked at startup only\n${out}${err}")
+endif()
+message(STATUS "An icall is listed as checked at startup only.")

@@ -19,6 +19,14 @@ std::map<std::string, PgGameEntry> g_entries;  // by key; a map never moves its 
 std::vector<std::string> g_hooked;
 int g_barrierWrites = 0;
 
+// The storage given to static_field(), by key.
+struct Static {
+  void* storage;
+  size_t size;
+  bool reference;
+};
+std::map<std::string, Static> g_statics;
+
 // The fake's managed memory, freed by reset. Every fake object begins with its class pointer.
 std::deque<std::vector<uint64_t>> g_memory;
 std::map<void*, void*> g_parents;                      // class -> the class it derives from
@@ -77,6 +85,7 @@ bool of_kind(const void* obj, const int& kind, bool& refused, const char* servic
 }
 
 PgGameEntry& entry_for(const sdk::EntryDesc& d, uint32_t kind) {
+  g_statics.erase(d.key);
   PgGameEntry& e = g_entries[d.key];
   e = {};
   e.kind = kind;
@@ -197,6 +206,28 @@ uint32_t gc_hold(void* obj) {
 
 void gc_release(uint32_t handle) { g_holds.erase(handle); }
 
+// The storage of the static field `key` when it was given with `size` bytes, or null.
+const Static* static_of(const char* key, size_t size) {
+  const PgGameEntry* e = game_entry(key);
+  const auto it = e && e->kind == PG_ENTRY_FIELD ? g_statics.find(key) : g_statics.end();
+  return it != g_statics.end() && it->second.size == size ? &it->second : nullptr;
+}
+
+bool static_get(const char* key, void* out, size_t size) {
+  const Static* s = static_of(key, size);
+  if (!s || !out) return false;
+  std::memcpy(out, s->storage, size);
+  return true;
+}
+
+bool static_set(const char* key, const void* in, size_t size) {
+  const Static* s = static_of(key, size);
+  if (!s || !in) return false;
+  if (s->reference) ++g_barrierWrites;
+  std::memcpy(s->storage, in, size);
+  return true;
+}
+
 // The rest of the contract does nothing.
 void log(const char*) {}
 bool create_hook(void*, void*, void**, const char*) { return false; }
@@ -212,12 +243,13 @@ const PgHostApi kHost{PGMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_ho
                       &set_receiver, &peer_has_mod, &register_service, &service, &game_entry, &hook_entry,
                       &set_reference, &inside_entry, &string_new, &string_utf8, &array_length, &array_data,
                       &array_new, &list_count, &list_items, &type_object, &object_new, &is_instance, &alive,
-                      &virtual_method, &gc_hold, &gc_release, &log_exception};
+                      &virtual_method, &gc_hold, &gc_release, &log_exception, &static_get, &static_set};
 
 }  // namespace
 
 void reset() {
   g_entries.clear();
+  g_statics.clear();
   g_hooked.clear();
   g_barrierWrites = 0;
   g_memory.clear();
@@ -240,6 +272,13 @@ void method(const sdk::EntryDesc& d, void* fn, void* owner) {
 }
 
 void field(const sdk::EntryDesc& d, int32_t offset) { entry_for(d, PG_ENTRY_FIELD).offset = offset; }
+
+void static_field(const sdk::EntryDesc& d, void* storage, size_t size, bool reference) {
+  entry_for(d, PG_ENTRY_FIELD).field = storage;  // stands in for the FieldInfo
+  g_statics[d.key] = {storage, size, reference};
+}
+
+void icall(const sdk::EntryDesc& d, void* fn) { entry_for(d, PG_ENTRY_ICALL).code = fn; }
 
 void value(const sdk::EntryDesc& d, int64_t v) { entry_for(d, PG_ENTRY_ENUM_VALUE).value = v; }
 

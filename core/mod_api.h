@@ -32,6 +32,9 @@ enum PgEntryKind : uint32_t {
   PG_ENTRY_FIELD,       // a field, with its offset
   PG_ENTRY_ENUM_VALUE,  // one value of an enum
   PG_ENTRY_CODE,        // an address inside a method's code
+  // Added in version 2.1.
+  PG_ENTRY_ICALL,       // a Unity engine function the runtime registered by name, with its code
+  PG_ENTRY_EXPORT,      // a function GameAssembly.dll exports, with its code; only the host uses one
 };
 
 // A game entry as the host resolved it in the running game. The host keeps it for the process
@@ -41,13 +44,16 @@ struct PgGameEntry {
   uint32_t kind;       // PgEntryKind
   void* klass;         // Il2CppClass*: the type itself, or the type that declares the member
   const void* method;  // MethodInfo* of a method, passed as a call's last argument
-  void* code;          // a method's code (its canonical body), or a code entry's address
+  // A method's code (its canonical body), a code entry's address, or an icall's or export's code.
+  void* code;
   // A method's same behaviour at other addresses (the obfuscator's twins), besides `code`.
   void* const* twins;
   uint32_t twinCount;
-  int32_t offset;  // a field's offset from the start of the object, including the object header
-  void* field;     // FieldInfo* of a field
-  int64_t value;   // an enum value's number
+  // A field's offset from the start of the object, including the object header; a static field's
+  // from the start of its class's static data.
+  int32_t offset;
+  void* field;    // FieldInfo* of a field, static or not
+  int64_t value;  // an enum value's number
 };
 
 // Who a message is sent to.
@@ -156,6 +162,22 @@ struct PgHostApi {
   // Logs a caught managed exception (the first member of the thrown Il2CppExceptionWrapper): its
   // class, message and stack trace, each line beginning with `where`.
   void (*log_exception)(const char* where, const void* exception);
+
+  // Also added in version 2.1: static fields. `key` is the map key of a Field entry flagged static
+  // (kStatic). Reading or writing a static field first runs its class's static constructor when that
+  // has not run yet, as the game's own first use would, so call these only from code that runs while
+  // the game plays (a tick, a detour), on the main thread; the host never touches a static field
+  // while it resolves the map at startup. Each answers false without reading or writing the field
+  // for a null pointer, for a key that is unknown, unresolved or not a static field, when `size` is
+  // not the size of the field's value (a pointer's for a managed reference), and when the class's
+  // initialisation throws (logged once per key).
+
+  // Copies the static field's value, `size` bytes, into `out`. For a managed reference `out`
+  // receives the pointer.
+  bool (*static_get)(const char* key, void* out, size_t size);
+  // Stores the `size` bytes at `in` into the static field. For a managed reference `in` points at
+  // the pointer, which is stored through the runtime's GC write barrier.
+  bool (*static_set)(const char* key, const void* in, size_t size);
 };
 
 enum PgModFlags : uint32_t {

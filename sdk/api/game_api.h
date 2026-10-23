@@ -20,6 +20,9 @@
 // Threading: everything here runs on Unity's main thread, where the host calls pgmod_start and
 // pgmod_tick, except the registration a wrapper makes while the mod's DLL loads.
 //
+// Exports of GameAssembly.dll (Export below) are for the host's own code only: a mod never sees the
+// handle, and the host contract's hook_entry refuses an export.
+//
 // Managed strings, arrays, lists, alive checks and GC holds are in runtime.h and held.h.
 
 #include <cstddef>
@@ -40,7 +43,8 @@ struct Slot {
   const sdk::EntryDesc* desc;
   const PgGameEntry* entry;  // null before bind and when the entry did not resolve
   bool reported;             // its "not available" line was logged since the last bind
-  bool refused;              // a virtual_call it refused was logged since the last bind
+  bool refused;              // a refusal (a virtual_call, a static field the host could not reach) was
+                             // logged since the last bind
 };
 
 // Adds a used entry to the mod's list. Runs while the mod's DLL loads; always true.
@@ -52,6 +56,11 @@ void report_unavailable(Slot& slot);
 // Logs that a virtual_call of the entry was refused (a null object or one not of its declaring
 // type), once per bind.
 void report_refused_call(Slot& slot);
+// Logs that the host could not read or write the static field, once per bind.
+void report_refused_static(Slot& slot);
+// The host contract's static_get and static_set (version 2.1), or false before bind.
+bool static_get(const char* key, void* out, size_t size);
+bool static_set(const char* key, const void* in, size_t size);
 // The host contract's runtime services (core/mod_api.h, version 2.1) for an entry's key, or null,
 // false or 0 before bind.
 bool is_instance(const void* obj, const char* typeKey);
@@ -159,7 +168,7 @@ struct Method<D, R(A...)> {
 template <const sdk::EntryDesc& D, class T>
 struct Field {
   static_assert(D.kind == sdk::Kind::Field, "Field wraps a map entry of kind Field");
-  static_assert(!(D.flags & sdk::kStatic), "static fields are not part of the game API yet");
+  static_assert(!(D.flags & sdk::kStatic), "a static field is StaticField<D, T>");
   static_assert(std::is_trivially_copyable_v<T>, "a field is read and written as plain bytes");
   static_assert(!std::is_pointer_v<T> || std::is_same_v<T, void*>, "a managed reference field is Field<D, void*>");
   static constexpr const sdk::EntryDesc& desc = D;
@@ -189,6 +198,107 @@ struct Field {
     }
   }
 };
+
+/// A static field of type T, one value for the whole class. T is a plain value or void* for a managed
+/// reference. Reading or writing it first runs the class's static constructor when that has not run
+/// yet, as the game's own first use would, so use it only from code that runs while the game plays
+/// (pgmod_tick, a hook's detour), never from a DLL's initialisation; the host never reads a static
+/// field while it resolves the map at startup. Main thread.
+template <const sdk::EntryDesc& D, class T>
+struct StaticField {
+  static_assert(D.kind == sdk::Kind::Field && (D.flags & sdk::kStatic),
+                "StaticField wraps a map entry of kind Field flagged kStatic");
+  static_assert(std::is_trivially_copyable_v<T>, "a field is read and written as plain bytes");
+  static_assert(!std::is_pointer_v<T> || std::is_same_v<T, void*>,
+                "a managed reference field is StaticField<D, void*>");
+  static constexpr const sdk::EntryDesc& desc = D;
+  using use = Use<D>;
+
+  /// The field's value. Unresolved: logs once and returns T{}. When the host cannot read it (T's size
+  /// is not the field's, or the class's static constructor threw): logs once per bind and returns T{}.
+  template <int = 0>
+  T get() const {
+    if (!use::entry()) return T{};
+    T value{};
+    if (detail::static_get(D.key, &value, sizeof value)) return value;
+    detail::report_refused_static(use::slot);
+    return T{};
+  }
+
+  /// Stores `value` in the field; a managed reference goes through the GC write barrier. Unresolved:
+  /// logs once and writes nothing. When the host cannot write it: logs once per bind and writes
+  /// nothing.
+  template <int = 0>
+  void set(T value) const {
+    if (!use::entry()) return;
+    if (!detail::static_set(D.key, &value, sizeof value)) detail::report_refused_static(use::slot);
+  }
+
+  /// Whether the field resolved in this game build. Never logs.
+  template <int = 0>
+  bool available() const {
+    return use::resolved();
+  }
+};
+
+template <const sdk::EntryDesc& D, class Sig>
+struct Icall;
+
+/// A Unity engine function the runtime registered by its icall name (the map entry's name, such as
+/// "UnityEngine.Animator::SetBoolID"), called as R(A...). It is native code, so unlike a game method
+/// it takes no MethodInfo; an instance function's first parameter is the managed object. Main thread.
+template <const sdk::EntryDesc& D, class R, class... A>
+struct Icall<D, R(A...)> {
+  static_assert(D.kind == sdk::Kind::Icall, "Icall wraps a map entry of kind Icall");
+  static constexpr const sdk::EntryDesc& desc = D;
+  using use = Use<D>;
+
+  /// Calls the engine function with the arguments. Unresolved: logs once and returns R{} without
+  /// calling anything.
+  template <int = 0>
+  R operator()(A... a) const {
+    const PgGameEntry* e = use::entry();
+    if (!e || !e->code) {
+      if constexpr (std::is_void_v<R>) return;
+      else return R{};
+    }
+    return reinterpret_cast<R (*)(A...)>(e->code)(a...);
+  }
+
+  /// Whether the icall resolved in this game build. Never logs.
+  template <int = 0>
+  bool available() const {
+    return use::resolved();
+  }
+};
+
+#ifdef PG_HOST
+namespace host_only {
+/// The host's own resolved entry for `key` (host/game_map.cpp), or null when it is unknown or
+/// unresolved. Main thread, after the map resolved at startup.
+const PgGameEntry* game_entry(const char* key);
+}  // namespace host_only
+
+/// A function GameAssembly.dll exports, such as il2cpp_shutdown. Host code only: it exists where
+/// PG_HOST is defined (ModHost), a mod never sees it, and the host contract's hook_entry refuses an
+/// export. The host hooks one through its own MinHook instance. Main thread, after the map resolved
+/// at startup.
+template <const sdk::EntryDesc& D>
+struct Export {
+  static_assert(D.kind == sdk::Kind::Export, "Export wraps a map entry of kind Export");
+  static constexpr const sdk::EntryDesc& desc = D;
+
+  /// The export's code in the loaded GameAssembly.dll, or null when it did not resolve (the host
+  /// logged that at startup).
+  void* address() const {
+    const PgGameEntry* e = host_only::game_entry(D.key);
+    return e ? e->code : nullptr;
+  }
+
+  /// Whether the export resolved in this game build. Never logs.
+  bool available() const { return address() != nullptr; }
+};
+#endif
 
 /// One value of a game enum, by its readable name. Main thread.
 template <const sdk::EntryDesc& D>

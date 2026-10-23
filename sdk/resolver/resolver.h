@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -22,13 +23,14 @@ struct Result {
   std::vector<std::string> candidates;  // the candidates of an Ambiguous entry, readable
   int type = -1;    // the type, or a member's owner type, as an index into GameModel::types
   int member = -1;  // index into the owner's fields (Field, EnumValue) or methods (Method)
-  uint64_t rva = 0;  // a method's canonical body, or a code entry's address
+  uint64_t rva = 0;  // a method's canonical body, a code entry's address, or an export's function
   // A method's same behaviour at other addresses: bodies that read the same once placed (twins), and
   // the names of other methods folded onto its own body (aliases).
   std::vector<uint64_t> twins;
   std::vector<std::string> aliases;
   int32_t offset = 0;  // a field's offset
   int64_t value = 0;   // an enum value's number
+  uint64_t address = 0;  // an icall's code in the running game (outside GameAssembly, so not an rva)
   std::string currentName;  // the name in this build
 };
 
@@ -48,8 +50,17 @@ std::vector<std::string> assemblies_of(std::span<const EntryDesc* const> entries
 
 class CodeImage;
 
+// The running runtime's il2cpp_resolve_icall: the code registered under an icall name, or null.
+using IcallLookup = std::function<const void*(const char* name)>;
+
+// The detail of a well-formed icall entry resolved without an IcallLookup, as offline.
+inline constexpr std::string_view kCheckedAtStartup = "checked at startup only";
+
 // Resolves every entry against the model, each after the entries it refers to. Without an image,
-// entries that need machine code are Missing with the detail "no code image".
-Resolution resolve(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image);
+// entries that need machine code or the export table are Missing with the detail "no code image".
+// Icall entries resolve only through `icalls`, which only the running game has: without it they are
+// Missing with the detail "checked at startup only".
+Resolution resolve(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image,
+                   const IcallLookup& icalls = {});
 
 }  // namespace pg::sdk

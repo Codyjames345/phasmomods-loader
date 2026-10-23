@@ -1,5 +1,6 @@
 // The host's game map resolution against a fake runtime: it stays inside its share of the startup
-// deadline and stops when startup is cancelled.
+// deadline and stops when startup is cancelled, resolves icalls through the runtime, and publishes
+// each kind of entry as mods (and, for exports, the host) receive it.
 #include <windows.h>
 
 #include <cstdarg>
@@ -8,6 +9,7 @@
 #include <vector>
 
 #include "check.h"
+#include "game_api.h"
 
 namespace {
 unsigned long long clockMs = 0;
@@ -16,6 +18,8 @@ int stopAfter = -1;                   // the class read after which a stop is re
 bool stopRequested = false;
 int classesRead = 0;
 int apiRequests = 0;
+void* icallAnswer = nullptr;          // what the runtime's il2cpp_resolve_icall answers
+std::vector<std::string> icallsAsked;
 std::vector<std::string> messages;
 
 ULONGLONG WINAPI tick_count() { return clockMs; }
@@ -63,6 +67,8 @@ void reset() {
   stopAfter = -1;
   stopRequested = false;
   classesRead = apiRequests = 0;
+  icallAnswer = nullptr;
+  icallsAsked.clear();
   messages.clear();
 }
 
@@ -97,7 +103,7 @@ void builds_and_resolves_within_budget() {
   CHECK(all_unresolved(nullptr) && pg::gamemap::result("GhostAI")->status == Status::Missing);
   CHECK(pg::gamemap::entry("GhostAI") == nullptr);  // unresolved: mods receive nothing
   CHECK(!logged("abandoned"));
-  CHECK(logged("game map: 0/23 resolved in 0 ms"));
+  CHECK(logged("game map: 0/27 resolved in 0 ms"));
 }
 
 void stop_during_build_abandons_promptly() {
@@ -107,7 +113,7 @@ void stop_during_build_abandons_promptly() {
   CHECK(classesRead == 10);
   CHECK(all_unresolved("startup was cancelled"));
   CHECK(count_logged("abandoned") == 1);
-  CHECK(logged("game map: 0/23 resolved"));
+  CHECK(logged("game map: 0/27 resolved"));
 }
 
 void spent_budget_reads_nothing() {
@@ -179,6 +185,46 @@ void entry_without_code_has_no_address() {
   CHECK(m && m->kind == PG_ENTRY_METHOD && m->code == nullptr);
 }
 
+// An icall resolves at startup through the runtime's il2cpp_resolve_icall, by its name.
+void icall_resolves_through_the_runtime() {
+  reset();
+  int setBoolID = 0;
+  icallAnswer = &setBoolID;
+  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK((icallsAsked == std::vector<std::string>{"UnityEngine.Animator::SetBoolID"}));
+  const PgGameEntry* e = pg::gamemap::entry("Animator.SetBoolID");
+  CHECK(e && e->kind == PG_ENTRY_ICALL && e->code == &setBoolID && !e->method);
+  CHECK(logged("game map: 1/27 resolved"));
+}
+
+// An export's address is in the loaded module; a static field carries its FieldInfo like any field.
+// The host reaches an export through pg::api::Export, which exists only in host code.
+void exports_and_statics_are_published() {
+  int klass = 0, fieldInfo = 0;
+  ModelType type;
+  type.runtime = &klass;
+  type.fields.push_back({});
+  type.fields[0].runtime = &fieldInfo;
+  type.fields[0].isStatic = true;
+  pg::gamemap::g_model = {};
+  pg::gamemap::g_model.types.push_back(type);
+  Result shutdown{.desc = &pg::map::GameAssembly_il2cpp_shutdown, .status = Status::Resolved, .rva = 0x3844C0};
+  Result instance{.desc = &pg::map::LevelController_instance, .status = Status::Resolved, .type = 0, .member = 0};
+  pg::gamemap::g_resolution.results = {shutdown, instance};
+  pg::gamemap::publish(0x10000000);
+
+  const PgGameEntry* x = pg::gamemap::entry("GameAssembly.il2cpp_shutdown");
+  CHECK(x && x->kind == PG_ENTRY_EXPORT && x->code == reinterpret_cast<void*>(0x103844C0));
+  constexpr pg::api::Export<pg::map::GameAssembly_il2cpp_shutdown> shutdownExport{};
+  CHECK(shutdownExport.available() && shutdownExport.address() == x->code);
+  const PgGameEntry* s = pg::gamemap::entry("LevelController.instance");
+  CHECK(s && s->kind == PG_ENTRY_FIELD && s->field == &fieldInfo && s->klass == &klass && !s->code);
+
+  pg::gamemap::g_resolution.results = {};
+  pg::gamemap::publish(0x10000000);
+  CHECK(!shutdownExport.available() && shutdownExport.address() == nullptr);
+}
+
 }  // namespace
 
 namespace il2cpp {
@@ -220,6 +266,10 @@ bool runtime_api(void*, pg::sdk::RuntimeApi& api) {
   api.type_get_type = [](const void*) { return 0; };
   api.type_get_name = [](const void*) { return static_cast<char*>(nullptr); };
   api.free_memory = [](void*) {};
+  api.resolve_icall = [](const char* name) {
+    icallsAsked.emplace_back(name);
+    return icallAnswer;
+  };
   return true;
 }
 void log_exception(const char* where, const void*) { messages.emplace_back(where); }
@@ -243,5 +293,7 @@ int main() {
   slow_build_leaves_the_hooks_budget();
   entry_carries_the_resolved_result();
   entry_without_code_has_no_address();
+  icall_resolves_through_the_runtime();
+  exports_and_statics_are_published();
   return g_failures ? 1 : 0;
 }

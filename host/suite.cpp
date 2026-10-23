@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <map>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "consent.h"
@@ -259,6 +261,60 @@ void api_gc_release(uint32_t handle) {
     PG_LOG("suite: exception while releasing an object");
   }
 }
+
+// The static field entry `key`: its class and FieldInfo, or null when it is unknown, unresolved, not
+// a field or not static.
+const PgGameEntry* static_field(const char* key) {
+  const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
+  const sdk::Result* r = e ? gamemap::result(key) : nullptr;
+  if (!e || !r || e->kind != PG_ENTRY_FIELD || !(r->desc->flags & sdk::kStatic) || !e->klass || !e->field)
+    return nullptr;
+  return e;
+}
+
+// A static field access that failed: logged once per key, with `why`. Called from catch handlers too,
+// so it throws nothing.
+void static_refused(const char* key, const char* why) {
+  try {
+    static std::set<std::string> logged;
+    if (logged.insert(key).second) PG_LOG("suite: static field %s: %s; it answers false", key, why);
+  } catch (...) {
+    // Logging is best effort; the caller answers false either way.
+  }
+}
+
+// Runs a static field access, `access(entry)`, for the entry `key`. False, logged once per key, when
+// the entry is not a resolved static field, the access refuses (a size other than the field's), or
+// it throws (the class's static constructor, say).
+template <class F>
+bool static_access(const char* key, const char* what, F access) {
+  if (!key) return false;
+  try {
+    const PgGameEntry* e = static_field(key);
+    if (!e) {
+      static_refused(key, "it is unknown, unresolved or not a static field");
+      return false;
+    }
+    if (access(e)) return true;
+    static_refused(key, "the size given is not the size of its value");
+  } catch (const Il2CppExceptionWrapper& ex) {
+    static bool stackLogged = false;  // the stack once; a failed static constructor throws on every access
+    if (!std::exchange(stackLogged, true)) il2cpp::log_exception((std::string("suite: ") + what).c_str(), ex.ex);
+    static_refused(key, "a managed exception was thrown");
+  } catch (...) {
+    static_refused(key, "an exception was thrown");
+  }
+  return false;
+}
+bool api_static_get(const char* key, void* out, size_t size) {
+  return out && static_access(key, "reading a static field",
+                              [&](const PgGameEntry* e) { return il2cpp::static_get(e->klass, e->field, out, size); });
+}
+bool api_static_set(const char* key, const void* in, size_t size) {
+  return in && static_access(key, "writing a static field",
+                             [&](const PgGameEntry* e) { return il2cpp::static_set(e->klass, e->field, in, size); });
+}
+
 void api_log_exception(const char* where, const void* exception) {
   try {
     il2cpp::log_exception(where ? where : "mod", exception);
@@ -346,7 +402,8 @@ bool start(void* gameAssembly, void* unityPlayer) {
            &api_game_entry, &api_hook_entry, &api_set_reference, &api_inside_entry,
            &api_string_new, &api_string_utf8, &api_array_length, &api_array_data, &api_array_new,
            &api_list_count, &api_list_items, &api_type_object, &api_object_new, &api_is_instance,
-           &api_alive, &api_virtual_method, &api_gc_hold, &api_gc_release, &api_log_exception};
+           &api_alive, &api_virtual_method, &api_gc_hold, &api_gc_release, &api_log_exception,
+           &api_static_get, &api_static_set};
   hostnet::set_receiver(hostnet::kHostChannel, &on_presence);
   mods::load(g_dataDirectory);
   if (mods::loaded().empty()) {

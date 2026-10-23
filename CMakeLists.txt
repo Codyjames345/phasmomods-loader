@@ -76,7 +76,8 @@ add_library(ModHost SHARED
 target_include_directories(ModHost PRIVATE host sdk/map sdk/runtime)
 target_link_libraries(ModHost PRIVATE pgcore pgsdk_resolver minhook bcrypt)
 pg_options(ModHost)
-target_compile_definitions(ModHost PRIVATE PG_SUITE_VERSION="${PG_SUITE_VERSION}")
+# PG_HOST: host-only parts of the game API (pg::api::Export), which mods never see.
+target_compile_definitions(ModHost PRIVATE PG_HOST PG_SUITE_VERSION="${PG_SUITE_VERSION}")
 
 # Mods. Each is one DLL with a mod.ini beside it in the release (tools/payload.psd1).
 add_library(PlayableGhost SHARED
@@ -277,6 +278,7 @@ target_compile_definitions(runtime_model_test PRIVATE PG_SOURCE_DIR="${CMAKE_SOU
 pg_test(game_map sdk/runtime/runtime_model.cpp)
 target_include_directories(game_map_test PRIVATE sdk/map sdk/runtime)
 target_link_libraries(game_map_test PRIVATE pgsdk_resolver)
+target_compile_definitions(game_map_test PRIVATE PG_HOST)
 pg_test(map)
 target_include_directories(map_test PRIVATE sdk/map)
 target_link_libraries(map_test PRIVATE pgsdk_resolver)

@@ -27,6 +27,11 @@ API(void, il2cpp_field_set_value, (void* obj, void* field, void* value))
 API(const void*, il2cpp_field_get_type, (void* field))
 API(char*, il2cpp_type_get_name, (const void* type))
 API(void, il2cpp_field_static_get_value, (void* field, void* value))
+API(void, il2cpp_field_static_set_value, (void* field, void* value))
+API(void, il2cpp_runtime_class_init, (void* klass))
+API(void*, il2cpp_class_from_type, (const void* type))
+API(bool, il2cpp_class_is_valuetype, (const void* klass))
+API(int32_t, il2cpp_class_value_size, (void* klass, uint32_t* align))
 API(void*, il2cpp_thread_attach, (void* domain))
 API(void, il2cpp_thread_detach, (void* thread))
 API(void*, il2cpp_string_new, (const char* str))
@@ -78,7 +83,8 @@ bool resolve_exports(void* gameAssembly) {
   R(il2cpp_get_corlib) R(il2cpp_gc_wbarrier_set_field) R(il2cpp_array_class_get) R(il2cpp_class_get_type) R(il2cpp_type_get_object)
   R(il2cpp_get_exception_argument_null) R(il2cpp_raise_exception) R(il2cpp_object_get_virtual_method)
   R(il2cpp_gchandle_new) R(il2cpp_gchandle_free) R(il2cpp_class_get_element_class)
-  R(il2cpp_class_get_namespace) R(il2cpp_class_get_rank)
+  R(il2cpp_class_get_namespace) R(il2cpp_class_get_rank) R(il2cpp_field_static_set_value)
+  R(il2cpp_runtime_class_init) R(il2cpp_class_from_type) R(il2cpp_class_is_valuetype) R(il2cpp_class_value_size)
 #undef R
   if (!ok) return false;
   p_il2cpp_format_stack_trace = reinterpret_cast<decltype(p_il2cpp_format_stack_trace)>(
@@ -99,6 +105,7 @@ bool runtime_api(void* gameAssembly, pg::sdk::RuntimeApi& out) {
   out.field_static_get_value = p_il2cpp_field_static_get_value;
   out.type_get_name = p_il2cpp_type_get_name;
   out.free_memory = p_il2cpp_free;
+  out.resolve_icall = p_il2cpp_resolve_icall;
   bool ok = true;
 #define R(field, name) ok &= resolve(m, out.field, #name);
   R(image_get_class_count, il2cpp_image_get_class_count) R(image_get_class, il2cpp_image_get_class)
@@ -240,6 +247,43 @@ void* static_field_by_type(Class* klass, const char* typeName) {
     return value;
   }
   return nullptr;
+}
+
+namespace {
+
+// The bytes a field's value takes: a pointer for a managed reference, the value's own size for a
+// value type. 0 when the runtime does not know the field's class.
+size_t value_size(Field* field, bool& reference) {
+  void* const klass = p_il2cpp_class_from_type(p_il2cpp_field_get_type(field));
+  if (!klass) return 0;
+  reference = !p_il2cpp_class_is_valuetype(klass);
+  if (reference) return sizeof(void*);
+  const int32_t size = p_il2cpp_class_value_size(klass, nullptr);
+  return size > 0 ? static_cast<size_t>(size) : 0;
+}
+
+}  // namespace
+
+bool static_get(Class* klass, Field* field, void* out, size_t size) {
+  if (!klass || !field || !out) return false;
+  p_il2cpp_runtime_class_init(klass);  // runs the static constructor once, as the game's first use does
+  bool reference = false;
+  if (value_size(field, reference) != size) return false;
+  p_il2cpp_field_static_get_value(field, out);
+  return true;
+}
+
+bool static_set(Class* klass, Field* field, const void* in, size_t size) {
+  if (!klass || !field || !in) return false;
+  p_il2cpp_runtime_class_init(klass);
+  bool reference = false;
+  if (value_size(field, reference) != size) return false;
+  // As il2cpp_field_set_value (set_reference_field): a reference is passed itself, and stored through
+  // the GC write barrier; a value type's bytes are passed by address. This build's static store
+  // (GameAssembly RVA 0x3A66C0) takes the same path.
+  void* const value = reference ? *static_cast<void* const*>(in) : const_cast<void*>(in);
+  p_il2cpp_field_static_set_value(field, value);
+  return true;
 }
 
 void format_stack_trace(const void* exception, char* out, size_t size) {

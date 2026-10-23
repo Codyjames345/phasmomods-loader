@@ -1,6 +1,6 @@
 // The game API (sdk/api/game_api.h) and the phasmo:: wrappers against the fake game backend
-// (sdk/fake): calls, field reads and writes, enum values, what a mod requires, what an entry that
-// did not resolve does, and the runtime services (sdk/api/runtime.h): strings, arrays, lists, type
+// (sdk/fake): calls, field and static field reads and writes, icalls, enum values, what a mod
+// requires, what an entry that did not resolve does, and the runtime services (sdk/api/runtime.h): strings, arrays, lists, type
 // objects, object creation, alive checks, virtual calls and GC holds. Run: build\game_api_test.exe
 #include <algorithm>
 #include <cstdint>
@@ -8,8 +8,10 @@
 #include <utility>
 #include <vector>
 
+#include "Animator.h"
 #include "Camera.h"
 #include "GhostAI.h"
+#include "LevelController.h"
 #include "check.h"
 #include "fake_game.h"
 #include "game_api.h"
@@ -73,6 +75,22 @@ void fake_unappear_override(void* ghost, const void* method) {
   g_overrideMethod = method;
 }
 
+// The static storage of LevelController.instance, and of an optional static int no fake gives.
+void* g_levelInstance = nullptr;
+inline constexpr pg::sdk::EntryDesc kOptionalStatic{.key = "Test.optionalStatic", .kind = pg::sdk::Kind::Field,
+                                                    .flags = pg::sdk::kStatic | pg::sdk::kOptional,
+                                                    .owner = "LevelController", .type = "int"};
+constexpr api::StaticField<kOptionalStatic, int32_t> optionalStatic{};
+
+void* g_sawAnimator = nullptr;
+int32_t g_sawId = 0;
+bool g_sawValue = false;
+void fake_set_bool_id(void* animator, int32_t id, bool value) {  // an icall takes no MethodInfo
+  g_sawAnimator = animator;
+  g_sawId = id;
+  g_sawValue = value;
+}
+
 // A managed object as far as the fields below reach: GhostAI.state at 0x40, GhostAI.agent at 0x48.
 struct FakeObject {
   alignas(8) uint8_t bytes[0x60] = {};
@@ -89,6 +107,9 @@ void fake_everything_but(const char* except) {
   fake::type(map::GhostAI, kGhostClass);
   fake::type(map::Camera, kCameraClass);
   fake::parent(kDerivedClass, kGhostClass);
+  g_levelInstance = nullptr;
+  fake::static_field(map::LevelController_instance, &g_levelInstance, sizeof g_levelInstance, true);
+  fake::icall(map::Animator_SetBoolID, reinterpret_cast<void*>(&fake_set_bool_id));
 }
 
 bool bound() {
@@ -339,6 +360,51 @@ void held_uses_contract_handles() {
   CHECK(fake::held() == 0);
 }
 
+void static_field_get_set() {
+  fake_everything_but("");
+  CHECK(bound());
+  int level = 0;
+  CHECK(phasmo::LevelController::instance.get() == nullptr);
+  phasmo::LevelController::instance.set(&level);
+  CHECK(g_levelInstance == &level);                         // in the class's static storage
+  CHECK(fake::barrier_writes() == 1);                       // a reference goes through the write barrier
+  CHECK(phasmo::LevelController::instance.get() == &level);
+}
+
+// An unresolved static field reads the default and writes nothing, logged once; one the host cannot
+// read (here its size differs, as for a class it could not initialise) does the same.
+void static_field_unresolved_returns_default() {
+  fake_everything_but("");
+  CHECK(bound());
+  g_lines.clear();
+  CHECK(!optionalStatic.available());
+  CHECK(optionalStatic.get() == 0);
+  optionalStatic.set(5);
+  CHECK(optionalStatic.get() == 0);
+  CHECK(count_logged("Test.optionalStatic is not available in this game build") == 1);
+  CHECK(g_lines.size() == 1);
+
+  int64_t wide = 9;
+  fake::static_field(kOptionalStatic, &wide, sizeof wide);  // an int64 where the API reads an int32
+  CHECK(bound());
+  g_lines.clear();
+  CHECK(optionalStatic.available());
+  CHECK(optionalStatic.get() == 0);
+  optionalStatic.set(5);
+  CHECK(wide == 9);
+  CHECK(count_logged("Test.optionalStatic: the host could not read or write the static field") == 1);
+  CHECK(g_lines.size() == 1);
+}
+
+void icall_reaches_fake() {
+  fake_everything_but("");
+  CHECK(bound());
+  int animator = 0;
+  CHECK(phasmo::Animator::SetBoolID.available());
+  phasmo::Animator::SetBoolID(&animator, 42, true);
+  CHECK(g_sawAnimator == &animator && g_sawId == 42 && g_sawValue);
+}
+
 }  // namespace
 
 int main() {
@@ -362,5 +428,8 @@ int main() {
   wrong_kind_reads_nothing();
   alive_false_for_destroyed();
   held_uses_contract_handles();
+  static_field_get_set();
+  static_field_unresolved_returns_default();
+  icall_reaches_fake();
   return g_failures ? 1 : 0;
 }

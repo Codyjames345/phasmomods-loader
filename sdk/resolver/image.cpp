@@ -28,6 +28,7 @@ std::optional<T> read(std::span<const uint8_t> b, uint64_t offset) {
 struct Headers {
   uint32_t sizeOfImage = 0, sizeOfHeaders = 0;
   uint32_t exceptionRva = 0, exceptionSize = 0;
+  uint32_t exportRva = 0, exportSize = 0;
   uint64_t sections = 0;  // offset of the section table
   uint16_t sectionCount = 0;
 };
@@ -46,6 +47,8 @@ std::optional<Headers> parse_headers(std::span<const uint8_t> b) {
   Headers h;
   h.sizeOfImage = read<uint32_t>(b, opt + 56).value_or(0);
   h.sizeOfHeaders = read<uint32_t>(b, opt + 60).value_or(0);
+  h.exportRva = read<uint32_t>(b, opt + 112).value_or(0);  // the export directory is entry 0
+  h.exportSize = read<uint32_t>(b, opt + 112 + 4).value_or(0);
   if (*dirCount > 3) {  // the exception directory is entry 3
     h.exceptionRva = read<uint32_t>(b, opt + 112 + 3 * 8).value_or(0);
     h.exceptionSize = read<uint32_t>(b, opt + 112 + 3 * 8 + 4).value_or(0);
@@ -66,8 +69,44 @@ CodeImage::CodeImage(std::span<const uint8_t> mapped) {
     if (c.begin < c.end && c.end <= mapped.size()) chunks_.push_back(c);
   }
   std::sort(chunks_.begin(), chunks_.end(), [](const Chunk& a, const Chunk& b) { return a.begin < b.begin; });
+  // IMAGE_EXPORT_DIRECTORY is 40 bytes.
+  if (h->exportSize >= 40 && in_bounds(mapped, h->exportRva, h->exportSize)) {
+    exportRva_ = h->exportRva;
+    exportSize_ = h->exportSize;
+  }
   image_ = mapped;
   valid_ = true;
+}
+
+uint64_t CodeImage::exported(std::string_view name) const {
+  if (exportSize_ == 0) return 0;
+  // IMAGE_EXPORT_DIRECTORY: NumberOfFunctions at 20, NumberOfNames at 24, then the RVAs of the
+  // function table, the name table and the name ordinals at 28, 32 and 36.
+  const auto functions = read<uint32_t>(image_, exportRva_ + 20);
+  const auto names = read<uint32_t>(image_, exportRva_ + 24);
+  const auto functionTable = read<uint32_t>(image_, exportRva_ + 28);
+  const auto nameTable = read<uint32_t>(image_, exportRva_ + 32);
+  const auto ordinalTable = read<uint32_t>(image_, exportRva_ + 36);
+  if (!functions || !names || !functionTable || !nameTable || !ordinalTable) return 0;
+  uint64_t found = 0;
+  int matches = 0;
+  for (uint32_t i = 0; i < *names; ++i) {
+    const auto text = read<uint32_t>(image_, *nameTable + uint64_t(i) * 4);
+    if (!text) return 0;  // the name table leaves the image
+    if (!in_bounds(image_, *text, name.size() + 1) || image_[*text + name.size()] != 0 ||
+        std::memcmp(image_.data() + *text, name.data(), name.size()) != 0)
+      continue;
+    const auto ordinal = read<uint16_t>(image_, *ordinalTable + uint64_t(i) * 2);
+    if (!ordinal || *ordinal >= *functions) return 0;
+    const auto rva = read<uint32_t>(image_, *functionTable + uint64_t(*ordinal) * 4);
+    if (!rva) return 0;
+    found = *rva;
+    ++matches;
+  }
+  // A forwarder's RVA names its text inside the export directory, not code.
+  const bool forwarded = found >= exportRva_ && found < uint64_t(exportRva_) + exportSize_;
+  if (matches != 1 || found == 0 || found >= image_.size() || forwarded) return 0;
+  return found;
 }
 
 const CodeImage::Chunk* CodeImage::chunk_at(uint64_t rva) const {

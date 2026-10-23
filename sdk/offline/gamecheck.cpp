@@ -2,11 +2,13 @@
 // without running the game. tools/gamecheck.ps1 prepares both and runs it.
 //
 // usage: gamecheck --dump <DiffableCs root> --image <GameAssembly.dll> [--addresses <tsv>] [--mods <dir>]
-// It prints one line per entry and a summary. With --addresses it writes key, kind, value and length
-// for each resolved entry. With --mods it loads every mod DLL in <dir> and its subfolders (a DLL
-// that exports pgmod_info), asks each for the game entries it requires (pgmod_requires), and after
-// the summary prints "would switch off <mod id>: <keys>" for each mod the host would not start on
-// this build. Exit 0 when every required entry resolved and no mod would be switched off, 1 when
+// It prints one line per entry and a summary. Exports resolve from the image's export table. An icall
+// cannot be checked without the running game: it is listed as checked at startup only, and never
+// counts as a failure. With --addresses it writes key, kind, value and length for each resolved
+// entry. With --mods it loads every mod DLL in <dir> and its subfolders (a DLL that exports
+// pgmod_info), asks each for the game entries it requires (pgmod_requires), and after the summary
+// prints "would switch off <mod id>: <keys>" for each mod the host would not start on this build.
+// Exit 0 when every required entry it can check resolved and no mod would be switched off, 1 when
 // one did not or one would, 2 on bad arguments or unreadable input.
 #include <windows.h>
 
@@ -58,17 +60,21 @@ const char* kind_word(Kind k) {
     case Kind::Field: return "field";
     case Kind::EnumValue: return "enum";
     case Kind::Code: return "code";
+    case Kind::Icall: return "icall";
+    case Kind::Export: return "export";
   }
   return "?";
 }
 
-// A resolved entry's value: a type's name in this build, a method's or code entry's RVA, a field's
-// offset, an enum value's number.
+// A resolved entry's value: a type's name in this build, a method's, code entry's or export's RVA, a
+// field's offset, an enum value's number, an icall's name.
 std::string value_of(const Result& r) {
   switch (r.desc->kind) {
-    case Kind::Type: return r.currentName;
+    case Kind::Type:
+    case Kind::Icall: return r.currentName;
     case Kind::Method:
-    case Kind::Code: return std::format("0x{:X}", r.rva);
+    case Kind::Code:
+    case Kind::Export: return std::format("0x{:X}", r.rva);
     case Kind::Field: return std::format("+0x{:X}", r.offset);
     case Kind::EnumValue: return std::to_string(r.value);
   }
@@ -81,7 +87,14 @@ std::string utf8(const std::filesystem::path& p) {
   return std::string(text.begin(), text.end());
 }
 
+// A well-formed icall entry, which only the running game can resolve. A malformed one is reported as
+// any other entry that did not resolve.
+bool startup_only(const Result& r) {
+  return r.desc->kind == Kind::Icall && r.status == Status::Missing && r.detail == kCheckedAtStartup;
+}
+
 std::string line_for(const Result& r) {
+  if (startup_only(r)) return std::format("STARTUP {} {} ({})", r.desc->key, r.desc->name, kCheckedAtStartup);
   std::string line = std::format("{} {}", status_word(r.status), r.desc->key);
   if (r.status != Status::Resolved) {
     line += " (" + r.detail + ")";
@@ -102,24 +115,11 @@ std::string line_for(const Result& r) {
   return line;
 }
 
-// Whether the image, laid out by RVA (map_pe_file), exports a function named `name`. Read from the
-// file, so a DLL that is not a mod (the host itself, whose loading starts a thread) is never loaded.
-bool exports(const std::vector<uint8_t>& image, std::string_view name) {
-  const auto at = [&](uint64_t rva, uint64_t size) { return rva + size <= image.size() ? image.data() + rva : nullptr; };
-  const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(at(0, sizeof(IMAGE_DOS_HEADER)));
-  if (!dos) return false;
-  const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(at(uint32_t(dos->e_lfanew), sizeof(IMAGE_NT_HEADERS64)));
-  if (!nt || nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT) return false;
-  const IMAGE_DATA_DIRECTORY dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
-  const auto* table = reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(at(dir.VirtualAddress, sizeof(IMAGE_EXPORT_DIRECTORY)));
-  if (!dir.VirtualAddress || !table) return false;
-  const auto* names = reinterpret_cast<const uint32_t*>(at(table->AddressOfNames, uint64_t{4} * table->NumberOfNames));
-  for (uint32_t i = 0; names && i < table->NumberOfNames; ++i) {
-    const uint8_t* text = at(names[i], name.size() + 1);
-    if (text && std::string_view(reinterpret_cast<const char*>(text), name.size()) == name && text[name.size()] == 0)
-      return true;
-  }
-  return false;
+// Whether the DLL exports a function named `name`. Read from the file, so a DLL that is not a mod
+// (the host itself, whose loading starts a thread) is never loaded.
+bool exports(const std::filesystem::path& dll, std::string_view name) {
+  const std::vector<uint8_t> image = map_pe_file(dll);
+  return CodeImage(image).exported(name) != 0;
 }
 
 // The DLLs in `dir` and in its subfolders (a release keeps each mod in its own), sorted. False when
@@ -151,7 +151,7 @@ int check_mods(const std::filesystem::path& dir, const Resolution& resolution) {
   int off = 0;
   bool unreadable = false;
   for (const std::filesystem::path& dll : dlls) {
-    if (!exports(map_pe_file(dll), "pgmod_info")) continue;  // not a mod
+    if (!exports(dll, "pgmod_info")) continue;  // not a mod
     HMODULE module = LoadLibraryExW(dll.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     const auto info = module ? reinterpret_cast<PgModInfoFn>(GetProcAddress(module, "pgmod_info")) : nullptr;
     const PgModInfo* mod = info ? info() : nullptr;
@@ -167,7 +167,8 @@ int check_mods(const std::filesystem::path& dir, const Resolution& resolution) {
       const size_t n = listRequired(&keys);
       for (size_t i = 0; keys && i < n; ++i) {
         const Result* r = keys[i] ? resolution.find(keys[i]) : nullptr;
-        if (keys[i] && (!r || r->status != Status::Resolved)) lacking += (lacking.empty() ? "" : ", ") + std::string(keys[i]);
+        if (keys[i] && (!r || (r->status != Status::Resolved && !startup_only(*r))))
+          lacking += (lacking.empty() ? "" : ", ") + std::string(keys[i]);
       }
     }
     if (!lacking.empty()) {
@@ -214,14 +215,18 @@ int wmain(int argc, wchar_t** argv) {
   }
 
   const Resolution resolution = resolve(pg::map::kAllEntries, model, &image);
-  size_t counts[4] = {};
+  size_t counts[4] = {}, startupOnly = 0;
+  bool failed = false;  // a required entry that could be checked here did not resolve
   for (const Result& r : resolution.results) {
-    ++counts[static_cast<int>(r.status)];
+    if (startup_only(r)) ++startupOnly;
+    else ++counts[static_cast<int>(r.status)];
+    failed = failed || (!startup_only(r) && r.status != Status::Resolved && !(r.desc->flags & kOptional));
     std::printf("%s\n", line_for(r).c_str());
   }
-  std::printf("%zu entries: %zu resolved, %zu missing, %zu ambiguous, %zu blocked\n", resolution.results.size(),
-              counts[static_cast<int>(Status::Resolved)], counts[static_cast<int>(Status::Missing)],
-              counts[static_cast<int>(Status::Ambiguous)], counts[static_cast<int>(Status::Blocked)]);
+  std::printf("%zu entries: %zu resolved, %zu missing, %zu ambiguous, %zu blocked, %zu checked at startup only\n",
+              resolution.results.size(), counts[static_cast<int>(Status::Resolved)],
+              counts[static_cast<int>(Status::Missing)], counts[static_cast<int>(Status::Ambiguous)],
+              counts[static_cast<int>(Status::Blocked)], startupOnly);
   const int switchedOff = args.mods.empty() ? 0 : check_mods(args.mods, resolution);
   if (switchedOff < 0) return 2;
 
@@ -234,7 +239,7 @@ int wmain(int argc, wchar_t** argv) {
     for (const Result& r : resolution.results) {
       if (r.status != Status::Resolved) continue;
       // A code entry's length is that of the function it lies in.
-      const bool code = r.desc->kind == Kind::Method || r.desc->kind == Kind::Code;
+      const bool code = r.desc->kind == Kind::Method || r.desc->kind == Kind::Code || r.desc->kind == Kind::Export;
       const std::string length = code ? std::format("0x{:X}", image.function(r.rva).size()) : "";
       std::fprintf(out, "%s\t%s\t%s\t%s\n", r.desc->key, kind_word(r.desc->kind), value_of(r).c_str(), length.c_str());
     }
@@ -244,5 +249,5 @@ int wmain(int argc, wchar_t** argv) {
       return 2;
     }
   }
-  return resolution.required_resolved() && switchedOff == 0 ? 0 : 1;
+  return !failed && switchedOff == 0 ? 0 : 1;
 }

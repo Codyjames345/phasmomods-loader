@@ -45,6 +45,16 @@ void report_refused_call(Slot& slot) {
   PG_LOG("%s: virtual_call on a null object or one not of its declaring type; nothing was called", slot.desc->key);
 }
 
+void report_refused_static(Slot& slot) {
+  if (slot.refused) return;
+  slot.refused = true;
+  PG_LOG("%s: the host could not read or write the static field; the default was used", slot.desc->key);
+}
+
+bool static_get(const char* key, void* out, size_t size) { return g_host && g_host->static_get(key, out, size); }
+
+bool static_set(const char* key, const void* in, size_t size) { return g_host && g_host->static_set(key, in, size); }
+
 bool is_instance(const void* obj, const char* typeKey) { return g_host && g_host->is_instance(obj, typeKey); }
 
 void* type_object(const char* typeKey) { return g_host ? g_host->type_object(typeKey) : nullptr; }

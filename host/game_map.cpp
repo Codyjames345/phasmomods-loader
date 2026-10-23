@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "all.h"
+#include "game_api.h"
 #include "il2cpp.h"
 #include "image.h"
 #include "log.h"
@@ -34,12 +35,15 @@ uint32_t kind_of(sdk::Kind kind) {
     case sdk::Kind::Field: return PG_ENTRY_FIELD;
     case sdk::Kind::EnumValue: return PG_ENTRY_ENUM_VALUE;
     case sdk::Kind::Code: return PG_ENTRY_CODE;
+    case sdk::Kind::Icall: return PG_ENTRY_ICALL;
+    case sdk::Kind::Export: return PG_ENTRY_EXPORT;
   }
   return 0;
 }
 
 // Builds what mods receive for every resolved entry: the runtime's class, method and field from the
-// kept model, code as addresses in the loaded module at `base`.
+// kept model, code and exports as addresses in the loaded module at `base`, an icall's code as the
+// runtime gave it.
 void publish(uintptr_t base) {
   g_published.assign(g_resolution.results.size(), {});
   for (size_t i = 0; i < g_resolution.results.size(); ++i) {
@@ -59,7 +63,9 @@ void publish(uintptr_t base) {
         [[fallthrough]];
       // rva 0 is no code: base + 0 would be the PE header. The resolver never resolves one; this
       // keeps a call through the entry from ever reaching it.
-      case sdk::Kind::Code: e.code = r.rva ? reinterpret_cast<void*>(base + r.rva) : nullptr; break;
+      case sdk::Kind::Code:
+      case sdk::Kind::Export: e.code = r.rva ? reinterpret_cast<void*>(base + r.rva) : nullptr; break;
+      case sdk::Kind::Icall: e.code = reinterpret_cast<void*>(r.address); break;
       case sdk::Kind::Field:
         if (type && r.member >= 0 && size_t(r.member) < type->fields.size()) e.field = type->fields[r.member].runtime;
         e.offset = r.offset;
@@ -113,7 +119,12 @@ std::string build_and_resolve(void* gameAssembly, void* stopEvent, unsigned long
   // The loaded module's own memory, only read.
   const sdk::CodeImage image(sdk::loaded_module(base));
   if (!image.valid()) PG_LOG("game map: the loaded GameAssembly has no readable function table");
-  g_resolution = sdk::resolve(map::kAllEntries, g_model, image.valid() ? &image : nullptr);
+  // The icalls the engine registered, by name. A lookup reads the runtime's table and runs no game
+  // code. Static fields are never read here: that can run a class's static constructor.
+  const sdk::IcallLookup icalls = [&](const char* name) -> const void* {
+    return api.resolve_icall ? api.resolve_icall(name) : nullptr;
+  };
+  g_resolution = sdk::resolve(map::kAllEntries, g_model, image.valid() ? &image : nullptr, icalls);
   return {};
 }
 
@@ -151,3 +162,6 @@ const PgGameEntry* entry(const char* key) {
 }
 
 }  // namespace pg::gamemap
+
+// pg::api::Export's lookup (sdk/api/game_api.h), for the host's own code.
+const PgGameEntry* pg::api::host_only::game_entry(const char* key) { return gamemap::entry(key); }
