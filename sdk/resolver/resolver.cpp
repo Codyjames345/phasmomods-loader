@@ -131,6 +131,8 @@ class Resolver {
       return missing(r, std::format("owner {} is not an enum", d.owner ? d.owner : "(none)"));
     if (!d.name) {
       if (d.kind == Kind::EnumValue) return missing(r, "an enum value is found by name only");
+      if (d.kind == Kind::Type && d.values.empty() && d.fieldTypes.empty())
+        return missing(r, "a type found by shape needs values or field types");
       if (d.kind != Kind::Type && !d.type)
         return missing(r, std::format("a {} found by shape needs its type", kind_name(d.kind)));
     }
@@ -185,18 +187,27 @@ class Resolver {
     return out;
   }
 
-  // Candidates by shape: every type, or every member of the owner of the entry's kind. The checks
-  // in fits then keep those of the declared shape.
+  // Candidates by shape: every type the compiler did not generate, or every member of the owner of
+  // the entry's kind. The checks in fits then keep those of the declared shape.
   std::vector<Candidate> by_shape(const EntryDesc& d, int owner) const {
     std::vector<Candidate> out;
     if (d.kind == Kind::Type) {
-      for (size_t t = 0; t < model_.types.size(); ++t) out.push_back({static_cast<int>(t), -1});
+      for (size_t t = 0; t < model_.types.size(); ++t)
+        if (!compiler_generated(model_.types[t])) out.push_back({static_cast<int>(t), -1});
       return out;
     }
     const ModelType& type = model_.types[owner];
     const size_t count = d.kind == Kind::Method ? type.methods.size() : type.fields.size();
     for (size_t m = 0; m < count; ++m) out.push_back({owner, static_cast<int>(m)});
     return out;
+  }
+
+  // A coroutine or closure class. The obfuscator renames these but keeps their fields' names, such as
+  // "<>1__state" and "<>4__this", so either one marks them.
+  static bool compiler_generated(const ModelType& type) {
+    return type.name.starts_with('<') || std::any_of(type.fields.begin(), type.fields.end(), [](const ModelField& f) {
+             return f.name.starts_with("<>");
+           });
   }
 
   // Whether a candidate passes the checks the entry declares.

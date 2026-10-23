@@ -353,6 +353,52 @@ void type_by_field_types() {
   CHECK(any && any->status == Status::Ambiguous && any->candidates.size() == 2);
 }
 
+// A type shape that declares nothing to look for does not take the lone type in scope.
+void type_shape_needs_values_or_field_types() {
+  ModelBuilder b;
+  const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+  b.type("Assembly-CSharp", "", "ദശസറ", ai);
+  const GameModel model = b.build();
+  constexpr EntryDesc nested{.key = "Nested", .owner = "GhostAI"};
+  const Resolution r = run({&kGhostAI, &nested}, model);
+  const Result* n = r.find("Nested");
+  CHECK(n && n->status == Status::Missing);
+  CHECK(n && n->detail == "a type found by shape needs values or field types");
+}
+
+// Coroutine and closure classes are never shape candidates, whether the compiler's name survives or
+// only their fields' names do.
+void compiler_generated_types_are_not_shape_candidates() {
+  static constexpr const char* kOwnerField[] = {"@GhostAI"};
+  constexpr EntryDesc helper{.key = "Helper", .owner = "GhostAI", .fieldTypes = kOwnerField};
+  const auto model_with = [](bool renamed, bool named, bool target) {
+    ModelBuilder b;
+    const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+    if (renamed) {
+      const int co = b.type("Assembly-CSharp", "", "ജഷധഷഡബടഷഺ", ai);
+      b.field(co, "<>1__state", "int", 0x10);
+      b.field(co, "<>4__this", "GhostAI", 0x18, false, ai);
+    }
+    if (named) {
+      const int co = b.type("Assembly-CSharp", "", "<Hunt>d__1", ai);
+      b.field(co, "state", "int", 0x10);
+      b.field(co, "owner", "GhostAI", 0x18, false, ai);
+    }
+    if (target) {
+      const int t = b.type("Assembly-CSharp", "", "ദശസറ", ai);
+      b.field(t, "ghost", "GhostAI", 0x10, false, ai);
+    }
+    return b.build();
+  };
+  CHECK(run({&kGhostAI, &helper}, model_with(true, false, false)).find("Helper")->status == Status::Missing);
+  CHECK(run({&kGhostAI, &helper}, model_with(false, true, false)).find("Helper")->status == Status::Missing);
+  const GameModel all = model_with(true, true, true);
+  const Resolution r = run({&kGhostAI, &helper}, all);
+  const Result* h = r.find("Helper");
+  CHECK(h && h->status == Status::Resolved && h->type == 3);
+  CHECK(h && h->currentName == "ദശസറ");
+}
+
 void field_by_unique_type() {
   Game g;
   g.b.field(g.ghostAI, "ദശ", "float", 0x48);
@@ -487,6 +533,8 @@ int main() {
   required_resolved_ignores_optional();
   enum_type_by_values();
   type_by_field_types();
+  type_shape_needs_values_or_field_types();
+  compiler_generated_types_are_not_shape_candidates();
   field_by_unique_type();
   field_shape_with_many_candidates_is_ambiguous();
   stale_hint_never_decides();
