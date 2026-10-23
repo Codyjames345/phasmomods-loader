@@ -186,11 +186,11 @@ String* string_new(const char* utf8) { return text(utf8); }
 Object* object_new(Class*) { return static_cast<Object*>(ghost_data(0)); }
 Class* class_of(const void*) { return nullptr; }
 void set_ref_field(void* obj, size_t offset, void* value) { set_field<void*>(obj, offset, value); }
-void to_utf8(const String* s, char* out, size_t size) {
-  if (!size) return;
+size_t to_utf8(const String* s, char* out, size_t size) {
   auto it = strings.find(s);
   const std::string value = it == strings.end() ? "" : it->second;
-  std::snprintf(out, size, "%s", value.c_str());
+  if (size) std::snprintf(out, size, "%s", value.c_str());
+  return value.size();
 }
 uint32_t gc_hold(void*) { return 0; }
 void gc_release(uint32_t) {}

@@ -53,7 +53,8 @@ namespace phasmo {
 
 /// Unity's camera component. `camera` below is the Camera object.
 struct Camera {
-  /// The Camera type: klass() and is(obj). Unresolved: null and false.
+  /// The Camera type: klass(), is(obj), type_object(), make() and make_array(n). Unresolved: null
+  /// and false.
   static constexpr pg::api::Type<pg::map::Camera> type{};
   /// Sets the vertical field of view in degrees: set_fieldOfView(camera, degrees). Unresolved: does
   /// nothing.

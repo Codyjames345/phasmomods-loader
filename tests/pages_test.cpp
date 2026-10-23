@@ -163,8 +163,10 @@ Array* array_new(Class*, uintptr_t length) {
 /** Keep managed strings readable for assertions on entry names. */
 String* string_new(const char* text) { return reinterpret_cast<String*>(node(text)); }
 /** Names read back as the fixture holds them. */
-void to_utf8(const String* s, char* out, size_t size) {
-  if (size) std::snprintf(out, size, "%s", reinterpret_cast<const Node*>(s)->name.c_str());
+size_t to_utf8(const String* s, char* out, size_t size) {
+  const std::string& name = reinterpret_cast<const Node*>(s)->name;
+  if (size) std::snprintf(out, size, "%s", name.c_str());
+  return name.size();
 }
 /** Preserve offset references written by production. */
 void set_ref_field(void* object, size_t offset, void* value) { set_field(object, offset, value); }

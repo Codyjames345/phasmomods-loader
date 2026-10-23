@@ -147,6 +147,87 @@ void api_set_reference(void* obj, int32_t offset, void* value) {
 }
 int32_t api_inside_entry(const char* key) { return context::depth(key); }
 
+// The runtime services (version 2.1). Each runs `body` and contains what it throws: a managed
+// exception is logged with its stack, anything else with `what`, and the caller gets `fallback`.
+template <class R, class F>
+R contained(const char* what, R fallback, F body) {
+  try {
+    return body();
+  } catch (const Il2CppExceptionWrapper& e) {
+    il2cpp::log_exception((std::string("suite: managed exception while ") + what).c_str(), e.ex);
+  } catch (...) {
+    PG_LOG("suite: exception while %s", what);
+  }
+  return fallback;
+}
+
+// The class of the Type entry `key`, or null when it is unknown, unresolved or not a type.
+il2cpp::Class* type_class(const char* key) {
+  const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
+  return e && e->kind == PG_ENTRY_TYPE ? e->klass : nullptr;
+}
+
+void* api_string_new(const char* utf8) {
+  return contained("making a string", static_cast<void*>(nullptr),
+                   [&]() -> void* { return utf8 ? il2cpp::string_new(utf8) : nullptr; });
+}
+size_t api_string_utf8(const void* str, char* out, size_t size) {
+  return contained("reading a string", size_t{0},
+                   [&] { return il2cpp::to_utf8(static_cast<const il2cpp::String*>(str), out, size); });
+}
+size_t api_array_length(const void* arr) {
+  return arr ? static_cast<size_t>(static_cast<const il2cpp::Array*>(arr)->max_length) : 0;
+}
+void* api_array_data(void* arr) { return arr ? static_cast<il2cpp::Array*>(arr)->data<char>() : nullptr; }
+void* api_array_new(const char* elementTypeKey, size_t length) {
+  return contained("making an array", static_cast<void*>(nullptr), [&]() -> void* {
+    il2cpp::Class* const klass = type_class(elementTypeKey);
+    return klass ? il2cpp::array_new(klass, length) : nullptr;
+  });
+}
+int32_t api_list_count(const void* list) { return list ? static_cast<const il2cpp::List*>(list)->size : 0; }
+void* api_list_items(const void* list) { return list ? static_cast<const il2cpp::List*>(list)->items : nullptr; }
+void* api_type_object(const char* typeKey) {
+  return contained("making a type object", static_cast<void*>(nullptr),
+                   [&]() -> void* { return il2cpp::type_object(type_class(typeKey)); });
+}
+void* api_object_new(const char* typeKey) {
+  return contained("making an object", static_cast<void*>(nullptr), [&]() -> void* {
+    il2cpp::Class* const klass = type_class(typeKey);
+    return klass ? il2cpp::object_new(klass) : nullptr;
+  });
+}
+bool api_is_instance(const void* obj, const char* typeKey) {
+  return contained("checking an object's type", false, [&] { return il2cpp::is_instance(obj, type_class(typeKey)); });
+}
+bool api_alive(const void* unityObject) {
+  return contained("checking an object is alive", false, [&] { return game::alive(const_cast<void*>(unityObject)); });
+}
+const void* api_virtual_method(const void* obj, const char* methodKey) {
+  return contained("finding a virtual method", static_cast<const void*>(nullptr), [&]() -> const void* {
+    const PgGameEntry* e = methodKey ? gamemap::entry(methodKey) : nullptr;
+    if (!obj || !e || e->kind != PG_ENTRY_METHOD || !e->method || !il2cpp::is_instance(obj, e->klass)) return nullptr;
+    return il2cpp::virtual_method(const_cast<void*>(obj), e->method);
+  });
+}
+uint32_t api_gc_hold(void* obj) {
+  return contained("holding an object", uint32_t{0}, [&] { return il2cpp::gc_hold(obj); });
+}
+void api_gc_release(uint32_t handle) {
+  try {
+    il2cpp::gc_release(handle);
+  } catch (...) {
+    PG_LOG("suite: exception while releasing an object");
+  }
+}
+void api_log_exception(const char* where, const void* exception) {
+  try {
+    il2cpp::log_exception(where ? where : "mod", exception);
+  } catch (...) {
+    PG_LOG("suite: exception while logging a managed exception");
+  }
+}
+
 void on_presence(int32_t sender, const uint8_t* data, size_t size) {
   if (game::private_room()) g_presence.receive(sender, data, size, GetTickCount64());
 }
@@ -223,7 +304,10 @@ bool start(void* gameAssembly, void* unityPlayer) {
   g_api = {PGMOD_API_VERSION, gameAssembly, unityPlayer, g_dataDirectory.c_str(),
            &api_log, &api_create_hook, &api_enable_hooks, &api_send, &api_set_receiver,
            &api_peer_has_mod, &api_register_service, &api_service,
-           &api_game_entry, &api_hook_entry, &api_set_reference, &api_inside_entry};
+           &api_game_entry, &api_hook_entry, &api_set_reference, &api_inside_entry,
+           &api_string_new, &api_string_utf8, &api_array_length, &api_array_data, &api_array_new,
+           &api_list_count, &api_list_items, &api_type_object, &api_object_new, &api_is_instance,
+           &api_alive, &api_virtual_method, &api_gc_hold, &api_gc_release, &api_log_exception};
   hostnet::set_receiver(hostnet::kHostChannel, &on_presence);
   mods::load(g_dataDirectory);
   if (mods::loaded().empty()) {

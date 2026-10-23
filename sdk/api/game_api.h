@@ -19,6 +19,8 @@
 //
 // Threading: everything here runs on Unity's main thread, where the host calls pgmod_start and
 // pgmod_tick, except the registration a wrapper makes while the mod's DLL loads.
+//
+// Managed strings, arrays, lists, alive checks and GC holds are in runtime.h and held.h.
 
 #include <cstddef>
 #include <cstdint>
@@ -46,8 +48,19 @@ bool register_use(Slot* slot);
 const PgHostApi* host();
 // Logs "<key> is not available in this game build", once per bind.
 void report_unavailable(Slot& slot);
-// Whether the managed object `obj` (non-null) is of the class `klass` or derives from it.
-bool is_instance(const void* obj, void* klass);
+// The host contract's runtime services (core/mod_api.h, version 2.1) for an entry's key, or null,
+// false or 0 before bind.
+bool is_instance(const void* obj, const char* typeKey);
+void* type_object(const char* typeKey);
+void* object_new(const char* typeKey);
+void* array_new(const char* elementTypeKey, size_t length);
+const void* virtual_method(const void* obj, const char* methodKey);
+// The object a virtual call is made on: an instance method's first argument.
+template <class Obj, class... Rest>
+const void* object_of(Obj obj, Rest...) {
+  static_assert(std::is_pointer_v<Obj>, "an instance method's first parameter is the object, a pointer");
+  return obj;
+}
 // The host contract's hook_entry, or false (logged) before bind.
 bool hook(const char* key, void* detour, void** original, const char* name, bool allTwins);
 // The host contract's inside_entry, or 0 before bind.
@@ -86,8 +99,9 @@ struct Method<D, R(A...)> {
   static constexpr const sdk::EntryDesc& desc = D;
   using use = Use<D>;
 
-  /// Calls the method's code with the arguments and its MethodInfo, as the game does. Unresolved:
-  /// logs once and returns R{} without calling anything.
+  /// Calls the method's code with the arguments and its MethodInfo, as the game does. The call is
+  /// never virtual: it runs the declared body even when the object's class overrides it (see
+  /// virtual_call). Unresolved: logs once and returns R{} without calling anything.
   template <int = 0>
   R operator()(A... a) const {
     const PgGameEntry* e = use::entry();
@@ -96,6 +110,33 @@ struct Method<D, R(A...)> {
       else return R{};
     }
     return reinterpret_cast<R (*)(A..., const void*)>(e->code)(a..., e->method);
+  }
+
+  /// Calls the method as C# calls a virtual method: the override that the class of the object (the
+  /// first argument) runs, with that override's MethodInfo. Falls back to the declared body, as
+  /// operator() calls it, when nothing overrides the method, when the object is null or not of the
+  /// method's declaring type, or before bind. Unresolved: logs once and returns R{} without calling
+  /// anything.
+  template <int = 0>
+  R virtual_call(A... a) const {
+    static_assert(!(D.flags & sdk::kStatic), "a static method has no object to dispatch on");
+    static_assert(sizeof...(A) > 0, "virtual_call needs the object as the first argument");
+    const PgGameEntry* e = use::entry();
+    if (!e || !e->code) {
+      if constexpr (std::is_void_v<R>) return;
+      else return R{};
+    }
+    void* code = e->code;
+    const void* method = e->method;
+    const void* obj = detail::object_of(a...);
+    if (const void* chosen = obj ? detail::virtual_method(obj, D.key) : nullptr) {
+      // core/mod_api.h: a MethodInfo's first member is the address of its code.
+      if (void* chosenCode = *static_cast<void* const*>(chosen)) {
+        code = chosenCode;
+        method = chosen;
+      }
+    }
+    return reinterpret_cast<R (*)(A..., const void*)>(code)(a..., method);
   }
 
   /// Whether the method resolved in this game build. Never logs.
@@ -172,12 +213,34 @@ struct Type {
     return e ? e->klass : nullptr;
   }
 
-  /// Whether the managed object `obj` is of this type or of a type derived from it. False for a
-  /// null `obj`, and when the type did not resolve (logged once).
+  /// Whether the managed object `obj` is of this type or of a class derived from it (following the
+  /// class's parents). False for a null `obj`, and when the type did not resolve (logged once).
   template <int = 0>
   bool is(const void* obj) const {
-    const PgGameEntry* e = use::entry();
-    return e && e->klass && obj && detail::is_instance(obj, e->klass);
+    return use::entry() && obj && detail::is_instance(obj, D.key);
+  }
+
+  /// The type's System.Type object, as C#'s typeof gives it (for GetComponent, AddComponent and
+  /// the like). Unresolved: logs once and returns null.
+  template <int = 0>
+  void* type_object() const {
+    return use::entry() ? detail::type_object(D.key) : nullptr;
+  }
+
+  /// A new managed object of this class with every field zeroed. No constructor runs. Nothing else
+  /// refers to it yet, so keep it in a pg::api::Held (held.h) past the current frame. Unresolved:
+  /// logs once and returns null.
+  template <int = 0>
+  void* make() const {
+    return use::entry() ? detail::object_new(D.key) : nullptr;
+  }
+
+  /// A new managed array of `length` elements of this type, zeroed (read it with pg::api::Array or
+  /// RefArray, runtime.h). Keep it in a pg::api::Held past the current frame. Unresolved: logs once
+  /// and returns null.
+  template <int = 0>
+  void* make_array(size_t length) const {
+    return use::entry() ? detail::array_new(D.key, length) : nullptr;
   }
 };
 

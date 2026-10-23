@@ -7,6 +7,7 @@
 #include "log.h"
 #include "runtime_model.h"
 #include "startup.h"
+#include "utf16.h"
 
 namespace il2cpp {
 namespace {
@@ -184,6 +185,13 @@ bool is_class(const void* obj, const char* name) {
   return actual && std::strcmp(actual, name) == 0;
 }
 
+bool is_instance(const void* obj, Class* klass) {
+  if (!obj || !klass) return false;
+  for (void* k = class_of(obj); k; k = p_il2cpp_class_get_parent(k))
+    if (k == klass) return true;
+  return false;
+}
+
 bool is_kind(const void* obj, const char* name) {
   for (void* k = obj ? class_of(obj) : nullptr; k; k = p_il2cpp_class_get_parent(k))
     if (std::strcmp(p_il2cpp_class_get_name(k), name) == 0) return true;
@@ -275,38 +283,9 @@ void raise_argument_null(const char* argument) {
   __assume(0);  // il2cpp_raise_exception throws and never returns
 }
 
-void to_utf8(const String* s, char* out, size_t outSize) {
-  if (!outSize) return;
-  size_t n = 0;
-  auto emit = [&](const char* bytes, size_t count) {
-    if (n + count + 1 > outSize) return false;  // never split a character
-    std::memcpy(out + n, bytes, count);
-    n += count;
-    return true;
-  };
-  for (int32_t i = 0; s && i < s->length; ++i) {
-    uint32_t c = s->chars[i];
-    if (c >= 0xD800 && c < 0xDC00 && i + 1 < s->length && s->chars[i + 1] >= 0xDC00 && s->chars[i + 1] < 0xE000) {
-      c = 0x10000 + ((c - 0xD800) << 10) + (s->chars[++i] - 0xDC00);
-    } else if (c >= 0xD800 && c < 0xE000) {
-      c = 0xFFFD;  // unpaired surrogate
-    }
-    char b[4];
-    size_t len;
-    if (c < 0x80) {
-      b[0] = static_cast<char>(c), len = 1;
-    } else if (c < 0x800) {
-      b[0] = static_cast<char>(0xC0 | (c >> 6)), b[1] = static_cast<char>(0x80 | (c & 0x3F)), len = 2;
-    } else if (c < 0x10000) {
-      b[0] = static_cast<char>(0xE0 | (c >> 12)), b[1] = static_cast<char>(0x80 | ((c >> 6) & 0x3F));
-      b[2] = static_cast<char>(0x80 | (c & 0x3F)), len = 3;
-    } else {
-      b[0] = static_cast<char>(0xF0 | (c >> 18)), b[1] = static_cast<char>(0x80 | ((c >> 12) & 0x3F));
-      b[2] = static_cast<char>(0x80 | ((c >> 6) & 0x3F)), b[3] = static_cast<char>(0x80 | (c & 0x3F)), len = 4;
-    }
-    if (!emit(b, len)) break;
-  }
-  out[n] = '\0';
+size_t to_utf8(const String* s, char* out, size_t outSize) {
+  const std::u16string_view text = s ? std::u16string_view(s->chars, static_cast<size_t>(s->length)) : std::u16string_view();
+  return pg::utf16_to_utf8(text, out, outSize);
 }
 
 }  // namespace il2cpp

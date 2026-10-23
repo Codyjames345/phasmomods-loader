@@ -211,7 +211,10 @@ void set_reference_field(void* object, Field* field, void* value) {
   else if (field == reinterpret_cast<Field*>(5)) item->graphic = static_cast<Node*>(value);
   else item->event = static_cast<Node*>(value);
 }
-void to_utf8(const String*, char* result, size_t length) { if (length) *result = 0; }
+size_t to_utf8(const String*, char* result, size_t length) {
+  if (length) *result = 0;
+  return 0;
+}
 }
 namespace pg::game {
 void* instantiate(void* original, void* parent, bool world) { return ::instantiate(original, parent, world, nullptr); }

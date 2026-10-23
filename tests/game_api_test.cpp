@@ -1,16 +1,22 @@
 // The game API (sdk/api/game_api.h) and the phasmo:: wrappers against the fake game backend
-// (sdk/fake): calls, field reads and writes, enum values, what a mod requires, and what an entry that
-// did not resolve does. Run: build\game_api_test.exe
+// (sdk/fake): calls, field reads and writes, enum values, what a mod requires, what an entry that
+// did not resolve does, and the runtime services (sdk/api/runtime.h): strings, arrays, lists, type
+// objects, object creation, alive checks, virtual calls and GC holds. Run: build\game_api_test.exe
 #include <algorithm>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "Camera.h"
 #include "GhostAI.h"
 #include "check.h"
 #include "fake_game.h"
 #include "game_api.h"
+#include "held.h"
 #include "log.h"
+#include "runtime.h"
+#include "utf16.h"
 
 namespace {
 
@@ -39,6 +45,24 @@ inline constexpr pg::sdk::EntryDesc kOptionalCount{.key = "Test.optionalCount", 
                                                    .name = "OptionalCount"};
 constexpr api::Method<kOptionalCount, int32_t(void*)> optionalCount{};
 
+// An optional type no fake provides, so it never resolves.
+inline constexpr pg::sdk::EntryDesc kOptionalType{.key = "Test.OptionalType", .kind = pg::sdk::Kind::Type,
+                                                  .flags = pg::sdk::kOptional, .name = "OptionalType"};
+constexpr api::Type<kOptionalType> optionalType{};
+
+// Class pointers for the fake: GhostAI, a class derived from it, and Camera.
+int g_ghostClass = 0, g_derivedClass = 0, g_cameraClass = 0;
+void* const kGhostClass = &g_ghostClass;
+void* const kDerivedClass = &g_derivedClass;
+void* const kCameraClass = &g_cameraClass;
+
+const void* g_overrideMethod = nullptr;
+void* g_overrideGhost = nullptr;
+void fake_unappear_override(void* ghost, const void* method) {
+  g_overrideGhost = ghost;
+  g_overrideMethod = method;
+}
+
 // A managed object as far as the fields below reach: GhostAI.state at 0x40, GhostAI.agent at 0x48.
 struct FakeObject {
   alignas(8) uint8_t bytes[0x60] = {};
@@ -52,6 +76,9 @@ void fake_everything_but(const char* except) {
   fake::field(map::GhostAI_state, 0x40);
   fake::field(map::GhostAI_agent, 0x48);
   fake::value(map::GhostState_hunting, 2);
+  fake::type(map::GhostAI, kGhostClass);
+  fake::type(map::Camera, kCameraClass);
+  fake::parent(kDerivedClass, kGhostClass);
 }
 
 bool bound() {
@@ -146,6 +173,123 @@ void hook_by_entry() {
   CHECK(!api::inside<phasmo::GhostAI::UnAppear>());
 }
 
+// The shared UTF-16 to UTF-8 encoder the host's string_utf8 uses: a surrogate pair becomes one
+// character, an unpaired surrogate becomes U+FFFD, and a short buffer is cut at a character boundary
+// while the full length is still returned.
+void utf16_encoder() {
+  char out[16];
+  CHECK(pg::utf16_to_utf8(u"\xD83D\xDE00", out, sizeof out) == 4 && std::string(out) == "\xF0\x9F\x98\x80");
+  CHECK(pg::utf16_to_utf8(u"a\xD800z", out, sizeof out) == 5 && std::string(out) == "a\xEF\xBF\xBDz");
+  CHECK(pg::utf16_to_utf8(u"ടഴ", out, 5) == 6 && std::string(out) == "ട");  // 3 bytes each: the second does not fit
+  CHECK(pg::utf16_to_utf8(u"ab", nullptr, 0) == 2);
+}
+
+void utf8_round_trip_with_surrogates() {
+  fake_everything_but("");
+  CHECK(bound());
+  for (const char* text : {"ടഴദബ", "😀", "a😀ടz", ""}) {
+    void* s = api::make_string(text);
+    CHECK(s != nullptr);
+    CHECK(api::to_utf8(s) == text);
+  }
+  CHECK(api::to_utf8(nullptr).empty());
+}
+
+void array_and_list_access() {
+  fake_everything_but("");
+  CHECK(bound());
+  const api::Array<int32_t> numbers{fake::array(sizeof(int32_t), 3)};
+  CHECK(numbers.size() == 3);
+  for (size_t i = 0; i < numbers.size(); ++i) numbers[i] = static_cast<int32_t>(10 * (i + 1));
+  CHECK(numbers[0] == 10 && numbers[1] == 20 && numbers[2] == 30);
+
+  int a = 0, b = 0, c = 0;
+  const api::List list{fake::list({&a, &b, &c})};
+  CHECK(list.size() == 3);
+  CHECK(list[0] == &a && list[1] == &b && list[2] == &c);
+
+  const api::RefArray refs{list.items()};
+  CHECK(refs.size() >= 3 && refs[1] == &b);
+  refs.set(1, &c);  // a reference store goes through the GC write barrier
+  CHECK(fake::barrier_writes() == 1 && list[1] == &c);
+
+  const api::Array<int32_t> none{nullptr};
+  CHECK(none.size() == 0 && api::List{nullptr}.size() == 0);
+}
+
+void type_object_and_make() {
+  fake_everything_but("");
+  CHECK(bound());
+  void* const type = phasmo::GhostAI::type.type_object();
+  CHECK(type != nullptr && type == phasmo::GhostAI::type.type_object());  // one System.Type per class
+  void* const ghost = phasmo::GhostAI::type.make();
+  CHECK(ghost != nullptr && phasmo::GhostAI::type.is(ghost) && !phasmo::Camera::type.is(ghost));
+  const api::RefArray cameras{phasmo::Camera::type.make_array(4)};
+  CHECK(cameras.size() == 4 && cameras[3] == nullptr);
+
+  g_lines.clear();
+  CHECK(optionalType.type_object() == nullptr);
+  CHECK(optionalType.make() == nullptr);
+  CHECK(optionalType.make_array(2) == nullptr);
+  CHECK(!optionalType.is(ghost));
+  CHECK(count_logged("Test.OptionalType is not available in this game build") == 1);
+}
+
+void is_follows_parents() {
+  fake_everything_but("");
+  CHECK(bound());
+  void* derived[1] = {kDerivedClass};
+  void* camera[1] = {kCameraClass};
+  CHECK(phasmo::GhostAI::type.is(derived));
+  CHECK(!phasmo::GhostAI::type.is(camera));
+  CHECK(!phasmo::GhostAI::type.is(nullptr));
+}
+
+void virtual_call_reaches_override() {
+  fake_everything_but("");
+  fake::override_method(map::GhostAI_UnAppear, kDerivedClass, reinterpret_cast<void*>(&fake_unappear_override));
+  CHECK(bound());
+  void* derived[1] = {kDerivedClass};
+  void* base[1] = {kGhostClass};
+  g_sawGhost = g_overrideGhost = nullptr;
+  phasmo::GhostAI::UnAppear.virtual_call(derived);
+  CHECK(g_overrideGhost == derived && g_sawGhost == nullptr);
+  CHECK(g_overrideMethod != nullptr);  // the override's own method info
+  g_overrideGhost = nullptr;
+  phasmo::GhostAI::UnAppear.virtual_call(base);  // no override: the declared body
+  CHECK(g_sawGhost == base && g_overrideGhost == nullptr);
+  g_sawGhost = nullptr;
+  phasmo::GhostAI::UnAppear(derived);  // a plain call is never virtual
+  CHECK(g_sawGhost == derived && g_overrideGhost == nullptr);
+}
+
+void alive_false_for_destroyed() {
+  fake_everything_but("");
+  CHECK(bound());
+  void* const ghost = phasmo::GhostAI::type.make();
+  CHECK(api::alive(ghost));
+  fake::destroy(ghost);
+  CHECK(!api::alive(ghost));
+  CHECK(!api::alive(nullptr));
+}
+
+void held_uses_contract_handles() {
+  fake_everything_but("");
+  CHECK(bound());
+  int a = 0, b = 0;
+  {
+    api::Held kept = &a;
+    CHECK(kept == &a && fake::held() == 1);
+    kept = &a;  // the object it already holds keeps its handle
+    CHECK(fake::held() == 1);
+    kept = &b;
+    CHECK(kept == &b && fake::held() == 1);
+    api::Held moved = std::move(kept);
+    CHECK(!kept && moved == &b && fake::held() == 1);
+  }
+  CHECK(fake::held() == 0);
+}
+
 }  // namespace
 
 int main() {
@@ -159,5 +303,13 @@ int main() {
   unresolved_optional_call_returns_default();
   unresolved_required_call_does_nothing();
   hook_by_entry();
+  utf16_encoder();
+  utf8_round_trip_with_surrogates();
+  array_and_list_access();
+  type_object_and_make();
+  is_follows_parents();
+  virtual_call_reaches_override();
+  alive_false_for_destroyed();
+  held_uses_contract_handles();
   return g_failures ? 1 : 0;
 }

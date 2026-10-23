@@ -1,7 +1,5 @@
 #include "game_api.h"
 
-#include <windows.h>
-
 #include <algorithm>
 #include <vector>
 
@@ -11,8 +9,6 @@ namespace pg::api {
 namespace {
 
 const PgHostApi* g_host = nullptr;
-// GameAssembly's il2cpp_class_is_subclass_of, for Type::is; null without a game module (the fake).
-bool (*g_isSubclass)(void* klass, void* parent, bool checkInterfaces) = nullptr;
 
 // Every entry the mod's code uses, filled while its DLL loads. Built on first use, so a wrapper
 // registered from any translation unit's initialisation finds it.
@@ -43,10 +39,18 @@ void report_unavailable(Slot& slot) {
   PG_LOG("%s is not available in this game build", slot.desc->key);
 }
 
-bool is_instance(const void* obj, void* klass) {
-  void* const objClass = *static_cast<void* const*>(obj);  // a managed object begins with its class
-  if (objClass == klass) return true;
-  return objClass && g_isSubclass && g_isSubclass(objClass, klass, true);
+bool is_instance(const void* obj, const char* typeKey) { return g_host && g_host->is_instance(obj, typeKey); }
+
+void* type_object(const char* typeKey) { return g_host ? g_host->type_object(typeKey) : nullptr; }
+
+void* object_new(const char* typeKey) { return g_host ? g_host->object_new(typeKey) : nullptr; }
+
+void* array_new(const char* elementTypeKey, size_t length) {
+  return g_host ? g_host->array_new(elementTypeKey, length) : nullptr;
+}
+
+const void* virtual_method(const void* obj, const char* methodKey) {
+  return g_host ? g_host->virtual_method(obj, methodKey) : nullptr;
 }
 
 bool hook(const char* key, void* detour, void** original, const char* name, bool allTwins) {
@@ -64,11 +68,7 @@ int32_t inside(const char* key) { return g_host ? g_host->inside_entry(key) : 0;
 bool bind(const PgHostApi* host, std::string& missing) {
   missing.clear();
   g_host = host;
-  g_isSubclass = nullptr;
   if (!host) return false;
-  if (host->gameAssembly)
-    g_isSubclass = reinterpret_cast<decltype(g_isSubclass)>(
-        GetProcAddress(static_cast<HMODULE>(host->gameAssembly), "il2cpp_class_is_subclass_of"));
   std::vector<const char*> lacking;
   for (detail::Slot* slot : registry()) {
     slot->entry = host->game_entry(slot->desc->key);

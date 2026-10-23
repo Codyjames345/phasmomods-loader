@@ -12,9 +12,14 @@
 //   phasmo::GhostAI::UnAppear(ghost);  // runs fake_unappear(ghost, nullptr)
 //
 // An entry the test did not give stays unresolved, as in a game build that lacks it. A fake method is
-// called with a null MethodInfo as its last argument. Type::is sees only the exact class: the fake
-// models no inheritance. Single-threaded, like the game API.
+// called with a null MethodInfo as its last argument. Every fake managed object begins with its class
+// pointer, as a real one does, so a test can stand an object in with a buffer whose first pointer is
+// the class it gave to type(). Inheritance exists only as parent() declares it. The runtime services
+// (sdk/api/runtime.h, held.h) work on the fake's own strings, arrays, lists and objects: those made by
+// the game API (make_string, Type::make, make_array) or by the givers below. Single-threaded, like the
+// game API.
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -24,15 +29,22 @@
 
 namespace pg::fake {
 
-/// Forgets every entry, hook and barrier write, so the next test starts from an empty game. Bind the
-/// game API again after it (and after giving entries): a bound wrapper keeps the entry it was given.
+/// Forgets every entry, hook, barrier write, class parent, override, destroyed object and GC hold,
+/// and frees every fake managed object, so the next test starts from an empty game. Bind the game API
+/// again after it (and after giving entries): a bound wrapper keeps the entry it was given.
 void reset();
 
 /// A complete host contract in which only the game functions are live: game_entry answers from the
 /// entries given below, hook_entry records the hook (see hooked) and hands back the fake method as
 /// `original`, set_reference stores the reference and counts the write (see barrier_writes), and
-/// inside_entry is always 0. Every other function does nothing and answers false or null. The
-/// pointer stays valid for the process lifetime.
+/// inside_entry is always 0. The runtime services of version 2.1 work on the fake's memory:
+/// string_new and string_utf8 convert between UTF-8 and UTF-16 as the host does; type_object gives
+/// one fake System.Type per class; object_new gives a zeroed object of 0x200 bytes and array_new an
+/// array of zeroed 16-byte elements, for a type given to type() (null otherwise); is_instance follows
+/// parent(); alive is false after destroy(); virtual_method answers with an override_method() of the
+/// object's class or a parent, or null (so virtual_call runs the declared fake); gc_hold and
+/// gc_release count live holds (see held); log_exception does nothing. Every other function does
+/// nothing and answers false or null. The pointer stays valid for the process lifetime.
 const PgHostApi* host();
 
 // Giving an entry again replaces it.
@@ -46,9 +58,24 @@ void value(const sdk::EntryDesc& d, int64_t v);
 /// The type entry `d` resolves to `klass`, which the fake compares with an object's first pointer.
 void type(const sdk::EntryDesc& d, void* klass);
 
+/// The class `klass` derives from `parentClass`: is_instance and virtual_method follow it.
+void parent(void* klass, void* parentClass);
+/// Objects of the class `klass`, or of a class derived from it, run `fn` for the method entry `d`
+/// when called through virtual_call, as fn(args..., info) with a non-null fake MethodInfo. Give the
+/// method entry itself with method() as well.
+void override_method(const sdk::EntryDesc& d, void* klass, void* fn);
+/// A new fake managed array of `length` zeroed elements of `elementSize` bytes, freed by reset.
+void* array(size_t elementSize, size_t length);
+/// A new fake System.Collections.Generic.List holding `items`, freed by reset.
+void* list(const std::vector<void*>& items);
+/// The engine object `unityObject` is destroyed: alive answers false for it until reset.
+void destroy(const void* unityObject);
+
 /// The keys hooked through hook_entry since reset, in order.
 std::vector<std::string> hooked();
 /// How many managed references were stored through set_reference (the GC write barrier) since reset.
 int barrier_writes();
+/// How many GC handles from gc_hold are not yet released.
+int held();
 
 }  // namespace pg::fake

@@ -19,7 +19,7 @@ build.
 ## What exists today, and what does not
 
 Exists: the map and its resolver (at startup in the game, and offline), the game API, host contract
-2.0, hooks by entry, the fake backend, `tools/gamecheck.ps1`, and two mapped types (GhostAI with 15
+2.1 with its runtime services, hooks by entry, the fake backend, `tools/gamecheck.ps1`, and two mapped types (GhostAI with 15
 entries, Unity's Camera with 8). One mod call goes through the game API: Ghost Tells' Shade calls
 `phasmo::GhostAI::UnAppear`.
 
@@ -43,8 +43,9 @@ describes what is in the code now.
   thread, and the game API runs there too. Do not call it from another thread. Only the host contract's `log` may be
   called from any thread; everything else runs on the main thread.
 - **Never keep a raw managed reference across frames.** The garbage collector moves and frees
-  managed objects. Keep one in an `il2cpp::Held` (`core/il2cpp.h`), as `mods/ghost_tells/shade.cpp`
-  does with its ghost. `tests/held_scan_test.cpp` fails the build on a raw `void*` kept at namespace
+  managed objects. Keep one in a `pg::api::Held` (`sdk/api/held.h`), which holds it through the host
+  contract's `gc_hold`. (The bundled mods still use the host's copy, `il2cpp::Held` in `core/il2cpp.h`,
+  as `mods/ghost_tells/shade.cpp` does with its ghost, until stage 2b moves them onto the game API.) `tests/held_scan_test.cpp` fails the build on a raw `void*` kept at namespace
   or struct scope. It scans `core/`, `host/` and the four bundled mod folders by name, so a new mod
   folder must be added to the list in that test.
 - **Private lobbies only.** Play with mods in private lobbies only. Playing with mods risks a ban on
@@ -146,20 +147,39 @@ Four kinds of wrapper, from `sdk/api/game_api.h`:
 
 | Wrapper | Declared as | Use |
 | --- | --- | --- |
-| `pg::api::Method<D, R(A...)>` | `static constexpr ... UnAppear{}` | `UnAppear(ghost)`; `available()` says whether it resolved. For an instance method the first parameter is the object. |
+| `pg::api::Method<D, R(A...)>` | `static constexpr ... UnAppear{}` | `UnAppear(ghost)`; `available()` says whether it resolved. For an instance method the first parameter is the object. A call runs the declared body; `virtual_call(ghost, ...)` runs the override the object's class runs, as C# calls a virtual method. |
 | `pg::api::Field<D, T>` | `Field<D, int32_t>` | `get(obj)`, `set(obj, v)`. `T` is a plain value or `void*` for a managed reference, whose `set` goes through the GC write barrier (the host's `set_reference`). |
 | `pg::api::EnumValue<D>` | `idle{}` | `idle()` gives the value's number in this build. |
-| `pg::api::Type<D>` | `type{}` | `klass()` gives the `Il2CppClass*`; `is(obj)` tells whether an object is of the type or a derived one. |
+| `pg::api::Type<D>` | `type{}` | `klass()` gives the `Il2CppClass*`; `is(obj)` tells whether an object is of the type or a derived one; `type_object()` gives its `System.Type` (C#'s `typeof`); `make()` a new object, fields zeroed and no constructor run; `make_array(n)` a new array of the type. |
 
 A call that cannot reach the game never jumps to null. An entry that did not resolve logs
 `<key> is not available in this game build` once and returns the type's default (0, false, null) or
 does nothing. A field read of a null object gives the default; a write to one does nothing.
 
+### Strings, arrays, lists and engine objects
+
+A mod never reads the runtime's object layouts; the host does, through the host contract's runtime
+services. `sdk/api/runtime.h`:
+
+```cpp
+const std::string name = pg::api::to_utf8(str);         // a System.String as UTF-8; "" for null
+void* text = pg::api::make_string("ടഴദബ");              // a new System.String
+const pg::api::Array<int32_t> numbers{arr};              // value elements: numbers.size(), numbers[i]
+const pg::api::RefArray objects{arr};                     // references: objects[i], objects.set(i, obj)
+const pg::api::List players{list};                        // a List of references: players.size(), players[i]
+if (pg::api::alive(camera)) ...                          // UnityEngine.Object's implicit bool
+```
+
+An index past the end logs once and touches nothing (a reference reads null, a value element is a
+zeroed scratch copy). `RefArray::set` stores through the GC write barrier. These views and the raw
+pointers they wrap are valid for the current frame only: keep the object itself in a `pg::api::Held`
+and make the view again. Before `bind` every service answers as for a null object.
+
 ### What a mod requires
 
 What a mod requires is what its code calls. Every wrapper member is a template, so an entry is
 registered only when code in the mod uses it (`Use<D>::registered`). A call, a field `get` or `set`,
-an enum value, `klass()`, `is()`, `available()`, `hook<M>` and `inside<M>` all use it. The mod's
+an enum value, `klass()`, `is()`, `type_object()`, `make()`, `make_array()`, `virtual_call`, `available()`, `hook<M>` and `inside<M>` all use it. The mod's
 `pgmod_requires` export lists exactly those entries' keys, less the entries whose map entry carries
 `kOptional`. That flag belongs to the entry, so it holds for every mod; a mod cannot make an entry
 optional for itself. Check an optional entry with `available()` before using it. `pg::mod::bind` (called
@@ -196,9 +216,9 @@ the host's own hook on M keeps (`inside_entry` in the host contract). It answers
 host tracks (`PG_TRACK` in `host/context.cpp`). The host tracks none yet, so today it is always false.
 It replaces return-address checks, which break when several mods chain detours on one function.
 
-### The host contract, version 2.0
+### The host contract, version 2.1
 
-`PGMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.0 today).
+`PGMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.1 today).
 `pg_api_compatible(host, mod)` accepts a mod of the same major and a minor no newer than the host's.
 Within a major, `PgHostApi` and every published struct only grow at the end; a new major refuses
 older mods. Version 2.0 added these members, after the services of version 1:
@@ -209,6 +229,22 @@ older mods. Version 2.0 added these members, after the services of version 1:
 - `set_reference(obj, offset, value)`: stores a managed reference through the GC write barrier. The
   only correct way to write a reference field; `Field<D, void*>::set` calls it.
 - `inside_entry(key)`: the thread-local depth above.
+
+Version 2.1 added the runtime services, after `inside_entry`. A mod built for 2.0 still loads. Each
+runs on the main thread, never throws, and answers null, 0 or false for a null argument and for a key
+that is unknown, unresolved or of the wrong kind:
+
+- `string_new(utf8)` and `string_utf8(str, out, size)`: a managed string from UTF-8, and its UTF-8
+  text (the whole length is returned, so a caller can size its buffer).
+- `array_length(arr)`, `array_data(arr)` and `array_new(elementTypeKey, length)`; `list_count(list)`
+  and `list_items(list)`.
+- `type_object(typeKey)`, `object_new(typeKey)` and `is_instance(obj, typeKey)` (which follows the
+  class's parents).
+- `alive(unityObject)`: UnityEngine.Object's implicit bool.
+- `virtual_method(obj, methodKey)`: the MethodInfo the object runs for the method; its first member is
+  the address of its code.
+- `gc_hold(obj)` and `gc_release(handle)`: strong GC handles, which `pg::api::Held` uses.
+- `log_exception(where, exception)`: logs a caught managed exception with its stack.
 
 A mod's exports are `pgmod_info`, `pgmod_start`, `pgmod_tick`, `pgmod_stop` and (version 2 onwards,
 exported by linking `pgmod`) `pgmod_requires`.
@@ -228,8 +264,12 @@ phasmo::GhostAI::UnAppear(ghost);  // runs fake_unappear(ghost, nullptr)
 
 The other givers are `field(d, offset)`, `value(d, n)` and `type(d, klass)`. An entry not given stays
 unresolved, as in a build that lacks it. `hooked()` lists the keys hooked through `hook_entry`, and
-`barrier_writes()` counts reference stores. `Type::is` sees only the exact class (no inheritance).
-`tests/game_api_test.cpp` shows every path.
+`barrier_writes()` counts reference stores. A fake object begins with its class pointer;
+`parent(klass, parentClass)` declares inheritance, which `Type::is` and `virtual_call` follow, and
+`override_method(d, klass, fn)` gives a class its override. The runtime services work on the fake's
+own memory: `array(elementSize, n)` and `list(items)` make arrays and lists, `destroy(obj)` makes
+`alive` false, and `held()` counts the GC holds not yet released. `tests/game_api_test.cpp` shows
+every path.
 
 ### Checking a mod against a game build
 

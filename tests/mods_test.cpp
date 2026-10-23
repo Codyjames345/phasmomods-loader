@@ -77,6 +77,24 @@ void mod_with_unresolved_requirement_stays_off(const fs::path& data) {
   pg::log::set_sink(nullptr, nullptr);
 }
 
+// A mod built against contract 2.0 loads and starts in a 2.1 host: the contract only grew at the end.
+void mod_built_for_2_0_still_loads(const fs::path& data) {
+  CHECK(PGMOD_API_VERSION == ((2u << 16) | 1u));
+  pg::log::set_sink(&capture, "");
+  g_lines.clear();
+  pg::mods::load(data, {{PG_FAKE_MOD_2_0, "", ""}});
+  CHECK(pg::mods::loaded().size() == 1 && pg::mods::loaded()[0].info->apiVersion == ((2u << 16) | 0u));
+  CHECK(!logged("was built for another host version"));
+  PgHostApi api{};
+  api.version = PGMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  g_resolved = {"Camera", "GhostAI.UnAppear"};
+  pg::mods::start(&api, {"fake-mod"});
+  CHECK(pg::mods::started_ids() == std::vector<std::string>{"fake-mod"});
+  pg::mods::stop_all();
+  pg::log::set_sink(nullptr, nullptr);
+}
+
 }  // namespace
 
 int main() {
@@ -120,6 +138,7 @@ int main() {
   CHECK(pg::mods::started_allow_vanilla());  // nothing runs
 
   mod_with_unresolved_requirement_stays_off(data);
+  mod_built_for_2_0_still_loads(data);
 
   fs::remove_all(root, error);
   return g_failures ? 1 : 0;

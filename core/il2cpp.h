@@ -97,6 +97,9 @@ void gc_release(uint32_t handle);
 // destroyed, and the alive check reports a destroyed object as alive.
 // It reads as the raw pointer it replaces (assigned, tested, compared and passed as a void*), and is
 // moved, never copied. Assigning the object it already holds keeps its handle.
+// This copy stays for the host's own code (and the bundled mods' raw IL2CPP paths) until stage 2b
+// moves them onto the game API. Mod code keeps objects in pg::api::Held (sdk/api/held.h), which
+// holds them through the host contract.
 class Held {
  public:
   Held() = default;
@@ -147,6 +150,8 @@ Object* type_object(Class* klass);          // System.Type for a class (typeof(T
 const char* class_name(Class* klass);
 /** True when obj is non-null and its runtime class is named `name` (a check on offset reads). */
 bool is_class(const void* obj, const char* name);
+/** True when obj is non-null and its class is `klass` or derives from it (the class's parents). */
+bool is_instance(const void* obj, Class* klass);
 /** True when obj is non-null and its class, or a class it derives from, is named `name`. */
 bool is_kind(const void* obj, const char* name);
 void* resolve_icall(const char* name);
@@ -154,8 +159,9 @@ void* resolve_icall(const char* name);
 // (the runtime may use incremental GC).
 void set_ref_field(void* obj, size_t offset, void* value);
 
-// Copy a managed string into a UTF-8 buffer, truncated at a character boundary.
-void to_utf8(const String* s, char* out, size_t outSize);
+// Copy a managed string into a UTF-8 buffer, truncated at a character boundary (pg::utf16_to_utf8).
+// Returns the whole string's length in UTF-8 bytes, without the NUL; a null string is empty.
+size_t to_utf8(const String* s, char* out, size_t outSize);
 
 // Throw a managed System.ArgumentNullException from native code. It unwinds like any managed
 // exception, through managed frames, to the nearest C++ catch.
