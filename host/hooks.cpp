@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <MinHook.h>
+#include <tlhelp32.h>
 
 #include <algorithm>
 #include <array>
@@ -12,6 +13,7 @@
 #include <mutex>
 #include <vector>
 
+#include "code_memory.h"
 #include "hde64.h"
 #include "log.h"
 
@@ -33,6 +35,10 @@ constexpr size_t kResumeBytes = 14;
 constexpr size_t kStubPage = 0x1000;
 // How far from its site a stub's page is looked for: a rel32 reaches 2 GB either way.
 constexpr uintptr_t kNear = 0x7FF00000;
+// How often a site write is tried when another thread is stopped inside the bytes it replaces, and
+// how long it waits between tries.
+constexpr int kFreezeTries = 20;
+constexpr DWORD kFreezeRetryMs = 1;
 
 // Each hook is one link of its target's chain. The link's relay jumps to its detour, and MinHook
 // patches the relay, not the detour, when a newer link chains on the same target. A site patch
@@ -108,32 +114,160 @@ bool repeated(void* target, void* detour, const char* name) {
 
 void remove_since(size_t start);
 
-// Writes `size` bytes of code at `at`, making them writable for the write and restoring their
-// protection after it. False, logged and nothing written, when they cannot be made writable.
-bool write_code(void* at, const void* bytes, size_t size) {
-  DWORD old = 0;
-  if (!VirtualProtect(at, size, PAGE_EXECUTE_READWRITE, &old)) {
-    PG_LOG("hooks: the code at %p cannot be made writable (%lu)", at, GetLastError());
-    return false;
+// The other threads of the process, stopped while game code is written, as MinHook stops them when
+// it enables a hook: no atomic write covers a site that crosses a cache line (the steering site
+// does, at RVA 0xA4FB80). open() lists and opens them and allocates all it needs; while they are
+// suspended nothing here allocates, logs or takes a lock another thread could hold.
+class Frozen {
+ public:
+  Frozen() = default;
+  Frozen(const Frozen&) = delete;
+  Frozen& operator=(const Frozen&) = delete;
+  ~Frozen() {
+    resume();
+    for (const HANDLE thread : threads_) CloseHandle(thread);
   }
-  std::memcpy(at, bytes, size);
-  if (!VirtualProtect(at, size, old, &old))
-    PG_LOG("hooks: the code at %p stays writable: restoring its protection failed (%lu)", at, GetLastError());
-  FlushInstructionCache(GetCurrentProcess(), at, size);
-  return true;
+
+  // Opens every other thread of the process. False, with the reason in `error`, when the list cannot
+  // be read or a thread that still runs cannot be opened.
+  bool open(DWORD& error) {
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+      error = GetLastError();
+      return false;
+    }
+    const DWORD self = GetCurrentThreadId(), process = GetCurrentProcessId();
+    THREADENTRY32 entry{};
+    entry.dwSize = sizeof entry;
+    bool ok = true;
+    for (BOOL more = Thread32First(snapshot, &entry); more && ok; more = Thread32Next(snapshot, &entry)) {
+      if (entry.th32OwnerProcessID != process || entry.th32ThreadID == self) continue;
+      const HANDLE thread =
+          OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, entry.th32ThreadID);
+      if (thread) {
+        threads_.push_back(thread);
+      } else if (GetLastError() != ERROR_INVALID_PARAMETER) {  // that thread has not ended
+        error = GetLastError();
+        ok = false;
+      }
+    }
+    CloseHandle(snapshot);
+    suspended_.assign(threads_.size(), 0);
+    return ok;
+  }
+
+  enum class Stop { Stopped, Inside, Failed };
+  // Suspends every opened thread. Inside, all resumed, when one of them is stopped with its rip
+  // strictly inside (begin, end), where a write would leave it in the middle of an instruction.
+  // Failed, all resumed, when a thread that has not ended cannot be suspended or read.
+  Stop stop(uintptr_t begin, uintptr_t end, DWORD& error) {
+    for (size_t i = 0; i < threads_.size(); ++i) {
+      if (SuspendThread(threads_[i]) != static_cast<DWORD>(-1)) {
+        suspended_[i] = 1;
+      } else if (!ended(threads_[i])) {
+        error = GetLastError();
+        resume();
+        return Stop::Failed;
+      }
+    }
+    for (size_t i = 0; i < threads_.size(); ++i) {
+      if (!suspended_[i]) continue;
+      alignas(16) CONTEXT context{};
+      context.ContextFlags = CONTEXT_CONTROL;
+      // GetThreadContext also waits until the suspension has taken effect.
+      if (!GetThreadContext(threads_[i], &context)) {
+        if (ended(threads_[i])) continue;
+        error = GetLastError();
+        resume();
+        return Stop::Failed;
+      }
+      if (context.Rip > begin && context.Rip < end) {
+        resume();
+        return Stop::Inside;
+      }
+    }
+    return Stop::Stopped;
+  }
+
+  void resume() {
+    for (size_t i = 0; i < threads_.size(); ++i)
+      if (suspended_[i]) {
+        ResumeThread(threads_[i]);
+        suspended_[i] = 0;
+      }
+  }
+
+ private:
+  static bool ended(HANDLE thread) {
+    DWORD code = 0;
+    return GetExitCodeThread(thread, &code) && code != STILL_ACTIVE;
+  }
+
+  std::vector<HANDLE> threads_;
+  std::vector<uint8_t> suspended_;
+};
+
+// What a write of game code did. The caller logs it, once every thread runs again.
+struct Write {
+  enum Result { Written, Inside, Unfrozen, Unwritable } result = Unfrozen;
+  DWORD error = 0;         // Unfrozen, Unwritable: the system's error
+  DWORD restoreError = 0;  // Written: why the old protection could not be restored; 0 when it was
+};
+
+// Writes `size` bytes of game code at `at` with every other thread suspended, its protection
+// restored after the write and the instruction cache flushed. Tried again, a few times, while another
+// thread is stopped inside the bytes; nothing is written unless the result is Written. The threads
+// are listed once per write (the system-wide list is slow to take), as MinHook lists them once per
+// enable: a thread started after that is not stopped.
+Write write_frozen(void* at, const void* bytes, size_t size) {
+  const auto begin = reinterpret_cast<uintptr_t>(at), end = begin + size;
+  Write w;
+  Frozen frozen;
+  if (!frozen.open(w.error)) return w;  // Unfrozen
+  for (int attempt = 0; attempt < kFreezeTries; ++attempt) {
+    if (attempt) Sleep(kFreezeRetryMs);
+    const Frozen::Stop stop = frozen.stop(begin, end, w.error);
+    if (stop == Frozen::Stop::Failed) {
+      w.result = Write::Unfrozen;
+      return w;
+    }
+    if (stop == Frozen::Stop::Inside) {
+      w.result = Write::Inside;
+      continue;
+    }
+    DWORD old = 0;
+    if (!VirtualProtect(at, size, PAGE_EXECUTE_READWRITE, &old)) {
+      w.error = GetLastError();
+      w.result = Write::Unwritable;
+      return w;  // frozen resumes the threads
+    }
+    std::memcpy(at, bytes, size);
+    if (!VirtualProtect(at, size, old, &old)) w.restoreError = GetLastError();
+    FlushInstructionCache(GetCurrentProcess(), at, size);
+    frozen.resume();
+    w.result = Write::Written;
+    return w;
+  }
+  return w;
 }
 
-// Whether `size` bytes at `at` are committed code this process may read.
-bool readable_code(const void* at, size_t size) {
-  constexpr DWORD kReadableCode = PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-  for (uintptr_t p = reinterpret_cast<uintptr_t>(at), end = p + size; p < end;) {
-    MEMORY_BASIC_INFORMATION region{};
-    if (!VirtualQuery(reinterpret_cast<const void*>(p), &region, sizeof region) || region.State != MEM_COMMIT ||
-        (region.Protect & PAGE_GUARD) || !(region.Protect & kReadableCode))
-      return false;
-    p = reinterpret_cast<uintptr_t>(region.BaseAddress) + region.RegionSize;
+// Logs why a write at `at` did not happen, or that its protection stayed writable.
+void log_write(const Write& w, const char* name, const void* at, const char* outcome) {
+  switch (w.result) {
+    case Write::Written:
+      if (w.restoreError)
+        PG_LOG("hooks: the code at %p stays writable: restoring its protection failed (%lu)", at, w.restoreError);
+      return;
+    case Write::Inside:
+      PG_LOG("hooks: %s: another thread kept stopping inside the bytes at %p; %s", name, at, outcome);
+      return;
+    case Write::Unfrozen:
+      PG_LOG("hooks: %s: the other threads could not be stopped (%lu); %s", name, w.error, outcome);
+      return;
+    case Write::Unwritable:
+      PG_LOG("hooks: %s: the code at %p cannot be made writable (%lu); %s", name, at, w.error, outcome);
+      return;
   }
-  return true;
 }
 
 // Whether `bytes` are whole instructions, as HDE64 decodes them. VEX and EVEX forms (C4, C5, 62),
@@ -150,6 +284,16 @@ bool whole_instructions(const uint8_t* bytes, size_t size) {
     at += hs.len;
   }
   return true;
+}
+
+// Whether a hook's patch at `target` would touch a site patch in place: MinHook writes 5 bytes there.
+bool in_site_patch(const void* target) {
+  const auto begin = reinterpret_cast<uintptr_t>(target), end = begin + kJumpBytes;
+  for (const Created& c : g_created) {
+    const auto at = reinterpret_cast<uintptr_t>(c.at);
+    if (c.siteBytes && c.enabled && at < end && begin < at + c.siteBytes) return true;
+  }
+  return false;
 }
 
 // Whether `size` bytes at `site` overlap a site patch in place or the 5 bytes before or after a
@@ -190,16 +334,20 @@ uint8_t* page_near(uintptr_t site) {
   return nullptr;
 }
 
-// Writes a site patch's replaced bytes back, unless something else has overwritten its jump since.
+// Writes a site patch's replaced bytes back with the other threads stopped, unless something else
+// has overwritten its jump since. A patch that cannot be written back stays, logged.
 void unpatch(Created& c) {
   if (!c.enabled) return;
-  c.enabled = false;
   if (std::memcmp(c.at, c.written.data(), c.siteBytes) != 0) {
+    c.enabled = false;
     PG_LOG("hooks: the patch at %p was overwritten since it was written; its bytes are left as they are", c.at);
     return;
   }
-  if (write_code(c.at, c.original.data(), c.siteBytes)) PG_LOG("hooks: restored the %zu bytes at %p", c.siteBytes, c.at);
-  else PG_LOG("hooks: the patch at %p stays: its bytes could not be written back", c.at);
+  const Write w = write_frozen(c.at, c.original.data(), c.siteBytes);
+  log_write(w, "restoring a site", c.at, "the patch stays");
+  if (w.result != Write::Written) return;
+  c.enabled = false;
+  PG_LOG("hooks: restored the %zu bytes at %p", c.siteBytes, c.at);
 }
 
 }  // namespace
@@ -221,6 +369,10 @@ bool create(void* target, void* detour, void** original, const char* name) {
   }
   std::lock_guard lock(g_mutex);
   if (repeated(target, detour, name)) return false;
+  if (in_site_patch(target)) {
+    PG_LOG("hooks: %s at %p is inside a site patch; nothing hooked", name, target);
+    return false;
+  }
   void* relay = write_relay(detour);
   if (!relay) {
     PG_LOG("hooks: create %s at %p failed: no memory for its relay", name, target);
@@ -269,7 +421,7 @@ bool patch_site(void* site, const void* expected, size_t expectedSize, const voi
     PG_LOG("hooks: %s: the site at %p is already patched or hooked; nothing was written", name, at);
     return false;
   }
-  if (!readable_code(at, expectedSize)) {
+  if (!host::readable_code(at, expectedSize)) {
     PG_LOG("hooks: %s: the site at %p is not readable code; nothing was written", name, at);
     return false;
   }
@@ -303,9 +455,10 @@ bool patch_site(void* site, const void* expected, size_t expectedSize, const voi
   const auto rel32 = static_cast<int32_t>(distance);
   std::memcpy(patch.written.data() + 1, &rel32, sizeof rel32);
   g_created.reserve(g_created.size() + 1);  // so the record cannot fail once the jump is written
-  if (!write_code(at, patch.written.data(), expectedSize)) {
+  const Write w = write_frozen(at, patch.written.data(), expectedSize);
+  log_write(w, name, at, "nothing was written");
+  if (w.result != Write::Written) {
     VirtualFree(stubPage, 0, MEM_RELEASE);
-    PG_LOG("hooks: %s: the jump at %p could not be written; nothing was written", name, at);
     return false;
   }
   g_created.push_back(patch);

@@ -15,13 +15,17 @@ bool init();  // host only
 // a detour hooked on several targets carries no later hook on one of them over to the others (its
 // one `original` still reaches only the target it was hooked on last). Refuses a repeat of the same
 // detour on the same target.
+// Refuses a target whose first 5 bytes touch a site patch in place.
 bool create(void* target, void* detour, void** original, const char* name);
 bool enable_all();  // enables the hooks created since the open group began
 // Host only: the host contract's patch_site (core/mod_api.h says what it writes and when it
 // refuses) at the native site `site`. The patch joins the open group like a hook: rollback_group,
 // rollback_to and shutdown write the site's own bytes back, unless something else has overwritten the
-// patch since (logged, left as it is). Every refusal and failure is logged under `name`; protections
-// changed for the write are restored.
+// patch since (logged, left as it is). Each write, and each write back, runs with every other thread
+// of the process suspended, as MinHook's enabling does, and is refused (retried briefly first) while
+// one of them is stopped inside the replaced bytes. Every patch takes a new page (a 64 KB
+// reservation), so a site patched again after a rollback takes another; pages are never freed.
+// Every refusal and failure is logged under `name`; protections changed for the write are restored.
 bool patch_site(void* site, const void* expected, size_t expectedSize, const void* stub, size_t stubSize, void** page,
                 const char* name);
 // Host only. Each mod's start is a group: rollback_group disables and removes the hooks created

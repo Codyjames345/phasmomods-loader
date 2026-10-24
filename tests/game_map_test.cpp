@@ -5,6 +5,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -378,26 +379,39 @@ std::vector<uint8_t> bytes_of(std::string_view pattern) {
 }
 
 // Native sites resolve over the loaded UnityPlayer module, and are published as addresses in it.
-// Without a readable UnityPlayer every native site stays missing, saying so.
+// The module is mapped as a loaded one is, its code readable and executable. Without a UnityPlayer,
+// or with one whose code is not readable code (here a heap copy, which is not executable), every
+// native site stays missing, saying so.
 void native_sites_resolve_over_unity_player() {
   ImageBuilder b;
   b.function(0x2000, bytes_of(pg::map::UnityPlayer_SteerSite.pattern));
   b.function(0x3000, bytes_of(pg::map::UnityPlayer_GetInternalAgent.pattern));
-  const std::vector<uint8_t> unityPlayer = b.build();
+  const std::vector<uint8_t> image = b.build();
+  auto* const loaded =
+      static_cast<uint8_t*>(VirtualAlloc(nullptr, image.size(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+  CHECK(loaded != nullptr);
+  if (!loaded) return;
+  std::memcpy(loaded, image.data(), image.size());
+  DWORD old = 0;
+  CHECK(VirtualProtect(loaded, image.size(), PAGE_EXECUTE_READ, &old));
   reset();
-  CHECK(pg::gamemap::resolve(module(), const_cast<uint8_t*>(unityPlayer.data()), nullptr, 60000));
+  CHECK(pg::gamemap::resolve(module(), loaded, nullptr, 60000));
   const PgGameEntry* steer = pg::gamemap::entry("UnityPlayer.SteerSite");
-  CHECK(steer && steer->kind == PG_ENTRY_NATIVE_SITE && steer->code == unityPlayer.data() + 0x2000);
+  CHECK(steer && steer->kind == PG_ENTRY_NATIVE_SITE && steer->code == loaded + 0x2000);
   CHECK(pg::gamemap::mod_entry("UnityPlayer.SteerSite") == steer);
   const PgGameEntry* agent = pg::gamemap::entry("UnityPlayer.NavMeshAgent.GetInternalAgent");
-  CHECK(agent && agent->kind == PG_ENTRY_NATIVE_SITE && agent->code == unityPlayer.data() + 0x3000);
+  CHECK(agent && agent->kind == PG_ENTRY_NATIVE_SITE && agent->code == loaded + 0x3000);
   CHECK(logged("game map: 2/42 resolved"));
 
-  reset();
-  CHECK(pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
-  CHECK(pg::gamemap::entry("UnityPlayer.SteerSite") == nullptr);
-  CHECK(logged("game map: MISSING UnityPlayer.SteerSite (no UnityPlayer image)"));
-  CHECK(logged("game map: the loaded UnityPlayer cannot be read; every native site stays missing"));
+  void* const unreadable[] = {nullptr, const_cast<uint8_t*>(image.data())};
+  for (void* unityPlayer : unreadable) {
+    reset();
+    CHECK(pg::gamemap::resolve(module(), unityPlayer, nullptr, 60000));
+    CHECK(pg::gamemap::entry("UnityPlayer.SteerSite") == nullptr);
+    CHECK(logged("game map: MISSING UnityPlayer.SteerSite (no UnityPlayer image)"));
+    CHECK(logged("game map: the loaded UnityPlayer cannot be read; every native site stays missing"));
+  }
+  VirtualFree(loaded, 0, MEM_RELEASE);
 }
 
 }  // namespace

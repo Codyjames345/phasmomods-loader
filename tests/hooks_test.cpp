@@ -5,6 +5,7 @@
 // Run: build\hooks_test.exe
 #include <windows.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
@@ -15,6 +16,7 @@
 #include <thread>
 #include <vector>
 
+#include "code_memory.h"
 #include "entry_hooks.h"
 #include "game_api.h"
 #include "hooks.h"
@@ -609,6 +611,111 @@ void patch_and_rollback() {
   CHECK(logged("hooks: restored the 8 bytes at"));
 }
 
+// Another thread runs the site the whole time it is patched and restored: every call it makes
+// returns 5 or 7, never a torn instruction, and it sees the stub once the patch is in.
+std::atomic<bool> g_spin{false};
+std::atomic<long> g_spinCalls{0}, g_spinSevens{0}, g_spinWrong{0};
+void spin() {
+  while (g_spin.load()) {
+    const int v = run_site();
+    ++g_spinCalls;
+    if (v == 7) ++g_spinSevens;
+    else if (v != 5) ++g_spinWrong;
+  }
+}
+
+void patch_while_a_thread_runs_the_site() {
+  g_spin = true;
+  std::thread worker(spin);
+  while (g_spinCalls.load() < 1000) std::this_thread::yield();
+  const size_t before = pg::hooks::mark();
+  void* page = nullptr;
+  for (int round = 0; round < 5; ++round) {
+    pg::hooks::begin_group();
+    CHECK(patch(kSiteCode, 8, &page));
+    const long sevens = g_spinSevens.load();
+    while (g_spinSevens.load() < sevens + 100) std::this_thread::yield();  // the worker runs the stub
+    pg::hooks::rollback_to(before);
+    CHECK(site_intact());
+  }
+  g_spin = false;
+  worker.join();
+  CHECK(g_spinWrong.load() == 0);
+  CHECK(pg::hooks::mark() == before);
+}
+
+// A thread stopped inside the bytes a patch replaces would resume in the middle of the jump: the
+// patch is refused, after its retries, and nothing is written. The thread is parked there by hand.
+void parked() {
+  for (;;) Sleep(1000);
+}
+void thread_inside_the_site_refuses_the_patch() {
+  g_log.clear();
+  std::thread parker(parked);
+  const HANDLE thread = parker.native_handle();
+  CHECK(SuspendThread(thread) != static_cast<DWORD>(-1));
+  alignas(16) CONTEXT saved{};
+  saved.ContextFlags = CONTEXT_CONTROL;
+  CHECK(GetThreadContext(thread, &saved));
+  CONTEXT inside = saved;
+  inside.Rip = reinterpret_cast<DWORD64>(site_code() + 5);  // the nop after `mov eax, 5`
+  CHECK(SetThreadContext(thread, &inside));
+
+  const size_t before = pg::hooks::mark();
+  void* page = &g_log;
+  CHECK(!patch(kSiteCode, 8, &page));
+  CHECK(page == nullptr && site_intact() && pg::hooks::mark() == before);
+  CHECK(logged("hooks: test site: another thread kept stopping inside the bytes at"));
+  CHECK(logged("; nothing was written"));
+
+  // Parked at the site's first byte, the thread is between instructions: the patch goes ahead.
+  inside.Rip = reinterpret_cast<DWORD64>(site_code());
+  CHECK(SetThreadContext(thread, &inside));
+  pg::hooks::begin_group();
+  CHECK(patch(kSiteCode, 8, &page));
+  pg::hooks::rollback_to(before);
+  CHECK(site_intact());
+
+  CHECK(SetThreadContext(thread, &saved));
+  CHECK(ResumeThread(thread) != static_cast<DWORD>(-1));
+  parker.detach();  // it sleeps until the process ends
+}
+
+// A hook whose 5 bytes would land on a live site patch is refused, as a patch near a hook is.
+int not_a_detour() { return 0; }
+void hook_inside_a_site_patch_refused() {
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
+  pg::hooks::begin_group();
+  void* page = nullptr;
+  CHECK(patch(kSiteCode, 8, &page));
+  void* original = nullptr;
+  for (const size_t offset : {0, 3, 7}) {
+    CHECK(!pg::hooks::create(site_code() + offset, reinterpret_cast<void*>(&not_a_detour), &original, "in the site"));
+  }
+  CHECK(logged("hooks: in the site at"));
+  CHECK(logged("is inside a site patch; nothing hooked"));
+  CHECK(pg::hooks::mark() - before == 1);
+  pg::hooks::rollback_to(before);
+  CHECK(site_intact());
+}
+
+// Code that cannot be read is not readable code: an execute-only page fails, as does a guard page.
+void execute_only_is_not_readable() {
+  auto* page = static_cast<uint8_t*>(VirtualAlloc(nullptr, 0x2000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+  CHECK(page != nullptr);
+  if (!page) return;
+  DWORD old = 0;
+  CHECK(VirtualProtect(page, 0x1000, PAGE_EXECUTE_READ, &old));
+  CHECK(VirtualProtect(page + 0x1000, 0x1000, PAGE_EXECUTE, &old));
+  CHECK(pg::host::readable_code(page, 0x1000));
+  CHECK(!pg::host::readable_code(page + 0x1000, 0x10));
+  CHECK(!pg::host::readable_code(page + 0xFF8, 0x10));  // the second page of two
+  CHECK(VirtualProtect(page, 0x1000, PAGE_EXECUTE_READ | PAGE_GUARD, &old));
+  CHECK(!pg::host::readable_code(page, 0x10));
+  VirtualFree(page, 0, MEM_RELEASE);
+}
+
 }  // namespace
 
 int main() {
@@ -680,6 +787,10 @@ int main() {
   changed_bytes_refuse_the_patch();
   no_page_refuses_the_patch();
   patch_and_rollback();
+  patch_while_a_thread_runs_the_site();
+  thread_inside_the_site_refuses_the_patch();
+  hook_inside_a_site_patch_refused();
+  execute_only_is_not_readable();
 
   // A patch still in place at shutdown is removed with the hooks.
   begin_group();

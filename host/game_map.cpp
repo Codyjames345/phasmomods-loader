@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "all.h"
+#include "code_memory.h"
 #include "game_api.h"
 #include "il2cpp.h"
 #include "image.h"
@@ -163,19 +164,13 @@ void abandon(const std::string& reason) {
   PG_LOG("game map: abandoned, no entry resolved: %s", reason.c_str());
 }
 
-// Whether the image's .text section is committed memory that can be read throughout: the search for
-// a native site reads every byte of it. True for an image without one, which the resolver reports.
+// Whether the image's .text section is committed code that can be read throughout, by the same
+// test as a patched site (host/code_memory.h): the search for a native site reads every byte of it.
+// True for an image without one, which the resolver reports.
 bool text_readable(const sdk::CodeImage& image) {
   uint64_t rva = 0;
   const std::span<const uint8_t> text = image.section(".text", rva);
-  for (auto p = reinterpret_cast<uintptr_t>(text.data()), end = p + text.size(); p < end;) {
-    MEMORY_BASIC_INFORMATION region{};
-    if (!VirtualQuery(reinterpret_cast<const void*>(p), &region, sizeof region) || region.State != MEM_COMMIT ||
-        (region.Protect & (PAGE_NOACCESS | PAGE_GUARD)))
-      return false;
-    p = reinterpret_cast<uintptr_t>(region.BaseAddress) + region.RegionSize;
-  }
-  return true;
+  return host::readable_code(text.data(), text.size());
 }
 
 // The reason it could not resolve, or empty once it has.
@@ -201,6 +196,8 @@ std::string build_and_resolve(void* gameAssembly, void* unityPlayer, void* stopE
   // registered every icall by now. resolve_icalls asks on the main thread at activation. Static
   // fields are never read here either: that can run a class's static constructor.
   g_resolveIcall = api.resolve_icall;
+  // The native sites' search reads all of UnityPlayer's .text: it starts only within the budget.
+  if (const char* why = stop_reason(stopEvent, deadline)) return why;
   g_resolution = sdk::resolve(map::kAllEntries, g_model, image.valid() ? &image : nullptr, {},
                               unityReadable ? &unity : nullptr);
   return {};

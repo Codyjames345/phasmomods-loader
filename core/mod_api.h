@@ -234,11 +234,16 @@ struct PgHostApi {
   // `jmp` to the page over the site, the rest of the replaced bytes as NOPs. The stub must perform
   // whatever of the replaced instructions it still needs, and position-independent code is required:
   // it runs at the page's address. It resumes the game by running off its own end, or by jumping to
-  // page + stubSize. `page` receives the stub's first byte: the page stays readable, writable and
-  // executable for the process lifetime and is never freed (a thread may still be running the stub),
-  // so the mod may keep the stub's data there and write it from any thread. The patch belongs to the
+  // page + stubSize. A stub that keeps data must place it after a jump that ends its code (to
+  // page + stubSize, or wherever it means to go), never where the code could run off into it. `page`
+  // receives the stub's first byte: the page stays readable, writable and executable for the process
+  // lifetime and is never freed (a thread may still be running the stub), so the mod may keep the
+  // stub's data there and write it from any thread. The patch belongs to the
   // mod like its hooks: the site's own bytes are written back when the mod fails to start and when
-  // the mods restart (the page stays). False, `page` null and nothing written, when the entry is
+  // the mods restart (the page stays). Every patch takes a new page, one 64 KB reservation, so patching
+  // again after a rollback takes another, and no page is ever freed. The host stops every other thread
+  // of the process while it writes or restores the site, and refuses (nothing written) when one keeps
+  // stopping inside the replaced bytes. False, `page` null and nothing written, when the entry is
   // unknown, unresolved or not a native site, when the bytes there differ from `expected` (another
   // game build), when `expected` is not whole instructions or not 5 to 32 bytes, when the stub is
   // empty or longer than 4082 bytes (a page less the jump back), when the site is already patched or
