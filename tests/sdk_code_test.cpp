@@ -7,6 +7,7 @@
 #include "check.h"
 #include "code.h"
 #include "image.h"
+#include "resolver.h"
 #include "sdk_image_fixture.h"
 
 using namespace pg::sdk;
@@ -449,6 +450,105 @@ void undecodable_instructions_fail_closed() {
   CHECK(!facts({0x06, 0xC3}).complete);
 }
 
+// Native UnityPlayer sites, resolved over an image built as UnityPlayer.dll would be: its .text spans
+// the image, and it exports one function.
+const std::vector<uint8_t> kSiteBytes = {0x48, 0x8B, 0x51, 0x60, 0x48, 0x8B, 0x05, 0x11, 0x22, 0x33, 0x44, 0x48, 0x8B,
+                                         0xCA, 0x48, 0xC1, 0xE9, 0x04, 0x4C, 0x8B, 0x80, 0x90, 0x00, 0x00, 0x00, 0xC3};
+// 25 bytes, 21 of them not wildcards.
+constexpr const char* kSitePattern = "48 8B 51 60 48 8B 05 ?? ?? ?? ?? 48 8B CA 48 C1 E9 04 4C 8B 80 90 00 00 00";
+
+Result native(const EntryDesc& d, const CodeImage* unityPlayer) {
+  const EntryDesc* entries[] = {&d};
+  return resolve(entries, GameModel{}, nullptr, {}, unityPlayer).results[0];
+}
+
+EntryDesc site(const char* within, const char* pattern = kSitePattern, int32_t offset = 0) {
+  return {.key = "UnityPlayer.Test", .kind = Kind::NativeSite, .assembly = "UnityPlayer", .pattern = pattern,
+          .within = within, .patternOffset = offset};
+}
+
+void native_site_resolves_in_text() {
+  ImageBuilder b;
+  b.function(0x2000, kSiteBytes);
+  const std::vector<uint8_t> mapped = b.build();
+  const CodeImage image(mapped);
+  const Result r = native(site(".text", kSitePattern, 4), &image);
+  CHECK(r.status == Status::Resolved);
+  CHECK(r.rva == 0x2004);  // `within` is no map key, so the entry is not blocked on it
+  // The same entry with nothing to search, or where the pattern is not.
+  CHECK(native(site(".text", kSitePattern, 4), nullptr).detail == "no UnityPlayer image");
+  ImageBuilder empty;
+  const std::vector<uint8_t> none = empty.build();
+  const CodeImage noSite(none);
+  const Result missing = native(site(".text"), &noSite);
+  CHECK(missing.status == Status::Missing && missing.detail == "the pattern is not in .text");
+}
+
+// The resolver never picks among candidates: two matches are Ambiguous, each one listed.
+void native_site_twice_is_ambiguous() {
+  ImageBuilder b;
+  b.function(0x2000, kSiteBytes);
+  b.function(0x3000, kSiteBytes);
+  const std::vector<uint8_t> mapped = b.build();
+  const CodeImage image(mapped);
+  const Result r = native(site(".text"), &image);
+  CHECK(r.status == Status::Ambiguous);
+  CHECK(r.detail == "the pattern is in .text 2 times");
+  CHECK((r.candidates == std::vector<std::string>{"0x2000", "0x3000"}));
+}
+
+// `within` an export bounds the search to that function, so a copy elsewhere does not count.
+void native_site_within_an_export() {
+  ImageBuilder b;
+  b.function(0x2000, kSiteBytes);
+  std::vector<uint8_t> exported = filled(0x10, 0xCC);
+  exported.insert(exported.end(), kSiteBytes.begin(), kSiteBytes.end());
+  b.function(0x3000, exported);
+  b.exported = {{"UnityMain", 0x3000}};
+  const std::vector<uint8_t> mapped = b.build();
+  const CodeImage image(mapped);
+  const Result r = native(site("UnityMain"), &image);
+  CHECK(r.status == Status::Resolved && r.rva == 0x3010);
+  CHECK(native(site(".text"), &image).status == Status::Ambiguous);
+  const Result unknown = native(site("UnityShutdown"), &image);
+  CHECK(unknown.status == Status::Missing && unknown.detail == "UnityPlayer exports no UnityShutdown");
+}
+
+// A native site is found by its pattern alone, in UnityPlayer, and lies inside the bytes it matched.
+// A short pattern over the whole .text could match by chance, so it is refused there.
+void native_site_malformed_is_missing() {
+  ImageBuilder b;
+  b.function(0x2000, kSiteBytes);
+  const std::vector<uint8_t> mapped = b.build();
+  const CodeImage image(mapped);
+  EntryDesc d = site(".text");
+  d.assembly = "GameAssembly";
+  CHECK(native(d, &image).detail == "a native site's assembly must be UnityPlayer");
+  d = site(".text");
+  d.name = "GetInternalAgent";
+  CHECK(native(d, &image).detail == "a native site is found by its pattern alone");
+  CHECK(native(site(nullptr), &image).detail == "a native site needs a pattern and where to search it");
+  CHECK(native(site(".text", "48 8B 5"), &image).detail == "bad pattern \"48 8B 5\"");
+  CHECK(native(site(".text", kSitePattern, 25), &image).detail == "the pattern's offset 25 is outside the pattern");
+  CHECK(native(site(".text", kSitePattern, -1), &image).detail == "the pattern's offset -1 is outside the pattern");
+  const Result shortPattern = native(site(".text", "48 8B 51 60 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ??"), &image);
+  CHECK(shortPattern.status == Status::Missing);
+  CHECK(shortPattern.detail == "a pattern searched in .text needs at least 16 bytes that are not wildcards");
+  for (const Result& r : {native(d, &image), shortPattern}) CHECK(r.rva == 0);
+}
+
+// The .text section by name: the bytes the loader maps there and where.
+void section_by_name() {
+  ImageBuilder b;
+  const std::vector<uint8_t> mapped = b.build();
+  const CodeImage image(mapped);
+  uint64_t rva = 0;
+  const std::span<const uint8_t> text = image.section(".text", rva);
+  CHECK(rva == ImageBuilder::kSection && text.size() == ImageBuilder::kSize - ImageBuilder::kSection);
+  CHECK(text.data() == mapped.data() + ImageBuilder::kSection);
+  CHECK(image.section(".data", rva).empty());
+}
+
 }  // namespace
 
 int main() {
@@ -466,5 +566,10 @@ int main() {
   byte_table_indexed_by_the_image_base();
   unknown_in_function_data_is_incomplete();
   undecodable_instructions_fail_closed();
+  native_site_resolves_in_text();
+  native_site_twice_is_ambiguous();
+  native_site_within_an_export();
+  native_site_malformed_is_missing();
+  section_by_name();
   return g_failures ? 1 : 0;
 }

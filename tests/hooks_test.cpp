@@ -1,10 +1,12 @@
 // Offline tests for the host's hooks (host/hooks.cpp) on local functions, with the real MinHook:
 // chaining, refused repeats, per-mod groups and rolling a group back; hooks by entry over a method's
-// twins (host/entry_hooks.cpp), the game API's typed hooks with one chain per body (sdk/api), and the
-// caller context (host/context.cpp). Run: build\hooks_test.exe
+// twins (host/entry_hooks.cpp), the game API's typed hooks with one chain per body (sdk/api), the
+// caller context (host/context.cpp), and native site patches on a code page of this process.
+// Run: build\hooks_test.exe
 #include <windows.h>
 
 #include <cstdint>
+#include <cstring>
 #include <initializer_list>
 #include <map>
 #include <span>
@@ -515,6 +517,98 @@ void tracking_counts_every_body() {
   CHECK(pg::context::depth("Test.Untracked") == 0);
 }
 
+// A native site in a real code page of this process: `mov eax, 5; nop dword ptr [rax]; ret`. A
+// patch replaces its first two instructions (8 bytes, as the steering site's movss is) with a jump to
+// a stub, `mov eax, 7`, after which the host's jump back resumes at the `ret`.
+constexpr uint8_t kSiteCode[] = {0xB8, 0x05, 0x00, 0x00, 0x00, 0x0F, 0x1F, 0x00, 0xC3};
+constexpr uint8_t kStub[] = {0xB8, 0x07, 0x00, 0x00, 0x00};
+
+uint8_t* site_code() {
+  static uint8_t* const code = [] {
+    auto* page = static_cast<uint8_t*>(VirtualAlloc(nullptr, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    if (!page) return page;
+    std::memcpy(page, kSiteCode, sizeof kSiteCode);
+    DWORD old = 0;
+    VirtualProtect(page, 0x1000, PAGE_EXECUTE_READ, &old);
+    return page;
+  }();
+  return code;
+}
+int run_site() {
+  int (*volatile through)() = reinterpret_cast<int (*)()>(site_code());
+  return through();
+}
+bool site_intact() { return std::memcmp(site_code(), kSiteCode, sizeof kSiteCode) == 0; }
+bool patch(const uint8_t* expected, size_t size, void** page) {
+  return pg::hooks::patch_site(site_code(), expected, size, kStub, sizeof kStub, page, "test site");
+}
+
+// Bytes other than the expected ones are never overwritten: the patch is refused, nothing is
+// written, and the log says why. So are bytes that are not whole instructions (the jump back would
+// land inside one) and fewer than a jump takes.
+void changed_bytes_refuse_the_patch() {
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
+  uint8_t other[8];
+  std::memcpy(other, kSiteCode, sizeof other);
+  other[1] = 0x06;  // another build: mov eax, 6
+  void* page = &g_log;
+  CHECK(!patch(other, sizeof other, &page));
+  CHECK(page == nullptr);
+  CHECK(site_intact() && run_site() == 5);
+  CHECK(pg::hooks::mark() == before);
+  CHECK(logged("hooks: test site: the 8 bytes at"));
+  CHECK(logged("differ from the expected ones; nothing was written"));
+
+  CHECK(!patch(kSiteCode, 6, &page) && page == nullptr);
+  CHECK(logged("hooks: test site: the expected bytes are not whole instructions; nothing was written"));
+  CHECK(!patch(kSiteCode, 4, &page));
+  CHECK(logged("hooks: test site: a patch replaces 5 to 32 bytes, not 4; nothing was written"));
+  CHECK(site_intact() && pg::hooks::mark() == before);
+}
+
+// No page can be had within rel32 range of the site: the patch is refused and nothing is written.
+void no_page_refuses_the_patch() {
+  g_log.clear();
+  pg::hooks::g_noPageNear = true;
+  void* page = &g_log;
+  CHECK(!patch(kSiteCode, 8, &page));
+  pg::hooks::g_noPageNear = false;
+  CHECK(page == nullptr && site_intact() && run_site() == 5);
+  CHECK(logged("hooks: test site: no page within rel32 range of"));
+}
+
+// A patch belongs to the open group like a hook: it goes when the mod does not start, and with every
+// mod's hooks when the mods restart, the site's own bytes written back each time.
+void patch_and_rollback() {
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
+  pg::hooks::begin_group();
+  void* page = nullptr;
+  CHECK(patch(kSiteCode, 8, &page));
+  CHECK(page && std::memcmp(page, kStub, sizeof kStub) == 0);
+  CHECK(run_site() == 7);
+  const intptr_t distance = reinterpret_cast<intptr_t>(page) - reinterpret_cast<intptr_t>(site_code() + 5);
+  CHECK(distance >= INT32_MIN && distance <= INT32_MAX);
+  CHECK(site_code()[0] == 0xE9 && site_code()[5] == 0x90 && site_code()[7] == 0x90 && site_code()[8] == 0xC3);
+  CHECK(pg::hooks::mark() - before == 1);
+  CHECK(pg::hooks::enable_all());  // a patch is live as written: enabling leaves it be
+  CHECK(run_site() == 7);
+
+  // A second patch on the patched site sees other bytes: refused, and the first stays.
+  void* second = nullptr;
+  CHECK(!patch(kSiteCode, 8, &second) && second == nullptr && run_site() == 7);
+
+  pg::hooks::rollback_group();
+  CHECK(site_intact() && run_site() == 5 && pg::hooks::mark() == before);
+
+  pg::hooks::begin_group();
+  CHECK(patch(kSiteCode, 8, &page) && run_site() == 7);
+  pg::hooks::rollback_to(before);
+  CHECK(site_intact() && run_site() == 5 && pg::hooks::mark() == before);
+  CHECK(logged("hooks: restored the 8 bytes at"));
+}
+
 }  // namespace
 
 int main() {
@@ -583,8 +677,16 @@ int main() {
   partial_hook_runs_no_detour();
   rollback_per_body();
   tracking_counts_every_body();
+  changed_bytes_refuse_the_patch();
+  no_page_refuses_the_patch();
+  patch_and_rollback();
 
+  // A patch still in place at shutdown is removed with the hooks.
+  begin_group();
+  void* page = nullptr;
+  CHECK(patch(kSiteCode, 8, &page) && run_site() == 7);
   shutdown();
   CHECK(call(target, 1) == 2 && call(other, 1) == 5);
+  CHECK(site_intact() && run_site() == 5);
   return g_failures ? 1 : 0;
 }

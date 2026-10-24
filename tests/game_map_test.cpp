@@ -10,6 +10,7 @@
 
 #include "check.h"
 #include "game_api.h"
+#include "sdk_image_fixture.h"
 
 namespace {
 unsigned long long clockMs = 0;
@@ -99,28 +100,28 @@ void* module() { return g_module.bytes; }
 
 void builds_and_resolves_within_budget() {
   reset();
-  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
   CHECK(classesRead == 600);
   CHECK(all_unresolved(nullptr) && pg::gamemap::result("GhostAI")->status == Status::Missing);
   CHECK(pg::gamemap::entry("GhostAI") == nullptr);  // unresolved: mods receive nothing
   CHECK(!logged("abandoned"));
-  CHECK(logged("game map: 0/40 resolved in 0 ms"));
+  CHECK(logged("game map: 0/42 resolved in 0 ms"));
 }
 
 void stop_during_build_abandons_promptly() {
   reset();
   stopAfter = 10;
-  CHECK(!pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(!pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
   CHECK(classesRead == 10);
   CHECK(all_unresolved("startup was cancelled"));
   CHECK(count_logged("abandoned") == 1);
-  CHECK(logged("game map: 0/40 resolved"));
+  CHECK(logged("game map: 0/42 resolved"));
 }
 
 void spent_budget_reads_nothing() {
   reset();
   clockMs = 50001;
-  CHECK(!pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(!pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
   CHECK(apiRequests == 0 && classesRead == 0);
   CHECK(all_unresolved("the startup budget ran out"));
   CHECK(count_logged("abandoned") == 1);
@@ -129,7 +130,7 @@ void spent_budget_reads_nothing() {
 void slow_build_leaves_the_hooks_budget() {
   reset();
   tickPerClass = 100;  // 600 classes would take 60 s
-  CHECK(!pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(!pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
   // It stops at the first check with less than 10 s left, so the hooks keep their share.
   CHECK(clockMs >= 50000 && clockMs < 50100);
   CHECK(all_unresolved("the startup budget ran out"));
@@ -193,7 +194,7 @@ void entry_without_code_has_no_address() {
 // one the runtime does not answer then is logged as missing, once.
 void icall_resolves_at_activation() {
   reset();
-  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
   CHECK(icallsAsked.empty());
   CHECK(pg::gamemap::entry("Animator.SetBoolID") == nullptr);
   CHECK(!logged("Animator.SetBoolID"));  // not final yet
@@ -208,7 +209,7 @@ void icall_resolves_at_activation() {
   CHECK(logged("game map: 1/1 icalls resolved on the main thread"));
 
   reset();
-  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
   pg::gamemap::resolve_icalls();  // the runtime does not answer
   CHECK(pg::gamemap::entry("Animator.SetBoolID") == nullptr);
   CHECK(count_logged("game map: MISSING Animator.SetBoolID") == 1);
@@ -251,7 +252,7 @@ void exports_and_statics_are_published() {
 // publish is refused and logged: every entry stays where and as it was published.
 void publish_twice_is_refused() {
   reset();
-  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
   int setBoolID = 0;
   icallAnswer = &setBoolID;
   pg::gamemap::resolve_icalls();
@@ -260,7 +261,7 @@ void publish_twice_is_refused() {
 
   messages.clear();
   icallAnswer = nullptr;
-  CHECK(!pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(!pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
   CHECK(count_logged("game map: already resolved; a second resolve is refused") == 1);
   CHECK(classesRead == 600);  // nothing was read again
   CHECK(!pg::gamemap::publish(0x20000));
@@ -295,7 +296,7 @@ void mark_resolved(std::initializer_list<const char*> keys) {
 // where it is used; a layer no layer has is logged once and stays unresolved.
 void scene_facts_resolve_at_activation() {
   reset();
-  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
   CHECK(pg::gamemap::entry("Layer.PlayerView") == nullptr && pg::gamemap::entry("Scene.JournalBookContent") == nullptr);
   CHECK(!logged("Layer.PlayerView") && !logged("Scene.JournalBookContent"));
 
@@ -314,7 +315,7 @@ void scene_facts_resolve_at_activation() {
   CHECK(!pg::gamemap::animator_param("Scene.JournalBookContent", &root, &hash) && hash == 5);
 
   reset();
-  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
   mark_resolved({"LayerMask", "LayerMask.NameToLayer"});
   g_layerName = "Renamed";
   pg::gamemap::resolve_scene_facts(&kEngine);
@@ -366,6 +367,37 @@ void scene_facts_need_their_engine_entries() {
   activate({pending(Layer_PlayerView), resolved(LayerMask)});
   CHECK(pg::gamemap::entry("Layer.PlayerView") == nullptr);
   CHECK(count_logged("game map: MISSING Layer.PlayerView (LayerMask.NameToLayer unresolved)") == 1);
+}
+
+// A pattern's bytes, a wildcard as 0.
+std::vector<uint8_t> bytes_of(std::string_view pattern) {
+  std::vector<uint8_t> out;
+  for (size_t i = 0; i + 1 < pattern.size(); i += 3)
+    out.push_back(pattern[i] == '?' ? 0 : static_cast<uint8_t>(std::stoi(std::string(pattern.substr(i, 2)), nullptr, 16)));
+  return out;
+}
+
+// Native sites resolve over the loaded UnityPlayer module, and are published as addresses in it.
+// Without a readable UnityPlayer every native site stays missing, saying so.
+void native_sites_resolve_over_unity_player() {
+  ImageBuilder b;
+  b.function(0x2000, bytes_of(pg::map::UnityPlayer_SteerSite.pattern));
+  b.function(0x3000, bytes_of(pg::map::UnityPlayer_GetInternalAgent.pattern));
+  const std::vector<uint8_t> unityPlayer = b.build();
+  reset();
+  CHECK(pg::gamemap::resolve(module(), const_cast<uint8_t*>(unityPlayer.data()), nullptr, 60000));
+  const PgGameEntry* steer = pg::gamemap::entry("UnityPlayer.SteerSite");
+  CHECK(steer && steer->kind == PG_ENTRY_NATIVE_SITE && steer->code == unityPlayer.data() + 0x2000);
+  CHECK(pg::gamemap::mod_entry("UnityPlayer.SteerSite") == steer);
+  const PgGameEntry* agent = pg::gamemap::entry("UnityPlayer.NavMeshAgent.GetInternalAgent");
+  CHECK(agent && agent->kind == PG_ENTRY_NATIVE_SITE && agent->code == unityPlayer.data() + 0x3000);
+  CHECK(logged("game map: 2/42 resolved"));
+
+  reset();
+  CHECK(pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
+  CHECK(pg::gamemap::entry("UnityPlayer.SteerSite") == nullptr);
+  CHECK(logged("game map: MISSING UnityPlayer.SteerSite (no UnityPlayer image)"));
+  CHECK(logged("game map: the loaded UnityPlayer cannot be read; every native site stays missing"));
 }
 
 }  // namespace
@@ -441,5 +473,6 @@ int main() {
   publish_twice_is_refused();
   scene_facts_resolve_at_activation();
   scene_facts_need_their_engine_entries();
+  native_sites_resolve_over_unity_player();
   return g_failures ? 1 : 0;
 }

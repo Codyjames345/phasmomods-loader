@@ -4,14 +4,15 @@
 #include <filesystem>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
 namespace pg::sdk {
 
 // A PE32+ image laid out by RVA, as a loaded module is, the bounds of its functions from the
-// exception directory's RUNTIME_FUNCTION table, and its export table. It refers to the bytes, which
-// must outlive it.
+// exception directory's RUNTIME_FUNCTION table, its export table and its sections. It refers to the
+// bytes, which must outlive it.
 class CodeImage {
  public:
   explicit CodeImage(std::span<const uint8_t> mapped);
@@ -30,10 +31,17 @@ class CodeImage {
   // one does, when it is forwarded to another module (its RVA lies inside the export directory), or
   // when the export table or the address leaves the image.
   uint64_t exported(std::string_view name) const;
+  // The bytes of the section named `name` (".text") as laid out by RVA, with its RVA in `rva`. Empty
+  // when no section has that name, when more than one does, or when it leaves the image.
+  std::span<const uint8_t> section(std::string_view name, uint64_t& rva) const;
 
  private:
   struct Chunk {
     uint32_t begin, end, unwind;
+  };
+  struct Section {
+    std::string name;
+    uint32_t rva, size;
   };
   const Chunk* chunk_at(uint64_t rva) const;
   const Chunk* chunk_starting(uint32_t begin) const;
@@ -44,6 +52,7 @@ class CodeImage {
 
   std::span<const uint8_t> image_;
   std::vector<Chunk> chunks_;  // sorted by begin
+  std::vector<Section> sections_;
   uint32_t exportRva_ = 0, exportSize_ = 0;  // the export directory; size 0 when it is absent or outside
   bool valid_ = false;
 };

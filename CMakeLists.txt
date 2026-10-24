@@ -75,7 +75,8 @@ add_library(ModHost SHARED
   host/scene_engine.cpp
   sdk/runtime/runtime_model.cpp
   sdk/runtime/scene_facts.cpp)
-target_include_directories(ModHost PRIVATE host sdk/map sdk/runtime)
+# host/hooks.cpp checks a native site's bytes with HDE64, vendored inside MinHook.
+target_include_directories(ModHost PRIVATE host sdk/map sdk/runtime third_party/minhook/src/hde)
 target_link_libraries(ModHost PRIVATE pgcore pgsdk_resolver minhook bcrypt)
 pg_options(ModHost)
 # PG_HOST: host-only parts of the game API (pg::api::Export), which mods never see.
@@ -246,8 +247,9 @@ pg_test(score)
 pg_test(typestate)
 pg_test(perceive)
 pg_test(hooks host/hooks.cpp host/entry_hooks.cpp host/context.cpp sdk/api/game_api.cpp core/log.cpp)
-target_include_directories(hooks_test PRIVATE sdk/api sdk/map)
+target_include_directories(hooks_test PRIVATE sdk/api sdk/map third_party/minhook/src/hde)
 target_link_libraries(hooks_test PRIVATE minhook)
+target_compile_definitions(hooks_test PRIVATE PG_HOOKS_TEST)
 # A mod for the tests that load one (mods_test, gamecheck): it requires GhostAI.UnAppear and Camera.
 add_library(pg_fake_mod SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pg_fake_mod PRIVATE pgmod)
@@ -263,6 +265,7 @@ target_link_libraries(pg_fake_mod_1 PRIVATE pgmod)
 target_compile_definitions(pg_fake_mod_1 PRIVATE PG_FAKE_MOD_API_VERSION=1u)
 pg_options(pg_fake_mod_1)
 pg_test(mods host/mods.cpp host/hooks.cpp host/build_check.cpp core/log.cpp)
+target_include_directories(mods_test PRIVATE third_party/minhook/src/hde)
 target_link_libraries(mods_test PRIVATE minhook bcrypt)
 target_compile_definitions(mods_test PRIVATE PG_FAKE_MOD="$<TARGET_FILE:pg_fake_mod>"
   PG_FAKE_MOD_2_0="$<TARGET_FILE:pg_fake_mod_2_0>")

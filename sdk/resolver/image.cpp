@@ -74,6 +74,13 @@ CodeImage::CodeImage(std::span<const uint8_t> mapped) {
     exportRva_ = h->exportRva;
     exportSize_ = h->exportSize;
   }
+  // IMAGE_SECTION_HEADER: the name in 8 bytes, NUL-padded, then VirtualSize and VirtualAddress.
+  for (uint16_t i = 0; i < h->sectionCount; ++i) {
+    const uint64_t s = h->sections + uint64_t(i) * 40;
+    const char* name = reinterpret_cast<const char*>(mapped.data() + s);
+    sections_.push_back({std::string(name, strnlen(name, 8)), *read<uint32_t>(mapped, s + 12),
+                         *read<uint32_t>(mapped, s + 8)});
+  }
   image_ = mapped;
   valid_ = true;
 }
@@ -107,6 +114,18 @@ uint64_t CodeImage::exported(std::string_view name) const {
   const bool forwarded = found >= exportRva_ && found < uint64_t(exportRva_) + exportSize_;
   if (matches != 1 || found == 0 || found >= image_.size() || forwarded) return 0;
   return found;
+}
+
+std::span<const uint8_t> CodeImage::section(std::string_view name, uint64_t& rva) const {
+  const Section* found = nullptr;
+  for (const Section& s : sections_) {
+    if (s.name != name) continue;
+    if (found) return {};
+    found = &s;
+  }
+  if (!found || found->size == 0 || !in_bounds(image_, found->rva, found->size)) return {};
+  rva = found->rva;
+  return image_.subspan(found->rva, found->size);
 }
 
 const CodeImage::Chunk* CodeImage::chunk_at(uint64_t rva) const {

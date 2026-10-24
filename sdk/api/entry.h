@@ -15,7 +15,11 @@ namespace pg::sdk {
 // layer by its name; an AnimatorParam entry is a parameter of an Animator by its name. None of them is
 // in the IL2CPP metadata: the offline check verifies them in the scene files (tools/assetcheck.py), and
 // the running game checks them where they are used (sdk/api/game_api.h says when).
-enum class Kind : uint8_t { Type, Method, Field, EnumValue, Code, Icall, Export, Scene, Layer, AnimatorParam };
+//
+// A NativeSite is a place in UnityPlayer.dll's machine code, which has no metadata: the one place its
+// `pattern` matches, searched inside the UnityPlayer export `within` names, or in the whole ".text"
+// section. `assembly` is "UnityPlayer". The host patches one through the host contract's patch_site.
+enum class Kind : uint8_t { Type, Method, Field, EnumValue, Code, Icall, Export, Scene, Layer, AnimatorParam, NativeSite };
 
 // How an entry's identification was established. A note never claims more than this.
 enum class Confidence : uint8_t { Inferred, Decompiled, Live };
@@ -59,7 +63,10 @@ struct EntryDesc {
   std::span<const char* const> values{};      // an enum Type found by shape: value names it must have
   std::span<const Fact> facts{};
   const char* pattern = nullptr;  // hex bytes, "??" for a wildcard
-  const char* within = nullptr;   // key of the Method the pattern is searched in
+  // A Code entry's: the key of the Method the pattern is searched in. A NativeSite's: the name of the
+  // UnityPlayer export whose function bounds the search, or ".text" for the whole code section.
+  const char* within = nullptr;
+  // Where the entry lies from the pattern's first byte. A NativeSite's lies inside the pattern.
   int32_t patternOffset = 0;
   // Where the offline check finds a Scene or AnimatorParam entry: a scene's name as the build lists it
   // ("Main_Menu"), or "Resources/<path>" for a prefab the game loads with Resources.Load

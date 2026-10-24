@@ -38,6 +38,7 @@ enum PgEntryKind : uint32_t {
   PG_ENTRY_SCENE,       // a GameObject by its path, found through scene_find
   PG_ENTRY_LAYER,       // a layer, with its index in `value`
   PG_ENTRY_ANIMATOR_PARAM,  // an Animator parameter by its name, checked through animator_param
+  PG_ENTRY_NATIVE_SITE,     // a place in UnityPlayer.dll's code, its address in `code`; see patch_site
 };
 
 // A game entry as the host resolved it in the running game. The host keeps it for the process
@@ -47,7 +48,8 @@ struct PgGameEntry {
   uint32_t kind;       // PgEntryKind
   void* klass;         // Il2CppClass*: the type itself, or the type that declares the member
   const void* method;  // MethodInfo* of a method, passed as a call's last argument
-  // A method's code (its canonical body), a code entry's address, or an icall's or export's code.
+  // A method's code (its canonical body), a code entry's address, an icall's or export's code, or a
+  // native site's address in UnityPlayer.dll.
   void* code;
   // A method's same behaviour at other addresses (the obfuscator's twins), besides `code`.
   void* const* twins;
@@ -222,6 +224,27 @@ struct PgHostApi {
   // entry is unknown, unresolved or not an AnimatorParam entry, when `animator` is null, destroyed or
   // not an Animator, or when it lacks the parameter.
   bool (*animator_param)(const char* key, const void* animator, int32_t* hash);
+
+  // Also added in version 2.1: native sites, the entries of kind PG_ENTRY_NATIVE_SITE.
+
+  // Patches the native site `key` names, on the main thread while the mod starts. When the
+  // `expectedSize` bytes there equal `expected` (5 to 32 bytes, whole instructions), the host copies
+  // the `stubSize` bytes of `stub` to the start of a page of its own within rel32 range of the site,
+  // follows them with a jump back to the instruction after the replaced bytes, and writes a 5-byte
+  // `jmp` to the page over the site, the rest of the replaced bytes as NOPs. The stub must perform
+  // whatever of the replaced instructions it still needs, and position-independent code is required:
+  // it runs at the page's address. It resumes the game by running off its own end, or by jumping to
+  // page + stubSize. `page` receives the stub's first byte: the page stays readable, writable and
+  // executable for the process lifetime and is never freed (a thread may still be running the stub),
+  // so the mod may keep the stub's data there and write it from any thread. The patch belongs to the
+  // mod like its hooks: the site's own bytes are written back when the mod fails to start and when
+  // the mods restart (the page stays). False, `page` null and nothing written, when the entry is
+  // unknown, unresolved or not a native site, when the bytes there differ from `expected` (another
+  // game build), when `expected` is not whole instructions or not 5 to 32 bytes, when the stub is
+  // empty or longer than 4082 bytes (a page less the jump back), when the site is already patched or
+  // hooked, when no page can be had within rel32 range, or when the write fails; the host logs which.
+  bool (*patch_site)(const char* key, const void* expected, size_t expectedSize, const void* stub, size_t stubSize,
+                     void** page);
 };
 
 enum PgModFlags : uint32_t {

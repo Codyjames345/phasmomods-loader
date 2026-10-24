@@ -1,16 +1,19 @@
 // The offline check: resolves every map entry against a Cpp2IL dump and a copy of GameAssembly.dll,
-// without running the game. tools/gamecheck.ps1 prepares both and runs it.
+// and the native sites against a copy of UnityPlayer.dll, without running the game.
+// tools/gamecheck.ps1 prepares them and runs it.
 //
-// usage: gamecheck --dump <DiffableCs root> --image <GameAssembly.dll> [--addresses <tsv>] [--mods <dir>]
-//                  [--scene-entries <tsv>]
-// It prints one line per entry and a summary. Exports resolve from the image's export table. An icall
+// usage: gamecheck --dump <DiffableCs root> --image <GameAssembly.dll> [--unity-player <UnityPlayer.dll>]
+//                  [--addresses <tsv>] [--mods <dir>] [--scene-entries <tsv>]
+// It prints one line per entry and a summary. Exports resolve from the image's export table. Without
+// --unity-player every native site is missing, and counts as a failure when it is required. An icall
 // cannot be checked without the running game: it is listed as checked at startup only, and never
 // counts as a failure. A well-formed scene fact (a Scene, Layer or AnimatorParam entry) is not in the
 // code either: it is listed as checked in the scene files and never counts as a failure here. With
 // --scene-entries the scene facts go to that file for tools/assetcheck.py, one per line: key, kind
 // (scene, layer or animator), 1 when required or 0, scene, path, component and name, tab separated,
 // with an empty column for a field the entry does not set. With --addresses it writes key, kind, value
-// and length for each resolved entry. With --mods it loads every mod DLL in <dir> and its subfolders (a DLL that exports
+// and length for each resolved entry (a native site's value is its RVA in UnityPlayer, with no
+// length). With --mods it loads every mod DLL in <dir> and its subfolders (a DLL that exports
 // pgmod_info), and after the summary prints "would not load <mod id> (contract <version>)" for each
 // mod built against a host contract this build's host does not run (pg_api_compatible), and, for
 // the others, asks for the game entries each requires (pgmod_requires) and prints
@@ -24,6 +27,7 @@
 #include <exception>
 #include <filesystem>
 #include <format>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -40,11 +44,11 @@ namespace {
 using namespace pg::sdk;
 
 constexpr const char* kUsage =
-    "usage: gamecheck --dump <DiffableCs root> --image <GameAssembly.dll> [--addresses <tsv>] [--mods <dir>]\n"
-    "                 [--scene-entries <tsv>]\n";
+    "usage: gamecheck --dump <DiffableCs root> --image <GameAssembly.dll> [--unity-player <UnityPlayer.dll>]\n"
+    "                 [--addresses <tsv>] [--mods <dir>] [--scene-entries <tsv>]\n";
 
 struct Args {
-  std::filesystem::path dump, image, addresses, mods, sceneEntries;
+  std::filesystem::path dump, image, unityPlayer, addresses, mods, sceneEntries;
 };
 
 bool parse(int argc, wchar_t** argv, Args& out) {
@@ -53,6 +57,7 @@ bool parse(int argc, wchar_t** argv, Args& out) {
     if (i + 1 >= argc) return false;
     std::filesystem::path* target = flag == L"--dump"            ? &out.dump
                                     : flag == L"--image"         ? &out.image
+                                    : flag == L"--unity-player"  ? &out.unityPlayer
                                     : flag == L"--addresses"     ? &out.addresses
                                     : flag == L"--mods"          ? &out.mods
                                     : flag == L"--scene-entries" ? &out.sceneEntries
@@ -75,20 +80,22 @@ const char* kind_word(Kind k) {
     case Kind::Scene: return "scene";
     case Kind::Layer: return "layer";
     case Kind::AnimatorParam: return "animator";
+    case Kind::NativeSite: return "native";
   }
   return "?";
 }
 
 // A resolved entry's value: a type's name in this build, a method's, code entry's or export's RVA, a
-// field's offset, an enum value's number, an icall's name, a layer's index, a path, a parameter's
-// name.
+// native site's RVA in UnityPlayer, a field's offset, an enum value's number, an icall's name, a
+// layer's index, a path, a parameter's name.
 std::string value_of(const Result& r) {
   switch (r.desc->kind) {
     case Kind::Type:
     case Kind::Icall: return r.currentName;
     case Kind::Method:
     case Kind::Code:
-    case Kind::Export: return std::format("0x{:X}", r.rva);
+    case Kind::Export:
+    case Kind::NativeSite: return std::format("0x{:X}", r.rva);
     case Kind::Field: return std::format("+0x{:X}", r.offset);
     case Kind::EnumValue:
     case Kind::Layer: return std::to_string(r.value);
@@ -295,7 +302,19 @@ int run(int argc, wchar_t** argv) {
     return 2;
   }
 
-  const Resolution resolution = resolve(pg::map::kAllEntries, model, &image);
+  // UnityPlayer.dll, for the native sites. One given that cannot be read is unreadable input.
+  std::vector<uint8_t> unityBytes;
+  std::optional<CodeImage> unity;
+  if (!args.unityPlayer.empty()) {
+    unityBytes = map_pe_file(args.unityPlayer);
+    unity.emplace(unityBytes);
+    if (unityBytes.empty() || !unity->valid()) {
+      std::fprintf(stderr, "gamecheck: %s is not a readable PE32+ image\n", utf8(args.unityPlayer).c_str());
+      return 2;
+    }
+  }
+
+  const Resolution resolution = resolve(pg::map::kAllEntries, model, &image, {}, unity ? &*unity : nullptr);
   size_t counts[4] = {}, startupOnly = 0, inScene = 0;
   bool failed = false;  // a required entry that could be checked here did not resolve
   for (const Result& r : resolution.results) {

@@ -17,15 +17,27 @@ bool init();  // host only
 // detour on the same target.
 bool create(void* target, void* detour, void** original, const char* name);
 bool enable_all();  // enables the hooks created since the open group began
+// Host only: the host contract's patch_site (core/mod_api.h says what it writes and when it
+// refuses) at the native site `site`. The patch joins the open group like a hook: rollback_group,
+// rollback_to and shutdown write the site's own bytes back, unless something else has overwritten the
+// patch since (logged, left as it is). Every refusal and failure is logged under `name`; protections
+// changed for the write are restored.
+bool patch_site(void* site, const void* expected, size_t expectedSize, const void* stub, size_t stubSize, void** page,
+                const char* name);
 // Host only. Each mod's start is a group: rollback_group disables and removes the hooks created
 // since begin_group, for a mod that did not start. rollback_to removes every hook created since
 // mark() returned, newest first, so detours chained on one function unwind in order: the mods'
-// hooks, all of them, when the mods are restarted.
+// hooks, all of them, when the mods are restarted. Site patches count as hooks in both.
 void begin_group();
 void rollback_group();
 size_t mark();
 void rollback_to(size_t mark);
-void shutdown();  // host only: disable all hooks, drain in-flight detours, uninitialise
+void shutdown();  // host only: disable all hooks and site patches, drain in-flight detours, uninitialise
+
+#ifdef PG_HOOKS_TEST
+// tests/hooks_test.cpp only: while set, patch_site finds no page within rel32 range of a site.
+extern bool g_noPageNear;
+#endif
 
 extern std::atomic<int> g_inflight;
 struct Guard {

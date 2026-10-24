@@ -24,8 +24,10 @@ Exists: the map and its resolver (at startup in the game, and offline), the game
 15 entries, Unity's Camera with 8, LevelController with its static instance, Unity's Animator with
 one icall, and the Unity types the host's scene facts use: Animator, AnimatorControllerParameter,
 Transform, LayerMask and SceneManager), two scene facts (the journal's book and the PlayerView layer),
-plus one GameAssembly export the host may use (`il2cpp_shutdown`). One mod call goes through the game API: Ghost Tells'
-Shade calls `phasmo::GhostAI::UnAppear`.
+plus one GameAssembly export the host may use (`il2cpp_shutdown`), and two native sites in
+UnityPlayer.dll (the crowd steering site and `NavMeshAgent::GetInternalAgent`) with the host's
+`patch_site`. One mod call goes through the game API: Ghost Tells' Shade calls
+`phasmo::GhostAI::UnAppear`.
 
 Does not exist yet. These arrive with stage 2, when every bundled mod is on the game API:
 
@@ -318,6 +320,13 @@ that is unknown, unresolved or of the wrong kind:
   scene load; `animator_param` says whether the Animator has an AnimatorParam entry's parameter, with
   its hash. Both log a miss once per scene load and answer null or false. A layer needs no service:
   `game_entry` gives its index in `value`.
+- `patch_site(key, expected, expectedSize, stub, stubSize, page)`, after `animator_param`: patches a
+  native site, on the main thread while the mod starts. Only when the bytes there equal `expected`
+  (5 to 32 bytes of whole instructions) does the host copy the stub to a page of its own within rel32
+  range, follow it with a jump back past the replaced bytes, and write a `jmp` to it over the site.
+  `page` receives the stub's address; the page is never freed, and stays writable for the stub's
+  data. The patch is removed with the mod's hooks. Bytes that differ, or any other refusal, write
+  nothing and are logged. `game_entry` gives a native site's address in `code`.
 
 A mod's exports are `pgmod_info`, `pgmod_start`, `pgmod_tick`, `pgmod_stop` and (version 2 onwards,
 exported by linking `pgmod`) `pgmod_requires`.
@@ -385,12 +394,12 @@ inline constexpr pg::sdk::EntryDesc GhostAI_UnAppear{.key = "GhostAI.UnAppear", 
 ```
 
 The fields: `key` (what `game_entry` and `pgmod_requires` use), `kind` (`Type`, `Method`, `Field`,
-`EnumValue`, `Code`, `Icall`, `Export`, `Scene`, `Layer`, `AnimatorParam`), `confidence`, `flags` (`kStatic`, `kOptional`, `kTrack`;
+`EnumValue`, `Code`, `Icall`, `Export`, `Scene`, `Layer`, `AnimatorParam`, `NativeSite`), `confidence`, `flags` (`kStatic`, `kOptional`, `kTrack`;
 `kStatic` makes a field a static one; `kTrack` is not read by anything yet), `owner` (the declaring
 Type entry's key), `name` or `hint` (an icall's or export's name, as the runtime knows it),
 `assembly` and `ns` (for a type; a null `ns` means the global namespace for a top-level type and any
 for a nested one), `type` (a field's type or a method's return type), `params`, `fieldTypes`,
-`values`, `facts`, for a Code entry `pattern`, `within`, `patternOffset`, and for a scene fact `scene`,
+`values`, `facts`, for a Code entry or a native site `pattern`, `within`, `patternOffset`, and for a scene fact `scene`,
 `path` and `component`. A map header ends with
 its `phasmo::` wrappers; add one for each entry a mod may use (an export gets none).
 
@@ -452,6 +461,16 @@ Two kinds are found by name outside the metadata, with no owner, shape or facts:
   another module, is `Missing`. Only the host may use an export: the host contract never gives one to
 a mod.
 
+A **native site** (`Kind::NativeSite`) is a place in UnityPlayer.dll's code, which has no metadata.
+`assembly` is `"UnityPlayer"`, `pattern` is hex bytes with `??` as a wildcard, and `within` is the
+name of a UnityPlayer export whose function bounds the search, or `".text"` for the whole code
+section, where the pattern needs at least 16 bytes that are not wildcards. It must match exactly once
+there, or the entry is `Missing` or `Ambiguous`, and `patternOffset` must keep the site inside the
+bytes it matched. The host resolves native sites over the loaded UnityPlayer at startup, and the
+offline check over a copy of UnityPlayer.dll. UnityPlayer exports only `UnityMain`, so every native
+site today searches `.text`: its pattern runs through the instructions its users rely on, so a build
+that changes them leaves it unresolved. They are the most fragile entries.
+
 Three kinds are facts of the game's scene and asset files, not of its code (see
 [scene and asset facts](systems/scene.md)). The resolver only checks that one is well formed and
 leaves it as checked in the scene files; the offline check verifies it with `tools/assetcheck.py`,
@@ -510,8 +529,9 @@ and `-Cpp2Il`. The game and Cpp2IL paths never come from the repository.
 
 `gamecheck.ps1` copies four files out of the game folder (`GameAssembly.dll`, `Phasmophobia.exe`,
 `globalgamemanagers`, `global-metadata.dat`), runs Cpp2IL with `--use-processor attributeinjector
---output-as diffable-cs` only when their hashes changed, and runs `build\gamecheck.exe --dump <dir>
---image <GameAssembly.dll> --addresses re\map-addresses.tsv --scene-entries re\dump\scene-entries.tsv
+--output-as diffable-cs` only when their hashes changed, copies `UnityPlayer.dll` when its size or
+time changed, and runs `build\gamecheck.exe --dump <dir> --image <GameAssembly.dll> --unity-player
+<UnityPlayer.dll> --addresses re\map-addresses.tsv --scene-entries re\dump\scene-entries.tsv
 [--mods <dir>]`. It prints one line per entry (`OK`, `MISSING`, `AMBIGUOUS` or `BLOCKED`, the key, the
 value, then twins, aliases and `renamed from`; `STARTUP`, the key and the icall's name for an icall,
 checked at startup only; `SCENE`, the key and its path or name for a scene fact, checked in the scene

@@ -366,6 +366,23 @@ bool api_animator_param(const char* key, const void* animator, int32_t* hash) {
                    [&] { return gamemap::animator_param(key, animator, hash); });
 }
 
+// The native sites (version 2.1): the hooks layer patches one, in the open mod's group.
+bool api_patch_site(const char* key, const void* expected, size_t expectedSize, const void* stub, size_t stubSize,
+                    void** page) {
+  if (page) *page = nullptr;
+  try {
+    const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
+    if (!e || e->kind != PG_ENTRY_NATIVE_SITE || !e->code) {
+      PG_LOG("suite: game entry %s is unknown, unresolved or not a native site; nothing patched", key ? key : "?");
+      return false;
+    }
+    return hooks::patch_site(e->code, expected, expectedSize, stub, stubSize, page, key);
+  } catch (...) {
+    PG_LOG("suite: exception while patching native site %s", key ? key : "?");
+    return false;
+  }
+}
+
 void on_presence(int32_t sender, const uint8_t* data, size_t size) {
   if (game::private_room()) g_presence.receive(sender, data, size, GetTickCount64());
 }
@@ -449,7 +466,7 @@ bool start(void* gameAssembly, void* unityPlayer) {
            &api_list_count, &api_list_items, &api_type_object, &api_object_new, &api_is_instance,
            &api_alive, &api_virtual_method, &api_gc_hold, &api_gc_release, &api_log_exception,
            &api_static_get, &api_static_set, &api_hook_body, &api_body_count,
-           &api_scene_find, &api_animator_param};
+           &api_scene_find, &api_animator_param, &api_patch_site};
   hostnet::set_receiver(hostnet::kHostChannel, &on_presence);
   mods::load(g_dataDirectory);
   if (mods::loaded().empty()) {

@@ -29,6 +29,7 @@ struct Published {
 };
 std::vector<Published> g_published;  // one per result, in the same order; built once, never resized
 uintptr_t g_base = 0;                // the loaded GameAssembly the entries were published for
+uintptr_t g_unityPlayerBase = 0;     // and the loaded UnityPlayer, for the native sites
 // The entries were published. Mods keep pointers to them (and to their twins) for the process
 // lifetime, so they are never published again: that would reallocate them under the mods.
 bool g_publishedOnce = false;
@@ -49,14 +50,16 @@ uint32_t kind_of(sdk::Kind kind) {
     case sdk::Kind::Scene: return PG_ENTRY_SCENE;
     case sdk::Kind::Layer: return PG_ENTRY_LAYER;
     case sdk::Kind::AnimatorParam: return PG_ENTRY_ANIMATOR_PARAM;
+    case sdk::Kind::NativeSite: return PG_ENTRY_NATIVE_SITE;
   }
   return 0;
 }
 
 // Builds what mods receive for the resolved entry at index i: the runtime's class, method and field
-// from the kept model, code and exports as addresses in the loaded module at g_base, an icall's code
-// as the runtime gave it, a layer's index. A Scene or AnimatorParam entry carries its kind alone:
-// scene_find and animator_param answer for it. An unresolved entry gets nothing.
+// from the kept model, code and exports as addresses in the loaded module at g_base, a native site
+// as its address in the loaded UnityPlayer at g_unityPlayerBase, an icall's code as the runtime gave
+// it, a layer's index. A Scene or AnimatorParam entry carries its kind alone: scene_find and
+// animator_param answer for it. An unresolved entry gets nothing.
 void publish_one(size_t i) {
   const uintptr_t base = g_base;
   const sdk::Result& r = g_resolution.results[i];
@@ -79,6 +82,9 @@ void publish_one(size_t i) {
     case sdk::Kind::Code:
     case sdk::Kind::Export: e.code = r.rva ? reinterpret_cast<void*>(base + r.rva) : nullptr; break;
     case sdk::Kind::Icall: e.code = reinterpret_cast<void*>(r.address); break;
+    case sdk::Kind::NativeSite:
+      e.code = g_unityPlayerBase && r.rva ? reinterpret_cast<void*>(g_unityPlayerBase + r.rva) : nullptr;
+      break;
     case sdk::Kind::Field:
       if (type && r.member >= 0 && size_t(r.member) < type->fields.size()) e.field = type->fields[r.member].runtime;
       e.offset = r.offset;
@@ -92,13 +98,14 @@ void publish_one(size_t i) {
 }
 
 // False, publishing nothing and logging why, once the entries were published.
-bool publish(uintptr_t base) {
+bool publish(uintptr_t base, uintptr_t unityPlayerBase = 0) {
   if (g_publishedOnce) {
     PG_LOG("game map: already published; a second publish is refused and the entries stay as they are");
     return false;
   }
   g_publishedOnce = true;
   g_base = base;
+  g_unityPlayerBase = unityPlayerBase;
   g_published.assign(g_resolution.results.size(), {});
   for (size_t i = 0; i < g_resolution.results.size(); ++i) publish_one(i);
   return true;
@@ -156,8 +163,23 @@ void abandon(const std::string& reason) {
   PG_LOG("game map: abandoned, no entry resolved: %s", reason.c_str());
 }
 
+// Whether the image's .text section is committed memory that can be read throughout: the search for
+// a native site reads every byte of it. True for an image without one, which the resolver reports.
+bool text_readable(const sdk::CodeImage& image) {
+  uint64_t rva = 0;
+  const std::span<const uint8_t> text = image.section(".text", rva);
+  for (auto p = reinterpret_cast<uintptr_t>(text.data()), end = p + text.size(); p < end;) {
+    MEMORY_BASIC_INFORMATION region{};
+    if (!VirtualQuery(reinterpret_cast<const void*>(p), &region, sizeof region) || region.State != MEM_COMMIT ||
+        (region.Protect & (PAGE_NOACCESS | PAGE_GUARD)))
+      return false;
+    p = reinterpret_cast<uintptr_t>(region.BaseAddress) + region.RegionSize;
+  }
+  return true;
+}
+
 // The reason it could not resolve, or empty once it has.
-std::string build_and_resolve(void* gameAssembly, void* stopEvent, unsigned long long deadline) {
+std::string build_and_resolve(void* gameAssembly, void* unityPlayer, void* stopEvent, unsigned long long deadline) {
   if (const char* why = stop_reason(stopEvent, deadline)) return why;
   sdk::RuntimeApi api;
   if (!il2cpp::runtime_api(gameAssembly, api)) return "the runtime lacks an export the model reads";
@@ -170,17 +192,23 @@ std::string build_and_resolve(void* gameAssembly, void* stopEvent, unsigned long
   // The loaded module's own memory, only read.
   const sdk::CodeImage image(sdk::loaded_module(base));
   if (!image.valid()) PG_LOG("game map: the loaded GameAssembly has no readable function table");
+  // The native sites are found in the loaded UnityPlayer's code, only read. Without it each stays
+  // missing, naming it.
+  const sdk::CodeImage unity(sdk::loaded_module(reinterpret_cast<uintptr_t>(unityPlayer)));
+  const bool unityReadable = unity.valid() && text_readable(unity);
+  if (!unityReadable) PG_LOG("game map: the loaded UnityPlayer cannot be read; every native site stays missing");
   // No icall lookup here: the runtime's icall table is not locked, and nothing proves the engine has
   // registered every icall by now. resolve_icalls asks on the main thread at activation. Static
   // fields are never read here either: that can run a class's static constructor.
   g_resolveIcall = api.resolve_icall;
-  g_resolution = sdk::resolve(map::kAllEntries, g_model, image.valid() ? &image : nullptr);
+  g_resolution = sdk::resolve(map::kAllEntries, g_model, image.valid() ? &image : nullptr, {},
+                              unityReadable ? &unity : nullptr);
   return {};
 }
 
 }  // namespace
 
-bool resolve(void* gameAssembly, void* stopEvent, unsigned long long deadline) {
+bool resolve(void* gameAssembly, void* unityPlayer, void* stopEvent, unsigned long long deadline) {
   if (g_publishedOnce) {
     PG_LOG("game map: already resolved; a second resolve is refused and the entries stay as published");
     return false;
@@ -188,7 +216,7 @@ bool resolve(void* gameAssembly, void* stopEvent, unsigned long long deadline) {
   const ULONGLONG start = GetTickCount64();
   std::string failure = "an unknown exception was thrown";
   try {
-    failure = build_and_resolve(gameAssembly, stopEvent, deadline);
+    failure = build_and_resolve(gameAssembly, unityPlayer, stopEvent, deadline);
   } catch (const Il2CppExceptionWrapper& e) {
     il2cpp::log_exception("game map: managed exception while reading the runtime", e.ex);
     failure = "a managed exception was thrown";
@@ -198,7 +226,7 @@ bool resolve(void* gameAssembly, void* stopEvent, unsigned long long deadline) {
   }
   if (failure.empty()) log_failures();
   else abandon(failure);
-  publish(reinterpret_cast<uintptr_t>(gameAssembly));
+  publish(reinterpret_cast<uintptr_t>(gameAssembly), reinterpret_cast<uintptr_t>(unityPlayer));
   size_t resolved = 0;
   for (const sdk::Result& r : g_resolution.results) resolved += r.status == sdk::Status::Resolved;
   PG_LOG("game map: %zu/%zu resolved in %llu ms", resolved, std::size(map::kAllEntries), GetTickCount64() - start);

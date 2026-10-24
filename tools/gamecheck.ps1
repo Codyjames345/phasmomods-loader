@@ -1,5 +1,6 @@
 # The offline game check: copies the four files Cpp2IL needs out of the game folder, dumps them with
-# Cpp2IL, and runs build\gamecheck.exe on the dump and the copied GameAssembly.dll. It writes the dump
+# Cpp2IL, and runs build\gamecheck.exe on the dump and the copied GameAssembly.dll, and on a copy of
+# UnityPlayer.dll for the native sites. It writes the dump
 # to re\dump, the map's addresses to re\map-addresses.tsv and the RVA name table to re\names.tsv, all
 # gitignored. Then it checks the scene facts (tools/assetcheck.py) in copies of the scene and asset
 # files they need, with UnityPy in a venv it makes in re\dump\venv on first run, and prints that
@@ -41,6 +42,16 @@ foreach ($file in $files) {
   Copy-Item -LiteralPath $from -Destination $to -Force
 }
 
+# UnityPlayer.dll, for the native sites. It is large, so a copy whose size and time match the game's
+# is kept.
+$unityFrom = Get-Item -LiteralPath (Join-Path $GameDir 'UnityPlayer.dll') -ErrorAction SilentlyContinue
+if (-not $unityFrom) { throw 'The game folder has no UnityPlayer.dll.' }
+$unityPlayer = Join-Path $game 'UnityPlayer.dll'
+$unityTo = Get-Item -LiteralPath $unityPlayer -ErrorAction SilentlyContinue
+if (-not ($unityTo -and $unityTo.Length -eq $unityFrom.Length -and $unityTo.LastWriteTimeUtc -eq $unityFrom.LastWriteTimeUtc)) {
+  Copy-Item -LiteralPath $unityFrom.FullName -Destination $unityPlayer -Force
+}
+
 # The dump depends only on the code and the metadata, so their two hashes say whether it is current.
 $hashes = @('GameAssembly.dll', 'Phasmophobia_Data\il2cpp_data\Metadata\global-metadata.dat') |
   ForEach-Object { '{0} {1}' -f (Get-FileHash -LiteralPath (Join-Path $game $_) -Algorithm SHA256).Hash, $_ }
@@ -57,8 +68,8 @@ if (-not $current) {
 }
 
 $diffable = Join-Path $cs 'DiffableCs'
-$checkArgs = @('--dump', $diffable, '--image', (Join-Path $game 'GameAssembly.dll'), '--addresses', $addresses,
-  '--scene-entries', $sceneEntries)
+$checkArgs = @('--dump', $diffable, '--image', (Join-Path $game 'GameAssembly.dll'), '--unity-player', $unityPlayer,
+  '--addresses', $addresses, '--scene-entries', $sceneEntries)
 if ($Mods) { $checkArgs += @('--mods', (Resolve-Path -LiteralPath $Mods).Path) }
 & $check @checkArgs
 $code = $LASTEXITCODE

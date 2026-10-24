@@ -23,7 +23,9 @@ struct Result {
   std::vector<std::string> candidates;  // the candidates of an Ambiguous entry, readable
   int type = -1;    // the type, or a member's owner type, as an index into GameModel::types
   int member = -1;  // index into the owner's fields (Field, EnumValue) or methods (Method)
-  uint64_t rva = 0;  // a method's canonical body, a code entry's address, or an export's function
+  // A method's canonical body, a code entry's address, or an export's function, in GameAssembly; a
+  // native site's address in UnityPlayer.
+  uint64_t rva = 0;
   // A method's same behaviour at other addresses: bodies that read the same once placed (twins), and
   // the names of other methods folded onto its own body (aliases).
   std::vector<uint64_t> twins;
@@ -44,8 +46,8 @@ struct Resolution {
 // "OK", "MISSING", "AMBIGUOUS" or "BLOCKED", as the reports write a status.
 const char* status_word(Status status);
 
-// The assemblies the entries name, each once and sorted: the only ones a model needs, since more would
-// only add look-alike types.
+// The IL2CPP assemblies the entries name, each once and sorted: the only ones a model needs, since more
+// would only add look-alike types. A native site's "UnityPlayer" is none of them.
 std::vector<std::string> assemblies_of(std::span<const EntryDesc* const> entries);
 
 class CodeImage;
@@ -65,8 +67,10 @@ inline constexpr std::string_view kCheckedInScene = "checked in the scene files 
 // entries that need machine code or the export table are Missing with the detail "no code image".
 // Icall entries resolve only through `icalls`, which only the running game has: without it they are
 // Missing with the detail "checked at startup only". Scene, Layer and AnimatorParam entries are
-// Missing with the detail kCheckedInScene when well formed.
+// Missing with the detail kCheckedInScene when well formed. NativeSite entries resolve over
+// `unityPlayer`, UnityPlayer.dll laid out by RVA: without it they are Missing with the detail
+// "no UnityPlayer image".
 Resolution resolve(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image,
-                   const IcallLookup& icalls = {});
+                   const IcallLookup& icalls = {}, const CodeImage* unityPlayer = nullptr);
 
 }  // namespace pg::sdk

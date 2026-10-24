@@ -4,15 +4,18 @@ file(REMOVE_RECURSE "${WORK}")
 file(MAKE_DIRECTORY "${WORK}")
 set(table "${WORK}/map-addresses.tsv")
 
-foreach(case "no-such-dump" "unreadable-image")
+file(WRITE "${WORK}/not-an-image.dll" "not a PE file")
+foreach(case "no-such-dump" "unreadable-image" "unreadable-unity-player")
   file(WRITE "${table}" "GhostAI.Hunting\tmethod\t0x1\t0x1\n")
   if(case STREQUAL "no-such-dump")
     set(args --dump "${WORK}/no-such-dump" --image "${GAMECHECK}")
+  elseif(case STREQUAL "unreadable-unity-player")
+    # A readable dump and image, and a UnityPlayer.dll that is not a PE32+ file.
+    set(args --dump "${DUMP}" --image "${GAMECHECK}" --unity-player "${WORK}/not-an-image.dll")
   else()
     # A dump folder with the assemblies the map names, and an image that is not a PE32+ file.
     file(MAKE_DIRECTORY "${WORK}/dump/Assembly-CSharp" "${WORK}/dump/UnityEngine.AnimationModule"
       "${WORK}/dump/UnityEngine.CoreModule")
-    file(WRITE "${WORK}/not-an-image.dll" "not a PE file")
     set(args --dump "${WORK}/dump" --image "${WORK}/not-an-image.dll")
   endif()
   execute_process(COMMAND "${GAMECHECK}" ${args} --addresses "${table}" RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)

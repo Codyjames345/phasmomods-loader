@@ -12,6 +12,7 @@
 #include "Scene.h"
 #include "SceneManager.h"
 #include "Transform.h"
+#include "UnityPlayer.h"
 
 namespace pg::map {
 
@@ -56,6 +57,8 @@ inline constexpr const pg::sdk::EntryDesc* kAllEntries[] = {
     &Scene_JournalBookContent,
     &Layer_PlayerView,
     &GameAssembly_il2cpp_shutdown,
+    &UnityPlayer_SteerSite,
+    &UnityPlayer_GetInternalAgent,
 };
 
 }  // namespace pg::map
