@@ -66,22 +66,23 @@ $code = $LASTEXITCODE
 if ($LASTEXITCODE -ne 0) { throw 'node re\names.mjs failed.' }
 if ($code -eq 2) { exit 2 }  # gamecheck could not read its input, so it wrote no scene entries
 
-# The scene facts. The venv is made once and refreshed when the pinned requirements change.
+# The scene facts. The venv is made once, and made afresh when the pinned requirements change, so
+# nothing a previous set installed stays in it. Every package is pinned with its hashes and installed
+# from wheels only (tools/assetcheck-requirements.txt).
 $venv = Join-Path $dump 'venv'
 $python = Join-Path $venv 'Scripts\python.exe'
 $requirements = Join-Path $PSScriptRoot 'assetcheck-requirements.txt'
 $installed = Join-Path $venv 'assetcheck-requirements.txt'
-if (-not (Test-Path -LiteralPath $python)) {
-  Write-Host 'Making the Python venv for the scene check...'
-  if (Get-Command py -ErrorAction SilentlyContinue) { & py -3 -m venv $venv }
-  elseif (Get-Command python -ErrorAction SilentlyContinue) { & python -m venv $venv }
-  else { throw 'The scene check (tools/assetcheck.py) needs Python 3; none is installed.' }
-  if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw "Cannot make the venv $venv." }
-}
-$fresh = (Test-Path -LiteralPath $installed) -and
+$fresh = (Test-Path -LiteralPath $python) -and (Test-Path -LiteralPath $installed) -and
   ((Get-FileHash -LiteralPath $installed).Hash -eq (Get-FileHash -LiteralPath $requirements).Hash)
 if (-not $fresh) {
-  & $python -I -m pip install --quiet --disable-pip-version-check -r $requirements
+  if (Test-Path -LiteralPath $venv) { Remove-Item -LiteralPath $venv -Recurse -Force }
+  Write-Host 'Making the Python venv for the scene check...'
+  if (Get-Command py -ErrorAction SilentlyContinue) { & py -3 -I -m venv $venv }
+  elseif (Get-Command python -ErrorAction SilentlyContinue) { & python -I -m venv $venv }
+  else { throw 'The scene check (tools/assetcheck.py) needs Python 3; none is installed.' }
+  if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw "Cannot make the venv $venv." }
+  & $python -I -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r $requirements
   if ($LASTEXITCODE -ne 0) { throw 'Cannot install the scene check''s requirements.' }
   Copy-Item -LiteralPath $requirements -Destination $installed -Force
 }

@@ -237,6 +237,29 @@ void resolve_icalls() {
   }
 }
 
+namespace {
+// The engine entries the host needs to check a scene fact of the kind `kind` (host/scene_engine.cpp).
+std::vector<const sdk::EntryDesc*> engine_entries(sdk::Kind kind) {
+  switch (kind) {
+    case sdk::Kind::Scene: return {&map::Transform, &map::Transform_Find, &map::SceneManager_GetActiveScene};
+    case sdk::Kind::Layer: return {&map::LayerMask, &map::LayerMask_NameToLayer};
+    case sdk::Kind::AnimatorParam:
+      return {&map::Animator, &map::Animator_get_parameters, &map::Animator_StringToHash,
+              &map::AnimatorControllerParameter, &map::AnimatorControllerParameter_m_Name};
+    default: return {};
+  }
+}
+
+// The first engine entry the scene fact needs that did not resolve, or null.
+const sdk::EntryDesc* unresolved_engine_entry(const sdk::EntryDesc& d) {
+  for (const sdk::EntryDesc* needed : engine_entries(d.kind)) {
+    const sdk::Result* r = g_resolution.find(needed->key);
+    if (!r || r->status != sdk::Status::Resolved) return needed;
+  }
+  return nullptr;
+}
+}  // namespace
+
 void resolve_scene_facts(const sdk::SceneEngine* engine) {
   try {
     if (g_published.size() != g_resolution.results.size()) return;
@@ -245,9 +268,15 @@ void resolve_scene_facts(const sdk::SceneEngine* engine) {
     for (size_t i = 0; i < g_resolution.results.size(); ++i) {
       sdk::Result& r = g_resolution.results[i];
       if (!scene_fact_pending(r)) continue;
+      layers += r.desc->kind == sdk::Kind::Layer;
+      // Fails closed: a fact the host cannot check is never published.
+      if (const sdk::EntryDesc* needed = unresolved_engine_entry(*r.desc)) {
+        r.detail = std::string(needed->key) + " unresolved";
+        PG_LOG("game map: %s %s (%s)", sdk::status_word(r.status), r.desc->key, r.detail.c_str());
+        continue;
+      }
       // A path or a parameter is checked where a mod uses it, in the scene it is used in.
       if (r.desc->kind == sdk::Kind::Layer) {
-        ++layers;
         const int32_t index = g_scene.layer(*r.desc);  // logged when no layer has the name
         if (index < 0) {
           r.detail = std::string("no layer is named ") + r.desc->name;

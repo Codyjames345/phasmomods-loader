@@ -91,7 +91,8 @@ void destroy(const void* unityObject);
 
 /// The Scene or AnimatorParam entry `d` resolves: scene_find or animator_param answers for it.
 void scene_fact(const sdk::EntryDesc& d);
-/// The layers the fake's LayerMask.NameToLayer knows: names[i] is layer i's name, "" for none.
+/// The layers the fake's LayerMask.NameToLayer knows: names[i] is layer i's name, "" for none. No
+/// names at all stands for a NameToLayer that did not resolve.
 void layer_names(const std::vector<std::string>& names);
 /// The Layer entry `d` resolves as the host resolves it when it activates, through NameToLayer by its
 /// name: to that layer's index, or not at all (logged) when no layer has the name.
@@ -100,6 +101,8 @@ void layer(const sdk::EntryDesc& d);
 void child(void* root, const char* path, void* found);
 /// A scene loads: the active scene's handle changes.
 void load_scene();
+/// `obj` is neither a Transform nor an Animator: scene_find and animator_param refuse it, saying so.
+void wrong_type(const void* obj);
 /// The Animator `animator` has these parameters (name and hash); any other object has none.
 void parameters(const void* animator, const std::vector<std::pair<std::string, int32_t>>& list);
 /// How many Transform.Find calls, and how many reads of an Animator's parameters, the fake answered

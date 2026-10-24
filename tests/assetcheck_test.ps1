@@ -56,7 +56,24 @@ try {
   [IO.File]::WriteAllText($notJson, 'not json')
   $run = Invoke-AssetCheck $all $notJson
   if ($run.Code -ne 2) { throw "assetcheck exited $($run.Code) on a snapshot that is not JSON, expected 2." }
+  $malformed = Join-Path $root 'malformed.json'
+  [IO.File]::WriteAllText($malformed, '{"layers": [], "places": {"Resources/Player": {"objects": [{"name": "A"}]}}}')
+  $run = Invoke-AssetCheck $all $malformed
+  if ($run.Code -ne 2) { throw "assetcheck exited $($run.Code) on a malformed snapshot, expected 2." }
   Write-Host 'assetcheck exits 2 on input it cannot read.'
+
+  # A hierarchy whose parents loop (A under B under A) still gets an answer, naming the loop's path.
+  $cyclic = Join-Path $root 'cyclic.json'
+  [IO.File]::WriteAllText($cyclic, '{"layers": [], "places": {"Loop": {"objects": [' +
+    '{"name": "A", "parent": 1, "components": ["Root"]}, {"name": "B", "parent": 0, "components": []}],' +
+    ' "controllers": {}}}}')
+  $loopEntries = Join-Path $root 'loop.tsv'
+  [IO.File]::WriteAllText($loopEntries, "Scene.loop`tscene`t1`tLoop`tB/C`tRoot`t`n")
+  $run = Invoke-AssetCheck $loopEntries $cyclic
+  if ($run.Code -ne 1 -or ($run.Lines -join "`n") -ne 'MISSING Scene.loop nothing at B/C under B/A in Loop') {
+    throw "assetcheck on a looping hierarchy exited $($run.Code) with:`n$($run.Lines -join "`n")"
+  }
+  Write-Host 'assetcheck ends on a hierarchy that loops.'
 } finally {
   Remove-Item -LiteralPath $root -Recurse -Force
 }

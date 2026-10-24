@@ -11,7 +11,8 @@ usage:
 
 The entries are what `gamecheck --scene-entries` writes: key, kind (scene, layer or animator), 1 when
 required or 0, scene, path, component and name, tab separated. The check prints `OK <key> <detail>` or
-`MISSING <key> <why>` for each and exits 1 when a required one is missing, 2 on unreadable input.
+`MISSING <key> <why>` for each and exits 1 when a required one is missing, 2 on input it cannot read
+(an unreadable entry line, file or snapshot, or anything else that stops the reading).
 --needs prints the data files the check reads that are already known, one name per line: a file's
 own references are known only once it is there, so the caller copies and asks again until nothing is
 added. --record writes what the check reads from the files (the snapshot) instead of checking it; the
@@ -68,8 +69,10 @@ def find_all(objects, children, root, path):
 
 
 def path_of(objects, index):
-    names = []
-    while index >= 0:
+    """The object's path from its root; a parent chain that loops stops where it comes back."""
+    names, seen = [], set()
+    while index >= 0 and index not in seen:
+        seen.add(index)
         names.append(objects[index]["name"])
         index = objects[index]["parent"]
     return "/".join(reversed(names))
@@ -248,8 +251,8 @@ class Reader:
                     return o.read()
             return None
 
-        def add(go_obj, parent):
-            go = go_obj.read()
+        def describe(go):
+            """The GameObject's components, noting the controllers of its Animators."""
             components = []
             for c in go.m_Component:
                 pptr = getattr(c, "component", c)
@@ -266,15 +269,30 @@ class Reader:
                     found = self.controller(f, o.read().m_Controller)
                     if found:
                         controllers.setdefault(found[0], []).append(found[1])
-            index = len(objects)
-            objects.append({"name": go.m_Name, "parent": parent, "components": components})
-            t = transform_of(go)
-            for child in (t.m_Children if t else []):
-                child_t = f.objects.get(child.path_id)
-                if child_t is not None:
-                    child_go = f.objects.get(child_t.read().m_GameObject.path_id)
-                    if child_go is not None:
-                        add(child_go, index)
+            return components
+
+        # Parent first and children in their Transform's order, walked with a stack rather than
+        # recursion, and each GameObject once: a malformed file whose hierarchy loops still ends.
+        visited = set()
+
+        def add(root_id):
+            stack = [(root_id, -1)]
+            while stack:
+                path_id, parent = stack.pop()
+                go_obj = f.objects.get(path_id)
+                if path_id in visited or go_obj is None or go_obj.type.name != "GameObject":
+                    continue
+                visited.add(path_id)
+                go = go_obj.read()
+                index = len(objects)
+                objects.append({"name": go.m_Name, "parent": parent, "components": describe(go)})
+                t = transform_of(go)
+                children = []
+                for child in (t.m_Children if t else []):
+                    child_t = f.objects.get(child.path_id)
+                    if child_t is not None:
+                        children.append((child_t.read().m_GameObject.path_id, index))
+                stack.extend(reversed(children))
 
         if roots is None:
             roots = []
@@ -284,9 +302,7 @@ class Reader:
                     if not t.m_Father.path_id:
                         roots.append(t.m_GameObject.path_id)
         for path_id in roots:
-            go = f.objects.get(path_id)
-            if go is not None and go.type.name == "GameObject":
-                add(go, -1)
+            add(path_id)
         return {"objects": objects, "controllers": controllers}
 
 
@@ -353,6 +369,9 @@ def main(argv):
         lines, failed = check(entries, snapshot)
     except BadInput as e:
         print(f"assetcheck: {e}", file=sys.stderr)
+        return 2
+    except Exception as e:  # anything else the files or the snapshot did not let it read
+        print(f"assetcheck: cannot read the input: {type(e).__name__}: {e}", file=sys.stderr)
         return 2
     print("\n".join(lines))
     return 1 if failed else 0

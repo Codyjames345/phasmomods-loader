@@ -211,9 +211,10 @@ struct PgHostApi {
   // per scene load, and the call answers null or false, so the feature that needs it stays off.
 
   // The Transform at the Scene entry `key`'s path under the Transform `root`, as Transform.Find finds
-  // it. The answer is kept until the next scene load, and found again when that object was destroyed
-  // or another `root` is given. Null when the entry is unknown, unresolved or not a Scene entry, when
-  // `root` is null, destroyed or not a Transform, and when nothing is at the path.
+  // it. One answer is kept per entry, for the last `root`, until the next scene load: the same `root`
+  // costs no search, another one (or the object found being destroyed) searches again. Null when the
+  // entry is unknown, unresolved or not a Scene entry, when `root` is null (at once, the kept answer
+  // untouched), destroyed or not a Transform, and when nothing is at the path.
   void* (*scene_find)(const char* key, void* root);
   // Whether the Animator `animator` has the parameter the AnimatorParam entry `key` names, read from
   // the Animator's own parameter list the first time each Animator is asked (and again after a scene

@@ -272,13 +272,23 @@ void publish_twice_is_refused() {
 const char* g_layerName = "PlayerView";
 const pg::sdk::SceneEngine kEngine{
     [] { return int32_t{1}; },
-    [](void*, const char*) { return static_cast<void*>(nullptr); },
-    [](const char* name) { return std::string(name) == g_layerName ? int32_t{11} : int32_t{-1}; },
-    [](const void*, const char*, int32_t*) { return false; },
+    [](void*, const char*, const char**) { return static_cast<void*>(nullptr); },
+    [](const char* name, const char**) { return std::string(name) == g_layerName ? int32_t{11} : int32_t{-1}; },
+    [](const void*, const char*, int32_t*, const char**) { return false; },
     [](const void* obj) { return obj != nullptr; },
     [](void*) { return uint32_t{0}; },
     [](uint32_t) {},
 };
+
+// Marks the entries `keys` resolved, as if the runtime had them.
+void mark_resolved(std::initializer_list<const char*> keys) {
+  for (Result& r : pg::gamemap::g_resolution.results)
+    for (const char* key : keys)
+      if (std::string(r.desc->key) == key) {
+        r.status = Status::Resolved;
+        r.detail.clear();
+      }
+}
 
 // The worker leaves the scene facts to the main thread, and does not log them as failures. At
 // activation a layer resolves by its name, and a well-formed Scene entry is published to be checked
@@ -289,6 +299,7 @@ void scene_facts_resolve_at_activation() {
   CHECK(pg::gamemap::entry("Layer.PlayerView") == nullptr && pg::gamemap::entry("Scene.JournalBookContent") == nullptr);
   CHECK(!logged("Layer.PlayerView") && !logged("Scene.JournalBookContent"));
 
+  mark_resolved({"Transform", "Transform.Find", "SceneManager.GetActiveScene", "LayerMask", "LayerMask.NameToLayer"});
   g_layerName = "PlayerView";
   pg::gamemap::resolve_scene_facts(&kEngine);
   const PgGameEntry* layer = pg::gamemap::entry("Layer.PlayerView");
@@ -304,11 +315,57 @@ void scene_facts_resolve_at_activation() {
 
   reset();
   CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  mark_resolved({"LayerMask", "LayerMask.NameToLayer"});
   g_layerName = "Renamed";
   pg::gamemap::resolve_scene_facts(&kEngine);
   CHECK(pg::gamemap::entry("Layer.PlayerView") == nullptr);
   CHECK(count_logged("game map: Layer.PlayerView: no layer is named PlayerView") == 1);
   CHECK(logged("game map: 0/1 layers resolved on the main thread"));
+}
+
+// An optional AnimatorParam entry for the dependency test: the map has none yet.
+inline constexpr EntryDesc kTestParam{.key = "Test.isOpened", .kind = pg::sdk::Kind::AnimatorParam,
+                                      .flags = pg::sdk::kOptional, .name = "isOpened",
+                                      .scene = "Resources/PCPlayer", .component = "BookController"};
+
+// A pending scene fact, as the worker leaves it.
+Result pending(const EntryDesc& d) { return {.desc = &d, .status = Status::Missing, .detail = std::string(kCheckedInScene)}; }
+Result resolved(const EntryDesc& d) { return {.desc = &d, .status = Status::Resolved}; }
+
+// Publishes `results`, then resolves the scene facts among them.
+void activate(std::vector<Result> results) {
+  pg::gamemap::g_model = {};
+  pg::gamemap::g_resolution.results = std::move(results);
+  reset();
+  CHECK(pg::gamemap::publish(0x10000));
+  pg::gamemap::resolve_scene_facts(&kEngine);
+}
+
+// A scene fact fails closed: it is published only when every engine entry the host needs to check it
+// resolved, and otherwise stays missing, naming the first one that did not, logged once.
+void scene_facts_need_their_engine_entries() {
+  using namespace pg::map;
+  activate({pending(Scene_JournalBookContent), resolved(Transform), resolved(Transform_Find),
+            pending(SceneManager_GetActiveScene)});
+  CHECK(pg::gamemap::entry("Scene.JournalBookContent") == nullptr);
+  CHECK(pg::gamemap::result("Scene.JournalBookContent")->detail == "SceneManager.GetActiveScene unresolved");
+  CHECK(count_logged("game map: MISSING Scene.JournalBookContent (SceneManager.GetActiveScene unresolved)") == 1);
+  activate({pending(Scene_JournalBookContent), resolved(Transform), resolved(Transform_Find),
+            resolved(SceneManager_GetActiveScene)});
+  CHECK(pg::gamemap::entry("Scene.JournalBookContent") != nullptr);
+
+  activate({pending(kTestParam), resolved(Animator), resolved(Animator_get_parameters),
+            resolved(AnimatorControllerParameter), resolved(AnimatorControllerParameter_m_Name)});
+  CHECK(pg::gamemap::entry("Test.isOpened") == nullptr);
+  CHECK(count_logged("game map: MISSING Test.isOpened (Animator.StringToHash unresolved)") == 1);
+  activate({pending(kTestParam), resolved(Animator), resolved(Animator_get_parameters), resolved(Animator_StringToHash),
+            resolved(AnimatorControllerParameter), resolved(AnimatorControllerParameter_m_Name)});
+  const PgGameEntry* param = pg::gamemap::entry("Test.isOpened");
+  CHECK(param && param->kind == PG_ENTRY_ANIMATOR_PARAM);
+
+  activate({pending(Layer_PlayerView), resolved(LayerMask)});
+  CHECK(pg::gamemap::entry("Layer.PlayerView") == nullptr);
+  CHECK(count_logged("game map: MISSING Layer.PlayerView (LayerMask.NameToLayer unresolved)") == 1);
 }
 
 }  // namespace
@@ -383,5 +440,6 @@ int main() {
   exports_and_statics_are_published();
   publish_twice_is_refused();
   scene_facts_resolve_at_activation();
+  scene_facts_need_their_engine_entries();
   return g_failures ? 1 : 0;
 }

@@ -13,18 +13,20 @@
 
 namespace pg::sdk {
 
-// What the facts ask of the engine. Each call contains what it throws and answers as for a miss.
+// What the facts ask of the engine. Each call contains what it throws and answers as for a miss. Where
+// a call misses for a reason other than the fact being absent (an argument of the wrong type, an entry
+// it needs that did not resolve), it points `why` at a static text saying so ("the root is not a
+// Transform", "Transform.Find unresolved"); otherwise it leaves `why` alone.
 struct SceneEngine {
   // The active scene's handle, which changes with every scene load; 0 when it cannot be read.
   int32_t (*active_scene)();
-  // The Transform at `path` under the Transform `root` (Transform.Find), or null; null as well when
-  // `root` is not a Transform.
-  void* (*find)(void* root, const char* path);
+  // The Transform at `path` under the Transform `root` (Transform.Find), or null.
+  void* (*find)(void* root, const char* path, const char** why);
   // The index of the layer named `name` (LayerMask.NameToLayer), or -1.
-  int32_t (*name_to_layer)(const char* name);
+  int32_t (*name_to_layer)(const char* name, const char** why);
   // Whether the Animator `animator` lists a parameter named `name`, read from its parameter list, with
-  // its hash into `hash`. False as well when `animator` is not an Animator.
-  bool (*parameter)(const void* animator, const char* name, int32_t* hash);
+  // its hash into `hash`.
+  bool (*parameter)(const void* animator, const char* name, int32_t* hash, const char** why);
   // UnityEngine.Object's implicit bool.
   bool (*alive)(const void* obj);
   // A strong GC handle on `obj` (0 for null), and its release: what is kept across frames is held.
@@ -46,11 +48,13 @@ class SceneFacts {
   // Releases everything kept and forgets what was logged. Main thread, while the game runs.
   void forget();
 
-  // The index of the Layer entry `d`'s layer, or -1 (logged) when no layer has its name.
+  // The index of the Layer entry `d`'s layer, or -1, logged with why (no layer has its name, or the
+  // engine could not ask).
   int32_t layer(const EntryDesc& d);
   // The Transform at the Scene entry `d`'s path under `root`. Kept until the active scene changes,
-  // the object found is destroyed or another root is given. Null, logged once per scene, when nothing
-  // is there or `root` is null or destroyed.
+  // the object found is destroyed or another root is given, so only a call with a new root searches.
+  // A null `root` answers null at once: no search, nothing logged, the kept answer untouched. Null,
+  // logged once per scene with why, when nothing is there or `root` is destroyed or not a Transform.
   void* find(const EntryDesc& d, void* root);
   // Whether `animator` has the AnimatorParam entry `d`'s parameter, with its hash. Checked once per
   // Animator and scene; a miss is logged once per scene.
@@ -67,6 +71,7 @@ class SceneFacts {
     uint32_t foundHandle = 0;
     bool has = false;  // a parameter: whether the Animator has it
     int32_t hash = 0;
+    const char* why = nullptr;  // a parameter: why the Animator was refused, when the engine said
     int32_t missLogged = 0;  // the scene a miss was last logged in
     bool missLoggedOnce = false;
   };

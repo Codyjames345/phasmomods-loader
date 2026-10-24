@@ -474,9 +474,12 @@ struct SceneObject {
   using use = Use<D>;
 
   /// The Transform at the entry's path under the Transform `root`, as Transform.Find finds it. The host
-  /// keeps the answer until the next scene load, so calling it every frame costs no search. Null when
-  /// nothing is there (logged once per scene load), when `root` is null, destroyed or not a Transform,
-  /// and when the entry did not resolve (logged once). A managed reference: do not keep it across
+  /// keeps one answer per entry, for the last root found under, until the next scene load: calling it
+  /// again with the same root costs no search, but a call with another root searches again, so
+  /// alternating roots searches every time. Null when nothing is there (logged once per scene load,
+  /// and searched again next call), when `root` is destroyed or not a Transform (logged the same way),
+  /// when `root` is null (at once: no search, nothing logged, the kept answer stays), and when the
+  /// entry did not resolve (logged once). A managed reference: do not keep it across
   /// frames without a pg::api::Held.
   template <int = 0>
   void* find(void* root) const {

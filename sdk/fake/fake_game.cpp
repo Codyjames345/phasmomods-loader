@@ -248,24 +248,37 @@ bool static_set(const char* key, const void* in, size_t size) {
 std::map<std::pair<void*, std::string>, void*> g_children;
 std::vector<std::string> g_layerNames;
 std::map<const void*, std::vector<std::pair<std::string, int32_t>>> g_parameters;
+std::set<const void*> g_wrongType;  // objects that are neither a Transform nor an Animator
 std::map<std::string, const sdk::EntryDesc*> g_sceneFacts;  // the Scene and AnimatorParam entries given
 int32_t g_scene = 1;
 int g_finds = 0, g_parameterReads = 0;
 
 const sdk::SceneEngine kEngine{
     [] { return g_scene; },
-    [](void* root, const char* path) -> void* {
+    [](void* root, const char* path, const char** why) -> void* {
       ++g_finds;
+      if (g_wrongType.count(root)) {
+        *why = "the root is not a Transform";
+        return nullptr;
+      }
       const auto it = g_children.find({root, path});
       return it != g_children.end() && !g_destroyed.count(it->second) ? it->second : nullptr;
     },
-    [](const char* name) -> int32_t {
+    [](const char* name, const char** why) -> int32_t {
+      if (g_layerNames.empty()) {
+        *why = "LayerMask.NameToLayer unresolved";
+        return -1;
+      }
       for (size_t i = 0; i < g_layerNames.size(); ++i)
         if (g_layerNames[i] == name) return static_cast<int32_t>(i);
       return -1;
     },
-    [](const void* animator, const char* name, int32_t* hash) {
+    [](const void* animator, const char* name, int32_t* hash, const char** why) {
       ++g_parameterReads;
+      if (g_wrongType.count(animator)) {
+        *why = "the object is not an Animator";
+        return false;
+      }
       const auto it = g_parameters.find(animator);
       if (it == g_parameters.end()) return false;
       for (const auto& [n, h] : it->second) {
@@ -341,6 +354,7 @@ void reset() {
   g_children.clear();
   g_layerNames.clear();
   g_parameters.clear();
+  g_wrongType.clear();
   g_sceneFacts.clear();
   g_scene = 1;
   g_finds = g_parameterReads = 0;
@@ -405,6 +419,8 @@ void layer(const sdk::EntryDesc& d) {
 void child(void* root, const char* path, void* found) { g_children[{root, path}] = found; }
 
 void load_scene() { ++g_scene; }
+
+void wrong_type(const void* obj) { g_wrongType.insert(obj); }
 
 void parameters(const void* animator, const std::vector<std::pair<std::string, int32_t>>& list) {
   g_parameters[animator] = list;

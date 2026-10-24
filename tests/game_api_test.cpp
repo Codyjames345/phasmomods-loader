@@ -521,6 +521,10 @@ void scene_path_found_and_kept_per_scene() {
   CHECK(phasmo::Journal::BookContent.find(&canvas) == &book);
   CHECK(fake::finds() == 1);
   CHECK(fake::held() == 2);  // the root and what was found, kept for the scene
+  g_lines.clear();
+  CHECK(phasmo::Journal::BookContent.find(nullptr) == nullptr);  // no root: no search, nothing logged
+  CHECK(phasmo::Journal::BookContent.find(&canvas) == &book);   // and the kept answer stays
+  CHECK(fake::finds() == 1 && fake::held() == 2 && g_lines.empty());
   fake::load_scene();
   CHECK(phasmo::Journal::BookContent.find(&canvas) == &book && fake::finds() == 2);
   fake::destroy(&book);
@@ -532,6 +536,26 @@ void scene_path_found_and_kept_per_scene() {
   g_lines.clear();
   CHECK(phasmo::Journal::BookContent.find(&canvas) == nullptr && fake::finds() == 0);
   CHECK(count_logged("Scene.JournalBookContent is not available in this game build") == 1);
+}
+
+// A miss says what failed: a root that is not a Transform, a NameToLayer that did not resolve, an
+// object that is not an Animator.
+void misses_say_what_failed() {
+  fake_everything_but("");
+  fake::scene_fact(kTestParam);
+  CHECK(bound());
+  int stranger = 0;
+  fake::wrong_type(&stranger);
+  g_lines.clear();
+  CHECK(phasmo::Journal::BookContent.find(&stranger) == nullptr);
+  CHECK(count_logged("Scene.JournalBookContent: the root is not a Transform; it answers null") == 1);
+  CHECK(testParam.hash(&stranger) == 0);
+  CHECK(count_logged("Test.isOpened: the object is not an Animator; it answers 0") == 1);
+  fake::layer_names({});  // a NameToLayer that did not resolve
+  fake::layer(kTestLayer);
+  CHECK(count_logged("Test.layer: LayerMask.NameToLayer unresolved") == 1);
+  CHECK(count_logged("no layer is named") == 0);
+  CHECK(g_lines.size() == 3);
 }
 
 // A layer resolves by its name through LayerMask.NameToLayer; one no layer has stays unresolved and
@@ -598,6 +622,7 @@ int main() {
   icall_reaches_fake();
   missing_scene_path_is_null_and_logged_once();
   scene_path_found_and_kept_per_scene();
+  misses_say_what_failed();
   layer_by_name();
   animator_param_checked();
   return g_failures ? 1 : 0;
