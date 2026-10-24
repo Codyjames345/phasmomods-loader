@@ -24,7 +24,7 @@ bool enable_all();  // enables the hooks created since the open group began
 // patch since (logged, left as it is). Each write, and each write back, runs with every other thread
 // of the process suspended, as MinHook's enabling does, and is refused (retried briefly first) while
 // one of them is stopped inside the replaced bytes. A write back so refused leaves the patch in place
-// and recorded, and the next rollback or shutdown tries it again. Every patch takes a new page (a 64 KB
+// and recorded, and a later rollback_to that covers it (the mods' restart) or shutdown tries again. Every patch takes a new page (a 64 KB
 // reservation), so a site patched again after a rollback takes another; pages are never freed.
 // Every refusal and failure is logged under `name`; protections changed for the write are restored.
 bool patch_site(void* site, const void* expected, size_t expectedSize, const void* stub, size_t stubSize, void** page,

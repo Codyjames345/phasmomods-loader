@@ -161,8 +161,8 @@ class Frozen {
           CloseHandle(thread);
           throw;
         }
+        suspended_.push_back(0);  // resume() reads only as many as this holds
       }
-      suspended_.assign(threads_.size(), 0);
     } catch (const std::bad_alloc&) {
       error = ERROR_NOT_ENOUGH_MEMORY;
       return false;
@@ -175,7 +175,7 @@ class Frozen {
   // strictly inside (begin, end), where a write would leave it in the middle of an instruction.
   // Failed, all resumed, when a thread that has not ended cannot be suspended or read.
   Stop stop(uintptr_t begin, uintptr_t end, DWORD& error) {
-    for (size_t i = 0; i < threads_.size(); ++i) {
+    for (size_t i = 0; i < suspended_.size(); ++i) {
       if (SuspendThread(threads_[i]) != static_cast<DWORD>(-1)) {
         suspended_[i] = 1;
         continue;
@@ -187,7 +187,7 @@ class Frozen {
         return Stop::Failed;
       }
     }
-    for (size_t i = 0; i < threads_.size(); ++i) {
+    for (size_t i = 0; i < suspended_.size(); ++i) {
       if (!suspended_[i]) continue;
       alignas(16) CONTEXT context{};
       context.ContextFlags = CONTEXT_CONTROL;
@@ -208,7 +208,7 @@ class Frozen {
   }
 
   void resume() {
-    for (size_t i = 0; i < threads_.size(); ++i)
+    for (size_t i = 0; i < suspended_.size(); ++i)
       if (suspended_[i]) {
         ResumeThread(threads_[i]);
         suspended_[i] = 0;
@@ -515,17 +515,14 @@ void begin_group() {
 namespace {
 
 // Newest first, so a detour chained onto another is removed before the one it chained onto. A site
-// patch whose bytes cannot be written back stays recorded and in place, for shutdown to try again;
-// returns how many of those there were.
+// patch whose bytes cannot be written back stays recorded and in place, for a later rollback that
+// covers it, or shutdown, to try again; returns how many of those there were. Allocates nothing.
 size_t remove_since(size_t start) {
-  std::vector<Created> kept;
-  kept.reserve(g_created.size() > start ? g_created.size() - start : 0);
-  while (g_created.size() > start) {
-    Created c = g_created.back();
-    g_created.pop_back();
+  for (size_t i = g_created.size(); i-- > start;) {
+    Created& c = g_created[i];
     if (c.siteBytes) {
       unpatch(c);
-      if (c.enabled) kept.push_back(c);
+      if (!c.enabled) c.at = nullptr;  // gone
       continue;
     }
     if (c.enabled) MH_DisableHook(c.at);
@@ -533,11 +530,14 @@ size_t remove_since(size_t start) {
     // The link before this one leads again: its relay is what this one patched.
     if (c.at == c.target) g_head.erase(c.target);
     else g_head[c.target] = c.at;
+    c.at = nullptr;
   }
+  if (start < g_created.size())
+    g_created.erase(std::remove_if(g_created.begin() + static_cast<ptrdiff_t>(start), g_created.end(),
+                                   [](const Created& c) { return c.at == nullptr; }),
+                    g_created.end());
   if (g_groupStart > start) g_groupStart = start;
-  // The popped records' room is still allocated, so these cannot fail.
-  for (auto c = kept.rbegin(); c != kept.rend(); ++c) g_created.push_back(*c);
-  return kept.size();
+  return g_created.size() > start ? g_created.size() - start : 0;
 }
 
 }  // namespace
