@@ -65,11 +65,37 @@ void accepted_access_initialises_first() {
   CHECK(g_setValue == &number);  // a value is passed by address
 }
 
+// A static constructor that throws: the managed exception leaves static_get and static_set as it
+// came, for the caller to contain (host/suite.cpp's static_access), and nothing is read or written.
+void throwing_static_constructor_escapes_untouched() {
+  g_fieldClass = &g_intClass;
+  static int managed = 0;  // the managed exception
+  il2cpp::p_il2cpp_runtime_class_init = [](void*) {
+    g_calls.emplace_back("init");
+    throw Il2CppExceptionWrapper{&managed};
+  };
+  for (const bool reading : {true, false}) {
+    g_calls.clear();
+    int32_t value = 3;
+    void* caught = nullptr;
+    try {
+      if (reading) il2cpp::static_get(&g_owner, &g_fieldInfo, &value, sizeof value);
+      else il2cpp::static_set(&g_owner, &g_fieldInfo, &value, sizeof value);
+    } catch (const Il2CppExceptionWrapper& e) {
+      caught = e.ex;
+    }
+    CHECK(caught == &managed);
+    CHECK((g_calls == std::vector<std::string>{"init"}));
+    CHECK(value == 3);
+  }
+}
+
 }  // namespace
 
 int main() {
   install();
   size_mismatch_never_initialises();
   accepted_access_initialises_first();
+  throwing_static_constructor_escapes_untouched();
   return g_failures ? 1 : 0;
 }

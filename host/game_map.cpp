@@ -121,18 +121,6 @@ void forget_published() {
 }
 #endif
 
-// An icall left for the main thread: the worker never asks the runtime (see build_and_resolve).
-bool icall_pending(const sdk::Result& r) {
-  return r.desc->kind == sdk::Kind::Icall && r.status == sdk::Status::Missing && r.detail == sdk::kCheckedAtStartup;
-}
-
-// A scene fact left for the main thread: resolve_scene_facts decides it.
-bool scene_fact_pending(const sdk::Result& r) {
-  return (r.desc->kind == sdk::Kind::Scene || r.desc->kind == sdk::Kind::Layer ||
-          r.desc->kind == sdk::Kind::AnimatorParam) &&
-         r.status == sdk::Status::Missing && r.detail == sdk::kCheckedInScene;
-}
-
 // Why resolution may not go on: startup was cancelled, or less than kHooksBudget of the deadline is
 // left. Null while it may.
 const char* stop_reason(void* stopEvent, unsigned long long deadline) {
@@ -144,7 +132,7 @@ const char* stop_reason(void* stopEvent, unsigned long long deadline) {
 // Every entry that did not resolve, less the icalls and scene facts decided later on the main thread.
 void log_failures() {
   for (const sdk::Result& r : g_resolution.results) {
-    if (r.status == sdk::Status::Resolved || icall_pending(r) || scene_fact_pending(r)) continue;
+    if (r.status == sdk::Status::Resolved || sdk::checked_at_startup(r) || sdk::checked_in_scene(r)) continue;
     PG_LOG("game map: %s %s (%s)", sdk::status_word(r.status), r.desc->key, r.detail.c_str());
     for (const std::string& c : r.candidates) PG_LOG("game map:     %s", c.c_str());
   }
@@ -235,7 +223,7 @@ void resolve_icalls() {
     std::vector<size_t> pending;
     std::vector<const sdk::EntryDesc*> entries;
     for (size_t i = 0; i < g_resolution.results.size(); ++i)
-      if (icall_pending(g_resolution.results[i])) {
+      if (sdk::checked_at_startup(g_resolution.results[i])) {
         pending.push_back(i);
         entries.push_back(g_resolution.results[i].desc);
       }
@@ -292,7 +280,7 @@ void resolve_scene_facts(const sdk::SceneEngine* engine) {
     size_t layers = 0, resolved = 0;
     for (size_t i = 0; i < g_resolution.results.size(); ++i) {
       sdk::Result& r = g_resolution.results[i];
-      if (!scene_fact_pending(r)) continue;
+      if (!sdk::checked_in_scene(r)) continue;
       layers += r.desc->kind == sdk::Kind::Layer;
       // Fails closed: a fact the host cannot check is never published.
       if (const sdk::EntryDesc* needed = unresolved_engine_entry(*r.desc)) {

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <mutex>
 #include <set>
 #include <string>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include "consent.h"
+#include "contained.h"
 #include "entry_hooks.h"
 #include "game.h"
 #include "game_map.h"
@@ -178,19 +180,8 @@ void api_set_reference(void* obj, int32_t offset, void* value) {
 }
 int32_t api_inside_entry(const char* key) { return context::depth(key); }
 
-// The runtime services (version 2.1). Each runs `body` and contains what it throws: a managed
-// exception is logged with its stack, anything else with `what`, and the caller gets `fallback`.
-template <class R, class F>
-R contained(const char* what, R fallback, F body) {
-  try {
-    return body();
-  } catch (const Il2CppExceptionWrapper& e) {
-    il2cpp::log_exception((std::string("suite: managed exception while ") + what).c_str(), e.ex);
-  } catch (...) {
-    PG_LOG("suite: exception while %s", what);
-  }
-  return fallback;
-}
+// The runtime services (version 2.1). Each runs its body in host::contained, which logs every
+// exception it contains.
 
 // The class of the Type entry `key`, or null when it is unknown, unresolved or not a type.
 il2cpp::Class* type_class(const char* key) {
@@ -220,67 +211,69 @@ bool list_given(const void* obj, const char* service) {
 }
 
 void* api_string_new(const char* utf8) {
-  return contained("making a string", static_cast<void*>(nullptr),
-                   [&]() -> void* { return utf8 ? il2cpp::string_new(utf8) : nullptr; });
+  return host::contained("suite", "making a string", static_cast<void*>(nullptr),
+                         [&]() -> void* { return utf8 ? il2cpp::string_new(utf8) : nullptr; });
 }
 size_t api_string_utf8(const void* str, char* out, size_t size) {
-  return contained("reading a string", size_t{0}, [&]() -> size_t {
+  return host::contained("suite", "reading a string", size_t{0}, [&]() -> size_t {
     if (out && size) out[0] = '\0';
     if (!str || !string_given(str, "string_utf8")) return 0;
     return il2cpp::to_utf8(static_cast<const il2cpp::String*>(str), out, size);
   });
 }
 size_t api_array_length(const void* arr) {
-  return contained("reading an array", size_t{0}, [&]() -> size_t {
+  return host::contained("suite", "reading an array", size_t{0}, [&]() -> size_t {
     return arr && array_given(arr, "array_length") ? static_cast<const il2cpp::Array*>(arr)->max_length : 0;
   });
 }
 void* api_array_data(void* arr) {
-  return contained("reading an array", static_cast<void*>(nullptr), [&]() -> void* {
+  return host::contained("suite", "reading an array", static_cast<void*>(nullptr), [&]() -> void* {
     return arr && array_given(arr, "array_data") ? static_cast<il2cpp::Array*>(arr)->data<char>() : nullptr;
   });
 }
 void* api_array_new(const char* elementTypeKey, size_t length) {
-  return contained("making an array", static_cast<void*>(nullptr), [&]() -> void* {
+  return host::contained("suite", "making an array", static_cast<void*>(nullptr), [&]() -> void* {
     il2cpp::Class* const klass = type_class(elementTypeKey);
     return klass ? il2cpp::array_new(klass, length) : nullptr;
   });
 }
 int32_t api_list_count(const void* list) {
-  return contained("reading a list", int32_t{0}, [&]() -> int32_t {
+  return host::contained("suite", "reading a list", int32_t{0}, [&]() -> int32_t {
     return list && list_given(list, "list_count") ? static_cast<const il2cpp::List*>(list)->size : 0;
   });
 }
 void* api_list_items(const void* list) {
-  return contained("reading a list", static_cast<void*>(nullptr), [&]() -> void* {
+  return host::contained("suite", "reading a list", static_cast<void*>(nullptr), [&]() -> void* {
     return list && list_given(list, "list_items") ? static_cast<const il2cpp::List*>(list)->items : nullptr;
   });
 }
 void* api_type_object(const char* typeKey) {
-  return contained("making a type object", static_cast<void*>(nullptr),
-                   [&]() -> void* { return il2cpp::type_object(type_class(typeKey)); });
+  return host::contained("suite", "making a type object", static_cast<void*>(nullptr),
+                         [&]() -> void* { return il2cpp::type_object(type_class(typeKey)); });
 }
 void* api_object_new(const char* typeKey) {
-  return contained("making an object", static_cast<void*>(nullptr), [&]() -> void* {
+  return host::contained("suite", "making an object", static_cast<void*>(nullptr), [&]() -> void* {
     il2cpp::Class* const klass = type_class(typeKey);
     return klass ? il2cpp::object_new(klass) : nullptr;
   });
 }
 bool api_is_instance(const void* obj, const char* typeKey) {
-  return contained("checking an object's type", false, [&] { return il2cpp::is_instance(obj, type_class(typeKey)); });
+  return host::contained("suite", "checking an object's type", false,
+                         [&] { return il2cpp::is_instance(obj, type_class(typeKey)); });
 }
 bool api_alive(const void* unityObject) {
-  return contained("checking an object is alive", false, [&] { return game::alive(const_cast<void*>(unityObject)); });
+  return host::contained("suite", "checking an object is alive", false,
+                         [&] { return game::alive(const_cast<void*>(unityObject)); });
 }
 const void* api_virtual_method(const void* obj, const char* methodKey) {
-  return contained("finding a virtual method", static_cast<const void*>(nullptr), [&]() -> const void* {
+  return host::contained("suite", "finding a virtual method", static_cast<const void*>(nullptr), [&]() -> const void* {
     const PgGameEntry* e = methodKey ? gamemap::entry(methodKey) : nullptr;
     if (!obj || !e || e->kind != PG_ENTRY_METHOD || !e->method || !il2cpp::is_instance(obj, e->klass)) return nullptr;
     return il2cpp::virtual_method(const_cast<void*>(obj), e->method);
   });
 }
 uint32_t api_gc_hold(void* obj) {
-  return contained("holding an object", uint32_t{0}, [&] { return il2cpp::gc_hold(obj); });
+  return host::contained("suite", "holding an object", uint32_t{0}, [&] { return il2cpp::gc_hold(obj); });
 }
 void api_gc_release(uint32_t handle) {
   try {
@@ -358,12 +351,12 @@ void api_log_exception(const char* where, const void* exception) {
 
 // The scene facts (version 2.1): the game map keeps and checks them.
 void* api_scene_find(const char* key, void* root) {
-  return contained("finding a scene path", static_cast<void*>(nullptr),
-                   [&]() -> void* { return gamemap::scene_find(key, root); });
+  return host::contained("suite", "finding a scene path", static_cast<void*>(nullptr),
+                         [&]() -> void* { return gamemap::scene_find(key, root); });
 }
 bool api_animator_param(const char* key, const void* animator, int32_t* hash) {
-  return contained("checking an Animator parameter", false,
-                   [&] { return gamemap::animator_param(key, animator, hash); });
+  return host::contained("suite", "checking an Animator parameter", false,
+                         [&] { return gamemap::animator_param(key, animator, hash); });
 }
 
 // The native sites (version 2.1): the hooks layer patches one, in the open mod's group.
@@ -458,6 +451,9 @@ bool start(void* gameAssembly, void* unityPlayer) {
     PG_LOG("suite: the local application-data folder is unavailable; set LOCALAPPDATA and restart the game");
     return false;
   }
+  // Positional: a member added to PgHostApi after patch_site fails this until it is given here too.
+  static_assert(offsetof(PgHostApi, patch_site) + sizeof(PgHostApi::patch_site) == sizeof(PgHostApi),
+                "g_api lists every PgHostApi member");
   g_api = {PGMOD_API_VERSION, gameAssembly, unityPlayer, g_dataDirectory.c_str(),
            &api_log, &api_create_hook, &api_enable_hooks, &api_send, &api_set_receiver,
            &api_peer_has_mod, &api_register_service, &api_service,

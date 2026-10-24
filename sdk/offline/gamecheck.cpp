@@ -117,26 +117,13 @@ std::string contract(uint32_t version) {
   return std::format("{}.{}", version >> 16, version & 0xFFFFu);
 }
 
-// A well-formed icall entry, which only the running game can resolve. A malformed one is reported as
-// any other entry that did not resolve.
-bool startup_only(const Result& r) {
-  return r.desc->kind == Kind::Icall && r.status == Status::Missing && r.detail == kCheckedAtStartup;
-}
-
-// A well-formed scene fact, which tools/assetcheck.py checks in the scene files. A malformed one is
-// reported as any other entry that did not resolve.
-bool scene_fact(const Result& r) {
-  const Kind k = r.desc->kind;
-  return (k == Kind::Scene || k == Kind::Layer || k == Kind::AnimatorParam) && r.status == Status::Missing &&
-         r.detail == kCheckedInScene;
-}
-
-// Checked elsewhere than here: in the running game at startup, or in the scene files.
-bool checked_elsewhere(const Result& r) { return startup_only(r) || scene_fact(r); }
+// Checked elsewhere than here: in the running game at startup, or in the scene files (which
+// tools/assetcheck.py checks).
+bool checked_elsewhere(const Result& r) { return checked_at_startup(r) || checked_in_scene(r); }
 
 std::string line_for(const Result& r) {
-  if (startup_only(r)) return std::format("STARTUP {} {} ({})", r.desc->key, r.desc->name, kCheckedAtStartup);
-  if (scene_fact(r)) return std::format("SCENE {} {} ({})", r.desc->key, r.currentName, kCheckedInScene);
+  if (checked_at_startup(r)) return std::format("STARTUP {} {} ({})", r.desc->key, r.desc->name, kCheckedAtStartup);
+  if (checked_in_scene(r)) return std::format("SCENE {} {} ({})", r.desc->key, r.currentName, kCheckedInScene);
   std::string line = std::format("{} {}", status_word(r.status), r.desc->key);
   if (r.status != Status::Resolved) {
     line += " (" + r.detail + ")";
@@ -254,7 +241,7 @@ bool write_scene_entries(const std::filesystem::path& path, const Resolution& re
   }
   const auto text = [](const char* s) { return s ? s : ""; };
   for (const Result& r : resolution.results) {
-    if (!scene_fact(r)) continue;
+    if (!checked_in_scene(r)) continue;
     const EntryDesc& d = *r.desc;
     std::fprintf(out, "%s\t%s\t%d\t%s\t%s\t%s\t%s\n", d.key, kind_word(d.kind), (d.flags & kOptional) ? 0 : 1,
                  text(d.scene), text(d.path), text(d.component), text(d.name));
@@ -318,8 +305,8 @@ int run(int argc, wchar_t** argv) {
   size_t counts[4] = {}, startupOnly = 0, inScene = 0;
   bool failed = false;  // a required entry that could be checked here did not resolve
   for (const Result& r : resolution.results) {
-    if (startup_only(r)) ++startupOnly;
-    else if (scene_fact(r)) ++inScene;
+    if (checked_at_startup(r)) ++startupOnly;
+    else if (checked_in_scene(r)) ++inScene;
     else ++counts[static_cast<int>(r.status)];
     failed = failed || (!checked_elsewhere(r) && r.status != Status::Resolved && !(r.desc->flags & kOptional));
     std::printf("%s\n", line_for(r).c_str());

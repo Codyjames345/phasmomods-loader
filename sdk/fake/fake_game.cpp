@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <cstddef>
 #include <cstring>
 #include <deque>
 #include <map>
@@ -327,13 +328,20 @@ bool peer_has_mod(int32_t, const char*) { return false; }
 void register_service(const char*, const void*) {}
 const void* service(const char*) { return nullptr; }
 void log_exception(const char*, const void*) {}
+bool patch_site(const char*, const void*, size_t, const void*, size_t, void** page) {
+  if (page) *page = nullptr;
+  return false;
+}
 
+// Positional: a member added to PgHostApi after patch_site fails this until it is given here too.
+static_assert(offsetof(PgHostApi, patch_site) + sizeof(PgHostApi::patch_site) == sizeof(PgHostApi),
+              "kHost lists every PgHostApi member");
 const PgHostApi kHost{PGMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_hook, &enable_hooks, &send,
                       &set_receiver, &peer_has_mod, &register_service, &service, &game_entry, &hook_entry,
                       &set_reference, &inside_entry, &string_new, &string_utf8, &array_length, &array_data,
                       &array_new, &list_count, &list_items, &type_object, &object_new, &is_instance, &alive,
                       &virtual_method, &gc_hold, &gc_release, &log_exception, &static_get, &static_set,
-                      &hook_body, &body_count, &scene_find, &animator_param};
+                      &hook_body, &body_count, &scene_find, &animator_param, &patch_site};
 
 }  // namespace
 

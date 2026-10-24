@@ -22,6 +22,8 @@ bool startThrows = false;
 int tornDown = 0;
 int resolved = 0, created = 0, attached = 0, starts = 0, ticks = 0, activeLogs = 0, threads = 0;
 int detached = 0;
+int sitesRestored = 0;              // calls of hooks::restore_sites
+bool restoredWhileEnabled = false;  // the last one came before the hooks were disabled
 int mapped = 0, mappedInOrder = 0;  // map resolutions; those attached and before the game bindings
 bool mapOk = true;
 bool parkedAttached = false;  // the worker waited for shutdown while still attached to IL2CPP
@@ -179,6 +181,11 @@ bool create(void*, void* detour, void** original, const char*) {
 bool enable_all() { enabled = true; return true; }
 /** Record legacy cleanup without destroying real trampolines. */
 void shutdown() { enabled = false; }
+/** Record that the site patches were written back, and whether the hooks were still enabled then. */
+void restore_sites() {
+  ++sitesRestored;
+  restoredWhileEnabled = enabled;
+}
 }
 namespace pg::suite {
 /** Count resolution of the host's own bindings. */
@@ -210,7 +217,8 @@ void reset() {
   mapped = mappedInOrder = 0;
   tornDown = 0;
   resolved = created = attached = starts = ticks = activeLogs = threads = detached = 0;
-  parkedAttached = false;
+  sitesRestored = 0;
+  parkedAttached = restoredWhileEnabled = false;
   messages.clear();
   frame = nullptr;
   CHECK(DllMain(nullptr, DLL_PROCESS_ATTACH, nullptr));
@@ -229,6 +237,7 @@ bool logged(const char* text) {
 int main() {
   reset(); gameHash = false; run_worker();
   CHECK(resolved == 0 && created == 0 && activeLogs == 0 && mapped == 0);
+  CHECK(sitesRestored == 0);  // no hooks of its own, so no site patches to write back
   reset(); unityHash = false; run_worker();
   CHECK(resolved == 0 && created == 0 && activeLogs == 0);
   reset(); stopped = true; run_worker();
@@ -254,6 +263,8 @@ int main() {
   CHECK(attached == 1 && !parkedAttached && detached == 1);
   // The map resolves once, on the attached worker, before the game bindings.
   CHECK(mapped == 1 && mappedInOrder == 1);
+  // Shutdown writes every site patch back, once, before it disables the hooks.
+  CHECK(sitesRestored == 1 && restoredWhileEnabled && !enabled);
   // A map that does not resolve leaves the host active: only the mods that need it stay off.
   reset(); mapOk = false; deliverFrame = true; run_worker();
   CHECK(mapped == 1 && starts == 1 && activeLogs == 1 && ticks == 1);

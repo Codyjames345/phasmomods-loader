@@ -280,7 +280,7 @@ Within a major, `PgHostApi` and every published struct only grow at the end; a n
 older mods. Version 2.0 added these members, after the services of version 1:
 
 - `game_entry(key)`: the resolved `PgGameEntry` for a map key (type, method, code, twins, field
-  offset, enum value), or null when unknown or unresolved.
+  offset, enum value), or null when unknown or unresolved, and for a GameAssembly export.
 - `hook_entry(key, detour, original, name, allTwins)`: a hook by entry with one detour. Since 2.1 it is
   made from per-body hooks: without `allTwins` it hooks body 0, with it every body, and `original`
   receives body 0's chain. So a call that entered through a twin goes on along the canonical body's

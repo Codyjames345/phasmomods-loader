@@ -162,6 +162,7 @@ DWORD WINAPI worker(void*) {
   }
   g_activation = Activation::Failed;
   if (hooksOwned) {
+    pg::hooks::restore_sites();  // the game's own bytes at every native site a mod patched
     const auto result = MH_DisableHook(MH_ALL_HOOKS);
     if (result != MH_OK) PG_LOG("shutdown: hook disable failed (%d); native code retained", result);
     // Disabled detours can still be returning. Keep their trampolines and pinned DLL alive.

@@ -7,8 +7,20 @@ $project = Split-Path $PSScriptRoot -Parent
 $fixture = Join-Path $PSScriptRoot 'fixtures/assetcheck'
 $check = Join-Path $project 'tools/assetcheck.py'
 
-$python = if (Get-Command py -ErrorAction SilentlyContinue) { @('py', '-3') }
-  elseif (Get-Command python -ErrorAction SilentlyContinue) { @('python') }
+<# Whether this command runs Python: the Windows Store's python.exe alias is found but exits 9009. #>
+function Test-Python([string[]]$Command) {
+  if (-not (Get-Command $Command[0] -ErrorAction SilentlyContinue)) { return $false }
+  $exe = $Command[0]
+  $rest = @($Command | Select-Object -Skip 1)
+  $ErrorActionPreference = 'Continue'
+  & $exe @rest -I -c 'import sys' 2>$null | Out-Null
+  return $LASTEXITCODE -eq 0
+}
+
+$python = $null
+foreach ($candidate in @(, @('py', '-3')) + @(, @('python'))) {
+  if (Test-Python $candidate) { $python = $candidate; break }
+}
 if (-not $python) {
   Write-Host 'assetcheck test: skipped, no Python is installed.'
   exit 0

@@ -562,12 +562,14 @@ void rollback_to(size_t mark) {
   else PG_LOG("hooks: removed %zu hook(s)", listed);
 }
 
+void restore_sites() {
+  std::lock_guard lock(g_mutex);
+  for (auto c = g_created.rbegin(); c != g_created.rend(); ++c)
+    if (c->siteBytes) unpatch(*c);
+}
+
 void shutdown() {
-  {
-    std::lock_guard lock(g_mutex);
-    for (auto c = g_created.rbegin(); c != g_created.rend(); ++c)
-      if (c->siteBytes) unpatch(*c);
-  }
+  restore_sites();
   if (!g_initialised) return;
   MH_DisableHook(MH_ALL_HOOKS);
   // A detour that entered before disabling may still be running on the main thread.

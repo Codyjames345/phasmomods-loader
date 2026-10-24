@@ -9,6 +9,7 @@
 #include "LayerMask.h"
 #include "SceneManager.h"
 #include "Transform.h"
+#include "contained.h"
 #include "game.h"
 #include "game_map.h"
 #include "il2cpp.h"
@@ -27,24 +28,9 @@ bool of_type(const void* obj, const sdk::EntryDesc& type) {
   return obj && t && t->klass && il2cpp::is_instance(obj, static_cast<il2cpp::Class*>(t->klass));
 }
 
-// Runs `body` and contains what it throws: the first exception of each call site is logged, and the
-// caller gets `fallback`.
-template <class R, class F>
-R contained(std::atomic<bool>& logged, const char* what, R fallback, F body) {
-  try {
-    return body();
-  } catch (const Il2CppExceptionWrapper& e) {
-    if (!logged.exchange(true))
-      il2cpp::log_exception((std::string("scene facts: managed exception while ") + what).c_str(), e.ex);
-  } catch (...) {
-    if (!logged.exchange(true)) PG_LOG("scene facts: exception while %s", what);
-  }
-  return fallback;
-}
-
 int32_t active_scene() {
   static std::atomic<bool> logged{false};
-  return contained(logged, "reading the active scene", int32_t{0}, []() -> int32_t {
+  return host::contained(&logged, "scene facts", "reading the active scene", int32_t{0}, []() -> int32_t {
     const PgGameEntry* e = mapped(map::SceneManager_GetActiveScene);
     // A Scene is a struct of one int, its handle, so it comes back in a register as that int.
     return e && e->code ? reinterpret_cast<int32_t (*)(const void*)>(e->code)(e->method) : 0;
@@ -53,7 +39,7 @@ int32_t active_scene() {
 
 void* find(void* root, const char* path, const char** why) {
   static std::atomic<bool> logged{false};
-  return contained(logged, "finding a path", static_cast<void*>(nullptr), [&]() -> void* {
+  return host::contained(&logged, "scene facts", "finding a path", static_cast<void*>(nullptr), [&]() -> void* {
     const PgGameEntry* e = mapped(map::Transform_Find);
     if (!e || !e->code) *why = "Transform.Find unresolved";
     else if (!mapped(map::Transform)) *why = "Transform unresolved";
@@ -66,7 +52,7 @@ void* find(void* root, const char* path, const char** why) {
 
 int32_t name_to_layer(const char* layerName, const char** why) {
   static std::atomic<bool> logged{false};
-  return contained(logged, "finding a layer", int32_t{-1}, [&]() -> int32_t {
+  return host::contained(&logged, "scene facts", "finding a layer", int32_t{-1}, [&]() -> int32_t {
     const PgGameEntry* e = mapped(map::LayerMask_NameToLayer);
     if (!e || !e->code) *why = "LayerMask.NameToLayer unresolved";
     void* name = e && e->code && layerName ? il2cpp::string_new(layerName) : nullptr;
@@ -76,7 +62,7 @@ int32_t name_to_layer(const char* layerName, const char** why) {
 
 bool parameter(const void* animator, const char* name, int32_t* hash, const char** why) {
   static std::atomic<bool> logged{false};
-  return contained(logged, "reading an Animator's parameters", false, [&] {
+  return host::contained(&logged, "scene facts", "reading an Animator's parameters", false, [&] {
     const PgGameEntry* list = mapped(map::Animator_get_parameters);
     const PgGameEntry* toHash = mapped(map::Animator_StringToHash);
     const PgGameEntry* field = mapped(map::AnimatorControllerParameter_m_Name);
@@ -106,12 +92,14 @@ bool parameter(const void* animator, const char* name, int32_t* hash, const char
 
 bool alive(const void* obj) {
   static std::atomic<bool> logged{false};
-  return contained(logged, "checking an object is alive", false, [&] { return game::alive(const_cast<void*>(obj)); });
+  return host::contained(&logged, "scene facts", "checking an object is alive", false,
+                         [&] { return game::alive(const_cast<void*>(obj)); });
 }
 
 uint32_t hold(void* obj) {
   static std::atomic<bool> logged{false};
-  return contained(logged, "holding an object", uint32_t{0}, [&] { return il2cpp::gc_hold(obj); });
+  return host::contained(&logged, "scene facts", "holding an object", uint32_t{0},
+                         [&] { return il2cpp::gc_hold(obj); });
 }
 
 void release(uint32_t handle) {

@@ -6,7 +6,9 @@
 // Run: build\game_api_test.exe
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <thread>
 #include <type_traits>
@@ -144,6 +146,22 @@ bool bound() {
   std::string missing;
   const bool ok = api::bind(fake::host(), missing);
   return ok && missing.empty();
+}
+
+// The fake host fills every function of the contract it claims: each member from `log` to the end
+// of PgHostApi is a function pointer, and none is null. Its patch_site refuses, with `page` null.
+void fake_host_fills_every_function() {
+  const PgHostApi* host = fake::host();
+  const auto* bytes = reinterpret_cast<const unsigned char*>(host);
+  for (size_t at = offsetof(PgHostApi, log); at < sizeof(PgHostApi); at += sizeof(void*)) {
+    void* slot = nullptr;
+    std::memcpy(&slot, bytes + at, sizeof slot);
+    CHECK(slot != nullptr);
+  }
+  void* page = &page;
+  const unsigned char stub[] = {0x90};
+  CHECK(host->patch_site && !host->patch_site("UnityPlayer.Site", stub, sizeof stub, stub, sizeof stub, &page) &&
+        page == nullptr);
 }
 
 void call_reaches_fake() {
@@ -596,6 +614,7 @@ void animator_param_checked() {
 
 int main() {
   pg::log::set_sink(&capture, "");
+  fake_host_fills_every_function();
   call_reaches_fake();
   field_get_set();
   reference_set_uses_barrier();

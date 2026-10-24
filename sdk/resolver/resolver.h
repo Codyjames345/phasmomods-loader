@@ -63,6 +63,20 @@ inline constexpr std::string_view kCheckedAtStartup = "checked at startup only";
 // it activates (a layer) or where a mod uses them (a path, a parameter).
 inline constexpr std::string_view kCheckedInScene = "checked in the scene files and in the running game";
 
+// A well-formed icall entry left Missing for the running game, which alone resolves it (at startup,
+// on the main thread). A malformed one has another detail and is reported as any other miss.
+inline bool checked_at_startup(const Result& r) {
+  return r.desc->kind == Kind::Icall && r.status == Status::Missing && r.detail == kCheckedAtStartup;
+}
+
+// A well-formed Scene, Layer or AnimatorParam entry left Missing for the scene files and the running
+// game. A malformed one has another detail and is reported as any other miss.
+inline bool checked_in_scene(const Result& r) {
+  const Kind k = r.desc->kind;
+  return (k == Kind::Scene || k == Kind::Layer || k == Kind::AnimatorParam) && r.status == Status::Missing &&
+         r.detail == kCheckedInScene;
+}
+
 // Resolves every entry against the model, each after the entries it refers to. Without an image,
 // entries that need machine code or the export table are Missing with the detail "no code image".
 // Icall entries resolve only through `icalls`, which only the running game has: without it they are

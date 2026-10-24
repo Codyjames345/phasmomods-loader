@@ -38,7 +38,10 @@ void begin_group();
 void rollback_group();
 size_t mark();
 void rollback_to(size_t mark);
-void shutdown();  // host only: disable all hooks and site patches, drain in-flight detours, uninitialise
+// Host only: writes back every site patch still in place, newest first, as a rollback does (a write
+// back refused leaves that patch in place). Makes no managed calls; the host's shutdown calls it.
+void restore_sites();
+void shutdown();  // host only: restore_sites, disable all hooks, drain in-flight detours, uninitialise
 
 #ifdef PG_HOOKS_TEST
 // tests/hooks_test.cpp only: while set, patch_site finds no page within rel32 range of a site.

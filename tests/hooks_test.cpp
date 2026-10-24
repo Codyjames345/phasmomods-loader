@@ -744,6 +744,42 @@ void hook_inside_a_site_patch_refused() {
   CHECK(site_intact());
 }
 
+// A site under a hook, created and not yet enabled, is refused as one already patched: the hook's
+// own patch would write over the jump once enabled.
+void patch_over_a_hook_refused() {
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
+  pg::hooks::begin_group();
+  void* original = nullptr;
+  CHECK(pg::hooks::create(site_code(), reinterpret_cast<void*>(&not_a_detour), &original, "on the site"));
+  void* page = &g_log;
+  CHECK(!patch(kSiteCode, 8, &page));
+  CHECK(page == nullptr && site_intact() && pg::hooks::mark() - before == 1);
+  CHECK(logged("hooks: test site: the site at"));
+  CHECK(logged("is already patched or hooked; nothing was written"));
+  pg::hooks::rollback_to(before);
+  CHECK(site_intact() && run_site() == 5 && pg::hooks::mark() == before);
+}
+
+// The host's shutdown writes the site's bytes back before it disables the hooks: restore_sites
+// restores every patch in place and leaves the hooks as they are. A second call finds nothing to do.
+void restore_sites_writes_the_bytes_back() {
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
+  pg::hooks::begin_group();
+  void* page = nullptr;
+  CHECK(patch(kSiteCode, 8, &page) && run_site() == 7);
+  pg::hooks::restore_sites();
+  CHECK(site_intact() && run_site() == 5);
+  CHECK(logged("hooks: restored the 8 bytes at"));
+  CHECK(call(target, 1) == 13);  // the hooks still run
+  g_log.clear();
+  pg::hooks::restore_sites();
+  CHECK(site_intact() && !logged("hooks: restored"));
+  pg::hooks::rollback_to(before);
+  CHECK(site_intact() && pg::hooks::mark() == before);
+}
+
 // Code that cannot be read is not readable code: an execute-only page fails, as does a guard page.
 void execute_only_is_not_readable() {
   auto* page = static_cast<uint8_t*>(VirtualAlloc(nullptr, 0x2000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
@@ -835,6 +871,8 @@ int main() {
   thread_inside_the_site_refuses_the_patch();
   refused_restore_keeps_the_patch();
   hook_inside_a_site_patch_refused();
+  patch_over_a_hook_refused();
+  restore_sites_writes_the_bytes_back();
   execute_only_is_not_readable();
 
   // A patch still in place at shutdown is removed with the hooks.

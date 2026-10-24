@@ -215,6 +215,8 @@ The steering migration itself is stage 2b. This task only provides the kind, the
   5. Close with a live check by the user.
 
   About 1,140 raw sites are counted today.
+
+  The in-game smoke list of 2b also takes what stage 2a could not test off the game: `static_get` on a class whose static constructor throws answers false, logs the managed stack once and the key once, and the game goes on (the `Il2CppExceptionWrapper` catch in `host/suite.cpp`'s `static_access`; `tests/il2cpp_static_test.cpp` covers only that the exception leaves `il2cpp::static_get` untouched).
 - **2c, safety switch-over:**
   - checked-build records (`sdk/builds/`, map digest) replace `host/build_check.cpp`;
   - the records go into the package, and the release script refuses a stale one;
