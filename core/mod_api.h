@@ -240,7 +240,8 @@ struct PgHostApi {
   // lifetime and is never freed (a thread may still be running the stub), so the mod may keep the
   // stub's data there and write it from any thread. The patch belongs to the
   // mod like its hooks: the site's own bytes are written back when the mod fails to start and when
-  // the mods restart (the page stays). Every patch takes a new page, one 64 KB reservation, so patching
+  // the mods restart (the page stays); a restore the host has to refuse leaves the patch in place,
+  // still the host's, and shutdown tries it again. Every patch takes a new page, one 64 KB reservation, so patching
   // again after a rollback takes another, and no page is ever freed. The host stops every other thread
   // of the process while it writes or restores the site, and refuses (nothing written) when one keeps
   // stopping inside the replaced bytes. False, `page` null and nothing written, when the entry is

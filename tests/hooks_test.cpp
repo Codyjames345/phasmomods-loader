@@ -632,9 +632,14 @@ void patch_while_a_thread_runs_the_site() {
   void* page = nullptr;
   for (int round = 0; round < 5; ++round) {
     pg::hooks::begin_group();
-    CHECK(patch(kSiteCode, 8, &page));
-    const long sevens = g_spinSevens.load();
-    while (g_spinSevens.load() < sevens + 100) std::this_thread::yield();  // the worker runs the stub
+    const bool patched = patch(kSiteCode, 8, &page);
+    CHECK(patched);
+    if (patched) {  // the worker runs the stub
+      const long sevens = g_spinSevens.load();
+      const ULONGLONG deadline = GetTickCount64() + 5000;
+      while (g_spinSevens.load() < sevens + 100 && GetTickCount64() < deadline) std::this_thread::yield();
+      CHECK(g_spinSevens.load() >= sevens + 100);
+    }
     pg::hooks::rollback_to(before);
     CHECK(site_intact());
   }
@@ -681,7 +686,46 @@ void thread_inside_the_site_refuses_the_patch() {
   parker.detach();  // it sleeps until the process ends
 }
 
-// A hook whose 5 bytes would land on a live site patch is refused, as a patch near a hook is.
+int not_a_detour();
+
+// A write back refused because a thread is stopped inside the site leaves the patch in place and
+// recorded, so nothing can hook over it and the next rollback writes the bytes back.
+void refused_restore_keeps_the_patch() {
+  g_log.clear();
+  const size_t before = pg::hooks::mark();
+  pg::hooks::begin_group();
+  void* page = nullptr;
+  CHECK(patch(kSiteCode, 8, &page));
+
+  std::thread parker(parked);
+  const HANDLE thread = parker.native_handle();
+  CHECK(SuspendThread(thread) != static_cast<DWORD>(-1));
+  alignas(16) CONTEXT saved{};
+  saved.ContextFlags = CONTEXT_CONTROL;
+  CHECK(GetThreadContext(thread, &saved));
+  CONTEXT inside = saved;
+  inside.Rip = reinterpret_cast<DWORD64>(site_code() + 5);  // in the patch's nops
+  CHECK(SetThreadContext(thread, &inside));
+
+  pg::hooks::rollback_to(before);
+  CHECK(pg::hooks::mark() - before == 1);  // still recorded
+  CHECK(site_code()[0] == 0xE9 && !site_intact());
+  CHECK(logged("hooks: restoring a site: another thread kept stopping inside the bytes at"));
+  CHECK(logged("hooks: removed 0 hook(s); 1 site patch(es) stay in place"));
+  void* original = nullptr;
+  CHECK(!pg::hooks::create(site_code(), reinterpret_cast<void*>(&not_a_detour), &original, "over the kept patch"));
+
+  CHECK(SetThreadContext(thread, &saved));
+  CHECK(ResumeThread(thread) != static_cast<DWORD>(-1));
+  parker.detach();  // it sleeps until the process ends
+
+  pg::hooks::rollback_to(before);
+  CHECK(site_intact() && run_site() == 5 && pg::hooks::mark() == before);
+  CHECK(logged("hooks: restored the 8 bytes at"));
+}
+
+// A hook whose patch may write into a live site patch is refused, as a patch near a hook is: MinHook
+// writes 5 bytes at its target, or also the 5 before it.
 int not_a_detour() { return 0; }
 void hook_inside_a_site_patch_refused() {
   g_log.clear();
@@ -690,7 +734,7 @@ void hook_inside_a_site_patch_refused() {
   void* page = nullptr;
   CHECK(patch(kSiteCode, 8, &page));
   void* original = nullptr;
-  for (const size_t offset : {0, 3, 7}) {
+  for (const size_t offset : {0, 3, 7, 8, 12}) {  // 8 and 12: just after the site, within patch-above reach
     CHECK(!pg::hooks::create(site_code() + offset, reinterpret_cast<void*>(&not_a_detour), &original, "in the site"));
   }
   CHECK(logged("hooks: in the site at"));
@@ -789,6 +833,7 @@ int main() {
   patch_and_rollback();
   patch_while_a_thread_runs_the_site();
   thread_inside_the_site_refuses_the_patch();
+  refused_restore_keeps_the_patch();
   hook_inside_a_site_patch_refused();
   execute_only_is_not_readable();
 

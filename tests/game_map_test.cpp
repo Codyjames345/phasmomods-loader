@@ -18,6 +18,8 @@ unsigned long long clockMs = 0;
 unsigned long long tickPerClass = 0;  // how far the clock moves for each class read
 int stopAfter = -1;                   // the class read after which a stop is requested, -1 never
 bool stopRequested = false;
+int waits = 0;                        // how often the stop event has been checked
+int stopAtWait = -1;                  // the check that finds a stop requested, -1 none
 int classesRead = 0;
 int apiRequests = 0;
 void* icallAnswer = nullptr;          // what the runtime's il2cpp_resolve_icall answers
@@ -25,7 +27,9 @@ std::vector<std::string> icallsAsked;
 std::vector<std::string> messages;
 
 ULONGLONG WINAPI tick_count() { return clockMs; }
-DWORD WINAPI wait_event(HANDLE, DWORD) { return stopRequested ? WAIT_OBJECT_0 : WAIT_TIMEOUT; }
+DWORD WINAPI wait_event(HANDLE, DWORD) {
+  return stopRequested || ++waits == stopAtWait ? WAIT_OBJECT_0 : WAIT_TIMEOUT;
+}
 }  // namespace
 
 #define GetTickCount64 tick_count
@@ -68,6 +72,8 @@ void reset() {
   tickPerClass = 0;
   stopAfter = -1;
   stopRequested = false;
+  waits = 0;
+  stopAtWait = -1;
   classesRead = apiRequests = 0;
   icallAnswer = nullptr;
   icallsAsked.clear();
@@ -126,6 +132,20 @@ void spent_budget_reads_nothing() {
   CHECK(apiRequests == 0 && classesRead == 0);
   CHECK(all_unresolved("the startup budget ran out"));
   CHECK(count_logged("abandoned") == 1);
+}
+
+// The search for the native sites reads all of UnityPlayer's .text, so it checks for a stop first:
+// a stop found by that last check, after UnityPlayer was looked at, still resolves nothing.
+void stop_before_the_native_sites_resolves_nothing() {
+  reset();
+  CHECK(pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
+  const int checks = waits;
+  reset();
+  stopAtWait = checks;
+  CHECK(!pg::gamemap::resolve(module(), nullptr, nullptr, 60000));
+  CHECK(classesRead == 600);
+  CHECK(logged("the loaded UnityPlayer cannot be read"));  // the check after UnityPlayer was looked at
+  CHECK(all_unresolved("startup was cancelled"));
 }
 
 void slow_build_leaves_the_hooks_budget() {
@@ -478,6 +498,7 @@ void write(const char* format, ...) {
 int main() {
   builds_and_resolves_within_budget();
   stop_during_build_abandons_promptly();
+  stop_before_the_native_sites_resolves_nothing();
   spent_budget_reads_nothing();
   slow_build_leaves_the_hooks_budget();
   entry_carries_the_resolved_result();

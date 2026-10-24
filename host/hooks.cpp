@@ -11,6 +11,7 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <new>
 #include <vector>
 
 #include "code_memory.h"
@@ -112,7 +113,7 @@ bool repeated(void* target, void* detour, const char* name) {
   return false;
 }
 
-void remove_since(size_t start);
+size_t remove_since(size_t start);
 
 // The other threads of the process, stopped while game code is written, as MinHook stops them when
 // it enables a hook: no atomic write covers a site that crosses a cache line (the steering site
@@ -131,29 +132,42 @@ class Frozen {
   // Opens every other thread of the process. False, with the reason in `error`, when the list cannot
   // be read or a thread that still runs cannot be opened.
   bool open(DWORD& error) {
-    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (snapshot == INVALID_HANDLE_VALUE) {
+    struct Snapshot {
+      HANDLE handle = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+      ~Snapshot() {
+        if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle);
+      }
+    } snapshot;
+    if (snapshot.handle == INVALID_HANDLE_VALUE) {
       error = GetLastError();
       return false;
     }
     const DWORD self = GetCurrentThreadId(), process = GetCurrentProcessId();
     THREADENTRY32 entry{};
     entry.dwSize = sizeof entry;
-    bool ok = true;
-    for (BOOL more = Thread32First(snapshot, &entry); more && ok; more = Thread32Next(snapshot, &entry)) {
-      if (entry.th32OwnerProcessID != process || entry.th32ThreadID == self) continue;
-      const HANDLE thread =
-          OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, entry.th32ThreadID);
-      if (thread) {
-        threads_.push_back(thread);
-      } else if (GetLastError() != ERROR_INVALID_PARAMETER) {  // that thread has not ended
-        error = GetLastError();
-        ok = false;
+    try {
+      for (BOOL more = Thread32First(snapshot.handle, &entry); more; more = Thread32Next(snapshot.handle, &entry)) {
+        if (entry.th32OwnerProcessID != process || entry.th32ThreadID == self) continue;
+        const HANDLE thread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE,
+                                         entry.th32ThreadID);
+        if (!thread) {
+          error = GetLastError();
+          if (error == ERROR_INVALID_PARAMETER) continue;  // that thread has ended
+          return false;
+        }
+        try {
+          threads_.push_back(thread);
+        } catch (...) {
+          CloseHandle(thread);
+          throw;
+        }
       }
+      suspended_.assign(threads_.size(), 0);
+    } catch (const std::bad_alloc&) {
+      error = ERROR_NOT_ENOUGH_MEMORY;
+      return false;
     }
-    CloseHandle(snapshot);
-    suspended_.assign(threads_.size(), 0);
-    return ok;
+    return true;
   }
 
   enum class Stop { Stopped, Inside, Failed };
@@ -164,8 +178,11 @@ class Frozen {
     for (size_t i = 0; i < threads_.size(); ++i) {
       if (SuspendThread(threads_[i]) != static_cast<DWORD>(-1)) {
         suspended_[i] = 1;
-      } else if (!ended(threads_[i])) {
-        error = GetLastError();
+        continue;
+      }
+      const DWORD failed = GetLastError();  // before ended() overwrites it
+      if (!ended(threads_[i])) {
+        error = failed;
         resume();
         return Stop::Failed;
       }
@@ -176,8 +193,9 @@ class Frozen {
       context.ContextFlags = CONTEXT_CONTROL;
       // GetThreadContext also waits until the suspension has taken effect.
       if (!GetThreadContext(threads_[i], &context)) {
+        const DWORD failed = GetLastError();
         if (ended(threads_[i])) continue;
-        error = GetLastError();
+        error = failed;
         resume();
         return Stop::Failed;
       }
@@ -286,24 +304,28 @@ bool whole_instructions(const uint8_t* bytes, size_t size) {
   return true;
 }
 
-// Whether a hook's patch at `target` would touch a site patch in place: MinHook writes 5 bytes there.
+// Whether a hook's patch at `hook` may write into [begin, end): MinHook writes 5 bytes there, or, in
+// its patch-above mode, also the 5 bytes before it.
+bool hook_reaches(uintptr_t hook, uintptr_t begin, uintptr_t end) {
+  return hook + kJumpBytes > begin && hook < end + kJumpBytes;
+}
+
+// Whether a hook's patch at `target` may write into a site patch in place.
 bool in_site_patch(const void* target) {
-  const auto begin = reinterpret_cast<uintptr_t>(target), end = begin + kJumpBytes;
+  const auto hook = reinterpret_cast<uintptr_t>(target);
   for (const Created& c : g_created) {
     const auto at = reinterpret_cast<uintptr_t>(c.at);
-    if (c.siteBytes && c.enabled && at < end && begin < at + c.siteBytes) return true;
+    if (c.siteBytes && c.enabled && hook_reaches(hook, at, at + c.siteBytes)) return true;
   }
   return false;
 }
 
-// Whether `size` bytes at `site` overlap a site patch in place or the 5 bytes before or after a
-// hook's patched address (MinHook may patch either side).
+// Whether `size` bytes at `site` overlap a site patch in place or what a hook's patch may write.
 bool overlaps(const uint8_t* site, size_t size) {
   const auto begin = reinterpret_cast<uintptr_t>(site), end = begin + size;
   for (const Created& c : g_created) {
     const auto at = reinterpret_cast<uintptr_t>(c.at);
-    const bool hit = c.siteBytes ? c.enabled && at < end && begin < at + c.siteBytes
-                                 : at + kJumpBytes > begin && at < end + kJumpBytes;
+    const bool hit = c.siteBytes ? c.enabled && at < end && begin < at + c.siteBytes : hook_reaches(at, begin, end);
     if (hit) return true;
   }
   return false;
@@ -492,13 +514,18 @@ void begin_group() {
 
 namespace {
 
-// Newest first, so a detour chained onto another is removed before the one it chained onto.
-void remove_since(size_t start) {
+// Newest first, so a detour chained onto another is removed before the one it chained onto. A site
+// patch whose bytes cannot be written back stays recorded and in place, for shutdown to try again;
+// returns how many of those there were.
+size_t remove_since(size_t start) {
+  std::vector<Created> kept;
+  kept.reserve(g_created.size() > start ? g_created.size() - start : 0);
   while (g_created.size() > start) {
     Created c = g_created.back();
     g_created.pop_back();
     if (c.siteBytes) {
       unpatch(c);
+      if (c.enabled) kept.push_back(c);
       continue;
     }
     if (c.enabled) MH_DisableHook(c.at);
@@ -508,14 +535,18 @@ void remove_since(size_t start) {
     else g_head[c.target] = c.at;
   }
   if (g_groupStart > start) g_groupStart = start;
+  // The popped records' room is still allocated, so these cannot fail.
+  for (auto c = kept.rbegin(); c != kept.rend(); ++c) g_created.push_back(*c);
+  return kept.size();
 }
 
 }  // namespace
 
 void rollback_group() {
   std::lock_guard lock(g_mutex);
-  remove_since(g_groupStart);  // only the open group adds hooks, so nothing has chained onto these
-  PG_LOG("hooks: removed the hooks of a mod that did not start");
+  const size_t kept = remove_since(g_groupStart);  // only the open group adds hooks, so nothing has chained onto these
+  if (kept) PG_LOG("hooks: removed the hooks of a mod that did not start; %zu site patch(es) stay in place", kept);
+  else PG_LOG("hooks: removed the hooks of a mod that did not start");
 }
 
 size_t mark() {
@@ -525,9 +556,10 @@ size_t mark() {
 
 void rollback_to(size_t mark) {
   std::lock_guard lock(g_mutex);
-  const size_t removed = g_created.size() > mark ? g_created.size() - mark : 0;
-  remove_since(mark);
-  PG_LOG("hooks: removed %zu hook(s)", removed);
+  const size_t listed = g_created.size() > mark ? g_created.size() - mark : 0;
+  const size_t kept = remove_since(mark);
+  if (kept) PG_LOG("hooks: removed %zu hook(s); %zu site patch(es) stay in place", listed - kept, kept);
+  else PG_LOG("hooks: removed %zu hook(s)", listed);
 }
 
 void shutdown() {
