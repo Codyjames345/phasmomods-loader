@@ -3,11 +3,16 @@
 #include <windows.h>
 
 #include <algorithm>
-#include <map>
+#include <atomic>
+#include <cstddef>
+#include <mutex>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "consent.h"
+#include "contained.h"
 #include "entry_hooks.h"
 #include "game.h"
 #include "game_map.h"
@@ -22,6 +27,8 @@
 #include "notice.h"
 #include "presence.h"
 #include "room_actions.h"
+#include "scene_engine.h"
+#include "service_registry.h"
 #include "ui.h"
 
 namespace pg::suite {
@@ -30,7 +37,7 @@ namespace {
 std::wstring g_dataDirectory;
 PgHostApi g_api{};
 presence::Presence g_presence;
-std::map<std::string, const void*> g_services;  // every one a running mod's
+services::Registry g_services;  // every table a running mod's
 bool g_agreed = false;     // the player agreed to the notice: the mods are the host's to run
 size_t g_modHooks = 0;     // hooks::mark() before the first mod started: everything after is the mods'
 consent::Answer g_answer = consent::Answer::Pending;
@@ -101,15 +108,15 @@ bool api_peer_has_mod(int32_t actor, const char* id) {
 }
 void api_register_service(const char* name, const void* table) {
   try {
-    if (name) g_services[name] = table;
+    if (name && !g_services.publish(name, table))
+      PG_LOG("suite: service %s is already registered; the first table stays", name);
   } catch (...) {
-    PG_LOG("suite: could not register service %s", name);
+    PG_LOG("suite: could not register service %s", name ? name : "?");
   }
 }
 const void* api_service(const char* name) {
   try {
-    auto it = name ? g_services.find(name) : g_services.end();
-    return it == g_services.end() ? nullptr : it->second;
+    return g_services.find(name);
   } catch (...) {
     return nullptr;
   }
@@ -117,15 +124,20 @@ const void* api_service(const char* name) {
 
 const PgGameEntry* api_game_entry(const char* key) {
   try {
-    return key ? gamemap::entry(key) : nullptr;
+    return key ? gamemap::mod_entry(key) : nullptr;
   } catch (...) {
     return nullptr;  // an allocation failure while looking it up: treat the entry as unresolved
   }
 }
+// The resolved method entry `key` names, or null when it is unknown, unresolved or not a method.
+const PgGameEntry* method_entry(const char* key) {
+  const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
+  return e && e->kind == PG_ENTRY_METHOD && e->code ? e : nullptr;
+}
 bool api_hook_entry(const char* key, void* detour, void** original, const char* name, bool allTwins) {
   try {
-    const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
-    if (!e || e->kind != PG_ENTRY_METHOD || !e->code) {
+    const PgGameEntry* e = method_entry(key);
+    if (!e) {
       PG_LOG("suite: game entry %s is unknown, unresolved or not a method; nothing hooked", key ? key : "?");
       return false;
     }
@@ -133,6 +145,27 @@ bool api_hook_entry(const char* key, void* detour, void** original, const char* 
   } catch (...) {
     PG_LOG("suite: exception while hooking game entry %s", key ? key : "?");
     return false;
+  }
+}
+bool api_hook_body(const char* key, uint32_t bodyIndex, void* detour, void** original, const char* name) {
+  try {
+    const PgGameEntry* e = method_entry(key);
+    if (!e) {
+      PG_LOG("suite: game entry %s is unknown, unresolved or not a method; nothing hooked", key ? key : "?");
+      return false;
+    }
+    return entry_hooks::hook_body(e->code, {e->twins, e->twinCount}, bodyIndex, detour, original, name ? name : key);
+  } catch (...) {
+    PG_LOG("suite: exception while hooking game entry %s", key ? key : "?");
+    return false;
+  }
+}
+uint32_t api_body_count(const char* key) {
+  try {
+    const PgGameEntry* e = method_entry(key);
+    return e ? static_cast<uint32_t>(entry_hooks::bodies(e->code, {e->twins, e->twinCount}).size()) : 0;
+  } catch (...) {
+    return 0;  // an allocation failure while listing the bodies: treat the entry as unresolved
   }
 }
 void api_set_reference(void* obj, int32_t offset, void* value) {
@@ -146,6 +179,202 @@ void api_set_reference(void* obj, int32_t offset, void* value) {
   }
 }
 int32_t api_inside_entry(const char* key) { return context::depth(key); }
+
+// The runtime services (version 2.1). Each runs its body in host::contained, which logs every
+// exception it contains.
+
+// The class of the Type entry `key`, or null when it is unknown, unresolved or not a type.
+il2cpp::Class* type_class(const char* key) {
+  const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
+  return e && e->kind == PG_ENTRY_TYPE ? e->klass : nullptr;
+}
+
+// A service handed an object of the wrong kind reads no layout from it. It logs that once per
+// service (`refused` is the service's own flag, atomic so two threads still log once) and answers 0
+// or null.
+bool refuse_once(std::atomic<bool>& refused, const char* service, const char* kind) {
+  if (!refused.exchange(true))
+    PG_LOG("suite: a mod passed %s an object that is not %s; it answers 0 or null", service, kind);
+  return false;
+}
+bool string_given(const void* obj, const char* service) {
+  static std::atomic<bool> refused{false};
+  return il2cpp::is_string(obj) || refuse_once(refused, service, "a System.String");
+}
+bool array_given(const void* obj, const char* service) {
+  static std::atomic<bool> refused{false};
+  return il2cpp::is_array(obj) || refuse_once(refused, service, "a managed array");
+}
+bool list_given(const void* obj, const char* service) {
+  static std::atomic<bool> refused{false};
+  return il2cpp::is_list(obj) || refuse_once(refused, service, "a System.Collections.Generic.List");
+}
+
+void* api_string_new(const char* utf8) {
+  return host::contained("suite", "making a string", static_cast<void*>(nullptr),
+                         [&]() -> void* { return utf8 ? il2cpp::string_new(utf8) : nullptr; });
+}
+size_t api_string_utf8(const void* str, char* out, size_t size) {
+  return host::contained("suite", "reading a string", size_t{0}, [&]() -> size_t {
+    if (out && size) out[0] = '\0';
+    if (!str || !string_given(str, "string_utf8")) return 0;
+    return il2cpp::to_utf8(static_cast<const il2cpp::String*>(str), out, size);
+  });
+}
+size_t api_array_length(const void* arr) {
+  return host::contained("suite", "reading an array", size_t{0}, [&]() -> size_t {
+    return arr && array_given(arr, "array_length") ? static_cast<const il2cpp::Array*>(arr)->max_length : 0;
+  });
+}
+void* api_array_data(void* arr) {
+  return host::contained("suite", "reading an array", static_cast<void*>(nullptr), [&]() -> void* {
+    return arr && array_given(arr, "array_data") ? static_cast<il2cpp::Array*>(arr)->data<char>() : nullptr;
+  });
+}
+void* api_array_new(const char* elementTypeKey, size_t length) {
+  return host::contained("suite", "making an array", static_cast<void*>(nullptr), [&]() -> void* {
+    il2cpp::Class* const klass = type_class(elementTypeKey);
+    return klass ? il2cpp::array_new(klass, length) : nullptr;
+  });
+}
+int32_t api_list_count(const void* list) {
+  return host::contained("suite", "reading a list", int32_t{0}, [&]() -> int32_t {
+    return list && list_given(list, "list_count") ? static_cast<const il2cpp::List*>(list)->size : 0;
+  });
+}
+void* api_list_items(const void* list) {
+  return host::contained("suite", "reading a list", static_cast<void*>(nullptr), [&]() -> void* {
+    return list && list_given(list, "list_items") ? static_cast<const il2cpp::List*>(list)->items : nullptr;
+  });
+}
+void* api_type_object(const char* typeKey) {
+  return host::contained("suite", "making a type object", static_cast<void*>(nullptr),
+                         [&]() -> void* { return il2cpp::type_object(type_class(typeKey)); });
+}
+void* api_object_new(const char* typeKey) {
+  return host::contained("suite", "making an object", static_cast<void*>(nullptr), [&]() -> void* {
+    il2cpp::Class* const klass = type_class(typeKey);
+    return klass ? il2cpp::object_new(klass) : nullptr;
+  });
+}
+bool api_is_instance(const void* obj, const char* typeKey) {
+  return host::contained("suite", "checking an object's type", false,
+                         [&] { return il2cpp::is_instance(obj, type_class(typeKey)); });
+}
+bool api_alive(const void* unityObject) {
+  return host::contained("suite", "checking an object is alive", false,
+                         [&] { return game::alive(const_cast<void*>(unityObject)); });
+}
+const void* api_virtual_method(const void* obj, const char* methodKey) {
+  return host::contained("suite", "finding a virtual method", static_cast<const void*>(nullptr), [&]() -> const void* {
+    const PgGameEntry* e = methodKey ? gamemap::entry(methodKey) : nullptr;
+    if (!obj || !e || e->kind != PG_ENTRY_METHOD || !e->method || !il2cpp::is_instance(obj, e->klass)) return nullptr;
+    return il2cpp::virtual_method(const_cast<void*>(obj), e->method);
+  });
+}
+uint32_t api_gc_hold(void* obj) {
+  return host::contained("suite", "holding an object", uint32_t{0}, [&] { return il2cpp::gc_hold(obj); });
+}
+void api_gc_release(uint32_t handle) {
+  try {
+    il2cpp::gc_release(handle);
+  } catch (...) {
+    PG_LOG("suite: exception while releasing an object");
+  }
+}
+
+// The static field entry `key`: its class and FieldInfo, or null when it is unknown, unresolved, not
+// a field or not static.
+const PgGameEntry* static_field(const char* key) {
+  const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
+  const sdk::Result* r = e ? gamemap::result(key) : nullptr;
+  if (!e || !r || e->kind != PG_ENTRY_FIELD || !(r->desc->flags & sdk::kStatic) || !e->klass || !e->field)
+    return nullptr;
+  return e;
+}
+
+// Whether a managed exception's stack from a static field access was logged: once in all, since a
+// failed static constructor throws again on every access.
+std::atomic<bool> g_staticStackLogged{false};
+
+// A static field access that failed: logged once per key, with `why`. Called from catch handlers too,
+// so it throws nothing.
+void static_refused(const char* key, const char* why) {
+  try {
+    static std::mutex mutex;
+    static std::set<std::string> logged;
+    const std::lock_guard lock(mutex);
+    if (logged.insert(key).second) PG_LOG("suite: static field %s: %s; it answers false", key, why);
+  } catch (...) {
+    // Logging is best effort; the caller answers false either way.
+  }
+}
+
+// Runs a static field access, `access(entry)`, for the entry `key`. False, logged once per key, when
+// the entry is not a resolved static field, the access refuses (a size other than the field's), or
+// it throws (the class's static constructor, say).
+template <class F>
+bool static_access(const char* key, const char* what, F access) {
+  if (!key) return false;
+  try {
+    const PgGameEntry* e = static_field(key);
+    if (!e) {
+      static_refused(key, "it is unknown, unresolved or not a static field");
+      return false;
+    }
+    if (access(e)) return true;
+    static_refused(key, "the size given is not the size of its value");
+  } catch (const Il2CppExceptionWrapper& ex) {
+    if (!g_staticStackLogged.exchange(true)) il2cpp::log_exception((std::string("suite: ") + what).c_str(), ex.ex);
+    static_refused(key, "a managed exception was thrown");
+  } catch (...) {
+    static_refused(key, "an exception was thrown");
+  }
+  return false;
+}
+bool api_static_get(const char* key, void* out, size_t size) {
+  return out && static_access(key, "reading a static field",
+                              [&](const PgGameEntry* e) { return il2cpp::static_get(e->klass, e->field, out, size); });
+}
+bool api_static_set(const char* key, const void* in, size_t size) {
+  return in && static_access(key, "writing a static field",
+                             [&](const PgGameEntry* e) { return il2cpp::static_set(e->klass, e->field, in, size); });
+}
+
+void api_log_exception(const char* where, const void* exception) {
+  try {
+    il2cpp::log_exception(where ? where : "mod", exception);
+  } catch (...) {
+    PG_LOG("suite: exception while logging a managed exception");
+  }
+}
+
+// The scene facts (version 2.1): the game map keeps and checks them.
+void* api_scene_find(const char* key, void* root) {
+  return host::contained("suite", "finding a scene path", static_cast<void*>(nullptr),
+                         [&]() -> void* { return gamemap::scene_find(key, root); });
+}
+bool api_animator_param(const char* key, const void* animator, int32_t* hash) {
+  return host::contained("suite", "checking an Animator parameter", false,
+                         [&] { return gamemap::animator_param(key, animator, hash); });
+}
+
+// The native sites (version 2.1): the hooks layer patches one, in the open mod's group.
+bool api_patch_site(const char* key, const void* expected, size_t expectedSize, const void* stub, size_t stubSize,
+                    void** page) {
+  if (page) *page = nullptr;
+  try {
+    const PgGameEntry* e = key ? gamemap::entry(key) : nullptr;
+    if (!e || e->kind != PG_ENTRY_NATIVE_SITE || !e->code) {
+      PG_LOG("suite: game entry %s is unknown, unresolved or not a native site; nothing patched", key ? key : "?");
+      return false;
+    }
+    return hooks::patch_site(e->code, expected, expectedSize, stub, stubSize, page, key);
+  } catch (...) {
+    PG_LOG("suite: exception while patching native site %s", key ? key : "?");
+    return false;
+  }
+}
 
 void on_presence(int32_t sender, const uint8_t* data, size_t size) {
   if (game::private_room()) g_presence.receive(sender, data, size, GetTickCount64());
@@ -215,15 +444,25 @@ bool resolve() {
 bool create_hooks() { return hostnet::create_hooks() && context::install(&gamemap::entry); }
 
 bool start(void* gameAssembly, void* unityPlayer) {
+  gamemap::resolve_icalls();  // on the main thread, before any mod starts
+  gamemap::resolve_scene_facts(scene_engine::engine());  // the layers, from the running game
   g_dataDirectory = data_directory();
   if (g_dataDirectory.empty()) {
     PG_LOG("suite: the local application-data folder is unavailable; set LOCALAPPDATA and restart the game");
     return false;
   }
+  // Positional: a member added to PgHostApi after patch_site fails this until it is given here too.
+  static_assert(offsetof(PgHostApi, patch_site) + sizeof(PgHostApi::patch_site) == sizeof(PgHostApi),
+                "g_api lists every PgHostApi member");
   g_api = {PGMOD_API_VERSION, gameAssembly, unityPlayer, g_dataDirectory.c_str(),
            &api_log, &api_create_hook, &api_enable_hooks, &api_send, &api_set_receiver,
            &api_peer_has_mod, &api_register_service, &api_service,
-           &api_game_entry, &api_hook_entry, &api_set_reference, &api_inside_entry};
+           &api_game_entry, &api_hook_entry, &api_set_reference, &api_inside_entry,
+           &api_string_new, &api_string_utf8, &api_array_length, &api_array_data, &api_array_new,
+           &api_list_count, &api_list_items, &api_type_object, &api_object_new, &api_is_instance,
+           &api_alive, &api_virtual_method, &api_gc_hold, &api_gc_release, &api_log_exception,
+           &api_static_get, &api_static_set, &api_hook_body, &api_body_count,
+           &api_scene_find, &api_animator_param, &api_patch_site};
   hostnet::set_receiver(hostnet::kHostChannel, &on_presence);
   mods::load(g_dataDirectory);
   if (mods::loaded().empty()) {
@@ -261,6 +500,7 @@ void stop() {
   mods_panel::teardown();
   if (g_agreed) mods::stop_all();
   g_agreed = false;
+  gamemap::forget_scene_facts();  // after the mods, which may still ask in their stop
   g_presence.set_local({}, false);
 }
 

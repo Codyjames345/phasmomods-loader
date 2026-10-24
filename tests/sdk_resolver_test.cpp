@@ -1,5 +1,9 @@
+#include <cstring>
+#include <filesystem>
 #include <format>
+#include <fstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -1090,6 +1094,116 @@ void pattern_needs_readable_code() {
   CHECK(s && s->detail.find("could not be fully read") != std::string::npos);
 }
 
+// A static field is a Field entry flagged kStatic: its shape counts static fields only.
+void static_field_by_shape() {
+  ModelBuilder b;
+  const int level = b.type("Assembly-CSharp", "", "LevelController");
+  b.field(level, "ബദഭ", "LevelController", 0x0, true, level);
+  b.field(level, "ഷമദ", "LevelController", 0x18, false, level);  // an instance field of the same type
+  constexpr EntryDesc type{.key = "LevelController", .name = "LevelController", .assembly = "Assembly-CSharp", .ns = ""};
+  constexpr EntryDesc instance{.key = "LevelController.instance", .kind = Kind::Field, .flags = kStatic,
+                               .owner = "LevelController", .type = "@LevelController"};
+  const Resolution r = run({&type, &instance}, b.build());
+  const Result* i = r.find("LevelController.instance");
+  CHECK(i && i->status == Status::Resolved && i->member == 0 && i->currentName == "ബദഭ");
+}
+
+int g_setBoolID = 0;  // stands in for the engine function's code
+
+// An icall resolves through the running runtime, by the icall's name.
+void icall_resolves_by_name() {
+  constexpr EntryDesc setBool{.key = "Animator.SetBoolID", .kind = Kind::Icall,
+                              .name = "UnityEngine.Animator::SetBoolID"};
+  std::vector<std::string> asked;
+  const IcallLookup runtime = [&](const char* name) -> const void* {
+    asked.emplace_back(name);
+    return std::string_view(name) == "UnityEngine.Animator::SetBoolID" ? &g_setBoolID : nullptr;
+  };
+  const Resolution r = resolve(std::vector<const EntryDesc*>{&setBool}, GameModel{}, nullptr, runtime);
+  const Result* s = r.find("Animator.SetBoolID");
+  CHECK(s && s->status == Status::Resolved && s->address == reinterpret_cast<uintptr_t>(&g_setBoolID));
+  CHECK((asked == std::vector<std::string>{"UnityEngine.Animator::SetBoolID"}));
+
+  constexpr EntryDesc gone{.key = "Animator.Gone", .kind = Kind::Icall, .name = "UnityEngine.Animator::Gone"};
+  const Resolution missing = resolve(std::vector<const EntryDesc*>{&gone}, GameModel{}, nullptr, runtime);
+  CHECK(missing.find("Animator.Gone")->status == Status::Missing);
+  CHECK(missing.find("Animator.Gone")->address == 0);
+}
+
+// Offline there is no runtime to ask: an icall stays unresolved, checked at startup only.
+void icall_without_runtime_is_checked_at_startup() {
+  constexpr EntryDesc setBool{.key = "Animator.SetBoolID", .kind = Kind::Icall,
+                              .name = "UnityEngine.Animator::SetBoolID"};
+  const Resolution r = run({&setBool}, GameModel{});
+  CHECK(r.find("Animator.SetBoolID")->status == Status::Missing);
+  CHECK(r.find("Animator.SetBoolID")->detail == "checked at startup only");
+}
+
+constexpr EntryDesc kShutdown{.key = "GameAssembly.il2cpp_shutdown", .kind = Kind::Export, .name = "il2cpp_shutdown"};
+
+// An export resolves from the image's export table, as the offline check reads the copied
+// GameAssembly.dll.
+void export_resolves_offline_from_pe() {
+  ImageBuilder ib;
+  ib.function(0x2000, std::vector<uint8_t>{0xC3});
+  ib.function(0x2010, std::vector<uint8_t>{0xC3});
+  ib.exported = {{"il2cpp_init", 0x2010}, {"il2cpp_shutdown", 0x2000}};
+  const std::filesystem::path dir = std::filesystem::temp_directory_path() / "pg_sdk_resolver_test";
+  std::filesystem::create_directories(dir);
+  const std::vector<uint8_t> file = ib.file();
+  std::ofstream(dir / "GameAssembly.dll", std::ios::binary)
+      .write(reinterpret_cast<const char*>(file.data()), static_cast<std::streamsize>(file.size()));
+  const std::vector<uint8_t> mapped = map_pe_file(dir / "GameAssembly.dll");
+  std::filesystem::remove_all(dir);
+  const CodeImage image(mapped);
+  CHECK(image.valid());
+  CHECK(image.exported("il2cpp_shutdown") == 0x2000);
+  CHECK(image.exported("il2cpp_init") == 0x2010);
+  const Resolution r = resolve(std::vector<const EntryDesc*>{&kShutdown}, GameModel{}, &image);
+  const Result* s = r.find("GameAssembly.il2cpp_shutdown");
+  CHECK(s && s->status == Status::Resolved && s->rva == 0x2000 && s->currentName == "il2cpp_shutdown");
+
+  // Without an image there is nothing to read the table from.
+  CHECK(run({&kShutdown}, GameModel{}).find("GameAssembly.il2cpp_shutdown")->detail == "no code image");
+}
+
+void missing_export_is_missing() {
+  ImageBuilder ib;
+  ib.function(0x2000, std::vector<uint8_t>{0xC3});
+  // A name that only begins with the one wanted, and an export forwarded to another module (its RVA
+  // lies inside the export directory, where the forwarder's text is).
+  ib.exported = {{"il2cpp_shutdown_now", 0x2000}, {"il2cpp_stop", ImageBuilder::kExports + 4}};
+  const std::vector<uint8_t> mapped = ib.build();
+  const CodeImage image(mapped);
+  CHECK(image.exported("il2cpp_shutdown") == 0);
+  CHECK(image.exported("il2cpp_stop") == 0);
+  const Resolution r = resolve(std::vector<const EntryDesc*>{&kShutdown}, GameModel{}, &image);
+  const Result* s = r.find("GameAssembly.il2cpp_shutdown");
+  CHECK(s && s->status == Status::Missing && s->rva == 0);
+
+  // An image without an export directory exports nothing.
+  ImageBuilder none;
+  none.function(0x2000, std::vector<uint8_t>{0xC3});
+  const std::vector<uint8_t> bare = none.build();
+  CHECK(CodeImage(bare).exported("il2cpp_shutdown") == 0);
+}
+
+// A name table that runs off the image's end, or two exports of one name, never give an address.
+void malformed_export_table_exports_nothing() {
+  ImageBuilder ib;
+  ib.function(0x2000, std::vector<uint8_t>{0xC3});
+  ib.exported = {{"il2cpp_shutdown", 0x2000}, {"il2cpp_shutdown", 0x2000}};
+  std::vector<uint8_t> twice = ib.build();
+  CHECK(CodeImage(twice).exported("il2cpp_shutdown") == 0);
+
+  ib.exported = {{"il2cpp_shutdown", 0x2000}};
+  std::vector<uint8_t> broken = ib.build();
+  const uint32_t names = ImageBuilder::kExports + 32;
+  const uint32_t past = ImageBuilder::kSize - 2;  // the name table's one entry would end past the image
+  std::memcpy(broken.data() + names, &past, 4);
+  CHECK(CodeImage(broken).exported("il2cpp_shutdown") == 0);
+}
+
 void assemblies_named_once_sorted() {
   constexpr EntryDesc kCamera{.key = "Camera", .name = "Camera", .assembly = "UnityEngine.CoreModule"};
   const EntryDesc* entries[] = {&kGhostAI, &kCamera, &kGhostState, &kAgent, &kGhostAI};
@@ -1142,5 +1256,11 @@ int main() {
   pattern_inside_method();
   pattern_needs_readable_code();
   assemblies_named_once_sorted();
+  static_field_by_shape();
+  icall_resolves_by_name();
+  icall_without_runtime_is_checked_at_startup();
+  export_resolves_offline_from_pe();
+  missing_export_is_missing();
+  malformed_export_table_exports_nothing();
   return g_failures ? 1 : 0;
 }

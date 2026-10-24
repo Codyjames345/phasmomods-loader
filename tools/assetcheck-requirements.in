@@ -1,0 +1,4 @@
+# The input of tools/assetcheck-requirements.txt: UnityPy for tools/assetcheck.py, the offline scene
+# and asset check, and for nothing else (the user approved it on 2026-10-23 for that check only).
+# UnityPy 1.25.2 was released 2026-07-09. sdk/systems/scene.md says how to regenerate the pinned file.
+UnityPy==1.25.2

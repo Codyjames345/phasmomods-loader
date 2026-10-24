@@ -5,12 +5,14 @@
 #include <cstring>
 #include <optional>
 #include <span>
+#include <string>
+#include <utility>
 #include <vector>
 
 // Builds a small PE32+ image for the code reader's tests, laid out by RVA as a loaded module is: DOS
 // and NT headers, one section spanning the image, unwind info and an exception directory (the
-// RUNTIME_FUNCTION table). file() gives the same image in file layout, with the section at another
-// file offset than its RVA.
+// RUNTIME_FUNCTION table), and an export directory when `exported` names any function. file() gives
+// the same image in file layout, with the section at another file offset than its RVA.
 struct ImageBuilder {
   struct RuntimeFunction {
     uint32_t begin, end, unwind;
@@ -21,10 +23,12 @@ struct ImageBuilder {
   static constexpr uint32_t kSection = 0x1000;  // the section's RVA
   static constexpr uint32_t kUnwind = 0xA000;   // where unwind info is placed
   static constexpr uint32_t kTable = 0xC000;    // where the RUNTIME_FUNCTION table is placed
+  static constexpr uint32_t kExports = 0xE000;  // where the export directory is placed
 
   std::vector<uint8_t> image = std::vector<uint8_t>(kSize);
   std::vector<RuntimeFunction> table;
   uint32_t nextUnwind = kUnwind;
+  std::vector<std::pair<std::string, uint32_t>> exported;  // each export's name and RVA, in name order
 
   template <typename T>
   void put(uint32_t rva, T value) {
@@ -87,6 +91,26 @@ struct ImageBuilder {
     put32(opt + 112 + 3 * 8 + 4, static_cast<uint32_t>(sorted.size() * 12));
     for (size_t i = 0; i < sorted.size(); ++i)
       std::memcpy(out.data() + kTable + i * 12, &sorted[i], 12);
+    if (!exported.empty()) {
+      // IMAGE_EXPORT_DIRECTORY, then the function RVAs, the name RVAs, the ordinals and the names.
+      const auto n = static_cast<uint32_t>(exported.size());
+      const uint32_t functions = kExports + 40, names = functions + 4 * n, ordinals = names + 4 * n;
+      uint32_t text = ordinals + 2 * n;
+      put32(kExports + 20, n);  // NumberOfFunctions
+      put32(kExports + 24, n);  // NumberOfNames
+      put32(kExports + 28, functions);
+      put32(kExports + 32, names);
+      put32(kExports + 36, ordinals);
+      for (uint32_t i = 0; i < n; ++i) {
+        put32(functions + 4 * i, exported[i].second);
+        put32(names + 4 * i, text);
+        put16(ordinals + 2 * i, static_cast<uint16_t>(i));
+        std::memcpy(out.data() + text, exported[i].first.c_str(), exported[i].first.size() + 1);
+        text += static_cast<uint32_t>(exported[i].first.size()) + 1;
+      }
+      put32(opt + 112, kExports);  // the export directory
+      put32(opt + 112 + 4, text - kExports);
+    }
     const uint32_t sec = opt + 0xF0;
     std::memcpy(out.data() + sec, ".text", 5);
     put32(sec + 8, kSize - kSection);   // VirtualSize

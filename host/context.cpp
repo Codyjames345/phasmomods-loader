@@ -42,7 +42,19 @@ bool install(const PgGameEntry* (*lookup)(const char* key)) {
       PG_LOG("context: %s did not resolve; calls of it are not tracked", t.key);
       continue;
     }
-    if (!entry_hooks::hook(e->code, {e->twins, e->twinCount}, t.detour, t.original, t.key, true)) {
+    const std::vector<void*> bodies = entry_hooks::bodies(e->code, {e->twins, e->twinCount});
+    if (bodies.size() > api::kMaxBodies) {
+      PG_LOG("context: %s has %zu bodies, more than the %u a hook covers; calls of it are not tracked", t.key,
+             bodies.size(), api::kMaxBodies);
+      continue;
+    }
+    // Every body or none: a failure removes the bodies hooked before it.
+    const size_t start = hooks::mark();
+    bool hooked = true;
+    for (uint32_t i = 0; hooked && i < bodies.size(); ++i)
+      hooked = hooks::create(bodies[i], t.entry(i), &t.originals[i], t.key);
+    if (!hooked) {
+      hooks::rollback_to(start);
       ok = false;
       continue;
     }

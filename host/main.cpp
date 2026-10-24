@@ -118,7 +118,7 @@ DWORD WINAPI worker(void*) {
         PG_LOG("ModHost inactive: runtime initialization failed");
       } else if (pg::startup::permitted(g_stop, g_deadline, "resolution")) {
         // An unresolved entry switches off only the mods that need it, never the host.
-        pg::gamemap::resolve(g_gameAssembly, g_stop, g_deadline);
+        pg::gamemap::resolve(g_gameAssembly, g_unityPlayer, g_stop, g_deadline);
         if (!(pg::game::resolve() && pg::suite::resolve())) {
           PG_LOG("ModHost inactive: game binding resolution failed");
         } else if (pg::startup::permitted(g_stop, g_deadline, "hooks")) {
@@ -162,6 +162,7 @@ DWORD WINAPI worker(void*) {
   }
   g_activation = Activation::Failed;
   if (hooksOwned) {
+    pg::hooks::restore_sites();  // the game's own bytes at every native site a mod patched
     const auto result = MH_DisableHook(MH_ALL_HOOKS);
     if (result != MH_OK) PG_LOG("shutdown: hook disable failed (%d); native code retained", result);
     // Disabled detours can still be returning. Keep their trampolines and pinned DLL alive.

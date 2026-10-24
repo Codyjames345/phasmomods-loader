@@ -19,8 +19,14 @@ build.
 ## What exists today, and what does not
 
 Exists: the map and its resolver (at startup in the game, and offline), the game API, host contract
-2.0, hooks by entry, the fake backend, `tools/gamecheck.ps1`, and two mapped types (GhostAI with 15
-entries, Unity's Camera with 8). One mod call goes through the game API: Ghost Tells' Shade calls
+2.1 with its runtime services, static fields and scene facts, hooks by entry, the fake backend,
+`tools/gamecheck.ps1` with its scene check `tools/assetcheck.py`, and the mapped types (GhostAI with
+15 entries, Unity's Camera with 8, LevelController with its static instance, Unity's Animator with
+one icall, and the Unity types the host's scene facts use: Animator, AnimatorControllerParameter,
+Transform, LayerMask and SceneManager), two scene facts (the journal's book and the PlayerView layer),
+plus one GameAssembly export the host may use (`il2cpp_shutdown`), and two native sites in
+UnityPlayer.dll (the crowd steering site and `NavMeshAgent::GetInternalAgent`) with the host's
+`patch_site`. One mod call goes through the game API: Ghost Tells' Shade calls
 `phasmo::GhostAI::UnAppear`.
 
 Does not exist yet. These arrive with stage 2, when every bundled mod is on the game API:
@@ -43,8 +49,9 @@ describes what is in the code now.
   thread, and the game API runs there too. Do not call it from another thread. Only the host contract's `log` may be
   called from any thread; everything else runs on the main thread.
 - **Never keep a raw managed reference across frames.** The garbage collector moves and frees
-  managed objects. Keep one in an `il2cpp::Held` (`core/il2cpp.h`), as `mods/ghost_tells/shade.cpp`
-  does with its ghost. `tests/held_scan_test.cpp` fails the build on a raw `void*` kept at namespace
+  managed objects. Keep one in a `pg::api::Held` (`sdk/api/held.h`), which holds it through the host
+  contract's `gc_hold`. (The bundled mods still use the host's copy, `il2cpp::Held` in `core/il2cpp.h`,
+  as `mods/ghost_tells/shade.cpp` does with its ghost, until stage 2b moves them onto the game API.) `tests/held_scan_test.cpp` fails the build on a raw `void*` kept at namespace
   or struct scope. It scans `core/`, `host/` and the four bundled mod folders by name, so a new mod
   folder must be added to the list in that test.
 - **Private lobbies only.** Play with mods in private lobbies only. Playing with mods risks a ban on
@@ -109,7 +116,8 @@ The lifecycle, every call on the main thread:
 - `pgmod_tick()`: every frame once started.
 - `pgmod_stop()`: once, when the host stops the mod (newest started first). The mod may be started
   again later, and its hooks stay until the host removes them.
-- `pgmod_requires`: the game entries the mod needs (see "What a mod requires").
+- `pgmod_requires`: the game entries the mod needs (see "What a mod requires"), in an array the mod
+  keeps, unchanged, for as long as its DLL stays loaded.
 - `pg::mod::guarded_start`, `guarded_tick` and `guarded_stop` (`core/mod_glue.h`) wrap the three
   bodies so that nothing thrown leaves the mod; `mods/ghost_tells/mod.cpp` shows all of it.
 
@@ -125,7 +133,9 @@ receivers when it stops. `peer_has_mod(actor, modId)` says whether that client r
 Services. `register_service(name, table)` publishes a table of C function pointers for other mods and
 `service(name)` returns it, or null when nobody registered that name. The table must stay valid for the
 process lifetime, so version it in the name (`"ghost-tells.v1"`) and make the caller check for null
-(`core/services.h` lists the bundled ones). The host forgets the services when it stops.
+(`core/services.h` lists the bundled ones). A name is published once: the host refuses a second
+`register_service` of a name already registered, logs it, and keeps the first table, so no mod can
+take over another's service. The host forgets the services when it stops.
 
 ### Calling the game
 
@@ -142,24 +152,81 @@ const int32_t state = phasmo::GhostAI::state.get(ghost);     // compare it with 
 phasmo::GhostAI::ChangeState(ghost, phasmo::GhostState::idle(), nullptr, false);
 ```
 
-Four kinds of wrapper, from `sdk/api/game_api.h`:
+Nine kinds of wrapper, from `sdk/api/game_api.h`:
 
 | Wrapper | Declared as | Use |
 | --- | --- | --- |
-| `pg::api::Method<D, R(A...)>` | `static constexpr ... UnAppear{}` | `UnAppear(ghost)`; `available()` says whether it resolved. For an instance method the first parameter is the object. |
+| `pg::api::Method<D, R(A...)>` | `static constexpr ... UnAppear{}` | `UnAppear(ghost)`; `available()` says whether it resolved. For an instance method the first parameter is the object. A call runs the declared body; `virtual_call(ghost, ...)` runs the override the object's class runs, as C# calls a virtual method, and refuses (logged once, nothing called) a null object or one not of the declaring type. |
 | `pg::api::Field<D, T>` | `Field<D, int32_t>` | `get(obj)`, `set(obj, v)`. `T` is a plain value or `void*` for a managed reference, whose `set` goes through the GC write barrier (the host's `set_reference`). |
+| `pg::api::StaticField<D, T>` | `StaticField<D, void*>` | `get()`, `set(v)`: a static field, one value for the class, read and written by the host (`static_get`, `static_set`). A reference's `set` goes through the GC write barrier. The first access runs the class's static constructor if it has not run, as the game's own first use would, so use it while the game plays (a tick, a detour), never at startup. When the host cannot read it (a `T` of the wrong size, a static constructor that threw) it logs once and gives the default. `T` is a number, a bool, an enum or `void*`: a struct does not compile, since a whole copy would store any reference inside it without the write barrier. |
+| `pg::api::Icall<D, R(A...)>` | `static constexpr ... SetBoolID{}` | `SetBoolID(animator, id, value)`: a Unity engine function the runtime registered by its icall name. It is native code, so it takes no MethodInfo. |
 | `pg::api::EnumValue<D>` | `idle{}` | `idle()` gives the value's number in this build. |
-| `pg::api::Type<D>` | `type{}` | `klass()` gives the `Il2CppClass*`; `is(obj)` tells whether an object is of the type or a derived one. |
+| `pg::api::SceneObject<D>` | `BookContent{}` | `find(root)`: the Transform at the Scene entry's path under the Transform `root`, as Transform.Find finds it; null when it is not there, logged once per scene load. The host keeps one answer per entry, for the last root, until the next scene load: repeated calls with the same root cost no search, while alternating roots searches each time. A null root answers null at once. |
+| `pg::api::Layer<D>` | `PlayerView{}` | `index()`: the layer's index, resolved by its name when the host activates; -1 (never 0, the Default layer) when no layer has the name. |
+| `pg::api::AnimatorParam<D>` | `someParam{}` (hypothetical: no AnimatorParam entry is mapped yet) | `hash(animator)`: the parameter's hash for the Animator's by-id setters, checked against that Animator's own parameters when that Animator is first asked (and again after a scene load); repeated calls with the same Animator cost no read, while alternating Animators reads each time. 0 when it lacks the parameter, logged once per scene load. |
+| `pg::api::Type<D>` | `type{}` | `klass()` gives the `Il2CppClass*`; `is(obj)` tells whether an object is of the type or a derived one (an interface type never matches); `type_object()` gives its `System.Type` (C#'s `typeof`); `make()` a new object, fields zeroed and no constructor run (not for engine objects, which come from `AddComponent` or `Instantiate`); `make_array(n)` a new array of the type. |
+
+Every wrapper has two members besides its calls: `desc`, the map entry it wraps (its key, kind and
+flags; `hook<M>` and `inside<M>` read it), and `use`, the entry's `pg::api::Use<D>`, whose `entry()`
+and `resolved()` make the entry required (see "What a mod requires").
+
+A wrapper's shape must be its entry's, or it does not compile. Where the entry lists `params`, a
+`Method` or `Icall` takes one argument per param, after the object unless the entry is `kStatic`
+(a method named without `params` is matched at any arity, so its wrapper is not checked). Where a
+field's `type` is a C# value type by name (`bool`, `int`, `float` and the like), a `Field` or
+`StaticField` whose `T` has another size does not compile. `tests/compile_fail_test.cmake` builds
+wrong wrappers of every kind and expects each to fail with its own `static_assert`.
+
+A call is never virtual: `UnAppear(ghost)` runs the body the map entry names, even when the object's
+class overrides it. Use `virtual_call` to run the override.
+
+A managed reference a wrapper gives (a `void*` field or return value, `type_object()`, `make()`,
+`make_array()`) is valid for the current frame only. Do not keep it across frames: keep the object
+in a `pg::api::Held`.
+
+The game API gives no lookup by a raw path string and no setter that takes a raw layer number: a path,
+a layer and an Animator parameter are map entries, so these facts stay out of mod code.
 
 A call that cannot reach the game never jumps to null. An entry that did not resolve logs
 `<key> is not available in this game build` once and returns the type's default (0, false, null) or
-does nothing. A field read of a null object gives the default; a write to one does nothing.
+does nothing. A field read of a null object gives the default; a write to one does nothing. "Once"
+holds across threads: each line's flag is atomic.
+
+GameAssembly's exports (`il2cpp_shutdown`) are not for mods. `pg::api::Export<D>` gives one's
+`address()` to the host's own code only: it exists where `PG_HOST` is defined (ModHost), and the host
+contract's `game_entry` gives a mod null for one, so a mod that requires an export is never started
+(gamecheck's `--mods` reports it as switched off).
+
+### Strings, arrays, lists and engine objects
+
+A mod never reads the runtime's object layouts; the host does, through the host contract's runtime
+services. `sdk/api/runtime.h`:
+
+```cpp
+const std::string name = pg::api::to_utf8(str);         // a System.String as UTF-8; "" for null
+void* text = pg::api::make_string("ടഴദബ");              // a new System.String
+const pg::api::Array<int32_t> numbers{arr};              // value elements: numbers.size(), numbers[i]
+const pg::api::RefArray objects{arr};                     // references: objects[i], objects.set(i, obj)
+const pg::api::List players{list};                        // a List of references: players.size(), players[i]
+if (pg::api::alive(camera)) ...                          // UnityEngine.Object's implicit bool
+```
+
+An index past the end logs once and touches nothing (a reference reads null, a value element is a
+zeroed scratch copy). `RefArray::set` stores through the GC write barrier. These views and the raw
+pointers they wrap are valid for the current frame only: keep the object itself in a `pg::api::Held`
+and make the view again. An element reference from `Array` and the array `List::items()` gives are
+valid only until the next managed call: a List replaces its backing array when it grows, so take
+`items()` again after any game call, and never store either. An object of the wrong kind (a list
+passed as a string, say) reads nothing: the host logs it once and the service answers 0 or null.
+Before `bind` every service answers as for a null object.
 
 ### What a mod requires
 
 What a mod requires is what its code calls. Every wrapper member is a template, so an entry is
-registered only when code in the mod uses it (`Use<D>::registered`). A call, a field `get` or `set`,
-an enum value, `klass()`, `is()`, `available()`, `hook<M>` and `inside<M>` all use it. The mod's
+registered only when code in the mod uses it: only `Use<D>::resolved` names the entry's
+registration, so naming a wrapper or `Use<D>` registers nothing (MSVC would otherwise register an
+entry wherever its `Use<D>` is named). A call, a field `get` or `set`,
+an enum value, `klass()`, `is()`, `type_object()`, `make()`, `make_array()`, `virtual_call`, `available()`, `hook<M>` and `inside<M>` all use it. The mod's
 `pgmod_requires` export lists exactly those entries' keys, less the entries whose map entry carries
 `kOptional`. That flag belongs to the entry, so it holds for every mod; a mod cannot make an entry
 optional for itself. Check an optional entry with `available()` before using it. `pg::mod::bind` (called
@@ -174,41 +241,92 @@ itself; only the members the mod's code actually uses become required.
 ### Hooking and caller context
 
 ```cpp
-// A game method's code takes the MethodInfo as its last argument, so the detour and `original` do too.
-void (*original)(void*, int32_t, void*, bool, const void*) = nullptr;
-const bool hooked = pg::api::hook<phasmo::GhostAI::ChangeState>(
-    reinterpret_cast<void*>(&detour), reinterpret_cast<void**>(&original), "my hook", pg::api::Twins::All);
+// The detour takes the method's own arguments after `original`; the MethodInfo is passed on for it.
+void detour(pg::api::Original<phasmo::GhostAI::ChangeState> original, void* ghost, int32_t state, void* interact,
+            bool force) {
+  original(ghost, state, interact, force);  // the rest of the chain of the body the game called
+}
+const bool hooked = pg::api::hook<phasmo::GhostAI::ChangeState>(&detour, "my hook", pg::api::Twins::All);
 ```
 
 `hook<M>` creates a MinHook detour on the method through the host's single MinHook instance. It is
 created, not enabled: call `enable_hooks` (or `hooks::enable_all()`). Hooks chain: the newest detour
-runs first and its `original` reaches the previous one.
+runs first and its `original` reaches the previous one. A mod hooks a method once; a second `hook<M>`
+in the same mod is refused and the first keeps its detour.
 
 The obfuscator makes same-behaviour copies of some methods (twins). With `Twins::All` (the default)
-every twin is hooked as well, so the detour runs whichever body the game calls. With
+every twin is hooked as well, so the detour runs whichever body the game calls; with
 `Twins::CanonicalOnly` only the canonical body is hooked, which is what existing code hooked by raw
-address and so what a migration uses. The host refuses a hook that mixes the two policies on one
-method (an all-twins hook over a canonical-only one, or the reverse), and an all-twins hook over a raw
-hook on a twin, and logs why. A twin folded onto the canonical address is hooked once.
+address and so what a migration uses. Each body has its own chain, and `original` continues the chain
+of the body the call came in through, so typed hooks of either policy, and raw hooks on one body,
+coexist on one method in any order: a hook on the canonical body alone never runs for a call through
+a twin. That stops holding once a 2.0 mod's all-twins `hook_entry` is on the method: its one detour
+continues every call on the canonical body's chain, so a call through a twin also runs the hooks on
+the canonical body below it (the limit `hook_entry` documents in `core/mod_api.h`). The
+game API makes one entry function per body for this, up to `pg::api::kMaxBodies` (8); an all-twins
+hook on a method with more bodies is refused and logged, with nothing hooked. A twin folded onto the
+canonical address is one body, hooked once.
 
 `pg::api::inside<M>()` tells whether a call of M is running on this thread, from a thread-local depth
 the host's own hook on M keeps (`inside_entry` in the host contract). It answers only for methods the
 host tracks (`PG_TRACK` in `host/context.cpp`). The host tracks none yet, so today it is always false.
 It replaces return-address checks, which break when several mods chain detours on one function.
 
-### The host contract, version 2.0
+### The host contract, version 2.1
 
-`PGMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.0 today).
+`PGMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.1 today).
 `pg_api_compatible(host, mod)` accepts a mod of the same major and a minor no newer than the host's.
 Within a major, `PgHostApi` and every published struct only grow at the end; a new major refuses
 older mods. Version 2.0 added these members, after the services of version 1:
 
 - `game_entry(key)`: the resolved `PgGameEntry` for a map key (type, method, code, twins, field
-  offset, enum value), or null when unknown or unresolved.
-- `hook_entry(key, detour, original, name, allTwins)`: the hook above.
+  offset, enum value), or null when unknown or unresolved, and for a GameAssembly export.
+- `hook_entry(key, detour, original, name, allTwins)`: a hook by entry with one detour. Since 2.1 it is
+  made from per-body hooks: without `allTwins` it hooks body 0, with it every body, and `original`
+  receives body 0's chain. So a call that entered through a twin goes on along the canonical body's
+  chain, past the twin's own older detours. The game API no longer calls it; `hook_body` replaced it.
 - `set_reference(obj, offset, value)`: stores a managed reference through the GC write barrier. The
   only correct way to write a reference field; `Field<D, void*>::set` calls it.
 - `inside_entry(key)`: the thread-local depth above.
+
+Version 2.1 added the runtime services, after `inside_entry`. A mod built for 2.0 still loads. Each
+runs on the main thread, never throws, and answers null, 0 or false for a null argument and for a key
+that is unknown, unresolved or of the wrong kind:
+
+- `string_new(utf8)` and `string_utf8(str, out, size)`: a managed string from UTF-8, and its UTF-8
+  text (the whole length is returned, so a caller can size its buffer).
+- `array_length(arr)`, `array_data(arr)` and `array_new(elementTypeKey, length)`; `list_count(list)`
+  and `list_items(list)`.
+- `type_object(typeKey)`, `object_new(typeKey)` and `is_instance(obj, typeKey)` (which follows the
+  class's parents).
+- `alive(unityObject)`: UnityEngine.Object's implicit bool.
+- `virtual_method(obj, methodKey)`: the MethodInfo the object runs for the method; its first member is
+  the address of its code.
+- `gc_hold(obj)` and `gc_release(handle)`: strong GC handles, which `pg::api::Held` uses.
+- `log_exception(where, exception)`: logs a caught managed exception with its stack.
+- `static_get(key, out, size)` and `static_set(key, in, size)`, after `log_exception`: a static
+  field's value, `size` bytes, read into `out` or written from `in` (a reference through the GC write
+  barrier, `in` pointing at the pointer). Each runs the class's static constructor if it has not run
+  yet, so the host never calls them while it resolves the map at startup, and a mod calls them only
+  while the game plays. False, touching nothing, for a key that is not a resolved static field, a
+  `size` other than the field's (checked before the class is initialised, so no static constructor
+  runs), or a static constructor that threw (logged once per key).
+- `hook_body(key, bodyIndex, detour, original, name)` and `body_count(key)`, after `static_set`: a
+  method's bodies are its canonical body (index 0) and each distinct twin, and `hook_body` hooks one of
+  them, chained on that body alone. `body_count` is 0 for an entry that is unknown, unresolved or not a
+  method. `hook<M>` is built on these.
+- `scene_find(key, root)` and `animator_param(key, animator, hash)`, after `body_count`: the scene
+  facts. `scene_find` gives the Transform at a Scene entry's path under `root`, kept until the next
+  scene load; `animator_param` says whether the Animator has an AnimatorParam entry's parameter, with
+  its hash. Both log a miss once per scene load and answer null or false. A layer needs no service:
+  `game_entry` gives its index in `value`.
+- `patch_site(key, expected, expectedSize, stub, stubSize, page)`, after `animator_param`: patches a
+  native site, on the main thread while the mod starts. Only when the bytes there equal `expected`
+  (5 to 32 bytes of whole instructions) does the host copy the stub to a page of its own within rel32
+  range, follow it with a jump back past the replaced bytes, and write a `jmp` to it over the site.
+  `page` receives the stub's address; the page is never freed, and stays writable for the stub's
+  data. The patch is removed with the mod's hooks. Bytes that differ, or any other refusal, write
+  nothing and are logged. `game_entry` gives a native site's address in `code`.
 
 A mod's exports are `pgmod_info`, `pgmod_start`, `pgmod_tick`, `pgmod_stop` and (version 2 onwards,
 exported by linking `pgmod`) `pgmod_requires`.
@@ -226,10 +344,21 @@ pg::api::bind(pg::fake::host(), missing);
 phasmo::GhostAI::UnAppear(ghost);  // runs fake_unappear(ghost, nullptr)
 ```
 
-The other givers are `field(d, offset)`, `value(d, n)` and `type(d, klass)`. An entry not given stays
-unresolved, as in a build that lacks it. `hooked()` lists the keys hooked through `hook_entry`, and
-`barrier_writes()` counts reference stores. `Type::is` sees only the exact class (no inheritance).
-`tests/game_api_test.cpp` shows every path.
+The other givers are `field(d, offset)`, `static_field(d, storage, size, reference)`, `icall(d, fn)`,
+`value(d, n)`, `type(d, klass)`, `scene_fact(d)` and `layer(d)` (resolved through the names given to
+`layer_names`). A static field reads and writes the test's own storage, and a
+`size` other than the one given answers as the host does for a field it cannot reach. An entry not
+given stays
+unresolved, as in a build that lacks it. `hooked()` lists the keys hooked through `hook_entry` or `hook_body`, and
+`barrier_writes()` counts reference stores. A fake object begins with its class pointer;
+`parent(klass, parentClass)` declares inheritance, which `Type::is` and `virtual_call` follow, and
+`override_method(d, klass, fn)` gives a class its override. `method(d, fn, owner)` names the
+declaring class, so `virtual_call` refuses an object of another class. The runtime services work on the fake's
+own memory: `array(elementSize, n)` and `list(items)` make arrays and lists, `destroy(obj)` makes
+`alive` false, and `held()` counts the GC holds not yet released. The scene facts run the host's own
+logic over the fake's scene: `child(root, path, found)` says what Transform.Find answers,
+`parameters(animator, list)` what an Animator has, `load_scene()` loads a new scene, and `finds()`
+and `parameter_reads()` count the searches. `tests/game_api_test.cpp` shows every path.
 
 ### Checking a mod against a game build
 
@@ -265,12 +394,14 @@ inline constexpr pg::sdk::EntryDesc GhostAI_UnAppear{.key = "GhostAI.UnAppear", 
 ```
 
 The fields: `key` (what `game_entry` and `pgmod_requires` use), `kind` (`Type`, `Method`, `Field`,
-`EnumValue`, `Code`), `confidence`, `flags` (`kStatic`, `kOptional`, `kTrack`; `kTrack` is not read
-by anything yet), `owner` (the declaring Type entry's key), `name` or `hint`, `assembly` and `ns` (for
-a type; a null `ns` means the global namespace for a top-level type and any for a nested one), `type`
-(a field's type or a method's return type), `params`, `fieldTypes`, `values`, `facts`, and for a Code
-entry `pattern`, `within`, `patternOffset`. A map header ends with its `phasmo::` wrappers; add one
-for each entry a mod may use.
+`EnumValue`, `Code`, `Icall`, `Export`, `Scene`, `Layer`, `AnimatorParam`, `NativeSite`), `confidence`, `flags` (`kStatic`, `kOptional`, `kTrack`;
+`kStatic` makes a field a static one; `kTrack` is not read by anything yet), `owner` (the declaring
+Type entry's key), `name` or `hint` (an icall's or export's name, as the runtime knows it),
+`assembly` and `ns` (for a type; a null `ns` means the global namespace for a top-level type and any
+for a nested one), `type` (a field's type or a method's return type), `params`, `fieldTypes`,
+`values`, `facts`, for a Code entry or a native site `pattern`, `within`, `patternOffset`, and for a scene fact `scene`,
+`path` and `component`. A map header ends with
+its `phasmo::` wrappers; add one for each entry a mod may use (an export gets none).
 
 ### How the resolver finds an entry
 
@@ -317,6 +448,47 @@ check the entry declares.
    the result, which must still start an instruction of that method, read in full. A pattern is the
    last resort, and its note says why nothing better works.
 
+Two kinds are found by name outside the metadata, with no owner, shape or facts:
+
+- **An icall** (`Kind::Icall`), a Unity engine function, by its icall name
+  (`"UnityEngine.Animator::SetBoolID"`), through the runtime's `il2cpp_resolve_icall` on the main
+  thread when the host activates, before any mod starts. The startup worker never asks: the runtime's
+  icall table is not locked, and the engine may still be registering icalls then.
+  Only the running game registers icalls, so the offline check cannot resolve one: it lists it as
+  checked at startup only and never counts it as a failure.
+- **An export** (`Kind::Export`), a function GameAssembly.dll exports (`"il2cpp_shutdown"`), from the
+  module's export table, in the game and offline alike. A name exported twice, or forwarded to
+  another module, is `Missing`. Only the host may use an export: the host contract never gives one to
+a mod.
+
+A **native site** (`Kind::NativeSite`) is a place in UnityPlayer.dll's code, which has no metadata.
+`assembly` is `"UnityPlayer"`, `pattern` is hex bytes with `??` as a wildcard, and `within` is the
+name of a UnityPlayer export whose function bounds the search, or `".text"` for the whole code
+section, where the pattern needs at least 16 bytes that are not wildcards. It must match exactly once
+there, or the entry is `Missing` or `Ambiguous`, and `patternOffset` must keep the site inside the
+bytes it matched. The host resolves native sites over the loaded UnityPlayer at startup, and the
+offline check over a copy of UnityPlayer.dll. UnityPlayer exports only `UnityMain`, so every native
+site today searches `.text`: its pattern runs through the instructions its users rely on, so a build
+that changes them leaves it unresolved. They are the most fragile entries.
+
+Three kinds are facts of the game's scene and asset files, not of its code (see
+[scene and asset facts](systems/scene.md)). The resolver only checks that one is well formed and
+leaves it as checked in the scene files; the offline check verifies it with `tools/assetcheck.py`,
+and the running game where it is used:
+
+- **A Scene entry** (`Kind::Scene`): `scene` (a scene's name as the build lists it, or
+  `"Resources/<path>"` for a prefab `Resources.Load` loads), `component` (the script or engine
+  component on the object a lookup starts from) and `path` (from that object, as Transform.Find
+  takes it). The offline check requires exactly one object at the path under every object that
+  carries the component there.
+- **A Layer entry** (`Kind::Layer`): its `name`. Resolved by name on the main thread when the host
+  activates.
+- **An AnimatorParam entry** (`Kind::AnimatorParam`): the parameter's `name`, the controller's name in
+  `component` and the place that uses it in `scene`.
+
+A static field is a `Field` entry flagged `kStatic`, found like any field. The resolver only reads the
+metadata; the field's value is read when a mod asks for it, never at startup.
+
 Identity. A type string `"@Key"` means the very type the entry `Key` resolved to, not just its name,
 and the same holds in `params` and `fieldTypes`. Where the model says which type a member uses, it
 must be that type; where it does not, a name that several types share makes the entry `Ambiguous`.
@@ -357,17 +529,26 @@ and `-Cpp2Il`. The game and Cpp2IL paths never come from the repository.
 
 `gamecheck.ps1` copies four files out of the game folder (`GameAssembly.dll`, `Phasmophobia.exe`,
 `globalgamemanagers`, `global-metadata.dat`), runs Cpp2IL with `--use-processor attributeinjector
---output-as diffable-cs` only when their hashes changed, and runs `build\gamecheck.exe --dump <dir>
---image <GameAssembly.dll> --addresses re\map-addresses.tsv [--mods <dir>]`. It prints one line per
-entry (`OK`, `MISSING`, `AMBIGUOUS` or `BLOCKED`, the key, the value, then twins, aliases and
-`renamed from`), then a summary. It never runs game code and never writes in the game folder. Exit 0
-when every required entry resolved and no mod would be switched off, 1 when one did not or one would,
-2 on bad arguments.
+--output-as diffable-cs` only when their hashes changed, copies `UnityPlayer.dll` when its size or
+time changed, and runs `build\gamecheck.exe --dump <dir> --image <GameAssembly.dll> --unity-player
+<UnityPlayer.dll> --addresses re\map-addresses.tsv --scene-entries re\dump\scene-entries.tsv
+[--mods <dir>]`. It prints one line per entry (`OK`, `MISSING`, `AMBIGUOUS` or `BLOCKED`, the key, the
+value, then twins, aliases and `renamed from`; `STARTUP`, the key and the icall's name for an icall,
+checked at startup only; `SCENE`, the key and its path or name for a scene fact, checked in the scene
+files), then a summary. Then it copies the scene and asset files the scene facts need and runs
+`tools/assetcheck.py` on them, which prints `OK` or `MISSING` for each (see
+[scene and asset facts](systems/scene.md)). The first configured run makes a Python venv in
+`re\dump\venv` and installs the pinned UnityPy there, so it needs Python 3 (the `py` launcher or
+`python`); an unconfigured run needs no Python. It never runs game code and never writes in the game
+folder. Exit 0 when every required entry it can check resolved and no mod would be switched off, 1
+when one did not or one would, 2 on bad arguments or input it cannot read.
 
 `-Mods <dir>` adds `--mods <dir>`: gamecheck loads each mod DLL under `<dir>`, reads its
 `pgmod_requires` and prints `would switch off <mod id>: <keys>` for each mod the host would not start
-on that build. `validate.ps1` runs `.\tools\gamecheck.ps1 -IfConfigured -Mods dist\PhasmoMods\mods`,
-the staged bundled mods, so it fails when a mod would be switched off.
+on that build, and `would not load <mod id> (contract <version>)` for a mod built against a host
+contract the host does not run (`pg_api_compatible`), which the host never loads. `validate.ps1`
+runs `.\tools\gamecheck.ps1 -IfConfigured -Mods dist\PhasmoMods\mods`, the staged bundled mods, so
+it fails when a mod would be switched off or would not load.
 
 Reading a function's code needs Ghidra, `GHIDRA_INSTALL_DIR` and a one-time import into `re/ghidra`.
 That import is not written down yet: `FINDINGS.md` item 30 describes the missing `re/README.md`.
@@ -394,4 +575,4 @@ gitignored. Map entries (names, shapes, facts, hints, notes) are committed.
 4. Put anything you learned that is not in the entry's note into `sdk/systems/<system>.md`.
 5. `.\validate.ps1`.
 
-The system overviews: [ghost AI](systems/ghost-ai.md).
+The system overviews: [ghost AI](systems/ghost-ai.md), [scene and asset facts](systems/scene.md).

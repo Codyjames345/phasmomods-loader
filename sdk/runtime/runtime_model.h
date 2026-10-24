@@ -42,6 +42,9 @@ struct RuntimeApi {
   int (*type_get_type)(const void* type) = nullptr;
   char* (*type_get_name)(const void* type) = nullptr;  // freed with free_memory
   void (*free_memory)(void* memory) = nullptr;
+  // Not read by the model: the map's icall entries resolve through it (host/game_map.cpp). It looks
+  // the name up among the icalls the engine registered, and answers null for an unknown one.
+  void* (*resolve_icall)(const char* name) = nullptr;
 };
 
 // Builds the game model from the running game's metadata, for the named assemblies (image names

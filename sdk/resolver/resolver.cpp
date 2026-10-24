@@ -34,8 +34,20 @@ void for_each_dependency(const EntryDesc& d, F&& f) {
       if (const auto ref = entry_ref(type)) f(ref->key);
   for (const Fact& fact : d.facts)
     if (fact.method) f(std::string_view(fact.method));
-  if (d.within) f(std::string_view(d.within));
+  // A native site's `within` names a UnityPlayer export or section, never an entry.
+  if (d.within && d.kind != Kind::NativeSite) f(std::string_view(d.within));
 }
+
+// UnityPlayer.dll's name without ".dll", a native site's assembly, and the section a native site
+// searches when it names no export.
+constexpr std::string_view kUnityPlayer = "UnityPlayer";
+constexpr std::string_view kTextSection = ".text";
+// A pattern searched in the whole .text section must have this many bytes that are not wildcards: a
+// shorter one could match by chance in 25 MB of code.
+constexpr size_t kMinTextPattern = 16;
+// The scan for a native site stops at this many matches: more would say no more than that it is
+// ambiguous.
+constexpr size_t kMaxNativeMatches = 8;
 
 const char* kind_name(Kind kind) {
   switch (kind) {
@@ -44,6 +56,12 @@ const char* kind_name(Kind kind) {
     case Kind::Field: return "field";
     case Kind::EnumValue: return "enum value";
     case Kind::Code: return "code";
+    case Kind::Icall: return "icall";
+    case Kind::Export: return "export";
+    case Kind::Scene: return "scene";
+    case Kind::Layer: return "layer";
+    case Kind::AnimatorParam: return "animator parameter";
+    case Kind::NativeSite: return "native site";
   }
   return "entry";
 }
@@ -110,8 +128,9 @@ struct Candidate {
 
 class Resolver {
  public:
-  Resolver(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image)
-      : entries_(entries), model_(model), image_(image) {
+  Resolver(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image,
+           const IcallLookup& icalls, const CodeImage* unityPlayer)
+      : entries_(entries), model_(model), image_(image), icalls_(icalls), unityPlayer_(unityPlayer) {
     out_.results.resize(entries.size());
     for (size_t i = 0; i < entries.size(); ++i) {
       out_.results[i].desc = entries[i];
@@ -171,6 +190,9 @@ class Resolver {
     Result& r = out_.results[i];
     if (index_.at(d.key) != i) return missing(r, "duplicate key");
     if (blocked(d, r)) return;
+    if (d.kind == Kind::Icall || d.kind == Kind::Export) return resolve_by_name_outside_metadata(d, r);
+    if (d.kind == Kind::Scene || d.kind == Kind::Layer || d.kind == Kind::AnimatorParam) return check_scene_fact(d, r);
+    if (d.kind == Kind::NativeSite) return resolve_native_site(d, r);
     if (d.kind == Kind::Code || !d.facts.empty()) {
       if (!image_) return missing(r, "no code image");
       if (d.kind == Kind::Code) return resolve_code(d, r);
@@ -316,6 +338,12 @@ class Resolver {
       case Kind::EnumValue:
         return type.fields[c.member].hasLiteral;
       case Kind::Code:
+      case Kind::Icall:
+      case Kind::Export:
+      case Kind::Scene:
+      case Kind::Layer:
+      case Kind::AnimatorParam:
+      case Kind::NativeSite:
         break;
     }
     return false;
@@ -420,6 +448,12 @@ class Resolver {
         r.currentName = type.fields[c.member].name;
         break;
       case Kind::Code:
+      case Kind::Icall:
+      case Kind::Export:
+      case Kind::Scene:
+      case Kind::Layer:
+      case Kind::AnimatorParam:
+      case Kind::NativeSite:
         break;
     }
   }
@@ -618,6 +652,105 @@ class Resolver {
     r.rva = at;
   }
 
+  // An icall, through the running runtime, or an export, from the image's export table: found by
+  // its name alone, with no owner, shape or facts.
+  void resolve_by_name_outside_metadata(const EntryDesc& d, Result& r) const {
+    if (!d.name) return missing(r, std::format("an {} entry needs its name", kind_name(d.kind)));
+    if (d.owner || !d.facts.empty() || d.pattern)
+      return missing(r, std::format("an {} entry is found by its name alone", kind_name(d.kind)));
+    if (d.kind == Kind::Icall) {
+      if (!icalls_) return missing(r, std::string(kCheckedAtStartup));
+      const void* code = icalls_(d.name);
+      if (!code) return missing(r, std::format("the runtime has no icall {}", d.name));
+      r.address = reinterpret_cast<uintptr_t>(code);
+    } else {
+      if (!image_) return missing(r, "no code image");
+      r.rva = image_->exported(d.name);
+      if (r.rva == 0) return missing(r, std::format("the image exports no {}", d.name));
+    }
+    r.status = Status::Resolved;
+    r.currentName = d.name;
+  }
+
+  // A native site: the one place in UnityPlayer's code where the pattern matches, inside the function
+  // of the export `within` names, or anywhere in its .text section. The resolver knows no instruction
+  // bounds there, so the site must lie inside the bytes the pattern matched, and patch_site checks the
+  // bytes it replaces before it writes. The scan stops at kMaxNativeMatches.
+  void resolve_native_site(const EntryDesc& d, Result& r) const {
+    if (d.owner || d.name || d.hint || d.ns || d.type || !d.params.empty() || !d.fieldTypes.empty() ||
+        !d.values.empty() || !d.facts.empty() || d.scene || d.path || d.component || (d.flags & kStatic))
+      return missing(r, "a native site is found by its pattern alone");
+    if (!d.assembly || std::string_view(d.assembly) != kUnityPlayer)
+      return missing(r, "a native site's assembly must be UnityPlayer");
+    if (!d.pattern || !d.within) return missing(r, "a native site needs a pattern and where to search it");
+    const auto pattern = parse_pattern(d.pattern);
+    if (!pattern) return missing(r, std::format("bad pattern \"{}\"", d.pattern));
+    if (d.patternOffset < 0 || static_cast<size_t>(d.patternOffset) >= pattern->size())
+      return missing(r, std::format("the pattern's offset {} is outside the pattern", d.patternOffset));
+    const std::string_view within = d.within;
+    const bool text = within == kTextSection;
+    const auto fixed = std::count_if(pattern->begin(), pattern->end(), [](int b) { return b >= 0; });
+    if (text && static_cast<size_t>(fixed) < kMinTextPattern)
+      return missing(r, std::format("a pattern searched in .text needs at least {} bytes that are not wildcards",
+                                    kMinTextPattern));
+    if (!unityPlayer_) return missing(r, "no UnityPlayer image");
+    uint64_t start = 0;
+    std::span<const uint8_t> code;
+    if (text) {
+      code = unityPlayer_->section(kTextSection, start);
+      if (code.empty()) return missing(r, "UnityPlayer has no single .text section");
+    } else {
+      start = unityPlayer_->exported(within);
+      if (start == 0) return missing(r, std::format("UnityPlayer exports no {}", within));
+      if (unityPlayer_->function_start(start) != start)
+        return missing(r, std::format("no function starts at the export {} ({:#x})", within, start));
+      code = unityPlayer_->function(start);
+    }
+    std::vector<uint64_t> matches;
+    for (size_t at = 0; at + pattern->size() <= code.size() && matches.size() < kMaxNativeMatches; ++at) {
+      size_t i = 0;
+      while (i < pattern->size() && ((*pattern)[i] < 0 || (*pattern)[i] == code[at + i])) ++i;
+      if (i == pattern->size()) matches.push_back(start + at);
+    }
+    if (matches.empty()) return missing(r, std::format("the pattern is not in {}", within));
+    if (matches.size() > 1) {
+      r.status = Status::Ambiguous;
+      r.detail = matches.size() < kMaxNativeMatches
+                     ? std::format("the pattern is in {} {} times", within, matches.size())
+                     : std::format("the pattern is in {} at least {} times", within, matches.size());
+      for (const uint64_t at : matches) r.candidates.push_back(std::format("{:#x}", at));
+      return;
+    }
+    r.status = Status::Resolved;
+    r.rva = matches.front() + d.patternOffset;
+  }
+
+  // A Scene, Layer or AnimatorParam entry: a fact of the scene files, which the resolver only checks
+  // for being well formed. A Scene entry names where it is (scene), the component its lookup starts
+  // from and its path; a Layer entry its name; an AnimatorParam entry its name, where it is and its
+  // controller (component).
+  static void check_scene_fact(const EntryDesc& d, Result& r) {
+    if (d.owner || d.hint || d.assembly || d.ns || d.type || !d.params.empty() || !d.fieldTypes.empty() ||
+        !d.values.empty() || !d.facts.empty() || d.pattern || d.within || (d.flags & kStatic))
+      return missing(r, std::format("a {} entry has no owner, shape, facts or pattern", kind_name(d.kind)));
+    const bool scene = d.kind == Kind::Scene;
+    const bool layer = d.kind == Kind::Layer;
+    const bool wellFormed = scene   ? d.scene && d.path && d.component && !d.name
+                            : layer ? d.name && !d.scene && !d.path && !d.component
+                                    : d.name && d.scene && d.component && !d.path;
+    if (!wellFormed) {
+      return missing(r, scene   ? "a scene entry needs its scene, path and component, and no name"
+                        : layer ? "a layer entry needs its name alone"
+                                : "an animator parameter entry needs its name, scene and component, and no path");
+    }
+    for (const char* text : {d.scene, d.path, d.component, d.name})
+      if (text && (!*text || std::string_view(text).find_first_of("\t\r\n") != std::string_view::npos))
+        return missing(r, std::format("a {} entry's names must not be empty or hold a tab or line break",
+                                      kind_name(d.kind)));
+    missing(r, std::string(kCheckedInScene));
+    r.currentName = scene ? d.path : d.name;
+  }
+
   // An entry's type string against a model type string and, when the model knows it, the index of
   // the type that string names. "@Key" means the very type entry Key resolved to: a known index must
   // be that type, and an unknown one is trusted by name only when no other model type shares the
@@ -661,6 +794,12 @@ class Resolver {
       case Kind::EnumValue:
         return std::format("{} = {}", type.fields[c.member].name, type.fields[c.member].literal);
       case Kind::Code:
+      case Kind::Icall:
+      case Kind::Export:
+      case Kind::Scene:
+      case Kind::Layer:
+      case Kind::AnimatorParam:
+      case Kind::NativeSite:
         break;
     }
     return {};
@@ -676,6 +815,8 @@ class Resolver {
   std::span<const EntryDesc* const> entries_;
   const GameModel& model_;
   const CodeImage* image_;
+  const IcallLookup& icalls_;
+  const CodeImage* unityPlayer_;
   std::unordered_map<std::string_view, size_t> index_;  // the first entry with each key
   std::unordered_map<std::string, int> typesNamed_;     // how many model types have each name
   mutable std::unordered_map<uint64_t, CodeFacts> code_;  // read once per function start
@@ -713,14 +854,15 @@ const char* status_word(Status status) {
 std::vector<std::string> assemblies_of(std::span<const EntryDesc* const> entries) {
   std::vector<std::string> out;
   for (const EntryDesc* e : entries)
-    if (e->assembly) out.emplace_back(e->assembly);
+    if (e->assembly && e->kind != Kind::NativeSite) out.emplace_back(e->assembly);
   std::sort(out.begin(), out.end());
   out.erase(std::unique(out.begin(), out.end()), out.end());
   return out;
 }
 
-Resolution resolve(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image) {
-  return Resolver(entries, model, image).run();
+Resolution resolve(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image,
+                   const IcallLookup& icalls, const CodeImage* unityPlayer) {
+  return Resolver(entries, model, image, icalls, unityPlayer).run();
 }
 
 }  // namespace pg::sdk

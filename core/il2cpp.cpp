@@ -7,6 +7,7 @@
 #include "log.h"
 #include "runtime_model.h"
 #include "startup.h"
+#include "utf16.h"
 
 namespace il2cpp {
 namespace {
@@ -26,6 +27,11 @@ API(void, il2cpp_field_set_value, (void* obj, void* field, void* value))
 API(const void*, il2cpp_field_get_type, (void* field))
 API(char*, il2cpp_type_get_name, (const void* type))
 API(void, il2cpp_field_static_get_value, (void* field, void* value))
+API(void, il2cpp_field_static_set_value, (void* field, void* value))
+API(void, il2cpp_runtime_class_init, (void* klass))
+API(void*, il2cpp_class_from_type, (const void* type))
+API(bool, il2cpp_class_is_valuetype, (const void* klass))
+API(int32_t, il2cpp_class_value_size, (void* klass, uint32_t* align))
 API(void*, il2cpp_thread_attach, (void* domain))
 API(void, il2cpp_thread_detach, (void* thread))
 API(void*, il2cpp_string_new, (const char* str))
@@ -47,6 +53,8 @@ API(void, il2cpp_format_stack_trace, (const void* exception, char* output, int s
 API(uint32_t, il2cpp_gchandle_new, (void* obj, bool pinned))
 API(void, il2cpp_gchandle_free, (uint32_t handle))
 API(void*, il2cpp_class_get_element_class, (void* klass))
+API(const char*, il2cpp_class_get_namespace, (void* klass))
+API(int, il2cpp_class_get_rank, (const void* klass))
 #undef API
 
 void* g_thread = nullptr;
@@ -75,6 +83,8 @@ bool resolve_exports(void* gameAssembly) {
   R(il2cpp_get_corlib) R(il2cpp_gc_wbarrier_set_field) R(il2cpp_array_class_get) R(il2cpp_class_get_type) R(il2cpp_type_get_object)
   R(il2cpp_get_exception_argument_null) R(il2cpp_raise_exception) R(il2cpp_object_get_virtual_method)
   R(il2cpp_gchandle_new) R(il2cpp_gchandle_free) R(il2cpp_class_get_element_class)
+  R(il2cpp_class_get_namespace) R(il2cpp_class_get_rank) R(il2cpp_field_static_set_value)
+  R(il2cpp_runtime_class_init) R(il2cpp_class_from_type) R(il2cpp_class_is_valuetype) R(il2cpp_class_value_size)
 #undef R
   if (!ok) return false;
   p_il2cpp_format_stack_trace = reinterpret_cast<decltype(p_il2cpp_format_stack_trace)>(
@@ -95,6 +105,7 @@ bool runtime_api(void* gameAssembly, pg::sdk::RuntimeApi& out) {
   out.field_static_get_value = p_il2cpp_field_static_get_value;
   out.type_get_name = p_il2cpp_type_get_name;
   out.free_memory = p_il2cpp_free;
+  out.resolve_icall = p_il2cpp_resolve_icall;
   bool ok = true;
 #define R(field, name) ok &= resolve(m, out.field, #name);
   R(image_get_class_count, il2cpp_image_get_class_count) R(image_get_class, il2cpp_image_get_class)
@@ -184,6 +195,27 @@ bool is_class(const void* obj, const char* name) {
   return actual && std::strcmp(actual, name) == 0;
 }
 
+bool is_instance(const void* obj, Class* klass) {
+  if (!obj || !klass) return false;
+  for (void* k = class_of(obj); k; k = p_il2cpp_class_get_parent(k))
+    if (k == klass) return true;
+  return false;
+}
+
+bool is_string(const void* obj) {
+  static Class* const string = cls("mscorlib.dll", "System", "String");
+  return obj && string && class_of(obj) == string;  // System.String is sealed
+}
+
+bool is_array(const void* obj) { return obj && p_il2cpp_class_get_rank(class_of(obj)) > 0; }
+
+bool is_list(const void* obj) {
+  // A constructed List<T> keeps the generic definition's name and namespace.
+  Class* const klass = obj ? class_of(obj) : nullptr;
+  return klass && std::strcmp(p_il2cpp_class_get_name(klass), "List`1") == 0 &&
+         std::strcmp(p_il2cpp_class_get_namespace(klass), "System.Collections.Generic") == 0;
+}
+
 bool is_kind(const void* obj, const char* name) {
   for (void* k = obj ? class_of(obj) : nullptr; k; k = p_il2cpp_class_get_parent(k))
     if (std::strcmp(p_il2cpp_class_get_name(k), name) == 0) return true;
@@ -215,6 +247,45 @@ void* static_field_by_type(Class* klass, const char* typeName) {
     return value;
   }
   return nullptr;
+}
+
+namespace {
+
+// The bytes a field's value takes: a pointer for a managed reference, the value's own size for a
+// value type. 0 when the runtime does not know the field's class.
+size_t value_size(Field* field, bool& reference) {
+  void* const klass = p_il2cpp_class_from_type(p_il2cpp_field_get_type(field));
+  if (!klass) return 0;
+  reference = !p_il2cpp_class_is_valuetype(klass);
+  if (reference) return sizeof(void*);
+  const int32_t size = p_il2cpp_class_value_size(klass, nullptr);
+  return size > 0 ? static_cast<size_t>(size) : 0;
+}
+
+}  // namespace
+
+// The size is checked first: the field type's layout is known from the metadata the game map read at
+// startup, and a refused access must not run the owner's static constructor.
+bool static_get(Class* klass, Field* field, void* out, size_t size) {
+  if (!klass || !field || !out) return false;
+  bool reference = false;
+  if (value_size(field, reference) != size) return false;
+  p_il2cpp_runtime_class_init(klass);  // runs the static constructor once, as the game's first use does
+  p_il2cpp_field_static_get_value(field, out);
+  return true;
+}
+
+bool static_set(Class* klass, Field* field, const void* in, size_t size) {
+  if (!klass || !field || !in) return false;
+  bool reference = false;
+  if (value_size(field, reference) != size) return false;
+  p_il2cpp_runtime_class_init(klass);
+  // As il2cpp_field_set_value (set_reference_field): a reference is passed itself, and stored through
+  // the GC write barrier; a value type's bytes are passed by address. This build's static store
+  // (GameAssembly RVA 0x3A66C0) takes the same path.
+  void* const value = reference ? *static_cast<void* const*>(in) : const_cast<void*>(in);
+  p_il2cpp_field_static_set_value(field, value);
+  return true;
 }
 
 void format_stack_trace(const void* exception, char* out, size_t size) {
@@ -275,38 +346,9 @@ void raise_argument_null(const char* argument) {
   __assume(0);  // il2cpp_raise_exception throws and never returns
 }
 
-void to_utf8(const String* s, char* out, size_t outSize) {
-  if (!outSize) return;
-  size_t n = 0;
-  auto emit = [&](const char* bytes, size_t count) {
-    if (n + count + 1 > outSize) return false;  // never split a character
-    std::memcpy(out + n, bytes, count);
-    n += count;
-    return true;
-  };
-  for (int32_t i = 0; s && i < s->length; ++i) {
-    uint32_t c = s->chars[i];
-    if (c >= 0xD800 && c < 0xDC00 && i + 1 < s->length && s->chars[i + 1] >= 0xDC00 && s->chars[i + 1] < 0xE000) {
-      c = 0x10000 + ((c - 0xD800) << 10) + (s->chars[++i] - 0xDC00);
-    } else if (c >= 0xD800 && c < 0xE000) {
-      c = 0xFFFD;  // unpaired surrogate
-    }
-    char b[4];
-    size_t len;
-    if (c < 0x80) {
-      b[0] = static_cast<char>(c), len = 1;
-    } else if (c < 0x800) {
-      b[0] = static_cast<char>(0xC0 | (c >> 6)), b[1] = static_cast<char>(0x80 | (c & 0x3F)), len = 2;
-    } else if (c < 0x10000) {
-      b[0] = static_cast<char>(0xE0 | (c >> 12)), b[1] = static_cast<char>(0x80 | ((c >> 6) & 0x3F));
-      b[2] = static_cast<char>(0x80 | (c & 0x3F)), len = 3;
-    } else {
-      b[0] = static_cast<char>(0xF0 | (c >> 18)), b[1] = static_cast<char>(0x80 | ((c >> 12) & 0x3F));
-      b[2] = static_cast<char>(0x80 | ((c >> 6) & 0x3F)), b[3] = static_cast<char>(0x80 | (c & 0x3F)), len = 4;
-    }
-    if (!emit(b, len)) break;
-  }
-  out[n] = '\0';
+size_t to_utf8(const String* s, char* out, size_t outSize) {
+  const std::u16string_view text = s ? std::u16string_view(s->chars, static_cast<size_t>(s->length)) : std::u16string_view();
+  return pg::utf16_to_utf8(text, out, outSize);
 }
 
 }  // namespace il2cpp

@@ -1,7 +1,5 @@
 #include "game_api.h"
 
-#include <windows.h>
-
 #include <algorithm>
 #include <vector>
 
@@ -11,8 +9,6 @@ namespace pg::api {
 namespace {
 
 const PgHostApi* g_host = nullptr;
-// GameAssembly's il2cpp_class_is_subclass_of, for Type::is; null without a game module (the fake).
-bool (*g_isSubclass)(void* klass, void* parent, bool checkInterfaces) = nullptr;
 
 // Every entry the mod's code uses, filled while its DLL loads. Built on first use, so a wrapper
 // registered from any translation unit's initialisation finds it.
@@ -38,41 +34,80 @@ bool register_use(Slot* slot) {
 const PgHostApi* host() { return g_host; }
 
 void report_unavailable(Slot& slot) {
-  if (slot.reported) return;
-  slot.reported = true;
-  PG_LOG("%s is not available in this game build", slot.desc->key);
+  if (!slot.reported.exchange(true)) PG_LOG("%s is not available in this game build", slot.desc->key);
 }
 
-bool is_instance(const void* obj, void* klass) {
-  void* const objClass = *static_cast<void* const*>(obj);  // a managed object begins with its class
-  if (objClass == klass) return true;
-  return objClass && g_isSubclass && g_isSubclass(objClass, klass, true);
+void report_refused_call(Slot& slot) {
+  if (!slot.refused.exchange(true))
+    PG_LOG("%s: virtual_call on a null object or one not of its declaring type; nothing was called", slot.desc->key);
 }
 
-bool hook(const char* key, void* detour, void** original, const char* name, bool allTwins) {
+void report_refused_static(Slot& slot) {
+  if (!slot.refused.exchange(true))
+    PG_LOG("%s: the host could not read or write the static field; the default was used", slot.desc->key);
+}
+
+bool static_get(const char* key, void* out, size_t size) { return g_host && g_host->static_get(key, out, size); }
+
+bool static_set(const char* key, const void* in, size_t size) { return g_host && g_host->static_set(key, in, size); }
+
+bool is_instance(const void* obj, const char* typeKey) { return g_host && g_host->is_instance(obj, typeKey); }
+
+void* type_object(const char* typeKey) { return g_host ? g_host->type_object(typeKey) : nullptr; }
+
+void* object_new(const char* typeKey) { return g_host ? g_host->object_new(typeKey) : nullptr; }
+
+void* array_new(const char* elementTypeKey, size_t length) {
+  return g_host ? g_host->array_new(elementTypeKey, length) : nullptr;
+}
+
+const void* virtual_method(const void* obj, const char* methodKey) {
+  return g_host ? g_host->virtual_method(obj, methodKey) : nullptr;
+}
+
+bool hook_bodies(const char* key, bool hasDetour, void* (*entry)(uint32_t), void** originals, const char* name,
+                 bool allTwins, uint32_t& created) {
+  created = 0;
   if (!g_host) {
     PG_LOG("%s cannot be hooked before the game API is bound", key);
     return false;
   }
-  return g_host->hook_entry(key, detour, original, name, allTwins);
+  if (!hasDetour) {
+    PG_LOG("%s: the hook was given no detour; nothing was hooked", key);
+    return false;
+  }
+  const uint32_t count = allTwins ? g_host->body_count(key) : 1;
+  if (count > kMaxBodies) {
+    PG_LOG("%s has %u bodies, more than the %u a hook covers; nothing was hooked", key, count, kMaxBodies);
+    return false;
+  }
+  for (; created < count; ++created)
+    if (!g_host->hook_body(key, created, entry(created), &originals[created], name)) break;
+  if (created == count && count > 0) return true;
+  if (created > 0) PG_LOG("%s is hooked on %u of its %u bodies only", key, created, count);
+  else if (count == 0) PG_LOG("%s is not a method the host can hook; nothing was hooked", key);
+  return false;
 }
 
 int32_t inside(const char* key) { return g_host ? g_host->inside_entry(key) : 0; }
+
+void* scene_find(const char* key, void* root) { return g_host ? g_host->scene_find(key, root) : nullptr; }
+
+bool animator_param(const char* key, const void* animator, int32_t* hash) {
+  return g_host && g_host->animator_param(key, animator, hash);
+}
 
 }  // namespace detail
 
 bool bind(const PgHostApi* host, std::string& missing) {
   missing.clear();
   g_host = host;
-  g_isSubclass = nullptr;
   if (!host) return false;
-  if (host->gameAssembly)
-    g_isSubclass = reinterpret_cast<decltype(g_isSubclass)>(
-        GetProcAddress(static_cast<HMODULE>(host->gameAssembly), "il2cpp_class_is_subclass_of"));
   std::vector<const char*> lacking;
   for (detail::Slot* slot : registry()) {
     slot->entry = host->game_entry(slot->desc->key);
     slot->reported = false;
+    slot->refused = false;
     if (!slot->entry && !optional(slot)) lacking.push_back(slot->desc->key);
   }
   std::sort(lacking.begin(), lacking.end(), key_less);
@@ -81,11 +116,14 @@ bool bind(const PgHostApi* host, std::string& missing) {
 }
 
 size_t used_required(const char* const** keys) {
-  static std::vector<const char*> required;
-  required.clear();
-  for (const detail::Slot* slot : registry())
-    if (!optional(slot)) required.push_back(slot->desc->key);
-  std::sort(required.begin(), required.end(), key_less);
+  // Built once: every entry registered while the DLL loaded, so the list never changes after.
+  static const std::vector<const char*> required = [] {
+    std::vector<const char*> out;
+    for (const detail::Slot* slot : registry())
+      if (!optional(slot)) out.push_back(slot->desc->key);
+    std::sort(out.begin(), out.end(), key_less);
+    return out;
+  }();
   *keys = required.data();
   return required.size();
 }

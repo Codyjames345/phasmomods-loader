@@ -1,0 +1,12 @@
+Scene.contents	scene	1	Resources/Player	Pages/Contents	BookController	
+Scene.menuBoard	scene	1	Menu	Board	Example.UI.MenuView	
+Scene.missing	scene	1	Resources/Player	Pages/Index	BookController	
+Scene.twoTabs	scene	0	Resources/Player	Tabs/Tab	BookController	
+Scene.noRoot	scene	0	Menu	Board	MenuView	
+Scene.noPlace	scene	0	Lobby	Board	Canvas	
+Layer.overlay	layer	1				Overlay
+Layer.none	layer	0				Hidden
+Layer.twice	layer	0				Twice
+Anim.isOpen	animator	1	Resources/Player		Arms	isOpen
+Anim.isClosed	animator	0	Resources/Player		Arms	isClosed
+Anim.noController	animator	0	Resources/Player		Legs	isOpen

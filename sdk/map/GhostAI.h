@@ -121,7 +121,8 @@ namespace phasmo {
 
 /// The ghost's AI component, one per contract. `ghost` below is the GhostAI object.
 struct GhostAI {
-  /// The GhostAI type: klass() and is(obj). Unresolved: null and false.
+  /// The GhostAI type: klass(), is(obj), type_object(), make() and make_array(n). Unresolved: null
+  /// and false.
   static constexpr pg::api::Type<pg::map::GhostAI> type{};
   /// The ghost's current state, a GhostState number: state.get(ghost), state.set(ghost, n).
   /// ChangeState also starts the new state's behaviour. Unresolved: reads 0, writes nothing.
@@ -157,7 +158,8 @@ struct GhostAI {
 
 /// The ghost's states: the numbers GhostAI::state holds and GhostAI::ChangeState takes.
 namespace GhostState {
-/// The GhostState enum type: klass() and is(obj). Unresolved: null and false.
+/// The GhostState enum type: klass(), is(obj), type_object() and make_array(n). Unresolved: null and
+/// false.
 inline constexpr pg::api::Type<pg::map::GhostState> type{};
 /// The ghost stands still: idle(). Unresolved: 0.
 inline constexpr pg::api::EnumValue<pg::map::GhostState_idle> idle{};

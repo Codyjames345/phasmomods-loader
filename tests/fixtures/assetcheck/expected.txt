@@ -1,0 +1,12 @@
+OK Scene.contents Resources/Player: under 1 BookController object
+OK Scene.menuBoard Menu: under 1 Example.UI.MenuView object
+MISSING Scene.missing nothing at Pages/Index under Player/Book Canvas in Resources/Player
+MISSING Scene.twoTabs 2 objects, and Transform.Find takes the first, at Tabs/Tab under Player/Book Canvas in Resources/Player
+MISSING Scene.noRoot no object in Menu carries MenuView
+MISSING Scene.noPlace Lobby is not a scene or Resources prefab of this build
+OK Layer.overlay 11
+MISSING Layer.none no layer is named Hidden
+MISSING Layer.twice layers 6, 21 are all named Twice
+OK Anim.isOpen Resources/Player: in 1 controller named Arms
+MISSING Anim.isClosed a controller named Arms in Resources/Player has no isClosed
+MISSING Anim.noController no Animator in Resources/Player uses a controller named Legs
