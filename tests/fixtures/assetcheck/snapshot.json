@@ -1,0 +1,26 @@
+{
+ "layers": ["Default", "", "", "", "", "UI", "Twice", "", "", "", "", "Overlay", "", "", "", "", "", "",
+            "", "", "", "Twice", "", "", "", "", "", "", "", "", "", ""],
+ "places": {
+  "Resources/Player": {
+   "objects": [
+    {"name": "Player", "parent": -1, "components": ["Transform", "Mover"]},
+    {"name": "Book Canvas", "parent": 0, "components": ["RectTransform", "Canvas", "BookController"]},
+    {"name": "Pages", "parent": 1, "components": ["RectTransform"]},
+    {"name": "Contents", "parent": 2, "components": ["RectTransform"]},
+    {"name": "Tabs", "parent": 1, "components": ["RectTransform"]},
+    {"name": "Tab", "parent": 4, "components": ["RectTransform"]},
+    {"name": "Tab", "parent": 4, "components": ["RectTransform"]},
+    {"name": "Arm", "parent": 0, "components": ["Transform", "Animator"]}
+   ],
+   "controllers": {"Arms": [["isOpen", "speed"]]}
+  },
+  "Menu": {
+   "objects": [
+    {"name": "Menu Canvas", "parent": -1, "components": ["RectTransform", "Canvas", "Example.UI.MenuView"]},
+    {"name": "Board", "parent": 0, "components": ["RectTransform"]}
+   ],
+   "controllers": {}
+  }
+ }
+}

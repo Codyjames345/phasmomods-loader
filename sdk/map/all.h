@@ -7,7 +7,11 @@
 #include "Camera.h"
 #include "GameAssembly.h"
 #include "GhostAI.h"
+#include "LayerMask.h"
 #include "LevelController.h"
+#include "Scene.h"
+#include "SceneManager.h"
+#include "Transform.h"
 
 namespace pg::map {
 
@@ -37,7 +41,20 @@ inline constexpr const pg::sdk::EntryDesc* kAllEntries[] = {
     &Camera_set_farClipPlane,
     &LevelController,
     &LevelController_instance,
+    &Animator,
+    &Animator_get_parameters,
+    &Animator_StringToHash,
+    &AnimatorControllerParameter,
+    &AnimatorControllerParameter_m_Name,
     &Animator_SetBoolID,
+    &Transform,
+    &Transform_Find,
+    &LayerMask,
+    &LayerMask_NameToLayer,
+    &SceneManager,
+    &SceneManager_GetActiveScene,
+    &Scene_JournalBookContent,
+    &Layer_PlayerView,
     &GameAssembly_il2cpp_shutdown,
 };
 

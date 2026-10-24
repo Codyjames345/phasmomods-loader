@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "log.h"
+#include "scene_facts.h"
 #include "utf16.h"
 
 namespace pg::fake {
@@ -242,6 +243,67 @@ bool static_set(const char* key, const void* in, size_t size) {
   return true;
 }
 
+// The fake's scene: what Transform.Find answers, the layer names, the Animators' parameters and the
+// active scene's handle, and the scene facts the host would run over them.
+std::map<std::pair<void*, std::string>, void*> g_children;
+std::vector<std::string> g_layerNames;
+std::map<const void*, std::vector<std::pair<std::string, int32_t>>> g_parameters;
+std::map<std::string, const sdk::EntryDesc*> g_sceneFacts;  // the Scene and AnimatorParam entries given
+int32_t g_scene = 1;
+int g_finds = 0, g_parameterReads = 0;
+
+const sdk::SceneEngine kEngine{
+    [] { return g_scene; },
+    [](void* root, const char* path) -> void* {
+      ++g_finds;
+      const auto it = g_children.find({root, path});
+      return it != g_children.end() && !g_destroyed.count(it->second) ? it->second : nullptr;
+    },
+    [](const char* name) -> int32_t {
+      for (size_t i = 0; i < g_layerNames.size(); ++i)
+        if (g_layerNames[i] == name) return static_cast<int32_t>(i);
+      return -1;
+    },
+    [](const void* animator, const char* name, int32_t* hash) {
+      ++g_parameterReads;
+      const auto it = g_parameters.find(animator);
+      if (it == g_parameters.end()) return false;
+      for (const auto& [n, h] : it->second) {
+        if (n != name) continue;
+        *hash = h;
+        return true;
+      }
+      return false;
+    },
+    [](const void* obj) { return obj && !g_destroyed.count(obj); },
+    [](void* obj) { return gc_hold(obj); },
+    [](uint32_t handle) { gc_release(handle); },
+};
+
+sdk::SceneFacts& facts() {
+  static sdk::SceneFacts f;
+  return f;
+}
+
+// The scene fact `key` was given and is of the kind asked for.
+const sdk::EntryDesc* scene_fact_of(const char* key, sdk::Kind kind) {
+  const auto it = key ? g_sceneFacts.find(key) : g_sceneFacts.end();
+  return it != g_sceneFacts.end() && it->second->kind == kind ? it->second : nullptr;
+}
+
+void* scene_find(const char* key, void* root) {
+  const sdk::EntryDesc* d = scene_fact_of(key, sdk::Kind::Scene);
+  return d ? facts().find(*d, root) : nullptr;
+}
+
+bool animator_param(const char* key, const void* animator, int32_t* hash) {
+  const sdk::EntryDesc* d = scene_fact_of(key, sdk::Kind::AnimatorParam);
+  int32_t value = 0;
+  if (!d || !hash || !facts().parameter(*d, animator, value)) return false;
+  *hash = value;
+  return true;
+}
+
 // The rest of the contract does nothing.
 void log(const char*) {}
 bool create_hook(void*, void*, void**, const char*) { return false; }
@@ -258,11 +320,12 @@ const PgHostApi kHost{PGMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_ho
                       &set_reference, &inside_entry, &string_new, &string_utf8, &array_length, &array_data,
                       &array_new, &list_count, &list_items, &type_object, &object_new, &is_instance, &alive,
                       &virtual_method, &gc_hold, &gc_release, &log_exception, &static_get, &static_set,
-                      &hook_body, &body_count};
+                      &hook_body, &body_count, &scene_find, &animator_param};
 
 }  // namespace
 
 void reset() {
+  facts().set_engine(nullptr);  // releases what it kept while its holds still exist
   g_entries.clear();
   g_statics.clear();
   g_hooked.clear();
@@ -275,6 +338,13 @@ void reset() {
   g_destroyed.clear();
   g_holds.clear();
   g_refusedString = g_refusedArray = g_refusedList = false;
+  g_children.clear();
+  g_layerNames.clear();
+  g_parameters.clear();
+  g_sceneFacts.clear();
+  g_scene = 1;
+  g_finds = g_parameterReads = 0;
+  facts().set_engine(&kEngine);
 }
 
 const PgHostApi* host() { return &kHost; }
@@ -318,6 +388,31 @@ void* list(const std::vector<void*>& items) {
 }
 
 void destroy(const void* unityObject) { g_destroyed.insert(unityObject); }
+
+void scene_fact(const sdk::EntryDesc& d) {
+  entry_for(d, d.kind == sdk::Kind::Scene ? PG_ENTRY_SCENE : PG_ENTRY_ANIMATOR_PARAM);
+  g_sceneFacts[d.key] = &d;
+}
+
+void layer_names(const std::vector<std::string>& names) { g_layerNames = names; }
+
+void layer(const sdk::EntryDesc& d) {
+  g_entries.erase(d.key);
+  const int32_t index = facts().layer(d);
+  if (index >= 0) entry_for(d, PG_ENTRY_LAYER).value = index;
+}
+
+void child(void* root, const char* path, void* found) { g_children[{root, path}] = found; }
+
+void load_scene() { ++g_scene; }
+
+void parameters(const void* animator, const std::vector<std::pair<std::string, int32_t>>& list) {
+  g_parameters[animator] = list;
+}
+
+int finds() { return g_finds; }
+
+int parameter_reads() { return g_parameterReads; }
 
 std::vector<std::string> hooked() { return g_hooked; }
 

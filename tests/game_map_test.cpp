@@ -1,6 +1,6 @@
 // The host's game map resolution against a fake runtime: it stays inside its share of the startup
-// deadline and stops when startup is cancelled, resolves icalls through the runtime, and publishes
-// each kind of entry as mods (and, for exports, the host) receive it.
+// deadline and stops when startup is cancelled, resolves icalls through the runtime and layers through
+// the scene engine, and publishes each kind of entry as mods (and, for exports, the host) receive it.
 #include <windows.h>
 
 #include <cstdarg>
@@ -36,13 +36,13 @@ namespace {
 
 using namespace pg::sdk;
 
-// Two images of 200 empty classes each, named as the map's assemblies.
+// Three images of 200 empty classes each, named as the map's assemblies.
 struct FakeImage {
   std::string name;
   int classes[200] = {};
 };
-FakeImage g_images[] = {{"Assembly-CSharp.dll"}, {"UnityEngine.CoreModule.dll"}};
-void* g_assemblies[] = {&g_images[0], &g_images[1]};
+FakeImage g_images[] = {{"Assembly-CSharp.dll"}, {"UnityEngine.AnimationModule.dll"}, {"UnityEngine.CoreModule.dll"}};
+void* g_assemblies[] = {&g_images[0], &g_images[1], &g_images[2]};
 int g_domain = 0;
 
 // A module the size of its headers' SizeOfImage, with no function table.
@@ -100,11 +100,11 @@ void* module() { return g_module.bytes; }
 void builds_and_resolves_within_budget() {
   reset();
   CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
-  CHECK(classesRead == 400);
+  CHECK(classesRead == 600);
   CHECK(all_unresolved(nullptr) && pg::gamemap::result("GhostAI")->status == Status::Missing);
   CHECK(pg::gamemap::entry("GhostAI") == nullptr);  // unresolved: mods receive nothing
   CHECK(!logged("abandoned"));
-  CHECK(logged("game map: 0/27 resolved in 0 ms"));
+  CHECK(logged("game map: 0/40 resolved in 0 ms"));
 }
 
 void stop_during_build_abandons_promptly() {
@@ -114,7 +114,7 @@ void stop_during_build_abandons_promptly() {
   CHECK(classesRead == 10);
   CHECK(all_unresolved("startup was cancelled"));
   CHECK(count_logged("abandoned") == 1);
-  CHECK(logged("game map: 0/27 resolved"));
+  CHECK(logged("game map: 0/40 resolved"));
 }
 
 void spent_budget_reads_nothing() {
@@ -128,10 +128,10 @@ void spent_budget_reads_nothing() {
 
 void slow_build_leaves_the_hooks_budget() {
   reset();
-  tickPerClass = 150;  // 400 classes would take 60 s
+  tickPerClass = 100;  // 600 classes would take 60 s
   CHECK(!pg::gamemap::resolve(module(), nullptr, 60000));
   // It stops at the first check with less than 10 s left, so the hooks keep their share.
-  CHECK(clockMs >= 50000 && clockMs < 50150);
+  CHECK(clockMs >= 50000 && clockMs < 50100);
   CHECK(all_unresolved("the startup budget ran out"));
 }
 
@@ -262,10 +262,53 @@ void publish_twice_is_refused() {
   icallAnswer = nullptr;
   CHECK(!pg::gamemap::resolve(module(), nullptr, 60000));
   CHECK(count_logged("game map: already resolved; a second resolve is refused") == 1);
-  CHECK(classesRead == 400);  // nothing was read again
+  CHECK(classesRead == 600);  // nothing was read again
   CHECK(!pg::gamemap::publish(0x20000));
   CHECK(count_logged("game map: already published; a second publish is refused") == 1);
   CHECK(pg::gamemap::entry("Animator.SetBoolID") == kept && kept->code == &setBoolID);
+}
+
+// A scene engine whose NameToLayer knows one layer, `g_layerName` at 11.
+const char* g_layerName = "PlayerView";
+const pg::sdk::SceneEngine kEngine{
+    [] { return int32_t{1}; },
+    [](void*, const char*) { return static_cast<void*>(nullptr); },
+    [](const char* name) { return std::string(name) == g_layerName ? int32_t{11} : int32_t{-1}; },
+    [](const void*, const char*, int32_t*) { return false; },
+    [](const void* obj) { return obj != nullptr; },
+    [](void*) { return uint32_t{0}; },
+    [](uint32_t) {},
+};
+
+// The worker leaves the scene facts to the main thread, and does not log them as failures. At
+// activation a layer resolves by its name, and a well-formed Scene entry is published to be checked
+// where it is used; a layer no layer has is logged once and stays unresolved.
+void scene_facts_resolve_at_activation() {
+  reset();
+  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  CHECK(pg::gamemap::entry("Layer.PlayerView") == nullptr && pg::gamemap::entry("Scene.JournalBookContent") == nullptr);
+  CHECK(!logged("Layer.PlayerView") && !logged("Scene.JournalBookContent"));
+
+  g_layerName = "PlayerView";
+  pg::gamemap::resolve_scene_facts(&kEngine);
+  const PgGameEntry* layer = pg::gamemap::entry("Layer.PlayerView");
+  CHECK(layer && layer->kind == PG_ENTRY_LAYER && layer->value == 11);
+  const PgGameEntry* scene = pg::gamemap::entry("Scene.JournalBookContent");
+  CHECK(scene && scene->kind == PG_ENTRY_SCENE && pg::gamemap::mod_entry("Scene.JournalBookContent") == scene);
+  CHECK(logged("game map: 1/1 layers resolved on the main thread"));
+  int root = 0;
+  CHECK(pg::gamemap::scene_find("Scene.JournalBookContent", &root) == nullptr);  // the engine finds nothing
+  CHECK(pg::gamemap::scene_find("Layer.PlayerView", &root) == nullptr);          // not a Scene entry
+  int32_t hash = 5;
+  CHECK(!pg::gamemap::animator_param("Scene.JournalBookContent", &root, &hash) && hash == 5);
+
+  reset();
+  CHECK(pg::gamemap::resolve(module(), nullptr, 60000));
+  g_layerName = "Renamed";
+  pg::gamemap::resolve_scene_facts(&kEngine);
+  CHECK(pg::gamemap::entry("Layer.PlayerView") == nullptr);
+  CHECK(count_logged("game map: Layer.PlayerView: no layer is named PlayerView") == 1);
+  CHECK(logged("game map: 0/1 layers resolved on the main thread"));
 }
 
 }  // namespace
@@ -275,7 +318,7 @@ bool runtime_api(void*, pg::sdk::RuntimeApi& api) {
   ++apiRequests;
   api.domain_get = [] { return static_cast<void*>(&g_domain); };
   api.domain_get_assemblies = [](void*, size_t* count) {
-    *count = 2;
+    *count = 3;
     return g_assemblies;
   };
   api.assembly_get_image = [](void* a) { return a; };
@@ -339,5 +382,6 @@ int main() {
   icall_resolves_at_activation();
   exports_and_statics_are_published();
   publish_twice_is_refused();
+  scene_facts_resolve_at_activation();
   return g_failures ? 1 : 0;
 }

@@ -25,6 +25,7 @@
 #include "notice.h"
 #include "presence.h"
 #include "room_actions.h"
+#include "scene_engine.h"
 #include "service_registry.h"
 #include "ui.h"
 
@@ -355,6 +356,16 @@ void api_log_exception(const char* where, const void* exception) {
   }
 }
 
+// The scene facts (version 2.1): the game map keeps and checks them.
+void* api_scene_find(const char* key, void* root) {
+  return contained("finding a scene path", static_cast<void*>(nullptr),
+                   [&]() -> void* { return gamemap::scene_find(key, root); });
+}
+bool api_animator_param(const char* key, const void* animator, int32_t* hash) {
+  return contained("checking an Animator parameter", false,
+                   [&] { return gamemap::animator_param(key, animator, hash); });
+}
+
 void on_presence(int32_t sender, const uint8_t* data, size_t size) {
   if (game::private_room()) g_presence.receive(sender, data, size, GetTickCount64());
 }
@@ -424,6 +435,7 @@ bool create_hooks() { return hostnet::create_hooks() && context::install(&gamema
 
 bool start(void* gameAssembly, void* unityPlayer) {
   gamemap::resolve_icalls();  // on the main thread, before any mod starts
+  gamemap::resolve_scene_facts(scene_engine::engine());  // the layers, from the running game
   g_dataDirectory = data_directory();
   if (g_dataDirectory.empty()) {
     PG_LOG("suite: the local application-data folder is unavailable; set LOCALAPPDATA and restart the game");
@@ -436,7 +448,8 @@ bool start(void* gameAssembly, void* unityPlayer) {
            &api_string_new, &api_string_utf8, &api_array_length, &api_array_data, &api_array_new,
            &api_list_count, &api_list_items, &api_type_object, &api_object_new, &api_is_instance,
            &api_alive, &api_virtual_method, &api_gc_hold, &api_gc_release, &api_log_exception,
-           &api_static_get, &api_static_set, &api_hook_body, &api_body_count};
+           &api_static_get, &api_static_set, &api_hook_body, &api_body_count,
+           &api_scene_find, &api_animator_param};
   hostnet::set_receiver(hostnet::kHostChannel, &on_presence);
   mods::load(g_dataDirectory);
   if (mods::loaded().empty()) {
@@ -474,6 +487,7 @@ void stop() {
   mods_panel::teardown();
   if (g_agreed) mods::stop_all();
   g_agreed = false;
+  gamemap::forget_scene_facts();  // after the mods, which may still ask in their stop
   g_presence.set_local({}, false);
 }
 

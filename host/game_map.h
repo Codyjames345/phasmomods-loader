@@ -1,10 +1,15 @@
 #pragma once
 
+#include <cstdint>
 #include <string_view>
 
 #include "resolver.h"
 
 struct PgGameEntry;
+
+namespace pg::sdk {
+struct SceneEngine;
+}
 
 // The game map (sdk/map) resolved against the running game, once at startup.
 namespace pg::gamemap {
@@ -30,6 +35,23 @@ const sdk::Result* result(std::string_view key);
 // since the runtime's icall table is not locked and the engine's registration may not be done.
 // Logs each icall that still did not resolve, and the count. Nothing thrown escapes.
 void resolve_icalls();
+
+// Resolves the map's scene facts and publishes them, with `engine` asking the running game
+// (host/scene_engine.h). On the main thread at host activation, after resolve_icalls and before any mod
+// starts: a layer resolves by its name through LayerMask.NameToLayer, and is logged when no layer has
+// it; a well-formed Scene or AnimatorParam entry is published as resolved and checked where a mod
+// uses it (scene_find, animator_param). Logs the count of layers resolved. Nothing thrown escapes.
+void resolve_scene_facts(const sdk::SceneEngine* engine);
+
+// Releases what the scene facts keep (the objects found, the roots and Animators asked about). Main
+// thread, when the host stops; the facts are found again on their next use.
+void forget_scene_facts();
+
+// The host contract's scene_find and animator_param (core/mod_api.h) for the resolved Scene or
+// AnimatorParam entry `key`: null or false for any other key, and before resolve_scene_facts. Main
+// thread.
+void* scene_find(const char* key, void* root);
+bool animator_param(const char* key, const void* animator, int32_t* hash);
 
 // An entry as the host has it, or null when it is unknown or unresolved. Host code only: it includes
 // GameAssembly's exports.

@@ -1,7 +1,9 @@
 // The game API (sdk/api/game_api.h) and the phasmo:: wrappers against the fake game backend
 // (sdk/fake): calls, field and static field reads and writes, icalls, enum values, what a mod
 // requires, what an entry that did not resolve does, and the runtime services (sdk/api/runtime.h): strings, arrays, lists, type
-// objects, object creation, alive checks, virtual calls and GC holds. Run: build\game_api_test.exe
+// objects, object creation, alive checks, virtual calls and GC holds, and the scene and asset facts:
+// paths found and kept per scene load, layers by name and Animator parameters checked on first use.
+// Run: build\game_api_test.exe
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -15,6 +17,7 @@
 #include "Camera.h"
 #include "GhostAI.h"
 #include "LevelController.h"
+#include "Scene.h"
 #include "check.h"
 #include "fake_game.h"
 #include "game_api.h"
@@ -90,6 +93,16 @@ inline constexpr pg::sdk::EntryDesc kOptionalStatic{.key = "Test.optionalStatic"
                                                     .owner = "LevelController", .type = "int"};
 constexpr api::StaticField<kOptionalStatic, int32_t> optionalStatic{};
 
+// A layer and an Animator parameter for the scene fact tests, both optional, so the other tests bind
+// without them.
+inline constexpr pg::sdk::EntryDesc kTestLayer{.key = "Test.layer", .kind = pg::sdk::Kind::Layer,
+                                               .flags = pg::sdk::kOptional, .name = "NoSuchLayer"};
+constexpr api::Layer<kTestLayer> testLayer{};
+inline constexpr pg::sdk::EntryDesc kTestParam{.key = "Test.isOpened", .kind = pg::sdk::Kind::AnimatorParam,
+                                               .flags = pg::sdk::kOptional, .name = "isOpened",
+                                               .scene = "Resources/PCPlayer", .component = "BookController"};
+constexpr api::AnimatorParam<kTestParam> testParam{};
+
 void* g_sawAnimator = nullptr;
 int32_t g_sawId = 0;
 bool g_sawValue = false;
@@ -118,6 +131,13 @@ void fake_everything_but(const char* except) {
   g_levelInstance = nullptr;
   fake::static_field(map::LevelController_instance, &g_levelInstance, sizeof g_levelInstance, true);
   fake::icall(map::Animator_SetBoolID, reinterpret_cast<void*>(&fake_set_bool_id));
+  if (std::string(except) != map::Scene_JournalBookContent.key) fake::scene_fact(map::Scene_JournalBookContent);
+  std::vector<std::string> layers(32);
+  layers[0] = "Default";
+  layers[5] = "UI";
+  layers[11] = "PlayerView";
+  fake::layer_names(layers);
+  fake::layer(map::Layer_PlayerView);
 }
 
 bool bound() {
@@ -173,7 +193,8 @@ std::vector<std::string> required_keys() {
 void only_called_entries_are_required() {
   CHECK((required_keys() == std::vector<std::string>{"Animator.SetBoolID", "Camera", "GhostAI", "GhostAI.UnAppear",
                                                      "GhostAI.agent", "GhostAI.state", "GhostState.hunting",
-                                                     "LevelController.instance"}));
+                                                     "Layer.PlayerView", "LevelController.instance",
+                                                     "Scene.JournalBookContent"}));
   const char* const* first = nullptr;
   const char* const* again = nullptr;
   CHECK(api::used_required(&first) == api::used_required(&again) && first == again);  // kept, not rebuilt
@@ -469,6 +490,84 @@ void icall_reaches_fake() {
   CHECK(g_sawAnimator == &animator && g_sawId == 42 && g_sawValue);
 }
 
+
+// A path that is not under the object it is looked up from answers null, and says so once for each
+// scene load; a null root answers null without a search.
+void missing_scene_path_is_null_and_logged_once() {
+  fake_everything_but("");
+  CHECK(bound());
+  int canvas = 0;
+  g_lines.clear();
+  CHECK(phasmo::Journal::BookContent.available());
+  CHECK(phasmo::Journal::BookContent.find(&canvas) == nullptr);
+  CHECK(phasmo::Journal::BookContent.find(&canvas) == nullptr);
+  CHECK(phasmo::Journal::BookContent.find(nullptr) == nullptr);
+  CHECK(count_logged("Scene.JournalBookContent: no Content/GhostHuntingBookContent under the given object") == 1);
+  CHECK(g_lines.size() == 1);
+  fake::load_scene();
+  CHECK(phasmo::Journal::BookContent.find(&canvas) == nullptr);
+  CHECK(count_logged("Scene.JournalBookContent: no Content/GhostHuntingBookContent under the given object") == 2);
+}
+
+// A path found is kept until the next scene load, or until the object found is destroyed or another
+// root is given; an entry the build lacks answers null without a search.
+void scene_path_found_and_kept_per_scene() {
+  fake_everything_but("");
+  CHECK(bound());
+  int canvas = 0, other = 0, book = 0, otherBook = 0;
+  fake::child(&canvas, "Content/GhostHuntingBookContent", &book);
+  fake::child(&other, "Content/GhostHuntingBookContent", &otherBook);
+  CHECK(phasmo::Journal::BookContent.find(&canvas) == &book);
+  CHECK(phasmo::Journal::BookContent.find(&canvas) == &book);
+  CHECK(fake::finds() == 1);
+  CHECK(fake::held() == 2);  // the root and what was found, kept for the scene
+  fake::load_scene();
+  CHECK(phasmo::Journal::BookContent.find(&canvas) == &book && fake::finds() == 2);
+  fake::destroy(&book);
+  CHECK(phasmo::Journal::BookContent.find(&canvas) == nullptr && fake::finds() == 3);
+  CHECK(phasmo::Journal::BookContent.find(&other) == &otherBook && fake::finds() == 4);
+
+  fake_everything_but(map::Scene_JournalBookContent.key);  // the build lacks it
+  CHECK(!bound());
+  g_lines.clear();
+  CHECK(phasmo::Journal::BookContent.find(&canvas) == nullptr && fake::finds() == 0);
+  CHECK(count_logged("Scene.JournalBookContent is not available in this game build") == 1);
+}
+
+// A layer resolves by its name through LayerMask.NameToLayer; one no layer has stays unresolved and
+// answers -1, never 0, which is the Default layer.
+void layer_by_name() {
+  fake_everything_but("");  // its NameToLayer knows Default (0), UI (5) and PlayerView (11)
+  g_lines.clear();
+  fake::layer(kTestLayer);  // resolved as the host does when it activates
+  CHECK(bound());
+  CHECK(phasmo::Layers::PlayerView.available() && phasmo::Layers::PlayerView.index() == 11);
+  CHECK(!testLayer.available() && testLayer.index() == -1);
+  CHECK(count_logged("no layer is named NoSuchLayer") == 1);
+  CHECK(count_logged("Test.layer is not available in this game build") == 1);
+}
+
+// An Animator parameter is checked against the Animator's own parameters the first time that Animator
+// is asked; one it lacks answers 0, logged once per scene load.
+void animator_param_checked() {
+  fake_everything_but("");
+  fake::scene_fact(kTestParam);
+  CHECK(bound());
+  int book = 0, hands = 0;
+  fake::parameters(&book, {{"isVROpened", 7}, {"isOpened", 1234}});
+  fake::parameters(&hands, {{"Selecting", 9}});
+  g_lines.clear();
+  CHECK(testParam.available());
+  CHECK(testParam.hash(&book) == 1234 && testParam.hash(&book) == 1234);
+  CHECK(fake::parameter_reads() == 1);  // checked on first use, not on every call
+  CHECK(testParam.hash(&hands) == 0 && testParam.hash(&hands) == 0);
+  CHECK(testParam.hash(nullptr) == 0);
+  CHECK(count_logged("Test.isOpened: the Animator has no parameter isOpened") == 1);
+  CHECK(g_lines.size() == 1);
+  fake::load_scene();
+  CHECK(testParam.hash(&book) == 1234 && fake::parameter_reads() == 3);
+}
+
 }  // namespace
 
 int main() {
@@ -497,5 +596,9 @@ int main() {
   static_field_get_set();
   static_field_unresolved_returns_default();
   icall_reaches_fake();
+  missing_scene_path_is_null_and_logged_once();
+  scene_path_found_and_kept_per_scene();
+  layer_by_name();
+  animator_param_checked();
   return g_failures ? 1 : 0;
 }

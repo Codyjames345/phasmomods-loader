@@ -72,7 +72,9 @@ add_library(ModHost SHARED
   host/mods_panel.cpp
   host/room_actions.cpp
   host/game_map.cpp
-  sdk/runtime/runtime_model.cpp)
+  host/scene_engine.cpp
+  sdk/runtime/runtime_model.cpp
+  sdk/runtime/scene_facts.cpp)
 target_include_directories(ModHost PRIVATE host sdk/map sdk/runtime)
 target_link_libraries(ModHost PRIVATE pgcore pgsdk_resolver minhook bcrypt)
 pg_options(ModHost)
@@ -265,8 +267,9 @@ target_link_libraries(mods_test PRIVATE minhook bcrypt)
 target_compile_definitions(mods_test PRIVATE PG_FAKE_MOD="$<TARGET_FILE:pg_fake_mod>"
   PG_FAKE_MOD_2_0="$<TARGET_FILE:pg_fake_mod_2_0>")
 add_dependencies(mods_test pg_fake_mod pg_fake_mod_2_0)
-pg_test(game_api sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp core/log.cpp)
-target_include_directories(game_api_test PRIVATE sdk/api sdk/map sdk/fake)
+pg_test(game_api sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp
+  core/log.cpp)
+target_include_directories(game_api_test PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 # Wrappers that must not compile (PG_EXPECT_COMPILE_FAIL 1 to 7) and the same written right (0), built
 # only by the test, which expects each wrong one to fail with its static_assert. The test builds them
 # outside the developer environment validate.ps1 builds in, so it gets this configure's compiler
@@ -301,7 +304,7 @@ pg_test(runtime_model sdk/runtime/runtime_model.cpp sdk/offline/dump_model.cpp)
 target_include_directories(runtime_model_test PRIVATE sdk/runtime sdk/offline)
 target_link_libraries(runtime_model_test PRIVATE pgsdk_resolver)
 target_compile_definitions(runtime_model_test PRIVATE PG_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-pg_test(game_map sdk/runtime/runtime_model.cpp)
+pg_test(game_map sdk/runtime/runtime_model.cpp sdk/runtime/scene_facts.cpp)
 target_include_directories(game_map_test PRIVATE sdk/map sdk/runtime)
 target_link_libraries(game_map_test PRIVATE pgsdk_resolver)
 target_compile_definitions(game_map_test PRIVATE PG_HOST PG_GAME_MAP_TEST)

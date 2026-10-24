@@ -35,6 +35,9 @@ enum PgEntryKind : uint32_t {
   // Added in version 2.1.
   PG_ENTRY_ICALL,       // a Unity engine function the runtime registered by name, with its code
   PG_ENTRY_EXPORT,      // a function GameAssembly.dll exports; host only, game_entry never gives one
+  PG_ENTRY_SCENE,       // a GameObject by its path, found through scene_find
+  PG_ENTRY_LAYER,       // a layer, with its index in `value`
+  PG_ENTRY_ANIMATOR_PARAM,  // an Animator parameter by its name, checked through animator_param
 };
 
 // A game entry as the host resolved it in the running game. The host keeps it for the process
@@ -53,7 +56,7 @@ struct PgGameEntry {
   // from the start of its class's static data.
   int32_t offset;
   void* field;    // FieldInfo* of a field, static or not
-  int64_t value;  // an enum value's number
+  int64_t value;  // an enum value's number, or a layer's index (0 to 31)
 };
 
 // Who a message is sent to.
@@ -201,6 +204,23 @@ struct PgHostApi {
   // How many bodies the method entry `key` has: 1 for a method without twins; 0 when the entry is
   // unknown, unresolved or not a method.
   uint32_t (*body_count)(const char* key);
+
+  // Also added in version 2.1: scene and asset facts, the entries of kind PG_ENTRY_SCENE and
+  // PG_ENTRY_ANIMATOR_PARAM (a layer is resolved when the host activates, and game_entry gives its
+  // index). Main thread, while the game plays. A fact that is missing where it is used is logged once
+  // per scene load, and the call answers null or false, so the feature that needs it stays off.
+
+  // The Transform at the Scene entry `key`'s path under the Transform `root`, as Transform.Find finds
+  // it. The answer is kept until the next scene load, and found again when that object was destroyed
+  // or another `root` is given. Null when the entry is unknown, unresolved or not a Scene entry, when
+  // `root` is null, destroyed or not a Transform, and when nothing is at the path.
+  void* (*scene_find)(const char* key, void* root);
+  // Whether the Animator `animator` has the parameter the AnimatorParam entry `key` names, read from
+  // the Animator's own parameter list the first time each Animator is asked (and again after a scene
+  // load); its hash (Animator.StringToHash) into `hash` when it has. False, `hash` untouched, when the
+  // entry is unknown, unresolved or not an AnimatorParam entry, when `animator` is null, destroyed or
+  // not an Animator, or when it lacks the parameter.
+  bool (*animator_param)(const char* key, const void* animator, int32_t* hash);
 };
 
 enum PgModFlags : uint32_t {

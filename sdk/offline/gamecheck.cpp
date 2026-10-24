@@ -2,10 +2,15 @@
 // without running the game. tools/gamecheck.ps1 prepares both and runs it.
 //
 // usage: gamecheck --dump <DiffableCs root> --image <GameAssembly.dll> [--addresses <tsv>] [--mods <dir>]
+//                  [--scene-entries <tsv>]
 // It prints one line per entry and a summary. Exports resolve from the image's export table. An icall
 // cannot be checked without the running game: it is listed as checked at startup only, and never
-// counts as a failure. With --addresses it writes key, kind, value and length for each resolved
-// entry. With --mods it loads every mod DLL in <dir> and its subfolders (a DLL that exports
+// counts as a failure. A well-formed scene fact (a Scene, Layer or AnimatorParam entry) is not in the
+// code either: it is listed as checked in the scene files and never counts as a failure here. With
+// --scene-entries the scene facts go to that file for tools/assetcheck.py, one per line: key, kind
+// (scene, layer or animator), 1 when required or 0, scene, path, component and name, tab separated,
+// with an empty column for a field the entry does not set. With --addresses it writes key, kind, value
+// and length for each resolved entry. With --mods it loads every mod DLL in <dir> and its subfolders (a DLL that exports
 // pgmod_info), and after the summary prints "would not load <mod id> (contract <version>)" for each
 // mod built against a host contract this build's host does not run (pg_api_compatible), and, for
 // the others, asks for the game entries each requires (pgmod_requires) and prints
@@ -35,21 +40,23 @@ namespace {
 using namespace pg::sdk;
 
 constexpr const char* kUsage =
-    "usage: gamecheck --dump <DiffableCs root> --image <GameAssembly.dll> [--addresses <tsv>] [--mods <dir>]\n";
+    "usage: gamecheck --dump <DiffableCs root> --image <GameAssembly.dll> [--addresses <tsv>] [--mods <dir>]\n"
+    "                 [--scene-entries <tsv>]\n";
 
 struct Args {
-  std::filesystem::path dump, image, addresses, mods;
+  std::filesystem::path dump, image, addresses, mods, sceneEntries;
 };
 
 bool parse(int argc, wchar_t** argv, Args& out) {
   for (int i = 1; i < argc; ++i) {
     const std::wstring_view flag = argv[i];
     if (i + 1 >= argc) return false;
-    std::filesystem::path* target = flag == L"--dump"        ? &out.dump
-                                    : flag == L"--image"     ? &out.image
-                                    : flag == L"--addresses" ? &out.addresses
-                                    : flag == L"--mods"      ? &out.mods
-                                                             : nullptr;
+    std::filesystem::path* target = flag == L"--dump"            ? &out.dump
+                                    : flag == L"--image"         ? &out.image
+                                    : flag == L"--addresses"     ? &out.addresses
+                                    : flag == L"--mods"          ? &out.mods
+                                    : flag == L"--scene-entries" ? &out.sceneEntries
+                                                                 : nullptr;
     if (!target || !target->empty()) return false;
     *target = argv[++i];
   }
@@ -65,12 +72,16 @@ const char* kind_word(Kind k) {
     case Kind::Code: return "code";
     case Kind::Icall: return "icall";
     case Kind::Export: return "export";
+    case Kind::Scene: return "scene";
+    case Kind::Layer: return "layer";
+    case Kind::AnimatorParam: return "animator";
   }
   return "?";
 }
 
 // A resolved entry's value: a type's name in this build, a method's, code entry's or export's RVA, a
-// field's offset, an enum value's number, an icall's name.
+// field's offset, an enum value's number, an icall's name, a layer's index, a path, a parameter's
+// name.
 std::string value_of(const Result& r) {
   switch (r.desc->kind) {
     case Kind::Type:
@@ -79,7 +90,10 @@ std::string value_of(const Result& r) {
     case Kind::Code:
     case Kind::Export: return std::format("0x{:X}", r.rva);
     case Kind::Field: return std::format("+0x{:X}", r.offset);
-    case Kind::EnumValue: return std::to_string(r.value);
+    case Kind::EnumValue:
+    case Kind::Layer: return std::to_string(r.value);
+    case Kind::Scene:
+    case Kind::AnimatorParam: return r.currentName;
   }
   return {};
 }
@@ -102,8 +116,20 @@ bool startup_only(const Result& r) {
   return r.desc->kind == Kind::Icall && r.status == Status::Missing && r.detail == kCheckedAtStartup;
 }
 
+// A well-formed scene fact, which tools/assetcheck.py checks in the scene files. A malformed one is
+// reported as any other entry that did not resolve.
+bool scene_fact(const Result& r) {
+  const Kind k = r.desc->kind;
+  return (k == Kind::Scene || k == Kind::Layer || k == Kind::AnimatorParam) && r.status == Status::Missing &&
+         r.detail == kCheckedInScene;
+}
+
+// Checked elsewhere than here: in the running game at startup, or in the scene files.
+bool checked_elsewhere(const Result& r) { return startup_only(r) || scene_fact(r); }
+
 std::string line_for(const Result& r) {
   if (startup_only(r)) return std::format("STARTUP {} {} ({})", r.desc->key, r.desc->name, kCheckedAtStartup);
+  if (scene_fact(r)) return std::format("SCENE {} {} ({})", r.desc->key, r.currentName, kCheckedInScene);
   std::string line = std::format("{} {}", status_word(r.status), r.desc->key);
   if (r.status != Status::Resolved) {
     line += " (" + r.detail + ")";
@@ -199,7 +225,7 @@ int check_mods(const std::filesystem::path& dir, const Resolution& resolution) {
       const size_t n = listRequired(&keys);
       for (size_t i = 0; keys && i < n; ++i) {
         const Result* r = keys[i] ? resolution.find(keys[i]) : nullptr;
-        if (keys[i] && (!r || r->desc->kind == Kind::Export || (r->status != Status::Resolved && !startup_only(*r))))
+        if (keys[i] && (!r || r->desc->kind == Kind::Export || (r->status != Status::Resolved && !checked_elsewhere(*r))))
           lacking += (lacking.empty() ? "" : ", ") + std::string(keys[i]);
       }
     }
@@ -209,6 +235,30 @@ int check_mods(const std::filesystem::path& dir, const Resolution& resolution) {
     }
   }
   return unreadable ? -1 : off;
+}
+
+// Writes the well-formed scene facts for tools/assetcheck.py. False, with nothing left behind and the
+// reason printed, when the file cannot be written.
+bool write_scene_entries(const std::filesystem::path& path, const Resolution& resolution) {
+  std::FILE* out = nullptr;
+  if (_wfopen_s(&out, path.c_str(), L"wb") != 0 || !out) {
+    std::fprintf(stderr, "gamecheck: cannot write %s\n", utf8(path).c_str());
+    return false;
+  }
+  const auto text = [](const char* s) { return s ? s : ""; };
+  for (const Result& r : resolution.results) {
+    if (!scene_fact(r)) continue;
+    const EntryDesc& d = *r.desc;
+    std::fprintf(out, "%s\t%s\t%d\t%s\t%s\t%s\t%s\n", d.key, kind_word(d.kind), (d.flags & kOptional) ? 0 : 1,
+                 text(d.scene), text(d.path), text(d.component), text(d.name));
+  }
+  if (std::fclose(out) != 0) {
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+    std::fprintf(stderr, "gamecheck: cannot write %s\n", utf8(path).c_str());
+    return false;
+  }
+  return true;
 }
 
 // The check itself; wmain contains what it throws.
@@ -246,21 +296,24 @@ int run(int argc, wchar_t** argv) {
   }
 
   const Resolution resolution = resolve(pg::map::kAllEntries, model, &image);
-  size_t counts[4] = {}, startupOnly = 0;
+  size_t counts[4] = {}, startupOnly = 0, inScene = 0;
   bool failed = false;  // a required entry that could be checked here did not resolve
   for (const Result& r : resolution.results) {
     if (startup_only(r)) ++startupOnly;
+    else if (scene_fact(r)) ++inScene;
     else ++counts[static_cast<int>(r.status)];
-    failed = failed || (!startup_only(r) && r.status != Status::Resolved && !(r.desc->flags & kOptional));
+    failed = failed || (!checked_elsewhere(r) && r.status != Status::Resolved && !(r.desc->flags & kOptional));
     std::printf("%s\n", line_for(r).c_str());
   }
-  std::printf("%zu entries: %zu resolved, %zu missing, %zu ambiguous, %zu blocked, %zu checked at startup only\n",
+  std::printf("%zu entries: %zu resolved, %zu missing, %zu ambiguous, %zu blocked, %zu checked at startup only, "
+              "%zu checked in the scene files\n",
               resolution.results.size(), counts[static_cast<int>(Status::Resolved)],
               counts[static_cast<int>(Status::Missing)], counts[static_cast<int>(Status::Ambiguous)],
-              counts[static_cast<int>(Status::Blocked)], startupOnly);
+              counts[static_cast<int>(Status::Blocked)], startupOnly, inScene);
   const int switchedOff = args.mods.empty() ? 0 : check_mods(args.mods, resolution);
   if (switchedOff < 0) return 2;
 
+  if (!args.sceneEntries.empty() && !write_scene_entries(args.sceneEntries, resolution)) return 2;
   if (!args.addresses.empty()) {
     std::FILE* out = nullptr;
     if (_wfopen_s(&out, args.addresses.c_str(), L"wb") != 0 || !out) {

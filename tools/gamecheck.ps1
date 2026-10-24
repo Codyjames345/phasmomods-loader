@@ -1,9 +1,12 @@
 # The offline game check: copies the four files Cpp2IL needs out of the game folder, dumps them with
 # Cpp2IL, and runs build\gamecheck.exe on the dump and the copied GameAssembly.dll. It writes the dump
 # to re\dump, the map's addresses to re\map-addresses.tsv and the RVA name table to re\names.tsv, all
-# gitignored. It never runs game code and never writes in the game folder.
+# gitignored. Then it checks the scene facts (tools/assetcheck.py) in copies of the scene and asset
+# files they need, with UnityPy in a venv it makes in re\dump\venv on first run, and prints that
+# check's lines after gamecheck's. It never runs game code and never writes in the game folder.
 # With -Mods <dir> it also loads each mod DLL under <dir> and reports the mods the host would not start on
-# this build. -IfConfigured exits quietly when the game or Cpp2IL is not set.
+# this build. -IfConfigured exits quietly when the game or Cpp2IL is not set; nothing here needs Python
+# until the check is configured.
 # usage: tools\gamecheck.ps1 [-GameDir <dir>] [-Cpp2Il <exe>] [-Mods <dir>] [-IfConfigured]
 param([string]$GameDir = $env:PG_GAME_DIR, [string]$Cpp2Il = $env:PG_CPP2IL, [string]$Mods, [switch]$IfConfigured)
 $ErrorActionPreference = 'Stop'
@@ -21,9 +24,11 @@ $cs = Join-Path $dump 'cs'
 $record = Join-Path $dump 'build.txt'
 $check = Join-Path $root 'build\gamecheck.exe'
 $addresses = Join-Path $root 're\map-addresses.tsv'
+$sceneEntries = Join-Path $dump 'scene-entries.tsv'
 # The last build's addresses go first, so no failure below leaves them for the RE scripts.
 Remove-Item -LiteralPath $addresses -Force -ErrorAction SilentlyContinue
 if (Test-Path -LiteralPath $addresses) { throw "Cannot remove $addresses." }
+Remove-Item -LiteralPath $sceneEntries -Force -ErrorAction SilentlyContinue
 if (-not (Test-Path -LiteralPath $check)) { throw "Build first: $check is missing." }
 
 $files = @('GameAssembly.dll', 'Phasmophobia.exe', 'Phasmophobia_Data\globalgamemanagers',
@@ -52,10 +57,57 @@ if (-not $current) {
 }
 
 $diffable = Join-Path $cs 'DiffableCs'
-$checkArgs = @('--dump', $diffable, '--image', (Join-Path $game 'GameAssembly.dll'), '--addresses', $addresses)
+$checkArgs = @('--dump', $diffable, '--image', (Join-Path $game 'GameAssembly.dll'), '--addresses', $addresses,
+  '--scene-entries', $sceneEntries)
 if ($Mods) { $checkArgs += @('--mods', (Resolve-Path -LiteralPath $Mods).Path) }
 & $check @checkArgs
 $code = $LASTEXITCODE
 & node (Join-Path $root 're\names.mjs') $diffable
 if ($LASTEXITCODE -ne 0) { throw 'node re\names.mjs failed.' }
-exit $code
+if ($code -eq 2) { exit 2 }  # gamecheck could not read its input, so it wrote no scene entries
+
+# The scene facts. The venv is made once and refreshed when the pinned requirements change.
+$venv = Join-Path $dump 'venv'
+$python = Join-Path $venv 'Scripts\python.exe'
+$requirements = Join-Path $PSScriptRoot 'assetcheck-requirements.txt'
+$installed = Join-Path $venv 'assetcheck-requirements.txt'
+if (-not (Test-Path -LiteralPath $python)) {
+  Write-Host 'Making the Python venv for the scene check...'
+  if (Get-Command py -ErrorAction SilentlyContinue) { & py -3 -m venv $venv }
+  elseif (Get-Command python -ErrorAction SilentlyContinue) { & python -m venv $venv }
+  else { throw 'The scene check (tools/assetcheck.py) needs Python 3; none is installed.' }
+  if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw "Cannot make the venv $venv." }
+}
+$fresh = (Test-Path -LiteralPath $installed) -and
+  ((Get-FileHash -LiteralPath $installed).Hash -eq (Get-FileHash -LiteralPath $requirements).Hash)
+if (-not $fresh) {
+  & $python -I -m pip install --quiet --disable-pip-version-check -r $requirements
+  if ($LASTEXITCODE -ne 0) { throw 'Cannot install the scene check''s requirements.' }
+  Copy-Item -LiteralPath $requirements -Destination $installed -Force
+}
+
+# The scene and asset files it reads, copied until it names no file that is not there yet: a file's
+# references are known only once it is copied. A copy whose size and time match the game's is kept,
+# since some of these files are large.
+$assetcheck = Join-Path $PSScriptRoot 'assetcheck.py'
+$data = Join-Path $game 'Phasmophobia_Data'
+for ($round = 0; ; ++$round) {
+  $needed = @(& $python -I $assetcheck --data $data --entries $sceneEntries --needs)
+  if ($LASTEXITCODE -ne 0) { throw "assetcheck could not list the files it reads ($LASTEXITCODE)." }
+  $copied = 0
+  foreach ($name in $needed) {
+    if ($name -notmatch '^[A-Za-z0-9_.]+$' -or $name.StartsWith('.')) { throw "assetcheck named an unexpected file: $name" }
+    $from = Get-Item -LiteralPath (Join-Path $GameDir "Phasmophobia_Data\$name") -ErrorAction SilentlyContinue
+    if (-not $from) { throw "The game folder has no Phasmophobia_Data\$name." }
+    $to = Get-Item -LiteralPath (Join-Path $data $name) -ErrorAction SilentlyContinue
+    if ($to -and $to.Length -eq $from.Length -and $to.LastWriteTimeUtc -eq $from.LastWriteTimeUtc) { continue }
+    Copy-Item -LiteralPath $from.FullName -Destination (Join-Path $data $name) -Force
+    ++$copied
+  }
+  if ($copied -eq 0) { break }
+  if ($round -ge 5) { throw 'assetcheck kept naming new files to copy.' }
+}
+& $python -I $assetcheck --data $data --entries $sceneEntries
+$sceneCode = $LASTEXITCODE
+if ($sceneCode -eq 2) { exit 2 }
+exit ([Math]::Max($code, $sceneCode))

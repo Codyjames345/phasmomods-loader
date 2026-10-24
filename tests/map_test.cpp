@@ -96,7 +96,8 @@ void every_entry_has_a_note() {
 
 // Every string an entry carries.
 std::vector<const char*> strings_of(const pg::sdk::EntryDesc& e) {
-  std::vector<const char*> out{e.key, e.name, e.hint, e.owner, e.assembly, e.ns, e.type, e.within};
+  std::vector<const char*> out{e.key,  e.name,   e.hint,  e.owner, e.assembly, e.ns,
+                               e.type, e.within, e.scene, e.path,  e.component};
   for (const std::span<const char* const> list : {e.params, e.fieldTypes, e.values})
     out.insert(out.end(), list.begin(), list.end());
   for (const pg::sdk::Fact& f : e.facts) out.push_back(f.method);

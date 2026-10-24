@@ -91,6 +91,12 @@ bool hook_bodies(const char* key, bool hasDetour, void* (*entry)(uint32_t), void
 
 int32_t inside(const char* key) { return g_host ? g_host->inside_entry(key) : 0; }
 
+void* scene_find(const char* key, void* root) { return g_host ? g_host->scene_find(key, root) : nullptr; }
+
+bool animator_param(const char* key, const void* animator, int32_t* hash) {
+  return g_host && g_host->animator_param(key, animator, hash);
+}
+
 }  // namespace detail
 
 bool bind(const PgHostApi* host, std::string& missing) {

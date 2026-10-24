@@ -56,10 +56,16 @@ using IcallLookup = std::function<const void*(const char* name)>;
 // The detail of a well-formed icall entry resolved without an IcallLookup, as offline.
 inline constexpr std::string_view kCheckedAtStartup = "checked at startup only";
 
+// The detail of a well-formed Scene, Layer or AnimatorParam entry: the resolver never resolves one.
+// The offline check verifies them in the game's scene files (tools/assetcheck.py), and the host when
+// it activates (a layer) or where a mod uses them (a path, a parameter).
+inline constexpr std::string_view kCheckedInScene = "checked in the scene files and in the running game";
+
 // Resolves every entry against the model, each after the entries it refers to. Without an image,
 // entries that need machine code or the export table are Missing with the detail "no code image".
 // Icall entries resolve only through `icalls`, which only the running game has: without it they are
-// Missing with the detail "checked at startup only".
+// Missing with the detail "checked at startup only". Scene, Layer and AnimatorParam entries are
+// Missing with the detail kCheckedInScene when well formed.
 Resolution resolve(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image,
                    const IcallLookup& icalls = {});
 

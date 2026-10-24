@@ -19,10 +19,12 @@ build.
 ## What exists today, and what does not
 
 Exists: the map and its resolver (at startup in the game, and offline), the game API, host contract
-2.1 with its runtime services and static fields, hooks by entry, the fake backend,
-`tools/gamecheck.ps1`, and four mapped types (GhostAI with 15 entries, Unity's Camera with 8,
-LevelController with its static instance, Unity's Animator with one icall), plus one GameAssembly
-export the host may use (`il2cpp_shutdown`). One mod call goes through the game API: Ghost Tells'
+2.1 with its runtime services, static fields and scene facts, hooks by entry, the fake backend,
+`tools/gamecheck.ps1` with its scene check `tools/assetcheck.py`, and the mapped types (GhostAI with
+15 entries, Unity's Camera with 8, LevelController with its static instance, Unity's Animator with
+one icall, and the Unity types the host's scene facts use: Animator, AnimatorControllerParameter,
+Transform, LayerMask and SceneManager), two scene facts (the journal's book and the PlayerView layer),
+plus one GameAssembly export the host may use (`il2cpp_shutdown`). One mod call goes through the game API: Ghost Tells'
 Shade calls `phasmo::GhostAI::UnAppear`.
 
 Does not exist yet. These arrive with stage 2, when every bundled mod is on the game API:
@@ -148,7 +150,7 @@ const int32_t state = phasmo::GhostAI::state.get(ghost);     // compare it with 
 phasmo::GhostAI::ChangeState(ghost, phasmo::GhostState::idle(), nullptr, false);
 ```
 
-Six kinds of wrapper, from `sdk/api/game_api.h`:
+Nine kinds of wrapper, from `sdk/api/game_api.h`:
 
 | Wrapper | Declared as | Use |
 | --- | --- | --- |
@@ -157,6 +159,9 @@ Six kinds of wrapper, from `sdk/api/game_api.h`:
 | `pg::api::StaticField<D, T>` | `StaticField<D, void*>` | `get()`, `set(v)`: a static field, one value for the class, read and written by the host (`static_get`, `static_set`). A reference's `set` goes through the GC write barrier. The first access runs the class's static constructor if it has not run, as the game's own first use would, so use it while the game plays (a tick, a detour), never at startup. When the host cannot read it (a `T` of the wrong size, a static constructor that threw) it logs once and gives the default. `T` is a number, a bool, an enum or `void*`: a struct does not compile, since a whole copy would store any reference inside it without the write barrier. |
 | `pg::api::Icall<D, R(A...)>` | `static constexpr ... SetBoolID{}` | `SetBoolID(animator, id, value)`: a Unity engine function the runtime registered by its icall name. It is native code, so it takes no MethodInfo. |
 | `pg::api::EnumValue<D>` | `idle{}` | `idle()` gives the value's number in this build. |
+| `pg::api::SceneObject<D>` | `BookContent{}` | `find(root)`: the Transform at the Scene entry's path under the Transform `root`, as Transform.Find finds it; null when it is not there, logged once per scene load. The host keeps the answer until the next scene load, so calling it each frame costs no search. |
+| `pg::api::Layer<D>` | `PlayerView{}` | `index()`: the layer's index, resolved by its name when the host activates; -1 (never 0, the Default layer) when no layer has the name. |
+| `pg::api::AnimatorParam<D>` | `isOpened{}` | `hash(animator)`: the parameter's hash for the Animator's by-id setters, checked against that Animator's own parameters the first time it is asked (and again after a scene load); 0 when it lacks the parameter, logged once per scene load. |
 | `pg::api::Type<D>` | `type{}` | `klass()` gives the `Il2CppClass*`; `is(obj)` tells whether an object is of the type or a derived one (an interface type never matches); `type_object()` gives its `System.Type` (C#'s `typeof`); `make()` a new object, fields zeroed and no constructor run (not for engine objects, which come from `AddComponent` or `Instantiate`); `make_array(n)` a new array of the type. |
 
 Every wrapper has two members besides its calls: `desc`, the map entry it wraps (its key, kind and
@@ -176,6 +181,9 @@ class overrides it. Use `virtual_call` to run the override.
 A managed reference a wrapper gives (a `void*` field or return value, `type_object()`, `make()`,
 `make_array()`) is valid for the current frame only. Do not keep it across frames: keep the object
 in a `pg::api::Held`.
+
+The game API gives no lookup by a raw path string and no setter that takes a raw layer number: a path,
+a layer and an Animator parameter are map entries, so these facts stay out of mod code.
 
 A call that cannot reach the game never jumps to null. An entry that did not resolve logs
 `<key> is not available in this game build` once and returns the type's default (0, false, null) or
@@ -305,6 +313,11 @@ that is unknown, unresolved or of the wrong kind:
   method's bodies are its canonical body (index 0) and each distinct twin, and `hook_body` hooks one of
   them, chained on that body alone. `body_count` is 0 for an entry that is unknown, unresolved or not a
   method. `hook<M>` is built on these.
+- `scene_find(key, root)` and `animator_param(key, animator, hash)`, after `body_count`: the scene
+  facts. `scene_find` gives the Transform at a Scene entry's path under `root`, kept until the next
+  scene load; `animator_param` says whether the Animator has an AnimatorParam entry's parameter, with
+  its hash. Both log a miss once per scene load and answer null or false. A layer needs no service:
+  `game_entry` gives its index in `value`.
 
 A mod's exports are `pgmod_info`, `pgmod_start`, `pgmod_tick`, `pgmod_stop` and (version 2 onwards,
 exported by linking `pgmod`) `pgmod_requires`.
@@ -323,7 +336,8 @@ phasmo::GhostAI::UnAppear(ghost);  // runs fake_unappear(ghost, nullptr)
 ```
 
 The other givers are `field(d, offset)`, `static_field(d, storage, size, reference)`, `icall(d, fn)`,
-`value(d, n)` and `type(d, klass)`. A static field reads and writes the test's own storage, and a
+`value(d, n)`, `type(d, klass)`, `scene_fact(d)` and `layer(d)` (resolved through the names given to
+`layer_names`). A static field reads and writes the test's own storage, and a
 `size` other than the one given answers as the host does for a field it cannot reach. An entry not
 given stays
 unresolved, as in a build that lacks it. `hooked()` lists the keys hooked through `hook_entry` or `hook_body`, and
@@ -332,8 +346,10 @@ unresolved, as in a build that lacks it. `hooked()` lists the keys hooked throug
 `override_method(d, klass, fn)` gives a class its override. `method(d, fn, owner)` names the
 declaring class, so `virtual_call` refuses an object of another class. The runtime services work on the fake's
 own memory: `array(elementSize, n)` and `list(items)` make arrays and lists, `destroy(obj)` makes
-`alive` false, and `held()` counts the GC holds not yet released. `tests/game_api_test.cpp` shows
-every path.
+`alive` false, and `held()` counts the GC holds not yet released. The scene facts run the host's own
+logic over the fake's scene: `child(root, path, found)` says what Transform.Find answers,
+`parameters(animator, list)` what an Animator has, `load_scene()` loads a new scene, and `finds()`
+and `parameter_reads()` count the searches. `tests/game_api_test.cpp` shows every path.
 
 ### Checking a mod against a game build
 
@@ -369,12 +385,13 @@ inline constexpr pg::sdk::EntryDesc GhostAI_UnAppear{.key = "GhostAI.UnAppear", 
 ```
 
 The fields: `key` (what `game_entry` and `pgmod_requires` use), `kind` (`Type`, `Method`, `Field`,
-`EnumValue`, `Code`, `Icall`, `Export`), `confidence`, `flags` (`kStatic`, `kOptional`, `kTrack`;
+`EnumValue`, `Code`, `Icall`, `Export`, `Scene`, `Layer`, `AnimatorParam`), `confidence`, `flags` (`kStatic`, `kOptional`, `kTrack`;
 `kStatic` makes a field a static one; `kTrack` is not read by anything yet), `owner` (the declaring
 Type entry's key), `name` or `hint` (an icall's or export's name, as the runtime knows it),
 `assembly` and `ns` (for a type; a null `ns` means the global namespace for a top-level type and any
 for a nested one), `type` (a field's type or a method's return type), `params`, `fieldTypes`,
-`values`, `facts`, and for a Code entry `pattern`, `within`, `patternOffset`. A map header ends with
+`values`, `facts`, for a Code entry `pattern`, `within`, `patternOffset`, and for a scene fact `scene`,
+`path` and `component`. A map header ends with
 its `phasmo::` wrappers; add one for each entry a mod may use (an export gets none).
 
 ### How the resolver finds an entry
@@ -435,6 +452,21 @@ Two kinds are found by name outside the metadata, with no owner, shape or facts:
   another module, is `Missing`. Only the host may use an export: the host contract never gives one to
 a mod.
 
+Three kinds are facts of the game's scene and asset files, not of its code (see
+[scene and asset facts](systems/scene.md)). The resolver only checks that one is well formed and
+leaves it as checked in the scene files; the offline check verifies it with `tools/assetcheck.py`,
+and the running game where it is used:
+
+- **A Scene entry** (`Kind::Scene`): `scene` (a scene's name as the build lists it, or
+  `"Resources/<path>"` for a prefab `Resources.Load` loads), `component` (the script or engine
+  component on the object a lookup starts from) and `path` (from that object, as Transform.Find
+  takes it). The offline check requires exactly one object at the path under every object that
+  carries the component there.
+- **A Layer entry** (`Kind::Layer`): its `name`. Resolved by name on the main thread when the host
+  activates.
+- **An AnimatorParam entry** (`Kind::AnimatorParam`): the parameter's `name`, the controller's name in
+  `component` and the place that uses it in `scene`.
+
 A static field is a `Field` entry flagged `kStatic`, found like any field. The resolver only reads the
 metadata; the field's value is read when a mod asks for it, never at startup.
 
@@ -479,12 +511,17 @@ and `-Cpp2Il`. The game and Cpp2IL paths never come from the repository.
 `gamecheck.ps1` copies four files out of the game folder (`GameAssembly.dll`, `Phasmophobia.exe`,
 `globalgamemanagers`, `global-metadata.dat`), runs Cpp2IL with `--use-processor attributeinjector
 --output-as diffable-cs` only when their hashes changed, and runs `build\gamecheck.exe --dump <dir>
---image <GameAssembly.dll> --addresses re\map-addresses.tsv [--mods <dir>]`. It prints one line per
-entry (`OK`, `MISSING`, `AMBIGUOUS` or `BLOCKED`, the key, the value, then twins, aliases and
-`renamed from`; `STARTUP`, the key and the icall's name for an icall, checked at startup only), then
-a summary. It never runs game code and never writes in the game folder. Exit 0 when every required
-entry it can check resolved and no mod would be switched off, 1 when one did not or one would, 2 on
-bad arguments.
+--image <GameAssembly.dll> --addresses re\map-addresses.tsv --scene-entries re\dump\scene-entries.tsv
+[--mods <dir>]`. It prints one line per entry (`OK`, `MISSING`, `AMBIGUOUS` or `BLOCKED`, the key, the
+value, then twins, aliases and `renamed from`; `STARTUP`, the key and the icall's name for an icall,
+checked at startup only; `SCENE`, the key and its path or name for a scene fact, checked in the scene
+files), then a summary. Then it copies the scene and asset files the scene facts need and runs
+`tools/assetcheck.py` on them, which prints `OK` or `MISSING` for each (see
+[scene and asset facts](systems/scene.md)). The first configured run makes a Python venv in
+`re\dump\venv` and installs the pinned UnityPy there, so it needs Python 3 (the `py` launcher or
+`python`); an unconfigured run needs no Python. It never runs game code and never writes in the game
+folder. Exit 0 when every required entry it can check resolved and no mod would be switched off, 1
+when one did not or one would, 2 on bad arguments or input it cannot read.
 
 `-Mods <dir>` adds `--mods <dir>`: gamecheck loads each mod DLL under `<dir>`, reads its
 `pgmod_requires` and prints `would switch off <mod id>: <keys>` for each mod the host would not start
@@ -518,4 +555,4 @@ gitignored. Map entries (names, shapes, facts, hints, notes) are committed.
 4. Put anything you learned that is not in the entry's note into `sdk/systems/<system>.md`.
 5. `.\validate.ps1`.
 
-The system overviews: [ghost AI](systems/ghost-ai.md).
+The system overviews: [ghost AI](systems/ghost-ai.md), [scene and asset facts](systems/scene.md).

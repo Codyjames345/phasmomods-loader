@@ -136,6 +136,9 @@ bool hook_bodies(const char* key, bool hasDetour, void* (*entry)(uint32_t), void
                  bool allTwins, uint32_t& created);
 // The host contract's inside_entry, or 0 before bind.
 int32_t inside(const char* key);
+// The host contract's scene_find and animator_param (version 2.1), or null and false before bind.
+void* scene_find(const char* key, void* root);
+bool animator_param(const char* key, const void* animator, int32_t* hash);
 
 }  // namespace detail
 
@@ -456,6 +459,89 @@ struct Type {
   template <int = 0>
   void* make_array(size_t length) const {
     return use::entry() ? detail::array_new(D.key, length) : nullptr;
+  }
+};
+
+/// A GameObject of the game's scenes or prefabs, found by its path from an object the mod already holds
+/// (a Scene entry). The path is the entry's, never the mod's: the game API takes no raw path string.
+/// Main thread, while the game plays.
+template <const sdk::EntryDesc& D>
+struct SceneObject {
+  static_assert(D.kind == sdk::Kind::Scene, "SceneObject wraps a map entry of kind Scene");
+  /// The map entry this wraps (its key, path and where the offline check found it).
+  static constexpr const sdk::EntryDesc& desc = D;
+  /// The entry's use: calling use::entry() or use::resolved() makes the entry required (see Use).
+  using use = Use<D>;
+
+  /// The Transform at the entry's path under the Transform `root`, as Transform.Find finds it. The host
+  /// keeps the answer until the next scene load, so calling it every frame costs no search. Null when
+  /// nothing is there (logged once per scene load), when `root` is null, destroyed or not a Transform,
+  /// and when the entry did not resolve (logged once). A managed reference: do not keep it across
+  /// frames without a pg::api::Held.
+  template <int = 0>
+  void* find(void* root) const {
+    return use::entry() ? detail::scene_find(D.key, root) : nullptr;
+  }
+
+  /// Whether the entry resolved in this game build. Never logs. A resolved entry may still be missing
+  /// from the scene that is loaded: find says so.
+  template <int = 0>
+  bool available() const {
+    return use::resolved();
+  }
+};
+
+/// A layer, by its name (a Layer entry). The host resolves it through LayerMask.NameToLayer when it
+/// activates. The game API takes no raw layer number. Main thread.
+template <const sdk::EntryDesc& D>
+struct Layer {
+  static_assert(D.kind == sdk::Kind::Layer, "Layer wraps a map entry of kind Layer");
+  /// The map entry this wraps (its key and layer name).
+  static constexpr const sdk::EntryDesc& desc = D;
+  /// The entry's use: calling use::entry() or use::resolved() makes the entry required (see Use).
+  using use = Use<D>;
+
+  /// The layer's index, 0 to 31. Unresolved (no layer has the name in this build): logs once and
+  /// returns -1, never 0, which is the Default layer; check available() before using it.
+  template <int = 0>
+  int32_t index() const {
+    const PgGameEntry* e = use::entry();
+    return e ? static_cast<int32_t>(e->value) : -1;
+  }
+
+  /// Whether the layer resolved in this game build. Never logs.
+  template <int = 0>
+  bool available() const {
+    return use::resolved();
+  }
+};
+
+/// A parameter of an Animator, by its name (an AnimatorParam entry). Main thread, while the game plays.
+template <const sdk::EntryDesc& D>
+struct AnimatorParam {
+  static_assert(D.kind == sdk::Kind::AnimatorParam, "AnimatorParam wraps a map entry of kind AnimatorParam");
+  /// The map entry this wraps (its key, parameter name and controller).
+  static constexpr const sdk::EntryDesc& desc = D;
+  /// The entry's use: calling use::entry() or use::resolved() makes the entry required (see Use).
+  using use = Use<D>;
+
+  /// The parameter's hash (Animator.StringToHash), for the Animator's by-id setters such as
+  /// phasmo::Animator::SetBoolID. The host checks it against `animator`'s own parameters the first time
+  /// that Animator is asked, and again after a scene load. 0 when `animator` lacks it (logged once per
+  /// scene load), when `animator` is null, destroyed or not an Animator, and when the entry did not
+  /// resolve (logged once).
+  template <int = 0>
+  int32_t hash(const void* animator) const {
+    int32_t value = 0;
+    if (use::entry() && detail::animator_param(D.key, animator, &value)) return value;
+    return 0;
+  }
+
+  /// Whether the entry resolved in this game build. Never logs. A resolved parameter may still be
+  /// missing from a given Animator: hash says so.
+  template <int = 0>
+  bool available() const {
+    return use::resolved();
   }
 };
 

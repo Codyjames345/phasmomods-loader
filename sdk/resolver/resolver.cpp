@@ -46,6 +46,9 @@ const char* kind_name(Kind kind) {
     case Kind::Code: return "code";
     case Kind::Icall: return "icall";
     case Kind::Export: return "export";
+    case Kind::Scene: return "scene";
+    case Kind::Layer: return "layer";
+    case Kind::AnimatorParam: return "animator parameter";
   }
   return "entry";
 }
@@ -175,6 +178,7 @@ class Resolver {
     if (index_.at(d.key) != i) return missing(r, "duplicate key");
     if (blocked(d, r)) return;
     if (d.kind == Kind::Icall || d.kind == Kind::Export) return resolve_by_name_outside_metadata(d, r);
+    if (d.kind == Kind::Scene || d.kind == Kind::Layer || d.kind == Kind::AnimatorParam) return check_scene_fact(d, r);
     if (d.kind == Kind::Code || !d.facts.empty()) {
       if (!image_) return missing(r, "no code image");
       if (d.kind == Kind::Code) return resolve_code(d, r);
@@ -322,6 +326,9 @@ class Resolver {
       case Kind::Code:
       case Kind::Icall:
       case Kind::Export:
+      case Kind::Scene:
+      case Kind::Layer:
+      case Kind::AnimatorParam:
         break;
     }
     return false;
@@ -428,6 +435,9 @@ class Resolver {
       case Kind::Code:
       case Kind::Icall:
       case Kind::Export:
+      case Kind::Scene:
+      case Kind::Layer:
+      case Kind::AnimatorParam:
         break;
     }
   }
@@ -646,6 +656,32 @@ class Resolver {
     r.currentName = d.name;
   }
 
+  // A Scene, Layer or AnimatorParam entry: a fact of the scene files, which the resolver only checks
+  // for being well formed. A Scene entry names where it is (scene), the component its lookup starts
+  // from and its path; a Layer entry its name; an AnimatorParam entry its name, where it is and its
+  // controller (component).
+  static void check_scene_fact(const EntryDesc& d, Result& r) {
+    if (d.owner || d.hint || d.assembly || d.ns || d.type || !d.params.empty() || !d.fieldTypes.empty() ||
+        !d.values.empty() || !d.facts.empty() || d.pattern || d.within || (d.flags & kStatic))
+      return missing(r, std::format("a {} entry has no owner, shape, facts or pattern", kind_name(d.kind)));
+    const bool scene = d.kind == Kind::Scene;
+    const bool layer = d.kind == Kind::Layer;
+    const bool wellFormed = scene   ? d.scene && d.path && d.component && !d.name
+                            : layer ? d.name && !d.scene && !d.path && !d.component
+                                    : d.name && d.scene && d.component && !d.path;
+    if (!wellFormed) {
+      return missing(r, scene   ? "a scene entry needs its scene, path and component, and no name"
+                        : layer ? "a layer entry needs its name alone"
+                                : "an animator parameter entry needs its name, scene and component, and no path");
+    }
+    for (const char* text : {d.scene, d.path, d.component, d.name})
+      if (text && (!*text || std::string_view(text).find_first_of("\t\r\n") != std::string_view::npos))
+        return missing(r, std::format("a {} entry's names must not be empty or hold a tab or line break",
+                                      kind_name(d.kind)));
+    missing(r, std::string(kCheckedInScene));
+    r.currentName = scene ? d.path : d.name;
+  }
+
   // An entry's type string against a model type string and, when the model knows it, the index of
   // the type that string names. "@Key" means the very type entry Key resolved to: a known index must
   // be that type, and an unknown one is trusted by name only when no other model type shares the
@@ -691,6 +727,9 @@ class Resolver {
       case Kind::Code:
       case Kind::Icall:
       case Kind::Export:
+      case Kind::Scene:
+      case Kind::Layer:
+      case Kind::AnimatorParam:
         break;
     }
     return {};

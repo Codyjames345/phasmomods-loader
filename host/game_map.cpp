@@ -14,6 +14,7 @@
 #include "log.h"
 #include "mod_api.h"
 #include "runtime_model.h"
+#include "scene_facts.h"
 
 namespace pg::gamemap {
 namespace {
@@ -33,6 +34,8 @@ uintptr_t g_base = 0;                // the loaded GameAssembly the entries were
 bool g_publishedOnce = false;
 // The runtime's il2cpp_resolve_icall, kept for resolve_icalls; null when no model was built.
 void* (*g_resolveIcall)(const char* name) = nullptr;
+// The scene facts in the running game, from resolve_scene_facts on.
+sdk::SceneFacts g_scene;
 
 uint32_t kind_of(sdk::Kind kind) {
   switch (kind) {
@@ -43,13 +46,17 @@ uint32_t kind_of(sdk::Kind kind) {
     case sdk::Kind::Code: return PG_ENTRY_CODE;
     case sdk::Kind::Icall: return PG_ENTRY_ICALL;
     case sdk::Kind::Export: return PG_ENTRY_EXPORT;
+    case sdk::Kind::Scene: return PG_ENTRY_SCENE;
+    case sdk::Kind::Layer: return PG_ENTRY_LAYER;
+    case sdk::Kind::AnimatorParam: return PG_ENTRY_ANIMATOR_PARAM;
   }
   return 0;
 }
 
 // Builds what mods receive for the resolved entry at index i: the runtime's class, method and field
 // from the kept model, code and exports as addresses in the loaded module at g_base, an icall's code
-// as the runtime gave it. An unresolved entry gets nothing.
+// as the runtime gave it, a layer's index. A Scene or AnimatorParam entry carries its kind alone:
+// scene_find and animator_param answer for it. An unresolved entry gets nothing.
 void publish_one(size_t i) {
   const uintptr_t base = g_base;
   const sdk::Result& r = g_resolution.results[i];
@@ -76,8 +83,11 @@ void publish_one(size_t i) {
       if (type && r.member >= 0 && size_t(r.member) < type->fields.size()) e.field = type->fields[r.member].runtime;
       e.offset = r.offset;
       break;
-    case sdk::Kind::EnumValue: e.value = r.value; break;
-    case sdk::Kind::Type: break;
+    case sdk::Kind::EnumValue:
+    case sdk::Kind::Layer: e.value = r.value; break;
+    case sdk::Kind::Type:
+    case sdk::Kind::Scene:
+    case sdk::Kind::AnimatorParam: break;
   }
 }
 
@@ -108,6 +118,13 @@ bool icall_pending(const sdk::Result& r) {
   return r.desc->kind == sdk::Kind::Icall && r.status == sdk::Status::Missing && r.detail == sdk::kCheckedAtStartup;
 }
 
+// A scene fact left for the main thread: resolve_scene_facts decides it.
+bool scene_fact_pending(const sdk::Result& r) {
+  return (r.desc->kind == sdk::Kind::Scene || r.desc->kind == sdk::Kind::Layer ||
+          r.desc->kind == sdk::Kind::AnimatorParam) &&
+         r.status == sdk::Status::Missing && r.detail == sdk::kCheckedInScene;
+}
+
 // Why resolution may not go on: startup was cancelled, or less than kHooksBudget of the deadline is
 // left. Null while it may.
 const char* stop_reason(void* stopEvent, unsigned long long deadline) {
@@ -116,10 +133,10 @@ const char* stop_reason(void* stopEvent, unsigned long long deadline) {
   return nullptr;
 }
 
-// Every entry that did not resolve, less the icalls resolve_icalls decides later.
+// Every entry that did not resolve, less the icalls and scene facts decided later on the main thread.
 void log_failures() {
   for (const sdk::Result& r : g_resolution.results) {
-    if (r.status == sdk::Status::Resolved || icall_pending(r)) continue;
+    if (r.status == sdk::Status::Resolved || icall_pending(r) || scene_fact_pending(r)) continue;
     PG_LOG("game map: %s %s (%s)", sdk::status_word(r.status), r.desc->key, r.detail.c_str());
     for (const std::string& c : r.candidates) PG_LOG("game map:     %s", c.c_str());
   }
@@ -218,6 +235,69 @@ void resolve_icalls() {
   } catch (...) {
     PG_LOG("game map: the icalls could not be resolved");
   }
+}
+
+void resolve_scene_facts(const sdk::SceneEngine* engine) {
+  try {
+    if (g_published.size() != g_resolution.results.size()) return;
+    g_scene.set_engine(engine);
+    size_t layers = 0, resolved = 0;
+    for (size_t i = 0; i < g_resolution.results.size(); ++i) {
+      sdk::Result& r = g_resolution.results[i];
+      if (!scene_fact_pending(r)) continue;
+      // A path or a parameter is checked where a mod uses it, in the scene it is used in.
+      if (r.desc->kind == sdk::Kind::Layer) {
+        ++layers;
+        const int32_t index = g_scene.layer(*r.desc);  // logged when no layer has the name
+        if (index < 0) {
+          r.detail = std::string("no layer is named ") + r.desc->name;
+          continue;
+        }
+        r.value = index;
+        ++resolved;
+      }
+      r.status = sdk::Status::Resolved;
+      r.detail.clear();
+      publish_one(i);
+    }
+    PG_LOG("game map: %zu/%zu layers resolved on the main thread", resolved, layers);
+  } catch (const Il2CppExceptionWrapper& e) {
+    il2cpp::log_exception("game map: managed exception while resolving the layers", e.ex);
+  } catch (const std::exception& e) {
+    PG_LOG("game map: the scene facts could not be resolved: %s", e.what());
+  } catch (...) {
+    PG_LOG("game map: the scene facts could not be resolved");
+  }
+}
+
+namespace {
+// The resolved scene fact `key` of the kind `kind`, or null.
+const sdk::EntryDesc* scene_fact(const char* key, sdk::Kind kind) {
+  const PgGameEntry* e = key ? entry(key) : nullptr;
+  const sdk::Result* r = e ? g_resolution.find(key) : nullptr;
+  return r && r->desc->kind == kind ? r->desc : nullptr;
+}
+}  // namespace
+
+void forget_scene_facts() {
+  try {
+    g_scene.forget();
+  } catch (...) {
+    PG_LOG("game map: the scene facts could not be forgotten");
+  }
+}
+
+void* scene_find(const char* key, void* root) {
+  const sdk::EntryDesc* d = scene_fact(key, sdk::Kind::Scene);
+  return d ? g_scene.find(*d, root) : nullptr;
+}
+
+bool animator_param(const char* key, const void* animator, int32_t* hash) {
+  const sdk::EntryDesc* d = scene_fact(key, sdk::Kind::AnimatorParam);
+  int32_t value = 0;
+  if (!d || !hash || !g_scene.parameter(*d, animator, value)) return false;
+  *hash = value;
+  return true;
 }
 
 const sdk::Result* result(std::string_view key) { return g_resolution.find(key); }

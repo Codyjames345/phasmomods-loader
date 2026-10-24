@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "entry.h"
@@ -31,7 +32,8 @@
 namespace pg::fake {
 
 /// Forgets every entry, hook, barrier write, class parent, override, destroyed object and GC hold,
-/// and frees every fake managed object, so the next test starts from an empty game. Bind the game API
+/// the fake's scene (children, layer names, parameters, counts) and what its scene facts kept, and
+/// frees every fake managed object, so the next test starts from an empty game. Bind the game API
 /// again after it (and after giving entries): a bound wrapper keeps the entry it was given.
 void reset();
 
@@ -50,8 +52,10 @@ void reset();
 /// the method's owner class; gc_hold and
 /// gc_release count live holds (see held); log_exception does nothing. static_get and static_set
 /// copy between the caller and the storage given to static_field(), and answer false for a key not
-/// given there or a size other than the one given. Every other function does nothing and answers
-/// false or null. The pointer stays valid for the process lifetime.
+/// given there or a size other than the one given. scene_find and animator_param run the host's own
+/// scene facts (sdk/runtime/scene_facts.h) over the fake's scene: the children given to child(), the
+/// parameters given to parameters() and the scene load_scene() loads. Every other function does
+/// nothing and answers false or null. The pointer stays valid for the process lifetime.
 const PgHostApi* host();
 
 // Giving an entry again replaces it.
@@ -84,6 +88,24 @@ void* array(size_t elementSize, size_t length);
 void* list(const std::vector<void*>& items);
 /// The engine object `unityObject` is destroyed: alive answers false for it until reset.
 void destroy(const void* unityObject);
+
+/// The Scene or AnimatorParam entry `d` resolves: scene_find or animator_param answers for it.
+void scene_fact(const sdk::EntryDesc& d);
+/// The layers the fake's LayerMask.NameToLayer knows: names[i] is layer i's name, "" for none.
+void layer_names(const std::vector<std::string>& names);
+/// The Layer entry `d` resolves as the host resolves it when it activates, through NameToLayer by its
+/// name: to that layer's index, or not at all (logged) when no layer has the name.
+void layer(const sdk::EntryDesc& d);
+/// Transform.Find(root, path) answers `found` (until `found` is destroyed); any other path, null.
+void child(void* root, const char* path, void* found);
+/// A scene loads: the active scene's handle changes.
+void load_scene();
+/// The Animator `animator` has these parameters (name and hash); any other object has none.
+void parameters(const void* animator, const std::vector<std::pair<std::string, int32_t>>& list);
+/// How many Transform.Find calls, and how many reads of an Animator's parameters, the fake answered
+/// since reset.
+int finds();
+int parameter_reads();
 
 /// The keys hooked through hook_entry or hook_body since reset, in order, once per body hooked.
 std::vector<std::string> hooked();

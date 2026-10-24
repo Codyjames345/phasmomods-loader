@@ -1,0 +1,4 @@
+# UnityPy for tools/assetcheck.py, the offline scene and asset check, and for nothing else (the user
+# approved it on 2026-10-23 for that check only). One version, released 2026-08-01.
+# tools/gamecheck.ps1 installs it into re\dump\venv.
+UnityPy==1.25.3
