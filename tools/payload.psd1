@@ -7,6 +7,8 @@
         @{ Name = 'ModHost.dll'; Source = 'build/ModHost.dll' }
         @{ Name = 'velopack_libc.dll'; Source = 'build/velopack_libc.dll' }
         @{ Name = 'README.md'; Source = 'docs/installation.md' }
+        @{ Name = 'LICENSE.txt'; Source = 'LICENSE' }
+        @{ Name = 'NOTICE.txt'; Source = 'NOTICE' }
         @{ Name = 'MinHook-LICENSE.txt'; Source = 'third_party/minhook/LICENSE.txt' }
         @{ Name = 'Velopack-LICENSE.txt'; Source = 'third_party/velopack/LICENSE.txt' }
         @{ Name = 'mods/playable-ghost/PlayableGhost.dll'; Source = 'build/PlayableGhost.dll' }

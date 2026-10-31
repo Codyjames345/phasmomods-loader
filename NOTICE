@@ -1,0 +1,14 @@
+PhasmoMods Loader
+Copyright 2026 Codyjames345
+
+Licensed under the Apache License, Version 2.0 (see LICENSE). If you redistribute
+this work or a derivative of it, keep this notice and credit the original project:
+https://github.com/Codyjames345/phasmomods-loader
+
+This product includes third-party software under its own licence:
+- MinHook, Copyright (C) 2009-2017 Tsuda Kageyu, BSD 2-Clause (third_party/minhook/LICENSE.txt)
+- Velopack, MIT (third_party/velopack/LICENSE.txt)
+
+Phasmophobia is a game by Kinetic Games. This project is not affiliated with,
+endorsed by or supported by Kinetic Games. Using mods may put your game account
+at risk; play with mods in private lobbies only.
