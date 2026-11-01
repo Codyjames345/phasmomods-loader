@@ -17,8 +17,20 @@ function Test-Python([string[]]$Command) {
   return $LASTEXITCODE -eq 0
 }
 
+<# uv's Python 3.14, the version tools/gamecheck.ps1 makes its venv with, or nothing. #>
+function Find-UvPython {
+  if (-not (Get-Command uv -ErrorAction SilentlyContinue)) { return $null }
+  $ErrorActionPreference = 'Continue'
+  $found = & uv python find 3.14 2>$null
+  if ($LASTEXITCODE -ne 0) { return $null }
+  return $found
+}
+
+$candidates = @(, @('py', '-3')) + @(, @('python'))
+$uvPython = Find-UvPython
+if ($uvPython) { $candidates = @(, @($uvPython)) + $candidates }
 $python = $null
-foreach ($candidate in @(, @('py', '-3')) + @(, @('python'))) {
+foreach ($candidate in $candidates) {
   if (Test-Python $candidate) { $python = $candidate; break }
 }
 if (-not $python) {

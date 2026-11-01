@@ -538,8 +538,8 @@ checked at startup only; `SCENE`, the key and its path or name for a scene fact,
 files), then a summary. Then it copies the scene and asset files the scene facts need and runs
 `tools/assetcheck.py` on them, which prints `OK` or `MISSING` for each (see
 [scene and asset facts](systems/scene.md)). The first configured run makes a Python venv in
-`re\dump\venv` and installs the pinned UnityPy there, so it needs Python 3 (the `py` launcher or
-`python`); an unconfigured run needs no Python. It never runs game code and never writes in the game
+`re\dump\venv` and installs the pinned UnityPy there, so it needs Python 3 (uv's Python 3.14, the
+`py` launcher or `python`, in that order); an unconfigured run needs no Python. It never runs game code and never writes in the game
 folder. Exit 0 when every required entry it can check resolved and no mod would be switched off, 1
 when one did not or one would, 2 on bad arguments or input it cannot read.
 

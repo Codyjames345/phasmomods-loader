@@ -89,7 +89,17 @@ $fresh = (Test-Path -LiteralPath $python) -and (Test-Path -LiteralPath $installe
 if (-not $fresh) {
   if (Test-Path -LiteralPath $venv) { Remove-Item -LiteralPath $venv -Recurse -Force }
   Write-Host 'Making the Python venv for the scene check...'
-  if (Get-Command py -ErrorAction SilentlyContinue) { & py -3 -I -m venv $venv }
+  # uv's Python 3.14 first, the version the requirements are compiled for: the py launcher's -3
+  # finds only python.org (PythonCore) installs, not the ones uv registers.
+  $uvPython = $null
+  if (Get-Command uv -ErrorAction SilentlyContinue) {
+    $ErrorActionPreference = 'Continue'
+    $uvPython = & uv python find 3.14 2>$null
+    if ($LASTEXITCODE -ne 0) { $uvPython = $null }
+    $ErrorActionPreference = 'Stop'
+  }
+  if ($uvPython) { & $uvPython -I -m venv $venv }
+  elseif (Get-Command py -ErrorAction SilentlyContinue) { & py -3 -I -m venv $venv }
   elseif (Get-Command python -ErrorAction SilentlyContinue) { & python -I -m venv $venv }
   else { throw 'The scene check (tools/assetcheck.py) needs Python 3; none is installed.' }
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw "Cannot make the venv $venv." }
