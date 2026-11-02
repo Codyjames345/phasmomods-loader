@@ -81,7 +81,21 @@ Brownie: A Scottish house spirit that only works unwatched. In a hunt it is incr
 | Knell | The slow toll of a funeral bell, its footsteps mirror the rhythm. Every couple seconds it alternates between powerful surges of speed and a slow crawl, held back by the inevitability of death. |   |
 | Asterion | The birth name of the Minotaur, it is cursed to navigate the living realm as a labyrinth - unable to pass through doors. Though it lacks the ability to phase, its raging fury won't keep it trapped for long. Its sheer strength is enough to blast open doors after a few seconds and destroy their hinges, making them unusable for the rest of the contract. |   |
 | Tempest | A weather-based ghost, gifted ludicrous speed when supercharged by its conjured lightning strikes. Its power amplifies with raging weather - strongest in the rain, and weakest when skies are clear. This demonic presence is completely invisible to the naked eye, only revealed by its lightning... |   |
-| Hydra | Cut off one head, and two more take its place... the serpent of Lerna proves formidable against smudges. The true copy is difficult to identify, though a keen ear may help. Beware, a sickly green spectral flame provides warning to those who dare. |   |
+| Hydra | Cut off one head, and two more take its place... the serpent of Lerna proves formidable against smudges. The true copy is difficult to identify, though a keen ear may help. Beware, a sickly green spectral flame provides warning to those who dare fight it. |   |
+
+### Spectral Flame
+
+The addition of more than a few ghosts mandated a new type of evidence, as all possible combinations of three ran out. The idea came from soul flame (Minecraft) - a flame enraged by trapped souls, giving it a haunting blue colour.
+
+This evidence type gives more purpose to firelights as I felt they were underused.
+
+When the ghost is present in the same room as a firelight, it will slowly begin to shift its hue towards blue. This change takes about a full minute but differs based on the firelight tier. When the ghost walks out of the room, its colour fades back to orange at half this speed.
+
+For ghosts without spectral flame evidence: the colour will shift to a pale blue and remain steady, progressing no further.
+For ghosts with spectral flame evidence: the colour will shift to a deep blue in the same length of time. I decided to make the time period the same so that you can potentially get the evidence early by noticing the faster rate of colour change, adding a bit of skill into the mix. The hardest part is balancing the colour change so it doesn't reveal the ghost's location too easily, but isn't annoyingly long. Will need to test.
+To make things a bit more fair, ghosts with spectral flame will not be able to blow out firelights until they are fully blue. This was because I kept getting them blown out before they were noticeably blue, and it also doubles as a quick rule-out if a non-blue candle is ever blown out (similar to how a ghost throwing the writing book rules out ghost writing).
+
+Lastly, the Hydra has a unique tell of shifting firelights to green instead of blue. Thought it'd be fun to spice things up a bit.
 
 ## Install
 
