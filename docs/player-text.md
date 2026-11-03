@@ -5,7 +5,7 @@ Everything a player reads lives in string tables, never in the code (the author'
 
 | Table | Entries | `PM_TEXT_AI` | `PM_TEXT_TODO` |
 | --- | --- | --- | --- |
-| `i18n/default.json` | 232 | 0 | 2 |
+| `i18n/default.json` | 232 | 0 | 0 |
 | `mods/custom_ghosts/i18n/default.json` | 74 | 6 | 0 |
 | `mods/ghost_tells/i18n/default.json` | 6 | 0 | 0 |
 | `mods/playable_ghost/i18n/default.json` | 140 | 140 | 0 |
