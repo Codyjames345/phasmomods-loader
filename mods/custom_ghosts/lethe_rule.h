@@ -85,6 +85,13 @@ struct ActivitySubjects {
 };
 
 /**
+ * Whether this client counts as looking at the journal's media: its journal is on the media pages and its own investigator is in
+ * the game's player list. A ghost player's parked body is out of that list: they play no investigator, so what their journal
+ * shows keeps nothing from fading.
+ */
+inline bool lethe_looking(bool onMediaPages, bool inPlayerList) { return onMediaPages && inPlayerList; }
+
+/**
  * Whether journal media of this subject (MediaValues' evidence type) records the ghost's activity,
  * which fades; bones, bodies, cursed objects and the team's own gear stay.
  */

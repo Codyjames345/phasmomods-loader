@@ -14,6 +14,7 @@
 #include "Player.h"
 #include "Transform.h"
 #include "UnityWorld.h"
+#include "actors.h"
 #include "behaviour.h"
 #include "flame_net.h"
 #include "game.h"
@@ -176,11 +177,13 @@ void* my_journal() {
   return api::alive(me) ? phasmo::Player::journal.get(me) : nullptr;
 }
 
-/** Whether this client's player has the journal open on its media pages now. */
+/** Whether this client's investigator has the journal open on its media pages now. */
 bool viewing_media() {
   void* journal = my_journal();
   void* page = page_of(journal);
-  return page && phasmo::JournalController::open.get(journal) && game::active_in_hierarchy(game::game_object_of(page));
+  const bool onMediaPages =
+      page && phasmo::JournalController::open.get(journal) && game::active_in_hierarchy(game::game_object_of(page));
+  return lethe_looking(onMediaPages, actor_of_player(game::local_player()) != 0);
 }
 
 /** Fade one slot on this client: every journal's copy of it, through the game's own removal. */

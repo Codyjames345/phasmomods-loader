@@ -695,6 +695,10 @@ void the_brownie_steps_quietly_as_a_myling() {
 
 void the_lethe_makes_them_forget() {
   CHECK(!lethe_fades(179, false) && lethe_fades(180, false) && !lethe_fades(500, true));  // looked at: kept
+  // Only an investigator looks: a client whose own investigator is out of the game's player list (a ghost player's parked body)
+  // doesn't keep the media from fading, whatever its journal shows.
+  CHECK(lethe_looking(true, true));
+  CHECK(!lethe_looking(true, false) && !lethe_looking(false, true) && !lethe_looking(false, false));
   CHECK(!lethe_forgets(0.9f) && lethe_forgets(1.0f));
   CHECK(lethe_replay_at(10, 0) == 10 + kLetheReplayMin && lethe_replay_at(10, 1) == 10 + kLetheReplayMax);
   CHECK(lethe_replay_at(0, 0.5f) > kLetheReplayMin && lethe_replay_at(0, 0.5f) < kLetheReplayMax);

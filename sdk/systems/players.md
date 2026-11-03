@@ -25,7 +25,7 @@ Methods marked *decoy* have no caller.
 | Reader | What a dead player is to it |
 | --- | --- |
 | `GameController.PlayerDied`'s all-dead test, and its coroutine | counted as gone: the contract ends once every spot's Player is dead |
-| `GameController.GetAveragePlayerInsanity` | left out of the average |
+| `GameController.GetAveragePlayerInsanity` | left out of the average, which walks the spots alone: a Player whose spot is out of the list isn't in it either |
 | `ExitLevel.ThereAreAlivePlayersOutsideTheTruck` | not outside |
 | `GhostAI.GetNearestPlayer`, `GhostAI.SetNewBansheeTarget`, the hunt's target tests (`GhostHuntState`) | no target |
 | `LookAtNearestPlayer`, `Mannequin` and `Prop`'s nearest-player tests, `GhostController`'s player checks | skipped |

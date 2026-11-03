@@ -190,6 +190,19 @@ std::string high_priestess() {
   }
   return "flag";
 }
+// GameController.GetAveragePlayerInsanity, as decompiled: it walks Network.playerSpots, and adds each spot's living Player's
+// insanity and counts it. It reads no other list and not the local player.
+float average_insanity(const std::map<void*, float>& insanity) {
+  float sum = 0;
+  int count = 0;
+  for (void* s : spots()) {
+    void* p = get<void*>(spot(s), kPlayer);
+    if (dead(*static_cast<Object*>(p))) continue;
+    sum += insanity.at(p);
+    ++count;
+  }
+  return count ? sum / count : 0;
+}
 // GameController.PlayerDied's all-dead test: every spot's Player is dead.
 bool all_dead() {
   for (void* s : spots())
@@ -302,6 +315,23 @@ void the_all_dead_test_counts_investigators_only() {
   reset();  // the spot in the list: the living body holds the end back
   for (Object* p : {&wisher, &alice, &bob}) set_dead(*p, true);
   CHECK(!all_dead());
+}
+
+// The team's average sanity, which sets when the ghost may hunt: with the ghost player's spot out, their parked body's sanity is no
+// part of it, and the local player being that body changes nothing. With the spot in, the body would hold the average down.
+void the_team_average_counts_investigators_only() {
+  reset();
+  const std::map<void*, float> insanity{{&wisher, 20.0f}, {&alice, 40.0f}, {&bob, 60.0f}, {&ghostBody, 100.0f}};
+  CHECK(average_insanity(insanity) == 55.0f);  // the control: the spot in, the body counted
+  pm::outlist::take_out(2);
+  CHECK(average_insanity(insanity) == 40.0f);
+  put<void*>(network, kLocal, &ghostBody);  // on the ghost player's own client
+  CHECK(average_insanity(insanity) == 40.0f);
+  set_dead(alice, true);
+  CHECK(average_insanity(insanity) == 40.0f);  // a dead investigator is left out, as ever: (20 + 60) / 2
+  set_dead(alice, false);
+  pm::outlist::put_back();
+  CHECK(average_insanity(insanity) == 55.0f);
 }
 
 // The spot lookup answers the held spot for the ghost player, exactly what it found in the list before; every
@@ -464,6 +494,7 @@ int main() {
   the_paw_revives_the_dead_investigator();
   the_high_priestess_revives_an_investigator_or_sets_its_flag();
   the_all_dead_test_counts_investigators_only();
+  the_team_average_counts_investigators_only();
   the_spot_lookup_finds_the_held_spot_and_passes_everyone_else_through();
   every_player_lookup_answers_as_with_the_spot_in();
   the_present_is_placed_as_over_the_investigators_alone();
