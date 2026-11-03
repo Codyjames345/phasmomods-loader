@@ -8,7 +8,25 @@ An entry is deleted in the change that fixes it. `/fix` takes a number or a few 
 a heading and does both halves; `/finding` writes a new entry; `harness-findings verify`
 reports an entry whose problem is already gone.
 
-<!-- next: 33 -->
+<!-- next: 34 -->
+
+## 33. The API reference check fails with about 390 warnings
+
+  sdk/Doxyfile:47
+
+  `tools/docs.ps1` fails on any warning (WARN_AS_ERROR), but `validate.ps1` runs it only when PM_DOXYGEN is set, and until
+  2026-11-04 no machine that ran validation had set it. So this check had never passed. Running Doxygen 1.9.8 and 1.18.0 over
+  the same sources gave 392 and 389 messages. Under 1.18.0 they are: 297 undocumented members, 56 undocumented compounds (the
+  `core/mod_api.h` structs and `sdk/map/Equipment.h` among them), 18 about parameters or returns, and 18 unresolved references
+  (Markdown links to `sdk/internals`, which the Doxyfile excludes, and one to `README.md`). The rule that every public declaration
+  is documented as an interface is therefore not yet met. Found while moving the pin during the Squatter work.
+
+  Prompt:
+  > PhasmoMods Loader's `tools/docs.ps1` runs Doxygen 1.18.0 over the SDK with warnings as errors, and fails with about 390
+  > warnings (build\docs\warnings.txt, with PM_DOXYGEN set to doxygen.exe). Read CLAUDE.md's rule that every public declaration is
+  > documented as an interface. Document what is undocumented, from what the code and map entries prove and without addresses or
+  > obfuscated names. Decide how `sdk/systems` and `sdk/guides` should link to the excluded `sdk/internals` so those references
+  > resolve. Never weaken WARN_AS_ERROR or the undocumented warnings to make the check pass. Finish with the check passing.
 
 ## 32. A community mod has only the install folder to live in, which an update may replace
 
