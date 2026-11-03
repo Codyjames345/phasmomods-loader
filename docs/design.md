@@ -149,7 +149,8 @@ together. This changes nothing for the investigators' own rewards.
   so their marks, votes, sanity bar and pause card read another slot's (provisional until the user's first
   in-game test, `sdk/systems/players.md`). The spot comes back when the level goes, as they leave or quit, at the
   contract's end on their own client, and when the mod stops. Their local rig is switched off and its
-  camera detached to become the ghost's eyes.
+  camera detached to become the ghost's eyes. `Network.localPlayer` stays on the parked body: much of the game
+  reads it unchecked, so to the game's local code this client is an investigator standing in the truck.
 * The ghost player never dies: at the everyone-dead end (`GameController.Exit`, which writes a death
   for every client) their death status is left as it was, as at the truck's end, so their reward
   screen shows no death and returns their committed equipment.

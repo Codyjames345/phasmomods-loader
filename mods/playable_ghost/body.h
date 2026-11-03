@@ -15,8 +15,9 @@
 // contract's end on the ghost player's client, the ghost player leaving the room, the mod stopping.
 //
 // On the ghost player's own client, once every player has loaded, the camera is detached to become
-// the ghost's eyes and the local rig (controls, hands, HUD) is switched off; the game's local-player
-// reference is cleared, so no local-player code treats them as an investigator. Their journal stays
+// the ghost's eyes and the local rig (controls, hands, HUD) is switched off. Network.localPlayer stays on
+// the parked body: the game reads it with no check in many places, so a client without one throws, and
+// an exception inside the ghost's state change recurses until the stack runs out. Their journal stays
 // on the body (src/journal.h).
 //
 // The game's end of a contract needs the local investigator: src/contract_end.h. Main thread only.
@@ -28,7 +29,7 @@ void tick(session::Session& s);
 void teardown();
 // This client has its investigator again: it does not play the ghost, and Network's local player
 // (which the game's own Leave, Quit and ExitLevel.Exit read) is set. After teardown it is false only
-// when Network, the rig or the Player was gone.
+// when Network or the Player was gone.
 bool investigator_back();
 bool stepped_out();  // the ghost player's investigator is out of the contract on this client
 

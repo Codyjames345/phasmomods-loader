@@ -55,30 +55,6 @@ reports an entry whose problem is already gone.
   > and this entry's line for it in the same change. Never invent a window in its place; ask the author when no game
   > surface fits.
 
-## 29. The game's storm lightning throws on the ghost player's client in heavy rain
-
-  mods/playable_ghost/body.cpp:214
-
-  body.cpp clears Network+0x28 (the local Player) on the ghost player's client after stepping out.
-  LightningController.PlayLightningNetworked (0x2319F40), the RPC LightningController.Update sends
-  to every client every 0 to 30 s while the contract's weather is heavy rain, reads Network+0x28
-  in its heavy-rain branch whenever GameController's instance exists, and raises a
-  NullReferenceException when it is null (decompiled 2026-10-22). So in any heavy-rain contract with
-  a ghost player, that client throws on every storm strike and sees none of the game's lightning,
-  whatever the ghost type. Not seen in a log yet. The Tempest counts the strike before the game's
-  handler runs (tempest.cpp detour_storm_lightning), so its speed does not depend on this. The
-  fix belongs with the other null-local-Player cases (senses.cpp's VoiceVolume hook).
-
-  Prompt:
-  > In this repository, the ghost player's client has no local Player (mods/playable_ghost/body.cpp:214
-  > clears Network+0x28), and LightningController.PlayLightningNetworked (GameAssembly RVA 0x2319F40,
-  > decompile it with re\decomp.mjs) throws a NullReferenceException on it in heavy rain. Confirm it in
-  > a heavy-rain contract with a ghost player (the game log shows the exception at each strike), then
-  > make that client play the strike as an investigator's client does, the way senses.cpp handles
-  > VoiceVolume.Update, without changing what any other client sees. Never send the lightning RPC
-  > yourself: a client whose weather is not heavy rain refuses it, which can harm the sender's account.
-  > Run `env -u PSModulePath harness-verify`.
-
 ## 27. Ghost Tells has never run inside the game
 
   mods/ghost_tells/mod.cpp:1

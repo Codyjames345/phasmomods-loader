@@ -105,8 +105,12 @@ look for the cause in our code first.
   a PhotonView kept alive outside `PhotonNetwork.Destroy`, which breaks Photon's room cleanup
   ([Photon](../systems/photon.md), "PhotonViews and the cleanup").
 - **A collected wrapper** read as alive, and the next engine call crashed: a raw pointer kept across frames.
-- **Errors every frame** after taking the local player out: game code that assumes a local Player, such as
-  `VoiceVolume.Update` ([Voice](../systems/voice.md)). After a change like that, read the game's log for an
-  `at <Class>.Update ()` line repeated many times.
+- **Taking the local player out.** Playable Ghost once cleared `Network.localPlayer` on the ghost player's client. Hundreds of
+  game methods read it, many with no check: thousands of errors a contract from `FootstepController.AttemptPlaySound`,
+  `EVPRecorder.Update` and `VoiceVolume.Update`, the investigators' footsteps lost, and `SanityEffectsController.Update`
+  returning before its timer reset. The fatal one was `GhostAudio.PlayOrStopAppearSourceSync`: an RPC to all runs inline on
+  the sender, so its exception reached the ghost's state change, which logs `StateMachine ChangeState Error` and calls
+  `GhostAI.ChangeState` again. That throws again, until the stack runs out. Keep the reference set and move what the player
+  sees instead. After any change like that, read the game's log for an `at <Class>.Update ()` line repeated many times.
 - **A slower client never got the house key** when a mod destroyed a player's networked body: each client's all-loaded wait
   needs every `PlayerSpot.player` alive.

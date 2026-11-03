@@ -35,7 +35,6 @@ constexpr ULONGLONG kSweepMs = 500;  // anything the body switches on again is h
 // The ghost player's own client: their investigator rig, switched off while they play the ghost.
 struct SteppedOut {
   bool active = false;
-  api::Held player;        // their networked Player (Network's and the rig's reference cleared)
   api::Held rig;           // LocalPCPlayer, switched off for the contract
   api::Held camera;        // its camera, detached to be the ghost's eyes
   api::Held cameraParent;  // where the camera goes back to
@@ -167,7 +166,6 @@ void step_out() {
     journal::release();
   }
   void* cameraTransform = game::transform_of(camera);
-  g.player = player;
   g.rig = rig;
   g.camera = camera;
   g.cameraParent = game::parent(cameraTransform);
@@ -175,10 +173,6 @@ void step_out() {
   g.cameraLocalRotation = game::local_rotation(cameraTransform);
   game::set_parent(cameraTransform, nullptr, true);
   game::set_active(game::game_object_of(rig), false);
-  // This client plays no investigator: the game's local-player code finds none, as it did when the
-  // body was first left behind.
-  Network::localPlayer.set(net, nullptr);
-  LocalPlayer::player.set(rig, nullptr);
   g.active = true;
   g_steppedOutThisContract = true;
   PM_LOG("body: the ghost player stepped out of their investigator");
@@ -196,10 +190,6 @@ void step_in() {
   }
   if (game::alive(g.rig)) {
     game::set_active(game::game_object_of(g.rig), true);
-    if (game::alive(g.player)) {
-      if (void* net = game::network()) Network::localPlayer.set(net, g.player);
-      LocalPlayer::player.set(g.rig, g.player);
-    }
     PM_LOG("body: the ghost player is an investigator again");
   }
   g = SteppedOut{};

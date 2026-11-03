@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <vector>
 
-#include "Player.h"
 #include "PlayerVoice.h"
 #include "UnityAudio.h"
 #include "UnityObject.h"
@@ -21,7 +20,6 @@ constexpr ULONGLONG kTapScanMs = 2000;
 
 using phasmo::AudioListener;
 using phasmo::VivoxServiceInternal;
-using phasmo::VoiceVolume;
 
 bool g_muted = false;
 bool g_silenced = false;  // listener volume zeroed while the ghost is chosen
@@ -32,21 +30,6 @@ ULONGLONG g_nextTapScan = 0;
 void detour_unmute(api::Original<VivoxServiceInternal::UnmuteInputDevice> original, void* service) {
   if (g_muted) return;  // the ghost player's voice stays off for the whole contract
   original(service);
-}
-
-// VoiceVolume.Update silences a dead player's voice for a living listener, and asks the local
-// investigator whether the listener is alive: the ghost player's client has none (body.h), so the
-// game's own Update throws there every frame. While they play the ghost they hear as a living
-// investigator does: the dead stay silent, so they cannot tell the ghost where the living are.
-void detour_voice_volume(api::Original<VoiceVolume::Update> original, void* volume) {
-  if (!g_muted || !volume || game::local_player()) {
-    original(volume);
-    return;
-  }
-  void* player = VoiceVolume::player.get(volume);
-  void* multiplier = VoiceVolume::deathMultiplier.get(volume);
-  if (game::alive(player) && multiplier)
-    phasmo::VolumeMultiplier::set_value(multiplier, phasmo::Player::isDead.get(player) ? 0.0f : 1.0f);
 }
 
 void set_mic_muted(bool muted) {
@@ -91,8 +74,7 @@ void release() {
 
 bool create_hooks() {
   return api::hook<VivoxServiceInternal::UnmuteInputDevice>(&detour_unmute, "VivoxServiceInternal.UnmuteInputDevice",
-                                                             api::Twins::CanonicalOnly) &&
-         api::hook<VoiceVolume::Update>(&detour_voice_volume, "VoiceVolume.Update", api::Twins::CanonicalOnly);
+                                                             api::Twins::CanonicalOnly);
 }
 
 void tick(session::Session& s, void* ghost) {

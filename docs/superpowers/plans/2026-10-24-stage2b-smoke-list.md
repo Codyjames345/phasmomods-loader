@@ -888,6 +888,16 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 
 Tasks 12a to 12d and 12c's rounds. The ghost player is one of two or more clients.
 
+- The parked body stays the ghost player's local player (0.3.0)
+  - [ ] An investigator opens the main door with the ghost player as host, and again as a client: no crash, and no `StateMachine ChangeState Error` in the ghost player's game log.
+  - [ ] The ghost appears in an event and hunts: no crash, and its sounds play for the ghost player and the investigators.
+  - [ ] The ghost player's game log after a contract: `FootstepController.AttemptPlaySound`, `EVPRecorder.Update` and `VoiceVolume.Update` no longer repeat, and no other `at <Class>.Update ()` line repeats in their place.
+  - [ ] The ghost player hears investigators' footsteps and the house's ambience as they would standing where the ghost is, not from the truck.
+  - [ ] The ghost player sees the whole house from inside it, with its lights, with no part of it switched off because the parked body is in the truck.
+  - [ ] No sanity effect (camera or sound) reaches the ghost player's view as the parked body sits in the truck.
+  - [ ] In heavy rain the ghost player sees and hears the game's lightning, with no error at each strike.
+  - [ ] The truck's exit, a leave and a quit all work for the ghost player, and the truck doesn't leave or count the parked body by itself.
+
 - The lobby
   - [ ] The "Play as ghost" tape sits on the player's own ID card under the XP bar, in Ready's clickable colour, follows the player to another card, and clicking it volunteers without touching Ready.
   - [ ] Lobby equipment: the ghost player's loadout leaves the pool and comes back when they stop being the ghost.

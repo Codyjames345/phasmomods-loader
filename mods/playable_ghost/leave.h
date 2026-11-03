@@ -1,11 +1,10 @@
 #pragma once
 
 // Leaving the contract and quitting the game from the ghost player's pause menu (the game's own, in
-// their kept journal, src/journal.h). PauseMenuController.Leave and Quit read the local investigator,
-// which the ghost player does not have while they play the ghost, so while their investigator is out
-// of the contract the two buttons first give the ghost player their rig, camera and body back
-// (body::teardown), then run the game's own Leave or Quit. Only if the investigator did not come back
-// (Network, the rig or the Player gone) does the mod finish without them:
+// their kept journal, src/journal.h). PauseMenuController.Leave and Quit expect a whole investigator,
+// so while the ghost player's investigator is out of the contract the two buttons first give them
+// their rig, camera and body back (body::teardown), then run the game's own Leave or Quit. Only if the
+// investigator did not come back (Network or the Player gone) does the mod finish without them:
 //  - Leave: the steps of the game's leave coroutine. LoadingController.LoadScene to the main menu,
 //    then PhotonNetwork.Disconnect once the loading screen is ready.
 //  - Quit: Application.Quit, the game's last step.

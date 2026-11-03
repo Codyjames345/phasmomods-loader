@@ -200,8 +200,8 @@ The user allowed these differences, and no others (2026-10-31):
 
 `WintersJestManager.RPC_MakeKrampusStronger` sets `GhostAI.speedFlag` on the client that runs it, after acting on
 `Network.localPlayer`'s sanity, unless the weather (`Difficulty.actualWeather`) is the blood moon or the flag is already set.
-A client with no `Network.localPlayer` throws at that step, before the flag. So on a client whose player has stepped out of
-their investigator the flag is not set this way. Not read further: whether that client is the one running the ghost.
+A client with no `Network.localPlayer` throws at that step, before the flag. Playable Ghost's parked body keeps that reference
+set, so its client acts on the parked body's sanity and sets the flag as any client does.
 
 ## The game's player-shaped event (its doppelganger)
 

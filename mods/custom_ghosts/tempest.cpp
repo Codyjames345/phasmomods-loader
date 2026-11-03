@@ -175,7 +175,7 @@ void show_by_strikes(void* ghost) {
 }
 
 // The game's storm strike, an RPC every client runs: in heavy rain it lights the Tempest up as its own do.
-// Counted first, since the game's own handler throws where a client has no local Player (the ghost player's).
+// Counted first, since the game's own handler throws where a client has no local Player.
 void detour_storm_lightning(api::Original<phasmo::LightningController::PlayLightningNetworked> original,
                             void* controller, const void* info) {
   if (g.haunting && contract_weather() == phasmo::WeatherType::heavyRain()) strike_here(false);

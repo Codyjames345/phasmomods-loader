@@ -113,18 +113,17 @@ void waits_for_every_player_to_load() {
   CHECK(body::stepped_out() && body::camera() == &g_camera);
 }
 
-// Stepped out, the game finds no investigator of this client; its body is hidden; teardown gives all of it back.
+// Stepped out, this client's investigator is parked and hidden, and teardown gives it all back. The game still finds the parked
+// body as this client's local player: its code reads that reference with no check in many places, and an exception inside the
+// ghost's state change recurses until the stack runs out, which crashed the first live contract when the main door opened.
 void steps_out_and_teardown_gives_it_back() {
   pm::session::Session s;
   start_contract(s);
   put(g_gc, kAllLoaded, true);
   body::tick(s);
   CHECK(body::stepped_out() && g_journalKept && !g_rigActive);
-  CHECK(!body::investigator_back());
-  CHECK(!got<void*>(g_net, kLocalPlayer) && !got<void*>(g_rig, kRigPlayer));
-  put(g_net, kLocalPlayer, static_cast<void*>(&g_player));  // whoever set it, this client is still out
-  CHECK(!body::investigator_back());
-  put(g_net, kLocalPlayer, static_cast<void*>(nullptr));
+  CHECK(!body::investigator_back());  // playing the ghost, though the game's reference is set
+  CHECK(got<void*>(g_net, kLocalPlayer) == &g_player && got<void*>(g_rig, kRigPlayer) == &g_player);
   CHECK(!g_cameraParentNow);  // the camera left the rig
   body::tick(s);
   CHECK(s.ghost_stepped_out());

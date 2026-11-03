@@ -350,7 +350,7 @@ void the_present_is_placed_as_over_the_investigators_alone() {
   CHECK(furthest_spawn({&wisher, &ghostBody, &alice, &bob}) == 50.0f);  // the control: the body would change it
   CHECK(call().x == investigatorsOnly);
   CHECK(lookup(&pGhost) == &ghostBody);  // past the search, the parked body again
-  // With no local investigator (the ghost player's own client), it finds no null: the search would throw on one.
+  // With no local investigator, it finds no null: the search would throw on one.
   put<void*>(network, kLocal, nullptr);
   CHECK(call().x == investigatorsOnly);
   CHECK(searchSawNull == false);

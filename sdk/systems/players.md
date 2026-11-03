@@ -83,7 +83,7 @@ always has a spot, except for the moment between their departure and that callba
 A Photon player with no spot is not invisible to the game:
 
 - `Network.GetSpotPlayerFromPhotonPlayer` answers null for them, so `Network.GetPlayerFromPhotonPlayer`, which
-  calls it, answers `Network.localPlayer`: each client's own investigator, or null on a client without one.
+  calls it, answers `Network.localPlayer`: each client's own investigator.
   `Network.GetIndexOfPlayer` answers 0, the first spot's place.
 - Lookups by Photon player are common: about 225 methods call `Network.GetPlayerFromPhotonPlayer` (equipment,
   cursed items, the truck's lift button, the seasonal events), most with an RPC's sender or a view's owner

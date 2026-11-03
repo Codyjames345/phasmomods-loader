@@ -28,7 +28,7 @@ the consent notice says so before anyone agrees. A contract only begins once eve
 - **The dead are silent to the living.** `VoiceVolume.Update` sets a dead player's `VoiceVolume.deathMultiplier` to 0 while
   this client's investigator is alive, and to 1 otherwise. So a dead player is heard by the dead, and by nobody alive.
 - `VoiceVolume.Update` reads this client's local Player with no null check, so it throws every frame on a client with none.
-  A mod that takes the local player out (as Playable Ghost does for the ghost player) answers for it.
+  Don't clear `Network.localPlayer` ([Players](players.md)).
 
 ## Speech recognition
 
