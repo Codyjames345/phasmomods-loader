@@ -8,11 +8,11 @@
 #include "game_api.h"
 #include "hooks.h"
 
-struct PgGameEntry;
+struct PmGameEntry;
 
 // Hooks by game map entry: a method's bodies are its canonical body and its twins, and each body
 // has its own chain (hooks::create on that body).
-namespace pg::entry_hooks {
+namespace pm::entry_hooks {
 
 // The method's distinct bodies: `canonical` first (index 0), then each twin that is not null and not
 // folded onto an earlier body, in order.
@@ -32,12 +32,12 @@ bool hook_body(void* canonical, std::span<void* const> twins, uint32_t index, vo
 bool hook(void* canonical, std::span<void* const> twins, void* detour, void** original, const char* name,
           bool allTwins);
 
-}  // namespace pg::entry_hooks
+}  // namespace pm::entry_hooks
 
 // Caller context (the host contract's inside_entry): for each game method the host tracks, how many
 // of its calls are running on the calling thread. host/context.cpp lists the tracked methods as
-// PG_TRACK(phasmo::Type::Method).
-namespace pg::context {
+// PM_TRACK(phasmo::Type::Method).
+namespace pm::context {
 
 namespace detail {
 
@@ -89,11 +89,20 @@ void track() {
 // Hooks every tracked method not hooked yet, on each of its bodies in that body's own chain, through
 // `lookup` (gamemap::entry in the host). A method that did not resolve, or that has more bodies than
 // api::kMaxBodies, is logged and left untracked with nothing patched; false when a hook failed.
-// Runs before the mods start, as do the PG_TRACK registrations.
-bool install(const PgGameEntry* (*lookup)(const char* key));
+// Runs once the player agreed, before the mods start (host/mod_session.h); the PM_TRACK registrations run at load.
+bool install(const PmGameEntry* (*lookup)(const char* key));
 
 // How many calls of the tracked method `key` are running on the calling thread; 0 when the host does
 // not track it.
 int32_t depth(const char* key);
 
-}  // namespace pg::context
+// `key` is a method the host tracks, and install did not manage to hook it, so its depth says nothing. A mod
+// that requires such a method stays off rather than run on an answer of false (host/mods.h).
+bool tracking_failed(const char* key);
+
+// The host contract's abandon_ghost_spawn: when a call of GhostController.Spawn is running on this thread it
+// calls `raise`, which unwinds it (the runtime's exception, in the host), and returns true only if `raise`
+// returns; otherwise it does nothing and returns false.
+bool abandon_ghost_spawn(void (*raise)());
+
+}  // namespace pm::context

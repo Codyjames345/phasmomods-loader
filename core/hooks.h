@@ -6,7 +6,7 @@
 // MinHook detours. The host owns the only MinHook instance (host/hooks.cpp); in a mod these calls
 // go to the host (core/mod_glue.cpp), which chains a second detour on an already hooked function.
 // Every detour body holds a Guard so shutdown can wait for in-flight calls.
-namespace pg::hooks {
+namespace pm::hooks {
 
 bool init();  // host only
 // Hooks the one function `target` (a game method's body, never its twins with it): each target has
@@ -18,8 +18,21 @@ bool init();  // host only
 // Refuses a target whose first 5 bytes touch a site patch in place.
 bool create(void* target, void* detour, void** original, const char* name);
 bool enable_all();  // enables the hooks created since the open group began
-// Host only: the host contract's patch_site (core/mod_api.h says what it writes and when it
-// refuses) at the native site `site`. The patch joins the open group like a hook: rollback_group,
+// Host only: patches the native site `site`. When the `expectedSize` bytes there equal `expected` (5 to
+// 32 bytes, whole instructions), copies the `stubSize` bytes of `stub` to the start of a page of its own
+// within rel32 range of the site, follows them with a jump back to the instruction after the replaced
+// bytes, and writes a 5-byte `jmp` to the page over the site, the rest of the replaced bytes as NOPs.
+// The stub must perform whatever of the replaced instructions it still needs, and position-independent
+// code is required: it runs at the page's address. It resumes the game by running off its own end, or by
+// jumping to page + stubSize. A stub that keeps data must place it after a jump that ends its code (to
+// page + stubSize, or wherever it means to go), never where the code could run off into it. `page`
+// receives the stub's first byte: the page stays readable, writable and executable for the process
+// lifetime and is never freed (a thread may still be running the stub), so the host may keep the
+// stub's data there. False, `page` null and nothing written, when the bytes there differ from `expected`
+// (another game build), when `expected` is not whole instructions or not 5 to 32 bytes, when the stub is
+// empty or longer than 4082 bytes (a page less the jump back), when the site is already patched or
+// hooked, when no page can be had within rel32 range, or when the write fails.
+// The patch joins the open group like a hook: rollback_group,
 // rollback_to and shutdown write the site's own bytes back, unless something else has overwritten the
 // patch since (logged, left as it is). Each write, and each write back, runs with every other thread
 // of the process suspended, as MinHook's enabling does, and is refused (retried briefly first) while
@@ -30,6 +43,8 @@ bool enable_all();  // enables the hooks created since the open group began
 // Every refusal and failure is logged under `name`; protections changed for the write are restored.
 bool patch_site(void* site, const void* expected, size_t expectedSize, const void* stub, size_t stubSize, void** page,
                 const char* name);
+// Host only: whether a patch_site patch is in place at `site`, so it has not been written back.
+bool site_patched(const void* site);
 // Host only. Each mod's start is a group: rollback_group disables and removes the hooks created
 // since begin_group, for a mod that did not start. rollback_to removes every hook created since
 // mark() returned, newest first, so detours chained on one function unwind in order: the mods'
@@ -43,7 +58,7 @@ void rollback_to(size_t mark);
 void restore_sites();
 void shutdown();  // host only: restore_sites, disable all hooks, drain in-flight detours, uninitialise
 
-#ifdef PG_HOOKS_TEST
+#ifdef PM_HOOKS_TEST
 // tests/hooks_test.cpp only: while set, patch_site finds no page within rel32 range of a site.
 extern bool g_noPageNear;
 #endif
@@ -56,4 +71,4 @@ struct Guard {
   Guard& operator=(const Guard&) = delete;
 };
 
-}  // namespace pg::hooks
+}  // namespace pm::hooks

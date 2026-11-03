@@ -7,7 +7,7 @@
 // its room, with nobody near and a video camera on it, it now and then stands visible to the camera
 // alone, and it acts more there; in a hunt, having lost everyone far from its room, it heads home
 // instead of searching. It never stops chasing anyone it detects, wherever they are.
-namespace pg::tells {
+namespace pm::tells {
 
 constexpr float kGoryoAlone = 10.0f;        // metres: no living player this near
 constexpr float kGoryoShowMin = 30.0f;      // seconds of those conditions between its camera showings
@@ -76,4 +76,4 @@ struct HomeSearch {
   }
 };
 
-}  // namespace pg::tells
+}  // namespace pm::tells

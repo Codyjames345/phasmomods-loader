@@ -10,7 +10,7 @@ const int kFirst = 1, kSecond = 2;
 // A name already published is refused, so a later mod cannot take over a table that other mods
 // already found under it: the first table stays.
 void service_name_published_once() {
-  pg::services::Registry services;
+  pm::services::Registry services;
   CHECK(services.publish("ghost-tells.v1", &kFirst));
   CHECK(!services.publish("ghost-tells.v1", &kSecond));
   CHECK(services.find("ghost-tells.v1") == &kFirst);
@@ -22,7 +22,7 @@ void service_name_published_once() {
 // Nobody published the name, or the name is null: null. Once the mods stop the host forgets every
 // table, and a restarted mod publishes its own again.
 void unknown_and_cleared_names_are_null() {
-  pg::services::Registry services;
+  pm::services::Registry services;
   CHECK(services.find("nobody.v1") == nullptr && services.find(nullptr) == nullptr);
   CHECK(!services.publish(nullptr, &kFirst));
   CHECK(services.publish("ghost-tells.v1", &kFirst));

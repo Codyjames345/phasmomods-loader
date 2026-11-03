@@ -5,7 +5,7 @@
 // The Asterion's rules for one door, kept free of game calls so they can be tested offline. It never
 // closes a door; a closed door in its way stops it while it batters the door for a few seconds, then
 // bursts it open, and that door stays jammed open for the contract.
-namespace pg::custom {
+namespace pm::custom {
 
 constexpr float kAsterionReach = 1.1f;     // metres from the middle of a door's leaf: the door is in reach
 constexpr float kAsterionBatter = 3.0f;    // seconds of battering before the door gives way
@@ -85,4 +85,4 @@ struct DoorTrack {
   bool battering() const { return state == State::Battering; }
 };
 
-}  // namespace pg::custom
+}  // namespace pm::custom

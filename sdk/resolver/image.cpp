@@ -4,7 +4,7 @@
 #include <cstring>
 #include <fstream>
 
-namespace pg::sdk {
+namespace pm::sdk {
 namespace {
 
 constexpr uint32_t kChainInfo = 0x4;     // UNW_FLAG_CHAININFO
@@ -181,6 +181,15 @@ std::span<const uint8_t> CodeImage::function(uint64_t rva) const {
   return image_.subspan(first->begin, end - first->begin);
 }
 
+std::span<const uint8_t> CodeImage::leaf(uint64_t rva) const {
+  if (rva >= image_.size() || chunk_at(rva)) return {};
+  auto next = std::upper_bound(chunks_.begin(), chunks_.end(), rva,
+                               [](uint64_t r, const Chunk& c) { return r < c.begin; });
+  uint64_t end = std::min<uint64_t>(rva + kMaxLeaf, image_.size());
+  if (next != chunks_.end()) end = std::min<uint64_t>(end, next->begin);
+  return image_.subspan(rva, end - rva);
+}
+
 uint64_t CodeImage::function_start(uint64_t rva) const {
   const Chunk* first = primary_chunk(rva);
   return first ? first->begin : 0;
@@ -215,4 +224,4 @@ std::vector<uint8_t> map_pe_file(const std::filesystem::path& file) {
   return image;
 }
 
-}  // namespace pg::sdk
+}  // namespace pm::sdk

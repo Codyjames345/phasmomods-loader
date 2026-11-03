@@ -4,7 +4,7 @@
 #include "entry.h"
 #include "types.h"
 
-using pg::sdk::canonical_type;
+using pm::sdk::canonical_type;
 
 namespace {
 // Both spellings of a type, the runtime's and the dump's, must reach the same canonical form.
@@ -58,13 +58,13 @@ int main() {
   CHECK(canonical_type("") == "");
 
   // The entry vocabulary: map headers name only what an entry needs.
-  constexpr pg::sdk::EntryDesc entry{.key = "Ghost.speed",
-                                     .kind = pg::sdk::Kind::Field,
-                                     .confidence = pg::sdk::Confidence::Live,
-                                     .flags = pg::sdk::kOptional | pg::sdk::kTrack,
+  constexpr pm::sdk::EntryDesc entry{.key = "Ghost.speed",
+                                     .kind = pm::sdk::Kind::Field,
+                                     .confidence = pm::sdk::Confidence::Live,
+                                     .flags = pm::sdk::kOptional | pm::sdk::kTrack,
                                      .type = "float"};
   CHECK(entry.owner == nullptr && entry.params.empty() && entry.facts.empty());
-  CHECK(entry.patternOffset == 0 && (entry.flags & pg::sdk::kStatic) == 0);
+  CHECK(entry.patternOffset == 0 && (entry.flags & pm::sdk::kStatic) == 0);
 
   return g_failures ? 1 : 0;
 }

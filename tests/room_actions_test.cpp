@@ -1,34 +1,36 @@
+// Offline test of the join guard's game steps (host/room_actions.cpp) over the fake game: the kick reaches the card that
+// names the actor and no other, and an entry that did not resolve, or a card that cannot be proved to be theirs, makes the
+// step report that it did not run, so the guard asks again rather than believing it did. Run: build\room_actions_test.exe
 #include <windows.h>
 
-#include <cstring>
 #include <vector>
 
+#include "LevelController.h"
+#include "Photon.h"
+#include "Player.h"
+#include "ServerManager.h"
+#include "UnityObject.h"
 #include "check.h"
-#include "game.h"
+#include "fake_game.h"
+#include "game_api.h"
+#include "managed_exception.h"
+#include "room_actions.h"
+#include "runtime.h"
 
 namespace {
-char managerClass[] = "ServerManager";
-char objectClass[] = "Object";
-char profileClass[] = "MultiplayerProfile";
-char spotClass[] = "PlayerSpot";  // Network/PlayerSpot, unavailable through a top-level class lookup.
-char listClass[] = "List`1";
-int photonField;
-il2cpp::Object managerType{};
+namespace fake = pm::fake;
+namespace map = pm::map;
+
+int managerClass, profileClass, spotClass, otherClass;
+constexpr int32_t kCards = 0x10, kSpot = 0x18, kPlayer = 0x20, kActor = 0x28, kStartButton = 0x30;
+
 struct Node {
-  il2cpp::Object object{};
-  char fields[0x100]{};
-  void* player = nullptr;
-  int actor = 0;
+  void* klass = nullptr;
+  char fields[0x40]{};
 };
 Node sceneManager, firstCard, secondCard, firstSpot, secondSpot, firstPlayer, secondPlayer;
-struct CardArray {
-  il2cpp::Array array{};
-  void* entries[2]{};
-} cardArray;
-il2cpp::List fixtureCards{};
-bool fieldAvailable = true;
-const char* missingMethod = "";
-int topLevelSpotLookups = 0, fieldLookups = 0, kicks = 0, leaves = 0;
+int kicks = 0, leaves = 0;
+bool kickThrows = false, leaveThrows = false;
 void* kickedCard = nullptr;
 std::vector<void*> holds;  // gc_hold's handles (index + 1); a released one is null
 bool held(void* value) {
@@ -39,23 +41,34 @@ bool held(void* value) {
 
 /** Supply deterministic time for the production scene-search throttle. */
 ULONGLONG WINAPI clock_ms() { return 1000; }
-/** Return the fixture's manager through the production discovery boundary. */
-void* find_manager(il2cpp::Object* type, const void*) {
-  CHECK(type == &managerType);
+void* find_manager(void* type, bool includeInactive, const void*) {
+  CHECK(type == phasmo::ServerManager::type.type_object());
+  CHECK(!includeInactive);
   return &sceneManager;
 }
-/** Record only calls made with the manager resolved by production code. */
 void leave_server(void* manager, const void*) {
   CHECK(manager == &sceneManager);
   ++leaves;
+  if (leaveThrows) throw Il2CppExceptionWrapper{nullptr};
 }
-/** Record which ID card the production actor lookup selected. */
 void kick_player(void* manager, void* card, const void*) {
   CHECK(manager == &sceneManager);
   ++kicks;
   kickedCard = card;
+  if (kickThrows) throw Il2CppExceptionWrapper{nullptr};
 }
+bool queueRunning = true;
+bool message_queue_running(const void*) { return queueRunning; }
+void* levelController = nullptr;
+void answer_nothing() {}  // stands for each of the guard's readings: nothing here calls them
+int32_t actor_number(void* player, const void*) {
+  return *reinterpret_cast<int32_t*>(static_cast<char*>(player) + kActor);
 }
+template <class T>
+void put(Node& object, int32_t offset, T value) {
+  *reinterpret_cast<T*>(reinterpret_cast<char*>(&object) + offset) = value;
+}
+}  // namespace
 
 #define GetTickCount64 clock_ms
 #include "../host/room_actions.cpp"
@@ -70,138 +83,200 @@ uint32_t gc_hold(void* object) {
 void gc_release(uint32_t handle) {
   if (handle) holds[handle - 1] = nullptr;
 }
-/** Model top-level metadata without exposing the nested Network/PlayerSpot class. */
-Class* cls(const char*, const char*, const char* name) {
-  if (std::strcmp(name, "ServerManager") == 0) return managerClass;
-  if (std::strcmp(name, "Object") == 0) return objectClass;
-  if (std::strcmp(name, "PlayerSpot") == 0) ++topLevelSpotLookups;
-  return nullptr;
-}
-/** Resolve only the manager type used by scene discovery. */
-Object* type_object(Class* klass) { return klass == managerClass ? &managerType : nullptr; }
-/** Bind the native entry points while allowing required-method failures. */
-void* method_ptr(Class* klass, const char* name, int argc) {
-  if (std::strcmp(name, missingMethod) == 0) return nullptr;
-  if (klass == objectClass && std::strcmp(name, "FindObjectOfType") == 0 && argc == 1)
-    return reinterpret_cast<void*>(&find_manager);
-  if (klass == managerClass && std::strcmp(name, "LeaveServer") == 0 && argc == 0)
-    return reinterpret_cast<void*>(&leave_server);
-  if (klass == managerClass && std::strcmp(name, "KickPlayer") == 0 && argc == 1)
-    return reinterpret_cast<void*>(&kick_player);
-  return nullptr;
-}
-/** Read runtime class identity from the same object header as the real bindings. */
-Class* class_of(const void* object) {
-  return object ? static_cast<const Object*>(object)->klass : nullptr;
-}
-/** Reject null objects and incompatible offset contents before reading their fields. */
-bool is_class(const void* object, const char* name) {
-  auto* klass = class_of(object);
-  return klass && std::strcmp(static_cast<const char*>(klass), name) == 0;
-}
-/** Expose photonPlayer only on the nested runtime class. */
-Field* field_info(Class* klass, const char* name) {
-  ++fieldLookups;
-  return fieldAvailable && klass == spotClass && std::strcmp(name, "photonPlayer") == 0
-      ? &photonField : nullptr;
-}
-/** Model the runtime field API's null-metadata guard. */
-void* reference_field(void* object, Field* field) {
-  return object && field == &photonField ? static_cast<Node*>(object)->player : nullptr;
-}
-/** Consume managed exception reports without an external log file. */
 void log_exception(const char*, const void*) {}
-}
-
-namespace pg::game {
-/** All fixture Unity objects remain alive for the duration of a case. */
-bool alive(void* object) { return object != nullptr; }
-/** Null references have no actor, matching the game's binding. */
-int actor_number(void* player) { return player ? static_cast<Node*>(player)->actor : 0; }
-}
-namespace pg::log {
-/** Keep offline tests independent of the user's game log. */
-void write(const char*, ...) {}
-}
+}  // namespace il2cpp
 
 namespace {
-/** Reset production discovery state and create two cards with distinct actors. */
-void reset() {
-  pg::room_actions::api = {};
-  pg::room_actions::g_manager = nullptr;
-  pg::room_actions::g_nextSearch = 0;
-  sceneManager = {}; firstCard = {}; secondCard = {};
-  firstSpot = {}; secondSpot = {}; firstPlayer = {}; secondPlayer = {};
-  sceneManager.object.klass = managerClass;
-  firstCard.object.klass = secondCard.object.klass = profileClass;
-  firstSpot.object.klass = secondSpot.object.klass = spotClass;
-  firstPlayer.actor = 4;
-  secondPlayer.actor = 9;
-  firstSpot.player = &firstPlayer;
-  secondSpot.player = &secondPlayer;
-  fixtureCards = {};
-  fixtureCards.obj.klass = listClass;
-  fixtureCards.items = &cardArray.array;
-  fixtureCards.size = 2;
-  cardArray.array.max_length = 2;
-  cardArray.entries[0] = &firstCard;
-  cardArray.entries[1] = &secondCard;
-  il2cpp::set_field(&sceneManager, 0xC8, &fixtureCards);
-  il2cpp::set_field(&firstCard, 0x60, &firstSpot);
-  il2cpp::set_field(&secondCard, 0x60, &secondSpot);
-  fieldAvailable = true;
-  missingMethod = "";
-  topLevelSpotLookups = fieldLookups = kicks = leaves = 0;
+
+// The lobby with two cards, actors 4 and 9, and every entry the steps read but the one `without` names.
+void give(const pm::sdk::EntryDesc* without = nullptr) {
+  pm::room_actions::g_manager = nullptr;
+  pm::room_actions::g_nextSearch = 0;
+  fake::reset();
+  for (Node* n : {&sceneManager, &firstCard, &secondCard, &firstSpot, &secondSpot, &firstPlayer, &secondPlayer}) *n = {};
+  sceneManager.klass = &managerClass;
+  firstCard.klass = secondCard.klass = &profileClass;
+  firstSpot.klass = secondSpot.klass = &spotClass;
+  put(firstPlayer, kActor, 4);
+  put(secondPlayer, kActor, 9);
+  put(firstSpot, kPlayer, static_cast<void*>(&firstPlayer));
+  put(secondSpot, kPlayer, static_cast<void*>(&secondPlayer));
+  put(firstCard, kSpot, static_cast<void*>(&firstSpot));
+  put(secondCard, kSpot, static_cast<void*>(&secondSpot));
+  put(sceneManager, kCards, fake::list({&firstCard, &secondCard}));
+  fake::type(map::ServerManager, &managerClass);
+  fake::type(map::MultiplayerProfile, &profileClass);
+  fake::type(map::PlayerSpot, &spotClass);
+  fake::field(map::ServerManager_cards, kCards);
+  fake::field(map::ProfileCard_spot, kSpot);
+  fake::field(map::PlayerSpot_photonPlayer, kPlayer);
+  fake::method(map::UnityObject_FindObjectOfType, reinterpret_cast<void*>(&find_manager));
+  fake::method(map::ServerManager_LeaveServer, reinterpret_cast<void*>(&leave_server));
+  fake::method(map::ServerManager_KickPlayer, reinterpret_cast<void*>(&kick_player));
+  fake::method(map::PhotonPlayer_get_ActorNumber, reinterpret_cast<void*>(&actor_number));
+  fake::method(map::PhotonNetwork_get_IsMessageQueueRunning, reinterpret_cast<void*>(&message_queue_running));
+  for (const pm::sdk::EntryDesc* d : {&map::PhotonNetwork_get_InRoom, &map::PhotonNetwork_get_LocalPlayer,
+                                      &map::PhotonNetwork_get_MasterClient, &map::PhotonNetwork_get_PlayerList,
+                                      &map::PhotonNetwork_get_CurrentRoom, &map::PhotonNetwork_get_OfflineMode,
+                                      &map::PhotonRoom_get_IsVisible})
+    fake::method(*d, reinterpret_cast<void*>(&answer_nothing));
+  fake::static_field(map::LevelController_instance, &levelController, sizeof levelController, true);
+  fake::field(map::ServerManager_startGameButton, kStartButton);
+  put(sceneManager, kStartButton, static_cast<void*>(&firstSpot));  // any object stands for the button
+  queueRunning = true;
+  if (without) fake::forget(*without);
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  kicks = leaves = 0;
+  kickThrows = leaveThrows = false;
   kickedCard = nullptr;
 }
+
+void kick_reaches_the_actors_card() {
+  give();
+  CHECK(pm::room_actions::lobby_open());
+  CHECK(pm::room_actions::kick(9));
+  CHECK(kicks == 1 && kickedCard == &secondCard);
+  CHECK(!pm::room_actions::kick(27));
+  CHECK(kicks == 1);
+  CHECK(pm::room_actions::leave_lobby());
+  CHECK(leaves == 1);
 }
 
-/** Exercise startup and actor selection through the real room-actions implementation. */
-int main() {
-  reset();
-  CHECK(pg::room_actions::resolve());
-  CHECK(topLevelSpotLookups == 0);
-  CHECK(fieldLookups == 0);
-  CHECK(pg::room_actions::kick(9));
-  CHECK(kicks == 1 && kickedCard == &secondCard);
-  CHECK(fieldLookups == 1);
-  CHECK(!pg::room_actions::kick(27));
-  CHECK(kicks == 1);
-  CHECK(pg::room_actions::leave_lobby());
-  CHECK(leaves == 1);
+// ServerManager.LoadScene, a contract's start on every client, stops Photon's queue while the old scene is still up and the
+// lobby's manager still alive. That is no lobby frame: nothing is judged and no mod is switched while a contract's scene
+// loads. It is one again when the game turns the queue back on. A build without the getter never reads as a lobby frame,
+// and the host starts no mod on such a build (room_actions::missing).
+void a_contract_loading_is_no_lobby_frame() {
+  give();
+  CHECK(pm::room_actions::lobby_open());
+  queueRunning = false;
+  CHECK(!pm::room_actions::lobby_open());
+  queueRunning = true;
+  CHECK(pm::room_actions::lobby_open());
+  give(&map::PhotonNetwork_get_IsMessageQueueRunning);
+  CHECK(!pm::room_actions::lobby_open());
+  CHECK(pm::room_actions::missing().find("PhotonNetwork.get_IsMessageQueueRunning") != std::string::npos);
+  give();
+  CHECK(pm::room_actions::missing().empty());
+}
 
-  reset();
-  fieldAvailable = false;
-  CHECK(pg::room_actions::resolve());
-  CHECK(!pg::room_actions::kick(9));
-  CHECK(!pg::room_actions::kick(0));
+// Actor numbers that cannot be read are all 0: an ask for actor 0 must not find the first card.
+void an_unknown_actor_has_no_card() {
+  give(&map::PhotonPlayer_get_ActorNumber);
+  CHECK(!pm::room_actions::kick(0));
+  CHECK(!pm::room_actions::kick(9));
   CHECK(kicks == 0);
-
-  reset();
-  CHECK(pg::room_actions::resolve());
-  firstSpot.object.klass = objectClass;
-  secondSpot.object.klass = objectClass;
-  CHECK(!pg::room_actions::kick(9));
-  CHECK(kicks == 0 && fieldLookups == 0);
-
-  reset();
-  CHECK(pg::room_actions::resolve());
-  firstSpot.player = secondSpot.player = nullptr;
-  CHECK(!pg::room_actions::kick(9));
-  CHECK(!pg::room_actions::kick(0));
+  give();
+  CHECK(!pm::room_actions::kick(0));
   CHECK(kicks == 0);
+}
 
-  for (const char* method : {"FindObjectOfType", "LeaveServer", "KickPlayer"}) {
-    reset();
-    missingMethod = method;
-    CHECK(!pg::room_actions::resolve());
+// Without any one entry the step did not run, and says so: the guard asks again later and believes nothing happened.
+void each_entry_missing_stops_the_step() {
+  give();
+  CHECK(pm::room_actions::available());
+  CHECK(pm::room_actions::missing().empty());
+  for (const pm::sdk::EntryDesc* d :
+       {&map::ServerManager, &map::MultiplayerProfile, &map::ServerManager_LeaveServer, &map::PhotonPlayer_get_ActorNumber,
+        &map::PlayerSpot, &map::ServerManager_cards, &map::ProfileCard_spot, &map::PlayerSpot_photonPlayer,
+        &map::UnityObject_FindObjectOfType, &map::ServerManager_KickPlayer}) {
+    give(d);
+    CHECK(!pm::room_actions::available());
+    CHECK(pm::room_actions::missing().find(d->key) != std::string::npos);  // the start gate's line names it
   }
+  for (const pm::sdk::EntryDesc* d :
+       {&map::ServerManager, &map::MultiplayerProfile, &map::PlayerSpot, &map::ServerManager_cards, &map::ProfileCard_spot,
+        &map::PlayerSpot_photonPlayer, &map::UnityObject_FindObjectOfType, &map::ServerManager_KickPlayer}) {
+    give(d);
+    CHECK(!pm::room_actions::kick(9));
+    CHECK(kicks == 0);
+  }
+  for (const pm::sdk::EntryDesc* d : {&map::ServerManager, &map::UnityObject_FindObjectOfType, &map::ServerManager_LeaveServer}) {
+    give(d);
+    CHECK(!pm::room_actions::leave_lobby());
+    CHECK(leaves == 0);
+  }
+  for (const pm::sdk::EntryDesc* d : {&map::ServerManager, &map::UnityObject_FindObjectOfType}) {
+    give(d);
+    CHECK(!pm::room_actions::lobby_open());
+  }
+}
 
-  reset();  // the ServerManager kept between frames stays reachable for the GC until it is dropped
-  CHECK(pg::room_actions::resolve());
-  CHECK(pg::room_actions::leave_lobby());
+// What the guard reads to know where it is. A build lacking one could not see a public lobby or a player, so `opening`
+// answers Declined and its line names the key (mod_session_test).
+void the_guards_own_readings_are_required() {
+  for (const pm::sdk::EntryDesc* d : {&map::PhotonNetwork_get_InRoom, &map::PhotonNetwork_get_LocalPlayer,
+                                      &map::PhotonNetwork_get_MasterClient, &map::PhotonNetwork_get_PlayerList,
+                                      &map::PhotonNetwork_get_CurrentRoom, &map::PhotonNetwork_get_OfflineMode,
+                                      &map::PhotonRoom_get_IsVisible, &map::LevelController_instance,
+                                      &map::PhotonPlayer_get_ActorNumber, &map::PhotonNetwork_get_IsMessageQueueRunning}) {
+    give(d);
+    CHECK(!pm::room_actions::available());
+    CHECK(pm::room_actions::missing().find(d->key) != std::string::npos);
+  }
+  give();
+  CHECK(pm::room_actions::missing().empty());
+}
+
+void the_start_button_is_the_lobbys_own() {
+  give();
+  CHECK(pm::room_actions::is_start_button(&firstSpot));
+  CHECK(!pm::room_actions::is_start_button(&secondSpot) && !pm::room_actions::is_start_button(nullptr));
+  give(&map::ServerManager_startGameButton);
+  CHECK(!pm::room_actions::is_start_button(&firstSpot));
+  give(&map::ServerManager);
+  CHECK(!pm::room_actions::is_start_button(&firstSpot));
+}
+
+void a_card_of_another_shape_is_no_card() {
+  give();
+  firstSpot.klass = secondSpot.klass = &otherClass;
+  CHECK(!pm::room_actions::kick(9));
+  CHECK(kicks == 0);
+  give();
+  firstCard.klass = secondCard.klass = &otherClass;
+  CHECK(!pm::room_actions::kick(9));
+  CHECK(kicks == 0);
+  give();
+  put(firstSpot, kPlayer, static_cast<void*>(nullptr));
+  put(secondSpot, kPlayer, static_cast<void*>(nullptr));
+  CHECK(!pm::room_actions::kick(9));
+  CHECK(kicks == 0);
+  give();
+  fake::destroy(&secondCard);
+  CHECK(!pm::room_actions::kick(9));
+  CHECK(kicks == 0);
+}
+
+void a_step_that_threw_did_not_run() {
+  give();
+  kickThrows = true;
+  CHECK(!pm::room_actions::kick(9));
+  leaveThrows = true;
+  CHECK(!pm::room_actions::leave_lobby());
+}
+
+// The ServerManager kept between frames stays reachable for the GC until it is dropped.
+void the_manager_is_held() {
+  give();
+  CHECK(pm::room_actions::leave_lobby());
   CHECK(held(&sceneManager));
-  reset();
+  pm::room_actions::g_manager = nullptr;
   CHECK(!held(&sceneManager));
+}
+
+}  // namespace
+
+int main() {
+  kick_reaches_the_actors_card();
+  a_contract_loading_is_no_lobby_frame();
+  an_unknown_actor_has_no_card();
+  each_entry_missing_stops_the_step();
+  the_guards_own_readings_are_required();
+  the_start_button_is_the_lobbys_own();
+  a_card_of_another_shape_is_no_card();
+  a_step_that_threw_did_not_run();
+  the_manager_is_held();
   return g_failures ? 1 : 0;
 }

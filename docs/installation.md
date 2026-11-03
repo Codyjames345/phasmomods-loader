@@ -27,18 +27,42 @@ investigator's form). As the Mimic, Crouch on its own picks the next type to cop
 ## Requirements
 
 - Windows x64 and a Steam installation of Phasmophobia.
-- The audited game binaries from Steam build 25811160. The mods check both game
-  library hashes and stay inactive on an unsupported update.
 - .NET and administrator access are not required. The installer puts PhasmoMods Loader
   in `%LOCALAPPDATA%\PhasmoModsLoader`, outside the game's installation folder.
 
 ## The notice
 
-When the mods load, a notice pinned to the main menu's board asks you first. It
-explains the ban risk, voice recording (when a mod that records voices is on), and
-that your progress is at your own risk, and names every installed mod. **I agree**
-starts the ticked mods and is remembered until the notice changes. **Play without
-mods** keeps the game unmodified until you restart it.
+When the game reaches its main menu, a notice pinned to the board asks you first. It
+explains the ban risk, that a mod is a program that runs on your computer, voice
+recording (when a mod that records voices is on), and that your progress is at your own
+risk, and names every installed mod. No mod has
+been loaded yet: nothing of theirs runs until you answer. **I agree** loads and starts
+the ticked mods, and is remembered until the notice or the game's version changes.
+**Play without mods** loads none and takes the loader's hook back out of the game, and the notice asks again the next
+time you start.
+
+## When the game updates
+
+You don't need a new release of the mods for the game to update.
+
+The first time you start a version of the game these mods haven't been checked
+against, the notice asks again, with a paragraph saying so. The mods can't tell whether
+the update changed the anti-cheat, so playing then carries more risk than usual. It
+asks once for each new version.
+
+If you agree, every mod that still finds everything it needs in the game runs. Each
+one that doesn't stays off, and its row in the **Mods** panel says what it lacks. A mod
+that needs one of those stays off too. Your choice of mods is kept, so they come back
+on their own when a later release or game update fixes them.
+
+Some updates leave the mods unable to run at all. If the game moves to another Unity or
+metadata version, the loader's own layouts no longer fit it: the loader stays out of the
+game and hooks nothing, there is no notice and no **Mods** button, the game plays without
+mods, and `mods.log` names both versions. If the game changes what the
+lobby's rules need, no mod starts, and `mods.log` names what is missing. If the notice
+itself can't be drawn, the game runs without mods. In both cases the **Mods** panel
+says why when the game still lets it open. If there is no **Mods** button, `mods.log`
+says why. The game itself plays on without mods.
 
 ## Switching mods in the game
 
@@ -49,11 +73,36 @@ while you are in a lobby.
 
 ## Lobbies with mods
 
-A lobby whose host runs mods admits only players running the same mods, in the
-same versions. If yours differ, you leave the lobby and a note on the board says
-which mods differ. Players without the mod may stay when every mod the host runs
-works without them, as every current mod does. A mod that needs everyone to have
-it makes the host remove players without it, with the game's own kick.
+Mods only run in private lobbies and single player. In a public lobby every mod switches
+off, the host's too, with a note saying so, and comes back on when you leave.
+
+**The host's mods are the lobby's mods.** Every player in the lobby needs the same mods
+as the host, in the same versions. Nothing a player who joins does changes what anyone
+else runs.
+
+- **You join with exactly the host's mods:** you play with them as usual.
+- **You're missing one of the host's mods, or have another version of one:** you leave
+  the lobby, and a note lists every mod the lobby needs, with yours that don't match
+  first, highlighted, and what's wrong with each.
+- **You have extra mods the host doesn't run:** you stay, your extra mods switch off for
+  that lobby with a note naming them, and they come back on when you leave.
+- **The host doesn't run PhasmoMods:** all your mods switch off for that lobby, with a
+  note, and come back on when you leave.
+- **A player without PhasmoMods joins a modded lobby:** the host removes them with the
+  game's own kick, within about ten seconds.
+
+**Starting a contract.** When the host presses Start, the contract waits until every
+player's mods are confirmed. If someone is still being checked, a note names them and
+the host presses Start again once they are. As the contract starts, the lobby closes
+before anyone else can join, so everyone in a contract has the same mods. Nobody is
+kicked because the host pressed Start.
+
+## Mods that need other mods
+
+Some mods need another mod to work: Custom Ghosts needs Spectral Flame. Switching a mod
+on in the **Mods** panel switches on what it needs, and switching one off switches off
+the mods that need it. If a mod can't run, every mod that needs it stays off too, and its
+row in the panel says why.
 
 ## Install
 
@@ -71,8 +120,8 @@ it makes the host remove players without it, with the game's own kick.
 To load automatically instead, copy PhasmoMods Loader's Steam launch option into
 Phasmophobia's **Properties > General > Launch Options**, keeping the quotes and
 `%command%` exactly as shown, and start the game with Steam's **Play** button.
-PhasmoMods Loader waits for the menu and loads the ticked mods. The program shows the
-exact text to copy. It has this form:
+PhasmoMods Loader waits for the menu, and the notice appears there. The program shows
+the exact text to copy. It has this form:
 
 ```text
 "<install folder>\current\PhasmoMods Loader.exe" --steam %command%
@@ -110,10 +159,6 @@ Windows **Settings > Apps**. Remove the Steam launch option to launch without mo
 Your settings stay in `%LOCALAPPDATA%\PhasmoMods` until you delete that folder. No
 game file is replaced.
 
-Game updates require an audit of native bindings and tests before the supported
-hashes can change. The build check prevents using known offsets with unknown
-binaries; it does not guarantee compatibility with future updates.
-
 ## Troubleshooting
 
 - **Game not found:** launch through Steam and wait for the menu before attaching.
@@ -121,15 +166,21 @@ binaries; it does not guarantee compatibility with future updates.
 - **Already loaded:** use the **Mods** button in the game to change mods; restart
   the game to load another version.
 - **No mods were found:** run Setup again to repair the installation.
-- **Unsupported build:** use a release audited for your installed game build.
+- **A mod's row says "This game build lacks...":** a game update changed something
+  that mod needs. It stays off until a release or game update fixes it, and your other
+  mods carry on.
+- **The notice never appears and no mod runs:** read `mods.log`. Lines starting
+  `consent:` say why the notice could not be shown, and `ModHost inactive:` says when the
+  game moved to an engine the loader can't run on. If neither is there, the notice is still
+  waiting for the main menu to come into view, and the game plays without mods until it does.
 - **Access denied:** run Steam and PhasmoMods Loader as the same Windows user with
   matching privilege levels. Normal operation does not require elevation.
 - **Menu or activation timeout:** inspect the logs and restart before retrying.
   A loaded DLL is not proof that gameplay initialization succeeded.
 
 Native diagnostics are in `%LOCALAPPDATA%\PhasmoMods\mods.log`. PhasmoMods Loader
-checks fresh entries for the selected process, including `ModHost active`; each
-mod then logs its own start. Steam wrapper game logs are written under
+checks fresh entries for the selected process, including `ModHost active`; once you
+agree, each mod logs its own load and start. Steam wrapper game logs are written under
 `%LOCALAPPDATA%\PhasmoMods\logs` unless you supplied an explicit Unity
 `-logFile` argument. Preserve that file when reporting a startup failure. Review
 logs before sharing them; game logs can contain account identifiers.

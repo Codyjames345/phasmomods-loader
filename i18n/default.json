@@ -1,0 +1,236 @@
+// PhasmoMods Loader's player-facing text: the host's popups and the Mods panel, and the launcher's window.
+// Each text marked PM_TEXT_AI was written by AI before the AI policy (AI_POLICY.md); the author replaces it and
+// takes the mark off; one marked PM_TEXT_TODO is a placeholder waiting for the author's words. A {{token}} is a
+// value the code fills in. Keep one entry per line.
+{
+  "consent.account": "<b>Your account is at risk.</b> The game's anti-cheat can report a modified game to Kinetic Games, which may ban the account. Mods only run in private lobbies and single player, and switch off in public lobbies. Play only with friends who also agreed to this.",  // PM_TEXT_AI
+  "consent.agree": "I agree",  // PM_TEXT_AI
+  "consent.decline": "Play without mods",  // PM_TEXT_AI
+  "consent.installed": "Mods installed: <b>{{mods}}</b>. Choose which run from the Mods button on the main menu.",  // PM_TEXT_AI
+  "consent.installed-none": "none",  // PM_TEXT_AI
+  "consent.intro": "These mods change Phasmophobia in ways Kinetic Games does not support. Read this before you agree.",  // PM_TEXT_AI
+  "consent.programs": "<b>Mods are programs.</b> A mod runs its own code on your computer, with your permissions, and can do anything a program can. Only install community mods from authors you trust, and only when their source code is publicly available.",
+  "consent.progress": "<b>Your progress is at your own risk.</b> Mods can break saves, progress, money and items. Nobody who made these mods is responsible for anything you lose.",  // PM_TEXT_AI
+  "consent.title": "Before you play with mods",  // PM_TEXT_AI
+  "consent.update": "<b>The game has updated.</b> These mods haven't been checked against this version of Phasmophobia. Mods that still find everything they need will run, and the rest stay off. The mods can't tell whether the update changed the anti-cheat, so playing now carries more risk than usual.",  // PM_TEXT_AI
+  "consent.voices": "<b>Voices are recorded.</b> When it is on, {{mods}} keeps what other players say in memory during a contract and can play it back to the players in your lobby. Nothing is written to disk, and it is forgotten when the contract ends. Only players who agreed to this notice are recorded.",  // PM_TEXT_AI
+  "deps.and-more": "{{first}} and {{count}} more",  // PM_TEXT_AI
+  "deps.cascade-off-many": "{{others}} need {{mod}}, so they are switched off together.",  // PM_TEXT_AI
+  "deps.cascade-off-one": "{{others}} needs {{mod}}, so they are switched off together.",  // PM_TEXT_AI
+  "deps.cascade-on": "{{mod}} needs {{others}}, so they are switched on together.",  // PM_TEXT_AI
+  "deps.cycle": "Its required mods form a cycle: {{mods}}",  // PM_TEXT_AI
+  "deps.incompatible": "Can't run beside {{mod}}",  // PM_TEXT_AI
+  "deps.names-itself": "It names itself as a dependency",  // PM_TEXT_AI
+  "deps.names-twice": "It names one dependency twice",  // PM_TEXT_AI
+  "deps.needs": "Needs {{mods}}",  // PM_TEXT_AI
+  "deps.needs-not-started": "Needs {{mod}}, which did not start",  // PM_TEXT_AI
+  "deps.too-many": "More than {{count}} mods are on",  // PM_TEXT_AI
+  "deps.version-needed": "{{mod}} {{minimum}} or newer, and {{has}}",  // PM_TEXT_AI
+  "deps.version-unknown": "its version is unknown",  // PM_TEXT_AI
+  "deps.you-have": "you have {{version}}",  // PM_TEXT_AI
+  "launcher.already-running-change-which": "The loader is already running in this game. Change which mods run from the Mods button on the game's main menu; restart the game to change their versions.",  // PM_TEXT_AI
+  "launcher.another-copy-loading-wait": "Another copy of PhasmoMods Loader is loading this game. Wait for it to finish.",  // PM_TEXT_AI
+  "launcher.another-copy-starting-phasmophobia": "Another copy of PhasmoMods Loader is starting Phasmophobia. Wait for it to finish.",  // PM_TEXT_AI
+  "launcher.mod-dll-unreadable": "Its DLL could not be read or copied. Extract the package again.",  // PM_TEXT_AI
+  "launcher.mod-missing-dll": "It is missing its DLL. Extract the package again.",  // PM_TEXT_AI
+  "launcher.mod-repeats-id": "It repeats the id of another mod.",  // PM_TEXT_AI
+  "launcher.attach": "&Attach to running game",  // PM_TEXT_AI
+  "launcher.check-updates-starting-installed": "Could not check for updates. Starting the installed version.",  // PM_TEXT_AI
+  "launcher.checking-updates": "Checking for updates...",  // PM_TEXT_AI
+  "launcher.clipboard-unavailable-select-copy": "The clipboard is unavailable. Select and copy the launch option above.",  // PM_TEXT_AI
+  "launcher.command-too-long-shorten": "The game command is too long. Shorten the Steam launch options.",  // PM_TEXT_AI
+  "launcher.copied-native-library-cannot": "The copied native library cannot be verified. Restart the game.",  // PM_TEXT_AI
+  "launcher.copied-steam-open-phasmophobia": "Copied. In Steam, open Phasmophobia > Properties > General and paste into Launch Options. Keep %command% at the end.",  // PM_TEXT_AI
+  "launcher.copy": "&Copy Steam launch option",  // PM_TEXT_AI
+  "launcher.copy-intro": "To load automatically, copy this command into Steam's Launch Options:",  // PM_TEXT_AI
+  "launcher.finish-close": "PhasmoMods Loader could not finish. Close it and try again.",  // PM_TEXT_AI
+  "launcher.finish-loading": "PhasmoMods Loader could not finish loading. Restart it and try again.",  // PM_TEXT_AI
+  "launcher.fresh-log-created-close": "A fresh game log could not be created. Close PhasmoMods Loader and try again.",  // PM_TEXT_AI
+  "launcher.keep-folder-outside-directory": "Keep this folder outside the game directory. Restart the game to change the mods' versions.",  // PM_TEXT_AI
+  "launcher.launcher-cannot-copy-modhost": "The launcher cannot copy ModHost.dll. Check the package and folder access, then try again.",  // PM_TEXT_AI
+  "launcher.launcher-cannot-create-data": "The launcher cannot create its data folder. Check folder access and try again.",  // PM_TEXT_AI
+  "launcher.launcher-cannot-create-native": "The launcher cannot create its native-copy folder. Check folder access and try again.",  // PM_TEXT_AI
+  "launcher.launcher-cannot-write-list": "The launcher cannot write the list of mods to start. Check folder access and try again.",  // PM_TEXT_AI
+  "launcher.launcher-requires-windows-x64": "This launcher requires the Windows x64 version of Phasmophobia.",  // PM_TEXT_AI
+  "launcher.loaded-native-library-cannot": "The loaded native library cannot be verified. Restart the game.",  // PM_TEXT_AI
+  "launcher.loading-has-finished-before": "Loading has not finished. Restart the game before trying again.",  // PM_TEXT_AI
+  "launcher.loading-mods-waiting-confirm": "Loading the mods. Waiting for the game to confirm...",  // PM_TEXT_AI
+  "launcher.loading-task-start-close": "The loading task could not start. Close PhasmoMods Loader and try again.",  // PM_TEXT_AI
+  "launcher.local-application-data-folder": "The local application data folder is unavailable. Check your Windows profile.",  // PM_TEXT_AI
+  "launcher.local-application-data-folder-2": "The local application-data folder is unavailable. Check LOCALAPPDATA and try again.",  // PM_TEXT_AI
+  "launcher.location-read-extract-package": "The location of PhasmoMods Loader could not be read. Extract the package again.",  // PM_TEXT_AI
+  "launcher.log-folder-created-check": "The game log folder could not be created. Check its access permissions.",  // PM_TEXT_AI
+  "launcher.log-inspected-check-access": "The game log could not be inspected. Check its access permissions.",  // PM_TEXT_AI
+  "launcher.log-read": "The game log could not be read. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.log-read-check-path": "The game log could not be read. Check its path and access permissions.",  // PM_TEXT_AI
+  "launcher.log-read-failed": "The game log read failed. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.main-menu-was-confirmed": "The main menu was not confirmed within five minutes. Once it appears, open PhasmoMods Loader and choose Attach.",  // PM_TEXT_AI
+  "launcher.mod-loading-lock-created": "The mod loading lock could not be created. Close other copies of PhasmoMods Loader and try again.",  // PM_TEXT_AI
+  "launcher.mod-unusable": "The mod in {{folder}} cannot be used. {{why}}",  // PM_TEXT_AI
+  "launcher.modhost-dll-cannot-read": "ModHost.dll cannot be read. Extract the complete package again.",  // PM_TEXT_AI
+  "launcher.modhost-dll-missing-extract": "ModHost.dll is missing. Extract the complete package beside PhasmoMods Loader.",  // PM_TEXT_AI
+  "launcher.modhost-dll-missing-extract-2": "ModHost.dll is missing. Extract the complete package again.",  // PM_TEXT_AI
+  "launcher.mods-activate-check-native": "The mods could not activate. Check the native log and restart the game before trying again.",  // PM_TEXT_AI
+  "launcher.mods-did-confirm-activation": "The mods did not confirm activation. Check the native log and restart the game before trying again.",  // PM_TEXT_AI
+  "launcher.monitor-loading-close": "PhasmoMods Loader could not monitor loading. Close it and try again.",  // PM_TEXT_AI
+  "launcher.more-than-one-phasmophobia": "More than one Phasmophobia process is running. Close the extra games and try again.",  // PM_TEXT_AI
+  "launcher.native-log-cannot-opened": "The native log cannot be opened. Check folder access and try again.",  // PM_TEXT_AI
+  "launcher.native-log-cannot-read": "The native log cannot be read. Check the log file and restart the game.",  // PM_TEXT_AI
+  "launcher.native-log-cannot-read-2": "The native log cannot be read. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.native-log-changed-unexpectedly": "The native log changed unexpectedly. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.native-log-contains-invalid": "The native log contains an invalid line. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.native-log-position-cannot": "The native log position cannot be read. Check the log file and try again.",  // PM_TEXT_AI
+  "launcher.native-log-was-rewritten": "The native log was rewritten. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.native-log-was-truncated": "The native log was truncated. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.no-mods-were-found": "No mods were found. Extract the complete package, with its mods folder, beside PhasmoMods Loader.",  // PM_TEXT_AI
+  "launcher.no-mods-were-found-2": "No mods were found beside the launcher, so the game started without them.",  // PM_TEXT_AI
+  "launcher.open-without-arguments-copy": "Open PhasmoMods Loader without arguments, or copy its Steam launch option into Steam.",  // PM_TEXT_AI
+  "launcher.phasmophobia-already-running-close": "Phasmophobia is already running. Close it before launching from Steam, or use Attach.",  // PM_TEXT_AI
+  "launcher.phasmophobia-closed-before-mod": "Phasmophobia closed before the mod activated. Check the native log.",  // PM_TEXT_AI
+  "launcher.phasmophobia-closed-while-loading": "Phasmophobia closed while loading the mod. Start the game again.",  // PM_TEXT_AI
+  "launcher.phasmophobia-exited-before-reaching": "Phasmophobia exited before reaching the menu. Check the game log and try a normal Steam launch.",  // PM_TEXT_AI
+  "launcher.phasmophobia-has-closed-start": "Phasmophobia has closed. Start it again before loading the mod.",  // PM_TEXT_AI
+  "launcher.phasmophobia-running-start-through": "Phasmophobia is not running. Start it through Steam and wait for the main menu.",  // PM_TEXT_AI
+  "launcher.phasmophobia-start-check-steam": "Phasmophobia could not start. Check its Steam installation and launch options.",  // PM_TEXT_AI
+  "launcher.process-monitored": "The game process could not be monitored. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.remove-nolog-use-logfile": "Remove -nolog or use -logFile followed by a file path in Steam launch options.",  // PM_TEXT_AI
+  "launcher.running-answer-notice-start": "The loader is running. Answer the notice in the game to start the mods.",  // PM_TEXT_AI
+  "launcher.running-return-answer-notice": "The loader is running. Return to the game and answer the notice there.",  // PM_TEXT_AI
+  "launcher.s-windows-library-does": "The game's Windows library does not match this launcher. Restart the game and launcher.",  // PM_TEXT_AI
+  "launcher.save-which-mods-are": "PhasmoMods Loader could not save which mods are ticked. Check access to your local application-data folder.",  // PM_TEXT_AI
+  "launcher.selected-process-phasmophobia-start": "The selected process is not Phasmophobia. Start the game through Steam.",  // PM_TEXT_AI
+  "launcher.start-phasmophobia-through-steam": "Start Phasmophobia through Steam and wait for the main menu, then choose Attach.",  // PM_TEXT_AI
+  "launcher.startup-lock-created-close": "The game startup lock could not be created. Close other copies of PhasmoMods Loader and try again.",  // PM_TEXT_AI
+  "launcher.steam-command-missing-invalid": "The Steam game command is missing or invalid. Copy the launch option from PhasmoMods Loader again.",  // PM_TEXT_AI
+  "launcher.tick-mods-start-you": "Tick the mods to start. You can change them later from the Mods button on the game's main menu.",  // PM_TEXT_AI
+  "launcher.updating": "Updating to {{version}}. PhasmoMods Loader restarts when it is done.",  // PM_TEXT_AI
+  "launcher.use-one-logfile-option": "Use one -logFile option followed by a file path, or remove it from Steam launch options.",  // PM_TEXT_AI
+  "launcher.windows-check-architecture-launcher": "Windows could not check the game architecture. Restart the launcher.",  // PM_TEXT_AI
+  "launcher.windows-check-process": "Windows could not check the game process. Restart the game.",  // PM_TEXT_AI
+  "launcher.windows-denied-access-phasmophobia": "Windows denied access to Phasmophobia. Run the game and launcher under the same account and elevation level.",  // PM_TEXT_AI
+  "launcher.windows-did-load-modhost": "Windows did not load ModHost.dll. Check the package and restart the game before trying again.",  // PM_TEXT_AI
+  "launcher.windows-error": "Windows error: {{code}}.",  // PM_TEXT_AI
+  "launcher.windows-finish-cleaning-up": "Windows could not finish cleaning up the loading operation. Restart the game before trying again.",  // PM_TEXT_AI
+  "launcher.windows-finish-inspecting-s": "Windows could not finish inspecting the game's modules. Try again.",  // PM_TEXT_AI
+  "launcher.windows-finish-listing-games": "Windows could not finish listing games. Try again.",  // PM_TEXT_AI
+  "launcher.windows-identify-library-launcher": "Windows could not identify its library loader. Restart the launcher.",  // PM_TEXT_AI
+  "launcher.windows-identify-process": "Windows could not identify the game process. Try again.",  // PM_TEXT_AI
+  "launcher.windows-inspect-process": "Windows could not inspect the game process. Try again.",  // PM_TEXT_AI
+  "launcher.windows-inspect-s-modules": "Windows could not inspect the game's modules. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.windows-list-running-games": "Windows could not list running games. Try again.",  // PM_TEXT_AI
+  "launcher.windows-locate-library-launcher": "Windows could not locate its library loader. Restart the launcher.",  // PM_TEXT_AI
+  "launcher.windows-read-library-path": "Windows could not read its library loader path. Restart the launcher.",  // PM_TEXT_AI
+  "launcher.windows-read-s-modules": "Windows could not read the game's modules. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.windows-reserve-memory-loading": "Windows could not reserve memory for loading the mod. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.windows-resolve-library-launcher": "Windows could not resolve its library loader. Restart the launcher.",  // PM_TEXT_AI
+  "launcher.windows-send-mod-path": "Windows could not send the mod path to the game. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.windows-sent-only-part": "Windows sent only part of the mod path. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.windows-start-loading-mod": "Windows could not start loading the mod. Restart the game and try again.",  // PM_TEXT_AI
+  "launcher.windows-verify-s-system": "Windows could not verify the game's system library. Restart the game.",  // PM_TEXT_AI
+  "list.last-separator": " and ",  // PM_TEXT_AI
+  "list.separator": ", ",  // PM_TEXT_AI
+  "lobby.extras": "This lobby's host doesn't run {{mods}}, so those mods are off until you leave it.",  // PM_TEXT_AI
+  "lobby.not-first-actor": "The loader can't verify {{players}}, and the game only lets the player who's been here longest remove someone. A contract can't start while they're here. Ask them to leave, or start a new lobby.",  // PM_TEXT_AI
+  "lobby.public": "Mods only run in private lobbies, so your mods are off until you leave this one.",  // PM_TEXT_AI
+  "lobby.required.advice": "Install the same mods and switch them on from the Mods button, or join another lobby.\nRestart the game through PhasmoMods Loader to update, then join again.",  // PM_TEXT_AI
+  "lobby.required.highlight": "<b>{{line}}</b>",  // PM_TEXT_AI
+  "lobby.required.missing": "{{mod}}: you don't have it",  // PM_TEXT_AI
+  "lobby.required.more": "And {{count}} more.",  // PM_TEXT_AI
+  "lobby.required.needs-missing": "{{mod}}: yours needs a mod this lobby doesn't run",  // PM_TEXT_AI
+  "lobby.required.other-build": "{{mod}}: you have another build",  // PM_TEXT_AI
+  "lobby.required.other-version": "{{mod}}: you have {{version}}",  // PM_TEXT_AI
+  "lobby.required.title": "This lobby requires these mods, so you have left it.",  // PM_TEXT_AI
+  "lobby.unremoved": "The game didn't remove {{players}}, whose mods differ from yours. A contract can't start while they're here. Ask them to leave, or start a new lobby.",  // PM_TEXT_AI
+  "lobby.vanilla-host": "This lobby's host isn't running PhasmoMods, so your mods are off until you leave it.",  // PM_TEXT_AI
+  "manifest.bad-dll": "Its dll is not the name of a .dll file beside it.",  // PM_TEXT_AI
+  "manifest.bad-id": "Its id is not author.mod: one dot, each part a-z, 0-9 and '-', and 64 characters at most.",  // PM_TEXT_AI
+  "manifest.bad-version": "Its version is not MAJOR.MINOR.PATCH.",  // PM_TEXT_AI
+  "manifest.bad-website": "Its website is not an http or https address of at most {{bytes}} bytes.",  // PM_TEXT_AI
+  "manifest.dependencies-list": "Its dependencies are not a list of at most {{count}} entries.",  // PM_TEXT_AI
+  "manifest.dependency-no-id": "Its dependencies hold an entry with no id.",  // PM_TEXT_AI
+  "manifest.dependency-required": "A dependency's required is not true or false.",  // PM_TEXT_AI
+  "manifest.dependency-version": "A dependency's minimumVersion is not MAJOR.MINOR.PATCH.",  // PM_TEXT_AI
+  "manifest.dll-without-manifest": "It has a DLL but no manifest.json.",  // PM_TEXT_AI
+  "manifest.field-twice": "Its manifest.json names one field twice.",  // PM_TEXT_AI
+  "manifest.field-unsafe": "Its {{field}} is longer than {{bytes}} bytes or holds a control character or an angle bracket.",  // PM_TEXT_AI
+  "manifest.incompatibilities-list": "Its incompatibilities are not a list of at most {{count}} ids.",  // PM_TEXT_AI
+  "manifest.incompatibility-not-id": "Its incompatibilities hold something that is not a mod id.",  // PM_TEXT_AI
+  "manifest.list-itself": "Its {{field}} names the mod itself.",  // PM_TEXT_AI
+  "manifest.list-not-id": "Its {{field}} holds something that is not a mod id.",  // PM_TEXT_AI
+  "manifest.list-twice": "Its {{field}} names one mod twice.",  // PM_TEXT_AI
+  "manifest.missing": "It has no manifest.json.",  // PM_TEXT_AI
+  "manifest.no-author": "It has no author.",  // PM_TEXT_AI
+  "manifest.no-description": "It has no description.",  // PM_TEXT_AI
+  "manifest.no-id": "It has no id.",  // PM_TEXT_AI
+  "manifest.no-name": "It has no name.",  // PM_TEXT_AI
+  "manifest.not-json": "Its manifest.json is not valid JSON in UTF-8.",  // PM_TEXT_AI
+  "manifest.not-object": "Its manifest.json does not hold an object.",  // PM_TEXT_AI
+  "manifest.old-bad-description": "Its description is longer than 512 bytes or holds a control character or an angle bracket.",  // PM_TEXT_AI
+  "manifest.old-bad-id": "Its id is missing or uses characters other than a-z, 0-9 and '-'.",  // PM_TEXT_AI
+  "manifest.old-bad-name": "Its name is longer than 64 bytes or holds a control character or an angle bracket.",  // PM_TEXT_AI
+  "manifest.old-bad-requires": "Its requires is not the id of another mod.",  // PM_TEXT_AI
+  "manifest.old-bundled-id": "Its id is the old id of a bundled mod, which now means that mod.",  // PM_TEXT_AI
+  "manifest.old-vanilla": "Its id is \"vanilla\", which the game's own content has.",  // PM_TEXT_AI
+  "manifest.records-voice": "Its recordsVoice is not true or false.",  // PM_TEXT_AI
+  "manifest.reserved-author": "Its author is PhasmoMods, which only the mods that come with PhasmoMods Loader may use.",  // PM_TEXT_AI
+  "manifest.reserved-id": "Its id uses the author \"phasmomods\", which only the mods that come with PhasmoMods Loader may use.",  // PM_TEXT_AI
+  "manifest.too-deep": "Its manifest.json nests deeper than {{levels}} levels.",  // PM_TEXT_AI
+  "manifest.too-large": "Its manifest is larger than 64 KiB.",  // PM_TEXT_AI
+  "manifest.too-large-json": "Its manifest.json is larger than 64 KiB.",  // PM_TEXT_AI
+  "manifest.unreadable": "Its manifest could not be read.",  // PM_TEXT_AI
+  "manifest.unreadable-json": "Its manifest.json could not be read.",  // PM_TEXT_AI
+  "manifest.vanilla-author": "Its id uses the author \"vanilla\", which the game's own content has.",  // PM_TEXT_AI
+  "manifest.website-not-text": "Its website is not text.",  // PM_TEXT_AI
+  "mods.a-game-entry": "a game entry",  // PM_TEXT_AI
+  "mods.channel-taken": "It repeats the channel of a mod already loaded",  // PM_TEXT_AI
+  "mods.dll-unloadable": "Its DLL could not be loaded",  // PM_TEXT_AI
+  "mods.id-mismatch": "Its manifest's id is not the id in its DLL",  // PM_TEXT_AI
+  "mods.id-repeated": "It repeats the id of another mod.",  // PM_TEXT_AI
+  "mods.info-threw": "Its DLL failed when asked what it is",  // PM_TEXT_AI
+  "mods.lacks-entries": "This game build lacks {{entry}} and {{count}} more",  // PM_TEXT_AI
+  "mods.lacks-entry": "This game build lacks {{entry}}",  // PM_TEXT_AI
+  "mods.not-a-mod": "Its DLL is not a mod for this loader",  // PM_TEXT_AI
+  "mods.other-version": "It was built for another version of the loader",  // PM_TEXT_AI
+  "mods.requires-threw": "Its DLL failed when asked what it needs",  // PM_TEXT_AI
+  "mods.untracked": "The loader could not track game calls it needs",  // PM_TEXT_AI
+  "mods.voice-undeclared": "It records voice, which its manifest does not say",  // PM_TEXT_AI
+  "off.lacks-rules": "This game build lacks what the lobby's rules need, so the mods stay off. mods.log names what it lacks.",  // PM_TEXT_AI
+  "off.notice-cannot-show": "The notice can't be shown on this game build, so the mods stay off. mods.log says why.",  // PM_TEXT_AI
+  "panel.apply": "Apply",  // PM_TEXT_AI
+  "panel.button": "Mods",  // PM_TEXT_AI
+  "panel.by-author": "By {{author}}. {{description}}",  // PM_TEXT_AI
+  "panel.close": "Close",  // PM_TEXT_AI
+  "panel.off-reason": "{{reason}}. {{about}}",  // PM_TEXT_AI
+  "panel.refused": "Off. {{reason}}",  // PM_TEXT_AI
+  "panel.row-name": "{{name}} {{version}}",  // PM_TEXT_AI
+  "panel.status.changed": "Apply to restart the mods with your choice. The game keeps running.",  // PM_TEXT_AI
+  "panel.status.done": "Done: the mods restarted with your choice.",  // PM_TEXT_AI
+  "panel.status.in-lobby": "Leave the lobby to change mods.",  // PM_TEXT_AI
+  "panel.status.not-saved": "The mods restarted, but your choice couldn't be saved, so the next start uses the old one.",  // PM_TEXT_AI
+  "panel.status.restarting": "Restarting the mods...",  // PM_TEXT_AI
+  "panel.status.some-failed": "Some mods could not start. mods.log says why.",  // PM_TEXT_AI
+  "panel.status.unchanged": "Click a mod to switch it on or off.",  // PM_TEXT_AI
+  "panel.title": "Mods",  // PM_TEXT_AI
+  "panel.version-unknown": "(version unknown)",  // PM_TEXT_AI
+  "player.unnamed": "Player {{number}}",  // PM_TEXT_AI
+  "popup.contract-waiting": "The contract is waiting",  // PM_TEXT_AI
+  "popup.mods-dont-match": "These mods don't match",  // PM_TEXT_AI
+  "popup.mods-off": "Your mods are off",  // PM_TEXT_AI
+  "popup.player-still-here": "A player is still here",  // PM_TEXT_AI
+  "start.list-unread": "The loader can't read who's in this lobby right now, so the contract hasn't started. Press Start again in a moment.",  // PM_TEXT_AI
+  "start.not-closed": "[PM_TEXT_TODO start-not-closed]",  // PM_TEXT_TODO
+  "start.not-confirmed": "[PM_TEXT_TODO start-not-confirmed]",  // PM_TEXT_TODO
+  "start.waiting": "Waiting for {{players}}. The loader is still checking their mods. Press Start again once that's done.",  // PM_TEXT_AI
+  "updater.check-failed": "Could not check for updates ({{reason}}). Starting the installed version.",  // PM_TEXT_AI
+  "updater.checking-updates-took-too": "Checking for updates took too long. Starting the installed version.",  // PM_TEXT_AI
+  "updater.download-failed": "Could not download version {{version}} ({{reason}}). Starting the installed version.",  // PM_TEXT_AI
+  "updater.failed": "The update failed ({{reason}}). Starting the installed version.",  // PM_TEXT_AI
+  "updater.install-failed": "Could not install version {{version}} ({{reason}}). Starting the installed version.",  // PM_TEXT_AI
+  "updater.no-reason": "no reason given",  // PM_TEXT_AI
+  "updater.not-downloaded": "no update was downloaded",  // PM_TEXT_AI
+  "updater.not-found": "the update to download was not found",  // PM_TEXT_AI
+  "updater.not-installed": "PhasmoMods Loader is not installed",  // PM_TEXT_AI
+  "updater.unknown-error": "unknown error",  // PM_TEXT_AI
+  "updater.updated-on-close": "Updated to {{version}}. It installs when PhasmoMods Loader closes.",  // PM_TEXT_AI
+  "updater.updated-restarting": "Updated to {{version}}. Restarting."  // PM_TEXT_AI
+}

@@ -11,7 +11,7 @@
 // temporarily stopped by burning incense": incense in a hunt stops it where it stands for a moment;
 // incense outside a hunt silences it for a minute (its vanilla three minutes without a hunt are
 // unchanged); and, the most human of the ghosts, it knocks when a player near it says its name.
-namespace pg::tells {
+namespace pm::tells {
 
 constexpr float kSpiritStopSeconds = 3.0f;    // standing still after incense reaches it in a hunt
 constexpr float kSpiritQuietSeconds = 60.0f;  // no interactions, events or ability after incense outside a hunt
@@ -19,7 +19,8 @@ constexpr float kSpiritHearRange = 10.0f;     // metres from the ghost, on its f
 constexpr float kSpiritAnswerCooldown = 20.0f;
 constexpr float kSpiritAnswerMinDelay = 1.0f, kSpiritAnswerMaxDelay = 3.0f;  // seconds from the name to the knock
 
-/** Incense in a hunt (GhostAI +0xF8 becomes set): it stops for kSpiritStopSeconds. */
+/** Incense in a hunt (GhostAI.smudge, the incense that smudged it, becomes set): it stops for
+ *  kSpiritStopSeconds. */
 struct IncenseStop {
   Edge smudge;
   Timer hold;
@@ -38,12 +39,16 @@ struct IncenseStop {
   }
 };
 
-/** Incense outside a hunt (GhostAI +0xF5 becomes set while it does not hunt): a minute of silence. */
+/** Incense outside a hunt that starts the game's hunt hold (GhostAI.huntsHeldOff goes from clear to set,
+ *  through GhostAI.StopGhostFromHunting): a minute of silence. */
 struct Quiet {
-  Edge incense;
   Timer left;
-  bool step(bool incenseActive, bool hunting, float dt) {
-    if (incense.rose(incenseActive) && !hunting) left.start(kSpiritQuietSeconds);
+  /** The incense reached it; `hunting` it hunts, when the incense stops it instead (IncenseStop);
+   *  `held` the game's hunt hold was already on, when this incense starts no new hold and no new minute. */
+  void incense(bool hunting, bool held) {
+    if (!hunting && !held) left.start(kSpiritQuietSeconds);
+  }
+  bool step(float dt) {
     left.step(dt);
     return quiet();
   }
@@ -102,4 +107,4 @@ struct Answer {
   }
 };
 
-}  // namespace pg::tells
+}  // namespace pm::tells

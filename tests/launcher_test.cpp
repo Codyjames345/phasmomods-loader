@@ -8,13 +8,13 @@
 #include "../tools/launcher.h"
 #include "../tools/inject.h"
 
-namespace pg::launcher {
+namespace pm::launcher {
 loader::Result launch_steam(std::vector<std::wstring> arguments, const Package& package);
 }
 
 namespace {
 int failures = 0;
-pg::loader::Outcome candidate = pg::loader::Outcome::no_process;
+pm::loader::Outcome candidate = pm::loader::Outcome::no_process;
 bool spawnSucceeds = false;
 int spawnCalls = 0, loadCalls = 0;
 DWORD loadedPid = 0;
@@ -24,7 +24,7 @@ ULONGLONG ticks = 0;
 DWORD processState = WAIT_TIMEOUT;
 unsigned sleeps = 0, readyAfterSleeps = 0;
 bool concurrentLaunch = false;
-pg::loader::Outcome overlappingOutcome = pg::loader::Outcome::ready;
+pm::loader::Outcome overlappingOutcome = pm::loader::Outcome::ready;
 int discoveryCalls = 0;
 
 /** Emit the same completed marker for immediate and delayed fake child startup. */
@@ -69,7 +69,7 @@ BOOL WINAPI create_process(LPCWSTR app, LPWSTR command, LPSECURITY_ATTRIBUTES pr
     !environment && startup->cb == sizeof(STARTUPINFOW);
   if (concurrentLaunch) {
     concurrentLaunch = false;
-    overlappingOutcome = pg::launcher::launch_steam({app, L"-logFile", fixturePath}, {L"unused.dll", {L"mod.dll"}}).outcome;
+    overlappingOutcome = pm::launcher::launch_steam({app, L"-logFile", fixturePath}, {L"unused.dll", {L"mod.dll"}}).outcome;
   }
   if (!spawnSucceeds) { SetLastError(ERROR_ACCESS_DENIED); return FALSE; }
   if (!append_menu_marker()) { SetLastError(ERROR_WRITE_FAULT); return FALSE; }
@@ -80,7 +80,7 @@ BOOL WINAPI create_process(LPCWSTR app, LPWSTR command, LPSECURITY_ATTRIBUTES pr
 }
 }
 
-namespace pg::loader {
+namespace pm::loader {
 /** Supply deterministic discovery results without inspecting any running game. */
 Result find_game(DWORD& pid) {
   ++discoveryCalls;
@@ -88,10 +88,10 @@ Result find_game(DWORD& pid) {
   return {candidate};
 }
 /** Record the selected child identity without touching another process. */
-Result load(DWORD pid, const wchar_t*, const std::vector<std::wstring>&) { ++loadCalls; loadedPid = pid; return {Outcome::active}; }
+Result load(DWORD pid, const wchar_t*, const std::vector<std::wstring>&, const std::vector<std::string>&) { ++loadCalls; loadedPid = pid; return {Outcome::active}; }
 }
 
-#define PG_LAUNCHER_TEST
+#define PM_LAUNCHER_TEST
 #define CreateProcessW create_process
 #define GetModuleFileNameW module_path
 #define GetTickCount64 tick_count
@@ -114,7 +114,7 @@ void quoting() {
     L"\\\\server\\path\\", L"before\\\\\"after", L"\t", L"%PATH% & $(test)"
   };
   int count = 0;
-  auto parsed = CommandLineToArgvW(pg::launcher::command_line(arguments).c_str(), &count);
+  auto parsed = CommandLineToArgvW(pm::launcher::command_line(arguments).c_str(), &count);
   CHECK(parsed != nullptr);
   CHECK(count == static_cast<int>(arguments.size()));
   if (parsed && count == static_cast<int>(arguments.size()))
@@ -124,7 +124,7 @@ void quoting() {
 
 /** Reject conflicting or disabled logs while preserving user arguments. */
 void log_options() {
-  using pg::launcher::configure_log;
+  using pm::launcher::configure_log;
   std::wstring path;
   std::vector<std::wstring> arguments{L"Phasmophobia.exe", L"-screen-width", L"1280"};
   CHECK(configure_log(arguments, L"fresh.log", path).empty());
@@ -148,17 +148,17 @@ void log_options() {
 
 /** A stale fragment, seasonal scene name or unterminated line cannot signal readiness. */
 void readiness() {
-  pg::launcher::MenuReadiness parser;
+  pm::launcher::MenuReadiness parser;
   CHECK(!parser.feed("Set active scene to Main Menu Halloween\n"));
   CHECK(!parser.feed("Loaded Level: Main Menu Extra | Players: 0\n"));
   CHECK(!parser.feed("prefix Loaded Level: Main Menu | Players: 0\n"));
   CHECK(!parser.feed("Loaded Level: Main"));
   CHECK(!parser.feed(" Menu | Players: 0\r"));
   CHECK(parser.feed("\n"));
-  pg::launcher::MenuReadiness stale(true);
+  pm::launcher::MenuReadiness stale(true);
   CHECK(!stale.feed("Loaded Level: Main Menu | Players: 0\n"));
   CHECK(stale.feed("Loaded Level: Main Menu | Players: 0\n"));
-  pg::launcher::MenuReadiness oversized;
+  pm::launcher::MenuReadiness oversized;
   CHECK(!oversized.feed(std::string(100000, 'x')));
   CHECK(!oversized.feed("Loaded Level: Main Menu | Players: 0\n"));
   CHECK(oversized.feed("Loaded Level: Main Menu | Players: 0\n"));
@@ -178,27 +178,27 @@ void write_fixture(const char* content, DWORD disposition = CREATE_ALWAYS) {
 
 /** Baselines skip old complete markers and discard old fragments through the next newline. */
 void log_files() {
-  using namespace pg::launcher;
+  using namespace pm::launcher;
   write_fixture("Loaded Level: Main Menu | Players: 0\nLoaded Level: Main");
   LogCursor cursor{fixturePath};
-  CHECK(read_menu(cursor, true).outcome == pg::loader::Outcome::ready);
-  CHECK(read_menu(cursor).outcome == pg::loader::Outcome::ready);
+  CHECK(read_menu(cursor, true).outcome == pm::loader::Outcome::ready);
+  CHECK(read_menu(cursor).outcome == pm::loader::Outcome::ready);
   write_fixture(" Menu | Players: 0\n", OPEN_EXISTING);
-  CHECK(read_menu(cursor).outcome == pg::loader::Outcome::ready);
+  CHECK(read_menu(cursor).outcome == pm::loader::Outcome::ready);
   write_fixture("Loaded Level: Main Menu | Players: 0\n", OPEN_EXISTING);
-  CHECK(read_menu(cursor).outcome == pg::loader::Outcome::active);
+  CHECK(read_menu(cursor).outcome == pm::loader::Outcome::active);
   write_fixture("Loading\n");
-  CHECK(read_menu(cursor).outcome == pg::loader::Outcome::ready);
+  CHECK(read_menu(cursor).outcome == pm::loader::Outcome::ready);
   write_fixture("Loaded Level: Main Menu | Players: 0", OPEN_EXISTING);
-  CHECK(read_menu(cursor).outcome == pg::loader::Outcome::ready);
+  CHECK(read_menu(cursor).outcome == pm::loader::Outcome::ready);
   write_fixture("\n", OPEN_EXISTING);
-  CHECK(read_menu(cursor).outcome == pg::loader::Outcome::active);
+  CHECK(read_menu(cursor).outcome == pm::loader::Outcome::active);
 }
 
 /** Failure, duplicate and success paths never rediscover or launch an unrelated process. */
 void orchestration() {
-  using namespace pg::launcher;
-  using pg::loader::Outcome;
+  using namespace pm::launcher;
+  using pm::loader::Outcome;
   std::wstring hostPath, executable;
   CHECK(adjacent_host(hostPath, executable).outcome == Outcome::file_error);
   CHECK(hostPath == fixturePath + L"\\ModHost.dll");
@@ -238,7 +238,7 @@ void orchestration() {
 
 /** Mods are found one folder each, broken ones are named, and the saved selection is honoured. */
 void mod_folders() {
-  using namespace pg::launcher;
+  using namespace pm::launcher;
   namespace fs = std::filesystem;
   const fs::path root = fs::path(fixturePath).parent_path() / (L"pgl-mods-" + std::to_wstring(GetCurrentProcessId()));
   std::error_code error;
@@ -247,26 +247,52 @@ void mod_folders() {
     fs::create_directories(file.parent_path(), error);
     std::ofstream(file, std::ios::binary) << text;
   };
-  write(root / "mods" / "b" / "mod.ini", "id=second\nname=Second\ndll=Second.dll\n");
+  const auto json = [](const std::string& id, const std::string& dll) {
+    return R"({"id":")" + id + R"(","name":"N","author":"Me","version":"1.2.3","description":"One","dll":")" + dll + R"("})";
+  };
+  write(root / "mods" / "b" / "mod.ini", "id=second\nname=Second\ndll=Second.dll\n");  // an old-format mod still loads
   write(root / "mods" / "b" / "Second.dll", "x");
-  write(root / "mods" / "a" / "mod.ini", "# first\r\nid=first\r\nname=First\r\ndll=First.dll\r\ndescription=One\r\n");
+  write(root / "mods" / "a" / "manifest.json", json("me.first", "First.dll"));
   write(root / "mods" / "a" / "First.dll", "x");
-  write(root / "mods" / "c" / "mod.ini", "id=Bad Id\nname=Bad\ndll=Bad.dll\n");
-  write(root / "mods" / "d" / "mod.ini", "id=nodll\nname=No DLL\ndll=Missing.dll\n");
-  write(root / "mods" / "e" / "mod.ini", "id=first\nname=Copy\ndll=First.dll\n");
+  write(root / "mods" / "c" / "manifest.json", "{ not json");
+  write(root / "mods" / "c" / "mod.ini", "id=fallback\nname=Fallback\ndll=Bad.dll\n");  // a bad manifest.json is not passed over
+  write(root / "mods" / "c" / "Bad.dll", "x");
+  write(root / "mods" / "d" / "manifest.json", json("me.nodll", "Missing.dll"));
+  write(root / "mods" / "e" / "manifest.json", json("me.first", "First.dll"));
   write(root / "mods" / "e" / "First.dll", "x");
+  write(root / "mods" / "f" / "NoManifest.dll", "x");
+  write(root / "mods" / "g" / "readme.txt", "not a mod");
+  write(root / "mods" / "h" / "manifest.json", json("me.folder", "Folder.dll"));
+  write(root / "mods" / "h" / "Folder.dll" / "inside.txt", "a folder, not a DLL");
   std::wstring problems;
-  const auto mods = discover_mods(root / "mods", problems);
-  CHECK(mods.size() == 2 && mods[0].manifest.id == "first" && mods[1].manifest.id == "second");
-  CHECK(mods.size() == 2 && mods[0].manifest.description == "One");
-  CHECK(problems.find(L"in c cannot be used") != std::wstring::npos);
-  CHECK(problems.find(L"in d is missing its DLL") != std::wstring::npos);
-  CHECK(problems.find(L"in e repeats the id") != std::wstring::npos);
+  std::vector<pm::modlist::Refused> refused;
+  const auto mods = discover_mods({{root / "mods", pm::modlist::Place::InstallFolder}}, problems, refused);
+  CHECK(mods.size() == 2 && mods[0].manifest.id == "me.first" && mods[1].manifest.id == "second");
+  CHECK(mods.size() == 2 && mods[0].manifest.description == "One" && mods[0].manifest.version == "1.2.3");
+  CHECK(mods.size() == 2 && mods[1].manifest.oldFormat && mods[1].manifest.version.empty());
+  CHECK(problems.find(L"in c cannot be used. Its manifest.json is not valid JSON") != std::wstring::npos);
+  CHECK(problems.find(L"in d cannot be used. It is missing its DLL") != std::wstring::npos);
+  CHECK(problems.find(L"in e cannot be used. It repeats the id") != std::wstring::npos);
+  CHECK(problems.find(L"in f cannot be used. It has a DLL but no manifest.json") != std::wstring::npos);
+  CHECK(problems.find(L"in g") == std::wstring::npos);  // a folder with no DLL is no mod
+  CHECK(problems.find(L"in h cannot be used. It is missing its DLL") != std::wstring::npos);  // a folder is no DLL
+  CHECK(refused.size() == 5 && refused[0].name == "c" && refused[3].name == "f" && refused[4].name == "h");
+  // They reach the host's Mods panel through the session file.
+  const auto lines = session_lines(refused);
+  CHECK(lines.size() == 5 && pm::modlist::parse_session_refused(lines[1]).size() == 1 &&
+        pm::modlist::parse_session_refused(lines[1])[0].name == "d");
+  // And the package's checked-build records, which the session file's mod list does not take for a mod.
+  std::string session;
+  for (const std::string& line : session_lines(refused, root / "builds")) session += line;
+  CHECK(pm::modlist::parse_session_builds(session) == (root / "builds").string());
+  CHECK(pm::modlist::parse_session(session).empty());
+  CHECK(pm::modlist::parse_session_refused(session).size() == 5);
+  CHECK(pm::modlist::parse_session_builds("a.dll\n?b\tc\n").empty());
   const fs::path ini = root / "data" / "launcher.ini";
-  CHECK(saved_selection(ini, mods) == (std::vector<std::string>{"first", "second"}));  // nothing saved: all
+  CHECK(saved_selection(ini, mods) == (std::vector<std::string>{"me.first", "second"}));  // nothing saved: all
   CHECK(save_selection(ini, {"second"}));
   CHECK(saved_selection(ini, mods) == std::vector<std::string>{"second"});
-  const auto dlls = all_dlls(mods);  // every installed mod loads; the saved choice decides which start
+  const auto dlls = all_dlls(mods);  // every installed mod is listed; the saved choice decides which load and start
   CHECK(dlls.size() == 2 && dlls[0] == (root / "mods" / "a" / "First.dll").wstring() &&
         dlls[1] == (root / "mods" / "b" / "Second.dll").wstring());
   CHECK(save_selection(ini, {}));
@@ -274,10 +300,61 @@ void mod_folders() {
   fs::remove_all(root, error);
 }
 
+/**
+ * A mod outside the install folder that claims the project's author is refused as it is read, before any id is compared,
+ * so the real mod in the install folder runs whichever folder is read first, and the impostor's row says why.
+ */
+void real_mod_runs_when_an_impostor_sorts_first() {
+  using namespace pm::launcher;
+  using pm::modlist::Place;
+  namespace fs = std::filesystem;
+  const fs::path root = fs::path(fixturePath).parent_path() / (L"pgl-impostor-" + std::to_wstring(GetCurrentProcessId()));
+  std::error_code error;
+  fs::remove_all(root, error);
+  const auto write = [&](const fs::path& file, const std::string& text) {
+    fs::create_directories(file.parent_path(), error);
+    std::ofstream(file, std::ios::binary) << text;
+  };
+  const auto json = [](const std::string& id, const std::string& author) {
+    return R"({"id":")" + id + R"(","name":"Ghost Tells","author":")" + author +
+           R"(","version":"1.0.0","description":"One","dll":"GhostTells.dll"})";
+  };
+  // "a" sorts before "ghost_tells", and the third-party folder is read first in one of the two orders.
+  write(root / "install" / "ghost_tells" / "manifest.json", json("phasmomods.ghost-tells", "PhasmoMods"));
+  write(root / "install" / "ghost_tells" / "GhostTells.dll", "x");
+  write(root / "other" / "a" / "manifest.json", json("phasmomods.ghost-tells", "Someone"));
+  write(root / "other" / "a" / "GhostTells.dll", "x");
+  write(root / "other" / "b" / "manifest.json", json("someone.tells", " phasmomods "));
+  write(root / "other" / "b" / "GhostTells.dll", "x");
+  write(root / "other" / "c" / "manifest.json", json("someone.tells", "Someone"));
+  write(root / "other" / "c" / "GhostTells.dll", "x");
+  CHECK(ModsFolder{root / "other"}.place == Place::Elsewhere);  // a folder not said to be the install folder is not trusted
+  const std::vector<ModsFolder> orders[] = {{{root / "other", Place::Elsewhere}, {root / "install", Place::InstallFolder}},
+                                            {{root / "install", Place::InstallFolder}, {root / "other", Place::Elsewhere}}};
+  for (const std::vector<ModsFolder>& order : orders) {
+    std::wstring problems;
+    std::vector<pm::modlist::Refused> refused;
+    const auto mods = discover_mods(order, problems, refused);
+    CHECK(mods.size() == 2);
+    if (mods.size() != 2) continue;
+    const ModEntry& real = mods[0].manifest.id == "phasmomods.ghost-tells" ? mods[0] : mods[1];
+    const ModEntry& other = mods[0].manifest.id == "phasmomods.ghost-tells" ? mods[1] : mods[0];
+    CHECK(real.manifest.id == "phasmomods.ghost-tells" && real.dll == (root / "install" / "ghost_tells" / "GhostTells.dll").wstring());
+    CHECK(other.manifest.id == "someone.tells" && other.dll == (root / "other" / "c" / "GhostTells.dll").wstring());
+    CHECK(refused.size() == 2 && refused[0].name == "a" && refused[1].name == "b");
+    if (refused.size() != 2) continue;
+    CHECK(refused[0].why == "Its id uses the author \"phasmomods\", which only the mods that come with PhasmoMods Loader may use.");
+    CHECK(refused[1].why == "Its author is PhasmoMods, which only the mods that come with PhasmoMods Loader may use.");
+    CHECK(problems.find(L"in a cannot be used. Its id uses the author") != std::wstring::npos);
+    CHECK(problems.find(L"repeats the id") == std::wstring::npos);  // the impostor never took the real one's id
+  }
+  fs::remove_all(root, error);
+}
+
 /** Slow startup waits for evidence; timeout and child exit cannot become activation. */
 void startup_wait() {
-  using namespace pg::launcher;
-  using pg::loader::Outcome;
+  using namespace pm::launcher;
+  using pm::loader::Outcome;
   write_fixture("");
   LogCursor cursor{fixturePath};
   CHECK(read_menu(cursor, true).outcome == Outcome::ready);
@@ -298,34 +375,34 @@ void startup_wait() {
 
 /** An overlapping wrapper must be rejected before discovery or child creation. */
 void concurrent_startup() {
-  using pg::loader::Outcome;
+  using pm::loader::Outcome;
   candidate = Outcome::no_process;
   spawnSucceeds = false;
   concurrentLaunch = true;
   const int beforeSpawn = spawnCalls, beforeDiscovery = discoveryCalls;
   const std::vector<std::wstring> arguments{L"C:\\Games\\Phasmophobia.exe", L"-logFile", fixturePath};
-  CHECK(pg::launcher::launch_steam(arguments, {L"unused.dll", {L"mod.dll"}}).outcome == Outcome::process_error);
+  CHECK(pm::launcher::launch_steam(arguments, {L"unused.dll", {L"mod.dll"}}).outcome == Outcome::process_error);
   CHECK(overlappingOutcome == Outcome::already_loaded);
   CHECK(spawnCalls == beforeSpawn + 1 && discoveryCalls == beforeDiscovery + 1);
-  CHECK(pg::launcher::launch_steam(arguments, {L"unused.dll", {L"mod.dll"}}).outcome == Outcome::process_error);
+  CHECK(pm::launcher::launch_steam(arguments, {L"unused.dll", {L"mod.dll"}}).outcome == Outcome::process_error);
   CHECK(spawnCalls == beforeSpawn + 2 && discoveryCalls == beforeDiscovery + 2);
 }
 
 /** The compiled-in suite version is the one in the VERSION file, and that file holds MAJOR.MINOR.PATCH. */
 void version_matches_version_file() {
-  std::ifstream file(PG_SOURCE_DIR "/VERSION");
+  std::ifstream file(PM_SOURCE_DIR "/VERSION");
   std::string line;
   CHECK(static_cast<bool>(std::getline(file, line)));
   const char* blanks = " \t\r\n";
   const auto first = line.find_first_not_of(blanks), last = line.find_last_not_of(blanks);
   const std::string version = first == std::string::npos ? "" : line.substr(first, last - first + 1);
-  CHECK(version == PG_SUITE_VERSION);
+  CHECK(version == PM_SUITE_VERSION);
   CHECK(std::regex_match(version, std::regex(R"(\d+\.\d+\.\d+)")));
 }
 
 /** The executable's name has a space, so the Steam launch option must quote its path. */
 void launch_option_quotes_spaced_name() {
-  CHECK(pg::launcher::steam_launch_option(L"C:\\Games\\PhasmoMods Loader.exe") ==
+  CHECK(pm::launcher::steam_launch_option(L"C:\\Games\\PhasmoMods Loader.exe") ==
         L"\"C:\\Games\\PhasmoMods Loader.exe\" --steam %command%");
 }
 
@@ -335,12 +412,16 @@ void launcher_log_is_in_data_directory() {
   const DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", saved.data(), static_cast<DWORD>(saved.size()));
   const std::filesystem::path temp = std::filesystem::path(fixturePath).parent_path() / L"pgl appdata";
   CHECK(SetEnvironmentVariableW(L"LOCALAPPDATA", temp.c_str()));
-  CHECK(pg::launcher::launcher_log() == temp / L"PhasmoMods" / L"launcher.log");
+  CHECK(pm::launcher::launcher_log() == temp / L"PhasmoMods" / L"launcher.log");
   SetEnvironmentVariableW(L"LOCALAPPDATA", length && length < saved.size() ? saved.data() : nullptr);
 }
 
 /** Exercise argument preservation and conservative startup detection without a game. */
 int main() {
+  {  // the loader's shipped text (core/text_table.h), so the messages read as players see them
+    std::string why;
+    if (!pm::i18n::table().load(std::filesystem::path(PM_TEXT_DIR) / "i18n" / "default.json", why)) std::printf("FAIL the loader's text: %s\n", why.c_str());
+  }
   wchar_t directory[MAX_PATH], path[MAX_PATH];
   CHECK(GetTempPathW(MAX_PATH, directory) > 0);
   CHECK(GetTempFileNameW(directory, L"pgl", 0, path) != 0);
@@ -351,6 +432,7 @@ int main() {
   log_files();
   orchestration();
   mod_folders();
+  real_mod_runs_when_an_impostor_sorts_first();
   startup_wait();
   concurrent_startup();
   version_matches_version_file();

@@ -1,11 +1,13 @@
 #pragma once
 
+// PM_UI_TODO: a mod-drawn window, against the vanilla-UI rule, waiting for the author's design (FINDINGS.md 31).
+
 // While the ghost player picks, their camera (the investigator's, detached by src/body.cpp) stands
 // in the chosen favourite room and turns slowly on the spot, the way the haunted mirror's camera
 // shows the ghost's room, under a light of its own near the ceiling so the room can be seen. It
 // starts as soon as the investigator leaves, so the truck is never shown. The light exists only on
 // the ghost player's client. Main thread only.
-namespace pg::panorama {
+namespace pm::panorama {
 
 bool resolve();
 // Every frame until the ghost spawns: room is a favourite-room candidate index (negative: the room
@@ -18,4 +20,4 @@ void hide();  // removes the light; the camera is the ghost's again once it spaw
 // they see the truck. Every frame; on is false the rest of the time.
 void cover(bool on);
 
-}  // namespace pg::panorama
+}  // namespace pm::panorama

@@ -5,37 +5,35 @@
 #include <cmath>
 
 #include "game.h"
-#include "il2cpp.h"
+#include "held.h"
+#include "Transform.h"
 #include "log.h"
 #include "mapview.h"
+#include "UnityObject.h"
+#include "UnityRendering.h"
 #include "ui.h"
 
-namespace pg::panorama {
+namespace pm::panorama {
 namespace {
 
-using il2cpp::Quaternion;
-using il2cpp::Vector3;
+using phasmo::Quaternion;
+using phasmo::Vector3;
 
 constexpr float kDegreesPerSecond = 6;  // a slow pan, like the haunted mirror's view
 constexpr float kPitchDegrees = 8;      // looking slightly down into the room
-constexpr int kLightPoint = 2;          // LightType.Point
 constexpr float kLightRange = 9;
 constexpr float kLightIntensity = 1.6f;
 // The light hangs this far above the room's centre, near its ceiling: lit from the camera itself, the
 // journal held in front of it outshone the room and the game's exposure then darkened the room.
 constexpr float kLightHeight = 1.0f;
-constexpr ui::Color kLightColour = {0.85f, 0.9f, 1, 1};  // a cold, ghostly white
+constexpr phasmo::Color kLightColour = {0.85f, 0.9f, 1, 1};  // a cold, ghostly white
 
-struct Api {
-  il2cpp::Object* lightType = nullptr;
-  void (*setType)(void*, int, const void*) = nullptr;
-  void (*setRange)(void*, float, const void*) = nullptr;
-  void (*setIntensity)(void*, float, const void*) = nullptr;
-  void (*setColour)(void*, const ui::Color*, const void*) = nullptr;
-} api;
+using phasmo::Light;
 
-il2cpp::Held g_light;                    // GameObject
-il2cpp::Held g_cover;                    // overlay canvas
+bool g_lit = false;                      // whether the light's entries resolved
+
+api::Held g_light;                    // GameObject
+api::Held g_cover;                    // overlay canvas
 constexpr int kCoverSortingOrder = 120;  // above everything the game and the mod draw
 int g_room = -2;
 ULONGLONG g_since = 0;
@@ -48,28 +46,26 @@ Quaternion yaw_pitch(float yawDegrees, float pitchDegrees) {
 }
 
 void make_light() {
-  if (!api.lightType) return;
+  if (!g_lit) return;
   g_light = game::new_game_object("PlayableGhost panorama light");
-  void* light = g_light ? game::add_component(g_light, api.lightType) : nullptr;
+  void* light = g_light ? phasmo::GameObject::AddComponent(g_light, Light::type.type_object()) : nullptr;
   if (!light) return;
-  api.setType(light, kLightPoint, nullptr);
-  api.setRange(light, kLightRange, nullptr);
-  api.setIntensity(light, kLightIntensity, nullptr);
-  api.setColour(light, &kLightColour, nullptr);
+  Light::set_type(light, phasmo::LightType::Point());
+  Light::set_range(light, kLightRange);
+  Light::set_intensity(light, kLightIntensity);
+  phasmo::Color colour = kLightColour;  // the callee may change what it is passed
+  Light::set_color(light, &colour);
 }
 
 }  // namespace
 
 bool resolve() {
-  il2cpp::Class* light = il2cpp::cls("UnityEngine.CoreModule.dll", "UnityEngine", "Light");
-  api.lightType = light ? il2cpp::type_object(light) : nullptr;
-  api.setType = reinterpret_cast<decltype(api.setType)>(il2cpp::method_ptr(light, "set_type", 1));
-  api.setRange = reinterpret_cast<decltype(api.setRange)>(il2cpp::method_ptr(light, "set_range", 1));
-  api.setIntensity = reinterpret_cast<decltype(api.setIntensity)>(il2cpp::method_ptr(light, "set_intensity", 1));
-  api.setColour = reinterpret_cast<decltype(api.setColour)>(il2cpp::method_ptr(light, "set_color", 1));
-  const bool ok = api.lightType && api.setType && api.setRange && api.setIntensity && api.setColour;
-  if (!ok) api = Api{};  // optional: the panorama is shown unlit
-  PG_LOG("panorama: resolve %s", ok ? "ok" : "without its light");
+  // Light.set_type, set_range and LightType.Point are optional entries: without them the panorama is shown
+  // unlit. set_intensity and set_color are required map entries (other mods need them), so a build
+  // without them does not start the mod at all.
+  g_lit = api::all_resolved<Light::type, Light::set_type, Light::set_range, Light::set_intensity, Light::set_color,
+                            phasmo::LightType::Point>();
+  PM_LOG("panorama: resolve %s", g_lit ? "ok" : "without its light");
   return true;
 }
 
@@ -108,4 +104,4 @@ void hide() {
   g_room = -2;
 }
 
-}  // namespace pg::panorama
+}  // namespace pm::panorama

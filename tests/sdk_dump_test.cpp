@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -5,11 +7,11 @@
 #include "check.h"
 #include "dump_model.h"
 
-using namespace pg::sdk;
+using namespace pm::sdk;
 
 namespace {
 
-const std::filesystem::path kRoot = std::filesystem::path(PG_SOURCE_DIR) / "tests" / "fixtures" / "diffable";
+const std::filesystem::path kRoot = std::filesystem::path(PM_SOURCE_DIR) / "tests" / "fixtures" / "diffable";
 
 GameModel load(const std::vector<std::string>& assemblies = {"Assembly-CSharp", "UnityEngine.CoreModule"}) {
   GameModel model;
@@ -31,6 +33,21 @@ const ModelMethod* method(const ModelType& t, const std::string& name) {
   for (const ModelMethod& m : t.methods)
     if (m.name == name) return &m;
   return nullptr;
+}
+
+// A field's accessibility comes from its modifiers; an enum's values, which the dump writes with none,
+// are public.
+void field_access_is_read() {
+  const GameModel m = load();
+  const ModelType* ghost = find(m, "Ghost");
+  CHECK(ghost != nullptr);
+  if (!ghost) return;
+  for (const ModelField& f : ghost->fields) {
+    if (f.name == "awake") CHECK(f.access == pm::sdk::Visibility::Public);
+    if (f.name == "seen") CHECK(f.access == pm::sdk::Visibility::Private);
+  }
+  const ModelType* state = find(m, "ദശസറ");
+  CHECK(state && !state->fields.empty() && state->fields[0].access == pm::sdk::Visibility::Public);
 }
 
 void nested_enum_with_literals() {
@@ -121,6 +138,10 @@ void field_offsets_and_static() {
   CHECK(ghost->fields.size() == 6);
   // The members after a constant that spans lines are still read.
   CHECK(method(*ghost, "ChangeState") != nullptr && method(*ghost, ".cctor") != nullptr);
+  // A method whose default string argument holds a line break is read whole, and the members after it too.
+  const ModelMethod* escape = method(*ghost, "Escape");
+  CHECK(escape && escape->isStatic && escape->params.size() == 3 && escape->rva == 0x1340);
+  CHECK(method(*ghost, "get_IsAwake") != nullptr);
 }
 
 void namespace_from_path() {
@@ -181,9 +202,139 @@ void nothing_is_left_unparsed() {
   CHECK(unparsed == 0);
 }
 
+// The dump writes System's primitive structs with their C# keywords ("public struct float"), where the
+// runtime names the class Single. The model names them as the runtime does, and a field spelled with
+// the keyword still names that type.
+void system_primitive_is_named_as_the_runtime_names_it() {
+  const GameModel m = load({"mscorlib"});
+  const ModelType* single = find(m, "Single");
+  CHECK(single && single->ns == "System" && single->isValueType);
+  CHECK(!find(m, "float"));
+  if (!single) return;
+  for (const ModelField& f : single->fields)
+    if (f.name == "m_value") CHECK(f.type == "float" && f.typeIndex == index_of(m, single));
+}
+
 }  // namespace
 
+// An image laid out by RVA with what read_method_tables reads: the PE headers' image base, and where a test puts them,
+// module names, records and tables.
+struct TableImage {
+  static constexpr uint64_t kBase = 0x180000000;
+  static constexpr uint32_t kLfanew = 0x40;
+  std::vector<uint8_t> bytes = std::vector<uint8_t>(0x4000);
+  TableImage() {
+    put<uint32_t>(0x3C, kLfanew);
+    put<uint64_t>(kLfanew + 24 + 24, kBase);
+  }
+  template <class T>
+  void put(uint32_t at, T value) {
+    std::memcpy(bytes.data() + at, &value, sizeof value);
+  }
+  void name(uint32_t at, const std::string& text) { std::memcpy(bytes.data() + at, text.data(), text.size()); }
+  void record(uint32_t at, uint32_t nameAt, uint32_t count, uint64_t tableVa) {
+    put<uint64_t>(at, kBase + nameAt);
+    put<uint32_t>(at + 8, count);
+    put<uint64_t>(at + 16, tableVa);
+  }
+};
+
+void the_tables_are_read_by_module_name() {
+  TableImage image;
+  image.name(0x1000, "Assembly-CSharp.dll");
+  image.record(0x2000, 0x1000, 3, TableImage::kBase + 0x3000);
+  image.put<uint64_t>(0x3000, TableImage::kBase + 0x1200);
+  image.put<uint64_t>(0x3008, 0);
+  image.put<uint64_t>(0x3010, TableImage::kBase + 0x1300);
+  MethodTables tables;
+  std::string error;
+  const std::vector<std::string> names{"Assembly-CSharp"};
+  CHECK(read_method_tables(image.bytes, names, tables, error));
+  CHECK((tables["Assembly-CSharp"] == std::vector<uint64_t>{0x1200, 0, 0x1300}));
+}
+
+void a_missing_module_is_an_error() {
+  TableImage image;
+  image.name(0x1000, "Assembly-CSharp.dll");
+  image.record(0x2000, 0x1000, 3, TableImage::kBase + 0x3000);
+  MethodTables tables;
+  std::string error;
+  const std::vector<std::string> names{"Assembly-CSharp", "PhotonRealtime"};
+  CHECK(!read_method_tables(image.bytes, names, tables, error));
+  CHECK(error.find("no code-gen module for PhotonRealtime") != std::string::npos);
+  CHECK(tables.empty());
+  CHECK(!read_method_tables(std::vector<uint8_t>(0x10), names, tables, error));
+}
+
+void several_modules_are_an_error() {
+  TableImage image;
+  image.name(0x1000, "Assembly-CSharp.dll");
+  image.record(0x2000, 0x1000, 1, TableImage::kBase + 0x3000);
+  image.record(0x2100, 0x1000, 1, TableImage::kBase + 0x3000);
+  MethodTables tables;
+  std::string error;
+  const std::vector<std::string> names{"Assembly-CSharp"};
+  CHECK(!read_method_tables(image.bytes, names, tables, error));
+  CHECK(error.find("several code-gen modules for Assembly-CSharp") != std::string::npos);
+}
+
+// What only looks like a module: a longer name ending in the assembly's, no count, a table leaving the image, or a
+// table holding something other than addresses.
+void a_look_alike_is_no_module() {
+  TableImage image;
+  image.name(0x1000, "NotAssembly-CSharp.dll");
+  image.record(0x2000, 0x1003, 1, TableImage::kBase + 0x3000);
+  image.name(0x1100, "Assembly-CSharp.dll");
+  image.record(0x2100, 0x1100, 0, TableImage::kBase + 0x3000);
+  image.record(0x2200, 0x1100, 0x1000, TableImage::kBase + 0x3F00);
+  image.record(0x2300, 0x1100, 1, TableImage::kBase + 0x3100);
+  image.put<uint64_t>(0x3100, 0x1234);  // no address of the image
+  image.record(0x2400, 0x1100, 1, TableImage::kBase + 0x3000);
+  image.put<uint64_t>(0x3000, TableImage::kBase + 0x1200);
+  MethodTables tables;
+  std::string error;
+  const std::vector<std::string> names{"Assembly-CSharp"};
+  CHECK(read_method_tables(image.bytes, names, tables, error));
+  CHECK((tables["Assembly-CSharp"] == std::vector<uint64_t>{0x1200}));
+  // The longer name alone answers to nothing.
+  TableImage longer;
+  longer.name(0x1000, "NotAssembly-CSharp.dll");
+  longer.record(0x2000, 0x1003, 1, TableImage::kBase + 0x3000);
+  CHECK(!read_method_tables(longer.bytes, names, tables, error));
+}
+
+// The address comes from the method's row of its own assembly's table, whatever the dump wrote.
+void a_method_takes_its_row() {
+  GameModel model;
+  model.types.resize(2);
+  model.types[0].assembly = "A";
+  model.types[1].assembly = "B";
+  const auto add = [](ModelType& type, uint32_t token, uint64_t dumpRva) {
+    ModelMethod m;
+    m.token = token;
+    m.rva = dumpRva;
+    type.methods.push_back(m);
+  };
+  add(model.types[0], 0x06000001, 0x111);  // the table's address replaces the dump's
+  add(model.types[0], 0x06000002, 0x222);  // row 0: no code of its own, though the dump gives one
+  add(model.types[0], 0x06000003, 0x333);  // past the table
+  add(model.types[0], 0, 0x444);           // no token
+  add(model.types[0], 0x04000001, 0x555);  // not a method's token
+  add(model.types[1], 0x06000001, 0x666);  // no table for this assembly
+  apply_method_tables({{"A", {0x1200, 0}}}, model);
+  CHECK(model.types[0].methods[0].rva == 0x1200);
+  for (size_t i = 1; i < 5; ++i) CHECK(model.types[0].methods[i].rva == 0);
+  CHECK(model.types[1].methods[0].rva == 0);
+}
+
 int main() {
+  the_tables_are_read_by_module_name();
+  a_missing_module_is_an_error();
+  several_modules_are_an_error();
+  a_look_alike_is_no_module();
+  a_method_takes_its_row();
+  system_primitive_is_named_as_the_runtime_names_it();
+  field_access_is_read();
   nested_enum_with_literals();
   nothing_is_left_unparsed();
   method_rva_and_params();

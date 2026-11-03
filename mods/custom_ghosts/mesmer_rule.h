@@ -7,14 +7,15 @@
 // The Mesmer's rules, kept free of game calls so they can be tested offline. Each investigator sees
 // its appearances differently (another form, standing elsewhere); cameras see it as it is; the truck's
 // monitor shows the team saner than they are; and the lights in its room dim and brighten slowly.
-namespace pg::custom {
+namespace pm::custom {
 
 constexpr float kMesmerLie = 20.0f;        // percent of sanity the monitor adds
 constexpr float kMesmerOffsetMin = 1.5f;   // metres from where it really stands, at least
 constexpr float kMesmerOffsetMax = 3.0f;   // and at most
 constexpr float kMesmerDimPeriod = 20.0f;  // seconds for its room's lights to dim and come back
 constexpr float kMesmerDimLowest = 0.55f;  // the share of their light at the dimmest
-constexpr int kMesmerFakeLayer = 3;        // the one layer the game leaves unnamed: only a player's eye draws it
+// The one layer the game leaves unnamed (the scene's TagManager): only a player's eye draws it.
+constexpr int kMesmerFakeLayer = 3;  // pm:not-game-data: a Unity layer with no name, so no Layer entry can find it
 
 /** A culling-mask bit for a Unity layer; none for a layer out of range. */
 inline uint32_t mesmer_layer_bit(int layer) { return layer >= 0 && layer < 32 ? 1u << layer : 0; }
@@ -29,9 +30,9 @@ inline bool mesmer_layers_safe(uint32_t layers) {
 
 /** A well-mixed number from an appearance's count and the viewing player's actor. */
 inline uint32_t mesmer_seed(uint32_t appearance, uint32_t actor) {
-  uint32_t h = appearance * 0x9E3779B1u ^ (actor + 0x7F4A7C15u) * 0x85EBCA77u;
+  uint32_t h = appearance * 0x9E3779B1u ^ (actor + 0x7F4A7C15u) * 0x85EBCA77u;  // pm:not-game-data: hash mixing
   h ^= h >> 15;
-  h *= 0xC2B2AE3Du;
+  h *= 0xC2B2AE3Du;  // pm:not-game-data: hash mixing
   return h ^ (h >> 13);
 }
 
@@ -59,4 +60,4 @@ inline float mesmer_dim(float seconds) {
   return kMesmerDimLowest + (1 - kMesmerDimLowest) * wave;
 }
 
-}  // namespace pg::custom
+}  // namespace pm::custom

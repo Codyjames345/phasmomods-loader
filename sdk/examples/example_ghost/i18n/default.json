@@ -1,0 +1,7 @@
+// The example ghost's player-facing text: its journal page. The Knell's text is the author's own, from Custom Ghosts.
+{
+  "ghost.knell.description": "The slow toll of a funeral bell, on a beat that never changes. Relentless in a hunt, it surges and crawls on a two-second beat you can hear in its steps.",
+  "ghost.knell.name": "Knell",
+  "ghost.knell.strength": "In a hunt a Knell surges to great speed on every other beat.",
+  "ghost.knell.weakness": "Between surges a Knell crawls at about a third of the base speed; run on its slow beat."
+}

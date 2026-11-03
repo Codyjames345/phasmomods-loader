@@ -8,7 +8,7 @@
 // place of death will trap it temporarily": when its incense trap starts it shuts the doors of its room
 // on itself and keeps them shut while trapped; the door its ability slams is held locked for a moment
 // with the game's hunt lock; and a door left open in its room draws its ability.
-namespace pg::tells {
+namespace pm::tells {
 
 constexpr float kYureiTrapSeconds = 90.0f;   // the game's own trap (TemporarilyStopWander(90))
 constexpr float kYureiReseal = 3.0f;         // seconds a door may stand open while it is trapped
@@ -103,4 +103,4 @@ struct Steer {
   void end() { *this = Steer{}; }
 };
 
-}  // namespace pg::tells
+}  // namespace pm::tells

@@ -3,7 +3,7 @@
 #include <string_view>
 #include <utility>
 
-namespace pg::sdk {
+namespace pm::sdk {
 namespace {
 
 constexpr std::pair<std::string_view, std::string_view> kPrimitives[] = {
@@ -61,4 +61,11 @@ std::string canonical_type(std::string_view raw) {
   return out;
 }
 
-}  // namespace pg::sdk
+std::string_view system_value_type_name(std::string_view keyword) {
+  if (keyword == "object" || keyword == "string" || keyword == "void") return {};
+  for (const auto& [full, word] : kPrimitives)
+    if (word == keyword) return full;
+  return {};
+}
+
+}  // namespace pm::sdk

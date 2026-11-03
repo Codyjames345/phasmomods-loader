@@ -10,3 +10,8 @@ Layer.twice	layer	0				Twice
 Anim.isOpen	animator	1	Resources/Player		Arms	isOpen
 Anim.isClosed	animator	0	Resources/Player		Arms	isClosed
 Anim.noController	animator	0	Resources/Player		Legs	isOpen
+Shader.tint	shader	1	Level		Candle Flame	_TintColour
+Shader.noProperty	shader	0	Level		Candle Flame	_Glow
+Shader.noShader	shader	0	Level		Wax	_Glow
+Shader.noScene	shader	0	Lobby		Candle Flame	_TintColour
+Shader.twoShaders	shader	0	Level		Twice	_A

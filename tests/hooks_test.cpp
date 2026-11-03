@@ -22,6 +22,7 @@
 #include "hooks.h"
 #include "log.h"
 #include "mod_api.h"
+#include "steering.h"
 
 #include "check.h"
 
@@ -96,27 +97,27 @@ __declspec(noinline) int detour_folded(int x) { return g_origFolded(x) * 100; }
 
 bool hook_entry(Fn canonical, std::initializer_list<void*> twins, Fn detour, Fn* original, const char* name, bool all) {
   const std::vector<void*> list(twins);
-  return pg::entry_hooks::hook(p(canonical), std::span<void* const>(list), p(detour),
+  return pm::entry_hooks::hook(p(canonical), std::span<void* const>(list), p(detour),
                                reinterpret_cast<void**>(original), name, all);
 }
 
 void twin_calls_reach_detour() {
   CHECK(p(twin_a) != p(twin_b));
   CHECK(hook_entry(twin_a, {p(twin_b)}, detour_twin, &g_origTwin, "twin", true));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::hooks::enable_all());
   CHECK(call(twin_a, 1) == 1200);
   CHECK(call(twin_b, 1) == 1200);  // entered through the twin, continued on the canonical chain
 }
 
 // A second detour on the same entry chains ahead of the first on every twin, and rolls back cleanly.
 void second_hook_chains_on_twins() {
-  const size_t before = pg::hooks::mark();
+  const size_t before = pm::hooks::mark();
   CHECK(hook_entry(twin_a, {p(twin_b)}, detour_twin2, &g_origTwin2, "twin 2", true));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::hooks::enable_all());
   CHECK(g_origTwin2 != nullptr);
   CHECK(call(twin_a, 1) == 1205);
   CHECK(call(twin_b, 1) == 1205);
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
   CHECK(call(twin_a, 1) == 1200);
   CHECK(call(twin_b, 1) == 1200);
 }
@@ -124,22 +125,22 @@ void second_hook_chains_on_twins() {
 // CanonicalOnly hooks stay on the canonical body, and a second one chains ahead of the first.
 void canonical_only_leaves_twin() {
   CHECK(hook_entry(solo_a, {p(solo_b)}, detour_solo, &g_origSolo, "solo", false));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::hooks::enable_all());
   CHECK(call(solo_a, 1) == 1300);
   CHECK(call(solo_b, 1) == 13);
   CHECK(hook_entry(solo_a, {p(solo_b)}, detour_solo2, &g_origSolo2, "solo 2", false));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::hooks::enable_all());
   CHECK(call(solo_a, 1) == 1307);
   CHECK(call(solo_b, 1) == 13);
 }
 
 void folded_twin_hooked_once() {
   g_log.clear();
-  const size_t before = pg::hooks::mark();
+  const size_t before = pm::hooks::mark();
   CHECK(hook_entry(folded, {p(folded), p(folded)}, detour_folded, &g_origFolded, "folded", true));
-  CHECK(pg::hooks::mark() - before == 1);
+  CHECK(pm::hooks::mark() - before == 1);
   CHECK(!logged("already hooked"));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::hooks::enable_all());
   CHECK(call(folded, 1) == 1400);
 }
 
@@ -174,15 +175,15 @@ std::string trace(GameFn body) {
 
 // Two mods' game API on the same method: each declares its own entry for it, so each has its own
 // typed hook, as two mod DLLs do.
-constexpr pg::sdk::EntryDesc kTwinMod1{.key = "Test.Twin", .kind = pg::sdk::Kind::Method};
-constexpr pg::sdk::EntryDesc kTwinMod2{.key = "Test.Twin", .kind = pg::sdk::Kind::Method};
-constexpr pg::api::Method<kTwinMod1, int(int)> TwinMod1{};
-constexpr pg::api::Method<kTwinMod2, int(int)> TwinMod2{};
-int d1(pg::api::Original<TwinMod1> original, int x) {
+constexpr pm::sdk::EntryDesc kTwinMod1{.key = "Test.Twin", .kind = pm::sdk::Kind::Method};
+constexpr pm::sdk::EntryDesc kTwinMod2{.key = "Test.Twin", .kind = pm::sdk::Kind::Method};
+constexpr pm::api::Method<kTwinMod1, int(int)> TwinMod1{};
+constexpr pm::api::Method<kTwinMod2, int(int)> TwinMod2{};
+int d1(pm::api::Original<TwinMod1> original, int x) {
   step("D1");
   return original(x);
 }
-int d2(pg::api::Original<TwinMod2> original, int x) {
+int d2(pm::api::Original<TwinMod2> original, int x) {
   step("D2");
   return original(x);
 }
@@ -199,45 +200,45 @@ __declspec(noinline) int legacy_detour(int x, const void* method) {
   return g_origLegacy(x, method);
 }
 bool raw_on(GameFn body) {
-  return pg::hooks::create(reinterpret_cast<void*>(body), reinterpret_cast<void*>(&raw_detour),
+  return pm::hooks::create(reinterpret_cast<void*>(body), reinterpret_cast<void*>(&raw_detour),
                            reinterpret_cast<void**>(&g_origRaw), "raw");
 }
 bool legacy(bool allTwins) {
   void* const twins[] = {reinterpret_cast<void*>(&body_b)};
-  return pg::entry_hooks::hook(reinterpret_cast<void*>(&body_a), twins, reinterpret_cast<void*>(&legacy_detour),
+  return pm::entry_hooks::hook(reinterpret_cast<void*>(&body_a), twins, reinterpret_cast<void*>(&legacy_detour),
                                reinterpret_cast<void**>(&g_origLegacy), "legacy", allTwins);
 }
 
 // The test's host contract: the method entries below, hooked through the host's own per-body hooks.
-std::map<std::string, PgGameEntry> g_entries;
+std::map<std::string, PmGameEntry> g_entries;
 std::vector<std::vector<void*>> g_twinLists;
 void give(const char* key, void* code, std::vector<void*> twins) {
   std::vector<void*>& list = g_twinLists.emplace_back(std::move(twins));
-  PgGameEntry e{};
-  e.kind = PG_ENTRY_METHOD;
+  PmGameEntry e{};
+  e.kind = PM_ENTRY_METHOD;
   e.code = code;
   e.twins = list.data();
   e.twinCount = static_cast<uint32_t>(list.size());
   g_entries[key] = e;
 }
-const PgGameEntry* test_entry(const char* key) {
+const PmGameEntry* test_entry(const char* key) {
   const auto it = g_entries.find(key);
   return it == g_entries.end() ? nullptr : &it->second;
 }
 bool test_hook_body(const char* key, uint32_t index, void* detour, void** original, const char* name) {
-  const PgGameEntry* e = test_entry(key);
-  return e && pg::entry_hooks::hook_body(e->code, {e->twins, e->twinCount}, index, detour, original, name);
+  const PmGameEntry* e = test_entry(key);
+  return e && pm::entry_hooks::hook_body(e->code, {e->twins, e->twinCount}, index, detour, original, name);
 }
 uint32_t test_body_count(const char* key) {
-  const PgGameEntry* e = test_entry(key);
-  return e ? static_cast<uint32_t>(pg::entry_hooks::bodies(e->code, {e->twins, e->twinCount}).size()) : 0;
+  const PmGameEntry* e = test_entry(key);
+  return e ? static_cast<uint32_t>(pm::entry_hooks::bodies(e->code, {e->twins, e->twinCount}).size()) : 0;
 }
-void test_log(const char* line) { PG_LOG("%s", line); }
-bool test_enable() { return pg::hooks::enable_all(); }
+void test_log(const char* line) { PM_LOG("%s", line); }
+bool test_enable() { return pm::hooks::enable_all(); }
 
-PgHostApi test_host() {
-  PgHostApi host{};
-  host.version = PGMOD_API_VERSION;
+PmHostApi test_host() {
+  PmHostApi host{};
+  host.version = PMMOD_API_VERSION;
   host.log = &test_log;
   host.enable_hooks = &test_enable;
   host.game_entry = &test_entry;
@@ -249,13 +250,13 @@ PgHostApi test_host() {
 // Twins A and B with different chains: an all-twins hook D1, then a CanonicalOnly hook D2 on A. A
 // call through B runs D1 and then B's own code; a call through A runs D2, then D1, then A's code.
 void original_follows_the_entered_body() {
-  const size_t before = pg::hooks::mark();
-  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
-  CHECK(pg::api::hook<TwinMod2>(&d2, "d2", pg::api::Twins::CanonicalOnly));
-  CHECK(pg::hooks::enable_all());
+  const size_t before = pm::hooks::mark();
+  CHECK(pm::api::hook<TwinMod1>(&d1, "d1", pm::api::Twins::All));
+  CHECK(pm::api::hook<TwinMod2>(&d2, "d2", pm::api::Twins::CanonicalOnly));
+  CHECK(pm::hooks::enable_all());
   CHECK(trace(&body_b) == "D1 B");
   CHECK(trace(&body_a) == "D2 D1 A");
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
   CHECK(trace(&body_a) == "A");
   CHECK(trace(&body_b) == "B");
 }
@@ -263,74 +264,74 @@ void original_follows_the_entered_body() {
 // Hooks with different twin policies coexist on one method in either order, typed or not: a hook on
 // one body never runs for a call that entered through another.
 void mixed_policies_now_coexist() {
-  const size_t before = pg::hooks::mark();
-  CHECK(pg::api::hook<TwinMod2>(&d2, "d2", pg::api::Twins::CanonicalOnly));
-  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
-  CHECK(pg::hooks::enable_all());
+  const size_t before = pm::hooks::mark();
+  CHECK(pm::api::hook<TwinMod2>(&d2, "d2", pm::api::Twins::CanonicalOnly));
+  CHECK(pm::api::hook<TwinMod1>(&d1, "d1", pm::api::Twins::All));
+  CHECK(pm::hooks::enable_all());
   CHECK(trace(&body_a) == "D1 D2 A");
   CHECK(trace(&body_b) == "D1 B");
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
 
   // A 2.0 mod's all-twins hook_entry, then a CanonicalOnly hook. Its one detour runs on both
   // bodies and continues on the canonical chain (the limit hook_entry documents), yet D2 stays on A.
   CHECK(legacy(true));
-  CHECK(pg::api::hook<TwinMod2>(&d2, "d2", pg::api::Twins::CanonicalOnly));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::api::hook<TwinMod2>(&d2, "d2", pm::api::Twins::CanonicalOnly));
+  CHECK(pm::hooks::enable_all());
   CHECK(trace(&body_a) == "D2 L A");
   CHECK(trace(&body_b) == "L A");
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
 
   // A CanonicalOnly hook_entry, then an all-twins hook.
   CHECK(legacy(false));
-  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::api::hook<TwinMod1>(&d1, "d1", pm::api::Twins::All));
+  CHECK(pm::hooks::enable_all());
   CHECK(trace(&body_a) == "D1 L A");
   CHECK(trace(&body_b) == "D1 B");
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
 
   // An all-twins hook, then an all-twins hook_entry over it: the entry's detour leads on both.
-  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
+  CHECK(pm::api::hook<TwinMod1>(&d1, "d1", pm::api::Twins::All));
   CHECK(legacy(true));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::hooks::enable_all());
   CHECK(trace(&body_a) == "L D1 A");
   CHECK(trace(&body_b) == "L D1 A");
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
   CHECK(trace(&body_a) == "A" && trace(&body_b) == "B");
 }
 
 // A raw hook on a twin, before or after an all-twins hook, joins that twin's chain alone.
 void raw_create_on_a_twin() {
-  const size_t before = pg::hooks::mark();
+  const size_t before = pm::hooks::mark();
   CHECK(raw_on(&body_b));
-  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::api::hook<TwinMod1>(&d1, "d1", pm::api::Twins::All));
+  CHECK(pm::hooks::enable_all());
   CHECK(trace(&body_a) == "D1 A");
   CHECK(trace(&body_b) == "D1 R B");
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
 
-  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
+  CHECK(pm::api::hook<TwinMod1>(&d1, "d1", pm::api::Twins::All));
   CHECK(raw_on(&body_b));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::hooks::enable_all());
   CHECK(trace(&body_a) == "D1 A");
   CHECK(trace(&body_b) == "R D1 B");
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
   CHECK(trace(&body_a) == "A" && trace(&body_b) == "B");
 }
 
 // One mod hooks a method once: a second typed hook on it is refused and the first keeps its detour.
-int d1_again(pg::api::Original<TwinMod1> original, int x) {
+int d1_again(pm::api::Original<TwinMod1> original, int x) {
   step("D1 again");
   return original(x);
 }
 void second_typed_hook_refused() {
-  const size_t before = pg::hooks::mark();
-  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::CanonicalOnly));
-  CHECK(!pg::api::hook<TwinMod1>(&d1_again, "d1 again", pg::api::Twins::All));
-  CHECK(pg::hooks::mark() - before == 1);
-  CHECK(pg::hooks::enable_all());
+  const size_t before = pm::hooks::mark();
+  CHECK(pm::api::hook<TwinMod1>(&d1, "d1", pm::api::Twins::CanonicalOnly));
+  CHECK(!pm::api::hook<TwinMod1>(&d1_again, "d1 again", pm::api::Twins::All));
+  CHECK(pm::hooks::mark() - before == 1);
+  CHECK(pm::hooks::enable_all());
   CHECK(trace(&body_a) == "D1 A");
   CHECK(trace(&body_b) == "B");
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
 }
 
 // A method with more bodies than a typed hook has slots for: an all-twins hook is refused with a log
@@ -340,9 +341,9 @@ __declspec(noinline) int many_body(int x, const void*) {
   volatile int y = x;
   return y + 23;
 }
-constexpr pg::sdk::EntryDesc kMany{.key = "Test.Many", .kind = pg::sdk::Kind::Method};
-constexpr pg::api::Method<kMany, int(int)> Many{};
-int many_detour(pg::api::Original<Many> original, int x) {
+constexpr pm::sdk::EntryDesc kMany{.key = "Test.Many", .kind = pm::sdk::Kind::Method};
+constexpr pm::api::Method<kMany, int(int)> Many{};
+int many_detour(pm::api::Original<Many> original, int x) {
   step("DM");
   return original(x);
 }
@@ -356,17 +357,17 @@ std::vector<void*> eight_twins() {
 
 void more_than_eight_bodies_refused() {
   g_log.clear();
-  const size_t before = pg::hooks::mark();
-  CHECK(!pg::api::hook<Many>(&many_detour, "many", pg::api::Twins::All));
-  CHECK(pg::hooks::mark() == before);
+  const size_t before = pm::hooks::mark();
+  CHECK(!pm::api::hook<Many>(&many_detour, "many", pm::api::Twins::All));
+  CHECK(pm::hooks::mark() == before);
   CHECK(logged("Test.Many has 9 bodies, more than the 8 a hook covers; nothing was hooked"));
-  CHECK(pg::api::hook<Many>(&many_detour, "many", pg::api::Twins::CanonicalOnly));
-  CHECK(pg::hooks::mark() - before == 1);
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::api::hook<Many>(&many_detour, "many", pm::api::Twins::CanonicalOnly));
+  CHECK(pm::hooks::mark() - before == 1);
+  CHECK(pm::hooks::enable_all());
   g_trace.clear();
   GameFn volatile through = &many_body;
   CHECK(through(1, nullptr) == 24 && g_trace == "DM M");
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
 }
 
 // A typed hook that the host refuses on a later body is partial: the body hooked before it stays
@@ -376,9 +377,9 @@ __declspec(noinline) int partial_body(int x, const void*) {
   volatile int y = x;
   return y + 25;
 }
-constexpr pg::sdk::EntryDesc kPartial{.key = "Test.Partial", .kind = pg::sdk::Kind::Method};
-constexpr pg::api::Method<kPartial, int(int)> Partial{};
-int partial_detour(pg::api::Original<Partial> original, int x) {
+constexpr pm::sdk::EntryDesc kPartial{.key = "Test.Partial", .kind = pm::sdk::Kind::Method};
+constexpr pm::api::Method<kPartial, int(int)> Partial{};
+int partial_detour(pm::api::Original<Partial> original, int x) {
   step("DP");
   return original(x);
 }
@@ -398,15 +399,15 @@ void* unhookable_twin() {
 
 void partial_hook_runs_no_detour() {
   g_log.clear();
-  const size_t before = pg::hooks::mark();
-  CHECK(!pg::api::hook<Partial>(&partial_detour, "partial", pg::api::Twins::All));
+  const size_t before = pm::hooks::mark();
+  CHECK(!pm::api::hook<Partial>(&partial_detour, "partial", pm::api::Twins::All));
   CHECK(logged("Test.Partial is hooked on 1 of its 2 bodies only"));
-  CHECK(pg::hooks::mark() - before == 1);
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::hooks::mark() - before == 1);
+  CHECK(pm::hooks::enable_all());
   g_trace.clear();
   GameFn volatile through = &partial_body;
   CHECK(through(1, nullptr) == 26 && g_trace == "P");
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
 }
 
 // The mods restart: every per-body hook since the mark goes, newest first, and each body's chain is
@@ -417,50 +418,50 @@ __declspec(noinline) int host_detour(int x, const void* method) {
   return g_origHost(x, method);
 }
 void rollback_per_body() {
-  CHECK(pg::hooks::create(reinterpret_cast<void*>(&body_a), reinterpret_cast<void*>(&host_detour),
+  CHECK(pm::hooks::create(reinterpret_cast<void*>(&body_a), reinterpret_cast<void*>(&host_detour),
                           reinterpret_cast<void**>(&g_origHost), "host"));
-  CHECK(pg::hooks::enable_all());
-  const size_t beforeMods = pg::hooks::mark();
-  pg::hooks::begin_group();
-  CHECK(pg::api::hook<TwinMod1>(&d1, "d1", pg::api::Twins::All));
-  CHECK(pg::api::hook<TwinMod2>(&d2, "d2", pg::api::Twins::CanonicalOnly));
+  CHECK(pm::hooks::enable_all());
+  const size_t beforeMods = pm::hooks::mark();
+  pm::hooks::begin_group();
+  CHECK(pm::api::hook<TwinMod1>(&d1, "d1", pm::api::Twins::All));
+  CHECK(pm::api::hook<TwinMod2>(&d2, "d2", pm::api::Twins::CanonicalOnly));
   CHECK(raw_on(&body_b));
   CHECK(legacy(true));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::hooks::enable_all());
   CHECK(trace(&body_a) == "L D2 D1 H A");
   CHECK(trace(&body_b) == "L D2 D1 H A");  // hook_entry's detour continues on the canonical chain
   g_log.clear();
-  pg::hooks::rollback_to(beforeMods);
+  pm::hooks::rollback_to(beforeMods);
   CHECK(logged("removed 6 hook(s)"));
   CHECK(trace(&body_a) == "H A");
   CHECK(trace(&body_b) == "B");
-  pg::hooks::begin_group();
-  CHECK(pg::api::hook<TwinMod1>(&d1, "d1 restarted", pg::api::Twins::All));
+  pm::hooks::begin_group();
+  CHECK(pm::api::hook<TwinMod1>(&d1, "d1 restarted", pm::api::Twins::All));
   CHECK(raw_on(&body_b));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::hooks::enable_all());
   CHECK(trace(&body_a) == "D1 H A");
   CHECK(trace(&body_b) == "R D1 B");
-  pg::hooks::rollback_to(beforeMods);
+  pm::hooks::rollback_to(beforeMods);
   CHECK(trace(&body_a) == "H A" && trace(&body_b) == "B");
 }
 
 // The caller context, on a tracked test method with a twin (the game's convention: its MethodInfo
 // comes last).
-constexpr pg::sdk::EntryDesc kTestF{.key = "Test.F", .kind = pg::sdk::Kind::Method};
-constexpr pg::api::Method<kTestF, int(int)> TestF{};
-constexpr pg::sdk::EntryDesc kTestMany{.key = "Test.ManyTracked", .kind = pg::sdk::Kind::Method};
-constexpr pg::api::Method<kTestMany, int(int)> TestMany{};
+constexpr pm::sdk::EntryDesc kTestF{.key = "Test.F", .kind = pm::sdk::Kind::Method};
+constexpr pm::api::Method<kTestF, int(int)> TestF{};
+constexpr pm::sdk::EntryDesc kTestMany{.key = "Test.ManyTracked", .kind = pm::sdk::Kind::Method};
+constexpr pm::api::Method<kTestMany, int(int)> TestMany{};
 
 int g_depthInside = -1, g_depthElsewhere = -1;
 __declspec(noinline) int tracked(int x, const void*) {
-  g_depthInside = pg::context::depth("Test.F");
-  std::thread([] { g_depthElsewhere = pg::context::depth("Test.F"); }).join();
+  g_depthInside = pm::context::depth("Test.F");
+  std::thread([] { g_depthElsewhere = pm::context::depth("Test.F"); }).join();
   if (x < 0) throw std::runtime_error("thrown inside the tracked method");
   volatile int y = x;
   return y + 1;
 }
 __declspec(noinline) int tracked_twin(int x, const void*) {
-  g_depthInside = pg::context::depth("Test.F");
+  g_depthInside = pm::context::depth("Test.F");
   volatile int y = x;
   volatile int zero = 0;
   return y + zero + 1;
@@ -470,16 +471,16 @@ int call_tracked(GameFn body, int x) {
   return through(x, nullptr);
 }
 
-const PgGameEntry* fake_lookup(const char* key) {
+const PmGameEntry* fake_lookup(const char* key) {
   static void* const twins[] = {reinterpret_cast<void*>(&tracked_twin)};
-  static PgGameEntry entry{};
-  entry.kind = PG_ENTRY_METHOD;
+  static PmGameEntry entry{};
+  entry.kind = PM_ENTRY_METHOD;
   entry.code = reinterpret_cast<void*>(&tracked);
   entry.twins = twins;
   entry.twinCount = 1;
   static const std::vector<void*> many = eight_twins();
-  static PgGameEntry manyEntry{};
-  manyEntry.kind = PG_ENTRY_METHOD;
+  static PmGameEntry manyEntry{};
+  manyEntry.kind = PM_ENTRY_METHOD;
   manyEntry.code = reinterpret_cast<void*>(&many_body);
   manyEntry.twins = many.data();
   manyEntry.twinCount = static_cast<uint32_t>(many.size());
@@ -489,23 +490,28 @@ const PgGameEntry* fake_lookup(const char* key) {
 }
 
 void tracking_counts_every_body() {
-  CHECK(pg::context::depth("Test.F") == 0);
-  pg::context::track<TestF>();
-  pg::context::track<TestMany>();
+  CHECK(pm::context::depth("Test.F") == 0);
+  pm::context::track<TestF>();
+  pm::context::track<TestMany>();
   g_log.clear();
-  const size_t before = pg::hooks::mark();
-  CHECK(pg::context::install(&fake_lookup));
-  CHECK(pg::hooks::mark() - before == 2);  // one hook per body of Test.F, none on Test.ManyTracked
+  const size_t before = pm::hooks::mark();
+  CHECK(pm::context::tracking_failed("Test.F"));  // not installed yet
+  CHECK(pm::context::install(&fake_lookup));
+  CHECK(!pm::context::tracking_failed("Test.F"));
+  CHECK(pm::context::tracking_failed("Test.ManyTracked"));  // more bodies than a hook covers
+  CHECK(!pm::context::tracking_failed("Test.Untracked"));   // not one the host tracks
+  CHECK(!pm::context::tracking_failed(nullptr));
+  CHECK(pm::hooks::mark() - before == 2);  // one hook per body of Test.F, none on Test.ManyTracked
   CHECK(logged("Test.ManyTracked has 9 bodies, more than the 8 a hook covers"));
-  CHECK(pg::hooks::enable_all());
+  CHECK(pm::hooks::enable_all());
   CHECK(call_tracked(&tracked, 1) == 2);
   CHECK(g_depthInside == 1);
   CHECK(g_depthElsewhere == 0);  // another thread never sees this one's depth
-  CHECK(pg::context::depth("Test.F") == 0);
+  CHECK(pm::context::depth("Test.F") == 0);
   g_depthInside = -1;
   CHECK(call_tracked(&tracked_twin, 1) == 2);
   CHECK(g_depthInside == 1);  // entered through the twin, counted all the same
-  CHECK(pg::context::depth("Test.F") == 0);
+  CHECK(pm::context::depth("Test.F") == 0);
   g_depthInside = -1;
   bool caught = false;
   try {
@@ -515,8 +521,44 @@ void tracking_counts_every_body() {
   }
   CHECK(caught);
   CHECK(g_depthInside == 1);
-  CHECK(pg::context::depth("Test.F") == 0);  // the exception unwound through the counter
-  CHECK(pg::context::depth("Test.Untracked") == 0);
+  CHECK(pm::context::depth("Test.F") == 0);  // the exception unwound through the counter
+  CHECK(pm::context::depth("Test.Untracked") == 0);
+}
+
+// The host contract's abandon_ghost_spawn: outside a running GhostController.Spawn it does nothing; under one it
+// raises, and the unwind lowers the spawn's depth again.
+int g_raised = 0;
+void raise_for_test() {
+  ++g_raised;
+  throw std::runtime_error("abandoned");
+}
+__declspec(noinline) int spawn_body(int x, const void*) {
+  volatile int y = x;
+  pm::context::abandon_ghost_spawn(&raise_for_test);
+  return y + 2;
+}
+const PmGameEntry* spawn_lookup(const char* key) {
+  static PmGameEntry spawn{};
+  spawn.kind = PM_ENTRY_METHOD;
+  spawn.code = reinterpret_cast<void*>(&spawn_body);
+  return std::string(key) == "GhostController.Spawn" ? &spawn : fake_lookup(key);
+}
+
+void abandon_raises_only_under_the_spawn() {
+  g_raised = 0;
+  CHECK(!pm::context::abandon_ghost_spawn(&raise_for_test));  // no spawn running: nothing raised
+  CHECK(g_raised == 0);
+  CHECK(pm::context::install(&spawn_lookup));
+  CHECK(pm::hooks::enable_all());
+  bool caught = false;
+  try {
+    call_tracked(&spawn_body, 1);
+  } catch (const std::runtime_error&) {
+    caught = true;
+  }
+  CHECK(caught && g_raised == 1);
+  CHECK(pm::context::depth("GhostController.Spawn") == 0);
+  CHECK(!pm::context::abandon_ghost_spawn(&raise_for_test));
 }
 
 // A native site in a real code page of this process: `mov eax, 5; nop dword ptr [rax]; ret`. A
@@ -542,7 +584,7 @@ int run_site() {
 }
 bool site_intact() { return std::memcmp(site_code(), kSiteCode, sizeof kSiteCode) == 0; }
 bool patch(const uint8_t* expected, size_t size, void** page) {
-  return pg::hooks::patch_site(site_code(), expected, size, kStub, sizeof kStub, page, "test site");
+  return pm::hooks::patch_site(site_code(), expected, size, kStub, sizeof kStub, page, "test site");
 }
 
 // Bytes other than the expected ones are never overwritten: the patch is refused, nothing is
@@ -550,7 +592,7 @@ bool patch(const uint8_t* expected, size_t size, void** page) {
 // land inside one) and fewer than a jump takes.
 void changed_bytes_refuse_the_patch() {
   g_log.clear();
-  const size_t before = pg::hooks::mark();
+  const size_t before = pm::hooks::mark();
   uint8_t other[8];
   std::memcpy(other, kSiteCode, sizeof other);
   other[1] = 0x06;  // another build: mov eax, 6
@@ -558,7 +600,7 @@ void changed_bytes_refuse_the_patch() {
   CHECK(!patch(other, sizeof other, &page));
   CHECK(page == nullptr);
   CHECK(site_intact() && run_site() == 5);
-  CHECK(pg::hooks::mark() == before);
+  CHECK(pm::hooks::mark() == before);
   CHECK(logged("hooks: test site: the 8 bytes at"));
   CHECK(logged("differ from the expected ones; nothing was written"));
 
@@ -566,16 +608,37 @@ void changed_bytes_refuse_the_patch() {
   CHECK(logged("hooks: test site: the expected bytes are not whole instructions; nothing was written"));
   CHECK(!patch(kSiteCode, 4, &page));
   CHECK(logged("hooks: test site: a patch replaces 5 to 32 bytes, not 4; nothing was written"));
-  CHECK(site_intact() && pg::hooks::mark() == before);
+  CHECK(site_intact() && pm::hooks::mark() == before);
+}
+
+// The bytes the map says steering replaces are ones the host patches: whole instructions, restored after.
+void the_steering_sites_bytes_patch_and_restore() {
+  const auto& replaced = pm::steering::kReplaced;
+  auto* const site = static_cast<uint8_t*>(VirtualAlloc(nullptr, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+  CHECK(site != nullptr);
+  if (!site) return;
+  std::memcpy(site, replaced.data(), replaced.size());
+  site[replaced.size()] = 0xC3;
+  DWORD old = 0;
+  CHECK(VirtualProtect(site, 0x1000, PAGE_EXECUTE_READ, &old));
+  const size_t before = pm::hooks::mark();
+  void* page = nullptr;
+  CHECK(pm::hooks::patch_site(site, replaced.data(), replaced.size(), kStub, sizeof kStub, &page, "steering site"));
+  CHECK(page != nullptr && site[0] == 0xE9);
+  CHECK(pm::hooks::site_patched(site));
+  pm::hooks::rollback_to(before);
+  CHECK(std::memcmp(site, replaced.data(), replaced.size()) == 0);
+  CHECK(!pm::hooks::site_patched(site));
+  VirtualFree(site, 0, MEM_RELEASE);
 }
 
 // No page can be had within rel32 range of the site: the patch is refused and nothing is written.
 void no_page_refuses_the_patch() {
   g_log.clear();
-  pg::hooks::g_noPageNear = true;
+  pm::hooks::g_noPageNear = true;
   void* page = &g_log;
   CHECK(!patch(kSiteCode, 8, &page));
-  pg::hooks::g_noPageNear = false;
+  pm::hooks::g_noPageNear = false;
   CHECK(page == nullptr && site_intact() && run_site() == 5);
   CHECK(logged("hooks: test site: no page within rel32 range of"));
 }
@@ -584,8 +647,8 @@ void no_page_refuses_the_patch() {
 // mod's hooks when the mods restart, the site's own bytes written back each time.
 void patch_and_rollback() {
   g_log.clear();
-  const size_t before = pg::hooks::mark();
-  pg::hooks::begin_group();
+  const size_t before = pm::hooks::mark();
+  pm::hooks::begin_group();
   void* page = nullptr;
   CHECK(patch(kSiteCode, 8, &page));
   CHECK(page && std::memcmp(page, kStub, sizeof kStub) == 0);
@@ -593,21 +656,21 @@ void patch_and_rollback() {
   const intptr_t distance = reinterpret_cast<intptr_t>(page) - reinterpret_cast<intptr_t>(site_code() + 5);
   CHECK(distance >= INT32_MIN && distance <= INT32_MAX);
   CHECK(site_code()[0] == 0xE9 && site_code()[5] == 0x90 && site_code()[7] == 0x90 && site_code()[8] == 0xC3);
-  CHECK(pg::hooks::mark() - before == 1);
-  CHECK(pg::hooks::enable_all());  // a patch is live as written: enabling leaves it be
+  CHECK(pm::hooks::mark() - before == 1);
+  CHECK(pm::hooks::enable_all());  // a patch is live as written: enabling leaves it be
   CHECK(run_site() == 7);
 
   // A second patch on the patched site sees other bytes: refused, and the first stays.
   void* second = nullptr;
   CHECK(!patch(kSiteCode, 8, &second) && second == nullptr && run_site() == 7);
 
-  pg::hooks::rollback_group();
-  CHECK(site_intact() && run_site() == 5 && pg::hooks::mark() == before);
+  pm::hooks::rollback_group();
+  CHECK(site_intact() && run_site() == 5 && pm::hooks::mark() == before);
 
-  pg::hooks::begin_group();
+  pm::hooks::begin_group();
   CHECK(patch(kSiteCode, 8, &page) && run_site() == 7);
-  pg::hooks::rollback_to(before);
-  CHECK(site_intact() && run_site() == 5 && pg::hooks::mark() == before);
+  pm::hooks::rollback_to(before);
+  CHECK(site_intact() && run_site() == 5 && pm::hooks::mark() == before);
   CHECK(logged("hooks: restored the 8 bytes at"));
 }
 
@@ -628,10 +691,10 @@ void patch_while_a_thread_runs_the_site() {
   g_spin = true;
   std::thread worker(spin);
   while (g_spinCalls.load() < 1000) std::this_thread::yield();
-  const size_t before = pg::hooks::mark();
+  const size_t before = pm::hooks::mark();
   void* page = nullptr;
   for (int round = 0; round < 5; ++round) {
-    pg::hooks::begin_group();
+    pm::hooks::begin_group();
     const bool patched = patch(kSiteCode, 8, &page);
     CHECK(patched);
     if (patched) {  // the worker runs the stub
@@ -640,13 +703,13 @@ void patch_while_a_thread_runs_the_site() {
       while (g_spinSevens.load() < sevens + 100 && GetTickCount64() < deadline) std::this_thread::yield();
       CHECK(g_spinSevens.load() >= sevens + 100);
     }
-    pg::hooks::rollback_to(before);
+    pm::hooks::rollback_to(before);
     CHECK(site_intact());
   }
   g_spin = false;
   worker.join();
   CHECK(g_spinWrong.load() == 0);
-  CHECK(pg::hooks::mark() == before);
+  CHECK(pm::hooks::mark() == before);
 }
 
 // A thread stopped inside the bytes a patch replaces would resume in the middle of the jump: the
@@ -666,19 +729,19 @@ void thread_inside_the_site_refuses_the_patch() {
   inside.Rip = reinterpret_cast<DWORD64>(site_code() + 5);  // the nop after `mov eax, 5`
   CHECK(SetThreadContext(thread, &inside));
 
-  const size_t before = pg::hooks::mark();
+  const size_t before = pm::hooks::mark();
   void* page = &g_log;
   CHECK(!patch(kSiteCode, 8, &page));
-  CHECK(page == nullptr && site_intact() && pg::hooks::mark() == before);
+  CHECK(page == nullptr && site_intact() && pm::hooks::mark() == before);
   CHECK(logged("hooks: test site: another thread kept stopping inside the bytes at"));
   CHECK(logged("; nothing was written"));
 
   // Parked at the site's first byte, the thread is between instructions: the patch goes ahead.
   inside.Rip = reinterpret_cast<DWORD64>(site_code());
   CHECK(SetThreadContext(thread, &inside));
-  pg::hooks::begin_group();
+  pm::hooks::begin_group();
   CHECK(patch(kSiteCode, 8, &page));
-  pg::hooks::rollback_to(before);
+  pm::hooks::rollback_to(before);
   CHECK(site_intact());
 
   CHECK(SetThreadContext(thread, &saved));
@@ -692,8 +755,8 @@ int not_a_detour();
 // recorded, so nothing can hook over it and the next rollback writes the bytes back.
 void refused_restore_keeps_the_patch() {
   g_log.clear();
-  const size_t before = pg::hooks::mark();
-  pg::hooks::begin_group();
+  const size_t before = pm::hooks::mark();
+  pm::hooks::begin_group();
   void* page = nullptr;
   CHECK(patch(kSiteCode, 8, &page));
 
@@ -707,20 +770,20 @@ void refused_restore_keeps_the_patch() {
   inside.Rip = reinterpret_cast<DWORD64>(site_code() + 5);  // in the patch's nops
   CHECK(SetThreadContext(thread, &inside));
 
-  pg::hooks::rollback_to(before);
-  CHECK(pg::hooks::mark() - before == 1);  // still recorded
+  pm::hooks::rollback_to(before);
+  CHECK(pm::hooks::mark() - before == 1);  // still recorded
   CHECK(site_code()[0] == 0xE9 && !site_intact());
   CHECK(logged("hooks: restoring a site: another thread kept stopping inside the bytes at"));
   CHECK(logged("hooks: removed 0 hook(s); 1 site patch(es) stay in place"));
   void* original = nullptr;
-  CHECK(!pg::hooks::create(site_code(), reinterpret_cast<void*>(&not_a_detour), &original, "over the kept patch"));
+  CHECK(!pm::hooks::create(site_code(), reinterpret_cast<void*>(&not_a_detour), &original, "over the kept patch"));
 
   CHECK(SetThreadContext(thread, &saved));
   CHECK(ResumeThread(thread) != static_cast<DWORD>(-1));
   parker.detach();  // it sleeps until the process ends
 
-  pg::hooks::rollback_to(before);
-  CHECK(site_intact() && run_site() == 5 && pg::hooks::mark() == before);
+  pm::hooks::rollback_to(before);
+  CHECK(site_intact() && run_site() == 5 && pm::hooks::mark() == before);
   CHECK(logged("hooks: restored the 8 bytes at"));
 }
 
@@ -729,18 +792,18 @@ void refused_restore_keeps_the_patch() {
 int not_a_detour() { return 0; }
 void hook_inside_a_site_patch_refused() {
   g_log.clear();
-  const size_t before = pg::hooks::mark();
-  pg::hooks::begin_group();
+  const size_t before = pm::hooks::mark();
+  pm::hooks::begin_group();
   void* page = nullptr;
   CHECK(patch(kSiteCode, 8, &page));
   void* original = nullptr;
   for (const size_t offset : {0, 3, 7, 8, 12}) {  // 8 and 12: just after the site, within patch-above reach
-    CHECK(!pg::hooks::create(site_code() + offset, reinterpret_cast<void*>(&not_a_detour), &original, "in the site"));
+    CHECK(!pm::hooks::create(site_code() + offset, reinterpret_cast<void*>(&not_a_detour), &original, "in the site"));
   }
   CHECK(logged("hooks: in the site at"));
   CHECK(logged("is inside a site patch; nothing hooked"));
-  CHECK(pg::hooks::mark() - before == 1);
-  pg::hooks::rollback_to(before);
+  CHECK(pm::hooks::mark() - before == 1);
+  pm::hooks::rollback_to(before);
   CHECK(site_intact());
 }
 
@@ -748,36 +811,36 @@ void hook_inside_a_site_patch_refused() {
 // own patch would write over the jump once enabled.
 void patch_over_a_hook_refused() {
   g_log.clear();
-  const size_t before = pg::hooks::mark();
-  pg::hooks::begin_group();
+  const size_t before = pm::hooks::mark();
+  pm::hooks::begin_group();
   void* original = nullptr;
-  CHECK(pg::hooks::create(site_code(), reinterpret_cast<void*>(&not_a_detour), &original, "on the site"));
+  CHECK(pm::hooks::create(site_code(), reinterpret_cast<void*>(&not_a_detour), &original, "on the site"));
   void* page = &g_log;
   CHECK(!patch(kSiteCode, 8, &page));
-  CHECK(page == nullptr && site_intact() && pg::hooks::mark() - before == 1);
+  CHECK(page == nullptr && site_intact() && pm::hooks::mark() - before == 1);
   CHECK(logged("hooks: test site: the site at"));
   CHECK(logged("is already patched or hooked; nothing was written"));
-  pg::hooks::rollback_to(before);
-  CHECK(site_intact() && run_site() == 5 && pg::hooks::mark() == before);
+  pm::hooks::rollback_to(before);
+  CHECK(site_intact() && run_site() == 5 && pm::hooks::mark() == before);
 }
 
 // The host's shutdown writes the site's bytes back before it disables the hooks: restore_sites
 // restores every patch in place and leaves the hooks as they are. A second call finds nothing to do.
 void restore_sites_writes_the_bytes_back() {
   g_log.clear();
-  const size_t before = pg::hooks::mark();
-  pg::hooks::begin_group();
+  const size_t before = pm::hooks::mark();
+  pm::hooks::begin_group();
   void* page = nullptr;
   CHECK(patch(kSiteCode, 8, &page) && run_site() == 7);
-  pg::hooks::restore_sites();
+  pm::hooks::restore_sites();
   CHECK(site_intact() && run_site() == 5);
   CHECK(logged("hooks: restored the 8 bytes at"));
   CHECK(call(target, 1) == 13);  // the hooks still run
   g_log.clear();
-  pg::hooks::restore_sites();
+  pm::hooks::restore_sites();
   CHECK(site_intact() && !logged("hooks: restored"));
-  pg::hooks::rollback_to(before);
-  CHECK(site_intact() && pg::hooks::mark() == before);
+  pm::hooks::rollback_to(before);
+  CHECK(site_intact() && pm::hooks::mark() == before);
 }
 
 // Code that cannot be read is not readable code: an execute-only page fails, as does a guard page.
@@ -788,18 +851,18 @@ void execute_only_is_not_readable() {
   DWORD old = 0;
   CHECK(VirtualProtect(page, 0x1000, PAGE_EXECUTE_READ, &old));
   CHECK(VirtualProtect(page + 0x1000, 0x1000, PAGE_EXECUTE, &old));
-  CHECK(pg::host::readable_code(page, 0x1000));
-  CHECK(!pg::host::readable_code(page + 0x1000, 0x10));
-  CHECK(!pg::host::readable_code(page + 0xFF8, 0x10));  // the second page of two
+  CHECK(pm::host::readable_code(page, 0x1000));
+  CHECK(!pm::host::readable_code(page + 0x1000, 0x10));
+  CHECK(!pm::host::readable_code(page + 0xFF8, 0x10));  // the second page of two
   CHECK(VirtualProtect(page, 0x1000, PAGE_EXECUTE_READ | PAGE_GUARD, &old));
-  CHECK(!pg::host::readable_code(page, 0x10));
+  CHECK(!pm::host::readable_code(page, 0x10));
   VirtualFree(page, 0, MEM_RELEASE);
 }
 
 }  // namespace
 
 int main() {
-  using namespace pg::hooks;
+  using namespace pm::hooks;
   CHECK(init());
   CHECK(call(target, 1) == 2);
 
@@ -844,7 +907,7 @@ int main() {
   CHECK(enable_all());
   CHECK(call(target, 1) == 13);
 
-  pg::log::set_sink(&capture, "");
+  pm::log::set_sink(&capture, "");
   twin_calls_reach_detour();
   second_hook_chains_on_twins();
   canonical_only_leaves_twin();
@@ -853,9 +916,9 @@ int main() {
   give("Test.Twin", reinterpret_cast<void*>(&body_a), {reinterpret_cast<void*>(&body_b)});
   give("Test.Many", reinterpret_cast<void*>(&many_body), eight_twins());
   give("Test.Partial", reinterpret_cast<void*>(&partial_body), {unhookable_twin()});
-  const PgHostApi host = test_host();
+  const PmHostApi host = test_host();
   std::string missing;
-  CHECK(pg::api::bind(&host, missing));
+  CHECK(pm::api::bind(&host, missing));
   original_follows_the_entered_body();
   mixed_policies_now_coexist();
   raw_create_on_a_twin();
@@ -864,7 +927,9 @@ int main() {
   partial_hook_runs_no_detour();
   rollback_per_body();
   tracking_counts_every_body();
+  abandon_raises_only_under_the_spawn();
   changed_bytes_refuse_the_patch();
+  the_steering_sites_bytes_patch_and_restore();
   no_page_refuses_the_patch();
   patch_and_rollback();
   patch_while_a_thread_runs_the_site();

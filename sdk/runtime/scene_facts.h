@@ -1,9 +1,9 @@
 #pragma once
 
-// The scene and asset facts in the running game: layers by name, paths found from an object a mod
-// holds, and Animator parameters checked against the Animator. The host (host/game_map.cpp) runs this
-// over the running game, and the fake game backend (sdk/fake) over its own, so the tests exercise the
-// code the host runs. Main thread only.
+// The scene and asset facts in the running game: layers and shader properties by name, paths found
+// from an object a mod holds, and Animator parameters checked against the Animator. The host
+// (host/game_map.cpp) runs this over the running game, and the fake game backend (sdk/fake) over its
+// own, so the tests exercise the code the host runs. Main thread only.
 
 #include <cstdint>
 #include <string>
@@ -11,7 +11,7 @@
 
 #include "entry.h"
 
-namespace pg::sdk {
+namespace pm::sdk {
 
 // What the facts ask of the engine. Each call contains what it throws and answers as for a miss. Where
 // a call misses for a reason other than the fact being absent (an argument of the wrong type, an entry
@@ -32,6 +32,9 @@ struct SceneEngine {
   // A strong GC handle on `obj` (0 for null), and its release: what is kept across frames is held.
   uint32_t (*hold)(void* obj);
   void (*release)(uint32_t handle);
+  // The id of the shader property named `name` (Shader.PropertyToID) into `id`; false when it could not
+  // be asked.
+  bool (*property_id)(const char* name, int32_t* id, const char** why);
 };
 
 class SceneFacts {
@@ -51,6 +54,10 @@ class SceneFacts {
   // The index of the Layer entry `d`'s layer, or -1, logged with why (no layer has its name, or the
   // engine could not ask).
   int32_t layer(const EntryDesc& d);
+  // The id of the ShaderProperty entry `d`'s property into `id`; false, logged with why, when the engine
+  // could not ask. Any name has an id: whether a material's shader has the property is the material's
+  // to answer (Material.HasProperty).
+  bool shader_property(const EntryDesc& d, int32_t& id);
   // The Transform at the Scene entry `d`'s path under `root`. Kept until the active scene changes,
   // the object found is destroyed or another root is given, so only a call with a new root searches.
   // A null `root` answers null at once: no search, nothing logged, the kept answer untouched. Null,
@@ -85,4 +92,4 @@ class SceneFacts {
   std::unordered_map<std::string, Kept> kept_;  // by key
 };
 
-}  // namespace pg::sdk
+}  // namespace pm::sdk

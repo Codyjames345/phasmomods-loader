@@ -9,7 +9,7 @@
 
 // Small file and text helpers shared by the host and the launcher, for the suite's UTF-8 text
 // files (core/mod_list.h).
-namespace pg::text {
+namespace pm::text {
 
 /** A whole file's bytes; empty when it cannot be read. */
 inline std::string read_file(const std::filesystem::path& path) {
@@ -37,4 +37,4 @@ inline std::string narrow(const std::wstring& wide) {
   return out;
 }
 
-}  // namespace pg::text
+}  // namespace pm::text

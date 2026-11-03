@@ -6,40 +6,57 @@
 #include <cmath>
 
 #include "check.h"
+#include "text_fixture.h"
+#include "roll.h"
 
-using namespace pg::tether;
+using namespace pm::tether;
 
 namespace {
+
+// Two numberings, neither the game's: the rules read every state's number from the game, so nothing here may know
+// them. Numbers neither names (kOther) stand for the game's other states.
+constexpr States kStates{.idle = 40, .wander = 41, .dots = 47, .hunting = 42, .favouriteRoom = 43, .throwing = 46,
+                         .fuseBox = 48, .randomEvent = 44, .ability = 45};
+constexpr int kOther = 30, kOtherToo = 31;
+constexpr States kMoved{.idle = 3, .wander = 9, .dots = 5, .hunting = 0, .favouriteRoom = 1, .throwing = 2,
+                        .fuseBox = 11, .randomEvent = 4, .ability = 6};
 
 Ghost in(int state) { return {state, false, false}; }
 
 bool near(float a, float b) { return std::fabs(a - b) < 1e-4f; }
 
 void the_player_moves_the_ghost_only_where_a_vanilla_ghost_moves() {
-  CHECK(reason(in(kWander)) == kRoaming);
-  CHECK(reason(in(kRoam)) == kRoaming);
-  CHECK(reason(in(kHunting)) == kSteer);
-  // Between wanders a vanilla ghost stands where it is: idle and its interactions.
-  CHECK(reason(in(kIdle)) == kResting);
-  CHECK(reason(in(4)) == kResting);  // a light switch
-  CHECK(reason(in(kFuseBox)) == kResting);
+  for (const States& s : {kStates, kMoved}) {
+    CHECK(reason(in(s.wander), s) == kRoaming);
+    CHECK(reason(in(s.dots), s) == kRoaming);
+    CHECK(reason(in(s.hunting), s) == kSteer);
+    // Between wanders a vanilla ghost stands where it is: idle and its interactions.
+    CHECK(reason(in(s.idle), s) == kResting);
+    CHECK(reason(in(s.throwing), s) == kResting);
+    CHECK(reason(in(s.fuseBox), s) == kResting);
+  }
+  CHECK(reason(in(kOther), kStates) == kResting);  // another state, a light switch
   CHECK(!native_moves(kSteer) && !native_moves(kRoaming) && !native_moves(kResting));
 }
 
 void a_favourite_room_roll_walks_the_ghost_home_natively() {
-  CHECK(reason(in(kFavouriteRoom)) == kDrawnHome);
-  Ghost home = in(kFavouriteRoom);
-  home.inFavouriteRoom = true;
-  CHECK(reason(home) == kActing);  // the walk to its spot in the room, still native
+  for (const States& s : {kStates, kMoved}) {
+    CHECK(reason(in(s.favouriteRoom), s) == kDrawnHome);
+    Ghost home = in(s.favouriteRoom);
+    home.inFavouriteRoom = true;
+    CHECK(reason(home, s) == kActing);  // the walk to its spot in the room, still native
+  }
   CHECK(native_moves(kDrawnHome) && native_moves(kActing));
 }
 
 void events_abilities_and_smoke_move_the_ghost_natively() {
-  CHECK(reason(in(kRandomEvent)) == kEvent);
-  CHECK(reason(in(kAbility)) == kActing);
-  Ghost g = in(kHunting);
-  g.smudged = true;
-  CHECK(reason(g) == kBlinded);
+  for (const States& s : {kStates, kMoved}) {
+    CHECK(reason(in(s.randomEvent), s) == kEvent);
+    CHECK(reason(in(s.ability), s) == kActing);
+    Ghost g = in(s.hunting);
+    g.smudged = true;
+    CHECK(reason(g, s) == kBlinded);
+  }
   CHECK(native_moves(kEvent) && native_moves(kBlinded));
 }
 
@@ -94,16 +111,22 @@ void a_search_path_that_arrives_late_replaces_the_straight_guess() {
 }
 
 void actions_start_only_from_idle_or_a_wander() {
-  CHECK(may_act_from(kIdle) && may_act_from(kWander) && may_act_from(kRoam));
-  CHECK(!may_act_from(kHunting) && !may_act_from(kFavouriteRoom) && !may_act_from(kRandomEvent));
-  CHECK(!may_act_from(kAbility) && !may_act_from(kFuseBox) && !may_act_from(5));  // a door in progress
+  for (const States& s : {kStates, kMoved}) {
+    CHECK(may_act_from(s.idle, s) && may_act_from(s.wander, s) && may_act_from(s.dots, s));
+    CHECK(!may_act_from(s.hunting, s) && !may_act_from(s.favouriteRoom, s) && !may_act_from(s.randomEvent, s));
+    CHECK(!may_act_from(s.ability, s) && !may_act_from(s.fuseBox, s));
+  }
+  CHECK(!may_act_from(kOtherToo, kStates));  // another state, a door in progress
 }
 
 void a_throw_with_nothing_to_throw_costs_nothing() {
-  CHECK(aimed_state_counts(5, true));  // a door
-  CHECK(aimed_state_counts(kThrow, true));
-  CHECK(!aimed_state_counts(kThrow, false));
-  CHECK(!aimed_state_counts(kIdle, true));
+  for (const States& s : {kStates, kMoved}) {
+    CHECK(aimed_state_counts(s.fuseBox, true, s));
+    CHECK(aimed_state_counts(s.fuseBox, false, s));
+    CHECK(aimed_state_counts(s.throwing, true, s));
+    CHECK(!aimed_state_counts(s.throwing, false, s));
+    CHECK(!aimed_state_counts(s.idle, true, s));
+  }
 }
 
 void trying_to_act_takes_the_roll_back_from_restlessness() {
@@ -165,20 +188,120 @@ void actions_keep_the_rolls_vanilla_gates() {
 }
 
 void the_fuse_box_keeps_each_types_rules() {
-  CHECK(fuse_action(true, false, false, true, 0) == kFuseTurnOff);
-  CHECK(fuse_action(true, false, false, false, 0) == kFuseTurnOn);
-  CHECK(fuse_action(true, false, false, true, kJinn) == kFuseNone);  // a Jinn never turns it off
-  CHECK(fuse_action(true, false, false, false, kJinn) == kFuseTurnOn);
-  CHECK(fuse_action(true, false, false, false, kHantu) == kFuseNone);  // a Hantu never turns it on
-  CHECK(fuse_action(true, false, false, true, kHantu) == kFuseTurnOff);
-  CHECK(fuse_action(false, false, false, true, 0) == kFuseNone);
-  CHECK(fuse_action(true, true, false, true, 0) == kFuseNone);
-  CHECK(fuse_action(true, false, true, true, 0) == kFuseNone);
+  CHECK(fuse_action(true, false, false, true, "vanilla.spirit") == kFuseTurnOff);
+  CHECK(fuse_action(true, false, false, false, "vanilla.spirit") == kFuseTurnOn);
+  CHECK(fuse_action(true, false, false, true, "vanilla.jinn") == kFuseNone);  // a Jinn never turns it off
+  CHECK(fuse_action(true, false, false, false, "vanilla.jinn") == kFuseTurnOn);
+  CHECK(fuse_action(true, false, false, false, "vanilla.hantu") == kFuseNone);  // a Hantu never turns it on
+  CHECK(fuse_action(true, false, false, true, "vanilla.hantu") == kFuseTurnOff);
+  // A registered ghost, or a type the content layer cannot name, follows the rule for any other type.
+  CHECK(fuse_action(true, false, false, true, "custom.ghost") == kFuseTurnOff);
+  CHECK(fuse_action(true, false, false, false, "") == kFuseTurnOn);
+  CHECK(fuse_action(false, false, false, true, "vanilla.spirit") == kFuseNone);
+  CHECK(fuse_action(true, true, false, true, "vanilla.spirit") == kFuseNone);
+  CHECK(fuse_action(true, false, true, true, "vanilla.spirit") == kFuseNone);
 }
 
 }  // namespace
 
+// The idle roll's draws, told apart by their scope as the decompiled GhostIdleState.Execute makes them.
+void the_idle_roll_tells_its_own_draws() {
+  using pm::roll::Idle;
+  Idle roll;
+  roll.draw(0, 2, 1, true);  // a state change's draw before the coin is not the coin
+  CHECK(roll.coin == -1);
+  roll.draw(0, 2, 1, false);
+  CHECK(roll.coin == 1 && !roll.decided);
+  roll.draw(0, 4, 1, false);  // the hunt branch's chance, passed
+  CHECK(roll.decided && roll.huntRolled && !roll.passed_without_hunting());
+  roll.draw(0, 11, 1, false);  // nothing after it counts
+  CHECK(roll.huntRolled);
+  roll.begin();
+  roll.draw(0, 2, 1, false);
+  roll.draw(0, 4, 0, false);  // the chance failed
+  CHECK(roll.decided && !roll.huntRolled && roll.passed_without_hunting());
+  roll.begin();
+  roll.draw(0, 2, 1, false);
+  roll.draw(0, 11, 1, false);  // a check failed: the next draw is the activity roll's
+  CHECK(!roll.huntRolled && roll.passed_without_hunting());
+  roll.begin();
+  roll.draw(0, 2, 0, false);  // the coin says no hunt branch
+  roll.draw(0, 4, 1, false);
+  CHECK(!roll.huntRolled && !roll.passed_without_hunting());
+}
+
+// A chance's own roll becomes 0 in an aimed interaction, and only that draw, however it continues.
+void a_chance_answers_only_its_own_roll() {
+  pm::roll::Chance c;
+  CHECK(c.draw(0, 100, 57, true) == 57);  // no chance began: the game's own
+  c.due = true;
+  CHECK(c.draw(0, 4, 3, true) == 3);       // another draw is the game's
+  CHECK(c.draw(0, 100, 57, true) == 0);    // its roll
+  CHECK(!c.due && c.draw(0, 100, 58, true) == 58);  // what it runs after that draws for itself
+  c.due = true;
+  CHECK(c.draw(0, 100, 57, false) == 57 && !c.due);  // not aimed: the roll stands, and is spent
+}
+
+// A chance's scope puts the roll back as it found it when the chance ends, whatever it threw, and a chance
+// inside another leaves the outer one's state alone; the state change count likewise.
+void a_chances_scope_restores_on_unwind_and_nests() {
+  using pm::roll::Chance;
+  using pm::roll::ChanceScope;
+  Chance c;
+  {
+    ChanceScope outer{c};
+    CHECK(c.due);
+    {
+      ChanceScope inner{c};  // a chance run before the outer one drew its roll
+      CHECK(c.draw(0, 100, 40, true) == 0 && !c.due);
+    }
+    CHECK(c.due && c.draw(0, 100, 41, true) == 0);  // the outer one's roll is still its own
+    {
+      ChanceScope inner{c};  // a chance run after it drew
+      CHECK(c.due);
+    }
+    CHECK(!c.due && c.draw(0, 100, 42, true) == 42);
+  }
+  CHECK(!c.due);
+  try {
+    ChanceScope thrown{c};
+    throw 1;
+  } catch (int) {
+  }
+  CHECK(!c.due);  // the roll is not left over for a draw outside the chance
+
+  int running = 0;
+  try {
+    pm::roll::Running outer{running};
+    pm::roll::Running inner{running};
+    CHECK(running == 2);
+    throw 2;
+  } catch (int) {
+  }
+  CHECK(running == 0);
+}
+
+// An aimed interaction costs the charge by how much rarer the type's own chance makes its kind.
+void an_aimed_interaction_costs_by_the_types_chance() {
+  using pm::roll::Aimed;
+  using pm::roll::interaction_cost;
+  CHECK(interaction_cost("vanilla.spirit", Aimed::Door) == 1.0f);
+  CHECK(interaction_cost("", Aimed::Light) == 1.0f && interaction_cost("", Aimed::Prop) == 1.0f);
+  CHECK(std::fabs(interaction_cost("vanilla.deogen", Aimed::Door) - 25.0f / 30.0f) < 1e-6f);
+  CHECK(interaction_cost("vanilla.thaye", Aimed::Door) == interaction_cost("vanilla.deogen", Aimed::Door));
+  CHECK(interaction_cost("vanilla.deildegast", Aimed::Door) == 2.5f);
+  CHECK(interaction_cost("vanilla.deildegast", Aimed::Light) == 2.5f);
+  CHECK(std::fabs(interaction_cost("vanilla.deildegast", Aimed::Prop) - 100.0f / 85.0f) < 1e-6f);
+  CHECK(interaction_cost("vanilla.poltergeist", Aimed::Prop) == 5.0f);
+  CHECK(interaction_cost("vanilla.poltergeist", Aimed::Door) == 1.0f);
+}
+
 int main() {
+  use_text({"mods/playable_ghost/i18n/default.json"});
+  the_idle_roll_tells_its_own_draws();
+  a_chance_answers_only_its_own_roll();
+  a_chances_scope_restores_on_unwind_and_nests();
+  an_aimed_interaction_costs_by_the_types_chance();
   the_player_moves_the_ghost_only_where_a_vanilla_ghost_moves();
   a_favourite_room_roll_walks_the_ghost_home_natively();
   events_abilities_and_smoke_move_the_ghost_natively();

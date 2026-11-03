@@ -6,47 +6,39 @@
 #include <cmath>
 #include <vector>
 
+#include "Camera.h"
+#include "UnityUI.h"
 #include "alerts.h"
+#include "content.h"
 #include "game.h"
-#include "il2cpp.h"
+#include "held.h"
+#include "Transform.h"
 #include "log.h"
 #include "perceive.h"
+#include "runtime.h"
 #include "ui.h"
+#include "yokai_ears.h"
 
-namespace pg::perceive_view {
+namespace pm::perceive_view {
 namespace {
 
-using il2cpp::Vector3;
+using phasmo::Vector3;
 using perceive::Mark;
 
-constexpr size_t kVoicePlayer = 0x20;     // PlayerVoice: its Player
-constexpr size_t kVoiceLocalTap = 0x70;   // PlayerVoice: the tap carrying the player's positional voice
-constexpr int kYokai = 12, kKormos = 28;
-constexpr int kBlackShuck = 35;           // the Custom Ghosts Black Shuck, by identity: blind in a hunt, as the Kormos
-constexpr float kYokaiHearing = 2.5f;     // metres: the Yokai hears voices only this close in a hunt
 constexpr ULONGLONG kMarksStaleMs = 1000; // marks not refreshed this long are gone
 constexpr int kSortingOrder = 45;         // under the HUD (50)
 constexpr float kDarkness = 0.88f;
 
-struct Api {
-  Vector3 (*worldToScreen)(void*, Vector3, const void*) = nullptr;
-  float (*scaleFactor)(void*, const void*) = nullptr;
-  void (*setMute)(void*, bool, const void*) = nullptr;
-  il2cpp::Array* (*findObjects)(il2cpp::Object*, const void*) = nullptr;
-  il2cpp::Object* sourceType = nullptr;
-  il2cpp::Object* voiceType = nullptr;
-} api;
-
 struct View {
-  il2cpp::Held canvas;
-  il2cpp::Held dark;
-  std::vector<il2cpp::Held> dots;
+  api::Held canvas;
+  api::Held dark;
+  std::vector<api::Held> dots;
 } g;
 
 perceive::Recent g_recent;
 perceive::Alert g_alert;
 ULONGLONG g_alertUntil = 0;
-std::vector<il2cpp::Held> g_muted;  // voice AudioSources silenced for the Yokai's hunt
+std::vector<api::Held> g_muted;  // voice AudioSources silenced for the Yokai's hunt (yokai_ears.h)
 
 ui::Color colour(uint8_t kind, float pulse) {
   switch (kind) {
@@ -85,36 +77,14 @@ void* dot(size_t i) {
   return g.dots[i];
 }
 
-void unmute_voices() {
-  for (void* source : g_muted)
-    if (game::alive(source)) api.setMute(source, false, nullptr);
-  g_muted.clear();
-}
-
-/** The Yokai in a hunt hears investigators' voices only within 2.5 m of itself. */
-void yokai_hearing(void* ghost) {
-  const Vector3 at = game::position(game::transform_of(ghost));
-  il2cpp::Array* voices = api.findObjects(api.voiceType, nullptr);
-  for (uintptr_t i = 0; voices && i < voices->max_length; ++i) {
-    void* voice = voices->data<void*>()[i];
-    void* player = voice ? il2cpp::field<void*>(voice, kVoicePlayer) : nullptr;
-    void* tap = voice ? il2cpp::field<void*>(voice, kVoiceLocalTap) : nullptr;
-    void* source = tap ? game::get_component(tap, api.sourceType) : nullptr;
-    if (!source || !player || !game::alive(player)) continue;
-    const Vector3 p = game::position(game::transform_of(player));
-    const bool distant = std::hypot(p.x - at.x, p.z - at.z) > kYokaiHearing || std::fabs(p.y - at.y) > 2.5f;
-    api.setMute(source, distant, nullptr);
-    if (distant && std::find(g_muted.begin(), g_muted.end(), source) == g_muted.end()) g_muted.push_back(source);
-  }
-}
-
 void draw_marks(const session::Session& s, void* camera, bool darkened, ULONGLONG now) {
   const std::vector<Mark>& marks = now - s.marks_at() < kMarksStaleMs ? s.marks() : std::vector<Mark>{};
-  const float scale = std::max(0.01f, api.scaleFactor(g.canvas, nullptr));  // screen pixels per canvas unit
+  // Screen pixels per canvas unit.
+  const float scale = std::max(0.01f, phasmo::Canvas::get_scaleFactor(g.canvas));
   const float pulse = 0.5f + 0.5f * std::sin(static_cast<float>(now % 100000) / 160.0f);
   size_t used = 0;
   for (const Mark& m : marks) {
-    const Vector3 screen = api.worldToScreen(camera, {m.x, m.y + 0.2f, m.z}, nullptr);
+    const phasmo::Vector3 screen = phasmo::Camera::WorldToScreenPoint(camera, {m.x, m.y + 0.2f, m.z});
     if (screen.z <= 0.1f) continue;  // behind the ghost
     void* d = dot(used++);
     const float size = size_of(m.kind);
@@ -144,21 +114,8 @@ std::string alert_line(void* camera, void* ghost, ULONGLONG now) {
 
 }  // namespace
 
-bool resolve() {
-  il2cpp::Class* camera = il2cpp::cls("UnityEngine.CoreModule.dll", "UnityEngine", "Camera");
-  il2cpp::Class* canvas = il2cpp::cls("UnityEngine.UIModule.dll", "UnityEngine", "Canvas");
-  il2cpp::Class* source = il2cpp::cls("UnityEngine.AudioModule.dll", "UnityEngine", "AudioSource");
-  il2cpp::Class* object = il2cpp::cls("UnityEngine.CoreModule.dll", "UnityEngine", "Object");
-  bool ok = il2cpp::bind(api.worldToScreen, camera, "WorldToScreenPoint", 1);
-  ok &= il2cpp::bind(api.scaleFactor, canvas, "get_scaleFactor", 0);
-  ok &= il2cpp::bind(api.setMute, source, "set_mute", 1);
-  ok &= il2cpp::bind(api.findObjects, object, "FindObjectsOfType", 1);
-  api.sourceType = il2cpp::type_object(source);
-  api.voiceType = il2cpp::type_object(il2cpp::cls("Assembly-CSharp.dll", "", "PlayerVoice"));
-  ok &= api.sourceType && api.voiceType;
-  PG_LOG("perceive: resolve %s", ok ? "ok" : "FAILED");
-  return ok;
-}
+// The game members it uses are map entries, which the host checks before the mod starts.
+bool resolve() { return true; }
 
 std::string tick(session::Session& s, void* camera, void* ghost, bool shown) {
   const ULONGLONG now = GetTickCount64();
@@ -168,24 +125,27 @@ std::string tick(session::Session& s, void* camera, void* ghost, bool shown) {
   const std::string line = alert_line(camera, ghost, now);
   const session::Status& st = s.status();
   const bool hunting = (st.flags & session::kHunting) != 0;
-  if (ghost && hunting && st.type == kYokai) yokai_hearing(ghost);
-  else unmute_voices();
+  const std::string type = api::content::id_of(st.type == session::kNoType ? -1 : st.type);
+  if (ghost && hunting && type == "vanilla.yokai") yokai_ears::hear(ghost, g_muted);
+  else yokai_ears::unmute(g_muted);
   if (!shown || !camera || !ghost) {
     if (g.canvas) ui::set_active(g.canvas, false);
     return line;
   }
   create();
   ui::set_active(g.canvas, true);
-  draw_marks(s, camera, hunting && (st.type == kKormos || st.identity == kBlackShuck), now);
+  // The Kormos, and a registered ghost blind in a hunt (the Black Shuck), see only their marks then.
+  const bool blind = type == "vanilla.kormos" || (api::content::flags() & PM_GHOST_BLIND_IN_HUNTS) != 0;
+  draw_marks(s, camera, hunting && blind, now);
   return line;
 }
 
 void hide() {
-  unmute_voices();
+  yokai_ears::unmute(g_muted);
   if (g.canvas) ui::destroy(g.canvas);
   g = View{};
   g_recent.clear();
   g_alertUntil = 0;
 }
 
-}  // namespace pg::perceive_view
+}  // namespace pm::perceive_view

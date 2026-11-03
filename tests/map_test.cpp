@@ -13,6 +13,7 @@
 
 #include "all.h"
 #include "check.h"
+#include "map_digest.h"
 
 namespace {
 namespace fs = std::filesystem;
@@ -29,10 +30,10 @@ std::string trim(const std::string& s) {
 }
 
 std::vector<Declared> declared() {
-  static const std::regex decl(R"(^inline constexpr pg::sdk::EntryDesc (\w+)\{)");
+  static const std::regex decl(R"(^inline constexpr pm::sdk::EntryDesc (\w+)\{)");
   static const std::regex key(R"(\.key = "([^"]*)\")");
   std::vector<Declared> out;
-  const fs::path dir = fs::path(PG_SOURCE_DIR) / "sdk" / "map";
+  const fs::path dir = fs::path(PM_SOURCE_DIR) / "sdk" / "map";
   for (const fs::directory_entry& e : fs::directory_iterator(dir)) {
     if (e.path().extension() != ".h") continue;
     std::ifstream in(e.path());
@@ -66,10 +67,10 @@ void every_entry_listed() {
   const std::vector<Declared> all = declared();
   CHECK(!all.empty());
   // Together with keys_unique, the counts and the keys make kAllEntries exactly the declared set.
-  CHECK(all.size() == std::size(pg::map::kAllEntries));
+  CHECK(all.size() == std::size(pm::map::kAllEntries));
   for (const Declared& d : all) {
-    const bool listed = std::any_of(std::begin(pg::map::kAllEntries), std::end(pg::map::kAllEntries),
-                                    [&](const pg::sdk::EntryDesc* e) { return e->key == d.key; });
+    const bool listed = std::any_of(std::begin(pm::map::kAllEntries), std::end(pm::map::kAllEntries),
+                                    [&](const pm::sdk::EntryDesc* e) { return e->key == d.key; });
     if (!listed) std::printf("not in kAllEntries: %s (%s, key \"%s\")\n", d.name.c_str(), d.file.c_str(), d.key.c_str());
     CHECK(listed);
   }
@@ -77,12 +78,25 @@ void every_entry_listed() {
 
 void keys_unique() {
   std::set<std::string> seen;
-  for (const pg::sdk::EntryDesc* e : pg::map::kAllEntries) {
+  for (const pm::sdk::EntryDesc* e : pm::map::kAllEntries) {
     CHECK(e->key != nullptr);
     if (!e->key) continue;
     const bool fresh = seen.insert(e->key).second;
     if (!fresh) std::printf("duplicate key: %s\n", e->key);
     CHECK(fresh);
+  }
+}
+
+// A type written from the dump can resolve offline and fail in the running game: the dump writes System.Object[] and
+// UnityEngine.Object[] alike, as Object[], and the game tells them apart. PhotonView.RPC did this, and every mod stayed off on the
+// first live run. So a parameter says which it means: object[] for System.Object[]. No entry needs UnityEngine.Object[] yet.
+void no_entry_spells_an_object_array_the_dumps_way() {
+  for (const pm::sdk::EntryDesc* e : pm::map::kAllEntries) {
+    bool spelled = e->type && std::string_view(e->type) == "Object[]";
+    for (const char* p : e->params) spelled |= std::string_view(p) == "Object[]";
+    for (const char* f : e->fieldTypes) spelled |= std::string_view(f) == "Object[]";
+    if (spelled) std::printf("write object[] for System.Object[]: %s\n", e->key);
+    CHECK(!spelled);
   }
 }
 
@@ -95,17 +109,17 @@ void every_entry_has_a_note() {
 }
 
 // Every string an entry carries.
-std::vector<const char*> strings_of(const pg::sdk::EntryDesc& e) {
+std::vector<const char*> strings_of(const pm::sdk::EntryDesc& e) {
   std::vector<const char*> out{e.key,  e.name,   e.hint,  e.owner, e.assembly, e.ns,
                                e.type, e.within, e.scene, e.path,  e.component};
   for (const std::span<const char* const> list : {e.params, e.fieldTypes, e.values})
     out.insert(out.end(), list.begin(), list.end());
-  for (const pg::sdk::Fact& f : e.facts) out.push_back(f.method);
+  for (const pm::sdk::Fact& f : e.facts) out.push_back(f.method);
   return out;
 }
 
 void no_anticheat_entries() {
-  for (const pg::sdk::EntryDesc* e : pg::map::kAllEntries)
+  for (const pm::sdk::EntryDesc* e : pm::map::kAllEntries)
     for (const char* text : strings_of(*e))
       for (const std::string_view word : {"SelfReport", "Moderation"}) {
         const bool clean = !contains_ci(text, word);
@@ -118,10 +132,49 @@ void no_anticheat_entries() {
 
 }  // namespace
 
+// A checked-build record is stale once an entry changes, so every field the resolver reads changes the digest. The same
+// map gives the same digest, and how sure an entry's note may sound is not part of it.
+void map_digest_follows_what_the_resolver_reads() {
+  using pm::sdk::EntryDesc;
+  using pm::sdk::Fact;
+  static constexpr const char* kOne[] = {"a"};
+  static constexpr const char* kTwo[] = {"b"};
+  static constexpr Fact kFact[] = {{Fact::Is::Calls, "x"}};
+  static constexpr Fact kOtherFact[] = {{Fact::Is::Calls, "x", 1}};
+  const EntryDesc base{.key = "K", .owner = "O", .params = kOne, .facts = kFact};
+  const auto digest = [](const EntryDesc& d) {
+    const EntryDesc* one[] = {&d};
+    return pm::sdk::map_digest(one);
+  };
+  const std::string same = digest(base);
+  CHECK(same.size() == 16);
+  CHECK(same == digest({.key = "K", .confidence = pm::sdk::Confidence::Live, .owner = "O", .params = kOne, .facts = kFact}));
+  const auto changed = [&](const EntryDesc& d) { return digest(d) != same; };
+  CHECK(changed({.key = "L", .owner = "O", .params = kOne, .facts = kFact}));
+  CHECK(changed({.key = "K", .kind = pm::sdk::Kind::Method, .owner = "O", .params = kOne, .facts = kFact}));
+  CHECK(changed({.key = "K", .flags = pm::sdk::kOptional, .owner = "O", .params = kOne, .facts = kFact}));
+  CHECK(changed({.key = "K", .owner = "P", .params = kOne, .facts = kFact}));
+  CHECK(changed({.key = "K", .owner = "O", .name = "O", .params = kOne, .facts = kFact}));
+  CHECK(changed({.key = "K", .owner = "O", .params = kTwo, .facts = kFact}));
+  CHECK(changed({.key = "K", .owner = "O", .params = kOne, .fieldTypes = kOne, .facts = kFact}));
+  CHECK(changed({.key = "K", .owner = "O", .params = kOne, .values = kOne, .facts = kFact}));
+  CHECK(changed({.key = "K", .owner = "O", .params = kOne, .facts = kOtherFact}));
+  CHECK(changed({.key = "K", .owner = "O", .params = kOne, .facts = kFact, .pattern = "90"}));
+  CHECK(changed({.key = "K", .owner = "O", .params = kOne, .facts = kFact, .patternOffset = 1}));
+  CHECK(changed({.key = "K", .owner = "O", .params = kOne, .facts = kFact, .scene = "S"}));
+  CHECK(changed({.key = "K", .owner = "O", .params = kOne, .facts = kFact, .access = pm::sdk::Visibility::Public}));
+  CHECK(changed({.key = "K", .owner = "O", .params = kOne, .facts = kFact, .typeArgs = kOne}));
+  // Moving a character between two fields is a change too.
+  CHECK(digest({.key = "K", .owner = "ab", .name = "c"}) != digest({.key = "K", .owner = "a", .name = "bc"}));
+  CHECK(pm::sdk::map_digest(pm::map::kAllEntries) == pm::sdk::map_digest(pm::map::kAllEntries));
+}
+
 int main() {
+  map_digest_follows_what_the_resolver_reads();
   every_entry_listed();
   keys_unique();
   every_entry_has_a_note();
+  no_entry_spells_an_object_array_the_dumps_way();
   no_anticheat_entries();
   return g_failures ? 1 : 0;
 }

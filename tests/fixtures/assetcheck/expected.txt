@@ -10,3 +10,8 @@ MISSING Layer.twice layers 6, 21 are all named Twice
 OK Anim.isOpen Resources/Player: in 1 controller named Arms
 MISSING Anim.isClosed a controller named Arms in Resources/Player has no isClosed
 MISSING Anim.noController no Animator in Resources/Player uses a controller named Legs
+OK Shader.tint Level: in 1 shader named Candle Flame
+MISSING Shader.noProperty a shader named Candle Flame in Level's assets has no _Glow
+MISSING Shader.noShader no shader named Wax is in Level's assets
+MISSING Shader.noScene Lobby is not a scene of this build
+MISSING Shader.twoShaders a shader named Twice in Level's assets has no _A

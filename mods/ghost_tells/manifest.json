@@ -1,0 +1,11 @@
+{
+  "id": "phasmomods.ghost-tells",
+  "name": "Ghost Tells",
+  "author": "PhasmoMods",
+  "version": "1.0.0",
+  "description": "New tells for the Spirit, Mare, Shade, Yurei, Goryo and Onryo",
+  "dll": "GhostTells.dll",
+  "website": "",
+  "dependencies": [],
+  "incompatibilities": []
+}

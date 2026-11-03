@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <charconv>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string_view>
 #include <system_error>
@@ -15,7 +17,7 @@
 
 namespace fs = std::filesystem;
 
-namespace pg::sdk {
+namespace pm::sdk {
 namespace {
 
 constexpr std::string_view kModifiers[] = {"public", "private",  "internal", "protected", "static",   "abstract",
@@ -133,12 +135,18 @@ std::string parameter_type(std::string_view text) {
   return canonical_type(prefix + join_words(w, 0, w.size()));
 }
 
-// Whether a constant string's declaration continues on the next line: the dump writes the value raw, so
-// a value holding a line break spans lines, and one holding quotes cannot be told apart by counting
-// them. The declaration ends at the line that carries the field offset comment.
+// Whether a declaration with a string value continues on the next line: the dump writes the value raw,
+// so a value holding a line break spans lines, and one holding quotes cannot be told apart by counting
+// them. A constant string's declaration ends at the line that carries the field offset comment; a
+// method's whose default argument is such a string ends at the line that carries its empty body
+// (Unity.InputSystem's StringHelpers.Escape).
 bool continues(std::string_view line) {
-  return line.find("//Field offset:") == std::string_view::npos && line.find("const string ") != std::string_view::npos &&
-         line.find("= \"") != std::string_view::npos;
+  if (line.find("= \"") == std::string_view::npos) return false;
+  if (line.find("const string ") != std::string_view::npos) return line.find("//Field offset:") == std::string_view::npos;
+  // An attribute ("[Address(...)]", a default value's) is one line: only a declaration continues.
+  const std::string_view declaration = trim(line);
+  return !declaration.starts_with('[') && line.find('(') != std::string_view::npos && !declaration.ends_with("{ }") &&
+         !declaration.ends_with(';');
 }
 
 // Whether a constant of this canonical type has an integer value: an integer type, or a named type,
@@ -191,7 +199,44 @@ bool parse_method(std::string_view line, Declaration& out) {
 }
 
 // The part of a type declaration line before its base list: "private sealed class Name<T> : Base".
-bool parse_type_line(std::string_view line, std::string& name, bool& isEnum, bool& isStruct) {
+// The base list after a type declaration's name, ": Base, IThing<T>", as short names without generic
+// arguments; empty when there is none.
+std::vector<std::string> base_names(std::string_view line) {
+  std::vector<std::string> out;
+  const size_t colon = line.find(" : ");
+  if (colon == std::string_view::npos) return out;
+  int depth = 0;
+  std::string current;
+  auto flush = [&] {
+    std::string name = canonical_type(trim(current));
+    if (const size_t lt = name.find('<'); lt != std::string::npos) name.resize(lt);
+    if (!name.empty()) out.push_back(name == "object" ? std::string("Object") : std::move(name));
+    current.clear();
+  };
+  for (const char c : line.substr(colon + 3)) {
+    if (c == '<') ++depth;
+    if (c == '>') --depth;
+    if (c == ',' && depth == 0) flush();
+    else current += c;
+  }
+  flush();
+  return out;
+}
+
+// A generic definition's number of type parameters from its file's name: Cpp2IL writes the declaration without them
+// ("public class UnityEvent : UnityEventBase") but names the file "UnityEvent`1.cs". 0 for a name without an arity.
+int file_arity(std::string_view stem) {
+  const size_t tick = stem.rfind('`');
+  if (tick == std::string_view::npos || tick + 1 >= stem.size() || stem.size() - tick > 4) return 0;
+  int arity = 0;
+  for (const char c : stem.substr(tick + 1)) {
+    if (c < '0' || c > '9') return 0;
+    arity = arity * 10 + (c - '0');
+  }
+  return arity;
+}
+
+bool parse_type_line(std::string_view line, std::string& name, bool& isEnum, bool& isStruct, bool& isInterface) {
   if (line.find('(') != std::string_view::npos || line.find(';') != std::string_view::npos) return false;
   const std::vector<std::string_view> w = words(line);
   size_t k = 0;
@@ -204,9 +249,13 @@ bool parse_type_line(std::string_view line, std::string& name, bool& isEnum, boo
   const size_t skip = n.starts_with('<') ? n.find('>') + 1 : 0;
   n = n.substr(0, std::min(n.size(), n.find_first_of("<`:", skip)));
   if (n.empty()) return false;
-  name = std::string(n);
+  // Cpp2IL declares System.Object and UnityEngine.Object as "class object" (and writes UnityEngine.Object
+  // as `object` inside UnityEngine's own files); no C# type can be named so, and the runtime names both
+  // "Object".
+  name = n == "object" ? std::string("Object") : std::string(n);
   isEnum = keyword == "enum";
   isStruct = keyword == "struct";
+  isInterface = keyword == "interface";
   return true;
 }
 
@@ -218,10 +267,10 @@ struct Frame {
 // Reads one file's types into the model, nesting by tab depth.
 // A line that looks like a member but is neither a field, a method nor an enum member is counted in
 // `unparsed`.
-void parse_file(const std::string& text, const std::string& assembly, const std::string& ns, GameModel& model,
-                size_t& unparsed) {
+void parse_file(const std::string& text, const std::string& assembly, const std::string& ns, int arity,
+                GameModel& model, size_t& unparsed) {
   std::vector<Frame> stack;
-  uint64_t pendingRva = 0;
+  uint64_t pendingRva = 0, pendingToken = 0;
   int64_t nextLiteral = 0;
   std::istringstream in(text);
   std::string raw;
@@ -234,15 +283,20 @@ void parse_file(const std::string& text, const std::string& assembly, const std:
     if (line.starts_with('[')) {
       uint64_t rva = 0;
       if (line.starts_with("[Address(") && attribute_hex(line, "RVA", rva)) pendingRva = rva;
+      if (line.starts_with("[Token(") && attribute_hex(line, "Token", rva)) pendingToken = rva;
       continue;
     }
     const uint64_t rva = std::exchange(pendingRva, 0);
+    const uint64_t token = std::exchange(pendingToken, 0);
 
     while (!stack.empty() && stack.back().depth >= depth) stack.pop_back();
 
     std::string name;
-    bool isEnum = false, isStruct = false;
-    if (parse_type_line(line, name, isEnum, isStruct)) {
+    bool isEnum = false, isStruct = false, isInterface = false;
+    if (parse_type_line(line, name, isEnum, isStruct, isInterface)) {
+      // "public struct float" in System is the runtime's Single: named as the runtime names it.
+      if (stack.empty() && ns == "System")
+        if (const std::string_view full = system_value_type_name(name); !full.empty()) name = full;
       ModelType t;
       t.assembly = assembly;
       t.ns = ns;
@@ -250,6 +304,11 @@ void parse_file(const std::string& text, const std::string& assembly, const std:
       t.declaring = stack.empty() ? -1 : stack.back().type;
       t.isEnum = isEnum;
       t.isValueType = isEnum || isStruct;
+      t.isInterface = isInterface;
+      // The file's name gives the arity of its top-level type only; a nested type's is not known, so kNotGeneric
+      // applies to top-level types (sdk/resolver).
+      t.genericParams = stack.empty() ? arity : 0;
+      if (!isEnum) t.bases = base_names(line);  // an enum's ": byte" names its storage, not a base
       model.types.push_back(std::move(t));
       stack.push_back({depth, static_cast<int>(model.types.size()) - 1});
       nextLiteral = 0;
@@ -276,6 +335,7 @@ void parse_file(const std::string& text, const std::string& assembly, const std:
       f.type = type.name;
       f.isStatic = true;
       f.hasLiteral = true;
+      f.access = Visibility::Public;  // an enum's values are public, though the dump writes no modifier
       f.literal = value;
       f.typeIndex = static_cast<int>(&type - model.types.data());
       nextLiteral = value + 1;
@@ -298,10 +358,22 @@ void parse_file(const std::string& text, const std::string& assembly, const std:
       ModelField f;
       f.name = std::string(w.back());
       f.offset = static_cast<int32_t>(offset);
+      bool isPrivate = false, isProtected = false, isInternal = false, isPublic = false;
       for (const std::string_view word : w) {
         if (word == "static") f.isStatic = true;
         if (word == "const") f.isStatic = f.hasLiteral = true;
+        isPrivate = isPrivate || word == "private";
+        isProtected = isProtected || word == "protected";
+        isInternal = isInternal || word == "internal";
+        isPublic = isPublic || word == "public";
       }
+      f.access = isPublic                     ? Visibility::Public
+                 : isProtected && isInternal  ? Visibility::ProtectedInternal
+                 : isPrivate && isProtected   ? Visibility::PrivateProtected
+                 : isProtected                ? Visibility::Protected
+                 : isInternal                 ? Visibility::Internal
+                 : isPrivate                  ? Visibility::Private
+                                              : Visibility::Any;
       // The runtime counts a value type's instance fields from its boxed form, after the object header.
       if (type.isValueType && !f.isStatic) f.offset += 0x10;
       size_t first = 0;
@@ -334,6 +406,7 @@ void parse_file(const std::string& text, const std::string& assembly, const std:
     m.paramIndex.assign(m.params.size(), -1);
     m.isStatic = d.isStatic;
     m.rva = rva;
+    m.token = static_cast<uint32_t>(token);
     type.methods.push_back(std::move(m));
   }
 }
@@ -343,8 +416,11 @@ class TypeNames {
  public:
   explicit TypeNames(const GameModel& model) {
     for (size_t i = 0; i < model.types.size(); ++i) {
-      int& slot = index_.try_emplace(model.types[i].name, static_cast<int>(i)).first->second;
-      if (slot != static_cast<int>(i)) slot = -1;
+      const ModelType& t = model.types[i];
+      add(t.name, static_cast<int>(i));
+      // A System value type is spelled with its keyword where it is used ("float" for Single).
+      if (t.ns == "System" && t.declaring < 0)
+        if (const std::string word = canonical_type("System." + t.name); word != t.name) add(word, static_cast<int>(i));
     }
   }
 
@@ -356,6 +432,11 @@ class TypeNames {
   }
 
  private:
+  void add(const std::string& name, int i) {
+    int& slot = index_.try_emplace(name, i).first->second;
+    if (slot != i) slot = -1;
+  }
+
   std::map<std::string, int> index_;
 };
 
@@ -379,6 +460,7 @@ bool load_dump(const fs::path& diffableCsRoot, std::span<const std::string> asse
     return false;
   }
   GameModel model;
+  model.objectArraysLookAlike = true;
   size_t count = 0;
   for (const std::string& assembly : assemblies) {
     const fs::path folder = diffableCsRoot / fs::path(std::u8string(assembly.begin(), assembly.end()));
@@ -406,7 +488,9 @@ bool load_dump(const fs::path& diffableCsRoot, std::span<const std::string> asse
         if (!ns.empty()) ns += '.';
         for (const char8_t c : part.u8string()) ns += static_cast<char>(c);
       }
-      parse_file(text, assembly, ns, model, count);
+      std::string stem;
+      for (const char8_t c : file.stem().u8string()) stem += static_cast<char>(c);
+      parse_file(text, assembly, ns, file_arity(stem), model, count);
     }
   }
 
@@ -424,4 +508,79 @@ bool load_dump(const fs::path& diffableCsRoot, std::span<const std::string> asse
   return true;
 }
 
-}  // namespace pg::sdk
+bool read_method_tables(std::span<const uint8_t> mapped, std::span<const std::string> assemblies, MethodTables& out,
+                        std::string& error) {
+  const auto u32 = [&](size_t at) {
+    uint32_t v = 0;
+    std::memcpy(&v, mapped.data() + at, sizeof v);
+    return v;
+  };
+  const auto u64 = [&](size_t at) {
+    uint64_t v = 0;
+    std::memcpy(&v, mapped.data() + at, sizeof v);
+    return v;
+  };
+  if (mapped.size() < 0x40 || u32(0x3C) > mapped.size() - 0x40) {
+    error = "the image has no PE32+ headers";
+    return false;
+  }
+  const uint64_t base = u64(u32(0x3C) + 24 + 24);  // ImageBase of the optional header
+  const auto in_image = [&](uint64_t va) { return va >= base && va - base < mapped.size(); };
+
+  // Where each assembly's module name lies: "<assembly>.dll" as a whole C string.
+  const std::string_view bytes(reinterpret_cast<const char*>(mapped.data()), mapped.size());
+  std::map<uint64_t, std::string> nameAt;  // by address, as the module holds it
+  for (const std::string& assembly : assemblies) {
+    const std::string needle = assembly + ".dll" + std::string(1, '\0');
+    for (size_t at = bytes.find(needle); at != std::string_view::npos; at = bytes.find(needle, at + 1))
+      if (at == 0 || bytes[at - 1] == '\0') nameAt.emplace(base + at, assembly);
+  }
+
+  // The module begins { const char* moduleName; uint32_t methodPointerCount; Il2CppMethodPointer* methodPointers; }.
+  constexpr uint64_t kMaxMethods = 2000000;
+  MethodTables found;
+  std::set<std::string> several;
+  for (size_t at = 0; at + 24 <= mapped.size(); at += 8) {
+    const auto name = nameAt.find(u64(at));
+    if (name == nameAt.end()) continue;
+    const uint64_t count = u32(at + 8), table = u64(at + 16);
+    if (count == 0 || count > kMaxMethods || !in_image(table) || table % 8 != 0) continue;
+    if (table - base + count * 8 > mapped.size()) continue;
+    std::vector<uint64_t> rvas(count);
+    bool pointers = true;
+    for (uint64_t i = 0; i < count && pointers; ++i) {
+      const uint64_t va = u64(table - base + i * 8);
+      pointers = va == 0 || in_image(va);
+      rvas[i] = va ? va - base : 0;
+    }
+    if (!pointers) continue;
+    if (!found.emplace(name->second, std::move(rvas)).second) several.insert(name->second);
+  }
+  for (const std::string& assembly : assemblies) {
+    if (several.contains(assembly)) {
+      error = "the image holds several code-gen modules for " + assembly;
+      return false;
+    }
+    if (!found.contains(assembly)) {
+      error = "the image holds no code-gen module for " + assembly;
+      return false;
+    }
+  }
+  out = std::move(found);
+  return true;
+}
+
+void apply_method_tables(const MethodTables& tables, GameModel& model) {
+  constexpr uint32_t kMethodDef = 0x06000000;
+  for (ModelType& type : model.types) {
+    const auto table = tables.find(type.assembly);
+    for (ModelMethod& m : type.methods) {
+      const uint32_t row = m.token & 0x00FFFFFF;
+      const bool listed = table != tables.end() && (m.token & 0xFF000000) == kMethodDef && row >= 1 &&
+                          row <= table->second.size();
+      m.rva = listed ? table->second[row - 1] : 0;
+    }
+  }
+}
+
+}  // namespace pm::sdk

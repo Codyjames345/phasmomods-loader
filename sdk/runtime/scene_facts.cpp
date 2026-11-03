@@ -2,7 +2,7 @@
 
 #include "log.h"
 
-namespace pg::sdk {
+namespace pm::sdk {
 
 void SceneFacts::set_engine(const SceneEngine* engine) {
   forget();
@@ -45,9 +45,16 @@ int32_t SceneFacts::layer(const EntryDesc& d) {
   const char* why = engine_ ? nullptr : "no scene engine";
   const int32_t index = engine_ && d.name ? engine_->name_to_layer(d.name, &why) : -1;
   if (index >= 0 && index < 32) return index;
-  if (why) PG_LOG("game map: %s: %s", d.key, why);
-  else PG_LOG("game map: %s: no layer is named %s", d.key, d.name ? d.name : "(none)");
+  if (why) PM_LOG("game map: %s: %s", d.key, why);
+  else PM_LOG("game map: %s: no layer is named %s", d.key, d.name ? d.name : "(none)");
   return -1;
+}
+
+bool SceneFacts::shader_property(const EntryDesc& d, int32_t& id) {
+  const char* why = engine_ ? nullptr : "no scene engine";
+  if (engine_ && engine_->property_id && d.name && engine_->property_id(d.name, &id, &why)) return true;
+  PM_LOG("game map: %s: %s", d.key, why ? why : "the property's id could not be read");
+  return false;
 }
 
 void* SceneFacts::find(const EntryDesc& d, void* root) {
@@ -66,8 +73,8 @@ void* SceneFacts::find(const EntryDesc& d, void* root) {
   // Nothing is kept for a miss: the object may be added later in the same scene.
   release(k);
   if (miss_once(k, scene)) {
-    if (why) PG_LOG("game map: %s: %s; it answers null", d.key, why);
-    else PG_LOG("game map: %s: no %s under the given object in this scene; it answers null", d.key, d.path);
+    if (why) PM_LOG("game map: %s: %s; it answers null", d.key, why);
+    else PM_LOG("game map: %s: no %s under the given object in this scene; it answers null", d.key, d.path);
   }
   return nullptr;
 }
@@ -92,10 +99,10 @@ bool SceneFacts::parameter(const EntryDesc& d, const void* animator, int32_t& ha
     return true;
   }
   if (miss_once(k, scene)) {
-    if (k.why) PG_LOG("game map: %s: %s; it answers 0", d.key, k.why);
-    else PG_LOG("game map: %s: the Animator has no parameter %s; it answers 0", d.key, d.name);
+    if (k.why) PM_LOG("game map: %s: %s; it answers 0", d.key, k.why);
+    else PM_LOG("game map: %s: the Animator has no parameter %s; it answers 0", d.key, d.name);
   }
   return false;
 }
 
-}  // namespace pg::sdk
+}  // namespace pm::sdk

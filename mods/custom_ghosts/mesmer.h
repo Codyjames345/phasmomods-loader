@@ -8,7 +8,7 @@
 //  - The truck's monitor (HeartRateData.UpdateUI) is shown every player's sanity a fifth higher.
 //  - Outside hunts the lights in its favourite room dim and brighten slowly instead of flickering
 //    (LightSwitch.FlickerNetworked is not shown there). Main thread.
-namespace pg::custom::mesmer {
+namespace pm::custom::mesmer {
 
 bool resolve();
 bool create_hooks();  // before hooks::enable_all
@@ -16,4 +16,4 @@ bool create_hooks();  // before hooks::enable_all
 void tick(void* ghost, int type);
 void reset();
 
-}  // namespace pg::custom::mesmer
+}  // namespace pm::custom::mesmer

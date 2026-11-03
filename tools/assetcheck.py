@@ -1,7 +1,8 @@
-"""The scene and asset half of the offline game check: verifies the map's Scene, Layer and
-AnimatorParam entries (sdk/map/Scene.h) in copies of the game's scene and asset files. It reads with
-UnityPy (pinned in tools/assetcheck-requirements.txt) and never runs game code. tools/gamecheck.ps1
-copies the files and runs it isolated (python -I); sdk/systems/scene.md says which files hold what.
+"""The scene and asset half of the offline game check: verifies the map's Scene, Layer, AnimatorParam
+and ShaderProperty entries (sdk/map/Scene.h, sdk/map/UnityRendering.h) in copies of the game's scene
+and asset files. It reads with UnityPy (pinned in tools/assetcheck-requirements.txt) and never runs
+game code. tools/gamecheck.ps1 copies the files and runs it isolated (python -I); sdk/systems/scene.md
+says which files hold what.
 
 usage:
   assetcheck.py --data <copied Phasmophobia_Data> --entries <tsv>            check the entries
@@ -9,10 +10,11 @@ usage:
   assetcheck.py --data <copied Phasmophobia_Data> --entries <tsv> --record <json>
   assetcheck.py --snapshot <json> --entries <tsv>                            check a recorded snapshot
 
-The entries are what `gamecheck --scene-entries` writes: key, kind (scene, layer or animator), 1 when
-required or 0, scene, path, component and name, tab separated. The check prints `OK <key> <detail>` or
-`MISSING <key> <why>` for each and exits 1 when a required one is missing, 2 on input it cannot read
-(an unreadable entry line, file or snapshot, or anything else that stops the reading).
+The entries are what `gamecheck --scene-entries` writes: key, kind (scene, layer, animator or shader),
+1 when required or 0, scene, path, component and name, tab separated. The check prints
+`OK <key> <detail>` or `MISSING <key> <why>` for each and exits 1 when a required one is missing, 2 on
+input it cannot read (an unreadable entry line, file or snapshot, or anything else that stops the
+reading).
 --needs prints the data files the check reads that are already known, one name per line: a file's
 own references are known only once it is there, so the caller copies and asks again until nothing is
 added. --record writes what the check reads from the files (the snapshot) instead of checking it; the
@@ -20,18 +22,22 @@ tests check a recorded snapshot, which needs no UnityPy.
 
 A snapshot is JSON: {"layers": [32 names, "" for none], "places": {scene: {"objects": [{"name",
 "parent" (an index, -1 for none), "components": [type names]}], "controllers": {name: [parameter
-names]}}}}. Objects are listed parent first and children in their Transform's order. A place is a
-scene by the name the build lists it under, or "Resources/<path>" for a prefab Resources.Load loads;
-one missing from the snapshot is not in the build.
+names]}}}, "shaders": {scene: {shader name: [[property names] for each shader of that name]}}}.
+Objects are listed parent first and children in their Transform's order. A place is a scene by the
+name the build lists it under, or "Resources/<path>" for a prefab Resources.Load loads; one missing
+from the snapshot is not in the build. A scene's shaders are those of its shared assets file
+(sharedassets<n>.assets for the build's scene n) and of the shared assets files that one refers to.
 """
 
 import argparse
 import json
 import os
+import re
 import struct
 import sys
 
-KINDS = ("scene", "layer", "animator")
+KINDS = ("scene", "layer", "animator", "shader")
+SHARED_ASSETS = re.compile(r"sharedassets[0-9]+\.assets")
 RESOURCES = "Resources/"
 
 
@@ -115,12 +121,27 @@ def check_animator(entry, place):
     return True, f"{entry['scene']}: in {len(controllers)} controller{plural} named {entry['component']}"
 
 
+def check_shader(entry, shaders):
+    if shaders is None:
+        return False, f"{entry['scene']} is not a scene of this build"
+    found = shaders.get(entry["component"])
+    if not found:
+        return False, f"no shader named {entry['component']} is in {entry['scene']}'s assets"
+    for properties in found:
+        if entry["name"] not in properties:
+            return False, f"a shader named {entry['component']} in {entry['scene']}'s assets has no {entry['name']}"
+    plural = "s" if len(found) > 1 else ""
+    return True, f"{entry['scene']}: in {len(found)} shader{plural} named {entry['component']}"
+
+
 def check(entries, snapshot):
     """The report's lines, and whether a required entry is missing."""
     lines, failed = [], False
     for entry in entries:
         if entry["kind"] == "layer":
             ok, detail = check_layer(entry, snapshot["layers"])
+        elif entry["kind"] == "shader":
+            ok, detail = check_shader(entry, snapshot.get("shaders", {}).get(entry["scene"]))
         else:
             place = snapshot["places"].get(entry["scene"])
             if place is None:
@@ -181,6 +202,11 @@ class Build:
         return {f"level{i}": None for i, s in enumerate(self.scenes)
                 if os.path.splitext(os.path.basename(s))[0] == scene}
 
+    def shared_assets(self, scene):
+        """The shared assets files of the scene named `scene` (one per time the build lists it)."""
+        return [f"sharedassets{i}.assets" for i, s in enumerate(self.scenes)
+                if os.path.splitext(os.path.basename(s))[0] == scene]
+
 
 def external_name(f, file_id):
     if file_id == 0:
@@ -237,6 +263,27 @@ class Reader:
         names = {int(h): n for h, n in tree["m_TOS"]}
         values = tree["m_Controller"]["m_Values"]["data"]["m_ValueArray"]
         return tree["m_Name"], [names.get(v["m_ID"], "") for v in values]
+
+    def shaders(self, name):
+        """The shaders of the shared assets file `name` and of the shared assets files it refers to:
+        {shader name: [[property names], ...]}. Files not here yet are noted as wanted."""
+        out, seen, pending = {}, set(), [name]
+        while pending:
+            current = pending.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            f = self.file(current)
+            if f is None:
+                continue
+            pending.extend(n for n in (os.path.basename(e.path) for e in f.externals) if SHARED_ASSETS.fullmatch(n))
+            for obj in f.objects.values():
+                if obj.type.name != "Shader":
+                    continue
+                form = obj.read_typetree().get("m_ParsedForm", {})
+                props = [p["m_Name"] for p in form.get("m_PropInfo", {}).get("m_Props", [])]
+                out.setdefault(form.get("m_Name", ""), []).append(props)
+        return out
 
     def place(self, f, roots):
         """The objects under the root GameObjects (every root of the file when None), and the
@@ -311,8 +358,17 @@ def read_snapshot(data, entries):
     build = Build(data)
     reader = Reader(data)
     wanted = ["globalgamemanagers"]
-    places = {}
-    for scene in sorted({e["scene"] for e in entries if e["kind"] != "layer"}):
+    places, shaders = {}, {}
+    for scene in sorted({e["scene"] for e in entries if e["kind"] == "shader"}):
+        files = build.shared_assets(scene)
+        if not files:
+            continue
+        found = {}
+        for name in files:
+            for shader, lists in reader.shaders(name).items():
+                found.setdefault(shader, []).extend(lists)
+        shaders[scene] = found
+    for scene in sorted({e["scene"] for e in entries if e["kind"] in ("scene", "animator")}):
         files = build.place_files(scene)
         if not files:
             continue
@@ -330,7 +386,7 @@ def read_snapshot(data, entries):
         places[scene] = place
     wanted += [w for w in reader.wanted if w not in wanted]
     missing = [w for w in wanted if not os.path.isfile(os.path.join(data, w))]
-    return {"layers": build.layers, "places": places}, wanted, missing
+    return {"layers": build.layers, "places": places, "shaders": shaders}, wanted, missing
 
 
 def main(argv):

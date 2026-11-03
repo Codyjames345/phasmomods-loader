@@ -1,5 +1,7 @@
 #pragma once
 
+// PM_UI_TODO: a mod-drawn window, against the vanilla-UI rule, waiting for the author's design (FINDINGS.md 31).
+
 #include <string>
 
 #include "ability.h"
@@ -11,7 +13,7 @@
 // has one; the fuse box by what it would do), the name of the interactable object under the ghost's
 // gaze, a one-line notice (favourite-room changes, movement) and the investigators' average sanity
 // with a mark where hunts begin (red once it is low enough). Main thread only.
-namespace pg::hud {
+namespace pm::hud {
 
 struct View {
   session::Status status;
@@ -27,4 +29,4 @@ struct View {
 void show(const View& view);  // creates the HUD on first use
 void hide();                  // destroys it
 
-}  // namespace pg::hud
+}  // namespace pm::hud

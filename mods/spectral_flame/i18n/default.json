@@ -1,0 +1,8 @@
+// Spectral Flame's player-facing text: its evidence's name and journal line (the author's own).
+// Each text marked PM_TEXT_AI was written by AI before the AI policy (AI_POLICY.md); the author replaces it and
+// takes the mark off; one marked PM_TEXT_TODO is a placeholder waiting for the author's words. A {{token}} is a
+// value the code fills in. Keep one entry per line.
+{
+  "evidence.journal-line": "Watch a placed candle or lantern burn blue from base to tip",
+  "evidence.name": "Spectral Flame"
+}

@@ -1,0 +1,12 @@
+// Ghost Tells' player-facing text: the line each told ghost's journal page gains (the author's own).
+// Each text marked PM_TEXT_AI was written by AI before the AI policy (AI_POLICY.md); the author replaces it and
+// takes the mark off; one marked PM_TEXT_TODO is a placeholder waiting for the author's words. A {{token}} is a
+// value the code fills in. Keep one entry per line.
+{
+  "tells.goryo": "Tells: a video camera can catch it standing in its room while nobody is near, where it also acts more; it heads home when it loses you far from there.",
+  "tells.mare": "Tells: it puts the lights out before it shows itself, leaves the rooms it hunted through dark, and often switches off a light you have just turned on.",
+  "tells.onryo": "Tells: it snuffs a flame lit near it, every flame gutters as its count of snuffed flames rises, and a flame it snuffed will not relight for a while.",
+  "tells.shade": "Tells: it vanishes the moment you stare at it, does nothing with two of you nearby, and hesitates when it sees you together.",
+  "tells.spirit": "Tells: incense stops it dead in a hunt and silences it for a minute; it knocks when you say its name.",
+  "tells.yurei": "Tells: smudged, it shuts itself in; the door its ability slams stays locked for a moment; a door left open in its room draws its ability."
+}

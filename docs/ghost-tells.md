@@ -1,16 +1,21 @@
 # Ghost Tells
 
 Status: in development. The code is the authority on what is implemented; `FINDINGS.md` (27) lists
-what has not run in the game yet. Design: `docs/superpowers/specs/2026-10-21-ghost-tells-design.md`.
+what has not run in the game yet. Not run in the game since the move onto the SDK (2026-10-28).
+Design: `docs/superpowers/specs/2026-10-21-ghost-tells-design.md`.
 
 Three new tells each for six vanilla ghosts that are hard to tell apart by how they behave: the
 Spirit, Mare, Shade, Yurei, Goryo and Onryo. A separate mod of the suite (`mods/ghost_tells`, channel
 6).
 
-It acts only in a private room in which every client runs it; the contract is otherwise plain vanilla. Players without the mod may share the
-lobby. The rules follow the ghost's behaviour type, as the game's own type rules do, so a Mimic copying
-one of the six shows its tells too. Each of the six ghosts' journal pages names its new tells while the
-mod is on.
+It reaches the game only through the SDK's game API and content functions. Each ghost's tells are
+content rules on its vanilla id (`vanilla.spirit` and so on, `sdk/api/content.h`): the content layer
+runs them while the contract's ghost acts as that type, so a Mimic copying one of the six shows its
+tells too, on every client, and only in a private room. Each of the six ghosts' journal pages ends
+with a line naming its new tells (the content layer's `journal_lines`). The host runs the rules and
+shows the lines only while the room's mod lists match, decided when the contract loads and held until
+it ends (`sdk/README.md`, "The room's mod agreement"); otherwise the contract is plain vanilla. The
+mod keeps no check of its own.
 
 | Ghost | New tells |
 | --- | --- |
@@ -22,15 +27,18 @@ mod is on.
 | Onryo | A flame lit within 4 m is blown out 1 time in 2 (counting toward its third-flame hunt). Every flame gutters as its count rises and burns low at two. A flame it blew out will not catch for 15 s. |
 
 Speeds, cones, ranges and timings are in each ghost's `*_rule.h`, tested offline by
-`tests/ghost_tells_test.cpp`. Where each rule meets the game: `spirit.cpp`, `mare.cpp`, `shade.cpp`,
-`yurei.cpp`, `goryo.cpp`, `onryo.cpp`; `gate.cpp` holds back the ghost's own interactions, events and
-hunts through GhostActivity.TryInteract and GhostAI.ChangeState, never a forced change (the tarot cards)
-or a cursed possession's pull (`gate_rule.h`); `rolls.cpp` answers rolls of Random.RandomRangeInt that a
-tell marked with a flag around the game's own call (never by return address: other mods chain there);
-`hold.cpp` holds a hunting ghost still through its hunt state's base speed; `journal.cpp` adds the
-journal line. The Goryo's figure is the suite's model copy (`mods/custom_ghosts/apparition.cpp`) on
-the game's camera-only layer, LaserGhost. Messages on the channel start `'G' 'T'` (`tells_net.h`).
+`tests/ghost_tells_test.cpp`, which also runs the game-side code over the SDK's fake backend. Where
+each rule meets the game: `spirit.cpp`, `mare.cpp`, `shade.cpp`, `yurei.cpp`, `goryo.cpp`, `onryo.cpp`;
+`world.cpp` reads the contract (the ghost, its rooms, the players, the hunt the speed update runs);
+`gate.cpp` holds back the ghost's own interactions, events and hunts through GhostActivity.TryInteract
+and GhostAI.ChangeState, never a forced change (the tarot cards) or a cursed possession's pull
+(`gate_rule.h`, with the state numbers read from the game's GhostState enum); `rolls.cpp` answers rolls
+of Random.RandomRangeInt that a tell marked with a flag around the game's own call (never by return
+address: other mods chain there; the Mare's around LightSwitch.UseLightSwitch, which runs its
+switch-off coroutine's first step); `hold.cpp` holds a hunting ghost still through the content rules'
+`huntSpeed`. The Goryo's figure is the suite's model copy (`mods/custom_ghosts/apparition.cpp`) on the
+game's camera-only layer, LaserGhost. Messages on the channel start `'G' 'T'` (`tells_net.h`).
 
 A player controlling one of these ghosts in Playable Ghost is bound by the same rules: its events,
-hunts and abilities go through ChangeState, and its aimed interactions ask the `ghost-tells.v1`
-service (`core/services.h`).
+hunts and abilities go through ChangeState, and before each action Playable Ghost asks whether the rules
+hold the ghost back: the rules answer the content layer's `heldBack` (`content::held_back`).

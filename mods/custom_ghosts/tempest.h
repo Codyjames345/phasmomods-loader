@@ -9,7 +9,7 @@
 // plays the game's own lightning (LightningController.PlayLocalLightning) and, in a hunt, shows the
 // ghost only while a strike lights it up. The game's own storm lightning (heavy rain) lights it up
 // too. behaviour.cpp sets its hunt speed by striking(). Main thread.
-namespace pg::custom::tempest {
+namespace pm::custom::tempest {
 
 bool resolve();
 bool create_hooks();  // the game's storm lightning; before hooks::enable_all
@@ -22,4 +22,4 @@ bool striking();   // a strike lights it up now
 void receive(int sender, const uint8_t* data, size_t size);
 void reset();
 
-}  // namespace pg::custom::tempest
+}  // namespace pm::custom::tempest

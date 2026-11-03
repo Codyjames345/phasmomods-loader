@@ -20,6 +20,8 @@
 #include "GhostAI.h"
 #include "LevelController.h"
 #include "Scene.h"
+#include "UnityPlayer.h"
+#include "UnityWorld.h"
 #include "check.h"
 #include "fake_game.h"
 #include "game_api.h"
@@ -29,15 +31,15 @@
 #include "utf16.h"
 
 // Hooks' detours hold a hooks::Guard; a mod's glue counts them, a test does here.
-namespace pg::hooks {
+namespace pm::hooks {
 std::atomic<int> g_inflight{0};
-}  // namespace pg::hooks
+}  // namespace pm::hooks
 
 namespace {
 
-namespace api = pg::api;
-namespace fake = pg::fake;
-namespace map = pg::map;
+namespace api = pm::api;
+namespace fake = pm::fake;
+namespace map = pm::map;
 
 std::vector<std::string> g_lines;
 void capture(const char* line) { g_lines.emplace_back(line); }
@@ -55,14 +57,14 @@ void fake_unappear(void* ghost, const void* method) {
 }
 
 // An optional entry no fake provides, so it never resolves.
-inline constexpr pg::sdk::EntryDesc kOptionalCount{.key = "Test.optionalCount", .kind = pg::sdk::Kind::Method,
-                                                   .flags = pg::sdk::kOptional, .owner = "GhostAI",
+inline constexpr pm::sdk::EntryDesc kOptionalCount{.key = "Test.optionalCount", .kind = pm::sdk::Kind::Method,
+                                                   .flags = pm::sdk::kOptional, .owner = "GhostAI",
                                                    .name = "OptionalCount"};
 constexpr api::Method<kOptionalCount, int32_t(void*)> optionalCount{};
 
 // An optional GhostAI method returning a number, for virtual_call's refusals.
-inline constexpr pg::sdk::EntryDesc kTestCount{.key = "Test.count", .kind = pg::sdk::Kind::Method,
-                                               .flags = pg::sdk::kOptional, .owner = "GhostAI", .name = "Count"};
+inline constexpr pm::sdk::EntryDesc kTestCount{.key = "Test.count", .kind = pm::sdk::Kind::Method,
+                                               .flags = pm::sdk::kOptional, .owner = "GhostAI", .name = "Count"};
 constexpr api::Method<kTestCount, int32_t(void*)> testCount{};
 int g_countCalls = 0;
 int32_t fake_count(void*, const void*) {
@@ -71,8 +73,8 @@ int32_t fake_count(void*, const void*) {
 }
 
 // An optional type no fake provides, so it never resolves.
-inline constexpr pg::sdk::EntryDesc kOptionalType{.key = "Test.OptionalType", .kind = pg::sdk::Kind::Type,
-                                                  .flags = pg::sdk::kOptional, .name = "OptionalType"};
+inline constexpr pm::sdk::EntryDesc kOptionalType{.key = "Test.OptionalType", .kind = pm::sdk::Kind::Type,
+                                                  .flags = pm::sdk::kOptional, .name = "OptionalType"};
 constexpr api::Type<kOptionalType> optionalType{};
 
 // Class pointers for the fake: GhostAI, a class derived from it, and Camera.
@@ -90,18 +92,18 @@ void fake_unappear_override(void* ghost, const void* method) {
 
 // The static storage of LevelController.instance, and of an optional static int no fake gives.
 void* g_levelInstance = nullptr;
-inline constexpr pg::sdk::EntryDesc kOptionalStatic{.key = "Test.optionalStatic", .kind = pg::sdk::Kind::Field,
-                                                    .flags = pg::sdk::kStatic | pg::sdk::kOptional,
+inline constexpr pm::sdk::EntryDesc kOptionalStatic{.key = "Test.optionalStatic", .kind = pm::sdk::Kind::Field,
+                                                    .flags = pm::sdk::kStatic | pm::sdk::kOptional,
                                                     .owner = "LevelController", .type = "int"};
 constexpr api::StaticField<kOptionalStatic, int32_t> optionalStatic{};
 
 // A layer and an Animator parameter for the scene fact tests, both optional, so the other tests bind
 // without them.
-inline constexpr pg::sdk::EntryDesc kTestLayer{.key = "Test.layer", .kind = pg::sdk::Kind::Layer,
-                                               .flags = pg::sdk::kOptional, .name = "NoSuchLayer"};
+inline constexpr pm::sdk::EntryDesc kTestLayer{.key = "Test.layer", .kind = pm::sdk::Kind::Layer,
+                                               .flags = pm::sdk::kOptional, .name = "NoSuchLayer"};
 constexpr api::Layer<kTestLayer> testLayer{};
-inline constexpr pg::sdk::EntryDesc kTestParam{.key = "Test.isOpened", .kind = pg::sdk::Kind::AnimatorParam,
-                                               .flags = pg::sdk::kOptional, .name = "isOpened",
+inline constexpr pm::sdk::EntryDesc kTestParam{.key = "Test.isOpened", .kind = pm::sdk::Kind::AnimatorParam,
+                                               .flags = pm::sdk::kOptional, .name = "isOpened",
                                                .scene = "Resources/PCPlayer", .component = "BookController"};
 constexpr api::AnimatorParam<kTestParam> testParam{};
 
@@ -149,19 +151,70 @@ bool bound() {
 }
 
 // The fake host fills every function of the contract it claims: each member from `log` to the end
-// of PgHostApi is a function pointer, and none is null. Its patch_site refuses, with `page` null.
+// of PmHostApi is a function pointer, and none is null.
 void fake_host_fills_every_function() {
-  const PgHostApi* host = fake::host();
+  const PmHostApi* host = fake::host();
   const auto* bytes = reinterpret_cast<const unsigned char*>(host);
-  for (size_t at = offsetof(PgHostApi, log); at < sizeof(PgHostApi); at += sizeof(void*)) {
+  for (size_t at = offsetof(PmHostApi, log); at < sizeof(PmHostApi); at += sizeof(void*)) {
     void* slot = nullptr;
     std::memcpy(&slot, bytes + at, sizeof slot);
     CHECK(slot != nullptr);
   }
-  void* page = &page;
-  const unsigned char stub[] = {0x90};
-  CHECK(host->patch_site && !host->patch_site("UnityPlayer.Site", stub, sizeof stub, stub, sizeof stub, &page) &&
-        page == nullptr);
+}
+
+// A mod names the effect: the agent and the direction reach the host as they were asked, and nothing of how it is done.
+// The fake shows each ask, a null agent's question among none of them.
+void steering_an_agent_reaches_the_host() {
+  fake_everything_but("");
+  CHECK(bound());
+  CHECK(phasmo::NavMeshAgent::steer.available());
+  CHECK(fake::steer_asks().empty());
+  int agent = 0;
+  phasmo::NavMeshAgent::steer(&agent, 0.6f, -0.8f);
+  phasmo::NavMeshAgent::steer(&agent, 3.0f, 3.0f);  // the host says what a direction is
+  phasmo::NavMeshAgent::steer(nullptr, 1.0f, 0.0f);
+  CHECK(fake::steer_asks().size() == 2);
+  if (fake::steer_asks().size() == 2) {
+    CHECK(fake::steer_asks()[0].agent == &agent && fake::steer_asks()[0].dx == 0.6f && fake::steer_asks()[0].dz == -0.8f);
+    CHECK(fake::steer_asks()[1].dx == 3.0f && fake::steer_asks()[1].dz == 3.0f);
+  }
+}
+
+// The host cannot steer in this build: the mod hears it when it asks, so it stays inactive.
+void steering_the_host_refuses_is_unavailable() {
+  fake_everything_but("");
+  CHECK(bound());
+  fake::refuse_steering();
+  CHECK(!phasmo::NavMeshAgent::steer.available());
+  int agent = 0;
+  phasmo::NavMeshAgent::steer(&agent, 1.0f, 0.0f);
+  CHECK(fake::steer_asks().empty());
+}
+
+// The entries the host steers with are its own: the mod binds and steers without any of them, requires none (see
+// only_called_entries_are_required), and is never given a native site even where the game has one.
+void steering_needs_no_entry_of_the_mod() {
+  fake_everything_but("");
+  CHECK(bound());
+  CHECK(phasmo::NavMeshAgent::steer.available());
+  int agent = 0;
+  phasmo::NavMeshAgent::steer(&agent, 1.0f, 0.0f);
+  CHECK(fake::steer_asks().size() == 1);
+  unsigned char code = 0;
+  fake::native_site(map::UnityPlayer_SteerSite, &code);
+  CHECK(fake::host()->game_entry(map::UnityPlayer_SteerSite.key) == nullptr);
+  CHECK(fake::host_entry(map::UnityPlayer_SteerSite.key) != nullptr);
+}
+
+// Before bind there is no host to ask.
+void steering_before_bind_is_unavailable() {
+  fake_everything_but("");
+  std::string missing;
+  api::bind(nullptr, missing);
+  CHECK(!phasmo::NavMeshAgent::steer.available());
+  int agent = 0;
+  phasmo::NavMeshAgent::steer(&agent, 1.0f, 0.0f);
+  CHECK(fake::steer_asks().empty());
 }
 
 void call_reaches_fake() {
@@ -290,6 +343,40 @@ void unappear_detour(api::Original<phasmo::GhostAI::UnAppear> original, void* gh
   original(ghost);
 }
 
+// What goes under a mod's own hook, from outside its detour: the chain's next, with the entry's MethodInfo.
+int g_underHook = 0, g_entered = 0;
+const void* g_underMethod = nullptr;
+void under_body(void*, const void* method) {
+  ++g_underHook;
+  g_underMethod = method;
+}
+void entered_body(void*, const void*) { ++g_entered; }
+bool under_host_hook(const char*, uint32_t, void*, void** original, const char*) {
+  *original = reinterpret_cast<void*>(&under_body);
+  return true;
+}
+void under_detour(api::Original<phasmo::GhostAI::UnAppear>, void*) {}
+
+void below_hook_goes_under_the_mods_own_hook() {
+  fake::reset();
+  std::string missing;
+  api::bind(fake::host(), missing);
+  api::below_hook<phasmo::GhostAI::UnAppear>()(nullptr);  // unresolved: nothing runs
+  CHECK(g_underHook == 0 && g_entered == 0);
+  fake::reset();
+  fake::method(map::GhostAI_UnAppear, reinterpret_cast<void*>(&entered_body));
+  PmHostApi host = *fake::host();
+  host.hook_body = &under_host_hook;
+  api::bind(&host, missing);
+  const PmGameEntry* e = api::Use<map::GhostAI_UnAppear>::entry();
+  CHECK(api::hook<phasmo::GhostAI::UnAppear>(&under_detour, "under", api::Twins::CanonicalOnly));
+  api::below_hook<phasmo::GhostAI::UnAppear>()(nullptr);
+  CHECK(g_underHook == 1 && g_entered == 0);
+  CHECK(e && g_underMethod == e->method);
+  fake::reset();
+  api::bind(fake::host(), missing);
+}
+
 void hook_by_entry() {
   fake_everything_but("");
   CHECK(bound());
@@ -312,10 +399,10 @@ void hook_by_entry() {
 // while the full length is still returned.
 void utf16_encoder() {
   char out[16];
-  CHECK(pg::utf16_to_utf8(u"\xD83D\xDE00", out, sizeof out) == 4 && std::string(out) == "\xF0\x9F\x98\x80");
-  CHECK(pg::utf16_to_utf8(u"a\xD800z", out, sizeof out) == 5 && std::string(out) == "a\xEF\xBF\xBDz");
-  CHECK(pg::utf16_to_utf8(u"ടഴ", out, 5) == 6 && std::string(out) == "ട");  // 3 bytes each: the second does not fit
-  CHECK(pg::utf16_to_utf8(u"ab", nullptr, 0) == 2);
+  CHECK(pm::utf16_to_utf8(u"\xD83D\xDE00", out, sizeof out) == 4 && std::string(out) == "\xF0\x9F\x98\x80");
+  CHECK(pm::utf16_to_utf8(u"a\xD800z", out, sizeof out) == 5 && std::string(out) == "a\xEF\xBF\xBDz");
+  CHECK(pm::utf16_to_utf8(u"ടഴ", out, 5) == 6 && std::string(out) == "ട");  // 3 bytes each: the second does not fit
+  CHECK(pm::utf16_to_utf8(u"ab", nullptr, 0) == 2);
 }
 
 void utf8_round_trip_with_surrogates() {
@@ -349,6 +436,45 @@ void array_and_list_access() {
 
   const api::Array<int32_t> none{nullptr};
   CHECK(none.size() == 0 && api::List{nullptr}.size() == 0);
+
+  // A List grows through its own Add (the host contract's list_add) and answers what it holds.
+  int d = 0;
+  CHECK(list.contains(&c) && !list.contains(&d));
+  CHECK(list.add(&d) && list.size() == 4 && list[3] == &d && list.contains(&d));
+  CHECK(!api::List{nullptr}.add(&d));
+  CHECK(!api::List{fake::array(sizeof(void*), 1)}.add(&d));  // an array is not a List
+}
+
+// A collection's count comes through its own Count, whatever kind it is; a List of structs is read with
+// the stride the runtime gives for its element type, never an assumed one; an item leaves a List through
+// its own RemoveAt.
+void collection_count_struct_lists_and_remove() {
+  fake_everything_but("");
+  CHECK(bound());
+  CHECK(api::count(fake::collection(5)) == 5);  // a HashSet
+  int a = 0, b = 0, c = 0;
+  const api::List list{fake::list({&a, &b, &c})};
+  CHECK(api::count(list.raw) == 3);
+  CHECK(api::count(nullptr) == 0 && api::count(fake::array(4, 2)) == 0);  // an array is no collection
+
+  struct Heard {  // the test's own struct, of 24 bytes: the stride is read, not assumed
+    void* who;
+    float metres;
+    int32_t pad[3];
+  };
+  const api::List heard{fake::struct_list(sizeof(Heard), 2)};
+  const api::ValueArray items = heard.values();
+  CHECK(items.stride() == sizeof(Heard) && items.size() == 2);
+  static_cast<Heard*>(items.at(1))->who = &b;
+  CHECK(static_cast<Heard*>(items.at(1)) == static_cast<Heard*>(items.at(0)) + 1);
+  CHECK(static_cast<const Heard*>(items.at(1))->who == &b);
+  g_lines.clear();
+  CHECK(items.at(2) == nullptr);  // past the end: nothing touched, logged once
+  CHECK(api::ValueArray{nullptr}.size() == 0 && api::ValueArray{list.raw}.size() == 0);  // a List is no array
+
+  CHECK(list.remove_at(1) && list.size() == 2 && list[0] == &a && list[1] == &c);
+  CHECK(!list.remove_at(2) && list.size() == 2);  // out of range: nothing removed
+  CHECK(!api::List{nullptr}.remove_at(0));
 }
 
 void type_object_and_make() {
@@ -377,6 +503,54 @@ void is_follows_parents() {
   CHECK(phasmo::GhostAI::type.is(derived));
   CHECK(!phasmo::GhostAI::type.is(camera));
   CHECK(!phasmo::GhostAI::type.is(nullptr));
+}
+
+// A class's settings copy as the host reads them from the metadata: its own public value fields, a
+// reference inside one through the barrier, nothing else. Its fields of one type read in layout order.
+void settings_copy_and_fields_of_type() {
+  fake_everything_but("");
+  fake::declare_fields(kGhostClass, {{.offset = 0x40, .size = 4, .publicValue = true},
+                                     {.offset = 0x48, .size = 16, .publicValue = true, .references = {8}},
+                                     {.offset = 0x58, .size = 4},  // private, or a reference: not a setting
+                                     {.offset = 0x68, .size = 8, .type = kCameraClass, .array = true},
+                                     {.offset = 0x60, .size = 8, .type = kCameraClass, .array = true},
+                                     {.offset = 0x70, .size = 8, .type = kCameraClass}});
+  CHECK(bound());
+  alignas(8) unsigned char from[0x80] = {}, to[0x80] = {};
+  std::memcpy(from, &kGhostClass, sizeof(void*));
+  std::memcpy(to, &kDerivedClass, sizeof(void*));  // a derived class takes its parent's settings
+  int curve = 0;
+  void* curveRef = &curve;
+  const int32_t a = 7, b = 9, hidden = 5;
+  std::memcpy(from + 0x40, &a, 4);
+  std::memcpy(from + 0x48, &b, 4);
+  std::memcpy(from + 0x50, &curveRef, 8);
+  std::memcpy(from + 0x58, &hidden, 4);
+  const int writes = fake::barrier_writes();
+  CHECK(phasmo::GhostAI::type.copy_settings(to, from));
+  int32_t got = 0;
+  void* gotRef = nullptr;
+  std::memcpy(&got, to + 0x40, 4);
+  CHECK(got == 7);
+  std::memcpy(&got, to + 0x48, 4);
+  std::memcpy(&gotRef, to + 0x50, 8);
+  CHECK(got == 9 && gotRef == &curve && fake::barrier_writes() == writes + 1);
+  std::memcpy(&got, to + 0x58, 4);
+  CHECK(got == 0);  // not a public value: left alone
+  void* camera[1] = {kCameraClass};
+  CHECK(!phasmo::GhostAI::type.copy_settings(camera, from) && !phasmo::GhostAI::type.copy_settings(nullptr, from));
+
+  int first = 0, second = 0, single = 0;
+  void* refs[] = {&first, &second, &single};
+  std::memcpy(from + 0x60, &refs[0], 8);
+  std::memcpy(from + 0x68, &refs[1], 8);
+  std::memcpy(from + 0x70, &refs[2], 8);
+  void* out[4] = {};
+  CHECK((phasmo::GhostAI::type.fields_of<phasmo::Camera::type>(from, true, out, 4)) == 2);
+  CHECK(out[0] == &first && out[1] == &second);  // by offset, not as declared
+  CHECK((phasmo::GhostAI::type.fields_of<phasmo::Camera::type>(from, true, out, 1)) == 2 && out[0] == &first);
+  CHECK((phasmo::GhostAI::type.fields_of<phasmo::Camera::type>(from, false, out, 4)) == 1 && out[0] == &single);
+  CHECK((phasmo::GhostAI::type.fields_of<phasmo::Camera::type>(camera, true, out, 4)) == 0);
 }
 
 void virtual_call_reaches_override() {
@@ -472,6 +646,15 @@ void static_field_get_set() {
   CHECK(g_levelInstance == &level);                         // in the class's static storage
   CHECK(fake::barrier_writes() == 1);                       // a reference goes through the write barrier
   CHECK(phasmo::LevelController::instance.get() == &level);
+  // read tells a null from a read that failed, as get does not.
+  void* read = nullptr;
+  CHECK(phasmo::LevelController::instance.read(read) && read == &level);
+  fake::static_field(pm::map::LevelController_instance, &g_levelInstance, sizeof(int32_t), true);
+  read = nullptr;
+  CHECK(!phasmo::LevelController::instance.read(read) && !read);  // the host refused it
+  fake::forget(pm::map::LevelController_instance);
+  bound();
+  CHECK(!phasmo::LevelController::instance.read(read));  // it did not resolve
 }
 
 // An unresolved static field reads the default and writes nothing, logged once; one the host cannot
@@ -613,8 +796,13 @@ void animator_param_checked() {
 }  // namespace
 
 int main() {
-  pg::log::set_sink(&capture, "");
+  below_hook_goes_under_the_mods_own_hook();
+  pm::log::set_sink(&capture, "");
   fake_host_fills_every_function();
+  steering_an_agent_reaches_the_host();
+  steering_the_host_refuses_is_unavailable();
+  steering_needs_no_entry_of_the_mod();
+  steering_before_bind_is_unavailable();
   call_reaches_fake();
   field_get_set();
   reference_set_uses_barrier();
@@ -629,8 +817,10 @@ int main() {
   utf16_encoder();
   utf8_round_trip_with_surrogates();
   array_and_list_access();
+  collection_count_struct_lists_and_remove();
   type_object_and_make();
   is_follows_parents();
+  settings_copy_and_fields_of_type();
   virtual_call_reaches_override();
   virtual_call_refuses_null_and_wrong_type();
   wrong_kind_reads_nothing();

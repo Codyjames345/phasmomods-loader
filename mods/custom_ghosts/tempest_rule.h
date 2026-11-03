@@ -8,19 +8,20 @@
 // strikes; for the strike's moment it shows in full and runs very fast. Every hunt opens with a
 // strike, the weather sets how often more follow (the game's own storm lightning counts too), and
 // lightning flashes as each of its ghost events begins.
-namespace pg::custom {
+namespace pm::custom {
 
 constexpr float kTempestDark = 0.6f;           // times the game's base speed between strikes (1.02 m/s)
 constexpr float kTempestStrike = 2.25f;        // times the game's base speed during a strike (3.83 m/s)
 constexpr float kTempestStrikeSeconds = 1.5f;  // how long a strike shows it and speeds it
-constexpr int kWeatherRain = 2, kWeatherHeavyRain = 3;  // LevelValues' weather types (the class dump's enum)
-
 enum class Sky { Clear, Rain, HeavyRain };
 
-/** The sky that sets its strikes, from the contract's weather type; anything but rain is a clear night. */
-inline Sky tempest_sky(int weatherType) {
-  if (weatherType == kWeatherHeavyRain) return Sky::HeavyRain;
-  if (weatherType == kWeatherRain) return Sky::Rain;
+/**
+ * The sky that sets its strikes, from the contract's weather type and the game's numbers for rain and
+ * heavy rain (WeatherType, read from the game); anything but rain is a clear night.
+ */
+inline Sky tempest_sky(int weatherType, int rain, int heavyRain) {
+  if (weatherType == heavyRain) return Sky::HeavyRain;
+  if (weatherType == rain) return Sky::Rain;
   return Sky::Clear;
 }
 
@@ -59,4 +60,4 @@ inline bool tempest_striking(float since) { return since >= 0 && since <= kTempe
  */
 inline float tempest_speed(float base, bool striking) { return base * (striking ? kTempestStrike : kTempestDark); }
 
-}  // namespace pg::custom
+}  // namespace pm::custom

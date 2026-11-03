@@ -18,10 +18,10 @@
 #include "hde64.h"
 #include "log.h"
 
-namespace pg::hooks {
+namespace pm::hooks {
 
 std::atomic<int> g_inflight{0};
-#ifdef PG_HOOKS_TEST
+#ifdef PM_HOOKS_TEST
 bool g_noPageNear = false;
 #endif
 
@@ -91,7 +91,7 @@ void* write_relay(void* detour) {
   std::memcpy(relay + sizeof jump, &detour, sizeof detour);
   std::memset(relay + sizeof jump + sizeof detour, 0xCC, kRelayBytes - sizeof jump - sizeof detour);
   if (!VirtualProtect(relay, kRelayBytes, old, &old))
-    PG_LOG("hooks: the relay at %p stays writable: restoring its protection failed (%lu)", relay, GetLastError());
+    PM_LOG("hooks: the relay at %p stays writable: restoring its protection failed (%lu)", relay, GetLastError());
   FlushInstructionCache(GetCurrentProcess(), relay, kRelayBytes);
   return relay;
 }
@@ -106,7 +106,7 @@ void* head(void* target) {
 bool repeated(void* target, void* detour, const char* name) {
   for (const Created& c : g_created) {
     if (c.target == target && c.detour == detour) {
-      PG_LOG("hooks: %s is already hooked with this detour", name);
+      PM_LOG("hooks: %s is already hooked with this detour", name);
       return true;
     }
   }
@@ -116,8 +116,8 @@ bool repeated(void* target, void* detour, const char* name) {
 size_t remove_since(size_t start);
 
 // The other threads of the process, stopped while game code is written, as MinHook stops them when
-// it enables a hook: no atomic write covers a site that crosses a cache line (the steering site
-// does, at RVA 0xA4FB80). open() lists and opens them and allocates all it needs; while they are
+// it enables a hook: no atomic write covers a site that crosses a cache line (UnityPlayer.SteerSite
+// does). open() lists and opens them and allocates all it needs; while they are
 // suspended nothing here allocates, logs or takes a lock another thread could hold.
 class Frozen {
  public:
@@ -274,16 +274,16 @@ void log_write(const Write& w, const char* name, const void* at, const char* out
   switch (w.result) {
     case Write::Written:
       if (w.restoreError)
-        PG_LOG("hooks: the code at %p stays writable: restoring its protection failed (%lu)", at, w.restoreError);
+        PM_LOG("hooks: the code at %p stays writable: restoring its protection failed (%lu)", at, w.restoreError);
       return;
     case Write::Inside:
-      PG_LOG("hooks: %s: another thread kept stopping inside the bytes at %p; %s", name, at, outcome);
+      PM_LOG("hooks: %s: another thread kept stopping inside the bytes at %p; %s", name, at, outcome);
       return;
     case Write::Unfrozen:
-      PG_LOG("hooks: %s: the other threads could not be stopped (%lu); %s", name, w.error, outcome);
+      PM_LOG("hooks: %s: the other threads could not be stopped (%lu); %s", name, w.error, outcome);
       return;
     case Write::Unwritable:
-      PG_LOG("hooks: %s: the code at %p cannot be made writable (%lu); %s", name, at, w.error, outcome);
+      PM_LOG("hooks: %s: the code at %p cannot be made writable (%lu); %s", name, at, w.error, outcome);
       return;
   }
 }
@@ -333,7 +333,7 @@ bool overlaps(const uint8_t* site, size_t size) {
 
 // A page of kStubPage bytes, readable, writable and executable, within rel32 range of `site`, or null.
 uint8_t* page_near(uintptr_t site) {
-#ifdef PG_HOOKS_TEST
+#ifdef PM_HOOKS_TEST
   if (g_noPageNear) return nullptr;
 #endif
   SYSTEM_INFO system{};
@@ -362,14 +362,14 @@ void unpatch(Created& c) {
   if (!c.enabled) return;
   if (std::memcmp(c.at, c.written.data(), c.siteBytes) != 0) {
     c.enabled = false;
-    PG_LOG("hooks: the patch at %p was overwritten since it was written; its bytes are left as they are", c.at);
+    PM_LOG("hooks: the patch at %p was overwritten since it was written; its bytes are left as they are", c.at);
     return;
   }
   const Write w = write_frozen(c.at, c.original.data(), c.siteBytes);
   log_write(w, "restoring a site", c.at, "the patch stays");
   if (w.result != Write::Written) return;
   c.enabled = false;
-  PG_LOG("hooks: restored the %zu bytes at %p", c.siteBytes, c.at);
+  PM_LOG("hooks: restored the %zu bytes at %p", c.siteBytes, c.at);
 }
 
 }  // namespace
@@ -377,7 +377,7 @@ void unpatch(Created& c) {
 bool init() {
   MH_STATUS s = MH_Initialize();
   if (s != MH_OK) {
-    PG_LOG("hooks: MH_Initialize failed: %s", MH_StatusToString(s));
+    PM_LOG("hooks: MH_Initialize failed: %s", MH_StatusToString(s));
     return false;
   }
   g_initialised = true;
@@ -386,32 +386,32 @@ bool init() {
 
 bool create(void* target, void* detour, void** original, const char* name) {
   if (!target || !detour) {
-    PG_LOG("hooks: %s has no %s", name, target ? "detour" : "target");
+    PM_LOG("hooks: %s has no %s", name, target ? "detour" : "target");
     return false;
   }
   std::lock_guard lock(g_mutex);
   if (repeated(target, detour, name)) return false;
   if (in_site_patch(target)) {
-    PG_LOG("hooks: %s at %p is inside a site patch; nothing hooked", name, target);
+    PM_LOG("hooks: %s at %p is inside a site patch; nothing hooked", name, target);
     return false;
   }
   void* relay = write_relay(detour);
   if (!relay) {
-    PG_LOG("hooks: create %s at %p failed: no memory for its relay", name, target);
+    PM_LOG("hooks: create %s at %p failed: no memory for its relay", name, target);
     return false;
   }
   void* earlier = head(target);
   void* at = earlier ? earlier : target;
   MH_STATUS s = MH_CreateHook(at, relay, original);
   if (s != MH_OK) {
-    PG_LOG("hooks: create %s at %p failed: %s", name, at, MH_StatusToString(s));
+    PM_LOG("hooks: create %s at %p failed: %s", name, at, MH_StatusToString(s));
     return false;
   }
   take_relay();
   g_head[target] = relay;
   g_created.push_back({target, at, detour, false});
-  if (at == target) PG_LOG("hooks: created %s at %p", name, target);
-  else PG_LOG("hooks: created %s at %p, chained ahead of an earlier detour", name, target);
+  if (at == target) PM_LOG("hooks: created %s at %p", name, target);
+  else PM_LOG("hooks: created %s at %p, chained ahead of an earlier detour", name, target);
   return true;
 }
 
@@ -420,46 +420,46 @@ bool patch_site(void* site, const void* expected, size_t expectedSize, const voi
   if (page) *page = nullptr;
   if (!name) name = "a site patch";
   if (!site || !expected || !stub || !page) {
-    PG_LOG("hooks: %s: no site, expected bytes, stub or page; nothing was written", name);
+    PM_LOG("hooks: %s: no site, expected bytes, stub or page; nothing was written", name);
     return false;
   }
   if (expectedSize < kJumpBytes || expectedSize > kMaxSiteBytes) {
-    PG_LOG("hooks: %s: a patch replaces %zu to %zu bytes, not %zu; nothing was written", name, kJumpBytes, kMaxSiteBytes,
+    PM_LOG("hooks: %s: a patch replaces %zu to %zu bytes, not %zu; nothing was written", name, kJumpBytes, kMaxSiteBytes,
            expectedSize);
     return false;
   }
   if (stubSize == 0 || stubSize > kStubPage - kResumeBytes) {
-    PG_LOG("hooks: %s: a stub has 1 to %zu bytes, not %zu; nothing was written", name, kStubPage - kResumeBytes,
+    PM_LOG("hooks: %s: a stub has 1 to %zu bytes, not %zu; nothing was written", name, kStubPage - kResumeBytes,
            stubSize);
     return false;
   }
   if (!whole_instructions(static_cast<const uint8_t*>(expected), expectedSize)) {
-    PG_LOG("hooks: %s: the expected bytes are not whole instructions; nothing was written", name);
+    PM_LOG("hooks: %s: the expected bytes are not whole instructions; nothing was written", name);
     return false;
   }
   std::lock_guard lock(g_mutex);
   auto* const at = static_cast<uint8_t*>(site);
   if (overlaps(at, expectedSize)) {
-    PG_LOG("hooks: %s: the site at %p is already patched or hooked; nothing was written", name, at);
+    PM_LOG("hooks: %s: the site at %p is already patched or hooked; nothing was written", name, at);
     return false;
   }
   if (!host::readable_code(at, expectedSize)) {
-    PG_LOG("hooks: %s: the site at %p is not readable code; nothing was written", name, at);
+    PM_LOG("hooks: %s: the site at %p is not readable code; nothing was written", name, at);
     return false;
   }
   if (std::memcmp(at, expected, expectedSize) != 0) {
-    PG_LOG("hooks: %s: the %zu bytes at %p differ from the expected ones; nothing was written", name, expectedSize, at);
+    PM_LOG("hooks: %s: the %zu bytes at %p differ from the expected ones; nothing was written", name, expectedSize, at);
     return false;
   }
   uint8_t* const stubPage = page_near(reinterpret_cast<uintptr_t>(at));
   if (!stubPage) {
-    PG_LOG("hooks: %s: no page within rel32 range of %p; nothing was written", name, at);
+    PM_LOG("hooks: %s: no page within rel32 range of %p; nothing was written", name, at);
     return false;
   }
   const intptr_t distance = reinterpret_cast<intptr_t>(stubPage) - reinterpret_cast<intptr_t>(at + kJumpBytes);
   if (distance < INT32_MIN || distance > INT32_MAX) {
     VirtualFree(stubPage, 0, MEM_RELEASE);
-    PG_LOG("hooks: %s: the page at %p is out of rel32 range of %p; nothing was written", name, stubPage, at);
+    PM_LOG("hooks: %s: the page at %p is out of rel32 range of %p; nothing was written", name, stubPage, at);
     return false;
   }
   // The stub, then the jump back to the instruction after the replaced ones.
@@ -485,8 +485,14 @@ bool patch_site(void* site, const void* expected, size_t expectedSize, const voi
   }
   g_created.push_back(patch);
   *page = stubPage;
-  PG_LOG("hooks: patched %s at %p, stub at %p (%zu bytes)", name, at, stubPage, stubSize);
+  PM_LOG("hooks: patched %s at %p, stub at %p (%zu bytes)", name, at, stubPage, stubSize);
   return true;
+}
+
+bool site_patched(const void* site) {
+  std::lock_guard lock(g_mutex);
+  return std::any_of(g_created.begin(), g_created.end(),
+                     [&](const Created& c) { return c.siteBytes && c.enabled && c.at == site; });
 }
 
 bool enable_all() {
@@ -499,7 +505,7 @@ bool enable_all() {
   }
   MH_STATUS s = queued ? MH_ApplyQueued() : MH_OK;
   if (s != MH_OK) {
-    PG_LOG("hooks: enable failed: %s", MH_StatusToString(s));
+    PM_LOG("hooks: enable failed: %s", MH_StatusToString(s));
     return false;
   }
   for (size_t i = g_groupStart; i < g_created.size(); ++i)
@@ -545,8 +551,8 @@ size_t remove_since(size_t start) {
 void rollback_group() {
   std::lock_guard lock(g_mutex);
   const size_t kept = remove_since(g_groupStart);  // only the open group adds hooks, so nothing has chained onto these
-  if (kept) PG_LOG("hooks: removed the hooks of a mod that did not start; %zu site patch(es) stay in place", kept);
-  else PG_LOG("hooks: removed the hooks of a mod that did not start");
+  if (kept) PM_LOG("hooks: removed the hooks of a mod that did not start; %zu site patch(es) stay in place", kept);
+  else PM_LOG("hooks: removed the hooks of a mod that did not start");
 }
 
 size_t mark() {
@@ -558,8 +564,8 @@ void rollback_to(size_t mark) {
   std::lock_guard lock(g_mutex);
   const size_t listed = g_created.size() > mark ? g_created.size() - mark : 0;
   const size_t kept = remove_since(mark);
-  if (kept) PG_LOG("hooks: removed %zu hook(s); %zu site patch(es) stay in place", listed - kept, kept);
-  else PG_LOG("hooks: removed %zu hook(s)", listed);
+  if (kept) PM_LOG("hooks: removed %zu hook(s); %zu site patch(es) stay in place", listed - kept, kept);
+  else PM_LOG("hooks: removed %zu hook(s)", listed);
 }
 
 void restore_sites() {
@@ -577,7 +583,7 @@ void shutdown() {
   Sleep(100);  // let returning detours leave their epilogues
   MH_Uninitialize();
   g_initialised = false;
-  PG_LOG("hooks: shut down (inflight=%d)", g_inflight.load());
+  PM_LOG("hooks: shut down (inflight=%d)", g_inflight.load());
 }
 
-}  // namespace pg::hooks
+}  // namespace pm::hooks

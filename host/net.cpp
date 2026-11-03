@@ -2,53 +2,53 @@
 
 #include <cstring>
 
+#include "Photon.h"
+#include "contained.h"
+#include "game_api.h"
 #include "hooks.h"
-#include "il2cpp.h"
+#include "host_game.h"
 #include "log.h"
+#include "runtime.h"
+#include "runtime_services.h"
 
-namespace pg::hostnet {
+namespace pm::hostnet {
 namespace {
 
-constexpr size_t kMaxPayload = PG_MAX_MESSAGE + 1;  // the channel byte, then the message
+using phasmo::EventData;
+using phasmo::PhotonNetwork;
+using phasmo::RaiseEventOptions;
 
-// Photon.Realtime.RaiseEventOptions fields (PhotonRealtime build in this game).
-constexpr size_t kOptTargetActors = 0x18;  // int[]
-constexpr size_t kOptReceivers = 0x20;     // ReceiverGroup: Others 0, All 1, MasterClient 2
-// ExitGames.Client.Photon.EventData
-constexpr size_t kEventCodeOffset = 0x10;  // byte Code
+constexpr size_t kMaxPayload = PM_MAX_MESSAGE + 1;  // the channel byte, then the message
 
-struct Api {
-  il2cpp::Class* byteClass = nullptr;
-  il2cpp::Class* intClass = nullptr;
-  il2cpp::Class* optionsClass = nullptr;
-  void (*optionsCtor)(void*, const void*) = nullptr;
-  bool (*raiseEvent)(uint8_t, void*, void*, uint64_t, const void*) = nullptr;
-  void* onEvent = nullptr;
-  int (*sender)(void*, const void*) = nullptr;
-  void* (*customData)(void*, const void*) = nullptr;
-} api;
-
-PgReceiver g_receivers[256] = {};
+PmReceiver g_receivers[256] = {};
+Gate g_gate = nullptr;
 using OnEvent_t = void (*)(void* client, void* eventData, const void* method);
 OnEvent_t g_onEvent = nullptr;
 
-using il2cpp::bind;
+// Whether a message can be read as the suite's. Without each of these an event of the suite's code stays unread: it is not
+// the game's either, so it is dropped rather than handed to a receiver with a sender it cannot name.
+bool can_read() {
+  return api::all_resolved<EventData::get_Sender, EventData::get_CustomData, phasmo::Byte::type>();
+}
 
 void detour_on_event(void* client, void* eventData, const void* method) {
   hooks::Guard guard;
-  if (eventData && il2cpp::field<uint8_t>(eventData, kEventCodeOffset) == kEventCode) {
+  // Before the host's bind, and in a build without the field, the code cannot be read: the event is the game's.
+  if (eventData && api::all_resolved<EventData::Code>() && EventData::Code.get(eventData) == kEventCode) {
     try {
-      void* data = api.customData(eventData, nullptr);
-      const int sender = api.sender(eventData, nullptr);
-      if (data && il2cpp::class_of(data) == il2cpp::class_of_array(api.byteClass)) {
-        auto* arr = static_cast<il2cpp::Array*>(data);
-        if (arr->max_length >= 1 && arr->max_length <= kMaxPayload) {
-          const uint8_t* bytes = arr->data<uint8_t>();
-          if (PgReceiver receiver = g_receivers[bytes[0]]) receiver(sender, bytes + 1, arr->max_length - 1);
+      void* data = can_read() ? EventData::get_CustomData(eventData) : nullptr;
+      if (data && runtime_services::is_array_of(data, phasmo::Byte::type.desc.key)) {
+        const api::Array<uint8_t> payload{data};
+        const size_t length = payload.size();
+        if (length >= 1 && length <= kMaxPayload) {
+          const uint8_t* bytes = &payload[0];
+          const int32_t sender = EventData::get_Sender(eventData);
+          PmReceiver receiver = g_receivers[bytes[0]];
+          if (receiver && (bytes[0] == kHostChannel || (g_gate && g_gate(bytes[0], sender)))) receiver(sender, bytes + 1, length - 1);
         }
       }
     } catch (...) {
-      PG_LOG("net: exception while reading a mod event");
+      PM_LOG("net: exception while reading a mod event");
     }
     return;  // mod events are not game events; do not dispatch them to game callbacks
   }
@@ -57,49 +57,89 @@ void detour_on_event(void* client, void* eventData, const void* method) {
 
 }  // namespace
 
-bool resolve() {
-  api.byteClass = il2cpp::cls("mscorlib.dll", "System", "Byte");
-  api.intClass = il2cpp::cls("mscorlib.dll", "System", "Int32");
-  api.optionsClass = il2cpp::cls("PhotonRealtime.dll", "Photon.Realtime", "RaiseEventOptions");
-  il2cpp::Class* pn = il2cpp::cls("PhotonUnityNetworking.dll", "Photon.Pun", "PhotonNetwork");
-  il2cpp::Class* lbc = il2cpp::cls("PhotonRealtime.dll", "Photon.Realtime", "LoadBalancingClient");
-  il2cpp::Class* ev = il2cpp::cls("Photon3Unity3D.dll", "ExitGames.Client.Photon", "EventData");
-  bool ok = api.byteClass && api.intClass;
-  ok &= bind(api.optionsCtor, api.optionsClass, ".ctor", 0);
-  ok &= bind(api.raiseEvent, pn, "RaiseEvent", 4);
-  ok &= bind(api.onEvent, lbc, "OnEvent", 1);
-  ok &= bind(api.sender, ev, "get_Sender", 0);
-  ok &= bind(api.customData, ev, "get_CustomData", 0);
-  PG_LOG("net: resolve %s", ok ? "ok" : "FAILED");
-  return ok;
-}
-
 bool create_hooks() {
-  return hooks::create(api.onEvent, reinterpret_cast<void*>(&detour_on_event), reinterpret_cast<void**>(&g_onEvent),
-                       "LoadBalancingClient.OnEvent");
+  const PmGameEntry* e = api::host_only::game_entry(map::LoadBalancingClient_OnEvent.key);
+  if (!e || !e->code) {
+    PM_LOG("net: %s did not resolve; the suite's messages are off", map::LoadBalancingClient_OnEvent.key);
+    return true;  // the game runs as it would without us: available() stays false
+  }
+  return hooks::create(e->code, reinterpret_cast<void*>(&detour_on_event), reinterpret_cast<void**>(&g_onEvent),
+                       map::LoadBalancingClient_OnEvent.key);
 }
 
-void set_receiver(uint8_t channel, PgReceiver receiver) { g_receivers[channel] = receiver; }
+std::string missing() {
+  namespace P = phasmo;
+  std::string out = api::host_only::game_entry(map::LoadBalancingClient_OnEvent.key) ? "" : map::LoadBalancingClient_OnEvent.key;
+  const std::string entries =
+      hostgame::unresolved<EventData::get_Sender, EventData::get_CustomData, P::Byte::type, EventData::Code,
+                           PhotonNetwork::RaiseEvent, RaiseEventOptions::type, RaiseEventOptions::ctor,
+                           RaiseEventOptions::TargetActors, RaiseEventOptions::Receivers, P::ReceiverGroup::Others,
+                           P::ReceiverGroup::MasterClient, P::ReceiverGroup::All, P::DeliveryMode::Unreliable,
+                           P::DeliveryMode::Reliable,
+                           P::SendOptions::type, P::SendOptions::DeliveryMode, P::Int32::type>();
+  if (!entries.empty()) out += (out.empty() ? "" : ", ") + entries;
+  return out;
+}
+
+bool available() { return g_onEvent && missing().empty(); }
+
+void set_receiver(uint8_t channel, PmReceiver receiver) { g_receivers[channel] = receiver; }
+
+void set_gate(Gate gate) { g_gate = gate; }
+
+namespace {
+
+// Raises the message, `address` writing who it goes to in the options. False, with nothing sent, when `address` is.
+template <typename Address>
+bool raise(uint8_t channel, const uint8_t* data, size_t size, bool reliable, Address address) {
+  // Who it goes to is written by `address`, and a default standing in for an entry that did not resolve would send it elsewhere.
+  if (size > PM_MAX_MESSAGE || !available()) return false;
+  void* payload = phasmo::Byte::type.make_array(size + 1);
+  void* options = RaiseEventOptions::type.make();
+  if (!payload || !options) return false;
+  const api::Array<uint8_t> bytes{payload};
+  if (bytes.size() != size + 1) return false;
+  uint8_t* out = &bytes[0];
+  out[0] = channel;
+  if (size) std::memcpy(out + 1, data, size);
+  RaiseEventOptions::ctor(options);
+  if (!address(options)) return false;
+  // SendOptions is 8 bytes (its entry's exact fields) and passed by value, its other fields zero.
+  uint64_t sendOptions = 0;
+  phasmo::SendOptions::DeliveryMode.set(&sendOptions,
+                                        reliable ? phasmo::DeliveryMode::Reliable() : phasmo::DeliveryMode::Unreliable());
+  return PhotonNetwork::RaiseEvent(kEventCode, payload, options, sendOptions);
+}
+
+}  // namespace
 
 bool send(uint8_t channel, const uint8_t* data, size_t size, int32_t to, bool reliable, int32_t actor) {
-  if (size > PG_MAX_MESSAGE) return false;
-  il2cpp::Array* payload = il2cpp::array_new(api.byteClass, size + 1);
-  il2cpp::Object* options = il2cpp::object_new(api.optionsClass);
-  if (!payload || !options) return false;
-  payload->data<uint8_t>()[0] = channel;
-  if (size) std::memcpy(payload->data<uint8_t>() + 1, data, size);
-  api.optionsCtor(options, nullptr);
-  if (to == PG_TO_ACTOR) {
-    il2cpp::Array* targets = il2cpp::array_new(api.intClass, 1);
-    if (!targets) return false;
-    targets->data<int32_t>()[0] = actor;
-    il2cpp::set_ref_field(options, kOptTargetActors, targets);
-  } else {
-    il2cpp::set_field<uint8_t>(options, kOptReceivers, to == PG_TO_MASTER ? 2 : 0);
-  }
-  // SendOptions { DeliveryMode (int) @0, bool Encrypt @4, byte Channel @5 } passed by value.
-  const uint64_t sendOptions = reliable ? 1 : 0;
-  return api.raiseEvent(kEventCode, payload, options, sendOptions, nullptr);
+  return raise(channel, data, size, reliable, [&](void* options) {
+    if (to == PM_TO_ACTOR) {
+      void* targets = phasmo::Int32::type.make_array(1);
+      if (!targets) return false;
+      api::Array<int32_t>{targets}[0] = actor;
+      RaiseEventOptions::TargetActors.set(options, targets);
+    } else {
+      const int32_t group = to == PM_TO_MASTER ? phasmo::ReceiverGroup::MasterClient() : phasmo::ReceiverGroup::Others();
+      RaiseEventOptions::Receivers.set(options, static_cast<uint8_t>(group));
+    }
+    return true;
+  });
 }
 
-}  // namespace pg::hostnet
+bool send_through_server_to_all(uint8_t channel, const uint8_t* data, size_t size) {
+  return raise(channel, data, size, true, [](void* options) {
+    RaiseEventOptions::Receivers.set(options, static_cast<uint8_t>(phasmo::ReceiverGroup::All()));
+    return true;
+  });
+}
+
+bool send_to_verified(uint8_t channel, const uint8_t* data, size_t size, bool reliable, const std::vector<int>& verified, bool everyone) {
+  if (everyone) return send(channel, data, size, PM_TO_OTHERS, reliable, 0);
+  bool sent = true;
+  for (int actor : verified) sent = send(channel, data, size, PM_TO_ACTOR, reliable, actor) && sent;
+  return sent;
+}
+
+}  // namespace pm::hostnet

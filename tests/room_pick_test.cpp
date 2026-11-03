@@ -3,7 +3,7 @@
 
 #include "check.h"
 
-using namespace pg::room_pick;
+using namespace pm::room_pick;
 
 namespace {
 

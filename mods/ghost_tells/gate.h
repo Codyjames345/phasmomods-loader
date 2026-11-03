@@ -5,9 +5,9 @@
 // What the told ghost may not do right now, whoever drives it, through the game's own entry points:
 // GhostActivity.TryInteract (the AI's interactions) and GhostAI.ChangeState (interactions, events,
 // abilities and hunts, the AI's and a Playable Ghost player's alike; never a forced change or a cursed
-// possession's pull, gate_rule.h). Each ghost's file adds the rule that holds it back. Runs on the host.
-// Main thread.
-namespace pg::tells::gate {
+// possession's pull, gate_rule.h). Each ghost's file adds the rule that holds it back; the same rules
+// answer the content layer's held-back check (mod.cpp). Runs on the host. Main thread.
+namespace pm::tells::gate {
 
 using Kind = GateKind;
 constexpr Kind kInteract = kGateInteract, kEvent = kGateEvent, kHunt = kGateHunt;
@@ -20,6 +20,9 @@ void add_rule(Rule rule);
 using StateListener = void (*)(void* ai, int state, bool before);
 void around_state(StateListener listener);
 
+/** Reads the game's GhostState numbers (gate_rule.h), at start. */
+void resolve();
+const GateStates& states();
 bool create_hooks();  // before hooks::enable_all
 // The told ghost haunting the contract (on the host while the tells are on; null otherwise).
 void tick(void* ghost);
@@ -29,4 +32,4 @@ void change_state(void* ai, int state);
 /** GhostActivity.TryInteract on the ghost's activity, through every mod's detours. */
 void try_interact(void* ai);
 
-}  // namespace pg::tells::gate
+}  // namespace pm::tells::gate

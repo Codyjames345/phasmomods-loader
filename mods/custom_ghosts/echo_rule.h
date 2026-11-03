@@ -6,18 +6,18 @@
 // players do: soon after a player uses a light switch or a door in its favourite room, its next interaction
 // once it is in reach of that switch or door uses it. With nobody heard near it for a minute it is dormant
 // and loses most of its interactions and events, but never a repeat.
-namespace pg::custom {
+namespace pm::custom {
 
 constexpr uint64_t kEchoRepeatMs = 60000;  // how long after a player's use the Echo still repeats it
-constexpr int kEchoDormantLoss = 75;       // percent of a dormant Echo's AI interactions and events lost
+constexpr int kEchoDormantLoss = 75;       // percent of a dormant Echo's interactions and events lost, whoever steers it
 
-/** Whether a dormant Echo's AI loses an interaction or event, for a roll in 0..99. */
+/** Whether a dormant Echo loses an interaction or event, for a roll in 0..99. */
 inline bool echo_dormant_loses(int roll) { return roll < kEchoDormantLoss; }
 
-enum class EchoRoll { Repeat, Lost, Game };  // what becomes of the Echo AI's interaction roll
+enum class EchoRoll { Repeat, Lost, Game };  // what becomes of the Echo's own interaction roll
 
 /**
- * What becomes of the Echo AI's interaction roll: its repeat when that fired (the repeat is the interaction,
+ * What becomes of the Echo's own interaction roll: its repeat when that fired (the repeat is the interaction,
  * so no dormancy roll is drawn); otherwise, while `dormant`, lost when `roll()` (0..99) falls in the share it
  * loses; else the game's own interaction. `roll` is drawn only for a dormant Echo whose repeat did not fire.
  */
@@ -28,8 +28,15 @@ EchoRoll echo_roll(bool repeated, bool dormant, Roll roll) {
 }
 
 /**
+ * Whether an interaction of the Echo's own ghost (`own`) on the host (`master`) tries its repeat first: an
+ * ordinary one, its AI's roll (GhostActivity.TryInteract) and a ghost player's aimed interaction
+ * (GhostActivity.NormalInteraction) alike, never a forced one (the voodoo doll's pins).
+ */
+inline bool echo_tries_repeat(bool own, bool master, bool forced) { return own && master && !forced; }
+
+/**
  * The switch or door the Echo's next interaction repeats. Only the most recent use in its room counts, for
- * kEchoRepeatMs, and it is handed out once. `Keep` holds the object between frames: il2cpp::Held in the
+ * kEchoRepeatMs, and it is handed out once. `Keep` holds the object between frames: pm::api::Held in the
  * game, so the collector keeps it alive while it waits; a plain pointer in the offline tests.
  */
 template <class Keep = void*>
@@ -60,4 +67,4 @@ class Repeat {
   uint64_t at_ = 0;
 };
 
-}  // namespace pg::custom
+}  // namespace pm::custom

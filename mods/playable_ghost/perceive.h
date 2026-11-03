@@ -6,6 +6,8 @@
 #include <map>
 #include <string>
 
+#include "text_table.h"
+
 // What the ghost player perceives beyond their own eyes, as their type's vanilla ghost does, and the
 // things done to the ghost that its vanilla code reacts to. Pure (no game calls), testable offline.
 //
@@ -18,7 +20,7 @@
 // Alerts (E3): a line for things done to the ghost (its name spoken, the Ouija board or spirit box
 // answering, a cursed object used on it, a crucifix burned, salt stepped in, being smudged or
 // summoned), with a direction and distance when they happen somewhere. No timers, no sanity.
-namespace pg::perceive {
+namespace pm::perceive {
 
 enum MarkKind : uint8_t {
   kStepWalk = 1,    // Kormos: footsteps it hears, by how the investigator moves
@@ -60,6 +62,19 @@ constexpr size_t kMaxAlertText = 40;
 enum TarotCard : uint8_t { kTower = 2, kDevil = 3, kDeath = 4, kHermit = 5 };
 inline bool tarot_affects_ghost(int card) { return card >= kTower && card <= kHermit; }
 
+// The Yokai's hearing in a hunt, as the hunt's voice test (GhostHuntState.Hears) has it for the Yokai's
+// ghostType: a player is heard only within 2.5 m (9 m for other types) of where the ghost hears from
+// (GhostAI.head) to the player's body (Player.body), on the floor of the ghost's room, and not from a
+// room outside the map; a player a Monkey Paw wish marked (Player.wished) from 1000 m and on any floor.
+// The voice test also asks that the player talk loudly (PlayerAudio.IsTalkingLoudly); the Yokai player
+// hears a voice within reach whatever its volume, so soft words are not cut off (user, 2026-10-31), a
+// known difference.
+constexpr float kYokaiHearing = 2.5f;     // pm:not-game-data: a literal in the voice test's code (GhostHuntState.Hears)
+constexpr float kWishedHearing = 1000.0f;  // pm:not-game-data: a literal in the voice test's code (GhostHuntState.Hears)
+inline bool yokai_hears(float distance, bool sameFloor, bool outsideMap, bool wished) {
+  return distance <= (wished ? kWishedHearing : kYokaiHearing) && (sameFloor || wished) && !outsideMap;
+}
+
 struct Alert {
   uint8_t kind = 0;
   uint8_t arg = 0;
@@ -72,25 +87,25 @@ struct Alert {
 /** What the alert says, without where. */
 inline std::string alert_text(const Alert& a) {
   switch (a.kind) {
-    case kName: return "Someone spoke your name";
-    case kSpiritBox: return "The spirit box spoke for you";
-    case kOuija: return a.text.empty() ? "The Ouija board spoke for you" : "The Ouija board answered: \"" + a.text + "\"";
-    case kMusicBox: return "Music is calling you";
-    case kSummoned: return "You are being summoned";
+    case kName: return i18n::text("alert.name");
+    case kSpiritBox: return i18n::text("alert.spirit-box");
+    case kOuija: return a.text.empty() ? i18n::text("alert.ouija") : i18n::text("alert.ouija-answered", {{"answer", a.text}});
+    case kMusicBox: return i18n::text("alert.music-box");
+    case kSummoned: return i18n::text("alert.summoned");
     case kTarot:
       switch (a.arg) {
-        case kTower: return "The Tower card: you grow restless";
-        case kDevil: return "The Devil card: you are made to appear";
-        case kDeath: return "The Death card: you are made to hunt";
-        case kHermit: return "The Hermit card: you are sent home";
-        default: return "A tarot card was drawn";
+        case kTower: return i18n::text("alert.tarot-tower");
+        case kDevil: return i18n::text("alert.tarot-devil");
+        case kDeath: return i18n::text("alert.tarot-death");
+        case kHermit: return i18n::text("alert.tarot-hermit");
+        default: return i18n::text("alert.tarot");
       }
-    case kVoodoo: return "A pin was pushed into the voodoo doll";
-    case kMonkeyPaw: return "A wish was made on the monkey paw";
-    case kMirror: return "They are watching your room in the mirror";
-    case kCrucifix: return "A crucifix stopped you";
-    case kSalt: return "You walked through salt";
-    case kSmudged: return "You have been smudged";
+    case kVoodoo: return i18n::text("alert.voodoo");
+    case kMonkeyPaw: return i18n::text("alert.monkey-paw");
+    case kMirror: return i18n::text("alert.mirror");
+    case kCrucifix: return i18n::text("alert.crucifix");
+    case kSalt: return i18n::text("alert.salt");
+    case kSmudged: return i18n::text("alert.smudged");
     default: return {};
   }
 }
@@ -102,13 +117,14 @@ inline std::string alert_text(const Alert& a) {
 inline std::string bearing(float gx, float gz, float yawDegrees, float tx, float tz) {
   const float dx = tx - gx, dz = tz - gz;
   const float distance = std::sqrt(dx * dx + dz * dz);
-  char buf[48];
-  if (distance < 1.5f) return "right here";
+  if (distance < 1.5f) return i18n::text("alert.right-here");
   const float toTarget = std::atan2(dx, dz) * 180.0f / 3.14159265f;
   float rel = std::fmod(toTarget - yawDegrees + 540.0f, 360.0f) - 180.0f;  // -180..180, positive: right
-  const char* side = std::fabs(rel) <= 45.0f ? "ahead" : std::fabs(rel) >= 135.0f ? "behind" : rel > 0 ? "to your right" : "to your left";
-  std::snprintf(buf, sizeof buf, "%s, %d m", side, static_cast<int>(distance + 0.5f));
-  return buf;
+  const std::string side = std::fabs(rel) <= 45.0f    ? i18n::text("alert.ahead")
+                           : std::fabs(rel) >= 135.0f ? i18n::text("alert.behind")
+                           : rel > 0                  ? i18n::text("alert.right")
+                                                      : i18n::text("alert.left");
+  return i18n::text("alert.where", {{"side", side}, {"metres", std::to_string(static_cast<int>(distance + 0.5f))}});
 }
 
 /** Drops an alert of a kind already shown within kRepeatMs (an RPC seen here and relayed by the host). */
@@ -126,4 +142,4 @@ class Recent {
   std::map<uint8_t, uint64_t> last_;
 };
 
-}  // namespace pg::perceive
+}  // namespace pm::perceive

@@ -8,12 +8,18 @@
 # With -Mods <dir> it also loads each mod DLL under <dir> and reports the mods the host would not start on
 # this build. -IfConfigured exits quietly when the game or Cpp2IL is not set; nothing here needs Python
 # until the check is configured.
-# usage: tools\gamecheck.ps1 [-GameDir <dir>] [-Cpp2Il <exe>] [-Mods <dir>] [-IfConfigured]
-param([string]$GameDir = $env:PG_GAME_DIR, [string]$Cpp2Il = $env:PG_CPP2IL, [string]$Mods, [switch]$IfConfigured)
+# When every check passes it writes this build's checked-build record into sdk\builds, for the release to
+# ship (core/build_record.h): the two library hashes and the map's digest, and nothing else. Commit it. A build on an
+# engine or metadata version the host's layouts were not written for fails the check and gets no record
+# (core/engine_version.h).
+# With -Expect it also checks every re\dump\expect\*.txt (lines of "<key> <hex>"): the values the SDK
+# migration replaced, which must still resolve to the same numbers (gitignored, never committed).
+# usage: tools\gamecheck.ps1 [-GameDir <dir>] [-Cpp2Il <exe>] [-Mods <dir>] [-Expect] [-IfConfigured]
+param([string]$GameDir = $env:PM_GAME_DIR, [string]$Cpp2Il = $env:PM_CPP2IL, [string]$Mods, [switch]$Expect, [switch]$IfConfigured)
 $ErrorActionPreference = 'Stop'
 
 if (-not $GameDir -or -not $Cpp2Il) {
-  Write-Host 'Offline game check: not configured (set PG_GAME_DIR and PG_CPP2IL).'
+  Write-Host 'Offline game check: not configured (set PM_GAME_DIR and PM_CPP2IL).'
   if ($IfConfigured) { exit 0 }
   exit 2
 }
@@ -69,8 +75,16 @@ if (-not $current) {
 
 $diffable = Join-Path $cs 'DiffableCs'
 $checkArgs = @('--dump', $diffable, '--image', (Join-Path $game 'GameAssembly.dll'), '--unity-player', $unityPlayer,
-  '--addresses', $addresses, '--scene-entries', $sceneEntries)
+  '--addresses', $addresses, '--scene-entries', $sceneEntries, '--game-data', (Join-Path $game 'Phasmophobia_Data'))
 if ($Mods) { $checkArgs += @('--mods', (Resolve-Path -LiteralPath $Mods).Path) }
+if ($Expect) {
+  $expectFiles = @(Get-ChildItem -LiteralPath (Join-Path $dump 'expect') -Filter '*.txt' -File -ErrorAction SilentlyContinue | Sort-Object Name)
+  if ($expectFiles.Count -eq 0) {
+    Write-Host 'No expectation files: re\dump\expect has no *.txt.'
+    exit 2
+  }
+  foreach ($file in $expectFiles) { $checkArgs += @('--expect', $file.FullName) }
+}
 & $check @checkArgs
 $code = $LASTEXITCODE
 & node (Join-Path $root 're\names.mjs') $diffable
@@ -132,4 +146,9 @@ for ($round = 0; ; ++$round) {
 & $python -I $assetcheck --data $data --entries $sceneEntries
 $sceneCode = $LASTEXITCODE
 if ($sceneCode -eq 2) { exit 2 }
-exit ([Math]::Max($code, $sceneCode))
+$result = [Math]::Max($code, $sceneCode)
+if ($result -eq 0) {
+  & $check --write-record (Join-Path $root 'sdk\builds') --image (Join-Path $game 'GameAssembly.dll') --unity-player $unityPlayer --game-data $data
+  if ($LASTEXITCODE -ne 0) { throw 'gamecheck could not write the checked-build record.' }
+}
+exit $result

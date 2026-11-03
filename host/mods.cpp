@@ -4,14 +4,20 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <iterator>
 
-#include "build_check.h"
+#include "contained.h"
+#include "file_hash.h"
 #include "hooks.h"
 #include "log.h"
+#include "mod_deps.h"
+#include "mod_exports.h"
 #include "mod_list.h"
+#include "quiet_load.h"
 #include "text_files.h"
+#include "text_table.h"
 
-namespace pg::mods {
+namespace pm::mods {
 namespace {
 
 namespace fs = std::filesystem;
@@ -19,8 +25,11 @@ using text::read_file;
 using text::widen;
 
 std::vector<Mod> g_mods;
+std::vector<modlist::Refused> g_refused;
 fs::path g_dataDirectory;
+fs::path g_buildRecords;
 std::vector<std::string> g_startOrder;  // the running mods' ids in the order they started
+std::vector<moddeps::LeftOut> g_off;   // the chosen mods the last start left off, with why
 
 /** The folder this host DLL was loaded from. */
 fs::path host_folder() {
@@ -33,43 +42,52 @@ fs::path host_folder() {
   return fs::path(path).parent_path();
 }
 
-bool duplicate(const PgModInfo* info) {
-  for (const Mod& m : g_mods)
-    if (std::string(m.info->id) == info->id || m.info->channel == info->channel) return true;
-  return false;
+/** What a launcher's copy of a mod is called for the player, until its manifest says: "GhostTells-1234-5-0.dll" is GhostTells. */
+std::string copy_name(const fs::path& dll) {
+  const std::wstring stem = dll.stem().wstring();
+  return text::narrow(stem.substr(0, stem.find(L'-')));
 }
 
-/**
- * A mod's manifest, or an empty one (logged) when it has none or it cannot be read: the mod then
- * loads without a description or a requirement, and a mod that needs another checks for it itself.
- */
-modlist::Manifest manifest_in(const fs::path& ini) {
-  std::error_code error;
-  modlist::Manifest m;
-  std::string why;
-  if (!fs::exists(ini, error)) {
-    PG_LOG("mods: %ls is missing; that mod has no description or requirement", ini.c_str());
-    return {};
-  }
-  if (!modlist::parse_manifest(read_file(ini), m, why)) {
-    PG_LOG("mods: %ls cannot be used: %s", ini.c_str(), why.c_str());
-    return {};
-  }
-  return m;
+/** A mod that stays off whatever the player chooses, with why: in the log and on its Mods panel row. */
+void refuse(std::vector<modlist::Refused>& list, std::string name, std::string why) {
+  PM_LOG("mods: %s stays off: %s", name.c_str(), why.c_str());
+  list.push_back({std::move(name), std::move(why)});
 }
 
-Mod* loaded_mod(const std::string& id) {
+Mod* find_mod(std::string_view id) {
   for (Mod& m : g_mods)
-    if (id == m.info->id) return &m;
+    if (id == m.manifest.id) return &m;
   return nullptr;
 }
 
-/** The game entries `m` requires that the host did not resolve, separated by ", "; empty when none. */
-std::string unresolved_entries(const PgHostApi* api, const Mod& m) {
-  std::string lacking;
+/** The game entries `m` requires that the host did not resolve. */
+std::vector<std::string> unresolved_entries(const PmHostApi* api, const Mod& m) {
+  std::vector<std::string> lacking;
   for (const std::string& key : m.entries)
-    if (!api->game_entry(key.c_str())) lacking += (lacking.empty() ? "" : ", ") + key;
+    if (!api->game_entry(key.c_str())) lacking.push_back(key);
   return lacking;
+}
+
+std::string joined(const std::vector<std::string>& keys) {
+  std::string text;
+  for (const std::string& key : keys) text += (text.empty() ? "" : ", ") + key;
+  return text;
+}
+
+/** A Mods panel row's reason for missing entries: the first by its key, since a row has room for little. The key is the mod's own text. */
+std::string lacking_row(const std::vector<std::string>& keys) {
+  const std::string first = modid::display_safe(keys[0], modid::kMaxNameBytes) ? keys[0] : i18n::text("mods.a-game-entry");
+  return keys.size() > 1 ? i18n::text("mods.lacks-entries", {{"entry", first}, {"count", std::to_string(keys.size() - 1)}})
+                         : i18n::text("mods.lacks-entry", {{"entry", first}});
+}
+
+/** The game entries `m` requires whose calls the host could not track, separated by ", "; empty when none. */
+std::string untracked_entries(bool (*untracked)(const char* key), const Mod& m) {
+  std::string lost;
+  if (untracked)
+    for (const std::string& key : m.entries)
+      if (untracked(key.c_str())) lost += (lost.empty() ? "" : ", ") + key;
+  return lost;
 }
 
 std::string build_of(const fs::path& dll) {
@@ -77,142 +95,265 @@ std::string build_of(const fs::path& dll) {
   return build::sha256_file(dll.c_str(), hex) ? std::string(hex, 16) : std::string(16, '0');
 }
 
+/** Keeps `m` off for this run of the game: its DLL was refused once loaded. */
+bool refuse_loaded(Mod& m, std::string row, std::string log) {
+  m.refusedRow = std::move(row);
+  m.refusedLog = std::move(log);
+  return false;
+}
+
+/** Whether a loaded mod other than `m` already has this channel. */
+bool channel_taken(const Mod& m, uint8_t channel) {
+  for (const Mod& other : g_mods)
+    if (&other != &m && other.info && other.info->channel == channel) return true;
+  return false;
+}
+
+/**
+ * Loads `m`'s DLL the first time it is needed, and checks what only the DLL can say. False with `m.refusedRow` and
+ * `m.refusedLog` when it is refused. A DLL that loaded stays mapped, refused or not, so it is never loaded twice.
+ */
+bool load_dll(Mod& m) {
+  if (!m.refusedRow.empty()) return false;
+  if (m.info) return true;
+  HMODULE module = dll::load_mod(m.dll.c_str());
+  if (!module) {
+    const std::string error = std::to_string(GetLastError());
+    return refuse_loaded(m, i18n::text("mods.dll-unloadable"), "its DLL could not be loaded (Windows error " + error + ")");
+  }
+  HMODULE pinned = nullptr;
+  GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+                     reinterpret_cast<LPCWSTR>(module), &pinned);  // detours in it must never be unmapped
+  // A mod built before the rename exports the old names (core/mod_exports.h): it loads, and the log says so once.
+  bool oldNames = false;
+  const auto find = [&](std::string_view name) {
+    const modexports::Found found =
+        modexports::find([&](const char* full) { return reinterpret_cast<void*>(GetProcAddress(module, full)); }, name);
+    oldNames = oldNames || found.old;
+    return found.address;
+  };
+  auto infoOf = reinterpret_cast<PmModInfoFn>(find("info"));
+  const auto start = reinterpret_cast<PmModStartFn>(find("start"));
+  const auto tick = reinterpret_cast<PmModTickFn>(find("tick"));
+  const auto stop = reinterpret_cast<PmModStopFn>(find("stop"));
+  // The contract forbids a throw here, and the SDK's glue guards it, but this DLL is anybody's.
+  bool threw = false;
+  const PmModInfo* info = !infoOf ? nullptr : host::contained("mods", "asking a mod what it is", static_cast<const PmModInfo*>(nullptr), [&] {
+    threw = true;  // until its call returns
+    const PmModInfo* answer = infoOf();
+    threw = false;
+    return answer;
+  });
+  if (threw) return refuse_loaded(m, i18n::text("mods.info-threw"), "its pmmod_info threw");
+  if (!info || !start || !tick || !stop || !info->id || !info->name)
+    return refuse_loaded(m, i18n::text("mods.not-a-mod"), "its DLL is not a mod for this loader");
+  if (!pm_api_compatible(PMMOD_API_VERSION, info->apiVersion) || info->channel == 0)
+    return refuse_loaded(m, i18n::text("mods.other-version"), "it was built for another version of the loader");
+  if (m.manifest.id != info->id)
+    return refuse_loaded(m, i18n::text("mods.id-mismatch"),
+                         "the manifest says " + m.manifest.id + ", the DLL says " + info->id);
+  if (channel_taken(m, info->channel))
+    return refuse_loaded(m, i18n::text("mods.channel-taken"),
+                         "it repeats channel " + std::to_string(info->channel) + " of a mod already loaded");
+  // The player agreed on the manifest's word. A manifest that says so when the DLL does not only warns too much.
+  if ((info->flags & PM_MOD_RECORDS_VOICE) && !m.manifest.recordsVoice)
+    return refuse_loaded(m, i18n::text("mods.voice-undeclared"), "its DLL records voice, which its manifest does not say");
+  // A mod built before the game API has no pmmod_requires and requires no game entry.
+  if (auto listRequired = reinterpret_cast<PmModRequiresFn>(find("requires"))) {
+    const char* const* keys = nullptr;
+    threw = true;
+    const size_t n = host::contained("mods", "asking a mod what it requires", size_t{0}, [&] {
+      const size_t count = listRequired(&keys);
+      threw = false;
+      return count;
+    });
+    if (threw) return refuse_loaded(m, i18n::text("mods.requires-threw"), "its pmmod_requires threw");
+    for (size_t i = 0; keys && i < n; ++i)
+      if (keys[i]) m.entries.emplace_back(keys[i]);
+  }
+  if (oldNames)
+    PM_LOG("mods: %s exports the names of contract 2.1 and before (%s*); they load until the next major contract version",
+           info->id, std::string(modexports::kOldPrefix).c_str());
+  m.info = info;
+  m.start = start;
+  m.tick = tick;
+  m.stop = stop;
+  m.build = build_of(m.dll);
+  PM_LOG("mods: loaded %s %s (%s, build %s)", info->id, m.manifest.version.empty() ? "(version unknown)" : m.manifest.version.c_str(),
+         m.manifest.name.c_str(), m.build.c_str());
+  return true;
+}
+
 }  // namespace
 
-std::vector<Found> find(const fs::path& dataDirectory, const fs::path& hostFolder, unsigned long pid) {
-  std::vector<Found> found;
+modlist::Place place_beside(const fs::path& hostFolder, const fs::path& bin) {
+  std::error_code compared, looked;
+  if (fs::equivalent(hostFolder, bin, compared)) return modlist::Place::Elsewhere;
+  if (!compared) return modlist::Place::InstallFolder;
+  // No bin is the usual reason, on a first run. Any other leaves it unknown, and unknown is not the install folder.
+  return fs::exists(bin, looked) || looked ? modlist::Place::Elsewhere : modlist::Place::InstallFolder;
+}
+
+Installed find(const fs::path& dataDirectory, const fs::path& hostFolder, unsigned long pid) {
+  Installed installed;
   std::error_code error;
   // Only the launcher's own copy of the host, in bin, runs what the launcher listed for this process.
   // Read once, so a later process reusing the id never picks up a stale list.
   const fs::path bin = dataDirectory / L"bin";
   const fs::path session = bin / (L"session-" + std::to_wstring(pid) + L".txt");
-  if (fs::equivalent(hostFolder, bin, error) && fs::exists(session, error)) {
-    for (const std::string& p : modlist::parse_session(read_file(session))) {
+  const bool inBin = fs::equivalent(hostFolder, bin, error);
+  if (inBin && fs::exists(session, error)) {
+    const std::string list = read_file(session);
+    for (const std::string& p : modlist::parse_session(list)) {
       fs::path dll = widen(p);
-      const modlist::Manifest m = manifest_in(fs::path(dll).replace_extension(L".ini"));
-      found.push_back({dll, m.description, m.required});
+      modlist::Manifest m;
+      std::string why;
+      if (modlist::read_copy(dll, m, why) == modlist::Reading::Readable) installed.found.push_back({dll, std::move(m)});
+      else refuse(installed.refused, copy_name(dll), why);
     }
+    for (modlist::Refused& r : modlist::parse_session_refused(list)) refuse(installed.refused, std::move(r.name), std::move(r.why));
+    installed.buildRecords = widen(modlist::parse_session_builds(list));
     fs::remove(session, error);
-    PG_LOG("mods: %zu listed by the launcher", found.size());
-    return found;
+    PM_LOG("mods: %zu listed by the launcher", installed.found.size());
+    return installed;
   }
+  if (hostFolder.empty()) {  // "mods" alone would be a folder in the game's working directory
+    PM_LOG("mods: the host's own folder could not be read, so no mod is found beside it");
+    return installed;
+  }
+  installed.buildRecords = hostFolder / L"builds";
   std::vector<fs::path> folders;
   for (const auto& entry : fs::directory_iterator(hostFolder / L"mods", error))
     if (entry.is_directory(error)) folders.push_back(entry.path());
   std::sort(folders.begin(), folders.end());
+  const modlist::Place place = place_beside(hostFolder, bin);
   for (const fs::path& folder : folders) {
-    const fs::path ini = folder / L"mod.ini";
-    if (!fs::exists(ini, error)) continue;
     modlist::Manifest m;
     std::string why;
-    if (!modlist::parse_manifest(read_file(ini), m, why)) {
-      PG_LOG("mods: skipping %ls: %s", ini.c_str(), why.c_str());
-      continue;
-    }
-    found.push_back({folder / widen(m.dll), m.description, m.required});
+    const modlist::Reading reading = modlist::read_folder(folder, m, why, place);
+    if (reading == modlist::Reading::Refused) refuse(installed.refused, text::narrow(folder.filename().wstring()), why);
+    if (reading != modlist::Reading::Readable) continue;
+    fs::path dll = folder / widen(m.dll);
+    installed.found.push_back({std::move(dll), std::move(m)});
   }
-  PG_LOG("mods: %zu found beside the host", found.size());
-  return found;
+  PM_LOG("mods: %zu found beside the host", installed.found.size());
+  return installed;
 }
 
-void load(const std::wstring& dataDirectory) { load(dataDirectory, find(dataDirectory, host_folder(), GetCurrentProcessId())); }
+void read_installed(const std::wstring& dataDirectory) { set_installed(dataDirectory, find(dataDirectory, host_folder(), GetCurrentProcessId())); }
 
-void load(const fs::path& dataDirectory, const std::vector<Found>& found) {
+void set_installed(const fs::path& dataDirectory, const Installed& installed) {
   g_mods.clear();
   g_startOrder.clear();
+  g_off.clear();
+  g_refused = installed.refused;
   g_dataDirectory = dataDirectory;
-  for (const Found& f : found) {
-    HMODULE module = LoadLibraryW(f.dll.c_str());
-    if (!module) {
-      PG_LOG("mods: could not load %ls (Windows error %lu)", f.dll.c_str(), GetLastError());
+  g_buildRecords = installed.buildRecords;
+  for (const Found& f : installed.found) {
+    if (find_mod(f.manifest.id)) {
+      refuse(g_refused, f.manifest.name, i18n::text("mods.id-repeated"));
       continue;
     }
-    HMODULE pinned = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                       reinterpret_cast<LPCWSTR>(module), &pinned);  // detours in it must never be unmapped
+    if (f.manifest.oldFormat) PM_LOG("mods: %s has a mod.ini, the old format; its version shows as unknown", f.manifest.id.c_str());
+    if (!f.manifest.unknownFields.empty()) {
+      std::string fields;
+      for (const std::string& field : f.manifest.unknownFields) fields += (fields.empty() ? "" : ", ") + field;
+      PM_LOG("mods: %s's manifest has fields this loader does not know, which it ignores: %s", f.manifest.id.c_str(), fields.c_str());
+    }
     Mod m;
-    auto info = reinterpret_cast<PgModInfoFn>(GetProcAddress(module, "pgmod_info"));
-    m.start = reinterpret_cast<PgModStartFn>(GetProcAddress(module, "pgmod_start"));
-    m.tick = reinterpret_cast<PgModTickFn>(GetProcAddress(module, "pgmod_tick"));
-    m.stop = reinterpret_cast<PgModStopFn>(GetProcAddress(module, "pgmod_stop"));
-    m.info = info ? info() : nullptr;
-    if (!m.info || !m.start || !m.tick || !m.stop || !m.info->id || !m.info->name) {
-      PG_LOG("mods: %ls is not a mod for this host", f.dll.c_str());
-      continue;
-    }
-    if (!pg_api_compatible(PGMOD_API_VERSION, m.info->apiVersion) || m.info->channel == 0) {
-      PG_LOG("mods: %s was built for another host version", m.info->id);
-      continue;
-    }
-    if (duplicate(m.info)) {
-      PG_LOG("mods: %s repeats the id or channel of a mod already loaded", m.info->id);
-      continue;
-    }
-    // A mod built before the game API has no pgmod_requires and requires no game entry.
-    if (auto listRequired = reinterpret_cast<PgModRequiresFn>(GetProcAddress(module, "pgmod_requires"))) {
-      const char* const* keys = nullptr;
-      const size_t n = listRequired(&keys);
-      for (size_t i = 0; keys && i < n; ++i)
-        if (keys[i]) m.entries.emplace_back(keys[i]);
-    }
-    m.build = build_of(f.dll);
-    m.description = f.description;
-    m.required = f.required;
-    PG_LOG("mods: loaded %s (%s, build %s)", m.info->id, m.info->name, m.build.c_str());
+    m.dll = f.dll;
+    m.manifest = f.manifest;
     g_mods.push_back(std::move(m));
   }
 }
 
-const std::vector<Mod>& loaded() { return g_mods; }
+const std::vector<Mod>& installed() { return g_mods; }
+
+const std::vector<modlist::Refused>& refused() { return g_refused; }
+
+const fs::path& build_records() { return g_buildRecords; }
 
 std::vector<std::string> chosen() {
-  std::vector<std::string> installed;
-  for (const Mod& m : g_mods) installed.emplace_back(m.info->id);
+  std::vector<std::string> ids;
+  for (const Mod& m : g_mods) ids.push_back(m.manifest.id);
   // A choice saved before a mod gained a requirement still starts what that mod needs.
-  return modlist::with_requirements(modlist::load_choice(g_dataDirectory / L"launcher.ini", installed), manifests());
+  return moddeps::with_requirements(modlist::load_choice(g_dataDirectory / L"launcher.ini", ids), manifests());
 }
 
 bool save_chosen(const std::vector<std::string>& ids) { return modlist::save_choice(g_dataDirectory / L"launcher.ini", ids); }
 
 std::vector<modlist::Manifest> manifests() {
   std::vector<modlist::Manifest> all;
-  for (const Mod& m : g_mods) {
-    modlist::Manifest e;
-    e.id = m.info->id;
-    e.name = m.info->name;
-    e.required = m.required;
-    all.push_back(std::move(e));
-  }
+  for (const Mod& m : g_mods) all.push_back(m.manifest);
   return all;
 }
 
-void start(const PgHostApi* api, const std::vector<std::string>& ids) {
-  std::vector<std::string> loadOrder;  // the chosen mods that are loaded, in load order
-  for (const Mod& m : g_mods)
-    if (modlist::enabled(ids, m.info->id)) loadOrder.emplace_back(m.info->id);
-  const std::vector<std::string> order = modlist::start_order(loadOrder, manifests());
-  for (const std::string& id : loadOrder)
-    if (!modlist::enabled(order, id))
-      PG_LOG("mods: %s needs %s, which is not chosen, not installed or needs something missing; it stays off", id.c_str(),
-             loaded_mod(id)->required.c_str());
-  for (const std::string& id : order) {
-    Mod& m = *loaded_mod(id);
-    if (m.started) continue;
-    if (!modlist::requirement_met(m.required, started_ids())) {
-      PG_LOG("mods: %s needs %s, which did not start; it stays off", m.info->id, m.required.c_str());
-      continue;
+std::vector<consent::Selected> notice_list() {
+  std::vector<consent::Selected> list;
+  for (const Mod& m : g_mods) list.push_back({m.manifest.name, m.manifest.recordsVoice});
+  return list;
+}
+
+void start(const PmHostApi* api, const std::vector<std::string>& ids, Group group) {
+  const std::vector<modlist::Manifest> all = manifests();
+  const moddeps::Plan plan = moddeps::plan(all, ids);
+  for (const std::string& note : plan.notes) PM_LOG("mods: %s", note.c_str());
+  // The dependencies are settled from the manifests, so a mod they leave off never loads. Its DLL, what only that can say
+  // (its game entries) and its start are judged here, one mod at a time, and a mod that does not start takes those that
+  // require it with it.
+  moddeps::Run run = moddeps::run(plan, all, [&](const std::string& id, std::string& row, std::string& log) {
+    Mod& m = *find_mod(id);
+    if (m.started) return true;
+    if (!load_dll(m)) {
+      row = m.refusedRow;
+      log = m.refusedLog;
+      return false;
     }
-    if (const std::string lacking = unresolved_entries(api, m); !lacking.empty()) {
-      PG_LOG("mods: %s needs game entries this game build lacks (%s); it stays off", m.info->id, lacking.c_str());
-      continue;
+    if (const std::vector<std::string> lacking = unresolved_entries(api, m); !lacking.empty()) {
+      row = lacking_row(lacking);
+      log = "it needs game entries this game build lacks (" + joined(lacking) + ")";
+      return false;
+    }
+    if (const std::string lost = untracked_entries(group.untracked, m); !lost.empty()) {
+      row = i18n::text("mods.untracked");
+      log = "it needs calls of game methods the host could not track (" + lost + ")";
+      return false;
     }
     hooks::begin_group();
+    if (group.begin) group.begin();
     m.started = m.start(api);
-    if (m.started) g_startOrder.push_back(id);
-    else hooks::rollback_group();
-    PG_LOG("mods: %s %s", m.info->id, m.started ? "started" : "failed to start and stays off");
-  }
+    if (group.end) group.end(m.started);
+    if (!m.started) {
+      hooks::rollback_group();
+      row = "It did not start. mods.log says why";
+      log = "its pmmod_start failed";
+      return false;
+    }
+    g_startOrder.push_back(id);
+    PM_LOG("mods: %s started", m.info->id);
+    return true;
+  });
   hooks::begin_group();  // nothing the host creates later belongs to a mod
+  for (const moddeps::LeftOut& o : run.off) PM_LOG("mods: %s stays off: %s", o.id.c_str(), o.log.c_str());
+  // This start speaks only for what it tried: a room's restart of a few mods leaves the reasons of those it never asked for.
+  std::erase_if(g_off, [&](const moddeps::LeftOut& o) {
+    return std::find(ids.begin(), ids.end(), o.id) != ids.end() || started(o.id.c_str()) ||
+           std::any_of(run.off.begin(), run.off.end(), [&](const moddeps::LeftOut& now) { return now.id == o.id; });
+  });
+  g_off.insert(g_off.end(), std::make_move_iterator(run.off.begin()), std::make_move_iterator(run.off.end()));
+}
+
+std::string off_reason(const std::string& id) {
+  for (const moddeps::LeftOut& o : g_off)
+    if (o.id == id) return o.row;
+  const Mod* m = find_mod(id);
+  return m ? m->refusedRow : std::string();
+}
+
+bool started(const char* id) {
+  if (!id) return false;
+  const Mod* m = find_mod(id);
+  return m && m->started;
 }
 
 void tick_all() {
@@ -221,36 +362,32 @@ void tick_all() {
 }
 
 void stop_all() {
-  // Newest first, so a mod stops before the mod it requires.
-  for (auto it = g_startOrder.rbegin(); it != g_startOrder.rend(); ++it) {
-    Mod* m = loaded_mod(*it);
+  // Newest first, so a mod stops before the mods it depends on.
+  for (const std::string& id : moddeps::stop_order(g_startOrder)) {
+    Mod* m = find_mod(id);
     if (m && m->started) {
       m->stop();
-      PG_LOG("mods: %s stopped", m->info->id);
+      m->started = false;  // at once: a mod stopping after it asks mod_started about it
+      PM_LOG("mods: %s stopped", m->info->id);
     }
   }
   g_startOrder.clear();
-  for (Mod& m : g_mods) m.started = false;
 }
 
-std::vector<std::string> started_ids() {
-  std::vector<std::string> ids;
-  for (const Mod& m : g_mods)
-    if (m.started) ids.emplace_back(m.info->id);
-  return ids;
-}
+std::vector<std::string> started_ids() { return g_startOrder; }
 
 std::vector<presence::Mod> started_builds() {
   std::vector<presence::Mod> builds;
   for (const Mod& m : g_mods)
-    if (m.started) builds.push_back({m.info->id, m.build});
+    if (m.started) builds.push_back({m.info->id, m.build, m.manifest.name, m.manifest.version});
   return builds;
 }
 
-bool started_allow_vanilla() {
-  for (const Mod& m : g_mods)
-    if (m.started && !(m.info->flags & PG_MOD_VANILLA_PEERS)) return false;
-  return true;
+void restart(const PmHostApi* api, const std::vector<std::string>& ids, Group group, const Restart& steps) {
+  if (steps.withdraw) steps.withdraw();
+  stop_all();
+  if (steps.stopped) steps.stopped();
+  start(api, ids, group);
 }
 
-}  // namespace pg::mods
+}  // namespace pm::mods

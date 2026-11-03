@@ -23,6 +23,30 @@ public class Probe : MonoBehaviour
 
 	}
 
+	[Token(Token = "0x2000004")]
+	public interface IProbe
+	{
+	}
+
+	[Token(Token = "0x2000005")]
+	public class Inner
+	{
+	}
+
+	[Token(Token = "0x2000006")]
+	public class Sensor : Inner, IProbe, IComparable<Probe>
+	{
+	}
+
+	[Token(Token = "0x2000007")]
+	public class OneFace : IProbe
+	{
+	}
+
+	public class Handle : object
+	{
+	}
+
 	[FieldOffset(Offset = "0x18")]
 	[Token(Token = "0x4000003")]
 	public bool awake; //Field offset: 0x18
@@ -35,6 +59,18 @@ public class Probe : MonoBehaviour
 	[FieldOffset(Offset = "0x28")]
 	[Token(Token = "0x4000006")]
 	private Cell cell; //Field offset: 0x28
+	[FieldOffset(Offset = "0x40")]
+	[Token(Token = "0x4000011")]
+	internal int shared; //Field offset: 0x40
+	[FieldOffset(Offset = "0x44")]
+	[Token(Token = "0x4000012")]
+	protected int family; //Field offset: 0x44
+	[FieldOffset(Offset = "0x48")]
+	[Token(Token = "0x4000013")]
+	protected internal int either; //Field offset: 0x48
+	[FieldOffset(Offset = "0x4C")]
+	[Token(Token = "0x4000014")]
+	protected private int both; //Field offset: 0x4C
 	[Token(Token = "0x4000007")]
 	public static Probe instance; //Field offset: 0x0
 	[Token(Token = "0x4000008")]
@@ -63,6 +99,14 @@ public class Probe : MonoBehaviour
 	[Address(RVA = "0x1300", Offset = "0x700", Length = "0x10")]
 	[Token(Token = "0x6000002")]
 	public static Mode Pick(Vector3 at) { }
+
+	[Address(RVA = "0x1600", Offset = "0xA00", Length = "0x20")]
+	[Token(Token = "0x6000006")]
+	public static int Index(T[] items) { }
+
+	[Address(RVA = "0x1680", Offset = "0xA80", Length = "0x20")]
+	[Token(Token = "0x6000007")]
+	public static int Count(Mode[] items) { }
 
 	[Token(Token = "0x6000003")]
 	public abstract void Wait(int ticks);

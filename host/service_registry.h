@@ -9,7 +9,7 @@
 // it is refused and the first table stays, so a mod that comes later cannot take over a service
 // other mods already found. Pure logic so it can be tested offline; the host logs a refusal. Main
 // thread.
-namespace pg::services {
+namespace pm::services {
 
 class Registry {
  public:
@@ -30,4 +30,4 @@ class Registry {
   std::map<std::string, const void*, std::less<>> tables_;
 };
 
-}  // namespace pg::services
+}  // namespace pm::services

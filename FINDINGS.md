@@ -8,25 +8,52 @@ An entry is deleted in the change that fixes it. `/fix` takes a number or a few 
 a heading and does both halves; `/finding` writes a new entry; `harness-findings verify`
 reports an entry whose problem is already gone.
 
-<!-- next: 31 -->
+<!-- next: 33 -->
 
-## 30. The reverse-engineering scripts point at setup steps that do not exist
+## 32. A community mod has only the install folder to live in, which an update may replace
 
-  re/decomp.mjs:3
+  tools/launcher.cpp:525
 
-  decomp.mjs says the one-time Ghidra import is described in re/README.md, and that file has never
-  existed. callers.mjs, decomp.mjs and slimpe.mjs all read re/names.tsv, which is git-ignored because
-  it is derived from the game's binaries, so a fresh clone has no way to rebuild what they need
-  except from notes kept outside the repository.
+  The launcher discovers mods only in the `mods` folder beside it (discover_mods with Place::InstallFolder), and the
+  host reads the same folder when the launcher did not start it. core/mod_list.h already names a second place
+  (Place::Elsewhere, "such as one in %LOCALAPPDATA%\PhasmoMods"), and the reserved-author rule is built around it, but
+  nothing reads one. The installer and updater are Velopack's (tools/update_velopack.cpp), whose install keeps the
+  program in a `current` folder that each update replaces, so a community mod a player copied there is likely lost on
+  the next update. Not checked on a real update. sdk/README.md ("Does not exist yet") plans that folder in
+  %LOCALAPPDATA%\PhasmoMods\mods for stage 2; the stage 2b plan names it only as an example in the reserved-author
+  rule, and no task builds it. Found while writing sdk/guides/adding-a-ghost.md (stage 2b Task 14 Step 2).
 
   Prompt:
-  > re/decomp.mjs:3 refers to re/README.md for the one-time Ghidra import, and that file does not
-  > exist. Write re/README.md describing how to set up the reverse-engineering tools from a clean
-  > clone: generating a Cpp2IL DiffableCs dump from copies of the game files (never inside the game
-  > folder), building re/names.tsv with re/names.mjs, the headless Ghidra import into re/ghidra that
-  > decomp.mjs expects, and the GHIDRA_INSTALL_DIR variable. re/ghidra, re/out, re/names.tsv and
-  > re/import.log are git-ignored (see .gitignore). Name no path that exists on only one machine;
-  > read the install locations from variables or arguments instead. Run each documented command once.
+  > PhasmoMods Loader finds mods only in the `mods` folder beside the launcher (tools/launcher.cpp discover_mods, and
+  > host/mods.cpp when the launcher did not start the game). core/mod_list.h's Place::Elsewhere names a mods folder
+  > outside the install folder that nothing reads yet. First confirm on a Velopack install whether an update keeps a
+  > folder added under `current\mods`. Then confirm with the author that %LOCALAPPDATA%\PhasmoMods\mods, which
+  > sdk/README.md plans, is still where community mods should live, before adding it to discovery, the launcher's copy
+  > step and the Mods panel. Update sdk/guides/adding-a-ghost.md, docs/installation.md and this entry together.
+
+## 31. Five mod-drawn windows remain, against the vanilla-UI rule
+
+  core/notice.h:1
+
+  The vanilla-UI rule forbids windows and overlays a mod draws itself (CLAUDE.md, "Vanilla UI only"). Stage 2b Task 14
+  Step 0a audited every ui::create_canvas caller. The deception score and the ghost's payout moved to the game's own popup
+  through the host contract's show_message. These have no mapped game surface in a contract, so the author chose
+  (2026-11-03) to rework what could be and mark the rest for the author to design: each carries a PM_UI_TODO comment.
+
+  - core/notice.cpp: the "truck stays shut" countdown an investigator sees while the ghost is chosen.
+  - mods/playable_ghost/hud.cpp: the ghost player's HUD strip (restlessness, actions and their keys, the object under the
+    ghost's gaze, a notice line, the investigators' average sanity).
+  - mods/playable_ghost/panorama.cpp: the cover drawn over the ghost player's view while the panorama camera moves.
+  - mods/playable_ghost/perceive_view.cpp: the per-type senses drawn where they are on screen, and the alert line.
+  - mods/playable_ghost/picker.cpp: the pick screen's own text over the journal and the truck's map.
+
+  Prompt:
+  > Each file above draws its own canvas with ui::create_canvas, which the vanilla-UI rule forbids; the author decides what
+  > game surface each should use (CLAUDE.md, "Vanilla UI only"). For the one the author names, reverse engineer the game
+  > surface chosen (its scene path, its widgets and how the game itself fills them), map what a mod needs as entries with
+  > notes, and move the window onto it, keeping the game's own components and click events. Remove the PM_UI_TODO comment
+  > and this entry's line for it in the same change. Never invent a window in its place; ask the author when no game
+  > surface fits.
 
 ## 29. The game's storm lightning throws on the ghost player's client in heavy rain
 
@@ -49,30 +76,8 @@ reports an entry whose problem is already gone.
   > a heavy-rain contract with a ghost player (the game log shows the exception at each strike), then
   > make that client play the strike as an investigator's client does, the way senses.cpp handles
   > VoiceVolume.Update, without changing what any other client sees. Never send the lightning RPC
-  > yourself: a client whose weather is not heavy rain runs the game's cheat report on its sender.
+  > yourself: a client whose weather is not heavy rain refuses it, which can harm the sender's account.
   > Run `env -u PSModulePath harness-verify`.
-
-## 28. Ghost Tells copies four private helpers of Custom Ghosts instead of sharing them from core
-
-  mods/ghost_tells/world.cpp:85
-
-  jscpd finds Ghost Tells repeating helpers that live privately inside Custom Ghosts files:
-  distance_to_room (mods/custom_ghosts/behaviour.cpp, as world.cpp's), the LevelController room list
-  (kikimora.cpp rooms(), as world.cpp's), the running-CCTV scan and view test (brownie.cpp tick_host,
-  as goryo.cpp on_camera), and the TryInteract/ChangeState hook creation (restraint.cpp, as gate.cpp).
-  Each mod also repeats the same everyone-has-this-mod check (spectral_flame, custom_ghosts,
-  ghost_tells mod.cpp). Two copies of each can drift: a fix to one room or camera test misses the other.
-  The fix is to move each helper into core (game.h or players.h) and call it from every mod; it was left
-  because it rewrites Custom Ghosts files that other sessions were changing at the time.
-
-  Prompt:
-  > In this repository, move these helpers into core and use them from every mod: distance_to_room
-  > (mods/custom_ghosts/behaviour.cpp, mods/ghost_tells/world.cpp), the LevelController +0x50 room list
-  > and room-at-point lookup (mods/custom_ghosts/kikimora.cpp, mods/ghost_tells/world.cpp), the running
-  > placed-video-camera scan and its view test (mods/custom_ghosts/brownie.cpp, mods/ghost_tells/goryo.cpp),
-  > and the everyone-runs-this-mod check (mods/spectral_flame/mod.cpp, mods/custom_ghosts/mod.cpp,
-  > mods/ghost_tells/mod.cpp). Keep behaviour identical, run `env -u PSModulePath harness-verify`, and
-  > check `jscpd --format cpp --min-tokens 50 mods core` reports none of these pairs.
 
 ## 27. Ghost Tells has never run inside the game
 
@@ -139,10 +144,14 @@ reports an entry whose problem is already gone.
 
 ## 26. The Ghosts tab grid fix and the custom difficulty's custom ghosts have never run inside the game
 
-  mods/custom_ghosts/difficulty.cpp:252
+  host/content_difficulty.cpp:206
 
+  Since stage 2b the host's content layer does both (host/content_journal.cpp,
+  host/content_difficulty.cpp, host/content_types.cpp) in place of Custom Ghosts' own pages.cpp,
+  difficulty.cpp and registry.cpp, which the items below name; the same game facts stand behind it.
   Both come from REA decompiles, the class dump and the scene files, not from a running game, and
-  pass only offline tests (tests/pages_test.cpp, tests/difficulty_test.cpp, tests/registry_test.cpp).
+  pass only offline tests (tests/content_journal_test.cpp, tests/content_difficulty_test.cpp,
+  tests/content_test.cpp).
   A wrong offset or calling convention here does not fail quietly: a custom ghost type could reach
   the save file or a player without the mod, whose menu then throws and whose contract spawns a ghost
   with no data. Unverified in the game:
@@ -172,7 +181,7 @@ reports an entry whose problem is already gone.
   > custom ghost: the difficulty summary's first line must read "Ghost: <its name>", not a number.
   > Pick a vanilla ghost, have a player without the mod join and leave: the option must keep naming
   > it. Pick the custom ghost again, apply, and start a contract: that ghost must haunt it, and
-  > %LOCALAPPDATA%\PhasmoMods\custom_difficulty.txt must hold "6=<type>". The other client's option
+  > %LOCALAPPDATA%\PhasmoMods\custom_difficulty.txt must hold "6=<ghost id>". The other client's option
   > must name that ghost too, and so must both after the contract, back in the lobby. Restart the
   > game: Custom 1 must show the pick again. Restart the game once more, open a lobby and start a
   > contract without ever opening the difficulty board: the pick must haunt it. Have a player without the mod join: the option must fall
@@ -318,12 +327,12 @@ reports an entry whose problem is already gone.
 
 ## 13. A custom ghost's type is briefly visible to listeners of the ghost's sync
 
-  mods/custom_ghosts/registry.cpp:1
+  host/content_types.cpp:366
 
   GhostInfo.SyncValuesNetworked invokes a UnityEvent and calls GetFullEvidence before returning, and
-  the registry's detour sets the behaviour type (GhostType.None) only after it returns. Anything
-  listening to that event sees +0x2C still holding 31-35 for that moment, which the game's type
-  checks do not know. A review of the custom ghosts found it; it was not traced to a visible fault.
+  the host's content layer (ContentTypes::after_sync_values, which replaced Custom Ghosts' own
+  registry) sets the behaviour type (GhostType.None) only after it returns. Anything listening to that
+  event sees +0x2C still holding a custom type for that moment, which the game's type checks do not know. A review of the custom ghosts found it; it was not traced to a visible fault.
 
   Prompt:
   > In this repository, find the listeners of the UnityEvent that
@@ -333,9 +342,11 @@ reports an entry whose problem is already gone.
 
 ## 12. The custom ghosts have never run inside the game
 
-  mods/custom_ghosts/registry.cpp:1
+  mods/custom_ghosts/mod.cpp:1
 
-  Everything in mods/custom_ghosts is verified against decompiled code and offline tests only: the
+  Everything in mods/custom_ghosts is verified against decompiled code and offline tests only (since
+  stage 2b the entries, behaviour type, keys, journal and hunt speed writes below are the host's content
+  layer's, which writes the hunt speed before every speed update instead): the
   GhostData entries made with il2cpp_object_new (no Unity object behind them), behaviour type
   GhostType.None set in GhostAI.Init and GhostInfo.SyncValuesNetworked, the localisation keys, the
   journal clones (ghost buttons, Ghosts-tab entries and pages, the grid cell height, the journal's
@@ -343,7 +354,7 @@ reports an entry whose problem is already gone.
   the hunt state (base +0xB0, line-of-sight speed-up +0xB4, put back after the game's two-second base
   refresh 0x214C2A0), the Draugr's room survey, the Kikimora's ownership takeover and teleport, and
   the Echo's Vivox tap capture, clip transfer and playback. LevelStats.SendData reports the ghost type
-  to the game's analytics as text, so a custom ghost is reported as "31" to "35"; the mod does not
+  to the game's analytics as text, so a custom ghost is reported as its number ("31" on); the mod does not
   touch telemetry. The Black Shuck's hunt rests on detours of the hunt state's sense tests by RVA (sight
   0x214BB40, voice 0x214DDA0, electronics 0x21554D0), its set-target 0x2150AB0 handing a hidden
   player to its closet search 0x213B840, and NavMeshAgent.SetDestination; on the game's own
@@ -422,22 +433,6 @@ reports an entry whose problem is already gone.
   > you are and the speed-up then decays; the torch key toggles the fuse box (log the input action
   > names if it does not); a Twins ghost's twin interacts after some aimed interactions; and 30 s
   > without trying to act lets the native AI act until you press any action key.
-
-## 9. A client that inherits the master role mid-contract thinks it is in the lobby
-
-  mods/playable_ghost/session.cpp:63
-
-  Only the master's start_round sets inRound_, so a client that becomes master during a contract
-  has inRound_ false and runs the lobby draw on its first observe. An inherited ghost player is now
-  kept (drawnAmong_ is seeded from it), but if the old master was itself the ghost player, the role
-  is redrawn mid-contract among the remaining volunteers.
-
-  Prompt:
-  > In mods/playable_ghost/session.cpp, a new master after migration has inRound_ == false even when a
-  > contract is running (start_round is master-only, called from mods/playable_ghost/round.cpp tick). Make the
-  > inherited contract state known to every client (for example from the ASSIGN or LOCK messages or
-  > a LevelController check) so draw_ghost never runs mid-contract, and add a session test where the
-  > master who is the ghost player leaves during a round.
 
 ## 8. Duplication remains across gameplay bindings, UI helpers and tests
 

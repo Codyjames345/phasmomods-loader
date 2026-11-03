@@ -6,12 +6,12 @@
 
 #include "mod_list.h"
 
-namespace pg::launcher {
-#ifdef PG_SUITE_VERSION
-#define PG_WIDEN_(text) L##text
-#define PG_WIDEN(text) PG_WIDEN_(text)
+namespace pm::launcher {
+#ifdef PM_SUITE_VERSION
+#define PM_WIDEN_(text) L##text
+#define PM_WIDEN(text) PM_WIDEN_(text)
 /** The suite version from the VERSION file. */
-inline constexpr wchar_t kVersion[] = PG_WIDEN(PG_SUITE_VERSION);
+inline constexpr wchar_t kVersion[] = PM_WIDEN(PM_SUITE_VERSION);
 #endif
 /** Quote an argument so Windows parsing preserves every character. */
 std::wstring quote(std::wstring_view value);
@@ -43,19 +43,35 @@ struct ModEntry {
   std::wstring dll;  // absolute path of its DLL
 };
 
-/** What one load puts into the game: the host and the mods it is to run. */
+/** What one load puts into the game: the host, the mods it is to run, and the session lines for those refused and the records. */
 struct Package {
   std::wstring host;
   std::vector<std::wstring> mods;
+  std::vector<std::string> refused = {};
 };
 
-/** The mods in `folder` (one sub-folder each, with a mod.ini); `problems` names any that are broken. */
-std::vector<ModEntry> discover_mods(const std::filesystem::path& folder, std::wstring& problems);
+/** A folder of mods, and where it is: anywhere else, unless the caller says it is the install folder, beside the launcher. */
+struct ModsFolder {
+  std::filesystem::path path;
+  modlist::Place place = modlist::Place::Elsewhere;
+};
+
+/**
+ * The mods in `folders`, in that order, each in folder order: one sub-folder each with a manifest.json
+ * (or a mod.ini for an old-format mod). `problems` names any that are broken, for the launcher's window,
+ * and `refused` the same for the host's Mods panel. A broken one is left out, and never stops the others.
+ * A mod that repeats an id found before it is refused; one outside the install folder that claims the
+ * project's author is refused before that (modlist::read_folder), so it never takes the real mod's id.
+ */
+std::vector<ModEntry> discover_mods(const std::vector<ModsFolder>& folders, std::wstring& problems,
+                                    std::vector<modlist::Refused>& refused);
+/** The session file's lines for mods refused here, and for the package's folder of checked-build records when given. */
+std::vector<std::string> session_lines(const std::vector<modlist::Refused>& refused, const std::filesystem::path& builds = {});
 /** The ids ticked in the saved selection; every mod when nothing has been saved yet. */
 std::vector<std::string> saved_selection(const std::filesystem::path& launcherIni, const std::vector<ModEntry>& mods);
 bool save_selection(const std::filesystem::path& launcherIni, const std::vector<std::string>& ids);
 /** %LOCALAPPDATA%\PhasmoMods\launcher.log, where `--steam` records update results; empty when the folder is unavailable. */
 std::filesystem::path launcher_log();
-/** Every installed mod's DLL, in the order they were found: the host loads them all and starts the saved choice. */
+/** Every installed mod's DLL, in the order they were found: the host loads those the player's choice starts, once the player agreed. */
 std::vector<std::wstring> all_dlls(const std::vector<ModEntry>& mods);
 }

@@ -1,11 +1,37 @@
-// Offline tests for the Ghost Tells rules (mods/ghost_tells/*.h).
+// Offline tests for the Ghost Tells rules (mods/ghost_tells/*.h), and for the tells in the game over the
+// fake backend (sdk/fake): the world, the gate, the hunt's inputs and the Mare's roll.
 // Run: build\ghost_tells_test.exe
 #include <cstdint>
 #include <cstring>
+#include <map>
+#include <optional>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
+#include "GhostAI.h"
+#include "GhostHuntState.h"
+#include "GhostInfo.h"
+#include "LevelController.h"
+#include "LevelRoom.h"
+#include "LightSwitch.h"
+#include "Photon.h"
+#include "Player.h"
+#include "Transform.h"
+#include "UnityObject.h"
+#include "UnityWorld.h"
+#include "fake_game.h"
+#include "game_api.h"
+#include "gate.h"
 #include "gate_rule.h"
+#include "hold.h"
+#include "mare.h"
+#include "register.h"
+#include "rolls.h"
+#include "spirit.h"
+#include "runtime.h"
+#include "world.h"
 #include "goryo_rule.h"
 #include "journal_text.h"
 #include "mare_rule.h"
@@ -17,19 +43,22 @@
 #include "yurei_rule.h"
 
 #include "check.h"
+#include "text_fixture.h"
 
-using namespace pg::tells;
+using namespace pm::tells;
 
 namespace {
 
 constexpr float kFrame = 1.0f / 30;
 
 void the_six_ghosts_are_told_and_no_other() {
-  for (int type : {kSpirit, kMare, kShade, kYurei, kGoryo, kOnryo}) CHECK(told(type));
-  CHECK(kSpirit == 0 && kMare == 6 && kShade == 8 && kYurei == 10 && kGoryo == 14 && kOnryo == 16);
-  CHECK(!told(1));   // the Wraith
-  CHECK(!told(24));  // GhostType.None, which every custom ghost's AI follows
-  CHECK(!told(-1));
+  CHECK(told_of("vanilla.spirit") == kSpirit && told_of("vanilla.mare") == kMare);
+  CHECK(told_of("vanilla.shade") == kShade && told_of("vanilla.yurei") == kYurei);
+  CHECK(told_of("vanilla.goryo") == kGoryo && told_of("vanilla.onryo") == kOnryo);
+  CHECK(told_of("vanilla.wraith") == -1);
+  CHECK(told_of("phasmomods.custom-ghosts.brownie") == -1);  // a custom ghost, whatever its AI follows
+  CHECK(told_of("") == -1);
+  CHECK(kToldCount == 6);
 }
 
 void an_edge_rises_once() {
@@ -100,30 +129,24 @@ void messages_round_trip() {
   CHECK(!net::read_onryo_spite(cut.data(), cut.size(), view, seconds));
 }
 
+// Each told ghost's line goes to its own vanilla page, named by its id (the content layer finds the
+// page; mod.cpp gives it the line).
 void the_journal_names_the_six_pages_only() {
-  CHECK(journal_type(u"Journal2_Spirit") == kSpirit);
-  CHECK(journal_type(u"Journal2_Mare") == kMare);
-  CHECK(journal_type(u"Journal2_Shade") == kShade);
-  CHECK(journal_type(u"Journal2_Yurei") == kYurei);
-  CHECK(journal_type(u"Journal2_Goryo") == kGoryo);
-  CHECK(journal_type(u"Journal2_Onryo") == kOnryo);
-  CHECK(journal_type(u"Journal2_Jinn") == -1);
-  CHECK(journal_type(u"Journal_GoryoTitle") == -1);
-  CHECK(journal_type(u"Journal2_Goryo2") == -1);
-  CHECK(journal_type(u"") == -1);
+  for (int told = 0; told < kToldCount; ++told) CHECK(told_of(kToldIds[told]) == told);
+  CHECK(std::string(kToldIds[kGoryo]) == "vanilla.goryo");
+  CHECK(tell_line(kToldCount).empty() && tell_line(-1).empty());
 }
 
 void every_told_ghost_has_a_journal_line() {
-  for (int type : {kSpirit, kMare, kShade, kYurei, kGoryo, kOnryo}) {
-    const char* line = tell_line(type);
-    CHECK(line && std::strlen(line) > 20);
-    if (!line) continue;
-    const std::string s = line;
+  for (int told = 0; told < kToldCount; ++told) {
+    const std::string s = tell_line(told);
+    CHECK(s.size() > 20);
+    CHECK(s.rfind("Tells: ", 0) == 0);  // after the page's own text, as before
     CHECK(s.find("\xE2\x80\x94") == std::string::npos);  // no em dash in player-facing copy
     CHECK(s.find("investigator") == std::string::npos);  // players, not investigators
   }
-  CHECK(tell_line(1) == nullptr);
-  CHECK(tell_line(24) == nullptr);
+  CHECK(tell_line(6).empty());
+  CHECK(tell_line(24).empty());
 }
 
 
@@ -150,16 +173,23 @@ void incense_stops_the_spirit_for_three_seconds_in_a_hunt() {
 
 void incense_silences_the_spirit_for_a_minute() {
   Quiet q;
-  q.step(true, false, kFrame);
+  q.incense(false, false);
+  q.step(kFrame);
   CHECK(q.quiet());
-  frames(59.0f, [&] { return q.step(true, false, kFrame); });  // the flag stays set for its 180 s
+  frames(59.0f, [&] { return q.step(kFrame); });  // the game's own hunt hold lasts longer
   CHECK(q.quiet());
-  frames(1.1f, [&] { return q.step(true, false, kFrame); });
-  CHECK(!q.quiet());  // a minute is over, though the game's own flag is still set
+  frames(1.1f, [&] { return q.step(kFrame); });
+  CHECK(!q.quiet());  // a minute is over, though the game's hold may still be on
+  q.incense(false, true);  // incense again while the game's hold is still on: no new hold, no new minute
+  q.step(kFrame);
+  CHECK(!q.quiet());
+  q.incense(false, false);  // once the hold has ended, incense starts a new minute
+  CHECK(q.quiet());
   Quiet inHunt;
-  inHunt.step(true, true, kFrame);
+  inHunt.incense(true, false);
+  inHunt.step(kFrame);
   CHECK(!inHunt.quiet());  // incense in a hunt stops it instead
-  inHunt.step(true, false, kFrame);
+  inHunt.step(kFrame);
   CHECK(!inHunt.quiet());  // the same incense, after the hunt: not a new one
 }
 
@@ -417,19 +447,32 @@ void a_flame_the_onryo_snuffed_will_not_catch_for_a_while() {
 
 
 void the_gate_holds_back_only_the_ghosts_own_attempts() {
-  CHECK(gate_kind(2) == kGateHunt);
-  CHECK(gate_kind(14) == kGateEvent && gate_kind(15) == kGateEvent && gate_kind(8) == kGateEvent);
-  CHECK(gate_kind(9) == kGateInteract && gate_kind(4) == kGateInteract && gate_kind(7) == kGateInteract);
-  CHECK(gate_kind(0) == -1 && gate_kind(1) == -1 && gate_kind(3) == -1);  // idle, wander, favourite room
-  CHECK(gate_kind(19) == -1);  // the summoning circle's answer
-  CHECK(gate_kind(20) == -1);  // the music box's pull
-  CHECK(gate_may_hold(2, false, false));
-  CHECK(!gate_may_hold(2, true, false));   // the Death card's forced hunt
-  CHECK(!gate_may_hold(14, true, false));  // the Devil card's forced event
-  CHECK(!gate_may_hold(9, false, true));   // nothing reaches into a running hunt
-  CHECK(!gate_may_hold(20, false, false));
-  CHECK(cursed_pull(19) && cursed_pull(20));  // a possession made it show itself: no tell changes that
-  CHECK(!cursed_pull(14) && !cursed_pull(8) && !cursed_pull(0));
+  // The numbers build 25811160's GhostState enum gives the states (gate.cpp reads them from the game).
+  GateStates s;
+  s.hunting = 2;
+  s.events = {8, 14, 15};
+  s.interactions = {4, 5, 6, 7, 9, 10, 11, 12, 13, 16, 17, 18, 23};
+  s.pulls = {19, 20};
+  CHECK(gate_kind(s, 2) == kGateHunt);
+  CHECK(gate_kind(s, 14) == kGateEvent && gate_kind(s, 15) == kGateEvent && gate_kind(s, 8) == kGateEvent);
+  CHECK(gate_kind(s, 9) == kGateInteract && gate_kind(s, 4) == kGateInteract && gate_kind(s, 7) == kGateInteract);
+  CHECK(gate_kind(s, 0) == -1 && gate_kind(s, 1) == -1 && gate_kind(s, 3) == -1);  // idle, wander, favourite room
+  // What PmGhostDef.heldBack asks of it: the fuse box as the interaction the gate holds it as, its ability alone not.
+  CHECK(gate_held_kind(0) == kGateInteract && gate_held_kind(1) == kGateEvent && gate_held_kind(2) == kGateHunt);
+  CHECK(gate_held_kind(4) == kGateInteract && gate_held_kind(3) == -1 && gate_held_kind(-1) == -1);
+  CHECK(gate_kind(s, 19) == -1);  // the summoning circle's answer
+  CHECK(gate_kind(s, 20) == -1);  // the music box's pull
+  CHECK(gate_kind(s, 24) == -1);  // a state the enum may add
+  CHECK(gate_may_hold(s, 2, false, false));
+  CHECK(!gate_may_hold(s, 2, true, false));   // the Death card's forced hunt
+  CHECK(!gate_may_hold(s, 14, true, false));  // the Devil card's forced event
+  CHECK(!gate_may_hold(s, 9, false, true));   // nothing reaches into a running hunt
+  CHECK(!gate_may_hold(s, 20, false, false));
+  CHECK(cursed_pull(s, 19) && cursed_pull(s, 20));  // a possession made it show itself: no tell changes that
+  CHECK(!cursed_pull(s, 14) && !cursed_pull(s, 8) && !cursed_pull(s, 0));
+  // Before the numbers are read nothing is held back, and no unread number matches.
+  const GateStates unread;
+  CHECK(gate_kind(unread, 0) == -1 && gate_kind(unread, 2) == -1 && !cursed_pull(unread, 0));
 }
 
 void the_yureis_door_pick_is_steered_only_after_its_idle_change() {
@@ -480,7 +523,392 @@ void the_mares_roll_is_answered_only_inside_its_coroutine() {
 
 }  // namespace
 
+// ---- The tells in the game, over the fake backend (sdk/fake): the game reached only through map entries.
+
+namespace game {
+
+namespace api = pm::api;
+namespace fake = pm::fake;
+namespace map = pm::map;
+namespace world = pm::tells::world;
+namespace gate = pm::tells::gate;
+namespace hold = pm::tells::hold;
+namespace rolls = pm::tells::rolls;
+namespace mare = pm::tells::mare;
+
+int g_toldNow = -1;  // what told_now answers (mod.cpp answers it in the mod)
+
+// A fake managed object: its class pointer first, as a real one's, then room for its fields.
+struct Obj {
+  void* klass = nullptr;
+  unsigned char bytes[0x58]{};
+};
+
+template <class T>
+void put(Obj& o, int32_t offset, T value) {
+  std::memcpy(reinterpret_cast<char*>(&o) + offset, &value, sizeof value);
+}
+
+int g_hingeClass = 0;  // a fake class
+
+// A contract: the level, its ghost in one room, two players (actors 1 and 2, the second dead), and the
+// GhostState numbers of build 25811160.
+struct World {
+  Obj level, ghost, info, room, collider, activity, network, spot1, spot2, player1, player2, photon1, photon2, hunt;
+  void* levelSlot = &level;
+  std::vector<std::pair<const void*, phasmo::Vector3>> positions;
+  std::vector<int32_t> changes;  // the states ChangeState was asked for, as the game ran them
+  int interacts = 0;
+  int32_t gameRoll = 3;  // what the game's own Random.RandomRangeInt answers
+  int32_t switchRoll = -1;  // the roll the switch-off coroutine's first step got, inside UseLightSwitch
+  static inline World* current = nullptr;
+
+  World() {
+    current = this;
+    fake::static_field(map::LevelController_instance, &levelSlot, sizeof levelSlot, true);
+    fake::field(map::LevelController_currentGhost, 0x10);
+    fake::field(map::LevelController_currentGhostRoom, 0x18);
+    fake::field(map::LevelController_rooms, 0x20);
+    fake::field(map::GhostAI_info, 0x10);
+    fake::field(map::GhostAI_state, 0x18);
+    fake::field(map::GhostAI_isHunting, 0x1C);
+    fake::field(map::GhostAI_isAppeared, 0x1D);
+    fake::field(map::GhostAI_activity, 0x20);
+    fake::field(map::GhostAI_huntsHeldOff, 0x1E);
+    fake::field(map::GhostAI_smudge, 0x30);
+    fake::field(map::GhostInfo_favouriteRoom, 0x10);
+    fake::field(map::LevelRoom_roomColliders, 0x10);
+    fake::field(map::Network_playerSpots, 0x10);
+    fake::field(map::PlayerSpot_player, 0x10);
+    fake::field(map::PlayerSpot_photonPlayer, 0x18);
+    fake::field(map::Player_isDead, 0x10);
+    fake::field(map::GhostHuntState_ghost, 0x10);
+    fake::field(map::GhostHuntState_target, 0x18);
+    fake::field(map::GhostHuntState_searchTarget, 0x20);
+    const std::pair<const pm::sdk::EntryDesc*, int64_t> states[] = {
+        {&map::GhostState_idle, 0},         {&map::GhostState_wander, 1},       {&map::GhostState_hunting, 2},
+        {&map::GhostState_favouriteRoom, 3}, {&map::GhostState_light, 4},        {&map::GhostState_door, 5},
+        {&map::GhostState_throwing, 6},     {&map::GhostState_fusebox, 7},      {&map::GhostState_appear, 8},
+        {&map::GhostState_doorKnock, 9},    {&map::GhostState_windowKnock, 10}, {&map::GhostState_carAlarm, 11},
+        {&map::GhostState_flicker, 12},     {&map::GhostState_cctv, 13},        {&map::GhostState_randomEvent, 14},
+        {&map::GhostState_GhostAbility, 15}, {&map::GhostState_mannequin, 16},  {&map::GhostState_teleportObject, 17},
+        {&map::GhostState_interact, 18},    {&map::GhostState_summoningCircle, 19}, {&map::GhostState_musicBox, 20},
+        {&map::GhostState_ignite, 23}};
+    for (const auto& [d, v] : states) fake::value(*d, v);
+    fake::method(map::Network_get_Instance, reinterpret_cast<void*>(&network_instance));
+    fake::method(map::Component_get_transform, reinterpret_cast<void*>(&itself));
+    fake::method(map::Transform_get_position, reinterpret_cast<void*>(&position));
+    fake::method(map::Collider_get_bounds, reinterpret_cast<void*>(&bounds));
+    fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&is_master));
+    fake::method(map::PhotonNetwork_get_LocalPlayer, reinterpret_cast<void*>(&local_player));
+    fake::method(map::PhotonPlayer_get_ActorNumber, reinterpret_cast<void*>(&actor_number));
+    fake::method(map::GhostAI_ChangeState, reinterpret_cast<void*>(&change_state));
+    fake::method(map::GhostActivity_TryInteract, reinterpret_cast<void*>(&try_interact));
+    fake::method(map::GhostHuntState_UpdateSpeed, reinterpret_cast<void*>(&update_speed));
+    fake::method(map::Random_RandomRangeInt, reinterpret_cast<void*>(&random_range_int));
+    fake::method(map::LightSwitch_UseLightSwitch, reinterpret_cast<void*>(&use_light_switch));
+    fake::method(map::GhostAI_Appear, reinterpret_cast<void*>(&appear));
+    fake::method(map::GhostAI_StopGhostFromHunting, reinterpret_cast<void*>(&stop_hunting));
+    fake::method(map::PhraseListenerController_OnPhraseRecognized, reinterpret_cast<void*>(&phrase));
+
+    put(level, 0x10, static_cast<void*>(&ghost));
+    put(level, 0x18, static_cast<void*>(&room));
+    put(ghost, 0x10, static_cast<void*>(&info));
+    put(ghost, 0x20, static_cast<void*>(&activity));
+    put(info, 0x10, static_cast<void*>(&room));
+    put(room, 0x10, fake::list({&collider}));
+    put(network, 0x10, fake::list({&spot1, &spot2}));
+    put(spot1, 0x10, static_cast<void*>(&player1));
+    put(spot1, 0x18, static_cast<void*>(&photon1));
+    put(spot2, 0x10, static_cast<void*>(&player2));
+    put(spot2, 0x18, static_cast<void*>(&photon2));
+    put(player2, 0x10, true);  // dead
+    put(hunt, 0x10, static_cast<void*>(&ghost));
+    put(hunt, 0x18, static_cast<void*>(&player1));
+    put(hunt, 0x20, static_cast<void*>(&player2));
+    place(&ghost, {1, 0, 1});
+    place(&player1, {2, 0, 1});
+    place(&player2, {30, 0, 1});
+    // The runtime services fill an array only once the game API is bound.
+    std::string missing;
+    api::bind(fake::host(), missing);
+    void* rooms = fake::array(sizeof(void*), 1);
+    api::RefArray{rooms}.set(0, &room);
+    put(level, 0x20, rooms);
+  }
+  ~World() { current = nullptr; }
+  World(const World&) = delete;
+  World& operator=(const World&) = delete;
+
+  void place(const void* o, phasmo::Vector3 at) { positions.emplace_back(o, at); }
+
+  static void* network_instance(const void*) { return &current->network; }
+  static void* itself(void* component, const void*) { return component; }
+  static phasmo::Vector3 position(void* t, const void*) {
+    for (const auto& [o, at] : current->positions)
+      if (o == t) return at;
+    return {100, 0, 100};
+  }
+  static phasmo::Bounds bounds(void*, const void*) { return {{0, 0, 0}, {5, 5, 5}}; }
+  static bool is_master(const void*) { return true; }
+  static void* local_player(const void*) { return &current->photon1; }
+  static int32_t actor_number(void* p, const void*) { return p == &current->photon1 ? 1 : p == &current->photon2 ? 2 : 0; }
+  static void change_state(void*, int32_t state, void*, bool, const void*) { current->changes.push_back(state); }
+  static void try_interact(void*, const void*) { ++current->interacts; }
+  static void update_speed(void*, const void*) {}
+  static int32_t random_range_int(int32_t, int32_t, const void*) { return current->gameRoll; }
+  static void appear(void*, int32_t, const void*) {}
+  static void* stop_hunting(void*, const void*) { return nullptr; }  // the coroutine the caller would start
+  static void phrase(void*, void*, const void*) {}
+  // The switch-off coroutine's first step runs inside UseLightSwitch and rolls Random.Range(0, 7).
+  static void use_light_switch(void*, bool, bool, bool, const void*) {
+    current->switchRoll = hooked<phasmo::Random::RandomRangeInt, int32_t (*)(int32_t, int32_t, const void*)>()(0, 7, nullptr);
+  }
+
+  // The body the game reaches the hooked method M through, as Fn.
+  template <auto& M, class Fn>
+  static Fn hooked() {
+    using W = std::remove_cvref_t<decltype(M)>;
+    return reinterpret_cast<Fn>(api::detail::Bodies<W, api::detail::Hooked<W>>::entry(0));
+  }
+};
+
+void start() {
+  world::reset();
+  gate::tick(nullptr);
+  hold::reset();
+  g_toldNow = -1;
+  fake::reset();
+}
+
+void bind() {
+  std::string missing;
+  api::bind(fake::host(), missing);
+}
+
+void the_world_reads_the_ghost_its_room_and_the_players() {
+  start();
+  World w;
+  bind();
+  CHECK(world::ghost() == &w.ghost);
+  CHECK(world::is_master() && world::local_actor() == 1);
+  int players = 0, living = 0;
+  world::each_player([&](void* p) {
+    ++players;
+    living += world::living(p) ? 1 : 0;
+  });
+  CHECK(players == 2 && living == 1);  // the second investigator is dead
+  CHECK(world::player_of_actor(2) == &w.player2 && world::player_of_actor(9) == nullptr);
+  CHECK(world::local_player() == &w.player1);
+  CHECK(world::favourite_room(&w.ghost) == &w.room && world::ghost_room() == &w.room);
+  CHECK(world::room_at({1, 0, 1}) == &w.room && world::room_at({9, 0, 9}) == nullptr);
+  CHECK(world::room_index(&w.room) == 0 && world::room_by_index(0) == &w.room && world::room_by_index(1) == nullptr);
+  CHECK(world::living_within({1, 0, 1}, 5) == 1);  // the living one, not the dead one far off
+  CHECK(world::distance_to_room(&w.room, {8, 0, 0}) > 2.9f && world::distance_to_room(&w.room, {8, 0, 0}) < 3.1f);
+  // Without the level the contract is over: no ghost.
+  w.levelSlot = nullptr;
+  CHECK(world::ghost() == nullptr && world::room_at({1, 0, 1}) == nullptr);
+}
+
+void the_hunt_is_the_one_the_speed_update_ran() {
+  start();
+  World w;
+  bind();
+  CHECK(world::create_hooks());
+  put(w.ghost, 0x18, int32_t{2});  // hunting
+  put(w.ghost, 0x1C, true);
+  CHECK(world::hunt_target(&w.ghost) == nullptr);  // no speed update has run yet
+  World::hooked<phasmo::GhostHuntState::UpdateSpeed, void (*)(void*, const void*)>()(&w.hunt, nullptr);
+  CHECK(world::hunt_state(&w.ghost) == &w.hunt);
+  CHECK(world::hunt_target(&w.ghost) == &w.player1 && world::hunt_search(&w.ghost) == &w.player2);
+  put(w.ghost, 0x1C, false);  // the hunt is over
+  CHECK(world::hunt_state(&w.ghost) == nullptr && world::hunt_target(&w.ghost) == nullptr);
+  put(w.ghost, 0x1C, true);
+  put(w.hunt, 0x10, static_cast<void*>(nullptr));  // another ghost's hunt
+  CHECK(world::hunt_state(&w.ghost) == nullptr);
+}
+
+bool g_holdHunts = false, g_holdInteractions = false;
+bool hold_rule(gate::Kind kind) {
+  return (kind == gate::kHunt && g_holdHunts) || (kind == gate::kInteract && g_holdInteractions);
+}
+
+void the_gate_reads_the_states_and_holds_back_the_ghosts_own_attempts() {
+  start();
+  World w;
+  bind();
+  gate::resolve();
+  const pm::tells::GateStates& s = gate::states();
+  CHECK(s.hunting == 2 && s.events[0] == 8 && s.events[1] == 14 && s.events[2] == 15);
+  CHECK(s.interactions[0] == 4 && s.interactions[12] == 23 && s.pulls[0] == 19 && s.pulls[1] == 20);
+  CHECK(gate::create_hooks());
+  static bool added = false;
+  if (!added) gate::add_rule(&hold_rule);
+  added = true;
+  const auto change = World::hooked<phasmo::GhostAI::ChangeState, void (*)(void*, int32_t, void*, bool, const void*)>();
+  const auto interact = World::hooked<phasmo::GhostActivity::TryInteract, void (*)(void*, const void*)>();
+  g_holdHunts = g_holdInteractions = true;
+  change(&w.ghost, 2, nullptr, false, nullptr);  // no told ghost yet: the game's own
+  CHECK((w.changes == std::vector<int32_t>{2}));
+  gate::tick(&w.ghost);
+  CHECK(gate::held_back(gate::kHunt) && !gate::held_back(gate::kEvent));
+  change(&w.ghost, 2, nullptr, false, nullptr);  // its own hunt: held back
+  change(&w.ghost, 2, nullptr, true, nullptr);   // a forced one (the Death card): through
+  change(&w.ghost, 0, nullptr, false, nullptr);  // idle: never held back
+  Obj other;
+  change(&other, 2, nullptr, false, nullptr);    // another ghost's: through
+  CHECK((w.changes == std::vector<int32_t>{2, 2, 0, 2}));
+  interact(&w.activity, nullptr);
+  CHECK(w.interacts == 0);
+  g_holdInteractions = false;
+  interact(&w.activity, nullptr);
+  CHECK(w.interacts == 1);
+  g_holdHunts = false;
+  gate::tick(nullptr);
+}
+
+void holding_still_gives_the_hunt_its_inputs() {
+  start();
+  float base = 1.7f, sight = 1.4f;
+  CHECK(!hold::hunt_speed(&base, &sight));  // nothing asked: the game's own
+  hold::hold_still(true);
+  CHECK(hold::hunt_speed(&base, &sight) && base == 0.0f && sight == 1.4f);
+  hold::reset_sight();
+  base = 1.7f;
+  CHECK(hold::hunt_speed(&base, &sight) && base == 0.0f && sight == 1.0f);
+  sight = 1.3f;
+  CHECK(hold::hunt_speed(&base, &sight) && sight == 1.3f);  // the reset is asked for once
+  hold::hold_still(false);
+  base = 1.7f;
+  CHECK(!hold::hunt_speed(&base, &sight) && base == 1.7f);  // the game's base comes back
+}
+
+void the_mares_roll_is_answered_inside_use_light_switch() {
+  start();
+  World w;
+  bind();
+  static bool resolved = false;
+  if (!resolved) mare::resolve();
+  resolved = true;
+  CHECK(rolls::create_hooks() && mare::create_hooks());
+  const auto use = World::hooked<phasmo::LightSwitch::UseLightSwitch, void (*)(void*, bool, bool, bool, const void*)>();
+  const auto roll = World::hooked<phasmo::Random::RandomRangeInt, int32_t (*)(int32_t, int32_t, const void*)>();
+  Obj light;
+  use(&light, true, false, false, nullptr);
+  CHECK(w.switchRoll == 3);  // no Mare: the game's own roll
+  g_toldNow = pm::tells::kMare;
+  int ones = 0;
+  for (int i = 0; i < 200; ++i) {
+    use(&light, true, false, false, nullptr);
+    CHECK(w.switchRoll == 0 || w.switchRoll == 1);
+    ones += w.switchRoll == 1 ? 1 : 0;
+  }
+  CHECK(ones > 60 && ones < 140);  // 1 in 2, where the game's is 1 in 7
+  CHECK(roll(0, 7, nullptr) == 3);  // the same roll outside UseLightSwitch is the game's
+  CHECK(roll(0, 4, nullptr) == 3);
+}
+
+// The incense's request for the game's hunt hold starts the Spirit's quiet minute only when no hold was
+// on: a second smudge while the game's hold runs starts no new hold, and no new minute.
+void a_spirits_quiet_minute_starts_only_with_a_new_hold() {
+  start();
+  World w;
+  static bool resolved = false;
+  if (!resolved) pm::tells::spirit::resolve();
+  resolved = true;
+  CHECK(pm::tells::spirit::create_hooks());
+  g_toldNow = pm::tells::kSpirit;
+  pm::tells::spirit::tick_host(&w.ghost, 0.03f);
+  gate::tick(&w.ghost);
+  const auto stop = World::hooked<phasmo::GhostAI::StopGhostFromHunting, void* (*)(void*, const void*)>();
+  put(w.ghost, 0x1E, true);  // the game's hold is already on
+  stop(&w.ghost, nullptr);
+  pm::tells::spirit::tick_host(&w.ghost, 0.03f);
+  CHECK(!gate::held_back(gate::kInteract));
+  put(w.ghost, 0x1E, false);  // no hold: this incense starts one
+  stop(&w.ghost, nullptr);
+  pm::tells::spirit::tick_host(&w.ghost, 0.03f);
+  CHECK(gate::held_back(gate::kInteract) && gate::held_back(gate::kEvent) && !gate::held_back(gate::kHunt));
+  put(w.ghost, 0x1E, true);
+  for (int i = 0; i < 61 * 30; ++i) pm::tells::spirit::tick_host(&w.ghost, 1.0f / 30);
+  CHECK(!gate::held_back(gate::kInteract));  // the minute is over
+  stop(&w.ghost, nullptr);                    // incense again while the game's hold still runs
+  pm::tells::spirit::tick_host(&w.ghost, 0.03f);
+  CHECK(!gate::held_back(gate::kInteract));
+  pm::tells::spirit::reset();
+  gate::tick(nullptr);
+}
+
+// The mod's wiring (register.h, from pmmod_start): each told ghost gets its rules, the hunt speed on
+// the Spirit and the Shade only, and its journal line. The host runs the rules and shows the lines only
+// while the room's mod lists match (sdk/runtime/mod_agreement.h), which replaced the mod's own check:
+// a peer without the mod means no lines and no rules; with it, both; a peer leaving mid-contract
+// changes nothing; another build of the mod is not agreed.
+int g_wiredStarts = 0;
+void wired_start(void*) { ++g_wiredStarts; }
+bool wired_speed(float*, float*, void*) { return false; }
+bool wired_held(int32_t, void*) { return false; }
+
+void the_tells_and_their_lines_run_only_while_the_room_agrees() {
+  start();
+  bind();
+  g_wiredStarts = 0;
+  pm::api::content::GhostRules rules;
+  rules.start = &wired_start;
+  rules.huntSpeed = &wired_speed;
+  rules.heldBack = &wired_held;
+  CHECK(register_content(rules));
+  fake::commit_content();
+  pm::content::Registry& r = fake::content_registry();
+  for (int told = 0; told < kToldCount; ++told) {
+    const std::vector<PmGhostRules> attached = r.rules_for(kToldIds[told]);
+    CHECK(attached.size() == 1);
+    if (attached.size() != 1) continue;
+    CHECK(reinterpret_cast<intptr_t>(attached[0].user) == told && attached[0].heldBack == &wired_held);
+    CHECK((attached[0].huntSpeed != nullptr) == (told == kSpirit || told == kShade));
+    const std::vector<pm::content::Text> lines = r.lines_for(kToldIds[told]);
+    CHECK(lines.size() == 1 && lines[0].size() == 1 && lines[0][0].first == "en" &&
+          lines[0][0].second == tell_line(told));
+  }
+  CHECK(r.rules_for("vanilla.wraith").empty() && r.lines_for("vanilla.wraith").empty());
+
+  // Behind the room's agreement, as in the host.
+  const std::vector<pm::content::ModBuild> ours{{"ghost-tells", "0011223344556677"}};
+  const auto announced = [](std::map<int, std::vector<pm::content::ModBuild>> lists) {
+    return [lists](int actor) -> std::optional<std::vector<pm::content::ModBuild>> {
+      const auto it = lists.find(actor);
+      if (it == lists.end()) return std::nullopt;
+      return it->second;
+    };
+  };
+  pm::content::Agreement agreement;
+  unsigned heard = 0;  // presence's revision: each observe below hears something new
+  agreement.set_local(ours);
+  r.use_agreement(&agreement);
+  agreement.observe(true, false, 1, 2, {2}, ++heard, announced({{2, {}}}));  // player 2 runs no mods
+  CHECK(r.rules_for("vanilla.mare").empty() && r.lines_for("vanilla.mare").empty());
+  agreement.observe(true, false, 1, 2, {2}, ++heard,
+                    announced({{2, {{"ghost-tells", "8899aabbccddeeff"}}}}));  // another build
+  CHECK(r.rules_for("vanilla.mare").empty() && r.lines_for("vanilla.mare").empty());
+  agreement.observe(true, false, 1, 2, {2}, ++heard, announced({{2, ours}}));
+  CHECK(!r.rules_for("vanilla.mare").empty() && !r.lines_for("vanilla.mare").empty());
+  agreement.observe(true, true, 1, 2, {2}, ++heard, announced({{2, ours}}));  // a contract with a Mare
+  fake::contract_ghost(6, 6);
+  fake::tick_rules();
+  CHECK(g_wiredStarts == 1);
+  agreement.observe(true, true, 1, 1, {}, ++heard, announced({}));  // the host leaves
+  fake::tick_rules();
+  CHECK(g_wiredStarts == 1 && !r.rules_for("vanilla.mare").empty() && !r.lines_for("vanilla.mare").empty());
+  fake::contract_ghost(-1, -1);
+  fake::tick_rules();
+}
+
+}  // namespace game
+
+int pm::tells::told_now() { return game::g_toldNow; }
+
 int main() {
+  use_text({"mods/ghost_tells/i18n/default.json"});
   the_six_ghosts_are_told_and_no_other();
   an_edge_rises_once();
   a_timer_runs_for_its_seconds();
@@ -511,6 +939,14 @@ int main() {
   a_room_change_keeps_the_yureis_minute();
   a_searching_goryo_is_still_after_its_prey();
   the_mares_roll_is_answered_only_inside_its_coroutine();
+  game::the_world_reads_the_ghost_its_room_and_the_players();
+  game::the_hunt_is_the_one_the_speed_update_ran();
+  game::the_gate_reads_the_states_and_holds_back_the_ghosts_own_attempts();
+  game::holding_still_gives_the_hunt_its_inputs();
+  game::the_mares_roll_is_answered_inside_use_light_switch();
+  game::a_spirits_quiet_minute_starts_only_with_a_new_hold();
+  game::the_tells_and_their_lines_run_only_while_the_room_agrees();
+  game::start();  // what the tells hold goes before the fake's objects do
   if (g_failures) std::printf("%d failure(s)\n", g_failures);
   return g_failures ? 1 : 0;
 }

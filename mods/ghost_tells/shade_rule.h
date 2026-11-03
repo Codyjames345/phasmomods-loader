@@ -6,7 +6,7 @@
 // all paranormal activity if there are people nearby": when it shows itself and a player stares at it,
 // it is gone at once; with two or more players near it does nothing at all (vanilla already holds it
 // back with anyone in its room); and in a hunt it hesitates when it sees players together.
-namespace pg::tells {
+namespace pm::tells {
 
 constexpr float kShadeGazeCone = 15.0f;     // degrees either side of where a player faces
 constexpr float kShadeGazeRange = 20.0f;    // metres
@@ -65,4 +65,4 @@ struct Falter {
   bool holding() const { return hold.running(); }
 };
 
-}  // namespace pg::tells
+}  // namespace pm::tells

@@ -1,13 +1,16 @@
-// Offline tests for pg::session (no game, no Photon). Run: build\session_test.exe
+// Offline tests for pm::session (no game, no Photon). Run: build\session_test.exe
 #include "session.h"
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <limits>
+#include <string>
 #include <vector>
 
-using namespace pg::session;
+using namespace pm::session;
 
 namespace {
 
@@ -42,7 +45,9 @@ struct Room {
   void frame(uint64_t dt = 16) {
     now += dt;
     for (int a : actors)
-      if (modded(a)) at(a).observe(a, master, actors, now);
+      if (modded(a)) {
+        at(a).observe(a, master, actors, now);
+      }
     deliver();
   }
   void deliver() {
@@ -80,6 +85,37 @@ std::vector<uint8_t> input_packet(uint16_t seq, float dx, float dz) {
   append(body, dx);
   append(body, dz);
   return packet(kInput, body);
+}
+
+// A lobby's rules stop the mod and start it again in the same room. It starts clean, and what the room still holds reaches
+// it again: the ghost player the master keeps announcing, and the volunteers. What the stopped client had chosen is its own
+// to choose again.
+void a_stopped_session_starts_clean_in_the_same_room() {
+  Room r(3);
+  r.at(2).set_volunteer(true);
+  r.at(3).set_volunteer(true);
+  r.settle();
+  const int drawn = r.at(1).ghost_actor();
+  CHECK(drawn == 2 || drawn == 3);
+  const int stopped = drawn == 2 ? 3 : 2;  // not the ghost player, whose volunteering ending would draw again
+  CHECK(!r.at(stopped).volunteers().empty() && r.at(stopped).ghost_actor() == drawn);
+  r.at(stopped).forget();
+  CHECK(r.at(stopped).ghost_actor() == kNobody && r.at(stopped).volunteers().empty() && !r.at(stopped).volunteer());
+  CHECK(!r.at(stopped).local_is_master() && !r.at(stopped).local_is_ghost());
+  r.settle();
+  CHECK(r.at(stopped).ghost_actor() == drawn);
+  CHECK(!r.at(stopped).volunteer());
+  CHECK(r.at(stopped).volunteers() == std::vector<int>{drawn});
+  // The master starts clean too, and its client draws afresh among those who still volunteer.
+  r.at(1).forget();
+  r.settle();
+  CHECK(r.at(1).ghost_actor() == drawn);
+  for (int a : r.actors) CHECK(r.at(a).ghost_actor() == drawn);
+  // The mod's stop asks for it: this test's whole point is that it runs.
+  std::ifstream room(std::string(PM_SOURCE_DIR) + "/mods/playable_ghost/room.cpp", std::ios::binary);
+  const std::string text{std::istreambuf_iterator<char>(room), std::istreambuf_iterator<char>()};
+  const size_t teardown = text.find("void teardown()");
+  CHECK(teardown != std::string::npos && text.find("g_session.forget();", teardown) != std::string::npos);
 }
 
 void volunteer_and_assignment_reach_everyone() {
@@ -183,6 +219,7 @@ void triggers_and_status_flow_between_ghost_and_host() {
   s.type = 24;
   s.room = 3;
   s.identity = 31;
+  s.huntSanity = 61;
   r.at(1).set_status(s);
   r.frame(kStatusMs);
   CHECK(r.at(2).status() == s);
@@ -252,6 +289,36 @@ void master_migration_keeps_the_assignment() {
   r.at(3).send_input(0.0f, 1.0f);
   r.deliver();
   CHECK(r.at(2).fresh_input(r.now, in) && in.dz == 1.0f);
+}
+
+// A master who is the ghost player leaves during a contract (FINDINGS 9). The client that inherits the master role
+// knows the contract is running, so it draws nobody new mid-contract: the native AI keeps the ghost, as when any ghost
+// player leaves. Back in the lobby it draws as usual.
+void a_new_master_mid_contract_draws_nobody() {
+  Room r(3);
+  r.at(1).set_volunteer(true);
+  r.settle();
+  CHECK(r.at(1).ghost_actor() == 1);
+  r.at(1).start_round();
+  for (int a : r.actors) r.at(a).set_contract(true);
+  r.at(2).set_volunteer(true);
+  r.at(3).set_volunteer(true);
+  r.settle();
+  for (int a : r.actors) CHECK(r.at(a).ghost_actor() == 1);
+  r.actors = {2, 3};
+  r.master = 2;
+  r.settle();
+  CHECK(r.at(2).ghost_actor() == kNobody);
+  CHECK(r.at(3).ghost_actor() == kNobody);
+  CHECK(r.at(2).in_round());
+  r.at(2).start_round();  // the host's tick asks again: the inherited round stays as it is
+  r.settle();
+  CHECK(r.at(2).ghost_actor() == kNobody && r.at(3).ghost_actor() == kNobody);
+  for (int a : r.actors) r.at(a).set_contract(false);
+  r.at(2).end_round();
+  r.settle();
+  CHECK(r.at(2).ghost_actor() > 0);
+  CHECK(r.at(3).ghost_actor() == r.at(2).ghost_actor());
 }
 
 void random_volunteer_is_drawn_in_the_lobby_with_fair_rotation() {
@@ -325,25 +392,10 @@ void a_silent_contract_load_keeps_the_drawn_ghost() {
   CHECK(r.at(3).ghost_actor() == 2);
 }
 
-// A ghost-player round needs the mod on every client: a player without it never sees the ghost
-// player's hidden body handled, so the contract stays vanilla until everyone has it.
-void a_player_without_the_mod_means_the_native_ghost() {
-  Room r(3);
-  r.unmodded = {3};
-  r.at(2).set_volunteer(true);
-  r.settle();
-  CHECK(!r.at(1).everyone_has_mod());
-  CHECK(!r.at(2).everyone_has_mod());
-  CHECK(r.at(1).ghost_actor() == kNobody);
-  CHECK(r.at(2).ghost_actor() == kNobody);
-  r.unmodded.clear();  // actor 3 starts the mod
-  r.settle();
-  CHECK(r.at(1).everyone_has_mod());
-  CHECK(r.at(1).ghost_actor() == 2);
-  CHECK(r.at(3).ghost_actor() == 2);
-}
-
-void a_player_without_the_mod_joining_the_lobby_cancels_the_ghost_player() {
+// The mod checks nobody: the host's list is the lobby's, and the loader keeps everyone to it (sdk/README.md). So a joiner, who
+// may turn out to run other mods, changes nothing about the ghost player, and a contract cannot start until they are verified
+// or gone.
+void a_joiner_changes_nothing_about_the_ghost_player() {
   Room r(2);
   r.at(2).set_volunteer(true);
   r.settle();
@@ -352,22 +404,8 @@ void a_player_without_the_mod_joining_the_lobby_cancels_the_ghost_player() {
   r.actors.push_back(3);
   r.unmodded = {3};
   r.frame();
-  CHECK(r.at(1).ghost_actor() == kNobody);
-  CHECK(r.at(2).ghost_actor() == kNobody);
-}
-
-// A client on another version of the mod speaks another wire format and handles the body another
-// way: it counts as not having the mod.
-void a_player_on_another_mod_version_means_the_native_ghost() {
-  Room r(3);
-  r.unmodded = {3};
-  r.at(2).set_volunteer(true);
-  r.settle();
-  const std::vector<uint8_t> hello = {'P', 'G', static_cast<uint8_t>(kVersion - 1), kHello, 0};
-  for (int to : {1, 2}) r.at(to).receive(3, hello.data(), hello.size(), r.now);
-  r.settle();
-  CHECK(!r.at(1).everyone_has_mod());
-  CHECK(r.at(1).ghost_actor() == kNobody);
+  CHECK(r.at(1).ghost_actor() == 2);
+  CHECK(r.at(2).ghost_actor() == 2);
 }
 
 void no_volunteers_means_the_native_ghost() {
@@ -568,8 +606,8 @@ void guesses_reach_the_ghost_and_the_score_reaches_the_investigators() {
   r.at(4).send_guess({9, true});
   r.deliver();
   CHECK(r.at(2).guesses().size() == 2);
-  CHECK((r.at(2).guesses().at(3) == pg::score::Guess{31, false}));
-  CHECK((r.at(2).guesses().at(4) == pg::score::Guess{9, true}));
+  CHECK((r.at(2).guesses().at(3) == pm::score::Guess{31, false}));
+  CHECK((r.at(2).guesses().at(4) == pm::score::Guess{9, true}));
   CHECK(r.at(1).guesses().empty());  // only the ghost player collects them
   r.at(3).send_guess({31, false});   // unchanged: nothing is sent again
   CHECK(r.at(3).take_outgoing().empty());
@@ -578,15 +616,46 @@ void guesses_reach_the_ghost_and_the_score_reaches_the_investigators() {
   CHECK(r.at(2).guesses().at(3).type == 4);
   r.at(2).send_guess({1, false});    // the ghost player does not guess
   CHECK(r.at(2).take_outgoing().empty());
-  const pg::score::Tally t = pg::score::tally(r.at(2).guesses(), 31);
+  const pm::score::Tally t = pm::score::tally({1, 3, 4}, r.at(2).actors(), r.at(2).guesses(), 31);
+  CHECK((t == pm::score::Tally{1, 2, 0, 3}));  // 1 never sent a guess; 3 is wrong now; 4 died
   r.at(2).send_score(t);
   r.deliver();
-  pg::score::Tally got;
+  pm::score::Tally got;
   CHECK(r.at(3).take_score(got) && got == t && !r.at(3).take_score(got));
   CHECK(r.at(1).take_score(got) && got == t);
-  std::vector<uint8_t> forged = packet(kScore, {9, 9, 9});
+  std::vector<uint8_t> forged = packet(kScore, {9, 9, 9, 9});
   r.at(3).receive(4, forged.data(), forged.size(), r.now);  // only the ghost player sends the score
   CHECK(!r.at(3).take_score(got));
+}
+
+// The score settles a few seconds after the end. Back in the lobby the master ends the round and the rotation
+// may name the next ghost player, and the score and the last guesses must still get through.
+void the_score_outlives_the_round_it_belongs_to() {
+  Room r(3);
+  round_with_ghost(r, 2);
+  for (const int actor : {1, 2, 3}) r.at(actor).in_contract();
+  const std::vector<uint8_t> next = packet(kAssign, {3, 0, 0, 0});  // the rotation names actor 3 for the next one
+  r.at(2).receive(1, next.data(), next.size(), r.now);
+  r.at(3).receive(1, next.data(), next.size(), r.now);
+  CHECK(!r.at(2).local_is_ghost() && r.at(3).local_is_ghost());
+  std::vector<uint8_t> late = packet(kGuess, {4, 1});
+  r.at(2).receive(3, late.data(), late.size(), r.now);
+  CHECK((r.at(2).guesses().at(3) == pm::score::Guess{4, true}));
+  const pm::score::Tally t{1, 1, 0, 2};
+  r.at(2).send_score(t);
+  r.deliver();
+  pm::score::Tally got;
+  CHECK(r.at(3).take_score(got) && got == t);
+  CHECK(r.at(1).take_score(got) && got == t);
+}
+
+// A leaver is seen from the room's own player list, with no message of the mod's.
+void the_session_sees_a_departure_in_the_rooms_players() {
+  Room r(3);
+  round_with_ghost(r, 2);
+  CHECK((r.at(2).actors() == std::vector<int>{1, 2, 3}));
+  r.at(2).observe(2, 1, {1, 2}, r.now);
+  CHECK((r.at(2).actors() == std::vector<int>{1, 2}));
 }
 
 void the_mimic_offer_reaches_the_ghost_and_only_offered_picks_reach_the_host() {
@@ -630,9 +699,9 @@ void host_as_ghost_picks_the_mimic_copy_without_network() {
 void marks_and_alerts_reach_only_the_ghost_player() {
   Room r(3);
   round_with_ghost(r, 2);
-  using pg::perceive::Alert;
-  using pg::perceive::Mark;
-  const std::vector<Mark> marks = {{pg::perceive::kPrey, 1, 0, 2}, {pg::perceive::kStepSprint, -3, 0.5f, 4}};
+  using pm::perceive::Alert;
+  using pm::perceive::Mark;
+  const std::vector<Mark> marks = {{pm::perceive::kPrey, 1, 0, 2}, {pm::perceive::kStepSprint, -3, 0.5f, 4}};
   r.at(1).send_marks(marks);
   r.deliver();
   CHECK(r.at(2).marks() == marks && r.at(2).marks_at() == r.now);
@@ -642,15 +711,15 @@ void marks_and_alerts_reach_only_the_ghost_player() {
   CHECK(r.at(2).marks().empty());
   r.at(1).send_marks({});
   CHECK(r.at(1).take_outgoing().empty());
-  std::vector<Mark> many(40, Mark{pg::perceive::kScent, 0, 0, 0});
+  std::vector<Mark> many(40, Mark{pm::perceive::kScent, 0, 0, 0});
   r.at(1).send_marks(many);
   r.deliver();
-  CHECK(r.at(2).marks().size() == static_cast<size_t>(pg::perceive::kMaxMarks));
+  CHECK(r.at(2).marks().size() == static_cast<size_t>(pm::perceive::kMaxMarks));
   r.at(3).send_marks(marks);  // only the host perceives for the ghost
   CHECK(r.at(3).take_outgoing().empty());
 
   Alert a;
-  a.kind = pg::perceive::kOuija;
+  a.kind = pm::perceive::kOuija;
   a.located = true;
   a.x = 4;
   a.z = -2;
@@ -659,10 +728,10 @@ void marks_and_alerts_reach_only_the_ghost_player() {
   r.deliver();
   Alert got;
   CHECK(r.at(2).take_alert(got) && got.kind == a.kind && got.located && got.x == 4 && got.z == -2);
-  CHECK(got.text.size() == pg::perceive::kMaxAlertText);
+  CHECK(got.text.size() == pm::perceive::kMaxAlertText);
   CHECK(!r.at(2).take_alert(got));
   CHECK(!r.at(3).take_alert(got));
-  std::vector<uint8_t> forged = packet(kAlert, {pg::perceive::kSalt, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+  std::vector<uint8_t> forged = packet(kAlert, {pm::perceive::kSalt, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
   r.at(2).receive(3, forged.data(), forged.size(), r.now);  // only the host sends alerts
   CHECK(!r.at(2).take_alert(got));
 }
@@ -670,13 +739,13 @@ void marks_and_alerts_reach_only_the_ghost_player() {
 void host_as_ghost_perceives_without_network() {
   Room r(2);
   round_with_ghost(r, 1);
-  r.at(1).send_marks({{pg::perceive::kCharge, 1, 1, 1}});
-  pg::perceive::Alert a;
-  a.kind = pg::perceive::kCrucifix;
+  r.at(1).send_marks({{pm::perceive::kCharge, 1, 1, 1}});
+  pm::perceive::Alert a;
+  a.kind = pm::perceive::kCrucifix;
   r.at(1).send_alert(a);
   CHECK(r.at(1).marks().size() == 1);
-  pg::perceive::Alert got;
-  CHECK(r.at(1).take_alert(got) && got.kind == pg::perceive::kCrucifix);
+  pm::perceive::Alert got;
+  CHECK(r.at(1).take_alert(got) && got.kind == pm::perceive::kCrucifix);
   CHECK(r.at(1).take_outgoing().empty());
 }
 
@@ -707,6 +776,7 @@ void the_ghost_is_named_by_what_it_is() {
 }
 
 int main() {
+  a_stopped_session_starts_clean_in_the_same_room();
   the_ghost_is_named_by_what_it_is();
   volunteer_and_assignment_reach_everyone();
   only_the_master_assigns();
@@ -717,14 +787,13 @@ int main() {
   host_as_ghost_needs_no_network();
   malformed_packets_are_ignored();
   master_migration_keeps_the_assignment();
+  a_new_master_mid_contract_draws_nobody();
   random_volunteer_is_drawn_in_the_lobby_with_fair_rotation();
   a_later_volunteer_can_be_drawn_for_the_first_contract();
   a_volunteer_who_withdraws_is_replaced();
   a_silent_contract_load_keeps_the_drawn_ghost();
   no_volunteers_means_the_native_ghost();
-  a_player_without_the_mod_means_the_native_ghost();
-  a_player_without_the_mod_joining_the_lobby_cancels_the_ghost_player();
-  a_player_on_another_mod_version_means_the_native_ghost();
+  a_joiner_changes_nothing_about_the_ghost_player();
   the_ghost_players_step_out_reaches_everyone();
   a_silent_ghost_player_stays_stepped_out();
   truck_wait_notice_reaches_only_the_investigator();
@@ -735,6 +804,8 @@ int main() {
   room_offer_and_claim();
   host_as_ghost_picks_without_network();
   guesses_reach_the_ghost_and_the_score_reaches_the_investigators();
+  the_score_outlives_the_round_it_belongs_to();
+  the_session_sees_a_departure_in_the_rooms_players();
   the_mimic_offer_reaches_the_ghost_and_only_offered_picks_reach_the_host();
   host_as_ghost_picks_the_mimic_copy_without_network();
   marks_and_alerts_reach_only_the_ghost_player();

@@ -1,0 +1,11 @@
+{
+  "id": "phasmomods.playable-ghost",
+  "name": "Playable Ghost",
+  "author": "PhasmoMods",
+  "version": "1.0.0",
+  "description": "One player in a private lobby plays the ghost",
+  "dll": "PlayableGhost.dll",
+  "website": "",
+  "dependencies": [{ "id": "phasmomods.custom-ghosts", "required": false }],
+  "incompatibilities": []
+}

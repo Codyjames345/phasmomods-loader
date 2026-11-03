@@ -3,37 +3,32 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string_view>
 
 // Vanilla rules that still apply to the controlled ghost, kept free of game calls so they can be
-// tested offline. The facts come from GhostAI and its states (build 25811160, see the offsets in
-// actions.cpp and control.cpp).
+// tested offline. The facts come from GhostAI and its states; each gate's field is named by its map key.
 //
-// Movement. A vanilla ghost only moves in a few states. A wander (state 1, and its variant 21) walks
-// to a random point near the ghost: within the state's radius (+0x24, three metres, sometimes up to
-// five), towards its target for a Banshee, and it ends on arrival or when its timer runs out. The
-// favourite-room state walks the ghost home, a hunt chases, and events and abilities move it their
+// Movement. A vanilla ghost only moves in a few states. A wander (GhostState.wander, and the D.O.T.S. walk
+// GhostState.dots) walks to a random point near the ghost: within the state's radius (GhostWanderState.radius,
+// three metres, sometimes up to five), towards its target for a Banshee, and it ends on arrival or when its timer
+// runs out. The favourite-room state walks the ghost home, a hunt chases, and events and abilities move it their
 // own way. In every other state, idle included, it stands where it is, and the idle roll every 2-6 s
 // chooses what comes next. The ghost player takes over the wander's walk (anywhere within that
 // wander's reach) and the hunt's; the native AI keeps the rest.
 //
 // Smudge in a hunt (GhostAI.StopHuntingForTime): the native hunt loses its target for the incense's
 // duration, so the native AI moves the ghost meanwhile instead of its player.
-namespace pg::tether {
+namespace pm::tether {
 
-// GhostAI.State values.
-constexpr int kIdle = 0;
-constexpr int kWander = 1;
-constexpr int kHunting = 2;
-constexpr int kFavouriteRoom = 3;
-constexpr int kFuseBox = 7;
-constexpr int kRandomEvent = 14;
-constexpr int kAbility = 15;
-constexpr int kRoam = 21;  // the wander's variant (same layout: timer, radius, destination)
+// The game's numbers for the ghost's states it asks about: phasmo::GhostState reads them through the map.
+struct States {
+  int idle, wander, dots, hunting, favouriteRoom, throwing, fuseBox, randomEvent, ability;
+};
 
 struct Ghost {
-  int state = kIdle;
-  bool inFavouriteRoom = false;  // LevelController's ghost room is the GhostInfo favourite room
-  bool smudged = false;          // GhostAI +0xF8: the incense that smudged it in a hunt
+  int state = 0;
+  bool inFavouriteRoom = false;  // LevelController.currentGhostRoom is the GhostInfo favourite room
+  bool smudged = false;          // GhostAI.smudge: the incense that smudged it in a hunt
 };
 
 // Who moves the ghost this frame.
@@ -43,16 +38,13 @@ struct Ghost {
 //   the rest  the native AI: walking home, blinded by smoke, an event, or settling in its room / an ability
 enum Reason { kSteer, kRoaming, kResting, kDrawnHome, kBlinded, kEvent, kActing };
 
-inline Reason reason(const Ghost& g) {
-  switch (g.state) {
-    case kHunting: return g.smudged ? kBlinded : kSteer;
-    case kWander:
-    case kRoam: return kRoaming;
-    case kFavouriteRoom: return g.inFavouriteRoom ? kActing : kDrawnHome;
-    case kRandomEvent: return kEvent;
-    case kAbility: return kActing;
-    default: return kResting;
-  }
+inline Reason reason(const Ghost& g, const States& s) {
+  if (g.state == s.hunting) return g.smudged ? kBlinded : kSteer;
+  if (g.state == s.wander || g.state == s.dots) return kRoaming;
+  if (g.state == s.favouriteRoom) return g.inFavouriteRoom ? kActing : kDrawnHome;
+  if (g.state == s.randomEvent) return kEvent;
+  if (g.state == s.ability) return kActing;
+  return kResting;
 }
 
 inline bool native_moves(Reason r) { return r >= kDrawnHome; }
@@ -83,7 +75,7 @@ inline void keep_within(const Reach& r, float px, float pz, float& dx, float& dz
 }
 
 // A hunt that loses sight of its target walks to where it last saw them and searches there. Its
-// line-of-sight speed-up (hunt state +0xB4) holds until that search is over and only then decays.
+// line-of-sight speed-up (GhostHuntState.sightSpeedUp) holds until that search is over and only then decays.
 // The ghost player may walk elsewhere, so the search ends where the ghost is once a vanilla ghost,
 // walking the path at its native speed, would have reached the search point. Walking there ends it
 // natively, sooner.
@@ -132,9 +124,9 @@ class SearchPace {
 // to the ghost player until the roll next reaches its hunt check, and only while the native checks
 // still pass.
 struct HuntGate {
-  bool hunting = false;   // GhostAI +0xF3
-  bool cooldown = false;  // GhostAI +0xD8, set after every hunt
-  bool smudged = false;   // GhostAI +0xF5, set by smudging outside a hunt
+  bool hunting = false;   // GhostAI.isHunting
+  bool cooldown = false;  // GhostAI.postHuntCooldown, set after every hunt
+  bool smudged = false;   // GhostAI.huntsHeldOff, set by smudging outside a hunt
   float insanity = -1;    // the measured players' insanity now, negative when unknown
   bool haveModifier = false;
   int modifier = 0;       // the type's and difficulty's addition, learned from the idle roll
@@ -152,24 +144,27 @@ inline bool hunt_allowed(const HuntGate& g) {
 // The vanilla gates on the actions the idle roll chooses through GhostActivity.GhostAbility and
 // TryInteract, checked again when the ghost player uses one the roll granted earlier.
 struct ActionGate {
-  bool mainDoorOpen = false;     // SetupPhaseController +0x44 (UnlockMainDoor): before it, no interactions
-  bool noEvents = false;         // LevelValues +0x23 (set by ConnectToServer): no events, hunts or fuse box
-  bool stayHome = false;         // GhostAI +0x10A: the roll sends the ghost home instead of acting
+  bool mainDoorOpen = false;     // SetupPhaseController.mainDoorOpen: before it, no interactions
+  bool noEvents = false;         // LevelValues.eventsBlocked (set by ConnectToServer): no events, hunts or fuse box
+  bool stayHome = false;         // GhostAI.stayHome: the roll sends the ghost home instead of acting
   bool shadeWatched = false;     // a Shade with an investigator in the room it is in
-  bool interactionBoost = false; // GhostAI +0xD9 (the Tower card): the roll's actions run natively
+  bool interactionBoost = false; // GhostAI.interactionBoost (the Tower card): the roll's actions run natively
 };
 
 inline bool may_interact(const ActionGate& g) { return g.mainDoorOpen; }
 
 // A vanilla ghost only acts from its idle roll. The ghost player may also act during a wander, which
 // a vanilla ghost leaves for idle as soon as it arrives, but never in the middle of another action.
-inline bool may_act_from(int state) { return state == kIdle || state == kWander || state == kRoam; }
+inline bool may_act_from(int state, const States& s) {
+  return state == s.idle || state == s.wander || state == s.dots;
+}
 
 // An aimed interaction counts once the native chain chose a state for the aimed object. The throw
-// state (6) is chosen from the sensor's whole detection count, so with the aim narrowed to something
+// state is chosen from the sensor's whole detection count, so with the aim narrowed to something
 // that cannot be thrown it arrives with no object: nothing would happen, and nothing is paid.
-constexpr int kThrow = 6;
-inline bool aimed_state_counts(int state, bool hasObject) { return state != kIdle && (state != kThrow || hasObject); }
+inline bool aimed_state_counts(int state, bool hasObject, const States& s) {
+  return state != s.idle && (state != s.throwing || hasObject);
+}
 
 // Restlessness: once the ghost player has not tried to act for kRestlessMs, the native roll acts on
 // its own again. Any attempt counts, so a ghost player with nothing saved up takes the roll back by
@@ -179,18 +174,16 @@ inline bool restless(uint64_t now, uint64_t lastAttempt) { return now - lastAtte
 inline bool may_use_ability(const ActionGate& g) { return !g.stayHome && !g.shadeWatched; }
 inline bool may_cause_event(const ActionGate& g) { return may_use_ability(g) && !g.noEvents; }
 
-// The fuse box (state 7: from anywhere, with EMF on the box): power on, any type but the Jinn turns it
-// off; power off, any type but the Hantu tries to turn it on (1 in 5). Never while the box is out of
-// order or events are off.
+// The fuse box (GhostState.fusebox: from anywhere, with EMF on the box): power on, any type but the Jinn turns
+// it off; power off, any type but the Hantu tries to turn it on (1 in 5). Never while the box is out of
+// order or events are off. The game tests the ghost's behaviour type, whose content id `ghostId` is
+// (api::content::id_of), so numbers stay the game's.
 enum FuseAction { kFuseNone, kFuseTurnOff, kFuseTurnOn };
 
-constexpr int kJinn = 5;
-constexpr int kHantu = 13;
-
-inline FuseAction fuse_action(bool haveFuseBox, bool outOfOrder, bool noEvents, bool powerOn, int ghostType) {
+inline FuseAction fuse_action(bool haveFuseBox, bool outOfOrder, bool noEvents, bool powerOn, std::string_view ghostId) {
   if (!haveFuseBox || outOfOrder || noEvents) return kFuseNone;
-  if (powerOn) return ghostType == kJinn ? kFuseNone : kFuseTurnOff;
-  return ghostType == kHantu ? kFuseNone : kFuseTurnOn;
+  if (powerOn) return ghostId == "vanilla.jinn" ? kFuseNone : kFuseTurnOff;
+  return ghostId == "vanilla.hantu" ? kFuseNone : kFuseTurnOn;
 }
 
-}  // namespace pg::tether
+}  // namespace pm::tether

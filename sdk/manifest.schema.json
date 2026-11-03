@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "manifest.schema.json",
+  "title": "PhasmoMods mod manifest",
+  "description": "A mod's manifest.json, beside its DLL. The loader reads it with core/mod_manifest.h; sdk/README.md says what each field means. An unknown field is logged and ignored. The loader counts limits in UTF-8 bytes and an editor counts maxLength in characters, so text beyond ASCII can pass here and be refused at load: each field's description gives the limit in bytes.",
+  "type": "object",
+  "required": ["id", "name", "author", "version", "description", "dll"],
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Where an editor finds this schema. The loader ignores it."
+    },
+    "id": {
+      "type": "string",
+      "description": "<author>.<mod>: exactly one dot, each part a-z, 0-9 and '-', at most 64 bytes. It must equal the id in the DLL's PmModInfo. The author \"vanilla\" is reserved, and so is \"phasmomods\" outside the loader's install folder.",
+      "pattern": "^(?!vanilla\\.)[a-z0-9-]+\\.[a-z0-9-]+$",
+      "maxLength": 64
+    },
+    "name": {
+      "type": "string",
+      "description": "What players read, at most 64 bytes. No control characters, line separators or angle brackets.",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029<>]+$"
+    },
+    "author": {
+      "type": "string",
+      "description": "Who made the mod, at most 64 bytes. No control characters, line separators or angle brackets. PhasmoMods is reserved for the mods in the loader's install folder.",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029<>]+$"
+    },
+    "version": {
+      "type": "string",
+      "description": "MAJOR.MINOR.PATCH, as Semantic Versioning means them, compared part by part as numbers. No pre-release tag and no leading zero, and the loader also needs each part to fit 32 bits.",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "maxLength": 32
+    },
+    "description": {
+      "type": "string",
+      "description": "One line for the Mods panel, at most 512 bytes. No control characters, line separators or angle brackets.",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029<>]+$"
+    },
+    "dll": {
+      "type": "string",
+      "description": "The file name of the mod's DLL beside this file, with no folder, at most 80 bytes, and not a name Windows keeps for a device (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9).",
+      "pattern": "^(?![cC][oO][nN]\\.|[pP][rR][nN]\\.|[aA][uU][xX]\\.|[nN][uU][lL]\\.|[cC][oO][mM][1-9]\\.|[lL][pP][tT][1-9]\\.)[^\\u0000-\\u001f/\\\\:<>\"|?*]+\\.[dD][lL][lL]$",
+      "maxLength": 80
+    },
+    "website": {
+      "type": "string",
+      "description": "An http or https address of at most 256 bytes, or empty.",
+      "pattern": "^(https?://[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029<>]*)?$",
+      "maxLength": 256
+    },
+    "recordsVoice": {
+      "type": "boolean",
+      "description": "true when the mod keeps other players' speech in memory during a contract. The consent notice says so, naming the mod. The player agrees before the DLL loads, so a DLL that sets PM_MOD_RECORDS_VOICE under a manifest that does not say this stays off.",
+      "default": false
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "The mods this one needs or can use; it starts after each of them that starts. No mod twice, and not the mod itself.",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The other mod's id.",
+            "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)?$",
+            "maxLength": 64
+          },
+          "minimumVersion": {
+            "type": "string",
+            "description": "The oldest version of it that will do, MAJOR.MINOR.PATCH. Without this, any version.",
+            "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "true (the default): this mod stays off without it, or when it is older than minimumVersion or does not start. false: this mod uses it when it is there.",
+            "default": true
+          }
+        }
+      }
+    },
+    "incompatibilities": {
+      "type": "array",
+      "description": "The ids of mods this one cannot run beside: while one of them is on, this mod stays off. No mod twice, and not the mod itself.",
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)?$",
+        "maxLength": 64
+      }
+    }
+  }
+}

@@ -1,8 +1,8 @@
 #pragma once
 
 // Screen-space UI built from the game's own Unity UI classes (Canvas, TextMeshPro, Image), using
-// the game's own font so mod UI reads as part of the game. Main thread only.
-namespace pg::ui {
+// the game's own font so mod UI reads as part of the game, through the game API. Main thread only.
+namespace pm::ui {
 
 struct Color {
   float r, g, b, a;
@@ -29,8 +29,8 @@ void set_active(void* component, bool on);
 // RectTransform layout: anchors and pivot in 0..1 of the parent, position and size in canvas units.
 void place(void* component, Vec2 anchor, Vec2 pivot, Vec2 position, Vec2 size);
 void set_text(void* text, const char* utf8);  // TextMeshPro rich text
-// TMPro.TextAlignmentOptions values.
-enum class Align { TopLeft = 257, Left = 513, Center = 514, Top = 258 };
+// TMPro.TextAlignmentOptions, each read from the game (phasmo::TextAlignmentOptions).
+enum class Align { TopLeft, Left, Center, Top };
 void set_alignment(void* text, Align align);
 void set_word_wrap(void* text, bool on);  // off by default on the mod's texts
 float font_size(void* text);
@@ -39,10 +39,7 @@ float font_size_max(void* text);  // configured native size, independent of the 
 void set_fixed_font_size(void* text, float size);
 // TextMeshPro auto-sizing: the text shrinks from `max` down to `min` until it fits its rectangle.
 void set_auto_size(void* text, float min, float max);
-// Whether the graphic catches the pointer (off by default on the mod's graphics). On a canvas that
-// blocks the pointer, a catching graphic keeps clicks from reaching the game's UI beneath it.
-void set_raycast_target(void* graphic, bool on);
-void block_pointer(void* canvas);  // give the canvas a GraphicRaycaster
+
 void set_color(void* graphic, Color color);
 Color color(void* graphic);
 
@@ -52,4 +49,4 @@ bool contains(void* component, Vec2 screenPoint, void* camera = nullptr);
 // Where screenPoint falls inside the element, 0..1 from its bottom-left corner; false if outside.
 bool normalized_point(void* component, Vec2 screenPoint, Vec2& out, void* camera = nullptr);
 
-}  // namespace pg::ui
+}  // namespace pm::ui

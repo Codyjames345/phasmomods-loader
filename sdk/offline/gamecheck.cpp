@@ -3,68 +3,124 @@
 // tools/gamecheck.ps1 prepares them and runs it.
 //
 // usage: gamecheck --dump <DiffableCs root> --image <GameAssembly.dll> [--unity-player <UnityPlayer.dll>]
-//                  [--addresses <tsv>] [--mods <dir>] [--scene-entries <tsv>]
+//                  [--addresses <tsv>] [--mods <dir>] [--scene-entries <tsv>] [--expect <file>]...
 // It prints one line per entry and a summary. Exports resolve from the image's export table. Without
 // --unity-player every native site is missing, and counts as a failure when it is required. An icall
 // cannot be checked without the running game: it is listed as checked at startup only, and never
-// counts as a failure. A well-formed scene fact (a Scene, Layer or AnimatorParam entry) is not in the
-// code either: it is listed as checked in the scene files and never counts as a failure here. With
-// --scene-entries the scene facts go to that file for tools/assetcheck.py, one per line: key, kind
-// (scene, layer or animator), 1 when required or 0, scene, path, component and name, tab separated,
-// with an empty column for a field the entry does not set. With --addresses it writes key, kind, value
-// and length for each resolved entry (a native site's value is its RVA in UnityPlayer, with no
-// length). With --mods it loads every mod DLL in <dir> and its subfolders (a DLL that exports
-// pgmod_info), and after the summary prints "would not load <mod id> (contract <version>)" for each
-// mod built against a host contract this build's host does not run (pg_api_compatible), and, for
-// the others, asks for the game entries each requires (pgmod_requires) and prints
-// "would switch off <mod id>: <keys>" for each one the host would not start on this build.
+// counts as a failure. A well-formed scene fact (a Scene, Layer, AnimatorParam or ShaderProperty entry)
+// is not in the code either: it is listed as checked in the scene files and never counts as a failure
+// here. With --scene-entries the scene facts go to that file for tools/assetcheck.py, one per line:
+// key, kind (scene, layer, animator or shader), 1 when required or 0, scene, path, component and
+// name, tab separated, with an empty column for a field the entry does not set. With --addresses it
+// writes key, kind, value and length for each resolved entry (a native site's value is its RVA in
+// UnityPlayer, with no length). With --mods it loads every mod DLL in <dir> and its subfolders (a DLL that exports
+// pmmod_info), and after the summary prints "would not load <mod id> (contract <version>)" for each
+// mod built against a host contract this build's host does not run (pm_api_compatible), and, for
+// the others, asks for the game entries each requires (pmmod_requires) and prints
+// "would switch off <mod id>: <keys>" for each one the host would not start on this build, and the same
+// when it records voice and the manifest.json beside it does not say so.
+// With --expect (repeatable) each line "<key> <hex>" of the file is a value the key must resolve to: a
+// method's or native site's RVA, a field's offset, an enum value's number. A key that resolves to
+// another value (or does not resolve) prints "EXPECT <key>: map 0x.. != expected 0x.." and counts as
+// a failure; a key the map lacks, a kind that has no number, or a line that is not "<key> <hex>" is
+// unreadable input. The files are the migration's record of the values an entry replaced, kept
+// outside the repository (re/dump/expect).
+// After the summary it prints the ranges of the game's GhostType and EvidenceType enums, from which
+// custom content is numbered at runtime ("CONTENT GhostType 0..30, EvidenceType 0..7"), and a line for
+// each value whose name cannot be a vanilla id, or "CONTENT not read: <why>" when the enums cannot be
+// read (the entries' own lines are the failure). Nothing here asserts a fixed number. Then "HOST steering
+// available", or "HOST steering unavailable: <keys>" naming the host's own steering entries
+// (pm::map::kSteeringEntries) that did not resolve; their own lines are the failure.
 // Exit 0 when every required entry it can check resolved and no mod would be switched off, 1 when
 // one did not or one would, 2 on bad arguments, unreadable input or an exception (its reason printed).
+//
+// usage: gamecheck --map-digest <file>
+// Writes the map's digest (sdk/resolver/map_digest.h) to the file and checks nothing. The build runs it, for
+// what must refuse a stale checked-build record (tools/check_build_record.ps1).
+//
+// With --game-data <dir> (the game's data folder, or a copy holding globalgamemanagers and
+// il2cpp_data/Metadata/global-metadata.dat) it prints "ENGINE <Unity version>, metadata <version>", and refuses a build
+// the host's compiled-in layouts were not written for (core/engine_version.h) with "ENGINE refused: <why>", which counts as a
+// failure. The host stays inactive on such a build.
+//
+// usage: gamecheck --write-record <folder> --image <GameAssembly.dll> --unity-player <UnityPlayer.dll> --game-data <dir>
+// Writes this build's checked-build record (core/build_record.h) into the folder, replacing the one it had,
+// and prints its name. It checks nothing else, so tools/gamecheck.ps1 runs it only once the checks have passed. A build whose
+// engine or metadata version the host refuses gets no record.
+// Exit 0 when it wrote the file, 2 when a file cannot be read or written, or the versions are refused.
 #include <windows.h>
 
 #include <algorithm>
+#include <charconv>
 #include <cstdio>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <format>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <vector>
 
 #include "all.h"
+#include "build_record.h"
+#include "file_hash.h"
+#include "map_digest.h"
+#include "mod_exports.h"
+#include "quiet_load.h"
 #include "dump_model.h"
+#include "engine_version.h"
+#include "game_enums.h"
 #include "image.h"
 #include "mod_api.h"
 #include "resolver.h"
 
 namespace {
 
-using namespace pg::sdk;
+using namespace pm::sdk;
 
 constexpr const char* kUsage =
     "usage: gamecheck --dump <DiffableCs root> --image <GameAssembly.dll> [--unity-player <UnityPlayer.dll>]\n"
-    "                 [--addresses <tsv>] [--mods <dir>] [--scene-entries <tsv>]\n";
+    "                 [--addresses <tsv>] [--mods <dir>] [--scene-entries <tsv>] [--expect <file>]...\n"
+    "                 [--game-data <dir>] [--no-method-tables]\n"
+    "       gamecheck --map-digest <file>\n"
+    "       gamecheck --write-record <folder> --image <GameAssembly.dll> --unity-player <UnityPlayer.dll> --game-data <dir>\n";
 
 struct Args {
-  std::filesystem::path dump, image, unityPlayer, addresses, mods, sceneEntries;
+  std::filesystem::path dump, image, unityPlayer, addresses, mods, sceneEntries, mapDigest, recordFolder, gameData;
+  std::vector<std::filesystem::path> expect;
+  bool noMethodTables = false;  // an image without code-gen modules: the dump's addresses stand (the tool's tests)
 };
 
 bool parse(int argc, wchar_t** argv, Args& out) {
   for (int i = 1; i < argc; ++i) {
     const std::wstring_view flag = argv[i];
+    if (flag == L"--no-method-tables") {
+      out.noMethodTables = true;
+      continue;
+    }
     if (i + 1 >= argc) return false;
+    if (flag == L"--expect") {
+      out.expect.emplace_back(argv[++i]);
+      continue;
+    }
     std::filesystem::path* target = flag == L"--dump"            ? &out.dump
                                     : flag == L"--image"         ? &out.image
                                     : flag == L"--unity-player"  ? &out.unityPlayer
                                     : flag == L"--addresses"     ? &out.addresses
                                     : flag == L"--mods"          ? &out.mods
                                     : flag == L"--scene-entries" ? &out.sceneEntries
+                                    : flag == L"--map-digest"    ? &out.mapDigest
+                                    : flag == L"--write-record"  ? &out.recordFolder
+                                    : flag == L"--game-data"     ? &out.gameData
                                                                  : nullptr;
     if (!target || !target->empty()) return false;
     *target = argv[++i];
   }
+  if (!out.mapDigest.empty()) return true;
+  if (!out.recordFolder.empty()) return !out.image.empty() && !out.unityPlayer.empty() && !out.gameData.empty();
   return !out.dump.empty() && !out.image.empty();
 }
 
@@ -81,13 +137,15 @@ const char* kind_word(Kind k) {
     case Kind::Layer: return "layer";
     case Kind::AnimatorParam: return "animator";
     case Kind::NativeSite: return "native";
+    case Kind::ShaderProperty: return "shader";
+    case Kind::Inflated: return "inflated";
   }
   return "?";
 }
 
 // A resolved entry's value: a type's name in this build, a method's, code entry's or export's RVA, a
 // native site's RVA in UnityPlayer, a field's offset, an enum value's number, an icall's name, a
-// layer's index, a path, a parameter's name.
+// layer's index, a path, a parameter's or shader property's name.
 std::string value_of(const Result& r) {
   switch (r.desc->kind) {
     case Kind::Type:
@@ -100,7 +158,9 @@ std::string value_of(const Result& r) {
     case Kind::EnumValue:
     case Kind::Layer: return std::to_string(r.value);
     case Kind::Scene:
-    case Kind::AnimatorParam: return r.currentName;
+    case Kind::AnimatorParam:
+    case Kind::ShaderProperty:
+    case Kind::Inflated: return r.currentName;  // never resolved offline (checked at startup only)
   }
   return {};
 }
@@ -197,34 +257,46 @@ int check_mods(const std::filesystem::path& dir, const Resolution& resolution) {
   int off = 0;
   bool unreadable = false;
   for (const std::filesystem::path& dll : dlls) {
-    if (!exports(dll, "pgmod_info")) continue;  // not a mod
-    HMODULE module = LoadLibraryExW(dll.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-    const auto info = module ? reinterpret_cast<PgModInfoFn>(GetProcAddress(module, "pgmod_info")) : nullptr;
-    const PgModInfo* mod = info ? info() : nullptr;
+    const std::string newInfo = std::string(pm::modexports::kPrefix) + "info", oldInfo = std::string(pm::modexports::kOldPrefix) + "info";
+    if (!exports(dll, newInfo.c_str()) && !exports(dll, oldInfo.c_str())) continue;  // not a mod
+    HMODULE module = pm::dll::load_mod(dll.c_str(), LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+    const auto lookup = [&](const char* full) { return reinterpret_cast<void*>(GetProcAddress(module, full)); };
+    const auto info = module ? reinterpret_cast<PmModInfoFn>(pm::modexports::find(lookup, "info").address) : nullptr;
+    const PmModInfo* mod = info ? info() : nullptr;
     if (!mod || !mod->id) {
       std::fprintf(stderr, "gamecheck: cannot load the mod %s\n", utf8(dll).c_str());
       unreadable = true;
       continue;
     }
-    if (!pg_api_compatible(PGMOD_API_VERSION, mod->apiVersion)) {
+    if (!pm_api_compatible(PMMOD_API_VERSION, mod->apiVersion)) {
       std::printf("would not load %s (contract %s)\n", mod->id, contract(mod->apiVersion).c_str());
       ++off;
       continue;
     }
-    // A mod without pgmod_requires requires no game entry. One that requires an export is never
-    // started: the host gives exports to its own code only.
+    // A mod without pmmod_requires requires no game entry. One that requires an export or a native site
+    // is never started: the host gives those to its own code only.
     std::string lacking;
-    if (const auto listRequired = reinterpret_cast<PgModRequiresFn>(GetProcAddress(module, "pgmod_requires"))) {
+    if (const auto listRequired = reinterpret_cast<PmModRequiresFn>(pm::modexports::find(lookup, "requires").address)) {
       const char* const* keys = nullptr;
       const size_t n = listRequired(&keys);
       for (size_t i = 0; keys && i < n; ++i) {
         const Result* r = keys[i] ? resolution.find(keys[i]) : nullptr;
-        if (keys[i] && (!r || r->desc->kind == Kind::Export || (r->status != Status::Resolved && !checked_elsewhere(*r))))
+        if (keys[i] && (!r || r->desc->kind == Kind::Export || r->desc->kind == Kind::NativeSite ||
+                        (r->status != Status::Resolved && !checked_elsewhere(*r))))
           lacking += (lacking.empty() ? "" : ", ") + std::string(keys[i]);
       }
     }
     if (!lacking.empty()) {
       std::printf("would switch off %s: %s\n", mod->id, lacking.c_str());
+      ++off;
+    }
+    // The host keeps off a DLL that records voice when its manifest does not say so: the player agreed on the manifest's word.
+    pm::modlist::Manifest manifest;
+    std::string text, why;
+    const std::filesystem::path beside = dll.parent_path() / L"manifest.json";
+    if ((mod->flags & PM_MOD_RECORDS_VOICE) && pm::modlist::read_manifest_file(beside, text, why) &&
+        pm::modlist::parse_manifest_json(text, manifest, why) && !manifest.recordsVoice) {
+      std::printf("would switch off %s: it records voice, and its manifest does not say so\n", mod->id);
       ++off;
     }
   }
@@ -255,6 +327,104 @@ bool write_scene_entries(const std::filesystem::path& path, const Resolution& re
   return true;
 }
 
+// A resolved entry's number for --expect: an RVA, an offset or an enum value. False for a kind
+// that has none.
+bool number_of(const Result& r, uint64_t& out) {
+  switch (r.desc->kind) {
+    case Kind::Method:
+    case Kind::Code:
+    case Kind::Export:
+    case Kind::NativeSite: out = r.rva; return true;
+    case Kind::Field: out = r.offset; return true;
+    case Kind::EnumValue: out = static_cast<uint64_t>(r.value); return true;
+    default: return false;
+  }
+}
+
+// Checks the expectation files against the resolution. The number of keys that differ, or -1 when a
+// file cannot be read, a line is malformed, a key is not in the map or has no number (reported).
+int check_expectations(const std::vector<std::filesystem::path>& files, const Resolution& resolution) {
+  int different = 0;
+  bool unreadable = false;
+  for (const std::filesystem::path& file : files) {
+    std::ifstream in(file);
+    if (!in) {
+      std::fprintf(stderr, "gamecheck: cannot read %s\n", utf8(file).c_str());
+      return -1;
+    }
+    std::string line;
+    for (int number = 1; std::getline(in, line); ++number) {
+      std::istringstream fields(line);
+      std::string key, hex, extra;
+      if (!(fields >> key)) continue;  // a blank line
+      uint64_t expected = 0;
+      bool formed = (fields >> hex) && !(fields >> extra) && hex.size() > 2 && hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X');
+      if (formed) {  // all of it must be hex digits that fit 64 bits
+        const auto parsed = std::from_chars(hex.data() + 2, hex.data() + hex.size(), expected, 16);
+        formed = parsed.ec == std::errc() && parsed.ptr == hex.data() + hex.size();
+      }
+      if (!formed) {
+        std::fprintf(stderr, "gamecheck: %s:%d: expected \"<key> <hex>\"\n", utf8(file).c_str(), number);
+        unreadable = true;
+        continue;
+      }
+      const Result* r = resolution.find(key.c_str());
+      uint64_t actual = 0;
+      if (!r || !number_of(*r, actual)) {
+        std::fprintf(stderr, "gamecheck: %s:%d: %s is %s\n", utf8(file).c_str(), number, key.c_str(),
+                     r ? "an entry with no number to expect" : "not a map entry");
+        unreadable = true;
+        continue;
+      }
+      if (r->status != Status::Resolved) {
+        std::printf("EXPECT %s: map does not resolve != expected 0x%llX\n", key.c_str(),
+                    static_cast<unsigned long long>(expected));
+        ++different;
+      } else if (actual != expected) {
+        std::printf("EXPECT %s: map 0x%llX != expected 0x%llX\n", key.c_str(), static_cast<unsigned long long>(actual),
+                    static_cast<unsigned long long>(expected));
+        ++different;
+      }
+    }
+  }
+  return unreadable ? -1 : different;
+}
+
+// Writes `text` to `path`. False, with the reason printed and nothing left behind, when it cannot.
+bool write_text(const std::filesystem::path& path, const std::string& text) {
+  std::FILE* out = nullptr;
+  if (_wfopen_s(&out, path.c_str(), L"wb") != 0 || !out) {
+    std::fprintf(stderr, "gamecheck: cannot write %s\n", utf8(path).c_str());
+    return false;
+  }
+  const bool written = std::fwrite(text.data(), 1, text.size(), out) == text.size();
+  if (std::fclose(out) == 0 && written) return true;
+  std::error_code ignored;
+  std::filesystem::remove(path, ignored);
+  std::fprintf(stderr, "gamecheck: cannot write %s\n", utf8(path).c_str());
+  return false;
+}
+
+// This build's record, from the two libraries as they were checked. 2 when one cannot be hashed or the file written.
+int write_build_record(const Args& args) {
+  if (const pm::engine::Versions versions = pm::engine::read(args.gameData); !pm::engine::known(versions)) {
+    std::fprintf(stderr, "gamecheck: no record: %s\n", pm::engine::refusal(versions).c_str());
+    return 2;
+  }
+  char gameAssembly[65], unityPlayer[65];
+  if (!pm::build::sha256_file(args.image.c_str(), gameAssembly) || !pm::build::sha256_file(args.unityPlayer.c_str(), unityPlayer)) {
+    std::fprintf(stderr, "gamecheck: cannot read %s or %s\n", utf8(args.image).c_str(), utf8(args.unityPlayer).c_str());
+    return 2;
+  }
+  const pm::build::Record record{gameAssembly, unityPlayer, map_digest(pm::map::kAllEntries)};
+  std::error_code error;
+  std::filesystem::create_directories(args.recordFolder, error);
+  const std::string name = pm::build::record_file_name(record);
+  if (!write_text(args.recordFolder / pm::text::widen(name), pm::build::write_record(record))) return 2;
+  std::printf("RECORD %s\n", name.c_str());
+  return 0;
+}
+
 // The check itself; wmain contains what it throws.
 int run(int argc, wchar_t** argv) {
   Args args;
@@ -262,6 +432,8 @@ int run(int argc, wchar_t** argv) {
     std::fputs(kUsage, stderr);
     return 2;
   }
+  if (!args.mapDigest.empty()) return write_text(args.mapDigest, map_digest(pm::map::kAllEntries) + "\n") ? 0 : 2;
+  if (!args.recordFolder.empty()) return write_build_record(args);
   // The previous build's addresses must not outlive a failed check: the RE scripts would read them.
   std::error_code removeError;
   if (!args.addresses.empty() && !std::filesystem::remove(args.addresses, removeError) && removeError) {
@@ -269,7 +441,7 @@ int run(int argc, wchar_t** argv) {
     return 2;
   }
 
-  const std::vector<std::string> assemblies = assemblies_of(pg::map::kAllEntries);
+  const std::vector<std::string> assemblies = assemblies_of(pm::map::kAllEntries);
   GameModel model;
   std::string error;
   size_t unparsed = 0;
@@ -288,6 +460,16 @@ int run(int argc, wchar_t** argv) {
     std::fprintf(stderr, "gamecheck: %s is not a readable PE32+ image\n", utf8(args.image).c_str());
     return 2;
   }
+  // The runtime takes a method's address from these tables, so an address the dump alone gives (a generic
+  // definition's) must not pass here and be missing in the game.
+  if (!args.noMethodTables) {
+    MethodTables tables;
+    if (!read_method_tables(bytes, assemblies, tables, error)) {
+      std::fprintf(stderr, "gamecheck: %s: %s\n", utf8(args.image).c_str(), error.c_str());
+      return 2;
+    }
+    apply_method_tables(tables, model);
+  }
 
   // UnityPlayer.dll, for the native sites. One given that cannot be read is unreadable input.
   std::vector<uint8_t> unityBytes;
@@ -301,7 +483,7 @@ int run(int argc, wchar_t** argv) {
     }
   }
 
-  const Resolution resolution = resolve(pg::map::kAllEntries, model, &image, {}, unity ? &*unity : nullptr);
+  const Resolution resolution = resolve(pm::map::kAllEntries, model, &image, {}, unity ? &*unity : nullptr);
   size_t counts[4] = {}, startupOnly = 0, inScene = 0;
   bool failed = false;  // a required entry that could be checked here did not resolve
   for (const Result& r : resolution.results) {
@@ -316,8 +498,38 @@ int run(int argc, wchar_t** argv) {
               resolution.results.size(), counts[static_cast<int>(Status::Resolved)],
               counts[static_cast<int>(Status::Missing)], counts[static_cast<int>(Status::Ambiguous)],
               counts[static_cast<int>(Status::Blocked)], startupOnly, inScene);
+  // Custom content numbers from one past the game's own ghost types and evidence, and names the game's
+  // ghosts by their values' names (sdk/runtime/content_ids.h): report what this build holds.
+  pm::content::GameEnums enums;
+  if (const std::string why = pm::content::read_game_enums(model, resolution, enums); !why.empty()) {
+    std::printf("CONTENT not read: %s\n", why.c_str());
+  } else {
+    std::printf("CONTENT GhostType %lld..%d, EvidenceType %lld..%d\n", static_cast<long long>(enums.lowestGhostType),
+                enums.firstGhostType - 1, static_cast<long long>(enums.lowestEvidence), enums.firstEvidence - 1);
+    for (const std::string& name : enums.unusable) std::printf("CONTENT no id for the value %s\n", name.c_str());
+  }
+  // The host's steering needs entries no mod names (host/steering.h): say whether this build gives them.
+  std::string steeringLacks;
+  for (const EntryDesc* d : pm::map::kSteeringEntries) {
+    const Result* r = resolution.find(d->key);
+    if (!r || !pm::map::steering_entry_usable(*d, r->status == Status::Resolved, r->rva != 0))
+      steeringLacks += (steeringLacks.empty() ? "" : ", ") + std::string(d->key);
+  }
+  if (steeringLacks.empty()) std::printf("HOST steering available\n");
+  else std::printf("HOST steering unavailable: %s\n", steeringLacks.c_str());
+  if (!args.gameData.empty()) {
+    const pm::engine::Versions versions = pm::engine::read(args.gameData);
+    if (pm::engine::known(versions)) {
+      std::printf("ENGINE %s, metadata %d\n", versions.engine.c_str(), versions.metadata);
+    } else {
+      std::printf("ENGINE refused: %s\n", pm::engine::refusal(versions).c_str());
+      failed = true;
+    }
+  }
   const int switchedOff = args.mods.empty() ? 0 : check_mods(args.mods, resolution);
   if (switchedOff < 0) return 2;
+  const int expectDifferent = args.expect.empty() ? 0 : check_expectations(args.expect, resolution);
+  if (expectDifferent < 0) return 2;
 
   if (!args.sceneEntries.empty() && !write_scene_entries(args.sceneEntries, resolution)) return 2;
   if (!args.addresses.empty()) {
@@ -339,7 +551,7 @@ int run(int argc, wchar_t** argv) {
       return 2;
     }
   }
-  return !failed && switchedOff == 0 ? 0 : 1;
+  return !failed && switchedOff == 0 && expectDifferent == 0 ? 0 : 1;
 }
 
 }  // namespace

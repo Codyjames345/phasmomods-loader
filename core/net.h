@@ -5,7 +5,7 @@
 
 // A mod's messages over the game's own Photon room connection, on the mod's own channel of the
 // host's event (host/net.cpp). Main thread.
-namespace pg::net {
+namespace pm::net {
 
 enum class To { Others, Master, Actor };
 
@@ -16,4 +16,4 @@ void set_handler(Handler handler);
 
 bool send(const uint8_t* data, size_t size, To to, bool reliable, int actor = 0);
 
-}  // namespace pg::net
+}  // namespace pm::net

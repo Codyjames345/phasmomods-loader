@@ -8,7 +8,7 @@
 // over, launches it at their chest and watches it fly; a hit tells that player's client, which takes the
 // sanity off its own player. With nobody in sight it throws nothing. In a hunt the throws the game makes
 // fly at the hunt's target instead, and only while it sees them within range. Main thread.
-namespace pg::custom::lithobolia {
+namespace pm::custom::lithobolia {
 
 bool resolve();
 // The host: the ghost is about to throw `prop` (a PhotonObjectInteract); true when the Lithobolia
@@ -26,4 +26,4 @@ void tick(void* ghost, int type);
 void receive(int sender, const uint8_t* data, size_t size);
 void reset();
 
-}  // namespace pg::custom::lithobolia
+}  // namespace pm::custom::lithobolia

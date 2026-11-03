@@ -1,5 +1,5 @@
 // Every managed object the host and the mods keep between frames must be an il2cpp::Held (see
-// core/il2cpp.h): the GC does not scan this code's memory. This test reads the sources and fails on a
+// host/il2cpp.h): the GC does not scan this code's memory. This test reads the sources and fails on a
 // raw void* (or std::vector<void*>) declared at namespace or struct scope, the places that outlive a
 // call. Pointers that are not managed objects (code addresses, views of runtime memory read in one
 // call) are listed in kNotObjects with why.
@@ -25,38 +25,23 @@ struct Exempt {
   const char* why;
 };
 const Exempt kNotObjects[] = {
-    {"core/il2cpp.h", "ex", "the layout of the runtime's exception wrapper"},
-    {"core/il2cpp.h", "klass", "the layout of a managed object's header"},
-    {"core/il2cpp.h", "monitor", "the layout of a managed object's header"},
-    {"core/il2cpp.h", "bounds", "the layout of a managed array"},
-    {"core/il2cpp.h", "object_", "Held's own storage, kept with its handle"},
+    {"host/il2cpp.h", "klass", "the layout of a managed object's header"},
+    {"host/il2cpp.h", "monitor", "the layout of a managed object's header"},
+    {"host/il2cpp.h", "bounds", "the layout of a managed array"},
+    {"host/il2cpp.h", "object_", "Held's own storage, kept with its handle"},
     {"core/mod_api.h", "gameAssembly", "a module handle in the host's C interface"},
     {"core/mod_api.h", "unityPlayer", "a module handle in the host's C interface"},
     {"core/mod_api.h", "klass", "a game entry's Il2CppClass*, runtime metadata"},
     {"core/mod_api.h", "code", "a game entry's code address"},
     {"core/mod_api.h", "field", "a game entry's FieldInfo*, runtime metadata"},
+    {"core/mod_api.h", "user", "a content definition's context for its callbacks, the mod's own memory"},
     {"host/game_map.cpp", "twins", "a resolved method's twins' code addresses"},
-    {"core/il2cpp.cpp", "g_thread", "the runtime's record of the attached worker thread, kept by the runtime"},
-    {"core/game.cpp", "handlerLateUpdate", "a method's code address, hooked"},
-    {"core/game.cpp", "changeState", "a method's code address, hooked"},
-    {"core/game.cpp", "normalInteraction", "a method's code address"},
-    {"core/game.cpp", "twinInteraction", "a method's code address"},
-    {"core/game.cpp", "tryInteract", "a method's code address, hooked"},
-    {"core/game.cpp", "randomRangeInt", "a method's code address, hooked"},
+    {"host/il2cpp.cpp", "g_thread", "the runtime's record of the attached worker thread, kept by the runtime"},
     {"host/hooks.cpp", "target", "a hooked function's code address"},
+    {"core/mod_exports.h", "address", "a mod DLL's exported function, a code address"},
     {"host/hooks.cpp", "at", "a hooked function's or a relay's code address"},
     {"host/hooks.cpp", "detour", "a detour's code address"},
-    {"host/net.cpp", "onEvent", "a method's code address, hooked"},
-    {"mods/playable_ghost/equipment.cpp", "addLoadout", "a method's code address, hooked"},
-    {"mods/playable_ghost/equipment.cpp", "addItem", "a method's code address, hooked"},
-    {"mods/playable_ghost/senses.cpp", "unmute", "a method's code address, hooked"},
-    {"mods/playable_ghost/marks.cpp", "noise", "the layout of GhostHearing's sound entry, read in one call"},
-    {"mods/playable_ghost/round.cpp", "sender", "the layout of PhotonMessageInfo, read in one call"},
-    {"mods/playable_ghost/round.cpp", "photonView", "the layout of PhotonMessageInfo, read in one call"},
-    {"mods/playable_ghost/journal.cpp", "openCloseJournal", "a method's code address, hooked"},
-    {"mods/playable_ghost/leave.cpp", "pauseLeave", "a method's code address, hooked"},
-    {"mods/playable_ghost/leave.cpp", "pauseQuit", "a method's code address, hooked"},
-    {"mods/playable_ghost/leave.cpp", "shutdown", "GameAssembly's il2cpp_shutdown export, hooked"},
+    {"mods/custom_ghosts/draugr_rule.h", "holder", "a survey's view of who carries a thing, made and read in one call"},
 };
 
 struct Hit {
@@ -204,7 +189,7 @@ const char* text = "void* inString;";
 
 int main() {
   scan_catches_known_cases();
-  const fs::path root = PG_SOURCE_DIR;
+  const fs::path root = PM_SOURCE_DIR;
   std::vector<Hit> hits;
   for (const char* dir : {"core", "host", "mods/playable_ghost", "mods/custom_ghosts", "mods/spectral_flame",
                           "mods/ghost_tells"})

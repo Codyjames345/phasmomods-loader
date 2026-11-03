@@ -1,0 +1,12 @@
+{
+  "id": "example.ghost",
+  "name": "Example Ghost",
+  "author": "Example",
+  "version": "1.0.0",
+  "description": "The SDK's worked example (sdk/guides/adding-a-ghost.md): the Knell from Custom Ghosts, as a mod of its own",
+  "dll": "ExampleGhost.dll",
+  "website": "",
+  "recordsVoice": false,
+  "dependencies": [{ "id": "phasmomods.spectral-flame", "minimumVersion": "1.0.0", "required": true }],
+  "incompatibilities": []
+}

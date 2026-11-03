@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace pg::host {
+namespace pm::host {
 
 // The protections of code this process may read: executable and readable. An execute-only page
 // (PAGE_EXECUTE), a NOACCESS page and a guard page are not.
@@ -25,4 +25,4 @@ inline bool readable_code(const void* at, size_t size) {
   return true;
 }
 
-}  // namespace pg::host
+}  // namespace pm::host

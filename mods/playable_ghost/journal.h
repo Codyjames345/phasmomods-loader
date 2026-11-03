@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "ghostbook.h"
-#include "il2cpp.h"
+#include "held.h"
 
 // The ghost player keeps the game's own journal. It hangs off their investigator's networked body
 // (PCPlayer/NetworkedJournal: the 3D book Journal_anim, its world-space pages canvas
@@ -28,28 +28,27 @@
 // evidence tab is view only, and the pause menu's Leave and Quit are handled by
 // src/leave.cpp. While open, the book is held where the game holds an investigator's. Main thread
 // only.
-namespace pg::journal {
+namespace pm::journal {
 
 struct GhostButton {
   int type = -1;         // GhostType
-  il2cpp::Held rect;     // the button's transform, for hit tests
-  il2cpp::Held ticked;   // Image shown when chosen (ThreeStateButton.tickedImage)
-  il2cpp::Held crossed;  // Image shown when crossed out (ThreeStateButton.crossedOutImage)
-  il2cpp::Held button;   // its UnityEngine.UI.Button (the journal's hover highlight)
+  api::Held rect;     // the button's transform, for hit tests
+  api::Held ticked;   // Image shown when chosen (ThreeStateButton.tickedImage)
+  api::Held crossed;  // Image shown when crossed out (ThreeStateButton.crossedOutImage)
+  api::Held button;   // its UnityEngine.UI.Button (the journal's hover highlight)
 };
 
 // The evidence spread taken over by the mod. The left (evidence) page's contents are hidden and
 // `page` covers it. The right page is the game's ghost page, whose buttons the mod may mark.
 struct Spread {
-  il2cpp::Held page;         // an empty page over the evidence page (RectTransform)
-  il2cpp::Held title;        // the ghost page's title text (transform), to copy for headings
-  il2cpp::Held description;  // its "We've decided it's a:" text (transform), to copy for body text
-  il2cpp::Held ghostTitle;   // the ghost page's heading, for the mod's text (TextMeshProUGUI)
-  il2cpp::Held ghostLine;    // the line under it, for the mod's text (TextMeshProUGUI)
+  api::Held page;         // an empty page over the evidence page (RectTransform)
+  api::Held title;        // the ghost page's title text (transform), to copy for headings
+  api::Held description;  // its "We've decided it's a:" text (transform), to copy for body text
+  api::Held ghostTitle;   // the ghost page's heading, for the mod's text (TextMeshProUGUI)
+  api::Held ghostLine;    // the line under it, for the mod's text (TextMeshProUGUI)
   std::vector<GhostButton> ghosts;
 };
 
-bool resolve();
 bool create_hooks();  // before hooks::enable_all
 
 void keep(void* player);  // the investigator's Player, as it is parked out of play
@@ -89,4 +88,4 @@ void hover(const GhostButton* b);
 // switched off so the mod's own text stays. Returns the TextMeshProUGUI component.
 void* copy_text(void* sourceTransform, void* parent);
 
-}  // namespace pg::journal
+}  // namespace pm::journal

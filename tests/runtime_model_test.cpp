@@ -11,16 +11,19 @@
 
 #include "check.h"
 #include "dump_model.h"
+#include "resolver.h"
 #include "runtime_model.h"
 
-using namespace pg::sdk;
+using namespace pm::sdk;
 
 namespace {
 
 // Il2CppTypeEnum values and metadata flags the model reads.
 constexpr int kBool = 0x02, kI1 = 0x04, kU1 = 0x05, kI4 = 0x08, kR4 = 0x0C, kString = 0x0E, kValueType = 0x11,
-              kClass = 0x12, kGenericInst = 0x15;
+              kClass = 0x12, kVar = 0x13, kGenericInst = 0x15, kSzArray = 0x1D;
 constexpr int kFieldStatic = 0x10, kFieldLiteral = 0x40;
+// FieldAccessMask values.
+constexpr int kPrivate = 1, kPrivateProtected = 2, kInternal = 3, kProtected = 4, kProtectedInternal = 5, kPublic = 6;
 constexpr uint32_t kMethodStatic = 0x10;
 
 struct FakeClass;
@@ -55,6 +58,9 @@ struct FakeClass {
   const FakeType* enumBase = nullptr;
   std::vector<FakeField> fields;
   std::vector<FakeMethod> methods;
+  FakeClass* parent = nullptr;          // null: System.Object's place, which the model leaves out
+  std::vector<FakeClass*> interfaces;
+  bool isInterface = false;
 };
 
 struct FakeImage {
@@ -106,6 +112,12 @@ RuntimeApi fake_api() {
   api.class_is_valuetype = [](const void* c) { return as<FakeClass>(c)->isValueType; };
   api.class_enum_basetype = [](void* c) { return static_cast<const void*>(as<FakeClass>(c)->enumBase); };
   api.class_from_type = [](const void* t) { return static_cast<void*>(as<FakeType>(t)->klass); };
+  api.class_get_parent = [](void* c) { return static_cast<void*>(as<FakeClass>(c)->parent); };
+  api.class_is_interface = [](const void* c) { return as<FakeClass>(c)->isInterface; };
+  api.class_get_interfaces = [](void* c, void** iter) {
+    FakeClass** i = next(as<FakeClass>(c)->interfaces, iter);
+    return static_cast<void*>(i ? *i : nullptr);
+  };
   api.class_get_fields = [](void* c, void** iter) { return static_cast<void*>(next(as<FakeClass>(c)->fields, iter)); };
   api.class_get_methods = [](void* c, void** iter) {
     return static_cast<const void*>(next(as<FakeClass>(c)->methods, iter));
@@ -263,6 +275,8 @@ void enumerates_types_methods_fields() {
   CHECK(m.types[pair].declaring == ghost && m.types[pair].isValueType && !m.types[pair].isEnum);
   CHECK(m.types[closure].declaring == holder && m.types[closure].ns == "Game");
   CHECK(m.types[state].isEnum && m.types[state].isValueType);
+  // A generic definition keeps its arity apart from its name ("Holder`1"); every other type has none.
+  CHECK(m.types[holder].genericParams == 1 && g.genericParams == 0 && m.types[closure].genericParams == 0);
 
   const ModelMethod* awake = method(g, "Awake");
   CHECK(awake && awake->rva == 0x1000 && !awake->isStatic && awake->ret == "void");
@@ -363,12 +377,25 @@ void bad_module_or_missing_assembly_fails() {
 struct Probe {
   FakeModule module;
   FakeClass probe, mode, cell;
+  FakeClass monoBehaviour{"UnityEngine", "MonoBehaviour"};  // Probe's parent, outside the model's images
+  // Bases outside the model's images: a generic interface (named with its arity, as the runtime names
+  // it) and UnityEngine.Object, which the dump writes as `object`.
+  FakeClass comparable{"System", "IComparable`1"};
+  FakeClass unityObject{"UnityEngine", "Object"};
+  FakeClass iprobe, inner, sensor, handle, oneFace;
+  // Generic definitions, whose methods IL2CPP gives no code (the code-gen module's method table holds 0):
+  // Box`1 with its nested Lid, Crate, a generic class whose name lost its arity (as the obfuscator leaves
+  // some), so only its base list shows its type parameter, and Bare, whose declaration shows none at all.
+  FakeClass box, lid, crate, bare;
   FakeType probeType{kClass, &probe, "Game.Probe"};
   FakeType probeRef{kClass, &probe, "Game.Probe&"};
   FakeType modeType{kValueType, &mode, "Game.Probe/Mode"};
   FakeType cellType{kValueType, &cell, "Game.Probe/Cell"};
   FakeType listType{kGenericInst, nullptr, "System.Collections.Generic.List<UnityEngine.Vector3>"};
   FakeType vector3{kValueType, nullptr, "UnityEngine.Vector3"};
+  FakeType typeParameter{kVar, nullptr, "T"};
+  FakeType parameterArray{kSzArray, nullptr, "T[]"};
+  FakeType modeArray{kSzArray, nullptr, "Game.Probe/Mode[]"};
   FakeImage image{"Assembly-CSharp.dll", {}};
   FakeAssembly assembly{&image};
   World world;
@@ -376,33 +403,60 @@ struct Probe {
   Probe() {
     const uintptr_t base = module.base();
     probe = {"Game", "Probe"};
+    probe.parent = &monoBehaviour;
+    iprobe = {"", "IProbe", &probe};
+    iprobe.isInterface = true;
+    inner = {"", "Inner", &probe};
+    sensor = {"", "Sensor", &probe};
+    sensor.parent = &inner;
+    sensor.interfaces = {&iprobe, &comparable};
+    oneFace = {"", "OneFace", &probe};
+    oneFace.interfaces = {&iprobe};
+    handle = {"", "Handle", &probe};
+    handle.parent = &unityObject;
     mode = {"", "Mode", &probe, true, true, &kSByte};
-    mode.fields = {{"value__", &kSByte, 0x10},
-                   {"off", &modeType, 0, kFieldStatic | kFieldLiteral, -1, 1},
-                   {"low", &modeType, 0, kFieldStatic | kFieldLiteral, 0, 1},
-                   {"high", &modeType, 0, kFieldStatic | kFieldLiteral, 5, 1}};
+    // The access bits (FieldAccessMask) are the parity dump's modifiers: 6 public, 1 private.
+    mode.fields = {{"value__", &kSByte, 0x10, kPublic},
+                   {"off", &modeType, 0, kFieldStatic | kFieldLiteral | kPublic, -1, 1},
+                   {"low", &modeType, 0, kFieldStatic | kFieldLiteral | kPublic, 0, 1},
+                   {"high", &modeType, 0, kFieldStatic | kFieldLiteral | kPublic, 5, 1}};
     cell = {"", "Cell", &probe, false, true};
-    cell.fields = {{"count", &kInt, 0x10}, {"owner", &probeType, 0x18}};
-    probe.fields = {{"awake", &kBoolean, 0x18},
-                    {"mode", &modeType, 0x19},
-                    {"path", &listType, 0x20},
-                    {"cell", &cellType, 0x28},
-                    {"instance", &probeType, 0x0, kFieldStatic},
-                    {"limit", &kInt, 0, kFieldStatic | kFieldLiteral, 50, 4},
-                    {"scale", &kFloat, 0, kFieldStatic | kFieldLiteral, 0x3727C5AC, 4},
-                    {"turn", &kFloat, 0, kFieldStatic | kFieldLiteral, 0x43B40000, 4},
-                    {"ready", &kBoolean, 0, kFieldStatic | kFieldLiteral, 1, 1},
-                    {"start", &modeType, 0, kFieldStatic | kFieldLiteral, 5, 1},
-                    {"letter", &kChar, 0, kFieldStatic | kFieldLiteral, 65, 2},
-                    {"big", &kLong, 0, kFieldStatic | kFieldLiteral, -5, 8},
-                    {"nothing", &probeType, 0, kFieldStatic | kFieldLiteral},
-                    {"tag", &kStringType, 0, kFieldStatic | kFieldLiteral}};
+    cell.fields = {{"count", &kInt, 0x10, kPublic}, {"owner", &probeType, 0x18, kPublic}};
+    probe.fields = {{"awake", &kBoolean, 0x18, kPublic},
+                    {"mode", &modeType, 0x19, kPrivate},
+                    {"path", &listType, 0x20, kPrivate},
+                    {"cell", &cellType, 0x28, kPrivate},
+                    {"shared", &kInt, 0x40, kInternal},
+                    {"family", &kInt, 0x44, kProtected},
+                    {"either", &kInt, 0x48, kProtectedInternal},
+                    {"both", &kInt, 0x4C, kPrivateProtected},
+                    {"instance", &probeType, 0x0, kFieldStatic | kPublic},
+                    {"limit", &kInt, 0, kFieldStatic | kFieldLiteral | kPrivate, 50, 4},
+                    {"scale", &kFloat, 0, kFieldStatic | kFieldLiteral | kPrivate, 0x3727C5AC, 4},
+                    {"turn", &kFloat, 0, kFieldStatic | kFieldLiteral | kPrivate, 0x43B40000, 4},
+                    {"ready", &kBoolean, 0, kFieldStatic | kFieldLiteral | kPrivate, 1, 1},
+                    {"start", &modeType, 0, kFieldStatic | kFieldLiteral | kPrivate, 5, 1},
+                    {"letter", &kChar, 0, kFieldStatic | kFieldLiteral | kPrivate, 65, 2},
+                    {"big", &kLong, 0, kFieldStatic | kFieldLiteral | kPrivate, -5, 8},
+                    {"nothing", &probeType, 0, kFieldStatic | kFieldLiteral | kPrivate},
+                    {"tag", &kStringType, 0, kFieldStatic | kFieldLiteral | kPublic}};
     probe.methods = {{base + 0x1200, "Find", &kBoolean, {&probeRef, &modeType}},
                      {base + 0x1300, "Pick", &modeType, {&vector3}, kMethodStatic},
+                     {0, "Index", &kInt, {&parameterArray}, kMethodStatic},  // a generic method
+                     {base + 0x1680, "Count", &kInt, {&modeArray}, kMethodStatic},
                      {0, "Wait", &kVoid, {&kInt}},
                      {base + 0x1400, ".ctor", &kVoid, {}},
                      {base + 0x1500, ".cctor", &kVoid, {}, kMethodStatic}};
-    image.classes = {&probe, &mode, &cell};
+    box = {"Game", "Box`1"};
+    box.methods = {{0, "Put", &kVoid, {&typeParameter}}, {0, "Clear", &kVoid, {}}};
+    lid = {"", "Lid", &box};
+    lid.methods = {{0, "Close", &kVoid, {}}};
+    crate = {"Game", "Crate"};
+    crate.interfaces = {&comparable};
+    crate.methods = {{0, "Open", &kVoid, {}}};
+    bare = {"Game", "Bare"};
+    bare.methods = {{0, "Shut", &kVoid, {}}};
+    image.classes = {&probe, &mode, &cell, &iprobe, &inner, &sensor, &oneFace, &handle, &box, &lid, &crate, &bare};
     world.assemblies = {&assembly};
     g_world = &world;
   }
@@ -429,17 +483,20 @@ void same_model(const GameModel& a, const GameModel& b) {
       continue;
     }
     const ModelType& tb = b.types[it->second];
-    CHECK(ta.isEnum == tb.isEnum && ta.isValueType == tb.isValueType);
+    CHECK(ta.isEnum == tb.isEnum && ta.isValueType == tb.isValueType && ta.isInterface == tb.isInterface);
+    CHECK(ta.genericParams == tb.genericParams);
     CHECK(ta.fields.size() == tb.fields.size());
     for (size_t f = 0; f < ta.fields.size() && f < tb.fields.size(); ++f) {
       const ModelField& fa = ta.fields[f];
       const ModelField& fb = tb.fields[f];
       const bool same = fa.name == fb.name && fa.type == fb.type && type_key(a, fa.typeIndex) == type_key(b, fb.typeIndex) &&
                         fa.offset == fb.offset && fa.isStatic == fb.isStatic && fa.hasLiteral == fb.hasLiteral &&
-                        fa.literal == fb.literal;
+                        fa.literal == fb.literal && fa.access == fb.access;
       CHECK(same);
       if (!same) std::printf("  field %s.%s differs\n", ta.name.c_str(), fa.name.c_str());
     }
+    CHECK(ta.bases == tb.bases);
+    if (ta.bases != tb.bases) std::printf("  bases of %s differ\n", ta.name.c_str());
     CHECK(ta.methods.size() == tb.methods.size());
     for (size_t k = 0; k < ta.methods.size() && k < tb.methods.size(); ++k) {
       const ModelMethod& ma = ta.methods[k];
@@ -462,11 +519,115 @@ void runtime_matches_dump() {
   GameModel dump;
   std::string error;
   size_t unparsed = 99;
-  const auto root = std::filesystem::path(PG_SOURCE_DIR) / "tests" / "fixtures" / "parity";
+  const auto root = std::filesystem::path(PM_SOURCE_DIR) / "tests" / "fixtures" / "parity";
   CHECK(load_dump(root, kCSharp, dump, error, &unparsed));
   CHECK(unparsed == 0);
-  CHECK(runtime.types.size() == 3);
+  CHECK(runtime.types.size() == 12);
+  // The code-gen module's table, by the fixture's method tokens: rows 0x6000001 upward. A row of 0 is a method
+  // with no code of its own, though the dump writes an address for all but Wait.
+  const MethodTables tables{{"Assembly-CSharp",
+                             {0x1200, 0x1300, 0, 0x1400, 0x1500, /* Index */ 0, 0x1680, /* Put */ 0,
+                              /* Close */ 0, /* Clear */ 0, /* Open */ 0, /* Shut */ 0}}};
+  CHECK(method(dump.types[find(dump, "Bare")], "Shut")->rva == 0x1A00);  // the dump alone cannot tell
+  // The dump writes "class Box", without its type parameter: the file's name, Box`1.cs, gives it.
+  CHECK(dump.types[find(dump, "Box")].genericParams == 1 && dump.types[find(dump, "Bare")].genericParams == 0);
+  apply_method_tables(tables, dump);
   same_model(runtime, dump);
+  // A generic definition's methods have no address in either model, though the dump writes one for each:
+  // a generic method, the methods of a generic class and of the class nested in it, and those of generic
+  // classes whose names lost their arity, one even with nothing in its declaration to show it. A plain
+  // method of an array of a model type keeps its own.
+  for (const GameModel* m : {&runtime, &dump}) {
+    const auto rva = [&](const char* type, const char* name) {
+      const int t = find(*m, type);
+      const ModelMethod* mm = t >= 0 ? method(m->types[t], name) : nullptr;
+      return mm ? mm->rva : ~uint64_t{0};
+    };
+    CHECK(rva("Probe", "Index") == 0 && rva("Box", "Put") == 0 && rva("Box", "Clear") == 0);
+    CHECK(rva("Lid", "Close") == 0 && rva("Crate", "Open") == 0 && rva("Bare", "Shut") == 0);
+    CHECK(rva("Probe", "Count") == 0x1680 && rva("Probe", "Pick") == 0x1300);
+  }
+  // And both read the risky cases as meant, not merely alike.
+  for (const GameModel* m : {&runtime, &dump}) {
+    const int sensor = find(*m, "Sensor"), handle = find(*m, "Handle"), iprobe = find(*m, "IProbe");
+    const int probeType = find(*m, "Probe");
+    CHECK(sensor >= 0 && handle >= 0 && iprobe >= 0 && probeType >= 0);
+    if (sensor < 0 || handle < 0 || iprobe < 0 || probeType < 0) continue;
+    CHECK((m->types[sensor].bases == std::vector<std::string>{"Inner", "IProbe", "IComparable"}));
+    CHECK((m->types[handle].bases == std::vector<std::string>{"Object"}));
+    CHECK((m->types[probeType].bases == std::vector<std::string>{"MonoBehaviour"}));
+    CHECK(m->types[iprobe].isInterface && !m->types[sensor].isInterface);
+    const ModelType& p = m->types[probeType];
+    const auto access = [&](const char* name) {
+      for (const ModelField& f : p.fields)
+        if (f.name == name) return f.access;
+      return Visibility::Any;
+    };
+    CHECK(access("shared") == Visibility::Internal && access("family") == Visibility::Protected);
+    CHECK(access("either") == Visibility::ProtectedInternal && access("both") == Visibility::PrivateProtected);
+    CHECK(access("awake") == Visibility::Public && access("mode") == Visibility::Private);
+  }
+  // An exact field list (kExactFields) judges both models alike: Probe declares eight instance fields,
+  // its statics and constants not among them, so the full list finds it and one short finds nothing.
+  static constexpr const char* kAll[] = {"bool", "Mode", "List<Vector3>", "Cell", "int", "int", "int", "int"};
+  static constexpr const char* kShort[] = {"bool", "Mode", "List<Vector3>", "Cell", "int", "int", "int"};
+  constexpr EntryDesc all{.key = "All", .flags = kExactFields, .assembly = "Assembly-CSharp", .ns = "Game",
+                          .fieldTypes = kAll};
+  constexpr EntryDesc oneShort{.key = "Short", .flags = kExactFields, .assembly = "Assembly-CSharp", .ns = "Game",
+                               .fieldTypes = kShort};
+  // kFieldOrder also reads the offsets: the list in memory order is found, the same types in another order are not.
+  static constexpr const char* kSwapped[] = {"Mode", "bool", "List<Vector3>", "Cell", "int", "int", "int", "int"};
+  constexpr EntryDesc inOrder{.key = "InOrder", .flags = kExactFields | kFieldOrder, .assembly = "Assembly-CSharp",
+                              .ns = "Game", .fieldTypes = kAll};
+  constexpr EntryDesc swapped{.key = "Swapped", .flags = kExactFields | kFieldOrder, .assembly = "Assembly-CSharp",
+                              .ns = "Game", .fieldTypes = kSwapped};
+  const EntryDesc* const exact[] = {&all, &oneShort, &inOrder, &swapped};
+  for (const GameModel* m : {&runtime, &dump}) {
+    const Resolution r = resolve(exact, *m, nullptr);
+    const Result* a = r.find("All");
+    const Result* s = r.find("Short");
+    CHECK(a && a->status == Status::Resolved && a->type == find(*m, "Probe"));
+    CHECK(s && s->status == Status::Missing);
+    const Result* o = r.find("InOrder");
+    const Result* w = r.find("Swapped");
+    CHECK(o && o->status == Status::Resolved && o->type == find(*m, "Probe"));
+    CHECK(w && w->status == Status::Missing);
+  }
+  // A type found as the one interface another declares reads both models' base lists alike, and a base no model
+  // type has (Sensor's IComparable) decides nothing in either.
+  constexpr EntryDesc owner{.key = "Owner", .name = "Probe", .assembly = "Assembly-CSharp", .ns = "Game"};
+  constexpr EntryDesc face{.key = "Face", .owner = "Owner", .name = "OneFace"};
+  constexpr EntryDesc declared{.key = "Declared", .owner = "Owner", .within = "Face"};
+  constexpr EntryDesc sensorType{.key = "SensorType", .owner = "Owner", .name = "Sensor"};
+  constexpr EntryDesc unknownBase{.key = "UnknownBase", .owner = "Owner", .within = "SensorType"};
+  // A generic instance's method, of a generic class and a generic method: both models find the definition and the
+  // type argument, and neither claims the instance, whose code only the running game has.
+  static constexpr const char* kT[] = {"T"};
+  static constexpr const char* kTArray[] = {"T[]"};
+  static constexpr const char* kModeArg[] = {"Mode"};
+  static constexpr const char* kNoArg[] = {"NoSuchType"};
+  constexpr EntryDesc boxType{.key = "BoxType", .name = "Box", .assembly = "Assembly-CSharp", .ns = "Game"};
+  constexpr EntryDesc ofClass{.key = "OfClass", .kind = Kind::Inflated, .owner = "BoxType", .name = "Put", .type = "void",
+                              .params = kT, .typeArgs = kModeArg};
+  constexpr EntryDesc ofMethod{.key = "OfMethod", .kind = Kind::Inflated, .flags = kStatic | kGenericMethod,
+                               .owner = "Owner", .name = "Index", .type = "int", .params = kTArray, .typeArgs = kModeArg};
+  constexpr EntryDesc noArg{.key = "NoArg", .kind = Kind::Inflated, .owner = "BoxType", .name = "Put", .params = kT,
+                            .typeArgs = kNoArg};
+  const EntryDesc* const shapes[] = {&owner, &face, &declared, &sensorType, &unknownBase, &boxType, &ofClass, &ofMethod, &noArg};
+  for (const GameModel* m : {&runtime, &dump}) {
+    const Resolution r = resolve(shapes, *m, nullptr);
+    const Result* d = r.find("Declared");
+    CHECK(d && d->status == Status::Resolved && d->type == find(*m, "IProbe"));
+    CHECK(r.find("UnknownBase")->status == Status::Missing);
+    for (const char* key : {"OfClass", "OfMethod"}) {
+      const Result* i = r.find(key);
+      CHECK(i && checked_at_startup(*i) && i->status != Status::Resolved);
+      CHECK(i && i->typeArgs == std::vector<int>{find(*m, "Mode")});
+      CHECK(i && i->member >= 0 && i->address == 0);
+    }
+    CHECK(r.find("OfClass")->type == find(*m, "Box") && r.find("OfMethod")->type == find(*m, "Probe"));
+    CHECK(!checked_at_startup(*r.find("NoArg")));
+  }
   // Both read a value only for an integer or enum constant: a char written as 65 stays 0.
   const int probeType = find(dump, "Probe");
   if (probeType < 0) return;

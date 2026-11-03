@@ -1,0 +1,27 @@
+// One raw site of each kind, and lines the scan must pass over. raw_scan_test reads this file as
+// if it were mods/example/kinds.cpp; the real scan never reads tests/.
+// 0x1400 in a comment is not a site, nor is il2cpp::cls( or MH_CreateHook.
+/* neither is 0x2000
+   in a block comment */
+int hex = 0x1400;
+int small = 0xFF;
+int low = 0x20u;
+unsigned long long wide = 0x1400ull;
+int sep = 0x1'0000;
+int suffixed = 0x290u;
+int mask = 0xFF00;  // pm:not-game-data: a colour mask
+int ഞതലസ = 1;
+void call() { il2cpp::cls("UnityEngine.CoreModule.dll", "UnityEngine", "Object"); p_il2cpp_thread_attach(); }
+using Pointer = il2cpp::Held;
+float read(void* o) { return il2cpp::field<float>(o, 8) + static_get(o); }
+void hook() { MH_CreateHook(a, b, &c); }
+const char* a = "FindObjectOfType";
+const char* b = "NameToLayer";
+const char* c = "Find";
+const char* d = "Finder";
+const char* e = "0x4000 is text";
+const char* raw = R"tag(
+0x5000 il2cpp::cls( stays inside the raw string
+)tag";
+// a comment continued by a backslash \
+   0x6000 il2cpp::cls(

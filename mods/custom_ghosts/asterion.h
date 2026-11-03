@@ -4,7 +4,7 @@
 // tracked through its hunts. It never closes a door; a closed door in its way stops it while it batters
 // it (the game's door slam noise, every client), then it forces the door open (Door.GhostForceDoor) and
 // jams it so nobody can close it again. Main thread.
-namespace pg::custom::asterion {
+namespace pm::custom::asterion {
 
 bool resolve();
 // Every frame on the host: ghost is the custom ghost's GhostAI (null for none), type its type.
@@ -13,4 +13,4 @@ void tick(void* ghost, int type);
 bool battering();
 void reset();
 
-}  // namespace pg::custom::asterion
+}  // namespace pm::custom::asterion

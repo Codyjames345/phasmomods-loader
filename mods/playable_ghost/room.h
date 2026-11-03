@@ -3,7 +3,7 @@
 #include "session.h"
 
 // Glue between the Photon room, the session and the in-contract control. Main thread.
-namespace pg::room {
+namespace pm::room {
 
 void init();  // after net::resolve
 void tick();  // once per frame
@@ -12,4 +12,4 @@ void teardown();
 bool ghost_controlled();
 int ghost_actor();  // the ghost player's actor, 0 for none
 
-}  // namespace pg::room
+}  // namespace pm::room

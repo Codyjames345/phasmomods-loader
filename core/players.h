@@ -1,29 +1,27 @@
 #pragma once
 
+#include "Player.h"
 #include "game.h"
-#include "il2cpp.h"
+#include "runtime.h"
 
 // The investigators in the contract as this client knows them: every networked Player in Network's
-// player spots (build 25811160 offsets, as everywhere they are read). Main thread.
-namespace pg::game {
-
-constexpr size_t kNetworkPlayerSpots = 0x38;  // Network: List<PlayerSpot>
-constexpr size_t kPlayerSpotPlayer = 0x38;    // PlayerSpot: networked Player
-constexpr size_t kPlayerIsDead = 0x28;        // Player: dead
+// player spots (phasmo::Network::playerSpots, phasmo::PlayerSpot::player), read through the game API.
+// Main thread.
+namespace pm::game {
 
 /** Visit each Player object that is still alive as a Unity object (dead investigators included). */
 template <class Visit>
 void each_player(Visit visit) {
   void* net = network();
-  auto* spots = net ? il2cpp::field<il2cpp::List*>(net, kNetworkPlayerSpots) : nullptr;
-  for (int i = 0; spots && spots->items && i < spots->size; ++i) {
-    void* spot = spots->items->data<void*>()[i];
-    void* player = spot ? il2cpp::field<void*>(spot, kPlayerSpotPlayer) : nullptr;
+  const api::List spots{net ? phasmo::Network::playerSpots.get(net) : nullptr};
+  for (size_t i = 0; i < spots.size(); ++i) {
+    void* spot = spots[i];
+    void* player = spot ? phasmo::PlayerSpot::player.get(spot) : nullptr;
     if (player && alive(player)) visit(player);
   }
 }
 
-/** Whether a Player is a living investigator. */
-inline bool living(void* player) { return player && alive(player) && !il2cpp::field<bool>(player, kPlayerIsDead); }
+/** Whether a Player is a living investigator (phasmo::Player::isDead). */
+inline bool living(void* player) { return player && alive(player) && !phasmo::Player::isDead.get(player); }
 
-}  // namespace pg::game
+}  // namespace pm::game

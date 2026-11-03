@@ -5,7 +5,7 @@
 // Which favourite-room candidate a click on the map picker lands in, kept free of game calls so it
 // can be tested offline. Each candidate carries its floor and the top-down (x, z) boxes of its room
 // colliders; the click is a world-space (x, z) point on the floor the map is showing.
-namespace pg::room_pick {
+namespace pm::room_pick {
 
 struct Box {
   float minX, minZ, maxX, maxZ;
@@ -35,4 +35,4 @@ inline int at(const std::vector<Room>& rooms, int floor, float x, float z) {
   return best;
 }
 
-}  // namespace pg::room_pick
+}  // namespace pm::room_pick
