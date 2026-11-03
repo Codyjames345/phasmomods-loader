@@ -22,7 +22,7 @@
 //   INPUT      seq:u16 dx:f32 dz:f32                              unreliable, ghost to master, 20 Hz
 //   TRIGGER    kind:u8 aim:f32x3 (unit view direction)            reliable, ghost to master
 //   STATUS     interact:u8 events:u8 abilities:u8 fuses:u8 restless:u8 flags:u8 more:u8 sanity:u8
-//              huntBelow:u8 type:u8 room:i16 identity:u8 trait:u8x2 mimicNext:u8
+//              huntBelow:u8 type:u8 room:i16 identity:u8 trait:u8x2 mimicNext:u8 huntSanity:u8
 //                                                                  unreliable, master to ghost, 5 Hz
 //   PICK_OFFER remainingMs:u32 fixedType:u8 rooms:u16 n:u8 types:u8[n]   reliable, master to ghost
 //   PICK       type:i8 room:i16 (-1 = not chosen yet)              reliable, ghost to master
@@ -37,9 +37,9 @@
 //   SENSE      n:u8 (kind:u8 x:f32 y:f32 z:f32)[n]                unreliable, master to ghost, 5 Hz
 //   ALERT      kind:u8 arg:u8 located:u8 x:f32 y:f32 z:f32 n:u8 text:u8[n]   reliable, master to ghost
 //   FORM       actor:i32 ms:u16                                   reliable, master to others: the ghost takes an investigator's form
-namespace pg::session {
+namespace pm::session {
 
-constexpr uint8_t kVersion = 8;
+constexpr uint8_t kVersion = 9;
 enum Type : uint8_t {
   kHello = 1,
   kAssign = 2,
@@ -88,11 +88,14 @@ constexpr uint8_t kUnknown = 0xFF;  // Status::sanity and huntBelow when the hos
 // chose: interact is the interaction charge as a fraction of the most that can be held (in 1/255; an
 // interaction with a rarely touched object costs more than one), events, abilities and fuses are
 // whole counts. restless is a fraction in 1/255 of the time without an action before the native AI
-// acts on its own again. sanity is the living investigators' average sanity in percent; the ghost
-// may hunt once it is at or below huntBelow (its type and the difficulty move that from 50). type
-// and room are the spawned ghost's GhostType and favourite-room index (kNoType and -1 before it
-// spawns). type is the type whose rules its AI follows (a Mimic's current copy; GhostType.None
-// for a custom ghost); identity is what the ghost is (the Mimic itself; a custom ghost's own type).
+// acts on its own again. sanity is the sanity in percent the HUD shows (set_sanity): what the hunt
+// check measures (the living investigators' average, or a Banshee's target's), or the ghost's one
+// target's (PmGhostDef.target); the ghost may hunt once what the hunt check measures (sanity,
+// or huntSanity when that is known) is at or below huntBelow (its type and the difficulty move that
+// from 50). type and room are the spawned ghost's GhostType and favourite-room index (kNoType and -1
+// before it spawns). type is the type whose rules its AI follows (a Mimic's current copy;
+// GhostType.None for a custom ghost); identity is what the ghost is (the Mimic itself; a custom
+// ghost's own type).
 struct Status {
   uint8_t interact = 0;
   uint8_t events = 0;
@@ -108,6 +111,7 @@ struct Status {
   uint8_t identity = 0xFF;  // kNoType
   uint8_t trait[2] = {0, 0};  // the type's own state (typestate.h), meaning by type
   uint8_t mimicNext = 0xFF;   // a Mimic: the type the ghost player chose to copy next (kNoType: the game's)
+  uint8_t huntSanity = kUnknown;  // what the hunt check measures, when sanity shows another player's
   bool operator==(const Status&) const = default;
 };
 // The type the ghost is named by: what it is (a custom ghost, the Mimic), else the type its AI follows.
@@ -120,7 +124,8 @@ inline uint8_t encode_charge(float charge, float maxCharges) {
 }
 inline int whole_charges(uint8_t encoded, int maxCharges) { return encoded * maxCharges / 255; }
 
-// kFocusSanity: sanity is the ghost's focused player's (the hunt check uses theirs), not the team's.
+// kFocusSanity: sanity is one player's, the ghost's target's: a Banshee's (the hunt check uses theirs)
+// or the controlled ghost's own target's (PmGhostDef.target), not the team's.
 // kNativeMove: the native AI moves the ghost instead of its player (src/tether.h); kDrawnHome and
 // kBlinded say why. kBound: the ghost may not leave its favourite room for now.
 enum StatusFlag : uint8_t {
@@ -136,7 +141,9 @@ enum StatusFlag : uint8_t {
 // What the vanilla gates allow right now (src/tether.h), and how the ghost may move. kFuseTurnOff and
 // kFuseTurnOn: what the fuse box action would do. kResting: the ghost holds still until it next
 // wanders. kRoamEdge: it has walked as far as this wander goes. kRestlessActing: the ghost player
-// has done nothing for long enough that the native AI acts on its own until they do.
+// has done nothing for long enough that the native AI acts on its own until they do. kCustomState:
+// trait[0] is the ghost's own state as its definition gives it (PmGhostDef.hudState), which its
+// hudLine turns into the HUD's line on the ghost player's client.
 enum StatusMore : uint8_t {
   kInteractAllowed = 1,
   kEventAllowed = 2,
@@ -145,7 +152,32 @@ enum StatusMore : uint8_t {
   kResting = 16,
   kRoamEdge = 32,
   kRestlessActing = 64,
+  kCustomState = 128,
 };
+
+// Fills the sanity the HUD shows, as insanities in percent (negative: unknown): `huntInsanity` is what
+// the hunt check measures (`gameFocused`: one player's, a Banshee's target), `targetInsanity` the
+// controlled ghost's own target's (PmGhostDef.target; negative for none). A target is shown as a
+// Banshee's is ("Your target's sanity"), and when the hunt check measures someone else huntSanity
+// carries that, so the HUD still says when the ghost may hunt.
+inline void set_sanity(Status& s, float huntInsanity, bool gameFocused, float targetInsanity) {
+  const auto percent = [](float insanity) {
+    const float sanity = 100.0f - insanity;
+    return static_cast<uint8_t>((sanity < 0 ? 0 : sanity > 100 ? 100 : sanity) + 0.5f);
+  };
+  s.sanity = s.huntSanity = kUnknown;
+  s.flags &= static_cast<uint8_t>(~kFocusSanity);
+  if (targetInsanity >= 0) {
+    s.sanity = percent(targetInsanity);
+    s.flags |= kFocusSanity;
+    if (huntInsanity >= 0) s.huntSanity = percent(huntInsanity);
+  } else if (huntInsanity >= 0) {
+    s.sanity = percent(huntInsanity);
+    if (gameFocused) s.flags |= kFocusSanity;
+  }
+}
+// The sanity the hunt check measures, as the HUD shows it.
+inline uint8_t hunt_sanity(const Status& s) { return s.huntSanity != kUnknown ? s.huntSanity : s.sanity; }
 
 // The ghost appears in an investigator's form (form.h) for `ms`.
 struct Form {
@@ -198,6 +230,9 @@ class Session {
   // Called every frame with the current Photon view; `actors` is the room's player list.
   void observe(int localActor, int masterActor, const std::vector<int>& actors, uint64_t now);
   void receive(int sender, const uint8_t* data, size_t size, uint64_t now);
+  // Forgets everything, as a new session has nothing: the mod stopped, and it can start again in the same room (a lobby's
+  // rules switch mods off and on there), where it hears who is who again within kAnnounceMs.
+  void forget() { *this = Session{}; }
 
   void set_volunteer(bool on);
   bool volunteer() const { return volunteer_; }
@@ -213,18 +248,15 @@ class Session {
   void start_round();  // master only, when a contract starts: counts the round for the rotation
   void end_round();    // master only, back in the lobby: the ghost player is drawn again
   bool in_round() const { return inRound_; }
+  // Every client, every frame: whether a contract is running here (round.cpp: the level exists). A client that becomes
+  // master while one runs takes over its round as it stands, so it draws nobody new until the contract ends.
+  void set_contract(bool running) { contract_ = running; }
 
   // kNobody or the ghost player's actor.
   int ghost_actor() const { return ghost_; }
   bool local_is_ghost() const { return ghost_ > 0 && ghost_ == local_; }
   bool local_is_master() const { return local_ != 0 && local_ == master_; }
   std::vector<int> volunteers() const;  // modded actors (including self) who volunteered
-  bool has_mod(int actor) const { return actor == local_ || peers_.count(actor) != 0; }
-  // Every player in the room has been heard from by this mod since they joined. A ghost player is
-  // only drawn while this holds: a client without the mod would neither hide the ghost player's
-  // body nor keep it out of the game's rules.
-  bool everyone_has_mod() const;
-
   // Ghost player side.
   void send_input(float dx, float dz);
   void send_trigger(int kind, const float aim[3]);
@@ -242,6 +274,12 @@ class Session {
   // Ghost player: every investigator's last guess, by actor, and the score sent at the end.
   const std::map<int, score::Guess>& guesses() const { return guesses_; }
   void clear_guesses() { guesses_.clear(); }
+  const std::vector<int>& actors() const { return actors_; }  // the room's players, as last observed
+  // Every frame of a contract: its ghost player is who the score belongs to. The score settles a few seconds
+  // after the end, and back in the lobby the rotation may already have named the next ghost player.
+  void in_contract() {
+    if (ghost_ > 0) contractGhost_ = ghost_;
+  }
   void send_score(const score::Tally& tally);
 
   // The Mimic's next copy. Host: the types it may copy, offered to the ghost player, and their pick.
@@ -297,10 +335,10 @@ class Session {
   int ghost_ = kNobody;
   Random random_ = [](int) { return 0; };
   bool inRound_ = false;
+  bool contract_ = false;  // a contract runs here (set_contract)
   bool volunteer_ = false;
   bool steppedOut_ = false;
   std::map<int, Peer> peers_;
-  std::set<int> heard_;  // actors heard from while in this room; kept through a contract's silent load
   // Actors whose last HELLO said they stepped out of their investigator; kept through silence, so a
   // quiet ghost player's body stays parked until their own HELLO or their leaving says otherwise.
   std::set<int> steppedOutPeers_;
@@ -319,6 +357,7 @@ class Session {
   std::vector<int> roomClaims_;
   uint64_t lockDeadline_ = 0;
   bool waitNotice_ = false;
+  int contractGhost_ = kNobody;          // the ghost player of the contract being played, or last played
   std::map<int, score::Guess> guesses_;  // ghost player: by investigator actor
   score::Guess guessSent_;
   int guessSentTo_ = kNobody;
@@ -335,4 +374,4 @@ class Session {
   std::vector<Outgoing> out_;
 };
 
-}  // namespace pg::session
+}  // namespace pm::session

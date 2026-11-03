@@ -5,26 +5,30 @@
 #include <cctype>
 #include <cstring>
 
-#include "game.h"
-#include "il2cpp.h"
+#include "Input.h"
+#include "Player.h"
+#include "runtime.h"
 
-namespace pg::bindings {
+namespace pm::bindings {
 namespace {
 
-// UnityEngine.InputSystem layouts (Unity.InputSystem in this build).
-constexpr size_t kActionId = 0x28;             // InputAction.m_Id
-constexpr size_t kActionMap = 0xC8;            // InputAction.m_ActionMap
-constexpr size_t kMapBindings = 0x30;          // InputActionMap.m_Bindings (InputBinding[])
-constexpr size_t kBindingSize = 0x58;          // sizeof(InputBinding)
-constexpr size_t kBindingName = 0x00;          // InputBinding.m_Name (composite part name)
-constexpr size_t kBindingPath = 0x10;          // InputBinding.m_Path
-constexpr size_t kBindingAction = 0x30;        // InputBinding.m_Action
-constexpr size_t kBindingOverridePath = 0x40;  // InputBinding.m_OverridePath
-
-std::string str(const il2cpp::String* s) {
-  char buf[128];
-  il2cpp::to_utf8(s, buf, sizeof buf);
-  return buf;
+// Visits each input action of the PC player's controls: the InputActionAsset of LocalPCPlayer.controls,
+// every action of each of its maps, with the map's and the action's names. Nothing for another kind of
+// player rig, or a destroyed one.
+template <class Visit>
+void each_action(void* localPlayer, Visit visit) {
+  if (!api::alive(localPlayer) || !phasmo::LocalPCPlayer::type.is(localPlayer)) return;
+  void* controls = phasmo::LocalPCPlayer::controls.get(localPlayer);
+  void* asset = controls ? phasmo::PCControls::actions.get(controls) : nullptr;
+  const api::RefArray maps{asset ? phasmo::InputActionAsset::m_ActionMaps.get(asset) : nullptr};
+  for (size_t i = 0; i < maps.size(); ++i) {
+    void* map = maps[i];
+    if (!map) continue;
+    const std::string mapName = api::to_utf8(phasmo::InputActionMap::m_Name.get(map));
+    const api::RefArray actions{phasmo::InputActionMap::m_Actions.get(map)};
+    for (size_t j = 0; j < actions.size(); ++j)
+      if (void* action = actions[j]) visit(action, mapName, api::to_utf8(phasmo::InputAction::m_Name.get(action)));
+  }
 }
 
 struct Named {
@@ -46,6 +50,8 @@ constexpr Named kNamed[] = {
     {"<Keyboard>/leftArrow", VK_LEFT, "Left"},     {"<Keyboard>/rightArrow", VK_RIGHT, "Right"},
 };
 
+}  // namespace
+
 Key key_for_path(const std::string& path) {
   for (const Named& n : kNamed)
     if (_stricmp(path.c_str(), n.control) == 0) return {n.vk, n.label};
@@ -63,28 +69,28 @@ Key key_for_path(const std::string& path) {
   return {};
 }
 
-}  // namespace
-
 Key for_action(void* localPlayer, const char* actionName, const char* part) {
   Key found;
-  game::for_each_input_action(localPlayer, [&](void* action, const char*, const char* name) {
-    if (found.vk || std::strcmp(name, actionName) != 0) return;
-    void* map = il2cpp::field<void*>(action, kActionMap);
-    auto* list = map ? il2cpp::field<il2cpp::Array*>(map, kMapBindings) : nullptr;
-    const std::string id = str(il2cpp::field<il2cpp::String*>(action, kActionId));
-    for (uintptr_t i = 0; list && i < list->max_length && !found.vk; ++i) {
-      const char* b = list->data<char>() + i * kBindingSize;
-      const std::string target = str(il2cpp::field<il2cpp::String*>(b, kBindingAction));  // name or ID
+  each_action(localPlayer, [&](void* action, const std::string&, const std::string& name) {
+    if (found.vk || name != actionName) return;
+    void* map = phasmo::InputAction::m_ActionMap.get(action);
+    // The map's bindings, structs whose size the runtime gives (ValueArray's stride).
+    const api::ValueArray list{map ? phasmo::InputActionMap::m_Bindings.get(map) : nullptr};
+    const std::string id = api::to_utf8(phasmo::InputAction::m_Id.get(action));
+    for (size_t i = 0; i < list.size() && !found.vk; ++i) {
+      void* b = list.at(i);
+      if (!b) break;
+      const std::string target = api::to_utf8(phasmo::InputBinding::m_Action.get(b));  // name or ID
       if (target != actionName && (id.empty() || target != id)) continue;
-      if (part && _stricmp(str(il2cpp::field<il2cpp::String*>(b, kBindingName)).c_str(), part) != 0) continue;
-      std::string path = str(il2cpp::field<il2cpp::String*>(b, kBindingOverridePath));
-      if (path.empty()) path = str(il2cpp::field<il2cpp::String*>(b, kBindingPath));
+      if (part && _stricmp(api::to_utf8(phasmo::InputBinding::m_Name.get(b)).c_str(), part) != 0) continue;
+      std::string path = api::to_utf8(phasmo::InputBinding::m_OverridePath.get(b));
+      if (path.empty()) path = api::to_utf8(phasmo::InputBinding::m_Path.get(b));
       found = key_for_path(path);  // the first keyboard/mouse binding wins
     }
   });
   return found;
 }
 
-bool down(const Key& key) { return key.vk && (GetAsyncKeyState(key.vk) & 0x8000) != 0; }
+bool down(const Key& key) { return key.vk && (GetAsyncKeyState(key.vk) & 0x8000) != 0; }  // pm:not-game-data: the key-down bit
 
-}  // namespace pg::bindings
+}  // namespace pm::bindings

@@ -1,18 +1,24 @@
 #include "mod_glue.h"
 
+#include <windows.h>
+
+#include <filesystem>
 #include <string>
+#include <system_error>
 
 #include "game_api.h"
 #include "hooks.h"
-#include "il2cpp.h"
+#include "managed_exception.h"
 #include "log.h"
 #include "net.h"
+#include "text_files.h"
+#include "text_table.h"
 
-namespace pg {
+namespace pm {
 namespace {
 
-const PgHostApi* g_host = nullptr;
-const PgModInfo* g_info = nullptr;
+const PmHostApi* g_host = nullptr;
+const PmModInfo* g_info = nullptr;
 std::string g_prefix;
 net::Handler g_handler = nullptr;
 
@@ -22,42 +28,63 @@ void receive(int32_t sender, const uint8_t* data, size_t size) {
   try {
     g_handler(sender, data, size);
   } catch (...) {
-    PG_LOG("net: exception while handling a message");
+    PM_LOG("net: exception while handling a message");
   }
+}
+
+// The mod's player-facing text (core/text_table.h), from beside this DLL's copy. Without it every text shows its key, and the
+// log says why.
+void load_text() {
+  HMODULE self = nullptr;
+  wchar_t path[MAX_PATH];
+  if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          reinterpret_cast<LPCWSTR>(&load_text), &self) ||
+      !GetModuleFileNameW(self, path, MAX_PATH)) {
+    PM_LOG("this DLL's path cannot be read, so its text cannot be found; its messages show their keys");
+    return;
+  }
+  i18n::table().on_missing([](const std::string& key) { PM_LOG("the mod's text has no %s", key.c_str()); });
+  std::string why;
+  const std::filesystem::path file = i18n::table_beside(path);
+  std::error_code error;
+  if (!i18n::table().load(file, why) && std::filesystem::exists(file.parent_path(), error))
+    PM_LOG("its text (%s) could not be read: %s; its messages show their keys", text::narrow(file.wstring()).c_str(), why.c_str());
 }
 
 }  // namespace
 
 namespace mod {
 
-bool bind(const PgHostApi* api, const PgModInfo* info) {
-  if (!api || !pg_api_compatible(api->version, PGMOD_API_VERSION) || !info) return false;
+bool bind(const PmHostApi* api, const PmModInfo* info) {
+  if (!api || !pm_api_compatible(api->version, PMMOD_API_VERSION) || !info) return false;
   g_host = api;
   g_info = info;
   g_prefix = std::string("[") + info->id + "] ";
   log::set_sink(api->log, g_prefix.c_str());
+  load_text();
   std::string missing;
   if (!api::bind(api, missing)) {
-    PG_LOG("game entries this game build lacks: %s", missing.c_str());
+    PM_LOG("game entries this game build lacks: %s", missing.c_str());
     return false;
   }
-  return il2cpp::resolve_exports(api->gameAssembly);
+  return true;
 }
 
-const PgHostApi& host() { return *g_host; }
-const PgModInfo& info() { return *g_info; }
+const PmHostApi& host() { return *g_host; }
+const PmModInfo& info() { return *g_info; }
 
-bool guarded_start(const char* name, bool& running, bool (*start)(const PgHostApi*), const PgHostApi* api) {
+bool guarded_start(const char* name, bool& running, bool (*start)(const PmHostApi*), const PmHostApi* api) {
   try {
     running = start(api);
   } catch (const Il2CppExceptionWrapper& e) {
-    il2cpp::log_exception((std::string(name) + " inactive: managed exception while starting").c_str(), e.ex);
+    if (g_host) g_host->log_exception((std::string(name) + " inactive: managed exception while starting").c_str(), e.ex);
+    else PM_LOG("%s inactive: managed exception while starting", name);
     running = false;
   } catch (...) {
-    PG_LOG("%s inactive: exception while starting", name);
+    PM_LOG("%s inactive: exception while starting", name);
     running = false;
   }
-  if (running) PG_LOG("%s active", name);
+  if (running) PM_LOG("%s active", name);
   return running;
 }
 
@@ -66,9 +93,10 @@ void guarded_tick(const bool& running, void (*tick)()) {
   try {
     tick();
   } catch (const Il2CppExceptionWrapper& e) {
-    il2cpp::log_exception("tick: managed exception caught at the frame boundary", e.ex);
+    if (g_host) g_host->log_exception("tick: managed exception caught at the frame boundary", e.ex);
+    else PM_LOG("tick: managed exception caught at the frame boundary");
   } catch (...) {
-    PG_LOG("tick: unknown exception caught at the frame boundary");
+    PM_LOG("tick: unknown exception caught at the frame boundary");
   }
 }
 
@@ -78,11 +106,17 @@ void guarded_stop(bool& running, void (*stop)()) {
   try {
     stop();
   } catch (...) {
-    PG_LOG("stop: exception while tearing down; the game keeps running without the mod");
+    PM_LOG("stop: exception while tearing down; the game keeps running without the mod");
   }
 }
 
 bool peer_has(int actor, const char* id) { return g_host && g_host->peer_has_mod(actor, id); }
+
+bool mod_started(const char* id) { return g_host && g_host->mod_started(id); }
+
+void show_message(const std::string& title, const std::string& body) {
+  if (g_host) g_host->show_message(title.c_str(), body.c_str());
+}
 
 }  // namespace mod
 
@@ -107,18 +141,18 @@ void set_handler(Handler handler) {
 
 bool send(const uint8_t* data, size_t size, To to, bool reliable, int actor) {
   if (!g_host) return false;
-  const int32_t target = to == To::Master ? PG_TO_MASTER : to == To::Actor ? PG_TO_ACTOR : PG_TO_OTHERS;
+  const int32_t target = to == To::Master ? PM_TO_MASTER : to == To::Actor ? PM_TO_ACTOR : PM_TO_OTHERS;
   return g_host->send(g_info->channel, data, size, target, reliable, actor);
 }
 
 }  // namespace net
-}  // namespace pg
+}  // namespace pm
 
 // The mod's required game entries, for the host before it starts the mod (core/mod_api.h). Nothing
 // thrown may leave it; should listing fail, the mod's own bind still refuses a missing entry.
-extern "C" __declspec(dllexport) size_t pgmod_requires(const char* const** keys) {
+extern "C" __declspec(dllexport) size_t pmmod_requires(const char* const** keys) {
   try {
-    return pg::api::used_required(keys);
+    return pm::api::used_required(keys);
   } catch (...) {
     *keys = nullptr;
     return 0;

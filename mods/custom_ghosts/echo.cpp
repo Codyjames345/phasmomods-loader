@@ -2,38 +2,45 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <map>
 #include <random>
 #include <vector>
 
+#include "Door.h"
+#include "GhostAI.h"
+#include "GhostInfo.h"
+#include "LevelController.h"
+#include "LevelRoom.h"
+#include "LightSwitch.h"
+#include "Photon.h"
+#include "Player.h"
+#include "PlayerVoice.h"
+#include "Props.h"
+#include "Sensor.h"
+#include "Transform.h"
+#include "UnityAudio.h"
+#include "UnityObject.h"
+#include "actors.h"
 #include "echo_rule.h"
 #include "game.h"
-#include "hooks.h"
-#include "il2cpp.h"
+#include "game_api.h"
+#include "held.h"
+#include "managed_exception.h"  // Il2CppExceptionWrapper: the C++ type a managed exception is thrown as
 #include "log.h"
 #include "mod_glue.h"
 #include "net.h"
+#include "runtime.h"
 #include "speed_rule.h"
 #include "voice.h"
 
-namespace pg::custom::echo {
+namespace pm::custom::echo {
 namespace {
 
-using il2cpp::bind;
-using il2cpp::Vector3;
+using phasmo::Vector3;
 
-// Build 25811160 (verified by the host at load); obfuscated names, so by offset.
-constexpr size_t kVoicePlayer = 0x20;          // PlayerVoice: its Player
-constexpr size_t kVoiceLocalTap = 0x70;        // PlayerVoice: the tap carrying the player's positional voice
-constexpr size_t kNetworkSpots = 0x38;         // Network: List<PlayerSpot>
-constexpr size_t kSpotPhotonPlayer = 0x18;     // PlayerSpot: Photon.Realtime.Player
-constexpr size_t kSpotPlayer = 0x38;           // PlayerSpot: networked Player
-constexpr size_t kPlayerDead = 0x28;           // Player: dead
-constexpr size_t kLevelGhostRoom = 0x38;       // LevelController: the room the ghost is in
-constexpr uintptr_t kTapReadRva = 0x4F5DF70;   // VivoxParticipantTap.DoAudioFilterRead (main thread, Vivox's coroutine)
-constexpr uintptr_t kTalkingRva = 0x8A9AC0;    // LevelRoom.ArePlayersTalkingInRoom(float)
 constexpr ULONGLONG kMapMs = 2000;             // how often taps are matched to players
 constexpr ULONGLONG kQuietMs = 60000;          // nobody heard near it this long: the Echo is dormant
 constexpr float kHearing = 10.0f;              // metres within which the Echo hears a voice
@@ -41,43 +48,25 @@ constexpr ULONGLONG kMinGapMs = 45000, kMaxGapMs = 90000;  // between the AI's w
 constexpr int kChunksPerFrame = 10;
 constexpr float kPitch = 0.96f;                // a shade low: almost, but not quite, their voice
 
-// The repeat (echo_rule.h). Ghidra decompiles of build 25811160, 2026-10-22.
-constexpr size_t kGhostInfo = 0x38;            // GhostAI: GhostInfo
-constexpr size_t kInfoFavouriteRoom = 0x70;    // GhostInfo: favourite LevelRoom
-constexpr size_t kSwitchRoom = 0xD0;           // LightSwitch: its LevelRoom
-constexpr size_t kRoomDoors = 0x28;            // LevelRoom: Door[] (the Yurei's ability picks from it)
-constexpr size_t kDoorInteract = 0x98;         // Door: its PhotonObjectInteract
-constexpr size_t kActivitySensor = 0x20;       // GhostActivity: the RangeSensor its interactions read (TryInteract pulses it)
-constexpr size_t kActivityBox = 0x60;          // GhostActivity: Vector3, that sensor's box half extents (Start sets them by map size)
-// The sensor's pulse, as TryInteract (0x2007470) runs it: RangeSensor.SetBoxShape(GhostActivity +0x60), then the
-// sensor's pulse through its class's vtable entry at +0x178 (method pointer, then MethodInfo at +0x180; the code
-// there, BasePulsableSensor.Pulse 0x3F31DB0 and its twin 0x3BCAAF0, completes any pending pulse and runs the
-// sensor's test). The test (RangeSensor 0x3E9D600) rebuilds the detections, then invokes the sensor's OnPulsed
-// delegate (+0x128) at once. GhostActivity.Start (0x2007150) adds the ghost's whole interaction to it (the
-// handler 0x200A860: the door chance, a light switch, a prop, or else ChangeState(3)) and nothing else to this
-// sensor; OnDestroy (0x2007060) removes it.
-constexpr uintptr_t kSetBoxShapeRva = 0x3E99F90;  // RangeSensor.SetBoxShape(Vector3): +0xF8 = 1 (box), +0x100 the extents
-constexpr size_t kPulseSlot = 0x178;           // Il2CppClass: the vtable entry TryInteract calls to pulse the sensor
-constexpr size_t kSensorOnPulsed = 0x128;      // RangeSensor: the OnPulsed delegate (add_OnPulsed 0x3EA0350)
-// LightSwitch.Use(bool on, bool prints, bool byGhost, bool counted): the RPC LightSwitch.UseLightSwitch sends
-// to every client for each use, so the host sees every one. A player's use (the interact handler 0x26DEC60)
-// clears every flag. The ghost's uses set byGhost; the switch's own sensor handler (0x26E4600) clears it but
-// sets counted, which adds a ghost interaction to LevelStats +0x9C. Neither is a player's.
-constexpr uintptr_t kSwitchUseRva = 0x26E5940;
-// Door.NetworkedGrabbedDoor(): the RPC Door.GrabbedDoor sends to every client when a player grabs an unlocked
-// door (its only callers are DragRigidbodyUse, the player's grab; ClothDoor's override calls it first).
-constexpr uintptr_t kDoorGrabbedRva = 0x264D150;
-// The ghost's own interactions with a given object, as the sensor's light-switch pick (0x2014DA0) and the
-// idle door chance (0x2007C60) start them: GhostAI.ChangeState(light, the switch's PhotonObjectInteract,
-// forced) and ChangeState(door, the door's PhotonObjectInteract). The light state (Enter 0x21899B0) switches
-// a lit switch off, and an unlit one on when forced or 1 in 2, through UseLightSwitch(true, true, false):
-// the game's prints and EMF. The door state (Enter 0x20D1920) moves an unlocked door through
-// Door.GhostOpenDoorEvent or GhostOpenDoorAnimated, its own pick. Both return the AI to idle. Door.GhostForceDoor
-// (0x264C3C0) is not the call: it starts the door's force coroutine directly, as the Yurei's ability does,
-// while the door state is the ghost's ordinary door interaction and picks the move as the game's own do. Neither
-// state sends the grab RPC below (the door's coroutines send ForceDropDoorNetworked and PlayDoorSlamNoise), so
-// a repeat is never noted as a player's use.
-constexpr int kStateLight = 4, kStateDoor = 5;  // GhostAI.State
+// The repeat (echo_rule.h). Ghidra decompiles of build 25811160, 2026-10-22; the map entries name each
+// call (sdk/map/GhostAI.h, Sensor.h, LightSwitch.h, Door.h).
+// The sensor's pulse, as TryInteract runs it: RangeSensor.SetBoxShape(GhostActivity.sensorBox), then the
+// sensor's pulse, whose code (BasePulsableSensor.Pulse) completes any pending pulse and runs the sensor's
+// test. The test rebuilds the detections, then invokes the sensor's OnPulsed delegate at once, to which
+// GhostActivity.Start adds the ghost's whole interaction and nothing else.
+// LightSwitch.Use is the RPC UseLightSwitch sends to every client for each use, so the host sees every one;
+// a player's use clears every flag, the ghost's set byGhost or counted. Door.NetworkedGrabbedDoor is the RPC
+// Door.GrabbedDoor sends to every client when a player grabs an unlocked door.
+// The ghost's own interactions with a given object, as the sensor's light-switch pick and the
+// idle door chance (GhostActivity.doorChance) start them: GhostAI.ChangeState(light, the switch's
+// PhotonObjectInteract, forced) and ChangeState(door, the door's PhotonObjectInteract). The light state
+// switches a lit switch off, and an unlit one on when forced or 1 in 2, through
+// UseLightSwitch(true, true, false): the game's prints and EMF. The door state moves an
+// unlocked door through Door.GhostOpenDoorEvent or GhostOpenDoorAnimated, its own pick. Both return the AI
+// to idle. Door.GhostForceDoor is not the call: it starts the door's force coroutine directly, as the
+// Yurei's ability does, while the door state is the ghost's ordinary door interaction and picks the move as
+// the game's own do. Neither state sends the grab RPC (the door's coroutines send ForceDropDoorNetworked and
+// PlayDoorSlamNoise), so a repeat is never noted as a player's use.
 
 // Messages on this mod's channel: 'C' 'G' version type, then:
 //   SPEAK  speaker:i32 source:i32 clip:u16 x:f32 y:f32 z:f32    (host to all: who speaks, who sends, where)
@@ -88,34 +77,6 @@ enum : uint8_t { kSpeak = 1, kChunk = 2, kHeard = 3 };
 constexpr ULONGLONG kHeardMs = 2000;           // how often each client reports whose phrases it holds
 constexpr ULONGLONG kHeardFreshMs = 5000;      // a report older than this no longer counts
 constexpr ULONGLONG kTapLiveMs = 500;          // a tap silent this long has stopped (death, leaving)
-
-struct Api {
-  il2cpp::Object* voiceType = nullptr;
-  il2cpp::Object* audioSourceType = nullptr;
-  il2cpp::Class* single = nullptr;
-  il2cpp::Array* (*findObjects)(il2cpp::Object*, const void*) = nullptr;
-  void* (*createClip)(il2cpp::String*, int, int, int, bool, const void*) = nullptr;
-  bool (*setData)(void*, il2cpp::Array*, int, const void*) = nullptr;
-  void (*setClip)(void*, void*, const void*) = nullptr;
-  void (*setSpatialBlend)(void*, float, const void*) = nullptr;
-  void (*setMinDistance)(void*, float, const void*) = nullptr;
-  void (*setMaxDistance)(void*, float, const void*) = nullptr;
-  void (*setPitch)(void*, float, const void*) = nullptr;
-  void (*play)(void*, const void*) = nullptr;
-  void (*destroyAfter)(void*, float, const void*) = nullptr;
-  bool (*talking)(void*, float, const void*) = nullptr;
-  il2cpp::Object* interactType = nullptr;  // PhotonObjectInteract, the object a ghost's interaction is given
-  void (*setBoxShape)(void*, Vector3, const void*) = nullptr;  // kSetBoxShapeRva
-  bool ok = false;
-} api;
-
-using TapRead_t = int (*)(void*, int, il2cpp::Array*, int, int, int, const void*);
-using SwitchUse_t = void (*)(void*, bool, bool, bool, bool, const void*);
-using DoorGrabbed_t = void (*)(void*, const void*);
-using ChangeState_t = void (*)(void*, int, void*, bool, const void*);
-TapRead_t g_tapRead = nullptr;
-SwitchUse_t g_switchUse = nullptr;
-DoorGrabbed_t g_doorGrabbed = nullptr;
 
 struct Pending {
   int speaker = 0, source = 0;
@@ -131,7 +92,7 @@ struct State {
   Holders holders;                              // host: who holds whose phrase (speed_rule.h)
   ULONGLONG nextHeard = 0;
   ULONGLONG nextMap = 0;
-  il2cpp::Held ghost;                           // the Echo (host)
+  api::Held ghost;                              // the Echo (host)
   ULONGLONG lastHeard = 0, nextWords = 0;
   Pending pending;                              // the last SPEAK, waiting for its audio
   voice::Assembler assembler;
@@ -139,41 +100,34 @@ struct State {
   uint16_t outgoingClip = 0;
   size_t outgoingNext = 0;
   uint16_t nextClip = 1;
-  Repeat<il2cpp::Held> repeat;                  // host: the switch or door its AI repeats next
+  Repeat<api::Held> repeat;                     // host: the switch or door its AI repeats next
 } g;
 
 std::mt19937 g_random{static_cast<unsigned>(GetTickCount64())};
 
-int actor_of_player(void* player) {
-  void* net = game::network();
-  auto* spots = net ? il2cpp::field<il2cpp::List*>(net, kNetworkSpots) : nullptr;
-  for (int i = 0; spots && spots->items && i < spots->size; ++i) {
-    void* spot = spots->items->data<void*>()[i];
-    if (spot && il2cpp::field<void*>(spot, kSpotPlayer) == player)
-      return game::actor_number(il2cpp::field<void*>(spot, kSpotPhotonPlayer));
-  }
-  return 0;
-}
-
-/** Match each voice tap to its player's actor; only players whose client runs this mod are kept. */
+/**
+ * Match each other player's voice tap to their actor. A contract only begins once every player's mods are confirmed
+ * (sdk/README.md, "The lobby's rules"), so every other player's client runs this mod and its player agreed to the notice.
+ */
 void map_taps() {
   g.tapActor.clear();
-  il2cpp::Array* voices = api.findObjects(api.voiceType, nullptr);
-  for (uintptr_t i = 0; voices && i < voices->max_length; ++i) {
-    void* v = voices->data<void*>()[i];
-    void* tap = v ? il2cpp::field<void*>(v, kVoiceLocalTap) : nullptr;
-    const int actor = tap ? actor_of_player(il2cpp::field<void*>(v, kVoicePlayer)) : 0;
-    if (actor && actor != game::local_actor() && mod::peer_has(actor, mod::info().id)) g.tapActor[tap] = actor;
+  const api::RefArray voices{phasmo::Object::FindObjectsOfType(phasmo::PlayerVoice::type.type_object())};
+  for (size_t i = 0; i < voices.size(); ++i) {
+    void* v = voices[i];
+    void* tap = v ? phasmo::PlayerVoice::globalTap.get(v) : nullptr;
+    const int actor = tap ? actor_of_player(phasmo::PlayerVoice::player.get(v)) : 0;
+    if (actor && actor != game::local_actor()) g.tapActor[tap] = actor;
   }
 }
 
-int detour_tap_read(void* tap, int tapId, il2cpp::Array* data, int frames, int channels, int rate, const void* method) {
-  hooks::Guard guard;
-  const int result = g_tapRead(tap, tapId, data, frames, channels, rate, method);
-  if (g.recording && data && result >= 0) {
+int detour_tap_read(api::Original<phasmo::VivoxParticipantTap::DoAudioFilterRead> original, void* tap, int32_t tapId,
+                    void* data, int32_t frames, int32_t channels, int32_t rate) {
+  const int result = original(tap, tapId, data, frames, channels, rate);
+  if (g.recording && data && result >= 0 && frames > 0 && channels > 0) {
     auto it = g.tapActor.find(tap);
-    if (it != g.tapActor.end() && data->max_length >= static_cast<uintptr_t>(frames) * channels) {
-      g.recorders[it->second].push(data->data<float>(), frames, channels, rate);
+    const api::Array<float> samples{data};
+    if (it != g.tapActor.end() && samples.size() >= static_cast<size_t>(frames) * channels) {
+      g.recorders[it->second].push(&samples[0], frames, channels, rate);
       g.lastAudio[it->second] = GetTickCount64();
     }
   }
@@ -189,23 +143,31 @@ void put(std::vector<uint8_t>& b, const void* p, size_t n) {
 
 /** Play a clip from `at`, through a 3D audio source made for it and gone once it has played. */
 void play(const std::vector<float>& clip, Vector3 at) {
-  if (clip.empty() || !api.ok) return;
-  il2cpp::Array* samples = il2cpp::array_new(api.single, clip.size());
-  void* audio = samples ? api.createClip(il2cpp::string_new("Echo"), static_cast<int>(clip.size()), 1, voice::kRate, false, nullptr) : nullptr;
-  void* go = audio ? game::new_game_object("Echo voice") : nullptr;
-  void* source = go ? game::add_component(go, api.audioSourceType) : nullptr;
-  if (!source) return;
-  std::memcpy(samples->data<float>(), clip.data(), clip.size() * sizeof(float));
-  api.setData(audio, samples, 0, nullptr);
-  game::set_position(game::object_transform(go), at);
-  api.setClip(source, audio, nullptr);
-  api.setSpatialBlend(source, 1.0f, nullptr);
-  api.setMinDistance(source, 1.0f, nullptr);
-  api.setMaxDistance(source, 15.0f, nullptr);
-  api.setPitch(source, kPitch, nullptr);
-  api.play(source, nullptr);
-  api.destroyAfter(go, static_cast<float>(clip.size()) / voice::kRate / kPitch + 1.0f, nullptr);
-  PG_LOG("echo: a voice from the ghost (%.1f s)", static_cast<float>(clip.size()) / voice::kRate);
+  if (clip.empty()) return;
+  void* samples = phasmo::Single::type.make_array(clip.size());
+  void* audio = samples ? phasmo::AudioClip::Create(api::make_string("Echo"), static_cast<int>(clip.size()), 1,
+                                                    voice::kRate, false)
+                        : nullptr;
+  void* go = audio ? phasmo::GameObject::type.make() : nullptr;
+  if (go) phasmo::GameObject::ctor(go, api::make_string("Echo voice"));
+  void* source = go ? phasmo::GameObject::AddComponent(go, phasmo::AudioSource::type.type_object()) : nullptr;
+  const api::Array<float> data{samples};
+  if (!source || data.size() < clip.size()) {  // nothing to play: the GameObject made for it goes at once
+    if (go) phasmo::Object::Destroy(go, 0.0f);
+    return;
+  }
+  std::memcpy(&data[0], clip.data(), clip.size() * sizeof(float));
+  phasmo::AudioClip::SetData(audio, samples, 0);
+  const phasmo::Vector3 where{at.x, at.y, at.z};
+  phasmo::Transform::set_position(phasmo::GameObject::get_transform(go), &where);
+  phasmo::AudioSource::set_clip(source, audio);
+  phasmo::AudioSource::set_spatialBlend(source, 1.0f);
+  phasmo::AudioSource::set_minDistance(source, 1.0f);
+  phasmo::AudioSource::set_maxDistance(source, 15.0f);
+  phasmo::AudioSource::set_pitch(source, kPitch);
+  phasmo::AudioSource::Play(source, 0);
+  phasmo::Object::Destroy(go, static_cast<float>(clip.size()) / voice::kRate / kPitch + 1.0f);
+  PM_LOG("echo: a voice from the ghost (%.1f s)", static_cast<float>(clip.size()) / voice::kRate);
 }
 
 /** This client sends the speaker's last phrase, if it heard one, and plays it itself. */
@@ -213,7 +175,7 @@ void send_phrase(const Pending& p) {
   auto it = g.recorders.find(p.speaker);
   std::vector<float> clip;
   if (it == g.recorders.end() || !it->second.last_phrase(clip)) {
-    PG_LOG("echo: nothing recent from that investigator to repeat");
+    PM_LOG("echo: nothing recent from that investigator to repeat");
     return;
   }
   g.outgoing = voice::chunks(clip);
@@ -265,21 +227,20 @@ void report_heard(ULONGLONG now) {
   net::send(b.data(), b.size(), net::To::Master, false);
 }
 
-/** A client that reported, lately, holding the actor's last phrase (the host itself first), or 0. */
-int holder_of(int actor, ULONGLONG now) {
-  return g.holders.holder_of(actor, game::local_actor(), now, kHeardFreshMs,
-                             [](int client) { return mod::peer_has(client, mod::info().id); });
+/** A client still in the room that reported, lately, holding the actor's last phrase (the host itself first), or 0. */
+int holder_of(int actor, const std::vector<int>& room, ULONGLONG now) {
+  return g.holders.holder_of(actor, game::local_actor(), now, kHeardFreshMs, [&](int client) {
+    return std::find(room.begin(), room.end(), client) != room.end();
+  });
 }
 
-/** Whom the Echo could speak as: living investigators who agreed and whose last phrase a client holds. */
-std::vector<int> candidates(ULONGLONG now) {
+/** Whom the Echo could speak as: living investigators whose last phrase a client holds. */
+std::vector<int> candidates(const std::vector<int>& room, ULONGLONG now) {
   std::vector<int> out;
-  std::vector<int> actors;
-  game::room_actors(actors);
-  for (int a : actors) {
+  for (int a : room) {
     void* player = game::player_of_actor(a);
-    if (!player || !game::alive(player) || il2cpp::field<bool>(player, kPlayerDead) || !mod::peer_has(a, mod::info().id)) continue;
-    if (holder_of(a, now)) out.push_back(a);
+    if (!api::alive(player) || phasmo::Player::isDead.get(player)) continue;
+    if (holder_of(a, room, now)) out.push_back(a);
   }
   return out;
 }
@@ -294,38 +255,38 @@ void listen(ULONGLONG now) {
     if (dx * dx + dy * dy + dz * dz <= kHearing * kHearing) g.lastHeard = now;
   }
   void* level = game::level_controller();
-  void* room = level && game::alive(level) ? il2cpp::field<void*>(level, kLevelGhostRoom) : nullptr;
-  if (room && game::alive(room) && api.talking(room, 0.1f, nullptr)) g.lastHeard = now;  // the host's own voice too
+  void* room = api::alive(level) ? phasmo::LevelController::currentGhostRoom.get(level) : nullptr;
+  if (api::alive(room) && phasmo::LevelRoom::ArePlayersTalkingInRoom(room, 0.1f)) g.lastHeard = now;  // the host's own voice too
 }
 
 /** The Echo's favourite room, on the host while it haunts the contract; null otherwise. */
 void* favourite_room() {
   if (!g.recording || !g.ghost || !game::alive(g.ghost) || !game::is_master()) return nullptr;
-  void* info = il2cpp::field<void*>(g.ghost, kGhostInfo);
-  void* room = info ? il2cpp::field<void*>(info, kInfoFavouriteRoom) : nullptr;
-  return room && game::alive(room) ? room : nullptr;
+  void* info = phasmo::GhostAI::info.get(g.ghost);
+  void* room = info ? phasmo::GhostInfo::favouriteRoom.get(info) : nullptr;
+  return api::alive(room) ? room : nullptr;
 }
 
 /** Whether `door` is one of the room's doors. */
 bool door_of(void* room, void* door) {
-  auto* doors = il2cpp::field<il2cpp::Array*>(room, kRoomDoors);
-  for (uintptr_t i = 0; doors && i < doors->max_length; ++i)
-    if (doors->data<void*>()[i] == door) return true;
+  const api::RefArray doors{phasmo::LevelRoom::doors.get(room)};
+  for (size_t i = 0; i < doors.size(); ++i)
+    if (doors[i] == door) return true;
   return false;
 }
 
 /** Note a player's use of a light switch or door for the repeat; it counts when the object is in its room. */
 void player_used(void* object, bool inItsRoom, const char* what) {
   g.repeat.used(object, inItsRoom, GetTickCount64());
-  if (inItsRoom) PG_LOG("echo: a player used a %s in its room", what);
+  if (inItsRoom) PM_LOG("echo: a player used a %s in its room", what);
 }
 
 /** Every client runs each use of a switch; the host notes a player's (neither flag set) for the repeat. */
-void detour_switch_use(void* lightSwitch, bool on, bool prints, bool byGhost, bool counted, const void* method) {
-  hooks::Guard guard;
-  g_switchUse(lightSwitch, on, prints, byGhost, counted, method);
+void detour_switch_use(api::Original<phasmo::LightSwitch::Use> original, void* lightSwitch, bool on, bool prints,
+                       bool byGhost, bool counted) {
+  original(lightSwitch, on, prints, byGhost, counted);
   if (void* room = !byGhost && !counted && lightSwitch ? favourite_room() : nullptr)
-    player_used(lightSwitch, il2cpp::field<void*>(lightSwitch, kSwitchRoom) == room, "light switch");
+    player_used(lightSwitch, phasmo::LightSwitch::room.get(lightSwitch) == room, "light switch");
 }
 
 /**
@@ -334,80 +295,50 @@ void detour_switch_use(void* lightSwitch, bool on, bool prints, bool byGhost, bo
  * whatever happens. False when the sensor could not be pulsed.
  */
 bool pulse_sensor(void* activity, void* sensor) {
-  if (!il2cpp::is_kind(sensor, "RangeSensor")) return false;  // the box and +0x128 are a RangeSensor's
-  const auto* klass = static_cast<const char*>(il2cpp::class_of(sensor));
-  using Pulse_t = void (*)(void*, const void*);
-  const Pulse_t pulse = klass ? *reinterpret_cast<const Pulse_t*>(klass + kPulseSlot) : nullptr;
-  if (!pulse) return false;
-  const void* method = *reinterpret_cast<const void* const*>(klass + kPulseSlot + sizeof(void*));
-  api.setBoxShape(sensor, il2cpp::field<Vector3>(activity, kActivityBox), nullptr);
-  il2cpp::Held onPulsed(il2cpp::field<void*>(sensor, kSensorOnPulsed));  // kept alive while set aside
-  il2cpp::set_ref_field(sensor, kSensorOnPulsed, nullptr);
+  if (!phasmo::RangeSensor::type.is(sensor)) return false;  // the box and the delegate are a RangeSensor's
+  const phasmo::Vector3 box = phasmo::GhostActivity::sensorBox.get(activity);
+  phasmo::RangeSensor::SetBoxShape(sensor, &box);
+  api::Held onPulsed(phasmo::RangeSensor::onPulsed.get(sensor));  // kept alive while set aside
+  phasmo::RangeSensor::onPulsed.set(sensor, nullptr);
   bool pulsed = true;
   try {
-    pulse(sensor, method);
+    phasmo::BasePulsableSensor::Pulse(sensor);
   } catch (const Il2CppExceptionWrapper& e) {
-    il2cpp::log_exception("echo: pulsing the interaction sensor threw", e.ex);
+    mod::host().log_exception("echo: pulsing the interaction sensor threw", e.ex);
     pulsed = false;
   } catch (...) {
-    PG_LOG("echo: pulsing the interaction sensor threw");
+    PM_LOG("echo: pulsing the interaction sensor threw");
     pulsed = false;
   }
-  il2cpp::set_ref_field(sensor, kSensorOnPulsed, onPulsed.get());
+  phasmo::RangeSensor::onPulsed.set(sensor, onPulsed.get());
   return pulsed;
 }
 
 /** Whether the ghost's interaction sensor, pulsed where the ghost stands now, detects `object`. */
 bool in_reach(void* ghost, void* object) {
   void* activity = game::ghost_activity(ghost);
-  void* sensor = activity ? il2cpp::field<void*>(activity, kActivitySensor) : nullptr;
-  return sensor && game::alive(sensor) && pulse_sensor(activity, sensor) &&
+  void* sensor = activity ? phasmo::GhostActivity::interactionSensor.get(activity) : nullptr;
+  return api::alive(sensor) && pulse_sensor(activity, sensor) &&
          game::sensor_detects(sensor, game::game_object_of(object));
 }
 
 /** Every client runs each player's grab of a door; the host notes it for the repeat. */
-void detour_door_grabbed(void* door, const void* method) {
-  hooks::Guard guard;
-  g_doorGrabbed(door, method);
+void detour_door_grabbed(api::Original<phasmo::Door::NetworkedGrabbedDoor> original, void* door) {
+  original(door);
   if (void* room = door ? favourite_room() : nullptr) player_used(door, door_of(room, door), "door");
 }
 
 }  // namespace
 
-bool resolve() {
-  constexpr const char* kAudio = "UnityEngine.AudioModule.dll";
-  il2cpp::Class* clip = il2cpp::cls(kAudio, "UnityEngine", "AudioClip");
-  il2cpp::Class* source = il2cpp::cls(kAudio, "UnityEngine", "AudioSource");
-  il2cpp::Class* object = il2cpp::cls("UnityEngine.CoreModule.dll", "UnityEngine", "Object");
-  api.voiceType = il2cpp::type_object(il2cpp::cls("Assembly-CSharp.dll", "", "PlayerVoice"));
-  api.audioSourceType = source ? il2cpp::type_object(source) : nullptr;
-  api.single = il2cpp::cls("mscorlib.dll", "System", "Single");
-  api.interactType = il2cpp::type_object(il2cpp::cls("Assembly-CSharp.dll", "", "PhotonObjectInteract"));
-  bool ok = api.voiceType && api.audioSourceType && api.single && api.interactType;
-  ok &= bind(api.findObjects, object, "FindObjectsOfType", 1);
-  ok &= bind(api.createClip, clip, "Create", 5);
-  ok &= bind(api.setData, clip, "SetData", 2);
-  ok &= bind(api.setClip, source, "set_clip", 1);
-  ok &= bind(api.setSpatialBlend, source, "set_spatialBlend", 1);
-  ok &= bind(api.setMinDistance, source, "set_minDistance", 1);
-  ok &= bind(api.setMaxDistance, source, "set_maxDistance", 1);
-  ok &= bind(api.setPitch, source, "set_pitch", 1);
-  ok &= bind(api.play, source, "Play", 0);
-  ok &= bind(api.destroyAfter, object, "Destroy", 2);
-  api.talking = reinterpret_cast<decltype(api.talking)>(game::game_assembly_address(kTalkingRva));
-  api.setBoxShape = reinterpret_cast<decltype(api.setBoxShape)>(game::game_assembly_address(kSetBoxShapeRva));
-  api.ok = ok && api.talking && api.setBoxShape;
-  PG_LOG("echo: resolve %s", api.ok ? "ok" : "FAILED");
-  return api.ok;
-}
+bool resolve() { return true; }
 
 bool create_hooks() {
-  return hooks::create(game::game_assembly_address(kTapReadRva), reinterpret_cast<void*>(&detour_tap_read),
-                       reinterpret_cast<void**>(&g_tapRead), "VivoxParticipantTap.DoAudioFilterRead") &&
-         hooks::create(game::game_assembly_address(kSwitchUseRva), reinterpret_cast<void*>(&detour_switch_use),
-                       reinterpret_cast<void**>(&g_switchUse), "LightSwitch.Use") &&
-         hooks::create(game::game_assembly_address(kDoorGrabbedRva), reinterpret_cast<void*>(&detour_door_grabbed),
-                       reinterpret_cast<void**>(&g_doorGrabbed), "Door.NetworkedGrabbedDoor");
+  return api::hook<phasmo::VivoxParticipantTap::DoAudioFilterRead>(&detour_tap_read,
+                                                                  "VivoxParticipantTap.DoAudioFilterRead",
+                                                                  api::Twins::CanonicalOnly) &&
+         api::hook<phasmo::LightSwitch::Use>(&detour_switch_use, "LightSwitch.Use", api::Twins::CanonicalOnly) &&
+         api::hook<phasmo::Door::NetworkedGrabbedDoor>(&detour_door_grabbed, "Door.NetworkedGrabbedDoor",
+                                                      api::Twins::CanonicalOnly);
 }
 
 void receive(int sender, const uint8_t* data, size_t size) {
@@ -436,13 +367,15 @@ void receive(int sender, const uint8_t* data, size_t size) {
 }
 
 bool speak(void* ghost, int actor) {
-  if (!ghost || !api.ok || !game::is_master()) return false;
+  if (!ghost || !game::is_master()) return false;
   const ULONGLONG now = GetTickCount64();
-  const std::vector<int> who = candidates(now);
+  std::vector<int> room;
+  game::room_actors(room);
+  const std::vector<int> who = candidates(room, now);
   if (who.empty()) return false;  // nobody's words are held anywhere: the Echo has nothing to say
   if (!actor) actor = who[std::uniform_int_distribution<size_t>(0, who.size() - 1)(g_random)];
   // Sent by a client that holds the phrase: the host when it heard it, else one that reported it.
-  const int source = holder_of(actor, now);
+  const int source = holder_of(actor, room, now);
   if (!source) return false;
   Pending p{actor, source, g.nextClip++, game::position(game::transform_of(ghost))};
   p.at.y += game::kGhostEyeHeight;
@@ -484,7 +417,7 @@ void tick(void* ghost, bool steered, bool recording) {
   }
   if (!g.ghost) return;
   listen(now);
-  if (steered || dormant() || game::ghost_state(g.ghost) == game::kStateHunting || now < g.nextWords) return;
+  if (steered || dormant() || game::ghost_state(g.ghost) == phasmo::GhostState::hunting() || now < g.nextWords) return;
   g.nextWords = now + kMinGapMs + std::uniform_int_distribution<ULONGLONG>(0, kMaxGapMs - kMinGapMs)(g_random);
   speak(g.ghost, 0);
 }
@@ -496,18 +429,19 @@ void reset() {
 bool dormant_now() { return dormant(); }
 
 bool repeat(void* ghost) {
-  if (!api.ok || !ghost || !game::is_master() || game::ghost_state(ghost) == game::kStateHunting) return false;
+  if (!ghost || !game::is_master() || game::ghost_state(ghost) == phasmo::GhostState::hunting()) return false;
   const ULONGLONG now = GetTickCount64();
   void* object = g.repeat.pending(now);
   if (!object || !game::alive(object) || !in_reach(ghost, object)) return false;  // it waits, within its minute
   g.repeat.take(now);
-  const bool door = il2cpp::is_kind(object, "Door");
-  void* interact = door ? il2cpp::field<void*>(object, kDoorInteract) : game::get_component(object, api.interactType);
-  if (!interact || !game::alive(interact)) return false;
+  const bool door = phasmo::Door::type.is(object);
+  void* interact = door ? phasmo::Door::interact.get(object)
+                        : phasmo::Component::GetComponent(object, phasmo::PhotonObjectInteract::type.type_object());
+  if (!api::alive(interact)) return false;
   // Forced, as the voodoo doll's interaction is (NormalInteraction(true)): an unlit switch is used every time.
-  reinterpret_cast<ChangeState_t>(game::change_state())(ghost, door ? kStateDoor : kStateLight, interact, !door, nullptr);
-  PG_LOG("echo: repeats a player's %s", door ? "door" : "light switch");
+  phasmo::GhostAI::ChangeState(ghost, door ? phasmo::GhostState::door() : phasmo::GhostState::light(), interact, !door);
+  PM_LOG("echo: repeats a player's %s", door ? "door" : "light switch");
   return true;
 }
 
-}  // namespace pg::custom::echo
+}  // namespace pm::custom::echo

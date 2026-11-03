@@ -16,14 +16,14 @@
 #include "check.h"
 
 // The dump reader of this test: it throws, as a reader meeting a filesystem failure could.
-bool pg::sdk::load_dump(const std::filesystem::path&, std::span<const std::string>, GameModel&, std::string&,
+bool pm::sdk::load_dump(const std::filesystem::path&, std::span<const std::string>, GameModel&, std::string&,
                         size_t*) {
   throw std::runtime_error("the disk went away");
 }
 
 namespace {
 
-std::filesystem::path scratch() { return std::filesystem::temp_directory_path() / "pg_gamecheck_main_test"; }
+std::filesystem::path scratch() { return std::filesystem::temp_directory_path() / "pm_gamecheck_main_test"; }
 
 // Whatever the check throws ends it with exit 2 and the reason, never an unhandled exception.
 void exception_exits_2() {

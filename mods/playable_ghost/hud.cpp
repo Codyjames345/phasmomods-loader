@@ -3,12 +3,15 @@
 #include <cstdio>
 #include <initializer_list>
 
+#include "Player.h"
+#include "UnityUI.h"
 #include "ability.h"
 #include "game.h"
-#include "il2cpp.h"
+#include "held.h"
+#include "text_table.h"
 #include "ui.h"
 
-namespace pg::hud {
+namespace pm::hud {
 namespace {
 
 using ui::Color;
@@ -19,10 +22,8 @@ constexpr Color kBarFill{1, 1, 1, 0.8f};
 constexpr Color kMark{1, 1, 1, 0.9f};
 constexpr float kBarWidth = 220;
 constexpr int kMaxCharges = 2;  // actions::kMaxCharges
-// The investigator's crosshair (LocalPCPlayer +0x120 PCCanvas, +0x20 its Image; obfuscated names, build
-// 25811160), copied so the ghost aims with the same dot.
-constexpr size_t kPlayerCanvas = 0x120;
-constexpr size_t kCanvasCrosshair = 0x20;
+// The investigator's crosshair (LocalPCPlayer.canvas, PCCanvas.crosshair) is copied so the ghost aims
+// with the same dot.
 constexpr ui::Vec2 kCrosshairSize = {48, 48};  // its size on the investigator's HUD
 // The team's average sanity, with a mark where the ghost may start to hunt.
 constexpr float kSanityWidth = 320;
@@ -30,19 +31,19 @@ constexpr float kSanityY = 220;
 constexpr Color kSanityLow{0.85f, 0.25f, 0.2f, 0.9f};  // low enough to hunt
 
 struct Hud {
-  il2cpp::Held canvas;
-  il2cpp::Held aim;
-  il2cpp::Held restlessLabel;
-  il2cpp::Held barBack;
-  il2cpp::Held barFill;
-  il2cpp::Held actions;
-  il2cpp::Held notice;
-  il2cpp::Held identity;  // top left: the ghost's type and favourite room
-  il2cpp::Held alert;     // top centre: something done to the ghost
-  il2cpp::Held sanityLabel;
-  il2cpp::Held sanityBack;
-  il2cpp::Held sanityFill;
-  il2cpp::Held sanityMark;
+  api::Held canvas;
+  api::Held aim;
+  api::Held restlessLabel;
+  api::Held barBack;
+  api::Held barFill;
+  api::Held actions;
+  api::Held notice;
+  api::Held identity;  // top left: the ghost's type and favourite room
+  api::Held alert;     // top centre: something done to the ghost
+  api::Held sanityLabel;
+  api::Held sanityBack;
+  api::Held sanityFill;
+  api::Held sanityMark;
   std::string aimShown, actionsShown, noticeShown, sanityShown, identityShown, alertShown;
   int fillShown = -1, sanityFillShown = -1, markShown = -1;
   bool lowShown = false;
@@ -56,9 +57,10 @@ void set_if_changed(void* text, std::string& shown, const std::string& value) {
 
 void add_crosshair() {
   void* player = game::local_player_component();
-  void* canvas = game::alive(player) ? il2cpp::field<void*>(player, kPlayerCanvas) : nullptr;
-  void* crosshair = il2cpp::is_class(canvas, "PCCanvas") ? il2cpp::field<void*>(canvas, kCanvasCrosshair) : nullptr;
-  if (!il2cpp::is_class(crosshair, "Image") || !game::alive(crosshair)) return;
+  void* canvas = phasmo::LocalPCPlayer::type.is(player) && game::alive(player) ? phasmo::LocalPCPlayer::canvas.get(player)
+                                                                              : nullptr;
+  void* crosshair = phasmo::PCCanvas::type.is(canvas) ? phasmo::PCCanvas::crosshair.get(canvas) : nullptr;
+  if (!phasmo::Image::type.is(crosshair) || !game::alive(crosshair)) return;
   void* copy = game::instantiate(crosshair, game::transform_of(g.canvas), false);
   if (!copy) return;
   ui::place(copy, {0.5f, 0.5f}, {0.5f, 0.5f}, {0, 0}, kCrosshairSize);
@@ -78,7 +80,7 @@ void build() {
   ui::place(g.barFill, {0.5f, 0}, {0, 0.5f}, {-kBarWidth / 2, 110}, {0, 6});
   g.restlessLabel = ui::create_text(g.canvas, "Restless", 24);
   ui::place(g.restlessLabel, {0.5f, 0}, {0, 0.5f}, {kBarWidth / 2 + 16, 110}, {200, 36});
-  ui::set_text(g.restlessLabel, "<align=left>restless");
+  ui::set_text(g.restlessLabel, ("<align=left>" + i18n::text("hud.restless")).c_str());
 
   g.actions = ui::create_text(g.canvas, "Actions", 26);
   ui::place(g.actions, {0.5f, 0}, {0.5f, 0.5f}, {0, 64}, {1400, 40});
@@ -100,18 +102,21 @@ void build() {
     ui::set_color(t, kText);
 }
 
-// The investigators' average sanity and, once the host has seen an idle roll, where hunts begin.
+// The investigators' average sanity, or the ghost's target's as a Banshee's is shown, and once the host
+// has seen an idle roll, where hunts begin (judged on what the hunt check measures).
 void show_sanity(const session::Status& st) {
   const bool known = st.sanity != session::kUnknown;
   const bool threshold = known && st.huntBelow != session::kUnknown;
-  const bool low = threshold && st.sanity <= st.huntBelow;
+  const bool low = threshold && session::hunt_sanity(st) <= st.huntBelow;
   for (void* part : std::initializer_list<void*>{g.sanityBack, g.sanityFill}) ui::set_active(part, known);
   ui::set_active(g.sanityMark, threshold);
   std::string label;
   if (known) {
-    label = std::string(st.flags & session::kFocusSanity ? "Target's sanity " : "Team sanity ") + std::to_string(st.sanity) + "%";
-    if (low) label += "     <b>low enough to hunt</b>";
-    else if (threshold) label += "     <alpha=#AA>hunts at " + std::to_string(st.huntBelow) + "% or below";
+    label = st.flags & session::kFocusSanity ? i18n::text("hud.sanity-target", {{"sanity", std::to_string(st.sanity)}})
+                                             : i18n::text("hud.sanity-team", {{"sanity", std::to_string(st.sanity)}});
+    if (low) label += "     " + i18n::text("hud.low-enough");
+    else if (threshold) label += "     <alpha=#AA>" + i18n::text("hud.hunts-at", {{"sanity", std::to_string(st.huntBelow)}});
+    if (st.huntSanity != session::kUnknown) label += "<alpha=#AA> " + i18n::text("hud.team", {{"sanity", std::to_string(st.huntSanity)}});
   }
   set_if_changed(g.sanityLabel, g.sanityShown, label);
   const int fill = known ? static_cast<int>(kSanityWidth * st.sanity / 100) : 0;
@@ -134,7 +139,7 @@ void show_sanity(const session::Status& st) {
 // An action with how many of it the native roll has given (count -1: not counted); unavailable or
 // used-up actions are dimmed rather than hidden so the controls stay learnable.
 std::string action(const std::string& key, const std::string& name, int count, bool available) {
-  std::string text = std::string(available && count != 0 ? "<alpha=#FF>" : "<alpha=#55>") + "[" + key + "] " + name;
+  std::string text = std::string(available && count != 0 ? "<alpha=#FF>" : "<alpha=#55>") + i18n::text("hud.action", {{"key", key}, {"action", name}});
   if (count >= 0) text += " " + std::to_string(count);
   return text;
 }
@@ -148,9 +153,9 @@ void show(const View& v) {
   set_if_changed(g.aim, g.aimShown, v.aimed ? v.aimed : "");
   show_sanity(v.status);
   std::string identity;
-  if (!v.ghostType.empty()) identity = "<align=left>You are a <b>" + v.ghostType + "</b>";
+  if (!v.ghostType.empty()) identity = "<align=left>" + i18n::text("hud.you-are", {{"type", v.ghostType}});
   if (!v.favouriteRoom.empty())
-    identity += std::string(identity.empty() ? "<align=left>" : "\n") + "Favourite room: <b>" + v.favouriteRoom + "</b>";
+    identity += std::string(identity.empty() ? "<align=left>" : "\n") + i18n::text("hud.favourite-room", {{"room", v.favouriteRoom}});
   if (!v.senses.empty()) identity += std::string(identity.empty() ? "<align=left>" : "\n") + v.senses;
   set_if_changed(g.identity, g.identityShown, identity);
   set_if_changed(g.notice, g.noticeShown, v.notice);
@@ -168,15 +173,15 @@ void show(const View& v) {
   const bool canAct = !hunting && !ownMove;
   const int interactions = session::whole_charges(st.interact, kMaxCharges);
   const std::string sep = "<alpha=#FF>     ";
-  std::string line = action(v.interactKey, "Interact", interactions,
+  std::string line = action(v.interactKey, i18n::text("hud.interact"), interactions,
                             canAct && v.aimed && (st.more & session::kInteractAllowed)) +
-                     sep + action(v.primaryKey, "Manifest", st.events, canAct && (st.more & session::kEventAllowed));
-  line += sep + action(v.crouchKey + "+" + v.primaryKey, "Disguise", st.events, canAct && (st.more & session::kEventAllowed));
+                     sep + action(v.primaryKey, i18n::text("hud.manifest"), st.events, canAct && (st.more & session::kEventAllowed));
+  line += sep + action(i18n::text("hud.keys-together", {{"first", v.crouchKey}, {"second", v.primaryKey}}), i18n::text("hud.disguise"), st.events, canAct && (st.more & session::kEventAllowed));
   if (const ability::Ability* a = v.ability)
     line += sep + action(v.secondaryKey, a->name, st.abilities, canAct && (st.flags & session::kAbilityAvailable));
   if (st.more & (session::kFuseTurnOff | session::kFuseTurnOn))
-    line += sep + action(v.fuseKey, st.more & session::kFuseTurnOff ? "Power off" : "Power on", st.fuses, canAct);
-  line += sep + action("Hold " + v.primaryKey, "Hunt", -1, (st.flags & session::kHuntAvailable) && canAct);
+    line += sep + action(v.fuseKey, st.more & session::kFuseTurnOff ? i18n::text("hud.power-off") : i18n::text("hud.power-on"), st.fuses, canAct);
+  line += sep + action(i18n::text("hud.hold-key", {{"key", v.primaryKey}}), i18n::text("hud.hunt"), -1, (st.flags & session::kHuntAvailable) && canAct);
   set_if_changed(g.actions, g.actionsShown, line);
 }
 
@@ -186,4 +191,4 @@ void hide() {
   g = Hud{};
 }
 
-}  // namespace pg::hud
+}  // namespace pm::hud

@@ -5,17 +5,25 @@
 
 // Bookkeeping for the custom ghosts' speed rules and the Echo, kept free of game calls so it can be tested
 // offline.
-namespace pg::custom {
+namespace pm::custom {
 
 // A custom ghost's speed rule sets the inputs of the game's own hunt speed, never the speed it produces. The
-// hunt update (RVA 0x2153C20) builds (base x sight + bonus) x the multipliers every type shares (the
-// difficulty's ghost speed, Blood Moon, three of GhostAI's), so a rule that writes the base (hunt state +0xB0)
-// and, to drop the line-of-sight speed-up, holds sight (+0xB4) at 1 gets the multipliers once and leaves the
-// footsteps, the run sound and the walk animation reading the real speed.
+// hunt update (GhostHuntState.UpdateSpeed) builds (base x sight + bonus) x the multipliers every type shares
+// (the difficulty's ghost speed, Blood Moon, three of GhostAI's), so a rule that gives the base and, to drop
+// the line-of-sight speed-up, holds sight at 1 (PmGhostRules.huntSpeed, which the host writes into the hunt
+// state before every update) gets the multipliers once and leaves the footsteps, the run sound and the walk
+// animation reading the real speed.
 struct OwnSpeed {
   float base;      // the hunt base to write, metres per second before the multipliers
   bool keepSight;  // whether the game's line-of-sight speed-up still multiplies it (false: it is held at 1)
 };
+
+/** Writes `s` as the hunt-speed rule's answer (PmGhostRules.huntSpeed): `base` becomes its base, and
+ *  `losScale` 1 when it holds the line-of-sight speed-up off; a kept speed-up is left as the game has it. */
+inline void give_speed(OwnSpeed s, float* base, float* losScale) {
+  *base = s.base;
+  if (!s.keepSight) *losScale = 1.0f;
+}
 
 /** A speed of the rule's own: `speed` m/s, no line-of-sight speed-up. */
 inline OwnSpeed flat_speed(float speed) { return {speed, false}; }
@@ -24,8 +32,8 @@ inline OwnSpeed flat_speed(float speed) { return {speed, false}; }
 inline OwnSpeed scaled_speed(float gameBase, float factor) { return {gameBase * factor, true}; }
 
 /**
- * `rule` while it `applies`, else the game's own default for base `gameBase`. A rule that stops mid-hunt must
- * write this: the game rewrites the base only every two seconds, so a stale one would linger.
+ * `rule` while it `applies`, else the game's own default for base `gameBase`: a rule that stops mid-hunt
+ * gives the game's own speed back at once.
  */
 inline OwnSpeed speed_when(bool applies, OwnSpeed rule, float gameBase) {
   return applies ? rule : scaled_speed(gameBase, 1.0f);
@@ -56,4 +64,4 @@ class Holders {
   std::map<int, std::map<int, uint64_t>> reports_;  // actor -> client -> when it reported
 };
 
-}  // namespace pg::custom
+}  // namespace pm::custom

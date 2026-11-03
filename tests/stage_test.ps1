@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 $project = Split-Path $PSScriptRoot -Parent
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('pg stage ' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
+. (Join-Path $project 'tools/payload_files.ps1')
 $payload = (Import-PowerShellDataFile -LiteralPath (Join-Path $project 'tools/payload.psd1')).Payload
 
 <# Create a project with a synthetic file for every payload source and a stale launchable copy. #>
@@ -17,6 +18,7 @@ function New-StageFixture {
         Copy-Item -LiteralPath (Join-Path $project $script) -Destination (Join-Path $fixture $script)
     }
     Write-PayloadSources $fixture $payload
+    Write-RecordFixture $fixture $project
     New-Item -ItemType Directory -Path (Join-Path $fixture 'dist/PhasmoMods/mods/retired') -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $fixture 'dist/PhasmoMods/ModHost.dll') -Value 'previous build'
     Set-Content -LiteralPath (Join-Path $fixture 'dist/PhasmoMods/mods/retired/Retired.dll') -Value 'stale mod'
@@ -55,10 +57,12 @@ try {
     $expected = @($payload | ForEach-Object { "$($_.Name)=fixture $($_.Source)" } | Sort-Object)
     $folder = Join-Path $fixture 'dist/PhasmoMods'
     $staged = @(Get-ChildItem -LiteralPath $folder -File -Recurse |
+        Where-Object { $_.Directory.Name -ne 'builds' } |
         ForEach-Object { "$($_.FullName.Substring($folder.Length + 1).Replace('\', '/'))=$((Get-Content -LiteralPath $_.FullName -Raw).Trim())" } | Sort-Object)
     if (Compare-Object $expected $staged) {
         throw 'dist\PhasmoMods does not hold exactly the current payload (stale files must go).'
     }
+    if (-not (Test-Path -LiteralPath (Join-Path $folder 'builds/fixture-build.txt') -PathType Leaf)) { throw 'dist\PhasmoMods does not hold the checked-build record.' }
     Assert-NoLeftovers $fixture
 
     $fixture = New-StageFixture 'missing build output'

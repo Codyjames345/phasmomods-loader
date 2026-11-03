@@ -9,20 +9,23 @@
 #include <utility>
 #include <vector>
 
+#include "Transform.h"
 #include "body.h"
 #include "game.h"
+#include "held.h"
 #include "journal.h"
 #include "log.h"
 #include "mapview.h"
 #include "panorama.h"
 #include "round.h"
+#include "text_table.h"
 #include "ui.h"
 
-namespace pg::picker {
+namespace pm::picker {
 namespace {
 
-using il2cpp::Quaternion;
-using il2cpp::Vector3;
+using phasmo::Quaternion;
+using phasmo::Vector3;
 using ui::Color;
 
 constexpr int kSortingOrder = 70;
@@ -67,13 +70,13 @@ enum class Mode { None, Start, Claim };
 // The page's text and markers, rebuilt each time the spread is taken over (it ends when the pause
 // menu is opened from the picker).
 struct Page {
-  il2cpp::Held floorLabel;
-  il2cpp::Held roomLabel;
-  il2cpp::Held hint;
-  il2cpp::Held confirm;
-  il2cpp::Held arrowLeft;
-  il2cpp::Held arrowRight;
-  il2cpp::Held highlights[kHighlights];
+  api::Held floorLabel;
+  api::Held roomLabel;
+  api::Held hint;
+  api::Held confirm;
+  api::Held arrowLeft;
+  api::Held arrowRight;
+  api::Held highlights[kHighlights];
   std::string floorShown, roomShown, hintShown, confirmShown, ghostTitleShown, ghostLineShown;
   bool built = false;
   bool armed = false;  // the button was up since the page was built: a click that opened it is not a choice
@@ -115,7 +118,7 @@ void drop_page() {
   p = Page{};
 }
 
-bool build_page(const char* heading) {
+bool build_page(const std::string& heading) {
   drop_page();
   const journal::Spread* s = journal::begin_spread();
   void* camera = body::camera();
@@ -128,7 +131,7 @@ bool build_page(const char* heading) {
   if (void* h = journal::copy_text(s->title, s->page)) {
     ui::place(h, {0.5f, 0.5f}, {0.5f, 0.5f}, kHeadingPosition, kHeadingSize);
     ui::set_alignment(h, ui::Align::Center);
-    ui::set_text(h, heading);
+    ui::set_text(h, heading.c_str());
   }
   p.floorLabel = line(s, kFloorRowY, {360, kLineSize.y});
   p.roomLabel = line(s, kRoomRowY, kLineSize);
@@ -140,8 +143,8 @@ bool build_page(const char* heading) {
   ui::place(p.arrowRight, {0.5f, 0.5f}, {0.5f, 0.5f}, {kArrowX, kFloorRowY}, kArrowSize);
   ui::set_text(p.arrowLeft, "<b><</b>");
   ui::set_text(p.arrowRight, "<b>></b>");
-  for (il2cpp::Held& h : p.highlights) h = ui::create_image(mapview::image(), "Room", kHoveredRoom);
-  PG_LOG("picker: the journal's evidence spread shows the %s page", b.mode == Mode::Claim ? "favourite-room" : "ghost");
+  for (api::Held& h : p.highlights) h = ui::create_image(mapview::image(), "Room", kHoveredRoom);
+  PM_LOG("picker: the journal's evidence spread shows the %s page", b.mode == Mode::Claim ? "favourite-room" : "ghost");
   return true;
 }
 
@@ -165,7 +168,7 @@ void send(session::Session& s, const session::PickOffer& offer) {
   c.room = b.room;
   s.send_pick(c);
   b.sent = true;
-  PG_LOG("picker: sent type %d room %d", c.type, c.room);
+  PM_LOG("picker: sent type %d room %d", c.type, c.room);
 }
 
 // Unconfirmed choices go to the host when the time is nearly up.
@@ -191,10 +194,10 @@ void show_rooms(bool pointer, ui::Vec2 at) {
     for (const ui::Rect& r : mapview::room_outline(hovered)) boxes.push_back({r, kHoveredRoom});
   show_highlights(boxes);
   set_if_changed(p.floorLabel, p.floorShown, mapview::floor_name());
-  set_if_changed(p.roomLabel, p.roomShown, b.room >= 0 ? "<b>" + round::room_name(b.room) + "</b>" : "Click a room on the map");
+  set_if_changed(p.roomLabel, p.roomShown, b.room >= 0 ? i18n::text("pick.room", {{"room", round::room_name(b.room)}}) : i18n::text("pick.click-room"));
 }
 
-std::string link(const char* label, bool hovered) {
+std::string link(const std::string& label, bool hovered) {
   return std::string(hovered ? "<b><u>" : "<u>") + label + (hovered ? "</u></b>" : "</u>");
 }
 
@@ -223,19 +226,19 @@ void tick_start_page(session::Session& s, const session::PickOffer& offer, bool 
     if (pointer && !b.sent && !fixed && offered(offer, g.type) && ui::contains(g.rect, at, cam)) hovered = &g;
   }
   journal::hover(hovered);
-  set_if_changed(spread->ghostTitle, p.ghostTitleShown, "Ghost type");
+  set_if_changed(spread->ghostTitle, p.ghostTitleShown, i18n::text("pick.ghost-type"));
   set_if_changed(spread->ghostLine, p.ghostLineShown,
-                 fixed ? "This contract's difficulty has chosen your ghost" : "Which ghost will you be?");
+                 fixed ? i18n::text("pick.difficulty-chose") : i18n::text("pick.which-ghost"));
   show_rooms(pointer, at);
   const int type = fixed ? offer.fixedType : b.type;
   std::string hint;
-  if (type >= 0) hint = "You will be a <b>" + round::ghost_type_name(type) + "</b>";
-  else hint = "Choose your ghost on the right-hand page";
+  if (type >= 0) hint = i18n::text("pick.you-will-be", {{"type", round::ghost_type_name(type)}});
+  else hint = i18n::text("pick.choose-ghost");
   set_if_changed(p.hint, p.hintShown, hint);
   std::string confirm;
-  if (b.sent) confirm = "Your ghost is ready  " + clock(offer.deadline, now);
-  else if (ready) confirm = link("Begin the haunting", pointer && ui::contains(p.confirm, at, cam)) + "  " + clock(offer.deadline, now);
-  else confirm = clock(offer.deadline, now) + "  anything left unchosen is random";
+  if (b.sent) confirm = i18n::text("pick.ready") + "  " + clock(offer.deadline, now);
+  else if (ready) confirm = link(i18n::text("pick.begin"), pointer && ui::contains(p.confirm, at, cam)) + "  " + clock(offer.deadline, now);
+  else confirm = clock(offer.deadline, now) + "  " + i18n::text("pick.unchosen-random");
   set_if_changed(p.confirm, p.confirmShown, confirm);
 }
 
@@ -251,7 +254,7 @@ void tick_claim_page(session::Session& s, const session::RoomOffer& offer, bool 
     if (ready && ui::contains(p.confirm, at, cam)) {
       s.send_room_claim(b.room);
       b.sent = true;
-      PG_LOG("picker: claimed room %d as the favourite room", b.room);
+      PM_LOG("picker: claimed room %d as the favourite room", b.room);
     } else {
       click_map(at, cam);
     }
@@ -259,15 +262,15 @@ void tick_claim_page(session::Session& s, const session::RoomOffer& offer, bool 
   show_rooms(pointer, at);
   if (const journal::Spread* spread = journal::begin_spread()) {
     const uint8_t type = session::named_type(s.status());
-    set_if_changed(spread->ghostTitle, p.ghostTitleShown, "Your ghost");
+    set_if_changed(spread->ghostTitle, p.ghostTitleShown, i18n::text("pick.your-ghost"));
     set_if_changed(spread->ghostLine, p.ghostLineShown,
-                   type != session::kNoType ? "You are a <b>" + round::ghost_type_name(type) + "</b>" : std::string());
+                   type != session::kNoType ? i18n::text("pick.you-are", {{"type", round::ghost_type_name(type)}}) : std::string());
   }
   set_if_changed(p.hint, p.hintShown,
-                 favourite >= 0 ? "Your favourite room moved to <b>" + round::room_name(favourite) + "</b>"
-                                : std::string("Your favourite room moved"));
-  const std::string confirm = ready ? link("Make it my favourite room", pointer && ui::contains(p.confirm, at, cam))
-                                    : std::string("Choose another room");
+                 favourite >= 0 ? i18n::text("pick.room-moved-to", {{"room", round::room_name(favourite)}})
+                                : i18n::text("pick.room-moved"));
+  const std::string confirm = ready ? link(i18n::text("pick.make-favourite"), pointer && ui::contains(p.confirm, at, cam))
+                                    : i18n::text("pick.choose-another");
   set_if_changed(p.confirm, p.confirmShown, confirm + "  " + clock(offer.deadline, now));
 }
 
@@ -288,15 +291,15 @@ struct Column {
   std::vector<Item> items;
   int selected = 0;
   int confirmed = -1;  // index into items
-  il2cpp::Held header;
-  il2cpp::Held rows[kRows];
+  api::Held header;
+  api::Held rows[kRows];
   std::string shown[kRows];
 };
 
 struct ListPicker {
-  il2cpp::Held canvas;
-  il2cpp::Held title;
-  il2cpp::Held hint;
+  api::Held canvas;
+  api::Held title;
+  api::Held hint;
   Column column[2];  // 0 ghost type, 1 favourite room
   int active = 0;
   bool typeFixed = false;
@@ -335,12 +338,12 @@ void build_list_ui() {
   ui::place(l.title, {0.5f, 0.5f}, {0.5f, 0.5f}, {0, 400}, {1400, 56});
   l.hint = ui::create_text(l.canvas, "Hint", 24);
   ui::place(l.hint, {0.5f, 0.5f}, {0.5f, 0.5f}, {0, -420}, {1600, 36});
-  const char* headers[2] = {"Ghost type", "Favourite room"};
+  const std::string headers[2] = {i18n::text("pick.ghost-type"), i18n::text("pick.favourite-room")};
   for (int c = 0; c < 2; ++c) {
     const float x = c == 0 ? -kColumnX : kColumnX;
     l.column[c].header = ui::create_text(l.canvas, "Header", 30);
     ui::place(l.column[c].header, {0.5f, 0.5f}, {0.5f, 0.5f}, {x, 300}, {560, 44});
-    ui::set_text(l.column[c].header, headers[c]);
+    ui::set_text(l.column[c].header, headers[c].c_str());
     for (int r = 0; r < kRows; ++r) {
       l.column[c].rows[r] = ui::create_text(l.canvas, "Row", 28);
       ui::place(l.column[c].rows[r], {0.5f, 0.5f}, {0.5f, 0.5f}, {x, 230 - r * kRowHeight}, {560, kRowHeight});
@@ -406,11 +409,10 @@ void tick_list(session::Session& s, const session::PickOffer& offer, const Keys&
   read_list_input(s, keys, focused && game::cursor_locked(), now);
   const bool done = l.column[0].confirmed >= 0 && l.column[1].confirmed >= 0;
   set_if_changed(l.title, l.titleShown,
-                 std::string(done ? "Your ghost is ready" : "You are the ghost") + "   <alpha=#AA>" + clock(offer.deadline, now));
+                 (done ? i18n::text("pick.ready") : i18n::text("pick.you-are-the-ghost")) + "   <alpha=#AA>" + clock(offer.deadline, now));
   set_if_changed(l.hint, l.hintShown,
-                 "<alpha=#BB>[" + keys.up.label + "] [" + keys.down.label + "] choose     [" + keys.left.label + "] [" +
-                     keys.right.label + "] switch list     [" + keys.confirm.label +
-                     "] confirm     <alpha=#77>Anything unconfirmed is chosen at random");
+                 "<alpha=#BB>" + i18n::text("pick.list-keys", {{"up", keys.up.label}, {"down", keys.down.label}, {"left", keys.left.label},
+                                                               {"right", keys.right.label}, {"confirm", keys.confirm.label}}));
   render_column(0);
   render_column(1);
 }
@@ -435,7 +437,7 @@ bool tick_start(session::Session& s, const session::PickOffer& offer, const Keys
     b.mode = Mode::Start;
     b.deadline = offer.deadline;
     if (!journal::kept()) {
-      PG_LOG("picker: the ghost player has no journal; showing the plain lists");
+      PM_LOG("picker: the ghost player has no journal; showing the plain lists");
       use_lists(offer);
     }
   }
@@ -456,8 +458,8 @@ bool tick_start(session::Session& s, const session::PickOffer& offer, const Keys
     send_if_late(s, offer, now);  // a choice already made still reaches the host in time
     return true;
   }
-  if (!journal::spread_active() && !build_page("Favourite room")) {
-    PG_LOG("picker: the journal's spread or the map is unavailable; showing the plain lists");
+  if (!journal::spread_active() && !build_page(i18n::text("pick.favourite-room"))) {
+    PM_LOG("picker: the journal's spread or the map is unavailable; showing the plain lists");
     if (!journal::on_pause()) journal::close();
     use_lists(offer);
     return l.canvas != nullptr;
@@ -483,7 +485,7 @@ bool tick_claim(session::Session& s, const Input& in, ULONGLONG now) {
   if (!open || !in.journalPressed || !journal::kept()) return false;
   b.mode = Mode::Claim;
   b.deadline = offer.deadline;
-  if (!build_page("New favourite room")) {
+  if (!build_page(i18n::text("pick.new-favourite-room"))) {
     end_book();
     return false;
   }
@@ -505,4 +507,4 @@ void hide() {
   hide_list();
 }
 
-}  // namespace pg::picker
+}  // namespace pm::picker

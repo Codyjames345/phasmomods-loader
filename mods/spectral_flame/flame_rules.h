@@ -22,9 +22,7 @@
 // is hotter and burns down faster. The Hydra's flame turns green instead, pale green at the cap, so
 // it names the Hydra even where its evidence is withheld. Only the time differs between Firelight
 // tiers.
-namespace pg::flame {
-
-constexpr int kEvidence = 8;  // the game's evidence value for Spectral Flame (after D.O.T.S., 7)
+namespace pm::flame {
 
 enum class Kind { Tier1, Tier2, Tier3, Candelabra };
 
@@ -92,10 +90,13 @@ inline float burn_multiplier(float blueness) { return 1 + std::clamp(blueness, 0
 /** The chance that the ghost, in the flame's room, blows out a flame this blue in `dt` seconds. */
 inline float blow_out_chance(float blueness, float dt) { return blueness >= 1 ? dt / kBlowOutSeconds : 0; }
 
-/** Whether any of `ghosts` evidence triples (flattened, three ints each) holds Spectral Flame. */
-inline bool active_for(const int* evidence, int ghosts) {
+/**
+ * Whether any of `ghosts` evidence triples (flattened, three ints each) holds `flame`, Spectral Flame's
+ * game value, which the host numbers (contract.h).
+ */
+inline bool active_for(const int* evidence, int ghosts, int flame) {
   for (int i = 0; evidence && i < ghosts * 3; ++i)
-    if (evidence[i] == kEvidence) return true;
+    if (evidence[i] == flame) return true;
   return false;
 }
 
@@ -263,4 +264,4 @@ inline bool decode(const uint8_t* data, size_t size, std::vector<std::pair<int, 
   return true;
 }
 
-}  // namespace pg::flame
+}  // namespace pm::flame

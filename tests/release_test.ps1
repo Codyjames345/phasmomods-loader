@@ -29,6 +29,10 @@ function New-ReleaseFixture {
     New-Item -ItemType Directory -Path (Join-Path $fixture 'tools') -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $project 'tools/release.ps1') -Destination (Join-Path $fixture 'tools')
     Set-Content -LiteralPath (Join-Path $fixture 'VERSION') -Value '0.1.0'
+    Write-RecordFixture $fixture $project
+    # Stands for the real build: it writes the digest of the map as it is now, when a test says the map has changed.
+    Set-Content -LiteralPath (Join-Path $fixture 'build.ps1') -Value "if (Test-Path -LiteralPath `"`$PSScriptRoot/new-digest`") { Copy-Item -LiteralPath `"`$PSScriptRoot/new-digest`" -Destination `"`$PSScriptRoot/build/map-digest.txt`" }; if (Test-Path -LiteralPath `"`$PSScriptRoot/build-fails`") { throw 'build failed' }"
+    Set-Content -LiteralPath (Join-Path $fixture '.gitignore') -Value "/build/`n/new-digest`n/build-fails"  # as the project's: the build's output is no change
     Invoke-Git $fixture @('init', '--quiet', '--initial-branch', 'main') | Out-Null
     Invoke-Git $fixture @('config', 'user.name', 'Release Test') | Out-Null
     Invoke-Git $fixture @('config', 'user.email', 'release-test@example.invalid') | Out-Null
@@ -69,6 +73,41 @@ try {
     $fixture = New-ReleaseFixture 'modified file'
     Set-Content -LiteralPath (Join-Path $fixture 'VERSION') -Value '0.1.1'
     Assert-ReleaseFailure $fixture '0.2.0' 'The working tree has uncommitted changes'
+
+    # refuses a checked-build record made with another map, no record, and a build that never wrote the digest
+    $fixture = New-ReleaseFixture 'stale record'
+    Set-Content -LiteralPath (Join-Path $fixture 'build/map-digest.txt') -Value 'fedcba9876543210'
+    Assert-ReleaseFailure $fixture '0.2.0' 'checked-build record'
+    $fixture = New-ReleaseFixture 'no record'
+    Invoke-Git $fixture @('rm', '--quiet', 'sdk/builds/fixture-build.txt') | Out-Null
+    Invoke-Git $fixture @('commit', '--quiet', '--message', 'Drop the record') | Out-Null
+    Assert-ReleaseFailure $fixture '0.2.0' 'checked-build record'
+    $fixture = New-ReleaseFixture 'no digest'
+    Remove-Item -LiteralPath (Join-Path $fixture 'build/map-digest.txt')
+    Assert-ReleaseFailure $fixture '0.2.0' 'map-digest'
+
+    # builds first: a pulled map change with the old digest still on disk is refused here, before any bump or tag
+    $fixture = New-ReleaseFixture 'digest of the last build'
+    Set-Content -LiteralPath (Join-Path $fixture 'new-digest') -Value 'fedcba9876543210'
+    Assert-ReleaseFailure $fixture '0.2.0' 'checked-build record'
+    $fixture = New-ReleaseFixture 'failed build'
+    Set-Content -LiteralPath (Join-Path $fixture 'build-fails') -Value 'x'
+    Assert-ReleaseFailure $fixture '0.2.0' 'build failed'
+
+    # a file with the digest alone is no record: the host's reader asks for all three lines
+    $fixture = New-ReleaseFixture 'not a record'
+    Set-Content -LiteralPath (Join-Path $fixture 'sdk/builds/fixture-build.txt') -Value 'map=0123456789abcdef'
+    Invoke-Git $fixture @('commit', '--quiet', '--all', '--message', 'Only the digest') | Out-Null
+    Assert-ReleaseFailure $fixture '0.2.0' 'checked-build record'
+
+    # -NoCheckedBuild releases a map no record holds, and the commit holds what lets CI through, for that digest alone
+    $fixture = New-ReleaseFixture 'no checked build'
+    Set-Content -LiteralPath (Join-Path $fixture 'new-digest') -Value 'fedcba9876543210'
+    & (Join-Path $fixture 'tools/release.ps1') -Version '0.2.0' -NoCheckedBuild 3>$null | Out-Null
+    if (@(Invoke-Git $fixture @('show', '--name-only', '--format=', 'HEAD')) -join ',' -ne 'VERSION,sdk/builds/unchecked-release.allow') { throw 'The unchecked release commit holds the wrong files.' }
+    & (Join-Path $fixture 'tools/check_build_record.ps1') -Root $fixture 3>$null  # as CI's package.ps1 runs it
+    Set-Content -LiteralPath (Join-Path $fixture 'new-digest') -Value '1111111111111111'
+    Assert-ReleaseFailure $fixture '0.3.0' 'checked-build record'  # the next map change needs its own say-so
 
     # refuses a malformed version
     $fixture = New-ReleaseFixture 'malformed version'

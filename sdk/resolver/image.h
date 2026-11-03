@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-namespace pg::sdk {
+namespace pm::sdk {
 
 // A PE32+ image laid out by RVA, as a loaded module is, the bounds of its functions from the
 // exception directory's RUNTIME_FUNCTION table, its export table and its sections. It refers to the
@@ -27,6 +27,11 @@ class CodeImage {
   std::span<const uint8_t> function(uint64_t rva) const;
   // The start of that function, or 0 when there is none.
   uint64_t function_start(uint64_t rva) const;
+  // The bytes from rva when no function of the table holds it: where a leaf function sits, which x64
+  // gives no unwind data. They run to the next function the table lists, kMaxLeaf bytes at most, and
+  // stay inside the image. Empty when a listed function holds rva, or rva leaves the image.
+  std::span<const uint8_t> leaf(uint64_t rva) const;
+  static constexpr size_t kMaxLeaf = 64;
   // The RVA of what the image exports under `name`. 0 when no export has that name, when more than
   // one does, when it is forwarded to another module (its RVA lies inside the export directory), or
   // when the export table or the address leaves the image.
@@ -61,4 +66,4 @@ class CodeImage {
 // the file cannot be read or any header or section lies outside the file or the image.
 std::vector<uint8_t> map_pe_file(const std::filesystem::path& file);
 
-}  // namespace pg::sdk
+}  // namespace pm::sdk

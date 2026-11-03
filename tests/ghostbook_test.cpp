@@ -4,9 +4,10 @@
 #include <string>
 
 #include "check.h"
+#include "text_fixture.h"
 
-using namespace pg;
-using namespace pg::ghostbook;
+using namespace pm;
+using namespace pm::ghostbook;
 
 namespace {
 
@@ -73,7 +74,7 @@ void charges_count_whole_actions() {
   f.status.interact = session::encode_charge(1.0f, 2.0f);  // exactly one
   CHECK(has(write(f).pages[kOverviewRight].body, "<b>1</b> interaction"));
   f.status.type = 9;  // a Demon: its ability is counted too
-  f.ability = pg::ability::of(9);
+  f.ability = pm::ability::of("vanilla.demon");
   f.status.abilities = 1;
   CHECK(has(write(f).pages[kOverviewRight].body, "<b>1</b> ability"));
 }
@@ -81,7 +82,7 @@ void charges_count_whole_actions() {
 void the_ability_is_named_only_for_a_type_that_has_one() {
   Facts f = facts();
   f.status.type = 10;  // Yurei
-  f.ability = pg::ability::of(10);
+  f.ability = pm::ability::of("vanilla.yurei");
   std::string items = write(f).pages[kItemsLeft].body;
   CHECK(has(items, "[RMB]") && has(items, "Door slam") && has(items, "Slam a door"));
   f.status.type = 0;  // Spirit: no ability of its own
@@ -113,6 +114,7 @@ void evidence_spread_reads_as_theirs() {
 }  // namespace
 
 int main() {
+  use_text({"mods/playable_ghost/i18n/default.json"});
   guide_uses_the_players_own_bindings();
   sheet_waits_for_the_ghost_then_names_it();
   hunt_page_marks_low_enough_sanity();

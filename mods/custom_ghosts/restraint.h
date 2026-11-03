@@ -1,30 +1,34 @@
 #pragma once
 
 // What a custom ghost may not do right now, whoever drives it. Runs on the host. Main thread.
-//  - Echo: while dormant (nobody heard near it for a minute) its interactions and events mostly fail;
-//    the AI loses 3 in 4 of them, a player cannot act at all until a voice wakes it. Through the same hook
-//    its AI repeats a player's use of a switch or door in its room once its interaction sensor detects it
-//    (echo.h repeat); a repeat is never lost to dormancy, every other interaction is as before.
+//  - Echo: while dormant (nobody heard near it for a minute) 3 in 4 of its interactions and events are lost,
+//    and it does not use its ability, whoever steers it. Through the same hook it repeats a player's use of a
+//    switch or door in its room once its interaction sensor detects it (echo.h repeat); a repeat is never lost to
+//    dormancy, every other interaction is as before. A ghost player's aimed interaction makes the same repeat
+//    (GhostActivity.NormalInteraction), and pays for what it loses (interaction_lost).
 //  - Kikimora: never touches anything in a room with the lights on.
 //  - Lithobolia: its throws go at an investigator in sight (lithobolia.h), through the same hook.
 //  - Gremlin: some of its interactions switch off running electronics instead (gremlin.h).
 //  - Brownie: nothing while an investigator or a running video camera has it in view (brownie.h).
 //  - Tempest: lightning strikes as each of its events begins (tempest.h), through the same hook.
-//  - Bogeyman: its AI's hunts begin from a closet (bogeyman.h), through the same hook, and outside hunts
-//    most of its AI's idle door interactions are on a closet door its door sensor detects, when there is
-//    one (GhostActivity.GetDoorToOpen).
-// The game's own AI is held back through GhostActivity.TryInteract and GhostAI.ChangeState; a player
-// controlling the ghost asks held_back() through the service (core/services.h) before acting.
-namespace pg::custom::restraint {
+//  - Bogeyman: its hunts begin from a closet (bogeyman.h), through the same hook, and outside hunts most of
+//    its idle door interactions are on a closet door its door sensor detects, when there is one
+//    (GhostActivity.GetDoorToOpen); its AI's and a ghost player's alike.
+// Its attempts are held back through GhostActivity.TryInteract and GhostAI.ChangeState, where a roll a player
+// takes (sdk/api/content.h roll_taken) goes straight on, as it attempts nothing yet; a player controlling the
+// ghost asks held_back() before acting (the ghost's PmGhostDef.heldBack, which Playable Ghost asks through the
+// content layer, sdk/api/content.h held_back). No hook here takes who steers it as an input.
+namespace pm::custom::restraint {
 
-enum Kind { kInteract = 0, kEvent = 1 };
+enum Kind { kInteract = 0, kEvent = 1, kAbility = 3 };
 
 bool create_hooks();  // before hooks::enable_all
 // The custom ghost haunting the contract (on the host; null otherwise) and its type, every frame.
-// `steered`: a player controls it, so the Lithobolia's hunt throws stay the game's own, the Bogeyman's
-// hunts begin where it stands and its doors are the ones the player picks, and the Echo repeats nothing.
-void tick(void* ghost, int type, bool steered);
+void tick(void* ghost, int type);
 // The rule holds now (no roll): the action would not happen.
 bool held_back(int type, Kind kind);
+// An interaction a player has paid for and chosen (PmGhostDef.interactionLost): whether a dormant Echo loses
+// this one, 3 in 4 by a roll of its own, as its AI's roll does; never its repeat. False for every other ghost.
+bool interaction_lost(int type);
 
-}  // namespace pg::custom::restraint
+}  // namespace pm::custom::restraint

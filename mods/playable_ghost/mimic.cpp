@@ -1,54 +1,60 @@
 #include "mimic.h"
 
-#include <vector>
+#include <algorithm>
 
-#include "game.h"
-#include "hooks.h"
-#include "il2cpp.h"
+#include "GhostController.h"
+#include "GhostTypes.h"
 #include "log.h"
+#include "runtime.h"
 
-namespace pg::mimic {
+namespace pm::mimic {
 namespace {
 
-// Build 25811160 (verified by the host at load); obfuscated names, so by offset.
-constexpr uintptr_t kAttemptStateChangeRva = 0x22AEFD0;  // GhostController.AttemptGhostTypeStateChange
-constexpr size_t kControllerType = 0x28;           // GhostController traits: what the ghost is
-constexpr size_t kControllerTimerFired = 0xB4;     // bool: the type's own timer asks for a change
-constexpr size_t kControllerOverridden = 0xBC;     // Nullable<GhostType>: hasValue (bool) ...
-constexpr size_t kControllerOverride = 0xC0;       // ... and value: the next copy, used once
-constexpr size_t kControllerCopies = 0xC8;         // List<GhostType>: what the Mimic may copy
-constexpr int kMimic = 20;
+using phasmo::GhostController;
 
-using Attempt_t = void (*)(void*, const void*);
-Attempt_t g_attempt = nullptr;
 uint8_t g_pick = session::kNoType;
 
-bool offered(void* controller, int type) {
-  auto* copies = il2cpp::field<il2cpp::List*>(controller, kControllerCopies);
-  for (int i = 0; copies && copies->items && i < copies->size; ++i)
-    if (copies->items->data<int>()[i] == type) return true;
-  return false;
+bool is_mimic(void* controller) {
+  return controller && api::alive(controller) && GhostController::ghostType.get(controller) == phasmo::GhostType::Mimic();
 }
 
-void detour_attempt(void* controller, const void* method) {
-  hooks::Guard guard;
-  // Only at the game's own moment to switch, and only to a type it would itself copy.
-  if (controller && g_pick != session::kNoType && il2cpp::field<int>(controller, kControllerType) == kMimic &&
-      il2cpp::field<bool>(controller, kControllerTimerFired) && !il2cpp::field<bool>(controller, kControllerOverridden) &&
-      offered(controller, g_pick)) {
-    il2cpp::set_field<bool>(controller, kControllerOverridden, true);
-    il2cpp::set_field<int>(controller, kControllerOverride, g_pick);
-    PG_LOG("mimic: copying the type its player chose (%d)", g_pick);
+void detour_attempt(api::Original<GhostController::AttemptGhostTypeStateChange> original, void* controller) {
+  if (place_pick(controller, g_pick)) {
+    PM_LOG("mimic: copying the type its player chose (%d)", g_pick);
     g_pick = session::kNoType;
   }
-  g_attempt(controller, method);
+  original(controller);
 }
 
 }  // namespace
 
+bool place_pick(void* controller, uint8_t pick) {
+  // Only at the game's own moment to switch, and only to a type it would itself copy.
+  if (pick == session::kNoType || !is_mimic(controller) || !GhostController::typeChangeDue.get(controller) ||
+      GhostController::mimicNext.get(controller).hasValue)
+    return false;
+  const std::vector<uint8_t> offered = copies(controller);
+  if (std::find(offered.begin(), offered.end(), pick) == offered.end()) return false;
+  GhostController::mimicNext.set(controller, {true, pick});
+  return true;
+}
+
+std::vector<uint8_t> copies(void* controller) {
+  std::vector<uint8_t> types;
+  if (!is_mimic(controller)) return types;
+  void* list = GhostController::mimicCopies.get(controller);
+  if (!list) return types;
+  const api::List copies{list};
+  const api::Array<int32_t> values{copies.items()};
+  for (size_t i = 0, n = copies.size(); i < n; ++i)
+    if (values[i] >= 0 && values[i] < session::kNoType) types.push_back(static_cast<uint8_t>(values[i]));
+  return types;
+}
+
 bool create_hooks() {
-  return hooks::create(game::game_assembly_address(kAttemptStateChangeRva), reinterpret_cast<void*>(&detour_attempt),
-                       reinterpret_cast<void**>(&g_attempt), "GhostController.AttemptGhostTypeStateChange");
+  return api::hook<GhostController::AttemptGhostTypeStateChange>(&detour_attempt,
+                                                                  "GhostController.AttemptGhostTypeStateChange",
+                                                                  api::Twins::CanonicalOnly);
 }
 
 void tick(session::Session& s, void* ghost) {
@@ -58,18 +64,11 @@ void tick(session::Session& s, void* ghost) {
     g_pick = session::kNoType;
     return;
   }
-  static il2cpp::Class* const controllerClass = il2cpp::cls("Assembly-CSharp.dll", "", "GhostController");
-  void* controller = il2cpp::static_field_by_type(controllerClass, "GhostController");
-  if (!controller || !game::alive(controller) || il2cpp::field<int>(controller, kControllerType) != kMimic) return;
-  std::vector<uint8_t> types;
-  auto* copies = il2cpp::field<il2cpp::List*>(controller, kControllerCopies);
-  for (int i = 0; copies && copies->items && i < copies->size; ++i) {
-    const int t = copies->items->data<int>()[i];
-    if (t >= 0 && t < session::kNoType) types.push_back(static_cast<uint8_t>(t));
-  }
-  s.offer_mimic(types);
+  void* controller = GhostController::instance.get();
+  if (!is_mimic(controller)) return;
+  s.offer_mimic(copies(controller));
 }
 
 uint8_t next() { return g_pick; }
 
-}  // namespace pg::mimic
+}  // namespace pm::mimic

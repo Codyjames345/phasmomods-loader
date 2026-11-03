@@ -4,7 +4,7 @@
 
 #include "log.h"
 
-namespace pg::entry_hooks {
+namespace pm::entry_hooks {
 
 std::vector<void*> bodies(void* canonical, std::span<void* const> twins) {
   std::vector<void*> out{canonical};
@@ -17,7 +17,7 @@ bool hook_body(void* canonical, std::span<void* const> twins, uint32_t index, vo
                const char* name) {
   const std::vector<void*> all = bodies(canonical, twins);
   if (index >= all.size()) {
-    PG_LOG("hooks: %s refused: the method has no body %u (it has %zu)", name, index, all.size());
+    PM_LOG("hooks: %s refused: the method has no body %u (it has %zu)", name, index, all.size());
     return false;
   }
   return hooks::create(all[index], detour, original, name);
@@ -38,4 +38,4 @@ bool hook(void* canonical, std::span<void* const> twins, void* detour, void** or
   return true;
 }
 
-}  // namespace pg::entry_hooks
+}  // namespace pm::entry_hooks

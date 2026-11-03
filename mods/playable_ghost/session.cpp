@@ -6,7 +6,7 @@
 #include <cstring>
 #include <utility>
 
-namespace pg::session {
+namespace pm::session {
 namespace {
 
 std::vector<uint8_t> header(Type t) { return {'P', 'G', kVersion, t}; }
@@ -44,10 +44,8 @@ void Session::observe(int localActor, int masterActor, const std::vector<int>& a
     const bool gone = !contains(actors, it->first) || now - it->second.lastSeen > kPeerTimeoutMs;
     it = gone ? peers_.erase(it) : std::next(it);
   }
-  std::erase_if(heard_, [&](int actor) { return !contains(actors, actor); });
   std::erase_if(steppedOutPeers_, [&](int actor) { return !contains(actors, actor); });
   if (local_ == 0) {  // left the room: forget the round and the rotation
-    heard_.clear();
     steppedOutPeers_.clear();
     ghost_ = kNobody;
     inRound_ = false;
@@ -63,6 +61,9 @@ void Session::observe(int localActor, int masterActor, const std::vector<int>& a
     nextAnnounce_ = 0;
   }
   if (masterChanged) input_ = Input{};
+  // Became master while a contract runs: its round goes on as it stands. Only the old master counted it for the rotation,
+  // and nobody is drawn until it ends (end_round), so a ghost player who left is not replaced mid-contract.
+  if (masterChanged && local_is_master() && contract_) inRound_ = true;
   if (local_is_master() && !inRound_) draw_ghost();
   if (now >= nextAnnounce_) announce();
   if (local_is_master() && ghost_ > 0 && !local_is_ghost() && now >= nextStatus_) {
@@ -82,6 +83,7 @@ void Session::observe(int localActor, int masterActor, const std::vector<int>& a
     put<uint8_t>(b, status_.trait[0]);
     put<uint8_t>(b, status_.trait[1]);
     put<uint8_t>(b, status_.mimicNext);
+    put<uint8_t>(b, status_.huntSanity);
     queue(std::move(b), To::Actor, false, ghost_);
     nextStatus_ = now + kStatusMs;
   }
@@ -107,7 +109,6 @@ void Session::receive(int sender, const uint8_t* data, size_t size, uint64_t now
   const uint8_t* end = data + size;
   Peer& peer = peers_[sender];
   peer.lastSeen = now;
-  heard_.insert(sender);
   const bool fromMaster = sender == master_;
   switch (data[3]) {
     case kHello: {
@@ -156,7 +157,7 @@ void Session::receive(int sender, const uint8_t* data, size_t size, uint64_t now
           get(p, end, s.abilities) && get(p, end, s.fuses) && get(p, end, s.restless) && get(p, end, s.flags) &&
           get(p, end, s.more) && get(p, end, s.sanity) && get(p, end, s.huntBelow) && get(p, end, s.type) &&
           get(p, end, s.room) && get(p, end, s.identity) && get(p, end, s.trait[0]) && get(p, end, s.trait[1]) &&
-          get(p, end, s.mimicNext))
+          get(p, end, s.mimicNext) && get(p, end, s.huntSanity))
         status_ = s;
       break;
     }
@@ -200,7 +201,8 @@ void Session::receive(int sender, const uint8_t* data, size_t size, uint64_t now
       break;
     case kGuess: {
       uint8_t type, dead;
-      if (local_is_ghost() && sender != local_ && get(p, end, type) && get(p, end, dead)) guesses_[sender] = {type, dead != 0};
+      if ((local_is_ghost() || local_ == contractGhost_) && sender != local_ && get(p, end, type) && get(p, end, dead))
+        guesses_[sender] = {type, dead != 0};
       break;
     }
     case kMimicOffer: {
@@ -220,9 +222,10 @@ void Session::receive(int sender, const uint8_t* data, size_t size, uint64_t now
       break;
     }
     case kScore: {
-      uint8_t killed, misled, investigators;
-      if (sender == ghost_ && !local_is_ghost() && get(p, end, killed) && get(p, end, misled) && get(p, end, investigators)) {
-        score_ = {killed, misled, investigators};
+      uint8_t killed, misled, quit, investigators;
+      if ((sender == contractGhost_ || sender == ghost_) && local_ != sender && get(p, end, killed) && get(p, end, misled) &&
+          get(p, end, quit) && get(p, end, investigators)) {
+        score_ = {killed, misled, quit, investigators};
         haveScore_ = true;
       }
       break;
@@ -301,14 +304,6 @@ bool Session::stopped_volunteering(int actor) const {
 // often in this room, and draws again whenever a new volunteer ticks in, so the first to tick has
 // no advantage; otherwise it keeps its drawn volunteer while they still volunteer.
 void Session::draw_ghost() {
-  if (!everyone_has_mod()) {
-    if (ghost_ == kNobody) return;
-    reset_round_state();
-    ghost_ = kNobody;
-    drawnAmong_.clear();
-    nextAnnounce_ = 0;
-    return;
-  }
   // Only knowing that a player stopped volunteering (or their leaving the room) replaces them:
   // a peer that has merely gone quiet keeps the role, because Photon holds messages back while a
   // contract loads and the ghost player's client has already prepared for the role by then.
@@ -355,10 +350,6 @@ void Session::end_round() {
   draw_ghost();
   if (wasLocked) send_lock();
   announce();
-}
-
-bool Session::everyone_has_mod() const {
-  return std::all_of(actors_.begin(), actors_.end(), [&](int a) { return a == local_ || heard_.count(a) != 0; });
 }
 
 std::vector<int> Session::volunteers() const {
@@ -606,10 +597,11 @@ bool Session::take_form(Form& out) {
 }
 
 void Session::send_score(const score::Tally& tally) {
-  if (!local_is_ghost()) return;
+  if (!local_is_ghost() && local_ != contractGhost_) return;
   std::vector<uint8_t> b = header(kScore);
   put<uint8_t>(b, static_cast<uint8_t>(tally.killed));
   put<uint8_t>(b, static_cast<uint8_t>(tally.misled));
+  put<uint8_t>(b, static_cast<uint8_t>(tally.quit));
   put<uint8_t>(b, static_cast<uint8_t>(tally.investigators));
   queue(std::move(b), To::Others, true);
 }
@@ -658,4 +650,4 @@ void Session::queue(std::vector<uint8_t> bytes, To to, bool reliable, int actor)
   out_.push_back({std::move(bytes), to, reliable, actor});
 }
 
-}  // namespace pg::session
+}  // namespace pm::session

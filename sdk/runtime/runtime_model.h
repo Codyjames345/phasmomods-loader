@@ -8,7 +8,16 @@
 
 #include "model.h"
 
-namespace pg::sdk {
+namespace pm::sdk {
+
+// A generic instance's method as the runtime made it: its MethodInfo*, the code and invoker that MethodInfo holds,
+// and the class it belongs to (the inflated class, or the generic method's owner).
+struct InflatedMethod {
+  const void* method = nullptr;
+  const void* code = nullptr;
+  const void* invoker = nullptr;
+  void* klass = nullptr;
+};
 
 // The IL2CPP exports the runtime model reads, as GameAssembly.dll exports them. The handles are the
 // runtime's metadata (Il2CppDomain*, Il2CppAssembly*, Il2CppImage*, Il2CppClass*, MethodInfo*,
@@ -27,6 +36,9 @@ struct RuntimeApi {
   bool (*class_is_valuetype)(const void* klass) = nullptr;
   const void* (*class_enum_basetype)(void* klass) = nullptr;
   void* (*class_from_type)(const void* type) = nullptr;
+  void* (*class_get_parent)(void* klass) = nullptr;
+  void* (*class_get_interfaces)(void* klass, void** iter) = nullptr;
+  bool (*class_is_interface)(const void* klass) = nullptr;
   void* (*class_get_fields)(void* klass, void** iter) = nullptr;
   const void* (*class_get_methods)(void* klass, void** iter) = nullptr;
   const char* (*method_get_name)(const void* method) = nullptr;
@@ -45,6 +57,12 @@ struct RuntimeApi {
   // Not read by the model: the map's icall entries resolve through it (host/game_map.cpp). It looks
   // the name up among the icalls the engine registered, and answers null for an unknown one.
   void* (*resolve_icall)(const char* name) = nullptr;
+  // Not read by the model either: the map's Inflated entries resolve through it (host/game_map.cpp).
+  // Makes `method` of the class `klass` for the type arguments `args` (Il2CppClass*): the class's, or
+  // with ofMethod the method's own. False when the runtime would not make it. On the main thread; it
+  // runs managed reflection.
+  bool (*inflate)(void* klass, const void* method, bool ofMethod, void* const* args, size_t count,
+                  InflatedMethod& out) = nullptr;
 };
 
 // Builds the game model from the running game's metadata, for the named assemblies (image names
@@ -58,6 +76,9 @@ struct RuntimeApi {
 //   il2cpp_field_static_get_value; any other constant's literal is 0 (its value is never read, so no
 //   string is made). A constant has no storage, and its offset is 0.
 // - An enum's instance field value__ is left out: the dump does not list it.
+// - A type's bases are its parent's and its interfaces' short names, less System.Object,
+//   System.ValueType and System.Enum, as the dump's base list gives them; an enum has none. Whether it
+//   is an interface is il2cpp_class_is_interface's answer, as the dump's `interface` keyword gives it.
 // - A method's rva is its code's distance from gameAssemblyBase when the code lies inside the module
 //   the headers at that base describe, and 0 otherwise (no code, or shared code elsewhere).
 // It fails when the headers at gameAssemblyBase are not a PE32+ image's, an export is missing, or a
@@ -70,4 +91,4 @@ bool load_runtime(const RuntimeApi& api, uintptr_t gameAssemblyBase, std::span<c
 // when the headers are not a PE32+ image's.
 std::span<const uint8_t> loaded_module(uintptr_t base);
 
-}  // namespace pg::sdk
+}  // namespace pm::sdk

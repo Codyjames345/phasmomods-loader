@@ -22,6 +22,8 @@ bool startThrows = false;
 int tornDown = 0;
 int resolved = 0, created = 0, attached = 0, starts = 0, ticks = 0, activeLogs = 0, threads = 0;
 int detached = 0;
+bool suiteDone = false;              // what suite::tick answers: true while it has something left to do
+int rolledBack = 0, rolledBackTo = -1;  // calls of hooks::rollback_to, and the last mark
 int sitesRestored = 0;              // calls of hooks::restore_sites
 bool restoredWhileEnabled = false;  // the last one came before the hooks were disabled
 int mapped = 0, mappedInOrder = 0;  // map resolutions; those attached and before the game bindings
@@ -112,7 +114,9 @@ FARPROC WINAPI proc_address(HMODULE, LPCSTR name) {
 #define GetProcAddress proc_address
 #define MH_DisableHook disable_hooks
 #include "../host/main.cpp"
-#include "../core/il2cpp.cpp"
+#include "../host/il2cpp.cpp"
+pm::build::Hashes startedWith;
+pm::engine::Versions runningVersions{"2022.3.40f1", 31};
 #undef GetTickCount64
 #undef GetModuleHandleW
 #undef WaitForSingleObject
@@ -125,7 +129,7 @@ FARPROC WINAPI proc_address(HMODULE, LPCSTR name) {
 #undef GetProcAddress
 #undef MH_DisableHook
 
-namespace pg::log {
+namespace pm::log {
 /** Keep native diagnostics available for terminal-stage assertions. */
 void open() {}
 /** Keep diagnostic storage available after worker completion. */
@@ -144,13 +148,16 @@ void write(const char* format, ...) {
   }
 }
 }
-namespace pg::build {
-/** Model the audited GameAssembly check at its existing boundary. */
-bool verify_game_assembly(void*) { return gameHash; }
-/** Model the independent audited UnityPlayer check. */
-bool verify_unity_player(void*) { return unityHash; }
+namespace pm::build {
+/** Model the libraries' hashes: empty when one cannot be read. */
+std::string hash_module(void*, const char* label) {
+  const bool read = std::strcmp(label, "GameAssembly.dll") == 0 ? gameHash : unityHash;
+  return read ? std::string("hash of ") + label : std::string();
 }
-namespace pg::gamemap {
+/** Model the game's files: what its engine and metadata versions read as. */
+engine::Versions running_versions() { return runningVersions; }
+}
+namespace pm::gamemap {
 /** Count map resolution and whether it ran attached, before the game bindings, with UnityPlayer. */
 bool resolve(void* gameAssembly, void* unityPlayer, void* stopEvent, unsigned long long deadline) {
   ++mapped;
@@ -160,13 +167,18 @@ bool resolve(void* gameAssembly, void* unityPlayer, void* stopEvent, unsigned lo
   return mapOk;
 }
 }
-namespace pg::game {
+namespace pm::game {
 /** Count every entry to game resolution after binary verification. */
 bool resolve() { ++resolved; return true; }
-/** Provide an inert hook target to the hook boundary. */
-void* photon_handler_late_update() { return reinterpret_cast<void*>(1); }
 }
-namespace pg::hooks {
+namespace pm::api::host_only {
+/** Provide an inert hook target, PhotonHandler.LateUpdate's, to the hook boundary. */
+const PmGameEntry* game_entry(const char*) {
+  static const PmGameEntry entry{.kind = PM_ENTRY_METHOD, .code = reinterpret_cast<void*>(1)};
+  return &entry;
+}
+}
+namespace pm::hooks {
 std::atomic<int> g_inflight{0};
 /** Allow hook setup without modifying the host executable. */
 bool init() { return true; }
@@ -186,20 +198,25 @@ void restore_sites() {
   ++sitesRestored;
   restoredWhileEnabled = enabled;
 }
+/** Take every hook since the mark off: with the mark 0, the frame's. */
+void rollback_to(size_t mark) {
+  ++rolledBack;
+  rolledBackTo = static_cast<int>(mark);
+  if (mark == 0) enabled = false;
 }
-namespace pg::suite {
+}
+namespace pm::suite {
 /** Count resolution of the host's own bindings. */
 bool resolve() { return true; }
-/** Create no hooks beyond the frame hook. */
-bool create_hooks() { return true; }
 /** Record the main-thread start and its configured result. */
-bool start(void*, void*) {
+bool start(void*, void*, const build::Hashes& game) {
   ++starts;
+  startedWith = game;
   if (startThrows) throw 1;
   return startOk;
 }
 /** Reject suite behavior before successful main-thread initialization. */
-void tick() { ++ticks; CHECK(starts == 1 && startOk); }
+bool tick() { ++ticks; CHECK(starts == 1 && startOk); return !suiteDone; }
 /** Keep shutdown independent of a live game. */
 void stop() { ++tornDown; }
 }
@@ -221,6 +238,10 @@ void reset() {
   parkedAttached = restoredWhileEnabled = false;
   messages.clear();
   frame = nullptr;
+  runningVersions = {"2022.3.40f1", 31};
+  suiteDone = false;
+  rolledBack = 0;
+  rolledBackTo = -1;
   CHECK(DllMain(nullptr, DLL_PROCESS_ATTACH, nullptr));
   threads = 0;
 }
@@ -231,15 +252,76 @@ bool logged(const char* text) {
   for (const auto& message : messages) if (message.find(text) != std::string::npos) return true;
   return false;
 }
+
+/** The host stays out: it never attaches to the runtime, maps nothing and hooks nothing, and the log names both versions. */
+void stays_inactive(const pm::engine::Versions& versions, const char* found) {
+  reset();
+  runningVersions = versions;
+  deliverFrame = true;
+  run_worker();
+  CHECK(attached == 0 && mapped == 0 && created == 0 && starts == 0 && ticks == 0 && activeLogs == 0 && !enabled);
+  CHECK(logged("ModHost inactive: this loader's layouts were written for Unity 2022.3.x and metadata version 31"));
+  CHECK(logged(found));
+}
+
+// Another Unity, or one its files do not say, reaches none of the layouts compiled in for this one.
+void unknown_engine_version_stays_inactive() {
+  stays_inactive({"6000.0.23f1", 31}, "this game is on Unity 6000.0.23f1 and metadata version 31");
+  stays_inactive({"2022.2.9f1", 31}, "this game is on Unity 2022.2.9f1");
+  stays_inactive({"", 31}, "this game is on Unity (unknown)");
+}
+
+void unknown_metadata_version_stays_inactive() {
+  stays_inactive({"2022.3.40f1", 32}, "and metadata version 32");
+  stays_inactive({"2022.3.40f1", -1}, "and metadata version (unknown)");
+}
+
+// Only the frame is hooked before the player answers: the suite makes every other hook on "I agree", so the worker makes
+// exactly one. "Play without mods" takes that off as well, from inside the frame, and stops the suite; no later frame ticks,
+// and a shutdown finds the main thread's part done, with no wait for a frame that will never come.
+void declined_leaves_no_hook_in_the_game() {
+  reset();
+  deliverFrame = true;
+  run_worker();
+  CHECK(created == 1 && rolledBack == 0);  // a session going on keeps it, whatever the player has yet to answer
+  reset();
+  suiteDone = true;
+  deliverFrame = releaseFrame = true;
+  run_worker();
+  CHECK(created == 1 && ticks == 1 && tornDown == 1);
+  CHECK(rolledBack == 1 && rolledBackTo == 0 && !enabled);
+  CHECK(logged("no hook of the loader's stays in the game"));
+  CHECK(!logged("main thread did not tick"));
+  CHECK(attached == 1 && !parkedAttached && detached == 1);  // parked as in any session, off the runtime
+}
+
+// A patch on the branch keeps the layouts: the host runs, as on any other new build.
+void a_patch_on_the_branch_runs() {
+  reset();
+  runningVersions = {"2022.3.62f2", 31};
+  deliverFrame = releaseFrame = true;
+  run_worker();
+  CHECK(mapped == 1 && starts == 1 && activeLogs == 1);
+}
 }  // namespace
 
 /** Exercise real startup rejection, deadlines, start ordering, and allocation failures. */
 int main() {
-  reset(); gameHash = false; run_worker();
-  CHECK(resolved == 0 && created == 0 && activeLogs == 0 && mapped == 0);
-  CHECK(sitesRestored == 0);  // no hooks of its own, so no site patches to write back
-  reset(); unityHash = false; run_worker();
-  CHECK(resolved == 0 && created == 0 && activeLogs == 0);
+  // Whatever build this is, and whether or not its libraries can be hashed, the host goes on: the map decides what
+  // runs, and the suite gets the hashes for the notice.
+  reset(); deliverFrame = releaseFrame = true; run_worker();
+  CHECK(mapped == 1 && starts == 1 && activeLogs == 1);
+  CHECK(startedWith.gameAssembly == "hash of GameAssembly.dll" && startedWith.unityPlayer == "hash of UnityPlayer.dll");
+  reset(); gameHash = false; deliverFrame = releaseFrame = true; run_worker();
+  CHECK(mapped == 1 && starts == 1 && activeLogs == 1);
+  CHECK(startedWith.gameAssembly.empty() && startedWith.unityPlayer == "hash of UnityPlayer.dll");
+  reset(); unityHash = false; deliverFrame = releaseFrame = true; run_worker();
+  CHECK(mapped == 1 && starts == 1 && activeLogs == 1);
+  CHECK(startedWith.gameAssembly == "hash of GameAssembly.dll" && startedWith.unityPlayer.empty());
+  unknown_engine_version_stays_inactive();
+  unknown_metadata_version_stays_inactive();
+  a_patch_on_the_branch_runs();
+  declined_leaves_no_hook_in_the_game();
   reset(); stopped = true; run_worker();
   CHECK(attached == 0 && resolved == 0 && created == 0);
   reset(); modulesAt = 100000; run_worker();

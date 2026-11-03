@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace pg::api {
+namespace pm::api {
 
 namespace detail {
 
@@ -19,12 +19,12 @@ void gc_release(uint32_t handle);
 /// weak handle on most engine objects' wrappers (GameObject, Transform; a MonoBehaviour only until it
 /// is destroyed). An unheld wrapper can be collected while the mod still points at it, and Unity
 /// then cannot clear its native pointer when the object is destroyed, so alive() would report a
-/// destroyed object as alive. (core/il2cpp.h keeps the host's own copy, il2cpp::Held, until stage
-/// 2b; mod code uses this one.)
+/// destroyed object as alive. (host/il2cpp.h keeps the host's own copy, il2cpp::Held, for the host's
+/// code; mod code uses this one.)
 ///
 /// It reads as the raw pointer it replaces (assigned, tested, compared and passed as a void*), and
 /// is moved, never copied. Assigning the object it already holds keeps its handle. A Held made
-/// before pg::api::bind holds nothing (its handle is 0), so make it after bind. Main thread.
+/// before pm::api::bind holds nothing (its handle is 0), so make it after bind. Main thread.
 class Held {
  public:
   Held() = default;
@@ -68,4 +68,4 @@ class Held {
   uint32_t handle_ = 0;
 };
 
-}  // namespace pg::api
+}  // namespace pm::api

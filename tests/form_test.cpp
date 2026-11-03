@@ -1,8 +1,13 @@
+// Offline test of the ghost's investigator form (mods/playable_ghost/form.cpp): its Unity calls go through the
+// game API over the fake backend, and core's helpers it still uses are modelled here.
+// Run: build\form_test.exe
 #include <windows.h>
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "check.h"
+#include "fake_game.h"
 #include "game.h"
 /** Keep form expiry deterministic while exercising the production tick. */
 ULONGLONG WINAPI form_clock_ms() { return 1000; }
@@ -11,20 +16,22 @@ ULONGLONG WINAPI form_clock_ms() { return 1000; }
 #undef GetTickCount64
 
 namespace {
-int player, ghost, renderer, mesh, root, part, filter, material;
-bool bakeAvailable = true, pending = false, meshAllocated = true;
-int baked = 0, assigned = 0, destroyed = 0;
+namespace fake = pm::fake;
+namespace map = pm::map;
+
+struct Obj {
+  void* klass = nullptr;
+  unsigned char bytes[0x20]{};
+};
+Obj player, ghost, renderer, root, part, filter, material, meshClass;
+bool pending = false;
+int baked = 0, assigned = 0, destroyed = 0, constructed = 0;
 bool scaled = true;
 void* bakedRenderer = nullptr;
 void* bakedMesh = nullptr;
-il2cpp::Object* skinnedType = reinterpret_cast<il2cpp::Object*>(1);
-il2cpp::Object* filterType = reinterpret_cast<il2cpp::Object*>(2);
-std::vector<void*> holds;  // gc_hold's handles (index + 1); a released one is null
-bool held(void* value) {
-  for (void* object : holds)
-    if (object == value) return true;
-  return false;
-}
+void* assignedMesh = nullptr;
+// Whether the fake host holds the object with a GC handle the code under test took.
+bool held(void* value) { return pm::fake::held(value); }
 
 /** Model the engine's internal call, including its scale argument. */
 void bake(void* source, void* destination, bool useScale) {
@@ -34,62 +41,50 @@ void bake(void* source, void* destination, bool useScale) {
   scaled = useScale;
 }
 /** Model the surviving Mesh constructor. */
-void construct(void*, const void*) {}
+void construct(void*, const void*) { ++constructed; }
 /** Expose a drawn body renderer. */
 bool enabled(void*, const void*) { return true; }
 /** Supply the original renderer's materials. */
-il2cpp::Array* materials(void*, const void*) { return reinterpret_cast<il2cpp::Array*>(&material); }
+void* materials(void*, const void*) { return &material; }
 /** Observe assigning the newly baked mesh to its visible component. */
 void set_mesh(void* target, void* value, const void*) {
-  CHECK(target == &filter && value == &mesh);
+  CHECK(target == &filter);
+  assignedMesh = value;
   ++assigned;
 }
 /** Check that the figure preserves the original materials. */
-void set_materials(void*, il2cpp::Array* value, const void*) {
-  CHECK(value == reinterpret_cast<il2cpp::Array*>(&material));
+void set_materials(void*, void* value, const void*) { CHECK(value == &material); }
+/** The investigator's body has a skinned renderer; nothing else has a component. */
+void* get_component(void*, void* type, const void*) {
+  return type == phasmo::SkinnedMeshRenderer::type.type_object() ? &renderer : nullptr;
+}
+/** A MeshFilter added to a part is the filter; any other component is the part itself. */
+void* add_component(void* object, void* type, const void*) {
+  return type == phasmo::MeshFilter::type.type_object() ? &filter : object;
+}
+
+/** Gives every entry form.cpp uses, with the Mesh type's class `mesh` (null: it cannot make one). */
+void give_entries(void* mesh, bool withBake) {
+  fake::reset();
+  static Obj skinnedClass, filterClass, rendererClass;
+  fake::type(map::Mesh, mesh);
+  fake::method(map::Mesh_ctor, reinterpret_cast<void*>(&construct));
+  fake::type(map::SkinnedMeshRenderer, &skinnedClass);
+  if (withBake) fake::icall(map::SkinnedMeshRenderer_BakeMesh, reinterpret_cast<void*>(&bake));
+  fake::type(map::MeshFilter, &filterClass);
+  fake::type(map::MeshRenderer, &rendererClass);
+  fake::method(map::MeshFilter_set_sharedMesh, reinterpret_cast<void*>(&set_mesh));
+  fake::method(map::Renderer_get_enabled, reinterpret_cast<void*>(&enabled));
+  fake::method(map::Renderer_get_sharedMaterials, reinterpret_cast<void*>(&materials));
+  fake::method(map::Renderer_set_sharedMaterials, reinterpret_cast<void*>(&set_materials));
+  fake::method(map::Component_GetComponent, reinterpret_cast<void*>(&get_component));
+  fake::method(map::GameObject_AddComponent, reinterpret_cast<void*>(&add_component));
+  fake::layer_names({"Default", "PlayerView"});
+  fake::layer(map::Layer_PlayerView);
 }
 }  // namespace
 
-namespace pg::log {
-void write(const char*, ...) {}
-}
-
-namespace il2cpp {
-/** Model the retained class metadata, with no managed BakeMesh wrapper. */
-Class* cls(const char*, const char*, const char* name) { return const_cast<char*>(name); }
-/** Only methods present in the audited game can resolve. */
-void* method_ptr(Class*, const char* name, int argc) {
-  if (!std::strcmp(name, ".ctor") && argc == 0) return reinterpret_cast<void*>(construct);
-  if (!std::strcmp(name, "get_sharedMaterials") && argc == 0) return reinterpret_cast<void*>(materials);
-  if (!std::strcmp(name, "set_sharedMaterials") && argc == 1) return reinterpret_cast<void*>(set_materials);
-  if (!std::strcmp(name, "set_sharedMesh") && argc == 1) return reinterpret_cast<void*>(set_mesh);
-  if (!std::strcmp(name, "get_enabled") && argc == 0) return reinterpret_cast<void*>(enabled);
-  return nullptr;
-}
-/** Resolve only the native entry registered by UnityPlayer. */
-void* resolve_icall(const char* name) {
-  return bakeAvailable && !std::strcmp(name, "UnityEngine.SkinnedMeshRenderer::BakeMesh")
-      ? reinterpret_cast<void*>(bake) : nullptr;
-}
-/** Distinguish components requested by the production collector. */
-Object* type_object(Class* klass) {
-  if (!std::strcmp(static_cast<char*>(klass), "SkinnedMeshRenderer")) return skinnedType;
-  if (!std::strcmp(static_cast<char*>(klass), "MeshFilter")) return filterType;
-  return reinterpret_cast<Object*>(3);
-}
-uint32_t gc_hold(void* object) {
-  if (!object) return 0;
-  holds.push_back(object);
-  return static_cast<uint32_t>(holds.size());
-}
-void gc_release(uint32_t handle) {
-  if (handle) holds[handle - 1] = nullptr;
-}
-/** Model allocation without constructing a real Unity object. */
-Object* object_new(Class*) { return meshAllocated ? reinterpret_cast<Object*>(&mesh) : nullptr; }
-}
-
-namespace pg::session {
+namespace pm::session {
 /** Deliver a single received form request to the real rendering code. */
 bool Session::take_form(Form& out) {
   if (!pending) return false;
@@ -97,9 +92,9 @@ bool Session::take_form(Form& out) {
   out = {7, 5000};
   return true;
 }
-}
+}  // namespace pm::session
 
-namespace pg::game {
+namespace pm::game {
 bool alive(void* value) { return value != nullptr; }
 void destroy(void*) { ++destroyed; }
 void* player_of_actor(int actor) { return actor == 7 ? &player : nullptr; }
@@ -110,38 +105,41 @@ bool active_in_hierarchy(void*) { return true; }
 int layer(void*) { return 0; }
 int child_count(void*) { return 0; }
 void* child(void*, int) { return nullptr; }
-void* get_component(void*, il2cpp::Object* type) { return type == skinnedType ? &renderer : nullptr; }
 void* new_game_object(const char* name) { return !std::strcmp(name, "Ghost form") ? &root : &part; }
-void* add_component(void* value, il2cpp::Object* type) { return type == filterType ? &filter : value; }
 Vector3 position(void*) { return {}; }
 Quaternion rotation(void*) { return {}; }
 void set_position(void*, Vector3) {}
 void set_rotation(void*, Quaternion) {}
 void set_parent(void*, void*, bool) {}
 void* level_controller() { return &ghost; }
-}
+}  // namespace pm::game
 
-/** Exercise resolution, a visible baked figure, and cleanup through the public API. */
+/** Exercise binding, a visible baked figure, and cleanup through the public API. */
 int main() {
-  const bool resolved = pg::form::resolve();
-  CHECK(resolved);
-  if (resolved) {
-    pg::session::Session session;
+  give_entries(&meshClass, true);
+  std::string missing;
+  const bool bound = pm::api::bind(fake::host(), missing);
+  CHECK(bound);
+  if (bound) {
+    pm::session::Session session;
     pending = true;
-    pg::form::tick(session, &ghost);
-    CHECK(baked == 1 && bakedRenderer == &renderer && bakedMesh == &mesh);
-    CHECK(!scaled && assigned == 1);
-    CHECK(held(&root) && held(&mesh));  // kept until the figure goes: the GC does not scan this DLL
-    pg::form::teardown();
+    pm::form::tick(session, &ghost);
+    CHECK(baked == 1 && bakedRenderer == &renderer && bakedMesh && constructed == 1);
+    CHECK(!scaled && assigned == 1 && assignedMesh == bakedMesh);
+    CHECK(held(&root) && held(bakedMesh));  // kept until the figure goes: the GC does not scan this DLL
+    void* mesh = bakedMesh;
+    pm::form::teardown();
     CHECK(destroyed == 2);
-    CHECK(!held(&root) && !held(&mesh));
-    meshAllocated = false;
-    pending = true;
-    pg::form::tick(session, &ghost);
-    CHECK(baked == 1 && assigned == 1);
-    pg::form::teardown();
+    CHECK(!held(&root) && !held(mesh));
   }
-  bakeAvailable = false;
-  CHECK(!pg::form::resolve());
+  give_entries(nullptr, true);  // the Mesh type makes nothing
+  CHECK(pm::api::bind(fake::host(), missing));
+  pm::session::Session session;
+  pending = true;
+  pm::form::tick(session, &ghost);
+  CHECK(baked == 1 && assigned == 1);
+  pm::form::teardown();
+  give_entries(&meshClass, false);  // a runtime without the bake: the mod does not start
+  CHECK(!pm::api::bind(fake::host(), missing) && missing == "SkinnedMeshRenderer.BakeMesh");
   return g_failures ? 1 : 0;
 }

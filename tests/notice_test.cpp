@@ -6,7 +6,7 @@
 
 #include "check.h"
 #include "game.h"
-#include "il2cpp.h"
+#include "held.h"
 #include "ui.h"
 
 namespace {
@@ -37,7 +37,7 @@ ULONGLONG WINAPI clock_ms() { return now; }
 #include "../core/notice.cpp"
 #undef GetTickCount64
 
-namespace il2cpp {
+namespace pm::api::detail {
 uint32_t gc_hold(void* object) {
   if (!object) return 0;
   holds.push_back(object);
@@ -46,15 +46,15 @@ uint32_t gc_hold(void* object) {
 void gc_release(uint32_t handle) {
   if (handle) holds[handle - 1] = nullptr;
 }
-}  // namespace il2cpp
-namespace pg::game {
+}  // namespace pm::api::detail
+namespace pm::game {
 bool alive(void* value) {
   for (auto* e = static_cast<Element*>(value); e; e = e->parent)
     if (!e->alive) return false;
   return value != nullptr;
 }
-}  // namespace pg::game
-namespace pg::ui {
+}  // namespace pm::game
+namespace pm::ui {
 void* create_canvas(const char* name, int) { return make(name, nullptr); }
 void* create_image(void* parent, const char* name, Color) { return make(name, parent); }
 void* create_text(void* parent, const char* name, float) { return make(name, parent); }
@@ -67,7 +67,7 @@ void set_text(void* text, const char* utf8) {
 void destroy(void* component) {
   if (game::alive(component)) static_cast<Element*>(component)->alive = false;
 }
-}  // namespace pg::ui
+}  // namespace pm::ui
 
 namespace {
 Element* canvas() {
@@ -77,40 +77,40 @@ Element* canvas() {
 }
 /** The popup's objects stay reachable for the GC while it shows, and are released when it hides. */
 void popup_is_held() {
-  pg::notice::show("Title", "Body", 2000);
+  pm::notice::show_wait(20, "Title", "Wait (0:20)");
   Element* shown = canvas();
   CHECK(shown && held(shown));
   int heldCount = 0;
   for (void* object : holds) heldCount += object != nullptr;
   CHECK(heldCount == 3);  // the canvas, the title and the body
-  now += 2000;
-  pg::notice::tick();
+  now += 3500;            // the wait popup's own time
+  pm::notice::tick();
   CHECK(!canvas());
   for (void* object : holds) CHECK(!object);
 }
 /** A scene change destroys the popup's canvas: the next notice builds a new one. */
 void destroyed_canvas_is_rebuilt() {
-  pg::notice::show("First", "Before the scene changed", 15000);
+  pm::notice::show_wait(20, "Title", "Wait (0:20)");
   Element* first = canvas();
   CHECK(first);
   if (first) first->alive = false;  // the scene that held it was unloaded
-  pg::notice::show("Second", "After the scene changed", 15000);
+  pm::notice::show_wait(19, "Title", "Wait (0:19)");
   Element* second = canvas();
   CHECK(second && second != first && held(second) && !held(first));
   bool bodyShown = false;
-  for (const auto& e : elements) bodyShown |= e->alive && e->text == "After the scene changed";
+  for (const auto& e : elements) bodyShown |= e->alive && e->text.find("0:19") != std::string::npos;
   CHECK(bodyShown);
-  pg::notice::hide();
+  pm::notice::hide();
   for (void* object : holds) CHECK(!object);
 }
 /** The truck countdown stops touching its popup once a scene change has destroyed it. */
 void destroyed_wait_is_left_alone() {
-  pg::notice::show_wait(20);
+  pm::notice::show_wait(20, "Title", "Wait (0:20)");
   Element* shown = canvas();
   CHECK(shown);
   if (shown) shown->alive = false;
-  pg::notice::tick_wait(19);  // set_text on the destroyed body fails the fake's check
-  pg::notice::hide();
+  pm::notice::tick_wait(19, "Wait (0:19)");  // set_text on the destroyed body fails the fake's check
+  pm::notice::hide();
 }
 }  // namespace
 

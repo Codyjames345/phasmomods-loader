@@ -8,9 +8,9 @@
 //  - authority: the master client, which runs the native GhostAI. It applies the ghost player's
 //    movement through native steering and runs their chosen actions (actions.h).
 // Everything here runs on Unity's main thread.
-namespace pg::control {
+namespace pm::control {
 
 void tick(session::Session& s);
 void teardown();  // release everything owned; safe to call repeatedly
 
-}  // namespace pg::control
+}  // namespace pm::control

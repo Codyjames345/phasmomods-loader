@@ -25,8 +25,11 @@
 // the aimed object and the per-type category chance forced, so the native chain (Shade presence rule,
 // door eligibility, state-specific type rules) decides what happens. The native per-type odds become
 // its cost instead: base odds / type odds. A Twins ghost's twin then interacts on its own at the
-// twin's vanilla rate (TryInteract: one roll in two).
-namespace pg::actions {
+// twin's vanilla rate (TryInteract: one roll in two). An aim whose ray hits nothing pulses too, with nothing
+// reported, so a rule on the pulse that needs only the sensor still runs (the Echo's repeat). The ghost's own
+// rules may lose what the chain chose (PmGhostDef.interactionLost): it does not begin, and it costs what it would
+// have, as its AI's roll is spent whether or not it is lost, and a free one could be pressed again until it took.
+namespace pm::actions {
 
 // kDisguise: an event in an investigator's form (form.h), paid for with an event charge under the
 // event's own vanilla checks; the investigator is the one nearest where the ghost looks.
@@ -43,5 +46,9 @@ session::Status status();
 // The investigator (Photon actor) whose form the ghost has just taken, once; 0 for none.
 int take_disguise();
 void clear();  // forget everything (leaving a contract, unloading)
+// Whether the ghost player takes the actions of the idle roll running now (each is granted to them instead of
+// happening): inside that roll, unless they are restless or the Tower card's boost has its actions happen on
+// their own.
+bool roll_taken();
 
-}  // namespace pg::actions
+}  // namespace pm::actions

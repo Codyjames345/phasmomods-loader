@@ -2,8 +2,9 @@
 #include "perceive.h"
 
 #include "check.h"
+#include "text_fixture.h"
 
-using namespace pg::perceive;
+using namespace pm::perceive;
 
 namespace {
 
@@ -51,10 +52,25 @@ void the_same_alert_twice_is_shown_once() {
 
 }  // namespace
 
+// The Yokai player hears a voice only where the game's hunt hears one for the Yokai: within its 2.5 m, on
+// the floor of the ghost's room, never from outside the map; a player a Monkey Paw wish marked from 1000 m
+// and any floor, but still not from outside the map.
+void yokai_hears_as_the_games_hunt_does() {
+  using pm::perceive::yokai_hears;
+  CHECK(yokai_hears(2.5f, true, false, false) && yokai_hears(0.0f, true, false, false));
+  CHECK(!yokai_hears(2.51f, true, false, false));  // farther than the Yokai's reach
+  CHECK(!yokai_hears(1.0f, false, false, false));  // another floor, however close
+  CHECK(!yokai_hears(1.0f, true, true, false));    // the truck
+  CHECK(yokai_hears(1000.0f, false, false, true) && yokai_hears(40.0f, true, false, true));  // wished
+  CHECK(!yokai_hears(1000.5f, false, false, true) && !yokai_hears(1.0f, true, true, true));
+}
+
 int main() {
+  use_text({"mods/playable_ghost/i18n/default.json"});
   directions_read_from_where_the_ghost_looks();
   alerts_say_what_happened();
   the_same_alert_twice_is_shown_once();
+  yokai_hears_as_the_games_hunt_does();
   std::printf(g_failures ? "%d check(s) failed\n" : "all perceive tests passed\n", g_failures);
   return g_failures ? 1 : 0;
 }

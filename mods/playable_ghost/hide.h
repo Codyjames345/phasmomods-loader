@@ -5,9 +5,8 @@
 // see them would simply avoid them. On the ghost player's client only, their renderers (and those of
 // everything under them, effects included) stay switched off for the whole contract. Nothing changes
 // for anyone else, and the objects themselves still work. Main thread.
-namespace pg::hide {
+namespace pm::hide {
 
-bool resolve();
 void tick(bool ghostPlayerInContract);  // every frame
 
-}  // namespace pg::hide
+}  // namespace pm::hide

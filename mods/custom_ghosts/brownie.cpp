@@ -3,51 +3,71 @@
 #include <windows.h>
 
 #include <cmath>
+#include <utility>
 #include <vector>
 
+#include "Equipment.h"
+#include "Footstep.h"
+#include "GhostAI.h"
+#include "LevelRoom.h"
+#include "Photon.h"
+#include "Transform.h"
+#include "UnityObject.h"
 #include "brownie_rule.h"
+#include "flame_net.h"
 #include "game.h"
+#include "game_api.h"
 #include "ghosts.h"
-#include "hooks.h"
-#include "il2cpp.h"
-#include "log.h"
+#include "held.h"
+#include "net.h"
 #include "players.h"
+#include "runtime.h"
 
-namespace pg::custom::brownie {
+namespace pm::custom::brownie {
 namespace {
 
-using il2cpp::Vector3;
+using phasmo::Vector3;
 
-// Build 25811160 (verified by the host at load); obfuscated names, so by offset.
-constexpr size_t kEquipmentOn = 0x281;   // Equipment: switched on
-constexpr size_t kGhostHunting = 0xF3;   // GhostAI: hunting, on every client
 constexpr float kPlayerEye = 1.6f, kGhostChest = 1.2f;  // metres above the feet
-constexpr ULONGLONG kCameraScanMs = 2000;
-
-// Build 25811160. The game's footstep play helper sets the Noise's pitch and reach, then plays it.
-constexpr uintptr_t kFootstepPlayRva = 0x243E380;  // void(Footstep, float volume, name, method)
-constexpr uintptr_t kSetMaxDistanceRva = 0x245AA40;  // Noise.SetMaxDistance(Noise, float, method)
-constexpr size_t kFootstepNoise = 0x30;   // Footstep: its Noise
-constexpr size_t kFootstepGhost = 0x40;   // Footstep: the GhostAI it belongs to
-constexpr size_t kFootstepReach = 0x48;   // Footstep: the default distance Footstep.Awake saved
-
-struct Api {
-  il2cpp::Object* cameraType = nullptr;  // CCTV: the placed video camera
-  il2cpp::Array* (*findObjects)(il2cpp::Object*, const void*) = nullptr;
-  bool ok = false;
-} api;
-
-using FootstepPlay_t = void (*)(void*, float, void*, const void*);
-using SetMaxDistance_t = void (*)(void*, float, const void*);
-FootstepPlay_t g_footstepPlay = nullptr;
-SetMaxDistance_t g_setMaxDistance = nullptr;
 
 struct State {
   bool seen = false, watched = false;
-  std::vector<il2cpp::Held> cameras;
-  ULONGLONG nextCameraScan = 0;
-  il2cpp::Held haunting;  // every client: the Brownie's GhostAI while a Brownie haunts, else empty
+  game::CameraScan cameras;  // the placed video cameras, rescanned every 2 s (core/game.h)
+  SeenTeller teller;   // the host: when it says `seen` to the clients
+  api::Held haunting;  // every client: the Brownie's GhostAI while a Brownie haunts, else empty
+  bool heardSeen = false;  // a client: what the host last said of `seen` while this Brownie haunts
+  // Every client: each Noise whose cube collider a silent step switched off, with that collider.
+  std::vector<std::pair<api::Held, api::Held>> muted;
 } g;
+
+/** Switches back on the cube collider a silent step switched off for `noise`, or every one for null. */
+void unmute(void* noise) {
+  for (auto it = g.muted.begin(); it != g.muted.end();) {
+    if (noise && it->first.get() != noise) {
+      ++it;
+      continue;
+    }
+    if (api::alive(it->second.get())) phasmo::Collider::set_enabled(it->second.get(), true);
+    it = g.muted.erase(it);
+  }
+}
+
+/**
+ * Switches off the collider on the Noise's own object (the footstep's "Noise Cube", a trigger on the Noise
+ * layer), so that no sensor's physics query finds the step. It stays off while the cube plays and is inactive,
+ * until the footstep's next step that is not silent, or until no Brownie haunts.
+ */
+void mute(void* noise) {
+  for (const auto& m : g.muted)
+    if (m.first.get() == noise) return;
+  void* collider = phasmo::Component::GetComponent(noise, phasmo::Collider::type.type_object());
+  if (!collider) return;
+  phasmo::Collider::set_enabled(collider, false);
+  g.muted.emplace_back(noise, collider);
+}
+
+/** Whether anyone looks at the Brownie, as this client knows it: the host's own, or what the host last said. */
+bool seen_now() { return phasmo::PhotonNetwork::get_IsMasterClient() ? g.seen : g.heardSeen; }
 
 /** Whether the straight line from `from` to `to` is clear (nothing solid within it). */
 bool clear_line(Vector3 from, Vector3 to) {
@@ -63,40 +83,77 @@ bool viewed_from(void* viewer, Vector3 eye, Vector3 target, float cone, float ra
 }
 
 /**
- * After the game plays a footstep, cuts the reach of a hunting Brownie's step the way the game cuts a
- * hunting Myling's (quiet_step_distance). Runs on every client: footsteps are spawned by an RPC.
+ * Whether someone sees it on the truck's monitor: a player is actively viewing the monitor, and a switched-on camera of the
+ * kind it shows has the Brownie in view. A viewer's grid page stays on their own client, so every camera of that kind counts.
  */
-void detour_footstep_play(void* footstep, float volume, void* name, const void* method) {
-  hooks::Guard guard;
-  g_footstepPlay(footstep, volume, name, method);
+bool on_the_monitor(Vector3 target) {
+  void* monitor = phasmo::CCTVController::instance.get();
+  if (!game::alive(monitor)) return false;
+  void* viewers = phasmo::CCTVController::viewers.get(monitor);
+  if (!viewers || api::List{viewers}.size() == 0) return false;
+  void* shown = phasmo::CCTVController::GetCCTVCamerasByCurrentCameraType(monitor);
+  if (!shown) return false;
+  const api::List cameras{shown};
+  for (size_t i = 0; i < cameras.size(); ++i) {
+    void* camera = cameras[i];
+    if (game::alive(camera) && viewed_from(camera, game::position(game::transform_of(camera)), target, kBrownieCameraCone,
+                                           kBrownieCameraRange))
+      return true;
+  }
+  return false;
+}
+
+/**
+ * A footstep of the haunting Brownie through the game's own play (Footstep.Play: the Noise's pitch and reach,
+ * then the clip through Noise.PlaySound, then the AudioSource's volume times Play's argument), by its rule
+ * (brownie_step). Unchanged outside hunts. In a hunt while anyone looks at it, the game cuts its reach as it
+ * cuts a hunting Myling's (quiet_step_distance). While nobody looks, its Noise Cube's collider is switched off
+ * before the game's play activates the cube, so neither sensor detects the step; the game's play gets volume 0,
+ * which silences the step's AudioSource and nothing else; and then the Noise's volume and loudness, which the
+ * sound sensor and the parabolic microphone read, are zeroed. The step's timing, pitch, reach, clip and print stay
+ * the game's. A pooled footstep's next step that is not silent gets its collider back before the game plays it.
+ * Runs on every client: footsteps are spawned by an RPC.
+ */
+void detour_footstep_play(api::Original<phasmo::Footstep::Play> original, void* footstep, float volume, void* name) {
   void* ghost = g.haunting.get();
-  if (!footstep || !ghost || il2cpp::field<void*>(footstep, kFootstepGhost) != ghost) return;
-  if (!il2cpp::field<bool>(ghost, kGhostHunting)) return;
-  if (void* noise = il2cpp::field<void*>(footstep, kFootstepNoise))
-    g_setMaxDistance(noise, quiet_step_distance(il2cpp::field<float>(footstep, kFootstepReach)), nullptr);
+  const bool its = footstep && ghost && phasmo::Footstep::ghost.get(footstep) == ghost;
+  const BrownieStep step = its ? brownie_step(phasmo::GhostAI::isHunting.get(ghost), seen_now()) : BrownieStep::Vanilla;
+  void* noise = footstep ? phasmo::Footstep::noise.get(footstep) : nullptr;
+  if (noise) {
+    if (step == BrownieStep::Silent) mute(noise);
+    else if (!g.muted.empty()) unmute(noise);
+  }
+  original(footstep, brownie_step_volume(step, volume), name);
+  if (step == BrownieStep::Vanilla || !noise) return;
+  if (step == BrownieStep::Quiet) {
+    phasmo::Noise::SetMaxDistance(noise, quiet_step_distance(phasmo::Footstep::reach.get(footstep)));
+  } else {
+    phasmo::Noise::volume.set(noise, 0.0f);
+    phasmo::Noise::loudness.set(noise, 0.0f);
+  }
+}
+
+/** The host says whether anyone looks at the Brownie when its teller says it is due. */
+void tell_seen(void* ghost) {
+  if (!g.teller.due(g.seen, phasmo::GhostAI::isHunting.get(ghost), GetTickCount64())) return;
+  const std::vector<uint8_t> message = net_msg::seen(g.seen);
+  net::send(message.data(), message.size(), net::To::Others, true);
 }
 
 }  // namespace
 
-bool resolve() {
-  il2cpp::Class* camera = il2cpp::cls("Assembly-CSharp.dll", "", "CCTV");
-  api.cameraType = camera ? il2cpp::type_object(camera) : nullptr;
-  bool ok = api.cameraType;
-  ok &= il2cpp::bind(api.findObjects, il2cpp::cls("UnityEngine.CoreModule.dll", "UnityEngine", "Object"), "FindObjectsOfType", 1);
-  api.ok = ok;
-  PG_LOG("brownie: resolve %s", ok ? "ok" : "unavailable (it acts as any ghost)");
-  return true;  // optional
-}
+bool resolve() { return true; }
 
 bool create_hooks() {
-  g_setMaxDistance = reinterpret_cast<SetMaxDistance_t>(game::game_assembly_address(kSetMaxDistanceRva));
-  return hooks::create(game::game_assembly_address(kFootstepPlayRva), reinterpret_cast<void*>(&detour_footstep_play),
-                       reinterpret_cast<void**>(&g_footstepPlay), "Footstep.Play");
+  return api::hook<phasmo::Footstep::Play>(&detour_footstep_play, "Footstep.Play", api::Twins::CanonicalOnly);
 }
 
 void tick_host(void* ghost, int type) {
   g.seen = g.watched = false;
-  if (!api.ok || !ghost || type != kBrownie || !game::alive(ghost)) return;
+  if (!ghost || type != kBrownie || !game::alive(ghost)) {
+    g.teller = SeenTeller{};  // the next Brownie's word goes out at once
+    return;
+  }
   const Vector3 feet = game::position(game::transform_of(ghost));
   const Vector3 target{feet.x, feet.y + kGhostChest, feet.z};
   game::each_player([&](void* player) {
@@ -104,35 +161,41 @@ void tick_host(void* ghost, int type) {
     const Vector3 p = game::position(game::transform_of(player));
     g.seen = viewed_from(player, {p.x, p.y + kPlayerEye, p.z}, target, kBrowniePlayerCone, kBrowniePlayerRange);
   });
+  if (!g.seen) g.seen = on_the_monitor(target);
+  tell_seen(ghost);
   g.watched = g.seen;
-  const ULONGLONG now = GetTickCount64();
-  if (now >= g.nextCameraScan) {
-    g.nextCameraScan = now + kCameraScanMs;
-    g.cameras.clear();
-    il2cpp::Array* all = api.findObjects(api.cameraType, nullptr);
-    for (uintptr_t i = 0; all && i < all->max_length; ++i)
-      if (void* c = all->data<void*>()[i]; c && game::alive(c)) g.cameras.emplace_back(c);
-  }
-  for (const il2cpp::Held& c : g.cameras) {
-    if (g.watched) break;
-    void* camera = c.get();
-    if (!game::alive(camera) || !il2cpp::field<bool>(camera, kEquipmentOn)) continue;
-    g.watched = viewed_from(camera, game::position(game::transform_of(camera)), target, kBrownieCameraCone, kBrownieCameraRange);
-  }
+  if (!g.watched)
+    game::each_running_camera(g.cameras, GetTickCount64(), [&](void* camera) {
+      g.watched = viewed_from(camera, game::position(game::transform_of(camera)), target, kBrownieCameraCone,
+                              kBrownieCameraRange);
+      return g.watched;
+    });
 }
 
 void tick_all(void* ghost, int type) {
-  const bool brownie = ghost && type == kBrownie && game::alive(ghost);
+  const bool brownie = ghost && type == kBrownie && api::alive(ghost);
   g.haunting = brownie ? ghost : nullptr;  // the same ghost keeps its handle
+  if (!brownie) {
+    g.heardSeen = false;
+    unmute(nullptr);
+  }
 }
 
-bool available() { return api.ok; }
+bool available() { return true; }
 
 bool seen() { return g.seen; }
 bool watched() { return g.watched; }
 
+void receive(int sender, const uint8_t* data, size_t size) {
+  bool seen = false;
+  const int master = game::master_actor();
+  if (!master || sender != master || !net_msg::read_seen(data, size, seen)) return;
+  g.heardSeen = seen;
+}
+
 void reset() {
+  unmute(nullptr);
   g = State{};
 }
 
-}  // namespace pg::custom::brownie
+}  // namespace pm::custom::brownie

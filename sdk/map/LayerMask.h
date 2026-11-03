@@ -6,18 +6,18 @@
 
 #include "entry.h"
 
-namespace pg::map {
+namespace pm::map {
 
 inline constexpr const char* LayerMask_string[] = {"string"};
 
 /// Unity's layer mask struct (UnityEngine.CoreModule). Inferred: Unity's documented API.
-inline constexpr pg::sdk::EntryDesc LayerMask{.key = "LayerMask", .name = "LayerMask",
+inline constexpr pm::sdk::EntryDesc LayerMask{.key = "LayerMask", .name = "LayerMask",
                                               .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
 
 /// The index of the layer named `layerName` in the project's tag manager, or -1 when no layer has
 /// that name. Static. Inferred: Unity's documented API.
-inline constexpr pg::sdk::EntryDesc LayerMask_NameToLayer{
-    .key = "LayerMask.NameToLayer", .kind = pg::sdk::Kind::Method, .flags = pg::sdk::kStatic, .owner = "LayerMask",
+inline constexpr pm::sdk::EntryDesc LayerMask_NameToLayer{
+    .key = "LayerMask.NameToLayer", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic, .owner = "LayerMask",
     .name = "NameToLayer", .type = "int", .params = LayerMask_string};
 
-}  // namespace pg::map
+}  // namespace pm::map

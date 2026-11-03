@@ -2,61 +2,34 @@
 
 #include <algorithm>
 
-#include "game.h"
-#include "log.h"
+#include "Transform.h"
+#include "UnityAudio.h"
+#include "UnityObject.h"
+#include "runtime.h"
 
-namespace pg::custom::sound {
-namespace {
+namespace pm::custom::sound {
 
-struct Api {
-  il2cpp::Object* sourceType = nullptr;
-  void (*setClip)(void*, void*, const void*) = nullptr;
-  void (*setSpatialBlend)(void*, float, const void*) = nullptr;
-  void (*setVolume)(void*, float, const void*) = nullptr;
-  void (*play)(void*, const void*) = nullptr;
-  float (*length)(void*, const void*) = nullptr;     // AudioClip.length, seconds
-  float (*timeScale)(const void*) = nullptr;
-  void (*destroyAfter)(void*, float, const void*) = nullptr;  // Object.Destroy(obj, t)
-  bool ok = false;
-} api;
+bool resolve() { return true; }
 
-}  // namespace
+bool available() { return true; }
 
-bool resolve() {
-  constexpr const char* kAudio = "UnityEngine.AudioModule.dll";
-  constexpr const char* kCore = "UnityEngine.CoreModule.dll";
-  il2cpp::Class* source = il2cpp::cls(kAudio, "UnityEngine", "AudioSource");
-  api.sourceType = source ? il2cpp::type_object(source) : nullptr;
-  bool ok = api.sourceType != nullptr;
-  ok &= il2cpp::bind(api.setClip, source, "set_clip", 1);
-  ok &= il2cpp::bind(api.setSpatialBlend, source, "set_spatialBlend", 1);
-  ok &= il2cpp::bind(api.setVolume, source, "set_volume", 1);
-  ok &= il2cpp::bind(api.play, source, "Play", 0);
-  ok &= il2cpp::bind(api.length, il2cpp::cls(kAudio, "UnityEngine", "AudioClip"), "get_length", 0);
-  ok &= il2cpp::bind(api.timeScale, il2cpp::cls(kCore, "UnityEngine", "Time"), "get_timeScale", 0);
-  ok &= il2cpp::bind(api.destroyAfter, il2cpp::cls(kCore, "UnityEngine", "Object"), "Destroy", 2);
-  api.ok = ok;
-  PG_LOG("sound: resolve %s", ok ? "ok" : "unavailable (the ghosts' own sounds are silent)");
-  return true;  // optional: only the Knell's steps and the Mesmer's sound use it
-}
-
-bool available() { return api.ok; }
-
-void play_at(void* clip, il2cpp::Vector3 at, float volume) {
-  if (!api.ok || !game::alive(clip)) return;
-  void* go = game::new_game_object("One shot audio");
+void play_at(void* clip, phasmo::Vector3 at, float volume) {
+  if (!api::alive(clip)) return;
+  void* go = phasmo::GameObject::type.make();
   if (!go) return;
-  game::set_position(game::object_transform(go), at);
-  void* source = game::add_component(go, api.sourceType);
+  phasmo::GameObject::ctor(go, api::make_string("One shot audio"));
+  const phasmo::Vector3 where{at.x, at.y, at.z};
+  phasmo::Transform::set_position(phasmo::GameObject::get_transform(go), &where);
+  void* source = phasmo::GameObject::AddComponent(go, phasmo::AudioSource::type.type_object());
   if (!source) {
-    game::destroy(go);
+    phasmo::Object::Destroy(go, 0.0f);
     return;
   }
-  api.setClip(source, clip, nullptr);
-  api.setSpatialBlend(source, 1.0f, nullptr);
-  api.setVolume(source, volume, nullptr);
-  api.play(source, nullptr);
-  api.destroyAfter(go, api.length(clip, nullptr) * std::max(api.timeScale(nullptr), 0.01f), nullptr);
+  phasmo::AudioSource::set_clip(source, clip);
+  phasmo::AudioSource::set_spatialBlend(source, 1.0f);
+  phasmo::AudioSource::set_volume(source, volume);
+  phasmo::AudioSource::Play(source, 0);
+  phasmo::Object::Destroy(go, phasmo::AudioClip::get_length(clip) * std::max(phasmo::Time::get_timeScale(), 0.01f));
 }
 
-}  // namespace pg::custom::sound
+}  // namespace pm::custom::sound

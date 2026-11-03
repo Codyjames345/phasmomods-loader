@@ -1,6 +1,6 @@
 # Exercise tools/assetcheck.py's check on a recorded snapshot (tests/fixtures/assetcheck), which needs
 # Python but not UnityPy: a path present, one missing and one Transform.Find would have to choose for,
-# the layer table, Animator parameters, and what makes it exit 0, 1 or 2. Skipped, and green, when no
+# the layer table, Animator parameters, shader properties, and what makes it exit 0, 1 or 2. Skipped, and green, when no
 # Python is installed: only the configured offline check needs it.
 $ErrorActionPreference = 'Stop'
 $project = Split-Path $PSScriptRoot -Parent

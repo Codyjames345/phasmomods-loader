@@ -6,8 +6,9 @@
 
 #include "alerts.h"
 #include "body.h"
+#include "reward.h"
 #include "control.h"
-#include "equipment.h"
+#include "loadout.h"
 #include "form.h"
 #include "game.h"
 #include "hide.h"
@@ -20,7 +21,7 @@
 #include "round.h"
 #include "senses.h"
 
-namespace pg::room {
+namespace pm::room {
 namespace {
 
 session::Session g_session;
@@ -68,10 +69,10 @@ void tick() {
   lobby::tick(g_session);
   if (g_session.ghost_actor() != g_loggedGhost) {
     g_loggedGhost = g_session.ghost_actor();
-    PG_LOG("room: ghost player is actor %d (local actor %d, master %d)", g_loggedGhost, game::local_actor(),
+    PM_LOG("room: ghost player is actor %d (local actor %d, master %d)", g_loggedGhost, game::local_actor(),
            game::master_actor());
   }
-  equipment::tick(g_session);
+  loadout::tick(g_session);
   round::tick(g_session);
   body::tick(g_session);
   control::tick(g_session);
@@ -84,7 +85,7 @@ void tick() {
   leave::tick_background();
   for (session::Outgoing& o : g_session.take_outgoing()) {
     if (!net::send(o.bytes.data(), o.bytes.size(), to_net(o.to), o.reliable, o.actor))
-      PG_LOG("room: send of message type %d failed", o.bytes.size() > 3 ? o.bytes[3] : -1);
+      PM_LOG("room: send of message type %d failed", o.bytes.size() > 3 ? o.bytes[3] : -1);
   }
 }
 
@@ -97,7 +98,13 @@ void teardown() {
   alerts::teardown();
   form::teardown();
   body::teardown();
+  reward::teardown();
   notice::hide();
+  // The mod can start again in this room: it starts clean, and hears who is who again.
+  g_session.forget();
+  g_actors.clear();
+  g_loggedGhost = -1;
+  g_private = false;
 }
 
-}  // namespace pg::room
+}  // namespace pm::room

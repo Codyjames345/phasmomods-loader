@@ -3,14 +3,14 @@
 #include <string>
 #include <vector>
 
-#include "il2cpp.h"
+#include "Transform.h"
 #include "ui.h"
 
 // The truck's map (MapController's map camera and its floors) shown inside the picker, with the
 // level's favourite-room candidates clickable. Everything here is local to the ghost player's
 // client: MapController.ChangeFloor and the camera's enabled state are not networked. Main thread
 // only.
-namespace pg::mapview {
+namespace pm::mapview {
 
 bool resolve();
 
@@ -29,6 +29,6 @@ int room_at(ui::Vec2 screenPoint);
 std::vector<ui::Rect> room_outline(int index);
 void* image();  // the RawImage, for placing markers
 // The centre of a candidate's first collider in world space; false when it has none.
-bool room_center(int index, il2cpp::Vector3& out);
+bool room_center(int index, phasmo::Vector3& out);
 
-}  // namespace pg::mapview
+}  // namespace pm::mapview

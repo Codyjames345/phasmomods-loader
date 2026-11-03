@@ -9,7 +9,7 @@
 // What the Echo needs from voices, kept free of game calls so it can be tested offline: a short
 // recording of each speaker at telephone quality, the last thing they said, and the G.711 mu-law
 // coding and chunking that carry it to the other clients.
-namespace pg::custom::voice {
+namespace pm::custom::voice {
 
 constexpr int kRate = 8000;                   // samples a second, as kept and sent
 constexpr int kKeepSeconds = 60;              // how far back a speaker is remembered
@@ -106,7 +106,7 @@ inline uint8_t encode(float sample) {
   if (sign) pcm = -pcm;
   pcm = std::min(pcm, kClip) + kBias;
   int exponent = 7;
-  for (int mask = 0x4000; exponent > 0 && !(pcm & mask); mask >>= 1) --exponent;
+  for (int mask = 0x4000; exponent > 0 && !(pcm & mask); mask >>= 1) --exponent;  // pm:not-game-data: mu-law mask
   const int mantissa = (pcm >> (exponent + 3)) & 0x0F;
   return static_cast<uint8_t>(~(sign | (exponent << 4) | mantissa));
 }
@@ -158,4 +158,4 @@ class Assembler {
   int have_ = 0;
 };
 
-}  // namespace pg::custom::voice
+}  // namespace pm::custom::voice

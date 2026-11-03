@@ -2,149 +2,131 @@
 
 #include <windows.h>
 
-#include "game.h"
-#include "il2cpp.h"
+#include "contained.h"
 #include "log.h"
 #include "menu_panel.h"
-#include "ui.h"
+#include "text_table.h"
 
-namespace pg::consent {
+namespace pm::consent {
 namespace {
 
-constexpr int kSortingOrder = 32760;  // above the game's own overlays and the mods' HUDs
-constexpr ui::Color kBackdrop{0.0f, 0.0f, 0.0f, 0.88f};
-constexpr ui::Color kPanel{0.07f, 0.07f, 0.07f, 0.98f};
-constexpr ui::Color kAgree{0.55f, 0.10f, 0.06f, 1.0f};   // the journal's red
-constexpr ui::Color kDecline{0.22f, 0.22f, 0.22f, 1.0f};
-constexpr ui::Vec2 kMiddle{0.5f, 0.5f};
-constexpr ui::Vec2 kButtonSize{340, 70};
-// The main menu's popup is copied for the notice; if the menu has not appeared by then (another
-// scene, or a game build whose popup moved), the mod's own overlay asks instead.
-constexpr ULONGLONG kMenuWaitMs = 20000;
-
-struct Button {
-  il2cpp::Held image;  // Held (il2cpp.h): kept between frames
-  ui::Color color{};
-};
+// Copying the menu's popup searches the scene: at most once a second.
+constexpr ULONGLONG kTryEveryMs = 1000;
+// How many times, with the main menu in view, the popup may be not found before the notice gives up. The menu reads as
+// in view only once its scene is up, the popup's own scene; this bounds the wait should a build's popup never appear.
+constexpr int kTriesInView = 10;
 
 struct State {
   Notice notice;
   std::string fingerprint;
   std::wstring path;
+  bool canRemember = false;
   Answer answer = Answer::Pending;
-  ULONGLONG overlayAt = 0;  // when the overlay takes over from waiting for the menu
-  ULONGLONG nextTry = 0;    // copying the menu's popup searches the scene: at most once a second
-  menu_panel::Panel panel;  // the notice as the game's popup
-  il2cpp::Held canvas;      // or as the mod's overlay
-  Button agree, decline;
+  ULONGLONG nextTry = 0;
+  int failedInView = 0;     // times the popup could not be made with the main menu in view, for the whole run
+  menu_panel::Panel panel;  // the notice, as the game's own popup
   // As last written to mods.log, where a notice nobody sees is diagnosed: why the main menu was out
   // of view (null: in view; "" before the first tick), whether copying the menu's popup failed, and
   // whether the popup was drawn.
   const char* waitingFor = "";
+  bool cannotShow = false;  // it answered Declined for the player
   bool copyFailed = false;
   bool drawn = false;
 } g;
 
-Button make_button(void* parent, const char* label, ui::Color color, float x) {
-  Button b{ui::create_image(parent, label, color), color};
-  ui::place(b.image, kMiddle, kMiddle, {x, -290}, kButtonSize);
-  void* text = ui::create_text(b.image, "Label", 30);
-  ui::place(text, kMiddle, kMiddle, {0, 0}, kButtonSize);
-  ui::set_text(text, label);
-  return b;
-}
-
-void build() {
-  g.canvas = ui::create_canvas("PhasmoMods notice", kSortingOrder);
-  if (!g.canvas) return;
-  ui::block_pointer(g.canvas);
-  void* backdrop = ui::create_image(g.canvas, "Backdrop", kBackdrop);
-  ui::place(backdrop, kMiddle, kMiddle, {0, 0}, {6000, 4000});
-  ui::set_raycast_target(backdrop, true);
-  void* panel = ui::create_image(g.canvas, "Panel", kPanel);
-  ui::place(panel, kMiddle, kMiddle, {0, 0}, {1240, 760});
-  void* title = ui::create_text(panel, "Title", 46);
-  ui::place(title, kMiddle, kMiddle, {0, 320}, {1140, 70});
-  ui::set_text(title, g.notice.title.c_str());
-  void* body = ui::create_text(panel, "Body", 25);
-  ui::place(body, kMiddle, kMiddle, {0, 10}, {1120, 520});
-  ui::set_word_wrap(body, true);
-  ui::set_alignment(body, ui::Align::TopLeft);
-  ui::set_text(body, g.notice.body.c_str());
-  g.agree = make_button(panel, "I agree", kAgree, -190);
-  g.decline = make_button(panel, "Play without mods", kDecline, 190);
-}
-
-ui::Color lighter(ui::Color c) { return {c.r * 1.35f + 0.06f, c.g * 1.35f + 0.06f, c.b * 1.35f + 0.06f, c.a}; }
-
 void answer(Answer a) {
   g.answer = a;
-  if (a == Answer::Agreed && !remember(g.path, g.fingerprint))
-    PG_LOG("consent: could not remember the answer (the notice will be shown again next time)");
-  PG_LOG("consent: %s (%s)", a == Answer::Agreed ? "agreed" : "declined; mods stay off", g.fingerprint.c_str());
+  if (a == Answer::Agreed && !g.canRemember)
+    PM_LOG("consent: this game build's hash could not be read, so the answer is not remembered (the notice will be shown "
+           "again next time)");
+  else if (a == Answer::Agreed && !remember(g.path, g.fingerprint))
+    PM_LOG("consent: could not remember the answer (the notice will be shown again next time)");
+  PM_LOG("consent: %s (%s)", a == Answer::Agreed ? "agreed" : "declined; mods stay off", g.fingerprint.c_str());
   hide();
 }
 
-// The notice as the game's own popup over the main menu: true while it is (or can be) shown so.
-bool tick_menu() {
+// The notice can never be shown in this run: it answers Declined, so it never blocks the game.
+void cannot_show(const char* why) {
+  PM_LOG("consent: the notice cannot be shown as the menu's popup (%s); the game runs without mods", why);
+  g.cannotShow = true;
+  answer(Answer::Declined);
+}
+
+// open, with whatever it throws stopped here: a half-built popup would have no working button, and at the frame's boundary
+// nothing would ever answer. The same code on the same scene would throw again, so a throw lasts.
+bool open_contained(menu_panel::OpenFailure& failure) {
+  const bool opened = host::contained("consent", "building the menu's popup", false, [&] {
+    failure = {true, "building it threw"};
+    const bool made = menu_panel::open(g.panel, g.notice.title, g.notice.body, {i18n::text("consent.agree"), i18n::text("consent.decline")}, &failure);
+    if (made) menu_panel::fit_body(g.panel);  // the mod list and the paragraphs a build adds must not run over the buttons
+    if (made) failure = {};
+    return made;
+  });
+  return opened;
+}
+
+// The notice as the game's own popup over the main menu, while the menu is in view.
+void tick_menu() {
   if (!menu_panel::is_open(g.panel)) {
     const ULONGLONG now = GetTickCount64();
-    if (now < g.nextTry) return false;
-    g.nextTry = now + 1000;
-    if (!menu_panel::open(g.panel, g.notice.title, g.notice.body, {"I agree", "Play without mods"})) {
-      if (!g.copyFailed) PG_LOG("consent: the menu's popup could not be copied; trying again each second");
+    if (now < g.nextTry) return;
+    g.nextTry = now + kTryEveryMs;
+    menu_panel::OpenFailure failure;
+    if (!open_contained(failure)) {
+      if (failure.lasting || ++g.failedInView >= kTriesInView) {
+        cannot_show(failure.why);
+        return;
+      }
+      if (!g.copyFailed) PM_LOG("consent: the menu's popup could not be made yet (%s); trying again each second", failure.why);
       g.copyFailed = true;
-      return false;
+      return;
     }
     g.copyFailed = false;
     g.drawn = false;
-    PG_LOG("consent: shown as the menu's popup");
+    PM_LOG("consent: shown as the menu's popup");
   }
   const int clicked = menu_panel::tick(g.panel);
   if (!menu_panel::is_open(g.panel)) {
     const char* why = menu_panel::why_menu_hidden();
-    PG_LOG("consent: the menu's popup closed (%s)", why ? why : "it was switched off");
-    return true;
+    PM_LOG("consent: the menu's popup closed (%s)", why ? why : "it was switched off");
+    return;
   }
   if (menu_panel::drawn(g.panel) != g.drawn) {
     g.drawn = !g.drawn;
-    PG_LOG(g.drawn ? "consent: the menu's popup is drawn" : "consent: the menu's popup is not drawn (it or its canvas is switched off)");
+    PM_LOG(g.drawn ? "consent: the menu's popup is drawn" : "consent: the menu's popup is not drawn (it or its canvas is switched off)");
   }
   if (clicked >= 0) answer(clicked == 0 ? Answer::Agreed : Answer::Declined);
-  return true;
-}
-
-void tick_overlay() {
-  if (!g.canvas || !game::alive(g.canvas)) {  // first shown, or a scene change destroyed it
-    build();
-    if (g.canvas) PG_LOG("consent: shown as the mod's own overlay");
-  }
-  if (!g.canvas) return;
-  if (game::cursor_locked()) game::free_cursor();
-  float x = 0, y = 0;
-  const bool pointer = game::mouse_position(x, y);
-  const bool click = pointer && game::mouse_left_pressed();
-  for (Button* b : {&g.agree, &g.decline}) {
-    const bool over = pointer && ui::contains(b->image, {x, y});
-    ui::set_color(b->image, over ? lighter(b->color) : b->color);
-    if (over && click) {
-      answer(b == &g.agree ? Answer::Agreed : Answer::Declined);
-      return;
-    }
-  }
 }
 
 }  // namespace
 
-void begin(const Notice& notice, const std::wstring& rememberedPath) {
+void begin(const Notice& notice, const build::Hashes& game, const std::wstring& rememberedPath) {
   g = {};
   g.notice = notice;
-  g.fingerprint = fingerprint(notice);
+  g.fingerprint = fingerprint(notice, game);
   g.path = rememberedPath;
-  g.overlayAt = GetTickCount64() + kMenuWaitMs;
-  if (remembered(g.path, g.fingerprint)) {
+  g.canRemember = can_remember(game);
+  if (g.canRemember && remembered(g.path, g.fingerprint)) {
     g.answer = Answer::Agreed;
-    PG_LOG("consent: agreed earlier to this notice (%s)", g.fingerprint.c_str());
+    PM_LOG("consent: agreed earlier to this notice (%s)", g.fingerprint.c_str());
+  } else if (!menu_panel::listeners_available()) {
+    // The notice's buttons take a click through a listener on the game's event: without one it could never be
+    // answered, and it never blocks the game.
+    g.answer = Answer::Declined;
+    g.cannotShow = true;
+    PM_LOG("consent: this game build gives no listener on a button to answer the notice with; the game runs without "
+           "mods");
+  } else if (!menu_panel::menu_available()) {
+    // The notice waits for the main menu, which the host could never see: it could never be shown.
+    g.answer = Answer::Declined;
+    g.cannotShow = true;
+    PM_LOG("consent: this game build does not let the host read the main menu to show the notice in; the game runs "
+           "without mods");
+  } else if (!menu_panel::can_copy()) {
+    // The notice is the game's popup, which this build gives the host no way to copy: it could never be shown.
+    g.answer = Answer::Declined;
+    g.cannotShow = true;
+    PM_LOG("consent: this game build lacks an entry a copy of the menu's popup needs; the game runs without mods");
   }
 }
 
@@ -152,27 +134,29 @@ Answer tick() {
   if (g.answer != Answer::Pending) return g.answer;
   const char* hidden = menu_panel::why_menu_hidden();
   if (hidden != g.waitingFor) {
-    if (hidden) PG_LOG("consent: waiting for the main menu (%s)", hidden);
-    else PG_LOG("consent: the main menu is in view");
+    if (hidden) PM_LOG("consent: waiting for the main menu (%s)", hidden);
+    else PM_LOG("consent: the main menu is in view");
     g.waitingFor = hidden;
   }
-  if (hidden) {
+  if (hidden) {  // however long it takes: the mods wait for the answer
     hide();
     g.nextTry = 0;
     return g.answer;
   }
-  if (g.canvas || !tick_menu()) {
-    if (g.canvas || GetTickCount64() >= g.overlayAt) tick_overlay();
-  }
+  tick_menu();
   return g.answer;
 }
 
 void hide() {
-  menu_panel::close(g.panel);
-  if (g.canvas) ui::destroy(g.canvas);
-  g.canvas = nullptr;
-  g.agree = {};
-  g.decline = {};
+  const bool closed = host::contained("consent", "taking the menu's popup away", false, [] {
+    menu_panel::close(g.panel);
+    return true;
+  });
+  if (!closed) g.panel = {};  // it took away what it could: nothing here points at the copy any more
 }
 
-}  // namespace pg::consent
+std::string off_cause() {
+  return g.cannotShow ? i18n::text("off.notice-cannot-show") : std::string();
+}
+
+}  // namespace pm::consent

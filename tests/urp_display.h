@@ -12,7 +12,7 @@
 // ACES (Color.hlsl AcesTonemap, the fitted RRT and ODT, from Unity-Technologies/Graphics) after the
 // HDR LUT's LogC range (scene values above 58.86 clamp), with no grading; `ev` tries the picture a
 // few stops brighter or darker. Bloom and the room around the flame are left out.
-namespace pg::flame::urp {
+namespace pm::flame::urp {
 
 struct M3 {
   float m[3][3];
@@ -84,4 +84,4 @@ inline Rgb display(Rgb sceneLinear, float ev = 0) {
 /** A colour set on a material or light (as Material.SetColor takes it) in linear light. */
 inline Rgb linear_light(Rgb set) { return {to_linear(set.r), to_linear(set.g), to_linear(set.b)}; }
 
-}  // namespace pg::flame::urp
+}  // namespace pm::flame::urp

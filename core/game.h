@@ -4,37 +4,32 @@
 #include <functional>
 #include <vector>
 
-#include "il2cpp.h"
+#include "LevelRoom.h"
+#include "Transform.h"
+#include "held.h"
+#include "runtime.h"
 
-// Resolved game and engine entry points. Managed methods are called through their
-// IL2CPP method pointers with the trailing hidden MethodInfo* argument (null).
-// All calls must be made on Unity's main thread.
-namespace pg::game {
+// Plain helpers over the game API (sdk/api, sdk/map): every member they reach is a map entry, so a game
+// update moves only the map. In a mod they call through the mod's host contract, in the host through the
+// host's own. All calls must be made on Unity's main thread.
+namespace pm::game {
 
-using il2cpp::Quaternion;
-using il2cpp::Vector3;
-
-struct Ray {
-  Vector3 origin, direction;
-};
-struct RaycastHit {  // UnityEngine.RaycastHit, 0x2C bytes
-  unsigned char bytes[0x2C];
-};
+using phasmo::Quaternion;
+using phasmo::Vector3;
 
 constexpr float kGhostEyeHeight = 1.6f;  // metres above the ghost's transform the ghost player sees from
 
-bool resolve();  // false if anything required is missing
+bool resolve();  // false when GameAssembly.dll is not loaded
 
 // Photon (PUN / Realtime)
 bool in_room();
 bool is_master();
-void* photon_local_player();          // Photon.Realtime.Player
-il2cpp::Array* photon_player_list();  // Photon.Realtime.Player[]
 int actor_number(void* photonPlayer);
-// Single player, or a room that is not listed publicly. The mod only acts in these.
+// Single player, or a room that is not listed publicly. The mod only acts in these. False whenever one of
+// the Photon members it reads did not resolve in this game build: a room it cannot judge is no private one.
 bool private_room();
-int local_actor();   // 0 when not in a room
-int master_actor();  // 0 when not in a room
+int local_actor();   // 0 when not in a room, or when the actor numbers cannot be read
+int master_actor();  // 0 when not in a room, or when the actor numbers cannot be read
 void room_actors(std::vector<int>& out);
 
 // Unity
@@ -51,8 +46,7 @@ float agent_path_length(void* agent);  // NavMeshAgent.remainingDistance, negati
 Quaternion rotation(void* transform);
 void set_rotation(void* transform, Quaternion r);
 void* new_game_object(const char* name);
-void* add_component(void* gameObject, il2cpp::Object* type);  // type: System.Type
-void* get_component(void* component, il2cpp::Object* type);   // on the component's GameObject
+void* add_component(void* gameObject, void* type);  // type: System.Type
 void* game_object_of(void* component);
 void set_enabled(void* behaviour, bool on);
 bool enabled(void* behaviour);
@@ -68,13 +62,10 @@ void set_local_scale(void* transform, Vector3 s);
 Vector3 local_scale(void* transform);
 Vector3 lossy_scale(void* transform);  // Transform.lossyScale: its scale in the world
 // UnityEngine.Object.Instantiate(original, parent, worldPositionStays): a copy of a GameObject or
-// component (and its children) under parent; returns the copy of what was passed.
+// component (and its children) under parent; returns the copy of what was passed. Null, with nothing copied, for a
+// null or destroyed original or parent. Unity differs: it throws for a null original and clones a null parent's copy
+// at the scene root. Every caller passes a live parent.
 void* instantiate(void* original, void* parent, bool worldPositionStays);
-void* find_child(void* transform, const char* path);  // Transform.Find, "a/b" paths, or null
-il2cpp::Array* components(void* gameObject, il2cpp::Object* type);  // GameObject.GetComponents(Type)
-void destroy_immediate(void* object);  // Object.DestroyImmediate: gone now, before anything can run
-float field_of_view(void* camera);     // vertical, degrees
-float aspect(void* camera);
 int child_count(void* transform);
 void* child(void* transform, int index);
 // Input System mouse movement since the last frame, in pixels; false when there is no mouse.
@@ -95,21 +86,21 @@ void set_renderer_enabled(void* renderer, bool on);
 bool collider_enabled(void* collider);
 void set_collider_enabled(void* collider, bool on);
 
-// Game singletons and offsets (build 25811160)
+// Game singletons
 void* level_controller();          // LevelController static instance, null outside a contract
-void* ghost_ai();                  // LevelController+0x40
-int ghost_state(void* ghostAi);    // GhostAI+0x30, GhostAI.State enum (2 = hunting)
-void* ghost_agent(void* ghostAi);  // GhostAI+0x40, NavMeshAgent
+void* ghost_ai();                  // phasmo::LevelController::currentGhost, alive
+int ghost_state(void* ghostAi);    // phasmo::GhostAI::state, a phasmo::GhostState value
+void* ghost_agent(void* ghostAi);  // phasmo::GhostAI::agent, a NavMeshAgent
 void* network();                   // Network.Instance
-void* local_player();              // Network.Instance+0x28, this client's Player
+void* local_player();              // phasmo::Network::localPlayer, this client's Player
 void* player_of_actor(int actor);  // the networked Player of a Photon actor (Network's spots), or null
-void* local_camera();              // Network.Instance+0x30 (LocalPlayer) +0x30 (Camera)
-void freeze_player_movement(void* player, bool frozen);
-void* ghost_activity(void* ghostAi);  // GhostAI+0x58, GhostActivity
-void* ghost_state_object(void* ghostAi);  // current IState (GhostAI+0x28 machine, +0x10)
+void* local_camera();              // phasmo::LocalPlayer::camera of local_player_component()
+void* ghost_activity(void* ghostAi);  // phasmo::GhostAI::activity
+void* ghost_state_object(void* ghostAi);  // the ghost state machine's current state object
 /**
- * Whether the ghost's own vision sensor (GhostAI+0xA0, "Ghost player vision sensor") detects a living
- * player: the call vanilla Footstep.OnEnable makes for the local player. False for null or dead.
+ * Whether the ghost's own vision sensor (phasmo::GhostAI::vision) detects a living player: any of the
+ * player's PlayerLOSTarget objects (phasmo::Player::losTargets), as the hunt's sight test asks, without
+ * that test's side effects. False for null or dead.
  */
 bool ghost_sees(void* ghostAi, void* player);
 /**
@@ -123,32 +114,31 @@ void start_coroutine(void* behaviour, void* routine);  // MonoBehaviour.StartCor
 bool any_players_in_room(void* levelRoom);            // LevelRoom.AnyPlayersInRoom
 void* level_values();                                 // LevelValues.Instance
 void* setup_phase();                                  // SetupPhaseController's instance, null outside a contract
-void* local_player_component();       // Network.Instance+0x30, LocalPlayer (LocalPCPlayer on PC)
+void* local_player_component();       // phasmo::Network::localRig, LocalPlayer (LocalPCPlayer on PC)
 
-// Hunter input: the InputActions of LocalPCPlayer.PCControls (+0x118) asset (+0x20).
-void for_each_input_action(void* localPlayer, const std::function<void(void* action, const char* map, const char* name)>& fn);
-bool action_enabled(void* action);
-void set_action_enabled(void* action, bool on);
-
-// Hook targets
-void* photon_handler_late_update();  // Photon.Pun.PhotonHandler.LateUpdate
-void* change_state();                // GhostAI.ChangeState(State, PhotonObjectInteract, bool)
-void* normal_interaction();          // GhostActivity.NormalInteraction(bool)
-void* idle_execute();                // idle state Execute (obfuscated, by address)
-void* twin_interaction();            // GhostActivity.TwinInteraction(bool) -> IEnumerator
-void* try_interact();                // GhostActivity.TryInteract(): the idle roll's interaction (inlines the normal one)
-void* random_range_int();            // UnityEngine.Random.RandomRangeInt(int, int)
-void* detected_components();         // Sensor.GetDetectedComponents<T>(List<T>) shared code
-bool in_function(const void* address, uintptr_t rva, uintptr_t length);  // GameAssembly range test
-void* game_assembly_address(uintptr_t rva);  // build 25811160 only (verified at load)
-
-// A LevelRoom's colliders' world bounds (empty when it has none).
-struct Bounds {
-  Vector3 center, extents;
-};
+// A LevelRoom's colliders' world bounds (empty when it has none), as the map's Bounds (centre and extents).
+using Bounds = phasmo::Bounds;
 std::vector<Bounds> room_bounds(void* levelRoom);
 /** Whether a world point lies inside a LevelRoom's colliders, widened by `margin` metres. */
 bool in_room(void* levelRoom, Vector3 p, float margin = 0.0f);
+/** The level's rooms (LevelController.rooms); empty outside a contract. */
+api::RefArray level_rooms();
+/** Distance in metres from `p` to the nearest of a LevelRoom's collider boxes: 0 inside one, 1e9 with none. */
+float distance_to_room(void* levelRoom, Vector3 p);
+/** The first of the level's rooms (LevelController.rooms, in its order) whose colliders, widened by `margin` metres,
+ *  hold `p`; null outside a contract and outside every room. */
+void* room_at(Vector3 p, float margin = 0.0f);
+
+// The placed video cameras (CCTV) a mod checks for what they film. A scan of every CCTV is costly, so `scan` keeps the
+// last one for kCameraScanMs; the caller owns it and clears it with its other state when it stops.
+inline constexpr uint64_t kCameraScanMs = 2000;
+struct CameraScan {
+  std::vector<api::Held> cameras;
+  uint64_t nextScan = 0;
+};
+/** Calls `visit` with each live CCTV that is switched on (Equipment.isOn), rescanning when `now` (milliseconds on any
+ *  steady clock) has reached the scan's next time; stops at the first visit that returns true. Main thread. */
+void each_running_camera(CameraScan& scan, uint64_t now, const std::function<bool(void* camera)>& visit);
 
 // First non-trigger collider hit along the ray, as its Transform, or null.
 void* raycast(Vector3 origin, Vector3 direction, float maxDistance);
@@ -157,6 +147,4 @@ bool is_child_of(void* transform, void* parent);
 const char* interactable_label(void* hitTransform);
 bool cursor_locked();  // false while a menu (pause, journal) has the cursor
 
-constexpr int kStateHunting = 2;
-
-}  // namespace pg::game
+}  // namespace pm::game

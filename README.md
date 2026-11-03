@@ -2,10 +2,10 @@
 
 ## AI Disclosure
 
-This project makes heavy use of AI for reverse engineering and C++ programming. I acknowledge that I cannot call this wholly "my" project, and that code readability is likely poor despite my best efforts at making a robust SDK. Hence I have decided to make this project fully open source and allow derivative works This is only a hobby and I have no ill intentions towards the community or Kinetic Games. I understand a
+This project makes heavy use of AI for reverse engineering, C++ programming and documentation. I acknowledge that I cannot call this wholly "my" project, and that code readability is likely poor despite my best efforts at making a robust SDK. Hence I have decided to make this project fully open source and allow derivative works. This is only a hobby and I have no ill intentions towards the community or Kinetic Games. I understand a
 subset of the community will be upset with this decision, but reverse engineering is incredibly tedious and not feasible for a solo developer working out of passion alone.
 
-<u>AI was not used for any of the following:</b>
+<u>AI was not used for any of the following:</u>
 - this README
 - ideas for custom ghosts/spectral flame
 - journal text
@@ -36,7 +36,7 @@ The mod loader attaches to the game through DLL injection, which may be picked u
 
 If you prefer automatic injection so you can launch straight from Steam, the loader provides a launch argument you can copy and paste into your Phasmophobia game settings. This only needs to be done once. After that, the game will start with the mods button visible on the main menu without any manual steps.
 
-Each mod is its own DLL with a manifest containing its version, ID, author, display name, dependencies, and description. You can toggle any mod from within the mods menu in-game.
+Each mod is its own DLL with a manifest containing its version, ID, author, display name, dependencies, and description. You can toggle any mod from within the mods menu in-game, outside a lobby.
 
 ## Using Mods
 
@@ -67,21 +67,21 @@ I have included four mods to demonstrate the capabilities of PhasmoMods. They ar
 
 | Ghost | Description | Evidence |
 | --- | --- | --- |
-| Echo  | A restless nymph known for its copycat behaviour. It often repeats actions of those around it, and talks in a familiar voice... be careful who you trust. |  |
-| Dullahan | The headless rider of Irish legend. Trading agility for speed, this ghost is a menace on straightaways but easily bested by corners. Don't let its slow turns lull you into feeling safe. |  |
-| Kikimora A Slavic household spirit with a compulsion to tidy up clutter left in the dark. Keep an eye on your equipment - this thief will keep you on your toes. |   |
-| Draugr | The jealous revenant of Valheim, strongly bonded to its favourite room. It is angered by material leaving its room, but its tether slows it down the further away it chases you. |   |
-Black Shuck: The phantom hound of the East Anglian roads, wielding a powerful sense of smell to trace your steps. It can't see or hear you, but hiding from its nose proves difficult. Salt, running water or rain breaks your scent trail.
-| Lithobolia | The ancient stone-throwing devil, a spiteful spirit that seeks a living target. It throws objects exclusively at players, and will wait if no-one is in sight. |   |
-| Gremlin | The saboteur often blamed for failing technology. This critter will often turn off equipment that has been set down and left running. |   |
-Brownie: A Scottish house spirit that only works unwatched. In a hunt it is incredibly swift and quiet while nobody watches - but a glance brings it to a crawl.
-| Bogeyman | The classic monster in the closet, it searches hiding places before anywhere else. Its hunts begin from the closet or locker nearest the youngest player (lowest XP level/prestige), and it goes for them first. Slow in open rooms and loses sight of its prey sooner. |   |
-| Lethe | With its namesake being the underworld river of forgetfulness, this ghost has the power to make players forget - much like it does. Photos, videos and recordings of it fade from the journal a few minutes after they're taken, stopped only by players taking care to remember them (viewing the media page of the journal). During a hunt it will also lose interest quickly after breaking line of sight. |   |
-| Mesmer | An illusionist with powerful deceptive abilities. Its physical form appears differently for each player, creating confusion and panic that throws off the truck's sanity monitor - which shows the team saner than they are. It can't fool a camera: video, photos and the D.O.T.S. projector show its true form and location. |   |
-| Knell | The slow toll of a funeral bell, its footsteps mirror the rhythm. Every couple seconds it alternates between powerful surges of speed and a slow crawl, held back by the inevitability of death. |   |
-| Asterion | The birth name of the Minotaur, it is cursed to navigate the living realm as a labyrinth - unable to pass through doors. Though it lacks the ability to phase, its raging fury won't keep it trapped for long. Its sheer strength is enough to blast open doors after a few seconds and destroy their hinges, making them unusable for the rest of the contract. |   |
-| Tempest | A weather-based ghost, gifted ludicrous speed when supercharged by its conjured lightning strikes. Its power amplifies with raging weather - strongest in the rain, and weakest when skies are clear. This demonic presence is completely invisible to the naked eye, only revealed by its lightning... |   |
-| Hydra | Cut off one head, and two more take its place... the serpent of Lerna proves formidable against smudges. The true copy is difficult to identify, though a keen ear may help. Beware, a sickly green spectral flame provides warning to those who dare fight it. |   |
+| Echo | A restless nymph known for its copycat behaviour. It often repeats actions of those around it, and talks in a familiar voice... be careful who you trust. | Spirit Box, Freezing Temperatures, D.O.T.S. |
+| Dullahan | The headless rider of Irish legend. Trading agility for speed, this ghost is a menace on straightaways but easily bested by corners. Don't let its slow turns lull you into feeling safe. | EMF 5, Ghost Orbs, Ghost Writing |
+| Kikimora | A Slavic household spirit with a compulsion to tidy up clutter left in the dark. Keep an eye on your equipment - this thief will keep you on your toes. | Ultraviolet, Ghost Writing, Spectral Flame |
+| Draugr | The jealous revenant of Norse folklore, strongly bonded to its favourite room. It is angered by material leaving its room, but its tether slows it down the further away it chases you. | EMF 5, Freezing Temperatures, Spectral Flame |
+| Black Shuck | The phantom hound of the East Anglian roads, wielding a powerful sense of smell to trace your steps. It can't see or hear you, but hiding from its nose proves difficult. Salt, running water or rain breaks your scent trail. | Ultraviolet, Freezing Temperatures, D.O.T.S. |
+| Lithobolia | The ancient stone-throwing devil, a spiteful spirit that seeks a living target. It throws objects exclusively at players, and will wait if no-one is in sight. | Spirit Box, Freezing Temperatures, Spectral Flame |
+| Gremlin | The saboteur often blamed for failing technology. This critter will often turn off equipment that has been set down and left running. | EMF 5, D.O.T.S., Spectral Flame |
+| Brownie | A Scottish house spirit that only works unwatched. In a hunt it is incredibly swift and quiet while nobody watches - but a glance brings it to a crawl. | EMF 5, Ghost Writing, Spectral Flame |
+| Bogeyman | The classic monster in the closet, it searches hiding places before anywhere else. Its hunts begin from the closet or locker nearest the youngest player (lowest XP level/prestige), and it goes for them first. Slow in open rooms and loses sight of its prey sooner. | Ultraviolet, Ghost Orbs, Spectral Flame |
+| Lethe | With its namesake being the underworld river of forgetfulness, this ghost has the power to make players forget - much like it does. Photos, videos and recordings of it fade from the journal a few minutes after they're taken, stopped only by players taking care to remember them (viewing the media page of the journal). During a hunt it will also lose interest quickly after breaking line of sight. | Ghost Orbs, Freezing Temperatures, Spectral Flame |
+| Mesmer | An illusionist with powerful deceptive abilities. Its physical form appears differently for each player, creating confusion and panic that throws off the truck's sanity monitor - which shows the team saner than they are. It can't fool a camera: video, photos and the D.O.T.S. projector show its true form and location. | Spirit Box, D.O.T.S., Spectral Flame |
+| Knell | The slow toll of a funeral bell, its footsteps mirror the rhythm. Every couple seconds it alternates between powerful surges of speed and a slow crawl, held back by the inevitability of death. | Spirit Box, Ghost Orbs, Spectral Flame |
+| Asterion | The birth name of the Minotaur, it is cursed to navigate the living realm as a labyrinth - unable to pass through doors. Though it lacks the ability to phase, its raging fury won't keep it trapped for long. Its sheer strength is enough to blast open doors after a few seconds and destroy their hinges, making them unusable for the rest of the contract. | Ghost Writing, D.O.T.S., Spectral Flame |
+| Tempest | A weather-based ghost, gifted ludicrous speed when supercharged by its conjured lightning strikes. Its power amplifies with raging weather - strongest in the rain, and weakest when skies are clear. During a hunt this demonic presence is invisible to the naked eye, only revealed by its lightning... | Spirit Box, Ultraviolet, Spectral Flame |
+| Hydra | Cut off one head, and two more take its place... the serpent of Lerna proves formidable against smudges. The true copy is difficult to identify, though a keen ear may help. Beware, a sickly green spectral flame provides warning to those who dare fight it. | Ghost Orbs, D.O.T.S., Spectral Flame |
 
 ### Spectral Flame
 
@@ -128,11 +128,12 @@ there runs the build just made. Close it before building.
 
 ## Source layout
 
-`core/` is shared by the host and every mod (IL2CPP access, game bindings, UI built from
-game classes, and the host contract in `core/mod_api.h`); `host/` is the host; `tools/`
-holds the PhasmoMods Loader and the injector. `archive/` holds archived mods: Bigger Lobbies, Replay, and Afterlife.
+`core/` is shared by the host and every mod (game bindings, UI built from game classes, and
+the host contract in `core/mod_api.h`); `host/` is the host, which alone reaches the game's
+IL2CPP runtime; `sdk/` is the game SDK that mods use to reach the game; `mods/` holds the
+bundled mods; `tools/` holds the PhasmoMods Loader and the injector. `archive/` holds archived mods: Bigger Lobbies, Replay, and Afterlife.
 
-Agents and contributors wish to create their own mods start at [sdk/README.md](sdk/README.md):
+Agents and contributors who wish to create their own mods start at [sdk/README.md](sdk/README.md):
 it explains the game SDK (the map of game types and methods, the game API, the offline check
 `tools/gamecheck.ps1`) and where reverse-engineering findings are recorded.
 

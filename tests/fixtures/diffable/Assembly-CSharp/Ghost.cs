@@ -59,7 +59,12 @@ second"; //Field offset: 0x0
 	[Token(Token = "0x1700001")]
 	public bool IsAwake
 	{
-		[Address(RVA = "0x1300", Offset = "0x700", Length = "0x6")]
+		[Address(RVA = "0x1340", Offset = "0x740", Length = "0x10")]
+	[Token(Token = "0x6000009")]
+	public static string Escape(string str, string chars = "
+	\"", string replacements = "ntr\"") { }
+
+	[Address(RVA = "0x1300", Offset = "0x700", Length = "0x6")]
 		[Token(Token = "0x6000002")]
 		get { } //Length: 6
 	}

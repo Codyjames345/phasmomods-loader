@@ -1,15 +1,18 @@
 #pragma once
 
 // Holding a hunting ghost still through the game's own hunt speed, so its footsteps and walk stop with
-// it: the hunt state's base speed (+0xB0) is held at zero, and the base it had is written back when the
-// hold ends. The hunt update builds the agent's speed, its footstep timing and its animation speed from
-// that base (docs/custom-ghosts.md, the speed model). Host. Main thread.
-namespace pg::tells::hold {
+// it: while a hold runs, the told ghost's content rules (mod.cpp, PmGhostRules::huntSpeed) give the hunt
+// a base speed of 0, and the game's own base comes back the frame they stop asking. The hunt update
+// builds the agent's speed, its footstep timing and its animation speed from that base
+// (sdk/systems/ghost-ai.md, "Hunt speed"). Host. Main thread.
+namespace pm::tells::hold {
 
-/** Every frame while `on`; false ends a hold (nothing when none is running). */
-void hold_still(void* ai, bool on);
-/** The line-of-sight speed-up (+0xB4) back to its floor of 1. */
-void reset_sight(void* ai);
+/** Every frame while `on`; false ends a hold. */
+void hold_still(bool on);
+/** The line-of-sight speed-up back to its floor of 1, at the hunt's next speed update. */
+void reset_sight();
+/** The rules' huntSpeed: writes the held inputs and returns true while a hold or a reset is due. */
+bool hunt_speed(float* base, float* losScale);
 void reset();
 
-}  // namespace pg::tells::hold
+}  // namespace pm::tells::hold

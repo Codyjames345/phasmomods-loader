@@ -5,10 +5,10 @@
 
 #include "log.h"
 
-namespace pg::api {
+namespace pm::api {
 namespace {
 
-const PgHostApi* g_host = nullptr;
+const PmHostApi* g_host = nullptr;
 
 // Every entry the mod's code uses, filled while its DLL loads. Built on first use, so a wrapper
 // registered from any translation unit's initialisation finds it.
@@ -31,20 +31,20 @@ bool register_use(Slot* slot) {
   return true;
 }
 
-const PgHostApi* host() { return g_host; }
+const PmHostApi* host() { return g_host; }
 
 void report_unavailable(Slot& slot) {
-  if (!slot.reported.exchange(true)) PG_LOG("%s is not available in this game build", slot.desc->key);
+  if (!slot.reported.exchange(true)) PM_LOG("%s is not available in this game build", slot.desc->key);
 }
 
 void report_refused_call(Slot& slot) {
   if (!slot.refused.exchange(true))
-    PG_LOG("%s: virtual_call on a null object or one not of its declaring type; nothing was called", slot.desc->key);
+    PM_LOG("%s: virtual_call on a null object or one not of its declaring type; nothing was called", slot.desc->key);
 }
 
 void report_refused_static(Slot& slot) {
   if (!slot.refused.exchange(true))
-    PG_LOG("%s: the host could not read or write the static field; the default was used", slot.desc->key);
+    PM_LOG("%s: the host could not read or write the static field; the default was used", slot.desc->key);
 }
 
 bool static_get(const char* key, void* out, size_t size) { return g_host && g_host->static_get(key, out, size); }
@@ -61,6 +61,15 @@ void* array_new(const char* elementTypeKey, size_t length) {
   return g_host ? g_host->array_new(elementTypeKey, length) : nullptr;
 }
 
+bool copy_settings(const char* typeKey, void* dst, const void* src) {
+  return g_host && g_host->copy_settings && g_host->copy_settings(typeKey, dst, src);
+}
+
+uint32_t fields_of_type(const char* typeKey, const void* obj, const char* fieldTypeKey, bool arrayOf, void** out,
+                        uint32_t max) {
+  return g_host && g_host->fields_of_type ? g_host->fields_of_type(typeKey, obj, fieldTypeKey, arrayOf, out, max) : 0;
+}
+
 const void* virtual_method(const void* obj, const char* methodKey) {
   return g_host ? g_host->virtual_method(obj, methodKey) : nullptr;
 }
@@ -69,23 +78,23 @@ bool hook_bodies(const char* key, bool hasDetour, void* (*entry)(uint32_t), void
                  bool allTwins, uint32_t& created) {
   created = 0;
   if (!g_host) {
-    PG_LOG("%s cannot be hooked before the game API is bound", key);
+    PM_LOG("%s cannot be hooked before the game API is bound", key);
     return false;
   }
   if (!hasDetour) {
-    PG_LOG("%s: the hook was given no detour; nothing was hooked", key);
+    PM_LOG("%s: the hook was given no detour; nothing was hooked", key);
     return false;
   }
   const uint32_t count = allTwins ? g_host->body_count(key) : 1;
   if (count > kMaxBodies) {
-    PG_LOG("%s has %u bodies, more than the %u a hook covers; nothing was hooked", key, count, kMaxBodies);
+    PM_LOG("%s has %u bodies, more than the %u a hook covers; nothing was hooked", key, count, kMaxBodies);
     return false;
   }
   for (; created < count; ++created)
     if (!g_host->hook_body(key, created, entry(created), &originals[created], name)) break;
   if (created == count && count > 0) return true;
-  if (created > 0) PG_LOG("%s is hooked on %u of its %u bodies only", key, created, count);
-  else if (count == 0) PG_LOG("%s is not a method the host can hook; nothing was hooked", key);
+  if (created > 0) PM_LOG("%s is hooked on %u of its %u bodies only", key, created, count);
+  else if (count == 0) PM_LOG("%s is not a method the host can hook; nothing was hooked", key);
   return false;
 }
 
@@ -97,9 +106,15 @@ bool animator_param(const char* key, const void* animator, int32_t* hash) {
   return g_host && g_host->animator_param(key, animator, hash);
 }
 
+bool steer_agent(void* agent, float dx, float dz) { return g_host && g_host->steer_agent(agent, dx, dz); }
+
+void abandon_ghost_spawn() {
+  if (g_host) g_host->abandon_ghost_spawn();
+}
+
 }  // namespace detail
 
-bool bind(const PgHostApi* host, std::string& missing) {
+bool bind(const PmHostApi* host, std::string& missing) {
   missing.clear();
   g_host = host;
   if (!host) return false;
@@ -128,4 +143,4 @@ size_t used_required(const char* const** keys) {
   return required.size();
 }
 
-}  // namespace pg::api
+}  // namespace pm::api

@@ -303,7 +303,7 @@ interfacing):
   - The offline check also verifies them from the game's asset files, before launch (decided by
     the user; see "The offline check").
 - **Runtime internals**: icall names (`UnityEngine.Animator::SetBoolID`) resolve through the runtime
-  by name. The IL2CPP exports the host hooks (`il2cpp_shutdown`) are entries of their own kind.
+  by name. The IL2CPP exports the host uses are entries of their own kind.
 - **Native UnityPlayer patches**: the steering stub, its register-level assumptions (RBX,
   XMM14/15, [RSP+24h]), and the CrowdAgent and NavMeshAgent internals behind it move out of
   Playable Ghost into the loader, as a native-patch entry kind the host owns. The mod asks the game
@@ -325,23 +325,39 @@ when they ship.
 
 ### Failure handling at startup
 
-- Which builds the host runs on (decided by the user, 2026-10-23):
-  - It runs mods only on a build the offline check has passed. This keeps today's rule that
-    nothing runs modded on a game patch nobody has looked at, which also guards against a changed
-    anti-cheat.
-  - The passing check writes its record. On an unchecked build the host stays inactive, as today,
-    and the log names the command to run.
-  - The compiled-in hashes in `host/build_check.cpp` are replaced by these records.
+- Which builds the host runs on (decided by the user, 2026-10-23; changed by the user, 2026-11-01):
+  - A build the offline check has passed runs as before. The passing check writes its record, which
+    replaced the hashes once compiled into `host/build_check.cpp`.
+  - An unseen build does not leave the host inactive (user, 2026-11-01: "compatibility checking
+    should be automatic so I don't have to release a new version unless a fix is required"). The
+    consent notice is asked again, once per build, with a paragraph saying the game updated and the
+    mods can't tell whether the anti-cheat changed. On agreement, every mod whose required entries
+    resolve runs, and the rest stay off and are named. Stage 2b Task 13c built it.
+  - A record that cannot be read, or a hash that cannot be computed, counts as an unseen build. It
+    never stops the game. With a hash unread the answer is not remembered, so every start asks.
+  - The host's own requirements still start no mod when they are missing (the entries of the join
+    guard and of its messages), since the lobby's rules could not hold. The log names the keys.
+  - A notice that cannot be shown (the popup cannot be copied) answers Declined, so the game runs
+    without mods, with a log line naming why. The game's own Mods panel names the cause where that
+    build can still make it. No window of the loader's own is drawn.
+- No mod's code runs before consent (user, 2026-11-02). Until the player agrees the host reads
+  `manifest.json` files only, bundled mods included, and maps no mod DLL. "I agree" loads the mods
+  that are chosen and may run, and a mod that is off is not loaded until it is switched on. "Play
+  without mods" and a Declined answer load none. A DLL that has loaded is never unloaded, refused or
+  not, since that is not safe. A chosen mod that cannot run stays in the saved choice.
+  - The earlier rule's guard against a changed anti-cheat is now the player's informed choice, not a
+    hard stop. The map still never covers anti-cheat, SelfReport or moderation.
 - Where the record lives (Claude's call): a small text file per checked build. It is committed under
   `sdk/builds/` and shipped in the release package. Other players get it with the package (through
   the updater, `2026-10-23-updater-design.md`), and a game update that breaks nothing needs a new
   release, not a code change.
 - What a record holds (Claude's call): the GameAssembly.dll and UnityPlayer.dll hashes, and a
-  digest of the map it was checked with.
+  digest of the map it was checked with (`core/build_record.h`, `sdk/resolver/map_digest.h`).
   - A record is stale when the map has changed since its check. A new or changed entry has then not
     been checked against that build.
   - The host treats a stale record as no record.
-  - The release script and CI refuse to publish with a stale record for the build being supported.
+  - The release script and CI refuse to publish when no record was made with the current map
+    (`tools/check_build_record.ps1`). A record for an older game build may stay stale.
 - The host resolves the whole map once, before any mod starts, on its own thread where IL2CPP
   allows and on the main thread where it does not (builder's call), inside the existing 60-second
   startup deadline.

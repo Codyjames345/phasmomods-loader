@@ -8,7 +8,7 @@
 
 #include "hde64.h"
 
-namespace pg::sdk {
+namespace pm::sdk {
 namespace {
 
 constexpr size_t kFlagWindow = 6;  // the init check is among a method's first instructions
@@ -163,6 +163,31 @@ bool writes(const hde64s& h) {
   return false;
 }
 
+// The immediate a `cmp` compares with, and the operand's width: cmp al, imm8 (3C) and cmp r/m8, imm8
+// (80 /7) are byte compares; cmp eax/rax, imm (3D) and cmp r/m, imm (81, 83 /7) compare 16, 32 or 64
+// bits, as the operand-size prefix and REX.W say.
+std::optional<CodeFacts::Compare> compare_immediate(const Insn& in) {
+  const hde64s& h = in.hs;
+  if (!in.ok() || !imm_size(h)) return std::nullopt;
+  const bool group = (h.opcode == 0x80 || h.opcode == 0x81 || h.opcode == 0x83) && (h.flags & F_MODRM) &&
+                     h.modrm_reg == 7;
+  if (!group && h.opcode != 0x3C && h.opcode != 0x3D) return std::nullopt;
+  const int bits = h.opcode == 0x80 || h.opcode == 0x3C ? 8 : h.rex_w ? 64 : (h.flags & F_PREFIX_66) ? 16 : 32;
+  return CodeFacts::Compare{imm_value(h), bits};
+}
+
+// The immediate a `mov` moves: mov r, imm32 (B8+r) and mov r/m, imm32 (C7 /0), read sign-extended. The CPU
+// sign-extends C7's into a 64-bit place, but B8+r into a 32-bit register zero-extends, so there a number of
+// 2^31 or more reads negative here; the numbers a MovesConst fact names are below that.
+std::optional<int64_t> move_immediate(const Insn& in) {
+  const hde64s& h = in.hs;
+  if (!in.ok() || !imm_size(h)) return std::nullopt;
+  const bool toRegister = h.opcode >= 0xB8 && h.opcode <= 0xBF;
+  const bool toPlace = h.opcode == 0xC7 && (h.flags & F_MODRM) && h.modrm_reg == 0;
+  if (!toRegister && !toPlace) return std::nullopt;
+  return imm_value(h);
+}
+
 std::optional<Access> access(const Insn& in) {
   const hde64s& h = in.hs;
   if (!in.ok() || !(h.flags & F_MODRM) || h.modrm_mod == 3) return std::nullopt;
@@ -292,17 +317,99 @@ uint16_t register_writes(const Insn& in) {
 
 uint32_t entry_at(std::span<const uint8_t> fn, size_t offset);
 
-// How many instructions run straight from the function's start, before the first branch or return
-// and before any place a branch or a switch case lands. Every call to the function runs them all, in
-// order.
-size_t entry_run(std::span<const uint8_t> fn, uint64_t rva, const std::vector<Insn>& code) {
+// The offsets in the function where a branch or a switch case lands.
+// Whether the instruction is `jmp rel32` to the function's own start (rva): a tail call of itself.
+bool self_tail_jump(const Insn& in, uint64_t rva) {
+  return in.kind == Kind::Instruction && in.ok() && in.hs.opcode == 0xE9 && (in.hs.flags & F_IMM32) &&
+         branch_target(in) == rva;
+}
+
+std::vector<bool> landing_places(std::span<const uint8_t> fn, uint64_t rva, const std::vector<Insn>& code) {
   std::vector<bool> landed(fn.size() + 1);
   for (const Insn& in : code) {
     const uint64_t target = in.kind == Kind::Entry ? entry_at(fn, in.offset)
                             : in.ok() && (in.hs.flags & F_RELATIVE) ? branch_target(in)
                                                                     : ~0ull;
+    // A `jmp rel32` to the function's own start is a tail call of itself, which runs it afresh, not a
+    // branch within this run of it.
+    if (target == rva && self_tail_jump(in, rva)) continue;
     if (target >= rva && target < rva + fn.size()) landed[target - rva] = true;
   }
+  return landed;
+}
+
+// Whether the memory operand is [base + disp] with no index, `base` being the register numbered so.
+bool based_on(const hde64s& h, int base) {
+  if (!(h.flags & F_MODRM) || h.modrm_mod == 3) return false;
+  if (h.modrm_rm == 4) return (h.sib_index | h.rex_x << 3) == 4 && (h.sib_base | h.rex_b << 3) == base;
+  return !(h.modrm_mod == 0 && h.modrm_rm == 5) && (h.modrm_rm | h.rex_b << 3) == base;
+}
+
+constexpr int kR11 = 11;
+
+// Whether the memory operand is a slot of the stack frame: [rsp + disp], or [r11 + disp] where r11 is
+// an epilogue's copy of the frame (frame_copy).
+bool stack_slot(const hde64s& h, bool r11Frame = false) {
+  return based_on(h, kRsp) || (r11Frame && based_on(h, kR11));
+}
+
+// lea r11, [rsp + disp]: an epilogue's pointer into the frame, through which it restores registers.
+bool frame_copy(const Insn& in) {
+  const hde64s& h = in.hs;
+  return in.ok() && h.opcode == 0x8D && h.rex_w && (h.modrm_reg | h.rex_r << 3) == kR11 && based_on(h, kRsp);
+}
+
+// Whether code[i] restores a register in an epilogue: a 64-bit load of it from a stack slot followed,
+// in straight line with nothing landing in between, only by loads of other registers (general or
+// xmm) from stack slots, the frame's release (add rsp, imm, or mov rsp, r11) and pops of other
+// registers, then a ret or a jmp leaving the function. A slot may be reached through r11 when a
+// lea r11, [rsp + disp] comes first in that straight line. The function never uses the value it
+// loads, which goes back to its caller, as a pop's does where the function pushed the register.
+bool epilogue_restore(std::span<const uint8_t> fn, uint64_t rva, const std::vector<Insn>& code,
+                      const std::vector<bool>& landed, size_t i) {
+  const hde64s& w = code[i].hs;
+  if (!code[i].ok() || w.opcode != 0x8B || !w.rex_w) return false;
+  const int reg = w.modrm_reg | w.rex_r << 3;
+  // Loads of other registers (or xmm ones) from the frame, the restores an epilogue makes.
+  const auto other_load = [&](const Insn& in, bool r11Frame) {
+    const hde64s& h = in.hs;
+    return in.ok() && ((h.opcode == 0x8B && h.rex_w && stack_slot(h, r11Frame) && (h.modrm_reg | h.rex_r << 3) != reg) ||
+                       (h.opcode == 0x0F && (h.opcode2 == 0x10 || h.opcode2 == 0x28 || h.opcode2 == 0x6F) &&
+                        stack_slot(h, r11Frame)));
+  };
+  bool r11Frame = false;
+  for (size_t k = i; k-- > 0 && !landed[code[k + 1].offset];) {
+    if (frame_copy(code[k])) {
+      r11Frame = true;
+      break;
+    }
+    if (!other_load(code[k], false)) break;
+  }
+  if (!stack_slot(w, r11Frame)) return false;
+  for (size_t j = i + 1; j < code.size(); ++j) {
+    const Insn& in = code[j];
+    const hde64s& h = in.hs;
+    if (!in.ok() || landed[in.offset]) return false;
+    if (h.opcode == 0xC2 || h.opcode == 0xC3) return true;  // ret
+    if (h.opcode == 0xE9 && (h.flags & F_IMM32)) {         // a tail jump out, or to its own start
+      const uint64_t target = branch_target(in);
+      return target < rva || target >= rva + fn.size() || self_tail_jump(in, rva);
+    }
+    const bool release =
+        h.rex_w && h.modrm_mod == 3 &&
+        (((h.opcode == 0x81 || h.opcode == 0x83) && h.modrm_reg == 0 && (h.modrm_rm | h.rex_b << 3) == kRsp) ||
+         (h.opcode == 0x8B && (h.modrm_reg | h.rex_r << 3) == kRsp && (h.modrm_rm | h.rex_b << 3) == kR11));
+    const bool otherPop = h.opcode >= 0x58 && h.opcode <= 0x5F && ((h.opcode & 7) | h.rex_b << 3) != reg;
+    if (!other_load(in, r11Frame) && !release && !otherPop) return false;
+  }
+  return false;
+}
+
+// How many instructions run straight from the function's start, before the first branch or return
+// and before any place a branch or a switch case lands. Every call to the function runs them all, in
+// order.
+size_t entry_run(std::span<const uint8_t> fn, uint64_t rva, const std::vector<Insn>& code) {
+  const std::vector<bool> landed = landing_places(fn, rva, code);
   size_t n = 0;
   for (; n < code.size(); ++n) {
     const Insn& in = code[n];
@@ -316,8 +423,9 @@ size_t entry_run(std::span<const uint8_t> fn, uint64_t rva, const std::vector<In
 }
 
 // Which registers provably hold `this` wherever the function uses them, a bit each. A register
-// qualifies when every write to it is a 64-bit register copy from `this` or the pop restoring it
-// where the function also pushes it, and at least one such copy is among its writes. `this` is rcx
+// qualifies when every write to it is a 64-bit register copy from `this`, the pop restoring it where
+// the function also pushes it, or an epilogue's load restoring it (epilogue_restore), and at least
+// one such copy is among its writes. `this` is rcx
 // at entry: rcx itself with nothing writing it, or a copy of rcx made before anything writes it in
 // the instructions every call runs first. Judged over the whole function, not per path.
 uint16_t this_registers(std::span<const uint8_t> fn, uint64_t rva, const std::vector<Insn>& code) {
@@ -328,6 +436,7 @@ uint16_t this_registers(std::span<const uint8_t> fn, uint64_t rva, const std::ve
     if (in.ok() && in.hs.opcode >= 0x50 && in.hs.opcode <= 0x57)
       pushed |= 1u << ((in.hs.opcode & 7) | in.hs.rex_b << 3);
   const size_t run = entry_run(fn, rva, code);
+  const std::vector<bool> landed = landing_places(fn, rva, code);
   bool rcxWritten = false;  // by anything so far, copies included
   for (size_t i = 0; i < code.size(); ++i) {
     const Insn& in = code[i];
@@ -343,6 +452,8 @@ uint16_t this_registers(std::span<const uint8_t> fn, uint64_t rva, const std::ve
       writes &= ~(1u << to);
     } else if (in.ok() && h.opcode >= 0x58 && h.opcode <= 0x5F) {
       writes &= ~(pushed & (1u << ((h.opcode & 7) | h.rex_b << 3)));
+    } else if (epilogue_restore(fn, rva, code, landed, i)) {
+      writes &= ~(1u << (h.modrm_reg | h.rex_r << 3));
     }
     otherWrite |= writes;
     rcxWritten = rcxWritten || writesRcx;
@@ -381,6 +492,39 @@ uint16_t this_registers(std::span<const uint8_t> fn, uint64_t rva, const std::ve
     }
   }
   return static_cast<uint16_t>(holds);
+}
+
+constexpr int kChainDepth = 3;  // field loads followed back from an access, at most
+
+// The field loads that gave register `reg` its value just before instruction i, back to this
+// (Access::chain): each a `mov r64, [base + disp]` with no index, the last write to its register in
+// straight-line code with no branch landing between. Empty when the value came from anything else, a
+// branch lands on the way, or the chain runs deeper than `depth` more loads.
+std::vector<int32_t> load_chain(const std::vector<Insn>& code, const std::vector<bool>& landed, uint16_t self,
+                                size_t i, int reg, int depth) {
+  for (size_t j = i; j > 0 && !landed[code[j].offset];) {
+    const Insn& w = code[--j];
+    if (w.kind != Kind::Instruction) return {};
+    if (!(register_writes(w) >> reg & 1)) continue;
+    const hde64s& h = w.hs;
+    if (!w.ok() || h.opcode != 0x8B || !h.rex_w || !(h.flags & F_MODRM) || h.modrm_mod == 3 || rip_relative(h) ||
+        (h.modrm_reg | h.rex_r << 3) != reg)
+      return {};
+    int base = h.modrm_rm | h.rex_b << 3;
+    if (h.modrm_rm == 4) {
+      if ((h.sib_index | h.rex_x << 3) != 4 || (h.modrm_mod == 0 && h.sib_base == 5)) return {};
+      base = h.sib_base | h.rex_b << 3;
+    }
+    const int32_t disp = h.modrm_mod == 1   ? static_cast<int8_t>(h.disp.disp8)
+                         : h.modrm_mod == 2 ? static_cast<int32_t>(h.disp.disp32)
+                                            : 0;
+    if (self >> base & 1) return {disp};
+    if (depth == 0) return {};
+    std::vector<int32_t> chain = load_chain(code, landed, self, j, base, depth - 1);
+    if (!chain.empty()) chain.push_back(disp);
+    return chain;
+  }
+  return {};
 }
 
 // The X of the method's own init check, `cmp byte ptr [rip+X], 0` followed by a later
@@ -597,7 +741,11 @@ CodeFacts read_code(std::span<const uint8_t> fn, uint64_t rva) {
       facts.normalized.push_back("?" + hex(p, in.len));
       continue;
     }
+    if (h.opcode == 0xC2 || h.opcode == 0xC3 || (h.opcode == 0xFF && (h.modrm_reg == 4 || h.modrm_reg == 5)))
+      facts.returns = true;
     if (const auto a = access(in)) facts.accesses.push_back(*a);
+    if (const auto c = compare_immediate(in)) facts.compares.push_back(*c);
+    if (const auto m = move_immediate(in)) facts.moves.push_back(*m);
     const size_t imm = imm_size(h);
     const auto ref = std::find_if(layout.refs.begin(), layout.refs.end(), [&](const auto& r) { return r.first == i; });
     const bool readsTable = ref != layout.refs.end();
@@ -605,6 +753,7 @@ CodeFacts read_code(std::span<const uint8_t> fn, uint64_t rva) {
       const uint64_t target = branch_target(in);
       if ((h.opcode == 0xE8 || h.opcode == 0xE9) && (h.flags & F_IMM32) && !inside(target))
         facts.callTargets.push_back(target);
+      if (h.opcode == 0xE9 && !inside(target)) facts.returns = true;
       if (inside(target)) lands(target);
       facts.normalized.push_back(hex(p, in.len - imm) + " " + place(target));
     } else if (rip_relative(h) || readsTable) {
@@ -622,8 +771,50 @@ CodeFacts read_code(std::span<const uint8_t> fn, uint64_t rva) {
   }
   const uint16_t self = this_registers(fn, rva, code);
   for (Access& a : facts.accesses) a.thisBase = (self >> a.base & 1) != 0;
+  // Which accesses go through a register just loaded from a fixed address (Access::global).
+  const std::vector<bool> landed = landing_places(fn, rva, code);
+  size_t next = 0;
+  for (size_t i = 0; i < code.size() && next < facts.accesses.size(); ++i) {
+    if (code[i].at != facts.accesses[next].at) continue;
+    Access& a = facts.accesses[next++];
+    for (size_t j = i; j > 0 && !landed[code[j].offset];) {
+      const Insn& w = code[--j];
+      if (w.kind != Kind::Instruction) break;
+      if (!(register_writes(w) >> a.base & 1)) continue;
+      const hde64s& h = w.hs;
+      a.global = w.ok() && h.opcode == 0x8B && h.rex_w && rip_relative(h) && (h.modrm_reg | h.rex_r << 3) == a.base;
+      break;
+    }
+    if (!a.thisBase && !a.global) a.chain = load_chain(code, landed, self, i, a.base, kChainDepth);
+  }
   facts.complete = complete;
   return facts;
 }
 
-}  // namespace pg::sdk
+CodeFacts read_leaf(std::span<const uint8_t> code, uint64_t rva) {
+  CodeFacts facts;
+  facts.complete = false;
+  for (size_t offset = 0; offset < code.size();) {
+    const Insn in = decode_one(code, rva, offset);
+    if (!in.ok()) return facts;
+    const hde64s& h = in.hs;
+    facts.starts.push_back(in.at);
+    if (h.opcode == 0xC3 || h.opcode == 0xC2) {  // ret
+      facts.returns = true;
+      facts.complete = true;
+      return facts;
+    }
+    if (h.opcode == 0xE9 && (h.flags & F_IMM32)) {  // jmp rel32: a tail call ends it
+      facts.callTargets.push_back(branch_target(in));
+      facts.complete = true;
+      return facts;
+    }
+    // Any other branch, a call, an indirect call or jump, or a breakpoint: not straight-line code.
+    const bool indirect = h.opcode == 0xFF && (h.flags & F_MODRM) && h.modrm_reg >= 2 && h.modrm_reg <= 5;
+    if ((h.flags & F_RELATIVE) || indirect || h.opcode == 0xCC) return facts;
+    offset += in.len;
+  }
+  return facts;
+}
+
+}  // namespace pm::sdk

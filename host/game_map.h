@@ -1,18 +1,20 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
+#include "content_ids.h"
 #include "resolver.h"
 
-struct PgGameEntry;
+struct PmGameEntry;
 
-namespace pg::sdk {
+namespace pm::sdk {
 struct SceneEngine;
 }
 
 // The game map (sdk/map) resolved against the running game, once at startup.
-namespace pg::gamemap {
+namespace pm::gamemap {
 
 // What resolution leaves of the startup deadline for the stages after it (the hooks).
 inline constexpr unsigned long long kHooksBudgetMs = 10000;
@@ -29,6 +31,9 @@ inline constexpr unsigned long long kHooksBudgetMs = 10000;
 // and leaves every entry as published.
 bool resolve(void* gameAssembly, void* unityPlayer, void* stopEvent, unsigned long long deadline);
 
+// The digest of the map this host holds (sdk/resolver/map_digest.h), which a checked-build record names.
+std::string map_digest();
+
 // An entry's result by key, or null before resolve or for an unknown key.
 const sdk::Result* result(std::string_view key);
 
@@ -37,6 +42,12 @@ const sdk::Result* result(std::string_view key);
 // since the runtime's icall table is not locked and the engine's registration may not be done.
 // Logs each icall that still did not resolve, and the count. Nothing thrown escapes.
 void resolve_icalls();
+
+// Makes the map's Inflated entries (a method of a generic instance) in the running game and publishes them. On the
+// main thread at host activation, after resolve_icalls and before any mod starts: it runs the game's managed
+// reflection, which no other time may. An instance this game build has no code for stays unresolved, as does one the
+// runtime will not make. Logs each one that did not resolve, and the count. Nothing thrown escapes.
+void resolve_inflated();
 
 // Resolves the map's scene facts and publishes them, with `engine` asking the running game
 // (host/scene_engine.h). On the main thread at host activation, after resolve_icalls and before any mod
@@ -55,12 +66,17 @@ void forget_scene_facts();
 void* scene_find(const char* key, void* root);
 bool animator_param(const char* key, const void* animator, int32_t* hash);
 
+// Reads the running game's GhostType and EvidenceType enums whole, every value and its name, into `out`
+// for content numbering (sdk/runtime/game_enums.h). Returns why they cannot be read, or empty. Main
+// thread, after resolve.
+std::string read_content_enums(content::GameEnums& out);
+
 // An entry as the host has it, or null when it is unknown or unresolved. Host code only: it includes
 // GameAssembly's exports.
-const PgGameEntry* entry(const char* key);
+const PmGameEntry* entry(const char* key);
 
-// An entry as the host contract gives it to mods: as entry, but null for an export, which only the
-// host may use. A mod that requires an export is therefore never started.
-const PgGameEntry* mod_entry(const char* key);
+// An entry as the host contract gives it to mods: as entry, but null for an export or a native site,
+// which only the host may use. A mod that requires one is therefore never started.
+const PmGameEntry* mod_entry(const char* key);
 
-}  // namespace pg::gamemap
+}  // namespace pm::gamemap

@@ -1,70 +1,92 @@
 #include "build_check.h"
 
 #include <windows.h>
-#include <bcrypt.h>
 
-#include <cstdio>
-#include <cstring>
+#include <fstream>
 
 #include "log.h"
+#include "text_files.h"
 
-namespace pg::build {
+namespace pm::build {
 namespace {
-constexpr char kGameAssemblySha256[] =
-    "e300eda993f2479922628f1b44f59e60c156c240f5a07c7289c4bd0fe4b790c8";
-constexpr char kUnityPlayerSha256[] =
-    "cd106e0f8a54c36ee741494ea2c557752890055220a825ce49b0fdf87d50c496";
-}  // namespace
+constexpr size_t kMaxRecordFiles = 1024;  // one per game build ever checked: far past what a package ships
 
-/** Read and hash the whole file, refusing unreadable chunks and avoiding heap allocation. */
-bool sha256_file(const wchar_t* path, char (&hex)[65]) {
-  hex[0] = '\0';
-  HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                         OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-  if (f == INVALID_HANDLE_VALUE) return false;
-  BCRYPT_ALG_HANDLE alg = nullptr;
-  BCRYPT_HASH_HANDLE hash = nullptr;
-  bool ok = BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) == 0 &&
-            BCryptCreateHash(alg, &hash, nullptr, 0, nullptr, 0, 0) == 0;
-  unsigned char buf[64 * 1024];
-  DWORD got = 0;
-  while (ok) {
-    if (!ReadFile(f, buf, sizeof buf, &got, nullptr)) {
-      ok = false;
+/** The record in `file`, false when it cannot be read or is no record. */
+bool read_record(const std::filesystem::path& file, Record& out) {
+  std::ifstream in(file, std::ios::binary);
+  if (!in) return false;
+  std::string text(kMaxRecordBytes + 1, '\0');
+  in.read(text.data(), static_cast<std::streamsize>(text.size()));
+  text.resize(static_cast<size_t>(in.gcount()));
+  return text.size() <= kMaxRecordBytes && parse_record(text, out);
+}
+
+Standing read_records(const std::filesystem::path& records, const Hashes& running, std::string_view mapDigest) {
+  namespace fs = std::filesystem;
+  Standing standing = Standing::Unseen;
+  std::error_code error;
+  size_t files = 0;
+  for (fs::directory_iterator it(records, error), end; !error && it != end; it.increment(error)) {
+    if (++files > kMaxRecordFiles) {
+      PM_LOG("build: more than %zu files among the build records; the rest are not read", kMaxRecordFiles);
       break;
     }
-    if (!got) break;
-    ok = BCryptHashData(hash, buf, got, 0) == 0;
+    const fs::path& file = it->path();
+    if (_wcsicmp(file.extension().c_str(), L".txt") != 0) continue;
+    Record record;
+    if (!read_record(file, record)) {
+      PM_LOG("build: the build record %s cannot be read, so it counts for nothing", text::narrow(file.filename().wstring()).c_str());
+      continue;
+    }
+    if (record.gameAssembly != running.gameAssembly || record.unityPlayer != running.unityPlayer) continue;
+    if (record.map == mapDigest) return Standing::Known;
+    standing = Standing::Stale;
   }
-  unsigned char digest[32];
-  ok = ok && BCryptFinishHash(hash, digest, sizeof digest, 0) == 0;
-  if (hash) BCryptDestroyHash(hash);
-  if (alg) BCryptCloseAlgorithmProvider(alg, 0);
-  CloseHandle(f);
-  if (!ok) return false;
-  for (int i = 0; i < 32; ++i) snprintf(hex + i * 2, 3, "%02x", digest[i]);
-  return true;
-}
-
-namespace {
-/** Require the loaded module's complete on-disk hash to match its audited binary. */
-bool verify(void* module, const char* expected, const char* label) {
-  wchar_t path[MAX_PATH];
-  DWORD n = GetModuleFileNameW(static_cast<HMODULE>(module), path, MAX_PATH);
-  char hex[65] = {};
-  if (n == 0 || n >= MAX_PATH || !sha256_file(path, hex)) {
-    PG_LOG("build: could not hash %s", label);
-    return false;
-  }
-  bool ok = std::strcmp(hex, expected) == 0;
-  PG_LOG("build: %s sha256 %s (%s)", label, hex, ok ? "supported" : "UNSUPPORTED");
-  return ok;
+  if (error) PM_LOG("build: the folder of build records cannot be read to its end (Windows error %d)", error.value());
+  return standing;
 }
 }  // namespace
 
-/** Check the GameAssembly build before resolving fixed addresses or fields. */
-bool verify_game_assembly(void* module) { return verify(module, kGameAssemblySha256, "GameAssembly.dll"); }
-/** Check the UnityPlayer build before creating hooks or installing steering. */
-bool verify_unity_player(void* module) { return verify(module, kUnityPlayerSha256, "UnityPlayer.dll"); }
+std::string hash_module(void* module, const char* label) {
+  wchar_t path[MAX_PATH];
+  const DWORD n = GetModuleFileNameW(static_cast<HMODULE>(module), path, MAX_PATH);
+  char hex[65] = {};
+  if (n == 0 || n >= MAX_PATH || !sha256_file(path, hex)) {
+    PM_LOG("build: could not hash %s", label);
+    return {};
+  }
+  PM_LOG("build: %s sha256 %s", label, hex);
+  return hex;
+}
 
-}  // namespace pg::build
+engine::Versions running_versions() {
+  wchar_t path[MAX_PATH];
+  const DWORD n = GetModuleFileNameW(nullptr, path, MAX_PATH);
+  if (n == 0 || n >= MAX_PATH) return {};
+  try {
+    const std::filesystem::path exe(path);
+    return engine::read(exe.parent_path() / (exe.stem().wstring() + L"_Data"));  // Unity's own name for the folder
+  } catch (...) {
+    return {};
+  }
+}
+
+Standing judge(const std::filesystem::path& records, const Hashes& running, std::string_view mapDigest) {
+  Standing standing = Standing::Unseen;
+  if (running.gameAssembly.empty() || running.unityPlayer.empty()) {
+    PM_LOG("build: a game library could not be hashed, so this counts as an unseen build");
+    return standing;
+  }
+  try {
+    standing = read_records(records, running, mapDigest);
+  } catch (...) {
+    PM_LOG("build: the build records could not be read, so this counts as an unseen build");
+    return Standing::Unseen;
+  }
+  if (standing == Standing::Known) PM_LOG("build: the offline check has passed this game build");
+  else if (standing == Standing::Stale) PM_LOG("build: this game build's record was made with another map, so it counts as an unseen build");
+  else PM_LOG("build: the offline check has not seen this game build");
+  return standing;
+}
+
+}  // namespace pm::build

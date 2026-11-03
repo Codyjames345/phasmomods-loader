@@ -6,12 +6,12 @@
 // object creation, instance checks and virtual calls are members of the wrappers in game_api.h
 // (Type::type_object, make, make_array and is; Method::virtual_call), and GC holds are held.h.
 //
-// Threading: Unity's main thread, like the rest of the game API. Before pg::api::bind every service
+// Threading: Unity's main thread, like the rest of the game API. Before pm::api::bind every service
 // answers as for a null object (empty, 0, null or false).
 //
 // Lifetime: a managed string, array or list a mod reads here is the runtime's memory. Never keep a
 // raw pointer to one, or a view over it (Array, RefArray, List), across frames: keep the object in a
-// pg::api::Held and make the view again when it is needed. An element reference from Array and the
+// pm::api::Held and make the view again when it is needed. An element reference from Array and the
 // array behind a List are valid only until the next managed call: a List replaces its backing array
 // when it grows, so take items() again after any game call, and never store either.
 
@@ -23,7 +23,7 @@
 
 #include "game_api.h"
 
-namespace pg::api {
+namespace pm::api {
 
 namespace detail {
 
@@ -33,10 +33,18 @@ size_t array_length(const void* arr);
 void* array_data(void* arr);
 size_t list_count(const void* list);
 void* list_items(const void* list);
+// The host contract's list_add, or false before bind or for a null list.
+bool list_add(void* list, void* item);
+// The host contract's collection_count, array_element_size and list_remove_at, or 0 and false before
+// bind or for null.
+size_t collection_count(const void* collection);
+size_t array_element_size(const void* arr);
+bool list_remove_at(void* list, int32_t index);
 // Logs, once per process, that an array or list index was out of range and the access was ignored.
 void report_out_of_range();
 // Stores the managed reference `value` at byte `offset` of `obj` through the host's set_reference.
 void store_reference(void* obj, size_t offset, void* value);
+size_t dictionary_int_entries(const void* dict, PmIntEntry* out, size_t max);
 
 }  // namespace detail
 
@@ -44,8 +52,12 @@ void store_reference(void* obj, size_t offset, void* value);
 /// character and an unpaired surrogate U+FFFD. Empty for a null `str` and before bind.
 std::string to_utf8(const void* str);
 
+/// Whether the managed string `str` reads exactly as `text`, with no allocation, for what runs on every RPC. False for a null
+/// `str`, before bind, and for a `text` of 64 bytes or more.
+bool string_is(const void* str, std::string_view text);
+
 /// A new managed string holding the UTF-8 text `text`, or null before bind. Nothing else refers to
-/// it yet: keep it in a pg::api::Held past the current frame.
+/// it yet: keep it in a pm::api::Held past the current frame.
 void* make_string(std::string_view text);
 
 /// UnityEngine.Object's implicit bool: false for null, for a destroyed engine object (whose managed
@@ -75,6 +87,50 @@ struct Array {
     return scratch;
   }
 };
+
+/// A view over a managed array of value elements whose layout the game holds (a struct of the game's,
+/// as a List<T> of structs keeps them), valid for the current frame. size() is its length and stride()
+/// the bytes each element takes, both read from the runtime (the host contract's array_element_size),
+/// never assumed. at(i) is element i in place: read its fields with the struct's field entries, whose
+/// offsets are the unboxed ones (Field::get(at(i))). It is null at or past size(), logged once per
+/// process, and for an array the runtime cannot size. Valid only until the next managed call. A null
+/// `raw` has size 0.
+struct ValueArray {
+  void* raw;
+
+  size_t size() const { return stride() ? detail::array_length(raw) : 0; }
+  size_t stride() const { return detail::array_element_size(raw); }
+
+  void* at(size_t i) const {
+    if (i < size())
+      if (char* data = static_cast<char*>(detail::array_data(raw))) return data + i * stride();
+    detail::report_out_of_range();
+    return nullptr;
+  }
+};
+
+/// @brief The entries of a managed System.Collections.Generic.Dictionary<K, int> whose K is a 4-byte value such as an
+/// enum (the game's Dictionary<GhostType, int> of weights, say), in the dictionary's own order, without its free
+/// slots.
+/// @param dict The dictionary. Null, or an object of another kind (logged once by the host): 0.
+/// @param out Where the entries go: the key as a number and the value.
+/// @param max At most this many are written.
+/// @return How many were written. Read from the runtime's own layout of the dictionary, never assumed.
+/// @pre Main thread. Valid until the dictionary changes; nothing is kept.
+/// @note This client only. Before bind: 0.
+/// @since Contract 2.2
+/// @code
+/// PmIntEntry weights[64];
+/// const size_t n = pm::api::dictionary_entries(dict, weights, 64);
+/// @endcode
+inline size_t dictionary_entries(const void* dict, PmIntEntry* out, size_t max) {
+  return detail::dictionary_int_entries(dict, out, max);
+}
+
+/// The number of items in a managed System.Collections.Generic List, HashSet, Dictionary, Queue or
+/// Stack, through the collection's own Count (the host contract's collection_count); 0 for null, before
+/// bind and for any other object (logged once by the host).
+inline size_t count(const void* collection) { return detail::collection_count(collection); }
 
 /// A view over a managed array of references (object[], GameObject[] and the like), valid for the
 /// current frame. operator[] reads element i (null past the end, logged once per process); set
@@ -122,6 +178,28 @@ struct List {
     detail::report_out_of_range();
     return nullptr;
   }
+
+  /// Whether the List holds `item` (the same reference), as its Contains finds a reference.
+  bool contains(const void* item) const {
+    for (size_t i = 0, n = size(); i < n; ++i)
+      if (RefArray{items()}[i] == item) return true;
+    return false;
+  }
+
+  /// Adds the reference `item` at its end through the List's own Add, as the game's code does (the
+  /// host contract's list_add): the List may replace its backing array, so take items() again after
+  /// it. False, touching nothing, before bind, for a null `raw` or an object that is not a List.
+  bool add(void* item) const { return detail::list_add(raw, item); }
+
+  /// Removes item i through the List's own RemoveAt, as the game's code does (the host contract's
+  /// list_remove_at); take items() again after it. False, touching nothing, before bind, for a null
+  /// `raw`, an object that is not a List or an index at or past size().
+  bool remove_at(size_t i) const {
+    return i < size() && detail::list_remove_at(raw, static_cast<int32_t>(i));
+  }
+
+  /// A List of structs' backing array, as a ValueArray (indexes below size() only).
+  ValueArray values() const { return ValueArray{items()}; }
 };
 
-}  // namespace pg::api
+}  // namespace pm::api

@@ -4,7 +4,7 @@
 // empty room, leaving EMF where it was as a ghost's throw does. It never touches anything in a room
 // with the lights on. Runs on the host, which takes the item over through its PhotonView as a player
 // picking it up does, so every client sees it move. Main thread.
-namespace pg::custom::kikimora {
+namespace pm::custom::kikimora {
 
 bool resolve();
 // Every frame on the host while a Kikimora haunts the contract; it hides something by itself every
@@ -18,4 +18,4 @@ void* nearest(void* ghost);
 bool in_lit_room(void* ghost);
 void reset();
 
-}  // namespace pg::custom::kikimora
+}  // namespace pm::custom::kikimora

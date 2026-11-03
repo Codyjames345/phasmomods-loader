@@ -7,7 +7,7 @@
 #include <mutex>
 #include <string>
 
-namespace pg::log {
+namespace pm::log {
 namespace {
 std::mutex g_mutex;
 FILE* g_file = nullptr;
@@ -59,4 +59,4 @@ void write(const char* fmt, ...) {
           t.wMilliseconds, GetCurrentProcessId(), GetCurrentThreadId(), line);
   fflush(g_file);
 }
-}  // namespace pg::log
+}  // namespace pm::log

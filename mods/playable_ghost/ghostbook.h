@@ -9,7 +9,7 @@
 // src/journal.cpp's): a guide on the Home spread, the ghost's abilities on the Items spread, the
 // ghost's own sheet on the Overview spread, and the evidence spread retitled as the investigators'
 // findings. Pure text, kept free of game calls so it can be tested offline.
-namespace pg::ghostbook {
+namespace pm::ghostbook {
 
 struct Facts {
   std::string up, left, down, right;           // movement binding labels
@@ -37,4 +37,4 @@ struct Book {
 
 Book write(const Facts& facts);
 
-}  // namespace pg::ghostbook
+}  // namespace pm::ghostbook

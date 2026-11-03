@@ -11,11 +11,10 @@
 //    Walkie-talkie (global) voice taps are muted for them; a ghost cannot listen to the radio.
 //  - Dead investigators are silent for them, as for any living investigator (the game's
 //    VoiceVolume.Update decides that from the local investigator, which their client has none of).
-namespace pg::senses {
+namespace pm::senses {
 
-bool resolve();
 bool create_hooks();  // before hooks::enable_all
 void tick(session::Session& s, void* ghost);
 void teardown();
 
-}  // namespace pg::senses
+}  // namespace pm::senses

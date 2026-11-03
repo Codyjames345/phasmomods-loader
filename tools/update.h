@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace pg::update {
+namespace pm::update {
 /** What asking the update source found. */
 struct Check {
   enum class Kind { UpToDate, Available, Failed } kind = Kind::UpToDate;
@@ -68,7 +68,7 @@ std::vector<std::wstring> restart_arguments(const std::vector<std::wstring>& lau
 
 /**
  * The Velopack backend (tools/update_velopack.cpp). It updates from the folder that the
- * environment variable PG_UPDATE_SOURCE names when that folder exists, and from the project's
+ * environment variable PM_UPDATE_SOURCE names when that folder exists, and from the project's
  * GitHub releases otherwise.
  */
 std::shared_ptr<Backend> velopack_backend();

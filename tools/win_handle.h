@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 
-namespace pg::tools {
+namespace pm::tools {
 /** Own one local Windows handle without changing the referenced process lifetime. */
 struct Handle {
   HANDLE value;

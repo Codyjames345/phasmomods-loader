@@ -4,60 +4,50 @@
 #include <cmath>
 #include <vector>
 
+#include "Camera.h"
+#include "LevelRoom.h"
+#include "MapController.h"
 #include "game.h"
-#include "il2cpp.h"
+#include "held.h"
+#include "Transform.h"
 #include "log.h"
+#include "runtime.h"
 #include "room_pick.h"
 #include "round.h"
 
-namespace pg::mapview {
+namespace pm::mapview {
 namespace {
 
-using il2cpp::Vector3;
+using phasmo::Vector3;
 
-// Build 25811160 (verified at load); obfuscated names, so by offset.
-constexpr size_t kMapFloorIndex = 0x38;  // MapController: index into allFloors of the shown floor
-constexpr size_t kFloorType = 0x10;      // MapController.Floor.floorType
-constexpr size_t kFloorTransform = 0x18;  // MapController.Floor.floor
-constexpr size_t kRoomFloor = 0x68;      // LevelRoom: its floor (same enum as Floor.floorType)
-
-struct Ray {
-  Vector3 origin, direction;
-};
 using game::Bounds;
+using phasmo::Camera;
+using phasmo::MapController;
 
-struct Api {
-  il2cpp::Class* mapController = nullptr;
-  il2cpp::Field* mapCamera = nullptr;
-  il2cpp::Field* allFloors = nullptr;
-  void* (*targetTexture)(void*, const void*) = nullptr;
-  Ray (*viewportRay)(void*, Vector3, const void*) = nullptr;
-  Vector3 (*worldToViewport)(void*, Vector3, const void*) = nullptr;
-  void (*changeFloor)(void*, bool, const void*) = nullptr;
-} api;
+bool g_available = false;  // whether the map's entries resolved
 
 struct Shown {
-  il2cpp::Held controller;
-  il2cpp::Held camera;
-  il2cpp::Held image;
-  il2cpp::Held eventCamera;
+  api::Held controller;
+  api::Held camera;
+  api::Held image;
+  api::Held eventCamera;
   bool cameraWasEnabled = false;
   int floorWas = -1;
-  il2cpp::Held card;  // the black card the map sits on
+  api::Held card;  // the black card the map sits on
 } g;
 
-il2cpp::Array* floors() { return g.controller ? static_cast<il2cpp::Array*>(il2cpp::reference_field(g.controller, api.allFloors)) : nullptr; }
+api::RefArray floors() { return api::RefArray{g.controller ? MapController::allFloors.get(g.controller) : nullptr}; }
 
 void* floor_at(int index) {
-  il2cpp::Array* a = floors();
-  return a && index >= 0 && static_cast<uintptr_t>(index) < a->max_length ? a->data<void*>()[index] : nullptr;
+  const api::RefArray a = floors();
+  return index >= 0 && static_cast<size_t>(index) < a.size() ? a[static_cast<size_t>(index)] : nullptr;
 }
 
-int shown_floor_index() { return g.controller ? il2cpp::field<int>(g.controller, kMapFloorIndex) : -1; }
+int shown_floor_index() { return g.controller ? MapController::floorIndex.get(g.controller) : -1; }
 
 int shown_floor_type() {
   void* f = floor_at(shown_floor_index());
-  return f ? il2cpp::field<int>(f, kFloorType) : -1;
+  return f ? phasmo::MapFloor::floorType.get(f) : -1;
 }
 
 // Every collider of a candidate room, as its world bounds.
@@ -67,14 +57,14 @@ std::vector<Bounds> room_bounds(void* room) { return game::room_bounds(room); }
 std::vector<ui::Rect> texture_outline(int index) {
   std::vector<ui::Rect> out;
   void* room = round::room(index);
-  if (!room || !game::alive(g.camera) || il2cpp::field<int>(room, kRoomFloor) != shown_floor_type()) return out;
+  if (!room || !game::alive(g.camera) || phasmo::LevelRoom::floor.get(room) != shown_floor_type()) return out;
   for (const Bounds& b : room_bounds(room)) {
     // All four corners, so the rectangle is right whichever way the map camera is turned.
     float x0 = 1, y0 = 1, x1 = 0, y1 = 0;
     for (float sx : {-1.0f, 1.0f}) {
       for (float sz : {-1.0f, 1.0f}) {
-        const Vector3 v = api.worldToViewport(
-            g.camera, {b.center.x + sx * b.extents.x, b.center.y, b.center.z + sz * b.extents.z}, nullptr);
+        const phasmo::Vector3 v = Camera::WorldToViewportPoint(
+            g.camera, {b.center.x + sx * b.extents.x, b.center.y, b.center.z + sz * b.extents.z});
         x0 = std::min(x0, v.x), x1 = std::max(x1, v.x), y0 = std::min(y0, v.y), y1 = std::max(y1, v.y);
       }
     }
@@ -87,31 +77,23 @@ std::vector<ui::Rect> texture_outline(int index) {
 }  // namespace
 
 bool resolve() {
-  constexpr const char* kCore = "UnityEngine.CoreModule.dll";
-  api.mapController = il2cpp::cls("Assembly-CSharp.dll", "", "MapController");
-  api.mapCamera = il2cpp::field_info(api.mapController, "mapCamera");
-  api.allFloors = il2cpp::field_info(api.mapController, "allFloors");
-  il2cpp::Class* camera = il2cpp::cls(kCore, "UnityEngine", "Camera");
-  api.targetTexture = reinterpret_cast<decltype(api.targetTexture)>(il2cpp::method_ptr(camera, "get_targetTexture", 0));
-  api.viewportRay = reinterpret_cast<decltype(api.viewportRay)>(il2cpp::method_ptr(camera, "ViewportPointToRay", 1));
-  api.worldToViewport = reinterpret_cast<decltype(api.worldToViewport)>(il2cpp::method_ptr(camera, "WorldToViewportPoint", 1));
-  api.changeFloor = reinterpret_cast<decltype(api.changeFloor)>(il2cpp::method_ptr(api.mapController, "ChangeFloor", 1));
-  const bool ok = api.mapController && api.mapCamera && api.allFloors && api.targetTexture &&
-                  api.viewportRay && api.worldToViewport && api.changeFloor;
+  g_available = api::all_resolved<MapController::instance, MapController::mapCamera, MapController::allFloors,
+                                  MapController::floorIndex, MapController::ChangeFloor, phasmo::MapFloor::floorType,
+                                  phasmo::MapFloor::floor, phasmo::FloorType::basement, Camera::get_targetTexture,
+                                  Camera::ViewportPointToRay, Camera::WorldToViewportPoint>();
   // Optional: without it the picker falls back to its plain room list.
-  PG_LOG("mapview: resolve %s", ok ? "ok" : "unavailable (the picker will list rooms instead)");
-  if (!ok) api = Api{};
+  PM_LOG("mapview: resolve %s", g_available ? "ok" : "unavailable (the picker will list rooms instead)");
   return true;
 }
 
 bool show(void* parent, ui::Vec2 position, ui::Vec2 size, void* eventCamera) {
   hide();
-  if (!api.changeFloor) return false;
-  void* controller = il2cpp::static_field_by_type(api.mapController, "MapController");
-  void* camera = game::alive(controller) ? il2cpp::reference_field(controller, api.mapCamera) : nullptr;
-  void* texture = game::alive(camera) ? api.targetTexture(camera, nullptr) : nullptr;
+  if (!g_available) return false;
+  void* controller = MapController::instance.get();
+  void* camera = game::alive(controller) ? MapController::mapCamera.get(controller) : nullptr;
+  void* texture = game::alive(camera) ? Camera::get_targetTexture(camera) : nullptr;
   if (!texture) {
-    PG_LOG("mapview: this level's map has no camera texture (controller %p camera %p)", controller, camera);
+    PM_LOG("mapview: this level's map has no camera texture (controller %p camera %p)", controller, camera);
     return false;
   }
   g.controller = controller;
@@ -130,7 +112,7 @@ bool show(void* parent, ui::Vec2 position, ui::Vec2 size, void* eventCamera) {
     return false;
   }
   ui::place(g.image, {0.5f, 0.5f}, {0.5f, 0.5f}, position, size);
-  PG_LOG("mapview: showing the map (floor %d of %d)", g.floorWas, floors() ? static_cast<int>(floors()->max_length) : 0);
+  PM_LOG("mapview: showing the map (floor %d of %zu)", g.floorWas, floors().size());
   return true;
 }
 
@@ -138,7 +120,7 @@ void hide() {
   if (game::alive(g.camera)) game::set_enabled(g.camera, g.cameraWasEnabled);
   if (game::alive(g.controller) && g.floorWas >= 0) {
     for (int guard = 0; guard < 16 && shown_floor_index() != g.floorWas; ++guard)
-      api.changeFloor(g.controller, shown_floor_index() < g.floorWas, nullptr);
+      MapController::ChangeFloor(g.controller, shown_floor_index() < g.floorWas);
   }
   if (g.image) ui::destroy(g.image);
   if (g.card) ui::destroy(g.card);
@@ -146,21 +128,21 @@ void hide() {
 }
 
 void change_floor(bool up) {
-  if (game::alive(g.controller)) api.changeFloor(g.controller, up, nullptr);
+  if (game::alive(g.controller)) MapController::ChangeFloor(g.controller, up);
 }
 
 std::string floor_name() {
   const int type = shown_floor_type();
-  return type < 0 ? "" : type == 0 ? "Basement" : "Floor " + std::to_string(type);
+  return type < 0 ? "" : type == phasmo::FloorType::basement() ? "Basement" : "Floor " + std::to_string(type);
 }
 
 int room_at(ui::Vec2 screenPoint) {
   ui::Vec2 uv{};
   if (!game::alive(g.camera) || !ui::normalized_point(g.image, screenPoint, uv, g.eventCamera)) return -1;
-  const Ray ray = api.viewportRay(g.camera, {uv.x, uv.y, 0}, nullptr);
+  const phasmo::Ray ray = Camera::ViewportPointToRay(g.camera, {uv.x, uv.y, 0});
   // Where the ray meets the shown floor's level (a top-down map camera, orthographic or not).
   void* floor = floor_at(shown_floor_index());
-  void* floorTransform = floor ? il2cpp::field<void*>(floor, kFloorTransform) : nullptr;
+  void* floorTransform = floor ? phasmo::MapFloor::floor.get(floor) : nullptr;
   float x = ray.origin.x, z = ray.origin.z;
   if (game::alive(floorTransform) && std::fabs(ray.direction.y) > 1e-4f) {
     const float t = (game::position(floorTransform).y - ray.origin.y) / ray.direction.y;
@@ -171,7 +153,7 @@ int room_at(ui::Vec2 screenPoint) {
   for (int i = 0; i < round::room_count(); ++i) {
     void* room = round::room(i);
     room_pick::Room r;
-    r.floor = room ? il2cpp::field<int>(room, kRoomFloor) : -1;
+    r.floor = room ? phasmo::LevelRoom::floor.get(room) : -1;
     for (const Bounds& b : room_bounds(room))
       r.boxes.push_back({b.center.x - b.extents.x, b.center.z - b.extents.z, b.center.x + b.extents.x, b.center.z + b.extents.z});
     rooms.push_back(std::move(r));
@@ -190,4 +172,4 @@ bool room_center(int index, Vector3& out) {
   return true;
 }
 
-}  // namespace pg::mapview
+}  // namespace pm::mapview

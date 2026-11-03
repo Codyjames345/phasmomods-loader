@@ -1,19 +1,47 @@
-// Offline tests for the Spectral Flame rules (mods/spectral_flame/flame_rules.h).
+// Offline tests for Spectral Flame: its rules (mods/spectral_flame/flame_rules.h), and its game side
+// (contract.cpp, flames.cpp) over the fake game backend (sdk/fake/fake_game.h).
 // Run: build\spectral_flame_test.exe
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <initializer_list>
+#include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
+#include "Candle.h"
+#include "Equipment.h"
+#include "FireSource.h"
+#include "GhostAI.h"
+#include "GhostCollection.h"
+#include "GhostController.h"
+#include "GhostInfo.h"
+#include "LevelController.h"
+#include "LevelRoom.h"
+#include "Photon.h"
+#include "PlayerSanity.h"
+#include "Transform.h"
+#include "UnityObject.h"
+#include "UnityRendering.h"
+#include "content.h"
+#include "contract.h"
+#include "fake_game.h"
 #include "flame_rules.h"
+#include "flames.h"
+#include "game_api.h"
+#include "runtime.h"
 #include "urp_display.h"
 
 #include "check.h"
+#include "text_fixture.h"
 
-using namespace pg::flame;
+using namespace pm::flame;
+namespace api = pm::api;
+namespace fake = pm::fake;
+namespace map = pm::map;
 
 namespace {
 
@@ -224,11 +252,15 @@ void once_fully_blue_it_may_be_blown_out_after_fading() {
 }
 
 void inert_without_a_carrier() {
+  // The flame's number is the host's (8 in the audited build, 9 after a game update adds an evidence).
   const int vanilla[] = {1, 2, 5, 3, 4, 7};
-  CHECK(!active_for(vanilla, 2));
+  CHECK(!active_for(vanilla, 2, 8));
   const int withFlame[] = {1, 2, 5, 1, 6, 8};
-  CHECK(active_for(withFlame, 2));
-  CHECK(!active_for(nullptr, 0));
+  CHECK(active_for(withFlame, 2, 8));
+  CHECK(!active_for(withFlame, 2, 9));
+  const int afterUpdate[] = {1, 2, 5, 1, 6, 9};
+  CHECK(active_for(afterUpdate, 2, 9) && !active_for(afterUpdate, 2, 8));
+  CHECK(!active_for(nullptr, 0, 8));
 }
 
 void the_model_shows_the_games_own_flames() {
@@ -443,9 +475,467 @@ void a_false_flame_reads_the_same_on_every_client() {
   CHECK(decode(encode({{1, 1.0f}}).data(), 8, back) && back.size() == 1 && back[0].second == 1);
 }
 
+// ---- The game side, over the fake backend ----
+
+// A fake managed object: its class pointer first, as a real one's, then room for the fields the tests
+// place at the offsets they give the map entries.
+struct Obj {
+  void* klass = nullptr;
+  unsigned char bytes[0xF8]{};
+};
+
+template <class T>
+void put(Obj& o, int32_t offset, T value) {
+  std::memcpy(reinterpret_cast<char*>(&o) + offset, &value, sizeof value);
+}
+template <class T>
+T got(const Obj& o, int32_t offset) {
+  T value;
+  std::memcpy(&value, reinterpret_cast<const char*>(&o) + offset, sizeof value);
+  return value;
+}
+
+int g_candleClass = 0, g_candlebraClass = 0, g_rendererClass = 0, g_lightClass = 0;  // fake classes
+
+void start() {
+  flames::teardown();  // what the flames hold goes before the fake's objects do
+  fake::reset();
+}
+
+void bind() {
+  std::string missing;
+  api::bind(fake::host(), missing);
+}
+
+void register_ghost(const std::string& id, const char* (*look)(const char*, void*)) {
+  api::content::GhostDef g;
+  g.id = id;
+  g.name = api::content::Text("en", "Ghost " + id);
+  g.description = api::content::Text("en", "It haunts.");
+  g.strength = api::content::Text("en", "It is strong.");
+  g.weakness = api::content::Text("en", "It is weak.");
+  g.evidence = {"orbs", "dots", contract::kEvidenceId};
+  g.evidenceLook = look;
+  CHECK(api::content::register_ghost(g) > 0);
+}
+
+void registers_the_evidence_by_its_id() {
+  start();
+  bind();
+  CHECK(contract::register_evidence());
+  const auto* e = fake::content_registry().registered_evidence(contract::kEvidenceId);
+  const pm::content::Text name{{"en", "Spectral Flame"}};
+  const pm::content::Text line{{"en", "Watch a placed candle or lantern burn blue from base to tip"}};
+  CHECK(e && e->name == name && e->journalLine == line);
+  CHECK(!contract::register_evidence());  // an id is registered once
+  CHECK(contract::evidence() == -1);      // nothing is in play before every mod has started
+  fake::commit_content();
+  fake::room(1, {1});
+  CHECK(contract::evidence() == 8);  // the host's number: one past D.O.T.S. in the audited build
+  fake::room(0, {});
+  CHECK(contract::evidence() == -1);  // outside a private room
+}
+
+void the_number_follows_the_games_enums() {
+  start();
+  pm::content::EnumValues evidence = fake::audited_evidence();
+  evidence.emplace_back("Smudge", 8);  // a game update adds an evidence
+  fake::game_enums(fake::audited_ghost_types(), evidence, fake::kAuditedNoGhost, fake::kAuditedNoEvidence);
+  bind();
+  CHECK(contract::register_evidence());
+  fake::commit_content();
+  fake::room(1, {1});
+  CHECK(contract::evidence() == 9);
+}
+
+// The contract's level, its GhostController and the GhostData of its collection.
+struct Collection {
+  Obj level, controller, collection, a, b;
+  void* levelSlot = &level;
+  void* controllerSlot = &controller;
+  Collection(std::array<int32_t, 3> first, std::array<int32_t, 3> second) {
+    fake::static_field(map::LevelController_instance, &levelSlot, sizeof levelSlot, true);
+    fake::static_field(map::GhostController_instance, &controllerSlot, sizeof controllerSlot, true);
+    fake::field(map::GhostController_allGhostsCollection, 0x10);
+    fake::field(map::GhostCollection_ghosts, 0x10);
+    fake::field(map::GhostData_evidence1, 0x10);
+    fake::field(map::GhostData_evidence2, 0x14);
+    fake::field(map::GhostData_evidence3, 0x18);
+    put(controller, 0x10, static_cast<void*>(&collection));
+    put(collection, 0x10, fake::list({&a, &b}));
+    for (int i = 0; i < 3; ++i) {
+      put(a, 0x10 + 4 * i, first[i]);
+      put(b, 0x10 + 4 * i, second[i]);
+    }
+  }
+};
+
+void a_ghost_type_of_the_collection_carries_it() {
+  start();
+  Collection c({1, 2, 3}, {4, 9, 6});
+  bind();
+  CHECK(contract::level() == &c.level);
+  CHECK(contract::carried(9));    // whatever number the host gave it
+  CHECK(!contract::carried(8));
+  CHECK(!contract::carried(-1));  // content not in play
+  fake::destroy(&c.level);        // the contract is over: its controller outlives it
+  CHECK(!contract::level() && !contract::carried(9));
+}
+
+void the_ghost_gives_what_the_difficulty_left() {
+  start();
+  fake::field(map::GhostAI_info, 0x10);
+  fake::field(map::GhostInfo_givenEvidence, 0x10);
+  bind();
+  Obj ghost, info;
+  put(ghost, 0x10, static_cast<void*>(&info));
+  put(info, 0x10, fake::value_list({1, 9}));
+  CHECK(contract::ghost_gives(&ghost, 9) && !contract::ghost_gives(&ghost, 8) && !contract::ghost_gives(&ghost, -1));
+  put(info, 0x10, fake::value_list({}));  // a difficulty that gives no evidence
+  CHECK(!contract::ghost_gives(&ghost, 9));
+  CHECK(!contract::ghost_gives(nullptr, 9));
+}
+
+const char* hydra_look(const char* evidenceId, void*) {
+  return std::strcmp(evidenceId, contract::kEvidenceId) == 0 ? "green" : nullptr;
+}
+
+void the_hydra_burns_green() {
+  start();
+  fake::field(map::GhostAI_info, 0x10);
+  fake::field(map::GhostInfo_identityType, 0x18);
+  bind();
+  CHECK(contract::register_evidence());
+  register_ghost("test.hydra", &hydra_look);
+  register_ghost("test.lethe", nullptr);
+  fake::commit_content();
+  fake::room(1, {1});
+  const int32_t hydra = api::content::type_of("test.hydra"), lethe = api::content::type_of("test.lethe");
+  Obj ghost, info;
+  put(ghost, 0x10, static_cast<void*>(&info));
+  put(info, 0x18, hydra);
+  fake::contract_ghost(hydra, 24);
+  CHECK(contract::green(&ghost));  // its look for the evidence, from the content layer
+  CHECK(!contract::green(nullptr));  // no ghost
+  put(info, 0x18, lethe);
+  fake::contract_ghost(lethe, 24);
+  CHECK(!contract::green(&ghost));  // a ghost without a look: blue
+  fake::contract_ghost(5, 5);
+  CHECK(!contract::green(&ghost));  // a game ghost: blue
+}
+
+// A contract with one Firelight candle set down and lit in the ghost's room, its ghost hunting (so it
+// never blows a flame out on its own) and giving `given`.
+struct World;
+World* g_world = nullptr;
+int g_blownOut = 0;    // the game's BlowOutFire ran
+bool g_comfort = false;  // what PlayerSanity.Update's candle test answered for the candle
+
+struct World {
+  Obj level, ghost, info, room, collider, fire, candle, candleObject, storeItem, view, transform, closure, sanity;
+  void* levelSlot = &level;
+
+  World(int32_t tier, const std::vector<int32_t>& given) {
+    g_world = this;
+    g_blownOut = 0;
+    candle.klass = &g_candleClass;
+    fake::type(map::Candle, &g_candleClass);
+    fake::type(map::Candlebra, &g_candlebraClass);
+    fake::type(map::Renderer, &g_rendererClass);
+    fake::type(map::Light, &g_lightClass);
+    fake::static_field(map::LevelController_instance, &levelSlot, sizeof levelSlot, true);
+    fake::field(map::LevelController_currentGhost, 0x10);
+    fake::field(map::LevelController_currentGhostRoom, 0x18);
+    fake::field(map::LevelController_rooms, 0x20);
+    fake::field(map::LevelController_fireSources, 0x28);
+    fake::field(map::GhostAI_info, 0x10);
+    fake::field(map::GhostAI_state, 0x18);
+    fake::value(map::GhostState_hunting, 2);
+    fake::value(map::GhostState_appear, 8);
+    fake::value(map::GhostState_randomEvent, 14);
+    fake::field(map::GhostInfo_givenEvidence, 0x10);
+    fake::field(map::FireSource_equipment, 0x10);
+    fake::field(map::FireSource_isOn, 0x18);
+    fake::field(map::FireSource_flame, 0x20);
+    fake::field(map::FireSource_flameLight, 0x28);
+    fake::field(map::Candle_candleObjects, 0x30);
+    fake::field(map::Candle_candleEmissionColor, 0x40);
+    fake::field(map::Candle_candleDuration, 0x50);
+    fake::field(map::Equipment_storeItem, 0x58);
+    fake::field(map::Equipment_placed, 0x60);
+    fake::field(map::CandleObject_fireSource, 0x10);
+    fake::field(map::CandleObject_candleRend, 0x18);
+    fake::field(map::StoreItem_tier, 0x10);
+    fake::value(map::StoreItemTier_One, 0);
+    fake::value(map::StoreItemTier_Two, 1);
+    fake::value(map::StoreItemTier_Three, 2);
+    fake::field(map::LevelRoom_roomColliders, 0x10);
+    fake::method(map::UnityObject_FindObjectsOfType, reinterpret_cast<void*>(&find_none));
+    fake::method(map::Component_get_transform, reinterpret_cast<void*>(&transform_of));
+    fake::method(map::Component_GetComponent, reinterpret_cast<void*>(&no_component));
+    fake::method(map::Transform_get_childCount, reinterpret_cast<void*>(&no_children));
+    fake::method(map::Transform_get_position, reinterpret_cast<void*>(&position));
+    fake::method(map::Collider_get_bounds, reinterpret_cast<void*>(&bounds));
+    fake::method(map::MonoBehaviourPun_get_photonView, reinterpret_cast<void*>(&photon_view));
+    fake::method(map::PhotonView_get_ViewID, reinterpret_cast<void*>(&view_id));
+    fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&is_master));
+    fake::method(map::FireSource_BlowOutFire, reinterpret_cast<void*>(&blow_out));
+    fake::method(map::PlayerSanity_Update, reinterpret_cast<void*>(&sanity_update));
+    fake::method(map::PlayerSanity_CandleIsOn, reinterpret_cast<void*>(&candle_is_on));
+
+    put(level, 0x10, static_cast<void*>(&ghost));
+    put(level, 0x18, static_cast<void*>(&room));
+    void* rooms = fake::array(sizeof(void*), 1);
+    api::RefArray{rooms}.set(0, &room);
+    put(level, 0x20, rooms);
+    put(level, 0x28, fake::list({&fire}));
+    put(ghost, 0x10, static_cast<void*>(&info));
+    put(ghost, 0x18, int32_t{2});  // hunting
+    put(info, 0x10, fake::value_list(given));
+    put(room, 0x10, fake::list({&collider}));
+    put(fire, 0x10, static_cast<void*>(&candle));
+    put(fire, 0x18, true);
+    void* objects = fake::array(sizeof(void*), 1);
+    api::RefArray{objects}.set(0, &candleObject);
+    put(candle, 0x30, objects);
+    put(candle, 0x50, 100.0f);
+    put(candle, 0x58, static_cast<void*>(&storeItem));
+    put(candle, 0x60, true);
+    put(candleObject, 0x10, static_cast<void*>(&fire));
+    put(storeItem, 0x10, tier);
+  }
+  World(const World&) = delete;
+  World& operator=(const World&) = delete;
+
+  static void* find_none(void*, const void*) { return fake::array(sizeof(void*), 0); }
+  static void* transform_of(void*, const void*) { return &g_world->transform; }
+  static void* no_component(void*, void*, const void*) { return nullptr; }
+  static int32_t no_children(void*, const void*) { return 0; }
+  static phasmo::Vector3 position(void*, const void*) { return {1, 0, 1}; }
+  static phasmo::Bounds bounds(void*, const void*) { return {{0, 0, 0}, {5, 5, 5}}; }
+  static void* photon_view(void*, const void*) { return &g_world->view; }
+  static int32_t view_id(void*, const void*) { return 42; }
+  static bool is_master(const void*) { return true; }
+  static void blow_out(void*, bool, const void*) { ++g_blownOut; }
+  static bool candle_is_on(void*, void*, const void*) { return true; }  // the game's own answer: lit
+  // The game's Update asks the candle test through its hooked body, as the delegate's call does.
+  static void sanity_update(void*, const void*) {
+    g_comfort = hooked<phasmo::PlayerSanity::CandleIsOn, bool (*)(void*, void*, const void*)>()(
+        &g_world->closure, &g_world->candle, nullptr);
+  }
+
+  // The body the game reaches the hooked method M through, as Fn.
+  template <auto& M, class Fn>
+  static Fn hooked() {
+    using W = std::remove_cvref_t<decltype(M)>;
+    return reinterpret_cast<Fn>(api::detail::Bodies<W, api::detail::Hooked<W>>::entry(0));
+  }
+
+  // The game calls these: the player's sanity update and the ghost's (or another's) blow-out.
+  bool comforted() {
+    hooked<phasmo::PlayerSanity::Update, void (*)(void*, const void*)>()(&sanity, nullptr);
+    return g_comfort;
+  }
+  void blow_out_by(bool ghostDid) { hooked<phasmo::FireSource::BlowOutFire, void (*)(void*, bool, const void*)>()(&fire, ghostDid, nullptr); }
+};
+
+void run(flames::Frame& frame, float seconds) {
+  for (int i = 0; i < static_cast<int>(seconds * 10); ++i) {
+    frame.now += 100;
+    flames::tick(frame);
+  }
+}
+
+void hooks_the_sanity_test_and_the_blow_out() {
+  start();
+  World w(2, {1, 9});
+  bind();
+  CHECK(flames::create_hooks());
+  CHECK(fake::hooked() ==
+        (std::vector<std::string>{"PlayerSanity.Update", "PlayerSanity.CandleIsOn", "FireSource.BlowOutFire"}));
+  // Before any contract switches the flames on, the game's answers pass through.
+  CHECK(w.comforted());
+  w.blow_out_by(true);
+  CHECK(g_blownOut == 1);
+}
+
+void a_true_flame_turns_blue_in_the_ghosts_room() {
+  start();
+  World w(2, {1, 9});  // tier Three, the lantern: fully blue in 40 s
+  bind();
+  CHECK(flames::create_hooks());
+  flames::Frame frame;
+  frame.enabled = true;
+  frame.evidence = 9;  // the host's number for it in this contract
+  frame.now = 1000;
+  run(frame, 30);
+  // Below half blue it eases the drain still, and the ghost may not blow it out yet; a player may.
+  CHECK(w.comforted());
+  w.blow_out_by(true);
+  CHECK(g_blownOut == 0);
+  w.blow_out_by(false);
+  CHECK(g_blownOut == 1);
+  run(frame, 11);  // 41 s: fully blue as a lantern, where a tier One would be barely a fifth blue
+  CHECK(!w.comforted());
+  // The candle test answers so only inside the sanity update.
+  CHECK((World::hooked<phasmo::PlayerSanity::CandleIsOn, bool (*)(void*, void*, const void*)>()(&w.closure, &w.candle,
+                                                                                                  nullptr)));
+  w.blow_out_by(true);  // fully blue: the test is over, and the ghost may
+  CHECK(g_blownOut == 2);
+  CHECK(got<float>(w.candle, 0x50) < 100);  // it burns down faster (the game's own countdown is not faked)
+  frame.enabled = false;  // switched off: a plain candle again
+  flames::tick(frame);
+  CHECK(w.comforted());
+}
+
+void a_false_flame_stops_at_half() {
+  start();
+  World w(2, {1, 8});  // the ghost gives another evidence than the contract's flame (9)
+  bind();
+  CHECK(flames::create_hooks());
+  flames::Frame frame;
+  frame.enabled = true;
+  frame.evidence = 9;
+  frame.now = 1000;
+  run(frame, 60);
+  CHECK(w.comforted());  // at most half blue: it still eases the drain
+  w.blow_out_by(true);   // a ghost without the evidence blows candles out as the game's do
+  CHECK(g_blownOut == 1);
+}
+
+// The flame's material, through a renderer on the fire's transform: the Candle Flame shader, with a
+// tint and a sprite. Its properties' ids are the fake Shader.PropertyToID's for their names.
+Obj g_renderer, g_material;
+int g_textureReads = 0, g_materialReads = 0;
+phasmo::Color g_tint{};  // what the material's tint holds
+
+bool has_property(void*, int32_t id) {
+  return id == fake::property_id("_TintColour") || id == fake::property_id("_CandleSprite");
+}
+void get_color(void*, int32_t id, phasmo::Color* out) {
+  if (id == fake::property_id("_TintColour")) *out = g_tint;
+}
+void set_color(void*, int32_t id, phasmo::Color* in) {
+  if (id == fake::property_id("_TintColour")) g_tint = *in;
+}
+void* flame_renderer(void*, void* type, const void*) {
+  return type == phasmo::Renderer::type.type_object() ? &g_renderer : nullptr;
+}
+void* shared_material(void*, const void*) { return &g_material; }
+void* flame_material(void*, const void*) {  // the renderer's own copy, made to be changed
+  ++g_materialReads;
+  return &g_material;
+}
+void* read_texture(void*, int32_t, const void*) {
+  ++g_textureReads;
+  return nullptr;
+}
+
+// A lit candle flame in the ghost's room, its material faked as above; `tint` gives the tint's entry.
+void flame_world(bool tint) {
+  g_textureReads = g_materialReads = 0;
+  g_tint = {kCandleTint.r, kCandleTint.g, kCandleTint.b, 1};
+  if (tint) fake::shader_property(map::ShaderProperty_CandleFlame_TintColour);
+  fake::shader_property(map::ShaderProperty_CandleFlame_CandleSprite);
+  fake::icall(map::Material_HasProperty, reinterpret_cast<void*>(&has_property));
+  fake::icall(map::Material_GetColorImpl, reinterpret_cast<void*>(&get_color));
+  fake::icall(map::Material_SetColorImpl, reinterpret_cast<void*>(&set_color));
+  fake::method(map::Component_GetComponent, reinterpret_cast<void*>(&flame_renderer));
+  fake::method(map::Renderer_get_sharedMaterial, reinterpret_cast<void*>(&shared_material));
+  fake::method(map::Renderer_get_material, reinterpret_cast<void*>(&flame_material));
+  // The sprite could be read, but the rest of what makes its grey copy is missing in this build.
+  fake::method(map::Material_GetTextureImpl, reinterpret_cast<void*>(&read_texture));
+}
+
+void without_the_texture_functions_a_flame_is_tinted_only() {
+  start();
+  World w(0, {1, 9});  // tier One: fully blue in a minute
+  flame_world(true);
+  bind();
+  flames::resolve();
+  CHECK(flames::create_hooks());
+  flames::Frame frame;
+  frame.enabled = true;
+  frame.evidence = 9;
+  frame.now = 1000;
+  run(frame, 61);
+  CHECK(g_textureReads == 0);  // the game's own sprite stays, unread
+  const Rgb deep = flame_colours(false).deep;
+  CHECK(same({g_tint.r, g_tint.g, g_tint.b}, deep));  // the tint alone turns it blue
+  frame.enabled = false;
+  flames::tick(frame);
+  CHECK(same({g_tint.r, g_tint.g, g_tint.b}, kCandleTint));  // and back to the game's own
+}
+
+// A shader property whose id was not read leaves what it colours as the game's: the candle flame's
+// tint unresolved, its material is never even asked for, and the rest of the flame goes on.
+void an_unresolved_property_leaves_its_colour() {
+  start();
+  World w(0, {1, 9});
+  flame_world(false);
+  bind();
+  flames::resolve();
+  CHECK(flames::create_hooks());
+  flames::Frame frame;
+  frame.enabled = true;
+  frame.evidence = 9;
+  frame.now = 1000;
+  run(frame, 61);
+  CHECK(g_materialReads == 0 && g_textureReads == 0);
+  CHECK(same({g_tint.r, g_tint.g, g_tint.b}, kCandleTint));
+  CHECK(got<float>(w.candle, 0x50) < 100);  // fully blue all the same: it burns down faster
+  w.blow_out_by(true);
+  CHECK(g_blownOut == 1);  // and the ghost may blow it out
+}
+
+// mod.cpp's decision (contract::flame_evidence): on while a contract is loaded, the content layer gives
+// the evidence a number and a ghost type of the contract carries it, with that number. A contract that
+// loaded with content holds it (the host's Registry::hold_contract), so the flames stay on while the room's
+// content lapses; off again once the contract ends, and in the next only while that one carries it.
+void the_flames_go_on_per_contract() {
+  start();
+  Collection c({1, 2, 5}, {4, 8, 6});  // the second ghost type gives Spectral Flame, 8
+  bind();
+  CHECK(contract::register_evidence());
+  fake::commit_content();
+  CHECK(contract::flame_evidence() == -1);  // not in a private room: content is not active
+  fake::room(1, {1});
+  CHECK(contract::flame_evidence() == 8);
+  fake::content_registry().hold_contract(true);  // the host decided the contract with content in it
+  fake::room(0, {});                             // content lapses: the contract keeps its flames
+  CHECK(contract::flame_evidence() == 8);
+  fake::destroy(&c.level);  // the contract ends
+  fake::content_registry().hold_contract(false);
+  CHECK(contract::flame_evidence() == -1);
+  Collection next({1, 2, 5}, {4, 7, 6});  // a contract whose ghost types carry no Spectral Flame
+  fake::room(1, {1});
+  CHECK(contract::flame_evidence() == -1);
+  put(next.b, 0x14, int32_t{8});  // one that does
+  CHECK(contract::flame_evidence() == 8);
+  fake::room(0, {});  // a contract that loaded without content holds none: off with the room
+  CHECK(contract::flame_evidence() == -1);
+}
+
+void the_level_s_own_candles_never_turn() {
+  start();
+  World w(2, {1, 9});
+  put(w.candle, 0x58, static_cast<void*>(nullptr));  // no store item and no candelabra: an altar's candle
+  bind();
+  CHECK(flames::create_hooks());
+  flames::Frame frame;
+  frame.enabled = true;
+  frame.evidence = 9;
+  frame.now = 1000;
+  run(frame, 61);
+  CHECK(w.comforted() && got<float>(w.candle, 0x50) == 100);
+  w.blow_out_by(true);
+  CHECK(g_blownOut == 1);
+}
+
 }  // namespace
 
 int main() {
+  use_text({"mods/spectral_flame/i18n/default.json"});  // the evidence's name and line are the mod's table's
   rises_only_with_the_ghost_in_the_room();
   every_second_in_the_room_counts();
   the_colour_comes_late();
@@ -472,5 +962,18 @@ int main() {
   the_sprites_yellow_shows_blue_once_grey();
   messages_round_trip();
   a_false_flame_reads_the_same_on_every_client();
+  registers_the_evidence_by_its_id();
+  the_number_follows_the_games_enums();
+  a_ghost_type_of_the_collection_carries_it();
+  the_ghost_gives_what_the_difficulty_left();
+  the_hydra_burns_green();
+  hooks_the_sanity_test_and_the_blow_out();
+  a_true_flame_turns_blue_in_the_ghosts_room();
+  a_false_flame_stops_at_half();
+  the_level_s_own_candles_never_turn();
+  without_the_texture_functions_a_flame_is_tinted_only();
+  an_unresolved_property_leaves_its_colour();
+  the_flames_go_on_per_contract();
+  start();
   return g_failures ? 1 : 0;
 }

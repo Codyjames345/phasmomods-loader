@@ -8,12 +8,11 @@
 // (their outfit, in the pose of the moment) into a still figure that stands where the ghost is and
 // moves and turns with it until the event ends. Nothing networked is copied; the figure is local
 // to each client and gone when the event, the ghost or the contract ends. Main thread.
-namespace pg::form {
+namespace pm::form {
 
 constexpr uint16_t kFormMs = 5000;  // how long the ghost keeps the form
 
-bool resolve();
 void tick(session::Session& s, void* ghost);  // every frame; ghost: the replicated GhostAI or null
 void teardown();
 
-}  // namespace pg::form
+}  // namespace pm::form

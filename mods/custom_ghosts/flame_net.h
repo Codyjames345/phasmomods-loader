@@ -6,7 +6,7 @@
 
 // Messages of the flame ghosts on Custom Ghosts' channel: 'C' 'G' 'F' kind, then the kind's body.
 // The Echo's own messages start 'C' 'G' with a version byte, never 'F', so the two never mix.
-namespace pg::custom::net_msg {
+namespace pm::custom::net_msg {
 
 enum Kind : uint8_t {
   kDecoys = 1,  // host to all: the Hydra's false heads, count:u8 then x y z yaw (f32 each) per head
@@ -16,6 +16,8 @@ enum Kind : uint8_t {
   // 5 is unused: each client works out its own Mesmer view from the appearance and its actor.
   kViewing = 6, // a client to the host: its player has the journal's media pages open
   kForget = 7,  // host to all: the Lethe makes a piece of media fade, list:u8 (0 photo, 1 video, 2 sound) slot:u8
+  kAnger = 8,   // host to all: the Draugr's anger, angered:u8 (0 or 1)
+  kSeen = 9,    // host to all: whether anyone looks at the Brownie, seen:u8 (0 or 1)
 };
 
 inline std::vector<uint8_t> header(Kind kind) { return {'C', 'G', 'F', kind}; }
@@ -77,4 +79,30 @@ inline bool read_forget(const uint8_t* data, size_t size, int& list, int& slot) 
   return true;
 }
 
-}  // namespace pg::custom::net_msg
+inline std::vector<uint8_t> anger(bool angered) {
+  std::vector<uint8_t> out = header(kAnger);
+  out.push_back(angered ? 1 : 0);
+  return out;
+}
+
+/** Whether the Draugr is angered, as the host says. */
+inline bool read_anger(const uint8_t* data, size_t size, bool& angered) {
+  if (kind_of(data, size) != kAnger || size != 5 || data[4] > 1) return false;
+  angered = data[4] == 1;
+  return true;
+}
+
+inline std::vector<uint8_t> seen(bool seen) {
+  std::vector<uint8_t> out = header(kSeen);
+  out.push_back(seen ? 1 : 0);
+  return out;
+}
+
+/** Whether anyone looks at the Brownie, as the host says. */
+inline bool read_seen(const uint8_t* data, size_t size, bool& seen) {
+  if (kind_of(data, size) != kSeen || size != 5 || data[4] > 1) return false;
+  seen = data[4] == 1;
+  return true;
+}
+
+}  // namespace pm::custom::net_msg

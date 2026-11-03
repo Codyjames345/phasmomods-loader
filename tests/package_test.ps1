@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 $project = Split-Path $PSScriptRoot -Parent
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('pg package ' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
+. (Join-Path $project 'tools/payload_files.ps1')
 $payload = (Import-PowerShellDataFile -LiteralPath (Join-Path $project 'tools/payload.psd1')).Payload
 
 <# Create a project with synthetic artifacts, a previous release to protect, and a fake vpk. The fake
@@ -22,6 +23,7 @@ function New-PackageFixture {
     Set-Content -LiteralPath (Join-Path $fixture 'validate.ps1') -Value '# Fixture validation succeeds.'
     Set-Content -LiteralPath (Join-Path $fixture 'VERSION') -Value '0.1.0'
     Write-PayloadSources $fixture $payload
+    Write-RecordFixture $fixture $project
     Set-Content -LiteralPath (Join-Path $fixture 'dist/releases/previous-release.txt') -Value 'previous release'
     Set-Content -LiteralPath (Join-Path $fixture 'dist/PhasmoMods/Retired.dll') -Value 'stale file'
     $fake = @'
@@ -76,7 +78,9 @@ try {
         Set-Content -LiteralPath (Join-Path $fixture 'tests/stage_test.ps1') -Value '# Fixture stage checks run on their own.'
         Set-Content -LiteralPath (Join-Path $fixture 'tests/release_test.ps1') -Value '# Fixture release checks run on their own.'
         Set-Content -LiteralPath (Join-Path $fixture 'tests/assetcheck_test.ps1') -Value 'exit 0 # Fixture scene check tests run on their own.'
+        Set-Content -LiteralPath (Join-Path $fixture 'tests/docs_test.ps1') -Value 'exit 0 # Fixture docs tests run on their own.'
         Set-Content -LiteralPath (Join-Path $fixture 'tools/gamecheck.ps1') -Value 'exit 0 # The fixture has no game to check.'
+        Set-Content -LiteralPath (Join-Path $fixture 'tools/docs.ps1') -Value 'exit 0 # The fixture has no reference to build.'
         $buildExit = if ($failure -eq 'native build') { 7 } else { 0 }
         $testExit = if ($failure -eq 'native tests') { 7 } else { 0 }
         Set-Content -LiteralPath (Join-Path $fixture 'build.ps1') -Value "exit $buildExit"
@@ -113,6 +117,28 @@ try {
         Assert-PackageFailure $fixture 'missing|Cannot find'
     }
 
+    # A map the offline check has not seen, and a package with no record at all, publish nothing.
+    $fixture = New-PackageFixture 'stale record'
+    Set-Content -LiteralPath (Join-Path $fixture 'build/map-digest.txt') -Value 'fedcba9876543210'
+    Assert-PackageFailure $fixture 'checked-build record'
+    $fixture = New-PackageFixture 'no record'
+    Remove-Item -LiteralPath (Join-Path $fixture 'sdk/builds/fixture-build.txt')
+    Assert-PackageFailure $fixture 'checked-build record'
+    $fixture = New-PackageFixture 'no digest'
+    Remove-Item -LiteralPath (Join-Path $fixture 'build/map-digest.txt')
+    Assert-PackageFailure $fixture 'map-digest'
+
+    # The file a -NoCheckedBuild release commits lets through the digest it names, and no other.
+    $fixture = New-PackageFixture 'allowed unchecked map'
+    Set-Content -LiteralPath (Join-Path $fixture 'build/map-digest.txt') -Value 'fedcba9876543210'
+    Set-Content -LiteralPath (Join-Path $fixture 'sdk/builds/unchecked-release.allow') -Value 'map=fedcba9876543210'
+    Invoke-Package $fixture 3>$null
+    if (@(Get-Content -LiteralPath (Join-Path $fixture 'vpk-args.txt')) -notcontains 'pack') { throw 'The allowed unchecked map was not packed.' }
+    $fixture = New-PackageFixture 'allowed another map'
+    Set-Content -LiteralPath (Join-Path $fixture 'build/map-digest.txt') -Value 'fedcba9876543210'
+    Set-Content -LiteralPath (Join-Path $fixture 'sdk/builds/unchecked-release.allow') -Value 'map=1111111111111111'
+    Assert-PackageFailure $fixture 'checked-build record'
+
     $fixture = New-PackageFixture 'bad version'
     Set-Content -LiteralPath (Join-Path $fixture 'VERSION') -Value 'one'
     Assert-PackageFailure $fixture 'VERSION'
@@ -128,7 +154,8 @@ try {
 
     # pack stages exactly the payload, and nothing from a stale dist/PhasmoMods
     $staged = @(Get-Content -LiteralPath (Join-Path $fixture 'vpk-content.txt') | Sort-Object)
-    $expected = @($payload | ForEach-Object { $_.Name } | Sort-Object)
+    $expected = @(Get-PayloadFiles $fixture | ForEach-Object { $_.Name } | Sort-Object)
+    if ($expected -notcontains 'builds/fixture-build.txt') { throw "The payload does not hold the checked-build record: $expected" }
     if (Compare-Object $expected $staged) { throw "vpk was given a folder that is not exactly the payload: $staged" }
     if (-not (Test-Path -LiteralPath (Join-Path $fixture 'dist/releases/PhasmoModsLoader-win-Setup.exe'))) { throw 'Packaging did not publish Setup.exe to dist/releases.' }
     if (-not (Test-Path -LiteralPath (Join-Path $fixture 'dist/releases/PhasmoModsLoader-0.1.0-full.nupkg'))) { throw 'Packaging did not publish the full package to dist/releases.' }

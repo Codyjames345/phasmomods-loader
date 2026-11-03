@@ -8,7 +8,7 @@
 // The Lithobolia's rules, kept free of game calls so they can be tested offline. It throws at people:
 // a thrown object leaves on a lobbed line that lands on the target's chest, and a hit while the object
 // still flies fast costs that person extra sanity.
-namespace pg::custom {
+namespace pm::custom {
 
 constexpr float kLithoboliaRange = 8.0f;     // metres: the farthest investigator it aims at
 constexpr float kLithoboliaSpeed = 9.0f;     // metres per second along the line to the target
@@ -59,4 +59,4 @@ inline bool lithobolia_hit(Vec at, float speed, Vec chest) {
   return speed >= kLithoboliaHitSpeed && length(d) <= kLithoboliaHitRadius;
 }
 
-}  // namespace pg::custom
+}  // namespace pm::custom

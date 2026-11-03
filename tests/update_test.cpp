@@ -6,11 +6,12 @@
 #include <stdexcept>
 #include <thread>
 #include "check.h"
+#include "text_fixture.h"
 #include "update.h"
 #include "launcher.h"
 
 namespace {
-using namespace pg::update;
+using namespace pm::update;
 using namespace std::chrono_literals;
 
 struct FakeBackend : Backend {
@@ -215,7 +216,7 @@ void restart_arguments_round_trip() {
   CHECK(restart_arguments({L"PhasmoMods Loader.exe"}).empty());
   CHECK(restart_arguments({}).empty());
 
-  const std::wstring line = L"\"PhasmoMods Loader.exe\" " + pg::launcher::command_line(restart);
+  const std::wstring line = L"\"PhasmoMods Loader.exe\" " + pm::launcher::command_line(restart);
   int count = 0;
   wchar_t** parsed = CommandLineToArgvW(line.c_str(), &count);
   CHECK(parsed != nullptr);
@@ -227,6 +228,7 @@ void restart_arguments_round_trip() {
 }
 
 int main() {
+  use_text({"i18n/default.json"});
   not_installed_skips_quietly();
   same_version_is_up_to_date();
   newer_version_restarts();

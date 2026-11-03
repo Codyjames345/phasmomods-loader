@@ -1,0 +1,12 @@
+{
+  "id": "phasmomods.custom-ghosts",
+  "name": "Custom Ghosts",
+  "author": "PhasmoMods",
+  "version": "1.0.0",
+  "description": "Fifteen new ghost types, twelve of them carrying Spectral Flame (needs Spectral Flame)",
+  "dll": "CustomGhosts.dll",
+  "website": "",
+  "recordsVoice": true,
+  "dependencies": [{ "id": "phasmomods.spectral-flame", "minimumVersion": "1.0.0", "required": true }],
+  "incompatibilities": []
+}

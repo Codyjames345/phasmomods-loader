@@ -2,23 +2,21 @@
 
 #include <vector>
 
-#include "game.h"
-#include "hooks.h"
-#include "il2cpp.h"
+#include "GhostAI.h"
+#include "game_api.h"
+#include "held.h"
+#include "runtime.h"
+#include "world.h"
 
-namespace pg::tells::gate {
+namespace pm::tells::gate {
 namespace {
 
-constexpr int kStateHunting = 2;  // GhostAI.State.hunting
-
-using TryInteract_t = void (*)(void*, const void*);
-using ChangeState_t = void (*)(void*, int, void*, bool, const void*);
-TryInteract_t g_tryInteract = nullptr;
-ChangeState_t g_changeState = nullptr;
+using phasmo::GhostAI;
 
 std::vector<Rule> g_rules;
 std::vector<StateListener> g_listeners;
-il2cpp::Held g_ghost;
+api::Held g_ghost;
+GateStates g_states;
 
 bool holds(Kind kind) {
   for (Rule rule : g_rules)
@@ -26,22 +24,23 @@ bool holds(Kind kind) {
   return false;
 }
 
-void detour_try_interact(void* activity, const void* method) {
-  hooks::Guard guard;
-  if (g_ghost && game::is_master() && activity == game::ghost_activity(g_ghost) && holds(kInteract)) return;
-  g_tryInteract(activity, method);
+void detour_try_interact(api::Original<phasmo::GhostActivity::TryInteract> original, void* activity) {
+  void* ghost = g_ghost.get();
+  if (ghost && world::is_master() && activity == GhostAI::activity.get(ghost) && holds(kInteract)) return;
+  original(activity);
 }
 
-void detour_change_state(void* ai, int state, void* target, bool flag, const void* method) {
-  hooks::Guard guard;
-  if (!g_ghost || ai != g_ghost || !game::is_master()) {
-    g_changeState(ai, state, target, flag, method);
+void detour_change_state(api::Original<GhostAI::ChangeState> original, void* ai, int32_t state, void* interact,
+                         bool forced) {
+  if (!g_ghost.get() || ai != g_ghost.get() || !world::is_master()) {
+    original(ai, state, interact, forced);
     return;
   }
   // A hunt's own throws and door slams are its own; nothing here reaches into a running hunt.
-  if (gate_may_hold(state, flag, game::ghost_state(ai) == kStateHunting) && holds(static_cast<Kind>(gate_kind(state)))) return;
+  const bool hunting = GhostAI::state.get(ai) == g_states.hunting;
+  if (gate_may_hold(g_states, state, forced, hunting) && holds(static_cast<Kind>(gate_kind(g_states, state)))) return;
   for (StateListener l : g_listeners) l(ai, state, true);
-  g_changeState(ai, state, target, flag, method);
+  original(ai, state, interact, forced);
   for (StateListener l : g_listeners) l(ai, state, false);
 }
 
@@ -50,23 +49,34 @@ void detour_change_state(void* ai, int state, void* target, bool flag, const voi
 void add_rule(Rule rule) { g_rules.push_back(rule); }
 void around_state(StateListener listener) { g_listeners.push_back(listener); }
 
+void resolve() {
+  using namespace phasmo::GhostState;
+  g_states.hunting = hunting();
+  g_states.events = {appear(), randomEvent(), GhostAbility()};
+  g_states.interactions = {light(),   door(),   throwing(),  fusebox(),   doorKnock(),      windowKnock(), carAlarm(),
+                           flicker(), cctv(),   mannequin(), teleportObject(), interact(),  ignite()};
+  g_states.pulls = {summoningCircle(), musicBox()};
+}
+
+const GateStates& states() { return g_states; }
+
 bool create_hooks() {
-  return hooks::create(game::try_interact(), reinterpret_cast<void*>(&detour_try_interact),
-                       reinterpret_cast<void**>(&g_tryInteract), "GhostActivity.TryInteract") &&
-         hooks::create(game::change_state(), reinterpret_cast<void*>(&detour_change_state),
-                       reinterpret_cast<void**>(&g_changeState), "GhostAI.ChangeState");
+  return api::hook<phasmo::GhostActivity::TryInteract>(&detour_try_interact, "GhostActivity.TryInteract",
+                                                        api::Twins::CanonicalOnly) &&
+         api::hook<GhostAI::ChangeState>(&detour_change_state, "GhostAI.ChangeState", api::Twins::CanonicalOnly);
 }
 
-void tick(void* ghost) { g_ghost = ghost; }
-
-bool held_back(Kind kind) { return g_ghost && holds(kind); }
-
-void change_state(void* ai, int state) {
-  reinterpret_cast<ChangeState_t>(game::change_state())(ai, state, nullptr, false, nullptr);
+void tick(void* ghost) {
+  if (ghost != g_ghost.get()) g_ghost = ghost;
 }
+
+bool held_back(Kind kind) { return g_ghost.get() && holds(kind); }
+
+void change_state(void* ai, int state) { GhostAI::ChangeState(ai, state, nullptr, false); }
 
 void try_interact(void* ai) {
-  if (void* activity = game::ghost_activity(ai)) reinterpret_cast<TryInteract_t>(game::try_interact())(activity, nullptr);
+  if (void* activity = api::alive(ai) ? GhostAI::activity.get(ai) : nullptr; api::alive(activity))
+    phasmo::GhostActivity::TryInteract(activity);
 }
 
-}  // namespace pg::tells::gate
+}  // namespace pm::tells::gate

@@ -8,7 +8,10 @@ $root = $PSScriptRoot
 
 $version = (Get-Content -LiteralPath (Join-Path $root 'VERSION') -Raw).Trim()
 if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "VERSION must be MAJOR.MINOR.PATCH, not '$version'." }
-$payload = (Import-PowerShellDataFile -LiteralPath (Join-Path $root 'tools/payload.psd1')).Payload
+# A map change the offline check has not seen would make every player's notice say the game updated.
+& (Join-Path $root 'tools/check_build_record.ps1') -Root $root
+. (Join-Path $root 'tools/payload_files.ps1')
+$payload = Get-PayloadFiles $root
 foreach ($file in $payload) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $file.Source) -PathType Leaf)) {
         throw "The release is missing $($file.Source). Build and validate the project before packaging."

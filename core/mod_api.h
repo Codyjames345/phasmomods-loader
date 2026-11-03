@@ -9,43 +9,45 @@
 // `log`, which any thread may call.
 //
 // Compatibility is versioned like a library. Within a major version the contract only grows:
-// PgHostApi and every struct here gain members at the end and nothing is removed or changed, so a
+// PmHostApi and every struct here gain members at the end and nothing is removed or changed, so a
 // host accepts a mod built against its own major version and the same or an older minor version. A
 // new major version refuses every older mod, and the host names those that need rebuilding.
 extern "C" {
 
-#define PGMOD_API_MAJOR 2u
-#define PGMOD_API_MINOR 1u
+#define PMMOD_API_MAJOR 2u
+#define PMMOD_API_MINOR 2u
 // Major in the high 16 bits, minor in the low 16. Version 1 (the first contract) had no minor.
-#define PGMOD_API_VERSION ((PGMOD_API_MAJOR << 16) | PGMOD_API_MINOR)
+#define PMMOD_API_VERSION ((PMMOD_API_MAJOR << 16) | PMMOD_API_MINOR)
 
 // Whether a host of version `host` runs a mod built against version `mod`: the same major version
 // and a minor version no newer than the host's. Callable from any thread.
-inline bool pg_api_compatible(uint32_t host, uint32_t mod) {
-  return (host >> 16) == (mod >> 16) && (mod & 0xFFFFu) <= (host & 0xFFFFu);
+inline bool pm_api_compatible(uint32_t host, uint32_t mod) {
+  return (host >> 16) == (mod >> 16) && (mod & 0xFFFFu) <= (host & 0xFFFFu);  // pm:not-game-data: the minor version
 }
 
 // What a game entry (an entry of the game map, sdk/map) names in the game.
-enum PgEntryKind : uint32_t {
-  PG_ENTRY_TYPE = 1,    // a class, struct or enum
-  PG_ENTRY_METHOD,      // a method, with its code
-  PG_ENTRY_FIELD,       // a field, with its offset
-  PG_ENTRY_ENUM_VALUE,  // one value of an enum
-  PG_ENTRY_CODE,        // an address inside a method's code
+enum PmEntryKind : uint32_t {
+  PM_ENTRY_TYPE = 1,    // a class, struct or enum
+  PM_ENTRY_METHOD,      // a method, with its code
+  PM_ENTRY_FIELD,       // a field, with its offset
+  PM_ENTRY_ENUM_VALUE,  // one value of an enum
+  PM_ENTRY_CODE,        // an address inside a method's code
   // Added in version 2.1.
-  PG_ENTRY_ICALL,       // a Unity engine function the runtime registered by name, with its code
-  PG_ENTRY_EXPORT,      // a function GameAssembly.dll exports; host only, game_entry never gives one
-  PG_ENTRY_SCENE,       // a GameObject by its path, found through scene_find
-  PG_ENTRY_LAYER,       // a layer, with its index in `value`
-  PG_ENTRY_ANIMATOR_PARAM,  // an Animator parameter by its name, checked through animator_param
-  PG_ENTRY_NATIVE_SITE,     // a place in UnityPlayer.dll's code, its address in `code`; see patch_site
+  PM_ENTRY_ICALL,       // a Unity engine function the runtime registered by name, with its code
+  PM_ENTRY_EXPORT,      // a function GameAssembly.dll exports; host only, game_entry never gives one
+  PM_ENTRY_SCENE,       // a GameObject by its path, found through scene_find
+  PM_ENTRY_LAYER,       // a layer, with its index in `value`
+  PM_ENTRY_ANIMATOR_PARAM,  // an Animator parameter by its name, checked through animator_param
+  PM_ENTRY_NATIVE_SITE,     // a place in UnityPlayer.dll's code; host only, game_entry never gives one (steer_agent)
+  // Added in version 2.2.
+  PM_ENTRY_SHADER_PROPERTY,  // a shader property by its name, with its id (Shader.PropertyToID) in `value`
 };
 
 // A game entry as the host resolved it in the running game. The host keeps it for the process
 // lifetime. Members a kind does not use are zero. Every pointer is the runtime's metadata or code,
 // never a managed object.
-struct PgGameEntry {
-  uint32_t kind;       // PgEntryKind
+struct PmGameEntry {
+  uint32_t kind;       // PmEntryKind
   void* klass;         // Il2CppClass*: the type itself, or the type that declares the member
   const void* method;  // MethodInfo* of a method, passed as a call's last argument
   // A method's code (its canonical body), a code entry's address, an icall's or export's code, or a
@@ -58,20 +60,145 @@ struct PgGameEntry {
   // from the start of its class's static data.
   int32_t offset;
   void* field;    // FieldInfo* of a field, static or not
-  int64_t value;  // an enum value's number, or a layer's index (0 to 31)
+  int64_t value;  // an enum value's number, a layer's index (0 to 31) or a shader property's id
 };
 
 // Who a message is sent to.
-enum PgTo : int32_t { PG_TO_OTHERS = 0, PG_TO_MASTER = 1, PG_TO_ACTOR = 2 };
+enum PmTo : int32_t { PM_TO_OTHERS = 0, PM_TO_MASTER = 1, PM_TO_ACTOR = 2 };
 
 // Mod payloads ride on Photon event 197 behind a one-byte channel; channel 0 is the host's own.
-constexpr size_t PG_MAX_MESSAGE = 511;
+constexpr size_t PM_MAX_MESSAGE = 511;
 
 // `sender` is the sending client's Photon actor number, taken from the event, never the payload.
-typedef void (*PgReceiver)(int32_t sender, const uint8_t* data, size_t size);
+typedef void (*PmReceiver)(int32_t sender, const uint8_t* data, size_t size);
 
-struct PgHostApi {
-  uint32_t version;              // PGMOD_API_VERSION
+// Added in version 2.2: content, the ghosts and evidence mods add to the game (sdk/api/content.h).
+// The host copies everything a definition holds when it is registered, except `user` and the
+// callbacks, which must stay valid while the mod runs. Each definition begins with its own size
+// (sizeof), so it can grow at the end like PmHostApi: the host reads no member past `size`.
+
+// One piece of text in one language. `lang` is a language code of the game's own (e.g. "en"); `text`
+// is UTF-8, at most 64 KB. Neither may be null.
+typedef struct PmText {
+  const char* lang;
+  const char* text;
+} PmText;
+// A piece of text in several languages (at most 64), each named once. English ("en") is required
+// wherever text is given; a language the game asks for and the set lacks falls back to English.
+typedef struct PmTextSet {
+  const PmText* items;
+  uint32_t count;
+} PmTextSet;
+
+// A custom ghost.
+typedef struct PmGhostDef {
+  uint32_t size;   // sizeof(PmGhostDef)
+  const char* id;  // "<mod id>.<name>", stable across versions; "vanilla." is the game's own
+  PmTextSet name, description, strength, weakness;  // its name and journal page, each with English
+  const PmTextSet* tells;  // its tells (at most 64), one line each, each with English
+  uint32_t tellCount;
+  // The evidence it gives: a vanilla evidence id ("emf" "spirit_box" "ultraviolet" "orbs" "writing"
+  // "freezing" "dots", and for evidence a game update adds, its EvidenceType name in lower case), or the
+  // id of a custom evidence any started mod registers. Null or "" is an empty slot; no evidence twice.
+  const char* evidence[3];
+  // Its ability for a player who controls it. Both count 0: no ability; otherwise both with English.
+  PmTextSet abilityName, abilityDescription;
+  void* user;  // handed to every callback below
+  // Each callback is optional (null) and runs on the main thread.
+  bool (*useAbility)(void* user);  // host only: use the ability now; false if it could not
+  // Host only: its state as its player feels it, 0 to 255, sent to the player's client, where hudLine
+  // (below) turns it into the HUD's line; -1 none.
+  int32_t (*hudState)(void* user);
+  // Its own rules forbid acting now (kind 0: an interaction, 1: an event or its ability, 2: a hunt, 3: its
+  // ability alone, for a rule that silences it while its events may still happen, 4: the fuse box, which
+  // is no interaction unless its rules say so), so a player controlling it may not either. The game's own rules on
+  // the fuse box (the Jinn, the Hantu) are the game's and need no answer here.
+  bool (*heldBack)(int32_t kind, void* user);
+  // Points (x, y, z triples, room for `max`) only the ghost player sees; returns how many it wrote.
+  uint32_t (*playerView)(float* xyz, uint32_t max, void* user);
+  // How this ghost changes the look of the evidence `evidenceId` (e.g. "green"); null for the
+  // evidence's own look. The evidence's mod reads it.
+  const char* (*evidenceLook)(const char* evidenceId, void* user);
+  // Added in version 2.2 after evidenceLook (a definition of an earlier size reads it as 0): what sets
+  // the ghost apart in the game's own rules, PM_GHOST_* bits.
+  uint32_t flags;
+  // Added in version 2.2 after flags (an earlier size reads it as null): its one target (a Player), or
+  // null for no restriction: the host holds each of its hunts to that player as the game holds its
+  // Banshee's, whoever steers it, its AI or a player controlling it; never a dead player nor one of the
+  // `excludedCount` Players at `excluded` (null and 0 for none). A hunt asks it at its start with nobody
+  // excluded; again wherever the game gives the Banshee a new target (GhostAI.SetNewBansheeTarget: a
+  // kill, the Hanged Man card), excluding the player about to die (not dead yet); and again, excluding
+  // nobody, when its target leaves the game. An answer of null keeps the target, as the game does when
+  // nobody else qualifies. Between those it keeps the answer: a player it names mid-hunt binds from the
+  // next hunt or re-target. Main thread; asked on the host alone, which runs the hunt and fills the HUD
+  // status of a player controlling it.
+  void* (*target)(const void* const* excluded, uint32_t excludedCount, void* user);
+  // Added in version 2.2 after target (an earlier size reads it as null): the line its player's
+  // HUD shows for the state `state` that hudState answered on the host, asked on that player's client:
+  // UTF-8 text in the game's rich text, valid until the next call; null or "" for none.
+  const char* (*hudLine)(int32_t state, void* user);
+  // Added in version 2.2 after hudLine (an earlier size reads it as null): host only, every frame a player
+  // steers it: its own rules' limit on where they may steer. `at` is the ghost's position (x, y, z) and
+  // (`dx`, `dz`) the horizontal direction they steer in, its length at most 1, which it may shorten, turn or
+  // set to 0 (holding the ghost still); it leaves them as they are for no limit. Main thread.
+  void (*playerMove)(const float* at, float* dx, float* dz, void* user);
+  // Added in version 2.2 after playerMove (an earlier size reads it as null): host only, once for each
+  // interaction a player controlling it has paid for and chosen, just before it happens: true when its own
+  // rules lose this one, as they lose a share of its AI's attempts. It then does not happen and stays paid
+  // for. Asked once per interaction, so it may roll. Main thread.
+  bool (*interactionLost)(void* user);
+} PmGhostDef;
+
+// PmGhostDef.flags: its third evidence is never the one a difficulty withholds, as for the game's
+// Hantu, Goryo, Obake, Moroi and Deogen (the game's evidence pick draws the evidence it removes from all
+// but the last); on a difficulty that gives none, none is given.
+#define PM_GHOST_KEEPS_LAST_EVIDENCE 1u
+// PmGhostDef.flags: blind in a hunt, as its own hunt rules have it: a player controlling it sees nothing
+// of the house while it hunts but its playerView, as Playable Ghost darkens a hunting Kormos's view.
+#define PM_GHOST_BLIND_IN_HUNTS 2u
+
+// A custom evidence.
+typedef struct PmEvidenceDef {
+  uint32_t size;          // sizeof(PmEvidenceDef)
+  const char* id;         // "<mod id>.<name>", stable across versions
+  // Its name, with English: on its row of the journal's evidence page and on the pages of the ghosts
+  // that give it, as the game names its own.
+  PmTextSet name;
+  // The rest of its row's text, with English: the line under its name saying how it is found, as the
+  // game's rows have ("Getting a reading of 5 on an EMF Reader").
+  PmTextSet journalLine;
+} PmEvidenceDef;
+
+// A ghost type's rules, attached by ghost_rules. The host runs them for the contract's ghost while it
+// acts as that type: its own type, or for a Mimic the type it has copied (content_acting_as). Each
+// callback is optional (null) and runs on the main thread with `user`.
+typedef struct PmGhostRules {
+  uint32_t size;  // sizeof(PmGhostRules)
+  void* user;
+  void (*start)(void* user);  // the ghost begins acting as the type, on every client
+  void (*tick)(void* user);   // every frame while it does, after start
+  void (*stop)(void* user);   // it stops: another type, the contract's end, content withdrawn, the mods stopping
+  // Every frame of a hunt, on the host (which runs the ghost's AI), before the game sets the hunt's
+  // speed. `base` holds the game's own base speed for this hunt in metres a second and `losScale` its
+  // line-of-sight speed-up (1 to 1.65, growing while the ghost sees its prey); change them and return
+  // true to have the host write them as the hunt's inputs (set losScale to 1 to hold the speed-up off).
+  // The game then applies the multipliers every type shares (difficulty, Blood Moon) once. Return
+  // false for the game's own. Several rules on one type each see the values the one before left.
+  bool (*huntSpeed)(float* base, float* losScale, void* user);
+  // The type's own rules forbid acting now, by the kinds of PmGhostDef.heldBack; for a vanilla type (Ghost
+  // Tells' tells) as well as a custom one. A
+  // player controlling the ghost asks it through content_held_back.
+  bool (*heldBack)(int32_t kind, void* user);
+} PmGhostRules;
+
+// One entry of a managed Dictionary<K, int> (the host contract's dictionary_int_entries).
+struct PmIntEntry {
+  int32_t key;
+  int32_t value;
+};
+
+struct PmHostApi {
+  uint32_t version;              // PMMOD_API_VERSION
   void* gameAssembly;            // HMODULE, already verified against the audited build
   void* unityPlayer;             // HMODULE, already verified against the audited build
   const wchar_t* dataDirectory;  // %LOCALAPPDATA%\PhasmoMods, which exists
@@ -82,12 +209,15 @@ struct PgHostApi {
   // `original` reaches the previous one.
   bool (*create_hook)(void* target, void* detour, void** original, const char* name);
   bool (*enable_hooks)(void);  // enable every hook created so far
-  // A message on the mod's own channel (PgModInfo::channel; at most PG_MAX_MESSAGE bytes). `actor` is
-  // used with PG_TO_ACTOR.
+  // A message on the mod's own channel (PmModInfo::channel; at most PM_MAX_MESSAGE bytes). `actor` is
+  // used with PM_TO_ACTOR.
   bool (*send)(uint8_t channel, const uint8_t* data, size_t size, int32_t to, bool reliable, int32_t actor);
-  void (*set_receiver)(uint8_t channel, PgReceiver receiver);  // null stops receiving
-  // Whether the client of `actor` in this room runs the mod `modId` (its player having agreed to
-  // the notice). The local actor answers for this client.
+  // Null stops receiving. A message reaches it only from a verified player, on a client that matches the host; anything else
+  // is dropped, and a send goes only to verified players (sdk/README.md, "The host's list").
+  void (*set_receiver)(uint8_t channel, PmReceiver receiver);
+  // Whether the client of `actor` in this room is verified and the host's list has the mod `modId`: a verified player's mods
+  // equal that list (sdk/README.md, "The host's list"). Kept so 2.x mods load. A mod has no need of it: the loader
+  // keeps every player in a contract to the same mods, and a mod does no matching of its own.
   bool (*peer_has_mod)(int32_t actor, const char* modId);
   // Named tables of C function pointers that cooperating mods publish for each other. A table must
   // stay valid for the process lifetime. A name is published once: registering a name already
@@ -99,9 +229,9 @@ struct PgHostApi {
   // Added in version 2.0. Mods reach these through the game API (sdk/api/game_api.h).
 
   // The game entry `key` names (its map key, e.g. "GhostAI.ChangeState"), or null when the map has
-  // no such entry, it did not resolve in this game build, or it is a GameAssembly export (only the
-  // host may use one, so a mod that requires an export is never started).
-  const PgGameEntry* (*game_entry)(const char* key);
+  // no such entry, it did not resolve in this game build, or it is a GameAssembly export or a native
+  // site in UnityPlayer.dll (only the host may use one, so a mod that requires one is never started).
+  const PmGameEntry* (*game_entry)(const char* key);
   // A MinHook detour on the method entry `key` names, not yet enabled (enable_hooks enables it).
   // Without `allTwins` it is hook_body on body 0, the canonical body. With `allTwins` the one
   // `detour` is hooked on every body, each in that body's own chain, and `original` receives body
@@ -187,13 +317,13 @@ struct PgHostApi {
 
   // Copies the static field's value, `size` bytes, into `out`. For a managed reference `out`
   // receives the pointer.
-  bool (*static_get)(const char* key, void* out, size_t size);
+  bool (*static_get)(const char* key, void* out, size_t size);  // pm:not-game-data: the service, not a read
   // Stores the `size` bytes at `in` into the static field. For a managed reference `in` points at
   // the pointer, which is stored through the runtime's GC write barrier.
   bool (*static_set)(const char* key, const void* in, size_t size);
 
   // Also added in version 2.1: hooks per body. A method's bodies are its canonical body (index 0)
-  // and then each distinct twin (PgGameEntry::twins, less any folded onto an earlier body), in order.
+  // and then each distinct twin (PmGameEntry::twins, less any folded onto an earlier body), in order.
   // Each body has its own chain: the newest detour on a body runs first for the calls that enter
   // through that body, and its `original` reaches the next detour of that body's chain, or the body
   // itself. A detour that serves several bodies must therefore be a separate function per body, so it
@@ -207,10 +337,11 @@ struct PgHostApi {
   // unknown, unresolved or not a method.
   uint32_t (*body_count)(const char* key);
 
-  // Also added in version 2.1: scene and asset facts, the entries of kind PG_ENTRY_SCENE and
-  // PG_ENTRY_ANIMATOR_PARAM (a layer is resolved when the host activates, and game_entry gives its
-  // index). Main thread, while the game plays. A fact that is missing where it is used is logged once
-  // per scene load, and the call answers null or false, so the feature that needs it stays off.
+  // Also added in version 2.1: scene and asset facts, the entries of kind PM_ENTRY_SCENE and
+  // PM_ENTRY_ANIMATOR_PARAM (a layer is resolved when the host activates, and game_entry gives its
+  // index; so is a shader property since version 2.2, PM_ENTRY_SHADER_PROPERTY, with its id). Main
+  // thread, while the game plays. A fact that is missing where it is used is logged once per scene
+  // load, and the call answers null or false, so the feature that needs it stays off.
 
   // The Transform at the Scene entry `key`'s path under the Transform `root`, as Transform.Find finds
   // it. One answer is kept per entry, for the last `root`, until the next scene load: the same `root`
@@ -225,59 +356,287 @@ struct PgHostApi {
   // not an Animator, or when it lacks the parameter.
   bool (*animator_param)(const char* key, const void* animator, int32_t* hash);
 
-  // Also added in version 2.1: native sites, the entries of kind PG_ENTRY_NATIVE_SITE.
+  // Added in version 2.2: content (sdk/api/content.h). Main thread. A mod registers content only from
+  // its pmmod_start; registration only records a definition. Once every mod has started the host
+  // settles the content (a ghost whose custom evidence no started mod registered is dropped, logged)
+  // and puts it into the game. Mods never choose a number: the host numbers custom ghost types from
+  // one past the game's largest ghost type, and custom evidence from one past its largest evidence
+  // (both read from the game at startup: 31 and 8 in the audited build), each in byte order of its id,
+  // over the content the room's host has. Content is active only in a private room, on the host, or on a client
+  // whose host has sent a content manifest (its ghost and evidence ids, each with a hash of its
+  // definition, on the host's own channel as players join) equal to this client's (a host not heard from yet
+  // keeps it off for up to 10 s, then it is off). Another player's content changes nothing for anyone: the loader
+  // removes whoever cannot match, and no contract starts until they are gone. So in a contract every
+  // client holds the same content and reaches the same numbers. Content also stays off when the game's
+  // ghost type and evidence enums cannot be read (logged at startup). Vanilla ghost types and evidence
+  // answer whenever those enums were read. The content goes when the mods stop or restart, and a
+  // mod's own content when its pmmod_start fails.
 
-  // Patches the native site `key` names, on the main thread while the mod starts. When the
-  // `expectedSize` bytes there equal `expected` (5 to 32 bytes, whole instructions), the host copies
-  // the `stubSize` bytes of `stub` to the start of a page of its own within rel32 range of the site,
-  // follows them with a jump back to the instruction after the replaced bytes, and writes a 5-byte
-  // `jmp` to the page over the site, the rest of the replaced bytes as NOPs. The stub must perform
-  // whatever of the replaced instructions it still needs, and position-independent code is required:
-  // it runs at the page's address. It resumes the game by running off its own end, or by jumping to
-  // page + stubSize. A stub that keeps data must place it after a jump that ends its code (to
-  // page + stubSize, or wherever it means to go), never where the code could run off into it. `page`
-  // receives the stub's first byte: the page stays readable, writable and executable for the process
-  // lifetime and is never freed (a thread may still be running the stub), so the mod may keep the
-  // stub's data there and write it from any thread. The patch belongs to the
-  // mod like its hooks: the site's own bytes are written back when the mod fails to start and when
-  // the mods restart (the page stays); a restore the host has to refuse leaves the patch in place,
-  // and the host tries again at the next restart of the mods and at shutdown. Every patch takes a
-  // new page, one 64 KB reservation, so patching again after a rollback takes another, and no page is
-  // ever freed. The host stops every other thread
-  // of the process while it writes or restores the site, and refuses (nothing written) when one keeps
-  // stopping inside the replaced bytes. False, `page` null and nothing written, when the entry is
-  // unknown, unresolved or not a native site, when the bytes there differ from `expected` (another
-  // game build), when `expected` is not whole instructions or not 5 to 32 bytes, when the stub is
-  // empty or longer than 4082 bytes (a page less the jump back), when the site is already patched or
-  // hooked, when no page can be had within rel32 range, or when the write fails; the host logs which.
-  bool (*patch_site)(const char* key, const void* expected, size_t expectedSize, const void* stub, size_t stubSize,
-                     void** page);
+  // Records the ghost `def` and returns its handle (greater than 0), or 0 when it is refused: a call
+  // outside pmmod_start, a null `def`, a `size` smaller than version 2.2's, an id that is missing, has
+  // no '.', is longer than 255 bytes, begins with "vanilla." or is already registered, text without
+  // English (or with a null or repeated language, more than 64 languages, or a text over 64 KB), more
+  // than 64 tells, or an evidence that is neither vanilla nor "<mod id>.<name>", or is listed twice.
+  // The log names the ghost and why.
+  int32_t (*ghost_register)(const PmGhostDef* def);
+  // Records the evidence `def` like ghost_register: its handle, or 0 (logged) for a call outside
+  // pmmod_start, a null `def`, a short `size`, a bad or repeated id, or text refused as above.
+  int32_t (*evidence_register)(const PmEvidenceDef* def);
+  // The game type number of the ghost `ghostId` while content is active, and while a contract that
+  // loaded with content active holds it, until that contract ends, whatever the room's content state
+  // does meanwhile; else -1. A vanilla id ("vanilla.mare") answers its type whenever the game's enums
+  // were read; null or an unknown id answers -1.
+  int32_t (*content_type)(const char* ghostId);
+  // The id of the ghost type `type`: "vanilla.<its enum value's name in lower case>" for a vanilla type
+  // (for example "vanilla.mare" for 6; None is no ghost, and a value without a plain ASCII name has no
+  // id), a custom ghost's id while content is active or a contract holds it (as content_type), else
+  // null. The text stays valid until the content changes (the mods stop or restart).
+  const char* (*content_ghost_id)(int32_t type);
+  // The game value of the evidence `evidenceId`: the game's own for a vanilla id ("emf" is 1)
+  // whenever the game's enums were read, a custom evidence's number while content is active or a
+  // contract holds it (as content_type), else -1.
+  int32_t (*content_evidence)(const char* evidenceId);
+  // Whether custom content is in play: this client registered some and is the host or matches it (above). False
+  // outside a private room.
+  bool (*content_active)(void);
+  // Whether a player controls the contract's ghost, as the Playable Ghost mod reports it
+  // (playable-ghost.v1); false without it.
+  bool (*content_player_controlled)(void);
+
+  // Also added in version 2.2: ghost types in the game. While content is active the host puts each
+  // custom ghost into the game as a ghost type of its own: a GhostData in the contract's
+  // GhostCollection in its alphabetical place (the roll, the evidence given and the journal read
+  // it), its name for the game's name key, the custom type as the ghost's identity and the game's
+  // "no type" as its AI's behaviour type on every client, and the custom types in the list the Mimic
+  // copies from. Whether a contract has them is decided when it loads (content active then) and
+  // holds until it ends; they leave at its end and when the mods stop. In the lobby they follow the
+  // room: while content is active there the lists that offer ghost types (the difficulty menu's, the
+  // lobby journals' collection) get them, and lose them when it stops being active. Main thread.
+
+  // Attaches `rules` (copied) to the ghost `ghostId`: a custom ghost's id or a vanilla one
+  // ("vanilla.mare"). Several mods may attach rules to one id; they run in the order attached. Returns
+  // a handle greater than 0, or 0 when refused (logged with the id and why): a call outside
+  // pmmod_start, a null id or `rules`, a `size` smaller than version 2.2's, an id that is neither
+  // "<mod id>.<name>" nor a vanilla id of the game's enums. Rules on a custom id that no started mod
+  // registered are dropped once every mod has started (logged). A custom ghost's rules run in a
+  // contract that loaded while content was active, for the whole contract; a vanilla type's whenever
+  // the contract's ghost acts as it. No rules run outside a private room, nor while this client's mods do
+  // not match the host's list (sdk/runtime/mod_agreement.h). That answer holds from the contract's load until it ends, so a
+  // contract's rules never start partway through, and content stays pending while it is no.
+  int32_t (*ghost_rules)(const char* ghostId, const PmGhostRules* rules);
+  // The type the contract's ghost acts as on this client: its own type, or for a Mimic the type it has
+  // copied, a custom one included; -1 outside a contract or before the ghost spawns. The Mimic's copy
+  // happens on the host, which sends it to every client on its own channel; until it arrives a client
+  // answers from its own GhostInfo.
+  int32_t (*content_acting_as)(void);
+  // The contract's ghost's identity, the type the journal judges and the results name (a custom
+  // ghost's type, or the Mimic's while it copies); -1 outside a contract or before the ghost spawns.
+  int32_t (*content_identity)(void);
+
+  // Also added in version 2.2: the journal. On every client's journals, other players' books
+  // included, in a contract and in the lobby alike (a contract's custom ghosts, else the lobby's while
+  // content is active there, so players read a custom ghost's page before and after a contract; when
+  // that stops, each journal is put back as the game made it), the host gives each custom ghost a
+  // guess button on the evidence spread's ghost page (a copy of the game's own, crossed out by its
+  // evidence filter and synced by its own controller; the grid's rows shortened so every ghost fits),
+  // an entry in the Ghosts tab's list in its alphabetical place, and a page of its own after the
+  // book's last page:
+  // its name, its description with its strength and weakness, its ability when it has one, and its
+  // tells, laid out as the game's own pages are. Pages are numbered in the order of the ghosts' type
+  // numbers, so they are the same on every client. Texts are in the player's language when the ghost
+  // has it, else English, and follow the game's language switch. Main thread.
+
+  // Adds `count` lines to the journal page of the vanilla ghost `vanillaGhostId` ("vanilla.mare"),
+  // each in several languages (English required), after the page's own text. Several mods may add
+  // lines to one ghost; they show in the order added. They show in a private room only, in the lobby's
+  // journals and a contract's alike. Returns a
+  // handle greater than 0, or 0 when refused (logged with the id and why): a call outside
+  // pmmod_start, an id that is not one of the game's vanilla ghosts, null or no lines, more than 64
+  // lines, or a line refused as ghost_register refuses text. Like ghost_rules' rules, the lines show
+  // only while this client's mods match the host's list (sdk/runtime/mod_agreement.h), held from a contract's load until it
+  // ends; the host writes the pages again when that answer changes.
+  int32_t (*journal_lines)(const char* vanillaGhostId, const PmTextSet* lines, uint32_t count);
+
+  // Also added in version 2.2: custom evidence in the game. A custom ghost gives a custom evidence it
+  // lists through the game's own evidence pick: its number stands in the ghost's GhostData, so a
+  // difficulty that gives fewer evidence withholds it exactly as it withholds the game's own, and the
+  // game sends what it gives to every client. On every client's journals, whenever the custom ghosts
+  // they show give a custom evidence (a contract's, or the lobby's while content is active there),
+  // that evidence gets a copy of the game's Spirit Box row after the
+  // game's rows on the evidence page: its name (PmEvidenceDef::name) and, under it, the line saying how
+  // it is found (PmEvidenceDef::journalLine), in the player's language when the evidence has it, else
+  // English; it is marked, synced to the other players and filters the ghost buttons as the game's own
+  // rows do, and a custom ghost's page names it as the game's pages name theirs. What reveals the
+  // evidence in the world stays its mod's job. Main thread.
+
+  // How the contract's ghost changes the look of the evidence `evidenceId`: what its definition's
+  // evidenceLook answers (PmGhostDef), asked of the ghost by its identity (content_identity), so a
+  // Mimic that copies a ghost keeps the Mimic's look. Null for the evidence's own look: no ghost, a
+  // game ghost, a ghost without evidenceLook or one that answers null, and a null `evidenceId`. A
+  // contract that holds custom ghosts answers for its ghost until it ends. The text is the ghost mod's;
+  // copy it before the next call.
+  const char* (*content_evidence_look)(const char* evidenceId);
+
+  // Also added in version 2.2, after content_evidence_look: adds the managed reference `item` (null
+  // allowed) at the end of the List<T> `list`, through the Add of the list's own class, as the game's
+  // code adds to its lists; the List may replace its backing array. False, touching nothing, for a null
+  // `list`, an object that is not a List (logged once) or a List whose Add cannot be run. An item the
+  // List's element type does not take is the caller's error, as in C#. Main thread.
+  bool (*list_add)(void* list, void* item);
+
+  // Also added in version 2.2, after list_add: copies `src`'s settings onto `dst`, two objects of the
+  // class the Type entry `typeKey` resolved to (or of classes derived from it): every instance field
+  // that class itself declares as public and of a value type (a number, a bool, an enum or a struct),
+  // the settings Unity's inspector shows for a component of the class. A struct is copied whole, and
+  // each managed reference inside it is stored through the GC write barrier. Fields the class
+  // inherits, and its fields of a reference type, are left as they are. False, copying nothing, for an
+  // unknown or unresolved key, a null object, an object not of the class, or a setting whose type the
+  // runtime cannot say (logged once): a copy is whole or not made. Main thread.
+  bool (*copy_settings)(const char* typeKey, void* dst, const void* src);
+
+  // Also added in version 2.2, after copy_settings: the managed references `obj` holds in every
+  // instance field that the class the Type entry `typeKey` resolved to declares itself of the type the
+  // Type entry `fieldTypeKey` resolved to (with `arrayOf`, of an array of it), in the order the class
+  // lays them out, the first `max` of them (by layout, among all of them) into `out`. Returns how many
+  // such fields the class declares, which may be more than `max`; 0 for an unknown or unresolved key, a null `obj`, or an object not of
+  // the class. A class may declare several fields of one type that nothing in the game's code tells
+  // apart; this reads all of them without naming any. Main thread.
+  uint32_t (*fields_of_type)(const char* typeKey, const void* obj, const char* fieldTypeKey, bool arrayOf, void** out,
+                             uint32_t max);
+
+  // Also added in version 2.2, after fields_of_type: the contract's ghost as a player controls it, for
+  // any registered ghost. Each asks the definition (PmGhostDef) of the type the ghost acts as on this
+  // client (content_acting_as): a custom type a contract that loaded with content holds, or one of the
+  // active content. A game type, no ghost, or a callback the definition leaves null answers as below.
+  // Main thread.
+
+  // Host only: runs the definition's useAbility; false when it has none or could not.
+  bool (*content_use_ability)(void);
+  // The definition's ability name, or with `description` its description, in the player's language
+  // when it has it, else English; null for a ghost without an ability. Valid until the content changes.
+  const char* (*content_ability_text)(bool description);
+  // Host only: the definition's hudState, 0 to 255, or -1.
+  int32_t (*content_hud_state)(void);
+  // The definition's hudLine for `state`; null for none. Copy it before the next call.
+  const char* (*content_hud_line)(int32_t state);
+  // Whether the ghost may not act now as `kind` (as PmGhostDef.heldBack):
+  // the definition's heldBack, or the heldBack of any rules running for the type (ghost_rules; a
+  // vanilla type's too). False with no ghost.
+  bool (*content_held_back)(int32_t kind);
+  // The definition's playerView into `xyz` (room for `max` points); how many it wrote, 0 for none.
+  uint32_t (*content_player_view)(float* xyz, uint32_t max);
+  // The definition's target: the one player the ghost's hunts are held to now, never
+  // one of the `excludedCount` players at `excluded` (null and 0 for none), or null.
+  void* (*content_target)(const void* const* excluded, uint32_t excludedCount);
+  // The definition's flags (PM_GHOST_* bits); 0 with no definition.
+  uint32_t (*content_flags)(void);
+
+  // Also added in version 2.2, after content_flags: whether this client's running mods equal the host's list, in a private
+  // room (sdk/runtime/mod_agreement.h); held from a contract's load until it ends. It is the one answer the host gates the
+  // mods' content, rules and journal lines on. Kept so 2.x mods load: a mod has no need of it, since the loader removes
+  // or switches off whoever does not match, and no unverified player reaches a contract. Main thread.
+  bool (*room_agrees)(void);
+
+  // Also added in version 2.2, after room_agrees: more runtime services (sdk/api/runtime.h), which read
+  // what they need from the runtime's metadata. Main thread; each answers 0 or false, touching nothing,
+  // for null and for an object of another kind (logged once).
+
+  // The number of items in the managed collection `collection`, a System.Collections.Generic List<T>,
+  // HashSet<T>, Dictionary<K,V>, Queue<T> or Stack<T>, through its own get_Count, found by name on its
+  // class (a HashSet's count is not a List's).
+  int32_t (*collection_count)(const void* collection);
+  // The bytes one element of the managed array `arr` takes as the runtime lays it out: a value type's own
+  // (unboxed) size, as a List<T> of structs holds them, or a reference's.
+  size_t (*array_element_size)(const void* arr);
+  // Removes the item at `index` from the List<T> `list` through the RemoveAt of the list's own class, as
+  // the game's code removes from its lists; false for an index out of range or a RemoveAt that cannot be
+  // run.
+  bool (*list_remove_at)(void* list, int32_t index);
+
+  // Also added in version 2.2, after list_remove_at: host only, the definition's playerMove on the
+  // direction (`dx`, `dz`) a player steers the ghost in from `at` (x, y, z); it leaves them as they are
+  // without a definition or the callback. Main thread.
+  void (*content_player_move)(const float* at, float* dx, float* dz);
+  // Also added in version 2.2, after content_player_move: host only, the definition's interactionLost for an
+  // interaction a player has paid for and chosen; false without a definition or the callback. Asked once
+  // per interaction. Main thread.
+  bool (*content_interaction_lost)(void);
+  // Also added in version 2.2, after content_interaction_lost: whether a player controlling the ghost takes
+  // the actions of the game's idle roll running now, so a mod's rule on the AI's attempts stands aside
+  // whichever mod's hook runs first; as the Playable Ghost mod reports it (playable-ghost.v1, version 3),
+  // false without it. Main thread.
+  bool (*content_roll_taken)(void);
+
+  // Also added in version 2.2, after content_roll_taken: replaces the direction Unity's crowd walks the
+  // NavMeshAgent `agent` (a managed reference) in, until the host opens the next frame, on this client
+  // only: nothing is sent. (`dx`, `dz`) is a world direction of length at most 1, and (0, 0) holds the
+  // agent still as it decelerates. The agent's destination, speed, acceleration and avoidance stay the
+  // game's. A mod keeps an agent steered by asking in each pmmod_tick; a frame without an ask leaves
+  // the game's own direction. One agent at a time: the last ask of a frame counts, and a direction
+  // that is not one (longer than 1, not finite) ends the frame's steering until a valid ask after it.
+  // A null or destroyed `agent`, or an object that is not a NavMeshAgent, changes nothing. True when the
+  // host can steer, so a null `agent` asks only that; false when it cannot in this game build (the host
+  // logs why), and nothing was changed. The first ask makes the effect ready in the game's code; after a
+  // refusal the host tries again only when the mods start afresh. The game entries this needs are the
+  // host's own, and a mod requires none of them. Main thread, a null `agent` from pmmod_start, an agent
+  // from pmmod_tick.
+  bool (*steer_agent)(void* agent, float dx, float dz);
+
+  // Also added in version 2.2, after steer_agent: unwinds the running GhostController.Spawn, as a managed
+  // exception does, back to the mod's C++ catch around its call of it, so a mod can hold the setup back at
+  // its type roll, before it writes or sends anything. It does not return. Outside a running spawn it does
+  // nothing and returns (logged once). Main thread, from a hook the spawn reaches.
+  void (*abandon_ghost_spawn)(void);
+  // Also added in version 2.2, after abandon_ghost_spawn: the entries of the managed Dictionary<K, int>
+  // `dict`, whose K is a 4-byte value such as an enum, as the dictionary's own array keeps them: at most
+  // `max` into `out`, in that order, free slots left out. Returns how many it wrote; 0 for null and for an
+  // object of another kind (logged once). Main thread.
+  int32_t (*dictionary_int_entries)(const void* dict, PmIntEntry* out, int32_t max);
+  // Also added in version 2.2, after dictionary_int_entries: whether the mod `modId` (its manifest id) has started on this
+  // client and runs now. For an optional dependency (a manifest dependency with "required": false), asked from the
+  // mod's pmmod_start onwards. The host starts a mod after the dependencies it names, but one below this mod's
+  // minimumVersion, or on an edge that would close a cycle, gets no place in the order and may start after this mod, so
+  // do not keep the answer from pmmod_start: ask when it is needed. It says nothing of the other mod's version, nor of
+  // other players' mods (the loader keeps them to the host's list). False for null and for a mod not installed, off, not started
+  // yet or already stopped. Main thread.
+  bool (*mod_started)(const char* modId);
+  // Also added in version 2.2, after mod_started: a one-button message in the game's own popup on the menu's and the lobby's
+  // board, with `title` and `body` (UTF-8, the game's rich text). It waits until the board is in view, however long that takes,
+  // so one asked for during a contract shows once the lobby is back; it shows until it is clicked. It replaces any message
+  // showing or waiting, the host's own included, so keep it for news a player needs. Nothing shows in a build whose popup
+  // cannot be copied (logged once). Null `title` or `body`: nothing. The loader draws no window of its own (vanilla UI only).
+  // Main thread.
+  void (*show_message)(const char* title, const char* body);
 };
 
-enum PgModFlags : uint32_t {
-  PG_MOD_RECORDS_VOICE = 1,  // keeps other players' speech in memory during a contract
-  // Players without this mod can share its lobby: it falls back to the vanilla game for them. A
-  // modded host removes players without the mod unless every mod it runs has this flag.
-  PG_MOD_VANILLA_PEERS = 2,
+enum PmModFlags : uint32_t {
+  // Keeps other players' speech in memory during a contract. The manifest's recordsVoice must say so too: the notice reads
+  // that, before the DLL loads, and the host keeps off a DLL that sets this under a manifest that does not.
+  PM_MOD_RECORDS_VOICE = 1,
+  // Reserved: a mod built for contract 2.0 to 2.2 may set it, and it still loads. The host ignores it, because every mod is
+  // required by every player in a lobby (host/join_guard.h). A new mod leaves it clear.
+  PM_MOD_VANILLA_PEERS = 2,
 };
 
-struct PgModInfo {
-  uint32_t apiVersion;  // PGMOD_API_VERSION the mod was built against
-  const char* id;       // stable, lower-case, e.g. "playable-ghost"
-  const char* name;     // shown to the player, e.g. "Playable Ghost"
+struct PmModInfo {
+  uint32_t apiVersion;  // PMMOD_API_VERSION the mod was built against
+  const char* id;       // <author>.<mod>, as in its manifest.json, e.g. "phasmomods.playable-ghost"
+  const char* name;     // for the log; the manifest's name is what the player reads
   uint8_t channel;      // its own network channel, 1..255, unique in the suite
-  uint32_t flags;       // PgModFlags
+  uint32_t flags;       // PmModFlags
 };
 
-// The exports each mod DLL provides.
-typedef const PgModInfo* (*PgModInfoFn)(void);  // "pgmod_info": callable at any time
-typedef bool (*PgModStartFn)(const PgHostApi*);  // "pgmod_start": once, after consent; false leaves it inactive
-typedef void (*PgModTickFn)(void);               // "pgmod_tick": every frame once started
-typedef void (*PgModStopFn)(void);               // "pgmod_stop": once, when the host stops
-// "pgmod_requires" (optional, version 2 onwards; the game API's glue exports it): the keys of the game
+// The exports each mod DLL provides. The host loads the DLL when the mod first starts, after the player agreed to the
+// notice, never before; it reads these then. Do no work in DllMain. A loaded DLL stays mapped until the game exits, even
+// if the host refuses it, because unloading one is not safe.
+typedef const PmModInfo* (*PmModInfoFn)(void);  // "pmmod_info": callable at any time
+typedef bool (*PmModStartFn)(const PmHostApi*);  // "pmmod_start": once, after consent; false leaves it inactive
+typedef void (*PmModTickFn)(void);               // "pmmod_tick": every frame once started
+typedef void (*PmModStopFn)(void);               // "pmmod_stop": once, when the host stops
+// "pmmod_requires" (optional, version 2 onwards; the game API's glue exports it): the keys of the game
 // entries the mod uses that are not marked optional. It points `keys` at an array the mod keeps,
 // unchanged, for as long as its DLL stays loaded, and returns its length. Callable at any time. The
 // host does not start a mod while any of these did not resolve, and logs which. A mod without this
 // export requires no game entry.
-typedef size_t (*PgModRequiresFn)(const char* const** keys);
+typedef size_t (*PmModRequiresFn)(const char* const** keys);
 }

@@ -1,0 +1,146 @@
+// Playable Ghost's player-facing text: the ghost player's HUD, pick screen and alerts, and the investigators' notices.
+// Each text marked PM_TEXT_AI was written by AI before the AI policy (AI_POLICY.md); the author replaces it and
+// takes the mark off; one marked PM_TEXT_TODO is a placeholder waiting for the author's words. A {{token}} is a
+// value the code fills in. Keep one entry per line.
+{
+  "ability.demon": "Early hunt",  // PM_TEXT_AI
+  "ability.demon.about": "Start a hunt whatever the investigators' sanity.",  // PM_TEXT_AI
+  "ability.jinn": "Sanity drain",  // PM_TEXT_AI
+  "ability.jinn.about": "Drain the sanity of the investigators near you. It only works while the power is on.",  // PM_TEXT_AI
+  "ability.obake": "Fading prints",  // PM_TEXT_AI
+  "ability.obake.about": "Make the fingerprints you have left fade twice as fast.",  // PM_TEXT_AI
+  "ability.phantom": "Stalk",  // PM_TEXT_AI
+  "ability.phantom.about": "Walk to a spot close to a random investigator.",  // PM_TEXT_AI
+  "ability.poltergeist": "Burst",  // PM_TEXT_AI
+  "ability.poltergeist.about": "Throw every object around you at once, leaving EMF.",  // PM_TEXT_AI
+  "ability.wraith": "Teleport",  // PM_TEXT_AI
+  "ability.wraith.about": "Appear beside a random investigator, leaving EMF where you arrive.",  // PM_TEXT_AI
+  "ability.yurei": "Door slam",  // PM_TEXT_AI
+  "ability.yurei.about": "Slam a door of the room you are in. Investigators close to you on your floor lose sanity.",  // PM_TEXT_AI
+  "alert.ahead": "ahead",  // PM_TEXT_AI
+  "alert.behind": "behind",  // PM_TEXT_AI
+  "alert.crucifix": "A crucifix stopped you",  // PM_TEXT_AI
+  "alert.left": "to your left",  // PM_TEXT_AI
+  "alert.mirror": "They are watching your room in the mirror",  // PM_TEXT_AI
+  "alert.monkey-paw": "A wish was made on the monkey paw",  // PM_TEXT_AI
+  "alert.music-box": "Music is calling you",  // PM_TEXT_AI
+  "alert.name": "Someone spoke your name",  // PM_TEXT_AI
+  "alert.ouija": "The Ouija board spoke for you",  // PM_TEXT_AI
+  "alert.ouija-answered": "The Ouija board answered: \"{{answer}}\"",  // PM_TEXT_AI
+  "alert.right": "to your right",  // PM_TEXT_AI
+  "alert.right-here": "right here",  // PM_TEXT_AI
+  "alert.salt": "You walked through salt",  // PM_TEXT_AI
+  "alert.smudged": "You have been smudged",  // PM_TEXT_AI
+  "alert.spirit-box": "The spirit box spoke for you",  // PM_TEXT_AI
+  "alert.summoned": "You are being summoned",  // PM_TEXT_AI
+  "alert.tarot": "A tarot card was drawn",  // PM_TEXT_AI
+  "alert.tarot-death": "The Death card: you are made to hunt",  // PM_TEXT_AI
+  "alert.tarot-devil": "The Devil card: you are made to appear",  // PM_TEXT_AI
+  "alert.tarot-hermit": "The Hermit card: you are sent home",  // PM_TEXT_AI
+  "alert.tarot-tower": "The Tower card: you grow restless",  // PM_TEXT_AI
+  "alert.voodoo": "A pin was pushed into the voodoo doll",  // PM_TEXT_AI
+  "alert.where": "{{side}}, {{metres}} m",  // PM_TEXT_AI
+  "book.abilities.body": "{{interact}} <b>Interact</b>: look at a door, light switch or object within reach.\n\n{{primary}} <b>Manifest</b> (tap): an event your type is allowed, such as an appearance or a sound.\n\n",  // PM_TEXT_AI
+  "book.abilities.fuse-hunt": "{{fuse}} <b>Fuse box</b>: switch the power from anywhere. Some types never turn it off, others never on, and turning it on often fails.\n\nHold {{primary}} <b>Hunt</b>: when a hunt is available.",  // PM_TEXT_AI
+  "book.abilities.none": "Your type has no ability of its own.",  // PM_TEXT_AI
+  "book.abilities.own": "{{key}} <b>{{name}}</b>: {{description}}\n\n",  // PM_TEXT_AI
+  "book.abilities.title": "Your abilities",  // PM_TEXT_AI
+  "book.bound": "You are bound to your favourite room for now.",  // PM_TEXT_AI
+  "book.evidence-title": "Their evidence",  // PM_TEXT_AI
+  "book.haunting.body": "<b>Your urges.</b> Every few seconds the ghost feels an urge, as any ghost of your type does: to touch something, to cause an event, to use its ability or the fuse box. Each one is kept for you to act on, up to two of a kind.\n\n<b>Restlessness.</b> Do nothing for half a minute and the ghost acts on its urges by itself until you try to act again.\n\n<b>Your room.</b> Some urges draw you back to your favourite room, as a ghost always is. Some things bind you to it for a while.\n\n<b>Hunting.</b> When the urge to hunt comes, hold {{primary}} before the next one would. Crucifixes still burn, smoke still blinds you and the cooldown still applies.\n\n<b>Evidence.</b> Your type leaves its evidence on its own, as it always does.",  // PM_TEXT_AI
+  "book.haunting.title": "The haunting",  // PM_TEXT_AI
+  "book.hunt-available": "<b>A hunt is available</b>",  // PM_TEXT_AI
+  "book.hunt.title": "The hunt",  // PM_TEXT_AI
+  "book.hunting": "<color=#8C1A10><b>Hunting</b></color>",  // PM_TEXT_AI
+  "book.hunts-at": "Hunts possible at <b>{{sanity}}%</b> or below",  // PM_TEXT_AI
+  "book.key": "<b>[{{key}}]</b>",  // PM_TEXT_AI
+  "book.key-unbound": "?",  // PM_TEXT_AI
+  "book.low-enough": "<color=#8C1A10>(low enough)</color>",  // PM_TEXT_AI
+  "book.no-hunt": "No hunt available yet",  // PM_TEXT_AI
+  "book.overview.body": "Type: <b>{{type}}</b>\n\nFavourite room: <b>{{room}}</b>\n\nGoal: kill every investigator before they leave.",  // PM_TEXT_AI
+  "book.overview.not-yet": "chosen as the haunting begins",  // PM_TEXT_AI
+  "book.overview.title": "Your ghost",  // PM_TEXT_AI
+  "book.playing.body": "You are the ghost. The investigators must work out what you are and get away; you win by killing every one of them.\n\nMove with {{move}} and look with the mouse. A ghost only moves when the urge to wander comes, a few metres at a time, and when it hunts.\n\n{{journal}} opens this journal and {{pause}} its pause menu.\n\nYour favourite room is where they will look for you. When the game moves it, you have a few seconds to choose another on your map.",  // PM_TEXT_AI
+  "book.playing.title": "Playing the ghost",  // PM_TEXT_AI
+  "book.ready": "Ready: <b>{{interactions}}</b> interaction, <b>{{events}}</b> event, <b>{{fuses}}</b> fuse box",  // PM_TEXT_AI
+  "book.ready-with-ability": "Ready: <b>{{interactions}}</b> interaction, <b>{{events}}</b> event, <b>{{abilities}}</b> ability, <b>{{fuses}}</b> fuse box",  // PM_TEXT_AI
+  "book.rules.body": "Everything you do goes through the game's own rules for your type, so your evidence and behaviour stay true to it.\n\nYou can only do what your urges allow, and only when the game would let a ghost of your type do it: nothing touched before the front door opens, and a Shade keeps still while it is watched.\n\nAn interaction with an object your type rarely touches uses up more than one urge.\n\nHunts follow the game's checks: sanity, setup time, cooldown and smudging.",  // PM_TEXT_AI
+  "book.rules.title": "The rules",  // PM_TEXT_AI
+  "book.sanity-target": "Your target's sanity: <b>{{sanity}}%</b>",  // PM_TEXT_AI
+  "book.sanity-team": "The team's sanity: <b>{{sanity}}%</b>",  // PM_TEXT_AI
+  "book.sanity-unknown": "Their sanity: not known yet",  // PM_TEXT_AI
+  "book.verdict-line": "The investigators believe the ghost is a",  // PM_TEXT_AI
+  "book.verdict-title": "Their verdict",  // PM_TEXT_AI
+  "hud.action": "[{{key}}] {{action}}",  // PM_TEXT_AI
+  "hud.blinded": "The smoke blinds you",  // PM_TEXT_AI
+  "hud.bound": "You are bound to your favourite room",  // PM_TEXT_AI
+  "hud.disguise": "Disguise",  // PM_TEXT_AI
+  "hud.drawn-home": "Your favourite room draws you back",  // PM_TEXT_AI
+  "hud.favourite-room": "Favourite room: <b>{{room}}</b>",  // PM_TEXT_AI
+  "hud.hold-key": "Hold {{key}}",  // PM_TEXT_AI
+  "hud.hunt": "Hunt",  // PM_TEXT_AI
+  "hud.hunts-at": "hunts at {{sanity}}% or below",  // PM_TEXT_AI
+  "hud.interact": "Interact",  // PM_TEXT_AI
+  "hud.keys-together": "{{first}}+{{second}}",  // PM_TEXT_AI
+  "hud.low-enough": "<b>low enough to hunt</b>",  // PM_TEXT_AI
+  "hud.manifest": "Manifest",  // PM_TEXT_AI
+  "hud.mimic": "Copying: <b>{{copying}}</b>. Next copy: <b>{{next}}</b> [{{key}}]",  // PM_TEXT_AI
+  "hud.mimic-game-choice": "the game's choice",  // PM_TEXT_AI
+  "hud.power-off": "Power off",  // PM_TEXT_AI
+  "hud.power-on": "Power on",  // PM_TEXT_AI
+  "hud.resting": "You rest until the urge to wander comes",  // PM_TEXT_AI
+  "hud.restless": "restless",  // PM_TEXT_AI
+  "hud.restless-acting": "Restless, the ghost acts on its own until you try to act",  // PM_TEXT_AI
+  "hud.roam-edge": "You may not stray further this time",  // PM_TEXT_AI
+  "hud.room-moved-go": "Your favourite room moved: go to another room to choose it instead",  // PM_TEXT_AI
+  "hud.room-moved-here": "Your favourite room moved: [{{key}}] make {{room}} your favourite room instead",  // PM_TEXT_AI
+  "hud.room-moved-journal": "Your favourite room moved: [{{key}}] choose another on your map",  // PM_TEXT_AI
+  "hud.sanity-target": "Target's sanity {{sanity}}%",  // PM_TEXT_AI
+  "hud.sanity-team": "Team sanity {{sanity}}%",  // PM_TEXT_AI
+  "hud.team": "(team {{sanity}}%)",  // PM_TEXT_AI
+  "hud.you-are": "You are a <b>{{type}}</b>",  // PM_TEXT_AI
+  "lobby.play-as-ghost": "Play as ghost",  // PM_TEXT_AI
+  "lobby.you-are-the-ghost": "You are the ghost",  // PM_TEXT_AI
+  "pick.begin": "Begin the haunting",  // PM_TEXT_AI
+  "pick.choose-another": "Choose another room",  // PM_TEXT_AI
+  "pick.choose-ghost": "Choose your ghost on the right-hand page",  // PM_TEXT_AI
+  "pick.click-room": "Click a room on the map",  // PM_TEXT_AI
+  "pick.difficulty-chose": "This contract's difficulty has chosen your ghost",  // PM_TEXT_AI
+  "pick.favourite-room": "Favourite room",  // PM_TEXT_AI
+  "pick.ghost-type": "Ghost type",  // PM_TEXT_AI
+  "pick.list-keys": "[{{up}}] [{{down}}] choose     [{{left}}] [{{right}}] switch list     [{{confirm}}] confirm     <alpha=#77>Anything unconfirmed is chosen at random",  // PM_TEXT_AI
+  "pick.make-favourite": "Make it my favourite room",  // PM_TEXT_AI
+  "pick.new-favourite-room": "New favourite room",  // PM_TEXT_AI
+  "pick.ready": "Your ghost is ready",  // PM_TEXT_AI
+  "pick.room": "<b>{{room}}</b>",  // PM_TEXT_AI
+  "pick.room-moved": "Your favourite room moved",  // PM_TEXT_AI
+  "pick.room-moved-to": "Your favourite room moved to <b>{{room}}</b>",  // PM_TEXT_AI
+  "pick.unchosen-random": "anything left unchosen is random",  // PM_TEXT_AI
+  "pick.which-ghost": "Which ghost will you be?",  // PM_TEXT_AI
+  "pick.you-are": "You are a <b>{{type}}</b>",  // PM_TEXT_AI
+  "pick.you-are-the-ghost": "You are the ghost",  // PM_TEXT_AI
+  "pick.you-will-be": "You will be a <b>{{type}}</b>",  // PM_TEXT_AI
+  "pick.your-ghost": "Your ghost",  // PM_TEXT_AI
+  "reward.paid": "${{money}} and {{xp}} XP: {{details}}",  // PM_TEXT_AI
+  "round.ghost-fallback": "Ghost {{type}}",  // PM_TEXT_AI
+  "score.details": "{{killed}} killed, {{misled}} misled",  // PM_TEXT_AI
+  "score.details-quit": "{{killed}} killed, {{misled}} misled, {{quit}} quit",  // PM_TEXT_AI
+  "score.ghosts": "The ghost's deception score: {{points}} of {{of}}",  // PM_TEXT_AI
+  "score.yours": "Your deception score: {{points}} of {{of}}",  // PM_TEXT_AI
+  "state.dayan": "Strength: {{state}}",  // PM_TEXT_AI
+  "state.dayan.empowered": "<color=#E04030>empowered</color> (they move near you)",  // PM_TEXT_AI
+  "state.dayan.steady": "steady",  // PM_TEXT_AI
+  "state.dayan.weakened": "weakened (they stand still near you)",  // PM_TEXT_AI
+  "state.deildegast": "Speed: {{speed}} m/s ({{moved}} things moved)",  // PM_TEXT_AI
+  "state.gallu": "Rage: {{state}}",  // PM_TEXT_AI
+  "state.gallu.calm": "calm",  // PM_TEXT_AI
+  "state.gallu.enraged": "<color=#E04030>enraged</color>",  // PM_TEXT_AI
+  "state.gallu.exhausted": "exhausted",  // PM_TEXT_AI
+  "state.obambo": "Mood: {{mood}} for {{time}}",  // PM_TEXT_AI
+  "state.obambo.aggressive": "<color=#E04030>aggressive</color>",  // PM_TEXT_AI
+  "state.obambo.calm": "calm",  // PM_TEXT_AI
+  "state.raiju": "<color=#FFE070>Electronics hum near you</color>: you are faster",  // PM_TEXT_AI
+  "state.thaye": "Age: {{age}} of 10 (hunts at {{sanity}}% sanity)",  // PM_TEXT_AI
+  "truck.title": "The truck stays shut while the ghost is chosen",  // PM_TEXT_AI
+  "truck.wait": "Wait in the truck until the ghost player is ready ({{time}})"  // PM_TEXT_AI
+}

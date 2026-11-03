@@ -123,7 +123,7 @@ void WINAPI sleep_for(DWORD delay) {
 ULONGLONG WINAPI ticks() { return elapsed; }
 }
 
-#define PG_LOADER_NO_MAIN
+#define PM_LOADER_NO_MAIN
 #define OpenProcess open_process
 #define QueryFullProcessImageNameW process_name
 #define IsWow64Process2 architecture
@@ -171,6 +171,10 @@ void reset() {
 
 /** Exercise actual loader control flow through simulated operating-system boundaries. */
 int main() {
+  {  // the loader's shipped text (core/text_table.h), so the messages read as players see them
+    std::string why;
+    if (!pm::i18n::table().load(std::filesystem::path(PM_TEXT_DIR) / "i18n" / "default.json", why)) std::printf("FAIL the loader's text: %s\n", why.c_str());
+  }
   wchar_t temporary[MAX_PATH], root[MAX_PATH];
   CHECK(GetTempPathW(MAX_PATH, temporary)); CHECK(GetTempFileNameW(temporary, L"pgi", 0, root));
   CHECK(DeleteFileW(root)); CHECK(CreateDirectoryW(root, nullptr));
@@ -183,12 +187,24 @@ int main() {
   std::wstring mod = std::wstring(root) + L"\\Example.dll";
   file = CreateFileW(mod.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, 0, nullptr);
   CHECK(file != INVALID_HANDLE_VALUE); CHECK(CloseHandle(file));
-  using pg::loader::Outcome;
-  auto run = [&] { return pg::loader::load(42, source.c_str()); };
+  using pm::loader::Outcome;
+  auto run = [&] { return pm::loader::load(42, source.c_str()); };
   reset(); CHECK(run().outcome == Outcome::active); CHECK(frees == 1 && threadStarts == 1 && closes == 4);
   CHECK(wcsstr(copiedPath.c_str(), L"\\bin\\host-42-") != nullptr);
   // The selected mods are copied and listed, in order, in the session file the host reads.
-  reset(); CHECK(pg::loader::load(42, source.c_str(), {mod}).outcome == Outcome::active);
+  {
+    FILE* json = nullptr;
+    CHECK(_wfopen_s(&json, (std::wstring(root) + L"\\manifest.json").c_str(), L"wb") == 0);
+    if (json) { fputs("{}", json); fclose(json); }
+  }
+  reset(); CHECK(pm::loader::load(42, source.c_str(), {mod}, {"?broken\tIts id is bad.\n"}).outcome == Outcome::active);
+  {
+    // The manifest goes beside the copy as <copy>.json, the name the host looks for.
+    WIN32_FIND_DATAW found{};
+    HANDLE search = FindFirstFileW((directory + L"\\bin\\Example-42-*.json").c_str(), &found);
+    CHECK(search != INVALID_HANDLE_VALUE);
+    if (search != INVALID_HANDLE_VALUE) FindClose(search);
+  }
   {
     FILE* session = nullptr;
     CHECK(_wfopen_s(&session, (directory + L"\\bin\\session-42.txt").c_str(), L"rb") == 0);
@@ -196,8 +212,22 @@ int main() {
     char text[2048] = {};
     if (session) { fread(text, 1, sizeof text - 1, session); fclose(session); }
     CHECK(std::strstr(text, "\\bin\\Example-42-") != nullptr && std::strstr(text, ".dll\n") != nullptr);
+    CHECK(std::strstr(text, "?broken\tIts id is bad.\n") != nullptr);  // a refused mod reaches the host's Mods panel
   }
-  reset(); CHECK(pg::loader::load(42, source.c_str(), {std::wstring(root) + L"\\Missing.dll"}).outcome == Outcome::file_error);
+  // A mod whose DLL cannot be read stays off, with a line for the Mods panel; the host and the other mods still load.
+  reset(); CHECK(pm::loader::load(42, source.c_str(), {std::wstring(root) + L"\\custom_ghosts\\Missing.dll", mod}).outcome == Outcome::active);
+  {
+    FILE* session = nullptr;
+    CHECK(_wfopen_s(&session, (directory + L"\\bin\\session-42.txt").c_str(), L"rb") == 0);
+    char text[2048] = {};
+    if (session) { fread(text, 1, sizeof text - 1, session); fclose(session); }
+    // Its row names the mod's folder, as the launcher's other refusals do, and not the DLL.
+    CHECK(std::strstr(text, "?custom_ghosts\tIts DLL could not be read or copied.") != nullptr);
+    CHECK(std::strstr(text, "?Missing") == nullptr);
+    CHECK(std::strstr(text, "\\bin\\Example-42-") != nullptr);
+    CHECK(std::strstr(text, "\\bin\\Missing-42-") == nullptr);
+  }
+  reset(); CHECK(pm::loader::load(42, nullptr).outcome == Outcome::file_error);
   CHECK(threadStarts == 0);
   reset(); allocationFails = true; CHECK(run().outcome == Outcome::allocation_failed); CHECK(frees == 0);
   reset(); writeFails = true; CHECK(run().outcome == Outcome::write_failed); CHECK(frees == 1 && threadStarts == 0);
@@ -216,7 +246,6 @@ int main() {
   reset(); wcscpy_s(fakeModules[0].szModule, L"host-existing.dll"); CHECK(run().outcome == Outcome::already_loaded); CHECK(allocations == 0);
   reset(); emitted = event("ModHost loading") + event("ModHost inactive: test"); CHECK(run().outcome == Outcome::inactive);
   reset(); emitted = event("ModHost loading") + event("ModHost stopped; native module retained until process exit"); CHECK(run().outcome == Outcome::inactive);
-  reset(); emitted = event("ModHost loading") + event("ModHost inactive: unsupported or unreadable game binaries; nothing hooked"); CHECK(run().outcome == Outcome::unsupported_build);
   reset(); emitted = event("ModHost active"); CHECK(run().outcome == Outcome::activation_timeout);
   reset(); emitted = event("ModHost loading", 99) + event("ModHost active", 99); CHECK(run().outcome == Outcome::activation_timeout);
   reset(); write_log(event("ModHost loading") + event("ModHost active")); emitted.clear(); CHECK(run().outcome == Outcome::activation_timeout);
@@ -225,9 +254,9 @@ int main() {
   reset(); write_log(std::string(4096, 'x')); truncateLog = true; CHECK(run().outcome == Outcome::log_error);
   reset(); write_log("stale partial line"); CHECK(run().outcome == Outcome::activation_timeout);
   reset(); write_log(std::string(32, 'x')); truncateLog = true; CHECK(run().outcome == Outcome::log_error);
-  reset(); DWORD pid = 0; CHECK(pg::loader::find_game(pid).outcome == Outcome::ready && pid == 42);
-  processCount = 0; CHECK(pg::loader::find_game(pid).outcome == Outcome::no_process && pid == 0);
-  processCount = 2; CHECK(pg::loader::find_game(pid).outcome == Outcome::ambiguous_process && pid == 0);
-  snapshotFails = true; CHECK(pg::loader::find_game(pid).outcome == Outcome::process_error);
+  reset(); DWORD pid = 0; CHECK(pm::loader::find_game(pid).outcome == Outcome::ready && pid == 42);
+  processCount = 0; CHECK(pm::loader::find_game(pid).outcome == Outcome::no_process && pid == 0);
+  processCount = 2; CHECK(pm::loader::find_game(pid).outcome == Outcome::ambiguous_process && pid == 0);
+  snapshotFails = true; CHECK(pm::loader::find_game(pid).outcome == Outcome::process_error);
   return failures ? 1 : 0;
 }

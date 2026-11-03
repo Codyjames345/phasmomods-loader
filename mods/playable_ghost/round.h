@@ -17,15 +17,19 @@
 // Everyone: while the host holds the spawn the truck's door stays shut. The host refuses the
 // truck's own door button (LiftButton) and the investigator who pressed it is told to wait. The
 // house's main door is the game's own and untouched.
-namespace pg::round {
+namespace pm::round {
 
 constexpr unsigned kPickMs = 30000;
 constexpr unsigned kRoomClaimMs = 20000;
 
-bool resolve();
 bool create_hooks();  // before hooks::enable_all
 void tick(session::Session& s);
 void teardown();
+
+// The milliseconds the pick and the room claim are timed by: GetTickCount64 unless a test sets another
+// (null puts GetTickCount64 back).
+using Clock = unsigned long long (*)();
+void set_clock(Clock clock);
 
 // Level and ghost data for the ghost player's UI. Indices are into the level's favourite-room list.
 int room_count();
@@ -36,4 +40,4 @@ int favourite_room();      // the ghost's favourite room, or -1
 bool ghost_in_favourite_room();  // the room the ghost is in is its favourite room (any room, candidate or not)
 std::string ghost_type_name(int type);
 
-}  // namespace pg::round
+}  // namespace pm::round

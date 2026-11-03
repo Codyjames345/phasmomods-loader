@@ -1,129 +1,209 @@
+#include <algorithm>
+#include <cstdint>
+#include <limits>
 #include <string>
-#include <vector>
 
-#include "behaviour.h"
-#include "difficulty.h"
-#include "echo.h"
-#include "game.h"
-#include "ghosts.h"
-#include "hooks.h"
-#include "il2cpp.h"
+#include "LevelController.h"
+#include "Photon.h"
 #include "apparition.h"
 #include "asterion.h"
+#include "behaviour.h"
 #include "bogeyman.h"
 #include "brownie.h"
+#include "content.h"
+#include "echo.h"
 #include "flame_net.h"
-#include "hydra.h"
+#include "game.h"
+#include "ghosts.h"
 #include "gremlin.h"
+#include "hooks.h"
+#include "hud_line.h"
+#include "hydra.h"
 #include "kikimora.h"
 #include "lethe.h"
 #include "lithobolia.h"
-#include "mesmer.h"
-#include "tempest.h"
 #include "log.h"
+#include "mesmer.h"
 #include "mod_glue.h"
 #include "net.h"
-#include "pages.h"
-#include "registry.h"
+#include "registration.h"
 #include "restraint.h"
-#include "services.h"
+#include "runtime.h"
 #include "sound.h"
-#include "ui.h"
+#include "tempest.h"
 
-// The custom ghosts (Echo, Dullahan, Kikimora, Draugr, Black Shuck) as a mod of the suite
-// (core/mod_api.h). They join the game's ghost types only in a private room where every client runs
-// this mod: anyone without it would have no journal page or evidence for them.
+// The custom ghosts (ghosts.h) as a mod of the suite (core/mod_api.h). Each is a custom ghost of the
+// content layer (sdk/api/content.h, registration.h): the host numbers it, puts it into the game's ghost
+// types, journals and custom difficulty, and keeps it away from saves and from players without it. Each
+// ghost's rules are content rules on its id, which the host runs on every client while the contract's
+// ghost acts as that ghost (its own type, or a Mimic's copy of it). The host runs them, and puts the
+// ghosts into the game, only while this client's mods match the host's list, its one answer for every mod, held
+// through a contract (sdk/README.md, "The host's list"); this mod keeps no such state of its own.
+// While they do not, none of it runs: the lobby and the contract are plain vanilla.
 namespace {
 
-constexpr const char* kId = "custom-ghosts";
-// Players without the mod may share its lobby: the custom ghosts stay out of any contract where not
-// everyone runs it (everyone_has_mod), which is then vanilla.
-constexpr PgModInfo kInfo{PGMOD_API_VERSION, kId, "Custom Ghosts", 2, PG_MOD_RECORDS_VOICE | PG_MOD_VANILLA_PEERS};
+using namespace pm::custom;
+namespace content = pm::api::content;
+
+constexpr const char* kId = "phasmomods.custom-ghosts";
+constexpr PmModInfo kInfo{PMMOD_API_VERSION, kId, "Custom Ghosts", 2, PM_MOD_RECORDS_VOICE};
 bool g_running = false;
-std::vector<int> g_actors;
+int g_acting = 0;  // the custom ghost (ghosts.h Type) whose rules run now, or 0
 
-// Two of the custom ghosts (and more to come) carry Spectral Flame: without it running for everyone
-// they would give an evidence nobody can find, so the custom ghosts wait for it.
-bool spectral_flame_ready() {
-  const auto* flame = static_cast<const PgSpectralFlameService*>(pg::mod::host().service(PG_SERVICE_SPECTRAL_FLAME));
-  return flame && flame->version >= 1 && flame->ready && flame->ready();
+int type_of_user(void* user) { return static_cast<int>(reinterpret_cast<intptr_t>(user)); }
+
+// The contract's ghost, its GhostAI, once it has spawned; else null.
+void* contract_ghost() {
+  void* level = phasmo::LevelController::instance.get();
+  void* ghost = pm::api::alive(level) ? phasmo::LevelController::currentGhost.get(level) : nullptr;
+  return pm::api::alive(ghost) ? ghost : nullptr;
 }
 
-bool everyone_has_mod() {
-  if (!pg::game::private_room() || !spectral_flame_ready()) return false;
-  pg::game::room_actors(g_actors);
-  if (g_actors.empty()) return false;
-  for (int actor : g_actors)
-    if (!pg::mod::peer_has(actor, kId)) return false;
-  return true;
+// The ghost `type` acts as on this client while its rules run, and on the host (which runs its AI) only.
+void* hosts_ghost(int type) {
+  return type && type == g_acting && phasmo::PhotonNetwork::get_IsMasterClient() ? contract_ghost() : nullptr;
 }
 
-bool ghost_controlled() {
-  const auto* pg = static_cast<const PgPlayableGhostService*>(pg::mod::host().service(PG_SERVICE_PLAYABLE_GHOST));
-  return pg && pg->version >= 1 && pg->ghostControlled && pg->ghostControlled();
+// One frame of the custom ghost `type` (0: none, which puts every rule back as it was).
+void frame(int type) {
+  void* haunting = type ? contract_ghost() : nullptr;
+  // The host runs the ghost.
+  void* ghost = haunting && phasmo::PhotonNetwork::get_IsMasterClient() ? haunting : nullptr;
+  const bool steered = ghost && content::player_controlled();
+  asterion::tick(ghost, type);  // before the speed rules: it may stop the ghost
+  lithobolia::tick(ghost, type);
+  bogeyman::tick(ghost, type, steered);  // before the speed rules: its room sets its speed
+  brownie::tick_host(ghost, type);       // and who is looking sets the Brownie's
+  behaviour::tick(ghost, type, steered);
+  behaviour::tick_room(haunting, type);  // every client: the Draugr's room is colder while it is angered
+  restraint::tick(ghost, type);
+  if (ghost && type == kKikimora) kikimora::tick(ghost, steered);
+  else kikimora::reset();
+  // Every client listens while an Echo haunts the contract, and only then.
+  const bool echo = haunting && type == kEcho;
+  echo::tick(echo ? ghost : nullptr, steered, echo);
+  hydra::tick(haunting, type);  // and sees the Hydra's false heads
+  brownie::tick_all(haunting, type);  // and records which ghost haunts, for its steps
+  lethe::tick(haunting, type);        // and forgets with the Lethe
+  tempest::tick(haunting, type);      // and sees the Tempest's storm
+  mesmer::tick(haunting, type);       // and sees the Mesmer as no one else does
 }
 
-const char* ability_name(int type) {
-  const pg::custom::Ghost* g = pg::custom::find(type);
-  return g ? g->ability : nullptr;
-}
-
-const char* ability_description(int type) {
-  const pg::custom::Ghost* g = pg::custom::find(type);
-  return g ? g->abilityDescription : nullptr;
-}
-
-bool use_ability(int type) {
-  using namespace pg;
+// The rules of one custom ghost (PmGhostRules). `user` is its Type.
+void rules_start(void* user) {
   try {
-    int haunting = 0;
-    void* ghost = game::is_master() && custom::registry::active() ? custom::registry::custom_ghost(haunting) : nullptr;
-    if (!ghost || haunting != type) return false;
-    if (type == custom::kEcho) return custom::echo::speak(ghost, 0);
-    if (type == custom::kKikimora) return custom::kikimora::hide(ghost, custom::kikimora::nearest(ghost));
-    if (type == custom::kLithobolia) return custom::lithobolia::throw_now(ghost);
-    if (type == custom::kGremlin) return custom::gremlin::short_out(ghost);
+    g_acting = type_of_user(user);
+    if (const Ghost* g = find(g_acting)) PM_LOG("CustomGhosts: the rules of the %s run", g->name);
   } catch (...) {
-    PG_LOG("ability: exception while using a custom ghost's ability");  // nothing thrown may reach another mod
+  }
+}
+
+void rules_tick(void* user) {
+  try {
+    if (g_running && type_of_user(user) == g_acting) frame(g_acting);
+  } catch (...) {
+    PM_LOG("CustomGhosts: a rule threw; its frame is skipped");
+  }
+}
+
+void rules_stop(void* user) {
+  try {
+    if (type_of_user(user) != g_acting) return;
+    g_acting = 0;
+    if (g_running) frame(0);  // a stopped mod put everything back already (pmmod_stop)
+  } catch (...) {
+    PM_LOG("CustomGhosts: a rule threw while stopping");
+  }
+}
+
+bool rules_hunt_speed(float* base, float* losScale, void* user) {
+  try {
+    return type_of_user(user) == g_acting && behaviour::hunt_speed(base, losScale);
+  } catch (...) {
+    return false;  // nothing thrown may reach the host
+  }
+}
+
+// The callbacks of each ghost's definition (PmGhostDef). `user` is its Type.
+bool use_ability(int type) {
+  try {
+    void* ghost = hosts_ghost(type);
+    if (!ghost) return false;
+    if (type == kEcho) return echo::speak(ghost, 0);
+    if (type == kKikimora) return kikimora::hide(ghost, kikimora::nearest(ghost));
+    if (type == kLithobolia) return lithobolia::throw_now(ghost);
+    if (type == kGremlin) return gremlin::short_out(ghost);
+  } catch (...) {
+    PM_LOG("ability: exception while using a custom ghost's ability");  // nothing thrown may reach another mod
   }
   return false;
 }
 
-int sense(int type) {
-  using namespace pg;
+int32_t hud_state(int type) {
   try {
-    if (type == custom::kEcho) return custom::echo::dormant_now() ? 1 : 0;
-    if (type == custom::kKikimora) return custom::restraint::held_back(type, custom::restraint::kInteract) ? 1 : 0;
-    return custom::behaviour::sense(type);
+    if (!type || type != g_acting) return -1;
+    if (type == kEcho) return echo::dormant_now() ? 1 : 0;
+    if (type == kKikimora) return restraint::held_back(type, restraint::kInteract) ? 1 : 0;
+    return behaviour::sense(type);
   } catch (...) {
     return -1;  // nothing thrown may reach another mod
   }
 }
 
-bool held_back(int type, int kind) {
-  using namespace pg;
+void* target(int type, std::span<const void* const> excluded) {
   try {
-    return (kind == custom::restraint::kInteract || kind == custom::restraint::kEvent) &&
-           custom::restraint::held_back(type, static_cast<custom::restraint::Kind>(kind));
+    if (!type || type != g_acting) return nullptr;
+    if (type == kDraugr) return behaviour::target(type, excluded);
+    if (type == kBogeyman) return bogeyman::target(contract_ghost(), excluded);
+  } catch (...) {
+    PM_LOG("CustomGhosts: a ghost's target threw");  // nothing thrown may reach another mod
+  }
+  return nullptr;
+}
+
+bool held_back(int type, int32_t kind) {
+  try {
+    return (kind == restraint::kInteract || kind == restraint::kEvent || kind == restraint::kAbility) &&
+           restraint::held_back(type, static_cast<restraint::Kind>(kind));
   } catch (...) {
     return false;  // nothing thrown may reach another mod
   }
 }
 
-int scent(float* xyz, int maxPoints) {
+// The scent only the Black Shuck's player sees: nothing for any other ghost, or for one whose rules do not
+// run.
+uint32_t player_view(int type, float* xyz, uint32_t max) {
   try {
-    return pg::custom::behaviour::scent(xyz, maxPoints);
+    if (type != kBlackShuck || type != g_acting) return 0;
+    const int n = behaviour::scent(xyz, static_cast<int>(std::min<uint32_t>(max, std::numeric_limits<int>::max())));
+    return n > 0 ? static_cast<uint32_t>(n) : 0;
   } catch (...) {
     return 0;  // nothing thrown may reach another mod
   }
 }
 
-// The Hydra's Spectral Flame burns green, a tell even with the evidence withheld.
-bool green_flame(int type) { return type == pg::custom::kHydra; }
+// Where a player may steer the Black Shuck in a hunt: within its trails' corridor (behaviour.h player_move).
+void player_move(int type, const float* at, float* dx, float* dz) {
+  try {
+    if (type == kBlackShuck && type == g_acting) behaviour::player_move(at, dx, dz);
+  } catch (...) {
+    // Nothing thrown may reach another mod; the direction stays the player's.
+  }
+}
+
+// Its player's HUD line for a state hud_state answered on the host (hud_line.h), kept until the next call.
+const char* hud_text(int type, int32_t state) {
+  static std::string line;
+  try {
+    line = hud_line(type, state);
+  } catch (...) {
+    line.clear();  // nothing thrown may reach another mod
+  }
+  return line.empty() ? nullptr : line.c_str();
+}
 
 // Every message on the channel: the flame ghosts' ('C' 'G' 'F') to their own, the rest to the Echo.
 void receive(int sender, const uint8_t* data, size_t size) {
-  using namespace pg::custom;
   switch (net_msg::kind_of(data, size)) {
     case net_msg::kDecoys:
     case net_msg::kDouble: hydra::receive(sender, data, size); break;
@@ -131,90 +211,85 @@ void receive(int sender, const uint8_t* data, size_t size) {
     case net_msg::kStrike: tempest::receive(sender, data, size); break;
     case net_msg::kViewing:
     case net_msg::kForget: lethe::receive(sender, data, size); break;
+    case net_msg::kAnger: behaviour::receive(sender, data, size); break;
+    case net_msg::kSeen: brownie::receive(sender, data, size); break;
     case 0: echo::receive(sender, data, size); break;
     default: break;
   }
 }
 
-constexpr PgCustomGhostsService kService{5, &ability_name, &ability_description, &use_ability, &sense, &held_back, &scent,
-                                         &green_flame};
-
-bool start(const PgHostApi* api) {
-  using namespace pg;
-  if (!mod::bind(api, &kInfo)) return false;
-  if (!(game::resolve() && ui::resolve() && custom::registry::resolve() && custom::difficulty::resolve() && custom::pages::resolve() &&
-        custom::behaviour::resolve() && custom::kikimora::resolve() && custom::echo::resolve() && custom::sound::resolve() &&
-        custom::apparition::resolve() &&
-        custom::hydra::resolve() && custom::asterion::resolve() && custom::lithobolia::resolve() &&
-        custom::gremlin::resolve() && custom::bogeyman::resolve() && custom::brownie::resolve() &&
-        custom::lethe::resolve() && custom::tempest::resolve() && custom::mesmer::resolve())) {
-    PG_LOG("CustomGhosts inactive: game binding resolution failed");
+bool start(const PmHostApi* api) {
+  if (!pm::mod::bind(api, &kInfo)) return false;
+  content::GhostDef callbacks;
+  callbacks.useAbility = [](void* user) { return use_ability(type_of_user(user)); };
+  callbacks.hudState = [](void* user) { return hud_state(type_of_user(user)); };
+  callbacks.heldBack = [](int32_t kind, void* user) { return held_back(type_of_user(user), kind); };
+  callbacks.interactionLost = [](void* user) {
+    try {
+      return restraint::interaction_lost(type_of_user(user));
+    } catch (...) {
+      return false;  // nothing thrown may reach another mod
+    }
+  };
+  callbacks.playerView = [](float* xyz, uint32_t max, void* user) { return player_view(type_of_user(user), xyz, max); };
+  callbacks.target = [](const void* const* excluded, uint32_t count, void* user) {
+    return target(type_of_user(user), std::span<const void* const>(excluded, excluded ? count : 0));
+  };
+  callbacks.hudLine = [](int32_t state, void* user) { return hud_text(type_of_user(user), state); };
+  callbacks.playerMove = [](const float* at, float* dx, float* dz, void* user) {
+    player_move(type_of_user(user), at, dx, dz);
+  };
+  content::GhostRules rules;
+  rules.start = &rules_start;
+  rules.tick = &rules_tick;
+  rules.stop = &rules_stop;
+  rules.huntSpeed = &rules_hunt_speed;
+  if (!register_content(callbacks, rules)) {
+    PM_LOG("CustomGhosts inactive: the host refused its ghosts or their rules");
     return false;
   }
-  const std::wstring picks = std::wstring(api->dataDirectory) + L"\\custom_difficulty.txt";
-  if (!(custom::registry::create_hooks() && custom::difficulty::create_hooks(picks.c_str(), &everyone_has_mod) &&
-        custom::behaviour::create_hooks() && custom::echo::create_hooks() && custom::restraint::create_hooks() && custom::lethe::create_hooks() && custom::mesmer::create_hooks() &&
-        custom::brownie::create_hooks() && custom::tempest::create_hooks() &&
-        hooks::enable_all())) {
-    PG_LOG("CustomGhosts inactive: hook installation failed");
+  if (!(pm::game::resolve() && behaviour::resolve() && kikimora::resolve() && echo::resolve() && sound::resolve() &&
+        apparition::resolve() && hydra::resolve() && asterion::resolve() && lithobolia::resolve() &&
+        gremlin::resolve() && bogeyman::resolve() && brownie::resolve() && lethe::resolve() && tempest::resolve() &&
+        mesmer::resolve())) {
+    PM_LOG("CustomGhosts inactive: game binding resolution failed");
     return false;
   }
-  net::set_handler(&receive);
-  api->register_service(PG_SERVICE_CUSTOM_GHOSTS, &kService);
+  if (!(behaviour::create_hooks() && echo::create_hooks() && restraint::create_hooks() && lethe::create_hooks() &&
+        mesmer::create_hooks() && brownie::create_hooks() && tempest::create_hooks() && pm::hooks::enable_all())) {
+    PM_LOG("CustomGhosts inactive: hook installation failed");
+    return false;
+  }
+  pm::net::set_handler(&receive);
   return true;
-}
-
-void tick() {
-  using namespace pg;
-  custom::registry::tick(everyone_has_mod());
-  custom::difficulty::tick();
-  custom::pages::tick(custom::registry::active());
-  int type = 0;
-  void* haunting = custom::registry::active() ? custom::registry::custom_ghost(type) : nullptr;
-  void* ghost = game::is_master() ? haunting : nullptr;  // the host runs the ghost
-  const bool steered = ghost && ghost_controlled();
-  custom::asterion::tick(ghost, type);  // before the speed rules: it may stop the ghost
-  custom::lithobolia::tick(ghost, type);
-  custom::bogeyman::tick(ghost, type, steered);  // before the speed rules: its room sets its speed
-  custom::brownie::tick_host(ghost, type);       // and who is looking sets the Brownie's
-  custom::behaviour::tick(ghost, type, steered);
-  custom::restraint::tick(ghost, type, steered);
-  if (ghost && type == custom::kKikimora) custom::kikimora::tick(ghost, steered);
-  else custom::kikimora::reset();
-  // Every client listens while an Echo haunts the contract, and only then.
-  const bool echo = haunting && type == custom::kEcho;
-  custom::echo::tick(echo ? ghost : nullptr, steered, echo);
-  custom::hydra::tick(haunting, type);  // and sees the Hydra's false heads
-  custom::brownie::tick_all(haunting, type);  // and records which ghost haunts, for its quiet steps
-  custom::lethe::tick(haunting, type);        // and forgets with the Lethe
-  custom::tempest::tick(haunting, type);      // and sees the Tempest's storm
-  custom::mesmer::tick(haunting, type);       // and sees the Mesmer as no one else does
 }
 
 }  // namespace
 
-extern "C" __declspec(dllexport) const PgModInfo* pgmod_info() { return &kInfo; }
+extern "C" __declspec(dllexport) const PmModInfo* pmmod_info() { return &kInfo; }
 
-extern "C" __declspec(dllexport) bool pgmod_start(const PgHostApi* api) {
-  return pg::mod::guarded_start("CustomGhosts", g_running, &start, api);
+extern "C" __declspec(dllexport) bool pmmod_start(const PmHostApi* api) {
+  return pm::mod::guarded_start("CustomGhosts", g_running, &start, api);
 }
 
-extern "C" __declspec(dllexport) void pgmod_tick() { pg::mod::guarded_tick(g_running, &tick); }
+// The rules tick from the host's content dispatch; the mod's own tick has nothing left to do.
+extern "C" __declspec(dllexport) void pmmod_tick() {
+  pm::mod::guarded_tick(g_running, [] {});
+}
 
-extern "C" __declspec(dllexport) void pgmod_stop() {
-  pg::mod::guarded_stop(g_running, [] {
-    pg::custom::echo::reset();
-    pg::custom::hydra::reset();
-    pg::custom::asterion::reset();
-    pg::custom::lithobolia::reset();
-    pg::custom::bogeyman::reset();
-    pg::custom::brownie::reset();
-    pg::custom::lethe::reset();
-    pg::custom::tempest::reset();
-    pg::custom::mesmer::reset();
-    pg::custom::behaviour::teardown();
-    pg::custom::pages::teardown();
-    pg::custom::difficulty::teardown();  // while the menu still holds the custom ghosts it may name
-    pg::custom::registry::teardown();
+extern "C" __declspec(dllexport) void pmmod_stop() {
+  pm::mod::guarded_stop(g_running, [] {
+    g_acting = 0;
+    pm::custom::echo::reset();
+    pm::custom::hydra::reset();
+    pm::custom::asterion::reset();
+    pm::custom::lithobolia::reset();
+    pm::custom::bogeyman::reset();
+    pm::custom::brownie::reset();
+    pm::custom::lethe::reset();
+    pm::custom::tempest::reset();
+    pm::custom::mesmer::reset();
+    pm::custom::kikimora::reset();
+    pm::custom::behaviour::teardown();
   });
 }

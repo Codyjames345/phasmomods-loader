@@ -3,11 +3,11 @@
 #include <string>
 #include <vector>
 
-namespace pg::loader {
+namespace pm::loader {
 enum class Outcome {
   ready, active, already_loaded, no_process, ambiguous_process, invalid_target,
   wrong_architecture, process_error, file_error, allocation_failed, write_failed,
-  thread_failed, indeterminate, not_mapped, inactive, unsupported_build,
+  thread_failed, indeterminate, not_mapped, inactive,
   activation_timeout, game_exited, log_error
 };
 
@@ -26,5 +26,6 @@ Result find_game(DWORD& pid);
  * Load a fresh copy of the host (ModHost.dll) into an x64 game, with fresh copies of the mod DLLs it
  * is to run listed in its session file, and require process-specific activation.
  */
-Result load(DWORD pid, const wchar_t* hostDllPath, const std::vector<std::wstring>& modDllPaths = {});
-}  // namespace pg::loader
+Result load(DWORD pid, const wchar_t* hostDllPath, const std::vector<std::wstring>& modDllPaths = {},
+            const std::vector<std::string>& sessionLines = {});
+}  // namespace pm::loader

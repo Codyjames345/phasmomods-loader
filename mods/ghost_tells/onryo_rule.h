@@ -9,7 +9,7 @@
 // gutters as its count of blown-out flames rises and burns low while the count stands at two; and a
 // flame it blew out will not catch again for a while. Light and size only, never colour, so nothing here
 // looks like Spectral Flame.
-namespace pg::tells {
+namespace pm::tells {
 
 constexpr float kOnryoReach = 4.0f;       // metres: its vanilla flame range (and on its floor)
 constexpr int kOnryoSnuffOneIn = 2;
@@ -64,4 +64,4 @@ struct Spite {
   void clear() { left.clear(); }
 };
 
-}  // namespace pg::tells
+}  // namespace pm::tells

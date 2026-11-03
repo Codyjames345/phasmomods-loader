@@ -1,11 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <initializer_list>
 
 // The Lethe's rules, kept free of game calls so they can be tested offline. It makes the living forget:
 // media of it fades from the journal unless someone looks at it first; it forgets its prey once out of
 // sight; and each of its appearances comes back once, the same, a few minutes later (deja vu).
-namespace pg::custom {
+namespace pm::custom {
 
 constexpr float kLetheFade = 180.0f;       // seconds a piece of media lasts unless someone looks at it
 constexpr float kLetheGiveUp = 1.0f;       // seconds out of sight before it forgets its prey
@@ -21,7 +22,7 @@ inline bool lethe_forgets(float unseen) { return unseen >= kLetheGiveUp; }
 /**
  * The time the player its hunt still looks for has been out of the game's sight. The count is that player's
  * own: it starts over for another player, for nobody, while they are in sight, and once they are forgotten.
- * `Keep` holds the player between frames: il2cpp::Held in the game; a plain pointer in the offline tests.
+ * `Keep` holds the player between frames: pm::api::Held in the game; a plain pointer in the offline tests.
  */
 template <class Keep = void*>
 class LetheMemory {
@@ -51,47 +52,50 @@ class LetheMemory {
 /** When an appearance at `at` (seconds) replays, for a roll `r` in 0..1. */
 inline float lethe_replay_at(float at, float r) { return at + kLetheReplayMin + (kLetheReplayMax - kLetheReplayMin) * r; }
 
-/**
- * Whether the AI's new state takes the ghost's model over from a replay (the GhostAI states: 2 hunt,
- * 8 appear, 14 random event), so the replay must not hide it; any other state does not hide it itself.
- */
-inline bool lethe_state_shows_itself(int state) { return state == 2 || state == 8 || state == 14; }
+// The GhostAI states that take the ghost's model over from a replay, as the game numbers them
+// (GhostState, read from the game: 2, 8 and 14 in build 25811160).
+struct ShowingStates {
+  int hunting, appear, randomEvent;
+};
 
 /**
- * Whether journal media of this subject (MediaValues' evidence type, build 25811160) records the
- * ghost's activity, which fades; bones, bodies, cursed objects and the team's own gear stay.
+ * Whether the AI's new state takes the ghost's model over from a replay (a hunt, an appearance or a
+ * random event), so the replay must not hide it; any other state does not hide it itself.
  */
-inline bool lethe_activity(int subject) {
-  switch (subject) {
-    case 0:   // EMF spot
-    case 2:   // fingerprint
-    case 3:   // footstep
-    case 5:   // the ghost
-    case 7:   // dirty water
-    case 13:  // ghost writing
-    case 14:  // used crucifix
-    case 15:  // D.O.T.S. ghost
-    case 18:  // ghost orb
-    case 22:  // salt stepped in
-    case 23:  // freezing temperature
-    case 24:  // ghost smoke
-    case 25:  // camouflaged ghost
-    case 26:  // paranormal sound
-    case 27:  // spirit box answer
-    case 28:  // ghost hunt
-    case 29:  // banshee wail
-    case 31:  // spirit box breath
-    case 32:  // motion sensor tripped
-    case 33:  // shadow ghost
-    case 34: case 35: case 36: case 37:  // groan, laugh, talk, whisper
-    case 38:  // obake fingerprint
-    case 39:  // crucifix burnt in the chapel
-    case 40:  // obake shapeshift
-    case 43:  // EMF 5
-      return true;
-    default:
-      return false;
-  }
+inline bool lethe_state_shows_itself(int state, const ShowingStates& s) {
+  return state == s.hunting || state == s.appear || state == s.randomEvent;
 }
 
-}  // namespace pg::custom
+// The media subjects that record the ghost's activity, as the game numbers them (MediaSubject, the enum
+// MediaValues.evidenceType holds, read from the game by each value's name).
+struct ActivitySubjects {
+  int emfSpot, fingerprint, footstep, ghost, dirtyWater, ghostWriting, usedCrucifix,
+      dotsGhost,  // a D.O.T.S. ghost
+      ghostOrb,
+      salt,  // salt stepped in
+      freezingTemperature, ghostSmoke,
+      camoGhost,  // a camouflaged ghost
+      paranormalSound,
+      spiritBox,  // a spirit box answer
+      ghostHunt, bansheeWail, spiritBoxBreath,
+      motionSensor,  // a motion sensor tripped
+      shadowGhost, ghostGroan, ghostLaugh, ghostTalk, ghostWhisper, obakeFingerprint,
+      burningChapelCrucifix,  // a crucifix burnt in the chapel
+      obakeShapeshift, emf5;
+};
+
+/**
+ * Whether journal media of this subject (MediaValues' evidence type) records the ghost's activity,
+ * which fades; bones, bodies, cursed objects and the team's own gear stay.
+ */
+inline bool lethe_activity(int subject, const ActivitySubjects& s) {
+  for (int activity : {s.emfSpot, s.fingerprint, s.footstep, s.ghost, s.dirtyWater, s.ghostWriting, s.usedCrucifix,
+                       s.dotsGhost, s.ghostOrb, s.salt, s.freezingTemperature, s.ghostSmoke, s.camoGhost,
+                       s.paranormalSound, s.spiritBox, s.ghostHunt, s.bansheeWail, s.spiritBoxBreath, s.motionSensor,
+                       s.shadowGhost, s.ghostGroan, s.ghostLaugh, s.ghostTalk, s.ghostWhisper, s.obakeFingerprint,
+                       s.burningChapelCrucifix, s.obakeShapeshift, s.emf5})
+    if (subject == activity) return true;
+  return false;
+}
+
+}  // namespace pm::custom

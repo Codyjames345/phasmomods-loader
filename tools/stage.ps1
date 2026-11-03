@@ -1,10 +1,11 @@
-# Replace dist\PhasmoMods with exactly the release payload (tools/payload.psd1) from the current
+# Replace dist\PhasmoMods with exactly the release payload (tools/payload_files.ps1) from the current
 # build, so the launcher there always runs what was built last. The old copy is moved aside before
 # the new one takes its place: while the launcher holds a file in it, nothing changes and the build
 # reports why.
 param([string]$Root = (Split-Path $PSScriptRoot -Parent))
 $ErrorActionPreference = 'Stop'
-$payload = (Import-PowerShellDataFile -LiteralPath (Join-Path $Root 'tools/payload.psd1')).Payload
+. (Join-Path $Root 'tools/payload_files.ps1')
+$payload = Get-PayloadFiles $Root
 $dist = Join-Path $Root 'dist'
 $target = Join-Path $dist 'PhasmoMods'
 $id = [guid]::NewGuid().ToString('N')

@@ -8,53 +8,35 @@
 #include <utility>
 #include <vector>
 
+#include "GhostAI.h"
+#include "GhostHuntState.h"
+#include "JournalController.h"
+#include "Player.h"
+#include "Transform.h"
+#include "UnityWorld.h"
 #include "behaviour.h"
 #include "flame_net.h"
 #include "game.h"
+#include "game_api.h"
 #include "ghosts.h"
-#include "hooks.h"
-#include "il2cpp.h"
+#include "held.h"
 #include "lethe_rule.h"
 #include "log.h"
 #include "net.h"
 #include "players.h"
+#include "runtime.h"
 
-namespace pg::custom::lethe {
+namespace pm::custom::lethe {
 namespace {
 
-using il2cpp::Quaternion;
-using il2cpp::Vector3;
+using phasmo::Quaternion;
+using phasmo::Vector3;
 
-// Build 25811160 (verified by the host at load); obfuscated names, so by offset. REA decompiles of
-// GhostAI.Appear/UnAppear, Journal_PhotoPage's removal and JournalMedia.AddMedia/RemoveMedia
-// (2026-10-20).
-constexpr uintptr_t kAppearRva = 0x2020FB0;    // GhostAI.Appear(int form): RPC to every client
-constexpr uintptr_t kUnAppearRva = 0x202E140;  // GhostAI.UnAppear(): RPC to every client
-constexpr size_t kGhostAppeared = 0xA8;        // GhostAI: showing itself
-// Hunt state: the player it last went for. Its chase (0x214FC40) clears its target (+0x48) the first frame the
-// sight test fails for them and keeps them here, wandering near where it lost them (+0x78) while it is set.
-constexpr size_t kHuntLastPlayer = 0x58;
-constexpr size_t kPlayerJournal = 0xC8;        // Player: JournalController
-constexpr size_t kJournalOpen = 0xB8;          // JournalController: open
-constexpr size_t kJournalPhotoPage = 0x70;     // JournalController: Journal_PhotoPage
-constexpr size_t kPageLists[3] = {0x30, 0x38, 0x40};  // Journal_PhotoPage: photos, videos, sounds (JournalMedia[])
-constexpr size_t kMediaItem = 0xA0;            // JournalMedia: the Media it shows
-constexpr size_t kMediaFilled = 0xA9;          // JournalMedia: it holds media
-constexpr size_t kMediaValues = 0x10;          // Media: MediaValues (what it shows)
-constexpr size_t kValuesSubject = 0x1C;        // MediaValues: evidence type (the subject; class dump)
+// The appearances (GhostAI.Appear / UnAppear, RPCs to every client), the hunt's last player
+// (GhostHuntState.lastPlayer) and the journal's media page (sdk/map/JournalController.h): decompiles of
+// build 25811160 (2026-10-20).
 constexpr ULONGLONG kMediaCheckMs = 1000;
 constexpr ULONGLONG kViewingMs = 2500;         // a viewing report counts this long
-
-struct Api {
-  const il2cpp::Method* removeMedia = nullptr;  // JournalMedia.RemoveMedia(bool), through its override
-  bool (*warp)(void*, Vector3, const void*) = nullptr;
-  bool ok = false;
-} api;
-
-using Appear_t = void (*)(void*, int, const void*);
-using UnAppear_t = void (*)(void*, const void*);
-Appear_t g_appear = nullptr;
-UnAppear_t g_unAppear = nullptr;
 
 struct Appearance {
   Vector3 at{};
@@ -65,19 +47,19 @@ struct Appearance {
 };
 
 struct Slot {
-  il2cpp::Held media;  // the Media it held when first seen (compared only)
+  api::Held media;  // the Media it held when first seen (compared only)
   ULONGLONG since = 0;
   bool viewed = false;
 };
 
 struct State {
-  il2cpp::Held ghost;
+  api::Held ghost;
   int type = 0;
   std::vector<Appearance> appearances;
   bool replaying = false;
   int replayState = -1;  // the AI's state when the replay began
   ULONGLONG replayEnds = 0;
-  LetheMemory<il2cpp::Held> memory;  // the player its hunt still looks for, and how long they are out of sight
+  LetheMemory<api::Held> memory;  // the player its hunt still looks for, and how long they are out of sight
   std::map<std::pair<int, int>, Slot> slots;
   ULONGLONG nextMediaCheck = 0, lastViewing = 0, nextReport = 0, lastTick = 0;
 } g;
@@ -86,9 +68,8 @@ std::mt19937 g_random{static_cast<unsigned>(GetTickCount64())};
 
 bool haunting_lethe(void* ai) { return ai && ai == g.ghost && g.type == kLethe; }
 
-void detour_appear(void* ai, int form, const void* method) {
-  hooks::Guard guard;
-  g_appear(ai, form, method);
+void detour_appear(api::Original<phasmo::GhostAI::Appear> original, void* ai, int32_t form) {
+  original(ai, form);
   if (!haunting_lethe(ai) || g.replaying || !game::is_master()) return;
   void* t = game::transform_of(ai);
   Appearance a;
@@ -99,9 +80,8 @@ void detour_appear(void* ai, int form, const void* method) {
   g.appearances.push_back(a);
 }
 
-void detour_unappear(void* ai, const void* method) {
-  hooks::Guard guard;
-  g_unAppear(ai, method);
+void detour_unappear(api::Original<phasmo::GhostAI::UnAppear> original, void* ai) {
+  original(ai);
   if (!haunting_lethe(ai) || g.replaying || !game::is_master() || g.appearances.empty()) return;
   Appearance& a = g.appearances.back();
   if (a.lasted) return;
@@ -117,142 +97,169 @@ void host_deja_vu(void* ghost, ULONGLONG now) {
     // The AI moved on. A hunt or an event of its own owns the model now, so the replay just stops;
     // anything else (wandering off) does not hide it, so the replay ends as it would have.
     const int state = game::ghost_state(ghost);
-    if (state != g.replayState && lethe_state_shows_itself(state)) {
+    const ShowingStates showing{phasmo::GhostState::hunting(), phasmo::GhostState::appear(),
+                                phasmo::GhostState::randomEvent()};
+    if (state != g.replayState && lethe_state_shows_itself(state, showing)) {
       g.replaying = false;
     } else if (state != g.replayState || now >= g.replayEnds) {
-      g_unAppear(ghost, nullptr);
+      phasmo::GhostAI::UnAppear(ghost);
       g.replaying = false;
     }
     return;
   }
-  if (game::ghost_state(ghost) == game::kStateHunting || il2cpp::field<bool>(ghost, kGhostAppeared)) return;
+  if (game::ghost_state(ghost) == phasmo::GhostState::hunting() || phasmo::GhostAI::isAppeared.get(ghost)) return;
   for (Appearance& a : g.appearances) {
     if (a.replayed || !a.lasted || now < a.replayAt) continue;
     a.replayed = true;
     g.replaying = true;
     g.replayState = game::ghost_state(ghost);
-    api.warp(game::ghost_agent(ghost), a.at, nullptr);
+    const phasmo::Vector3 at{a.at.x, a.at.y, a.at.z};
+    phasmo::NavMeshAgent::Warp(phasmo::GhostAI::agent.get(ghost), &at);
     game::set_rotation(game::transform_of(ghost), a.facing);
-    g_appear(ghost, a.form, nullptr);
+    phasmo::GhostAI::Appear(ghost, a.form);
     g.replayEnds = now + a.lasted;
-    PG_LOG("lethe: deja vu, an appearance plays again");
+    PM_LOG("lethe: deja vu, an appearance plays again");
     return;
   }
 }
 
 /**
- * The host: in a hunt, the player it still looks for (kHuntLastPlayer) is forgotten once the hunt's own sight
- * test (its vision sensor, GhostAI +0xA0, not a ray of ours) has failed for them for a moment: the hunt stops
- * wandering where it lost them, as the game's own kill clears them.
+ * The host: in a hunt, the player it still looks for (GhostHuntState.lastPlayer) is forgotten once the
+ * hunt's own sight test (its vision sensor, GhostAI.vision, not a ray of ours) has failed for them for a
+ * moment: the hunt stops wandering where it lost them, as the game's own kill clears them. The hunt's
+ * chase (GhostHuntState.Chase) clears its target the first frame the sight test fails for them
+ * and keeps them as its last player, wandering near where it lost them while it is set.
  */
 void host_forget_prey(void* ghost, float dt) {
-  void* state = game::ghost_state(ghost) == game::kStateHunting ? game::ghost_state_object(ghost) : nullptr;
-  void* lost = state ? il2cpp::field<void*>(state, kHuntLastPlayer) : nullptr;
-  if (lost && !game::alive(lost)) lost = nullptr;
+  void* state = game::ghost_state(ghost) == phasmo::GhostState::hunting() ? game::ghost_state_object(ghost) : nullptr;
+  void* lost = state ? phasmo::GhostHuntState::lastPlayer.get(state) : nullptr;
+  if (lost && !api::alive(lost)) lost = nullptr;
   if (g.memory.forgets(lost, lost && behaviour::hunt_sees(ghost, lost), dt)) {
     behaviour::forget(ghost, lost);
-    PG_LOG("lethe: it forgets its prey");
+    PM_LOG("lethe: it forgets its prey");
   }
+}
+
+/** A journal's media page, or null. */
+void* page_of(void* journal) {
+  void* page = api::alive(journal) ? phasmo::JournalController::photoPage.get(journal) : nullptr;
+  return api::alive(page) ? page : nullptr;
 }
 
 /** Every journal's photo page on this client (each player's journal is on every client). */
 template <class Visit>
 void each_page(Visit visit) {
   game::each_player([&](void* player) {
-    void* journal = il2cpp::field<void*>(player, kPlayerJournal);
-    void* page = journal && game::alive(journal) ? il2cpp::field<void*>(journal, kJournalPhotoPage) : nullptr;
-    if (page && game::alive(page)) visit(journal, page);
+    void* journal = phasmo::Player::journal.get(player);
+    if (void* page = page_of(journal)) visit(journal, page);
   });
 }
 
+/** One of the page's three lists of slots: 0 photos, 1 videos, 2 sounds. */
+api::RefArray slots_of(void* page, int list) {
+  switch (list) {
+    case 0: return api::RefArray{phasmo::Journal_PhotoPage::photos.get(page)};
+    case 1: return api::RefArray{phasmo::Journal_PhotoPage::videos.get(page)};
+    case 2: return api::RefArray{phasmo::Journal_PhotoPage::sounds.get(page)};
+    default: return api::RefArray{nullptr};
+  }
+}
+
 void* slot_of(void* page, int list, int index) {
-  auto* slots = il2cpp::field<il2cpp::Array*>(page, kPageLists[list]);
-  return slots && index >= 0 && static_cast<uintptr_t>(index) < slots->max_length ? slots->data<void*>()[index] : nullptr;
+  const api::RefArray slots = slots_of(page, list);
+  return index >= 0 && static_cast<size_t>(index) < slots.size() ? slots[index] : nullptr;
+}
+
+/** This client's own journal, or null. */
+void* my_journal() {
+  void* me = game::local_player();
+  return api::alive(me) ? phasmo::Player::journal.get(me) : nullptr;
 }
 
 /** Whether this client's player has the journal open on its media pages now. */
 bool viewing_media() {
-  void* me = game::local_player();
-  void* journal = me && game::alive(me) ? il2cpp::field<void*>(me, kPlayerJournal) : nullptr;
-  void* page = journal && game::alive(journal) ? il2cpp::field<void*>(journal, kJournalPhotoPage) : nullptr;
-  return page && game::alive(page) && il2cpp::field<bool>(journal, kJournalOpen) &&
-         game::active_in_hierarchy(game::game_object_of(page));
+  void* journal = my_journal();
+  void* page = page_of(journal);
+  return page && phasmo::JournalController::open.get(journal) && game::active_in_hierarchy(game::game_object_of(page));
 }
 
 /** Fade one slot on this client: every journal's copy of it, through the game's own removal. */
 void forget(int list, int index) {
   each_page([&](void*, void* page) {
     void* slot = slot_of(page, list, index);
-    if (!slot || !game::alive(slot) || !il2cpp::field<bool>(slot, kMediaFilled)) return;
-    if (const il2cpp::Method* m = il2cpp::virtual_method(slot, api.removeMedia))
-      reinterpret_cast<void (*)(void*, bool, const void*)>(*reinterpret_cast<void* const*>(m))(slot, false, m);
+    if (!api::alive(slot) || !phasmo::JournalMedia::filled.get(slot)) return;
+    phasmo::JournalMedia::RemoveMedia.virtual_call(slot, false);
   });
+}
+
+/** The media subjects that record the ghost's activity, as this game build numbers them. */
+ActivitySubjects activity_subjects() {
+  namespace m = phasmo::MediaSubject;
+  return {m::emfSpot(),        m::fingerprint(),     m::footstep(),        m::ghost(),
+          m::dirtyWater(),     m::ghostWriting(),    m::usedCrucifix(),    m::dotsGhost(),
+          m::ghostOrb(),       m::salt(),            m::freezingTemperature(), m::ghostSmoke(),
+          m::camoGhost(),      m::paranormalSound(), m::spiritBox(),       m::ghostHunt(),
+          m::bansheeWail(),    m::spiritBoxBreath(), m::motionSensor(),    m::shadowGhost(),
+          m::ghostGroan(),     m::ghostLaugh(),      m::ghostTalk(),       m::ghostWhisper(),
+          m::obakeFingerprint(), m::burningChapelCrucifix(), m::obakeShapeshift(), m::emf5()};
 }
 
 /** The host: time each filled slot of its own journal; fade those nobody looked at in time. */
 void host_media(ULONGLONG now) {
   if (now < g.nextMediaCheck) return;
   g.nextMediaCheck = now + kMediaCheckMs;
-  void* me = game::local_player();
-  void* journal = me && game::alive(me) ? il2cpp::field<void*>(me, kPlayerJournal) : nullptr;
-  void* page = journal && game::alive(journal) ? il2cpp::field<void*>(journal, kJournalPhotoPage) : nullptr;
-  if (!page || !game::alive(page)) return;
+  void* page = page_of(my_journal());
+  if (!page) return;
   const bool looked = viewing_media() || now - g.lastViewing < kViewingMs;
+  const ActivitySubjects activities = activity_subjects();
   for (int list = 0; list < 3; ++list) {
-    auto* slots = il2cpp::field<il2cpp::Array*>(page, kPageLists[list]);
-    for (uintptr_t i = 0; slots && i < slots->max_length && i < 256; ++i) {  // a slot travels as a byte
+    const api::RefArray slots = slots_of(page, list);
+    for (size_t i = 0; i < slots.size() && i < 256; ++i) {  // a slot travels as a byte
       const std::pair<int, int> key{list, static_cast<int>(i)};
-      void* slot = slots->data<void*>()[i];
-      if (!slot || !game::alive(slot) || !il2cpp::field<bool>(slot, kMediaFilled)) {
+      void* slot = slots[i];
+      if (!api::alive(slot) || !phasmo::JournalMedia::filled.get(slot)) {
         g.slots.erase(key);
         continue;
       }
-      void* media = il2cpp::field<void*>(slot, kMediaItem);
-      void* values = media ? il2cpp::field<void*>(media, kMediaValues) : nullptr;
-      if (!values || !lethe_activity(il2cpp::field<int>(values, kValuesSubject))) {  // not of its doing: kept
+      void* media = phasmo::JournalMedia::media.get(slot);
+      void* values = media ? phasmo::Media::value.get(media) : nullptr;
+      if (!values || !lethe_activity(phasmo::MediaValues::evidenceType.get(values), activities)) {  // not of its doing: kept
         g.slots.erase(key);
         continue;
       }
       Slot& s = g.slots[key];
-      if (s.media != media) s = Slot{media, now, false};  // newly taken
+      if (s.media != media) {  // newly taken
+        s.media = media;
+        s.since = now;
+        s.viewed = false;
+      }
       if (looked) s.viewed = true;
       if (!lethe_fades((now - s.since) / 1000.0f, s.viewed)) continue;
       const std::vector<uint8_t> message = net_msg::forget(list, static_cast<int>(i));
       net::send(message.data(), message.size(), net::To::Others, true);
       forget(list, static_cast<int>(i));
       g.slots.erase(key);
-      PG_LOG("lethe: a piece of media fades from the journal");
+      PM_LOG("lethe: a piece of media fades from the journal");
     }
   }
 }
 
 }  // namespace
 
-bool resolve() {
-  il2cpp::Class* media = il2cpp::cls("Assembly-CSharp.dll", "", "JournalMedia");
-  api.removeMedia = media ? il2cpp::method(media, "RemoveMedia", 1) : nullptr;
-  bool ok = api.removeMedia != nullptr;
-  ok &= il2cpp::bind(api.warp, il2cpp::cls("UnityEngine.AIModule.dll", "UnityEngine.AI", "NavMeshAgent"), "Warp", 1);
-  api.ok = ok;
-  PG_LOG("lethe: resolve %s", ok ? "ok" : "unavailable (it acts as any ghost)");
-  return true;  // optional
-}
+bool resolve() { return true; }
 
 bool create_hooks() {
-  return hooks::create(game::game_assembly_address(kAppearRva), reinterpret_cast<void*>(&detour_appear),
-                       reinterpret_cast<void**>(&g_appear), "GhostAI.Appear") &&
-         hooks::create(game::game_assembly_address(kUnAppearRva), reinterpret_cast<void*>(&detour_unappear),
-                       reinterpret_cast<void**>(&g_unAppear), "GhostAI.UnAppear");
+  return api::hook<phasmo::GhostAI::Appear>(&detour_appear, "GhostAI.Appear", api::Twins::CanonicalOnly) &&
+         api::hook<phasmo::GhostAI::UnAppear>(&detour_unappear, "GhostAI.UnAppear", api::Twins::CanonicalOnly);
 }
 
 void tick(void* ghost, int type) {
-  if (!api.ok) return;
   if (ghost != g.ghost || type != g.type) {
     reset();
     g.ghost = ghost;
     g.type = type;
   }
-  if (!ghost || type != kLethe || !game::alive(ghost)) return;
+  if (!ghost || type != kLethe || !api::alive(ghost)) return;
   const ULONGLONG now = GetTickCount64();
   const float dt = g.lastTick ? (now - g.lastTick) / 1000.0f : 0;
   g.lastTick = now;
@@ -278,4 +285,4 @@ void receive(int sender, const uint8_t* data, size_t size) {
 
 void reset() { g = State{}; }
 
-}  // namespace pg::custom::lethe
+}  // namespace pm::custom::lethe

@@ -3,60 +3,27 @@
 #include <cmath>
 #include <vector>
 
+#include "CursedItems.h"
+#include "Equipment.h"
+#include "Player.h"
+#include "Props.h"
+#include "UnityObject.h"
 #include "game.h"
-#include "hooks.h"
-#include "il2cpp.h"
+#include "Transform.h"
 #include "log.h"
+#include "runtime.h"
 
-namespace pg::alerts {
+namespace pm::alerts {
 namespace {
 
-using il2cpp::Vector3;
+using phasmo::Vector3;
 using perceive::Alert;
 
-// Build 25811160 (verified by the host at load); obfuscated names, so by offset.
-constexpr uintptr_t kCrucifixRva = 0x5DC690;   // Crucifix.CrucifixUseNetworked(bool, PhotonMessageInfo)
-constexpr uintptr_t kOuijaRva = 0x707540;      // OuijaBoard.PlayMessageSequence(string, PhotonMessageInfo)
-constexpr uintptr_t kMirrorRva = 0x6996C0;     // HauntedMirror.UseNetworked(bool, PhotonMessageInfo)
-constexpr uintptr_t kSageRva = 0x827360;       // WhiteSage.UseNetworked(bool, PhotonMessageInfo)
-constexpr uintptr_t kMusicBoxRva = 0x730D40;   // MusicBox.UseNetworked(bool, PhotonMessageInfo)
-constexpr uintptr_t kTarotRva = 0x7BDBA0;      // TarotCards.ChangeState(int card, bool, PhotonMessageInfo)
-constexpr uintptr_t kVoodooRva = 0x80AE20;     // VoodooDoll.NetworkedUse(int, PhotonMessageInfo)
-constexpr uintptr_t kMonkeyPawRva = 0x6D4240;  // MonkeyPaw.MakeWishNetworked(int, int, string, PhotonMessageInfo)
-constexpr uintptr_t kNameRva = 0x2370BF0;      // PhraseListenerController.NetworkedReaction() (the ghost's host)
-constexpr uintptr_t kBoxLocationRva = 0x639650;    // EVPRecorder.PlayLocationSound(int, int)
-constexpr uintptr_t kBoxAboutRva = 0x6394B0;       // EVPRecorder.PlayAboutSound(int, int)
-constexpr uintptr_t kBoxDifficultyRva = 0x6395F0;  // EVPRecorder.PlayDifficultySound(int, int)
-constexpr uintptr_t kSaltRva = 0x778060;       // SaltSpot.SyncSalt(PhotonMessageInfo): the ghost stepped in it
-constexpr size_t kSaltFlattened = 0x30;        // SaltSpot: the flattened pile, active once the ghost stepped in it
-constexpr size_t kCrucifixUses = 0x410;      // Crucifix: times used (changes only when a use is accepted)
-constexpr size_t kMusicBoxTween = 0x410;     // MusicBox: its DOTween Sequence, replaced by each accepted use
 constexpr float kSmudgeReach = 6.0f;           // metres: lit sage this close to the ghost smudges it
 constexpr float kSummonJump = 4.0f;            // metres the ghost moves in one frame when it is teleported
 constexpr float kCircleReach = 3.0f;           // metres from a summoning circle where a summoned ghost appears
 
-using BoolRpc_t = void (*)(void*, bool, void*, const void*);
-using IntRpc_t = void (*)(void*, int, void*, const void*);
-using Tarot_t = void (*)(void*, int, bool, void*, const void*);
-using Ouija_t = void (*)(void*, il2cpp::String*, void*, const void*);
-using Wish_t = void* (*)(void*, int, int, il2cpp::String*, void*, const void*);
-using Plain_t = void (*)(void*, const void*);
-using Box_t = void (*)(void*, int, int, const void*);
-using Salt_t = void (*)(void*, void*, const void*);
-
-BoolRpc_t g_crucifix = nullptr, g_mirror = nullptr, g_sage = nullptr, g_musicBox = nullptr;
-IntRpc_t g_voodoo = nullptr;
-Tarot_t g_tarot = nullptr;
-Ouija_t g_ouija = nullptr;
-Wish_t g_wish = nullptr;
-Plain_t g_name = nullptr;
-Box_t g_boxLocation = nullptr, g_boxAbout = nullptr, g_boxDifficulty = nullptr;
-Salt_t g_salt = nullptr;
-
-struct Api {
-  il2cpp::Object* circleType = nullptr;
-  il2cpp::Array* (*findObjects)(il2cpp::Object*, const void*) = nullptr;
-} api;
+using phasmo::EVPRecorder;
 
 session::Session* g_session = nullptr;
 bool g_active = false;  // a player controls the ghost in this contract
@@ -94,91 +61,81 @@ float distance_to_ghost(void* component) {
   return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z));
 }
 
-void detour_crucifix(void* self, bool flag, void* info, const void* method) {
-  hooks::Guard guard;
-  const int usesBefore = self ? il2cpp::field<int>(self, kCrucifixUses) : 0;
-  g_crucifix(self, flag, info, method);
-  if (self && il2cpp::field<int>(self, kCrucifixUses) != usesBefore) raise_at(perceive::kCrucifix, self);  // the game accepted it
+void detour_crucifix(api::Original<phasmo::Crucifix::CrucifixUseNetworked> original, void* self, bool flag,
+                     void* info) {
+  const int usesBefore = self ? phasmo::Crucifix::useCount.get(self) : 0;
+  original(self, flag, info);
+  if (self && phasmo::Crucifix::useCount.get(self) != usesBefore) raise_at(perceive::kCrucifix, self);  // the game accepted it
 }
 
-void detour_mirror(void* self, bool on, void* info, const void* method) {
-  hooks::Guard guard;
-  g_mirror(self, on, info, method);
+void detour_mirror(api::Original<phasmo::HauntedMirror::UseNetworked> original, void* self, bool on, void* info) {
+  original(self, on, info);
   if (on) raise_at(perceive::kMirror, nullptr);  // where the mirror is says nothing to the ghost
 }
 
-void detour_sage(void* self, bool flag, void* info, const void* method) {
-  hooks::Guard guard;
-  g_sage(self, flag, info, method);
+void detour_sage(api::Original<phasmo::WhiteSage::UseNetworked> original, void* self, bool flag, void* info) {
+  original(self, flag, info);
   if (distance_to_ghost(self) <= kSmudgeReach) raise_at(perceive::kSmudged, nullptr);
 }
 
-void detour_music_box(void* self, bool flag, void* info, const void* method) {
-  hooks::Guard guard;
-  void* before = self ? il2cpp::field<void*>(self, kMusicBoxTween) : nullptr;
-  g_musicBox(self, flag, info, method);
+void detour_music_box(api::Original<phasmo::MusicBox::UseNetworked> original, void* self, bool flag, void* info) {
+  void* before = self ? phasmo::MusicBox::tween.get(self) : nullptr;
+  original(self, flag, info);
   // An accepted use starts a new tween (a call the game rejects returns before it).
-  if (self && il2cpp::field<void*>(self, kMusicBoxTween) != before) raise_at(perceive::kMusicBox, self);
+  if (self && phasmo::MusicBox::tween.get(self) != before) raise_at(perceive::kMusicBox, self);
 }
 
-void detour_tarot(void* self, int card, bool flag, void* info, const void* method) {
-  hooks::Guard guard;
-  g_tarot(self, card, flag, info, method);
+void detour_tarot(api::Original<phasmo::TarotCards::ChangeState> original, void* self, int32_t card, bool flag,
+                  void* info) {
+  original(self, card, flag, info);
   if (perceive::tarot_affects_ghost(card)) raise_at(perceive::kTarot, nullptr, static_cast<uint8_t>(card));
 }
 
-void detour_voodoo(void* self, int pin, void* info, const void* method) {
-  hooks::Guard guard;
-  g_voodoo(self, pin, info, method);
+void detour_voodoo(api::Original<phasmo::VoodooDoll::NetworkedUse> original, void* self, int32_t pin, void* info) {
+  original(self, pin, info);
   raise_at(perceive::kVoodoo, nullptr);  // held by an investigator anywhere: where says nothing to the ghost
 }
 
-void* detour_wish(void* self, int wish, int a, il2cpp::String* s, void* info, const void* method) {
-  hooks::Guard guard;
-  void* routine = g_wish(self, wish, a, s, info, method);
+void* detour_wish(api::Original<phasmo::MonkeyPaw::MakeWishNetworked> original, void* self, int32_t wish, int32_t a,
+                  void* text, void* info) {
+  void* routine = original(self, wish, a, text, info);
   raise_at(perceive::kMonkeyPaw, nullptr);  // held by an investigator anywhere
   return routine;
 }
 
-void detour_ouija(void* self, il2cpp::String* message, void* info, const void* method) {
-  hooks::Guard guard;
-  g_ouija(self, message, info, method);
+void detour_ouija(api::Original<phasmo::OuijaBoard::PlayMessageSequence> original, void* self, void* message,
+                  void* info) {
+  original(self, message, info);
   Alert a;
   a.kind = perceive::kOuija;
-  char text[perceive::kMaxAlertText + 1] = {};
-  if (message) il2cpp::to_utf8(message, text, sizeof text);
-  a.text = text;  // the board answers from anywhere: no place
+  a.text = api::to_utf8(message).substr(0, perceive::kMaxAlertText);  // the board answers from anywhere: no place
   raise(std::move(a));
 }
 
-void detour_name(void* self, const void* method) {
-  hooks::Guard guard;
-  g_name(self, method);
+void detour_name(api::Original<phasmo::PhraseListenerController::NetworkedReaction> original, void* self) {
+  original(self);
   raise_at(perceive::kName, nullptr);
 }
 
 void box(void* self) { raise_at(perceive::kSpiritBox, self); }
-void detour_box_location(void* self, int a, int b, const void* method) {
-  hooks::Guard guard;
-  g_boxLocation(self, a, b, method);
+void detour_box_location(api::Original<EVPRecorder::PlayLocationSound> original, void* self, int32_t a, int32_t b) {
+  original(self, a, b);
   box(self);
 }
-void detour_box_about(void* self, int a, int b, const void* method) {
-  hooks::Guard guard;
-  g_boxAbout(self, a, b, method);
+void detour_box_about(api::Original<EVPRecorder::PlayAboutSound> original, void* self, int32_t a, int32_t b) {
+  original(self, a, b);
   box(self);
 }
-void detour_box_difficulty(void* self, int a, int b, const void* method) {
-  hooks::Guard guard;
-  g_boxDifficulty(self, a, b, method);
+void detour_box_difficulty(api::Original<EVPRecorder::PlayDifficultySound> original, void* self, int32_t a,
+                           int32_t b) {
+  original(self, a, b);
   box(self);
 }
 
-void detour_salt(void* self, void* info, const void* method) {
-  hooks::Guard guard;
-  g_salt(self, info, method);
+void detour_salt(api::Original<phasmo::SaltSpot::SyncSalt> original, void* self, void* info) {
+  original(self, info);
   // The game's own checks (a Wraith never steps in salt) decide; the flattened pile shows it did.
-  void* flat = self ? il2cpp::field<void*>(self, kSaltFlattened) : nullptr;
+  void* flat = self ? phasmo::SaltSpot::flatSalt.get(self) : nullptr;
   if (flat && game::alive(flat) && game::active_self(flat)) raise_at(perceive::kSalt, self);
 }
 
@@ -192,10 +149,10 @@ void watch_for_summons(void* ghost) {
   const bool jumped = g_haveLastGhost && std::hypot(p.x - g_lastGhost.x, p.z - g_lastGhost.z) > kSummonJump;
   g_lastGhost = p;
   g_haveLastGhost = true;
-  if (!jumped || !api.circleType) return;
-  il2cpp::Array* circles = api.findObjects(api.circleType, nullptr);
-  for (uintptr_t i = 0; circles && i < circles->max_length; ++i) {
-    void* circle = circles->data<void*>()[i];
+  if (!jumped) return;
+  const api::RefArray circles{phasmo::Object::FindObjectsOfType(phasmo::SummoningCircle::type.type_object())};
+  for (size_t i = 0, n = circles.size(); i < n; ++i) {
+    void* circle = circles[i];
     if (!circle) continue;
     const Vector3 c = where(circle);
     if (std::hypot(p.x - c.x, p.z - c.z) <= kCircleReach) {
@@ -205,37 +162,24 @@ void watch_for_summons(void* ghost) {
   }
 }
 
-template <class T>
-bool hook(uintptr_t rva, T detour, T& original, const char* name) {
-  return hooks::create(game::game_assembly_address(rva), reinterpret_cast<void*>(detour),
-                       reinterpret_cast<void**>(&original), name);
-}
-
 }  // namespace
 
-bool resolve() {
-  api.circleType = il2cpp::type_object(il2cpp::cls("Assembly-CSharp.dll", "", "SummoningCircle"));
-  api.findObjects = reinterpret_cast<decltype(api.findObjects)>(
-      il2cpp::method_ptr(il2cpp::cls("UnityEngine.CoreModule.dll", "UnityEngine", "Object"), "FindObjectsOfType", 1));
-  const bool ok = api.circleType && api.findObjects;
-  PG_LOG("alerts: resolve %s", ok ? "ok" : "FAILED");
-  return ok;
-}
-
 bool create_hooks() {
-  return hook(kCrucifixRva, &detour_crucifix, g_crucifix, "Crucifix.CrucifixUseNetworked") &&
-         hook(kOuijaRva, &detour_ouija, g_ouija, "OuijaBoard.PlayMessageSequence") &&
-         hook(kMirrorRva, &detour_mirror, g_mirror, "HauntedMirror.UseNetworked") &&
-         hook(kSageRva, &detour_sage, g_sage, "WhiteSage.UseNetworked") &&
-         hook(kMusicBoxRva, &detour_music_box, g_musicBox, "MusicBox.UseNetworked") &&
-         hook(kTarotRva, &detour_tarot, g_tarot, "TarotCards.ChangeState") &&
-         hook(kVoodooRva, &detour_voodoo, g_voodoo, "VoodooDoll.NetworkedUse") &&
-         hook(kMonkeyPawRva, &detour_wish, g_wish, "MonkeyPaw.MakeWishNetworked") &&
-         hook(kNameRva, &detour_name, g_name, "PhraseListenerController.NetworkedReaction") &&
-         hook(kBoxLocationRva, &detour_box_location, g_boxLocation, "EVPRecorder.PlayLocationSound") &&
-         hook(kBoxAboutRva, &detour_box_about, g_boxAbout, "EVPRecorder.PlayAboutSound") &&
-         hook(kBoxDifficultyRva, &detour_box_difficulty, g_boxDifficulty, "EVPRecorder.PlayDifficultySound") &&
-         hook(kSaltRva, &detour_salt, g_salt, "SaltSpot.SyncSalt");
+  // The canonical bodies, as the raw hooks by address were; each hook is named by its entry's key.
+  constexpr api::Twins kCanonical = api::Twins::CanonicalOnly;
+  return api::hook<phasmo::Crucifix::CrucifixUseNetworked>(&detour_crucifix, nullptr, kCanonical) &&
+         api::hook<phasmo::OuijaBoard::PlayMessageSequence>(&detour_ouija, nullptr, kCanonical) &&
+         api::hook<phasmo::HauntedMirror::UseNetworked>(&detour_mirror, nullptr, kCanonical) &&
+         api::hook<phasmo::WhiteSage::UseNetworked>(&detour_sage, nullptr, kCanonical) &&
+         api::hook<phasmo::MusicBox::UseNetworked>(&detour_music_box, nullptr, kCanonical) &&
+         api::hook<phasmo::TarotCards::ChangeState>(&detour_tarot, nullptr, kCanonical) &&
+         api::hook<phasmo::VoodooDoll::NetworkedUse>(&detour_voodoo, nullptr, kCanonical) &&
+         api::hook<phasmo::MonkeyPaw::MakeWishNetworked>(&detour_wish, nullptr, kCanonical) &&
+         api::hook<phasmo::PhraseListenerController::NetworkedReaction>(&detour_name, nullptr, kCanonical) &&
+         api::hook<EVPRecorder::PlayLocationSound>(&detour_box_location, nullptr, kCanonical) &&
+         api::hook<EVPRecorder::PlayAboutSound>(&detour_box_about, nullptr, kCanonical) &&
+         api::hook<EVPRecorder::PlayDifficultySound>(&detour_box_difficulty, nullptr, kCanonical) &&
+         api::hook<phasmo::SaltSpot::SyncSalt>(&detour_salt, nullptr, kCanonical);
 }
 
 void tick(session::Session& s, void* ghost, bool ghostControlled) {
@@ -262,4 +206,4 @@ void teardown() {
   g_local.clear();
 }
 
-}  // namespace pg::alerts
+}  // namespace pm::alerts

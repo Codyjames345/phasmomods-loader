@@ -8,13 +8,13 @@
 
 #include "types.h"
 
-namespace pg::sdk {
+namespace pm::sdk {
 namespace {
 
 // Il2CppTypeEnum values and metadata flags (ECMA-335 II.23.1.5, II.23.1.10).
 constexpr int kTypeI1 = 0x04, kTypeU1 = 0x05, kTypeI2 = 0x06, kTypeU2 = 0x07, kTypeI4 = 0x08, kTypeU4 = 0x09,
               kTypeI8 = 0x0A, kTypeU8 = 0x0B, kTypeValueType = 0x11, kTypeClass = 0x12;
-constexpr int kFieldStatic = 0x10, kFieldLiteral = 0x40;
+constexpr int kFieldStatic = 0x10, kFieldLiteral = 0x40, kFieldAccessMask = 0x7;
 constexpr uint32_t kMethodStatic = 0x10;
 
 template <class... F>
@@ -26,18 +26,23 @@ bool complete(const RuntimeApi& a) {
   return all_set(a.domain_get, a.domain_get_assemblies, a.assembly_get_image, a.image_get_name,
                  a.image_get_class_count, a.image_get_class, a.class_get_name, a.class_get_namespace,
                  a.class_get_declaring_type, a.class_is_enum, a.class_is_valuetype, a.class_enum_basetype,
-                 a.class_from_type, a.class_get_fields, a.class_get_methods, a.method_get_name,
+                 a.class_from_type, a.class_get_parent, a.class_get_interfaces, a.class_is_interface,
+                 a.class_get_fields, a.class_get_methods, a.method_get_name,
                  a.method_get_param_count, a.method_get_param, a.method_get_return_type, a.method_get_flags,
                  a.field_get_name, a.field_get_offset, a.field_get_flags, a.field_get_type,
                  a.field_static_get_value, a.type_get_type, a.type_get_name, a.free_memory);
 }
 
-// A generic definition's name without its arity: "List`1" is "List".
-std::string type_name(const char* raw) {
+// A generic definition's name without its arity: "List`1" is "List", with 1 in `arity` (0 for a name without one).
+std::string type_name(const char* raw, int& arity) {
   std::string_view name = raw ? raw : "";
+  arity = 0;
   if (const size_t tick = name.rfind('`'); tick != std::string_view::npos && tick + 1 < name.size() &&
-                                           name.find_first_not_of("0123456789", tick + 1) == std::string_view::npos)
+                                           name.find_first_not_of("0123456789", tick + 1) == std::string_view::npos) {
+    const std::string_view digits = name.substr(tick + 1);
+    for (const char d : digits.substr(0, 4)) arity = arity * 10 + (d - '0');
     name = name.substr(0, tick);
+  }
   return std::string(name);
 }
 
@@ -73,7 +78,7 @@ class Builder {
         index_.emplace(klass, static_cast<int>(model_.types.size()));
         ModelType t;
         t.assembly = assembly;
-        t.name = type_name(api_.class_get_name(klass));
+        t.name = type_name(api_.class_get_name(klass), t.genericParams);
         t.isEnum = api_.class_is_enum(klass);
         t.isValueType = api_.class_is_valuetype(klass);
         t.runtime = klass;
@@ -96,8 +101,26 @@ class Builder {
       t.ns = ns ? ns : "";
       add_fields(t);
       add_methods(t);
+      t.isInterface = api_.class_is_interface(klass);
+      add_bases(t);
     }
     return true;
+  }
+
+  // The parent's and the interfaces' short names, as the dump's base list writes them.
+  void add_bases(ModelType& t) const {
+    if (t.isEnum) return;
+    const auto add = [&](void* klass) {
+      const char* ns = klass ? api_.class_get_namespace(klass) : nullptr;
+      int arity = 0;
+      const std::string name = klass ? type_name(api_.class_get_name(klass), arity) : "";
+      if (name.empty()) return;
+      if (ns && std::string_view(ns) == "System" && (name == "Object" || name == "ValueType" || name == "Enum")) return;
+      t.bases.push_back(name);
+    };
+    add(api_.class_get_parent(t.runtime));
+    void* iter = nullptr;
+    while (void* i = api_.class_get_interfaces(t.runtime, &iter)) add(i);
   }
 
   GameModel take() { return std::move(model_); }
@@ -169,6 +192,9 @@ class Builder {
       f.typeIndex = index_of_type(type);
       f.hasLiteral = (flags & kFieldLiteral) != 0;
       f.isStatic = (flags & kFieldStatic) != 0 || f.hasLiteral;
+      // FieldAccessMask: 0 (compiler controlled) says nothing; 1 to 6 are Visibility's own numbers.
+      const int access = flags & kFieldAccessMask;
+      f.access = access >= 1 && access <= 6 ? static_cast<Visibility>(access) : Visibility::Any;
       // A constant has no storage; the dump gives it offset 0.
       f.offset = f.hasLiteral ? 0 : static_cast<int32_t>(api_.field_get_offset(field));
       if (f.hasLiteral && type) f.literal = literal(field, type);
@@ -232,4 +258,4 @@ bool load_runtime(const RuntimeApi& api, uintptr_t gameAssemblyBase, std::span<c
   return true;
 }
 
-}  // namespace pg::sdk
+}  // namespace pm::sdk

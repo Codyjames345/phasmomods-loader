@@ -1,0 +1,39 @@
+/**
+@defgroup ghost The ghost
+The ghost's AI, its states, its type and evidence, its senses and its footsteps. Concept pages:
+[ghost AI](systems/ghost-ai.md) and [ghost types](systems/ghost-types.md).
+
+@defgroup players Players
+The investigators, each client's copy of them, and the input the game reads. Concept page: [players](systems/players.md).
+
+@defgroup sanity Sanity
+A player's sanity and what drains it. Concept page: [flames](systems/flames.md), "Sanity and Firelight".
+
+@defgroup rooms Map and rooms
+The level, its rooms and doors, its lights, its temperature and its flames. Concept page: [flames](systems/flames.md).
+
+@defgroup equipment Equipment
+What players carry and what the level holds, and the evidence the equipment shows. Concept page: [evidence](systems/evidence.md), and
+the [equipment guide](guides/equipment.md).
+
+@defgroup weather Weather
+A contract's weather and its lightning. Concept page: [weather](systems/weather.md).
+
+@defgroup journal The journal
+The journal's pages, ghost list and evidence, and the game's localised text. Concept page: [the journal](systems/journal.md).
+
+@defgroup voice Voice chat
+Each player's voice, how to read it and who hears whom. Concept page: [voice chat](systems/voice.md).
+
+@defgroup lobby Lobby, contract and network
+Rooms and who is in them, a contract's start and end, the difficulty and the menus. Concept pages:
+[Photon](systems/photon.md), [the contract](systems/contract.md), [the difficulty](systems/difficulty.md) and [the menus](systems/menus.md).
+
+@defgroup content Content and the host contract
+Registering ghosts and evidence, rules on a ghost type, and the contract a mod's DLL has with the host. Guides:
+[adding a ghost](guides/adding-a-ghost.md) and [adding evidence](guides/adding-evidence.md).
+
+@defgroup runtime The runtime and Unity
+Reaching the game through the map: typed entries, hooks, keeping objects alive, and the Unity types the game uses. See
+[the SDK's README](README.md).
+*/

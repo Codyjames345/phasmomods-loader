@@ -10,7 +10,7 @@
 #include "resolver.h"
 #include "sdk_image_fixture.h"
 
-using namespace pg::sdk;
+using namespace pm::sdk;
 
 namespace {
 
@@ -107,7 +107,7 @@ void chained_unwind_entry_maps_to_primary() {
 void map_pe_file_lays_out_by_rva() {
   ImageBuilder b;
   b.function(0x1000, filled(0x20, 0xC3));
-  const std::filesystem::path dir = std::filesystem::temp_directory_path() / "pg_sdk_code_test";
+  const std::filesystem::path dir = std::filesystem::temp_directory_path() / "pm_sdk_code_test";
   std::filesystem::create_directories(dir);
   auto write = [&](const char* name, const std::vector<uint8_t>& bytes) {
     const std::filesystem::path path = dir / name;
@@ -477,6 +477,13 @@ void native_site_resolves_in_text() {
   CHECK(r.rva == 0x2004);  // `within` is no map key, so the entry is not blocked on it
   // The same entry with nothing to search, or where the pattern is not.
   CHECK(native(site(".text", kSitePattern, 4), nullptr).detail == "no UnityPlayer image");
+  // A site of the IL2CPP runtime's is searched in GameAssembly's image, and UnityPlayer's does not stand in for it.
+  EntryDesc runtime = site(".text", kSitePattern, 4);
+  runtime.assembly = "GameAssembly";
+  const EntryDesc* runtimeEntries[] = {&runtime};
+  const Result inGame = resolve(runtimeEntries, GameModel{}, &image, {}, nullptr).results[0];
+  CHECK(inGame.status == Status::Resolved && inGame.rva == 0x2004);
+  CHECK(native(runtime, &image).detail == "no GameAssembly image");
   ImageBuilder empty;
   const std::vector<uint8_t> none = empty.build();
   const CodeImage noSite(none);
@@ -522,8 +529,8 @@ void native_site_malformed_is_missing() {
   const std::vector<uint8_t> mapped = b.build();
   const CodeImage image(mapped);
   EntryDesc d = site(".text");
-  d.assembly = "GameAssembly";
-  CHECK(native(d, &image).detail == "a native site's assembly must be UnityPlayer");
+  d.assembly = "SomethingElse";
+  CHECK(native(d, &image).detail == "a native site's assembly must be UnityPlayer or GameAssembly");
   d = site(".text");
   d.name = "GetInternalAgent";
   CHECK(native(d, &image).detail == "a native site is found by its pattern alone");
@@ -551,7 +558,28 @@ void section_by_name() {
 
 }  // namespace
 
+// The runtime's invoker for a method with no code raises and stops; any other function gives control back.
+void returns_tells_a_stub_that_never_does() {
+  const std::vector<uint8_t> missing{0x48, 0x83, 0xEC, 0x28, 0x48, 0x8B, 0xCA, 0x33, 0xD2, 0xE8, 0x32, 0x02, 0x00, 0x00, 0xCC};
+  CHECK(!read_code(missing, 0x1000).returns);
+  const std::vector<uint8_t> ret{0x48, 0x83, 0xEC, 0x28, 0x48, 0x83, 0xC4, 0x28, 0xC3};
+  CHECK(read_code(ret, 0x1000).returns);
+  const std::vector<uint8_t> tail{0x48, 0x8B, 0xCA, 0xE9, 0x00, 0x10, 0x00, 0x00};  // a jump out of the function
+  CHECK(read_code(tail, 0x1000).returns);
+  const std::vector<uint8_t> indirect{0x48, 0x8B, 0xCA, 0xFF, 0xE0};  // jmp rax
+  CHECK(read_code(indirect, 0x1000).returns);
+  const std::vector<uint8_t> inner{0xEB, 0x00, 0xCC};  // a jump inside it gives nothing back
+  CHECK(!read_code(inner, 0x1000).returns);
+  const std::vector<uint8_t> leaf{0x48, 0x8B, 0xC1, 0xC3};
+  CHECK(read_leaf(leaf, 0x1000).returns);
+  // A leaf's tail jump goes where this reader cannot follow, so it does not say that the code comes back.
+  const std::vector<uint8_t> leafTail{0x48, 0x8B, 0xC1, 0xE9, 0x00, 0x10, 0x00, 0x00};
+  CHECK(read_leaf(leafTail, 0x1000).complete);
+  CHECK(!read_leaf(leafTail, 0x1000).returns);
+}
+
 int main() {
+  returns_tells_a_stub_that_never_does();
   function_bounds_from_pdata();
   chained_unwind_entry_maps_to_primary();
   map_pe_file_lays_out_by_rva();

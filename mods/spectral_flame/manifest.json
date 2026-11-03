@@ -1,0 +1,11 @@
+{
+  "id": "phasmomods.spectral-flame",
+  "name": "Spectral Flame",
+  "author": "PhasmoMods",
+  "version": "1.0.0",
+  "description": "An eighth evidence: candles and lanterns burn blue where the ghost lingers",
+  "dll": "SpectralFlame.dll",
+  "website": "",
+  "dependencies": [],
+  "incompatibilities": []
+}

@@ -4,15 +4,19 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <string>
 #include <utility>
 
-#include "custom_link.h"
+#include "GhostAI.h"
+#include "Transform.h"
+#include "content.h"
+#include "content_link.h"
 #include "form.h"
+#include "held.h"
 #include "marks.h"
 #include "mimic.h"
 #include "perceive_view.h"
+#include "text_table.h"
 #include "typestate.h"
 #include "typestate_host.h"
 #include "actions.h"
@@ -27,14 +31,15 @@
 #include "panorama.h"
 #include "picker.h"
 #include "round.h"
-#include "steer.h"
 #include "tether.h"
+#include "UnityWorld.h"
+#include "walk_state.h"
 
-namespace pg::control {
+namespace pm::control {
 namespace {
 
-using il2cpp::Quaternion;
-using il2cpp::Vector3;
+using phasmo::Quaternion;
+using phasmo::Vector3;
 
 constexpr ULONGLONG kInputSendMs = 50;       // ghost player input rate (20 Hz)
 constexpr ULONGLONG kKeysRefreshMs = 3000;   // pick up rebinds made in the pause menu
@@ -67,12 +72,12 @@ ULONGLONG g_primarySince = 0;
 ULONGLONG g_nextInputSend = 0;
 
 // Authority side.
-il2cpp::Held g_steeredGhost;
+api::Held g_steeredGhost;
 int g_lastState = -1;
 ULONGLONG g_nextStatus = 0;
 ULONGLONG g_lastTick = 0;
 tether::Reason g_lastReason = tether::kSteer;
-il2cpp::Held g_reachState;  // the wander state object g_reach belongs to
+api::Held g_reachState;  // the wander state object g_reach belongs to
 tether::Reach g_reach;
 bool g_atReachEdge = false;
 tether::SearchPace g_search;
@@ -133,7 +138,7 @@ void release_ghost_player() {
   if (!g_controlling) return;
   hud::hide();
   perceive_view::hide();
-  PG_LOG("control: ghost player released");
+  PM_LOG("control: ghost player released");
   g_controlling = false;
   g_keys = {};
   g_interactHeld = g_secondaryHeld = g_fuseHeld = g_huntFired = g_crouchTap = false;
@@ -151,7 +156,8 @@ bool pressed(const bindings::Key& key, bool focused, bool& held) {
   return press;
 }
 
-constexpr uint8_t kMimicType = 20;
+/** Whether the type `type` is the game's Mimic. */
+bool is_mimic(int type) { return type >= 0 && type == api::content::type_of("vanilla.mimic"); }
 
 /** The Mimic's next copy: the next type it may copy, after the last one the game's own choice. */
 void next_mimic_copy(session::Session& s) {
@@ -168,12 +174,15 @@ void next_mimic_copy(session::Session& s) {
 std::string senses_line(const session::Status& st) {
   const int type = st.type == session::kNoType ? -1 : st.type;
   const int identity = st.identity == session::kNoType ? -1 : st.identity;
-  std::string line = typestate::describe(typestate::subject(type, identity), st.trait);
-  if (identity == kMimicType && type >= 0) {
+  // A registered ghost's own line comes from its definition; a game type's from what the host read.
+  std::string line = (st.more & session::kCustomState) ? api::content::hud_line(st.trait[0])
+                                                       : typestate::describe(api::content::id_of(type), st.trait);
+  if (is_mimic(identity) && type >= 0) {
     if (!line.empty()) line += "\n";
-    line += "Copying: <b>" + round::ghost_type_name(type) + "</b>. Next copy: <b>" +
-            (st.mimicNext == session::kNoType ? std::string("the game's choice") : round::ghost_type_name(st.mimicNext)) +
-            "</b> [" + g_keys.crouch.label + "]";
+    line += i18n::text("hud.mimic", {{"copying", round::ghost_type_name(type)},
+                                      {"next", st.mimicNext == session::kNoType ? i18n::text("hud.mimic-game-choice")
+                                                                                : round::ghost_type_name(st.mimicNext)},
+                                      {"key", g_keys.crouch.label}});
   }
   return line;
 }
@@ -194,7 +203,8 @@ void read_actions(session::Session& s, const float aim[3], ULONGLONG now) {
   const bool crouch = on && bindings::down(g_keys.crouch);
   const bool claimOpen = s.room_offer().valid && now < s.room_offer().deadline;
   g_crouchTap = !crouch && g_mimicKeyHeld && !g_crouchUsed;
-  if (g_crouchTap && s.status().identity == kMimicType && !claimOpen) next_mimic_copy(s);
+  if (g_crouchTap && is_mimic(s.status().identity == session::kNoType ? -1 : s.status().identity) && !claimOpen)
+    next_mimic_copy(s);
   if (!crouch) g_crouchUsed = false;
   g_mimicKeyHeld = crouch;
   g_interactHeld = interact;
@@ -218,9 +228,8 @@ void read_actions(session::Session& s, const float aim[3], ULONGLONG now) {
 
 void release_authority() {
   if (!g_steeredGhost) return;
-  steer::clear();
   actions::tick(nullptr);
-  PG_LOG("control: ghost returned to native AI");
+  PM_LOG("control: ghost returned to native AI");
   g_steeredGhost = nullptr;
   typestate::forget();
   g_lastState = -1;
@@ -242,23 +251,22 @@ std::string room_claim(session::Session& s, ULONGLONG now) {
   if (!offer.valid || now >= offer.deadline) return {};
   const unsigned left = static_cast<unsigned>((offer.deadline - now + 999) / 1000);
   const std::string time = " (0:" + two_digits(left) + ")";
-  if (journal::kept()) return "Your favourite room moved: [" + g_keys.journal.label + "] choose another on your map" + time;
+  if (journal::kept()) return i18n::text("hud.room-moved-journal", {{"key", g_keys.journal.label}}) + time;
   const int here = round::current_ghost_room();
   const bool claimable = here >= 0 && here != round::favourite_room();
   if (press && claimable) s.send_room_claim(here);
-  if (!claimable) return "Your favourite room moved: go to another room to choose it instead" + time;
-  return "Your favourite room moved: [" + g_keys.crouch.label + "] make " + round::room_name(here) +
-         " your favourite room instead" + time;
+  if (!claimable) return i18n::text("hud.room-moved-go") + time;
+  return i18n::text("hud.room-moved-here", {{"key", g_keys.crouch.label}, {"room", round::room_name(here)}}) + time;
 }
 
 // Why the ghost moves on its own or holds still, as the ghost would feel it.
 std::string movement_notice(const session::Status& st) {
-  if (st.flags & session::kBlinded) return "The smoke blinds you";
-  if (st.flags & session::kDrawnHome) return "Your favourite room draws you back";
-  if (st.more & session::kRestlessActing) return "Restless, the ghost acts on its own until you try to act";
-  if (st.more & session::kRoamEdge) return "You may not stray further this time";
-  if (st.flags & session::kBound) return "You are bound to your favourite room";
-  if (st.more & session::kResting) return "You rest until the urge to wander comes";
+  if (st.flags & session::kBlinded) return i18n::text("hud.blinded");
+  if (st.flags & session::kDrawnHome) return i18n::text("hud.drawn-home");
+  if (st.more & session::kRestlessActing) return i18n::text("hud.restless-acting");
+  if (st.more & session::kRoamEdge) return i18n::text("hud.roam-edge");
+  if (st.flags & session::kBound) return i18n::text("hud.bound");
+  if (st.more & session::kResting) return i18n::text("hud.resting");
   return {};
 }
 
@@ -267,8 +275,9 @@ std::string movement_notice(const session::Status& st) {
 session::Status host_status() {
   session::Status st = actions::status();
   st.room = static_cast<int16_t>(round::favourite_room());
-  if (void* ghost = game::ghost_ai(); ghost && game::alive(ghost))
-    typestate::read(ghost, st.type == session::kNoType ? -1 : st.type, st.identity == session::kNoType ? -1 : st.identity, st.trait);
+  if (void* ghost = game::ghost_ai(); ghost && game::alive(ghost) &&
+                                      typestate::read(ghost, st.type == session::kNoType ? -1 : st.type, st.trait))
+    st.more |= session::kCustomState;
   st.mimicNext = mimic::next();
   if (g_atReachEdge) st.more |= session::kRoamEdge;
   return st;
@@ -284,8 +293,7 @@ std::string type_name(const session::Status& st) {
 }
 
 const ability::Ability* own_ability(const session::Status& st) {
-  return custom_link::own_ability(st.type == session::kNoType ? -1 : st.type,
-                                  st.identity == session::kNoType ? -1 : st.identity);
+  return content_link::own_ability(st.type == session::kNoType ? -1 : st.type);
 }
 
 void write_journal(const session::Status& st) {
@@ -323,7 +331,7 @@ void look_from_ghost(void* camera, void* ghost) {
     g_yaw = std::atan2(f.x, f.z) / kDegrees;
     g_pitch = -std::asin(std::clamp(f.y, -1.0f, 1.0f)) / kDegrees;
     g_controlling = true;
-    PG_LOG("control: playing as the ghost");
+    PM_LOG("control: playing as the ghost");
   }
   float mx = 0, my = 0;
   if (accepting_input() && game::mouse_delta(mx, my)) {
@@ -410,28 +418,15 @@ void ghost_player(session::Session& s, void* ghost, float& dx, float& dz) {
   hud::show(v);
 }
 
-// The hunt state (obfuscated name, build 25811160): +0x48 the player it chases, +0x50 the player it
-// lost sight of and searches for (src/tether.h SearchPace).
-constexpr const char* kHuntStateClass = "ധജഫനഴയഭഥഷ";
-constexpr size_t kHuntTarget = 0x48;
-constexpr size_t kHuntSearched = 0x50;
-// The wander states (1 and 21, same layout): +0x24 radius (int), +0x28 has a destination, +0x2C it.
-constexpr size_t kWanderRadius = 0x24;
-constexpr size_t kWanderHasDestination = 0x28;
-constexpr size_t kWanderDestination = 0x2C;
-
 // A vanilla ghost's search ends once it has walked to the search point; a ghost player walking
 // elsewhere has their search end where they are after the same walk (tether::SearchPace).
 void pace_search(void* ghost, void* agent, float dt) {
-  void* hunt = game::ghost_state_object(ghost);
-  const bool searching = hunt && std::strcmp(il2cpp::class_name(il2cpp::class_of(hunt)), kHuntStateClass) == 0 &&
-                         !game::alive(il2cpp::field<void*>(hunt, kHuntTarget)) &&
-                         game::alive(il2cpp::field<void*>(hunt, kHuntSearched));
+  const bool searching = walk_state::hunt_searching(game::ghost_state_object(ghost));
   const Vector3 p = game::position(game::transform_of(ghost));
   const Vector3 d = game::agent_destination(agent);
   if (g_search.tick(searching, p.x, p.z, d.x, d.z, game::agent_path_length(agent), game::agent_speed(agent), dt)) {
     game::set_destination(agent, p);  // the native arrival check (closet search, re-acquire or give up) runs here
-    PG_LOG("control: hunt search ends where the ghost is, as a vanilla walk there would have");
+    PM_LOG("control: hunt search ends where the ghost is, as a vanilla walk there would have");
   }
 }
 
@@ -440,12 +435,9 @@ void pace_search(void* ghost, void* agent, float dt) {
 void roam(void* ghost, float& dx, float& dz) {
   void* wander = game::ghost_state_object(ghost);
   const Vector3 p = game::position(game::transform_of(ghost));
-  if (wander && wander != g_reachState) {
+  if (wander && wander != g_reachState && walk_state::wander_reach(wander, p.x, p.z, g_reach)) {
     g_reachState = wander;
-    const Vector3 dest = il2cpp::field<Vector3>(wander, kWanderDestination);
-    g_reach = tether::reach_of(p.x, p.z, il2cpp::field<int>(wander, kWanderRadius),
-                               il2cpp::field<bool>(wander, kWanderHasDestination), dest.x, dest.z);
-    PG_LOG("control: wander reach %.1f m", g_reach.radius);
+    PM_LOG("control: wander reach %.1f m", g_reach.radius);
   }
   if (!g_reachState) return;  // no wander state to read: its native walk is not limited further
   const float before = dx * dx + dz * dz;
@@ -475,18 +467,18 @@ void authority(session::Session& s, void* ghost, float localDx, float localDz) {
   if (g_steeredGhost != ghost) {
     release_authority();
     g_steeredGhost = ghost;
-    PG_LOG("control: steering ghost %p for actor %d", ghost, s.ghost_actor());
+    PM_LOG("control: steering ghost %p for actor %d", ghost, s.ghost_actor());
   }
 
   const int state = game::ghost_state(ghost);
   const ULONGLONG now = GetTickCount64();
   if (state != g_lastState) {
-    PG_LOG("control: ghost state %d, speed %.2f", state, game::agent_speed(agent));
+    PM_LOG("control: ghost state %d, speed %.2f", state, game::agent_speed(agent));
     g_lastState = state;
   }
   if (now >= g_nextStatus) {
     Vector3 p = game::position(game::transform_of(ghost));
-    PG_LOG("control: ghost (%.2f,%.2f,%.2f) state %d speed %.2f dir (%.2f,%.2f)", p.x, p.y, p.z, state,
+    PM_LOG("control: ghost (%.2f,%.2f,%.2f) state %d speed %.2f dir (%.2f,%.2f)", p.x, p.y, p.z, state,
            game::agent_speed(agent), dx, dz);
     g_nextStatus = now + 1000;
   }
@@ -499,32 +491,35 @@ void authority(session::Session& s, void* ghost, float localDx, float localDz) {
     static constexpr const char* kWhy[] = {"the player steers", "the player roams within the wander",
                                            "resting", "drawn home to its favourite room",
                                            "blinded by smudging", "in an event", "native (ability or settling in)"};
-    PG_LOG("control: movement: %s", kWhy[reason]);
+    PM_LOG("control: movement: %s", kWhy[reason]);
     g_lastReason = reason;
   }
   if (reason != tether::kRoaming) {
     g_reachState = nullptr;
     g_atReachEdge = false;
   }
-  if (tether::native_moves(reason)) {
-    // The native AI moves the ghost (src/tether.h): walking it home, blinded by smudging in a hunt,
-    // an event or an ability. Its own path and speed apply until the reason ends.
-    steer::clear();
-  } else {
-    // Otherwise only the direction is the player's; the destination, speed and acceleration stay
-    // native. Resting, it holds still (the agent decelerates natively).
+  // When native_moves, the native AI moves the ghost (src/tether.h): walking it home, blinded by smudging
+  // in a hunt, an event or an ability. Its own path and speed apply until the reason ends.
+  if (!tether::native_moves(reason)) {
+    // Otherwise only the direction is the player's, asked for each frame; the destination, speed and
+    // acceleration stay native. Resting, it holds still (the agent decelerates natively).
     if (reason == tether::kResting) dx = dz = 0;
     if (reason == tether::kRoaming) roam(ghost, dx, dz);
-    steer::set(steer::crowd_agent_for(agent), dx, dz);
+    // The ghost's own rules may limit where its player steers, as they limit its AI (the Black Shuck's
+    // trail corridor in a hunt: PmGhostDef.playerMove).
+    const Vector3 p = game::position(game::transform_of(ghost));
+    const float at[3] = {p.x, p.y, p.z};
+    api::content::player_move(at, dx, dz);
+    phasmo::NavMeshAgent::steer(agent, dx, dz);
   }
-  if (state == game::kStateHunting) pace_search(ghost, agent, dt);
+  if (state == phasmo::GhostState::hunting()) pace_search(ghost, agent, dt);
   else g_search = {};
 
   for (const session::Trigger& t : s.take_triggers()) actions::perform(t.kind, t.aim);
   if (const int actor = actions::take_disguise()) s.send_form({actor, form::kFormMs});
   const session::Status st = host_status();
   s.set_status(st);
-  marks::tick(s, ghost, st.type == session::kNoType ? -1 : st.type, st.identity == session::kNoType ? -1 : st.identity);
+  marks::tick(s, ghost, st.type == session::kNoType ? -1 : st.type);
 }
 
 }  // namespace
@@ -551,7 +546,7 @@ void tick(session::Session& s) {
   } else {
     release_authority();
     s.take_triggers();  // triggers only mean something to the host steering the ghost
-    marks::tick(s, nullptr, -1, -1);  // nothing to perceive
+    marks::tick(s, nullptr, -1);  // nothing to perceive
   }
   if (!game::level_controller()) actions::clear();  // what was saved up ends with its contract
 }
@@ -562,4 +557,4 @@ void teardown() {
   release_authority();
 }
 
-}  // namespace pg::control
+}  // namespace pm::control

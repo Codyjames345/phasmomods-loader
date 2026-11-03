@@ -22,19 +22,25 @@ loading; the launcher also offers attachment to a running game. See `installatio
 and verification limits, and `loading-investigation.md` for the evidence behind this choice.
 
 The host does not depend on how it is loaded: it starts from `DllMain` on its own thread, waits
-for the IL2CPP runtime, verifies the exact GameAssembly.dll and UnityPlayer.dll hashes and stays
-inactive on any other build. Startup waits share a 60-second deadline. On the first main-thread
-frame it shows the consent notice, as a copy of the main menu's own error popup (ban risk, voice
-recording when a mod that records voices is on, no liability for lost progress, every installed mod
-named); only "I agree" starts the mods, and it is remembered against the notice's exact text. Every
-installed mod is loaded; launcher.ini says which start, and the main menu's Mods panel restarts
-them with a new choice (each mod's hooks removed newest first, then the chosen mods started). The host owns the only MinHook instance (a second hook on the same function
+for the IL2CPP runtime, hashes GameAssembly.dll and UnityPlayer.dll, and resolves the map against the
+running game. Any build runs: a mod whose required entries all resolve can start, and the rest stay
+off, named. Startup waits share a 60-second deadline. On the first main-thread frame it shows the
+consent notice, as a copy of the main menu's own error popup (ban risk, a paragraph saying the game
+updated on a build the offline check has not passed (`sdk/builds`), voice recording when a mod's
+manifest says it records voices, no liability for lost progress, every installed mod named); only "I
+agree" starts the mods, and it is remembered against the notice's exact text and the two hashes, so
+each new build asks once. Until then the host reads manifests alone, and no mod's DLL is mapped. "I
+agree" loads the mods launcher.ini says start, and the main menu's Mods panel restarts them with a new
+choice (each mod's hooks removed newest first, then the chosen mods started, loading any that had not
+been). A loaded DLL stays mapped until the game exits, since unloading one is not safe. The host owns the only MinHook instance (a second hook on the same function
 chains), the frame tick, and Photon event 197, on which each mod has its own channel and every
-host announces which mods, in which builds, it runs. A modded lobby admits only matching players
-(host/join_guard.h): a joiner whose mods differ leaves by itself and says why, and the host kicks,
-with the game's own kick, a mismatched player who stays and a player without the mod when a running
-mod lacks PG_MOD_VANILLA_PEERS. Every feature is inactive outside single player and private
-(unlisted) rooms. `PG_Shutdown` requests a stop; native modules and detour storage remain until
+host announces which mods, in which builds, it runs. Every mod is required by every player
+(host/join_guard.h): a joiner lacking a host mod, or running it in another build, leaves by itself and
+is told every mod the lobby requires; the host kicks, with the game's own kick, a mismatched player who
+stays and a player without mods. A joiner's extra mods are off for that lobby, and so are all its mods
+when the host runs none. Mods run only in single player and private (unlisted) rooms: in a public lobby
+every mod is off for that room, the host's too, and no player is removed. Mods come back on leaving the
+room. `PM_Shutdown` requests a stop; native modules and detour storage remain until
 process exit. Restart the game to load another version. Every player in a modded lobby runs the
 same mods in the same builds. Existing gameplay rewards, including ghost money and XP, are retained.
 
@@ -118,37 +124,54 @@ No change ever happens when vanilla would not make one.
 As in vanilla: each investigator makes their own journal guess and sees the normal results. The
 ghost wins by killing every investigator; the contract then ends the game's own way.
 
-The ghost player is paid only when every investigator died: the contract's own main objective
-reward (what investigators earn for naming the ghost) scaled inversely to the difficulty's reward
-multiplier (`Difficulty.GetRewardMultiplier`), so a harder contract, which is easier for the ghost,
-pays the ghost less. A multiplier of 0 pays nothing, the scale is capped at 3x, and experience
-equals the money (`mods/playable_ghost/payout.h`). It is paid through the game's own payout on the reward screen,
-with a popup saying what it was for.
+The ghost player is paid full pay x points / investigators, where the points are the deception score:
+equal shares, one point per investigator at most. Once no investigator is left, by any mix of deaths and
+quits, that is full pay; investigators who all survive and name the ghost pay nothing. Full pay is the
+contract's own main objective reward (what investigators earn for naming the ghost) scaled inversely to
+the difficulty's reward multiplier (`Difficulty.GetRewardMultiplier`), so a harder contract, which is
+easier for the ghost, pays the ghost less. A multiplier of 0 pays nothing, the scale is capped at 3x, and
+experience equals the money (`mods/playable_ghost/payout.h`). It is paid through the game's own payout on
+the reward screen, on the final score: a reward screen that comes before the score settles has its call
+held until then, so a late message never underpays the ghost. One popup shows the score and the money
+together. This changes nothing for the investigators' own rewards.
 
 ## The ghost player
 
-* The ghost player is not an investigator. Their investigator (the networked player the game
-  creates in the lobby and carries into each contract) is destroyed for the contract once every
-  player has loaded, so every client's player slot for them is empty and the game's own rules
-  (team sanity, targeting, deaths, the all-dead check, rewards) never see them. Their local rig is
-  switched off and its camera detached to become the ghost's eyes. Back in the lobby the game's own
-  `CreateNetworkedPlayer` gives them their investigator again.
-* The end of a contract (`ExitLevel.Exit`, also used when everyone has died) needs the local
-  investigator, so the ghost player's client settles the payout and returns with the game's own
-  `GameController.LoadBackToMenu`.
+* The ghost player is not an investigator. Once every player has loaded, their investigator (the
+  networked player the game creates in the lobby and carries into each contract) is parked where it
+  stood, unseen and not solid, and their spot leaves the game's player list (`Network.playerSpots`)
+  on every client, each client its own list (`mods/playable_ghost/outlist.h`). So no game rule or
+  screen that walks the list sees them: team sanity, targeting and hunts, the dead count, the Monkey
+  Paw and the High Priestess, the all-dead check, the truck's sanity monitor. A lookup of their Photon
+  player still finds the parked body, as it did with the spot in the list, and their leaving the room is
+  the game's own departure. Code that holds a Player outside the list (a room's players, the truck's
+  trigger) still finds the parked body, alive. Investigators after them in the list move down one place,
+  so their marks, votes, sanity bar and pause card read another slot's (provisional until the user's first
+  in-game test, `sdk/systems/players.md`). The spot comes back when the level goes, as they leave or quit, at the
+  contract's end on their own client, and when the mod stops. Their local rig is switched off and its
+  camera detached to become the ghost's eyes.
+* The ghost player never dies: at the everyone-dead end (`GameController.Exit`, which writes a death
+  for every client) their death status is left as it was, as at the truck's end, so their reward
+  screen shows no death and returns their committed equipment.
+* The end of a contract (`ExitLevel.Exit` when the truck leaves, `GameController.Exit` when every
+  player has died) needs the local investigator, so the ghost player's client settles the payout, takes
+  their investigator back, and runs the game's own end. The game keeps its
+  bookkeeping for them (the master's stats sync, the mission status, the objective counts, the
+  journal's close) and returns with `GameController.LoadBackToMenu`; only its mission and challenge
+  checks, and the death status above, are skipped (`mods/playable_ghost/contract_end.h`).
 * They bring no equipment: while they are the ghost player their loadout is withdrawn from the
   lobby (`InventoryManager.RemoveMyEquipmentFromLobby`) and adding to it is refused; afterwards the
   game re-equips their saved loadout (`LoadoutManager.CheckEquipped`).
 * They see from the ghost's head with their own camera, turned with the mouse.
 * Movement uses the game's movement bindings relative to where they look. Native speed, acceleration
   and avoidance are kept by replacing only the steering direction inside Unity's crowd simulation
-  (`mods/playable_ghost/steer_stub.asm`); the destination stays the native state's own. The ghost moves only where a
+  (the host's `steer_agent`, `host/steer_stub.asm`); the destination stays the native state's own. The ghost moves only where a
   vanilla ghost moves (`mods/playable_ghost/tether.h`): in a wander (states 1 and 21, a hop of the state's radius,
   usually three metres, or as far as the point it chose, as a Banshee's towards its target) the
   player walks anywhere within that wander's reach until it ends natively; in a hunt the player
   steers freely. Between wanders, as a vanilla ghost does, it holds still. The native AI moves it
   while it is drawn home, blinded by smudging, in an event or using its ability (Fairness 2).
-* Line of sight: the hunt's speed-up and its decay stay native (hunt state +0xB4 grows while the
+* Line of sight: the hunt's speed-up and its decay stay native (`GhostHuntState.sightSpeedUp` grows while the
   target is seen and decays once its search is over), and so does every type's own speed rule. A
   vanilla hunt that loses its target walks to the last sighting and searches there; a ghost player
   walking elsewhere has that search end where they are once a vanilla ghost, walking the path at its
@@ -162,7 +185,7 @@ of each: an interaction (`GhostActivity.TryInteract`), or what `GhostActivity.Gh
 (an event, the type's ability, or the fuse box, including its Shade, Hantu and difficulty rules).
 Each action is then used through the native entry, and the roll's gates are checked again at that
 moment: no interaction before the front door is unlocked, no event or ability while a Shade is
-watched or the ghost is sent home (GhostAI +0x10A), no event while `LevelValues +0x23` is set.
+watched or the ghost is sent home (`GhostAI.stayHome`), no event while `LevelValues.eventsBlocked` is set.
 
 * **Interact:** look at a door, light switch or prop and use the interact binding. The host pulses
   the native interaction sensor narrowed to that object, which picks the native door, light, throw
@@ -209,7 +232,14 @@ watched or the ghost is sent home (GhostAI +0x10A), no event while `LevelValues 
    D.O.T.S. walks, prints on native touches) is never suppressed.
 4. **Ghost senses:** no information the ghost would not have. The HUD shows hunt availability,
    restlessness, tether, the Banshee target, the sanity the hunt check measures and the type's own
-   senses (below); never crucifixes, salt or smudge timers.
+   senses (below); never crucifixes, salt or smudge timers. A registered ghost with one target
+   (`PmGhostDef.target`: the Draugr's thief, the Bogeyman's youngest) shows it as the Banshee's
+   is, and the host holds its hunts, the AI's and a player's alike, through the game's own Banshee code
+   (`host/content_target.h`): only that target while it lives in the house,
+   anyone once it is in the truck, dead or killed in the hunt. The target is fixed at the hunt's start
+   and asked again, without the dying player, wherever the game re-targets a Banshee (a kill, the
+   Hanged Man card) and when the target leaves the game; the ghost's own rule then decides, so a
+   Bogeyman keeps the youngest and a Draugr its latest thief while they are not the one dying.
    The ghost player's microphone is muted through Vivox for the whole contract. While the ghost is
    chosen they hear nothing; afterwards they hear from the ghost's head (the listener is on their
    camera, so investigators' positional voices arrive with the game's own falloff), and
@@ -226,11 +256,14 @@ watched or the ghost is sent home (GhostAI +0x10A), no event while `LevelValues 
    (`mods/playable_ghost/hide.cpp` switches their renderers off on that client only), so they cannot
    be steered around on purpose. They still work natively: a hunt burns a crucifix in range, and the
    ghost steps in salt where its path crosses it.
-10. **Deception score:** the results screen shows the ghost a score, +1 for each investigator who died
-    and +1 for each who named the wrong type (`mods/playable_ghost/score.h`). Each investigator's
-    client sends its journal guess as it changes; the score is shown to everyone a few seconds after
-    the contract ends. Money is unchanged and investigators still win the vanilla way, so misleading
-    them (playing shy like a Shade, singling one out like a Banshee) pays while hard tells stay real.
+10. **Deception score:** the ghost scores +1 for each investigator who was killed, +1 for each who
+    survived naming the wrong type or none, and +1 for each who quit mid-contract, one point each at most
+    (`mods/playable_ghost/score.h`). Who counts is decided from the contract's start, not from who has sent a
+    guess, and a leaver is seen in the room's own player list. Each investigator's client sends its journal
+    guess as it changes; the score settles a few seconds after the contract ends. The ghost's pay is its share
+    of these points, shown with the score in one popup; the investigators see the score with no money and
+    still win the vanilla way, so misleading them (playing shy like a Shade, singling one out like a Banshee)
+    pays while hard tells stay real.
 
 ## Senses and alerts
 

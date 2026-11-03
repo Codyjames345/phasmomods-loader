@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "check.h"
+#include "code.h"
 #include "entry.h"
 #include "image.h"
 #include "model.h"
@@ -15,7 +16,7 @@
 #include "sdk_fixture.h"
 #include "sdk_image_fixture.h"
 
-using namespace pg::sdk;
+using namespace pm::sdk;
 
 namespace {
 
@@ -78,6 +79,30 @@ void type_by_name() {
   CHECK(ghost && ghost->currentName == "GhostAI");
 }
 
+// The models name UnityEvent and UnityEvent<T0> alike: by name both match, and kNotGeneric keeps the one that is no
+// generic definition. It applies to a top-level type entry only, since the dump knows no nested type's arity.
+void not_generic_type_among_its_generic_kin() {
+  ModelBuilder b;
+  const int plain = b.type("UnityEngine.CoreModule", "UnityEngine.Events", "UnityEvent");
+  for (int arity = 1; arity <= 2; ++arity) {
+    const int kin = b.type("UnityEngine.CoreModule", "UnityEngine.Events", "UnityEvent");
+    b.model.types[kin].genericParams = arity;
+  }
+  const GameModel model = b.build();
+  constexpr EntryDesc byName{.key = "UnityEvent", .name = "UnityEvent", .assembly = "UnityEngine.CoreModule",
+                             .ns = "UnityEngine.Events"};
+  CHECK(run({&byName}, model).find("UnityEvent")->status == Status::Ambiguous);
+  constexpr EntryDesc plainOnly{.key = "UnityEvent", .flags = kNotGeneric, .name = "UnityEvent",
+                                .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine.Events"};
+  const Result* r = run({&plainOnly}, model).find("UnityEvent");
+  CHECK(r && r->status == Status::Resolved && r->type == plain);
+  constexpr EntryDesc nested{.key = "Nested", .flags = kNotGeneric, .owner = "UnityEvent", .name = "Nested"};
+  CHECK(run({&plainOnly, &nested}, model).find("Nested")->status == Status::Missing);
+  constexpr EntryDesc member{.key = "UnityEvent.Invoke", .kind = Kind::Method, .flags = kNotGeneric,
+                             .owner = "UnityEvent", .name = "Invoke"};
+  CHECK(run({&plainOnly, &member}, model).find("UnityEvent.Invoke")->status == Status::Missing);
+}
+
 void method_by_name_and_params() {
   Game g;
   const GameModel model = g.b.build();
@@ -86,6 +111,31 @@ void method_by_name_and_params() {
   CHECK(ray && ray->status == Status::Resolved);
   CHECK(ray && ray->rva == 0x2000);
   CHECK(ray && ray->type == g.physics && ray->member == 0);
+}
+
+// The running game tells System.Object[] (object[]) from UnityEngine.Object[] (Object[]). The dump writes both as Object[], so only
+// a model read from the dump takes one for the other: an entry written from the dump alone must not resolve there and fail live.
+void an_object_array_is_exact_in_the_game_and_alike_in_the_dump() {
+  ModelBuilder b;
+  const int view = b.type("PhotonUnityNetworking", "Photon.Pun", "PhotonView");
+  b.method(view, "RPC", "void", {"string", "Object[]"}, 0x3000);
+  GameModel dump = b.build();
+  static constexpr EntryDesc kView{.key = "PhotonView", .name = "PhotonView", .assembly = "PhotonUnityNetworking", .ns = "Photon.Pun"};
+  static constexpr const char* kSystem[] = {"string", "object[]"};
+  static constexpr EntryDesc kSystemRpc{.key = "PhotonView.RPC", .kind = Kind::Method, .owner = "PhotonView", .name = "RPC", .params = kSystem};
+  // In the game: the method takes UnityEngine.Object[], which is not what the entry asks for.
+  Resolution r = run({&kView, &kSystemRpc}, dump);
+  CHECK(r.find("PhotonView.RPC") && r.find("PhotonView.RPC")->status == Status::Missing);
+  // From the dump: the spelling could be either.
+  dump.objectArraysLookAlike = true;
+  r = run({&kView, &kSystemRpc}, dump);
+  CHECK(r.find("PhotonView.RPC") && r.find("PhotonView.RPC")->status == Status::Resolved);
+  // In the game, the type as it is.
+  ModelBuilder live;
+  const int liveView = live.type("PhotonUnityNetworking", "Photon.Pun", "PhotonView");
+  live.method(liveView, "RPC", "void", {"string", "object[]"}, 0x3000);
+  r = run({&kView, &kSystemRpc}, live.build());
+  CHECK(r.find("PhotonView.RPC") && r.find("PhotonView.RPC")->status == Status::Resolved);
 }
 
 void method_by_name_without_params_is_ambiguous_with_overloads() {
@@ -360,6 +410,117 @@ void type_by_field_types() {
   CHECK(any && any->status == Status::Ambiguous && any->candidates.size() == 2);
 }
 
+// With kExactFields a type declares exactly the listed instance fields: a look-alike that declares one
+// more is no candidate, statics and constants do not count, two exact matches stay ambiguous, and the
+// flag fits only a type found by its field types.
+void type_by_exact_field_types() {
+  static constexpr const char* kWander[] = {"@GhostAI", "NavMeshAgent", "float", "int",
+                                            "bool",     "Vector3",      "bool",  "bool"};
+  constexpr EntryDesc wander{.key = "Wander", .flags = kExactFields, .assembly = "Assembly-CSharp", .ns = "",
+                             .fieldTypes = kWander};
+  constexpr EntryDesc loose{.key = "Wander", .assembly = "Assembly-CSharp", .ns = "", .fieldTypes = kWander};
+  const auto add = [](ModelBuilder& b, const char* name, int ai, bool extraFloat) {
+    const int t = b.type("Assembly-CSharp", "", name);
+    b.field(t, "ghost", "GhostAI", 0x10, false, ai);
+    b.field(t, "agent", "NavMeshAgent", 0x18);
+    b.field(t, "time", "float", 0x20);
+    b.field(t, "radius", "int", 0x24);
+    b.field(t, "moving", "bool", 0x28);
+    b.field(t, "to", "Vector3", 0x2C);
+    if (extraFloat) b.field(t, "wait", "float", 0x38);
+    b.field(t, "a", "bool", extraFloat ? 0x3C : 0x38);
+    b.field(t, "b", "bool", extraFloat ? 0x3D : 0x39);
+    return t;
+  };
+  {  // the exact class among a superset look-alike; a static and a constant do not count
+    ModelBuilder b;
+    const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+    const int superset = add(b, "ഹഫതണ", ai, true);
+    const int exact = add(b, "ഝസബള", ai, false);
+    b.field(exact, "shared", "int", 0, true);
+    b.literal(exact, "limit", 3);
+    const GameModel model = b.build();
+    const Resolution r = run({&kGhostAI, &wander}, model);
+    const Result* w = r.find("Wander");
+    CHECK(w && w->status == Status::Resolved && w->type == exact);
+    const Resolution l = run({&kGhostAI, &loose}, model);  // without the flag both fit
+    CHECK(l.find("Wander") && l.find("Wander")->status == Status::Ambiguous);
+    CHECK(superset != exact);
+  }
+  {  // the superset alone is no match
+    ModelBuilder b;
+    const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+    add(b, "ഹഫതണ", ai, true);
+    const Resolution r = run({&kGhostAI, &wander}, b.build());
+    CHECK(r.find("Wander") && r.find("Wander")->status == Status::Missing);
+  }
+  {  // two exact matches
+    ModelBuilder b;
+    const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+    add(b, "ഝസബള", ai, false);
+    add(b, "ദശസറ", ai, false);
+    const Resolution r = run({&kGhostAI, &wander}, b.build());
+    const Result* w = r.find("Wander");
+    CHECK(w && w->status == Status::Ambiguous && w->candidates.size() == 2);
+  }
+  {  // only a type found by its field types takes the flag
+    ModelBuilder b;
+    const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+    b.field(ai, "agent", "NavMeshAgent", 0x40);
+    const GameModel model = b.build();
+    constexpr EntryDesc named{.key = "Named", .flags = kExactFields, .name = "GhostAI",
+                              .assembly = "Assembly-CSharp", .ns = ""};
+    constexpr EntryDesc field{.key = "GhostAI.agent", .kind = Kind::Field, .flags = kExactFields,
+                              .owner = "GhostAI", .name = "agent"};
+    const Resolution r = run({&kGhostAI, &named, &field}, model);
+    for (const char* key : {"Named", "GhostAI.agent"}) {
+      const Result* x = r.find(key);
+      CHECK(x && x->status == Status::Missing &&
+            x->detail == "an exact field list applies to a type found by its field types");
+    }
+  }
+}
+
+// With kFieldOrder the exact fields also lie in the listed order by offset: a look-alike with the same
+// fields reordered (a different size) is no candidate, and the flag needs kExactFields.
+void type_by_field_order() {
+  static constexpr const char* kScore[] = {"int", "double", "short"};
+  constexpr EntryDesc ordered{.key = "Score", .flags = kExactFields | kFieldOrder, .assembly = "Assembly-CSharp",
+                              .ns = "", .fieldTypes = kScore};
+  constexpr EntryDesc unordered{.key = "Score", .flags = kExactFields, .assembly = "Assembly-CSharp", .ns = "",
+                                .fieldTypes = kScore};
+  constexpr EntryDesc alone{.key = "Score", .flags = kFieldOrder, .assembly = "Assembly-CSharp", .ns = "",
+                            .fieldTypes = kScore};
+  {  // declaration order does not matter, offsets do
+    ModelBuilder b;
+    const int t = b.type("Assembly-CSharp", "", "ഥഩവഹ");
+    b.field(t, "c", "short", 0x20);
+    b.field(t, "a", "int", 0x10);
+    b.field(t, "b", "double", 0x18);
+    const GameModel model = b.build();
+    const Resolution r_s = run({&ordered}, model);
+    const Result* s = r_s.find("Score");
+    CHECK(s && s->status == Status::Resolved && s->type == t);
+    const Resolution r_a = run({&alone}, model);
+    const Result* a = r_a.find("Score");
+    CHECK(a && a->status == Status::Missing && a->detail == "a field order applies to an exact field list");
+  }
+  {  // reordered look-alike: same fields, the two small ones together
+    ModelBuilder b;
+    const int t = b.type("Assembly-CSharp", "", "ഥഩവഹ");
+    b.field(t, "a", "int", 0x10);
+    b.field(t, "c", "short", 0x14);
+    b.field(t, "b", "double", 0x18);
+    const GameModel model = b.build();
+    const Resolution r_s = run({&ordered}, model);
+    const Result* s = r_s.find("Score");
+    CHECK(s && s->status == Status::Missing);
+    const Resolution r_u = run({&unordered}, model);
+    const Result* u = r_u.find("Score");  // without the order it still fits
+    CHECK(u && u->status == Status::Resolved);
+  }
+}
+
 // A type shape that declares nothing to look for does not take the lone type in scope.
 void type_shape_needs_values_or_field_types() {
   ModelBuilder b;
@@ -370,7 +531,26 @@ void type_shape_needs_values_or_field_types() {
   const Resolution r = run({&kGhostAI, &nested}, model);
   const Result* n = r.find("Nested");
   CHECK(n && n->status == Status::Missing);
-  CHECK(n && n->detail == "a type found by shape needs values or field types");
+  CHECK(n && n->detail == "a type found by shape needs values, field types, a static method's shape or a type that declares it");
+}
+
+// A static class has no fields to go by: a static method it declares finds it, and an instance method of that
+// shape, or another return type, does not.
+void type_found_by_a_static_method() {
+  ModelBuilder b;
+  const int yes = b.type("Assembly-CSharp", "", "ദശ");
+  b.method(yes, "ബഹ", "int", {"T[]"}, 0x1000, true);
+  const int instanceOnly = b.type("Assembly-CSharp", "", "സറ");
+  b.method(instanceOnly, "ജഭ", "int", {"T[]"}, 0x1100);
+  const int otherReturn = b.type("Assembly-CSharp", "", "ദബ");
+  b.method(otherReturn, "ജദ", "void", {"T[]"}, 0x1200, true);
+  const GameModel model = b.build();
+  static constexpr const char* kArray[] = {"T[]"};
+  constexpr EntryDesc shape{.key = "Helpers", .hint = "ദശ", .assembly = "Assembly-CSharp", .ns = "", .type = "int",
+                            .params = kArray};
+  const Resolution r = run({&shape}, model);
+  const Result* h = r.find("Helpers");
+  CHECK(h && h->status == Status::Resolved && h->currentName == "ദശ");
 }
 
 // Coroutine and closure classes are never shape candidates, whether the compiler's name survives or
@@ -404,6 +584,14 @@ void compiler_generated_types_are_not_shape_candidates() {
   const Result* h = r.find("Helper");
   CHECK(h && h->status == Status::Resolved && h->type == 3);
   CHECK(h && h->currentName == "ദശസറ");
+
+  // With kCompilerGenerated only those types are candidates: the renamed state machine, not the plain look-alike.
+  constexpr EntryDesc machine{.key = "Machine", .flags = kCompilerGenerated, .owner = "GhostAI",
+                              .fieldTypes = kOwnerField};
+  const Resolution g = run({&kGhostAI, &machine}, model_with(true, false, true));
+  const Result* m = g.find("Machine");
+  CHECK(m && m->status == Status::Resolved && m->currentName == "ജഷധഷഡബടഷഺ");
+  CHECK(run({&kGhostAI, &machine}, model_with(false, false, true)).find("Machine")->status == Status::Missing);
 }
 
 void field_by_unique_type() {
@@ -427,6 +615,59 @@ void field_by_unique_type() {
   // A field found by shape needs its type.
   constexpr EntryDesc untyped{.key = "GhostAI.untyped", .kind = Kind::Field, .owner = "GhostAI"};
   CHECK(run({&kGhostAI, &untyped}, model).find("GhostAI.untyped")->status == Status::Missing);
+}
+
+// "@Key" inside a generic's arguments means the type that entry resolved to, as at the start of a type
+// string: List<@GhostState> is a list of exactly that type, and the field depends on its entry.
+void at_type_inside_generic_arguments() {
+  const auto model_with = [](bool shareName) {
+    ModelBuilder b;
+    const int ai = b.type("Assembly-CSharp", "", "GhostAI");
+    const int state = b.type("Assembly-CSharp", "", "GhostState", ai, true);
+    b.literal(state, "idle", 0);
+    b.type("Assembly-CSharp", "Other", shareName ? "GhostState" : "OtherState");
+    b.field(ai, "states", "List<GhostState>", 0x48);
+    b.field(ai, "others", "List<OtherState>", 0x50);
+    b.field(ai, "next", "Nullable<GhostState>", 0x58);
+    b.field(ai, "weights", "Dictionary<GhostState,int>", 0x60);
+    return b.build();
+  };
+  constexpr EntryDesc states{.key = "GhostAI.states", .kind = Kind::Field, .owner = "GhostAI",
+                             .type = "List<@GhostState>"};
+  constexpr EntryDesc next{.key = "GhostAI.next", .kind = Kind::Field, .owner = "GhostAI",
+                           .type = "Nullable<@GhostState>"};
+  constexpr EntryDesc weights{.key = "GhostAI.weights", .kind = Kind::Field, .owner = "GhostAI",
+                              .type = "Dictionary<@GhostState, int>"};
+  const GameModel model = model_with(false);
+  const Resolution r = run({&kGhostAI, &kGhostState, &states, &next, &weights}, model);
+  CHECK(r.find("GhostAI.states")->status == Status::Resolved && r.find("GhostAI.states")->offset == 0x48);
+  CHECK(r.find("GhostAI.next")->status == Status::Resolved && r.find("GhostAI.next")->offset == 0x58);
+  CHECK(r.find("GhostAI.weights")->status == Status::Resolved && r.find("GhostAI.weights")->offset == 0x60);
+
+  // The field depends on the entry inside the generic: without it in the map, it is blocked.
+  const Resolution alone = run({&kGhostAI, &states}, model);
+  CHECK(alone.find("GhostAI.states")->status == Status::Blocked);
+  CHECK(alone.find("GhostAI.states")->detail.find("GhostState") != std::string::npos);
+
+  // A generic argument's type is known only by name, so a name another type shares cannot decide.
+  const GameModel shared = model_with(true);
+  const Resolution s = run({&kGhostAI, &kGhostState, &states}, shared);
+  CHECK(s.find("GhostAI.states")->status == Status::Ambiguous);
+  CHECK(s.find("GhostAI.states")->offset == 0);
+
+  // The same holds in a type's field types.
+  ModelBuilder t;
+  const int ai = t.type("Assembly-CSharp", "", "GhostAI");
+  t.type("Assembly-CSharp", "", "GhostState", ai, true);
+  const int traits = t.type("Assembly-CSharp", "", "ടഷള");
+  t.field(traits, "a", "List<GhostState>", 0x10);
+  const int decoy = t.type("Assembly-CSharp", "", "ഫഹദ");
+  t.field(decoy, "a", "List<int>", 0x10);
+  const GameModel typed = t.build();
+  static constexpr const char* kTraitsFields[] = {"List<@GhostState>"};
+  static constexpr EntryDesc traitsEntry{.key = "Traits", .assembly = "Assembly-CSharp", .ns = "", .fieldTypes = kTraitsFields};
+  const Resolution tr = run({&kGhostAI, &kGhostState, &traitsEntry}, typed);
+  CHECK(tr.find("Traits")->status == Status::Resolved && tr.find("Traits")->currentName == "ടഷള");
 }
 
 void field_shape_with_many_candidates_is_ambiguous() {
@@ -565,6 +806,8 @@ enum class Hunting {
   Unreadable,   // it starts with an instruction the reader cannot account for
   OtherObject,  // it also stores 1 at 0xF3 of another object, loaded from a field of this
   OtherOnly,    // it also stores 2 at 0xF4 of another object, which this never does
+  GlobalClass,  // it also reads 0xF4 of a class just loaded from a fixed address (a class-init check)
+  GlobalAfterBranch,  // the same, with a branch landing between the load and the read
 };
 
 // GhostAI with four bools, and Hunting at 0x1000 which writes two of them and reads a third through
@@ -584,9 +827,17 @@ struct Bools {
     const std::vector<uint8_t> other{0x48, 0x8B, 0x47, 0x40, 0xC6, 0x80, 0xF3, 0x00, 0x00, 0x00, 0x01};
     // mov rax, [rdi+0x40]; mov byte ptr [rax+0xF4], 2
     const std::vector<uint8_t> otherOnly{0x48, 0x8B, 0x47, 0x40, 0xC6, 0x80, 0xF4, 0x00, 0x00, 0x00, 0x02};
-    const std::vector<uint8_t> tail = body == Hunting::OtherObject ? other
-                                      : body == Hunting::OtherOnly ? otherOnly
-                                                                   : std::vector<uint8_t>{};
+    // mov rax, [rip+0x10000]; mov rdx, [rdi+0x40]; cmp dword ptr [rax+0xF4], 0
+    const std::vector<uint8_t> global{0x48, 0x8B, 0x05, 0x00, 0x00, 0x01, 0x00, 0x48, 0x8B, 0x57, 0x40,
+                                      0x83, 0xB8, 0xF4, 0x00, 0x00, 0x00, 0x00};
+    // The same with jmp +0 before the cmp: a branch lands on it, so rax may hold anything there.
+    const std::vector<uint8_t> globalAfterBranch{0x48, 0x8B, 0x05, 0x00, 0x00, 0x01, 0x00, 0xEB, 0x00,
+                                                 0x83, 0xB8, 0xF4, 0x00, 0x00, 0x00, 0x00};
+    const std::vector<uint8_t> tail = body == Hunting::OtherObject         ? other
+                                      : body == Hunting::OtherOnly         ? otherOnly
+                                      : body == Hunting::GlobalClass       ? global
+                                      : body == Hunting::GlobalAfterBranch ? globalAfterBranch
+                                                                           : std::vector<uint8_t>{};
     code.function(0x1000, join({lead, prologue, call, kHuntingBody, tail, {0x5F}, kRet}));  // pop rdi; ret
   }
   // The bool with these facts. The entry lives as long as the results that point at it.
@@ -634,6 +885,25 @@ void negated_fact_picks_flag() {
                                        {.is = Fact::Is::Loads, .method = "GhostAI.Hunting", .negate = true}};
   const Result* u = g.flag(untouched);
   CHECK(u && u->status == Status::Resolved && u->offset == 0xF4);
+}
+
+// An access through a register just loaded from a fixed address reads a runtime class (the class-init
+// check every method makes), never an object: it counts for no field fact. With a branch landing
+// between the load and the access the register may hold anything, and the access counts as before.
+void global_class_access_is_no_field() {
+  static constexpr Fact untouched[] = {{.is = Fact::Is::Stores, .method = "GhostAI.Hunting", .negate = true},
+                                       {.is = Fact::Is::Loads, .method = "GhostAI.Hunting", .negate = true}};
+  {
+    Bools g(Hunting::GlobalClass);
+    const Result* u = g.flag(untouched);
+    CHECK(u && u->status == Status::Resolved && u->offset == 0xF4);
+  }
+  {
+    Bools g(Hunting::GlobalAfterBranch);
+    const Result* u = g.flag(untouched);
+    CHECK(u && u->status == Status::Ambiguous);
+    CHECK(u && u->detail.find("not proven to hold this") != std::string::npos);
+  }
 }
 
 // A negated fact removes a candidate only on an access through this. Another object's field at the
@@ -791,6 +1061,198 @@ void field_facts_on_a_struct_fail_closed() {
   CHECK(r.find("GhostAI.agent")->status == Status::Resolved);
 }
 
+// A class that embeds a struct at 0x28 whose first two fields are of one enum type, as GhostController
+// embeds its traits: Attempt reads the first through this, Sync writes the second.
+struct Embedded {
+  ModelBuilder m;
+  Code code;
+  int controller = -1;
+  explicit Embedded(const char* holderType = "Traits", bool holderIsStruct = true) {
+    controller = m.type("Assembly-CSharp", "", "Controller");
+    const int traits = m.type("Assembly-CSharp", "", "Traits", -1, false, holderIsStruct);
+    const int kind = m.type("Assembly-CSharp", "", "Kind", -1, true, true);
+    m.literal(kind, "None", 24);
+    m.field(controller, "view", "PhotonView", 0x20);
+    m.field(controller, "ഢധഢ", holderType, 0x28, false, std::string_view(holderType) == "Traits" ? traits : -1);
+    m.field(controller, "count", "int", 0x68);
+    m.field(traits, "ഫഠ഻", "Kind", 0x10, false, kind);  // the struct's own offsets include the boxed header
+    m.field(traits, "നബട", "Kind", 0x14, false, kind);
+    m.field(traits, "ഺഹഴ", "int", 0x18);
+    m.field(controller, "shared", "Traits", 0x0, true, traits);
+    m.field(controller, "mood", "Kind", 0x70, false, kind);
+    const int info = m.type("Assembly-CSharp", "", "Info");
+    const int other = m.type("Assembly-CSharp", "", "Other", -1, false, true);
+    m.field(info, "ഢധഢ", "Traits", 0x30, false, traits);
+    m.field(info, "ഴരന", "Other", 0x40, false, other);
+    m.field(other, "ഫഠ഻", "Kind", 0x10, false, kind);
+    m.field(other, "നബട", "Kind", 0x14, false, kind);
+    m.method(controller, "Attempt", "void", {}, 0x1000);
+    m.method(controller, "Sync", "void", {}, 0x1100);
+    code.function(0x1000, join({{0x8B, 0x41, 0x28}, kRet}));  // mov eax, [rcx+0x28]; ret
+    code.function(0x1100, join({{0x89, 0x51, 0x2C}, kRet}));  // mov [rcx+0x2C], edx; ret
+  }
+  const Result* field(const EntryDesc& entry, bool withHolder = true, std::vector<const EntryDesc*> more = {}) {
+    std::vector<const EntryDesc*> entries{&kController, &kTraits, &kKind, &kInfo, &kOther, &kAttempt, &kSync, &entry};
+    if (withHolder) entries.push_back(&kHolder);
+    entries.insert(entries.end(), more.begin(), more.end());
+    results = code.run(entries, m.build());
+    return results.find(entry.key);
+  }
+  static constexpr EntryDesc kController{.key = "Controller", .name = "Controller", .assembly = "Assembly-CSharp",
+                                         .ns = ""};
+  static constexpr EntryDesc kTraits{.key = "Traits", .name = "Traits", .assembly = "Assembly-CSharp", .ns = ""};
+  static constexpr EntryDesc kKind{.key = "Kind", .name = "Kind", .assembly = "Assembly-CSharp", .ns = ""};
+  static constexpr EntryDesc kInfo{.key = "Info", .name = "Info", .assembly = "Assembly-CSharp", .ns = ""};
+  static constexpr EntryDesc kOther{.key = "Other", .name = "Other", .assembly = "Assembly-CSharp", .ns = ""};
+  static constexpr EntryDesc kHolder{.key = "Controller.traits", .kind = Kind::Field, .owner = "Controller",
+                                     .type = "@Traits"};
+  static constexpr EntryDesc kAttempt{.key = "Controller.Attempt", .kind = Kind::Method, .owner = "Controller",
+                                      .name = "Attempt"};
+  static constexpr EntryDesc kSync{.key = "Controller.Sync", .kind = Kind::Method, .owner = "Controller",
+                                   .name = "Sync"};
+  Resolution results;
+};
+
+// A struct's own instance field (an entry with a struct owner and no `within`) is published at its
+// place in the struct, as a method that receives the struct by address reads it: the model's offset
+// less the boxed header. A struct's static field keeps its offset.
+void struct_field_is_published_at_its_place_in_the_struct() {
+  static constexpr EntryDesc count{.key = "Traits.count", .kind = Kind::Field, .owner = "Traits", .name = "ഺഹഴ"};
+  Embedded g;
+  const Result* c = g.field(count, false);
+  CHECK(c && c->status == Status::Resolved && c->offset == 0x8);
+  ModelBuilder m;
+  const int pair = m.type("Assembly-CSharp", "", "Traits", -1, false, true);
+  m.field(pair, "shared", "int", 0x4, true);
+  static constexpr EntryDesc shared{.key = "Traits.shared", .kind = Kind::Field, .flags = pm::sdk::kStatic,
+                                    .owner = "Traits", .name = "shared"};
+  const Resolution r = run({&Embedded::kTraits, &shared}, m.build());
+  CHECK(r.find("Traits.shared")->status == Status::Resolved && r.find("Traits.shared")->offset == 0x4);
+}
+
+void field_within_an_embedded_struct() {
+  // A fact in the owner's code, at the struct field's place in the owner, decides; the entry reports
+  // that place, as a field of the owner with no member of its own.
+  static constexpr Fact read[] = {{.is = Fact::Is::Loads, .method = "Controller.Attempt"}};
+  static constexpr EntryDesc identity{.key = "Controller.identity", .kind = Kind::Field, .owner = "Controller",
+                                      .type = "@Kind", .facts = read, .within = "Controller.traits"};
+  Embedded g;
+  const Result* i = g.field(identity);
+  CHECK(i && i->status == Status::Resolved && i->offset == 0x28);
+  CHECK(i && i->type == g.controller && i->member == -1);
+  CHECK(i && i->currentName == "ഫഠ഻");
+  static constexpr Fact written[] = {{.is = Fact::Is::Stores, .method = "Controller.Sync"}};
+  static constexpr EntryDesc behaviour{.key = "Controller.behaviour", .kind = Kind::Field, .owner = "Controller",
+                                       .type = "@Kind", .facts = written, .within = "Controller.traits"};
+  const Result* b = g.field(behaviour);
+  CHECK(b && b->status == Status::Resolved && b->offset == 0x2C);
+
+  // Without a fact the struct's two fields of that type are both candidates, at their places in the
+  // owner.
+  static constexpr EntryDesc either{.key = "Controller.either", .kind = Kind::Field, .owner = "Controller",
+                                    .type = "@Kind", .within = "Controller.traits"};
+  const Result* e = g.field(either);
+  CHECK(e && e->status == Status::Ambiguous && e->offset == 0);
+  CHECK(e && has(e->candidates, "ഫഠ഻: Kind at 0x28") && has(e->candidates, "നബട: Kind at 0x2c"));
+
+  // No field of that type in the struct: missing.
+  static constexpr EntryDesc none{.key = "Controller.none", .kind = Kind::Field, .owner = "Controller",
+                                  .type = "float", .within = "Controller.traits"};
+  CHECK(g.field(none)->status == Status::Missing);
+
+  // The holding field is not in the map: blocked. Not a struct: missing.
+  CHECK(g.field(identity, false)->status == Status::Blocked);
+  Embedded notStruct("Traits", false);
+  const Result* n = notStruct.field(identity);
+  CHECK(n && n->status == Status::Missing && n->detail.find("struct") != std::string::npos);
+
+  // A fact that matches neither place leaves nothing.
+  static constexpr Fact stored[] = {{.is = Fact::Is::Stores, .method = "Controller.Attempt"}};
+  static constexpr EntryDesc stores{.key = "Controller.stores", .kind = Kind::Field, .owner = "Controller",
+                                    .type = "@Kind", .facts = stored, .within = "Controller.traits"};
+  CHECK(g.field(stores)->status == Status::Missing);
+}
+
+// Every holder a field within a struct cannot use fails closed, and a field within one may be named.
+void within_fails_closed_on_any_other_holder() {
+  Embedded g;
+  static constexpr EntryDesc staticHolder{.key = "Controller.shared", .kind = Kind::Field, .flags = kStatic,
+                                          .owner = "Controller", .type = "@Traits"};
+  static constexpr EntryDesc inStatic{.key = "Controller.inStatic", .kind = Kind::Field, .owner = "Controller",
+                                      .type = "@Kind", .within = "Controller.shared"};
+  CHECK(g.field(inStatic, true, {&staticHolder})->status == Status::Missing);
+  CHECK(g.results.find("Controller.shared")->status == Status::Resolved);
+
+  // A holder that is itself a field within a struct (resolved here by its fact).
+  static constexpr Fact read[] = {{.is = Fact::Is::Loads, .method = "Controller.Attempt"}};
+  static constexpr EntryDesc first{.key = "Controller.first", .kind = Kind::Field, .owner = "Controller",
+                                   .type = "@Kind", .facts = read, .within = "Controller.traits"};
+  static constexpr EntryDesc nested{.key = "Controller.nested", .kind = Kind::Field, .owner = "Controller",
+                                    .type = "@Kind", .within = "Controller.first"};
+  CHECK(g.field(nested, true, {&first})->status == Status::Missing);
+  CHECK(g.results.find("Controller.first")->status == Status::Resolved);
+
+  static constexpr EntryDesc elsewhere{.key = "Info.elsewhere", .kind = Kind::Field, .owner = "Info",
+                                       .type = "@Kind", .within = "Controller.traits"};
+  const Result* e = g.field(elsewhere);
+  CHECK(e && e->status == Status::Missing && e->detail.find("is not a field of Info") != std::string::npos);
+
+  static constexpr EntryDesc enumHolder{.key = "Controller.mood", .kind = Kind::Field, .owner = "Controller",
+                                        .type = "@Kind"};
+  static constexpr EntryDesc inEnum{.key = "Controller.inEnum", .kind = Kind::Field, .owner = "Controller",
+                                    .type = "@Kind", .within = "Controller.mood"};
+  CHECK(g.field(inEnum, true, {&enumHolder})->status == Status::Missing);
+  CHECK(g.results.find("Controller.mood")->status == Status::Resolved);
+
+  // By name, the struct's own field name decides; a name it lacks is missing.
+  static constexpr EntryDesc named{.key = "Controller.named", .kind = Kind::Field, .owner = "Controller",
+                                   .name = "നബട", .within = "Controller.traits"};
+  const Result* n = g.field(named);
+  CHECK(n && n->status == Status::Resolved && n->offset == 0x2C);
+  static constexpr EntryDesc unnamed{.key = "Controller.unnamed", .kind = Kind::Field, .owner = "Controller",
+                                     .name = "nope", .within = "Controller.traits"};
+  CHECK(g.field(unnamed)->status == Status::Missing);
+}
+
+// sameFieldAs: the struct member another within entry resolved to, in a struct of the same type held
+// by another class, without a fact of its own.
+void same_field_as_another_within_entry() {
+  static constexpr Fact read[] = {{.is = Fact::Is::Loads, .method = "Controller.Attempt"}};
+  static constexpr EntryDesc identity{.key = "Controller.identity", .kind = Kind::Field, .owner = "Controller",
+                                      .type = "@Kind", .facts = read, .within = "Controller.traits"};
+  static constexpr EntryDesc infoTraits{.key = "Info.traits", .kind = Kind::Field, .owner = "Info",
+                                        .type = "@Traits"};
+  static constexpr EntryDesc infoIdentity{.key = "Info.identity", .kind = Kind::Field, .owner = "Info",
+                                          .type = "@Kind", .within = "Info.traits",
+                                          .sameFieldAs = "Controller.identity"};
+  Embedded g;
+  const Result* i = g.field(infoIdentity, true, {&identity, &infoTraits});
+  CHECK(i && i->status == Status::Resolved && i->offset == 0x30);
+  CHECK(i && i->member == -1 && i->inner == 0 && i->currentName == "ഫഠ഻");
+  CHECK(g.results.find("Controller.identity")->inner == 0);
+
+  // A struct of another type, though its field has the same name and shape: missing.
+  static constexpr EntryDesc infoOther{.key = "Info.other", .kind = Kind::Field, .owner = "Info", .type = "@Other"};
+  static constexpr EntryDesc otherIdentity{.key = "Info.otherIdentity", .kind = Kind::Field, .owner = "Info",
+                                           .type = "@Kind", .within = "Info.other",
+                                           .sameFieldAs = "Controller.identity"};
+  const Result* o = g.field(otherIdentity, true, {&identity, &infoOther});
+  CHECK(o && o->status == Status::Missing && o->detail.find("another struct type") != std::string::npos);
+
+  // While the target is unresolved (no fact decides it): blocked.
+  static constexpr EntryDesc either{.key = "Controller.identity", .kind = Kind::Field, .owner = "Controller",
+                                    .type = "@Kind", .within = "Controller.traits"};
+  CHECK(g.field(infoIdentity, true, {&either, &infoTraits})->status == Status::Blocked);
+
+  // A target that is not a field within a struct, or an entry that is not one itself: missing.
+  static constexpr EntryDesc plainTarget{.key = "Info.plain", .kind = Kind::Field, .owner = "Info",
+                                         .type = "@Kind", .within = "Info.traits", .sameFieldAs = "Controller.traits"};
+  CHECK(g.field(plainTarget, true, {&infoTraits})->status == Status::Missing);
+  static constexpr EntryDesc notWithin{.key = "Controller.count2", .kind = Kind::Field, .owner = "Controller",
+                                       .type = "int", .sameFieldAs = "Controller.identity"};
+  CHECK(g.field(notWithin, true, {&identity})->status == Status::Missing);
+}
+
 // Fail closed: facts read from code the reader could not fully account for never decide.
 void unreadable_code_never_decides() {
   Bools g(Hunting::Unreadable);
@@ -879,7 +1341,7 @@ void method_without_code_is_missing() {
   for (const Resolution& r : {run({&kGhostAI, &e}, m.build()), code.run({&kGhostAI, &e}, m.build())}) {
     const Result* a = r.find("GhostAI.Abstract");
     CHECK(a && a->status == Status::Missing && a->rva == 0);
-    CHECK(a && a->detail == "has no code of its own (abstract, extern or shared generic)");
+    CHECK(a && a->detail == "has no code of its own (abstract, extern or generic)");
   }
 }
 
@@ -1032,6 +1494,521 @@ void negated_call_facts_are_refused() {
   }
 }
 
+// The obfuscator's decoys of a method are never called. A Called fact keeps the candidate some other
+// method of its type calls or jumps to, read in full: through a function the exception table lists,
+// or a leaf function it does not (straight-line code up to a ret or a tail jump).
+struct Decoys {
+  ModelBuilder m;
+  Code code;
+  int ai;
+  Decoys() {
+    ai = m.type("Assembly-CSharp", "", "GhostAI");
+    m.method(ai, "Helper", "int", {}, 0x1000);
+    m.method(ai, "ദശ", "int", {}, 0x1100);  // the real one, called by 0x1300
+    m.method(ai, "സറ", "int", {}, 0x1200);  // its decoy: the same call, and no caller
+    m.method(ai, "ബഹ", "void", {}, 0x1300);
+    m.method(ai, "ജഭ", "int", {}, 0x1400);  // a leaf getter: no entry in the exception table
+    code.function(0x1000, kRet);
+    code.function(0x1100, join({rel(0x1100, {0xE8}, 0x1000), kRet}));
+    code.function(0x1200, join({rel(0x1200, {0xE8}, 0x1000), kLoad40, kRet}));
+    code.function(0x1300, join({rel(0x1300, {0xE8}, 0x1100), kRet}));
+    code.b.code(0x1400, join({kLoad40, kRet}));
+  }
+  const Result* real(std::span<const Fact> facts) {
+    entry = {.key = "GhostAI.Real", .kind = Kind::Method, .owner = "GhostAI", .type = "int", .facts = facts};
+    results = code.run({&kGhostAI, &kHelper, &entry}, m.build());
+    return results.find("GhostAI.Real");
+  }
+  static constexpr EntryDesc kHelper{.key = "GhostAI.Helper", .kind = Kind::Method, .owner = "GhostAI",
+                                     .name = "Helper"};
+  EntryDesc entry;
+  Resolution results;
+};
+
+constexpr Fact kCallsHelperAndCalled[] = {{.is = Fact::Is::Calls, .method = "GhostAI.Helper"},
+                                          {.is = Fact::Is::Called}};
+
+void called_fact_drops_uncalled_decoys() {
+  {
+    Decoys g;
+    static constexpr Fact callsOnly[] = {{.is = Fact::Is::Calls, .method = "GhostAI.Helper"}};
+    const Result* r = g.real(callsOnly);
+    CHECK(r->status == Status::Ambiguous);  // the decoy matches as well
+    // The leaf getter, which the exception table does not list, is read as a leaf and calls nothing:
+    // the Calls fact drops it rather than leave it undecided.
+    CHECK(r->candidates.size() == 2 && r->detail.find("could not be fully read") == std::string::npos);
+  }
+  {
+    // A leaf the exception table does not list that tail-jumps to the fact method calls it: the Calls
+    // fact says yes for it.
+    Decoys g;
+    g.m.method(g.ai, "ലള", "int", {}, 0x1480);
+    g.code.b.code(0x1480, join({kLoad40, rel(0x1484, {0xE9}, 0x1000)}));
+    static constexpr Fact callsOnly[] = {{.is = Fact::Is::Calls, .method = "GhostAI.Helper"}};
+    const Result* r = g.real(callsOnly);
+    CHECK(r && r->status == Status::Ambiguous && r->candidates.size() == 3);
+  }
+  {
+    Decoys g;
+    const Result* r = g.real(kCallsHelperAndCalled);
+    CHECK(r && r->status == Status::Resolved && r->rva == 0x1100);
+  }
+  {
+    // A leaf function that tail-jumps to the decoy calls it.
+    Decoys g;
+    g.m.method(g.ai, "ലള", "int", {}, 0x1480);
+    g.code.b.code(0x1480, join({kLoad40, rel(0x1484, {0xE9}, 0x1200)}));
+    const Result* r = g.real(kCallsHelperAndCalled);
+    CHECK(r && r->status == Status::Ambiguous && r->candidates.size() == 2);
+  }
+}
+
+// None found decides only when every other method of the type was read in full: one the reader
+// cannot account for, listed or a leaf that branches, may hide the call.
+void called_fact_fails_closed() {
+  {
+    Decoys g;
+    g.m.method(g.ai, "ലള", "void", {}, 0x1500);
+    g.code.function(0x1500, join({kVzeroupper, kRet}));
+    const Result* r = g.real(kCallsHelperAndCalled);
+    CHECK(r && r->status == Status::Ambiguous);
+    CHECK(r && r->detail.find("could not be fully read for its Called fact") != std::string::npos);
+  }
+  {
+    Decoys g;
+    g.m.method(g.ai, "ലള", "int", {}, 0x1480);
+    g.code.b.code(0x1480, join({{0x74, 0x01}, kRet, kRet}));  // je: not straight-line
+    const Result* r = g.real(kCallsHelperAndCalled);
+    CHECK(r && r->status == Status::Ambiguous);
+  }
+}
+
+// A Called fact names no method, applies to a method only, and cannot be negated.
+void called_fact_must_fit() {
+  Decoys g;
+  static constexpr Fact named[] = {{.is = Fact::Is::Called, .method = "GhostAI.Helper"}};
+  const Result* r = g.real(named);
+  CHECK(r && r->status == Status::Missing && r->detail == "a Called fact names no method");
+  static constexpr Fact negated[] = {{.is = Fact::Is::Called, .negate = true}};
+  r = g.real(negated);
+  CHECK(r && r->status == Status::Missing && r->detail == "negated call facts are not supported yet");
+  static constexpr Fact called[] = {{.is = Fact::Is::Called}};
+  const EntryDesc field{.key = "GhostAI.f", .kind = Kind::Field, .owner = "GhostAI", .type = "int", .facts = called};
+  const Resolution f = g.code.run({&kGhostAI, &field}, g.m.build());
+  CHECK(f.find("GhostAI.f")->status == Status::Missing);
+  CHECK(f.find("GhostAI.f")->detail == "a Called fact applies to a method");
+}
+
+// GhostAI with two bools and Hunting at 0x1000 made of `body`; the bool Hunting stores 1 into, as a
+// StoresConst fact finds it.
+Result stored_flag(const std::vector<uint8_t>& body) {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  for (const int32_t offset : {0xD8, 0xE0}) m.field(ai, std::format("b{:x}", offset), "bool", offset);
+  m.method(ai, "Hunting", "void", {}, 0x1000);
+  Code code;
+  code.function(0x1000, body);
+  static constexpr Fact stores[] = {{.is = Fact::Is::StoresConst, .method = "GhostAI.Hunting", .value = 1}};
+  constexpr EntryDesc e{.key = "GhostAI.flag", .kind = Kind::Field, .owner = "GhostAI", .type = "bool",
+                        .facts = stores};
+  const Resolution r = code.run({&kGhostAI, &kHuntingMethod, &e}, m.build());
+  return *r.find("GhostAI.flag");
+}
+
+// A register saved to the stack and restored by an epilogue's mov (rather than a pop) still holds
+// this wherever the function uses it: the value the restore loads goes back to the caller unused.
+// A load from the stack the function goes on to use is another value.
+void epilogue_restore_keeps_this() {
+  const std::vector<uint8_t> save{0x48, 0x89, 0x5C, 0x24, 0x08};                 // mov [rsp+8], rbx
+  const std::vector<uint8_t> frame{0x48, 0x83, 0xEC, 0x20};                      // sub rsp, 0x20
+  const std::vector<uint8_t> copy{0x48, 0x8B, 0xD9};                             // mov rbx, rcx
+  const std::vector<uint8_t> storeD8{0xC6, 0x83, 0xD8, 0x00, 0x00, 0x00, 0x01};  // mov byte [rbx+0xD8], 1
+  const std::vector<uint8_t> storeE0{0xC6, 0x83, 0xE0, 0x00, 0x00, 0x00, 0x01};  // mov byte [rbx+0xE0], 1
+  const std::vector<uint8_t> restore{0x48, 0x8B, 0x5C, 0x24, 0x28};              // mov rbx, [rsp+0x28]
+  const std::vector<uint8_t> release{0x48, 0x83, 0xC4, 0x20};                    // add rsp, 0x20
+  const std::vector<uint8_t> call = rel(0x1000 + 12, {0xE8}, 0x9000);
+  const Result plain = stored_flag(join({save, frame, copy, call, storeD8, restore, release, kRet}));
+  CHECK(plain.status == Status::Resolved && plain.offset == 0xD8);
+
+  // Through r11, as a frame opened with mov rax, rsp is closed: mov rax, rsp; mov [rax+0x10], rbx;
+  // push rdi, then lea r11, [rsp+0x20]; mov rbx, [r11+0x18]; mov rsp, r11; pop rdi.
+  const std::vector<uint8_t> open{0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x10, 0x57};
+  const std::vector<uint8_t> callR11 = rel(0x1000 + 15, {0xE8}, 0x9000);
+  const std::vector<uint8_t> close{0x4C, 0x8D, 0x5C, 0x24, 0x20, 0x49, 0x8B, 0x5B, 0x18, 0x49, 0x8B, 0xE3, 0x5F};
+  const Result viaR11 = stored_flag(join({open, frame, copy, callR11, storeD8, close, kRet}));
+  CHECK(viaR11.status == Status::Resolved && viaR11.offset == 0xD8);
+
+  // Loaded mid-function and used: rbx is no longer this, and the store decides nothing.
+  const Result reused = stored_flag(join({save, frame, copy, call, storeD8, restore, storeE0, release, kRet}));
+  CHECK(reused.status == Status::Ambiguous);
+  CHECK(reused.detail.find("not proven to hold this") != std::string::npos);
+}
+
+// A `jmp rel32` back to the function's own start is a tail call of itself: the start is no branch
+// target within the run, so the entry's copy of this still counts, and the restore before the jump is
+// an epilogue's. A conditional jump to the start stays a branch.
+void self_tail_jump_keeps_this() {
+  const std::vector<uint8_t> save{0x48, 0x89, 0x5C, 0x24, 0x08};                 // mov [rsp+8], rbx
+  const std::vector<uint8_t> frame{0x48, 0x83, 0xEC, 0x20};                      // sub rsp, 0x20
+  const std::vector<uint8_t> copy{0x48, 0x8B, 0xD9};                             // mov rbx, rcx
+  const std::vector<uint8_t> storeD8{0xC6, 0x83, 0xD8, 0x00, 0x00, 0x00, 0x01};  // mov byte [rbx+0xD8], 1
+  const std::vector<uint8_t> restore{0x48, 0x8B, 0x5C, 0x24, 0x28};              // mov rbx, [rsp+0x28]
+  const std::vector<uint8_t> release{0x48, 0x83, 0xC4, 0x20};                    // add rsp, 0x20
+  const std::vector<uint8_t> call = rel(0x1000 + 12, {0xE8}, 0x9000);
+  // je +n over the tail call to a plain return: mov rcx, [rbx+0x40]; restore; release; jmp start.
+  const std::vector<uint8_t> next{0x48, 0x8B, 0x4B, 0x40};
+  const size_t tailAt = 0x1000 + 12 + 5 + 7 + 2 + 4 + 5 + 4;
+  const std::vector<uint8_t> tail = join({next, restore, release, rel(tailAt, {0xE9}, 0x1000)});
+  const std::vector<uint8_t> skip{0x74, static_cast<uint8_t>(tail.size())};  // je over the tail call
+  const Result looped = stored_flag(join({save, frame, copy, call, storeD8, skip, tail, restore, release, kRet}));
+  CHECK(looped.status == Status::Resolved && looped.offset == 0xD8);
+
+  // A jne back to the start is a branch to a place the run reaches again: the copy is no longer in
+  // the instructions every call runs first, and the store decides nothing.
+  const std::vector<uint8_t> back = rel(0x1000 + 12 + 5 + 7, {0x0F, 0x85}, 0x1000);  // jne start
+  const Result branched = stored_flag(join({save, frame, copy, call, storeD8, back, restore, release, kRet}));
+  CHECK(branched.status == Status::Ambiguous);
+}
+
+// An IsNot fact drops the field another entry of the owner resolved to, and fails closed: while that entry
+// is unresolved this one is blocked, and it names only a field entry of the same owner.
+void is_not_fact_narrows_by_a_resolved_field() {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.field(ai, "ദശ", "bool", 0x40);
+  m.field(ai, "സറ", "bool", 0x41);
+  m.field(ai, "ബഹ", "int", 0x44);
+  static constexpr EntryDesc owner{.key = "GhostAI", .name = "GhostAI", .assembly = "Assembly-CSharp", .ns = ""};
+  static constexpr EntryDesc known{.key = "GhostAI.Known", .kind = Kind::Field, .owner = "GhostAI", .name = "ദശ"};
+  static constexpr Fact notKnown[] = {{.is = Fact::Is::IsNot, .method = "GhostAI.Known"}};
+  static constexpr EntryDesc left{.key = "GhostAI.Left", .kind = Kind::Field, .owner = "GhostAI", .type = "bool",
+                                  .facts = notKnown};
+  Code code;
+  {
+    Resolution results = code.run({&owner, &known, &left}, m.build());
+    const Result* r = results.find("GhostAI.Left");
+    CHECK(r && r->status == Status::Resolved && r->offset == 0x41);
+  }
+  {  // The other entry did not resolve: nothing is accepted.
+    static constexpr EntryDesc gone{.key = "GhostAI.Known", .kind = Kind::Field, .owner = "GhostAI", .name = "നമ"};
+    Resolution results = code.run({&owner, &gone, &left}, m.build());
+    const Result* r = results.find("GhostAI.Left");
+    CHECK(r && r->status == Status::Blocked);
+  }
+  {  // It names a field of the same owner, and only a field carries it.
+    static constexpr Fact bad[] = {{.is = Fact::Is::IsNot, .method = "GhostAI"}};
+    static constexpr EntryDesc wrong{.key = "GhostAI.Wrong", .kind = Kind::Field, .owner = "GhostAI", .type = "bool",
+                                     .facts = bad};
+    Resolution results = code.run({&owner, &wrong}, m.build());
+    const Result* r = results.find("GhostAI.Wrong");
+    CHECK(r && r->status == Status::Missing);
+  }
+}
+
+// IsNot over real code, as GhostAI.interactionBoost uses it: a Loads fact matches every bool a method
+// reads, and IsNot facts naming the ones already told apart leave the one meant. A bool the method comes
+// to read after an update leaves the entry Ambiguous (sdk/README.md), never a silent pick.
+void is_not_narrows_a_loads_fact_over_code() {
+  const auto resolve_with = [](bool readsAnother, std::span<const Fact> facts) {
+    ModelBuilder m;
+    const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+    for (const int32_t offset : {0xD8, 0xD9, 0xDA, 0xDB}) m.field(ai, std::format("b{:x}", offset), "bool", offset);
+    m.method(ai, "Execute", "void", {}, 0x1000);
+    // movzx eax, byte ptr [rcx+disp32] for each bool it reads, through this
+    const auto load = [](uint8_t disp) { return std::vector<uint8_t>{0x0F, 0xB6, 0x81, disp, 0x00, 0x00, 0x00}; };
+    Code code;
+    code.function(0x1000, readsAnother ? join({load(0xD8), load(0xD9), load(0xDA), load(0xDB), kRet})
+                                       : join({load(0xD8), load(0xD9), load(0xDA), kRet}));
+    static constexpr EntryDesc execute{.key = "GhostAI.Execute", .kind = Kind::Method, .owner = "GhostAI",
+                                       .name = "Execute"};
+    static constexpr EntryDesc first{.key = "GhostAI.First", .kind = Kind::Field, .owner = "GhostAI", .name = "bd8"};
+    static constexpr EntryDesc second{.key = "GhostAI.Second", .kind = Kind::Field, .owner = "GhostAI",
+                                      .name = "bd9"};
+    const EntryDesc left{.key = "GhostAI.Left", .kind = Kind::Field, .owner = "GhostAI", .type = "bool",
+                         .facts = facts};
+    Resolution results = code.run({&kGhostAI, &execute, &first, &second, &left}, m.build());
+    const Result* r = results.find("GhostAI.Left");
+    return r ? std::pair{r->status, r->offset} : std::pair{Status::Missing, int32_t{-1}};
+  };
+  static constexpr Fact narrowed[] = {{.is = Fact::Is::Loads, .method = "GhostAI.Execute"},
+                                      {.is = Fact::Is::IsNot, .method = "GhostAI.First"},
+                                      {.is = Fact::Is::IsNot, .method = "GhostAI.Second"}};
+  static constexpr Fact loadsOnly[] = {{.is = Fact::Is::Loads, .method = "GhostAI.Execute"}};
+  const auto [status, offset] = resolve_with(false, narrowed);
+  CHECK(status == Status::Resolved && offset == 0xDA);
+  CHECK(resolve_with(false, loadsOnly).first == Status::Ambiguous);  // the Loads fact alone cannot choose
+  CHECK(resolve_with(true, narrowed).first == Status::Ambiguous);    // a new bool it reads fails closed
+}
+
+// A Compares fact keeps the methods whose own code compares something with an enum value's number
+// (cmp r/m, imm and cmp eax, imm alike), and fails closed on code it cannot read in full.
+struct Compared {
+  ModelBuilder m;
+  Code code;
+  int ai;
+  Compared() {
+    ai = m.type("Assembly-CSharp", "", "GhostAI");
+    const int ghostType = m.type("Assembly-CSharp", "", "GhostType", -1, true);
+    m.literal(ghostType, "Spirit", 0);
+    m.literal(ghostType, "Yurei", 10);
+    m.literal(ghostType, "Wide", 0x80);
+    m.literal(ghostType, "Wider", 0x180);
+    m.literal(ghostType, "Unset", -1);
+    m.method(ai, "ദശ", "void", {}, 0x1100);  // compares the type with 10
+    m.method(ai, "സറ", "void", {}, 0x1200);  // its look-alike: compares with 0x5F
+    m.method(ai, "ബഹ", "void", {}, 0x1300);  // compares nothing
+    code.function(0x1100, {0x48, 0x8B, 0x41, 0x38, 0x83, 0x78, 0x2C, 0x0A, 0xC3});  // cmp dword [rax+0x2C], 10
+    code.function(0x1200, {0x48, 0x8B, 0x41, 0x38, 0x83, 0x78, 0x2C, 0x5F, 0xC3});
+    code.function(0x1300, join({kLoad40, kRet}));
+  }
+  const Result* real(std::span<const Fact> facts) {
+    entry = {.key = "GhostAI.Real", .kind = Kind::Method, .owner = "GhostAI", .type = "void", .facts = facts};
+    results = code.run({&kGhostAI, &kGhostType, &kYurei, &kWide, &kWider, &kUnset, &entry}, m.build());
+    return results.find("GhostAI.Real");
+  }
+  static constexpr EntryDesc kGhostType{.key = "GhostType", .name = "GhostType", .assembly = "Assembly-CSharp",
+                                        .ns = ""};
+  static constexpr EntryDesc kYurei{.key = "GhostType.Yurei", .kind = Kind::EnumValue, .owner = "GhostType",
+                                    .name = "Yurei"};
+  static constexpr EntryDesc kWide{.key = "GhostType.Wide", .kind = Kind::EnumValue, .owner = "GhostType",
+                                   .name = "Wide"};
+  static constexpr EntryDesc kWider{.key = "GhostType.Wider", .kind = Kind::EnumValue, .owner = "GhostType",
+                                    .name = "Wider"};
+  static constexpr EntryDesc kUnset{.key = "GhostType.Unset", .kind = Kind::EnumValue, .owner = "GhostType",
+                                    .name = "Unset"};
+  EntryDesc entry;
+  Resolution results;
+};
+
+constexpr Fact kComparesYurei[] = {{.is = Fact::Is::Compares, .method = "GhostType.Yurei"}};
+
+// Look-alikes that differ only in a constant: the one that moves the number is kept, whether into a register or a place.
+void moves_const_fact_keeps_the_method_with_the_number() {
+  static constexpr Fact kMoves100[] = {{.is = Fact::Is::MovesConst, .value = 100}};
+  {
+    Compared g;
+    g.code.function(0x1100, {0xB8, 0x64, 0x00, 0x00, 0x00, 0xC3});  // mov eax, 100
+    g.code.function(0x1200, {0xB8, 0x42, 0x00, 0x00, 0x00, 0xC3});  // mov eax, 66
+    const Result* r = g.real(kMoves100);
+    CHECK(r && r->status == Status::Resolved && r->rva == 0x1100);
+  }
+  {
+    Compared g;
+    g.code.function(0x1100, {0xB8, 0x42, 0x00, 0x00, 0x00, 0xC3});
+    g.code.function(0x1200, {0xC7, 0x41, 0x2C, 0x64, 0x00, 0x00, 0x00, 0xC3});  // mov dword [rcx+0x2C], 100
+    const Result* r = g.real(kMoves100);
+    CHECK(r && r->status == Status::Resolved && r->rva == 0x1200);
+  }
+}
+
+// Several methods that move the number stay Ambiguous; one that cannot be read in full may move it, so it is
+// undecided, never dropped.
+void moves_const_fact_fails_closed() {
+  static constexpr Fact kMoves100[] = {{.is = Fact::Is::MovesConst, .value = 100}};
+  {
+    Compared g;
+    g.code.function(0x1100, {0xB8, 0x64, 0x00, 0x00, 0x00, 0xC3});
+    g.code.function(0x1200, {0xB9, 0x64, 0x00, 0x00, 0x00, 0xC3});  // mov ecx, 100
+    const Result* r = g.real(kMoves100);
+    CHECK(r && r->status == Status::Ambiguous);
+  }
+  {
+    Compared g;
+    g.code.function(0x1100, {0xB8, 0x64, 0x00, 0x00, 0x00, 0xC3});
+    g.code.function(0x1200, join({kVzeroupper, kRet}));
+    const Result* r = g.real(kMoves100);
+    CHECK(r && r->status == Status::Ambiguous);
+    CHECK(r && r->detail.find("could not be fully read for its MovesConst fact") != std::string::npos);
+  }
+}
+
+// A MovesConst fact names only a number, applies to a method only, and cannot be negated.
+void moves_const_fact_must_fit() {
+  Compared g;
+  static constexpr Fact named[] = {{.is = Fact::Is::MovesConst, .method = "GhostType.Yurei", .value = 100}};
+  const Result* r = g.real(named);
+  CHECK(r && r->status == Status::Missing && r->detail == "a MovesConst fact names only a number");
+  static constexpr Fact negated[] = {{.is = Fact::Is::MovesConst, .value = 100, .negate = true}};
+  r = g.real(negated);
+  CHECK(r && r->status == Status::Missing && r->detail == "a MovesConst fact names only a number");
+  static constexpr Fact moves[] = {{.is = Fact::Is::MovesConst, .value = 100}};
+  const EntryDesc field{.key = "GhostAI.f", .kind = Kind::Field, .owner = "GhostAI", .type = "int", .facts = moves};
+  const Resolution f = g.code.run({&kGhostAI, &field}, g.m.build());
+  CHECK(f.find("GhostAI.f")->status == Status::Missing);
+  CHECK(f.find("GhostAI.f")->detail == "a MovesConst fact applies to a method");
+}
+
+void compares_fact_keeps_the_method_that_tests_the_value() {
+  {
+    Compared g;
+    const Result* r = g.real(kComparesYurei);
+    CHECK(r && r->status == Status::Resolved && r->rva == 0x1100);
+  }
+  {
+    // cmp eax, imm32 counts as well.
+    Compared g;
+    g.code.function(0x1100, {0x8B, 0x41, 0x2C, 0x3D, 0x0A, 0x00, 0x00, 0x00, 0xC3});
+    const Result* r = g.real(kComparesYurei);
+    CHECK(r && r->status == Status::Resolved && r->rva == 0x1100);
+  }
+  {
+    // A byte compare with 0x80 compares with 128 (not with -128 sign-extended), and never with 0x180,
+    // which a byte cannot hold; a dword compare with the sign-extended imm8 0x80 is one with -128.
+    Compared g;
+    g.code.function(0x1100, {0x48, 0x8B, 0x41, 0x38, 0x80, 0x78, 0x2C, 0x80, 0xC3});  // cmp byte [rax+0x2C], 0x80
+    g.code.function(0x1200, {0x48, 0x8B, 0x41, 0x38, 0x83, 0x78, 0x2C, 0x80, 0xC3});  // cmp dword [rax+0x2C], -128
+    static constexpr Fact wide[] = {{.is = Fact::Is::Compares, .method = "GhostType.Wide"}};
+    const Result* r = g.real(wide);
+    CHECK(r && r->status == Status::Resolved && r->rva == 0x1100);
+    static constexpr Fact wider[] = {{.is = Fact::Is::Compares, .method = "GhostType.Wider"}};
+    r = g.real(wider);
+    CHECK(r && r->status == Status::Missing);
+  }
+  {
+    // A negative value: a dword compare with the sign-extended imm8 0xFF is one with -1.
+    Compared g;
+    g.code.function(0x1100, {0x48, 0x8B, 0x41, 0x38, 0x83, 0x78, 0x2C, 0xFF, 0xC3});  // cmp dword [rax+0x2C], -1
+    static constexpr Fact unset[] = {{.is = Fact::Is::Compares, .method = "GhostType.Unset"}};
+    const Result* r = g.real(unset);
+    CHECK(r && r->status == Status::Resolved && r->rva == 0x1100);
+  }
+  // The comparison itself: a value fits the width signed or unsigned and matches in its low bits.
+  using Compare = CodeFacts::Compare;
+  CHECK((Compare{-1, 32}.is(-1) && Compare{-1, 32}.is(0xFFFFFFFF) && !Compare{-1, 32}.is(0x1FFFFFFFF)));
+  CHECK((Compare{-128, 8}.is(128) && Compare{-128, 8}.is(-128)));
+  CHECK((!Compare{-128, 8}.is(384) && !Compare{-128, 8}.is(-129)));
+  CHECK((Compare{-128, 32}.is(-128) && !Compare{-128, 32}.is(128)));
+  CHECK((Compare{-5, 64}.is(-5) && !Compare{-5, 64}.is(5)));
+}
+
+void compares_fact_fails_closed() {
+  {
+    // A look-alike the reader cannot read in full may hold the cmp: undecided, never dropped.
+    Compared g;
+    g.code.function(0x1200, join({kVzeroupper, kRet}));
+    const Result* r = g.real(kComparesYurei);
+    CHECK(r && r->status == Status::Ambiguous);
+    CHECK(r && r->detail.find("could not be fully read for its Compares fact") != std::string::npos);
+  }
+  {
+    // A leaf the exception table does not list is read for its calls only: it cannot decide.
+    Compared g;
+    g.m.method(g.ai, "ലള", "void", {}, 0x1480);
+    g.code.b.code(0x1480, join({kLoad40, kRet}));
+    const Result* r = g.real(kComparesYurei);
+    CHECK(r && r->status == Status::Ambiguous);
+  }
+}
+
+// A Compares fact names an enum value entry, applies to a method only, and cannot be negated.
+void compares_fact_must_fit() {
+  Compared g;
+  static constexpr Fact onType[] = {{.is = Fact::Is::Compares, .method = "GhostType"}};
+  const Result* r = g.real(onType);
+  CHECK(r && r->status == Status::Missing && r->detail == "a Compares fact names an enum value entry");
+  // "Does not compare" cannot fail closed: the reader sees only cmp with an immediate.
+  static constexpr Fact notYurei[] = {{.is = Fact::Is::Compares, .method = "GhostType.Yurei", .negate = true}};
+  r = g.real(notYurei);
+  CHECK(r && r->status == Status::Missing && r->detail == "negated Compares facts are not supported");
+  const EntryDesc field{.key = "GhostAI.f", .kind = Kind::Field, .owner = "GhostAI", .type = "int",
+                        .facts = kComparesYurei};
+  const Resolution f = g.code.run({&kGhostAI, &Compared::kGhostType, &Compared::kYurei, &field}, g.m.build());
+  CHECK(f.find("GhostAI.f")->status == Status::Missing);
+  CHECK(f.find("GhostAI.f")->detail == "a Compares fact applies to a method");
+}
+
+// A field found by shape may name its accessibility: only fields declared so match, and a field the
+// model knows no accessibility for never does.
+void field_access_narrows_the_shape() {
+  ModelBuilder m;
+  const int ai = m.type("Assembly-CSharp", "", "GhostAI");
+  m.field(ai, "followed", "Player", 0x48);
+  m.model.types[ai].fields.back().access = Visibility::Internal;
+  m.field(ai, "fallback", "Player", 0x50);
+  m.model.types[ai].fields.back().access = Visibility::Private;
+  m.field(ai, "unknown", "Player", 0x58);
+  const GameModel model = m.build();
+  const auto resolve = [&](Visibility access) {
+    const EntryDesc e{.key = "GhostAI.p", .kind = Kind::Field, .owner = "GhostAI", .type = "Player",
+                      .access = access};
+    return *run({&kGhostAI, &e}, model).find("GhostAI.p");
+  };
+  const Result internal = resolve(Visibility::Internal);
+  CHECK(internal.status == Status::Resolved && internal.offset == 0x48);
+  const Result privateOne = resolve(Visibility::Private);
+  CHECK(privateOne.status == Status::Resolved && privateOne.offset == 0x50);
+  CHECK(resolve(Visibility::Public).status == Status::Missing);
+  CHECK(resolve(Visibility::Any).status == Status::Ambiguous);  // not checked: all three
+}
+
+// An access through a register loaded from a field of this reaches an object of that field's type. When
+// that type and the owner are of unrelated families (neither among the other's possible ancestors, both
+// known), the access cannot be the owner's field and counts for no fact; otherwise it counts as before.
+struct Chained {
+  ModelBuilder m;
+  Code code;
+  int hunt, ghost;
+  Chained() {
+    hunt = m.type("Assembly-CSharp", "", "Hunt");
+    ghost = m.type("Assembly-CSharp", "", "Ghost");
+    m.field(hunt, "ghost", "Ghost", 0x10, false, ghost);
+    for (const int32_t offset : {0x48, 0x50, 0x58}) m.field(hunt, std::format("p{:x}", offset), "Player", offset);
+    m.field(ghost, "activity", "object", 0x58);
+    m.method(hunt, "Update", "void", {}, 0x1000);
+    // push rbx; mov rbx, rcx; mov rax, [rbx+48h]; mov rax, [rbx+50h]; mov rax, [rbx+10h]; mov rcx, [rax+58h];
+    // pop rbx; ret
+    code.function(0x1000, {0x53, 0x48, 0x8B, 0xD9, 0x48, 0x8B, 0x43, 0x48, 0x48, 0x8B, 0x43, 0x50, 0x48, 0x8B,
+                           0x43, 0x10, 0x48, 0x8B, 0x48, 0x58, 0x5B, 0xC3});
+  }
+  Result loaded() {
+    static constexpr EntryDesc update{.key = "Hunt.Update", .kind = Kind::Method, .owner = "Hunt", .name = "Update"};
+    static constexpr EntryDesc type{.key = "Hunt", .name = "Hunt", .assembly = "Assembly-CSharp", .ns = ""};
+    static constexpr Fact loads[] = {{.is = Fact::Is::Loads, .method = "Hunt.Update"}};
+    static constexpr EntryDesc e{.key = "Hunt.p", .kind = Kind::Field, .owner = "Hunt", .type = "Player",
+                                 .facts = loads};
+    return *code.run({&type, &update, &e}, m.build()).find("Hunt.p");
+  }
+};
+
+void access_through_another_types_field_is_no_hit() {
+  {
+    Chained g;
+    const Result r = g.loaded();
+    CHECK(r.status == Status::Ambiguous && r.candidates.size() == 2);  // 0x48 and 0x50 only, decided
+    CHECK(r.detail.find("not proven to hold this") == std::string::npos);
+  }
+  {
+    // Ghost may derive from Hunt: the object may be a Hunt, and the access leaves 0x58 undecided.
+    Chained g;
+    g.m.model.types[g.ghost].bases = {"Hunt"};
+    const Result r = g.loaded();
+    CHECK(r.status == Status::Ambiguous && r.detail.find("not proven to hold this") != std::string::npos);
+  }
+  {
+    // A base the model does not know: no proof either.
+    Chained g;
+    g.m.model.types[g.ghost].bases = {"Elsewhere"};
+    const Result r = g.loaded();
+    CHECK(r.status == Status::Ambiguous && r.detail.find("not proven to hold this") != std::string::npos);
+  }
+  {
+    // The field's type is an interface: a class deriving from Hunt may implement it though Hunt does
+    // not, so the object may be a Hunt. No proof.
+    Chained g;
+    g.m.model.types[g.ghost].isInterface = true;
+    const Result r = g.loaded();
+    CHECK(r.status == Status::Ambiguous && r.detail.find("not proven to hold this") != std::string::npos);
+  }
+  {
+    // The owner is an interface: a class implementing Hunt may derive from Ghost though Ghost does not
+    // implement Hunt, so the object may be a Hunt. No proof either.
+    Chained g;
+    g.m.model.types[g.hunt].isInterface = true;
+    const Result r = g.loaded();
+    CHECK(r.status == Status::Ambiguous && r.detail.find("not proven to hold this") != std::string::npos);
+  }
+}
+
 void pattern_inside_method() {
   Bools g;
   g.m.method(0, "Twice", "void", {"int"}, 0x1100);
@@ -1139,6 +2116,151 @@ void icall_without_runtime_is_checked_at_startup() {
   CHECK(r.find("Animator.SetBoolID")->detail == "checked at startup only");
 }
 
+// A model of a wander and the interfaces it declares, for a type found as the one interface another declares.
+GameModel declaring(std::vector<std::string> bases) {
+  GameModel m;
+  ModelType wander;
+  wander.assembly = "A";
+  wander.name = "Wander";
+  wander.bases = std::move(bases);
+  m.types.push_back(wander);
+  for (const char* name : {"IState", "IOther", "Base"}) {
+    ModelType t;
+    t.assembly = "A";
+    t.name = name;
+    t.isInterface = name[0] == 'I';
+    m.types.push_back(t);
+  }
+  return m;
+}
+
+constexpr EntryDesc kWander{.key = "Wander", .name = "Wander", .assembly = "A", .ns = ""};
+constexpr EntryDesc kDeclared{.key = "IState", .assembly = "A", .ns = "", .within = "Wander"};
+
+const Result* declared_in(Resolution& r, const GameModel& model) {
+  r = run({&kWander, &kDeclared}, model);
+  return r.find("IState");
+}
+
+void type_is_the_one_interface_another_declares() {
+  Resolution r;
+  GameModel m = declaring({"IState"});
+  const Result* d = declared_in(r, m);
+  CHECK(d->status == Status::Resolved && d->type == 1);
+  m = declaring({"Base", "IState"});  // its base class is no interface
+  d = declared_in(r, m);
+  CHECK(d->status == Status::Resolved && d->type == 1);
+  m = declaring({"IState", "IOther"});  // never picks among them
+  d = declared_in(r, m);
+  CHECK(d->status == Status::Ambiguous && d->candidates.size() == 2);
+  m = declaring({"Base"});
+  d = declared_in(r, m);
+  CHECK(d->status == Status::Missing);
+  m = declaring({"IState", "Elsewhere"});  // an interface the model lacks could be the other one
+  d = declared_in(r, m);
+  CHECK(d->status == Status::Missing && d->detail.find("Elsewhere") != std::string::npos);
+  m = declaring({"IState"});
+  m.types.push_back(m.types[1]);  // two types share the name: the model does not say which it declares
+  d = declared_in(r, m);
+  CHECK(d->status == Status::Ambiguous);
+  constexpr EntryDesc overField{.key = "F", .kind = Kind::Field, .owner = "Wander", .name = "f"};
+  constexpr EntryDesc notType{.key = "Bad", .assembly = "A", .ns = "", .within = "F"};
+  ModelField f;
+  f.name = "f";
+  f.type = "int";
+  m = declaring({"IState"});
+  m.types[0].fields.push_back(f);
+  r = run({&kWander, &overField, &notType}, m);
+  CHECK(r.find("Bad")->status == Status::Missing);
+}
+
+// A model of a generic class with one method, whose code the definition lacks.
+GameModel generic_model() {
+  GameModel m;
+  ModelType box;
+  box.assembly = "A";
+  box.name = "Box";
+  ModelMethod put;
+  put.name = "Put";
+  put.ret = "T";
+  put.params = {"T"};
+  put.paramIndex = {-1};
+  box.methods.push_back(put);
+  m.types.push_back(box);
+  ModelType arg;
+  arg.assembly = "A";
+  arg.name = "Arg";
+  m.types.push_back(arg);
+  return m;
+}
+
+constexpr EntryDesc kBox{.key = "Box", .name = "Box", .assembly = "A", .ns = ""};
+constexpr EntryDesc kArg{.key = "Arg", .name = "Arg", .assembly = "A", .ns = ""};
+inline constexpr const char* kTParam[] = {"T"};
+inline constexpr const char* kArgByKey[] = {"@Arg"};
+inline constexpr const char* kArgByName[] = {"Arg"};
+inline constexpr const char* kArgMissing[] = {"Gone"};
+inline constexpr const char* kArgGeneric[] = {"List<Arg>"};
+constexpr EntryDesc kPut{.key = "Box<Arg>.Put", .kind = Kind::Inflated, .owner = "Box", .name = "Put", .type = "T",
+                         .params = kTParam, .typeArgs = kArgByKey};
+
+// The instance's code is the running game's: the offline check finds the definition and its arguments, and never
+// claims more, though a dump writes a shared instantiation's address on the definition.
+void inflated_is_checked_at_startup_only() {
+  GameModel m = generic_model();
+  Resolution r = run({&kBox, &kArg, &kPut}, m);
+  const Result* p = r.find("Box<Arg>.Put");
+  CHECK(p->status == Status::Missing && checked_at_startup(*p));
+  CHECK(p->type == 0 && p->member == 0 && p->typeArgs == std::vector<int>{1} && p->address == 0 && p->rva == 0);
+  m.types[0].methods[0].rva = 0x1234;
+  r = run({&kBox, &kArg, &kPut}, m);
+  p = r.find("Box<Arg>.Put");
+  CHECK(p->status == Status::Missing && checked_at_startup(*p) && p->rva == 0);
+  constexpr EntryDesc byName{.key = "ByName", .kind = Kind::Inflated, .owner = "Box", .name = "Put", .params = kTParam,
+                             .typeArgs = kArgByName};
+  r = run({&kBox, &byName}, generic_model());
+  CHECK(checked_at_startup(*r.find("ByName")) && r.find("ByName")->typeArgs == std::vector<int>{1});
+}
+
+void inflated_fails_closed_on_any_other_shape() {
+  const GameModel m = generic_model();
+  const auto detail_of = [&](const EntryDesc& d) {
+    const Resolution r = run({&kBox, &kArg, &d}, m);
+    const Result* x = r.find(d.key);
+    CHECK(x->status != Status::Resolved && !checked_at_startup(*x));
+    return x->detail;
+  };
+  constexpr EntryDesc noArgs{.key = "N", .kind = Kind::Inflated, .owner = "Box", .name = "Put", .params = kTParam};
+  CHECK(detail_of(noArgs).find("type arguments") != std::string::npos);
+  constexpr EntryDesc noOwner{.key = "O", .kind = Kind::Inflated, .name = "Put", .typeArgs = kArgByKey};
+  CHECK(detail_of(noOwner).find("owner") != std::string::npos);
+  constexpr EntryDesc noName{.key = "M", .kind = Kind::Inflated, .owner = "Box", .typeArgs = kArgByKey};
+  CHECK(detail_of(noName).find("name") != std::string::npos);
+  constexpr EntryDesc gone{.key = "G", .kind = Kind::Inflated, .owner = "Box", .name = "Put", .typeArgs = kArgMissing};
+  CHECK(detail_of(gone).find("Gone") != std::string::npos);
+  constexpr EntryDesc compound{.key = "C", .kind = Kind::Inflated, .owner = "Box", .name = "Put", .typeArgs = kArgGeneric};
+  CHECK(detail_of(compound).find("single type") != std::string::npos);
+  constexpr EntryDesc noMethod{.key = "X", .kind = Kind::Inflated, .owner = "Box", .name = "Take", .typeArgs = kArgByKey};
+  detail_of(noMethod);
+  static constexpr const char* kTwo[] = {"T", "T"};
+  constexpr EntryDesc wrongParams{.key = "W", .kind = Kind::Inflated, .owner = "Box", .name = "Put", .params = kTwo,
+                                  .typeArgs = kArgByKey};
+  detail_of(wrongParams);
+  // Overloads named without params never decide, as for a Method.
+  GameModel two = m;
+  two.types[0].methods.push_back(two.types[0].methods[0]);
+  constexpr EntryDesc anyArity{.key = "A", .kind = Kind::Inflated, .owner = "Box", .name = "Put", .typeArgs = kArgByKey};
+  const Resolution over = run({&kBox, &kArg, &anyArity}, two);
+  CHECK(over.find("A")->status == Status::Ambiguous);
+  // A type argument whose name several types share is never picked.
+  GameModel shared = m;
+  shared.types.push_back(shared.types[1]);
+  constexpr EntryDesc byName{.key = "S", .kind = Kind::Inflated, .owner = "Box", .name = "Put", .typeArgs = kArgByName};
+  CHECK(run({&kBox, &byName}, shared).find("S")->status == Status::Ambiguous);
+  // An instance's missing definition blocks like any other dependency.
+  CHECK(run({&kPut}, m).find("Box<Arg>.Put")->status == Status::Blocked);
+}
+
 constexpr EntryDesc kShutdown{.key = "GameAssembly.il2cpp_shutdown", .kind = Kind::Export, .name = "il2cpp_shutdown"};
 
 // An export resolves from the image's export table, as the offline check reads the copied
@@ -1148,7 +2270,7 @@ void export_resolves_offline_from_pe() {
   ib.function(0x2000, std::vector<uint8_t>{0xC3});
   ib.function(0x2010, std::vector<uint8_t>{0xC3});
   ib.exported = {{"il2cpp_init", 0x2010}, {"il2cpp_shutdown", 0x2000}};
-  const std::filesystem::path dir = std::filesystem::temp_directory_path() / "pg_sdk_resolver_test";
+  const std::filesystem::path dir = std::filesystem::temp_directory_path() / "pm_sdk_resolver_test";
   std::filesystem::create_directories(dir);
   const std::vector<uint8_t> file = ib.file();
   std::ofstream(dir / "GameAssembly.dll", std::ios::binary)
@@ -1214,7 +2336,9 @@ void assemblies_named_once_sorted() {
 
 int main() {
   type_by_name();
+  not_generic_type_among_its_generic_kin();
   method_by_name_and_params();
+  an_object_array_is_exact_in_the_game_and_alike_in_the_dump();
   method_by_name_without_params_is_ambiguous_with_overloads();
   method_by_name_ignores_static_among_overloads();
   field_by_name();
@@ -1228,9 +2352,13 @@ int main() {
   required_resolved_ignores_optional();
   enum_type_by_values();
   type_by_field_types();
+  type_by_exact_field_types();
+  type_by_field_order();
   type_shape_needs_values_or_field_types();
+  type_found_by_a_static_method();
   compiler_generated_types_are_not_shape_candidates();
   field_by_unique_type();
+  at_type_inside_generic_arguments();
   field_shape_with_many_candidates_is_ambiguous();
   stale_hint_never_decides();
   hint_cannot_break_a_tie();
@@ -1243,6 +2371,10 @@ int main() {
   fact_on_unresolved_method_blocks();
   fact_kinds_must_fit();
   field_facts_on_a_struct_fail_closed();
+  field_within_an_embedded_struct();
+  struct_field_is_published_at_its_place_in_the_struct();
+  within_fails_closed_on_any_other_holder();
+  same_field_as_another_within_entry();
   unreadable_code_never_decides();
   folded_alias_is_one_behaviour();
   zero_rva_is_never_an_alias();
@@ -1253,12 +2385,31 @@ int main() {
   unreadable_code_is_never_a_twin();
   calls_and_called_by_include_twins();
   negated_call_facts_are_refused();
+  called_fact_drops_uncalled_decoys();
+  called_fact_fails_closed();
+  called_fact_must_fit();
+  epilogue_restore_keeps_this();
+  self_tail_jump_keeps_this();
+  global_class_access_is_no_field();
+  compares_fact_keeps_the_method_that_tests_the_value();
+  moves_const_fact_keeps_the_method_with_the_number();
+  moves_const_fact_fails_closed();
+  moves_const_fact_must_fit();
+  is_not_fact_narrows_by_a_resolved_field();
+  is_not_narrows_a_loads_fact_over_code();
+  compares_fact_fails_closed();
+  compares_fact_must_fit();
+  field_access_narrows_the_shape();
+  access_through_another_types_field_is_no_hit();
   pattern_inside_method();
   pattern_needs_readable_code();
   assemblies_named_once_sorted();
   static_field_by_shape();
   icall_resolves_by_name();
   icall_without_runtime_is_checked_at_startup();
+  type_is_the_one_interface_another_declares();
+  inflated_is_checked_at_startup_only();
+  inflated_fails_closed_on_any_other_shape();
   export_resolves_offline_from_pe();
   missing_export_is_missing();
   malformed_export_table_exports_nothing();

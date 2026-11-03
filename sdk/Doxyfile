@@ -1,0 +1,48 @@
+# The SDK's API reference: what an author needs of each declaration, and nothing of how it is implemented.
+# tools/docs.ps1 runs this from the repository's root, at the Doxygen version it pins, into build/docs (never committed).
+# Warnings are errors, so an undocumented public declaration, a missing @param or @return, or a broken @see fails the build.
+PROJECT_NAME           = "PhasmoMods SDK"
+OUTPUT_DIRECTORY       = build/docs
+CREATE_SUBDIRS         = NO
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+SEARCHENGINE           = YES
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+FULL_PATH_NAMES        = YES
+STRIP_FROM_PATH        = .
+MARKDOWN_SUPPORT       = YES
+USE_MDFILE_AS_MAINPAGE = sdk/README.md
+OPTIMIZE_OUTPUT_FOR_C  = NO
+QUIET                  = YES
+
+# What an author reads: the game API, the runtime, the content API and the host contract, then the guides and concept pages.
+INPUT                  = sdk/README.md sdk/groups.dox sdk/CHANGELOG.md sdk/api core/mod_api.h sdk/map sdk/systems sdk/guides
+FILE_PATTERNS          = *.h *.md *.dox
+RECURSIVE              = YES
+
+# Left out: how entries are found (the map's own namespace, the implementation's details), the host's own declarations, and the
+# maintainers' pages.
+EXCLUDE                = sdk/internals sdk/map/all.h
+EXCLUDE_SYMBOLS        = pm::map pm::map::* pm::sdk pm::sdk::* detail *::detail *::detail::* host_only *::host_only *::host_only::*
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = NO
+PREDEFINED             =
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+SHOW_INCLUDE_FILES     = YES
+SOURCE_BROWSER         = NO
+VERBATIM_HEADERS       = NO
+CLASS_GRAPH            = NO
+HAVE_DOT               = NO
+
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_IF_INCOMPLETE_DOC = YES
+WARN_NO_PARAMDOC       = YES
+WARN_AS_ERROR          = FAIL_ON_WARNINGS
+WARN_LOGFILE           = build/docs/warnings.txt

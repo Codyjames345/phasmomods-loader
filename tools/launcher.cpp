@@ -2,7 +2,9 @@
 #include "inject.h"
 #include "update.h"
 #include "text_files.h"
+#include "text_table.h"
 #include "win_handle.h"
+#include "../host/mod_deps.h"
 #include <windows.h>
 #include <shellapi.h>
 #include <algorithm>
@@ -13,7 +15,7 @@
 #include <thread>
 #include <utility>
 
-namespace pg::launcher {
+namespace pm::launcher {
 namespace fs = std::filesystem;
 using loader::Outcome;
 using loader::Result;
@@ -56,10 +58,10 @@ std::wstring configure_log(std::vector<std::wstring>& arguments,
   for (size_t i = 1; i < arguments.size(); ++i) {
     const auto& argument = arguments[i];
     if (_wcsicmp(argument.c_str(), L"-nolog") == 0 || _wcsnicmp(argument.c_str(), L"-logFile=", 9) == 0)
-      return L"Remove -nolog or use -logFile followed by a file path in Steam launch options.";
+      return pm::text::widen(pm::i18n::text("launcher.remove-nolog-use-logfile"));
     if (_wcsicmp(argument.c_str(), L"-logFile") != 0) continue;
     if (!logPath.empty() || ++i == arguments.size() || arguments[i].empty() || arguments[i][0] == L'-')
-      return L"Use one -logFile option followed by a file path, or remove it from Steam launch options.";
+      return pm::text::widen(pm::i18n::text("launcher.use-one-logfile-option"));
     logPath = arguments[i];
   }
   if (logPath.empty()) {
@@ -86,44 +88,58 @@ bool MenuReadiness::feed(std::string_view bytes) {
 }
 
 /** Create a launcher error using the shared loader's user-facing result shape. */
-Result failure(Outcome outcome, const wchar_t* detail, DWORD error = 0) {
+Result failure(Outcome outcome, const std::wstring& detail, DWORD error = 0) {
   return {outcome, error, detail, {}};
 }
 
 using text::read_file;
 using text::widen;
 
-std::vector<ModEntry> discover_mods(const fs::path& folder, std::wstring& problems) {
+std::vector<ModEntry> discover_mods(const std::vector<ModsFolder>& roots, std::wstring& problems,
+                                    std::vector<modlist::Refused>& refused) {
   std::vector<ModEntry> mods;
   problems.clear();
+  refused.clear();
+  const auto refuse = [&](const fs::path& dir, const std::string& why) {
+    problems += pm::text::widen(pm::i18n::text("launcher.mod-unusable", {{"folder", pm::text::narrow(dir.filename().wstring())}, {"why", why}})) + L"\r\n";
+    refused.push_back({pm::text::narrow(dir.filename().wstring()), why});
+  };
   std::error_code error;
-  std::vector<fs::path> folders;
-  for (const auto& entry : fs::directory_iterator(folder, error))
-    if (entry.is_directory(error)) folders.push_back(entry.path());
-  std::sort(folders.begin(), folders.end());
-  for (const fs::path& dir : folders) {
-    const fs::path ini = dir / L"mod.ini";
-    if (!fs::exists(ini, error)) continue;
+  std::vector<std::pair<fs::path, modlist::Place>> folders;
+  for (const ModsFolder& root : roots) {
+    std::vector<fs::path> here;
+    for (const auto& entry : fs::directory_iterator(root.path, error))
+      if (entry.is_directory(error)) here.push_back(entry.path());
+    std::sort(here.begin(), here.end());
+    for (fs::path& dir : here) folders.emplace_back(std::move(dir), root.place);
+  }
+  for (const auto& [dir, place] : folders) {
     ModEntry m;
     std::string why;
-    if (!modlist::parse_manifest(read_file(ini), m.manifest, why)) {
-      problems += L"The mod in " + dir.filename().wstring() + L" cannot be used. " + widen(why) + L"\r\n";
-      continue;
-    }
+    const modlist::Reading reading = modlist::read_folder(dir, m.manifest, why, place);
+    if (reading == modlist::Reading::Refused) refuse(dir, why);
+    if (reading != modlist::Reading::Readable) continue;
     m.dll = (dir / widen(m.manifest.dll)).wstring();
-    if (!fs::exists(m.dll, error)) {
-      problems += L"The mod in " + dir.filename().wstring() + L" is missing its DLL. Extract the package again.\r\n";
+    if (!fs::is_regular_file(m.dll, error)) {  // a folder of that name is no DLL either
+      refuse(dir, pm::i18n::text("launcher.mod-missing-dll"));
       continue;
     }
     bool repeated = false;
     for (const ModEntry& other : mods) repeated |= other.manifest.id == m.manifest.id;
     if (repeated) {
-      problems += L"The mod in " + dir.filename().wstring() + L" repeats the id of another mod and is left out.\r\n";
+      refuse(dir, pm::i18n::text("launcher.mod-repeats-id"));
       continue;
     }
     mods.push_back(std::move(m));
   }
   return mods;
+}
+
+std::vector<std::string> session_lines(const std::vector<modlist::Refused>& refused, const fs::path& builds) {
+  std::vector<std::string> lines;
+  for (const modlist::Refused& r : refused) lines.push_back(modlist::session_refused_line(r));
+  if (!builds.empty()) lines.push_back(modlist::session_builds_line(text::narrow(builds.wstring())));
+  return lines;
 }
 
 std::vector<std::string> saved_selection(const fs::path& launcherIni, const std::vector<ModEntry>& mods) {
@@ -134,7 +150,7 @@ std::vector<std::string> saved_selection(const fs::path& launcherIni, const std:
     manifests.push_back(m.manifest);
   }
   // A choice saved before a mod gained a requirement still ticks what that mod needs.
-  return modlist::with_requirements(modlist::load_choice(launcherIni, installed), manifests);
+  return moddeps::with_requirements(modlist::load_choice(launcherIni, installed), manifests);
 }
 
 bool save_selection(const fs::path& launcherIni, const std::vector<std::string>& ids) {
@@ -161,17 +177,24 @@ fs::path selection_file() { return data_file(L"launcher.ini"); }
 
 fs::path launcher_log() { return data_file(L"launcher.log"); }
 
+/** This program's own file, or empty when it cannot be read. */
+std::wstring running_file() {
+  std::wstring file(32768, L'\0');
+  const DWORD length = GetModuleFileNameW(nullptr, file.data(), static_cast<DWORD>(file.size()));
+  if (!length || length >= file.size()) return {};
+  file.resize(length);
+  return file;
+}
+
 /** Resolve the packaged host beside the launcher, independent of Steam's directory. */
 Result adjacent_host(std::wstring& path, std::wstring& executable) {
-  executable.assign(32768, L'\0');
-  DWORD length = GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
-  if (!length || length >= executable.size())
-    return failure(Outcome::file_error, L"The location of PhasmoMods Loader could not be read. Extract the package again.", GetLastError());
-  executable.resize(length);
+  executable = running_file();
+  if (executable.empty())
+    return failure(Outcome::file_error, pm::text::widen(pm::i18n::text("launcher.location-read-extract-package")), GetLastError());
   path = (fs::path(executable).parent_path() / L"ModHost.dll").wstring();
   const DWORD attributes = GetFileAttributesW(path.c_str());
   if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY))
-    return failure(Outcome::file_error, L"ModHost.dll is missing. Extract the complete package beside PhasmoMods Loader.", GetLastError());
+    return failure(Outcome::file_error, pm::text::widen(pm::i18n::text("launcher.modhost-dll-missing-extract")), GetLastError());
   return {Outcome::ready, 0, {}, {}};
 }
 
@@ -181,16 +204,16 @@ Result load_once(DWORD pid, const Package& package) {
   Handle lock(CreateMutexW(nullptr, FALSE, name.c_str()));
   DWORD error = GetLastError();
   if (!lock.value)
-    return failure(Outcome::process_error, L"The mod loading lock could not be created. Close other copies of PhasmoMods Loader and try again.", error);
+    return failure(Outcome::process_error, pm::text::widen(pm::i18n::text("launcher.mod-loading-lock-created")), error);
   if (error == ERROR_ALREADY_EXISTS)
-    return failure(Outcome::already_loaded, L"Another copy of PhasmoMods Loader is loading this game. Wait for it to finish.");
-  return loader::load(pid, package.host.c_str(), package.mods);
+    return failure(Outcome::already_loaded, pm::text::widen(pm::i18n::text("launcher.another-copy-loading-wait")));
+  return loader::load(pid, package.host.c_str(), package.mods, package.refused);
 }
 
 /** Attach only to the single game instance selected by the shared identity check. */
 Result attach(const Package& package) {
   if (package.mods.empty())
-    return failure(Outcome::invalid_target, L"No mods were found. Extract the complete package, with its mods folder, beside PhasmoMods Loader.");
+    return failure(Outcome::invalid_target, pm::text::widen(pm::i18n::text("launcher.no-mods-were-found")));
   DWORD pid = 0;
   auto result = loader::find_game(pid);
   return result.outcome == Outcome::ready ? load_once(pid, package) : result;
@@ -213,11 +236,11 @@ Result read_menu(LogCursor& cursor, bool baseline = false) {
     const DWORD error = GetLastError();
     if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
       return {Outcome::ready, 0, {}, {}};
-    return failure(Outcome::log_error, L"The game log could not be read. Check its path and access permissions.", error);
+    return failure(Outcome::log_error, pm::text::widen(pm::i18n::text("launcher.log-read-check-path")), error);
   }
   BY_HANDLE_FILE_INFORMATION information{};
   if (!GetFileInformationByHandle(file.value, &information))
-    return failure(Outcome::log_error, L"The game log could not be inspected. Check its access permissions.", GetLastError());
+    return failure(Outcome::log_error, pm::text::widen(pm::i18n::text("launcher.log-inspected-check-access")), GetLastError());
   const ULONGLONG size = (ULONGLONG(information.nFileSizeHigh) << 32) | information.nFileSizeLow;
   const bool changed = !cursor.existed || cursor.volume != information.dwVolumeSerialNumber ||
     cursor.high != information.nFileIndexHigh || cursor.low != information.nFileIndexLow || size < cursor.offset;
@@ -230,12 +253,12 @@ Result read_menu(LogCursor& cursor, bool baseline = false) {
   LARGE_INTEGER position{};
   position.QuadPart = cursor.offset;
   if (!SetFilePointerEx(file.value, position, nullptr, FILE_BEGIN))
-    return failure(Outcome::log_error, L"The game log could not be read. Restart the game and try again.", GetLastError());
+    return failure(Outcome::log_error, pm::text::widen(pm::i18n::text("launcher.log-read")), GetLastError());
   char buffer[16384];
   DWORD read = 0;
   for (size_t total = 0; total < 1024 * 1024; total += read) {
     if (!ReadFile(file.value, buffer, baseline ? 1 : sizeof(buffer), &read, nullptr))
-      return failure(Outcome::log_error, L"The game log read failed. Restart the game and try again.", GetLastError());
+      return failure(Outcome::log_error, pm::text::widen(pm::i18n::text("launcher.log-read-failed")), GetLastError());
     cursor.offset += read;
     if (baseline) { cursor.parser = MenuReadiness(read && buffer[0] != '\n'); break; }
     if (!read) break;
@@ -249,17 +272,17 @@ Result reserve_log(std::wstring& path) {
   std::wstring local(32768, L'\0');
   DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", local.data(), static_cast<DWORD>(local.size()));
   if (!length || length >= local.size())
-    return failure(Outcome::file_error, L"The local application data folder is unavailable. Check your Windows profile.", GetLastError());
+    return failure(Outcome::file_error, pm::text::widen(pm::i18n::text("launcher.local-application-data-folder")), GetLastError());
   local.resize(length);
   const auto directory = fs::path(local) / L"PhasmoMods" / L"logs";
   std::error_code error;
   fs::create_directories(directory, error);
-  if (error) return failure(Outcome::file_error, L"The game log folder could not be created. Check its access permissions.", error.value());
+  if (error) return failure(Outcome::file_error, pm::text::widen(pm::i18n::text("launcher.log-folder-created-check")), error.value());
   path = (directory / (L"game-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
     std::to_wstring(GetTickCount64()) + L".log")).wstring();
   Handle file(CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_NEW, 0, nullptr));
   if (file.value == INVALID_HANDLE_VALUE)
-    return failure(Outcome::file_error, L"A fresh game log could not be created. Close PhasmoMods Loader and try again.", GetLastError());
+    return failure(Outcome::file_error, pm::text::widen(pm::i18n::text("launcher.fresh-log-created-close")), GetLastError());
   return {Outcome::ready, 0, {}, {}};
 }
 
@@ -269,33 +292,33 @@ Result wait_menu(HANDLE process, LogCursor& cursor) {
   while (GetTickCount64() < deadline) {
     const DWORD state = WaitForSingleObject(process, 0);
     if (state == WAIT_OBJECT_0)
-      return failure(Outcome::game_exited, L"Phasmophobia exited before reaching the menu. Check the game log and try a normal Steam launch.");
+      return failure(Outcome::game_exited, pm::text::widen(pm::i18n::text("launcher.phasmophobia-exited-before-reaching")));
     if (state != WAIT_TIMEOUT)
-      return failure(Outcome::process_error, L"The game process could not be monitored. Restart the game and try again.", GetLastError());
+      return failure(Outcome::process_error, pm::text::widen(pm::i18n::text("launcher.process-monitored")), GetLastError());
     auto result = read_menu(cursor);
     if (result.outcome != Outcome::ready) return result;
     Sleep(200);
   }
-  return failure(Outcome::activation_timeout, L"The main menu was not confirmed within five minutes. Once it appears, open PhasmoMods Loader and choose Attach.");
+  return failure(Outcome::activation_timeout, pm::text::widen(pm::i18n::text("launcher.main-menu-was-confirmed")));
 }
 
 /** Launch exactly Steam's supplied game command and keep its returned process identity. */
 Result launch_steam(std::vector<std::wstring> arguments, const Package& package) {
   if (arguments.empty() || !fs::path(arguments[0]).is_absolute() ||
       _wcsicmp(fs::path(arguments[0]).filename().c_str(), L"Phasmophobia.exe") != 0)
-    return failure(Outcome::invalid_target, L"The Steam game command is missing or invalid. Copy the launch option from PhasmoMods Loader again.");
+    return failure(Outcome::invalid_target, pm::text::widen(pm::i18n::text("launcher.steam-command-missing-invalid")));
   // The named object's lifetime reserves startup before a game PID exists.
   SetLastError(ERROR_SUCCESS);
   Handle startupLock(CreateMutexW(nullptr, FALSE, L"Local\\PhasmoModSteamLauncher"));
   const DWORD lockError = GetLastError();
   if (!startupLock.value)
-    return failure(Outcome::process_error, L"The game startup lock could not be created. Close other copies of PhasmoMods Loader and try again.", lockError);
+    return failure(Outcome::process_error, pm::text::widen(pm::i18n::text("launcher.startup-lock-created-close")), lockError);
   if (lockError == ERROR_ALREADY_EXISTS)
-    return failure(Outcome::already_loaded, L"Another copy of PhasmoMods Loader is starting Phasmophobia. Wait for it to finish.");
+    return failure(Outcome::already_loaded, pm::text::widen(pm::i18n::text("launcher.another-copy-starting-phasmophobia")));
   DWORD existingPid = 0;
   auto result = loader::find_game(existingPid);
   if (result.outcome == Outcome::ready)
-    return failure(Outcome::already_loaded, L"Phasmophobia is already running. Close it before launching from Steam, or use Attach.");
+    return failure(Outcome::already_loaded, pm::text::widen(pm::i18n::text("launcher.phasmophobia-already-running-close")));
   if (result.outcome != Outcome::no_process) return result;
   std::wstring freshPath, logPath;
   auto probe = arguments;
@@ -312,7 +335,7 @@ Result launch_steam(std::vector<std::wstring> arguments, const Package& package)
   if (result.outcome != Outcome::ready) return result;
   auto command = command_line(arguments);
   if (command.size() >= 32767)
-    return failure(Outcome::invalid_target, L"The game command is too long. Shorten the Steam launch options.");
+    return failure(Outcome::invalid_target, pm::text::widen(pm::i18n::text("launcher.command-too-long-shorten")));
   STARTUPINFOW startup{};
   startup.cb = sizeof(startup);
   PROCESS_INFORMATION child{};
@@ -321,10 +344,10 @@ Result launch_steam(std::vector<std::wstring> arguments, const Package& package)
   const std::wstring gameFolder = fs::path(arguments[0]).parent_path().wstring();
   if (!CreateProcessW(arguments[0].c_str(), command.data(), nullptr, nullptr, FALSE,
                       0, nullptr, gameFolder.c_str(), &startup, &child))
-    return failure(Outcome::process_error, L"Phasmophobia could not start. Check its Steam installation and launch options.", GetLastError());
+    return failure(Outcome::process_error, pm::text::widen(pm::i18n::text("launcher.phasmophobia-start-check-steam")), GetLastError());
   Handle process(child.hProcess), thread(child.hThread);
   if (package.mods.empty())
-    return {Outcome::active, 0, L"No mods were found beside the launcher, so the game started without them.", logPath};
+    return {Outcome::active, 0, pm::text::widen(pm::i18n::text("launcher.no-mods-were-found-2")), logPath};
   result = wait_menu(process.value, cursor);
   if (result.outcome == Outcome::active) result = load_once(child.dwProcessId, package);
   if (result.logPath.empty()) result.logPath = logPath;
@@ -333,15 +356,15 @@ Result launch_steam(std::vector<std::wstring> arguments, const Package& package)
 
 /** Present failure details without confusing a mapped DLL with an activated mod. */
 std::wstring describe(const Result& result) {
-  std::wstring text = result.outcome == Outcome::active ? (result.detail.empty() ? L"The mods are loaded. Return to the game and answer the notice there." : result.detail) : result.detail;
-  if (result.error) text += L"\r\nWindows error: " + std::to_wstring(result.error) + L".";
+  std::wstring text = result.outcome == Outcome::active ? (result.detail.empty() ? pm::text::widen(pm::i18n::text("launcher.running-return-answer-notice")) : result.detail) : result.detail;
+  if (result.error) text += L"\r\n" + pm::text::widen(pm::i18n::text("launcher.windows-error", {{"code", std::to_string(result.error)}}));
   if (!result.logPath.empty()) text += L"\r\nLog: " + result.logPath;
   return text;
 }
 
-#ifndef PG_LAUNCHER_TEST
+#ifndef PM_LAUNCHER_TEST
 constexpr wchar_t kName[] = L"PhasmoMods Loader";      // the message boxes' title
-constexpr wchar_t kTitle[] = L"PhasmoMods Loader " PG_WIDEN(PG_SUITE_VERSION);  // the window's title
+constexpr wchar_t kTitle[] = L"PhasmoMods Loader " PM_WIDEN(PM_SUITE_VERSION);  // the window's title
 constexpr int kIcon = 1;                               // tools/launcher.rc
 constexpr std::chrono::seconds kUpdateLimit{10};       // the longest an update check delays play
 constexpr UINT kUpdateFound = WM_APP + 1;              // sent by the worker; lParam is the version (std::string*)
@@ -362,7 +385,7 @@ void append_log(const std::wstring& message) {
 
 /** Check for updates on this thread, waiting at most kUpdateLimit. A check that cannot start reports CarryOn. */
 update::Report update_now(const std::vector<std::wstring>& launcherArguments, update::Progress progress = {}) {
-  update::Report report{update::Outcome::CarryOn, L"Could not check for updates. Starting the installed version."};
+  update::Report report{update::Outcome::CarryOn, pm::text::widen(pm::i18n::text("launcher.check-updates-starting-installed"))};
   try {
     report = update::run(update::velopack_backend(), update::restart_arguments(launcherArguments), kUpdateLimit,
                          std::move(progress));
@@ -423,15 +446,15 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
     case WM_COMMAND:
       if (LOWORD(wParam) == 101 && !state->busy) {
         if (!SetTimer(window, 1, 100, nullptr)) {
-          SetWindowTextW(state->status, L"PhasmoMods Loader could not monitor loading. Close it and try again.");
+          SetWindowTextW(state->status, pm::text::widen(pm::i18n::text("launcher.monitor-loading-close")).c_str());
           return 0;
         }
         state->busy = true;
         state->completed.store(false, std::memory_order_relaxed);
         set_controls(state, false);
-        SetWindowTextW(state->status, L"Loading the mods. Waiting for the game to confirm...");
+        SetWindowTextW(state->status, pm::text::widen(pm::i18n::text("launcher.loading-mods-waiting-confirm")).c_str());
         try {
-          state->result = failure(Outcome::process_error, L"PhasmoMods Loader could not finish loading. Restart it and try again.");
+          state->result = failure(Outcome::process_error, pm::text::widen(pm::i18n::text("launcher.finish-loading")));
           state->worker = std::thread([state] {
             try { state->result = attach(state->package); }
             catch (...) { /* Keep the prepared failure without allocating in this path. */ }
@@ -441,7 +464,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
           KillTimer(window, 1);
           state->busy = false;
           set_controls(state, true);
-          SetWindowTextW(state->status, L"The loading task could not start. Close PhasmoMods Loader and try again.");
+          SetWindowTextW(state->status, pm::text::widen(pm::i18n::text("launcher.loading-task-start-close")).c_str());
         }
       } else if (LOWORD(wParam) >= 200 && LOWORD(wParam) < 200 + state->boxes.size() && !state->busy) {
         // A mod is ticked with what it requires and unticked with what requires it.
@@ -450,19 +473,19 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
         std::vector<modlist::Manifest> manifests;
         for (const ModEntry& m : state->mods) manifests.push_back(m.manifest);
         const std::string& id = state->mods[clicked].manifest.id;
-        std::vector<std::string> next = modlist::switched(state->ticked, manifests, id, on);
-        const std::string note = modlist::switch_note(manifests, state->ticked, next, id, on);
+        std::vector<std::string> next = moddeps::switched(state->ticked, manifests, id, on);
+        const std::string note = moddeps::switch_note(manifests, state->ticked, next, id, on);
         state->ticked = std::move(next);
         if (!note.empty()) SetWindowTextW(state->status, widen(note).c_str());
         for (size_t i = 0; i < state->boxes.size(); ++i)
           SendMessageW(state->boxes[i], BM_SETCHECK,
                        modlist::enabled(state->ticked, state->mods[i].manifest.id) ? BST_CHECKED : BST_UNCHECKED, 0);
         if (!save_selection(state->selectionPath, state->ticked))
-          SetWindowTextW(state->status, L"PhasmoMods Loader could not save which mods are ticked. Check access to your local application-data folder.");
+          SetWindowTextW(state->status, pm::text::widen(pm::i18n::text("launcher.save-which-mods-are")).c_str());
       } else if (LOWORD(wParam) == 102) {
         const bool copied = copy_option(window, state->launchOption);
-        SetWindowTextW(state->status, copied ? L"Copied. In Steam, open Phasmophobia > Properties > General and paste into Launch Options. Keep %command% at the end." :
-          L"The clipboard is unavailable. Select and copy the launch option above.");
+        SetWindowTextW(state->status, (copied ? pm::text::widen(pm::i18n::text("launcher.copied-steam-open-phasmophobia"))
+                                              : pm::text::widen(pm::i18n::text("launcher.clipboard-unavailable-select-copy"))).c_str());
       }
       return 0;
     case WM_TIMER: {
@@ -489,8 +512,8 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
       return 0;
     }
     case kUpdateFound:
-      SetWindowTextW(state->status, (L"Updating to " + widen(*reinterpret_cast<const std::string*>(lParam)) +
-                                     L". PhasmoMods Loader restarts when it is done.").c_str());
+      SetWindowTextW(state->status,
+                     pm::text::widen(pm::i18n::text("launcher.updating", {{"version", *reinterpret_cast<const std::string*>(lParam)}})).c_str());
       return 0;
     case WM_CLOSE:
       if (state->busy) { state->closing = true; ShowWindow(window, SW_HIDE); }
@@ -505,10 +528,11 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
 int show_window(HINSTANCE instance, const std::wstring& executable, const std::wstring& hostPath) {
   WindowState state;
   std::wstring problems;
-  state.mods = discover_mods(fs::path(executable).parent_path() / L"mods", problems);
+  std::vector<modlist::Refused> refused;
+  state.mods = discover_mods({{fs::path(executable).parent_path() / L"mods", modlist::Place::InstallFolder}}, problems, refused);
   state.selectionPath = selection_file();
   state.ticked = saved_selection(state.selectionPath, state.mods);
-  state.package = {hostPath, all_dlls(state.mods)};
+  state.package = {hostPath, all_dlls(state.mods), session_lines(refused, fs::path(executable).parent_path() / L"builds")};
   state.launchOption = steam_launch_option(executable);
   WNDCLASSEXW type{};
   type.cbSize = sizeof(type);
@@ -533,26 +557,27 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
     SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)), TRUE);
     return child;
   };
-  control(L"STATIC", L"Tick the mods to start. You can change them later from the Mods button on the game's main menu.", 0, 18, 14, 600, 22, 0);
+  control(L"STATIC", pm::text::widen(pm::i18n::text("launcher.tick-mods-start-you")).c_str(), 0, 18, 14, 600, 22, 0);
   int y = 40;
   for (size_t i = 0; i < state.mods.size(); ++i, y += 30) {
     const auto& m = state.mods[i].manifest;
-    const std::wstring label = widen(m.name) + (m.description.empty() ? L"" : L": " + widen(m.description));
+    const std::wstring label = widen(m.name) + L" " + (m.version.empty() ? pm::text::widen(pm::i18n::text("panel.version-unknown")) : widen(m.version)) +
+                               (m.description.empty() ? L"" : L": " + widen(m.description));
     HWND box = control(L"BUTTON", label.c_str(), WS_TABSTOP | BS_AUTOCHECKBOX, 18, y, 600, 26, 200 + static_cast<int>(i));
     SendMessageW(box, BM_SETCHECK, modlist::enabled(state.ticked, m.id) ? BST_CHECKED : BST_UNCHECKED, 0);
     state.boxes.push_back(box);
   }
   if (state.mods.empty()) {
-    control(L"STATIC", L"No mods were found. Extract the complete package, with its mods folder, beside PhasmoMods Loader.", 0, 18, y, 600, 26, 0);
+    control(L"STATIC", pm::text::widen(pm::i18n::text("launcher.no-mods-were-found")).c_str(), 0, 18, y, 600, 26, 0);
     y += 30;
   }
   y += 10;
-  control(L"STATIC", L"Start Phasmophobia through Steam and wait for the main menu, then choose Attach.", 0, 18, y, 600, 22, 0);
-  state.attachButton = control(L"BUTTON", L"&Attach to running game", WS_TABSTOP | BS_DEFPUSHBUTTON, 18, y + 28, 205, 30, 101);
-  control(L"STATIC", L"To load automatically, copy this command into Steam's Launch Options:", 0, 18, y + 74, 600, 24, 0);
+  control(L"STATIC", pm::text::widen(pm::i18n::text("launcher.start-phasmophobia-through-steam")).c_str(), 0, 18, y, 600, 22, 0);
+  state.attachButton = control(L"BUTTON", pm::text::widen(pm::i18n::text("launcher.attach")).c_str(), WS_TABSTOP | BS_DEFPUSHBUTTON, 18, y + 28, 205, 30, 101);
+  control(L"STATIC", pm::text::widen(pm::i18n::text("launcher.copy-intro")).c_str(), 0, 18, y + 74, 600, 24, 0);
   control(L"EDIT", state.launchOption.c_str(), WS_TABSTOP | WS_BORDER | ES_READONLY | ES_AUTOHSCROLL, 18, y + 101, 600, 26, 103);
-  control(L"BUTTON", L"&Copy Steam launch option", WS_TABSTOP, 18, y + 135, 205, 30, 102);
-  state.usualStatus = problems.empty() ? L"Keep this folder outside the game directory. Restart the game to change the mods' versions." : problems;
+  control(L"BUTTON", pm::text::widen(pm::i18n::text("launcher.copy")).c_str(), WS_TABSTOP, 18, y + 135, 205, 30, 102);
+  state.usualStatus = problems.empty() ? pm::text::widen(pm::i18n::text("launcher.keep-folder-outside-directory")) : problems;
   state.status = control(L"EDIT", state.usualStatus.c_str(),
     WS_TABSTOP | ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL, 18, y + 186, 600, 75, 104);
   ShowWindow(window, SW_SHOW);
@@ -561,9 +586,9 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
   if (SetTimer(window, 1, 100, nullptr)) {
     state.busy = state.updating = true;
     set_controls(&state, false);
-    SetWindowTextW(state.status, L"Checking for updates...");
+    SetWindowTextW(state.status, pm::text::widen(pm::i18n::text("launcher.checking-updates")).c_str());
     try {
-      state.updateReport = {update::Outcome::CarryOn, L"Could not check for updates. Starting the installed version."};
+      state.updateReport = {update::Outcome::CarryOn, pm::text::widen(pm::i18n::text("launcher.check-updates-starting-installed"))};
       state.worker = std::thread([target = &state, window, executable] {
         try {
           update::Progress progress;
@@ -593,7 +618,7 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
 #endif
 }
 
-#ifndef PG_LAUNCHER_TEST
+#ifndef PM_LAUNCHER_TEST
 #include "Velopack.hpp"
 
 /** Enter either Steam wrapping or the attach UI without spawning Steam recursively. */
@@ -605,32 +630,42 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     if (!arguments) return 1;
     std::vector<std::wstring> values(arguments, arguments + count);
     LocalFree(arguments);
+    // The loader's player-facing text (core/text_table.h), beside the program; without it each text shows its key. First of all, so
+    // the box a damaged install needs most, that the host is missing, can be read.
+    if (const std::wstring running = pm::launcher::running_file(); !running.empty()) {
+      std::string why;
+      pm::i18n::table().load(pm::i18n::table_beside(running), why);
+    }
     std::wstring hostPath, executable;
-    auto result = pg::launcher::adjacent_host(hostPath, executable);
-    if (result.outcome == pg::loader::Outcome::ready && values.size() == 1)
-      return pg::launcher::show_window(instance, executable, hostPath);
+    auto result = pm::launcher::adjacent_host(hostPath, executable);
+    if (result.outcome == pm::loader::Outcome::ready && values.size() == 1)
+      return pm::launcher::show_window(instance, executable, hostPath);
     const bool steam = values.size() > 2 && values[1] == L"--steam";
-    if (result.outcome != pg::loader::Outcome::ready) {
+    if (result.outcome != pm::loader::Outcome::ready) {
       // A damaged install still updates, which is how it repairs itself.
-      const auto update = pg::launcher::update_now(values);
-      if (update.outcome == pg::update::Outcome::Restarting) return 0;
-      if (steam) pg::launcher::append_log(update.message);
+      const auto update = pm::launcher::update_now(values);
+      if (update.outcome == pm::update::Outcome::Restarting) return 0;
+      if (steam) pm::launcher::append_log(update.message);
       if (!update.message.empty()) result.detail += L"\r\n" + update.message;
     } else if (steam) {
       // Update before the game starts. Steam shows no window, so anything but a restart goes to the log.
-      const auto update = pg::launcher::update_now(values);
-      if (update.outcome == pg::update::Outcome::Restarting) return 0;
-      pg::launcher::append_log(update.message);
+      const auto update = pm::launcher::update_now(values);
+      if (update.outcome == pm::update::Outcome::Restarting) return 0;
+      pm::launcher::append_log(update.message);
       std::wstring problems;
-      const auto mods = pg::launcher::discover_mods(std::filesystem::path(executable).parent_path() / L"mods", problems);
-      const pg::launcher::Package package{hostPath, pg::launcher::all_dlls(mods)};
-      result = pg::launcher::launch_steam({values.begin() + 2, values.end()}, package);
-    } else result = pg::launcher::failure(pg::loader::Outcome::invalid_target,
-      L"Open PhasmoMods Loader without arguments, or copy its Steam launch option into Steam.");
-    if (result.outcome == pg::loader::Outcome::active) return 0;
-    MessageBoxW(nullptr, pg::launcher::describe(result).c_str(), pg::launcher::kName, MB_OK | MB_ICONWARNING);
+      std::vector<pm::modlist::Refused> refused;
+      const auto mods = pm::launcher::discover_mods(
+          {{std::filesystem::path(executable).parent_path() / L"mods", pm::modlist::Place::InstallFolder}}, problems, refused);
+      pm::launcher::append_log(problems);  // Steam shows no window; the host's Mods panel says the same
+      const pm::launcher::Package package{hostPath, pm::launcher::all_dlls(mods),
+                                          pm::launcher::session_lines(refused, std::filesystem::path(executable).parent_path() / L"builds")};
+      result = pm::launcher::launch_steam({values.begin() + 2, values.end()}, package);
+    } else result = pm::launcher::failure(pm::loader::Outcome::invalid_target,
+      pm::text::widen(pm::i18n::text("launcher.open-without-arguments-copy")));
+    if (result.outcome == pm::loader::Outcome::active) return 0;
+    MessageBoxW(nullptr, pm::launcher::describe(result).c_str(), pm::launcher::kName, MB_OK | MB_ICONWARNING);
   } catch (...) {
-    MessageBoxW(nullptr, L"PhasmoMods Loader could not finish. Close it and try again.", pg::launcher::kName, MB_OK | MB_ICONERROR);
+    MessageBoxW(nullptr, pm::text::widen(pm::i18n::text("launcher.finish-close")).c_str(), pm::launcher::kName, MB_OK | MB_ICONERROR);
   }
   return 1;
 }

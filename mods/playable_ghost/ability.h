@@ -1,38 +1,42 @@
 #pragma once
 
+#include <string>
+#include <string_view>
+#include <utility>
+
+#include "text_table.h"
+
 // The ghost types with an ability of their own: the ones GhostAI's ability entry (state 15, build
 // 25811160) starts a state for. Every other type's ability roll does nothing. What each one does is
-// read from that state's code. Kept free of game calls so it can be tested offline.
-namespace pg::ability {
+// read from that state's code. A type is named by its content id ("vanilla.wraith"), so its number is
+// the game's own (sdk/api/content.h type_of). A custom ghost's ability is its definition's, read
+// through the content layer (content_link.h). Kept free of game calls so it can be tested offline.
+namespace pm::ability {
 
 struct Ability {
-  const char* name;
-  const char* description;
+  std::string name;
+  std::string description;
 };
 
-inline const Ability* of(int ghostType) {
-  static constexpr Ability kWraith{"Teleport", "Appear beside a random investigator, leaving EMF where you arrive."};
-  static constexpr Ability kPhantom{"Stalk", "Walk to a spot close to a random investigator."};
-  static constexpr Ability kPoltergeist{"Burst", "Throw every object around you at once, leaving EMF."};
-  static constexpr Ability kJinn{"Sanity drain",
-                                 "Drain the sanity of the investigators near you. It only works while the power is on."};
-  static constexpr Ability kDemon{"Early hunt", "Start a hunt whatever the investigators' sanity."};
-  static constexpr Ability kYurei{"Door slam",
-                                  "Slam a door of the room you are in. Investigators close to you on your floor lose sanity."};
-  static constexpr Ability kObake{"Fading prints", "Make the fingerprints you have left fade twice as fast."};
-  switch (ghostType) {
-    case 1: return &kWraith;
-    case 2: return &kPhantom;
-    case 3: return &kPoltergeist;
-    case 5: return &kJinn;
-    case 9: return &kDemon;
-    case 10: return &kYurei;
-    case 19: return &kObake;
-    default: return nullptr;
-  }
+inline const Ability* of(std::string_view ghostId) {
+  // One per type, its text read from the mod's table on each call, so it is the table's as it stands now.
+  static Ability kWraith, kPhantom, kPoltergeist, kJinn, kDemon, kYurei, kObake;
+  const auto with = [](Ability& a, std::string name, std::string description) {
+    a = {std::move(name), std::move(description)};
+    return &a;
+  };
+  if (ghostId == "vanilla.wraith") return with(kWraith, i18n::text("ability.wraith"), i18n::text("ability.wraith.about"));
+  if (ghostId == "vanilla.phantom") return with(kPhantom, i18n::text("ability.phantom"), i18n::text("ability.phantom.about"));
+  if (ghostId == "vanilla.poltergeist")
+    return with(kPoltergeist, i18n::text("ability.poltergeist"), i18n::text("ability.poltergeist.about"));
+  if (ghostId == "vanilla.jinn") return with(kJinn, i18n::text("ability.jinn"), i18n::text("ability.jinn.about"));
+  if (ghostId == "vanilla.demon") return with(kDemon, i18n::text("ability.demon"), i18n::text("ability.demon.about"));
+  if (ghostId == "vanilla.yurei") return with(kYurei, i18n::text("ability.yurei"), i18n::text("ability.yurei.about"));
+  if (ghostId == "vanilla.obake") return with(kObake, i18n::text("ability.obake"), i18n::text("ability.obake.about"));
+  return nullptr;
 }
 
 // The Jinn's ability state leaves at once while the power is off.
-inline bool needs_power(int ghostType) { return ghostType == 5; }
+inline bool needs_power(std::string_view ghostId) { return ghostId == "vanilla.jinn"; }
 
-}  // namespace pg::ability
+}  // namespace pm::ability

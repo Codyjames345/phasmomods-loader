@@ -7,14 +7,15 @@
 // nightmares, more powerful in the dark": it never shows itself in a lit room (it puts the lights out
 // first), it leaves the rooms it hunted through dark, and its vanilla switch-off of a light a player
 // has just turned on happens 1 time in 2 instead of 1 in 7.
-namespace pg::tells {
+namespace pm::tells {
 
 constexpr int kMareSwitchOffOneIn = 2;  // the vanilla coroutine's Random.Range(0, 7) == 1 becomes 1 in this
 constexpr float kMareTrailStep = 0.5f;  // seconds between looks at the room it hunts through
 
 constexpr int kMareVanillaRollMax = 7;  // the coroutine's Random.Range(0, 7)
 
-/** Whether a roll is the switch-off coroutine's own: made while it runs, with its arguments. */
+/** Whether a roll is the switch-off coroutine's own: made inside LightSwitch.UseLightSwitch, which runs
+ *  the coroutine's first step (where it rolls) inside its StartCoroutine, with the coroutine's arguments. */
 inline bool mare_roll_applies(bool inCoroutine, int min, int max) { return inCoroutine && min == 0 && max == kMareVanillaRollMax; }
 
 /** The value the switch-off coroutine's roll should give it for a fresh roll in [0, kMareSwitchOffOneIn). */
@@ -41,4 +42,4 @@ struct RoomTrail {
   void clear() { passed.clear(); }
 };
 
-}  // namespace pg::tells
+}  // namespace pm::tells

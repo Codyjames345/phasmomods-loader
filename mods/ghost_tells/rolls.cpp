@@ -2,19 +2,16 @@
 
 #include <vector>
 
-#include "game.h"
-#include "hooks.h"
+#include "UnityWorld.h"
+#include "game_api.h"
 
-namespace pg::tells::rolls {
+namespace pm::tells::rolls {
 namespace {
 
-using RandomRangeInt_t = int (*)(int, int, const void*);
-RandomRangeInt_t g_randomRangeInt = nullptr;
 std::vector<Roller> g_rollers;
 
-int detour_random_range_int(int min, int max, const void* method) {
-  hooks::Guard guard;
-  int result = g_randomRangeInt(min, max, method);
+int32_t detour_random_range_int(api::Original<phasmo::Random::RandomRangeInt> original, int32_t min, int32_t max) {
+  int result = original(min, max);
   for (Roller roller : g_rollers)
     if (roller(min, max, result)) break;
   return result;
@@ -25,8 +22,8 @@ int detour_random_range_int(int min, int max, const void* method) {
 void add_roller(Roller roller) { g_rollers.push_back(roller); }
 
 bool create_hooks() {
-  return hooks::create(game::random_range_int(), reinterpret_cast<void*>(&detour_random_range_int),
-                       reinterpret_cast<void**>(&g_randomRangeInt), "Random.RandomRangeInt");
+  return api::hook<phasmo::Random::RandomRangeInt>(&detour_random_range_int, "Random.RandomRangeInt",
+                                                    api::Twins::CanonicalOnly);
 }
 
-}  // namespace pg::tells::rolls
+}  // namespace pm::tells::rolls

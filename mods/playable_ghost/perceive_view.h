@@ -1,5 +1,7 @@
 #pragma once
 
+// PM_UI_TODO: a mod-drawn window, against the vanilla-UI rule, waiting for the author's design (FINDINGS.md 31).
+
 #include <string>
 
 #include "session.h"
@@ -8,7 +10,7 @@
 // screen, the Kormos's near blindness in a hunt (the view darkens; only what it hears shows), the
 // Yokai's hunting deafness (investigators' voices farther than 2.5 m fall silent, as its vanilla
 // hearing does), and the alert line. Main thread.
-namespace pg::perceive_view {
+namespace pm::perceive_view {
 
 bool resolve();
 // Every frame while the ghost player plays the ghost. camera: their eyes; ghost: the replicated
@@ -17,4 +19,4 @@ bool resolve();
 std::string tick(session::Session& s, void* camera, void* ghost, bool shown);
 void hide();  // destroys the markers and gives back any muted voices
 
-}  // namespace pg::perceive_view
+}  // namespace pm::perceive_view

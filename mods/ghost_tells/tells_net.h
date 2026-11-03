@@ -8,7 +8,7 @@
 // Messages on Ghost Tells' channel: 'G' 'T' kind, then the kind's body. The host makes every change
 // to the ghost; a client tells it what only the client saw, and the host tells every client what to
 // show.
-namespace pg::tells::net {
+namespace pm::tells::net {
 
 enum Kind : uint8_t {
   kName = 1,        // a client to the host: its player said the ghost's name near it (the Spirit)
@@ -74,4 +74,4 @@ inline bool read_onryo_spite(const uint8_t* data, size_t size, int& view, float&
   return true;
 }
 
-}  // namespace pg::tells::net
+}  // namespace pm::tells::net

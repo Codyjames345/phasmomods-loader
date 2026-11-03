@@ -3,10 +3,10 @@
 // The Black Shuck's hunt, kept free of game calls so it can be tested offline. It is blind and deaf:
 // it finds players by their scent trails (trail.h) alone, follows one player's trail to them, and
 // has the game search the hiding place a trail ends at. The game's smudge state wins over all of it.
-namespace pg::custom {
+namespace pm::custom {
 
 // Metres from a hidden prey at which its trail has brought the hound to the hiding place: the reach
-// of the game's own closet search in a hunt (build 25811160, the constant at RVA 0x5583290).
+// of the game's own closet search in a hunt (build 25811160, a constant in its code).
 constexpr float kShuckSearchReach = 2.0f;
 
 enum class ShuckMove {
@@ -37,4 +37,4 @@ inline void* shuck_target(ShuckMove move, void* prey, void* proposed) {
   return move == ShuckMove::Follow && proposed && proposed == prey ? proposed : nullptr;
 }
 
-}  // namespace pg::custom
+}  // namespace pm::custom

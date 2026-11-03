@@ -1,16 +1,23 @@
 # Spectral Flame
 
 Status: tested in the game (2026-10-23): candles, lanterns and candelabras, flame ghosts, vanilla
-ghosts and the Hydra's greens, hidden evidence included. The code is the authority on what is
-implemented. Design: `docs/superpowers/specs/2026-10-20-spectral-flame-design.md`.
+ghosts and the Hydra's greens, hidden evidence included. Not re-tested since the move onto the SDK
+(2026-10-27). The code is the authority on what is implemented. Design:
+`docs/superpowers/specs/2026-10-20-spectral-flame-design.md`.
 
 An eighth evidence type, a separate mod of the suite (`mods/spectral_flame`). A candle or lantern
 left burning where the ghost spends its time slowly turns blue. It tells investigators where the
 ghost lives, never where it is right now: the motion sensor keeps that job.
 
-It acts only in a private room in which every client runs it, and only in a contract where some
-ghost type carries it. No vanilla ghost does; the custom ghosts that do come from Custom Ghosts,
-which requires this mod. Otherwise nothing changes: no journal row, no blue, no extra blow-outs.
+It registers the evidence through the SDK's content layer (`sdk/api/content.h`, id
+`phasmomods.spectral-flame.flame`), which gives it its number and its place in a ghost type's evidence, and its
+journal row where a ghost registered through that layer gives it. It acts only in a contract where
+some ghost type carries it. No vanilla ghost does; the custom ghosts that do come from Custom Ghosts,
+which requires this mod and registers them through the same layer. The host puts them into a contract,
+and numbers the evidence, only in a private room whose players' mod lists match (the room's mod
+agreement, `sdk/README.md`), decided when the contract loads and held until it ends; the mod keeps no
+check of its own on the other players. Otherwise nothing changes: no journal row, no blue, no extra
+blow-outs.
 
 ## How it reads
 
@@ -54,9 +61,14 @@ turn green with it, at the flame's own hue.
 
 ## The journal
 
-Every journal on every client gets an eighth row on the evidence page, "Spectral Flame", cloned
-from the Spirit Box row, registered with the journal's evidence buttons and their synchronisation.
-It marks, crosses out and filters the ghost list like the others.
+The host gives the evidence its row (`host/content_evidence.h`) whenever the custom ghosts shown,
+registered through the content layer, give it (in a contract, or in the lobby while content is active
+there): every journal on every client gets an eighth row on
+the evidence page, "Spectral Flame" with "Watch a placed candle or lantern burn blue from base to
+tip" under it, copied from the Spirit Box row and registered with the journal's evidence buttons and
+their synchronisation. It marks, crosses out and filters the ghost list like the others. Custom
+Ghosts' twelve flame ghosts give it, so the row shows wherever they do
+(`tests/content_journal_test.cpp`, `spectral_flame_row_comes_with_custom_ghosts`).
 
 ## How it works
 
@@ -67,7 +79,8 @@ It marks, crosses out and filters the ghost list like the others.
   effect. Every client makes the grey flame picture when it first finds a candle flame: the game's
   picture is drawn into a render texture, read back, greyed (`flame_rules.h` `to_grey`), and the
   tint that shows it as the game's own did is fitted to it (`grey_match`, both tested offline); it is
-  kept until the contract ends, when every flame gets the game's own picture and tint back. The host
+  kept until the contract ends, when every flame gets the game's own picture and tint back (in a game
+  build without Unity's texture functions it keeps the game's picture under the tint). The host
   also rolls the extra blow-out through the game's own `FireSource.BlowOutFire`, so the
   interaction EMF and every client's candle follow as for any blow-out, and holds back the ghost's
   own `BlowOutFire` calls on a flame still turning (they also complete the candle objective, which
@@ -75,8 +88,11 @@ It marks, crosses out and filters the ghost list like the others.
 * The ghost's evidence is the list the game kept for it after the difficulty removed evidence
   (`GhostInfo`, sent to every client by its `SyncEvidence`). A custom difficulty giving no evidence
   gives no Spectral Flame either.
-* Every client asks Custom Ghosts which ghost types turn a flame green (the service
-  `custom-ghosts.v1`, version 5, `greenFlame`), with the ghost's own type (`GhostInfo +0x28`, written
-  on every client by the ghost's sync), once a second; a flame already showing a colour is repainted
-  when the answer changes. Without Custom Ghosts every flame turns blue.
-* Other mods ask whether it can be given through the service `spectral-flame.v1` (`core/services.h`).
+* A flame more than half blue is left out of the sanity effect by the game's own candle test in
+  `PlayerSanity.Update`, which answers that its candle is out while `Update` runs
+  (`sdk/systems/flames.md`).
+* Every client asks the content layer how the contract's ghost changes the evidence's look
+  (`content_evidence_look`, "green" for the Hydra), once a second; a flame already showing a colour
+  is repainted when the answer changes. Without a look every flame turns blue.
+* Every game value comes through the SDK's game map (`sdk/systems/flames.md`): the mod holds no
+  address, offset or obfuscated name.

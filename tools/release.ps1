@@ -1,8 +1,13 @@
-# Bump the suite version, commit it and tag it. Usage: tools\release.ps1 -Version <x.y.z> [-Push]
+# Bump the suite version, commit it and tag it. Usage: tools\release.ps1 -Version <x.y.z> [-Push] [-NoCheckedBuild]
 # -Push also sends main and the new tag to origin together, which starts the release workflow.
+# It builds first, so the map it checks is the map being released.
+# -NoCheckedBuild releases a map no checked-build record holds, for a fix that must ship while the live game build still has
+# an unresolved entry (tools/check_build_record.ps1): the release commit also holds the file that lets CI through, and
+# every player's notice says the game updated. Without it the release refuses.
 param(
     [Parameter(Mandatory)][string]$Version,
-    [switch]$Push
+    [switch]$Push,
+    [switch]$NoCheckedBuild
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -24,6 +29,8 @@ function Invoke-Git([string[]]$GitArguments) {
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "The version must be MAJOR.MINOR.PATCH, not '$Version'." }
 if ((Invoke-Git @('branch', '--show-current')) -join '' -ne 'main') { throw 'Releases are made from main. Switch to main first.' }
 if (@(Invoke-Git @('status', '--porcelain')).Count) { throw 'The working tree has uncommitted changes. Commit or stash them first.' }
+& (Join-Path $root 'build.ps1')
+if (-not $NoCheckedBuild) { & (Join-Path $PSScriptRoot 'check_build_record.ps1') -Root $root }
 
 $versionFile = Join-Path $root 'VERSION'
 $current = (Get-Content -LiteralPath $versionFile -Raw).Trim()
@@ -33,6 +40,13 @@ if ([version]$Version -le [version]$current) { throw "The version $Version must 
 $tag = "v$Version"
 if (@(Invoke-Git @('tag', '--list', $tag)).Count) { throw "The tag $tag already exists." }
 
+if ($NoCheckedBuild) {
+    $digestFile = Join-Path $root 'build/map-digest.txt'
+    if (-not (Test-Path -LiteralPath $digestFile -PathType Leaf)) { throw 'build\map-digest.txt is missing. The build should have written it.' }
+    Set-Content -LiteralPath (Join-Path $root 'sdk/builds/unchecked-release.allow') -Value "map=$((Get-Content -LiteralPath $digestFile -Raw).Trim())"
+    & (Join-Path $PSScriptRoot 'check_build_record.ps1') -Root $root
+    Invoke-Git @('add', '--', 'sdk/builds/unchecked-release.allow') | Out-Null
+}
 Set-Content -LiteralPath $versionFile -Value $Version
 Invoke-Git @('add', '--', 'VERSION') | Out-Null
 Invoke-Git @('commit', '--quiet', '--message', "Release $Version",

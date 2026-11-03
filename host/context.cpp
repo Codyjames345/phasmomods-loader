@@ -6,12 +6,12 @@
 #include "log.h"
 #include "mod_api.h"
 
-namespace pg::context {
+namespace pm::context {
 namespace detail {
 namespace {
 
 std::vector<Tracked>& tracked() {
-  static std::vector<Tracked> list;  // a function's static, so PG_TRACK may register at load
+  static std::vector<Tracked> list;  // a function's static, so PM_TRACK may register at load
   return list;
 }
 
@@ -25,26 +25,30 @@ void add(const Tracked& t) {
 
 }  // namespace detail
 
-// PG_TRACK(phasmo::Type::Method) at namespace scope tracks that game method from the host's load on.
-#define PG_TRACK_JOIN(a, b) a##b
-#define PG_TRACK_NAME(line) PG_TRACK_JOIN(pg_tracked_, line)
-#define PG_TRACK(M) [[maybe_unused]] static const bool PG_TRACK_NAME(__LINE__) = (::pg::context::track<M>(), true)
+// PM_TRACK(phasmo::Type::Method) at namespace scope tracks that game method in every mod session, from the
+// player's "I agree" on (host/mod_session.h).
+#define PM_TRACK_JOIN(a, b) a##b
+#define PM_TRACK_NAME(line) PM_TRACK_JOIN(pm_tracked_, line)
+#define PM_TRACK(M) [[maybe_unused]] static const bool PM_TRACK_NAME(__LINE__) = (::pm::context::track<M>(), true)
 
-// The game methods the host tracks for caller context. None yet: stage 2 adds the first, the
-// weighted ghost-type roll.
+// The game methods the host tracks for caller context (pm::api::inside). A hook on each makes the answer the
+// running thread's, whichever of a method's bodies the call came in through.
+PM_TRACK(phasmo::GhostController::Spawn);
+PM_TRACK(phasmo::GhostWanderState::Exit);
+PM_TRACK(phasmo::LiftButton::NetworkedUse);
 
-bool install(const PgGameEntry* (*lookup)(const char* key)) {
+bool install(const PmGameEntry* (*lookup)(const char* key)) {
   bool ok = true;
   for (detail::Tracked& t : detail::tracked()) {
     if (t.installed) continue;
-    const PgGameEntry* e = lookup(t.key);
-    if (!e || e->kind != PG_ENTRY_METHOD || !e->code) {
-      PG_LOG("context: %s did not resolve; calls of it are not tracked", t.key);
+    const PmGameEntry* e = lookup(t.key);
+    if (!e || e->kind != PM_ENTRY_METHOD || !e->code) {
+      PM_LOG("context: %s did not resolve; calls of it are not tracked", t.key);
       continue;
     }
     const std::vector<void*> bodies = entry_hooks::bodies(e->code, {e->twins, e->twinCount});
     if (bodies.size() > api::kMaxBodies) {
-      PG_LOG("context: %s has %zu bodies, more than the %u a hook covers; calls of it are not tracked", t.key,
+      PM_LOG("context: %s has %zu bodies, more than the %u a hook covers; calls of it are not tracked", t.key,
              bodies.size(), api::kMaxBodies);
       continue;
     }
@@ -55,6 +59,7 @@ bool install(const PgGameEntry* (*lookup)(const char* key)) {
       hooked = hooks::create(bodies[i], t.entry(i), &t.originals[i], t.key);
     if (!hooked) {
       hooks::rollback_to(start);
+      PM_LOG("context: %s could not be hooked; calls of it are not tracked", t.key);
       ok = false;
       continue;
     }
@@ -70,4 +75,17 @@ int32_t depth(const char* key) {
   return 0;
 }
 
-}  // namespace pg::context
+bool tracking_failed(const char* key) {
+  if (!key) return false;
+  for (const detail::Tracked& t : detail::tracked())
+    if (std::strcmp(t.key, key) == 0) return !t.installed;
+  return false;
+}
+
+bool abandon_ghost_spawn(void (*raise)()) {
+  if (depth(map::GhostController_Spawn.key) <= 0) return false;
+  raise();
+  return true;
+}
+
+}  // namespace pm::context

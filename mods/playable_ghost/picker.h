@@ -1,5 +1,7 @@
 #pragma once
 
+// PM_UI_TODO: a mod-drawn window, against the vanilla-UI rule, waiting for the author's design (FINDINGS.md 31).
+
 #include "bindings.h"
 #include "session.h"
 
@@ -18,7 +20,7 @@
 //  - After a native favourite-room change, while the host allows another room: the Journal key opens
 //    the map page and any room can be made the favourite room instead.
 // Main thread only.
-namespace pg::picker {
+namespace pm::picker {
 
 struct Keys {
   bindings::Key up, down, left, right, confirm;
@@ -36,4 +38,4 @@ struct Input {
 bool tick(session::Session& s, const Keys& keys, const Input& in);
 void hide();
 
-}  // namespace pg::picker
+}  // namespace pm::picker

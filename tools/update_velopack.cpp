@@ -1,4 +1,5 @@
 #include "update.h"
+#include "text_table.h"
 #include "text_files.h"
 #include "Velopack.hpp"
 #include <windows.h>
@@ -6,20 +7,20 @@
 #include <filesystem>
 #include <optional>
 
-namespace pg::update {
+namespace pm::update {
 namespace {
 constexpr char kRepository[] = "https://github.com/Codyjames345/phasmomods-loader";
 
 /** Why a Velopack call failed: its own message, as Velopack's wrapper throws it. */
 std::wstring reason(const std::exception& error) {
   const std::wstring text = text::widen(error.what());
-  return text.empty() ? L"no reason given" : text;
+  return text.empty() ? pm::text::widen(pm::i18n::text("updater.no-reason")) : text;
 }
 
-/** The folder `PG_UPDATE_SOURCE` names, when it names one that exists; empty otherwise. */
+/** The folder `PM_UPDATE_SOURCE` names, when it names one that exists; empty otherwise. */
 std::filesystem::path local_source() {
   std::wstring value(32768, L'\0');
-  const DWORD length = GetEnvironmentVariableW(L"PG_UPDATE_SOURCE", value.data(), static_cast<DWORD>(value.size()));
+  const DWORD length = GetEnvironmentVariableW(L"PM_UPDATE_SOURCE", value.data(), static_cast<DWORD>(value.size()));
   if (!length || length >= value.size()) return {};
   value.resize(length);
   std::error_code error;
@@ -61,7 +62,7 @@ class VelopackBackend : public Backend {
   Check check() override {
     Check result;
     try {
-      if (!manager_) return {Check::Kind::Failed, {}, L"PhasmoMods Loader is not installed"};
+      if (!manager_) return {Check::Kind::Failed, {}, pm::text::widen(pm::i18n::text("updater.not-installed"))};
       update_ = manager_->CheckForUpdates();
       if (!update_) return result;
       result.kind = Check::Kind::Available;
@@ -69,7 +70,7 @@ class VelopackBackend : public Backend {
     } catch (const std::exception& error) {
       return {Check::Kind::Failed, {}, reason(error)};
     } catch (...) {
-      return {Check::Kind::Failed, {}, L"unknown error"};
+      return {Check::Kind::Failed, {}, pm::text::widen(pm::i18n::text("updater.unknown-error"))};
     }
     return result;
   }
@@ -77,7 +78,7 @@ class VelopackBackend : public Backend {
   bool download(const std::string& version, std::wstring& error) override {
     try {
       if (!manager_ || !update_ || update_->TargetFullRelease.Version != version) {
-        error = L"the update to download was not found";
+        error = pm::text::widen(pm::i18n::text("updater.not-found"));
         return false;
       }
       manager_->DownloadUpdates(*update_);
@@ -85,7 +86,7 @@ class VelopackBackend : public Backend {
     } catch (const std::exception& failure) {
       error = reason(failure);
     } catch (...) {
-      error = L"unknown error";
+      error = pm::text::widen(pm::i18n::text("updater.unknown-error"));
     }
     return false;
   }
@@ -94,7 +95,7 @@ class VelopackBackend : public Backend {
   bool apply(const std::vector<std::wstring>& arguments, bool restart, std::wstring& error) override {
     try {
       if (!manager_ || !update_) {
-        error = L"no update was downloaded";
+        error = pm::text::widen(pm::i18n::text("updater.not-downloaded"));
         return false;
       }
       std::vector<std::string> restartArguments;
@@ -104,7 +105,7 @@ class VelopackBackend : public Backend {
     } catch (const std::exception& failure) {
       error = reason(failure);
     } catch (...) {
-      error = L"unknown error";
+      error = pm::text::widen(pm::i18n::text("updater.unknown-error"));
     }
     return false;
   }

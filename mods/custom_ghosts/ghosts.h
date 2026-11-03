@@ -7,127 +7,103 @@
 #include <string>
 #include <string_view>
 
-// The custom ghost types and the rules that make each one identifiable. Pure data and arithmetic,
-// kept free of game calls so it can be tested offline.
+#include "text_table.h"
+
+// The custom ghosts and the rules that make each one identifiable. Pure data and arithmetic, kept free
+// of game calls so it can be tested offline.
 //
-// Each custom ghost is a new GhostType (31 and up, after the game's last type, Deildegast = 30) for
-// everything that names or judges it: the type roll, evidence, the journal, the players' guess
-// and the results. For the ghost's AI its behaviour type (GhostInfo +0x2C) is GhostType.None, so no
-// vanilla type's rules apply to it; only its own rules, below, set it apart.
-namespace pg::custom {
+// Each custom ghost goes to the content layer (sdk/api/content.h; registration.h) under its id,
+// "phasmomods.custom-ghosts.<name in lower case, spaces as _>", with its journal text and evidence. The host makes
+// it a ghost type of the game's while content is active: it numbers it after the game's own types, and
+// the type roll, evidence, the journal, the players' guess and the results name and judge it by that
+// number, while its AI follows no vanilla type's rules; only its own rules, attached to its id, set it
+// apart. That number is the host's (content::type_of(id)) and may differ from one lobby to the next, so
+// the mod's own code names a ghost by its Type below, which is never a game number.
+namespace pm::custom {
 
-// Evidence values (the game's EvidenceType), and Spectral Flame, the evidence the Spectral Flame mod adds.
-enum Evidence : int {
-  kEmf = 1, kSpiritBox = 2, kUltraviolet = 3, kOrbs = 4, kWriting = 5, kFreezing = 6, kDots = 7, kSpectralFlame = 8
-};
+// The evidence the ghosts give, by content id: the game's own (core/mod_api.h, PmGhostDef) and Spectral
+// Flame, which the Spectral Flame mod registers (mods/spectral_flame/contract.h).
+inline constexpr const char* kEmf = "emf";
+inline constexpr const char* kSpiritBox = "spirit_box";
+inline constexpr const char* kUltraviolet = "ultraviolet";
+inline constexpr const char* kOrbs = "orbs";
+inline constexpr const char* kWriting = "writing";
+inline constexpr const char* kFreezing = "freezing";
+inline constexpr const char* kDots = "dots";
+inline constexpr const char* kSpectralFlame = "phasmomods.spectral-flame.flame";
 
-constexpr int kFirstType = 31;
-constexpr int kBehaviourType = 24;  // GhostType.None: no vanilla type's rules
+// The mod's own name for each of its ghosts; 0 is none. Never a game type number.
 enum Type : int {
-  kEcho = 31, kDullahan = 32, kKikimora = 33, kDraugr = 34, kBlackShuck = 35,
+  kEcho = 1, kDullahan, kKikimora, kDraugr, kBlackShuck,
   // The flame ghosts: they carry Spectral Flame (docs/superpowers/specs/2026-10-20-flame-ghosts-design.md).
-  kLithobolia = 36, kGremlin = 37, kBrownie = 38, kBogeyman = 39, kLethe = 40,
-  kMesmer = 41, kKnell = 42, kAsterion = 43, kTempest = 44, kHydra = 45
+  kLithobolia, kGremlin, kBrownie, kBogeyman, kLethe, kMesmer, kKnell, kAsterion, kTempest, kHydra
 };
 
 struct Ghost {
-  int type;
-  const char* name;
-  Evidence evidence[3];
-  const char* description;  // the journal page: what it is
+  Type type;
+  const char* name;  // its English name, which its id is made from; players read the table's (title_key)
+  const char* evidence[3];  // content evidence ids
+  const char* description;  // the journal page: what it is (each text field is a key of the mod's table)
   const char* strength;
   const char* weakness;
   const char* ability;             // what a player controlling it may do at will (null: nothing)
   const char* abilityDescription;
+  const char* flameLook = nullptr;  // how its Spectral Flame looks ("green"); null: the evidence's own
+  // Its last evidence is never the one a difficulty withholds, as the Goryo's D.O.T.S. (the content
+  // layer's PM_GHOST_KEEPS_LAST_EVIDENCE); on zero evidence none is given.
+  bool keepsLastEvidence = false;
+  // Blind in a hunt (the content layer's PM_GHOST_BLIND_IN_HUNTS): a player controlling it sees only its
+  // player view (the Black Shuck's scent) while it hunts.
+  bool blindInHunts = false;
 };
 
 inline constexpr Ghost kGhosts[] = {
     {kEcho, "Echo", {kSpiritBox, kFreezing, kDots},
-     "The nymph of Greek myth, cursed to repeat only what others say. A lonely mimic, it stays quiet "
-     "unless someone speaks near it, then answers in their voice.",
-     "An Echo can call out in the voice of anyone it has heard, and it repeats what players do in its "
-     "room: the switch or door you just used is the next thing it touches.",
-     "With nobody speaking near it for a while, an Echo falls quiet and rarely acts.",
-     "Speak", "Call out with the last words a player said, in their own voice."},
+     i18n::key("ghost.echo.description"), i18n::key("ghost.echo.strength"), i18n::key("ghost.echo.weakness"),
+     i18n::key("ghost.echo.ability"), i18n::key("ghost.echo.about")},
     {kDullahan, "Dullahan", {kEmf, kOrbs, kWriting},
-     "The headless rider of Irish legend, which charges down whatever lies straight ahead. Its mount "
-     "cannot turn, so in the house it is fast on a long run and all but stops at a corner.",
-     "A Dullahan is very fast on long, straight runs.",
-     "A Dullahan turns slowly and loses most of its speed at every corner.", nullptr, nullptr},
+     i18n::key("ghost.dullahan.description"), i18n::key("ghost.dullahan.strength"), i18n::key("ghost.dullahan.weakness"),
+     nullptr, nullptr},
     {kKikimora, "Kikimora", {kUltraviolet, kWriting, kSpectralFlame},
-     "The Slavic household spirit behind the stove, fussy about other people's mess. It tidies away "
-     "whatever the living leave lying around in the dark, somewhere they will not think to look.",
-     "A Kikimora carries off equipment left on the floor and hides it in another room.",
-     "A Kikimora will not touch anything in a room with the lights on.",
-     "Tidy away", "Carry off the nearest equipment lying in a dark room and hide it in another dark, empty room."},
-    {kDraugr, "Draugr", {kEmf, kFreezing, kSpectralFlame},
-     "The restless dead of the Norse barrows, jealous guardians of their resting place and all that lies in "
-     "it. In the house it keeps to its room, fast beside it and slow far from it, and wakes early when "
-     "something is taken.",
-     "Carry anything out of a Draugr's room and it may hunt while your sanity is still high.",
-     "A Draugr never leaves its room for good, and in a hunt it slows to a crawl the further it strays from it.", nullptr, nullptr},
+     i18n::key("ghost.kikimora.description"), i18n::key("ghost.kikimora.strength"), i18n::key("ghost.kikimora.weakness"),
+     i18n::key("ghost.kikimora.ability"), i18n::key("ghost.kikimora.about")},
+    {kDraugr, "Draugr", {kEmf, kSpectralFlame, kFreezing},
+     i18n::key("ghost.draugr.description"), i18n::key("ghost.draugr.strength"), i18n::key("ghost.draugr.weakness"),
+     nullptr, nullptr, nullptr, true},
     {kBlackShuck, "Black Shuck", {kUltraviolet, kFreezing, kDots},
-     "The phantom hound of the East Anglian roads, blind but never lost. It cannot see or hear you; it "
-     "follows your scent, step for step, until salt, running water or rain breaks it.",
-     "In a hunt a Black Shuck follows the exact path its prey walked, round every corner and into hiding places, though it cannot see or hear.",
-     "Salt, running water or rain breaks a Black Shuck's scent, and it loses anyone on the other side.", nullptr, nullptr},
+     i18n::key("ghost.black_shuck.description"), i18n::key("ghost.black_shuck.strength"), i18n::key("ghost.black_shuck.weakness"),
+     nullptr, nullptr, nullptr, false, true},
     {kLithobolia, "Lithobolia", {kSpiritBox, kFreezing, kSpectralFlame},
-     "Named for the stone-throwing devil that pelted a New Hampshire house in 1682. A spiteful thrower "
-     "that wants a target, it throws only at players it can see, never at an empty room.",
-     "A Lithobolia throws only at players it can see, and a hit costs more than a fright.",
-     "With nobody in sight a Lithobolia throws nothing at all.",
-     "Throw", "Throw the nearest loose object at a player in sight."},
+     i18n::key("ghost.lithobolia.description"), i18n::key("ghost.lithobolia.strength"), i18n::key("ghost.lithobolia.weakness"),
+     i18n::key("ghost.lithobolia.ability"), i18n::key("ghost.lithobolia.about")},
     {kGremlin, "Gremlin", {kEmf, kDots, kSpectralFlame},
-     "The saboteur airmen blamed for every failing engine in the Second World War. It cannot leave a "
-     "running machine alone, unless someone is standing by it.",
-     "A Gremlin switches off equipment that has been set down and left running.",
-     "A Gremlin will not touch equipment someone is holding or standing beside.",
-     "Short out", "Switch off the nearest placed equipment that nobody is holding or standing beside."},
+     i18n::key("ghost.gremlin.description"), i18n::key("ghost.gremlin.strength"), i18n::key("ghost.gremlin.weakness"),
+     i18n::key("ghost.gremlin.ability"), i18n::key("ghost.gremlin.about")},
     {kBrownie, "Brownie", {kEmf, kWriting, kSpectralFlame},
-     "The Scottish house spirit that works only while nobody is watching. Unseen it is quick and quiet "
-     "in a hunt; watched, it slows to a walk, and outside a hunt it does nothing in view.",
-     "A Brownie is very fast in a hunt while nobody looks at it, and its footsteps are hard to hear.",
-     "A Brownie slows to less than a walk while anyone looks at it.", nullptr, nullptr},
+     i18n::key("ghost.brownie.description"), i18n::key("ghost.brownie.strength"), i18n::key("ghost.brownie.weakness"),
+     nullptr, nullptr},
     {kBogeyman, "Bogeyman", {kUltraviolet, kOrbs, kSpectralFlame},
-     "The thing in the closet, which knows every place a frightened child hides. It lurks there, picks on "
-     "the youngest player, and starts each hunt from the closet nearest them.",
-     "A Bogeyman's hunts begin from the closet or locker nearest the youngest player, and it goes for them "
-     "first.",
-     "A Bogeyman is slow in open rooms and loses sight of its prey there sooner.", nullptr, nullptr},
+     i18n::key("ghost.bogeyman.description"), i18n::key("ghost.bogeyman.strength"), i18n::key("ghost.bogeyman.weakness"),
+     nullptr, nullptr},
     {kLethe, "Lethe", {kOrbs, kFreezing, kSpectralFlame},
-     "Named for the river of forgetting in the underworld. It has forgotten who it was and makes the "
-     "living forget too: photos fade, and in a hunt it loses you a second after you leave its sight.",
-     "Photos, videos and recordings of a Lethe fade from the journal a few minutes after they are taken, "
-     "unless someone looks at them first.",
-     "A Lethe forgets its prey: once it loses sight of someone in a hunt, it gives up the chase within a second.",
+     i18n::key("ghost.lethe.description"), i18n::key("ghost.lethe.strength"), i18n::key("ghost.lethe.weakness"),
      nullptr, nullptr},
     {kMesmer, "Mesmer", {kSpiritBox, kDots, kSpectralFlame},
-     "Named for the showman whose audiences saw whatever he wished. An illusionist with a different face "
-     "for everyone, no two players agree on what a Mesmer showed them.",
-     "Each player sees a Mesmer differently, and the truck's sanity monitor shows the team saner than "
-     "they are.",
-     "A Mesmer cannot fool a camera: video, photos and the D.O.T.S. projector show it as it is.", nullptr, nullptr},
+     i18n::key("ghost.mesmer.description"), i18n::key("ghost.mesmer.strength"), i18n::key("ghost.mesmer.weakness"),
+     nullptr, nullptr},
     {kKnell, "Knell", {kSpiritBox, kOrbs, kSpectralFlame},
-     "The slow toll of a funeral bell, on a beat that never changes. Relentless in a hunt, it surges and "
-     "crawls on a two-second beat you can hear in its steps.",
-     "In a hunt a Knell surges to great speed on every other beat.",
-     "Between surges a Knell crawls at about a third of the base speed; run on its slow beat.", nullptr, nullptr},
+     i18n::key("ghost.knell.description"), i18n::key("ghost.knell.strength"), i18n::key("ghost.knell.weakness"),
+     nullptr, nullptr},
     {kAsterion, "Asterion", {kWriting, kDots, kSpectralFlame},
-     "The Minotaur of the labyrinth, by its own name. A battering brute that makes a maze of any house, "
-     "doors only slow it, and it never closes one.",
-     "A closed door never stops an Asterion for good: it batters it down, and the door stays broken open.",
-     "Battering a door down takes an Asterion a few seconds, and it can be heard far away.", nullptr, nullptr},
+     i18n::key("ghost.asterion.description"), i18n::key("ghost.asterion.strength"), i18n::key("ghost.asterion.weakness"),
+     nullptr, nullptr},
     {kTempest, "Tempest", {kSpiritBox, kUltraviolet, kSpectralFlame},
-     "A storm spirit of the old weather lore. It moves with the lightning, and the wilder the night, the "
-     "more often it strikes.",
-     "In a hunt a Tempest cannot be seen, except when lightning strikes; then it is very fast.",
-     "Between strikes a Tempest is slow, and the clearer the night, the rarer its lightning.", nullptr, nullptr},
+     i18n::key("ghost.tempest.description"), i18n::key("ghost.tempest.strength"), i18n::key("ghost.tempest.weakness"),
+     nullptr, nullptr},
     {kHydra, "Hydra", {kOrbs, kDots, kSpectralFlame},
-     "The many-headed serpent of Lerna: cut off one head and two grow back. Its flame burns green as "
-     "marsh fire, and every smudge grows it another head.",
-     "Smudge a Hydra in a hunt and it splits into apparitions, only one of them real; smudge it again "
-     "and there are more.",
-     "A Hydra's false heads are harmless and make no sound as they walk.", nullptr, nullptr},
+     i18n::key("ghost.hydra.description"), i18n::key("ghost.hydra.strength"), i18n::key("ghost.hydra.weakness"),
+     nullptr, nullptr, "green"}
+
 };
 constexpr int kGhostCount = static_cast<int>(sizeof kGhosts / sizeof kGhosts[0]);
 
@@ -136,67 +112,42 @@ inline const Ghost* find(int type) {
     if (g.type == type) return &g;
   return nullptr;
 }
-inline bool is_custom(int type) { return find(type) != nullptr; }
 
-/** The English name the journal shows for an evidence type. */
-inline const char* evidence_name(int e) {
-  switch (e) {
-    case kEmf: return "EMF Level 5";
-    case kSpiritBox: return "Spirit Box";
-    case kUltraviolet: return "Ultraviolet";
-    case kOrbs: return "Ghost Orb";
-    case kWriting: return "Ghost Writing";
-    case kFreezing: return "Freezing Temperatures";
-    case kDots: return "D.O.T.S Projector";
-    case kSpectralFlame: return "Spectral Flame";
-    default: return "";
+/** The ghost's content id: the mod's id, a dot, and its name in lower case, spaces as _ ("phasmomods.custom-ghosts.black_shuck"). */
+/** The table key of the ghost `g`'s name as players read it; its id comes from Ghost::name, which never changes. */
+inline const char* title_key(const Ghost& g) {
+  switch (g.type) {
+    case kEcho: return i18n::key("ghost.echo.name");
+    case kDullahan: return i18n::key("ghost.dullahan.name");
+    case kKikimora: return i18n::key("ghost.kikimora.name");
+    case kDraugr: return i18n::key("ghost.draugr.name");
+    case kBlackShuck: return i18n::key("ghost.black_shuck.name");
+    case kLithobolia: return i18n::key("ghost.lithobolia.name");
+    case kGremlin: return i18n::key("ghost.gremlin.name");
+    case kBrownie: return i18n::key("ghost.brownie.name");
+    case kBogeyman: return i18n::key("ghost.bogeyman.name");
+    case kLethe: return i18n::key("ghost.lethe.name");
+    case kMesmer: return i18n::key("ghost.mesmer.name");
+    case kKnell: return i18n::key("ghost.knell.name");
+    case kAsterion: return i18n::key("ghost.asterion.name");
+    case kTempest: return i18n::key("ghost.tempest.name");
+    case kHydra: return i18n::key("ghost.hydra.name");
   }
+  return "";
 }
 
-/**
- * The localisation key the game builds for a ghost type's name ("Journal_" + GhostType.ToString() +
- * "Title"): a type with no enum name prints as its number, so custom types are "Journal_31Title".
- */
-inline std::string title_key(int type) { return "Journal_" + std::to_string(type) + "Title"; }
-
-/**
- * Whether a localisation key may name a custom type: "Journal_" and two digits and "Title", the
- * shape of every custom type's key (31 and up). A cheap check before the full comparison.
- */
-inline bool maybe_title_key(std::u16string_view key) {
-  constexpr std::u16string_view kPrefix = u"Journal_", kSuffix = u"Title";
-  if (key.size() != kPrefix.size() + 2 + kSuffix.size() || key.substr(0, kPrefix.size()) != kPrefix ||
-      key.substr(kPrefix.size() + 2) != kSuffix)
-    return false;
-  const char16_t a = key[kPrefix.size()], b = key[kPrefix.size() + 1];
-  return a >= u'3' && a <= u'9' && b >= u'0' && b <= u'9';
+inline std::string id_of(const Ghost& g) {
+  std::string id = "phasmomods.custom-ghosts.";
+  for (const char* c = g.name; *c; ++c)
+    id += *c == ' ' ? '_' : static_cast<char>(std::tolower(static_cast<unsigned char>(*c)));
+  return id;
 }
 
-/** The custom type a localisation key names, or 0. */
-inline int type_of_title_key(const char* key) {
-  if (!key) return 0;
+/** The ghost whose content id is `id`, or null. */
+inline const Ghost* find_id(std::string_view id) {
   for (const Ghost& g : kGhosts)
-    if (title_key(g.type) == key) return g.type;
-  return 0;
-}
-
-/**
- * The name in a ghost type's title key ("Journal_TheTwinsTitle": "TheTwins"), empty for any other
- * key. A game ghost's is the name of its GhostData asset, which the game's collection is sorted by.
- */
-inline std::string_view title_key_name(std::string_view key) {
-  constexpr std::string_view kPrefix = "Journal_", kSuffix = "Title";
-  if (key.size() <= kPrefix.size() + kSuffix.size() || key.substr(0, kPrefix.size()) != kPrefix ||
-      key.substr(key.size() - kSuffix.size()) != kSuffix)
-    return {};
-  return key.substr(kPrefix.size(), key.size() - kPrefix.size() - kSuffix.size());
-}
-
-/** Whether ghost name `a` comes before `b` in the game's collection: alphabetically, ignoring case. */
-inline bool sorts_before(std::string_view a, std::string_view b) {
-  return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(), [](char x, char y) {
-    return std::tolower(static_cast<unsigned char>(x)) < std::tolower(static_cast<unsigned char>(y));
-  });
+    if (id_of(g) == id) return &g;
+  return nullptr;
 }
 
 // Dullahan: fast on straights, slow to turn. Its body turns at kDullahanTurn degrees a second, and its
@@ -227,4 +178,4 @@ inline float draugr_speed(float distance) {
   return std::clamp(kDraugrRoomSpeed - kDraugrSlope * distance, kDraugrFloor, kDraugrRoomSpeed);
 }
 
-}  // namespace pg::custom
+}  // namespace pm::custom
