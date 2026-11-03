@@ -100,13 +100,13 @@ These rules still hold:
 Read from the game's `resources.assets` with the project's pinned UnityPy on 2026-11-04. These are static facts; nothing has been
 played in game.
 
-- The current player object, `Player Body Offset`, has a Unity humanoid avatar with 23 of 25 human bone slots mapped, running the
-  controller `PCPlayer (overhaul)`.
+- The PC player's body, `PCPlayer/Rigged PC Model Base` in Resources, has a Unity humanoid avatar with 23 of 25 human bone slots mapped
+  (the eyes are not), running the controller `PCPlayer (overhaul)`. `Player Body Offset`, on the VR player, shares that avatar and controller.
 - The cosmetic bodies, `Male_1` to `6` and `Female_2` to `6`, each have humanoid avatars with 25 of 25 mapped. Those sampled use
   a Character Creator skeleton (`CC_Base_*`). They have no controller of their own.
 - Older models, `Male1` to `4` and `Female1` to `4`, have humanoid avatars with 24 of 25 mapped, on the `PCPlayer` and
-  `VRIK Animated Locomotion` controllers. The one sampled uses a literal Mixamo skeleton (`mixamorig:*`). Whether the game still
-  shows these models is unknown.
+  `VRIK Animated Locomotion` controllers. The one sampled uses a literal Mixamo skeleton (`mixamorig:*`). They live only in `OldPCPlayer` and
+  `OldVRPlayer`, and no route to them was found (`sharedassets*` were not searched for references), so they are not used.
 
 So Mixamo clips should retarget through Unity's humanoid system. That is an expectation, not a result.
 
