@@ -13,7 +13,7 @@ enum Kind : uint8_t {
   kDouble = 2,  // host to all: the Hydra's second apparition, x y z yaw
   kHit = 3,     // host to one: a Lithobolia's throw hit you, sanity:f32
   kStrike = 4,  // host to all: the Tempest's lightning strikes now, no body
-  // 5 is unused: each client works out its own Mesmer view from the appearance and its actor.
+  // 5 is unused: each client works out its own Mesmer view from the ghost's name, the appearance and its actor.
   kViewing = 6, // a client to the host: its player has the journal's media pages open
   kForget = 7,  // host to all: the Lethe makes a piece of media fade, list:u8 (0 photo, 1 video, 2 sound) slot:u8
   kAnger = 8,   // host to all: the Draugr's anger, angered:u8 (0 or 1)

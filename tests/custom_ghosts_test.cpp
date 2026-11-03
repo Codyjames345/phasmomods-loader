@@ -762,16 +762,37 @@ void the_tempest_opens_each_hunt_with_a_strike() {
 }
 
 void the_mesmer_shows_each_their_own() {
-  // Different viewers of the same appearance see different things, and never the true form.
-  int differ = 0;
-  for (uint32_t appearance = 0; appearance < 20; ++appearance) {
-    const int a = mesmer_form(mesmer_seed(appearance, 1), 6, 2), b = mesmer_form(mesmer_seed(appearance, 2), 6, 2);
-    CHECK(a != 2 && b != 2 && a >= 0 && a < 6 && b >= 0 && b < 6);
-    differ += a != b;
+  // A viewer's form comes from the contract and their actor alone, so it stays the same through every appearance and hunt, and
+  // two forms in one contract can't give a Mesmer away. Players find it out by telling each other what they saw, so in a contract
+  // no two viewers see the same form, and none sees the true one.
+  for (const char* name : {"Anna Smith", "Ellen Ward", "John Doe", "Mary Jones", "Alex Reed", "Sam Hill"}) {
+    const uint32_t contract = mesmer_contract_seed(name);
+    for (int real = 0; real < 6; ++real) {
+      std::set<int> seen;
+      for (uint32_t actor = 1; actor <= 4; ++actor) {
+        const int form = mesmer_viewer_form(contract, actor, 6, real);
+        CHECK(form >= 0 && form < 6 && form != real);
+        CHECK(form == mesmer_viewer_form(contract, actor, 6, real));
+        seen.insert(form);
+      }
+      CHECK(seen.size() == 4);
+    }
   }
-  CHECK(differ >= 10);
+  // Every client works the seed out alike from the ghost's name, and another contract deals the forms differently, so no form
+  // means Mesmer from one contract to the next.
+  CHECK(mesmer_contract_seed("Anna Smith") == mesmer_contract_seed("Anna Smith"));
+  std::set<int> acrossContracts;
+  for (const char* name : {"Anna Smith", "Ellen Ward", "John Doe", "Mary Jones", "Alex Reed", "Sam Hill"})
+    acrossContracts.insert(mesmer_viewer_form(mesmer_contract_seed(name), 1, 6, 2));
+  CHECK(acrossContracts.size() >= 2);
+  // Where it appears still changes with each appearance: the seed for that has the appearance in it.
+  CHECK(mesmer_seed(1, 1) != mesmer_seed(2, 1) && mesmer_seed(1, 1) != mesmer_seed(1, 2));
   CHECK(mesmer_form(12345, 1, 0) == 0);  // only one form: it is that one
-  // It turns to whoever sees it: 0 degrees looks along +z, 90 along +x, from wherever it stands.
+  // In an appearance it walks as the ghost walks, at its own offset: walking is the ghost covering ground over a measured time.
+  CHECK(mesmer_walking(0.17f, 0.1f));    // the game's walking pace
+  CHECK(!mesmer_walking(0.001f, 0.1f));  // standing, give or take the agent settling
+  CHECK(!mesmer_walking(0, 0.1f) && !mesmer_walking(0.5f, 0));  // no time measured: no answer
+  // At rest it turns to whoever sees it: 0 degrees looks along +z, 90 along +x, from wherever it stands.
   CHECK(std::fabs(mesmer_facing(2, 3, 2, 8)) < 0.001f);
   CHECK(std::fabs(mesmer_facing(2, 3, 7, 3) - 90.0f) < 0.001f);
   CHECK(std::fabs(std::fabs(mesmer_facing(2, 3, 2, -1)) - 180.0f) < 0.001f);

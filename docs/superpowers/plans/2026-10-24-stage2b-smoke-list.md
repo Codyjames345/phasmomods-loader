@@ -535,6 +535,9 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 **Tells**
 
 - [ ] Each player sees its appearances as another form, elsewhere, and its hunts as another form where it truly is.
+- [ ] A player sees the same form in every appearance and hunt of a contract, and another contract usually deals another form.
+- [ ] Two or more players each see a different form, and find it by telling each other what they saw.
+- [ ] When it walks during an appearance, each player's form walks too, at their own distance from the true ghost, animating as it goes. It faces where it walks, and turns to the player when it stops. It doesn't pass through walls or sink through floors.
 - [ ] The truck monitor shows the team a fifth saner.
 - [ ] The lights in its room dim slowly instead of flickering.
 - [ ] Video cameras, photos and the D.O.T.S. projector show it as it is.
@@ -543,6 +546,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 **Told apart**
 
 - [ ] Check the camera and D.O.T.S. view against the eye, on zero evidence in single player.
+- [ ] On zero evidence in single player with no camera: the favourite room's lights slowly dim and brighten instead of flickering, and the truck monitor reads higher than the wristwatch's sanity bar.
 - [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):

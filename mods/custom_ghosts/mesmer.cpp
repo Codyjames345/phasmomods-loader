@@ -34,6 +34,8 @@ using phasmo::Vector3;
 // The class dump, the scene's TagManager (layer 3 is the only unnamed layer) and decompiles of
 // GhostAI.Appear and GhostModel.SetVisibility (build 25811160, 2026-10-20).
 
+constexpr ULONGLONG kPaceMs = 100;  // how long the ghost's pace is measured over
+
 struct Dimmed {
   api::Held light;
   float original;
@@ -44,6 +46,11 @@ struct State {
   bool wasAppeared = false;
   uint32_t appearances = 0;
   apparition::Copy fake;
+  float offsetX = 0, offsetZ = 0;  // where this player sees this appearance, from where the ghost stands
+  Vector3 spot{};               // where the fake last found walkable ground
+  Vector3 measuredFrom{};       // where the ghost was when its pace was last measured
+  ULONGLONG measuredAt = 0;
+  bool walking = false;
   api::Held camera;             // this player's camera while its mask is changed
   int savedMask = 0;
   std::vector<Dimmed> lights;
@@ -101,8 +108,35 @@ float yaw_of(void* transform) {
 }
 
 /**
- * This client's own view of an appearance (or, `hunt`, a hunt) that just began: another form, a few
- * metres off with a sound of its own; in a hunt where the ghost truly is, following it.
+ * Puts the fake where this player sees it now. In a hunt: where the ghost truly is, as it faces. In an appearance: at this player's
+ * offset from the ghost, on walkable ground, facing the way the ghost walks, and at rest turned to the camera that sees it.
+ */
+void place_fake(void* ghost, bool hunt, ULONGLONG now) {
+  void* t = game::transform_of(ghost);
+  const Vector3 at = game::position(t);
+  if (hunt) {
+    apparition::place(g.fake, at, yaw_of(t));
+    return;
+  }
+  const phasmo::Vector3 guess{at.x + g.offsetX, at.y, at.z + g.offsetZ};
+  phasmo::NavMeshHit hit{};
+  if (phasmo::NavMesh::SamplePosition(&guess, &hit, 1.5f, -1) && hit.hit)
+    g.spot = {hit.position.x, hit.position.y, hit.position.z};  // no ground here: it keeps to the last it found
+  // GetTickCount64 steps coarsely, so the pace is measured over a stretch of frames.
+  if (now - g.measuredAt >= kPaceMs) {
+    const float moved = std::hypot(at.x - g.measuredFrom.x, at.z - g.measuredFrom.z);
+    g.walking = mesmer_walking(moved, (now - g.measuredAt) / 1000.0f);
+    g.measuredFrom = at;
+    g.measuredAt = now;
+  }
+  void* camera = g.camera.get();
+  const Vector3 eye = api::alive(camera) ? game::position(game::transform_of(camera)) : at;
+  apparition::place(g.fake, g.spot, g.walking ? yaw_of(t) : mesmer_facing(g.spot.x, g.spot.z, eye.x, eye.z));
+}
+
+/**
+ * This client's own view of an appearance (or, `hunt`, a hunt) that just began: this player's form, a
+ * few metres off with a sound of its own; in a hunt where the ghost truly is. The tick keeps it moving.
  */
 void hide_fake();
 
@@ -127,29 +161,27 @@ void show_fake(void* ghost, bool hunt) {
     g.warnedLayers = true;
     return;
   }
-  const uint32_t seed = mesmer_seed(++g.appearances, static_cast<uint32_t>(game::local_actor()));
-  void* form = forms[mesmer_form(seed, static_cast<int>(forms.size()), realIndex)];
+  // One form for this player through the contract; where it stands and what it sounds like change with each appearance.
+  const uint32_t actor = static_cast<uint32_t>(game::local_actor());
+  const uint32_t seed = mesmer_seed(++g.appearances, actor);
+  void* info = phasmo::GhostAI::info.get(ghost);
+  const uint32_t contract = mesmer_contract_seed(pm::api::to_utf8(info ? phasmo::GhostInfo::name.get(info) : nullptr));
+  void* form = forms[mesmer_viewer_form(contract, actor, static_cast<int>(forms.size()), realIndex)];
   g.fake = apparition::make(form);
   if (!g.fake.root) return;
   apparition::set_layer(g.fake, kMesmerFakeLayer);
   const Vector3 at = game::position(game::transform_of(ghost));
-  Vector3 spot = at;
-  float yaw = yaw_of(game::transform_of(ghost));
-  if (!hunt) {
-    float dx = 0, dz = 0;
-    mesmer_offset(seed, dx, dz);
-    spot = {at.x + dx, at.y, at.z + dz};
-    const phasmo::Vector3 guess{spot.x, spot.y, spot.z};
-    phasmo::NavMeshHit hit{};
-    if (phasmo::NavMesh::SamplePosition(&guess, &hit, 1.5f, -1) && hit.hit)
-      spot = {hit.position.x, hit.position.y, hit.position.z};
-    // It faces whoever sees it, from the camera they see through: a ghost player's body is parked elsewhere.
-    const Vector3 eye = game::position(game::transform_of(camera));
-    yaw = mesmer_facing(spot.x, spot.z, eye.x, eye.z);
-  }
-  apparition::place(g.fake, spot, yaw);
-  // This player's eye: the fake's layer on, the true form's layers off, for as long as it shows.
+  g.offsetX = g.offsetZ = 0;
+  if (!hunt) mesmer_offset(seed, g.offsetX, g.offsetZ);
+  g.spot = {at.x + g.offsetX, at.y, at.z + g.offsetZ};
+  g.measuredFrom = at;
+  g.walking = false;
+  const ULONGLONG now = GetTickCount64();
+  g.measuredAt = now;
+  // This player's eye: the fake's layer on, the true form's layers off, for as long as it shows. It faces whoever sees it from the
+  // camera they see through: a ghost player's body is parked elsewhere.
   g.camera = camera;
+  place_fake(ghost, hunt, now);
   g.savedMask = phasmo::Camera::get_cullingMask(camera);
   phasmo::Camera::set_cullingMask(
       camera, static_cast<int>((static_cast<uint32_t>(g.savedMask) | (1u << kMesmerFakeLayer)) & ~realLayers));
@@ -158,7 +190,7 @@ void show_fake(void* ghost, bool hunt) {
   // And a sound of its own, from where this player sees it.
   const api::List sounds{phasmo::GhostModel::sounds.get(form)};
   if (sounds.size() > 0)
-    if (void* clip = sounds[seed % static_cast<uint32_t>(sounds.size())]) sound::play_at(clip, spot, 1.0f);
+    if (void* clip = sounds[seed % static_cast<uint32_t>(sounds.size())]) sound::play_at(clip, g.spot, 1.0f);
 }
 
 void hide_fake() {
@@ -257,15 +289,12 @@ void tick(void* ghost, int type) {
   // What ended is hidden before what began is shown (a hunt can end on the frame an appearance shows).
   if ((!appeared && g.wasAppeared) || (!hunting && g.wasHunting)) hide_fake();
   if (appeared && !g.wasAppeared) show_fake(ghost, false);
-  if (hunting && !g.wasHunting) show_fake(ghost, true);  // a new form for each hunt
+  if (hunting && !g.wasHunting) show_fake(ghost, true);
   g.wasAppeared = appeared;
   g.wasHunting = hunting;
-  if (g.fake.root && hunting) {
-    void* t = game::transform_of(ghost);
-    apparition::place(g.fake, game::position(t), yaw_of(t));
-    apparition::follow(g.fake, apparition::model_of(ghost));  // flickers and walks as the true one
-  } else if (g.fake.root) {
-    apparition::show(g.fake, true);
+  if (g.fake.root) {
+    place_fake(ghost, hunting, now);
+    apparition::follow(g.fake, apparition::model_of(ghost));  // shows, flickers and walks as the true one
   }
   // Hunts flicker the lights as any ghost's do (a warning players rely on); otherwise its room dims.
   g.room = hunting ? nullptr : favourite_room(ghost);

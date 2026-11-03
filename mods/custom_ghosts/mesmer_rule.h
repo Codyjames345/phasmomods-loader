@@ -3,10 +3,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string_view>
 
 // The Mesmer's rules, kept free of game calls so they can be tested offline. Each investigator sees
-// its appearances differently (another form, standing elsewhere); cameras see it as it is; the truck's
-// monitor shows the team saner than they are; and the lights in its room dim and brighten slowly.
+// it as one other form through the whole contract, a little way off in its appearances; cameras see
+// it as it is; the truck's monitor shows the team saner than they are; and the lights in its room dim
+// and brighten slowly.
 namespace pm::custom {
 
 constexpr float kMesmerLie = 20.0f;        // percent of sanity the monitor adds
@@ -14,6 +16,7 @@ constexpr float kMesmerOffsetMin = 1.5f;   // metres from where it really stands
 constexpr float kMesmerOffsetMax = 3.0f;   // and at most
 constexpr float kMesmerDimPeriod = 20.0f;  // seconds for its room's lights to dim and come back
 constexpr float kMesmerDimLowest = 0.55f;  // the share of their light at the dimmest
+constexpr float kMesmerWalkSpeed = 0.2f;   // metres a second the ghost must cover to be walking, not settling
 // The one layer the game leaves unnamed (the scene's TagManager): only a player's eye draws it.
 constexpr int kMesmerFakeLayer = 3;  // pm:not-game-data: a Unity layer with no name, so no Layer entry can find it
 
@@ -42,6 +45,30 @@ inline int mesmer_form(uint32_t seed, int count, int real) {
   int pick = static_cast<int>(seed % static_cast<uint32_t>(count - 1));
   return pick >= real && real >= 0 ? pick + 1 : pick;
 }
+
+/**
+ * A number every client of a contract shares and the next contract changes, from the ghost's name (GhostInfo.name, which
+ * GhostInfo.SyncValuesNetworked builds on every client from the same two numbers). FNV-1a.
+ */
+inline uint32_t mesmer_contract_seed(std::string_view ghostName) {
+  uint32_t h = 2166136261u;  // pm:not-game-data: hash mixing
+  for (const char c : ghostName) {
+    h ^= static_cast<uint8_t>(c);
+    h *= 16777619u;  // pm:not-game-data: hash mixing
+  }
+  return h;
+}
+
+/**
+ * The one form a viewer sees in every appearance and hunt of a contract, never `real` (when there is another). Viewers whose
+ * actors differ by less than `count - 1` see different forms, so in practice no two players in a room agree.
+ */
+inline int mesmer_viewer_form(uint32_t contract, uint32_t actor, int count, int real) {
+  return mesmer_form(contract + actor, count, real);
+}
+
+/** Whether the ghost is walking, having covered `moved` metres in `seconds`: no time measured says no. */
+inline bool mesmer_walking(float moved, float seconds) { return seconds > 0 && moved > kMesmerWalkSpeed * seconds; }
 
 /** Where a viewer sees it: an offset (x, z) from where it stands. */
 inline void mesmer_offset(uint32_t seed, float& dx, float& dz) {
