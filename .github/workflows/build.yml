@@ -17,8 +17,9 @@ permissions:
 jobs:
   validate:
     name: Validate
-    # A development push builds and tests once, in the job that publishes it: package.ps1 validates what it packs.
-    if: github.ref != 'refs/heads/development'
+    # A development push and a release's tag each build and test once, in the job that publishes them: package.ps1 validates
+    # what it packs, before anything is uploaded.
+    if: github.ref != 'refs/heads/development' && !startsWith(github.ref, 'refs/tags/')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,7 +82,6 @@ jobs:
   publish:
     name: Publish the release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: validate
     runs-on: windows-latest
     # One publish at a time, never cancelled halfway, so two tags cannot race to upload.
     concurrency:

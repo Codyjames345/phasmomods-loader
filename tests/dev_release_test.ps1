@@ -43,13 +43,17 @@ Assert-That ($workflow -match '--pre\b') 'a development build is a pre-release, 
 Assert-That ($workflow -match '--channel dev\b') 'a development build is on its own channel'
 Assert-That ($workflow -match '--tag "dev-') 'a development tag doesn''t match the release pattern'
 Assert-That ($workflow -match 'Remove-OldDevReleases') 'the job clears old development builds'
-# A development push builds and tests once: the job's own package.ps1 validates what ships, so the validate job would only repeat it.
-Assert-That ($workflow -match "  validate:\s+name: Validate\s+(#[^\n]*\s+)?if: github\.ref != 'refs/heads/development'") 'the validate job leaves a development push to the job that publishes it'
+# A development push and a release's tag each build and test once: the publishing job's own package.ps1 validates what ships, so the
+# validate job would only repeat it. A push to main validates, having nothing else to do it.
+Assert-That ($workflow -match "  validate:\s+name: Validate\s+(#[^\n]*\s+)*if: github\.ref != 'refs/heads/development' && !startsWith\(github\.ref, 'refs/tags/'\)") 'the validate job leaves a development push and a tag to the jobs that publish them'
 $developmentJob = [regex]::Match($workflow, "(?s)  publish-development:.*?(?=\n  publish:)").Value
 Assert-That ($developmentJob -and $developmentJob -notmatch 'needs:') 'the development job doesn''t wait on a job a development push skips'
 Assert-That ($developmentJob -match 'package\.ps1') 'the development job packs through package.ps1'
 Assert-That ((Get-Content -LiteralPath (Join-Path $project 'package.ps1') -Raw) -match "validate\.ps1") 'package.ps1 validates what it packs, so the build that ships is tested'
-Assert-That ($workflow -match "(?s)\n  publish:.*?needs: validate") 'a release still needs the validate job'
+$releaseJob = [regex]::Match($workflow, "(?s)\n  publish:.*").Value
+Assert-That ($releaseJob -and $releaseJob -notmatch 'needs:') 'the release job doesn''t wait on a job a tag skips'
+Assert-That ($releaseJob -match 'package\.ps1') 'the release job packs through package.ps1, which validates it'
+Assert-That ($releaseJob.IndexOf('package.ps1') -lt $releaseJob.IndexOf('vpk upload')) 'a release is validated and packed before anything is uploaded'
 Write-Host 'The workflow keeps development builds apart from releases.'
 
 Write-Host 'Development build tests passed.'
