@@ -16,7 +16,8 @@ A push of nothing but Markdown or `docs/` runs no workflow, so it can't trigger 
 1. Work on `development`, testing locally with `.\build.ps1`. Run `.\validate.ps1` before pushing, and
    `.\tools\gamecheck.ps1 -IfConfigured -Expect` when the map changed, committing the record it rewrites: a build whose map has no
    record fails to publish.
-2. Push to `development`. The workflow validates it and publishes a pre-release. Testers get it the next time their loader starts.
+2. Push to `development`. The workflow builds and validates it once, then publishes a pre-release if that passes. Testers get it the
+   next time their loader starts.
 3. Everyone in a lobby needs the same build, so testers restart their loaders after each push.
 
 ## Releasing

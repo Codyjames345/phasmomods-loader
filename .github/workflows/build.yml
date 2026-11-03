@@ -17,6 +17,8 @@ permissions:
 jobs:
   validate:
     name: Validate
+    # A development push builds and tests once, in the job that publishes it: package.ps1 validates what it packs.
+    if: github.ref != 'refs/heads/development'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -31,7 +33,6 @@ jobs:
   publish-development:
     name: Publish the development build
     if: github.ref == 'refs/heads/development'
-    needs: validate
     runs-on: windows-latest
     # One publish at a time, never cancelled halfway.
     concurrency:

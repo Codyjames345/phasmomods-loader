@@ -43,6 +43,13 @@ Assert-That ($workflow -match '--pre\b') 'a development build is a pre-release, 
 Assert-That ($workflow -match '--channel dev\b') 'a development build is on its own channel'
 Assert-That ($workflow -match '--tag "dev-') 'a development tag doesn''t match the release pattern'
 Assert-That ($workflow -match 'Remove-OldDevReleases') 'the job clears old development builds'
+# A development push builds and tests once: the job's own package.ps1 validates what ships, so the validate job would only repeat it.
+Assert-That ($workflow -match "  validate:\s+name: Validate\s+(#[^\n]*\s+)?if: github\.ref != 'refs/heads/development'") 'the validate job leaves a development push to the job that publishes it'
+$developmentJob = [regex]::Match($workflow, "(?s)  publish-development:.*?(?=\n  publish:)").Value
+Assert-That ($developmentJob -and $developmentJob -notmatch 'needs:') 'the development job doesn''t wait on a job a development push skips'
+Assert-That ($developmentJob -match 'package\.ps1') 'the development job packs through package.ps1'
+Assert-That ((Get-Content -LiteralPath (Join-Path $project 'package.ps1') -Raw) -match "validate\.ps1") 'package.ps1 validates what it packs, so the build that ships is tested'
+Assert-That ($workflow -match "(?s)\n  publish:.*?needs: validate") 'a release still needs the validate job'
 Write-Host 'The workflow keeps development builds apart from releases.'
 
 Write-Host 'Development build tests passed.'
