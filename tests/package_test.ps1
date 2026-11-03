@@ -78,6 +78,7 @@ try {
         Set-Content -LiteralPath (Join-Path $fixture 'tests/stage_test.ps1') -Value '# Fixture stage checks run on their own.'
         Set-Content -LiteralPath (Join-Path $fixture 'tests/release_test.ps1') -Value '# Fixture release checks run on their own.'
         Set-Content -LiteralPath (Join-Path $fixture 'tests/assetcheck_test.ps1') -Value 'exit 0 # Fixture scene check tests run on their own.'
+        Set-Content -LiteralPath (Join-Path $fixture 'tests/docs_test.ps1') -Value 'exit 0 # Fixture docs tests run on their own.'
         Set-Content -LiteralPath (Join-Path $fixture 'tools/gamecheck.ps1') -Value 'exit 0 # The fixture has no game to check.'
         Set-Content -LiteralPath (Join-Path $fixture 'tools/docs.ps1') -Value 'exit 0 # The fixture has no reference to build.'
         $buildExit = if ($failure -eq 'native build') { 7 } else { 0 }

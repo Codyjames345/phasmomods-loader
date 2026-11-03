@@ -1,14 +1,15 @@
 # Builds the SDK's API reference with Doxygen into build\docs\html, from sdk\Doxyfile. A warning fails it, so an undocumented public
 # declaration, a missing @param or @return, or a broken @see stops the build. Doxygen is used for this alone and is not part of
 # what ships. It comes from PM_DOXYGEN (the executable's path) or the PATH, and must be the pinned version.
-# -IfConfigured exits quietly when no Doxygen is found, as tools/gamecheck.ps1 does for a game that is not set up.
+# -IfConfigured runs only the Doxygen PM_DOXYGEN names and exits quietly without one, as tools/gamecheck.ps1 does for a game that is
+# not set up: a build machine's own Doxygen on the PATH, of whatever version, doesn't ask for the reference.
 # usage: tools\docs.ps1 [-IfConfigured]
 param([switch]$IfConfigured)
 $ErrorActionPreference = 'Stop'
 $pinned = '1.9.8'
 
 $doxygen = $env:PM_DOXYGEN
-if (-not $doxygen) {
+if (-not $doxygen -and -not $IfConfigured) {
   $found = Get-Command doxygen -ErrorAction SilentlyContinue
   if ($found) { $doxygen = $found.Source }
 }
