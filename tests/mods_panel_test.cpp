@@ -437,6 +437,17 @@ void a_row_says_why_its_mod_is_off() {
   CHECK(static_cast<Node*>(opened->rows[1].description)->text == "An invented extra feature.");
 }
 
+// A row reads "{{reason}}. {{about}}", so a reason that ends its own sentence must not give two full stops in a row.
+void a_reason_with_its_own_full_stop_gets_only_one() {
+  reset();
+  offReasons["extra"] = "Depends on Base Mod, which contains an error. Please check mods.log.";
+  open_panel();
+  CHECK(opened && opened->rows.size() == 2);
+  if (!opened || opened->rows.size() != 2) return;
+  CHECK(static_cast<Node*>(opened->rows[1].description)->text ==
+        "Depends on Base Mod, which contains an error. Please check mods.log. An invented extra feature.");
+}
+
 // A game update leaves a chosen mod off, and whatever requires it. The player opens the panel and changes something else:
 // Apply must not forget them, or they stay off once a build that can run them arrives. The rows start from the saved
 // choice, and so does what Apply saves. Nothing changed, Apply has nothing to do, however little of the choice runs.
@@ -454,7 +465,7 @@ void apply_keeps_a_chosen_mod_that_could_not_run() {
   offReasons["extra"] = "Needs Base Mod, which did not start";
   open_panel();
   CHECK(checked(0) && checked(1) && checked(2));  // chosen, whether or not it runs
-  CHECK(static_cast<Node*>(opened->body.get())->text == "Click a mod to switch it on or off.");
+  CHECK(static_cast<Node*>(opened->body.get())->text == "Click a mod to toggle it.");
   std::vector<std::string> choice;
   clickButton = 0;
   pm::mods_panel::tick(true);
@@ -465,7 +476,7 @@ void apply_keeps_a_chosen_mod_that_could_not_run() {
   clickRow = 2;  // Tells off
   pm::mods_panel::tick(true);
   clickRow = -1;
-  CHECK(static_cast<Node*>(opened->body.get())->text == "Apply to restart the mods with your choice. The game keeps running.");
+  CHECK(static_cast<Node*>(opened->body.get())->text == "Press apply to save your changes.");
   clickButton = 0;
   pm::mods_panel::tick(true);
   clickButton = -1;
@@ -475,7 +486,7 @@ void apply_keeps_a_chosen_mod_that_could_not_run() {
   // A choice that could not be saved is said to be lost at the next start, not done.
   pm::mods_panel::applied(true, false);
   pm::mods_panel::tick(true);
-  CHECK(static_cast<Node*>(opened->body)->text == "The mods restarted, but your choice couldn't be saved, so the next start uses the old one.");
+  CHECK(static_cast<Node*>(opened->body)->text == "The mods restarted, but your choice couldn't be saved. Please try again.");
 
   // Applied, the panel holds that choice, not what started from it.
   started.clear();
@@ -697,6 +708,7 @@ int main() {
   checklist_matches_pending_and_dependencies();
   refused_mod_has_a_row_saying_why();
   a_row_says_why_its_mod_is_off();
+  a_reason_with_its_own_full_stop_gets_only_one();
   apply_keeps_a_chosen_mod_that_could_not_run();
   leaving_a_room_with_the_panel_open_reads_the_choice_again();
   panel_changes_wait_until_out_of_the_room();

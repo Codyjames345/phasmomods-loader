@@ -95,7 +95,7 @@ void a_leave_that_did_not_start_is_asked_again() {
 
 void mismatch_message_tells_how_to_update() {
   const std::string text = joinguard::mismatch_message({kGhost}, {kGhostOther}, &name_of);
-  CHECK(text.substr(text.rfind('\n') + 1) == "Restart the game through PhasmoMods Loader to update, then join again.");
+  CHECK(text.substr(text.rfind('\n') + 1) == "Restart the game through PhasmoMods Loader to update, then try joining again.");
 }
 
 // The removal lists ALL the lobby's required mods: every mod the host runs, with its version, marking the ones the joiner
@@ -110,12 +110,12 @@ void mismatch_message_lists_every_required_mod() {
   const Mod mineOnly{"old-mod", "4444444444444444", "Old Mod", ""};
   const std::string text =
       joinguard::mismatch_message({hostTells, hostOnly, shared, sameVersionOtherBuild}, {myTells, shared, mine, mineOnly}, &name_of);
-  CHECK(text.find("New Ghosts 2.0.0: you don't have it") != std::string::npos);
+  CHECK(text.find("New Ghosts 2.0.0: missing") != std::string::npos);
   CHECK(text.find("Ghost Tells 1.0.1: you have 1.0.0") != std::string::npos);
   CHECK(text.find("Rebuilt 1.0.0: you have another build") != std::string::npos);
   CHECK(text.find("\nShared 3.1.0\n") != std::string::npos);  // required too, and the joiner has it
   // What rules the joiner out is highlighted (the user, 2026-11-03), and a mod it has is not.
-  CHECK(text.find("<b>New Ghosts 2.0.0: you don't have it</b>") != std::string::npos);
+  CHECK(text.find("<b>New Ghosts 2.0.0: missing</b>") != std::string::npos);
   CHECK(text.find("<b>Ghost Tells 1.0.1: you have 1.0.0</b>") != std::string::npos);
   CHECK(text.find("<b>Shared") == std::string::npos);
   CHECK(text.find("Old Mod") == std::string::npos);           // an extra mod is not what the lobby needs
@@ -135,7 +135,7 @@ void mismatch_message_is_bounded() {
   }
   host.back().name = "The Last One";
   const std::string text = joinguard::mismatch_message(host, mine, &name_of);
-  CHECK(text.find("The Last One 1.0.0: you don't have it") != std::string::npos);
+  CHECK(text.find("The Last One 1.0.0: missing") != std::string::npos);
   CHECK(text.find("And " + std::to_string(presence::kMaxMods - joinguard::kMaxListedMods) + " more.") != std::string::npos);
   CHECK(text.size() < 4096);
 }
@@ -161,7 +161,7 @@ void vanilla_host_suspends_after_grace() {
   CHECK(guard.judge(lobby(2, 1, {1, 2}, joinguard::kGraceMs - 1), p).suspend.empty());
   const Verdict v = guard.judge(lobby(2, 1, {1, 2}, joinguard::kGraceMs), p);
   CHECK(v.suspend == (Ids{"playable-ghost", "custom-ghosts"}) && !v.leave && !v.resume);
-  CHECK(v.notice == "This lobby's host isn't running PhasmoMods, so your mods are off until you leave it.");
+  CHECK(v.notice == "This lobby isn't running PhasmoMods, your mods have been disabled.");
   p.set_local({});
   CHECK(guard.judge(lobby(2, 1, {1, 2}, joinguard::kGraceMs + 1), p).suspend.empty());  // said once
 }
@@ -194,7 +194,7 @@ void extras_notice_names_them() {
   p.observe(2, {1, 2}, 0);
   hear(p, 1, {kGhost}, 0);
   const Verdict v = guard.judge(lobby(2, 1, {1, 2}, 0), p);
-  CHECK(v.notice == "This lobby's host doesn't run Custom Ghosts, Replay, so those mods are off until you leave it.");
+  CHECK(v.notice == "This lobby's host doesn't run Custom Ghosts, Replay, they will be disabled.");
 }
 
 // A suspended mod takes the mods that require it with it, and the player is told which: as extras, or as what rules them out.
@@ -219,7 +219,7 @@ void suspension_cascades_to_dependents() {
   hear(q, 1, {kGhost}, 0);
   Verdict v = plain.judge(lobby(2, 1, {1, 2}, 0), q);
   CHECK(v.suspend == (Ids{"custom-ghosts", "replay"}) && !v.leave && v.kick.empty());
-  CHECK(v.notice == "This lobby's host doesn't run Custom Ghosts, Replay, so those mods are off until you leave it.");
+  CHECK(v.notice == "This lobby's host doesn't run Custom Ghosts, Replay, they will be disabled.");
   // With them off, the next judgements ask for nothing more and read the manifests no more, and leaving brings both back.
   CHECK(asked == 1);
   q.set_local({kGhost});
@@ -242,7 +242,7 @@ void suspension_cascades_to_dependents() {
   CHECK(v.leave && v.suspend.empty() && v.notice.empty());
   guard.left(true);
   v = guard.judge(outside(100), p);
-  CHECK(v.show.find("Custom Ghosts 2.0.0: yours needs a mod this lobby doesn't run") != std::string::npos);
+  CHECK(v.show.find("Custom Ghosts 2.0.0: dependency missing on host") != std::string::npos);
   CHECK(v.show.find("Playable Ghost 1.0.0") != std::string::npos);
   CHECK(v.show.find("Custom Ghosts") < v.show.find("Playable Ghost"));  // what rules it out comes first
 
@@ -407,7 +407,7 @@ void public_lobby_suspends_every_mod_and_removes_nobody() {
     p.set_local({kGhost, kCustom});
     const Verdict v = guard.judge(public_lobby(local, 1, 0), p);
     CHECK(v.suspend == (Ids{"playable-ghost", "custom-ghosts"}) && !v.leave && v.kick.empty());
-    CHECK(v.notice == "Mods only run in private lobbies, so your mods are off until you leave this one.");
+    CHECK(v.notice == "Mods only run in private lobbies and have been disabled, please reconsider playing public lobbies with the PhasmoMods Loader active. You have been warned.");
     p.set_local({});
     for (uint64_t now : {uint64_t{1}, joinguard::kGraceMs * 3}) {
       const Verdict later = guard.judge(public_lobby(local, 1, now), p);
@@ -909,7 +909,7 @@ void mismatched_joiner_leaves_with_the_list() {
   CHECK(v.leave);
   joiner.guard.left(true);
   const Verdict out = joiner.guard.judge(outside(1), joiner.presence);
-  CHECK(out.show.find("Custom Ghosts 2.0.0: you don't have it") != std::string::npos);
+  CHECK(out.show.find("Custom Ghosts 2.0.0: missing") != std::string::npos);
   CHECK(out.show.find("Playable Ghost 1.0.0: you have 1.0.1") != std::string::npos);
 }
 
@@ -1012,9 +1012,9 @@ void start_waits_for_an_unverified_player() {
   unread.listRead = false;
   a = guard.start_answer(unread, host);
   CHECK(!a.go && a.listUnread && a.waiting.empty());
-  CHECK(joinguard::start_wait_notice({}, {}, true).find("can't read who's in this lobby") != std::string::npos);
+  CHECK(joinguard::start_wait_notice({}, {}, true).find("Player list is updating") != std::string::npos);
   const std::string text = joinguard::start_wait_notice({"Alice", "Bob"}, {}, false);
-  CHECK(text == "Waiting for Alice and Bob. The loader is still checking their mods. Press Start again once that's done.");
+  CHECK(text == "Waiting for Alice and Bob. The loader is still checking their mods, please try again in a moment.");
 }
 
 void start_goes_once_everyone_is_verified() {
@@ -1095,7 +1095,7 @@ void wait_ends_when_the_player_is_removed_or_leaves() {
   joinguard::StartAnswer a = guard.start_answer(lobby(1, 1, {1, 4}, now), host);
   CHECK(!a.go && a.stuck == std::vector<int>{4} && a.waiting.empty());
   CHECK(joinguard::start_wait_notice({}, {"Mallory"}, false) ==
-        "The game didn't remove Mallory, whose mods differ from yours. A contract can't start while they're here. Ask them to leave, or start a new lobby.");
+        "The game didn't remove Mallory with different mod lists. A contract can't start while they're here; ask them to leave or start a new lobby.");
   host.observe(1, {1}, now + 100);
   guard.judge(lobby(1, 1, {1}, now + 100), host);
   CHECK(guard.start_answer(lobby(1, 1, {1}, now + 100), host).go);
@@ -1107,7 +1107,7 @@ void wait_ends_when_the_player_is_removed_or_leaves() {
   a = secondGuard.start_answer(lobby(5, 5, {3, 5}, 0), second);
   CHECK(!a.go && a.stuck == std::vector<int>{3} && a.notFirstActor);
   CHECK(joinguard::start_wait_notice({}, {"Mallory"}, false, true) ==
-        "The loader can't verify Mallory, and the game only lets the player who's been here longest remove someone. A contract can't start while they're here. Ask them to leave, or start a new lobby.");
+        "The loader can't verify Mallory. Ask them to leave, or start a new lobby.");
   CHECK(!a.go && secondGuard.start_answer(lobby(3, 3, {3, 5}, 0), second).notFirstActor == false);
 }
 
@@ -1276,8 +1276,7 @@ void a_mods_channel_takes_only_verified_players() {
 
 void notice_says_private_lobbies() {
   const consent::Notice n = consent::notice({{"Ghost Tells", false}});
-  CHECK(n.body.find("Mods only run in private lobbies and single player, and switch off in public lobbies. Play only "
-                    "with friends who also agreed to this.") != std::string::npos);
+  CHECK(n.body.find("To protect your account, mods only run in private lobbies. Do not attempt to bypass this restriction.") != std::string::npos);
   CHECK(n.body.find("Play with mods only in private lobbies") == std::string::npos);
   CHECK(n.body.find("achievement") == std::string::npos);  // the loader leaves Steam's achievements alone
   // The notice as it read before this rule, so everyone who agreed to that one is asked again.

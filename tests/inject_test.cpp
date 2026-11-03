@@ -222,7 +222,7 @@ int main() {
     char text[2048] = {};
     if (session) { fread(text, 1, sizeof text - 1, session); fclose(session); }
     // Its row names the mod's folder, as the launcher's other refusals do, and not the DLL.
-    CHECK(std::strstr(text, "?custom_ghosts\tIts DLL could not be read or copied.") != nullptr);
+    CHECK(std::strstr(text, "?custom_ghosts\tMod DLL could not be read or copied.") != nullptr);
     CHECK(std::strstr(text, "?Missing") == nullptr);
     CHECK(std::strstr(text, "\\bin\\Example-42-") != nullptr);
     CHECK(std::strstr(text, "\\bin\\Missing-42-") == nullptr);

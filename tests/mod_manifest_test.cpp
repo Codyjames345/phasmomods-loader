@@ -111,7 +111,7 @@ void manifest_says_whether_it_records_voice() {
   CHECK(parse_manifest_json(minimal(R"(,"recordsVoice":false)"), m, why) && !m.recordsVoice);
   for (const char* bad : {R"(,"recordsVoice":"yes")", R"(,"recordsVoice":1)", R"(,"recordsVoice":null)"}) {
     CHECK(!parse_manifest_json(minimal(bad), m, why));
-    CHECK(why == "Its recordsVoice is not true or false.");
+    CHECK(why == "'recordsVoice=' field is not true or false.");
   }
 }
 
@@ -157,7 +157,7 @@ void manifest_rejects_bad_version() {
   for (const char* v : {"1", "1.0", "1.0.0.0", "1.0.0-beta", "1.0.0+build", "v1.0.0", "01.0.0", "1.00.0", "1.0.", ".1.0", "1..0",
                         " 1.0.0", "1.0.0 ", "-1.0.0", "4294967296.0.0", "", "unknown"}) {
     CHECK(!parse_version(v));
-    CHECK(why_refused(with(R"("version":"1.0.0")", std::string(R"("version":")") + v + "\"")).find("version") !=
+    CHECK(why_refused(with(R"("version":"1.0.0")", std::string(R"("version":")") + v + "\"")).find("Version") !=
           std::string::npos);
   }
   CHECK(!parses(with(R"("version":"1.0.0")", R"("version":1)")));

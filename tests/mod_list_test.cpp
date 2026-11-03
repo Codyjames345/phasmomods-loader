@@ -38,7 +38,7 @@ void rejects_unsafe_manifests() {
   error.clear();
   CHECK(!parse_mod_ini("id=vanilla\nname=A\ndll=a.dll\n", m, error) && error.find("vanilla") != std::string::npos);
   CHECK(!parse_mod_ini("id=a\ndll=a.dll\n", m, error) && error.find("name") != std::string::npos);
-  CHECK(!parse_mod_ini("id=a\nname=<size=0>A\ndll=a.dll\n", m, error) && error.find("name") != std::string::npos);
+  CHECK(!parse_mod_ini("id=a\nname=<size=0>A\ndll=a.dll\n", m, error) && error.find("Name") != std::string::npos);
   CHECK(!parse_mod_ini("id=a\nname=" + std::string(65, 'x') + "\ndll=a.dll\n", m, error));
   CHECK(!parse_mod_ini("id=a\nname=A\ndll=a.dll\ndescription=<size=0>x\n", m, error));
   for (const char* dll : {"..\\host.dll", "C:\\x.dll", "sub/x.dll", "x.exe", "x", ".dll"}) {
@@ -130,7 +130,7 @@ void third_party_mod_cannot_claim_the_reserved_id_author() {
   std::string why;
   for (const char* id : {"phasmomods.ghost-tells", "phasmomods.anything"}) {
     CHECK(read_mod(json(id, "Someone"), "", Place::Elsewhere, m, why) == Reading::Refused);
-    CHECK(why == "Its id uses the author \"phasmomods\", which only the mods that come with PhasmoMods Loader may use.");
+    CHECK(why == "id uses the author \"phasmomods\", which is reserved for bundled mods.");
     CHECK(m.id.empty());  // nothing of it is kept
   }
   // An old-format mod has no author: its flat id can still claim it.
@@ -149,7 +149,7 @@ void third_party_mod_cannot_claim_the_reserved_author_name() {
   std::string why;
   for (const char* author : {"PhasmoMods", "phasmomods", " PhasmoMods  ", "PHASMOMODS"}) {
     CHECK(read_mod(json("someone.tells", author), "", Place::Elsewhere, m, why) == Reading::Refused);
-    CHECK(why == "Its author is PhasmoMods, which only the mods that come with PhasmoMods Loader may use.");
+    CHECK(why == "Author is PhasmoMods, which is reserved for bundled mods.");
   }
   CHECK(read_mod(json("someone.tells", "PhasmoMods fan"), "", Place::Elsewhere, m, why) == Reading::Readable &&
         m.author == "PhasmoMods fan");

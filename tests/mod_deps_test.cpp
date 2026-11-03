@@ -75,11 +75,11 @@ void missing_required_dependency_leaves_mod_off_with_reason() {
   // Installed and not chosen.
   Plan p = plan(all, {"me.custom", "me.other"});
   CHECK(p.order == Ids{"me.other"});
-  CHECK(off(p, "me.custom") && off(p, "me.custom")->row == "Needs Spectral Flame");
+  CHECK(off(p, "me.custom") && off(p, "me.custom")->row == "Depends on Spectral Flame");
   CHECK(off(p, "me.custom") && contains(off(p, "me.custom")->log, "Spectral Flame"));
   // Not installed at all: an id no installed mod has counts as missing, and is named by its id.
   p = plan({mod("me.custom", {needs("me.flame"), needs("me.ash")})}, {"me.custom"});
-  CHECK(p.order.empty() && off(p, "me.custom") && off(p, "me.custom")->row == "Needs me.flame and 1 more");
+  CHECK(p.order.empty() && off(p, "me.custom") && off(p, "me.custom")->row == "Depends on me.flame and 1 more");
   CHECK(off(p, "me.custom") && contains(off(p, "me.custom")->log, "me.flame") && contains(off(p, "me.custom")->log, "me.ash"));
   // A chosen id no installed mod has is not started and not listed.
   CHECK(plan(all, {"me.nobody"}).order.empty() && plan(all, {"me.nobody"}).off.empty());
@@ -96,16 +96,16 @@ void failed_required_dependency_cascades() {
   CHECK(r.started == Ids{"me.d"});
   CHECK(tried == (Ids{"me.c", "me.d"}));  // neither B nor A is even tried
   CHECK(off(r, "me.c") && off(r, "me.c")->row == "It did not start");
-  CHECK(off(r, "me.b") && off(r, "me.b")->row == "Needs C, which did not start" && off(r, "me.b")->because == "me.c");
-  CHECK(off(r, "me.a") && off(r, "me.a")->row == "Needs B, which did not start" && off(r, "me.a")->because == "me.b");
+  CHECK(off(r, "me.b") && off(r, "me.b")->row == "Depends on C, which contains an error. Please check mods.log." && off(r, "me.b")->because == "me.c");
+  CHECK(off(r, "me.a") && off(r, "me.a")->row == "Depends on B, which contains an error. Please check mods.log." && off(r, "me.a")->because == "me.b");
   CHECK(off(r, "me.a") && contains(off(r, "me.a")->log, "B, which needs C"));  // the chain of why
   // Planned off, the same cascade, before anything is tried: C needs something missing.
   all[2].dependencies = {needs("me.gone")};
   const Plan q = plan(all, {"me.a", "me.b", "me.c", "me.d"});
   CHECK(q.order == Ids{"me.d"});
-  CHECK(off(q, "me.c") && off(q, "me.c")->row == "Needs me.gone");
-  CHECK(off(q, "me.b") && off(q, "me.b")->row == "Needs C, which did not start");
-  CHECK(off(q, "me.a") && contains(off(q, "me.a")->log, "B, which needs C, which stays off: Needs me.gone"));
+  CHECK(off(q, "me.c") && off(q, "me.c")->row == "Depends on me.gone");
+  CHECK(off(q, "me.b") && off(q, "me.b")->row == "Depends on C, which contains an error. Please check mods.log.");
+  CHECK(off(q, "me.a") && contains(off(q, "me.a")->log, "B, which needs C, which stays off: Depends on me.gone"));
 }
 
 void missing_optional_dependency_still_starts() {
@@ -124,11 +124,11 @@ void required_cycle_refused_and_named() {
   const Plan p = plan(all, {"me.a", "me.b", "me.c", "me.d", "me.e"});
   CHECK(p.order == Ids{"me.e"});
   for (const char* id : {"me.a", "me.b", "me.c"}) {
-    CHECK(off(p, id) && contains(off(p, id)->row, "Its required mods form a cycle"));
+    CHECK(off(p, id) && contains(off(p, id)->row, "Dependency cycle detected"));
   }
-  CHECK(off(p, "me.a") && off(p, "me.a")->row == "Its required mods form a cycle: a, b, c");
+  CHECK(off(p, "me.a") && off(p, "me.a")->row == "Dependency cycle detected: a, b, c.");
   CHECK(off(p, "me.a") && contains(off(p, "me.a")->log, "a needs b, which needs c, which needs a"));
-  CHECK(off(p, "me.d") && off(p, "me.d")->row == "Needs a, which did not start");  // outside the cycle: it cascades
+  CHECK(off(p, "me.d") && off(p, "me.d")->row == "Depends on a, which contains an error. Please check mods.log.");  // outside the cycle: it cascades
 }
 
 void optional_edge_closing_cycle_ignored_for_order() {
@@ -148,8 +148,8 @@ void self_and_duplicate_dependency_refused() {
                                      mod("me.x")};
   const Plan p = plan(all, {"me.self", "me.twice", "me.x"});
   CHECK(p.order == Ids{"me.x"});
-  CHECK(off(p, "me.self") && off(p, "me.self")->row == "It names itself as a dependency");
-  CHECK(off(p, "me.twice") && off(p, "me.twice")->row == "It names one dependency twice");
+  CHECK(off(p, "me.self") && off(p, "me.self")->row == "Lists itself as a dependency... nice.");
+  CHECK(off(p, "me.twice") && off(p, "me.twice")->row == "Duplicates a dependency.");
 }
 
 void stop_runs_in_reverse_start_order() {
@@ -193,11 +193,11 @@ void panel_disabling_turns_off_dependents() {
   CHECK(dependents({"me.custom"}, all).empty());
   // What the panel says when a click switched more than one mod.
   CHECK(switch_note(all, {}, {"me.custom", "me.flame"}, "me.custom", true) ==
-        "Custom Ghosts needs Spectral Flame, so they are switched on together.");
+        "Custom Ghosts depends on Spectral Flame, so they are also switched on.");
   CHECK(switch_note(all, {"me.custom", "me.flame"}, {}, "me.flame", false) ==
-        "Custom Ghosts needs Spectral Flame, so they are switched off together.");
+        "Custom Ghosts depends on Spectral Flame, so it is also switched off.");
   CHECK(switch_note(all, everything, {"me.ghost"}, "me.flame", false) ==
-        "Custom Ghosts, Other need Spectral Flame, so they are switched off together.");
+        "Custom Ghosts, Other depend on Spectral Flame, so they are also switched off.");
   CHECK(switch_note(all, {"me.flame"}, {}, "me.flame", false).empty());  // only itself
 }
 
@@ -217,7 +217,7 @@ void dependency_below_minimum_version_counts_as_missing() {
                                mod("me.ghost", {uses("me.custom", "2.0.0")})};
   all[1].name = "Spectral Flame";
   Plan p = plan(all, {"me.custom", "me.flame", "me.ghost"});
-  CHECK(off(p, "me.custom") && off(p, "me.custom")->row == "Needs Spectral Flame 1.2.0 or newer, and you have 1.0.10");
+  CHECK(off(p, "me.custom") && off(p, "me.custom")->row == "Depends on Spectral Flame 1.2.0 or newer, you have 1.0.10");
   CHECK(p.order == (Ids{"me.flame", "me.ghost"}));
   // Versions compare as numbers: 1.10.0 meets 1.2.0.
   all[1].version = "1.10.0";
@@ -231,7 +231,7 @@ void dependency_below_minimum_version_counts_as_missing() {
   all[1].version.clear();
   all[1].oldFormat = true;
   p = plan(all, {"me.custom", "me.flame"});
-  CHECK(off(p, "me.custom") && off(p, "me.custom")->row == "Needs Spectral Flame 1.2.0 or newer, and its version is unknown");
+  CHECK(off(p, "me.custom") && off(p, "me.custom")->row == "Depends on Spectral Flame 1.2.0 or newer, its version is unknown");
 }
 
 void incompatible_mod_stays_off_with_reason() {
@@ -242,9 +242,9 @@ void incompatible_mod_stays_off_with_reason() {
   all[3].incompatibilities = {"me.c"};
   all[3].name = "D";
   Plan p = plan(all, {"me.a", "me.b", "me.c", "me.d"});
-  CHECK(off(p, "me.a") && off(p, "me.a")->row == "Can't run beside B");
+  CHECK(off(p, "me.a") && off(p, "me.a")->row == "Not compatible with B.");
   CHECK(!off(p, "me.b"));  // the other mod is unaffected
-  CHECK(off(p, "me.c") && off(p, "me.c")->row == "Can't run beside D" && off(p, "me.d"));  // each in a mutual refusal
+  CHECK(off(p, "me.c") && off(p, "me.c")->row == "Not compatible with D." && off(p, "me.d"));  // each in a mutual refusal
   CHECK(p.order == Ids{"me.b"});
   // Naming a mod that is installed and not chosen, or not installed, refuses nothing.
   p = plan(all, {"me.a", "me.c"});
@@ -290,7 +290,7 @@ void playable_ghost_starts_after_custom_ghosts() {
   // Without Spectral Flame, Custom Ghosts stays off and says why; Playable Ghost starts without it.
   const Plan alone = plan(bundled, {"phasmomods.custom-ghosts", "phasmomods.playable-ghost"});
   CHECK(alone.order == Ids{"phasmomods.playable-ghost"});
-  CHECK(off(alone, "phasmomods.custom-ghosts") && off(alone, "phasmomods.custom-ghosts")->row == "Needs Spectral Flame");
+  CHECK(off(alone, "phasmomods.custom-ghosts") && off(alone, "phasmomods.custom-ghosts")->row == "Depends on Spectral Flame");
 }
 
 // Manifests come from anybody: a long chain, a cycle through everything and more mods than may start all end, with
@@ -306,14 +306,14 @@ void untrusted_graphs_are_bounded() {
   // The first kMaxMods of the choice may start; the rest say why not.
   Plan p = plan(chain, forward);
   CHECK(p.order.size() == kMaxMods && p.order.front() == "me.m0" && p.order.back() == "me.m255");
-  CHECK(p.off.size() == 300 - kMaxMods && off(p, "me.m256") && off(p, "me.m256")->row == "More than 256 mods are on");
+  CHECK(p.off.size() == 300 - kMaxMods && off(p, "me.m256") && off(p, "me.m256")->row == "More than 256 mods are on... How did we get here?");
   // The deepest first: the mods past the limit are the chain's roots, so everything else cascades. However long the
   // chain, its log is bounded.
   const Ids reversed(forward.rbegin(), forward.rend());
   p = plan(chain, reversed);
   CHECK(p.order.empty() && p.off.size() == 300);
-  CHECK(off(p, "me.m0") && off(p, "me.m0")->row == "More than 256 mods are on");
-  CHECK(off(p, "me.m299") && off(p, "me.m299")->row == "Needs me.m298, which did not start");
+  CHECK(off(p, "me.m0") && off(p, "me.m0")->row == "More than 256 mods are on... How did we get here?");
+  CHECK(off(p, "me.m299") && off(p, "me.m299")->row == "Depends on me.m298, which contains an error. Please check mods.log.");
   CHECK(off(p, "me.m299") && off(p, "me.m299")->log.size() < 1024 &&
         contains(off(p, "me.m299")->log, "which stays off: More than 256 mods are on"));
   // What goes off with a mod looks through as many mods as may start, however many are installed. One past them that needed

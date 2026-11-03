@@ -253,7 +253,7 @@ void manifest_id_must_match_dll(const fs::path& data) {
   g_resolved = {"Camera", "GhostAI.UnAppear"};
   pm::mods::start(&api, {"someone.else", "fake-mod"});
   CHECK(pm::mods::started_ids() == std::vector<std::string>{"fake-mod"});
-  CHECK(pm::mods::off_reason("someone.else") == "Its manifest's id is not the id in its DLL");
+  CHECK(pm::mods::off_reason("someone.else") == "manifest and DLL disagree on the mod id");
   CHECK(logged("mods: someone.else stays off: the manifest says someone.else, the DLL says fake-mod"));
   pm::mods::stop_all();
   pm::log::set_sink(nullptr, nullptr);
@@ -288,20 +288,20 @@ void a_dll_that_cannot_run_is_refused_with_a_reason(const fs::path& data, const 
   pm::mods::start(&api, every);
   CHECK(pm::mods::started_ids() == std::vector<std::string>{"fake-mod"});
   CHECK(pm::mods::refused().size() == 1 && pm::mods::refused()[0].name == "from-the-launcher");
-  CHECK(pm::mods::off_reason("not-a-dll") == "Its DLL could not be loaded");
+  CHECK(pm::mods::off_reason("not-a-dll") == "DLL could not be loaded");
   CHECK(logged("mods: not-a-dll stays off: its DLL could not be loaded (Windows error 193)"));
-  CHECK(pm::mods::off_reason("not-there") == "Its DLL could not be loaded");
-  CHECK(pm::mods::off_reason("fake-optional") == "Needs Bad Mod, which did not start");
+  CHECK(pm::mods::off_reason("not-there") == "DLL could not be loaded");
+  CHECK(pm::mods::off_reason("fake-optional") == "Depends on Bad Mod, which contains an error. Please check mods.log.");
   CHECK(GetModuleHandleW(neverLoaded.c_str()) == nullptr);
   pm::mods::stop_all();
   // The file is now a good DLL, and the refusal still stands until the game restarts: loaded or not, it is not tried again.
   CHECK(fs::copy_file(PM_FAKE_MOD_PLAIN, notADll, fs::copy_options::overwrite_existing, error));
   pm::mods::start(&api, every);
   CHECK(GetModuleHandleW(notADll.c_str()) == nullptr);
-  CHECK(pm::mods::off_reason("not-a-dll") == "Its DLL could not be loaded");
+  CHECK(pm::mods::off_reason("not-a-dll") == "DLL could not be loaded");
   pm::mods::stop_all();
   pm::mods::start(&api, {"fake-mod"});
-  CHECK(pm::mods::off_reason("not-a-dll") == "Its DLL could not be loaded");  // unticked, the row still says why
+  CHECK(pm::mods::off_reason("not-a-dll") == "DLL could not be loaded");  // unticked, the row still says why
   pm::mods::stop_all();
   pm::log::set_sink(nullptr, nullptr);
 }
@@ -316,7 +316,7 @@ void a_repeated_id_is_refused_from_the_manifests(const fs::path& data) {
   pm::mods::set_installed(data, twice);
   CHECK(pm::mods::installed().size() == 1 && pm::mods::installed()[0].manifest.name == "Fake Mod");
   CHECK(pm::mods::refused().size() == 1 && pm::mods::refused()[0].name == "Fake Again" &&
-        pm::mods::refused()[0].why == "It repeats the id of another mod.");
+        pm::mods::refused()[0].why == "Repeats the id of another mod.");
   pm::log::set_sink(nullptr, nullptr);
 }
 
@@ -404,7 +404,7 @@ void unticked_mod_is_not_loaded_until_switched_on(const fs::path& data, const fs
   pm::mods::start(&api, {"fake-mod", "fake-optional"});
   CHECK(pm::mods::started_ids() == std::vector<std::string>{"fake-mod"});
   CHECK(mapped(ticked) && !mapped(later) && !mapped(needsAbsent));
-  CHECK(pm::mods::off_reason("fake-optional") == "Needs nobody-has-this");
+  CHECK(pm::mods::off_reason("fake-optional") == "Depends on nobody-has-this");
   pm::mods::restart(&api, {"fake-mod", "fake-plain"}, {}, {});
   CHECK(pm::mods::started_ids() == (std::vector<std::string>{"fake-mod", "fake-plain"}));
   CHECK(mapped(later) && !mapped(needsAbsent));
@@ -457,7 +457,7 @@ void unresolved_mod_stays_off_and_is_named(const fs::path& data, const fs::path&
   CHECK(pm::mods::started_ids() == std::vector<std::string>{"fake-plain"});
   CHECK(pm::mods::off_reason("fake-mod") == "This game build lacks GhostAI.UnAppear");
   CHECK(logged("mods: fake-mod stays off: it needs game entries this game build lacks (GhostAI.UnAppear)"));
-  CHECK(pm::mods::off_reason("fake-optional") == "Needs Spectral Flame, which did not start");
+  CHECK(pm::mods::off_reason("fake-optional") == "Depends on Spectral Flame, which contains an error. Please check mods.log.");
   CHECK(logged("mods: fake-optional stays off: it needs Spectral Flame, which stays off: This game build lacks GhostAI.UnAppear"));
   CHECK(pm::mods::off_reason("fake-plain").empty());
   CHECK(!mapped(dependent));  // it never reached its DLL
@@ -504,9 +504,9 @@ void dll_recording_voice_against_its_manifest_stays_off(const fs::path& data, co
   pm::mods::start(&api, {"fake-voice", "fake-optional"});
   CHECK(pm::mods::started_ids().empty());
   CHECK(mapped(voice));  // it took loading it to find out, and it stays mapped
-  CHECK(pm::mods::off_reason("fake-voice") == "It records voice, which its manifest does not say");
+  CHECK(pm::mods::off_reason("fake-voice") == "Undeclared voice recording, please check with the author.");
   CHECK(logged("mods: fake-voice stays off: its DLL records voice, which its manifest does not say"));
-  CHECK(pm::mods::off_reason("fake-optional") == "Needs Voice, which did not start");
+  CHECK(pm::mods::off_reason("fake-optional") == "Depends on Voice, which contains an error. Please check mods.log.");
   CHECK(!mapped(dependent));
   CHECK(pm::mods::started_builds().empty());
 
@@ -533,7 +533,7 @@ void a_mod_for_another_contract_gets_its_reason_once_loaded(const fs::path& data
   api.game_entry = &game_entry;
   pm::mods::start(&api, {"fake-mod"});
   CHECK(mapped(old) && pm::mods::started_ids().empty());
-  CHECK(pm::mods::off_reason("fake-mod") == "It was built for another version of the loader");
+  CHECK(pm::mods::off_reason("fake-mod") == "Mod was built for another version of the PhasmoMods Loader.");
   pm::log::set_sink(nullptr, nullptr);
 }
 
@@ -551,7 +551,7 @@ void a_repeated_channel_is_judged_in_start_order(const fs::path& data, const fs:
     const std::string first = plainFirst ? "fake-plain" : "fake-same", second = plainFirst ? "fake-same" : "fake-plain";
     pm::mods::start(&api, {first, second});
     CHECK(pm::mods::started_ids() == std::vector<std::string>{first});
-    CHECK(pm::mods::off_reason(second) == "It repeats the channel of a mod already loaded");
+    CHECK(pm::mods::off_reason(second) == "Repeats the network channel of a mod already loaded");
     CHECK(logged("mods: " + second + " stays off: it repeats channel 203 of a mod already loaded"));
     pm::mods::stop_all();
   }
@@ -714,7 +714,7 @@ void mod_started_answers_for_optional_dependency(const fs::path& data) {
   g_lines.clear();
   pm::mods::start(&api, both);
   CHECK(pm::mods::started_ids().empty());
-  CHECK(pm::mods::off_reason("fake-optional") == "Needs Fake Mod, which did not start");
+  CHECK(pm::mods::off_reason("fake-optional") == "Depends on Fake Mod, which contains an error. Please check mods.log.");
   CHECK(logged("mods: fake-optional stays off: it needs Fake Mod, which stays off: It did not start. mods.log says why"));
   fail(false);
   pm::mods::start(&api, both);
@@ -740,13 +740,13 @@ void a_dll_that_throws_when_asked_is_refused(const fs::path& data) {
   g_lines.clear();
   pm::mods::set_installed(data, {{first, {PM_FAKE_MOD, fake_manifest()}}, {}});
   pm::mods::start(&api, {"fake-throws", "fake-mod"});
-  CHECK(pm::mods::off_reason("fake-throws") == "Its DLL failed when asked what it is");
+  CHECK(pm::mods::off_reason("fake-throws") == "DLL failed when performing handshake. Check %LOCALAPPDATA%\\PhasmoMods\\mods.log for details.");
   CHECK(logged("mods: fake-throws stays off: its pmmod_info threw"));
   CHECK(!pm::mods::started("fake-throws") && pm::mods::started("fake-mod"));
   pm::mods::stop_all();
   pm::mods::set_installed(data, {{second}, {}});
   pm::mods::start(&api, {"fake-throws"});
-  CHECK(pm::mods::off_reason("fake-throws") == "Its DLL failed when asked what it needs");
+  CHECK(pm::mods::off_reason("fake-throws") == "DLL failed when querying dependencies. Check %LOCALAPPDATA%\\PhasmoMods\\mods.log for details.");
   CHECK(logged("mods: fake-throws stays off: its pmmod_requires threw"));
   CHECK(!pm::mods::started("fake-throws"));
   pm::log::set_sink(nullptr, nullptr);
@@ -810,8 +810,8 @@ void a_mods_folder_beside_a_copied_host_is_elsewhere(const fs::path& data, const
   g_lines.clear();
   pm::mods::Installed installed = pm::mods::find(data, data / "bin", 77);
   CHECK(installed.found.empty() && installed.refused.size() == 1 && installed.refused[0].name == "tells");
-  CHECK(installed.refused.size() == 1 && installed.refused[0].why.find("only the mods that come with PhasmoMods Loader") != std::string::npos);
-  CHECK(logged("mods: tells stays off: Its id uses the author"));
+  CHECK(installed.refused.size() == 1 && installed.refused[0].why.find("reserved for bundled mods") != std::string::npos);
+  CHECK(logged("mods: tells stays off: id uses the author"));
   // Beside a host in its package, the same mod is the project's own.
   write(root / "installed" / "mods" / "tells" / "manifest.json", tells);
   installed = pm::mods::find(data, root / "installed", 77);

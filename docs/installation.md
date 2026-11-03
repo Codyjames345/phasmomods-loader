@@ -34,8 +34,8 @@ investigator's form). As the Mimic, Crouch on its own picks the next type to cop
 
 When the game reaches its main menu, a notice pinned to the board asks you first. It
 explains the ban risk, that a mod is a program that runs on your computer, voice
-recording (when a mod that records voices is on), and that your progress is at your own
-risk, and names every installed mod. No mod has
+recording (when a mod that records voices is on), and to back up your saves, and names every
+installed mod. No mod has
 been loaded yet: nothing of theirs runs until you answer. **I agree** loads and starts
 the ticked mods, and is remembered until the notice or the game's version changes.
 **Play without mods** loads none and takes the loader's hook back out of the game, and the notice asks again the next

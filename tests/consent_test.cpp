@@ -20,9 +20,9 @@ void covers_the_whole_suite() {
   const Notice n = notice({{"Playable Ghost", false}, {"Custom Ghosts", true}});
   CHECK(says(n, "ban"));
   CHECK(says(n, "private lobbies"));
-  CHECK(says(n, "Voices are recorded"));
+  CHECK(says(n, "Voices may be recorded"));
   CHECK(says(n, "Custom Ghosts keeps what other players say"));
-  CHECK(says(n, "own risk"));
+  CHECK(says(n, "Please back up your saves"));
   CHECK(says(n, "Playable Ghost, Custom Ghosts"));
   CHECK(says(n, "Mods button"));  // every installed mod is named: any can be switched on later
   CHECK(n.body.find("\xE2\x80\x94") == std::string::npos);  // no em dash in player-facing copy
@@ -31,7 +31,7 @@ void covers_the_whole_suite() {
 void mentions_recording_only_when_a_mod_records() {
   const Notice n = notice({{"Playable Ghost", false}});
   CHECK(!says(n, "recorded"));
-  CHECK(says(n, "ban") && says(n, "own risk"));
+  CHECK(says(n, "ban") && says(n, "Please back up your saves"));
 }
 
 // Every notice warns that a mod is a program, after the account's risk (and after the update paragraph, which stays straight
@@ -40,9 +40,9 @@ void mentions_recording_only_when_a_mod_records() {
 void notice_warns_about_community_mods() {
   for (const Notice& n : {notice({}), notice({{"Playable Ghost", false}}), notice({{"Custom Ghosts", true}}, false)}) {
     CHECK(says(n, programs_paragraph().c_str()));
-    CHECK(n.body.find("Your account is at risk") < n.body.find("Mods are programs"));
-    if (says(n, "The game has updated")) CHECK(n.body.find("The game has updated") < n.body.find("Mods are programs"));
-    CHECK(n.body.find("Mods are programs") < n.body.find("Your progress is at your own risk"));
+    CHECK(n.body.find("Your account is at risk") < n.body.find("Mods run arbitrary code"));
+    if (says(n, "The game has updated")) CHECK(n.body.find("The game has updated") < n.body.find("Mods run arbitrary code"));
+    CHECK(n.body.find("Mods run arbitrary code") < n.body.find("Please back up your saves"));
     Notice before = n;
     before.body.erase(before.body.find(programs_paragraph()), programs_paragraph().size());
     CHECK(fingerprint(before, kBuild) != fingerprint(n, kBuild));
@@ -74,9 +74,9 @@ void remembers_only_the_agreed_notice() {
 }
 
 constexpr char kExactParagraph[] =
-    "<b>The game has updated.</b> These mods haven't been checked against this version of Phasmophobia. Mods that still "
-    "find everything they need will run, and the rest stay off. The mods can't tell whether the update changed the "
-    "anti-cheat, so playing now carries more risk than usual.\n\n";
+    "<b>The game has updated.</b> These mods haven't been checked against this version of Phasmophobia. Most mods will "
+    "likely still work, but some won't. Please note every update contains a risk of detection by a newer version of "
+    "anti-cheat.\n\n";
 
 // The paragraph is about a build the offline check has not passed, and appears on no other.
 void known_build_runs_without_the_update_paragraph() {
@@ -91,9 +91,9 @@ void unseen_build_asks_again_with_the_update_paragraph() {
   CHECK(says(n, kExactParagraph));
   const size_t at = n.body.find(kExactParagraph);
   const size_t risk = n.body.find("Your account is at risk");
-  const size_t before = n.body.find("Play only with friends who also agreed to this.\n\n");
-  CHECK(risk < at && before != std::string::npos && before + std::strlen("Play only with friends who also agreed to this.\n\n") == at);
-  CHECK(at < n.body.find("Voices are recorded"));
+  const size_t before = n.body.find("Do not attempt to bypass this restriction.\n\n");
+  CHECK(risk < at && before != std::string::npos && before + std::strlen("Do not attempt to bypass this restriction.\n\n") == at);
+  CHECK(at < n.body.find("Voices may be recorded"));
   CHECK(n.body.find("\xE2\x80\x94") == std::string::npos);
   // It is another notice: an agreement to the known build's does not answer it, on this build or any.
   CHECK(fingerprint(n, kBuild) != fingerprint(notice({{"Playable Ghost", true}}, true), kBuild));

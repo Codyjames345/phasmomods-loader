@@ -353,7 +353,7 @@ void declined_runs_the_game_without_mods() {
 // A notice that cannot be shown says so to the Mods panel, in each way it can fail. The player's own answers do not, nor a
 // notice still waiting: "Play without mods" is a choice, and needs no explaining.
 void off_cause_is_only_for_a_notice_that_could_not_be_shown() {
-  constexpr char kCause[] = "The notice can't be shown on this game build, so the mods stay off. mods.log says why.";
+  constexpr char kCause[] = "The consent notice can't be shown on this game build, mods are disabled. Check %LOCALAPPDATA%\\PhasmoMods\\mods.log for details.";
   reset();
   CHECK(pm::consent::off_cause().empty());
   menuVisible = true;

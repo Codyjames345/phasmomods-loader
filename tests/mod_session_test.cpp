@@ -109,7 +109,7 @@ void the_start_gate_declines_without_the_join_guard() {
   reset();
   CHECK(pm::mod_session::opening(true, "EventData.Code", "", cause) == Answer::Declined);
   CHECK(g_log.size() == 1 && g_log[0].find("did not resolve: EventData.Code") != std::string::npos);
-  CHECK(cause == "This game build lacks what the lobby's rules need, so the mods stay off. mods.log names what it lacks.");
+  CHECK(cause == "This game build lacks one or more required functions, mods are disabled. Check %LOCALAPPDATA%\\PhasmoMods\\mods.log for details.");
   reset();
   CHECK(pm::mod_session::opening(true, "", "ServerManager.KickPlayer", cause) == Answer::Declined);
   CHECK(g_log.size() == 1 && g_log[0].find("did not resolve: ServerManager.KickPlayer") != std::string::npos);

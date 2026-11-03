@@ -96,7 +96,8 @@ std::string row_name(const modlist::Manifest& m) {
 std::string row_text(const modlist::Manifest& m) {
   const std::string about =
       m.author.empty() ? m.description : i18n::text("panel.by-author", {{"author", m.author}, {"description", m.description}});
-  const std::string off = mods::off_reason(m.id);
+  std::string off = mods::off_reason(m.id);
+  if (!off.empty() && off.back() == '.') off.pop_back();  // the table's row ends the reason's sentence itself
   return off.empty() ? about : i18n::text("panel.off-reason", {{"reason", off}, {"about", about}});
 }
 

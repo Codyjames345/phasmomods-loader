@@ -270,12 +270,12 @@ void mod_folders() {
   CHECK(mods.size() == 2 && mods[0].manifest.id == "me.first" && mods[1].manifest.id == "second");
   CHECK(mods.size() == 2 && mods[0].manifest.description == "One" && mods[0].manifest.version == "1.2.3");
   CHECK(mods.size() == 2 && mods[1].manifest.oldFormat && mods[1].manifest.version.empty());
-  CHECK(problems.find(L"in c cannot be used. Its manifest.json is not valid JSON") != std::wstring::npos);
-  CHECK(problems.find(L"in d cannot be used. It is missing its DLL") != std::wstring::npos);
-  CHECK(problems.find(L"in e cannot be used. It repeats the id") != std::wstring::npos);
+  CHECK(problems.find(L"in c cannot be used. manifest.json is not valid JSON") != std::wstring::npos);
+  CHECK(problems.find(L"in d cannot be used. Mod is missing its DLL") != std::wstring::npos);
+  CHECK(problems.find(L"in e cannot be used. Mod repeats the id") != std::wstring::npos);
   CHECK(problems.find(L"in f cannot be used. It has a DLL but no manifest.json") != std::wstring::npos);
   CHECK(problems.find(L"in g") == std::wstring::npos);  // a folder with no DLL is no mod
-  CHECK(problems.find(L"in h cannot be used. It is missing its DLL") != std::wstring::npos);  // a folder is no DLL
+  CHECK(problems.find(L"in h cannot be used. Mod is missing its DLL") != std::wstring::npos);  // a folder is no DLL
   CHECK(refused.size() == 5 && refused[0].name == "c" && refused[3].name == "f" && refused[4].name == "h");
   // They reach the host's Mods panel through the session file.
   const auto lines = session_lines(refused);
@@ -343,9 +343,9 @@ void real_mod_runs_when_an_impostor_sorts_first() {
     CHECK(other.manifest.id == "someone.tells" && other.dll == (root / "other" / "c" / "GhostTells.dll").wstring());
     CHECK(refused.size() == 2 && refused[0].name == "a" && refused[1].name == "b");
     if (refused.size() != 2) continue;
-    CHECK(refused[0].why == "Its id uses the author \"phasmomods\", which only the mods that come with PhasmoMods Loader may use.");
-    CHECK(refused[1].why == "Its author is PhasmoMods, which only the mods that come with PhasmoMods Loader may use.");
-    CHECK(problems.find(L"in a cannot be used. Its id uses the author") != std::wstring::npos);
+    CHECK(refused[0].why == "id uses the author \"phasmomods\", which is reserved for bundled mods.");
+    CHECK(refused[1].why == "Author is PhasmoMods, which is reserved for bundled mods.");
+    CHECK(problems.find(L"in a cannot be used. id uses the author") != std::wstring::npos);
     CHECK(problems.find(L"repeats the id") == std::wstring::npos);  // the impostor never took the real one's id
   }
   fs::remove_all(root, error);
