@@ -26,10 +26,10 @@ The PhasmoMods Loader is my solution to a modding system for Phasmophobia. It pr
 
 The goal of this is to provide a way for developers to create their own mods without the need for reverse engineering, substantially lowering the barrier of entry.
 
-<u>In an effort to protect against misuse, I have made the following decisions</u>
+<u>In an effort to protect against misuse, I have made the following decisions:</u>
 - Mods are only allowed in private lobbies. The loader will forcefully disable all mods in public lobbies.
 - The anti-cheat is not documented, nor are any of its functions available in the SDK.
-- I plan to disable Steam achievements when mods are available, but this still needs work.
+- I plan to disable Steam achievements when mods are active, but this still needs work.
 - A consent banner is presented that must be agreed to before mods are enabled.
 
 The mod loader attaches to the game through DLL injection, which may be picked up as malicious by your antivirus. If you encounter any issues, you may need to add the executable as an exception. If this makes you suspicious, please read the source code for yourself or compile your own version from source - I have nothing to hide. This is just a consequence of how this type of mod loader works.
