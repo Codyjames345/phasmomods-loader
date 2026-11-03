@@ -143,10 +143,9 @@ void show_fake(void* ghost, bool hunt) {
     phasmo::NavMeshHit hit{};
     if (phasmo::NavMesh::SamplePosition(&guess, &hit, 1.5f, -1) && hit.hit)
       spot = {hit.position.x, hit.position.y, hit.position.z};
-    if (void* me = game::local_player(); api::alive(me)) {
-      const Vector3 p = game::position(game::transform_of(me));
-      yaw = std::atan2(p.x - spot.x, p.z - spot.z) * 180.0f / 3.14159265f;  // it faces whoever sees it
-    }
+    // It faces whoever sees it, from the camera they see through: a ghost player's body is parked elsewhere.
+    const Vector3 eye = game::position(game::transform_of(camera));
+    yaw = mesmer_facing(spot.x, spot.z, eye.x, eye.z);
   }
   apparition::place(g.fake, spot, yaw);
   // This player's eye: the fake's layer on, the true form's layers off, for as long as it shows.

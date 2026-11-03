@@ -771,6 +771,11 @@ void the_mesmer_shows_each_their_own() {
   }
   CHECK(differ >= 10);
   CHECK(mesmer_form(12345, 1, 0) == 0);  // only one form: it is that one
+  // It turns to whoever sees it: 0 degrees looks along +z, 90 along +x, from wherever it stands.
+  CHECK(std::fabs(mesmer_facing(2, 3, 2, 8)) < 0.001f);
+  CHECK(std::fabs(mesmer_facing(2, 3, 7, 3) - 90.0f) < 0.001f);
+  CHECK(std::fabs(std::fabs(mesmer_facing(2, 3, 2, -1)) - 180.0f) < 0.001f);
+  CHECK(std::fabs(mesmer_facing(2, 3, -3, 3) + 90.0f) < 0.001f);
   float dx = 0, dz = 0;
   mesmer_offset(mesmer_seed(3, 7), dx, dz);
   const float r = std::sqrt(dx * dx + dz * dz);

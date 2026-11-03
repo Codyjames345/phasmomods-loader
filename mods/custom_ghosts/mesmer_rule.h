@@ -51,6 +51,11 @@ inline void mesmer_offset(uint32_t seed, float& dx, float& dz) {
   dz = std::sin(angle) * r;
 }
 
+/** The yaw in degrees that turns it at (x, z) to face a viewer's eye at (eyeX, eyeZ): 0 looks along +z, 90 along +x. */
+inline float mesmer_facing(float x, float z, float eyeX, float eyeZ) {
+  return std::atan2(eyeX - x, eyeZ - z) * 180.0f / 3.14159265f;
+}
+
 /** The insanity (0..100, 100 the most insane) the monitor is shown for a true `insanity`. */
 inline float mesmer_shown_insanity(float insanity) { return std::max(0.0f, insanity - kMesmerLie); }
 

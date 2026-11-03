@@ -899,6 +899,7 @@ Tasks 12a to 12d and 12c's rounds. The ghost player is one of two or more client
   - [ ] The truck's exit, a leave and a quit all work for the ghost player, and the truck doesn't leave or count the parked body by itself.
   - [ ] Team sanity counts investigators only: the ghost player's HUD average matches the investigators' readings on the truck's monitor, which has no row for the ghost player, and a drained team reaches the hunt threshold though the parked body's sanity stays full.
   - [ ] A Lethe with a ghost player: the ghost player opening their own journal on the media pages keeps nothing from fading; an investigator looking at them does.
+  - [ ] A Mesmer with a ghost player: its false appearance turns to face the ghost player on their own screen, and each investigator on theirs.
 
 - The lobby
   - [ ] The "Play as ghost" tape sits on the player's own ID card under the XP bar, in Ready's clickable colour, follows the player to another card, and clicking it volunteers without touching Ready.
