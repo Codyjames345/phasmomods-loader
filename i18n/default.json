@@ -43,8 +43,8 @@
   "launcher.copied-steam-open-phasmophobia": "Copied. In Steam, open Phasmophobia > Properties > General and paste into Launch Options. Keep %command% at the end.",  // PM_TEXT_AI
   "launcher.copy": "&Copy Steam launch option",  // PM_TEXT_AI
   "launcher.copy-intro": "To load automatically, copy this command into Steam's Launch Options:",  // PM_TEXT_AI
-  "launcher.development": "[PM_TEXT_TODO launcher-development]",  // PM_TEXT_TODO
-  "launcher.development-not-saved": "[PM_TEXT_TODO launcher-development-not-saved]",  // PM_TEXT_TODO
+  "launcher.development": "Use &development builds (newer and less tested)",  // PM_TEXT_TODO
+  "launcher.development-not-saved": "Your choice of development builds could not be saved, so nothing changed.",  // PM_TEXT_TODO
   "launcher.finish-close": "PhasmoMods Loader could not finish. Close it and try again.",  // PM_TEXT_AI
   "launcher.finish-loading": "PhasmoMods Loader could not finish loading. Restart it and try again.",  // PM_TEXT_AI
   "launcher.fresh-log-created-close": "A fresh game log could not be created. Close PhasmoMods Loader and try again.",  // PM_TEXT_AI

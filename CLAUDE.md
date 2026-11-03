@@ -186,5 +186,5 @@ Where things live:
   user's go at that moment.
 - **Branches** (user, 2026-11-03): work and test locally, push to `development` to test with friends (each push publishes a
   pre-release that only those who ticked the loader's box take), merge to `main` with a merge commit, never a squash, then tag on
-  `main` with `tools/release.ps1` and merge `main` back. `docs/releasing.md` has the steps. A push to `development` is public, so it
-  needs the user's go as a merge does.
+  `main` with `tools/release.ps1` and merge `main` back. `docs/releasing.md` has the steps. Push to `development` whenever a task or
+  round of fixes is complete and tested locally, with no further go; merging to `main` and releasing still need one.
