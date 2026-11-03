@@ -397,7 +397,7 @@ void version_matches_version_file() {
   const auto first = line.find_first_not_of(blanks), last = line.find_last_not_of(blanks);
   const std::string version = first == std::string::npos ? "" : line.substr(first, last - first + 1);
   CHECK(version == PM_SUITE_VERSION);
-  CHECK(std::regex_match(version, std::regex(R"(\d+\.\d+\.\d+)")));
+  CHECK(std::regex_match(version, std::regex(R"(\d+\.\d+\.\d+(-dev\.\d+)?)")));  // a release, or a development build's
 }
 
 /** The executable's name has a space, so the Steam launch option must quote its path. */

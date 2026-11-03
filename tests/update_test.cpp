@@ -2,6 +2,8 @@
 #include <shellapi.h>
 #include <atomic>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <stdexcept>
 #include <thread>
@@ -50,6 +52,42 @@ struct FakeBackend : Backend {
 
 Check available(const char* version) { return {Check::Kind::Available, version, L""}; }
 const std::vector<std::wstring> kArguments{L"--steam", L"C:\\Game\\Phasmophobia.exe", L"-arg"};
+
+// The checkbox moves an install between two feeds. The release's is Velopack's default channel with GitHub's pre-releases left out,
+// so a player who never ticks it sees nothing different; a development build's is its own channel, and reads pre-releases.
+void each_choice_reads_its_own_feed() {
+  const Feed release = feed_for(false);
+  CHECK(release.channel == "win" && !release.prerelease);
+  const Feed development = feed_for(true);
+  CHECK(development.channel == "dev" && development.prerelease);
+}
+
+// With no choice saved, an install follows what it is: a release stays on releases, and a copy installed from a development
+// Setup.exe stays on development. A saved choice wins either way, which is how unticking comes back from a development build.
+void the_choice_defaults_to_what_is_installed() {
+  CHECK(!wants_development(std::nullopt, "0.2.0"));
+  CHECK(wants_development(std::nullopt, "0.3.0-dev.12"));
+  CHECK(wants_development(true, "0.2.0"));
+  CHECK(!wants_development(false, "0.3.0-dev.12"));
+  CHECK(is_development_version("0.3.0-dev.12") && !is_development_version("0.3.0") && !is_development_version(""));
+}
+
+void the_choice_is_saved_and_read_back() {
+  const std::filesystem::path folder =
+      std::filesystem::temp_directory_path() / ("pm-channel-test-" + std::to_string(GetCurrentProcessId()));
+  std::error_code ignored;
+  std::filesystem::remove_all(folder, ignored);
+  const std::filesystem::path file = folder / "nested" / "update_channel.txt";
+  CHECK(!read_development_choice(file));  // nothing saved yet
+  CHECK(save_development_choice(file, true));  // makes its folder
+  CHECK(read_development_choice(file) == true);
+  CHECK(save_development_choice(file, false));
+  CHECK(read_development_choice(file) == false);
+  std::ofstream(file) << "something else";
+  CHECK(!read_development_choice(file));  // a file it can't read is no choice
+  CHECK(!save_development_choice(std::filesystem::path(), true));  // no folder to save in: the checkbox says so
+  std::filesystem::remove_all(folder, ignored);
+}
 
 void not_installed_skips_quietly() {
   auto fake = std::make_shared<FakeBackend>();
@@ -229,6 +267,9 @@ void restart_arguments_round_trip() {
 
 int main() {
   use_text({"i18n/default.json"});
+  each_choice_reads_its_own_feed();
+  the_choice_defaults_to_what_is_installed();
+  the_choice_is_saved_and_read_back();
   not_installed_skips_quietly();
   same_version_is_up_to_date();
   newer_version_restarts();

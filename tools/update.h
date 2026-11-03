@@ -1,7 +1,9 @@
 #pragma once
 #include <chrono>
+#include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -66,10 +68,27 @@ Report run(std::shared_ptr<Backend> backend, const std::vector<std::wstring>& ar
 /** The launcher's own arguments after argv[0], unchanged, for the restarted launcher. */
 std::vector<std::wstring> restart_arguments(const std::vector<std::wstring>& launcherArguments);
 
+/** Which of the project's builds an install takes (docs/releasing.md). */
+struct Feed {
+  std::string channel;  // Velopack's channel
+  bool prerelease;      // whether GitHub's pre-releases are read
+};
+
+/** The development builds' feed, or the releases'. */
+Feed feed_for(bool development);
+/** Whether `version` is a development build's, like 0.3.0-dev.12. */
+bool is_development_version(const std::string& version);
+/** Whether an install takes development builds: as `saved`, and with no choice saved, as what is installed now. */
+bool wants_development(std::optional<bool> saved, const std::string& current);
+/** The choice saved in `file`; none when it is missing or can't be read. */
+std::optional<bool> read_development_choice(const std::filesystem::path& file);
+/** Saves the choice in `file`, making its folder. False when it could not be saved. */
+bool save_development_choice(const std::filesystem::path& file, bool development);
+
 /**
- * The Velopack backend (tools/update_velopack.cpp). It updates from the folder that the
+ * The Velopack backend (tools/update_velopack.cpp) for `feed`. It updates from the folder that the
  * environment variable PM_UPDATE_SOURCE names when that folder exists, and from the project's
  * GitHub releases otherwise.
  */
-std::shared_ptr<Backend> velopack_backend();
+std::shared_ptr<Backend> velopack_backend(const Feed& feed);
 }

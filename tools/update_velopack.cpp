@@ -6,6 +6,7 @@
 #include <exception>
 #include <filesystem>
 #include <optional>
+#include <utility>
 
 namespace pm::update {
 namespace {
@@ -33,17 +34,20 @@ std::filesystem::path local_source() {
  */
 class VelopackBackend : public Backend {
  public:
+  explicit VelopackBackend(Feed feed) : feed_(std::move(feed)) {}
+
   /** Constructing the manager fails when Setup.exe did not install this program (a dev build). */
   bool installed() override {
     try {
       Velopack::UpdateOptions options{};
-      options.AllowVersionDowngrade = true;
+      options.AllowVersionDowngrade = true;  // a taken-down release moves back, and so does leaving the development builds
       options.MaximumDeltasBeforeFallback = 10;  // Velopack's default
+      options.ExplicitChannel = feed_.channel;
       const std::filesystem::path folder = local_source();
       if (!folder.empty())
         manager_.emplace(std::make_unique<Velopack::FileSource>(text::narrow(folder.wstring())), &options);
       else
-        manager_.emplace(std::make_unique<Velopack::GithubSource>(kRepository, "", false), &options);
+        manager_.emplace(std::make_unique<Velopack::GithubSource>(kRepository, "", feed_.prerelease), &options);
       return true;
     } catch (...) {
       manager_.reset();
@@ -111,10 +115,11 @@ class VelopackBackend : public Backend {
   }
 
  private:
+  Feed feed_;
   std::optional<Velopack::UpdateManager> manager_;
   std::optional<Velopack::UpdateInfo> update_;  // what the last check found
 };
 }
 
-std::shared_ptr<Backend> velopack_backend() { return std::make_shared<VelopackBackend>(); }
+std::shared_ptr<Backend> velopack_backend(const Feed& feed) { return std::make_shared<VelopackBackend>(feed); }
 }

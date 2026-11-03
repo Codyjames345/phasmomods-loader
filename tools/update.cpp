@@ -3,6 +3,7 @@
 #include "text_table.h"
 #include <condition_variable>
 #include <exception>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -102,6 +103,36 @@ Report run(std::shared_ptr<Backend> backend, const std::vector<std::wstring>& ar
   // An apply that has started is not interrupted: it either restarts the program or reports why not.
   job->finished.wait(lock, [&] { return job->done; });
   return job->report;
+}
+
+Feed feed_for(bool development) {
+  // "win" is Velopack's default channel on Windows, which every release is packed for.
+  return development ? Feed{"dev", true} : Feed{"win", false};
+}
+
+bool is_development_version(const std::string& version) { return version.find("-dev.") != std::string::npos; }
+
+bool wants_development(std::optional<bool> saved, const std::string& current) {
+  return saved ? *saved : is_development_version(current);
+}
+
+std::optional<bool> read_development_choice(const std::filesystem::path& file) {
+  std::ifstream input(file);
+  std::string word;
+  if (!input || !(input >> word)) return std::nullopt;
+  if (word == "development") return true;
+  if (word == "release") return false;
+  return std::nullopt;
+}
+
+bool save_development_choice(const std::filesystem::path& file, bool development) {
+  if (file.empty()) return false;
+  std::error_code error;
+  std::filesystem::create_directories(file.parent_path(), error);
+  std::ofstream output(file, std::ios::binary | std::ios::trunc);
+  output << (development ? "development" : "release") << "\n";
+  output.flush();
+  return output.good();
 }
 
 std::vector<std::wstring> restart_arguments(const std::vector<std::wstring>& launcherArguments) {

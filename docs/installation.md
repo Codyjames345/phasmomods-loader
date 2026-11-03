@@ -139,6 +139,15 @@ itself, with the same Steam launch option. A release that is taken down therefor
 moves everyone back to the one before it. With no network, it starts the installed
 version unchanged.
 
+## Development builds
+
+PhasmoMods Loader has a checkbox for development builds, which are newer and less tested than a release, with the same ban risk.
+Ticking it installs the latest development build and restarts. Each time the program starts after that, it moves to the newest
+one. Unticking it moves you back to the latest release. The box can't be changed once mods are loaded into the game.
+
+Everyone in a lobby needs the same build, so a player on a development build can only play with others on that same build. After
+a new one comes out, restart PhasmoMods Loader before joining.
+
 ## Moving from the portable folder
 
 Earlier builds came as a ZIP that you extracted to a folder.

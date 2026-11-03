@@ -184,3 +184,7 @@ Where things live:
   right (no bullet lists, no conventional-commit prefixes).
 - The release after stage 2b Task 14 is public; the updater moves every install to it. The merge and the release each need the
   user's go at that moment.
+- **Branches** (user, 2026-11-03): work and test locally, push to `development` to test with friends (each push publishes a
+  pre-release that only those who ticked the loader's box take), merge to `main` with a merge commit, never a squash, then tag on
+  `main` with `tools/release.ps1` and merge `main` back. `docs/releasing.md` has the steps. A push to `development` is public, so it
+  needs the user's go as a merge does.

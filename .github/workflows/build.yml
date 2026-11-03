@@ -1,11 +1,14 @@
 # Validate every push and pull request. A tag vMAJOR.MINOR.PATCH also packs the release with Velopack
-# and publishes it on GitHub, which is where installed launchers look for updates.
+# and publishes it on GitHub, which is where installed launchers look for updates. A push to development
+# publishes a development build, a pre-release that only those who ticked the loader's box take
+# (docs/releasing.md). A push of documentation alone runs nothing; a tag always runs.
 name: build
 
 on:
   push:
-    branches: [main]
+    branches: [main, development]
     tags: ['v*']
+    paths-ignore: ['docs/**', '**.md']
   pull_request:
 
 permissions:
@@ -24,6 +27,55 @@ jobs:
       - name: Validate
         shell: pwsh
         run: .\validate.ps1
+
+  publish-development:
+    name: Publish the development build
+    if: github.ref == 'refs/heads/development'
+    needs: validate
+    runs-on: windows-latest
+    # One publish at a time, never cancelled halfway.
+    concurrency:
+      group: publish-development
+      cancel-in-progress: false
+    permissions:
+      contents: write # vpk creates the pre-release, and gh removes the old ones
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Restore vpk
+        shell: pwsh
+        run: dotnet tool restore
+      # In this job's copy alone: only release versions are ever committed.
+      - name: Number the build
+        shell: pwsh
+        env:
+          BUILD: ${{ github.run_number }}
+        run: |
+          . tools/dev_releases.ps1
+          $version = Get-DevVersion (Get-Content -LiteralPath VERSION -Raw) ([int]$env:BUILD)
+          Set-Content -LiteralPath VERSION -Value $version
+          "DEV_VERSION=$version" | Add-Content -LiteralPath $env:GITHUB_ENV
+      - name: Pack the build
+        shell: pwsh
+        run: .\package.ps1 -Channel dev
+      - name: Publish the build
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_URL: https://github.com/${{ github.repository }}
+        run: |
+          dotnet tool run vpk upload github --repoUrl $env:REPO_URL --publish --pre --channel dev --tag "dev-$env:DEV_VERSION" `
+              --targetCommitish $env:GITHUB_SHA --releaseName "PhasmoMods development $env:DEV_VERSION" --outputDir dist/releases --token $env:GH_TOKEN
+          if ($LASTEXITCODE -ne 0) { throw "vpk upload failed with exit code $LASTEXITCODE." }
+      - name: Remove old development builds
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          . tools/dev_releases.ps1
+          Remove-OldDevReleases $env:REPOSITORY
 
   publish:
     name: Publish the release

@@ -1,13 +1,14 @@
 # Validate, then pack the release with Velopack's vpk into dist\releases: Setup.exe and the full package.
 # Each run replaces dist\releases whole. Nothing in the game installation changes.
 # -Vpk is the command that runs vpk (its first element) and any arguments it starts with.
-param([string[]]$Vpk = @('dotnet', 'tool', 'run', 'vpk'))
+# -Channel packs for a Velopack channel other than the default, as development builds do (docs/releasing.md).
+param([string[]]$Vpk = @('dotnet', 'tool', 'run', 'vpk'), [string]$Channel)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 & (Join-Path $root 'validate.ps1')
 
 $version = (Get-Content -LiteralPath (Join-Path $root 'VERSION') -Raw).Trim()
-if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "VERSION must be MAJOR.MINOR.PATCH, not '$version'." }
+if ($version -notmatch '^\d+\.\d+\.\d+(-dev\.\d+)?$') { throw "VERSION must be MAJOR.MINOR.PATCH, or a development build's, not '$version'." }
 # A map change the offline check has not seen would make every player's notice say the game updated.
 & (Join-Path $root 'tools/check_build_record.ps1') -Root $root
 . (Join-Path $root 'tools/payload_files.ps1')
@@ -36,8 +37,9 @@ try {
         New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
         Copy-Item -LiteralPath (Join-Path $root $file.Source) -Destination $destination
     }
+    $channelArguments = if ($Channel) { @('--channel', $Channel) } else { @() }
     & $Vpk[0] @($Vpk | Select-Object -Skip 1) pack --packId PhasmoModsLoader --packVersion $version `
-        --packDir $content --mainExe 'PhasmoMods Loader.exe' --runtime win-x64 --outputDir $output
+        --packDir $content --mainExe 'PhasmoMods Loader.exe' --runtime win-x64 --outputDir $output @channelArguments
     if ($LASTEXITCODE -ne 0) { throw "vpk failed with exit code $LASTEXITCODE." }
 
     # Publish only a finished pack: the previous releases stay in place until the new ones replace them whole.

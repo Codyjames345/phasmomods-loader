@@ -368,6 +368,7 @@ constexpr wchar_t kTitle[] = L"PhasmoMods Loader " PM_WIDEN(PM_SUITE_VERSION);  
 constexpr int kIcon = 1;                               // tools/launcher.rc
 constexpr std::chrono::seconds kUpdateLimit{10};       // the longest an update check delays play
 constexpr UINT kUpdateFound = WM_APP + 1;              // sent by the worker; lParam is the version (std::string*)
+constexpr int kDevelopmentBox = 105;                   // the checkbox that takes development builds
 
 /** Add a timestamped line to launcher_log(), for what `--steam` mode cannot show in a window. */
 void append_log(const std::wstring& message) {
@@ -383,12 +384,20 @@ void append_log(const std::wstring& message) {
   std::ofstream(file, std::ios::binary | std::ios::app) << text::narrow(stamp + message) << "\r\n";
 }
 
+/** %LOCALAPPDATA%\PhasmoMods\update_channel.txt, the development box's choice, or empty when the folder is unavailable. */
+fs::path development_file() { return data_file(L"update_channel.txt"); }
+
+/** Whether this install takes development builds. */
+bool takes_development() {
+  return update::wants_development(update::read_development_choice(development_file()), PM_SUITE_VERSION);
+}
+
 /** Check for updates on this thread, waiting at most kUpdateLimit. A check that cannot start reports CarryOn. */
 update::Report update_now(const std::vector<std::wstring>& launcherArguments, update::Progress progress = {}) {
   update::Report report{update::Outcome::CarryOn, pm::text::widen(pm::i18n::text("launcher.check-updates-starting-installed"))};
   try {
-    report = update::run(update::velopack_backend(), update::restart_arguments(launcherArguments), kUpdateLimit,
-                         std::move(progress));
+    report = update::run(update::velopack_backend(update::feed_for(takes_development())),
+                         update::restart_arguments(launcherArguments), kUpdateLimit, std::move(progress));
   } catch (...) { /* An update that cannot start never stops the game: keep the prepared report. */ }
   return report;
 }
@@ -400,12 +409,15 @@ struct WindowState {
   std::vector<std::string> ticked;
   fs::path selectionPath;
   std::vector<HWND> boxes;
+  HWND developmentBox = nullptr;
+  std::wstring executable;
   std::wstring launchOption;
   std::wstring usualStatus;  // the status box's text when nothing is running
   HWND status = nullptr;
   HWND attachButton = nullptr;
   bool busy = false;
   bool updating = false;  // the worker is checking for updates, not attaching
+  bool attached = false;  // mods were loaded into the game: what they run from can't be replaced until it closes
   std::atomic<bool> closing{false};  // the window was closed while busy: it goes when the worker ends
   Result result;
   update::Report updateReport;
@@ -417,6 +429,38 @@ struct WindowState {
 void set_controls(WindowState* state, bool on) {
   EnableWindow(state->attachButton, on ? TRUE : FALSE);
   for (HWND box : state->boxes) EnableWindow(box, on ? TRUE : FALSE);
+  EnableWindow(state->developmentBox, on && !state->attached ? TRUE : FALSE);
+}
+
+/** Check for updates on a worker, with the controls off until it ends; WM_TIMER shows the result. False when it could not start. */
+bool start_update(HWND window, WindowState* state) {
+  if (!SetTimer(window, 1, 100, nullptr)) return false;
+  state->busy = state->updating = true;
+  state->completed.store(false, std::memory_order_relaxed);
+  set_controls(state, false);
+  SetWindowTextW(state->status, pm::text::widen(pm::i18n::text("launcher.checking-updates")).c_str());
+  try {
+    state->updateReport = {update::Outcome::CarryOn, pm::text::widen(pm::i18n::text("launcher.check-updates-starting-installed"))};
+    state->worker = std::thread([state, window] {
+      try {
+        update::Progress progress;
+        // Sent, not posted: the version string lives only for this call, and the window outlives the worker.
+        progress.found = [window](const std::string& version) {
+          SendMessageW(window, kUpdateFound, 0, reinterpret_cast<LPARAM>(&version));
+        };
+        progress.restart = [state] { return !state->closing; };  // closed: install, but do not come back
+        state->updateReport = update_now({state->executable}, std::move(progress));
+      } catch (...) { /* Keep the prepared report. */ }
+      state->completed.store(true, std::memory_order_release);
+    });
+  } catch (...) {
+    KillTimer(window, 1);
+    state->busy = state->updating = false;
+    set_controls(state, true);
+    SetWindowTextW(state->status, state->usualStatus.c_str());
+    return false;
+  }
+  return true;
 }
 
 /** Copy only the displayed setup command, transferring clipboard ownership on success. */
@@ -482,6 +526,15 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
                        modlist::enabled(state->ticked, state->mods[i].manifest.id) ? BST_CHECKED : BST_UNCHECKED, 0);
         if (!save_selection(state->selectionPath, state->ticked))
           SetWindowTextW(state->status, pm::text::widen(pm::i18n::text("launcher.save-which-mods-are")).c_str());
+      } else if (LOWORD(wParam) == kDevelopmentBox && !state->busy) {
+        // The choice is kept before the update, so whatever comes of it, the next start reads the same builds.
+        const bool on = SendMessageW(state->developmentBox, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        if (!update::save_development_choice(development_file(), on)) {
+          SendMessageW(state->developmentBox, BM_SETCHECK, on ? BST_UNCHECKED : BST_CHECKED, 0);
+          SetWindowTextW(state->status, pm::text::widen(pm::i18n::text("launcher.development-not-saved")).c_str());
+        } else {
+          start_update(window, state);
+        }
       } else if (LOWORD(wParam) == 102) {
         const bool copied = copy_option(window, state->launchOption);
         SetWindowTextW(state->status, (copied ? pm::text::widen(pm::i18n::text("launcher.copied-steam-open-phasmophobia"))
@@ -506,6 +559,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
         if (state->closing) DestroyWindow(window);
         return 0;
       }
+      state->attached = state->attached || state->result.outcome == Outcome::active;
       set_controls(state, true);
       SetWindowTextW(state->status, describe(state->result).c_str());
       if (state->closing) DestroyWindow(window);
@@ -534,6 +588,7 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
   state.ticked = saved_selection(state.selectionPath, state.mods);
   state.package = {hostPath, all_dlls(state.mods), session_lines(refused, fs::path(executable).parent_path() / L"builds")};
   state.launchOption = steam_launch_option(executable);
+  state.executable = executable;
   WNDCLASSEXW type{};
   type.cbSize = sizeof(type);
   type.lpfnWndProc = window_proc;
@@ -548,7 +603,7 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
   const int listHeight = 30 * static_cast<int>(state.mods.size() ? state.mods.size() : 1);
   HWND window = CreateWindowExW(WS_EX_CONTROLPARENT, type.lpszClassName, kTitle,
     WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, CW_USEDEFAULT, CW_USEDEFAULT,
-    650, 395 + listHeight, nullptr, nullptr, instance, &state);
+    650, 425 + listHeight, nullptr, nullptr, instance, &state);
   if (!window) return 1;
   const auto control = [&](const wchar_t* kind, const wchar_t* text, DWORD style,
                            int x, int y, int width, int height, int identifier) {
@@ -571,7 +626,10 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
     control(L"STATIC", pm::text::widen(pm::i18n::text("launcher.no-mods-were-found")).c_str(), 0, 18, y, 600, 26, 0);
     y += 30;
   }
-  y += 10;
+  state.developmentBox = control(L"BUTTON", pm::text::widen(pm::i18n::text("launcher.development")).c_str(),
+                                 WS_TABSTOP | BS_AUTOCHECKBOX, 18, y, 600, 26, kDevelopmentBox);
+  SendMessageW(state.developmentBox, BM_SETCHECK, takes_development() ? BST_CHECKED : BST_UNCHECKED, 0);
+  y += 40;
   control(L"STATIC", pm::text::widen(pm::i18n::text("launcher.start-phasmophobia-through-steam")).c_str(), 0, 18, y, 600, 22, 0);
   state.attachButton = control(L"BUTTON", pm::text::widen(pm::i18n::text("launcher.attach")).c_str(), WS_TABSTOP | BS_DEFPUSHBUTTON, 18, y + 28, 205, 30, 101);
   control(L"STATIC", pm::text::widen(pm::i18n::text("launcher.copy-intro")).c_str(), 0, 18, y + 74, 600, 24, 0);
@@ -582,32 +640,8 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
     WS_TABSTOP | ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL, 18, y + 186, 600, 75, 104);
   ShowWindow(window, SW_SHOW);
   SetFocus(state.attachButton);
-  // Check for updates on the worker before Attach is usable; WM_TIMER shows the result.
-  if (SetTimer(window, 1, 100, nullptr)) {
-    state.busy = state.updating = true;
-    set_controls(&state, false);
-    SetWindowTextW(state.status, pm::text::widen(pm::i18n::text("launcher.checking-updates")).c_str());
-    try {
-      state.updateReport = {update::Outcome::CarryOn, pm::text::widen(pm::i18n::text("launcher.check-updates-starting-installed"))};
-      state.worker = std::thread([target = &state, window, executable] {
-        try {
-          update::Progress progress;
-          // Sent, not posted: the version string lives only for this call, and the window outlives the worker.
-          progress.found = [window](const std::string& version) {
-            SendMessageW(window, kUpdateFound, 0, reinterpret_cast<LPARAM>(&version));
-          };
-          progress.restart = [target] { return !target->closing; };  // closed: install, but do not come back
-          target->updateReport = update_now({executable}, std::move(progress));
-        } catch (...) { /* Keep the prepared report. */ }
-        target->completed.store(true, std::memory_order_release);
-      });
-    } catch (...) {
-      KillTimer(window, 1);
-      state.busy = state.updating = false;
-      set_controls(&state, true);
-      SetWindowTextW(state.status, state.usualStatus.c_str());
-    }
-  }
+  // Check for updates on the worker before Attach is usable.
+  start_update(window, &state);
   MSG message{};
   while (GetMessageW(&message, nullptr, 0, 0) > 0) {
     if (!IsDialogMessageW(window, &message)) { TranslateMessage(&message); DispatchMessageW(&message); }

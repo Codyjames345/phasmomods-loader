@@ -57,6 +57,15 @@ Tasks 12g, 13b, 13c and 14 (string tables).
 - [ ] A saved custom difficulty pick survives the id change: a `custom_difficulty.txt` line `6=custom_ghosts.echo` becomes `6=phasmomods.custom-ghosts.echo`, and Custom 1's pick is still the Echo.
 - [ ] In a room the rows are locked (greyed, a click changes nothing) and the panel says to leave first, the host's too.
 
+## Development builds
+
+- [ ] Installed from the release, the development box starts unticked. Ticking it moves to the latest development build and restarts, with the box still ticked.
+- [ ] Unticking it moves back to the latest release, a lower version, and restarts, with the box unticked and the mods and the notice's answer kept.
+- [ ] With the box ticked and a new development build published, the next start updates to it. With the box unticked, a player sees no development build.
+- [ ] The box can't be changed once mods are attached, and works again after the program restarts.
+- [ ] A player on a development build joining a host on the release is removed with the list of what the lobby needs, and the reverse too.
+- [ ] Started through the Steam launch option, the program updates along the channel the box chose.
+
 ## Lobbies and players
 
 Tasks 13, 13b, 13c and 13d, with the closed-room start.
