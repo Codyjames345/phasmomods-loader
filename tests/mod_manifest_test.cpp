@@ -111,7 +111,7 @@ void manifest_says_whether_it_records_voice() {
   CHECK(parse_manifest_json(minimal(R"(,"recordsVoice":false)"), m, why) && !m.recordsVoice);
   for (const char* bad : {R"(,"recordsVoice":"yes")", R"(,"recordsVoice":1)", R"(,"recordsVoice":null)"}) {
     CHECK(!parse_manifest_json(minimal(bad), m, why));
-    CHECK(why == "'recordsVoice=' field is not true or false.");
+    CHECK(why == "'recordsVoice' field is not true or false.");
   }
 }
 
