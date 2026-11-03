@@ -29,7 +29,7 @@ well it works.
    repeatedly. It cannot open it. Hiding is safe, but loud. When they step out it goes straight back to chasing them. It knows
    because it saw them go in, or found them while searching the way the game's own closet search does **(builder's call)**. Someone
    hiding where it never looks keeps the front door unlocked and the Squatter searching, for as long as they stay.
-6. **The catch.** It slaps the player to death, replacing the stock choke, and says a funny line.
+6. **The catch.** It kills the player with a kick to the face, replacing the stock choke, and says a funny line.
 7. **The door.** It never follows anyone past the way out. The door does not lock until all living players are out; then it
    locks, and each later attempt to open it gets another line, like "hit the road dude". On a map with several exits, it stops at all
    of them and all of them lock. A map without a house still has a "door", which locks in the same way.
@@ -63,7 +63,7 @@ Some consequences, all **(builder's call)**:
 - **Body:** a vanilla player model, not a ghost model.
 - **Sheet:** a cloth-simulated white bedsheet draped over the model, with cutouts for the eyes. The mesh is a plain sheet generated
   in code. The user ruled on 2026-11-04 that this is not a creative asset, so `AI_POLICY.md` does not forbid it.
-- **Animation:** Mixamo clips, in variety: walk and run, ducks, weaves, rolls, parkour moves, stumbles, a slap, sitting on the floor,
+- **Animation:** Mixamo clips, in variety: walk and run, ducks, weaves, rolls, parkour moves, stumbles, a kick, sitting on the floor,
   and getting up excited. The movement should feel human and
   natural; GTA V's walk and run are the user's reference for the feel. Only the feel: none of GTA's assets are used. The user
   downloads the clips (Mixamo needs an Adobe login) and picks which ones to use.
@@ -127,7 +127,7 @@ Settle the first three in a throwaway test before building the rest. If one fail
    instantiation.
 4. **The kill.** `Player.BeginDeathSequence` sends the death to every client and the animation to the view's owner. Its note says to reach
    it only as its callers do, because the animation's coroutine refuses, **with a report on the sender**, a kill of a dead player or on
-   a friendly ghost's difficulty. `Difficulty.friendlyGhost` also refuses `GhostAI.Hunting` and `Door`'s hunt close. So the slap and the
+   a friendly ghost's difficulty. `Difficulty.friendlyGhost` also refuses `GhostAI.Hunting` and `Door`'s hunt close. So the kick and the
    door must never trigger a refusal, and `friendlyGhost` must never be changed. How to replace the choke, and what the victim sees, needs
    reverse engineering. Read `sdk/systems/photon.md`, "The game's checks on an RPC", first. Do not send a game RPC by name or
    invoke an RPC body.
