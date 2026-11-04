@@ -193,7 +193,9 @@ void panel_disabling_turns_off_dependents() {
   CHECK(dependents({"me.custom"}, all).empty());
   // What the panel says when a click switched more than one mod.
   CHECK(switch_note(all, {}, {"me.custom", "me.flame"}, "me.custom", true) ==
-        "Custom Ghosts depends on Spectral Flame, so they are also switched on.");
+        "Custom Ghosts depends on Spectral Flame, so it is also switched on.");
+  CHECK(switch_note(all, {}, {"me.custom", "me.flame", "me.other"}, "me.custom", true) ==
+        "Custom Ghosts depends on Spectral Flame, Other, so they are also switched on.");
   CHECK(switch_note(all, {"me.custom", "me.flame"}, {}, "me.flame", false) ==
         "Custom Ghosts depends on Spectral Flame, so it is also switched off.");
   CHECK(switch_note(all, everything, {"me.ghost"}, "me.flame", false) ==

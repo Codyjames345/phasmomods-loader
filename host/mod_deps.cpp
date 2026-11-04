@@ -393,7 +393,9 @@ std::string switch_note(const std::vector<Manifest>& installed, const std::vecto
     }
   }
   if (!count) return {};
-  if (on) return i18n::text("deps.cascade-on", {{"mod", name}, {"others", others}});
+  if (on)
+    return count == 1 ? i18n::text("deps.cascade-on-one", {{"mod", name}, {"others", others}})
+                      : i18n::text("deps.cascade-on-many", {{"mod", name}, {"others", others}});
   return count == 1 ? i18n::text("deps.cascade-off-one", {{"mod", name}, {"others", others}})
                     : i18n::text("deps.cascade-off-many", {{"mod", name}, {"others", others}});
 }
