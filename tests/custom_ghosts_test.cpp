@@ -893,6 +893,14 @@ void the_dullahan_charges_straight_and_stalls_at_corners() {
   CHECK(dullahan_speed(kGameBase, 0) < brownie_speed(kGameBase, false));          // the user's ceiling (spec)
 }
 
+void a_draugr_thing_leaves_its_room_at_the_rooms_colliders() {
+  // The game has no room for a prop; a player is in a room while inside one of its trigger colliders
+  // (LevelRoom.OnTriggerEnter, LevelRoomTrigger.OnTriggerEnter), the colliders LevelRoom.roomColliders holds.
+  // A thing has left the Draugr's room once it is outside them, with no margin: a 1 m margin kept things
+  // just past a doorway "in" the room on the first test sheet, so it never angered.
+  CHECK(draugr::kLeftRoomMargin == 0.0f);
+}
+
 void the_draugr_crawls_far_from_its_room() {
   CHECK(std::fabs(draugr_speed(0) - 2.8f) < 1e-5f);
   CHECK(std::fabs(draugr_speed(10) - 1.3f) < 1e-4f);      // 0.15 m/s per metre
@@ -2058,6 +2066,7 @@ int main() {
   the_tempest_opens_each_hunt_with_a_strike();
   the_mesmer_shows_each_their_own();
   the_dullahan_charges_straight_and_stalls_at_corners();
+  a_draugr_thing_leaves_its_room_at_the_rooms_colliders();
   the_draugr_crawls_far_from_its_room();
   draugr_skips_long_roam_like_goryo();
   draugr_goryo_type_restored_when_picker_throws();

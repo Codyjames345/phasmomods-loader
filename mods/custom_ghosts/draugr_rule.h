@@ -18,6 +18,10 @@
 namespace pm::custom::draugr {
 
 constexpr float kCold = 3.0f;  // degrees Celsius its room loses while it is angered
+// Metres past its room's colliders (LevelRoom.roomColliders) a thing may lie and still be in the room: none.
+// The game has no room for a prop, and a player is in a room only while inside one of those trigger colliders
+// (LevelRoom.OnTriggerEnter, LevelRoomTrigger.OnTriggerEnter), so a thing out of them has left the room.
+constexpr float kLeftRoomMargin = 0.0f;
 
 struct Point {
   float x = 0, y = 0, z = 0;

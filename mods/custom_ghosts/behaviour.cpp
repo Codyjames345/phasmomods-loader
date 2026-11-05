@@ -59,7 +59,6 @@ constexpr ULONGLONG kTrailStepMs = 500;
 constexpr float kSameSink = 0.1f;                 // metres: a running sink this close to one of the last step's is the same
 constexpr float kStandingStill = 0.01f;           // metres: a destination this close to the ghost stops it where it is
 constexpr ULONGLONG kSurveyMs = 1000;
-constexpr float kRoomMargin = 1.0f;               // metres outside a room's colliders still counted as in it
 constexpr ULONGLONG kAngerResendMs = 5000;        // the host says the Draugr's anger again this often
 
 struct Scent {
@@ -247,7 +246,8 @@ void survey_room(void* room) {
     g.roomItems.emplace_back(item);
     g.hoard.things.push_back({.home = {at.x, at.y, at.z}});
   }
-  PM_LOG("behaviour: the Draugr's room holds %zu things", g.roomItems.size());
+  PM_LOG("behaviour: the Draugr's room (%s) holds %zu things", api::to_utf8(phasmo::LevelRoom::name.get(room)).c_str(),
+         g.roomItems.size());
 }
 
 /** The investigator carrying `item` (in a hand or put away, NetworkedPropGrab.inventory), or null. */
@@ -291,9 +291,14 @@ void tell_anger(ULONGLONG now, bool changed) {
  */
 void survey_things(void* room, bool hunting, ULONGLONG now) {
   std::vector<draugr::Seen> seen;
-  for (const api::Held& item : g.roomItems) {
-    const bool alive = api::alive(item.get());
-    const bool out = alive && !game::in_room(room, game::position(game::transform_of(item.get())), kRoomMargin);
+  for (size_t i = 0; i < g.roomItems.size(); ++i) {
+    void* item = g.roomItems[i].get();
+    const bool alive = api::alive(item);
+    const Vector3 at = alive ? game::position(game::transform_of(item)) : Vector3{};
+    const bool out = alive && !game::in_room(room, at, draugr::kLeftRoomMargin);
+    if (out && !g.hoard.things[i].out)
+      PM_LOG("behaviour: %s has left the Draugr's room, %.1f m from it", api::to_utf8(phasmo::Object::get_name(item)).c_str(),
+             game::distance_to_room(room, at));
     seen.push_back({alive, out, alive ? carrier_of(item) : nullptr});
   }
   const bool angered = draugr::survey(g.hoard.things, seen, now);
@@ -308,7 +313,12 @@ void survey_things(void* room, bool hunting, ULONGLONG now) {
   const int i = draugr::to_take_back(g.hoard.things, seen);
   if (i < 0) return;
   const draugr::Point home = g.hoard.things[i].home;
-  if (g.takingBack.take(g.roomItems[i], {home.x, home.y, home.z}, now)) PM_LOG("behaviour: the Draugr takes something back");
+  void* item = g.roomItems[i].get();
+  const Vector3 from = game::position(game::transform_of(item));
+  const float away = std::sqrt((from.x - home.x) * (from.x - home.x) + (from.y - home.y) * (from.y - home.y) +
+                              (from.z - home.z) * (from.z - home.z));
+  if (g.takingBack.take(g.roomItems[i], {home.x, home.y, home.z}, now))
+    PM_LOG("behaviour: the Draugr takes %s back, %.1f m to where it lay", api::to_utf8(phasmo::Object::get_name(item)).c_str(), away);
 }
 
 /** A speed rule applies to this hunt this frame: `s` is what hunt_speed answers. */
