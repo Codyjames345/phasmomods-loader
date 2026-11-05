@@ -265,6 +265,27 @@ void the_asterion_batters_doors() {
   CHECK(ended.step(false, 1.0f, true, true, 0.1f) == DoorAction::None && !ended.battering());
 }
 
+void the_asterion_bursts_both_leaves_of_a_double_door() {
+  // Door.otherDoor names a double door's other leaf (Door.GhostOpenDoorEvent pushes it too). One leaf may
+  // name the other without the reverse, so a leaf's partner is the one it names or one that names it.
+  int a = 0, b = 0, c = 0, d = 0;
+  const std::vector<const void*> doors{&a, &b, &c, &d};
+  const std::vector<const void*> others{&b, nullptr, nullptr, &c};  // a names b and d names c; b and c name nobody
+  CHECK(door_partner(doors, others, 0) == 1);   // a: the leaf it names
+  CHECK(door_partner(doors, others, 1) == 0);   // b: names nobody, but a names it
+  CHECK(door_partner(doors, others, 2) == 3);   // c: d names it
+  CHECK(door_partner(doors, others, 3) == 2);
+  const std::vector<const void*> single{&a}, none{nullptr};
+  CHECK(door_partner(single, none, 0) == -1);   // a single door
+  const std::vector<const void*> gone{&a, &b}, othersGone{&c, nullptr};  // names a leaf not tracked
+  CHECK(door_partner(gone, othersGone, 0) == -1 && door_partner(gone, othersGone, 1) == -1);
+  // Battering one leaf bursts it; its partner is jammed open with it and never battered again.
+  DoorTrack partner;
+  partner.jam();
+  CHECK(partner.state == DoorTrack::State::Jammed && !partner.battering());
+  CHECK(partner.step(true, 0.5f, true, true, 0.1f) == DoorAction::None);
+}
+
 void the_asterion_jams_a_door_once_the_push_is_over() {
   // Door.GhostForceDoor's push switches the door back on for players as it ends (decompiled), so a jam sent
   // while the push runs is undone. The jam waits for the push to end and is sent once after each push.
@@ -2009,6 +2030,7 @@ int main() {
   the_flame_ghost_messages_round_trip();
   the_asterion_batters_doors();
   the_asterion_jams_a_door_once_the_push_is_over();
+  the_asterion_bursts_both_leaves_of_a_double_door();
   the_lithobolia_aims_true();
   the_lithobolia_only_throws_at_people();
   the_ghost_sees_a_player_through_their_sight_parts();

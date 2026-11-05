@@ -16,6 +16,11 @@ inline constexpr const char* Door_ToggleDoorLock_params[] = {"bool", "bool"};
 // derived type's method, so the fact also matches that offset through another register.
 inline constexpr pm::sdk::Fact Door_closedAngle_facts[] = {
     {.is = pm::sdk::Fact::Is::Loads, .method = "HingeDoor.Awake"}};
+inline constexpr const char* Door_GhostOpenDoorEvent_params[] = {"bool", "bool", "float"};
+// Door has two fields of its own type. Of Door's methods only GhostOpenDoorEvent reads the other leaf, and
+// Door.Convert copies both, so the load singles it out.
+inline constexpr pm::sdk::Fact Door_otherDoor_facts[] = {
+    {.is = pm::sdk::Fact::Is::Loads, .method = "Door.GhostOpenDoorEvent"}};
 
 /// A door (Assembly-CSharp, global namespace), an abstract MonoBehaviour. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door{.key = "Door", .confidence = pm::sdk::Confidence::Decompiled,
@@ -44,6 +49,22 @@ inline constexpr pm::sdk::EntryDesc Door_GhostForceDoor{.key = "Door.GhostForceD
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Door", .name = "GhostForceDoor",
                                                         .params = Door_GhostForceDoor_params};
+
+/// A ghost event's door push: pushes this door open or shut (its second argument; the third is a strength)
+/// and, when its first argument is true, one time in three the double door's other leaf (Door.otherDoor)
+/// too. Unlike Door.GhostForceDoor it starts without checking Door.forceRoutine, and its push clears
+/// Door.forceRoutine as it ends. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_GhostOpenDoorEvent{.key = "Door.GhostOpenDoorEvent",
+                                                            .kind = pm::sdk::Kind::Method,
+                                                            .confidence = pm::sdk::Confidence::Decompiled,
+                                                            .owner = "Door", .name = "GhostOpenDoorEvent",
+                                                            .params = Door_GhostOpenDoorEvent_params};
+
+/// A double door's other leaf, null for a single door: the Door field Door.GhostOpenDoorEvent reads to
+/// push both leaves. A leaf may name its partner without the partner naming it back. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_otherDoor{.key = "Door.otherDoor", .kind = pm::sdk::Kind::Field,
+                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                   .type = "@Door", .facts = Door_otherDoor_facts};
 
 /// Whether the ghost moves this door with physics rather than an animation, set in the scene:
 /// Door.GhostOpenDoorAnimated reads it and starts the physics push when it is set, else the animated move.
@@ -178,6 +199,9 @@ struct Door {
   /// Whether the ghost moves it with physics rather than an animation: useForceInsteadOfAnimations.get(door).
   /// Unresolved: false.
   static constexpr pm::api::Field<pm::map::Door_useForceInsteadOfAnimations, bool> useForceInsteadOfAnimations{};
+  /// A double door's other leaf: otherDoor.get(door), null for a single door. It may be set on one leaf
+  /// only. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Door_otherDoor, void*> otherDoor{};
   /// The door's running push: forceRoutine.get(door), null when none runs. Unresolved: null.
   static constexpr pm::api::Field<pm::map::Door_forceRoutine, void*> forceRoutine{};
   /// GhostForceDoor(door, open, strength, skipRattle). A mod may hook it. Unresolved: does nothing.

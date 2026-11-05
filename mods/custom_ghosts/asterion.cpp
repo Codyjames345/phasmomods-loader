@@ -100,6 +100,31 @@ void report(Tracked& t, ULONGLONG now) {
   ++t.reported;
 }
 
+/** Break the door open now: the leaf the Asterion battered, or (`partner`) the other leaf of its double door. */
+void burst(Tracked& t, ULONGLONG now, bool partner) {
+  PM_LOG("asterion: %s %s is broken open (push already running %s, moved with physics %s, kinematic %s)",
+         partner ? "its other leaf" : "a door", api::to_utf8(phasmo::Object::get_name(t.door)).c_str(),
+         yes_no(push_running(t)), yes_no(phasmo::Door::useForceInsteadOfAnimations.get(t.door)),
+         yes_no(phasmo::Rigidbody::get_isKinematic(t.body)));
+  t.burstAt = now;
+  t.burstAngle = leaf_angle(t);
+  t.reported = 0;
+  force_open(t);
+  t.nextForce = now + kKeepJammedMs;
+}
+
+/** The other leaf of the double door g.doors[i] (Door.otherDoor, named by either leaf), or null. */
+Tracked* partner_of(size_t i) {
+  std::vector<const void*> doors, others;
+  for (const Tracked& t : g.doors) {
+    const bool alive = api::alive(t.door);
+    doors.push_back(alive ? t.door.get() : nullptr);
+    others.push_back(alive ? phasmo::Door::otherDoor.get(t.door) : nullptr);
+  }
+  const int k = door_partner(doors, others, i);
+  return k < 0 ? nullptr : &g.doors[k];
+}
+
 }  // namespace
 
 bool resolve() { return true; }
@@ -126,7 +151,8 @@ void tick(void* ghost, int type) {
   const phasmo::Vector3 at = game::position(game::transform_of(ghost));
   Vector3 heading{};
   phasmo::NavMeshAgent::get_desiredVelocity_Injected(game::ghost_agent(ghost), &heading);
-  for (Tracked& t : g.doors) {
+  for (size_t i = 0; i < g.doors.size(); ++i) {
+    Tracked& t = g.doors[i];
     if (!api::alive(t.door) || !api::alive(t.leaf) || !api::alive(t.body)) continue;
     const Vector3 hinge = phasmo::Transform::get_position(t.leaf);
     const Vector3 centre = phasmo::Rigidbody::get_worldCenterOfMass(t.body);
@@ -137,15 +163,14 @@ void tick(void* ghost, int type) {
     switch (t.track.step(hunting, distance, closed, towards, dt)) {
       case DoorAction::Bang: phasmo::Door::CreateDoorSlamNoise(t.door, nullptr); break;
       case DoorAction::Burst: {
-        const bool busy = push_running(t);
-        PM_LOG("asterion: a door is broken open (push already running %s, moved with physics %s, kinematic %s)",
-               yes_no(busy), yes_no(phasmo::Door::useForceInsteadOfAnimations.get(t.door)),
-               yes_no(phasmo::Rigidbody::get_isKinematic(t.body)));
-        t.burstAt = now;
-        t.burstAngle = leaf_angle(t);
-        t.reported = 0;
-        force_open(t);
-        t.nextForce = now + kKeepJammedMs;
+        burst(t, now, false);
+        // A double door gives way as one: its other leaf is thrown open and jammed with it.
+        Tracked* other = partner_of(i);
+        if (other && other->track.state != DoorTrack::State::Jammed && api::alive(other->body) &&
+            api::alive(other->leaf)) {
+          other->track.jam();
+          burst(*other, now, true);
+        }
         break;
       }
       case DoorAction::None: break;

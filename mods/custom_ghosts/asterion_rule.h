@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
+#include <vector>
 
 // The Asterion's rules for one door, kept free of game calls so they can be tested offline. It never
 // closes a door; a closed door in its way stops it while it batters the door for a few seconds, then
@@ -83,7 +85,25 @@ struct DoorTrack {
   }
 
   bool battering() const { return state == State::Battering; }
+
+  /** Jammed open with no battering of its own: the other leaf of a double door whose first leaf burst. */
+  void jam() {
+    state = State::Jammed;
+    battered = 0;
+    bangs = 0;
+  }
 };
+
+/**
+ * The other leaf of `doors[i]`, as an index into `doors`, or -1 for a single door or a leaf not tracked.
+ * `others[k]` is doors[k]'s Door.otherDoor (null for none). A leaf may name its partner without the partner
+ * naming it back, so the partner is the leaf it names or a leaf that names it.
+ */
+inline int door_partner(const std::vector<const void*>& doors, const std::vector<const void*>& others, size_t i) {
+  for (size_t k = 0; k < doors.size(); ++k)
+    if (k != i && doors[k] && ((others[i] && others[i] == doors[k]) || others[k] == doors[i])) return static_cast<int>(k);
+  return -1;
+}
 
 /**
  * When a jammed door is switched off for players (Door.DisableOrEnableDoor). Door.GhostForceDoor's push
