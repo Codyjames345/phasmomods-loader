@@ -127,6 +127,39 @@ that compiler-generated coroutine writes the hold, and such classes are never sh
 entry is found through its readers: FireSource's count of the Onryo's blow-outs reads it beside
 isHunting (a cross-type fact), and ChangeState reads isHunting but never the hold (a negated one).
 
+## Every route to a state change
+
+Read from the direct callers of `GhostAI.ChangeState`, `GhostAI.Hunting`, `GhostActivity.TryInteract` and
+`GhostActivity.NormalInteraction` in build 25811160, and from the decompiled named callers. Most callers of
+`ChangeState` are `GhostActivity` and classes with obfuscated names, the ghost's states among them; the rest are these (`ChangeState` itself acts only while a flag of the ghost's PhotonView is set, above):
+
+| Caller | Change |
+| --- | --- |
+| `HauntedMirror`'s `BreakItem`, `OuijaBoard`'s `BreakBoard`, `MusicBox`'s `BreakMusicBox`, `VoodooDoll`'s `StartHunt` | a hunt, forced |
+| `TarotCards.ChangeState` | the card's state, forced: a hunt (after adding 20 seconds to the hunt's length), an event or the favourite room; only those three, and only while the ghost is not hunting |
+| `MusicBox`'s `EnterMusicBoxState` | `GhostState.musicBox`, with the box as the change's object, not forced |
+| `SummoningCircle`, through methods with obfuscated names | `GhostState.summoningCircle`, not forced, and a forced hunt; look-alikes among them pass numbers no state has |
+| `MonkeyPaw`, handlers with obfuscated names and a wish's coroutine (`MonkeyPaw.MakeWishNetworked`) | a forced hunt, the favourite room, an interaction, or the summoning circle's pull; which handler is which wish was not traced |
+| `Jackalope`'s `TriggerHunt` (a seasonal item) | a hunt, not forced |
+| `PhraseListenerController.NetworkedReaction` | the fuse box, not forced (a phrase a player says) |
+| `SaltSpot.SyncSalt` | `GhostState.salt` (the ghost stepped in salt) |
+| a coroutine of `GameController`; `GhostAI.EventPick` and another method of `GhostAI`; a `GhostAI` coroutine | the favourite room; idling; a hunt, forced as its caller says |
+
+`GhostAI.Hunting`, the RPC that starts a hunt on every client, has no direct caller: it is sent by name, so a hunt
+reaches it only through a state the change made. A voodoo doll's pin (`VoodooDoll.NetworkedUse`, through
+`VoodooDollPin`'s handlers) jumps straight into `GhostActivity.NormalInteraction` with its force flag, not through
+`TryInteract`; `NormalInteraction`'s other callers are `TryInteract` and `GhostActivity`'s own helpers, which the idle
+state calls. Each of the 173 direct callers of `GhostAI.Appear` lies in a class with an obfuscated name; which of them
+are state objects was not traced.
+
+So a ghost that must start no interaction, event or hunt, whatever asks, refuses at `GhostAI.ChangeState` before the
+game's code runs, forced or not, and at `GhostActivity.TryInteract` and `GhostActivity.NormalInteraction`. A refusal
+there returns to the caller, whose own code goes on: what the item does to a player (sanity, the card's own effect, the
+box's song, the board's breaking) stays the game's, as none of that waits on the change. Refusing before the game's
+change also means a forced hunt on a friendly ghost's difficulty never reaches the game's own turn of it into idling.
+Custom Ghosts' Squatter does this (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet`): it lets only
+idling, wandering and the favourite room through.
+
 ## The ghost's sensors and throws
 
 Two SensorToolkit sensors (`Sensor.h`) find what the ghost may act on. `GhostActivity.interactionSensor`
@@ -215,6 +248,8 @@ investigator's body itself instead (`mods/playable_ghost/form.h`).
 ## The ghost's setup and its favourite room
 
 `GhostController.Spawn` sets the contract's ghost up, on the master, once every player has loaded (`GhostController.SpawnGate`, from `GhostController.Start` and the room callbacks). It rolls the type with `GhostController.PickType` over a `Dictionary<GhostType, int>` of weights (those with a positive weight, or every key when none has), the evidence with `GhostController.PickEvidence`, and the favourite room's index among `LevelController.rooms` into `GhostController.favouriteRoomIndex`, which it reads nowhere after. It ends with the `GhostController.CreateGhost` RPC, which runs at once on this client, inside the spawn, and hands a copy of the traits, the room's index among them, to `GhostAI.Init`. `PickType` has no other caller the game runs. The room roll itself goes through a generic helper, which has no code of its own a map entry could name.
+
+The weights come from `GhostCollection.GetDefaultWeightedGhostList`, which gives every GhostData in the contract's collection a weight of 1 (custom ghosts the host put there included). The spawn then takes the Deogen out on one condition and two other types out in one game mode (neither traced further), and lays a dictionary of overrides from elsewhere over the weights of the types it names, before `PickType` draws. `PickType` adds up the positive weights only, so a type of weight 0 is never drawn while another type has weight. After the roll a Custom difficulty's ghost type replaces the rolled one unless it is "no type". The host gives a custom ghost whose definition says it may not be rolled a weight of 0 there (`PmGhostDef.rollable`, `host/content_types.h`).
 
 A mod that holds the setup back runs the spawn inside a `try`, and from its hook of `PickType` asks `phasmo::GhostController::abandon_spawn`: the host unwinds the spawn before it writes or sends anything, and `pm::api::dictionary_entries` reads the weights. `pm::api::inside<phasmo::GhostController::Spawn>` says a roll is the spawn's.
 

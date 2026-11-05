@@ -53,6 +53,27 @@ The host (`host/content_types.h`) follows the pick of a custom ghost with the fl
 - With zero evidence given the pick returns before GetEvidenceList, and all three go, as the Goryo's
   do.
 
+### A ghost that gives no evidence
+
+`GhostData.GetEvidenceList` puts all three of its evidence fields into a new list, whatever they hold, `EvidenceType.None`
+included: it tests none of them. So the pick of a ghost whose three slots hold `None` (a custom ghost registered with
+three empty slots: the content layer writes `None` into each, `host/content_types.h`) gives a list of `None` values,
+`evidenceGiven` of them once the removals are done, and nothing else. That length matters:
+`GhostInfo.SyncValues` makes an `int[]` of `evidenceGiven` elements and fills it by reading the pick's list at each index,
+so a list shorter than `evidenceGiven` would throw there, before `SyncEvidence` is sent. Every client's
+`GhostInfo.givenEvidence` then holds those `None` values. The readers of the given list read here test it for one
+evidence at a time (`EvidenceController.SpawnAllGhostTypeEvidence` for the orbs and for freezing temperatures,
+`EvidenceController.IsFingerPrintEvidence` for the ultraviolet), so a `None` is never taken for one; not every reader in
+the game was traced.
+
+The journal's filter (`JournalController.SetGhostTypes`, below) keeps such a ghost while nothing is found: no found
+number is missing from its three. Ruling evidence out keeps it too, as no evidence number is `None`. Any evidence
+marked found crosses it out. Its page names no evidence: the host shows a page line only for an evidence a game page
+shows by key (`host/content_journal.h`), and `None` is none of them.
+
+A ghost with no evidence is found by what it does instead; the Squatter's way (it is seen and heard) is Custom Ghosts'
+(`mods/custom_ghosts/squatter.h`).
+
 ## How a difficulty hides evidence
 
 Through `Difficulty.evidenceGiven` alone, in two places: the pick above removes 3 minus it, and
