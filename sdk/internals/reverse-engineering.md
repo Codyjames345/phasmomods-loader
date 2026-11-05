@@ -60,6 +60,9 @@ signature) and `re/map-addresses.tsv` (each map key's resolved value). Then:
   map it as an icall entry. In this engine version (Unity 2022.3) an icall takes the object (and an out pointer for a
   struct result) and no method info.
 
+- An in-game test of a body copy, clips loaded from an AssetBundle and runtime Cloth, with the bundle's build settings, is in
+  [Engine experiments](engine-experiments.md).
+
 ## The IL2CPP runtime's own pitfalls
 
 - **Setting a reference field.** The runtime's field setter stores the value it is given itself for a reference-type
