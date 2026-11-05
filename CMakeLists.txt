@@ -308,6 +308,7 @@ target_compile_definitions(custom_ghosts_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOU
 target_link_libraries(custom_ghosts_test PRIVATE pmmod)
 # Before the mods' folders, as for content_difficulty_test below.
 target_include_directories(custom_ghosts_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+pm_test(squatter)
 pm_test(brownie mods/custom_ghosts/brownie.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_compile_definitions(brownie_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
