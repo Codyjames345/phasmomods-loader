@@ -59,7 +59,7 @@ struct GhostDef {
   std::string id;  // "<mod id>.<name>", stable across versions
   Text name, description, strength, weakness;
   std::vector<Text> tells;               // one line each
-  std::array<std::string, 3> evidence;  // vanilla ("emf" ... "dots") or custom evidence ids; "" for none
+  std::array<std::string, 3> evidence;  // vanilla ("emf" ... "dots") or custom evidence ids; "" for none (all three may be)
   Text abilityName, abilityDescription;  // both empty: no ability
   void* user = nullptr;                  // handed to every callback
   bool (*useAbility)(void* user) = nullptr;
@@ -81,6 +81,11 @@ struct GhostDef {
   // its own rules lose this one, as they lose a share of its AI's attempts; it stays paid for. May roll
   // (core/mod_api.h).
   bool (*interactionLost)(void* user) = nullptr;
+  /// Host only, at the game's roll of the contract's ghost type, just before it draws: false keeps the ghost out
+  /// of that roll, as a weight of 0 does (a ghost that cannot run now); null or true leaves the game's weight. A
+  /// Custom difficulty that names its type still gets it (core/mod_api.h, PmGhostDef::rollable). Main thread, on
+  /// the master, with `user`.
+  bool (*rollable)(void* user) = nullptr;
 
   /// The C definition, valid until this definition is changed, copied or destroyed. The host copies
   /// what it needs when it is registered.

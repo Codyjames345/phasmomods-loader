@@ -5,6 +5,7 @@
 
 #include "content.h"
 #include "ghosts.h"
+#include "squatter.h"
 #include "text_table.h"
 
 // What Custom Ghosts gives the content layer from pmmod_start (mod.cpp): each ghost of ghosts.h as a
@@ -20,9 +21,15 @@ inline const char* evidence_look(const char* evidenceId, void* user) {
   return g && evidenceId && std::strcmp(evidenceId, kSpectralFlame) == 0 ? g->flameLook : nullptr;
 }
 
-/** The definition of `g`: its id, English text and evidence, its ability's text when it has one, `user`
- *  its Type, and the callbacks of `callbacks` (useAbility only for a ghost with an ability), with
- *  evidence_look for its evidence's look. */
+/** Whether the ghost `user` (its Type) may be rolled now (PmGhostDef.rollable): every ghost but the Squatter always,
+ *  the Squatter only while its figure is ready (squatter::available). */
+inline bool rollable(void* user) {
+  return static_cast<int>(reinterpret_cast<intptr_t>(user)) != kSquatter || squatter::available();
+}
+
+/** The definition of `g`: its id, English text and evidence (null an empty slot), its ability's text when it has
+ *  one, `user` its Type, and the callbacks of `callbacks` (useAbility only for a ghost with an ability), with
+ *  evidence_look for its evidence's look and rollable for the type roll. */
 inline pm::api::content::GhostDef definition(const Ghost& g, const pm::api::content::GhostDef& callbacks) {
   pm::api::content::GhostDef def;
   def.id = id_of(g);
@@ -31,7 +38,7 @@ inline pm::api::content::GhostDef definition(const Ghost& g, const pm::api::cont
   def.description = pm::api::content::Text("en", i18n::text(g.description));
   def.strength = pm::api::content::Text("en", i18n::text(g.strength));
   def.weakness = pm::api::content::Text("en", i18n::text(g.weakness));
-  for (int i = 0; i < 3; ++i) def.evidence[i] = g.evidence[i];
+  for (int i = 0; i < 3; ++i) def.evidence[i] = g.evidence[i] ? g.evidence[i] : "";  // null: an empty slot
   if (g.ability) {
     def.abilityName = pm::api::content::Text("en", i18n::text(g.ability));
     def.abilityDescription = pm::api::content::Text("en", i18n::text(g.abilityDescription));
@@ -46,6 +53,7 @@ inline pm::api::content::GhostDef definition(const Ghost& g, const pm::api::cont
   def.playerMove = callbacks.playerMove;
   def.interactionLost = callbacks.interactionLost;
   def.evidenceLook = &evidence_look;
+  def.rollable = &rollable;
   if (g.keepsLastEvidence) def.flags |= PM_GHOST_KEEPS_LAST_EVIDENCE;
   if (g.blindInHunts) def.flags |= PM_GHOST_BLIND_IN_HUNTS;
   return def;

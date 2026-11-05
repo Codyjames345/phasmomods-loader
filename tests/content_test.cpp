@@ -868,7 +868,8 @@ struct GameWorld {
     for (const pm::sdk::EntryDesc* m :
          {&map::LocalisationSystem_TryGetLocalisedValue, &map::GhostAI_Init, &map::GhostInfo_SyncValues,
           &map::GhostInfo_SyncValuesNetworked, &map::GhostController_BuildMimicCopies, &map::GhostController_MimicCopy,
-          &map::GhostHuntState_UpdateSpeed, &map::GhostController_PickEvidence, &map::GhostData_GetEvidenceList})
+          &map::GhostHuntState_UpdateSpeed, &map::GhostController_PickEvidence, &map::GhostData_GetEvidenceList,
+          &map::GhostController_PickType})
       fake::method(*m, reinterpret_cast<void*>(&never_called));
     std::string missing;
     api::bind(fake::host(), missing);
@@ -1708,6 +1709,132 @@ void custom_ghost_keeps_none_on_zero_evidence() {
   CHECK(phasmo::GhostController::behaviourType.get(w.world.controller) == w.hydra);
 }
 
+// A ghost that gives no evidence (the Squatter's spec, docs/superpowers/specs/2026-11-04-squatter-design.md,
+// "Technical unknowns" 6). Three empty slots register, null or "" alike. Its GhostData holds the game's own "no
+// evidence" (EvidenceType.None) in each, and the game's pick and sync then give only that value on every difficulty:
+// GetEvidenceList hands the pick all three slots, and SyncValues sends as many as the difficulty gives, so a list of
+// that length must reach it (sdk/systems/evidence.md, "A ghost that gives no evidence"). No evidence a player can
+// find is ever given.
+void a_ghost_may_give_no_evidence() {
+  start();
+  // The C definition with three null slots, as a mod built on core/mod_api.h alone gives it.
+  registry::Registry r = fresh();
+  r.begin_group();
+  content::GhostDef quiet = named("a.quiet", "Quiet");
+  quiet.evidence = {"", "", ""};
+  PmGhostDef raw = quiet.c_def();
+  for (const char*& e : raw.evidence) e = nullptr;
+  CHECK(r.add_ghost(&raw) > 0);
+  r.end_group(true);
+  r.commit();
+  const registry::Ghost* held = r.registered("a.quiet");
+  CHECK(held && held->evidence[0].empty() && held->evidence[1].empty() && held->evidence[2].empty());
+
+  // Through the content wrapper, beside a ghost that gives evidence, on the faked game.
+  start();
+  g_world = nullptr;
+  GameWorld world;
+  g_world = &world;
+  namespace map = pm::map;
+  int difficultyClass = 0;
+  fake::type(map::Difficulty, &difficultyClass);
+  fake::field(map::Difficulty_evidenceGiven, 0x4C);
+  fake::field(map::GhostController_givenEvidence, 0x30);
+  fake::field(map::GhostInfo_givenEvidence, 0x30);
+  std::string missing;
+  api::bind(fake::host(), missing);
+  CHECK(content::register_ghost(quiet) > 0);
+  CHECK(content::register_ghost(named("a.lethe", "Lethe")) > 0);
+  fake::commit_content();
+  room(1, {1}, {});
+  pm::host::ContentTypes types{fake::content_registry(), fake::acting(), fake_lists()};
+  types.tick(fake::content_state(), true, true);
+  const int32_t type = content::type_of("a.quiet"), none = fake::kAuditedNoEvidence;
+  void* data = world.entry_of(type);
+  CHECK(type > 0 && data);
+  if (!data) return;
+  CHECK(phasmo::GhostData::evidence1.get(data) == none && phasmo::GhostData::evidence2.get(data) == none &&
+        phasmo::GhostData::evidence3.get(data) == none);
+  CHECK(types.held().count(type) && types.held().at(type).evidence[0] == none);
+  for (int32_t given = 0; given <= 3; ++given)
+    for (int32_t roll = 0; roll < 3; ++roll) {
+      const std::vector<int32_t> rolls(3, roll);
+      const std::vector<int32_t> sent = game_pick_and_sync(world, type, given, rolls);
+      CHECK(sent.size() == static_cast<size_t>(given));
+      CHECK(std::all_of(sent.begin(), sent.end(), [&](int32_t e) { return e == none; }));
+    }
+  // The other ghost still gives its own.
+  CHECK((game_pick_and_sync(world, content::type_of("a.lethe"), 3, {}) == std::vector<int32_t>{1, 4, 6}));
+}
+
+// The game's type roll (GhostController.PickType, from GhostController.Spawn) draws from a Dictionary<GhostType, int>
+// of weights that GhostCollection.GetDefaultWeightedGhostList fills with 1 for every entry of the contract's
+// collection, the custom ones among them, and it draws only among positive weights. A ghost whose definition says it
+// may not be rolled now (PmGhostDef.rollable) gets a weight of 0 there before the game draws, so the roll never picks
+// it; every other ghost keeps the game's weight, and a ghost without the callback is rolled as before.
+std::map<std::pair<const void*, int32_t>, int32_t> g_weights;  // the faked roll dictionaries, by (dictionary, type)
+bool set_weight(void* dict, int32_t key, int32_t value) {
+  const auto it = g_weights.find({dict, key});
+  if (it == g_weights.end()) return false;
+  it->second = value;
+  return true;
+}
+bool g_rollable = true;
+bool rollable(void*) { return g_rollable; }
+
+void an_unrollable_ghost_gets_no_weight() {
+  start();
+  GameWorld world;
+  g_world = &world;
+  content::GhostDef unready = named("a.asterion", "Asterion");
+  unready.rollable = &rollable;
+  CHECK(content::register_ghost(unready) > 0);
+  CHECK(content::register_ghost(named("a.lethe", "Lethe")) > 0);
+  fake::commit_content();
+  room(1, {1}, {});
+  pm::host::ListOps lists = fake_lists();
+  lists.setValue = &set_weight;
+  pm::host::ContentTypes types{fake::content_registry(), fake::acting(), lists};
+  types.tick(fake::content_state(), true, true);
+  const int32_t asterion = content::type_of("a.asterion"), lethe = content::type_of("a.lethe");
+  CHECK(asterion == 31 && lethe == 32);
+  int dictionary = 0;
+  const auto weights = [&](std::initializer_list<int32_t> keys) {
+    g_weights.clear();
+    for (int32_t t : keys) g_weights[{&dictionary, t}] = 1;
+  };
+  const auto weight = [&](int32_t type) { return g_weights.at({&dictionary, type}); };
+  weights({4, 6, 0, 17, 10, asterion, lethe});
+  g_rollable = false;
+  types.before_pick_type(&dictionary);
+  CHECK(weight(asterion) == 0 && weight(lethe) == 1);
+  for (int32_t vanilla : {4, 6, 0, 17, 10}) CHECK(weight(vanilla) == 1);
+  // Ready again: the game's own weight stands.
+  weights({4, 6, 0, 17, 10, asterion, lethe});
+  g_rollable = true;
+  types.before_pick_type(&dictionary);
+  CHECK(weight(asterion) == 1 && weight(lethe) == 1);
+  // A dictionary without its entry, or none at all, changes nothing and throws nothing.
+  g_rollable = false;
+  weights({4, 6});
+  types.before_pick_type(&dictionary);
+  types.before_pick_type(nullptr);
+  CHECK(weight(4) == 1 && weight(6) == 1);
+  // The host hooks the roll once.
+  CHECK(types.create_hooks());
+  const std::vector<std::string> hooked = fake::hooked();
+  CHECK(std::count(hooked.begin(), hooked.end(), "GhostController.PickType") == 1);
+  // A contract without custom ghosts writes nothing.
+  start();
+  GameWorld plain;
+  g_world = &plain;
+  pm::host::ContentTypes none{fake::content_registry(), fake::acting(), lists};
+  none.tick(fake::content_state(), true, true);
+  weights({4, 6});
+  none.before_pick_type(&dictionary);
+  CHECK(weight(4) == 1 && weight(6) == 1);
+}
+
 // The evidence priority through the host's own detours (detour_pick_evidence, detour_evidence_list), as
 // the game calls them: a test host captures each detour the host hooks (as tests/hooks_test.cpp's does),
 // and a fake of the game's pick (0x22AFCB0) calls GetEvidenceList through its captured detour.
@@ -2071,6 +2198,8 @@ int main() {
   custom_ghost_keeps_last_evidence_when_one_withheld();
   custom_ghost_keeps_last_evidence_when_two_withheld();
   custom_ghost_keeps_none_on_zero_evidence();
+  a_ghost_may_give_no_evidence();
+  an_unrollable_ghost_gets_no_weight();
   evidence_priority_runs_through_the_host_detours();
   evidence_priority_restored_when_pick_throws();
   evidence_look_answers_ghost_choice();

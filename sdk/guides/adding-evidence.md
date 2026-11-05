@@ -29,7 +29,7 @@ repeated or malformed id, or for text without English.
 A ghost gives it by naming its id in `GhostDef::evidence`, whichever mod registers that ghost. Custom Ghosts' twelve
 flame ghosts name `phasmomods.spectral-flame.flame`, and Custom Ghosts requires Spectral Flame in its manifest, so the
 loader starts Spectral Flame first. Once every mod has started, the host drops (and logs) any ghost whose evidence no
-running mod registered ([README, "The host contract, version 2.2"](../README.md#the-host-contract-version-22)).
+running mod registered ([README, "The host contract, version 2.3"](../README.md#the-host-contract-version-23)).
 
 ## What the host does with it
 

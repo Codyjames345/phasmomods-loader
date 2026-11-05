@@ -465,8 +465,18 @@ bool copy_public_values(Class* klass, void* dst, const void* src) {
   return true;
 }
 
-bool dictionary_int_entries(const void* dict, IntPair* out, size_t max, size_t& written) {
-  written = 0;
+namespace {
+
+// Where a Dictionary<K, V> whose K and V are numbers an int holds as it is keeps its entries: read from the
+// constructed class's own fields and its entries' own layout, never assumed.
+struct IntDictionary {
+  char* data = nullptr;  // the entries' array data; null for an empty dictionary
+  size_t count = 0, stride = 0, hashAt = 0, keyAt = 0, valueAt = 0;
+};
+
+// False for an object of another class or shape.
+bool int_dictionary(const void* dict, IntDictionary& out) {
+  out = {};
   Class* const klass = dict ? class_of(dict) : nullptr;
   if (!klass || std::strcmp(p_il2cpp_class_get_namespace(klass), "System.Collections.Generic") != 0 ||
       std::strcmp(p_il2cpp_class_get_name(klass), "Dictionary`2") != 0)
@@ -500,23 +510,53 @@ bool dictionary_int_entries(const void* dict, IntPair* out, size_t max, size_t& 
   std::memcpy(&count, self + p_il2cpp_field_get_offset(countField), sizeof count);
   if (!entries || count <= 0) return true;  // an empty dictionary
   // A struct's field offset counts the object header a boxed struct has.
-  const size_t hashAt = p_il2cpp_field_get_offset(hashField) - sizeof(Object);
-  const size_t keyAt = p_il2cpp_field_get_offset(keyField) - sizeof(Object);
-  const size_t valueAt = p_il2cpp_field_get_offset(valueField) - sizeof(Object);
-  const size_t stride = array_element_size(entries);
-  if (stride == 0) return false;
-  const char* const data = entries->data<char>();
-  const size_t n = std::min<size_t>(static_cast<size_t>(count), entries->max_length);
-  for (size_t i = 0; i < n && written < max; ++i) {
-    const char* const at = data + i * stride;
-    int32_t hash = 0;
-    std::memcpy(&hash, at + hashAt, sizeof hash);
-    if (hash < 0) continue;
-    std::memcpy(&out[written].key, at + keyAt, sizeof(int32_t));
-    std::memcpy(&out[written].value, at + valueAt, sizeof(int32_t));
+  out.hashAt = p_il2cpp_field_get_offset(hashField) - sizeof(Object);
+  out.keyAt = p_il2cpp_field_get_offset(keyField) - sizeof(Object);
+  out.valueAt = p_il2cpp_field_get_offset(valueField) - sizeof(Object);
+  out.stride = array_element_size(entries);
+  if (out.stride == 0) return false;
+  out.data = entries->data<char>();
+  out.count = std::min<size_t>(static_cast<size_t>(count), entries->max_length);
+  return true;
+}
+
+// The entry `i` of `d` when it is in use (its hash code is not negative), else null.
+char* used_entry(const IntDictionary& d, size_t i) {
+  char* const at = d.data + i * d.stride;
+  int32_t hash = 0;
+  std::memcpy(&hash, at + d.hashAt, sizeof hash);
+  return hash < 0 ? nullptr : at;
+}
+
+}  // namespace
+
+bool dictionary_int_entries(const void* dict, IntPair* out, size_t max, size_t& written) {
+  written = 0;
+  IntDictionary d;
+  if (!int_dictionary(dict, d)) return false;
+  for (size_t i = 0; i < d.count && written < max; ++i) {
+    const char* const at = used_entry(d, i);
+    if (!at) continue;
+    std::memcpy(&out[written].key, at + d.keyAt, sizeof(int32_t));
+    std::memcpy(&out[written].value, at + d.valueAt, sizeof(int32_t));
     ++written;
   }
   return true;
+}
+
+bool dictionary_int_set(void* dict, int32_t key, int32_t value) {
+  IntDictionary d;
+  if (!int_dictionary(dict, d)) return false;
+  for (size_t i = 0; i < d.count; ++i) {
+    char* const at = used_entry(d, i);
+    int32_t k = 0;
+    if (at) std::memcpy(&k, at + d.keyAt, sizeof k);
+    if (!at || k != key) continue;
+    // A number written in its 4 bytes: no reference the collector needs to see.
+    std::memcpy(at + d.valueAt, &value, sizeof value);
+    return true;
+  }
+  return false;
 }
 
 size_t fields_of_type(Class* klass, const void* obj, Class* fieldClass, void** out, size_t max) {

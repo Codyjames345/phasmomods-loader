@@ -35,6 +35,7 @@ const Exempt kNotObjects[] = {
     {"core/mod_api.h", "code", "a game entry's code address"},
     {"core/mod_api.h", "field", "a game entry's FieldInfo*, runtime metadata"},
     {"core/mod_api.h", "user", "a content definition's context for its callbacks, the mod's own memory"},
+    {"host/content_types.h", "user", "a held ghost's copy of its definition's context, the mod's own memory"},
     {"host/game_map.cpp", "twins", "a resolved method's twins' code addresses"},
     {"host/il2cpp.cpp", "g_thread", "the runtime's record of the attached worker thread, kept by the runtime"},
     {"host/hooks.cpp", "target", "a hooked function's code address"},

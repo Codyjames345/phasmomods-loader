@@ -36,7 +36,9 @@ inline constexpr const char* kSpectralFlame = "phasmomods.spectral-flame.flame";
 enum Type : int {
   kEcho = 1, kDullahan, kKikimora, kDraugr, kBlackShuck,
   // The flame ghosts: they carry Spectral Flame (docs/superpowers/specs/2026-10-20-flame-ghosts-design.md).
-  kLithobolia, kGremlin, kBrownie, kBogeyman, kLethe, kMesmer, kKnell, kAsterion, kTempest, kHydra
+  kLithobolia, kGremlin, kBrownie, kBogeyman, kLethe, kMesmer, kKnell, kAsterion, kTempest, kHydra,
+  // A person in a bedsheet, not a ghost: no evidence, no activity (docs/superpowers/specs/2026-11-04-squatter-design.md).
+  kSquatter
 };
 
 struct Ghost {
@@ -102,7 +104,12 @@ inline constexpr Ghost kGhosts[] = {
      nullptr, nullptr},
     {kHydra, "Hydra", {kOrbs, kDots, kSpectralFlame},
      i18n::key("ghost.hydra.description"), i18n::key("ghost.hydra.strength"), i18n::key("ghost.hydra.weakness"),
-     nullptr, nullptr, "green"}
+     nullptr, nullptr, "green"},
+    // No evidence at all: it is told apart by sight and sound, being visible and talking (the spec's "Rules this
+    // ghost breaks on purpose"). Its interactions, events and hunts are refused in restraint.cpp.
+    {kSquatter, "Squatter", {nullptr, nullptr, nullptr},
+     i18n::key("ghost.squatter.description"), i18n::key("ghost.squatter.strength"), i18n::key("ghost.squatter.weakness"),
+     nullptr, nullptr}
 
 };
 constexpr int kGhostCount = static_cast<int>(sizeof kGhosts / sizeof kGhosts[0]);
@@ -132,6 +139,7 @@ inline const char* title_key(const Ghost& g) {
     case kAsterion: return i18n::key("ghost.asterion.name");
     case kTempest: return i18n::key("ghost.tempest.name");
     case kHydra: return i18n::key("ghost.hydra.name");
+    case kSquatter: return i18n::key("ghost.squatter.name");
   }
   return "";
 }

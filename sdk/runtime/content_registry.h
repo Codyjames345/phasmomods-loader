@@ -85,6 +85,7 @@ struct Ghost {
   const char* (*hudLine)(int32_t, void*) = nullptr;
   void (*playerMove)(const float*, float*, float*, void*) = nullptr;
   bool (*interactionLost)(void*) = nullptr;
+  bool (*rollable)(void*) = nullptr;
   uint64_t hash = 0;  // of its id, text and evidence: what its manifest entry carries
 };
 

@@ -256,6 +256,7 @@ int32_t Registry::add_ghost(const PmGhostDef* def) {
   g.hudLine = d.hudLine;
   g.playerMove = d.playerMove;
   g.interactionLost = d.interactionLost;
+  g.rollable = d.rollable;
   Hash h;
   h.text(g.id);
   for (const Text* t : {&g.name, &g.description, &g.strength, &g.weakness}) h.text(*t);

@@ -30,6 +30,7 @@
 #include "restraint.h"
 #include "runtime.h"
 #include "sound.h"
+#include "squatter.h"
 #include "tempest.h"
 
 // The custom ghosts (ghosts.h) as a mod of the suite (core/mod_api.h). Each is a custom ghost of the
@@ -87,6 +88,7 @@ void frame(int type) {
   lethe::tick(haunting, type);        // and forgets with the Lethe
   tempest::tick(haunting, type);      // and sees the Tempest's storm
   mesmer::tick(haunting, type);       // and sees the Mesmer as no one else does
+  squatter::tick(haunting, type, steered);  // and keeps the Squatter's phase
 }
 
 // The rules of one custom ghost (PmGhostRules). `user` is its Type.
@@ -163,8 +165,10 @@ void* target(int type, std::span<const void* const> excluded) {
 
 bool held_back(int type, int32_t kind) {
   try {
-    return (kind == restraint::kInteract || kind == restraint::kEvent || kind == restraint::kAbility) &&
-           restraint::held_back(type, static_cast<restraint::Kind>(kind));
+    // The Squatter's rules answer every kind, hunts and the fuse box among them; the others' only the first three.
+    const bool answered = kind == restraint::kInteract || kind == restraint::kEvent || kind == restraint::kAbility ||
+                          (type == kSquatter && (kind == restraint::kHunt || kind == restraint::kFuseBox));
+    return answered && restraint::held_back(type, static_cast<restraint::Kind>(kind));
   } catch (...) {
     return false;  // nothing thrown may reach another mod
   }
@@ -251,12 +255,13 @@ bool start(const PmHostApi* api) {
   if (!(pm::game::resolve() && behaviour::resolve() && kikimora::resolve() && echo::resolve() && sound::resolve() &&
         apparition::resolve() && hydra::resolve() && asterion::resolve() && lithobolia::resolve() &&
         gremlin::resolve() && bogeyman::resolve() && brownie::resolve() && lethe::resolve() && tempest::resolve() &&
-        mesmer::resolve())) {
+        mesmer::resolve() && squatter::resolve())) {
     PM_LOG("CustomGhosts inactive: game binding resolution failed");
     return false;
   }
   if (!(behaviour::create_hooks() && echo::create_hooks() && restraint::create_hooks() && lethe::create_hooks() &&
-        mesmer::create_hooks() && brownie::create_hooks() && tempest::create_hooks() && pm::hooks::enable_all())) {
+        mesmer::create_hooks() && brownie::create_hooks() && tempest::create_hooks() && squatter::create_hooks() &&
+        pm::hooks::enable_all())) {
     PM_LOG("CustomGhosts inactive: hook installation failed");
     return false;
   }
@@ -294,6 +299,7 @@ extern "C" __declspec(dllexport) void pmmod_stop() {
     pm::custom::tempest::reset();
     pm::custom::mesmer::reset();
     pm::custom::kikimora::reset();
+    pm::custom::squatter::reset();
     pm::custom::behaviour::teardown();
   });
 }

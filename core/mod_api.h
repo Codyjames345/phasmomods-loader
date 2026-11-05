@@ -15,7 +15,7 @@
 extern "C" {
 
 #define PMMOD_API_MAJOR 2u
-#define PMMOD_API_MINOR 2u
+#define PMMOD_API_MINOR 3u
 // Major in the high 16 bits, minor in the low 16. Version 1 (the first contract) had no minor.
 #define PMMOD_API_VERSION ((PMMOD_API_MAJOR << 16) | PMMOD_API_MINOR)
 
@@ -99,7 +99,10 @@ typedef struct PmGhostDef {
   uint32_t tellCount;
   // The evidence it gives: a vanilla evidence id ("emf" "spirit_box" "ultraviolet" "orbs" "writing"
   // "freezing" "dots", and for evidence a game update adds, its EvidenceType name in lower case), or the
-  // id of a custom evidence any started mod registers. Null or "" is an empty slot; no evidence twice.
+  // id of a custom evidence any started mod registers. Null or "" is an empty slot; no evidence twice. All
+  // three may be empty, for a ghost that gives none: its GhostData then holds the game's own "no evidence"
+  // (EvidenceType.None) in each slot, the game's pick gives only that, and the journal's filter crosses it out
+  // once any evidence is found (sdk/systems/evidence.md, "A ghost that gives no evidence").
   const char* evidence[3];
   // Its ability for a player who controls it. Both count 0: no ability; otherwise both with English.
   PmTextSet abilityName, abilityDescription;
@@ -147,6 +150,13 @@ typedef struct PmGhostDef {
   // rules lose this one, as they lose a share of its AI's attempts. It then does not happen and stays paid
   // for. Asked once per interaction, so it may roll. Main thread.
   bool (*interactionLost)(void* user);
+  /// Added in version 2.3 after interactionLost (an earlier size reads it as null): host only, at the game's roll
+  /// of the contract's ghost type (GhostController.PickType, from GhostController.Spawn), just before the game
+  /// draws: false keeps the ghost out of that roll, as a weight of 0 does, for a ghost that cannot run now (its
+  /// assets failed to load, say); true or null leaves it at the game's own weight. Only the roll: a Custom
+  /// difficulty that names its type still gets it, as the game sets that type after the roll. Asked once per roll,
+  /// on the master, with `user`. Main thread.
+  bool (*rollable)(void* user);
 } PmGhostDef;
 
 // PmGhostDef.flags: its third evidence is never the one a difficulty withholds, as for the game's

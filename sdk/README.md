@@ -485,9 +485,9 @@ that requires one whose hook could not be made stays off, and the log names the 
 false for that reason alone while a mod runs.
 It replaces return-address checks, which break when several mods chain detours on one function.
 
-### The host contract, version 2.2
+### The host contract, version 2.3
 
-`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.2 today).
+`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.3 today).
 `pm_api_compatible(host, mod)` accepts a mod of the same major and a minor no newer than the host's.
 Within a major, `PmHostApi` and every published struct only grow at the end; a new major refuses
 older mods. Version 2.0 added these members, after the services of version 1:
@@ -606,6 +606,13 @@ game's enums give the first custom ghost and evidence, so two clients whose game
 enums never agree; an enum value whose name would give another value's id (a future `Orbs` beside
 `GhostOrb`'s `orbs`) gets no id, logged; and the host logs the enum ranges it read
 (`content: GhostType 0..30, EvidenceType 0..7`).
+
+A ghost may give no evidence at all: its three slots empty, null or `""`. Its GhostData then holds the game's own
+"no evidence" in each, the game's pick gives only that, and the journal's filter lists it until any evidence is found
+([evidence](systems/evidence.md#a-ghost-that-gives-no-evidence)). Version 2.3 added `PmGhostDef.rollable`, after
+`interactionLost`: asked on the master at the game's type roll, just before it draws, false keeps the ghost out of the
+roll with a weight of 0 (one whose assets failed to load, say), and null or true leaves the game's weight. A Custom
+difficulty that names its type still gets it.
 
 - `ghost_rules(ghostId, rules)`, from `pmmod_start` only: attaches a `PmGhostRules` (`start`, `tick`,
   `stop`, `huntSpeed`, `heldBack`, each optional) to a custom ghost's id or a vanilla one

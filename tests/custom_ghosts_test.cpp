@@ -20,6 +20,7 @@
 #include "fake_game.h"
 #include "game_api.h"
 #include "ghosts.h"
+#include "Difficulty.h"
 #include "Equipment.h"
 #include "GhostHuntState.h"
 #include "LevelRoom.h"
@@ -30,6 +31,7 @@
 #include "registration.h"
 #include "Sensor.h"
 #include "sensor_copy.h"
+#include "squatter.h"
 #include "asterion_rule.h"
 #include "bogeyman_rule.h"
 #include "hud_line.h"
@@ -87,8 +89,17 @@ void every_custom_ghost_is_identifiable() {
   auto taken = vanilla_evidence();
   CHECK(taken.size() == 30);
   std::set<int> types;
+  int evidenced = 0;  // the ghosts told apart by their evidence
   for (const Ghost& g : kGhosts) {
     CHECK(g.type > 0 && types.insert(g.type).second);
+    // The Squatter gives no evidence and is identified by sight and sound instead: it is visible and it talks
+    // (docs/superpowers/specs/2026-11-04-squatter-design.md, "Rules this ghost breaks on purpose"). Its page and
+    // text are checked as every other ghost's.
+    if (g.type == kSquatter) {
+      for (const char* key : {title_key(g), g.description, g.strength, g.weakness}) CHECK(pm::i18n::table().has(key));
+      continue;
+    }
+    ++evidenced;
     std::set<int> e;
     for (const char* id : g.evidence) e.insert(evidence_number(id));
     CHECK(e.size() == 3 && !e.count(0));  // three different evidence types, each one the content layer knows
@@ -98,7 +109,23 @@ void every_custom_ghost_is_identifiable() {
     for (const char* key : {title_key(g), g.description, g.strength, g.weakness}) CHECK(pm::i18n::table().has(key));
     if (g.ability) CHECK(pm::i18n::table().has(g.ability) && pm::i18n::table().has(g.abilityDescription));
   }
-  CHECK(taken.size() == 30 + static_cast<size_t>(kGhostCount));  // every ghost has a combination of its own
+  CHECK(evidenced == kGhostCount - 1);                        // every ghost but the Squatter
+  CHECK(taken.size() == 30 + static_cast<size_t>(evidenced));  // each has a combination of its own
+}
+
+// The Squatter (ghosts.h): its id, the user's name for it, no evidence at all (every slot empty, as the content layer
+// takes it), no ability, and a page whose text waits for the user's words (PM_TEXT_TODO).
+void the_squatter_gives_nothing() {
+  const Ghost* g = find(kSquatter);
+  CHECK(g != nullptr);
+  if (!g) return;
+  CHECK(id_of(*g) == "phasmomods.custom-ghosts.squatter" && find_id("phasmomods.custom-ghosts.squatter") == g);
+  CHECK(pm::i18n::text(title_key(*g)) == "Squatter");
+  for (const char* e : g->evidence) CHECK(e == nullptr);
+  CHECK(!g->ability && !g->abilityDescription && !g->flameLook && !g->keepsLastEvidence && !g->blindInHunts);
+  const pm::api::content::GhostDef def = definition(*g, {});
+  for (const std::string& e : def.evidence) CHECK(e.empty());
+  CHECK(def.abilityName.empty() && def.abilityDescription.empty() && def.flags == 0);
 }
 
 // Each ghost's content id is its name in lower case, spaces as _, after the mod's prefix.
@@ -811,7 +838,7 @@ void the_mesmer_shows_each_their_own() {
 }
 
 void the_flame_ghosts_are_the_designed_ones() {
-  CHECK(kGhostCount == 15);
+  CHECK(kGhostCount == 16);  // the five first, the ten flame ghosts and the Squatter
   const int types[] = {kLithobolia, kGremlin, kBrownie, kBogeyman, kLethe, kMesmer, kKnell, kAsterion, kTempest, kHydra};
   for (int type : types) CHECK(find(type) != nullptr);
   const auto evidence_is = [](int type, const char* a, const char* b) {
@@ -1860,7 +1887,7 @@ void every_ghost_is_registered_by_its_id() {
     if (!def) continue;
     CHECK(def->name == english(title_key(g)) && def->description == english(g.description) &&
           def->strength == english(g.strength) && def->weakness == english(g.weakness) && def->tells.empty());
-    for (int i = 0; i < 3; ++i) CHECK(def->evidence[i] == g.evidence[i]);
+    for (int i = 0; i < 3; ++i) CHECK(def->evidence[i] == (g.evidence[i] ? g.evidence[i] : ""));
     CHECK(reinterpret_cast<intptr_t>(def->user) == g.type);
     CHECK(def->hudState == &hud && def->heldBack == &held && def->playerView == &view && def->evidenceLook &&
           def->target == &target && def->hudLine == &line);
@@ -1919,8 +1946,8 @@ void black_shuck_declares_itself_blind_in_hunts() {
 }
 
 // Without Spectral Flame's evidence, every ghost that gives it is dropped once every mod has started:
-// only the Echo, the Dullahan and the Black Shuck stay.
-void without_spectral_flame_only_three_stay() {
+// only the Echo, the Dullahan, the Black Shuck and the Squatter stay.
+void without_spectral_flame_only_four_stay() {
   start();
   CHECK(register_all());
   fake::commit_content();
@@ -1931,7 +1958,68 @@ void without_spectral_flame_only_three_stay() {
     CHECK(registered == !gives(g, kSpectralFlame));
     kept += registered;
   }
-  CHECK(kept == 3);
+  CHECK(kept == 4);
+}
+
+// Until its figure is ready (squatter::set_assets_ready, which Task 5's figure sets), the Squatter is registered but
+// never rolled: its definition's rollable answers false, so the host gives it a weight of 0 in the game's type roll
+// (host/content_types.h before_pick_type), while every other ghost is rolled at the game's own weight. The game's
+// roll draws among positive weights only (GhostController.PickType).
+void an_unavailable_squatter_is_never_rolled() {
+  start();
+  register_flame();
+  CHECK(register_all());
+  fake::commit_content();
+  fake::room(1, {1});
+  const auto rolled = [] {  // the custom ghosts the game's roll may draw, as the host leaves their weights
+    std::set<int> out;
+    for (const Ghost& g : kGhosts) {
+      const pm::content::Ghost* def = fake::content_registry().registered(id_of(g));
+      CHECK(def != nullptr);
+      if (def && (!def->rollable || def->rollable(def->user))) out.insert(g.type);
+    }
+    return out;
+  };
+  squatter::set_assets_ready(false);
+  CHECK(!squatter::available());
+  std::set<int> drawn = rolled();
+  CHECK(!drawn.count(kSquatter) && drawn.size() == static_cast<size_t>(kGhostCount - 1));
+  squatter::set_assets_ready(true);
+  CHECK(squatter::available());
+  drawn = rolled();
+  CHECK(drawn.count(kSquatter) && drawn.size() == static_cast<size_t>(kGhostCount));
+  squatter::set_assets_ready(false);
+}
+
+// The Squatter begins each contract lurking in its room, or moping on a friendly ghost's difficulty
+// (squatter_rule.h first_phase), on the frame it starts to haunt; it holds no phase while it does not.
+void the_squatter_begins_lurking_or_moping() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty;
+  void* valuesStatic = &values;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  Obj ghost;
+  squatter::reset();
+  CHECK(!squatter::phase());
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Lurking);
+  squatter::tick(nullptr, 0, false);  // the contract ends
+  CHECK(!squatter::phase());
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, true);
+  squatter::tick(&ghost, kSquatter, true);  // a player steering it begins the same way
+  CHECK(squatter::phase() == squatter::Phase::Moping);
+  squatter::tick(&ghost, kEcho, false);  // another ghost haunts
+  CHECK(!squatter::phase());
+  squatter::reset();
 }
 
 // The rules run for the ghost the contract's ghost acts as, with its Type, and the Hydra's look for
@@ -1970,6 +2058,7 @@ int main() {
   the_echo_remembers_the_last_phrase();
   voices_survive_the_trip();
   every_custom_ghost_is_identifiable();
+  the_squatter_gives_nothing();
   every_ghost_has_its_id();
   every_page_tells_its_story();
   the_held_ghosts_say_who_they_hunt();
@@ -2052,7 +2141,9 @@ int main() {
   player_shuck_prey_is_the_trail_it_walks();
   player_bogeyman_reaches_a_hiding_place();
   wiring::every_ghost_is_registered_by_its_id();
-  wiring::without_spectral_flame_only_three_stay();
+  wiring::without_spectral_flame_only_four_stay();
+  wiring::an_unavailable_squatter_is_never_rolled();
+  wiring::the_squatter_begins_lurking_or_moping();
   wiring::draugr_declares_freezing_priority();
   wiring::black_shuck_declares_itself_blind_in_hunts();
   wiring::the_rules_and_the_look_follow_the_ghost();

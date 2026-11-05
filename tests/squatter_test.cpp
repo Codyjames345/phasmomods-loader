@@ -457,10 +457,20 @@ void every_voice_file_is_in_the_payload() {
   }
 }
 
+// It may only idle, wander and go to its favourite room: every other GhostState (the game's numbers in build
+// 25811160, 0 to 23) and any it adds later, or an unread one, is refused.
+void only_idling_wandering_and_its_room_pass() {
+  const QuietStates s{0, 1, 3};
+  for (int state = -1; state <= 30; ++state) CHECK(keeps_quiet(s, state) == !(state == 0 || state == 1 || state == 3));
+  const QuietStates unread{};
+  CHECK(keeps_quiet(unread, -1) && keeps_quiet(unread, 0) && keeps_quiet(unread, 2));
+}
+
 }  // namespace
 
 int main() {
   lurks_until_it_sees_someone();
+  only_idling_wandering_and_its_room_pass();
   search_and_chase_alternate();
   door_locks_only_when_everyone_is_out();
   walking_back_in_keeps_the_door_open();

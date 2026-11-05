@@ -36,6 +36,7 @@ const PmGhostDef& GhostDef::c_def() const {
   def_.hudLine = hudLine;
   def_.playerMove = playerMove;
   def_.interactionLost = interactionLost;
+  def_.rollable = rollable;
   return def_;
 }
 

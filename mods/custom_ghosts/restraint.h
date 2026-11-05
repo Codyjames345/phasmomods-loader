@@ -14,13 +14,18 @@
 //  - Bogeyman: its hunts begin from a closet (bogeyman.h), through the same hook, and outside hunts most of
 //    its idle door interactions are on a closet door its door sensor detects, when there is one
 //    (GhostActivity.GetDoorToOpen); its AI's and a ghost player's alike.
+//  - Squatter: attempts nothing at all, forced or not: no interaction from its roll, no pulse of its interaction
+//    sensor (a voodoo pin's forced one included), and no state change but idling, wandering and its favourite room
+//    (squatter_rule.h keeps_quiet), so no event, ability, interaction, cursed pull or hunt begins, whatever starts it.
+//    Its rules hold back every kind a player may ask.
 // Its attempts are held back through GhostActivity.TryInteract and GhostAI.ChangeState, where a roll a player
 // takes (sdk/api/content.h roll_taken) goes straight on, as it attempts nothing yet; a player controlling the
 // ghost asks held_back() before acting (the ghost's PmGhostDef.heldBack, which Playable Ghost asks through the
 // content layer, sdk/api/content.h held_back). No hook here takes who steers it as an input.
 namespace pm::custom::restraint {
 
-enum Kind { kInteract = 0, kEvent = 1, kAbility = 3 };
+// The kinds of PmGhostDef.heldBack: kHunt and kFuseBox only the Squatter's rules hold back.
+enum Kind { kInteract = 0, kEvent = 1, kHunt = 2, kAbility = 3, kFuseBox = 4 };
 
 bool create_hooks();  // before hooks::enable_all
 // The custom ghost haunting the contract (on the host; null otherwise) and its type, every frame.

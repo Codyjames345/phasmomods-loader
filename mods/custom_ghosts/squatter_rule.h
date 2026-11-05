@@ -54,6 +54,20 @@ constexpr float kMoveCycleSeconds = kMoveCount * kMoveSlotSeconds;
 /** The phase a friendly or hostile Squatter begins a contract in: Lurking, or Moping on a friendly ghost's difficulty. */
 inline Phase first_phase(bool friendly) { return friendly ? Phase::Moping : Phase::Lurking; }
 
+/** The GhostState numbers the Squatter may still change to, as the running game numbers them (-1: unread). */
+struct QuietStates {
+  int idle = -1, wander = -1, favouriteRoom = -1;
+};
+
+/**
+ * Whether the Squatter refuses GhostAI.ChangeState to `state`, forced or not: every state but idling, wandering and
+ * going to its favourite room, so no interaction, event, ability, cursed pull, evidence state or hunt begins, and a
+ * state the game adds later is refused too. There is no paranormal activity (the spec, "What happens in a contract").
+ */
+inline bool keeps_quiet(const QuietStates& s, int state) {
+  return state < 0 || (state != s.idle && state != s.wander && state != s.favouriteRoom);
+}
+
 /**
  * The phase after `now` given this frame's facts. Pure and stateless: the caller keeps the phase. LockedOut
  * is final under every facts. A friendly ghost only moves Moping, Excited, Following (any other phase it is

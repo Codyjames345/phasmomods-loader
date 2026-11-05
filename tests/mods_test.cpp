@@ -177,9 +177,9 @@ void suspend_and_resume_in_a_room(const fs::path& data) {
 }
 
 // A mod built against an older minor version of contract 2 (`minor`, from `dll`) loads and starts in
-// the 2.2 host: the contract only grew at the end.
+// the 2.3 host: the contract only grew at the end.
 void older_minor_still_loads(const fs::path& data, const char* dll, uint32_t minor) {
-  CHECK(PMMOD_API_VERSION == ((2u << 16) | 2u));
+  CHECK(PMMOD_API_VERSION == ((2u << 16) | 3u));
   pm::log::set_sink(&capture, "");
   g_lines.clear();
   pm::mods::set_installed(data, fake_install(dll));
@@ -199,6 +199,9 @@ void mod_built_for_2_0_still_loads(const fs::path& data) { older_minor_still_loa
 
 // Contract 2.2 added the content functions at the end; a 2.1 mod never reaches them.
 void mod_built_for_2_1_still_loads(const fs::path& data) { older_minor_still_loads(data, PM_FAKE_MOD_2_1, 1); }
+
+// Contract 2.3 added PmGhostDef.rollable at the end; a 2.2 mod (the released contract) gives a shorter definition.
+void mod_built_for_2_2_still_loads(const fs::path& data) { older_minor_still_loads(data, PM_FAKE_MOD_2_2, 2); }
 
 // A mod exporting the new names loads and logs nothing about them.
 void loads_mod_with_new_exports(const fs::path& data) {
@@ -956,6 +959,7 @@ int main() {
   suspend_and_resume_in_a_room(data);
   mod_built_for_2_0_still_loads(data);
   mod_built_for_2_1_still_loads(data);
+  mod_built_for_2_2_still_loads(data);
   loads_mod_with_new_exports(data);
   loads_mod_with_old_exports_and_logs_once(data);
   manifest_id_must_match_dll(data);

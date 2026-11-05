@@ -6,6 +6,16 @@ a host runs a mod built for the same major version and a minor no newer than its
 major version `PmHostApi` and every published struct only grow at the end, and every content struct begins with its
 `size`, so a mod built for an older minor keeps loading.
 
+## [2.3] - Unreleased
+
+### Added
+
+- **A ghost kept out of the type roll.** `PmGhostDef.rollable`, at the end: false keeps the ghost out of the game's
+  type roll, as a weight of 0 does, while it cannot run (`sdk/api/content.h`).
+- **A ghost with no evidence.** Every evidence slot of a `PmGhostDef` may be empty; the game then gives only its own
+  "no evidence" for it ([evidence](systems/evidence.md#a-ghost-that-gives-no-evidence)). Allowed since 2.2, now stated
+  and tested.
+
 ## [2.2] - 2026-11-03
 
 Released in v0.2.0.

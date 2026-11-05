@@ -152,6 +152,7 @@ add_library(CustomGhosts SHARED
   mods/custom_ghosts/echo.cpp
   mods/custom_ghosts/restraint.cpp
   mods/custom_ghosts/sound.cpp
+  mods/custom_ghosts/squatter.cpp
   mods/custom_ghosts/squatter_voice.cpp
   mods/custom_ghosts/apparition.cpp
   mods/custom_ghosts/hydra.cpp
@@ -303,7 +304,7 @@ pm_test(mods_panel host/mod_deps.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sd
   sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp)
 target_include_directories(mods_panel_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(custom_ghosts sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp
-  sdk/runtime/content_acting.cpp mods/custom_ghosts/gremlin.cpp mods/custom_ghosts/hunt.cpp
+  sdk/runtime/content_acting.cpp mods/custom_ghosts/gremlin.cpp mods/custom_ghosts/hunt.cpp mods/custom_ghosts/squatter.cpp
   mods/custom_ghosts/sensor_copy.cpp)
 target_compile_definitions(custom_ghosts_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(custom_ghosts_test PRIVATE pmmod)
@@ -445,6 +446,11 @@ add_library(pm_fake_mod_2_1 SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_2_1 PRIVATE pmmod)
 target_compile_definitions(pm_fake_mod_2_1 PRIVATE "PM_FAKE_MOD_API_VERSION=((2u << 16) | 1u)")
 pm_options(pm_fake_mod_2_1)
+# And against host contract 2.2, the released minor before PmGhostDef.rollable.
+add_library(pm_fake_mod_2_2 SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_2_2 PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_2_2 PRIVATE "PM_FAKE_MOD_API_VERSION=((2u << 16) | 2u)")
+pm_options(pm_fake_mod_2_2)
 # And as built against the first contract (version 1, no minor), for gamecheck's version check.
 add_library(pm_fake_mod_1 SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_1 PRIVATE pmmod)
@@ -491,12 +497,13 @@ target_include_directories(mods_test PRIVATE third_party/minhook/src/hde)
 target_link_libraries(mods_test PRIVATE minhook bcrypt)
 target_compile_definitions(mods_test PRIVATE PM_FAKE_MOD="$<TARGET_FILE:pm_fake_mod>"
   PM_FAKE_MOD_2_0="$<TARGET_FILE:pm_fake_mod_2_0>" PM_FAKE_MOD_2_1="$<TARGET_FILE:pm_fake_mod_2_1>"
+  PM_FAKE_MOD_2_2="$<TARGET_FILE:pm_fake_mod_2_2>"
   PM_FAKE_MOD_OPTIONAL="$<TARGET_FILE:pm_fake_mod_optional>" PM_FAKE_MOD_VOICE="$<TARGET_FILE:pm_fake_mod_voice>"
   PM_FAKE_MOD_PLAIN="$<TARGET_FILE:pm_fake_mod_plain>" PM_FAKE_MOD_SAME_CHANNEL="$<TARGET_FILE:pm_fake_mod_same_channel>"
   PM_FAKE_MOD_THROWS="$<TARGET_FILE:pm_fake_mod_throws>" PM_FAKE_MOD_THROWS_REQUIRES="$<TARGET_FILE:pm_fake_mod_throws_requires>"
   PM_FAKE_MOD_1="$<TARGET_FILE:pm_fake_mod_1>" PM_FAKE_MOD_OLD_EXPORTS="$<TARGET_FILE:pm_fake_mod_old_exports>"
   PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-add_dependencies(mods_test pm_fake_mod pm_fake_mod_1 pm_fake_mod_2_0 pm_fake_mod_2_1 pm_fake_mod_optional pm_fake_mod_voice
+add_dependencies(mods_test pm_fake_mod pm_fake_mod_1 pm_fake_mod_2_0 pm_fake_mod_2_1 pm_fake_mod_2_2 pm_fake_mod_optional pm_fake_mod_voice
   pm_fake_mod_plain pm_fake_mod_same_channel pm_fake_mod_throws pm_fake_mod_throws_requires pm_fake_mod_old_exports)
 pm_test(mod_glue core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
@@ -514,7 +521,7 @@ target_include_directories(content_test PRIVATE sdk/examples/example_ghost)
 pm_test(content_journal sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp host/content_types.cpp
   host/content_text.cpp host/content_journal.cpp host/content_evidence.cpp host/content_localised.cpp
-  host/content_difficulty.cpp core/log.cpp mods/spectral_flame/contract.cpp)
+  host/content_difficulty.cpp core/log.cpp mods/spectral_flame/contract.cpp mods/custom_ghosts/squatter.cpp)
 # Before the mods' folders, as for content_difficulty_test below.
 target_include_directories(content_journal_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime sdk/resolver)
 pm_test(content_difficulty sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
