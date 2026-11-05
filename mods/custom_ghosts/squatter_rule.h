@@ -32,7 +32,7 @@ struct Facts {
   bool seesPlayer;    // a target is in sight now
   bool tracksPlayer;  // it still knows where a target is
   bool targetHiding;  // it knows its target is in a hiding place
-  int livingInside;   // living players inside the house
+  int livingInside;   // living players inside the house; negative when unknown (never locks, keeps the phase)
   bool actFinished;   // the get-up clip has ended (Excited)
 };
 
@@ -55,12 +55,15 @@ constexpr float kMoveCycleSeconds = kMoveCount * kMoveSlotSeconds;
 inline Phase first_phase(bool friendly) { return friendly ? Phase::Moping : Phase::Lurking; }
 
 /**
- * The phase after `now` given this frame's facts. Pure and stateless: the caller keeps the phase. A friendly
- * ghost only moves Moping, Excited, Following (any other phase it is handed restarts at Moping); it never
- * chases. A hostile one goes to LockedOut from any chase phase the frame no living player is inside, and
- * stays there.
+ * The phase after `now` given this frame's facts. Pure and stateless: the caller keeps the phase. LockedOut
+ * is final under every facts. A friendly ghost only moves Moping, Excited, Following (any other phase it is
+ * handed restarts at Moping); it never chases. A hostile one goes to LockedOut from a chase phase the frame
+ * exactly 0 living players are inside; a negative count (unknown) keeps the phase. In a chase phase a hiding
+ * target wins over knowing where it is (hiding is safe), then knowing where a target is (sight or tracking)
+ * chases, and otherwise a ghost that lost them searches.
  */
 inline Phase next_phase(Phase now, const Facts& f) {
+  if (now == Phase::LockedOut) return Phase::LockedOut;
   if (f.friendly) {
     switch (now) {
       case Phase::Excited: return f.actFinished ? Phase::Following : Phase::Excited;
@@ -71,18 +74,13 @@ inline Phase next_phase(Phase now, const Facts& f) {
   }
   switch (now) {
     case Phase::Lurking: return f.seesPlayer ? Phase::Chasing : Phase::Lurking;
-    case Phase::LockedOut: return Phase::LockedOut;
     case Phase::Chasing:
     case Phase::Searching:
     case Phase::AtHidingPlace:
-      if (f.livingInside <= 0) return Phase::LockedOut;
-      if (now == Phase::Chasing) {
-        if (f.seesPlayer || f.tracksPlayer) return Phase::Chasing;
-        return f.targetHiding ? Phase::AtHidingPlace : Phase::Searching;
-      }
-      if (f.seesPlayer) return Phase::Chasing;
+      if (f.livingInside < 0) return now;
+      if (f.livingInside == 0) return Phase::LockedOut;
       if (f.targetHiding) return Phase::AtHidingPlace;
-      return Phase::Searching;
+      return f.seesPlayer || f.tracksPlayer ? Phase::Chasing : Phase::Searching;
     default: return Phase::Lurking;  // a friendly phase handed to a hostile ghost
   }
 }
@@ -94,7 +92,7 @@ inline Phase next_phase(Phase now, const Facts& f) {
 inline bool doors_lock(Phase now, const Facts& f) {
   if (f.friendly) return false;
   const bool chase = now == Phase::Chasing || now == Phase::Searching || now == Phase::AtHidingPlace;
-  return chase && f.livingInside <= 0;
+  return chase && f.livingInside == 0;
 }
 
 /** Whether the Squatter may kick its target now: hostile, chasing, the target alive and within `reach` (metres). */
@@ -123,8 +121,9 @@ inline float average_chase_speed(float sprintSpeed) {
   return sum / kMoveCount;
 }
 
-/** The move `seconds` into a chase, walking kMoveCycle; offset the time per ghost for a seed. Before 0 reads as 0. */
+/** The move `seconds` into a chase, walking kMoveCycle; offset the time per ghost for a seed. Before 0 reads as 0, and a non-finite time as the start. */
 inline Move move_at(float seconds) {
+  if (!std::isfinite(seconds)) return kMoveCycle[0];
   const float t = std::fmod(std::max(seconds, 0.0f), kMoveCycleSeconds);
   return kMoveCycle[std::min(static_cast<int>(t / kMoveSlotSeconds), kMoveCount - 1)];
 }

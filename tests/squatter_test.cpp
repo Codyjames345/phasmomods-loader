@@ -1,6 +1,7 @@
 // Offline tests for the Squatter's rules (mods/custom_ghosts/squatter_rule.h).
 // Run: build\squatter_test.exe
 #include <cstdint>
+#include <limits>
 
 #include "squatter_rule.h"
 
@@ -94,9 +95,10 @@ void chase_ends_locked_out_when_everyone_is_out() {
 }
 
 void locked_out_is_final() {
-  for (int mask = 0; mask < 16; ++mask) {
-    for (const int inside : {0, 1, 4}) {
+  for (int mask = 0; mask < 32; ++mask) {
+    for (const int inside : {-1, 0, 1, 4}) {
       Facts f{};
+      f.friendly = mask & 16;
       f.seesPlayer = mask & 1;
       f.tracksPlayer = mask & 2;
       f.targetHiding = mask & 4;
@@ -106,6 +108,43 @@ void locked_out_is_final() {
       CHECK(!doors_lock(Phase::LockedOut, f));
     }
   }
+}
+
+void a_hiding_target_is_safe() {
+  for (const Phase p : kChaseStates) {
+    Facts f = hostile();
+    f.tracksPlayer = true;
+    f.targetHiding = true;
+    const Phase n = next_phase(p, f);
+    CHECK(n == Phase::AtHidingPlace);
+    CHECK(!may_kick(n, false, true, 0.5f, 1.0f));
+    f.seesPlayer = true;
+    CHECK(next_phase(p, f) == Phase::AtHidingPlace);
+  }
+}
+
+void hearing_a_target_resumes_the_chase() {
+  Facts heard = hostile();
+  heard.tracksPlayer = true;
+  CHECK(next_phase(Phase::Searching, heard) == Phase::Chasing);
+  CHECK(next_phase(Phase::AtHidingPlace, heard) == Phase::Chasing);  // target out and tracked
+}
+
+void an_unknown_count_never_locks() {
+  for (const Phase p : kChaseStates) {
+    const Facts f = hostile(-1);
+    CHECK(!doors_lock(p, f));
+    CHECK(next_phase(p, f) == p);
+  }
+}
+
+void the_move_clock_survives_bad_times() {
+  const Move start = move_at(0.0f);
+  CHECK(move_at(std::numeric_limits<float>::quiet_NaN()) == start);
+  CHECK(move_at(std::numeric_limits<float>::infinity()) == start);
+  CHECK(move_at(-std::numeric_limits<float>::infinity()) == start);
+  const int index = static_cast<int>(move_at(1e9f));
+  CHECK(index >= 0 && index <= static_cast<int>(Move::Stumble));
 }
 
 void friendly_never_chases_or_kicks() {
@@ -121,7 +160,7 @@ void friendly_never_chases_or_kicks() {
   CHECK(next_phase(Phase::Excited, f) == Phase::Following);
 
   // Under every combination of facts a friendly ghost stays among the friendly phases, whatever phase
-  // it is handed, and never locks a door.
+  // it is handed but LockedOut, and never locks a door.
   for (int mask = 0; mask < 16; ++mask) {
     for (const int inside : {0, 1, 3}) {
       Facts g{};
@@ -132,6 +171,7 @@ void friendly_never_chases_or_kicks() {
       g.actFinished = mask & 8;
       g.livingInside = inside;
       for (const Phase p : kAllPhases) {
+        if (p == Phase::LockedOut) continue;  // final under every facts (locked_out_is_final)
         const Phase n = next_phase(p, g);
         CHECK(n == Phase::Moping || n == Phase::Excited || n == Phase::Following);
         CHECK(!doors_lock(p, g));
@@ -215,6 +255,10 @@ int main() {
   a_dropped_target_does_not_stop_the_door();
   chase_ends_locked_out_when_everyone_is_out();
   locked_out_is_final();
+  a_hiding_target_is_safe();
+  hearing_a_target_resumes_the_chase();
+  an_unknown_count_never_locks();
+  the_move_clock_survives_bad_times();
   friendly_never_chases_or_kicks();
   kick_needs_a_living_target_in_reach();
   speed_stays_just_under_sprint();
