@@ -261,6 +261,10 @@ bool start(const PmHostApi* api) {
     return false;
   }
   pm::net::set_handler(&receive);
+  // SQUATTER_VOICE_TODO: squatter::voice::load(folder) goes here, or at contract start. Who passes the
+  // voice folder is undecided: the launcher copies only a mod's DLL, manifest and string table into its
+  // run folder, so a path beside this DLL is wrong. Until it is decided, no set is loaded and every
+  // squatter::voice::play stays silent.
   return true;
 }
 
