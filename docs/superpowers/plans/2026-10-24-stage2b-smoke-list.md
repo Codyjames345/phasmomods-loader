@@ -574,6 +574,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 **Tells**
 
 - [ ] A closed door never stops it for good: it batters it down in 3 s, heard far away, and the door stays broken open.
+- [ ] A closed double door: both leaves are thrown open together and stay stuck open.
 - [ ] It never closes a door; no door closes behind it.
 - [ ] UV prints on a battered door only where the ghost gives Ultraviolet.
 

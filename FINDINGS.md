@@ -193,6 +193,9 @@ reports an entry whose problem is already gone.
     kinematic state, and how far the leaf has turned 1 s and 3 s later. Open: which leaves make a double
     door (Door+0xF8 and +0x100 hold Doors; Door.Convert copies both; the hunt's own push skips a door
     whose +0xF8 is set and whose +0x21 is set).
+    Second run, 2026-11-06: a single door burst 90 degrees open; a double door's leaf did not turn
+    though its push ran (not kinematic after). Door+0xF8 is the other leaf (Door.otherDoor: the field
+    Door.GhostOpenDoorEvent reads to push both); both leaves now burst together, each logged by name.
   - Lithobolia: the throwing state is 6; ownership taken over before the aimed launch; the hit
   message and PlayerSanity.ChangeSanity(+5) on the hit player's client. No throw with nobody in
   sight (the game's sensor, GhostAI+0xA0, via Sensor.IsDetected); hunt throws (Prop.TryThrow from
