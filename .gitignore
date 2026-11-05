@@ -19,4 +19,7 @@
 /re/dump/
 /re/map-addresses.tsv
 
+# Test run exports: a tester's name and numbers derived from the game.
+/playtest/
+
 /.vscode
