@@ -182,6 +182,17 @@ reports an entry whose problem is already gone.
   CreateDoorSlamNoise as the bang; DisableOrEnableDoor(false) keeps a jammed door open; the leaf
   Rigidbody's worldCenterOfMass is the middle of the leaf (a door is in its way when its heading
   crosses the hinge-to-middle line, asterion_rule.h door_ahead).
+    Live, 2026-11-03 (user's first test sheet): the bangs and the 3 s are right, but the door stays shut
+    after "asterion: a door is broken open" (logged 4 times), so the ghost passes through it as any ghost
+    does; and of a double door only one leaf is battered. Decompiled 2026-11-05: GhostForceDoor (3 args)
+    starts its push only while Door+0x180 (Door.forceRoutine) is null, and the push switches the door
+    back on as it ends, undoing a jam sent with it (fixed: DoorJam sends the jam after the push). It
+    always pushes with physics, while GhostOpenDoorAnimated picks the physics push only for a door with
+    useForceInsteadOfAnimations (Door+0xC8) set, else the animated move. Why the leaf stays shut is not
+    known yet: each burst now logs whether a push was already running, the door's physics flag and
+    kinematic state, and how far the leaf has turned 1 s and 3 s later. Open: which leaves make a double
+    door (Door+0xF8 and +0x100 hold Doors; Door.Convert copies both; the hunt's own push skips a door
+    whose +0xF8 is set and whose +0x21 is set).
   - Lithobolia: the throwing state is 6; ownership taken over before the aimed launch; the hit
   message and PlayerSanity.ChangeSanity(+5) on the hit player's client. No throw with nobody in
   sight (the game's sensor, GhostAI+0xA0, via Sensor.IsDetected); hunt throws (Prop.TryThrow from

@@ -85,4 +85,23 @@ struct DoorTrack {
   bool battering() const { return state == State::Battering; }
 };
 
+/**
+ * When a jammed door is switched off for players (Door.DisableOrEnableDoor). Door.GhostForceDoor's push
+ * switches the door back on as it ends, so a jam sent while the push runs (Door.forceRoutine set) is undone:
+ * the jam waits for each push to end and is sent once after it.
+ */
+struct DoorJam {
+  bool off = false;  // switched off since the last push
+
+  /** A push has started: the door will be switched on again when it ends. */
+  void pushed() { off = false; }
+
+  /** Whether to switch the door off now, for a door `jammed` and a push still `running`. */
+  bool due(bool jammed, bool running) {
+    if (!jammed || running || off) return false;
+    off = true;
+    return true;
+  }
+};
+
 }  // namespace pm::custom

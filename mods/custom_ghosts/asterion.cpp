@@ -28,12 +28,18 @@ using phasmo::Vector3;
 constexpr ULONGLONG kScanMs = 3000;
 constexpr ULONGLONG kKeepJammedMs = 2000;   // how often a jammed door is forced open again
 
+constexpr ULONGLONG kReportMs[] = {1000, 3000};  // after a burst, when the log says how far the leaf has turned
+
 struct Tracked {
   api::Held door;
   api::Held leaf;  // the leaf's Transform
   api::Held body;  // the leaf's Rigidbody
   DoorTrack track;
+  DoorJam jam;
   ULONGLONG nextForce = 0;
+  ULONGLONG burstAt = 0;  // when it burst, for the reports below
+  float burstAngle = 0;   // the leaf's angle as it burst
+  int reported = 0;       // how many of kReportMs have been logged
 };
 
 struct State {
@@ -69,8 +75,30 @@ void scan() {
   }
 }
 
-/** Force the door open at the game's own strength (-1), skipping its rattle. */
-void force_open(void* door) { phasmo::Door::GhostForceDoor(door, true, -1, true); }
+const char* yes_no(bool b) { return b ? "yes" : "no"; }
+
+/** Whether the door's push is still running: Door.GhostForceDoor does nothing while it is. */
+bool push_running(const Tracked& t) { return phasmo::Door::forceRoutine.get(t.door) != nullptr; }
+
+/**
+ * Force the door open at the game's own strength (-1), skipping its rattle. The push switches the door
+ * back on for players as it ends, so the jam is sent again after it (DoorJam).
+ */
+void force_open(Tracked& t) {
+  phasmo::Door::GhostForceDoor(t.door, true, -1, true);
+  t.jam.pushed();
+}
+
+/** What the log says of a door the Asterion bursts, and how far its leaf has turned since. */
+void report(Tracked& t, ULONGLONG now) {
+  if (!t.burstAt || t.reported >= static_cast<int>(std::size(kReportMs)) || now < t.burstAt + kReportMs[t.reported])
+    return;
+  PM_LOG("asterion: %llu ms after the burst the leaf has turned %.0f degrees (closed %s, push running %s, kinematic %s)",
+         kReportMs[t.reported], std::fabs(delta_angle(t.burstAngle, leaf_angle(t))),
+         yes_no(door_closed(leaf_angle(t), phasmo::Door::closedAngle.get(t.door))), yes_no(push_running(t)),
+         yes_no(phasmo::Rigidbody::get_isKinematic(t.body)));
+  ++t.reported;
+}
 
 }  // namespace
 
@@ -108,20 +136,30 @@ void tick(void* ghost, int type) {
     const bool towards = door_ahead(heading.x, heading.z, dx, dz, centre.x - hinge.x, centre.z - hinge.z);
     switch (t.track.step(hunting, distance, closed, towards, dt)) {
       case DoorAction::Bang: phasmo::Door::CreateDoorSlamNoise(t.door, nullptr); break;
-      case DoorAction::Burst:
-        force_open(t.door);
-        phasmo::Door::DisableOrEnableDoor(t.door, false, false);  // jammed: nobody closes it again
+      case DoorAction::Burst: {
+        const bool busy = push_running(t);
+        PM_LOG("asterion: a door is broken open (push already running %s, moved with physics %s, kinematic %s)",
+               yes_no(busy), yes_no(phasmo::Door::useForceInsteadOfAnimations.get(t.door)),
+               yes_no(phasmo::Rigidbody::get_isKinematic(t.body)));
+        t.burstAt = now;
+        t.burstAngle = leaf_angle(t);
+        t.reported = 0;
+        force_open(t);
         t.nextForce = now + kKeepJammedMs;
-        PM_LOG("asterion: a door is broken open");
         break;
+      }
       case DoorAction::None: break;
     }
     if (t.track.battering()) g.battering = true;
+    const bool jammed = t.track.state == DoorTrack::State::Jammed;
+    // Jammed: nobody closes it again. Sent once each push is over, as the push switches it back on.
+    if (t.jam.due(jammed, push_running(t))) phasmo::Door::DisableOrEnableDoor(t.door, false, false);
     // A jammed door forced shut (an event, physics) is broken open again.
-    if (t.track.state == DoorTrack::State::Jammed && closed && now >= t.nextForce) {
+    if (jammed && closed && now >= t.nextForce) {
       t.nextForce = now + kKeepJammedMs;
-      force_open(t.door);
+      force_open(t);
     }
+    report(t, now);
   }
 }
 

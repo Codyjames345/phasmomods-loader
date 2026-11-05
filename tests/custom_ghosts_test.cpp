@@ -265,6 +265,19 @@ void the_asterion_batters_doors() {
   CHECK(ended.step(false, 1.0f, true, true, 0.1f) == DoorAction::None && !ended.battering());
 }
 
+void the_asterion_jams_a_door_once_the_push_is_over() {
+  // Door.GhostForceDoor's push switches the door back on for players as it ends (decompiled), so a jam sent
+  // while the push runs is undone. The jam waits for the push to end and is sent once after each push.
+  DoorJam jam;
+  CHECK(!jam.due(false, false));  // not jammed: never
+  jam.pushed();                   // the burst's push starts
+  CHECK(!jam.due(true, true));    // jammed, but the push still runs
+  CHECK(jam.due(true, false));    // the push is over: switch it off now
+  CHECK(!jam.due(true, false));   // and only once
+  jam.pushed();                   // forced shut and pushed open again: that push switches it on as it ends
+  CHECK(!jam.due(true, true) && jam.due(true, false) && !jam.due(true, false));
+}
+
 void the_lithobolia_aims_true() {
   const Vec from{0, 1, 0}, to{6, 1.2f, 2};
   const Vec v = aim_velocity(from, to);
@@ -1995,6 +2008,7 @@ int main() {
   the_hydra_grows_heads();
   the_flame_ghost_messages_round_trip();
   the_asterion_batters_doors();
+  the_asterion_jams_a_door_once_the_push_is_over();
   the_lithobolia_aims_true();
   the_lithobolia_only_throws_at_people();
   the_ghost_sees_a_player_through_their_sight_parts();

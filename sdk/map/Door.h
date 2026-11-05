@@ -34,11 +34,31 @@ inline constexpr pm::sdk::EntryDesc Door_closedAngle{.key = "Door.closedAngle", 
                                                      .type = "float",
                                                      .facts = Door_closedAngle_facts};
 
-/// The ghost forces the door open or shut (the overload with three arguments: open, strength, -1 for
-/// the game's own, and a third flag). Inferred: from the method's name and its default arguments.
+/// The ghost pushes the door open or shut (the overload with three arguments: open, strength, -1 for the
+/// game's own, and whether to skip the rattle). It does nothing while Door.forceRoutine is set; otherwise
+/// it starts the push there. The push switches the door off for players (Door.DisableOrEnableDoor's RPC,
+/// taking the door over on the master), waits until no player holds it and this client owns it, pushes
+/// the leaf with the hinge's physics, waits, switches the door back on and clears Door.forceRoutine. The
+/// hunt pushes doors between the ghost and a player this way. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_GhostForceDoor{.key = "Door.GhostForceDoor", .kind = pm::sdk::Kind::Method,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Door", .name = "GhostForceDoor",
                                                         .params = Door_GhostForceDoor_params};
+
+/// Whether the ghost moves this door with physics rather than an animation, set in the scene:
+/// Door.GhostOpenDoorAnimated reads it and starts the physics push when it is set, else the animated move.
+/// Door.GhostForceDoor never reads it and always pushes with physics. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_useForceInsteadOfAnimations{
+    .key = "Door.useForceInsteadOfAnimations", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door", .name = "useForceInsteadOfAnimations",
+    .type = "bool"};
+
+/// The door's running push, a Coroutine: Door's one field of that type. Door.GhostForceDoor and the ghost's
+/// animated door moves start only while it is null and store their coroutine here, and the push clears it
+/// as it ends, so while it is set a ghost push does nothing. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_forceRoutine{.key = "Door.forceRoutine", .kind = pm::sdk::Kind::Field,
+                                                      .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                      .type = "Coroutine"};
 
 /// Shuts and locks the door as a hunt does, on every client (an RPC), unless the contract's difficulty
 /// keeps doors open in hunts (it tests Difficulty.huntDoorsStayOpen first). Decompiled.
@@ -80,11 +100,13 @@ inline constexpr pm::sdk::EntryDesc Door_CreateDoorSlamNoise{.key = "Door.Create
                                                              .kind = pm::sdk::Kind::Method, .owner = "Door",
                                                              .name = "CreateDoorSlamNoise"};
 
-/// Switches the door on (true) or off (false) for players, on every client (an RPC): a door switched
-/// off cannot be grabbed or closed. Inferred: from the method's name.
+/// Switches the door on (true) or off (false) for players, on every client (an RPC): switched off, it is
+/// dropped from any player's hand and cannot be grabbed, so no player can move it. It does not hold the
+/// leaf still. Door.GhostForceDoor's push switches the door back on as it ends. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_DisableOrEnableDoor{.key = "Door.DisableOrEnableDoor",
-                                                             .kind = pm::sdk::Kind::Method, .owner = "Door",
-                                                             .name = "DisableOrEnableDoor"};
+                                                             .kind = pm::sdk::Kind::Method,
+                                                             .confidence = pm::sdk::Confidence::Decompiled,
+                                                             .owner = "Door", .name = "DisableOrEnableDoor"};
 
 /// What every client runs when a player grabs an unlocked door: the RPC Door.GrabbedDoor sends. Its only
 /// callers are DragRigidbodyUse (the player's grab) and ClothDoor's override, which calls it first; no
@@ -153,6 +175,11 @@ struct Door {
   static constexpr pm::api::Field<pm::map::Door_body, void*> body{};
   /// The leaf's closed angle in degrees: closedAngle.get(door). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Door_closedAngle, float> closedAngle{};
+  /// Whether the ghost moves it with physics rather than an animation: useForceInsteadOfAnimations.get(door).
+  /// Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Door_useForceInsteadOfAnimations, bool> useForceInsteadOfAnimations{};
+  /// The door's running push: forceRoutine.get(door), null when none runs. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Door_forceRoutine, void*> forceRoutine{};
   /// GhostForceDoor(door, open, strength, skipRattle). A mod may hook it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Door_GhostForceDoor, void(void*, bool, float, bool)> GhostForceDoor{};
   /// HuntingCloseDoor(door). Unresolved: does nothing.
