@@ -25,6 +25,31 @@ inline Sky tempest_sky(int weatherType, int rain, int heavyRain) {
   return Sky::Clear;
 }
 
+/**
+ * The contract's sky as it is now. A Monkey Paw weather wish changes the contract's weather mid-contract
+ * (RandomWeather.TransitionWeatherProfile sets LevelValues' weather at once), and the game's storm reads it
+ * again at each of its strikes, so the Tempest reads it again each time it draws a gap.
+ */
+struct SkyWatch {
+  Sky sky = Sky::Clear;  // the last weather read, or a clear night before any
+  bool known = false;
+
+  /**
+   * One reading: `weatherType` from the contract's weather (negative when unread), with the game's
+   * numbers for rain, heavy rain and the dead players' profile. An unread weather, or the dead players'
+   * profile (never a contract's), leaves the last known sky. Answers whether the sky changed, or is the
+   * first one read, so the caller can log it.
+   */
+  bool see(int weatherType, int rain, int heavyRain, int dead) {
+    if (weatherType < 0 || weatherType == dead) return false;
+    const Sky now = tempest_sky(weatherType, rain, heavyRain);
+    const bool news = !known || now != sky;
+    sky = now;
+    known = true;
+    return news;
+  }
+};
+
 /** Seconds from one strike to the next in a hunt under `sky`, for a random draw `unit` in 0..1. */
 inline float tempest_next_strike(Sky sky, float unit) {
   float least = 9, most = 14;

@@ -296,9 +296,12 @@ inline constexpr pm::sdk::EntryDesc LevelValues_eventsBlocked{
     .owner = "LevelValues", .type = "bool", .facts = LevelValues_eventsBlocked_facts};
 
 /// The contract's weather, a WeatherProfile (sdk/map/Weather.h): LevelValues' one field of that type.
-/// Custom Ghosts' Tempest has read it as the contract's weather since it was built. Inferred: from the
-/// field's type.
+/// RandomWeather's Start sets it from the difficulty's weather, and a Monkey Paw weather wish sets it again
+/// mid-contract (RandomWeather's TransitionWeatherProfile, which writes it before its dead-player check), so
+/// read it each time rather than once. LightningController's update reads its weather type at each of the
+/// storm's strikes. The dead players' profile never goes here. Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelValues_weather{.key = "LevelValues.weather", .kind = pm::sdk::Kind::Field,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "LevelValues",
                                                         .type = "WeatherProfile"};
 

@@ -41,8 +41,7 @@ struct State {
   StrikeClock clock;
   bool eventStrike = false;  // one of its events began: the next tick strikes
   int strikes = 0;           // in the current hunt
-  bool skyKnown = false;
-  Sky sky = Sky::Clear;
+  SkyWatch sky;              // the contract's weather, which a Monkey Paw wish can change
 } g;
 
 std::mt19937 g_random{static_cast<unsigned>(GetTickCount64())};
@@ -53,17 +52,16 @@ int contract_weather() {
   return weather ? phasmo::WeatherProfile::weatherType.get(weather) : -1;
 }
 
-/** The contract's sky, read once it is there (never the dead players' profile). */
+/**
+ * The contract's sky as it is now, read again each time: a Monkey Paw weather wish changes it mid-contract
+ * (sdk/systems/weather.md). Logged when it is first read and whenever it changes.
+ */
 Sky sky() {
-  if (!g.skyKnown) {
-    const int type = contract_weather();
-    if (type < 0 || type == phasmo::WeatherType::dead()) return Sky::Clear;
-    g.sky = tempest_sky(type, phasmo::WeatherType::rain(), phasmo::WeatherType::heavyRain());
-    g.skyKnown = true;
+  const int type = contract_weather();
+  if (g.sky.see(type, phasmo::WeatherType::rain(), phasmo::WeatherType::heavyRain(), phasmo::WeatherType::dead()))
     PM_LOG("tempest: weather %d, so it strikes %s", type,
-           g.sky == Sky::HeavyRain ? "often" : g.sky == Sky::Rain ? "now and then" : "rarely");
-  }
-  return g.sky;
+           g.sky.sky == Sky::HeavyRain ? "often" : g.sky.sky == Sky::Rain ? "now and then" : "rarely");
+  return g.sky.sky;
 }
 
 float since_strike() { return g.lastStrike ? (GetTickCount64() - g.lastStrike) / 1000.0f : -1.0f; }

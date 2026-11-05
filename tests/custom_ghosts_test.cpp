@@ -747,6 +747,22 @@ void the_tempest_strikes_with_the_weather() {
   CHECK(tempest_speed(kGameBase, false) < kGameBase && tempest_speed(kGameBase, true) > 2 * kGameBase);
 }
 
+void the_tempest_follows_a_weather_wish() {
+  // A Monkey Paw weather wish sets LevelValues' weather at once (RandomWeather.TransitionWeatherProfile), and
+  // the game's storm reads it again at each of its strikes, so the Tempest reads it again too.
+  // Weather types of build 25811160: clear 0, rain 2, heavy rain 3, dead 8 (passed in, as from the game).
+  SkyWatch watch;
+  CHECK(watch.sky == Sky::Clear);
+  CHECK(watch.see(0, 2, 3, 8) && watch.sky == Sky::Clear);       // the first reading is news, for the log
+  CHECK(!watch.see(0, 2, 3, 8) && watch.sky == Sky::Clear);      // the same weather again is not
+  CHECK(watch.see(3, 2, 3, 8) && watch.sky == Sky::HeavyRain);   // a wish for a storm: it strikes often now
+  CHECK(tempest_next_strike(watch.sky, 1) == 6);
+  CHECK(!watch.see(-1, 2, 3, 8) && watch.sky == Sky::HeavyRain);  // unread: the last known weather stands
+  CHECK(!watch.see(8, 2, 3, 8) && watch.sky == Sky::HeavyRain);   // the dead players' profile is never the contract's
+  CHECK(watch.see(2, 2, 3, 8) && watch.sky == Sky::Rain);         // another wish
+  CHECK(watch.see(4, 2, 3, 8) && watch.sky == Sky::Clear);        // snow strikes as rarely as a clear night
+}
+
 void the_tempest_opens_each_hunt_with_a_strike() {
   StrikeClock clock;
   CHECK(!tempest_strike_now(clock, false, 1000, 5000));  // no hunt, no strike
@@ -2002,6 +2018,7 @@ int main() {
   the_lethe_makes_them_forget();
   the_lethe_forgets_the_player_it_lost();
   the_tempest_strikes_with_the_weather();
+  the_tempest_follows_a_weather_wish();
   the_tempest_opens_each_hunt_with_a_strike();
   the_mesmer_shows_each_their_own();
   the_dullahan_charges_straight_and_stalls_at_corners();
