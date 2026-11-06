@@ -185,6 +185,12 @@ inline constexpr pm::sdk::EntryDesc Transform_get_localRotation{.key = "Transfor
                                                                 .kind = pm::sdk::Kind::Method, .owner = "Transform",
                                                                 .name = "get_localRotation"};
 
+/// Sets the Transform's rotation relative to its parent from Euler angles in degrees. Inferred: Unity's
+/// documented property setter.
+inline constexpr pm::sdk::EntryDesc Transform_set_localEulerAngles{
+    .key = "Transform.set_localEulerAngles", .kind = pm::sdk::Kind::Method, .owner = "Transform",
+    .name = "set_localEulerAngles", .params = Transform_Vector3};
+
 /// Sets the Transform's rotation relative to its parent. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc Transform_set_localRotation{
     .key = "Transform.set_localRotation", .kind = pm::sdk::Kind::Method, .owner = "Transform",
@@ -272,6 +278,9 @@ struct Transform {
   static constexpr pm::api::Method<pm::map::Transform_set_localPosition, void(void*, const Vector3*)> set_localPosition{};
   /// get_localRotation(t): its rotation relative to its parent. Unresolved: all zero.
   static constexpr pm::api::Method<pm::map::Transform_get_localRotation, Quaternion(void*)> get_localRotation{};
+  /// set_localEulerAngles(t, &e): sets its rotation relative to its parent, in degrees. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Transform_set_localEulerAngles, void(void*, const Vector3*)>
+      set_localEulerAngles{};
   /// set_localRotation(t, &r): sets its rotation relative to its parent. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Transform_set_localRotation, void(void*, const Quaternion*)>
       set_localRotation{};

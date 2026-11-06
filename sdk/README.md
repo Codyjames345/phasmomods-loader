@@ -52,7 +52,8 @@ Does not exist yet. These arrive with stage 2, when every bundled mod is on the 
   [the contract](systems/contract.md) (its start, both ends, every way out) and
   [Photon](systems/photon.md) (rooms, views and the cleanup, and the game's RPC checks),
   [the menus](systems/menus.md) (how a menu button is clicked, and how a copy of one keeps working),
-  [weather and lightning](systems/weather.md), [voice chat](systems/voice.md),
+  [weather and lightning](systems/weather.md), [doors](systems/doors.md) (finding, opening and locking them),
+  [navigation](systems/navigation.md) (routes over the level's navigation mesh), [voice chat](systems/voice.md),
   [photos, video and screens](systems/media.md) and
   [Steam achievements](systems/achievements.md) (how the game unlocks one).
 

@@ -6,6 +6,25 @@ a host runs a mod built for the same major version and a minor no newer than its
 major version `PmHostApi` and every published struct only grow at the end, and every content struct begins with its
 `size`, so a mod built for an older minor keeps loading.
 
+## [Unreleased]
+
+### Added
+
+- **Doors** ([doors](systems/doors.md)): `Door.locked` (the padlock), `Door.view`, `Door.otherDoor` (a double
+  door's other leaf), `Door.forceRoutine`, `Door.useForceInsteadOfAnimations`, `Door.CheckOcclusionPortal`,
+  `Door.GhostOpenDoorEvent`, `Door.SyncLockState` (documented, never to be sent), `HingeDoor.openAngle`,
+  `HingeDoor.LockDoor` and `HingeDoor.LevelControllerOpenDoor`.
+- **Navigation** ([navigation](systems/navigation.md)): `NavMesh.CalculatePath` for a route between any two points.
+- **Unity:** `Rigidbody.set_isKinematic`, `Rigidbody.set_constraints` (with `kFreezeAll`) and
+  `Transform.set_localEulerAngles`.
+- **Weather:** `LevelValues.weather` is decompiled: a Monkey Paw weather wish changes it mid-contract
+  ([weather](systems/weather.md)).
+
+### Changed
+
+- `Door.ToggleDoorLock`, `Door.GhostForceDoor` and `Door.DisableOrEnableDoor` are decompiled. `Door.ToggleDoorLock`
+  switches a door on or off for players and unlocks a locked door; it never locks one, as its earlier note said.
+
 ## [2.2] - 2026-11-03
 
 Released in v0.2.0.
