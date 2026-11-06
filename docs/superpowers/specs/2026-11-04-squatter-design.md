@@ -163,8 +163,8 @@ The host contract only grows at the end.
   official covers mods. Downloaded FBX files stay outside the repo.
 - **Every release carries the Squatter.** The user decided on 2026-11-04 that public releases don't drop features, so the compiled clips ship
   inside the mod. A release build fails if they are absent. Credit Mixamo in `NOTICE` regardless, as a courtesy.
-- **Failing closed** is for faults, not for releases. If the bundle, Cloth or a required entry fails at runtime, the Squatter alone is off and
-  never rolled, named in the log; the other ghosts carry on **(builder's call)**.
+- **Failing.** If the Squatter's files or a required entry can't load, the Custom Ghosts mod is disabled and the error is written to the log, as
+  for any mod with an error (user, 2026-11-06). No workaround keeps the other ghosts running.
 
 ## Player-facing text
 

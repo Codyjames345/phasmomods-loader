@@ -474,7 +474,7 @@ struct DifficultySettings {
   /// The DifficultySettings type: klass(), is(obj), type_object(), make() and make_array(n). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::DifficultySettings> type{};
   /// AddHuntDuration(settings, amount): adds `amount` to the hunt's duration on every client, once a contract; it
-  /// sends an RPC, so the master calls it as the game does. A mod hooks it. Unresolved: does nothing.
+  /// sends an RPC (sdk/systems/photon.md). A mod hooks it, never calls it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::DifficultySettings_AddHuntDuration, void(void*, int32_t)> AddHuntDuration{};
   /// ResetHuntGracePeriod(settings): the hunt's grace period goes back to its own value, on this client. Unresolved:
   /// does nothing.
