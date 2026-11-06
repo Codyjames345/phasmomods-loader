@@ -6,7 +6,7 @@
 
 // The Asterion's rules for one door, kept free of game calls so they can be tested offline. It never
 // closes a door; a closed door in its way stops it while it batters the door for a few seconds, then
-// bursts it open, and that door stays jammed open for the contract.
+// bursts it: the leaf, and a double door's other leaf, swing fully open and are locked there for the contract.
 namespace pm::custom {
 
 constexpr float kAsterionReach = 1.1f;     // metres from the middle of a door's leaf: the door is in reach
@@ -15,6 +15,7 @@ constexpr float kAsterionBang = 0.6f;      // seconds between bangs
 constexpr float kAsterionClosedAngle = 12; // degrees from the door's closed angle still counted closed
 constexpr float kAsterionAhead = 0.7f;     // cosine of the widest angle off its heading a door in its way lies at (about 45 degrees)
 constexpr float kAsterionAcross = 0.7f;    // cosine of the narrowest angle its heading makes with the door's plane (about 45 degrees)
+constexpr float kAsterionSwing = 0.3f;     // seconds a broken leaf takes to swing fully open (the user: a fast swing)
 
 /** The shortest signed difference between two angles in degrees, as Mathf.DeltaAngle. */
 inline float delta_angle(float from, float to) {
@@ -106,22 +107,12 @@ inline int door_partner(const std::vector<const void*>& doors, const std::vector
 }
 
 /**
- * When a jammed door is switched off for players (Door.DisableOrEnableDoor). Door.GhostForceDoor's push
- * switches the door back on as it ends, so a jam sent while the push runs (Door.forceRoutine set) is undone:
- * the jam waits for each push to end and is sent once after it.
+ * The leaf's angle `seconds` into its swing from `from` to its open angle `to` (degrees on the hinge's axis):
+ * the short way round, as Mathf.LerpAngle turns, reaching `to` after kAsterionSwing seconds and staying there.
  */
-struct DoorJam {
-  bool off = false;  // switched off since the last push
-
-  /** A push has started: the door will be switched on again when it ends. */
-  void pushed() { off = false; }
-
-  /** Whether to switch the door off now, for a door `jammed` and a push still `running`. */
-  bool due(bool jammed, bool running) {
-    if (!jammed || running || off) return false;
-    off = true;
-    return true;
-  }
-};
+inline float swing_angle(float from, float to, float seconds) {
+  const float t = seconds <= 0 ? 0.0f : seconds >= kAsterionSwing ? 1.0f : seconds / kAsterionSwing;
+  return from + delta_angle(from, to) * t;
+}
 
 }  // namespace pm::custom

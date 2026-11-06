@@ -18,6 +18,7 @@ enum Kind : uint8_t {
   kForget = 7,  // host to all: the Lethe makes a piece of media fade, list:u8 (0 photo, 1 video, 2 sound) slot:u8
   kAnger = 8,   // host to all: the Draugr's anger, angered:u8 (0 or 1)
   kSeen = 9,    // host to all: whether anyone looks at the Brownie, seen:u8 (0 or 1)
+  kDoors = 10,  // host to all: the Asterion breaks these doors open, count:u8 then ViewID:u32 each
 };
 
 inline std::vector<uint8_t> header(Kind kind) { return {'C', 'G', 'F', kind}; }
@@ -102,6 +103,28 @@ inline std::vector<uint8_t> seen(bool seen) {
 inline bool read_seen(const uint8_t* data, size_t size, bool& seen) {
   if (kind_of(data, size) != kSeen || size != 5 || data[4] > 1) return false;
   seen = data[4] == 1;
+  return true;
+}
+
+/** The doors the Asterion breaks open, by their PhotonView's ViewID (at most 255). */
+inline std::vector<uint8_t> doors(const std::vector<uint32_t>& ids) {
+  std::vector<uint8_t> out = header(kDoors);
+  const size_t n = ids.size() > 255 ? 255 : ids.size();
+  out.push_back(static_cast<uint8_t>(n));
+  for (size_t i = 0; i < n; ++i) put(out, ids[i]);
+  return out;
+}
+
+/** The doors the host says the Asterion broke open: false for another kind, a bad length or none. */
+inline bool read_doors(const uint8_t* data, size_t size, std::vector<uint32_t>& ids) {
+  if (kind_of(data, size) != kDoors || size < 5 || data[4] == 0 || size != 5 + 4 * size_t{data[4]}) return false;
+  ids.clear();
+  size_t at = 5;
+  for (int i = 0; i < data[4]; ++i) {
+    uint32_t id = 0;
+    take(data, size, at, id);
+    ids.push_back(id);
+  }
   return true;
 }
 

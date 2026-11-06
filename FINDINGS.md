@@ -196,6 +196,10 @@ reports an entry whose problem is already gone.
     Second run, 2026-11-06: a single door burst 90 degrees open; a double door's leaf did not turn
     though its push ran (not kinematic after). Door+0xF8 is the other leaf (Door.otherDoor: the field
     Door.GhostOpenDoorEvent reads to push both); both leaves now burst together, each logged by name.
+    Third run, 2026-11-06: physics pushes left 3 of 4 shut leaves unturned. User's ruling: no pushes;
+    each client swings the broken leaves to HingeDoor.openAngle over 0.3 s and leaves them in the game's
+    locked state (Door.locked, the body frozen, Door.CheckOcclusionPortal), the host naming them by ViewID
+    (net_msg::kDoors). Not yet seen in the game.
   - Lithobolia: the throwing state is 6; ownership taken over before the aimed launch; the hit
   message and PlayerSanity.ChangeSanity(+5) on the hit player's client. No throw with nobody in
   sight (the game's sensor, GhostAI+0xA0, via Sensor.IsDetected); hunt throws (Prop.TryThrow from

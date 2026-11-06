@@ -286,17 +286,28 @@ void the_asterion_bursts_both_leaves_of_a_double_door() {
   CHECK(partner.step(true, 0.5f, true, true, 0.1f) == DoorAction::None);
 }
 
-void the_asterion_jams_a_door_once_the_push_is_over() {
-  // Door.GhostForceDoor's push switches the door back on for players as it ends (decompiled), so a jam sent
-  // while the push runs is undone. The jam waits for the push to end and is sent once after each push.
-  DoorJam jam;
-  CHECK(!jam.due(false, false));  // not jammed: never
-  jam.pushed();                   // the burst's push starts
-  CHECK(!jam.due(true, true));    // jammed, but the push still runs
-  CHECK(jam.due(true, false));    // the push is over: switch it off now
-  CHECK(!jam.due(true, false));   // and only once
-  jam.pushed();                   // forced shut and pushed open again: that push switches it on as it ends
-  CHECK(!jam.due(true, true) && jam.due(true, false) && !jam.due(true, false));
+void the_asterion_swings_a_broken_door_open() {
+  // A broken leaf swings from where it stands to its open angle (HingeDoor.openAngle) over kAsterionSwing
+  // seconds, the short way round as Mathf.LerpAngle turns, then is locked there.
+  CHECK(std::fabs(swing_angle(0, 90, 0) - 0) < 0.001f);
+  CHECK(std::fabs(swing_angle(0, 90, kAsterionSwing / 2) - 45) < 0.001f);
+  CHECK(std::fabs(swing_angle(0, 90, kAsterionSwing) - 90) < 0.001f);
+  CHECK(std::fabs(swing_angle(0, 90, kAsterionSwing * 3) - 90) < 0.001f);  // never past the open angle
+  CHECK(std::fabs(swing_angle(0, 90, -1) - 0) < 0.001f);                   // nor before it starts
+  // Across 0 and 360 it takes the short way: from 350 to 80 is 90 degrees forward, not 270 back.
+  const float mid = swing_angle(350, 80, kAsterionSwing / 2);
+  CHECK(std::fabs(delta_angle(mid, 35)) < 0.001f);
+  CHECK(kAsterionSwing > 0 && kAsterionSwing < 1);  // a fast swing, as the user asked
+  // The host names the broken leaves to every client by their PhotonView's ViewID.
+  const std::vector<uint8_t> two = net_msg::doors({1001, 1002});
+  std::vector<uint32_t> ids;
+  const std::vector<uint32_t> named{1001, 1002};
+  CHECK(net_msg::read_doors(two.data(), two.size(), ids) && ids == named);
+  CHECK(!net_msg::read_doors(two.data(), two.size() - 1, ids));  // cut short
+  const std::vector<uint8_t> none = net_msg::doors({});
+  CHECK(!net_msg::read_doors(none.data(), none.size(), ids));    // no door is no message
+  const std::vector<uint8_t> anger = net_msg::anger(true);
+  CHECK(!net_msg::read_doors(anger.data(), anger.size(), ids));  // another kind
 }
 
 void the_lithobolia_aims_true() {
@@ -2037,7 +2048,7 @@ int main() {
   the_hydra_grows_heads();
   the_flame_ghost_messages_round_trip();
   the_asterion_batters_doors();
-  the_asterion_jams_a_door_once_the_push_is_over();
+  the_asterion_swings_a_broken_door_open();
   the_asterion_bursts_both_leaves_of_a_double_door();
   the_lithobolia_aims_true();
   the_lithobolia_only_throws_at_people();
