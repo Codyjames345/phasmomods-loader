@@ -785,6 +785,7 @@ bool striking() { return false; }
 }  // namespace tempest
 namespace carry {
 bool Carry::take(void*, phasmo::Vector3, ULONGLONG) { return false; }
+bool Carry::take_dragging(void*, phasmo::Vector3, ULONGLONG, float) { return false; }
 Carry::Step Carry::step(ULONGLONG, Still) { return Step::Idle; }
 void Carry::reset() {}
 }  // namespace carry

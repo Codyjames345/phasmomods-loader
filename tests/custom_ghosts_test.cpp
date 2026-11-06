@@ -15,6 +15,7 @@
 #include "apparition_rule.h"
 #include "contract.h"
 #include "draugr_rule.h"
+#include "drag_rule.h"
 #include "echo_rule.h"
 #include "goryo_way.h"
 #include "fake_game.h"
@@ -902,6 +903,32 @@ void the_dullahan_charges_straight_and_stalls_at_corners() {
   CHECK(dullahan_speed(kGameBase, 90) < kGameBase * 0.5f);
   CHECK(dullahan_speed(kGameBase, 30) > dullahan_speed(kGameBase, 60));
   CHECK(dullahan_speed(kGameBase, 0) < brownie_speed(kGameBase, false));          // the user's ceiling (spec)
+}
+
+void the_draugr_drags_a_thing_back_along_the_floor() {
+  using drag::Point;
+  // A route from the thing, along the navigation mesh's corners at the thing's height above the floor, to
+  // the spot it came from. The thing lies 0.4 m above the mesh where it starts.
+  const Point start{0, 0.4f, 0}, home{4, 1.2f, 3};
+  const std::vector<Point> corners{{0, 0, 0}, {4, 0, 0}, {4, 0, 3}};
+  const drag::Route r = drag::route(start, corners, home, 0.4f);
+  CHECK(r.points.size() == 5);
+  CHECK(std::fabs(r.points[2].x - 4) < 1e-4f && std::fabs(r.points[2].y - 0.4f) < 1e-4f);  // a corner, lifted
+  CHECK(std::fabs(r.length - (4 + 3 + 0.8f)) < 1e-3f);  // along the floor, then up onto its spot
+  // Walking it: halfway along the first leg, round the corner, and set down exactly on its spot at the end.
+  const Point a = drag::along(r, 2);
+  CHECK(std::fabs(a.x - 2) < 1e-4f && std::fabs(a.y - 0.4f) < 1e-4f && std::fabs(a.z) < 1e-4f);
+  const Point b = drag::along(r, 5);
+  CHECK(std::fabs(b.x - 4) < 1e-4f && std::fabs(b.z - 1) < 1e-4f);
+  const Point end = drag::along(r, 100);
+  CHECK(end.x == home.x && end.y == home.y && end.z == home.z);
+  CHECK(drag::along(r, -1).x == start.x);
+  // With no path over the mesh it goes straight to its spot.
+  const drag::Route straight = drag::route(start, {}, home, 0.4f);
+  CHECK(straight.points.size() == 2 && std::fabs(straight.length - std::sqrt(16.0f + 0.64f + 9.0f)) < 1e-3f);
+  // A thing below the mesh's height (a negative lift) rides on the floor, never under it.
+  const drag::Route low = drag::route(start, corners, home, -0.3f);
+  CHECK(std::fabs(low.points[1].y) < 1e-4f);
 }
 
 void a_draugr_thing_leaves_its_room_at_the_rooms_colliders() {
@@ -2078,6 +2105,7 @@ int main() {
   the_mesmer_shows_each_their_own();
   the_dullahan_charges_straight_and_stalls_at_corners();
   a_draugr_thing_leaves_its_room_at_the_rooms_colliders();
+  the_draugr_drags_a_thing_back_along_the_floor();
   the_draugr_crawls_far_from_its_room();
   draugr_skips_long_roam_like_goryo();
   draugr_goryo_type_restored_when_picker_throws();

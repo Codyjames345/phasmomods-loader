@@ -317,8 +317,12 @@ void survey_things(void* room, bool hunting, ULONGLONG now) {
   const Vector3 from = game::position(game::transform_of(item));
   const float away = std::sqrt((from.x - home.x) * (from.x - home.x) + (from.y - home.y) * (from.y - home.y) +
                               (from.z - home.z) * (from.z - home.z));
-  if (g.takingBack.take(g.roomItems[i], {home.x, home.y, home.z}, now))
-    PM_LOG("behaviour: the Draugr takes %s back, %.1f m to where it lay", api::to_utf8(phasmo::Object::get_name(item)).c_str(), away);
+  // Dragged back along the floor at the ghost's own walking pace: its agent's speed, outside a hunt as every
+  // take-back is (the user's choice, 2026-11-06).
+  const float pace = g.ghost ? phasmo::NavMeshAgent::get_speed(game::ghost_agent(g.ghost)) : 0.0f;
+  if (g.takingBack.take_dragging(g.roomItems[i], {home.x, home.y, home.z}, now, pace))
+    PM_LOG("behaviour: the Draugr drags %s back, %.1f m to where it lay, at %.2f m/s",
+           api::to_utf8(phasmo::Object::get_name(item)).c_str(), away, pace);
 }
 
 /** A speed rule applies to this hunt this frame: `s` is what hunt_speed answers. */
