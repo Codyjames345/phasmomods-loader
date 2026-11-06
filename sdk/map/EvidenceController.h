@@ -22,6 +22,21 @@ inline constexpr pm::sdk::EntryDesc EvidenceController_ForceRespawnGhostOrb{
     .key = "EvidenceController.ForceRespawnGhostOrb", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "EvidenceController", .name = "ForceRespawnGhostOrb"};
 
+/// Sets up the evidence the ghost gives in the world, given its traits (a GhostTraits, passed by address): on the
+/// master, when the given evidence holds Ghost Orbs or the behaviour type is the Mimic, it places the ghost orb; on
+/// every client, when it holds Freezing Temperatures, it sets a flag of the controller. Each test is one evidence's
+/// membership of the given list, so an evidence it does not name changes nothing. GhostInfo.SyncEvidence calls it on
+/// every client once the given evidence arrives. Decompiled.
+inline constexpr pm::sdk::EntryDesc EvidenceController_SpawnAllGhostTypeEvidence{
+    .key = "EvidenceController.SpawnAllGhostTypeEvidence", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "EvidenceController", .name = "SpawnAllGhostTypeEvidence"};
+
+/// Whether the contract's ghost gives Ultraviolet (fingerprints): true when its GhostInfo's given evidence holds it,
+/// false when the list is empty. Decompiled.
+inline constexpr pm::sdk::EntryDesc EvidenceController_IsFingerPrintEvidence{
+    .key = "EvidenceController.IsFingerPrintEvidence", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "EvidenceController", .name = "IsFingerPrintEvidence"};
+
 }  // namespace pm::map
 
 // The game API for EvidenceController (sdk/api/game_api.h). Every member is called on Unity's main
@@ -39,6 +54,14 @@ struct EvidenceController {
   /// Moves the ghost orb to the favourite room when the ghost gives orbs or is acting as the Mimic:
   /// ForceRespawnGhostOrb(controller). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::EvidenceController_ForceRespawnGhostOrb, void(void*)> ForceRespawnGhostOrb{};
+  /// Sets up the ghost's evidence in the world from its traits (a GhostTraits by address):
+  /// SpawnAllGhostTypeEvidence(controller, traits). The game calls it once per contract on every client; a mod hooks
+  /// it to follow that moment. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::EvidenceController_SpawnAllGhostTypeEvidence, void(void*, const void*)>
+      SpawnAllGhostTypeEvidence{};
+  /// Whether the contract's ghost gives fingerprints (Ultraviolet): IsFingerPrintEvidence(controller). Main thread,
+  /// any client once the given evidence has arrived. Unresolved: false.
+  static constexpr pm::api::Method<pm::map::EvidenceController_IsFingerPrintEvidence, bool(void*)> IsFingerPrintEvidence{};
 };
 
 /// @}

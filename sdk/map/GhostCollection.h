@@ -31,6 +31,14 @@ inline constexpr pm::sdk::EntryDesc GhostCollection_GetGhostOfType{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostCollection", .name = "GetGhostOfType",
     .params = GhostCollection_GetGhostOfType_params};
 
+/// The type roll's weights: a new Dictionary<GhostType, int> holding a weight of 1 for the type of every GhostData in
+/// ghosts, a custom ghost the host put there included. GhostController.Spawn takes some types out of it and lays
+/// other weights over it before GhostController.PickType draws (sdk/systems/ghost-ai.md, "The ghost's setup").
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostCollection_GetDefaultWeightedGhostList{
+    .key = "GhostCollection.GetDefaultWeightedGhostList", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostCollection", .name = "GetDefaultWeightedGhostList"};
+
 /// One ghost type's data (Assembly-CSharp, global namespace), a ScriptableObject. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostData{.key = "GhostData", .confidence = pm::sdk::Confidence::Decompiled,
                                               .name = "GhostData", .assembly = "Assembly-CSharp", .ns = ""};
@@ -96,6 +104,11 @@ struct GhostCollection {
   static constexpr pm::api::Field<pm::map::GhostCollection_ghosts, void*> ghosts{};
   /// The GhostData of a type, or null: GetGhostOfType(collection, type). Unresolved: null.
   static constexpr pm::api::Method<pm::map::GhostCollection_GetGhostOfType, void*(void*, int32_t)> GetGhostOfType{};
+  /// The roll's default weights, a new Dictionary<GhostType, int> (a managed reference) with 1 for every type in the
+  /// collection: GetDefaultWeightedGhostList(collection). Read its entries with pm::api::dictionary_entries. Main
+  /// thread, any client. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::GhostCollection_GetDefaultWeightedGhostList, void*(void*)>
+      GetDefaultWeightedGhostList{};
 };
 
 /// One ghost type's data. `data` below is the GhostData.

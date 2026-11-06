@@ -349,6 +349,26 @@ inline constexpr pm::sdk::EntryDesc Difficulty_actualWeather{.key = "Difficulty.
                                                              .confidence = pm::sdk::Confidence::Decompiled,
                                                              .owner = "Difficulty", .name = "actualWeather"};
 
+/// The contract's hunt settings (Assembly-CSharp, global namespace), a MonoBehaviourPun with one static instance.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc DifficultySettings{.key = "DifficultySettings",
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .name = "DifficultySettings", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// Adds its int to the hunt's duration, once a contract: unless a flag of the settings is set, it sends an RPC to every
+/// client, whose body adds the int to an int field of the settings and sets the flag. The music box's break, the
+/// voodoo doll's hunt, the Death card and a monkey paw wish call it with 20 just before their forced hunt. That the field
+/// is the hunt's length is its name's word; its unit was not traced. Decompiled.
+inline constexpr pm::sdk::EntryDesc DifficultySettings_AddHuntDuration{
+    .key = "DifficultySettings.AddHuntDuration", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "DifficultySettings", .name = "AddHuntDuration"};
+
+/// Puts the hunt's grace period back: copies a private int field of the settings into the public one beside it. The
+/// cursed possessions that force a hunt set that public field to 1 before the change and call this after it.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc DifficultySettings_ResetHuntGracePeriod{
+    .key = "DifficultySettings.ResetHuntGracePeriod", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "DifficultySettings", .name = "ResetHuntGracePeriod"};
 
 }  // namespace pm::map
 
@@ -447,6 +467,18 @@ struct LevelValues {
   /// Whether the contract ended the game's own way: completed.get(values); a mod's own end of the
   /// contract writes it as ExitLevel.Exit does. Unresolved: false, writes nothing.
   static constexpr pm::api::Field<pm::map::LevelValues_completed, bool> completed{};
+};
+
+/// The contract's hunt settings. `settings` below is the DifficultySettings.
+struct DifficultySettings {
+  /// The DifficultySettings type: klass(), is(obj), type_object(), make() and make_array(n). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::DifficultySettings> type{};
+  /// AddHuntDuration(settings, amount): adds `amount` to the hunt's duration on every client, once a contract; it
+  /// sends an RPC, so the master calls it as the game does. A mod hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::DifficultySettings_AddHuntDuration, void(void*, int32_t)> AddHuntDuration{};
+  /// ResetHuntGracePeriod(settings): the hunt's grace period goes back to its own value, on this client. Unresolved:
+  /// does nothing.
+  static constexpr pm::api::Method<pm::map::DifficultySettings_ResetHuntGracePeriod, void(void*)> ResetHuntGracePeriod{};
 };
 
 /// System.Enum. `boxed` below is a boxed enum value.

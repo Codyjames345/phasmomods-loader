@@ -135,15 +135,22 @@ Read from the direct callers of `GhostAI.ChangeState`, `GhostAI.Hunting`, `Ghost
 
 | Caller | Change |
 | --- | --- |
-| `HauntedMirror`'s `BreakItem`, `OuijaBoard`'s `BreakBoard`, `MusicBox`'s `BreakMusicBox`, `VoodooDoll`'s `StartHunt` | a hunt, forced |
-| `TarotCards.ChangeState` | the card's state, forced: a hunt (after adding 20 seconds to the hunt's length), an event or the favourite room; only those three, and only while the ghost is not hunting |
-| `MusicBox`'s `EnterMusicBoxState` | `GhostState.musicBox`, with the box as the change's object, not forced |
+| `HauntedMirror.BreakItem`, `OuijaBoard.BreakBoard` | a hunt, forced, while the ghost is not hunting |
+| `MusicBox.BreakMusicBox`, `VoodooDoll.StartHunt` | a hunt, forced, after `DifficultySettings.AddHuntDuration(20)` (20 added to the hunt's duration, once a contract) |
+| `TarotCards.ChangeState` | the card's state, forced: a hunt (after `DifficultySettings.AddHuntDuration(20)`), an event or the favourite room; only those three, and only while the ghost is not hunting |
+| `MusicBox.EnterMusicBoxState` | `GhostState.musicBox`, with the box as the change's object, not forced |
 | `SummoningCircle`, through methods with obfuscated names | `GhostState.summoningCircle`, not forced, and a forced hunt; look-alikes among them pass numbers no state has |
-| `MonkeyPaw`, handlers with obfuscated names and a wish's coroutine (`MonkeyPaw.MakeWishNetworked`) | a forced hunt, the favourite room, an interaction, or the summoning circle's pull; which handler is which wish was not traced |
-| `Jackalope`'s `TriggerHunt` (a seasonal item) | a hunt, not forced |
+| `MonkeyPaw`, handlers with obfuscated names and a wish's coroutine (`MonkeyPaw.MakeWishNetworked`) | a forced hunt (one handler after `DifficultySettings.AddHuntDuration(20)`, while the ghost is not hunting), the favourite room, an interaction, or the summoning circle's pull; which handler is which wish was not traced |
+| `Jackalope.TriggerHunt` (a seasonal item) | a hunt, not forced, after clearing `GhostAI.postHuntCooldown` and setting another bool of the GhostAI |
 | `PhraseListenerController.NetworkedReaction` | the fuse box, not forced (a phrase a player says) |
 | `SaltSpot.SyncSalt` | `GhostState.salt` (the ghost stepped in salt) |
 | a coroutine of `GameController`; `GhostAI.EventPick` and another method of `GhostAI`; a `GhostAI` coroutine | the favourite room; idling; a hunt, forced as its caller says |
+
+Every forced hunt above from a cursed possession (the mirror, the board, the box, the doll, the Death card and the paw's
+hunt) sets the hunt's grace period, a field of `DifficultySettings`, to 1 just before the change and puts it back with
+`DifficultySettings.ResetHuntGracePeriod` just after it; the box, the doll, the card and the paw also call
+`DifficultySettings.AddHuntDuration(20)` first, which adds 20 to the hunt's duration once a contract, on every client by
+RPC. Neither waits on the change, so both run whether it is refused or not.
 
 `GhostAI.Hunting`, the RPC that starts a hunt on every client, has no direct caller: it is sent by name, so a hunt
 reaches it only through a state the change made. A voodoo doll's pin (`VoodooDoll.NetworkedUse`, through
