@@ -54,6 +54,7 @@ Some consequences, all **(builder's call)**:
 - The chase can start during the setup phase, since the rule is simply "the first time it sees a player".
 - Smudge sticks and crucifixes do nothing to it, as the user confirmed. Cursed possessions that call on the ghost do nothing either, while
   anything they do to a player alone stays vanilla.
+- It is never on the Mimic's copy list (user, 2026-11-06).
 - "Can't sprint" covers both a custom difficulty that turns sprinting off and a chased player whose sprint has run out, so the taunt can play
   for either. Its speed comes from the game's sprint speed as if sprinting were on, which reverse engineering has to establish.
 - Bumping into something is an animation and a pause. It moves no props, since that would read as a ghost interaction.

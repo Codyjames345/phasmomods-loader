@@ -56,6 +56,7 @@ inline pm::api::content::GhostDef definition(const Ghost& g, const pm::api::cont
   def.rollable = &rollable;
   if (g.keepsLastEvidence) def.flags |= PM_GHOST_KEEPS_LAST_EVIDENCE;
   if (g.blindInHunts) def.flags |= PM_GHOST_BLIND_IN_HUNTS;
+  if (g.noMimicCopy) def.flags |= PM_GHOST_NO_MIMIC_COPY;
   return def;
 }
 

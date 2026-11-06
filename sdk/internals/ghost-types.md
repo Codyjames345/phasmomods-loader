@@ -194,7 +194,8 @@ read at startup, `content: GhostType 0..30, EvidenceType 0..7` on build 25811160
   back to `None`. The traits' members are placed from the entries (`GhostInfo.identityType` less
   `GhostInfo.traits`), not from a fixed layout.
 - **The Mimic.** After `BuildMimicCopies` the custom types join the list as the game built it, after
-  its own (and again each frame while the contract holds custom ghosts). After
+  its own (and again each frame while the contract holds custom ghosts), but a ghost marked
+  `PM_GHOST_NO_MIMIC_COPY` never and one whose `rollable` says no only once it says yes. After
   `MimicCopy` a copied custom type becomes the acting-as type and the behaviour type goes back to
   `None`; a vanilla copy is the acting-as type as the game wrote it. The host sends the acting-as type
   to every client on its own channel when it changes and once to each player who joins, since the

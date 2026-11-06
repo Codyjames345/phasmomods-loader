@@ -153,9 +153,11 @@ typedef struct PmGhostDef {
   /// Added in version 2.3 after interactionLost (an earlier size reads it as null): host only, at the game's roll
   /// of the contract's ghost type (GhostController.PickType, from GhostController.Spawn), just before the game
   /// draws: false keeps the ghost out of that roll, as a weight of 0 does, for a ghost that cannot run now (its
-  /// assets failed to load, say); true or null leaves it at the game's own weight. Only the roll: a Custom
-  /// difficulty that names its type still gets it, as the game sets that type after the roll. Asked once per roll,
-  /// on the master, with `user`. Main thread.
+  /// assets failed to load, say); true or null leaves it at the game's own weight. While it answers false the host
+  /// also leaves it off the Mimic's copy list (asked each frame while the contract holds the ghost; one already on
+  /// the list stays), keeps a Custom difficulty preset's pick of it at Random in the lobby, and sets a contract's
+  /// difficulty that names it back to Random, so the game's roll decides. Asked on every client, with `user`. Main
+  /// thread.
   bool (*rollable)(void* user);
 } PmGhostDef;
 
@@ -166,6 +168,11 @@ typedef struct PmGhostDef {
 // PmGhostDef.flags: blind in a hunt, as its own hunt rules have it: a player controlling it sees nothing
 // of the house while it hunts but its playerView, as Playable Ghost darkens a hunting Kormos's view.
 #define PM_GHOST_BLIND_IN_HUNTS 2u
+/// PmGhostDef.flags, added in version 2.3: never on the Mimic's copy list, so a Mimic never copies it, whether it may
+/// be rolled or not. The host leaves it out when it adds the contract's custom ghosts to the list the game built
+/// (GhostController.BuildMimicCopies); the game's own types and every other custom ghost are added as before. A
+/// host of version 2.2 does not know the bit and adds the ghost like any other.
+#define PM_GHOST_NO_MIMIC_COPY 4u
 
 // A custom evidence.
 typedef struct PmEvidenceDef {

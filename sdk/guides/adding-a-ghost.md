@@ -98,7 +98,8 @@ inline pm::api::content::GhostDef definition() {
   appear twice.
 
 `GhostDef` has more members, each optional and each documented in `sdk/api/content.h`: tells (lines on its journal
-page), `flags` (`PM_GHOST_KEEPS_LAST_EVIDENCE`, `PM_GHOST_BLIND_IN_HUNTS`), a single `target` for its hunts, the
+page), `flags` (`PM_GHOST_KEEPS_LAST_EVIDENCE`, `PM_GHOST_BLIND_IN_HUNTS`, and `PM_GHOST_NO_MIMIC_COPY` for a ghost a
+Mimic never copies), `rollable` to keep it out of the type roll while it cannot run, a single `target` for its hunts, the
 evidence's look (`evidenceLook`), and the members a player who controls the ghost uses (an ability, a HUD line, a limit
 on steering).
 

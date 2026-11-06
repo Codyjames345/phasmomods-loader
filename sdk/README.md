@@ -594,7 +594,7 @@ puts each custom ghost into the game as a ghost type (`host/content_types.h`, fo
 [ghost types](systems/ghost-types.md)): a GhostData in the contract's GhostCollection in its
 alphabetical place, its name for the game's name key, the custom type as its identity and the game's
 "no type" as its AI's behaviour type on every client, and the custom types after the game's own in the
-Mimic's copy list. Whether a contract has them is decided once, when it loads: content active then
+Mimic's copy list (not one marked `PM_GHOST_NO_MIMIC_COPY`, nor one whose `rollable` says no). Whether a contract has them is decided once, when it loads: content active then
 puts them in, and the decision holds until the contract ends (content going pending or off in between
 changes nothing, and the contract's custom rules keep running). They leave at the contract's end and
 when the mods stop, only the types this client's content numbers; a removal the game's List refused is
@@ -610,9 +610,10 @@ enums never agree; an enum value whose name would give another value's id (a fut
 A ghost may give no evidence at all: its three slots empty, null or `""`. Its GhostData then holds the game's own
 "no evidence" in each, the game's pick gives only that, and the journal's filter lists it until any evidence is found
 ([evidence](systems/evidence.md#a-ghost-that-gives-no-evidence)). Version 2.3 added `PmGhostDef.rollable`, after
-`interactionLost`: asked on the master at the game's type roll, just before it draws, false keeps the ghost out of the
-roll with a weight of 0 (one whose assets failed to load, say), and null or true leaves the game's weight. A Custom
-difficulty that names its type still gets it.
+`interactionLost`: while it answers false (one whose assets failed to load, say) the ghost gets a weight of 0 at the
+game's type roll, stays off the Mimic's copy list, and a Custom difficulty's pick of it plays Random; null or true leaves
+all of that to the game. Version 2.3 also added `PM_GHOST_NO_MIMIC_COPY`, a bit of `PmGhostDef.flags`: a ghost with it is
+never on the Mimic's copy list, so a Mimic never copies it.
 
 - `ghost_rules(ghostId, rules)`, from `pmmod_start` only: attaches a `PmGhostRules` (`start`, `tick`,
   `stop`, `huntSpeed`, `heldBack`, each optional) to a custom ghost's id or a vanilla one

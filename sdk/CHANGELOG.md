@@ -11,7 +11,10 @@ major version `PmHostApi` and every published struct only grow at the end, and e
 ### Added
 
 - **A ghost kept out of the type roll.** `PmGhostDef.rollable`, at the end: false keeps the ghost out of the game's
-  type roll, as a weight of 0 does, while it cannot run (`sdk/api/content.h`).
+  type roll, as a weight of 0 does, while it cannot run; it is then also off the Mimic's copy list, and a Custom
+  difficulty's pick of it plays Random (`sdk/api/content.h`).
+- **A ghost the Mimic never copies.** `PM_GHOST_NO_MIMIC_COPY`, a new bit of `PmGhostDef.flags` (`GhostDef::flags`):
+  the host leaves the ghost off the Mimic's copy list for good.
 - **A ghost with no evidence.** Every evidence slot of a `PmGhostDef` may be empty; the game then gives only its own
   "no evidence" for it ([evidence](systems/evidence.md#a-ghost-that-gives-no-evidence)). Allowed since 2.2, now stated
   and tested.

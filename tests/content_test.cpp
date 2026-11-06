@@ -1782,6 +1782,67 @@ bool set_weight(void* dict, int32_t key, int32_t value) {
 bool g_rollable = true;
 bool rollable(void*) { return g_rollable; }
 
+// The Mimic's copy list gets the contract's custom ghosts after the game's own, but never one an author registered
+// with PM_GHOST_NO_MIMIC_COPY in its GhostDef's flags, rollable or not, and not one whose rollable says it may not run
+// now, until it may.
+void the_mimic_leaves_out_what_it_may_not_copy() {
+  start();
+  GameWorld world;
+  g_world = &world;
+  content::GhostDef unready = named("a.asterion", "Asterion");
+  unready.rollable = &rollable;
+  content::GhostDef never = named("a.lethe", "Lethe");
+  never.flags = PM_GHOST_NO_MIMIC_COPY;
+  CHECK(content::register_ghost(unready) > 0);
+  CHECK(content::register_ghost(never) > 0);
+  CHECK(content::register_ghost(named("a.zephyr", "Zephyr")) > 0);
+  fake::commit_content();
+  room(1, {1}, {});
+  CHECK(fake::content_registry().registered("a.lethe")->flags == PM_GHOST_NO_MIMIC_COPY &&
+        fake::content_registry().registered("a.zephyr")->flags == 0);
+  pm::host::ContentTypes types{fake::content_registry(), fake::acting(), fake_lists()};
+  g_rollable = false;
+  types.tick(fake::content_state(), true, true);
+  std::vector<int32_t> built;  // as the game builds it: every type but None
+  for (int32_t t = 0; t <= 30; ++t)
+    if (t != 24) built.push_back(t);
+  void* list = fake::value_list(built);
+  phasmo::GhostController::mimicCopies.set(world.controller, list);
+  types.after_build_mimic_copies(world.controller);
+  std::vector<int32_t> expected = built;
+  expected.push_back(33);  // the Zephyr only
+  CHECK(fake::list_values(list) == expected);
+  g_rollable = true;  // the Asterion may run now: it joins, the Lethe never does
+  types.tick(fake::content_state(), true, true);
+  expected.push_back(31);
+  CHECK(fake::list_values(list) == expected);
+  g_rollable = true;
+}
+
+// A definition of contract 2.2's size ends before rollable, so the host reads nothing past it: a value a mod's memory
+// happens to hold there comes back null, and the ghost is rolled at the game's weight. A definition of 2.3's size keeps
+// its rollable.
+void a_short_definition_reads_rollable_as_null() {
+  start();
+  registry::Registry r = fresh();
+  r.begin_group();
+  content::GhostDef old = named("a.old", "Old");
+  old.rollable = &rollable;
+  PmGhostDef raw = old.c_def();
+  raw.size = offsetof(PmGhostDef, rollable);
+  CHECK(raw.rollable == &rollable);  // past its size, not null
+  CHECK(r.add_ghost(&raw) > 0);
+  content::GhostDef current = named("a.current", "Current");
+  current.rollable = &rollable;
+  CHECK(r.add_ghost(&current.c_def()) > 0);
+  r.end_group(true);
+  r.commit();
+  const registry::Ghost* short_ = r.registered("a.old");
+  const registry::Ghost* full = r.registered("a.current");
+  CHECK(short_ && !short_->rollable);
+  CHECK(full && full->rollable == &rollable);
+}
+
 void an_unrollable_ghost_gets_no_weight() {
   start();
   GameWorld world;
@@ -2200,6 +2261,8 @@ int main() {
   custom_ghost_keeps_none_on_zero_evidence();
   a_ghost_may_give_no_evidence();
   an_unrollable_ghost_gets_no_weight();
+  the_mimic_leaves_out_what_it_may_not_copy();
+  a_short_definition_reads_rollable_as_null();
   evidence_priority_runs_through_the_host_detours();
   evidence_priority_restored_when_pick_throws();
   evidence_look_answers_ghost_choice();

@@ -57,6 +57,8 @@ struct Ghost {
   // Blind in a hunt (the content layer's PM_GHOST_BLIND_IN_HUNTS): a player controlling it sees only its
   // player view (the Black Shuck's scent) while it hunts.
   bool blindInHunts = false;
+  // Never on the Mimic's copy list (the content layer's PM_GHOST_NO_MIMIC_COPY): a Mimic never copies it.
+  bool noMimicCopy = false;
 };
 
 inline constexpr Ghost kGhosts[] = {
@@ -106,10 +108,11 @@ inline constexpr Ghost kGhosts[] = {
      i18n::key("ghost.hydra.description"), i18n::key("ghost.hydra.strength"), i18n::key("ghost.hydra.weakness"),
      nullptr, nullptr, "green"},
     // No evidence at all: it is told apart by sight and sound, being visible and talking (the spec's "Rules this
-    // ghost breaks on purpose"). Its interactions, events and hunts are refused in restraint.cpp.
+    // ghost breaks on purpose"). Its interactions, events and hunts are refused in restraint.cpp. A Mimic never
+    // copies it (user, 2026-11-06).
     {kSquatter, "Squatter", {nullptr, nullptr, nullptr},
      i18n::key("ghost.squatter.description"), i18n::key("ghost.squatter.strength"), i18n::key("ghost.squatter.weakness"),
-     nullptr, nullptr}
+     nullptr, nullptr, nullptr, false, false, true}
 
 };
 constexpr int kGhostCount = static_cast<int>(sizeof kGhosts / sizeof kGhosts[0]);

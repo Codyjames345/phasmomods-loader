@@ -15,7 +15,8 @@
 //   GhostInfo.SyncValues sends the custom type, as docs/custom-ghosts.md describes;
 // - the game's type roll (GhostController.PickType) gives a weight of 0 to each custom ghost whose definition
 //   says it may not be rolled now (PmGhostDef.rollable), before it draws;
-// - the Mimic's copy list, as the game built it, gets the custom types after it; a copy of one is
+// - the Mimic's copy list, as the game built it, gets the custom types after it (not one marked
+//   PM_GHOST_NO_MIMIC_COPY, nor one that may not be rolled now); a copy of one is
 //   recorded as the acting-as type and the behaviour type set back to "no type"
 //   (sdk/runtime/content_acting.h);
 // - a running rule's hunt speed is written into the hunt state, the base and the line-of-sight
@@ -124,10 +125,13 @@ class ContentTypes {
     std::string id;
     content::Text name;
     int32_t evidence[3];
-    bool keepsLastEvidence = false;  // PM_GHOST_KEEPS_LAST_EVIDENCE
-    bool (*rollable)(void*) = nullptr;  // PmGhostDef.rollable, asked with `user` at the type roll
+    bool keepsLastEvidence = false;     // PM_GHOST_KEEPS_LAST_EVIDENCE
+    bool noMimicCopy = false;           // PM_GHOST_NO_MIMIC_COPY
+    bool (*rollable)(void*) = nullptr;  // PmGhostDef.rollable, asked with `user`
     void* user = nullptr;
   };
+  /// Whether the held ghost `h` may haunt a contract now: its definition's rollable, true without one.
+  static bool rollable(const HeldGhost& h) { return !h.rollable || h.rollable(h.user); }
   /// The contract's custom ghosts by type; empty when it has none or before it is decided.
   const std::map<int32_t, HeldGhost>& held() const { return held_; }
   /// The lobby's custom ghosts by type while its offer stands; empty otherwise.
@@ -156,7 +160,8 @@ class ContentTypes {
   void after_sync_send(void* traits, int32_t behaviour) const;
   /// GhostInfo.SyncValuesNetworked, after: a custom identity's behaviour type becomes "no type".
   void after_sync_values(void* info) const;
-  /// GhostController.BuildMimicCopies, after: the contract's custom types join the list the game built.
+  /// GhostController.BuildMimicCopies, after: the contract's custom types join the list the game built, but those
+  /// marked PM_GHOST_NO_MIMIC_COPY and those whose rollable answers false now.
   void after_build_mimic_copies(void* controller);
   /// GhostController.MimicCopy, after (on the master): the copy is the acting-as type, and a custom
   /// one's behaviour type becomes "no type".

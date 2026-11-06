@@ -125,7 +125,7 @@ void the_squatter_gives_nothing() {
   CHECK(!g->ability && !g->abilityDescription && !g->flameLook && !g->keepsLastEvidence && !g->blindInHunts);
   const pm::api::content::GhostDef def = definition(*g, {});
   for (const std::string& e : def.evidence) CHECK(e.empty());
-  CHECK(def.abilityName.empty() && def.abilityDescription.empty() && def.flags == 0);
+  CHECK(def.abilityName.empty() && def.abilityDescription.empty() && def.flags == PM_GHOST_NO_MIMIC_COPY);
 }
 
 // Each ghost's content id is its name in lower case, spaces as _, after the mod's prefix.
@@ -1945,6 +1945,21 @@ void black_shuck_declares_itself_blind_in_hunts() {
   }
 }
 
+// A Mimic never copies the Squatter (user, 2026-11-06): it is registered with PM_GHOST_NO_MIMIC_COPY, and no other
+// ghost of the mod is.
+void only_the_squatter_is_never_copied() {
+  start();
+  register_flame();
+  CHECK(register_all());
+  fake::commit_content();
+  fake::room(1, {1});
+  for (const Ghost& g : kGhosts) {
+    const pm::content::Ghost* def = fake::content_registry().registered(id_of(g));
+    CHECK(def != nullptr);
+    if (def) CHECK(((def->flags & PM_GHOST_NO_MIMIC_COPY) != 0) == (g.type == kSquatter));
+  }
+}
+
 // Without Spectral Flame's evidence, every ghost that gives it is dropped once every mod has started:
 // only the Echo, the Dullahan, the Black Shuck and the Squatter stay.
 void without_spectral_flame_only_four_stay() {
@@ -2146,6 +2161,7 @@ int main() {
   wiring::the_squatter_begins_lurking_or_moping();
   wiring::draugr_declares_freezing_priority();
   wiring::black_shuck_declares_itself_blind_in_hunts();
+  wiring::only_the_squatter_is_never_copied();
   wiring::the_rules_and_the_look_follow_the_ghost();
   pm::fake::reset();
   return g_failures ? 1 : 0;

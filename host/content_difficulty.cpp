@@ -194,6 +194,11 @@ void ContentDifficulty::save() {
 
 bool ContentDifficulty::ours(int32_t type) const { return registry_.own_range(type) || registry_.is_custom(type); }
 
+bool ContentDifficulty::forcible(const char* id) const {
+  const content::Ghost* g = id ? registry_.ghost(id) : nullptr;
+  return g && (!g->rollable || g->rollable(g->user));
+}
+
 bool ContentDifficulty::agreed_room() const {
   return state_ == content::State::Active && roomVerified_ && roomVerified_();
 }
@@ -242,7 +247,9 @@ bool ContentDifficulty::give_back(void* menu, bool master) {
     if (!d || ghost_of(d) != none || !custom_preset(menu, preset_of(d))) return false;
     const std::string& id = picks_.of(preset_of(d));
     const int32_t type = id.empty() ? -1 : registry_.type_of(id);
-    if (!registry_.is_custom(type)) return false;
+    // A pick of a ghost not ready to run stays Random, as one of a ghost this client no longer has does; it is
+    // kept, and comes back once the ghost may be rolled.
+    if (!registry_.is_custom(type) || !forcible(id.c_str())) return false;
     set_ghost(d, type);
     return true;
   };
@@ -327,10 +334,21 @@ void ContentDifficulty::withdraw_menu(void* menu, bool master) {
 void ContentDifficulty::keep_contract_vanilla() {
   // A contract the custom ghosts stay out of must not force one: its spawn would make a ghost the game
   // has no data for.
-  if (!types_.decided() || !types_.held().empty()) return;
+  // Nor one whose definition says it may not be rolled now (PmGhostDef.rollable): a difficulty a sync or a
+  // load brought in may still name it, and the game sets that type after its roll.
+  if (!types_.decided()) return;
   void* d = level_difficulty();
-  if (!d || !ours(ghost_of(d))) return;
+  const int32_t type = d ? ghost_of(d) : -1;
+  if (!d || !ours(type)) return;
+  const auto held = types_.held().find(type);
+  const bool unready = held != types_.held().end() && !ContentTypes::rollable(held->second);
+  if (!types_.held().empty() && !unready) return;
   set_ghost(d, registry_.game_enums().noGhostType);
+  if (unready) {
+    if (!unreadyLogged_) PM_LOG("content: the ghost \"%s\" is not ready to run; this contract's ghost is rolled instead", held->second.id.c_str());
+    unreadyLogged_ = true;
+    return;
+  }
   if (!vanillaLogged_) PM_LOG("content: this contract has no custom ghosts; its ghost is rolled instead");
   vanillaLogged_ = true;
 }
@@ -343,6 +361,7 @@ void ContentDifficulty::tick(content::State state, bool privateRoom, bool master
     return;
   }
   vanillaLogged_ = false;
+  unreadyLogged_ = false;
   void* menu = find_menu(nowMs);
   if (!menu) return;
   if (state_ == content::State::Active) {

@@ -243,7 +243,8 @@ std::map<int32_t, ContentTypes::HeldGhost> ContentTypes::active_ghosts() const {
     const char* id = registry_.id_of(type);
     const content::Ghost* g = id ? registry_.ghost(id) : nullptr;
     if (!g) continue;
-    HeldGhost h{g->id, g->name, {}, (g->flags & PM_GHOST_KEEPS_LAST_EVIDENCE) != 0, g->rollable, g->user};
+    HeldGhost h{g->id, g->name, {}, (g->flags & PM_GHOST_KEEPS_LAST_EVIDENCE) != 0,
+                (g->flags & PM_GHOST_NO_MIMIC_COPY) != 0, g->rollable, g->user};
     bool known = true;
     for (size_t i = 0; i < 3; ++i) {
       h.evidence[i] = g->evidence[i].empty() ? registry_.game_enums().noEvidence : registry_.evidence_of(g->evidence[i]);
@@ -457,7 +458,7 @@ void ContentTypes::before_pick_type(void* weights) {
   if (!weights || !lists_.setValue) return;
   // Only the contract's own custom ghosts are in its collection, so only they are in the roll.
   for (const auto& [type, h] : held_) {
-    if (!h.rollable || h.rollable(h.user)) continue;
+    if (rollable(h)) continue;
     if (lists_.setValue(weights, type, 0)) PM_LOG("content: the ghost \"%s\" is kept out of this type roll", h.id.c_str());
   }
 }
@@ -612,6 +613,8 @@ void ContentTypes::add_to_mimic_list(void* controller) {
   for (size_t i = 0; i < l.size(); ++i) there.push_back(items[i]);
   for (const auto& [type, h] : held_) {
     if (std::find(there.begin(), there.end(), type) != there.end()) continue;
+    // Never copied (PM_GHOST_NO_MIMIC_COPY), or not ready to run (PmGhostDef.rollable) until it is.
+    if (h.noMimicCopy || !rollable(h)) continue;
     if (lists_.addValue(list, type)) {
       addLogged_ = false;  // a later refusal is news again
       continue;

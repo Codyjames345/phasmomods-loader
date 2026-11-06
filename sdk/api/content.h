@@ -67,7 +67,11 @@ struct GhostDef {
   bool (*heldBack)(int32_t kind, void* user) = nullptr;
   uint32_t (*playerView)(float* xyz, uint32_t max, void* user) = nullptr;
   const char* (*evidenceLook)(const char* evidenceId, void* user) = nullptr;
-  uint32_t flags = 0;  // PM_GHOST_* bits (PM_GHOST_KEEPS_LAST_EVIDENCE, PM_GHOST_BLIND_IN_HUNTS)
+  /// What sets it apart in the game's own rules, PM_GHOST_* bits ORed together (core/mod_api.h): 0 for none.
+  /// PM_GHOST_KEEPS_LAST_EVIDENCE: a difficulty never withholds its third evidence. PM_GHOST_BLIND_IN_HUNTS: a player
+  /// controlling it sees only its playerView while it hunts. PM_GHOST_NO_MIMIC_COPY (since 2.3): a Mimic never copies
+  /// it; the host leaves it off the Mimic's copy list. Read once, when it is registered.
+  uint32_t flags = 0;
   // Its one target, to which the host holds each of its hunts as the game holds its Banshee's, for its AI
   // and a player controlling it alike: never dead nor one of the `excludedCount` players at `excluded` (null
   // and 0 for none), or null. Asked at each hunt's start and wherever the game gives a Banshee a new target
@@ -81,10 +85,10 @@ struct GhostDef {
   // its own rules lose this one, as they lose a share of its AI's attempts; it stays paid for. May roll
   // (core/mod_api.h).
   bool (*interactionLost)(void* user) = nullptr;
-  /// Host only, at the game's roll of the contract's ghost type, just before it draws: false keeps the ghost out
-  /// of that roll, as a weight of 0 does (a ghost that cannot run now); null or true leaves the game's weight. A
-  /// Custom difficulty that names its type still gets it (core/mod_api.h, PmGhostDef::rollable). Main thread, on
-  /// the master, with `user`.
+  /// Whether it may haunt a contract now: false keeps it out of the game's type roll (a weight of 0), off the
+  /// Mimic's copy list, and makes a Custom difficulty's pick of it play Random, for a ghost that cannot run (its
+  /// assets failed to load, say); null or true leaves all three to the game (core/mod_api.h, PmGhostDef::rollable).
+  /// Asked on every client, often, so answer at once. Main thread, with `user`.
   bool (*rollable)(void* user) = nullptr;
 
   /// The C definition, valid until this definition is changed, copied or destroyed. The host copies
