@@ -23,8 +23,7 @@
 //   matching it), every custom type in the lobby the menu was found in goes back to
 //   Random, the menu offers the game's ghosts only and the host sends Random; each pick comes back once
 //   content is active again;
-// - a contract without custom ghosts (content_types.h decides it) never forces one, nor one whose ghost may not be
-//   rolled now (PmGhostDef.rollable), and no preset gets such a pick back until it may;
+// - a contract without custom ghosts (content_types.h decides it) never forces one;
 // - the custom difficulty's summary names a custom ghost where Enum.ToString would print its number.
 //
 // It reaches the game only through map entries (the game API bound to the host's own contract).
@@ -113,7 +112,6 @@ class ContentDifficulty {
 
  private:
   bool ours(int32_t type) const;  // a type this client's content numbers
-  bool forcible(const char* id) const;  // the custom ghost `id` may be rolled now (PmGhostDef.rollable), so a preset may force it
   bool agreed_room() const;       // active, and everyone in the room now is verified
   bool custom_preset(void* menu, int32_t preset) const;
   void* find_menu(uint64_t nowMs);
@@ -142,7 +140,6 @@ class ContentDifficulty {
   int summarising_ = 0;          // depth of the summary's builder
   bool (*roomVerified_)();       // everyone in the room now is verified
   bool vanillaLogged_ = false;   // that a contract without custom ghosts was kept from one was logged
-  bool unreadyLogged_ = false;   // that a contract was kept from forcing a ghost not ready to run was logged
   bool saveLogged_ = false;      // that the picks could not be kept was logged
 };
 

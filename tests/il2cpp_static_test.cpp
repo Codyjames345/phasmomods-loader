@@ -227,48 +227,6 @@ void dictionary_shapes_are_refused() {
   install();
 }
 
-// The writer (dictionary_int_set, the content's type roll): a key the dictionary holds gets the value in its own
-// entry, in place, and nothing else changes; an absent key, a freed entry's key, an entry past the count, an object
-// of another class and a value that is no 4-byte number are refused, touching nothing.
-void dictionary_values_are_written() {
-  install_classes();
-  reset_dictionary();
-  const auto unchanged = [] {
-    return g_items.items[0].value == 0 && g_items.items[1].value == 50 && g_items.items[2].value == 10 &&
-           g_items.items[3].value == 20;
-  };
-  CHECK(il2cpp::dictionary_int_set(&g_dict, 5, 0));
-  CHECK(g_items.items[2].value == 0 && g_items.items[2].key == 5 && g_items.items[2].hash == 101);
-  CHECK(g_items.items[0].value == 0 && g_items.items[1].value == 50 && g_items.items[3].value == 20);
-  // Key 9 is in a freed slot and a used one: only the used one is written.
-  reset_dictionary();
-  CHECK(il2cpp::dictionary_int_set(&g_dict, 9, 7));
-  CHECK(g_items.items[1].value == 50 && g_items.items[3].value == 7);
-  // An absent key, or a freed entry's alone.
-  reset_dictionary();
-  CHECK(!il2cpp::dictionary_int_set(&g_dict, 42, 0) && unchanged());
-  g_items.items[3].hash = -1;  // key 9 now only in freed slots
-  CHECK(!il2cpp::dictionary_int_set(&g_dict, 9, 0) && g_items.items[1].value == 50 && g_items.items[3].value == 20);
-  // The count bounds the entries, as for the reader.
-  reset_dictionary();
-  g_dict.count = 2;
-  CHECK(!il2cpp::dictionary_int_set(&g_dict, 5, 0) && unchanged());
-  // An empty dictionary, null, another class, a value of another kind.
-  reset_dictionary();
-  g_dict.entries = nullptr;
-  g_dict.count = 0;
-  CHECK(!il2cpp::dictionary_int_set(&g_dict, 5, 0));
-  CHECK(!il2cpp::dictionary_int_set(nullptr, 5, 0));
-  reset_dictionary();
-  g_dict.klass = &g_list;
-  CHECK(!il2cpp::dictionary_int_set(&g_dict, 5, 0) && unchanged());
-  reset_dictionary();
-  g_value.type = &g_float;
-  CHECK(!il2cpp::dictionary_int_set(&g_dict, 5, 0) && unchanged());
-  reset_dictionary();
-  install();
-}
-
 }  // namespace
 
 namespace {
@@ -448,7 +406,6 @@ int main() {
   throwing_static_constructor_escapes_untouched();
   dictionary_entries_are_read();
   dictionary_shapes_are_refused();
-  dictionary_values_are_written();
   inflate_finds_the_same_method_of_the_instance();
   inflate_makes_a_generic_method();
   inflate_fails_closed();

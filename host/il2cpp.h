@@ -200,9 +200,6 @@ struct IntPair {
   int32_t key, value;
 };
 bool dictionary_int_entries(const void* dict, IntPair* out, size_t max, size_t& written);
-/** Writes `value` as the value of `key` in such a dictionary, in place, in the entry that holds it. False, touching
- *  nothing, when the key is not there or the object is of another class or shape. */
-bool dictionary_int_set(void* dict, int32_t key, int32_t value);
 
 // Copy a managed string into a UTF-8 buffer, truncated at a character boundary (pm::utf16_to_utf8).
 // Returns the whole string's length in UTF-8 bytes, without the NUL; a null string is empty.

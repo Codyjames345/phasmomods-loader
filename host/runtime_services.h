@@ -46,9 +46,6 @@ uint32_t api_fields_of_type(const char* typeKey, const void* obj, const char* fi
 bool list_insert(void* list, int32_t index, void* item);
 bool list_remove_at(void* list, int32_t index);
 bool list_add_value(void* list, int32_t value);
-// A Dictionary<K, int>'s value of a key it holds, written in place (il2cpp::dictionary_int_set), for the content's
-// type roll (host/content_types.h). False, touching nothing, for a key it lacks or what is no such dictionary.
-bool dictionary_set_value(void* dict, int32_t key, int32_t value);
 
 // The journal's operations the game API has no wrapper for (host/content_journal.h).
 bool collection_clear(void* collection);

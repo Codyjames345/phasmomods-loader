@@ -110,12 +110,6 @@ void* detour_evidence_list(pm::api::Original<phasmo::GhostData::GetEvidenceList>
   return list;
 }
 
-int32_t detour_pick_type(pm::api::Original<phasmo::GhostController::PickType> original, void* weights) {
-  static bool logged = false;
-  if (g_self && weights) guarded(logged, "keeping a custom ghost out of the type roll", [&] { g_self->before_pick_type(weights); });
-  return original(weights);
-}
-
 void detour_update_speed(pm::api::Original<phasmo::GhostHuntState::UpdateSpeed> original, void* hunt) {
   static bool logged = false;
   if (g_self && hunt) guarded(logged, "setting a hunt's speed", [&] { g_self->before_update_speed(hunt); });
@@ -159,7 +153,6 @@ std::string ContentTypes::missing() const {
       {"GhostHuntState.UpdateSpeed", Use<pm::map::GhostHuntState_UpdateSpeed>::resolved()},
       {"GhostController.PickEvidence", Use<pm::map::GhostController_PickEvidence>::resolved()},
       {"GhostData.GetEvidenceList", Use<pm::map::GhostData_GetEvidenceList>::resolved()},
-      {"GhostController.PickType", Use<pm::map::GhostController_PickType>::resolved()},
       {"LocalisationSystem.TryGetLocalisedValue", Use<pm::map::LocalisationSystem_TryGetLocalisedValue>::resolved()},
   };
   std::string out;
@@ -178,8 +171,7 @@ bool ContentTypes::create_hooks() {
          hook<phasmo::GhostController::MimicCopy>(&detour_mimic_copy, "content: the Mimic's copy") &&
          hook<phasmo::GhostHuntState::UpdateSpeed>(&detour_update_speed, "content: hunt speed") &&
          hook<phasmo::GhostController::PickEvidence>(&detour_pick_evidence, "content: a custom ghost's evidence pick") &&
-         hook<phasmo::GhostData::GetEvidenceList>(&detour_evidence_list, "content: a custom ghost's evidence list") &&
-         hook<phasmo::GhostController::PickType>(&detour_pick_type, "content: a custom ghost kept out of the type roll");
+         hook<phasmo::GhostData::GetEvidenceList>(&detour_evidence_list, "content: a custom ghost's evidence list");
 }
 
 void ContentTypes::tick(content::State state, bool privateRoom, bool master, bool roomVerified) {
@@ -244,7 +236,7 @@ std::map<int32_t, ContentTypes::HeldGhost> ContentTypes::active_ghosts() const {
     const content::Ghost* g = id ? registry_.ghost(id) : nullptr;
     if (!g) continue;
     HeldGhost h{g->id, g->name, {}, (g->flags & PM_GHOST_KEEPS_LAST_EVIDENCE) != 0,
-                (g->flags & PM_GHOST_NO_MIMIC_COPY) != 0, g->rollable, g->user};
+                (g->flags & PM_GHOST_NO_MIMIC_COPY) != 0};
     bool known = true;
     for (size_t i = 0; i < 3; ++i) {
       h.evidence[i] = g->evidence[i].empty() ? registry_.game_enums().noEvidence : registry_.evidence_of(g->evidence[i]);
@@ -454,15 +446,6 @@ void ContentTypes::after_pick_evidence() {
   pickSwitched_ = false;
 }
 
-void ContentTypes::before_pick_type(void* weights) {
-  if (!weights || !lists_.setValue) return;
-  // Only the contract's own custom ghosts are in its collection, so only they are in the roll.
-  for (const auto& [type, h] : held_) {
-    if (rollable(h)) continue;
-    if (lists_.setValue(weights, type, 0)) PM_LOG("content: the ghost \"%s\" is kept out of this type roll", h.id.c_str());
-  }
-}
-
 void ContentTypes::before_update_speed(void* hunt) {
   void* ghost = current_ghost();
   if (!ghost || phasmo::GhostHuntState::ghost.get(hunt) != ghost) return;
@@ -613,8 +596,7 @@ void ContentTypes::add_to_mimic_list(void* controller) {
   for (size_t i = 0; i < l.size(); ++i) there.push_back(items[i]);
   for (const auto& [type, h] : held_) {
     if (std::find(there.begin(), there.end(), type) != there.end()) continue;
-    // Never copied (PM_GHOST_NO_MIMIC_COPY), or not ready to run (PmGhostDef.rollable) until it is.
-    if (h.noMimicCopy || !rollable(h)) continue;
+    if (h.noMimicCopy) continue;  // never copied (PM_GHOST_NO_MIMIC_COPY)
     if (lists_.addValue(list, type)) {
       addLogged_ = false;  // a later refusal is news again
       continue;

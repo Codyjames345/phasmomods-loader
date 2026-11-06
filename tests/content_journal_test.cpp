@@ -601,7 +601,7 @@ struct World {
          {&map::JournalController_Awake, &map::Button_Press, &map::GhostAI_Init, &map::GhostInfo_SyncValues,
           &map::GhostInfo_SyncValuesNetworked, &map::GhostController_BuildMimicCopies, &map::GhostController_MimicCopy,
           &map::GhostHuntState_UpdateSpeed, &map::GhostController_PickEvidence, &map::GhostData_GetEvidenceList,
-          &map::GhostController_PickType, &map::DifficultyUIManager_GhostTypeChosen,
+          &map::DifficultyUIManager_GhostTypeChosen,
           &map::ES3UserType_Difficulty_WriteScriptableObject, &map::DifficultyUIManager_SummaryText,
           &map::SystemEnum_ToString})
       fake::method(*d, reinterpret_cast<void*>(&never_called));

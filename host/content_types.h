@@ -13,10 +13,8 @@
 // - a custom ghost's identity is its custom type and its AI's behaviour type the game's "no type",
 //   set in GhostAI.Init and after GhostInfo.SyncValuesNetworked on every client, and the host's
 //   GhostInfo.SyncValues sends the custom type, as docs/custom-ghosts.md describes;
-// - the game's type roll (GhostController.PickType) gives a weight of 0 to each custom ghost whose definition
-//   says it may not be rolled now (PmGhostDef.rollable), before it draws;
-// - the Mimic's copy list, as the game built it, gets the custom types after it (not one marked
-//   PM_GHOST_NO_MIMIC_COPY, nor one that may not be rolled now); a copy of one is
+// - the Mimic's copy list, as the game built it, gets the custom types after it, but not one marked
+//   PM_GHOST_NO_MIMIC_COPY; a copy of one is
 //   recorded as the acting-as type and the behaviour type set back to "no type"
 //   (sdk/runtime/content_acting.h);
 // - a running rule's hunt speed is written into the hunt state, the base and the line-of-sight
@@ -53,16 +51,12 @@
 
 namespace pm::host {
 
-/// The game's own List<T> methods the game API has no wrapper for, and one write to a Dictionary: the host
-/// runs them through the runtime (host/runtime_services.h), a test through the fake. Each answers false when it
-/// could not.
+/// The game's own List<T> methods the game API has no wrapper for: the host runs them through the
+/// runtime (host/runtime_services.h), a test through the fake. Each answers false when it could not.
 struct ListOps {
   bool (*insert)(void* list, int32_t index, void* item);  // List<T>.Insert of a reference
   bool (*removeAt)(void* list, int32_t index);            // List<T>.RemoveAt
   bool (*addValue)(void* list, int32_t value);            // List<T>.Add of a 32-bit value (an enum)
-  // The value of the key `key` already in a Dictionary<K, int> whose K is a 4-byte value (an enum), written in
-  // place; false, touching nothing, when the key is not there or the object is no such dictionary.
-  bool (*setValue)(void* dict, int32_t key, int32_t value) = nullptr;
 };
 
 class ContentTypes {
@@ -125,13 +119,9 @@ class ContentTypes {
     std::string id;
     content::Text name;
     int32_t evidence[3];
-    bool keepsLastEvidence = false;     // PM_GHOST_KEEPS_LAST_EVIDENCE
-    bool noMimicCopy = false;           // PM_GHOST_NO_MIMIC_COPY
-    bool (*rollable)(void*) = nullptr;  // PmGhostDef.rollable, asked with `user`
-    void* user = nullptr;
+    bool keepsLastEvidence = false;  // PM_GHOST_KEEPS_LAST_EVIDENCE
+    bool noMimicCopy = false;        // PM_GHOST_NO_MIMIC_COPY
   };
-  /// Whether the held ghost `h` may haunt a contract now: its definition's rollable, true without one.
-  static bool rollable(const HeldGhost& h) { return !h.rollable || h.rollable(h.user); }
   /// The contract's custom ghosts by type; empty when it has none or before it is decided.
   const std::map<int32_t, HeldGhost>& held() const { return held_; }
   /// The lobby's custom ghosts by type while its offer stands; empty otherwise.
@@ -161,7 +151,7 @@ class ContentTypes {
   /// GhostInfo.SyncValuesNetworked, after: a custom identity's behaviour type becomes "no type".
   void after_sync_values(void* info) const;
   /// GhostController.BuildMimicCopies, after: the contract's custom types join the list the game built, but those
-  /// marked PM_GHOST_NO_MIMIC_COPY and those whose rollable answers false now.
+  /// marked PM_GHOST_NO_MIMIC_COPY.
   void after_build_mimic_copies(void* controller);
   /// GhostController.MimicCopy, after (on the master): the copy is the acting-as type, and a custom
   /// one's behaviour type becomes "no type".
@@ -176,12 +166,6 @@ class ContentTypes {
   void after_evidence_list();
   /// GhostController.PickEvidence, after (also when it throws): the custom behaviour type is back.
   void after_pick_evidence();
-  /// GhostController.PickType, before (on the master, inside GhostController.Spawn): in `weights`, the roll's
-  /// Dictionary<GhostType, int>, each of the contract's custom ghosts whose definition says it may not be rolled
-  /// now (PmGhostDef.rollable) gets a weight of 0, so the game's draw, which counts positive weights only, never
-  /// picks it while another has weight. Every other weight stays the game's. Null, or a type the dictionary lacks,
-  /// changes nothing.
-  void before_pick_type(void* weights);
   /// GhostHuntState.UpdateSpeed, before (on the master): the running rules' hunt speed, written as the
   /// hunt's base and line-of-sight speed-up; the game's own base again once no rule asks.
   void before_update_speed(void* hunt);

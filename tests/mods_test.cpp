@@ -200,7 +200,7 @@ void mod_built_for_2_0_still_loads(const fs::path& data) { older_minor_still_loa
 // Contract 2.2 added the content functions at the end; a 2.1 mod never reaches them.
 void mod_built_for_2_1_still_loads(const fs::path& data) { older_minor_still_loads(data, PM_FAKE_MOD_2_1, 1); }
 
-// Contract 2.3 added PmGhostDef.rollable at the end; a 2.2 mod (the released contract) gives a shorter definition.
+// Contract 2.3 added PM_GHOST_NO_MIMIC_COPY; a 2.2 mod (the released contract) still loads.
 void mod_built_for_2_2_still_loads(const fs::path& data) { older_minor_still_loads(data, PM_FAKE_MOD_2_2, 2); }
 
 // A mod exporting the new names loads and logs nothing about them.

@@ -85,11 +85,6 @@ struct GhostDef {
   // its own rules lose this one, as they lose a share of its AI's attempts; it stays paid for. May roll
   // (core/mod_api.h).
   bool (*interactionLost)(void* user) = nullptr;
-  /// Whether it may haunt a contract now: false keeps it out of the game's type roll (a weight of 0), off the
-  /// Mimic's copy list, and makes a Custom difficulty's pick of it play Random, for a ghost that cannot run (its
-  /// assets failed to load, say); null or true leaves all three to the game (core/mod_api.h, PmGhostDef::rollable).
-  /// Asked on every client, often, so answer at once. Main thread, with `user`.
-  bool (*rollable)(void* user) = nullptr;
 
   /// The C definition, valid until this definition is changed, copied or destroyed. The host copies
   /// what it needs when it is registered.

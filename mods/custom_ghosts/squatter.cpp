@@ -8,7 +8,6 @@
 namespace pm::custom::squatter {
 namespace {
 
-bool g_assetsReady = false;
 std::optional<Phase> g_phase;
 
 // Whether the contract's difficulty is a friendly ghost's (Difficulty.friendlyGhost); false when none is read.
@@ -33,10 +32,6 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
 }
 
 std::optional<Phase> phase() { return g_phase; }
-
-bool available() { return g_assetsReady; }
-
-void set_assets_ready(bool ready) { g_assetsReady = ready; }
 
 void reset() { g_phase.reset(); }
 

@@ -11,10 +11,9 @@
 //    favourite room (squatter_rule.h keeps_quiet), forced or not, its AI's and a player's alike. A cursed
 //    possession's effect on a player alone stays the game's (sdk/systems/ghost-ai.md, "Every route to a state
 //    change").
-//  - It is rolled only while available(): until its figure is ready (set_assets_ready), the host gives it a weight of
-//    0 in the game's type roll (registration.h rollable), while every other ghost keeps the game's weight. A Custom
-//    difficulty that names it still gets it, as the game sets that type after the roll.
+//  - A Mimic never copies it (ghosts.h, the content layer's PM_GHOST_NO_MIMIC_COPY).
 //  - tick keeps its phase, which begins at first_phase on the frame it starts to haunt.
+// When something it needs cannot load, the whole mod fails its start (mod.cpp), as any mod with an error does.
 namespace pm::custom::squatter {
 
 /** True: what it reads of the game are map entries the mod requires. Main thread, from pmmod_start. */
@@ -30,10 +29,6 @@ bool create_hooks();
 void tick(void* haunting, int type, bool steered);
 /** Its phase while it haunts as the Squatter, else none. */
 std::optional<Phase> phase();
-/** Whether it may be rolled: its figure is ready. False until set_assets_ready(true). */
-bool available();
-/** Its figure (the model, clips and sheet) is ready or not; the figure says so once it has loaded or failed. */
-void set_assets_ready(bool ready);
 /** Forgets the phase, as when the mods stop. */
 void reset();
 

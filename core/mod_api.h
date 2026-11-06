@@ -150,15 +150,6 @@ typedef struct PmGhostDef {
   // rules lose this one, as they lose a share of its AI's attempts. It then does not happen and stays paid
   // for. Asked once per interaction, so it may roll. Main thread.
   bool (*interactionLost)(void* user);
-  /// Added in version 2.3 after interactionLost (an earlier size reads it as null): host only, at the game's roll
-  /// of the contract's ghost type (GhostController.PickType, from GhostController.Spawn), just before the game
-  /// draws: false keeps the ghost out of that roll, as a weight of 0 does, for a ghost that cannot run now (its
-  /// assets failed to load, say); true or null leaves it at the game's own weight. While it answers false the host
-  /// also leaves it off the Mimic's copy list (asked each frame while the contract holds the ghost; one already on
-  /// the list stays), keeps a Custom difficulty preset's pick of it at Random in the lobby, and sets a contract's
-  /// difficulty that names it back to Random, so the game's roll decides. Asked on every client, with `user`. Main
-  /// thread.
-  bool (*rollable)(void* user);
 } PmGhostDef;
 
 // PmGhostDef.flags: its third evidence is never the one a difficulty withholds, as for the game's

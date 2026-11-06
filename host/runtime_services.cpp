@@ -298,11 +298,6 @@ bool list_add_value(void* list, int32_t value) {
   });
 }
 
-bool dictionary_set_value(void* dict, int32_t key, int32_t value) {
-  return host::contained("content", "writing a dictionary's value", false,
-                         [&] { return il2cpp::dictionary_int_set(dict, key, value); });
-}
-
 // The host contract's list_add: the List's own Add of a reference, as the game calls it.
 bool api_list_add(void* list, void* item) {
   return host::contained("suite", "adding to a list", false, [&] {

@@ -595,45 +595,6 @@ void a_vanilla_contract_never_forces_one() {
   CHECK(l.spawned == -1 && logged("its ghost is rolled instead"));
 }
 
-// A ghost whose definition says it may not be rolled now (PmGhostDef.rollable): a preset's pick of it stays Random in the
-// lobby, as a pick of a ghost this client no longer has does, and is kept for when it may. A contract whose difficulty
-// names it anyway (a sync or a load brought it) plays Random, as one without custom ghosts does, so the game's roll
-// decides. Once it may be rolled the pick comes back and is played.
-bool g_ready = false;
-bool ready(void*) { return g_ready; }
-void a_ghost_not_ready_is_never_forced() {
-  std::vector<content::GhostDef> ghosts = some();
-  ghosts[0].rollable = &ready;  // a.asterion
-  g_ready = false;
-  start(ghosts, "7=a.asterion\n");
-  {
-    Lobby l;
-    l.boardShown = false;
-    l.side.load(picks_file());
-    phasmo::DifficultyUIManager::current.set(l.menu, Lobby::difficulty(7, kRandom));  // as a sync left it
-    l.tick();
-    CHECK(type_of(l.current()) == kRandom && type_of(l.contract_difficulty()) == kRandom);
-    CHECK(l.side.picks().of(7) == "a.asterion");  // kept
-    CHECK(!logged("gets its custom ghost back"));
-    // A difficulty that names it anyway.
-    set_type(l.contract_difficulty(), kAsterion);
-    l.contract();
-    CHECK(l.spawned == -1 && logged("is not ready to run"));
-  }
-  // Ready: the pick comes back, and the contract plays it.
-  g_ready = true;
-  start(ghosts, "7=a.asterion\n");
-  Lobby r;
-  r.boardShown = false;
-  r.side.load(picks_file());
-  phasmo::DifficultyUIManager::current.set(r.menu, Lobby::difficulty(7, kRandom));
-  r.tick();
-  CHECK(type_of(r.contract_difficulty()) == kAsterion);
-  r.contract();
-  CHECK(r.spawned == kAsterion);
-  g_ready = false;
-}
-
 void stopping_the_mod_leaves_no_custom_pick() {
   start(some(), "6=a.lethe\n7=a.asterion\n");
   Lobby l;
@@ -906,7 +867,6 @@ int main() {
   the_option_keeps_showing_a_game_ghost();
   the_summary_names_the_ghost();
   a_vanilla_contract_never_forces_one();
-  a_ghost_not_ready_is_never_forced();
   stopping_the_mod_leaves_no_custom_pick();
   pending_offers_the_game_ghosts_only();
   picks_keyed_by_id_survive_renumbering();

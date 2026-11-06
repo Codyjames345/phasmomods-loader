@@ -1976,36 +1976,6 @@ void without_spectral_flame_only_four_stay() {
   CHECK(kept == 4);
 }
 
-// Until its figure is ready (squatter::set_assets_ready, which Task 5's figure sets), the Squatter is registered but
-// never rolled: its definition's rollable answers false, so the host gives it a weight of 0 in the game's type roll
-// (host/content_types.h before_pick_type), while every other ghost is rolled at the game's own weight. The game's
-// roll draws among positive weights only (GhostController.PickType).
-void an_unavailable_squatter_is_never_rolled() {
-  start();
-  register_flame();
-  CHECK(register_all());
-  fake::commit_content();
-  fake::room(1, {1});
-  const auto rolled = [] {  // the custom ghosts the game's roll may draw, as the host leaves their weights
-    std::set<int> out;
-    for (const Ghost& g : kGhosts) {
-      const pm::content::Ghost* def = fake::content_registry().registered(id_of(g));
-      CHECK(def != nullptr);
-      if (def && (!def->rollable || def->rollable(def->user))) out.insert(g.type);
-    }
-    return out;
-  };
-  squatter::set_assets_ready(false);
-  CHECK(!squatter::available());
-  std::set<int> drawn = rolled();
-  CHECK(!drawn.count(kSquatter) && drawn.size() == static_cast<size_t>(kGhostCount - 1));
-  squatter::set_assets_ready(true);
-  CHECK(squatter::available());
-  drawn = rolled();
-  CHECK(drawn.count(kSquatter) && drawn.size() == static_cast<size_t>(kGhostCount));
-  squatter::set_assets_ready(false);
-}
-
 // The Squatter begins each contract lurking in its room, or moping on a friendly ghost's difficulty
 // (squatter_rule.h first_phase), on the frame it starts to haunt; it holds no phase while it does not.
 void the_squatter_begins_lurking_or_moping() {
@@ -2157,7 +2127,6 @@ int main() {
   player_bogeyman_reaches_a_hiding_place();
   wiring::every_ghost_is_registered_by_its_id();
   wiring::without_spectral_flame_only_four_stay();
-  wiring::an_unavailable_squatter_is_never_rolled();
   wiring::the_squatter_begins_lurking_or_moping();
   wiring::draugr_declares_freezing_priority();
   wiring::black_shuck_declares_itself_blind_in_hunts();

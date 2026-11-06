@@ -521,7 +521,7 @@ target_include_directories(content_test PRIVATE sdk/examples/example_ghost)
 pm_test(content_journal sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp host/content_types.cpp
   host/content_text.cpp host/content_journal.cpp host/content_evidence.cpp host/content_localised.cpp
-  host/content_difficulty.cpp core/log.cpp mods/spectral_flame/contract.cpp mods/custom_ghosts/squatter.cpp)
+  host/content_difficulty.cpp core/log.cpp mods/spectral_flame/contract.cpp)
 # Before the mods' folders, as for content_difficulty_test below.
 target_include_directories(content_journal_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime sdk/resolver)
 pm_test(content_difficulty sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp

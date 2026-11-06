@@ -868,8 +868,7 @@ struct GameWorld {
     for (const pm::sdk::EntryDesc* m :
          {&map::LocalisationSystem_TryGetLocalisedValue, &map::GhostAI_Init, &map::GhostInfo_SyncValues,
           &map::GhostInfo_SyncValuesNetworked, &map::GhostController_BuildMimicCopies, &map::GhostController_MimicCopy,
-          &map::GhostHuntState_UpdateSpeed, &map::GhostController_PickEvidence, &map::GhostData_GetEvidenceList,
-          &map::GhostController_PickType})
+          &map::GhostHuntState_UpdateSpeed, &map::GhostController_PickEvidence, &map::GhostData_GetEvidenceList})
       fake::method(*m, reinterpret_cast<void*>(&never_called));
     std::string missing;
     api::bind(fake::host(), missing);
@@ -1767,33 +1766,15 @@ void a_ghost_may_give_no_evidence() {
   CHECK((game_pick_and_sync(world, content::type_of("a.lethe"), 3, {}) == std::vector<int32_t>{1, 4, 6}));
 }
 
-// The game's type roll (GhostController.PickType, from GhostController.Spawn) draws from a Dictionary<GhostType, int>
-// of weights that GhostCollection.GetDefaultWeightedGhostList fills with 1 for every entry of the contract's
-// collection, the custom ones among them, and it draws only among positive weights. A ghost whose definition says it
-// may not be rolled now (PmGhostDef.rollable) gets a weight of 0 there before the game draws, so the roll never picks
-// it; every other ghost keeps the game's weight, and a ghost without the callback is rolled as before.
-std::map<std::pair<const void*, int32_t>, int32_t> g_weights;  // the faked roll dictionaries, by (dictionary, type)
-bool set_weight(void* dict, int32_t key, int32_t value) {
-  const auto it = g_weights.find({dict, key});
-  if (it == g_weights.end()) return false;
-  it->second = value;
-  return true;
-}
-bool g_rollable = true;
-bool rollable(void*) { return g_rollable; }
-
-// The Mimic's copy list gets the contract's custom ghosts after the game's own, but never one an author registered
-// with PM_GHOST_NO_MIMIC_COPY in its GhostDef's flags, rollable or not, and not one whose rollable says it may not run
-// now, until it may.
+// The Mimic's copy list gets the contract's custom ghosts after the game's own, but never one an author registered with
+// PM_GHOST_NO_MIMIC_COPY in its GhostDef's flags; one without the flag is added as before.
 void the_mimic_leaves_out_what_it_may_not_copy() {
   start();
   GameWorld world;
   g_world = &world;
-  content::GhostDef unready = named("a.asterion", "Asterion");
-  unready.rollable = &rollable;
   content::GhostDef never = named("a.lethe", "Lethe");
   never.flags = PM_GHOST_NO_MIMIC_COPY;
-  CHECK(content::register_ghost(unready) > 0);
+  CHECK(content::register_ghost(named("a.asterion", "Asterion")) > 0);
   CHECK(content::register_ghost(never) > 0);
   CHECK(content::register_ghost(named("a.zephyr", "Zephyr")) > 0);
   fake::commit_content();
@@ -1801,7 +1782,6 @@ void the_mimic_leaves_out_what_it_may_not_copy() {
   CHECK(fake::content_registry().registered("a.lethe")->flags == PM_GHOST_NO_MIMIC_COPY &&
         fake::content_registry().registered("a.zephyr")->flags == 0);
   pm::host::ContentTypes types{fake::content_registry(), fake::acting(), fake_lists()};
-  g_rollable = false;
   types.tick(fake::content_state(), true, true);
   std::vector<int32_t> built;  // as the game builds it: every type but None
   for (int32_t t = 0; t <= 30; ++t)
@@ -1810,90 +1790,10 @@ void the_mimic_leaves_out_what_it_may_not_copy() {
   phasmo::GhostController::mimicCopies.set(world.controller, list);
   types.after_build_mimic_copies(world.controller);
   std::vector<int32_t> expected = built;
-  expected.push_back(33);  // the Zephyr only
+  expected.insert(expected.end(), {31, 33});  // the Asterion and the Zephyr, never the Lethe
   CHECK(fake::list_values(list) == expected);
-  g_rollable = true;  // the Asterion may run now: it joins, the Lethe never does
-  types.tick(fake::content_state(), true, true);
-  expected.push_back(31);
+  types.tick(fake::content_state(), true, true);  // each frame's top-up leaves it out too
   CHECK(fake::list_values(list) == expected);
-  g_rollable = true;
-}
-
-// A definition of contract 2.2's size ends before rollable, so the host reads nothing past it: a value a mod's memory
-// happens to hold there comes back null, and the ghost is rolled at the game's weight. A definition of 2.3's size keeps
-// its rollable.
-void a_short_definition_reads_rollable_as_null() {
-  start();
-  registry::Registry r = fresh();
-  r.begin_group();
-  content::GhostDef old = named("a.old", "Old");
-  old.rollable = &rollable;
-  PmGhostDef raw = old.c_def();
-  raw.size = offsetof(PmGhostDef, rollable);
-  CHECK(raw.rollable == &rollable);  // past its size, not null
-  CHECK(r.add_ghost(&raw) > 0);
-  content::GhostDef current = named("a.current", "Current");
-  current.rollable = &rollable;
-  CHECK(r.add_ghost(&current.c_def()) > 0);
-  r.end_group(true);
-  r.commit();
-  const registry::Ghost* short_ = r.registered("a.old");
-  const registry::Ghost* full = r.registered("a.current");
-  CHECK(short_ && !short_->rollable);
-  CHECK(full && full->rollable == &rollable);
-}
-
-void an_unrollable_ghost_gets_no_weight() {
-  start();
-  GameWorld world;
-  g_world = &world;
-  content::GhostDef unready = named("a.asterion", "Asterion");
-  unready.rollable = &rollable;
-  CHECK(content::register_ghost(unready) > 0);
-  CHECK(content::register_ghost(named("a.lethe", "Lethe")) > 0);
-  fake::commit_content();
-  room(1, {1}, {});
-  pm::host::ListOps lists = fake_lists();
-  lists.setValue = &set_weight;
-  pm::host::ContentTypes types{fake::content_registry(), fake::acting(), lists};
-  types.tick(fake::content_state(), true, true);
-  const int32_t asterion = content::type_of("a.asterion"), lethe = content::type_of("a.lethe");
-  CHECK(asterion == 31 && lethe == 32);
-  int dictionary = 0;
-  const auto weights = [&](std::initializer_list<int32_t> keys) {
-    g_weights.clear();
-    for (int32_t t : keys) g_weights[{&dictionary, t}] = 1;
-  };
-  const auto weight = [&](int32_t type) { return g_weights.at({&dictionary, type}); };
-  weights({4, 6, 0, 17, 10, asterion, lethe});
-  g_rollable = false;
-  types.before_pick_type(&dictionary);
-  CHECK(weight(asterion) == 0 && weight(lethe) == 1);
-  for (int32_t vanilla : {4, 6, 0, 17, 10}) CHECK(weight(vanilla) == 1);
-  // Ready again: the game's own weight stands.
-  weights({4, 6, 0, 17, 10, asterion, lethe});
-  g_rollable = true;
-  types.before_pick_type(&dictionary);
-  CHECK(weight(asterion) == 1 && weight(lethe) == 1);
-  // A dictionary without its entry, or none at all, changes nothing and throws nothing.
-  g_rollable = false;
-  weights({4, 6});
-  types.before_pick_type(&dictionary);
-  types.before_pick_type(nullptr);
-  CHECK(weight(4) == 1 && weight(6) == 1);
-  // The host hooks the roll once.
-  CHECK(types.create_hooks());
-  const std::vector<std::string> hooked = fake::hooked();
-  CHECK(std::count(hooked.begin(), hooked.end(), "GhostController.PickType") == 1);
-  // A contract without custom ghosts writes nothing.
-  start();
-  GameWorld plain;
-  g_world = &plain;
-  pm::host::ContentTypes none{fake::content_registry(), fake::acting(), lists};
-  none.tick(fake::content_state(), true, true);
-  weights({4, 6});
-  none.before_pick_type(&dictionary);
-  CHECK(weight(4) == 1 && weight(6) == 1);
 }
 
 // The evidence priority through the host's own detours (detour_pick_evidence, detour_evidence_list), as
@@ -2260,9 +2160,7 @@ int main() {
   custom_ghost_keeps_last_evidence_when_two_withheld();
   custom_ghost_keeps_none_on_zero_evidence();
   a_ghost_may_give_no_evidence();
-  an_unrollable_ghost_gets_no_weight();
   the_mimic_leaves_out_what_it_may_not_copy();
-  a_short_definition_reads_rollable_as_null();
   evidence_priority_runs_through_the_host_detours();
   evidence_priority_restored_when_pick_throws();
   evidence_look_answers_ghost_choice();

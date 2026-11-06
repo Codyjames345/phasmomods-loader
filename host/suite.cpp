@@ -352,7 +352,7 @@ void* api_content_target(const void* const* excluded, uint32_t excludedCount) {
                          [&] { return g_acting.target(excluded, excludedCount); });
 }
 
-host::ContentTypes g_types{g_content, g_acting, {&list_insert, &list_remove_at, &list_add_value, &dictionary_set_value}};
+host::ContentTypes g_types{g_content, g_acting, {&list_insert, &list_remove_at, &list_add_value}};
 
 host::ContentEvidence g_evidence{g_content, g_types,
                                  {&collection_clear, &sync_initialise, &collection_has_clear, &sync_has_initialise}};
