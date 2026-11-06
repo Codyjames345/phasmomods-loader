@@ -72,7 +72,7 @@
   "ghost.squatter.name": "Squatter",
   "ghost.squatter.strength": "PM_TEXT_TODO",  // PM_TEXT_TODO
   "ghost.squatter.weakness": "PM_TEXT_TODO",  // PM_TEXT_TODO
-  "ghost.tempest.description":"A storm spirit of the old weather lore. It moves with the lightning, and the wilder the night, the more often it strikes.",
+  "ghost.tempest.description": "A storm spirit of the old weather lore. It moves with the lightning, and the wilder the night, the more often it strikes.",
   "ghost.tempest.name": "Tempest",
   "ghost.tempest.strength": "In a hunt a Tempest cannot be seen, except when lightning strikes; then it is very fast.",
   "ghost.tempest.weakness": "Between strikes a Tempest is slow, and the clearer the night, the rarer its lightning.",
