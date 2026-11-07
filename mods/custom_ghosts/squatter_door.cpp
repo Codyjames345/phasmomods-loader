@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <type_traits>
 
-#include "Difficulty.h"
 #include "Door.h"
 #include "LevelController.h"
 #include "LevelRoom.h"
@@ -13,6 +12,7 @@
 #include "held.h"
 #include "log.h"
 #include "runtime.h"
+#include "squatter_difficulty.h"
 
 namespace pm::custom::squatter::door {
 namespace {
@@ -38,19 +38,6 @@ void add_doors(void* doors, std::vector<void*>& out) {
   const api::RefArray list{doors};
   for (size_t i = 0; i < list.size(); ++i)
     if (void* d = list[i]; d && api::alive(d) && std::find(out.begin(), out.end(), d) == out.end()) out.push_back(d);
-}
-
-/**
- * Whether the contract's difficulty is a friendly ghost's (Difficulty.friendlyGhost) into `friendly`; false when it
- * cannot be read, which locks nothing.
- */
-bool read_friendly(bool& friendly) {
-  using Friendly = std::remove_cvref_t<decltype(phasmo::Difficulty::friendlyGhost)>;
-  void* values = phasmo::LevelValues::instance.get();
-  void* difficulty = values && api::alive(values) ? phasmo::LevelValues::difficulty.get(values) : nullptr;
-  if (!difficulty || !Friendly::use::resolved()) return false;
-  friendly = phasmo::Difficulty::friendlyGhost.get(difficulty);
-  return true;
 }
 
 /** Whether `d` is one of the exits lock_all locked for the current map. */
@@ -125,8 +112,7 @@ bool lock_all() {
   forget_old_level();
   if (g_level) return true;
   void* l = level();
-  bool friendly = true;
-  if (!l || !read_friendly(friendly) || friendly) return false;
+  if (!l || friendly()) return false;  // an unreadable difficulty counts as friendly: never lock
   const std::vector<void*> doors = exits();
   if (doors.empty()) return false;
   // The game's own hunt lock, from the client a hunt calls it on: its RPCs refuse any sender but the room's first

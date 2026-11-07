@@ -2,12 +2,12 @@
 
 #include <cmath>
 
-#include "Difficulty.h"
 #include "Transform.h"
 #include "UnityObject.h"
 #include "game_api.h"
 #include "ghosts.h"
 #include "runtime.h"
+#include "squatter_difficulty.h"
 #include "squatter_door.h"
 #include "squatter_figure.h"
 
@@ -15,13 +15,6 @@ namespace pm::custom::squatter {
 namespace {
 
 std::optional<Phase> g_phase;
-
-// Whether the contract's difficulty is a friendly ghost's (Difficulty.friendlyGhost); false when none is read.
-bool friendly() {
-  void* values = phasmo::LevelValues::instance.get();
-  void* difficulty = api::alive(values) ? phasmo::LevelValues::difficulty.get(values) : nullptr;
-  return difficulty && phasmo::Difficulty::friendlyGhost.get(difficulty);
-}
 
 // Every client shows its own figure where the contract's ghost is, facing the way it faces.
 void show(void* ghost) {
@@ -43,7 +36,8 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
   if (!haunting || type != kSquatter) {
     g_phase.reset();
     figure::destroy();
-    door::reset();
+    // The exits' lock is kept: it belongs to the map, and squatter_door forgets it once the map's LevelController
+    // is gone, so a tick without the ghost mid-contract never locks them twice.
     return;
   }
   if (!g_phase) g_phase = first_phase(friendly());

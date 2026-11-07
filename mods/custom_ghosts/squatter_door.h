@@ -48,8 +48,9 @@ using Attempt = std::function<void(void* door)>;
 
 /**
  * Calls `callback` with the door each time the local player tries an exit lock_all has locked on this client:
- * through the interact input (Door.AttemptToUnlockDoor) or a grab (Door.GrabbedDoor), which run on the trying
- * player's own client. The game's own try runs after it, unchanged. Carrying the try to the master is the caller's.
+ * through the interact input (Door.AttemptToUnlockDoor), which runs on the trying player's own client, or any route
+ * that reaches Door.GrabbedDoor for it (the PC grab refuses a locked or switched-off door before that). The game's
+ * own try runs after it, unchanged. Carrying the try to the master is the caller's.
  * Replaces any earlier callback; an empty one reports nothing.
  */
 void on_attempt(Attempt callback);
@@ -57,7 +58,10 @@ void on_attempt(Attempt callback);
 /** Hooks Door.AttemptToUnlockDoor and Door.GrabbedDoor, before hooks::enable_all. False when either cannot be hooked. */
 bool create_hooks();
 
-/** Forgets the lock and the map it was for, as when the contract ends or the mods stop. Keeps the callback. */
+/**
+ * Forgets the lock and the map it was for, as when the mods stop. A new map's LevelController forgets it too, so a
+ * contract's end needs no call. Keeps the callback.
+ */
 void reset();
 
 }  // namespace pm::custom::squatter::door

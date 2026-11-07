@@ -21,6 +21,9 @@
 #include "game_api.h"
 #include "ghosts.h"
 #include "Difficulty.h"
+#include "Door.h"
+#include "LevelController.h"
+#include "Photon.h"
 #include "Equipment.h"
 #include "GhostHuntState.h"
 #include "LevelRoom.h"
@@ -29,9 +32,11 @@
 #include "gremlin_rule.h"
 #include "hunt.h"
 #include "registration.h"
+#include "runtime.h"
 #include "Sensor.h"
 #include "sensor_copy.h"
 #include "squatter.h"
+#include "squatter_door.h"
 #include "asterion_rule.h"
 #include "bogeyman_rule.h"
 #include "hud_line.h"
@@ -2007,6 +2012,50 @@ void the_squatter_begins_lurking_or_moping() {
   squatter::reset();
 }
 
+int g_exitsClosed = 0;  // Door.HuntingCloseDoor calls
+void fake_hunting_close(void*, const void*) { ++g_exitsClosed; }
+bool fake_master(const void*) { return true; }
+
+// The exits' lock belongs to the map, not to the ghost: a tick without the ghost mid-contract keeps it, so the master
+// never calls Door.HuntingCloseDoor twice for one map; the next map's LevelController starts unlocked.
+void the_squatters_lock_survives_a_tick_without_it() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty, level, nextLevel, door, ghost;
+  void* valuesStatic = &values;
+  void* levelStatic = &level;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  fake::static_field(map::LevelController_instance, &levelStatic, sizeof levelStatic, true);
+  fake::field(map::LevelController_huntingDoors, 0x10);
+  fake::field(map::LevelController_mapVariations, 0x18);
+  fake::method(map::Door_HuntingCloseDoor, reinterpret_cast<void*>(&fake_hunting_close));
+  fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_master));
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  for (Obj* l : {&level, &nextLevel}) {
+    void* exits = fake::array(sizeof(void*), 1);
+    pm::api::RefArray{exits}.set(0, &door);
+    phasmo::LevelController::huntingDoors.set(l, exits);
+    phasmo::LevelController::mapVariations.set(l, fake::array(sizeof(void*), 0));
+  }
+  g_exitsClosed = 0;
+  squatter::reset();
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::door::lock_all() && g_exitsClosed == 1);
+  squatter::tick(nullptr, 0, false);  // a frame without the ghost
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::door::locked() && squatter::door::lock_all() && g_exitsClosed == 1);
+  levelStatic = &nextLevel;  // the next contract
+  CHECK(!squatter::door::locked() && squatter::door::lock_all() && g_exitsClosed == 2);
+  squatter::reset();
+}
+
 // The rules run for the ghost the contract's ghost acts as, with its Type, and the Hydra's look for
 // Spectral Flame is green, by its identity.
 void the_rules_and_the_look_follow_the_ghost() {
@@ -2128,6 +2177,7 @@ int main() {
   wiring::every_ghost_is_registered_by_its_id();
   wiring::without_spectral_flame_only_four_stay();
   wiring::the_squatter_begins_lurking_or_moping();
+  wiring::the_squatters_lock_survives_a_tick_without_it();
   wiring::draugr_declares_freezing_priority();
   wiring::black_shuck_declares_itself_blind_in_hunts();
   wiring::only_the_squatter_is_never_copied();
