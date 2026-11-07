@@ -309,11 +309,17 @@ inline constexpr pm::api::EnumValue<pm::map::AnimatorCullingMode_AlwaysAnimate> 
 
 /// Humanoid bones, for Animator::GetBoneTransform. Required entries, so a mod that uses one runs only where it resolved.
 namespace HumanBodyBones {
+/// Hips(): the hips.
 inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Hips> Hips{};
+/// Spine(): the spine's lowest bone.
 inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Spine> Spine{};
+/// Chest(): the chest.
 inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Chest> Chest{};
+/// Head(): the head.
 inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Head> Head{};
+/// LeftUpperArm(): the left upper arm.
 inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftUpperArm> LeftUpperArm{};
+/// RightUpperArm(): the right upper arm.
 inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightUpperArm> RightUpperArm{};
 }  // namespace HumanBodyBones
 

@@ -94,6 +94,7 @@ struct Cloth {
   /// The type: type_object() for GameObject.AddComponent. Optional: check available(). Unresolved: null.
   static constexpr pm::api::Type<pm::map::Cloth> type{};
   /// Whether the Cloth type resolved in this game build, whose module may be absent. Never logs.
+  /// @return True when it resolved.
   template <int = 0>
   static bool available() {
     return decltype(type)::use::resolved();

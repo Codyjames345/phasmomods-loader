@@ -5,8 +5,8 @@ it if you like. The bundled Custom Ghosts does this for the Squatter, a person i
 (`mods/custom_ghosts/squatter_figure.cpp`). This page shows how, with the SDK's helpers in `sdk/api/bundles.h` and
 `sdk/api/models.h`, and how to build the AssetBundle that carries your clips. No reverse engineering is needed.
 
-What the engine test proved of each part, and what it left open, is in
-[engine experiments](../internals/engine-experiments.md).
+What the engine test proved of each part, and what it left open, is in the maintainers' page
+`sdk/internals/engine-experiments.md`.
 
 ## What you get
 

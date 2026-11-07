@@ -585,15 +585,21 @@ struct Mesh {
 struct BoneWeight {
   /// The type: make_array() for a BoneWeight[]. Unresolved: null.
   static constexpr pm::api::Type<pm::map::BoneWeight> type{};
-  float weight0, weight1, weight2, weight3;
-  int32_t bone0, bone1, bone2, bone3;
+  float weight0;  ///< The first bone's weight, 0 to 1; the four add up to 1.
+  float weight1;  ///< The second bone's weight.
+  float weight2;  ///< The third bone's weight.
+  float weight3;  ///< The fourth bone's weight.
+  int32_t bone0;  ///< The first bone's index in the renderer's bones.
+  int32_t bone1;  ///< The second bone's index.
+  int32_t bone2;  ///< The third bone's index.
+  int32_t bone3;  ///< The fourth bone's index.
 };
 
 /// Sixteen floats by column, as Unity's Matrix4x4.
 struct Matrix4x4 {
   /// The type: make_array() for a Matrix4x4[]. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Matrix4x4> type{};
-  float m[16];
+  float m[16];  ///< The elements by column: m[0] to m[3] the first column.
 };
 
 /// A skinned renderer, a character's body. `skinned` below is the SkinnedMeshRenderer.
@@ -665,7 +671,9 @@ inline constexpr pm::api::EnumValue<pm::map::CullMode_Off> Off{};
 /// The properties of URP's Lit shader, the game's investigator bodies' shader, for Material's by-id functions:
 /// BaseColor.id(). Check available() first. Unresolved: 0.
 struct LitShader {
+  /// The base colour, a Color.
   static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_Lit_BaseColor> BaseColor{};
+  /// The face culling, a float holding a CullMode number.
   static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_Lit_Cull> Cull{};
 };
 

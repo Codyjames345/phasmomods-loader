@@ -91,10 +91,10 @@ void* lit_material_of(void* gameObject);
  *        element per vertex.
  */
 struct ClothMesh {
-  std::span<const phasmo::Vector3> vertices;
-  std::span<const phasmo::Vector3> normals;
-  std::span<const phasmo::Vector2> uv;
-  std::span<const int32_t> triangles;  // three vertex indices each, clockwise as seen from the front
+  std::span<const phasmo::Vector3> vertices;  ///< Each vertex's position, metres.
+  std::span<const phasmo::Vector3> normals;   ///< Each vertex's normal, of length 1.
+  std::span<const phasmo::Vector2> uv;        ///< Each vertex's texture coordinates.
+  std::span<const int32_t> triangles;         ///< Three vertex indices each, clockwise as seen from the front.
   /// Each vertex's constraint: x how far it may move from where its GameObject carries it (0 pins it), y the depth of
   /// the sphere it may not enter. A large value means no limit.
   std::span<const phasmo::Vector2> coefficients;
@@ -102,24 +102,24 @@ struct ClothMesh {
 
 /** How the cloth behaves. Unity's own ranges: stiffnesses and damping 0 to 1. */
 struct ClothSettings {
-  bool useGravity = true;
-  float bendingStiffness = 0.1f;
-  float stretchingStiffness = 1.0f;
-  float damping = 0.2f;
+  bool useGravity = true;             ///< Whether gravity pulls the cloth.
+  float bendingStiffness = 0.1f;      ///< How stiffly it resists bending.
+  float stretchingStiffness = 1.0f;   ///< How stiffly it resists stretching.
+  float damping = 0.2f;               ///< How much its motion is damped.
 };
 
 /** A sphere the cloth rests on and cannot pass through, following a bone. */
 struct ClothSphere {
-  void* bone;               // a Transform (Animator.GetBoneTransform); a null one is skipped
-  float radius;             // metres
-  phasmo::Vector3 offset;   // from the bone, in world space when add_cloth is called
+  void* bone;              ///< A Transform (Animator.GetBoneTransform); a null one is skipped.
+  float radius;            ///< Metres.
+  phasmo::Vector3 offset;  ///< From the bone, in world space when add_cloth is called.
 };
 
 /** What add_cloth made, for destroy_cloth. */
 struct ClothParts {
-  Held mesh;
-  Held cloth;
-  std::vector<Held> colliders;  // the spheres' GameObjects
+  Held mesh;                    ///< The Mesh it built.
+  Held cloth;                   ///< The Cloth component.
+  std::vector<Held> colliders;  ///< The spheres' GameObjects.
 };
 
 /**
