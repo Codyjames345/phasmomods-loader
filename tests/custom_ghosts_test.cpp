@@ -976,6 +976,43 @@ void the_draugr_drags_a_thing_back_along_the_floor() {
   CHECK(std::fabs(low.points[1].y) < 1e-4f);
 }
 
+void the_draugr_lifts_a_thing_onto_the_table_it_lay_on() {
+  using drag::Point;
+  // The thing lay on a table over the floor's last corner, its held corner resting at `rest`. The ghost drags it
+  // along the floor, lifts it where nothing is overhead, carries it over the table and sets it down. Live
+  // (2026-11-07): a route that ended on the floor below the spot pulled it under the table, where it jiggled.
+  const Point start{0, 0.3f, 0}, rest{4, 1.0f, 3};
+  const std::vector<Point> corners{{0, 0, 0}, {4, 0, 0}, {4, 0, 3}};
+  const float over = 1.4f;
+  auto table = [](Point floor) { return floor.z < 2.0f; };  // the table covers z from 2 on
+  const drag::Route r = drag::route_onto(start, corners, 0.3f, rest, over, table);
+  const Point& rise = r.points[r.points.size() - 4];
+  CHECK(rise.z < 2.0f && rise.z > 1.4f && std::fabs(rise.x - 4) < 1e-4f && std::fabs(rise.y - 0.3f) < 1e-4f);
+  const Point& up = r.points[r.points.size() - 3];
+  CHECK(up.x == rise.x && up.z == rise.z && std::fabs(up.y - over) < 1e-4f);  // straight up beside the table
+  const Point& across = r.points[r.points.size() - 2];
+  CHECK(across.x == rest.x && across.z == rest.z && std::fabs(across.y - over) < 1e-4f);  // over it
+  CHECK(r.points.back().x == rest.x && r.points.back().y == rest.y && r.points.back().z == rest.z);  // set down
+  for (size_t i = 1; i + 3 < r.points.size(); ++i) CHECK(r.points[i].z < 2.0f);  // never under the table
+  float length = 0;
+  for (size_t i = 1; i < r.points.size(); ++i) length += drag::distance(r.points[i - 1], r.points[i]);
+  CHECK(std::fabs(r.length - length) < 1e-3f);
+  // Nothing overhead at the floor's end: it lifts there. Nowhere clear near the end: it still lifts there.
+  const drag::Route open = drag::route_onto(start, corners, 0.3f, rest, over, [](Point) { return true; });
+  CHECK(std::fabs(open.points[open.points.size() - 4].z - 3) < 1e-4f && open.points.size() == 7);
+  const drag::Route shut = drag::route_onto(start, corners, 0.3f, rest, over, [](Point) { return false; });
+  CHECK(std::fabs(shut.points[shut.points.size() - 4].z - 3) < 1e-4f);
+  // Carried high enough that hanging by its corner it clears the table: a box whose diagonal is 0.6 m, its
+  // corner 0.2 m above its bottom at rest, goes 0.4 m higher than it rests, and kClear more.
+  CHECK(std::fabs(drag::lift_over(0.6f, 0.2f) - (0.4f + drag::kClear)) < 1e-5f);
+  CHECK(std::fabs(drag::lift_over(0.1f, 0.2f) - drag::kClear) < 1e-5f);
+  // A thing that makes no headway for kSnagMs is let go where it lies, close enough to its spot.
+  drag::Headway h;
+  CHECK(!h.stuck(0, 1000) && !h.stuck(1, 2000));
+  CHECK(!h.stuck(1, 2000 + drag::kSnagMs - 1) && h.stuck(1, 2000 + drag::kSnagMs));
+  CHECK(!h.stuck(1.5f, 9000));  // moving on again
+}
+
 void a_draugr_thing_leaves_its_room_at_the_rooms_colliders() {
   // The game has no room for a prop; a player is in a room while inside one of its trigger colliders
   // (LevelRoom.OnTriggerEnter, LevelRoomTrigger.OnTriggerEnter), the colliders LevelRoom.roomColliders holds.
@@ -2152,6 +2189,7 @@ int main() {
   a_draugr_thing_leaves_its_room_at_the_rooms_colliders();
   the_draugr_drags_a_thing_back_along_the_floor();
   the_draugr_drags_a_thing_by_a_corner();
+  the_draugr_lifts_a_thing_onto_the_table_it_lay_on();
   the_draugr_crawls_far_from_its_room();
   draugr_skips_long_roam_like_goryo();
   draugr_goryo_type_restored_when_picker_throws();
