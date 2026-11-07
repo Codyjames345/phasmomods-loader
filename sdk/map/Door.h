@@ -131,6 +131,17 @@ inline constexpr pm::sdk::EntryDesc Door_otherDoor{.key = "Door.otherDoor", .kin
                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                    .type = "@Door", .facts = Door_otherDoor_facts};
 
+/// The door's looping creak, an AudioSource set in the scene. A HingeDoor measures how fast its leaf turns
+/// on each physics step, in degrees a second from the change of its angle on the hinge's axis, so a leaf
+/// turned by setting its angle counts too. Every third frame, while the door is unlocked (Door.locked
+/// clear), HingeDoor.Update sets this source's volume from that speed (silent below a threshold set in the
+/// scene) and plays it if it has stopped. While the door is locked it leaves the source alone, so a leaf
+/// locked while it still turned creaks on at that volume until it is unlocked (seen in the game,
+/// 2026-11-07). Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_loopSource{.key = "Door.loopSource", .kind = pm::sdk::Kind::Field,
+                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                    .name = "loopSource", .type = "AudioSource"};
+
 /// Whether the ghost moves this door with physics rather than an animation, set in the scene:
 /// Door.GhostOpenDoorAnimated reads it and starts the physics push when it is set, else the animated move.
 /// Door.GhostForceDoor never reads it and always pushes with physics. Decompiled.
@@ -301,6 +312,9 @@ struct Door {
   /// Whether the ghost moves it with physics rather than an animation: useForceInsteadOfAnimations.get(door).
   /// Unresolved: false.
   static constexpr pm::api::Field<pm::map::Door_useForceInsteadOfAnimations, bool> useForceInsteadOfAnimations{};
+  /// Its looping creak, an AudioSource: loopSource.get(door). Its hinge door sets the volume from how fast the
+  /// leaf turns, only while unlocked. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Door_loopSource, void*> loopSource{};
   /// Whether it is locked on this client (the padlock): locked.get(door), .set(door, v). Unresolved: false,
   /// writes nothing.
   static constexpr pm::api::Field<pm::map::Door_locked, bool> locked{};

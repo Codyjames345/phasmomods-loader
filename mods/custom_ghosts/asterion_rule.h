@@ -16,6 +16,15 @@ constexpr float kAsterionClosedAngle = 12; // degrees from the door's closed ang
 constexpr float kAsterionAhead = 0.7f;     // cosine of the widest angle off its heading a door in its way lies at (about 45 degrees)
 constexpr float kAsterionAcross = 0.7f;    // cosine of the narrowest angle its heading makes with the door's plane (about 45 degrees)
 constexpr float kAsterionSwing = 0.3f;     // seconds a broken leaf takes to swing fully open (the user: a fast swing)
+constexpr float kAsterionSettle = 0.5f;    // seconds it rests fully open before it is locked, so the game hushes its creak
+
+/**
+ * Whether a broken leaf `seconds` into its swing is locked: only once it has rested fully open for
+ * kAsterionSettle. A hinge door sets its creak's volume from how fast its leaf turned, and only while it is
+ * unlocked (Door.loopSource), so a leaf locked straight out of its swing creaked for the rest of the contract
+ * (live, 2026-11-07). The game itself only locks a door that is still.
+ */
+inline bool asterion_locks(float seconds) { return seconds >= kAsterionSwing + kAsterionSettle; }
 
 /** The shortest signed difference between two angles in degrees, as Mathf.DeltaAngle. */
 inline float delta_angle(float from, float to) {

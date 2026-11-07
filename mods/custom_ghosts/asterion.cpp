@@ -93,7 +93,8 @@ void scan() {
 
 /**
  * This client breaks `door` open: its leaf starts its swing to the open angle, made kinematic so physics
- * does not fight it. Once it is fully open it is locked there (tick_doors). A door already broken is left.
+ * does not fight it. Once it has rested fully open it is locked there (tick_doors, asterion_locks). A door
+ * already broken is left.
  */
 void break_open(void* door) {
   void* body = api::alive(door) ? phasmo::Door::body.get(door) : nullptr;
@@ -222,8 +223,8 @@ void tick_doors(int type) {
   for (Swing& s : g.swings) {
     if (s.locked || !api::alive(s.door) || !api::alive(s.leaf) || !api::alive(s.body)) continue;
     const float seconds = (now - s.start) / 1000.0f;
-    set_leaf_angle(s.door, s.leaf, swing_angle(s.from, s.to, seconds));
-    if (seconds >= kAsterionSwing) lock_open(s);
+    set_leaf_angle(s.door, s.leaf, swing_angle(s.from, s.to, seconds));  // held fully open once there
+    if (asterion_locks(seconds)) lock_open(s);
   }
 }
 

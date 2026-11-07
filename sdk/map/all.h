@@ -517,6 +517,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &Transform_set_localEulerAngles,
     &Door_forceRoutine,
     &Door_useForceInsteadOfAnimations,
+    &Door_loopSource,
     &Door_GhostOpenDoorEvent,
     &Door_otherDoor,
     &Door_pairedDoor,
