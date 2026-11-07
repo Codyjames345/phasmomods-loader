@@ -137,6 +137,103 @@ inline constexpr pm::sdk::EntryDesc Animator_SetBool{.key = "Animator.SetBool", 
                                                      .owner = "Animator", .name = "SetBool",
                                                      .params = Animator_SetBool_params};
 
+// Playing a mod's own animation on a model (sdk/api/models.h, sdk/guides/custom-animation.md): a controller loaded from
+// an AssetBundle (UnityAssets.h) replaces the model's, and the mod plays its states by name.
+
+/// Unity's animator controller as the runtime holds it (UnityEngine.AnimationModule), the asset type an AssetBundle's
+/// controller loads as. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc RuntimeAnimatorController{
+    .key = "RuntimeAnimatorController", .name = "RuntimeAnimatorController",
+    .assembly = "UnityEngine.AnimationModule", .ns = "UnityEngine"};
+
+inline constexpr const char* Animator_RuntimeAnimatorController[] = {"RuntimeAnimatorController"};
+inline constexpr const char* Animator_Play_params[] = {"int", "int", "float"};
+inline constexpr const char* Animator_HumanBodyBones[] = {"HumanBodyBones"};
+inline constexpr const char* Animator_bool[] = {"bool"};
+inline constexpr const char* Animator_AnimatorCullingMode[] = {"AnimatorCullingMode"};
+inline constexpr const char* Animator_HasState_params[] = {"int", "int"};
+
+/// Replaces the Animator's controller, which starts at its default state. Inferred: Unity's documented property
+/// setter; the Squatter's engine test set a bundle's controller with it in game (2026-11-05).
+inline constexpr pm::sdk::EntryDesc Animator_set_runtimeAnimatorController{
+    .key = "Animator.set_runtimeAnimatorController", .kind = pm::sdk::Kind::Method, .owner = "Animator",
+    .name = "set_runtimeAnimatorController", .params = Animator_RuntimeAnimatorController};
+
+/// Plays a state now: Play(stateNameHash, layer, normalizedTime), the hash Animator.StringToHash of the state's name,
+/// the layer -1 for the first that has it, the time 0 to 1 into the state. Inferred: Unity's documented API; the
+/// Squatter's engine test played its states with it in game (2026-11-05).
+inline constexpr pm::sdk::EntryDesc Animator_Play{.key = "Animator.Play(int,int,float)", .kind = pm::sdk::Kind::Method,
+                                                  .owner = "Animator", .name = "Play",
+                                                  .params = Animator_Play_params};
+
+/// Whether the Animator's controller has a state, by its hash, on a layer: the engine function of
+/// Animator.HasState(layerIndex, stateID). The answer is only good while the Animator is initialised (active, with a
+/// controller). Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_HasState{.key = "Animator.HasState", .kind = pm::sdk::Kind::Icall,
+                                                      .name = "UnityEngine.Animator::HasState",
+                                                      .params = Animator_HasState_params};
+
+/// Whether the Animator is initialised: active, with a controller it has bound. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_get_isInitialized{.key = "Animator.get_isInitialized",
+                                                               .kind = pm::sdk::Kind::Icall,
+                                                               .name = "UnityEngine.Animator::get_isInitialized"};
+
+/// The Transform of a humanoid bone of a humanoid Animator's model, or null when the avatar does not map it. Inferred:
+/// Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_GetBoneTransform{
+    .key = "Animator.GetBoneTransform", .kind = pm::sdk::Kind::Method, .owner = "Animator",
+    .name = "GetBoneTransform", .params = Animator_HumanBodyBones};
+
+/// Whether the clips' root motion moves the model's Transform. A mod that moves the model itself turns it off.
+/// Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Animator_set_applyRootMotion{
+    .key = "Animator.set_applyRootMotion", .kind = pm::sdk::Kind::Method, .owner = "Animator",
+    .name = "set_applyRootMotion", .params = Animator_bool};
+
+/// When the Animator stops animating a model no camera sees. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Animator_set_cullingMode{
+    .key = "Animator.set_cullingMode", .kind = pm::sdk::Kind::Method, .owner = "Animator", .name = "set_cullingMode",
+    .params = Animator_AnimatorCullingMode};
+
+/// Unity's culling modes of an Animator (UnityEngine.AnimationModule). Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc AnimatorCullingMode{.key = "AnimatorCullingMode", .name = "AnimatorCullingMode",
+                                                        .assembly = "UnityEngine.AnimationModule",
+                                                        .ns = "UnityEngine"};
+
+/// The Animator keeps animating while no camera sees the model, so cloth on it keeps moving. Inferred: Unity's
+/// documented API.
+inline constexpr pm::sdk::EntryDesc AnimatorCullingMode_AlwaysAnimate{
+    .key = "AnimatorCullingMode.AlwaysAnimate", .kind = pm::sdk::Kind::EnumValue, .owner = "AnimatorCullingMode",
+    .name = "AlwaysAnimate"};
+
+/// Unity's humanoid bones (UnityEngine.AnimationModule), for Animator.GetBoneTransform. The investigator's body maps
+/// every one of these (its avatar leaves only the eyes unmapped, read from the asset files). Inferred: Unity's
+/// documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones{.key = "HumanBodyBones", .name = "HumanBodyBones",
+                                                   .assembly = "UnityEngine.AnimationModule", .ns = "UnityEngine"};
+/// The hips, the root of a humanoid skeleton. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_Hips{.key = "HumanBodyBones.Hips", .kind = pm::sdk::Kind::EnumValue,
+                                                        .owner = "HumanBodyBones", .name = "Hips"};
+/// The spine's lowest bone. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_Spine{.key = "HumanBodyBones.Spine",
+                                                         .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+                                                         .name = "Spine"};
+/// The chest. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_Chest{.key = "HumanBodyBones.Chest",
+                                                         .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+                                                         .name = "Chest"};
+/// The head, at the top of the neck. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_Head{.key = "HumanBodyBones.Head", .kind = pm::sdk::Kind::EnumValue,
+                                                        .owner = "HumanBodyBones", .name = "Head"};
+/// The left upper arm. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftUpperArm{
+    .key = "HumanBodyBones.LeftUpperArm", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "LeftUpperArm"};
+/// The right upper arm. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightUpperArm{
+    .key = "HumanBodyBones.RightUpperArm", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "RightUpperArm"};
+
 }  // namespace pm::map
 
 // The game API for Animator (sdk/api/game_api.h). Every member is called on Unity's main thread. One
@@ -173,7 +270,44 @@ struct Animator {
   static constexpr pm::api::Icall<pm::map::Animator_GetIntegerID, int32_t(void*, int32_t)> GetIntegerID{};
   /// SetBool(animator, name, value), with name a managed string. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Animator_SetBool, void(void*, void*, bool)> SetBool{};
+  /// set_runtimeAnimatorController(animator, controller). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Animator_set_runtimeAnimatorController, void(void*, void*)>
+      set_runtimeAnimatorController{};
+  /// Play(animator, stateHash, layer, normalizedTime). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Animator_Play, void(void*, int32_t, int32_t, float)> Play{};
+  /// HasState(animator, layer, stateHash). Unresolved: false.
+  static constexpr pm::api::Icall<pm::map::Animator_HasState, bool(void*, int32_t, int32_t)> HasState{};
+  /// get_isInitialized(animator). Unresolved: false.
+  static constexpr pm::api::Icall<pm::map::Animator_get_isInitialized, bool(void*)> get_isInitialized{};
+  /// GetBoneTransform(animator, bone), a HumanBodyBones number. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Animator_GetBoneTransform, void*(void*, int32_t)> GetBoneTransform{};
+  /// set_applyRootMotion(animator, on). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Animator_set_applyRootMotion, void(void*, bool)> set_applyRootMotion{};
+  /// set_cullingMode(animator, mode), an AnimatorCullingMode number. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Animator_set_cullingMode, void(void*, int32_t)> set_cullingMode{};
 };
+
+/// An animator controller asset.
+struct RuntimeAnimatorController {
+  /// The type: type_object() for AssetBundle.LoadAsset_Internal. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::RuntimeAnimatorController> type{};
+};
+
+/// When an Animator stops animating an unseen model.
+namespace AnimatorCullingMode {
+/// AlwaysAnimate(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::AnimatorCullingMode_AlwaysAnimate> AlwaysAnimate{};
+}  // namespace AnimatorCullingMode
+
+/// Humanoid bones, for Animator::GetBoneTransform. Required entries, so a mod that uses one runs only where it resolved.
+namespace HumanBodyBones {
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Hips> Hips{};
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Spine> Spine{};
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Chest> Chest{};
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Head> Head{};
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftUpperArm> LeftUpperArm{};
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightUpperArm> RightUpperArm{};
+}  // namespace HumanBodyBones
 
 /// One parameter of an Animator's controller. `parameter` below is one.
 struct AnimatorControllerParameter {

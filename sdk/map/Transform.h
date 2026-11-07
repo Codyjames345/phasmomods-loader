@@ -49,6 +49,11 @@ inline constexpr pm::sdk::EntryDesc Transform_get_position{
 
 inline constexpr const char* Transform_Vector3[] = {"Vector3"};
 
+/// Unity's Vector3 (UnityEngine.CoreModule), a struct of three floats. Its type makes a Vector3[], as Mesh.set_vertices
+/// takes. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Vector3{.key = "Vector3", .name = "Vector3", .assembly = "UnityEngine.CoreModule",
+                                            .ns = "UnityEngine"};
+
 /// The Transform's forward direction in world space, a unit vector. Inferred: Unity's documented
 /// property getter.
 inline constexpr pm::sdk::EntryDesc Transform_get_forward{
@@ -221,6 +226,8 @@ struct Vector2 {
 
 /// Three floats, as Unity's Vector3.
 struct Vector3 {
+  /// The type: make_array() for a Vector3[]. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::Vector3> type{};
   float x, y, z;
 };
 

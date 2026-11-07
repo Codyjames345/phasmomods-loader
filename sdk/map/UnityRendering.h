@@ -379,6 +379,131 @@ inline constexpr pm::sdk::EntryDesc Graphics_Blit{.key = "Graphics.Blit", .kind 
                                                   .flags = pm::sdk::kStatic | pm::sdk::kOptional, .owner = "Graphics",
                                                   .name = "Blit", .params = Graphics_Blit_params};
 
+// Building a mesh at run time, for a SkinnedMeshRenderer to draw and Cloth to simulate (sdk/api/models.h). Each setter
+// takes a whole managed array and replaces that channel. Set the vertices before the triangles, whose indices must lie
+// within them; setting the triangles also recalculates the mesh's bounds.
+
+/// Unity's BoneWeight (UnityEngine.CoreModule), a struct: four weights, then four bone indices. Its type makes the
+/// BoneWeight[] Mesh.set_boneWeights takes. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc BoneWeight{.key = "BoneWeight", .name = "BoneWeight",
+                                               .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+
+/// Unity's Matrix4x4 (UnityEngine.CoreModule), a struct of sixteen floats by column. Its type makes the Matrix4x4[]
+/// Mesh.set_bindposes takes. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Matrix4x4{.key = "Matrix4x4", .name = "Matrix4x4",
+                                              .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+
+inline constexpr const char* Mesh_Vector3Array[] = {"Vector3[]"};
+inline constexpr const char* Mesh_Vector2Array[] = {"Vector2[]"};
+inline constexpr const char* Mesh_Int32Array[] = {"Int32[]"};
+inline constexpr const char* Mesh_BoneWeightArray[] = {"BoneWeight[]"};
+inline constexpr const char* Mesh_Matrix4x4Array[] = {"Matrix4x4[]"};
+
+/// Sets the mesh's vertex positions, a Vector3[] in the mesh's own space. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Mesh_set_vertices{.key = "Mesh.set_vertices", .kind = pm::sdk::Kind::Method,
+                                                      .owner = "Mesh", .name = "set_vertices",
+                                                      .params = Mesh_Vector3Array};
+
+/// Sets the mesh's vertex normals, a Vector3[] as long as its vertices. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Mesh_set_normals{.key = "Mesh.set_normals", .kind = pm::sdk::Kind::Method,
+                                                     .owner = "Mesh", .name = "set_normals",
+                                                     .params = Mesh_Vector3Array};
+
+/// Sets the mesh's first texture coordinates, a Vector2[] as long as its vertices. Inferred: Unity's documented
+/// property setter.
+inline constexpr pm::sdk::EntryDesc Mesh_set_uv{.key = "Mesh.set_uv", .kind = pm::sdk::Kind::Method, .owner = "Mesh",
+                                                .name = "set_uv", .params = Mesh_Vector2Array};
+
+/// Sets the mesh's triangles, an Int32[] of three vertex indices each; a triangle whose vertices run clockwise as seen
+/// faces the viewer. Also recalculates the bounds. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Mesh_set_triangles{.key = "Mesh.set_triangles", .kind = pm::sdk::Kind::Method,
+                                                       .owner = "Mesh", .name = "set_triangles",
+                                                       .params = Mesh_Int32Array};
+
+/// Sets each vertex's bone weights, a BoneWeight[] as long as its vertices, for a SkinnedMeshRenderer. Inferred:
+/// Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Mesh_set_boneWeights{.key = "Mesh.set_boneWeights", .kind = pm::sdk::Kind::Method,
+                                                         .owner = "Mesh", .name = "set_boneWeights",
+                                                         .params = Mesh_BoneWeightArray};
+
+/// Sets each bone's bind pose, a Matrix4x4[] with one per bone of the renderer: the inverse of the bone's transform
+/// relative to the mesh when the mesh was bound. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Mesh_set_bindposes{.key = "Mesh.set_bindposes", .kind = pm::sdk::Kind::Method,
+                                                       .owner = "Mesh", .name = "set_bindposes",
+                                                       .params = Mesh_Matrix4x4Array};
+
+inline constexpr const char* SkinnedMeshRenderer_Mesh[] = {"Mesh"};
+inline constexpr const char* SkinnedMeshRenderer_TransformArray[] = {"Transform[]"};
+inline constexpr const char* SkinnedMeshRenderer_Transform[] = {"Transform"};
+
+/// Sets the mesh the renderer draws. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc SkinnedMeshRenderer_set_sharedMesh{
+    .key = "SkinnedMeshRenderer.set_sharedMesh", .kind = pm::sdk::Kind::Method, .owner = "SkinnedMeshRenderer",
+    .name = "set_sharedMesh", .params = SkinnedMeshRenderer_Mesh};
+
+/// Sets the bones the mesh's bone weights index, a Transform[]. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc SkinnedMeshRenderer_set_bones{
+    .key = "SkinnedMeshRenderer.set_bones", .kind = pm::sdk::Kind::Method, .owner = "SkinnedMeshRenderer",
+    .name = "set_bones", .params = SkinnedMeshRenderer_TransformArray};
+
+/// Sets the bone the renderer's bounds follow. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc SkinnedMeshRenderer_set_rootBone{
+    .key = "SkinnedMeshRenderer.set_rootBone", .kind = pm::sdk::Kind::Method, .owner = "SkinnedMeshRenderer",
+    .name = "set_rootBone", .params = SkinnedMeshRenderer_Transform};
+
+/// Whether the renderer keeps updating its mesh, and its bounds, while no camera sees it. Inferred: Unity's documented
+/// property setter.
+inline constexpr pm::sdk::EntryDesc SkinnedMeshRenderer_set_updateWhenOffscreen{
+    .key = "SkinnedMeshRenderer.set_updateWhenOffscreen", .kind = pm::sdk::Kind::Method,
+    .owner = "SkinnedMeshRenderer", .name = "set_updateWhenOffscreen", .params = UnityRendering_bool};
+
+inline constexpr const char* Material_Shader[] = {"Shader"};
+inline constexpr const char* Material_SetFloatImpl_params[] = {"int", "float"};
+
+/// The constructor Material(Shader): a new material of that shader with the shader's default values. Run it on an
+/// object the Material type made. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Material_ctor_Shader{.key = "Material.ctor(Shader)", .kind = pm::sdk::Kind::Method,
+                                                         .owner = "Material", .name = ".ctor",
+                                                         .params = Material_Shader};
+
+/// The material's shader. Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc Material_get_shader{.key = "Material.get_shader", .kind = pm::sdk::Kind::Method,
+                                                        .owner = "Material", .name = "get_shader"};
+
+/// Sets a float shader property (by its id): the engine function behind Material.SetFloat. Inferred: Unity's
+/// documented API.
+inline constexpr pm::sdk::EntryDesc Material_SetFloatImpl{.key = "Material.SetFloatImpl", .kind = pm::sdk::Kind::Icall,
+                                                          .name = "UnityEngine.Material::SetFloatImpl",
+                                                          .params = Material_SetFloatImpl_params};
+
+/// Unity's face culling modes (UnityEngine.CoreModule, UnityEngine.Rendering), the values a shader's cull property
+/// takes. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc CullMode{.key = "CullMode", .name = "CullMode",
+                                             .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine.Rendering"};
+
+/// No culling: both sides of each triangle are drawn. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc CullMode_Off{.key = "CullMode.Off", .kind = pm::sdk::Kind::EnumValue,
+                                                 .owner = "CullMode", .name = "Off"};
+
+// The properties of URP's Lit shader, "Universal Render Pipeline/Lit", the lit shader of the game's investigator
+// bodies: every material of the PCPlayer prefab's body uses it (read from the asset files). A material made with
+// Material(Shader) from a body material's shader takes the shader's defaults, so only what a mod changes needs
+// setting. Optional, as every ShaderProperty: a mod checks one before using it.
+
+/// The Lit shader's base colour, a Color: the surface's colour, times its base texture (white when it has none).
+/// Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc ShaderProperty_Lit_BaseColor{
+    .key = "ShaderProperty.Lit.BaseColor", .kind = pm::sdk::Kind::ShaderProperty,
+    .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kOptional, .name = "_BaseColor",
+    .scene = "Tanglewood_Street_House", .component = "Universal Render Pipeline/Lit"};
+
+/// The Lit shader's face culling, a float holding a CullMode: the game's body materials cull back faces, and
+/// CullMode.Off draws both sides, as a sheet seen from inside needs. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc ShaderProperty_Lit_Cull{
+    .key = "ShaderProperty.Lit.Cull", .kind = pm::sdk::Kind::ShaderProperty,
+    .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kOptional, .name = "_Cull",
+    .scene = "Tanglewood_Street_House", .component = "Universal Render Pipeline/Lit"};
+
 }  // namespace pm::map
 
 // The game API for rendering (sdk/api/game_api.h). Every member is called on Unity's main thread. One
@@ -442,6 +567,33 @@ struct Mesh {
   static constexpr pm::api::Type<pm::map::Mesh> type{};
   /// ctor(mesh): runs Mesh() on an object Mesh::type made. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Mesh_ctor, void(void*)> ctor{};
+  /// set_vertices(mesh, vertices), a Vector3[]. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Mesh_set_vertices, void(void*, void*)> set_vertices{};
+  /// set_normals(mesh, normals), a Vector3[]. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Mesh_set_normals, void(void*, void*)> set_normals{};
+  /// set_uv(mesh, uv), a Vector2[]. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Mesh_set_uv, void(void*, void*)> set_uv{};
+  /// set_triangles(mesh, indices), an Int32[]. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Mesh_set_triangles, void(void*, void*)> set_triangles{};
+  /// set_boneWeights(mesh, weights), a BoneWeight[]. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Mesh_set_boneWeights, void(void*, void*)> set_boneWeights{};
+  /// set_bindposes(mesh, poses), a Matrix4x4[]. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Mesh_set_bindposes, void(void*, void*)> set_bindposes{};
+};
+
+/// Four weights, then four bone indices, as Unity's BoneWeight.
+struct BoneWeight {
+  /// The type: make_array() for a BoneWeight[]. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::BoneWeight> type{};
+  float weight0, weight1, weight2, weight3;
+  int32_t bone0, bone1, bone2, bone3;
+};
+
+/// Sixteen floats by column, as Unity's Matrix4x4.
+struct Matrix4x4 {
+  /// The type: make_array() for a Matrix4x4[]. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::Matrix4x4> type{};
+  float m[16];
 };
 
 /// A skinned renderer, a character's body. `skinned` below is the SkinnedMeshRenderer.
@@ -450,6 +602,15 @@ struct SkinnedMeshRenderer {
   static constexpr pm::api::Type<pm::map::SkinnedMeshRenderer> type{};
   /// BakeMesh(skinned, mesh, useScale): writes the posed mesh into `mesh`. Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::SkinnedMeshRenderer_BakeMesh, void(void*, void*, bool)> BakeMesh{};
+  /// set_sharedMesh(skinned, mesh). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_sharedMesh, void(void*, void*)> set_sharedMesh{};
+  /// set_bones(skinned, bones), a Transform[]. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_bones, void(void*, void*)> set_bones{};
+  /// set_rootBone(skinned, transform). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_rootBone, void(void*, void*)> set_rootBone{};
+  /// set_updateWhenOffscreen(skinned, on). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_updateWhenOffscreen, void(void*, bool)>
+      set_updateWhenOffscreen{};
 };
 
 /// The holder of a MeshRenderer's mesh. `filter` below is the MeshFilter.
@@ -485,6 +646,27 @@ struct Material {
   /// SetColorImpl(material, id, &colour): the Color by reference, so pass a copy. Unresolved: does
   /// nothing.
   static constexpr pm::api::Icall<pm::map::Material_SetColorImpl, void(void*, int32_t, Color*)> SetColorImpl{};
+  /// The type: make() for a new one, then ctor_Shader; make_array() for a Material[]. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::Material> type{};
+  /// ctor_Shader(material, shader): runs Material(Shader) on an object Material::type made. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Material_ctor_Shader, void(void*, void*)> ctor_Shader{};
+  /// get_shader(material). Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Material_get_shader, void*(void*)> get_shader{};
+  /// SetFloatImpl(material, id, value). Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Material_SetFloatImpl, void(void*, int32_t, float)> SetFloatImpl{};
+};
+
+/// Unity's face culling modes, for a shader's cull property.
+namespace CullMode {
+/// Off(): both sides drawn. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::CullMode_Off> Off{};
+}  // namespace CullMode
+
+/// The properties of URP's Lit shader, the game's investigator bodies' shader, for Material's by-id functions:
+/// BaseColor.id(). Check available() first. Unresolved: 0.
+struct LitShader {
+  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_Lit_BaseColor> BaseColor{};
+  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_Lit_Cull> Cull{};
 };
 
 /// Shaders.

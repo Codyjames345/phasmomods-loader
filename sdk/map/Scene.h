@@ -249,6 +249,14 @@ inline constexpr pm::sdk::EntryDesc Layer_LaserGhost{.key = "Layer.LaserGhost", 
 /// layer, and the layer the journal's canvas leaves the PlayerView layer for.
 inline constexpr pm::sdk::EntryDesc Layer_UI{.key = "Layer.UI", .kind = pm::sdk::Kind::Layer, .name = "UI"};
 
+/// Unity's built-in Ignore Raycast layer. The game's physics matrix lets it collide only with an unnamed layer, so a
+/// collider on it touches nothing of the game's; Cloth still collides with the colliders it is given, whatever their
+/// layer, so a mod puts a cloth's colliders here (sdk/api/models.h). Decompiled: the layer's name and the physics
+/// matrix read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_IgnoreRaycast{.key = "Layer.IgnoreRaycast", .kind = pm::sdk::Kind::Layer,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .name = "Ignore Raycast"};
+
 }  // namespace pm::map
 
 // The game API for the scene facts (sdk/api/game_api.h). Every member is called on Unity's main thread
@@ -333,6 +341,9 @@ struct Layers {
   static constexpr pm::api::Layer<pm::map::Layer_UI> UI{};
   /// The LaserGhost layer: LaserGhost.index(), -1 when it did not resolve.
   static constexpr pm::api::Layer<pm::map::Layer_LaserGhost> LaserGhost{};
+  /// The Ignore Raycast layer, which collides with nothing of the game's: IgnoreRaycast.index(), -1 when it did not
+  /// resolve.
+  static constexpr pm::api::Layer<pm::map::Layer_IgnoreRaycast> IgnoreRaycast{};
 };
 
 /// @}

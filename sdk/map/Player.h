@@ -469,6 +469,15 @@ inline constexpr pm::sdk::EntryDesc PlayerCosmetics{.key = "PlayerCosmetics",
                                                     .confidence = pm::sdk::Confidence::Decompiled,
                                                     .name = "PlayerCosmetics", .assembly = "Assembly-CSharp", .ns = ""};
 
+/// The Animator of the investigator's body, a serialized field. On the PCPlayer prefab (Resources.Load("PCPlayer"),
+/// which LocalPCPlayer.CreateNetworkedPlayer spawns each investigator from) it sits on the body, "Rigged PC Model
+/// Base": a humanoid model every client has the same, whoever is in the room. Copy that body, never a live player's,
+/// which carries that player's outfit and the game's shadow-only and layer settings (sdk/api/models.h). Decompiled:
+/// read from the prefab; the Squatter's engine test copied the body through it in game (2026-11-05).
+inline constexpr pm::sdk::EntryDesc PlayerCosmetics_playerAnimator{
+    .key = "PlayerCosmetics.playerAnimator", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "PlayerCosmetics", .name = "playerAnimator", .type = "Animator"};
+
 /// A player's outfit, by RPC: it stores it on the sender's spot and loads it, then raises Network's body-type event
 /// with Network.GetIndexOfPlayer. The only live code that names this RPC is PlayerCustomizationScreenManager.SaveOutfit.
 /// Decompiled.
@@ -734,6 +743,14 @@ struct KrampusPresent {
   /// hooks it. Unresolved: the zero vector.
   static constexpr pm::api::Method<pm::map::KrampusPresent_GetFurthestSpawnPositionFromPlayers, Vector3(void*)>
       GetFurthestSpawnPositionFromPlayers{};
+};
+
+/// A player's cosmetics. `cosmetics` below is the PlayerCosmetics.
+struct PlayerCosmetics {
+  /// The type: type_object() for Component.GetComponentInChildren. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::PlayerCosmetics> type{};
+  /// playerAnimator.get(cosmetics): the body's Animator. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::PlayerCosmetics_playerAnimator, void*> playerAnimator{};
 };
 
 /// The player's character model. `character` below is the PlayerCharacter.

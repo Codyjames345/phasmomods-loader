@@ -47,7 +47,9 @@
 #include "Sensor.h"
 #include "ServerManager.h"
 #include "Transform.h"
+#include "UnityAssets.h"
 #include "UnityAudio.h"
+#include "UnityCloth.h"
 #include "UnityEvents.h"
 #include "UnityObject.h"
 #include "UnityUI.h"
@@ -1453,6 +1455,61 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &LobbyController_CreateServer,
     &ErrorManager_ShowErrors,
     &ErrorManager_NextMessageButton,
+    &Cloth,
+    &Cloth_set_capsuleColliders,
+    &Cloth_set_coefficients,
+    &Cloth_set_useGravity,
+    &Cloth_set_bendingStiffness,
+    &Cloth_set_stretchingStiffness,
+    &Cloth_set_damping,
+    &CapsuleCollider,
+    &CapsuleCollider_set_radius,
+    &CapsuleCollider_set_height,
+    &Layer_IgnoreRaycast,
+    &Vector3,
+    &BoneWeight,
+    &Matrix4x4,
+    &Mesh_set_vertices,
+    &Mesh_set_normals,
+    &Mesh_set_uv,
+    &Mesh_set_triangles,
+    &Mesh_set_boneWeights,
+    &Mesh_set_bindposes,
+    &SkinnedMeshRenderer_set_sharedMesh,
+    &SkinnedMeshRenderer_set_bones,
+    &SkinnedMeshRenderer_set_rootBone,
+    &SkinnedMeshRenderer_set_updateWhenOffscreen,
+    &Material_ctor_Shader,
+    &Material_get_shader,
+    &Material_SetFloatImpl,
+    &CullMode,
+    &CullMode_Off,
+    &ShaderProperty_Lit_BaseColor,
+    &ShaderProperty_Lit_Cull,
+    &PlayerCosmetics_playerAnimator,
+    &Resources,
+    &Resources_Load,
+    &RuntimeAnimatorController,
+    &Animator_set_runtimeAnimatorController,
+    &Animator_Play,
+    &Animator_HasState,
+    &Animator_get_isInitialized,
+    &Animator_GetBoneTransform,
+    &Animator_set_applyRootMotion,
+    &Animator_set_cullingMode,
+    &AnimatorCullingMode,
+    &AnimatorCullingMode_AlwaysAnimate,
+    &HumanBodyBones,
+    &HumanBodyBones_Hips,
+    &HumanBodyBones_Spine,
+    &HumanBodyBones_Chest,
+    &HumanBodyBones_Head,
+    &HumanBodyBones_LeftUpperArm,
+    &HumanBodyBones_RightUpperArm,
+    &AssetBundle_LoadFromFile,
+    &AssetBundle_LoadAsset,
+    &AssetBundle_GetAllAssetNames,
+    &AssetBundle_Unload,
 };
 
 }  // namespace pm::map
