@@ -995,9 +995,11 @@ forced in a Custom difficulty, two players where it says so.
   - [ ] With two players, one still inside (or hiding where it never looks): the exits stay open until that player is out too. A dead player inside does not keep them open.
   - [ ] As a client, not the host: the exits lock for you too, and your log has no refused-RPC line.
 - The locked exits
-  - [ ] Grabbing a locked exit does not open it, and the lock's click played as it locked.
-  - [ ] Without the house key picked up this contract, trying a locked exit plays the game's locked rattle, each time.
-  - [ ] Having picked up the house key, try a locked exit: report whether it plays the unlock click, and whether it can then be grabbed open (the code says it stays shut; `sdk/systems/doors.md`, "Locking the exits outside a hunt").
+  - [ ] Grabbing a locked exit does not open it, on the host and on a client.
+  - [ ] The lock's click as it locks, and the rattle on a try, come only when the host owns the exit's view: a player who grabbed that exit last owns it, and then nobody hears the click and only that player's tries rattle (`sdk/systems/doors.md`, "When a player owns the exit"). Their absence there is not a failure; note who opened the exit last.
+  - [ ] With the host owning the exit (nobody but the host opened it) and without the house key picked up, trying a locked exit plays the game's locked rattle, each time.
+  - [ ] Having picked up the house key, try a locked exit: report whether it plays the unlock click, and check it still cannot be grabbed open (the code says it stays shut; `sdk/systems/doors.md`, "Locking the exits outside a hunt").
+  - [ ] Make a Monkey Paw wish that times the exits after they have locked: they reopen when its window ends (the game's own; `sdk/systems/doors.md`, "The Monkey Paw"). Report it.
   - [ ] Each try at a locked exit, by the host or a client, reaches the mod (once Task 7 plays a line for it, each try plays one); a try at an ordinary door plays nothing.
   - [ ] On a friendly ghost's difficulty nothing locks, and the log has no lock line.
   - [ ] Leave and start another contract on the same map: its exits start as the map's own (locked until the key is used), not still switched off.
