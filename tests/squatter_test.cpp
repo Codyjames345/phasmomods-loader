@@ -1,14 +1,18 @@
 // Offline tests for the Squatter's rules (mods/custom_ghosts/squatter_rule.h).
 // Run: build\squatter_test.exe
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <limits>
 #include <set>
+#include <utility>
 #include <string>
 #include <vector>
 
+#include "sheet_mesh.h"
 #include "squatter_rule.h"
 #include "squatter_voice.h"
 #include "wav.h"
@@ -477,9 +481,169 @@ void only_idling_wandering_and_its_room_pass() {
   CHECK(keeps_quiet(unread, -1) && keeps_quiet(unread, 0) && keeps_quiet(unread, 2));
 }
 
+// The Squatter's sheet (sheet_mesh.h). A cell is cut for an eye when it overlaps the eye's rectangle, so a hole is the
+// rectangle rounded out to whole cells.
+namespace sh = pm::custom::sheet;
+
+bool overlaps_an_eye(const sh::SheetShape& s, float x0, float x1, float z0, float z1) {
+  for (const float side : {-1.0f, 1.0f}) {
+    const float x = side * s.eyeAcross;
+    if (x0 < x + s.eyeWidth / 2 && x1 > x - s.eyeWidth / 2 && z0 < s.eyeForward + s.eyeHeight / 2 &&
+        z1 > s.eyeForward - s.eyeHeight / 2)
+      return true;
+  }
+  return false;
+}
+
+bool inside_an_eye(const sh::SheetShape& s, sh::Vec2 p) {
+  for (const float side : {-1.0f, 1.0f}) {
+    const float x = side * s.eyeAcross;
+    if (std::abs(p.x - x) < s.eyeWidth / 2 && std::abs(p.y - s.eyeForward) < s.eyeHeight / 2) return true;
+  }
+  return false;
+}
+
+// The cell (column, row) of the axis a point lies in, or -1 for a coordinate on no cell.
+std::pair<int, int> cell_of(const std::vector<float>& axis, sh::Vec2 p) {
+  const auto at = [&](float v) {
+    for (size_t i = 0; i + 1 < axis.size(); ++i)
+      if (v > axis[i] && v < axis[i + 1]) return static_cast<int>(i);
+    return -1;
+  };
+  return {at(p.x), at(p.y)};
+}
+
+sh::Vec2 centroid(const sh::SheetMesh& m, size_t triangle) {
+  sh::Vec2 c{0, 0};
+  for (size_t k = 0; k < 3; ++k) {
+    const sh::Vec2 p = m.flat[static_cast<size_t>(m.triangles[triangle * 3 + k])];
+    c.x += p.x / 3;
+    c.y += p.y / 3;
+  }
+  return c;
+}
+
+void sheet_is_closed_grid_with_eye_holes() {
+  const sh::SheetShape shape;
+  const sh::SheetMesh m = sh::make_sheet(shape);
+  const std::vector<float> axis = sh::sheet_axis(shape);
+  CHECK(axis.size() >= 3);
+  if (axis.size() < 3) return;
+  CHECK(std::abs(axis.front() + shape.side / 2) < 1e-5f && std::abs(axis.back() - shape.side / 2) < 1e-5f);
+  CHECK(std::find(axis.begin(), axis.end(), 0.0f) != axis.end());
+  for (size_t i = 0; i < axis.size(); ++i) {
+    CHECK(axis[i] == -axis[axis.size() - 1 - i]);  // symmetric about the centre, exactly
+    if (i) CHECK(axis[i] > axis[i - 1]);
+  }
+  const size_t cells = axis.size() - 1;
+  size_t cut = 0;
+  for (size_t i = 0; i < cells; ++i)
+    for (size_t j = 0; j < cells; ++j)
+      if (overlaps_an_eye(shape, axis[i], axis[i + 1], axis[j], axis[j + 1])) ++cut;
+  CHECK(cut > 0);
+  CHECK(m.triangles.size() == 6 * (cells * cells - cut));
+  const size_t n = m.vertices.size();
+  CHECK(n > 0 && m.normals.size() == n && m.uv.size() == n && m.flat.size() == n && m.coefficients.size() == n);
+  if (n == 0 || m.flat.size() != n || m.uv.size() != n) return;
+  std::vector<bool> used(n, false);
+  bool inRange = true, clearOfEyes = true;
+  for (const int32_t index : m.triangles) {
+    if (index < 0 || static_cast<size_t>(index) >= n) {
+      inRange = false;
+      continue;
+    }
+    used[static_cast<size_t>(index)] = true;
+    if (inside_an_eye(shape, m.flat[static_cast<size_t>(index)])) clearOfEyes = false;
+  }
+  CHECK(inRange);
+  CHECK(clearOfEyes);
+  CHECK(std::count(used.begin(), used.end(), false) == 0);  // no vertex left over in a hole
+  // Each vertex lies on the grid, and its uv is its place on the sheet from 0 to 1.
+  for (size_t v = 0; v < n; ++v) {
+    CHECK(std::find(axis.begin(), axis.end(), m.flat[v].x) != axis.end());
+    CHECK(std::find(axis.begin(), axis.end(), m.flat[v].y) != axis.end());
+    CHECK(std::abs(m.uv[v].x - (m.flat[v].x / shape.side + 0.5f)) < 1e-5f);
+    CHECK(std::abs(m.uv[v].y - (m.flat[v].y / shape.side + 0.5f)) < 1e-5f);
+  }
+}
+
+void sheet_pins_only_the_top() {
+  const sh::SheetShape shape;
+  const sh::SheetMesh m = sh::make_sheet(shape);
+  CHECK(!m.coefficients.empty() && m.coefficients.size() == m.flat.size());
+  if (m.coefficients.empty() || m.coefficients.size() != m.flat.size()) return;
+  size_t pinned = 0, free = 0;
+  for (size_t v = 0; v < m.flat.size(); ++v) {
+    if (std::hypot(m.flat[v].x, m.flat[v].y) <= shape.pinRadius) {
+      CHECK(m.coefficients[v].maxDistance == 0.0f);
+      ++pinned;
+    } else {
+      CHECK(m.coefficients[v].maxDistance > 0.0f);
+      ++free;
+    }
+    CHECK(m.coefficients[v].collisionSphereDistance >= 0.0f);
+  }
+  CHECK(pinned > 0 && free > pinned);
+}
+
+void eyes_are_mirrored() {
+  const sh::SheetShape shape;
+  const sh::SheetMesh m = sh::make_sheet(shape);
+  const std::vector<float> axis = sh::sheet_axis(shape);
+  CHECK(axis.size() >= 3 && !m.flat.empty());
+  if (axis.size() < 3 || m.flat.empty()) return;
+  const int cells = static_cast<int>(axis.size()) - 1;
+  std::set<std::pair<int, int>> present;
+  for (size_t t = 0; t < m.triangles.size() / 3; ++t) present.insert(cell_of(axis, centroid(m, t)));
+  CHECK(!present.contains({-1, -1}));
+  std::vector<std::pair<int, int>> holes;
+  for (int i = 0; i < cells; ++i)
+    for (int j = 0; j < cells; ++j)
+      if (!present.contains({i, j})) holes.emplace_back(i, j);
+  CHECK(!holes.empty());
+  bool left = false, right = false;
+  for (const auto& [i, j] : holes) {
+    CHECK(!present.contains({cells - 1 - i, j}));  // its mirror across the centre line is a hole too
+    const float x = (axis[static_cast<size_t>(i)] + axis[static_cast<size_t>(i) + 1]) / 2;
+    const float z = (axis[static_cast<size_t>(j)] + axis[static_cast<size_t>(j) + 1]) / 2;
+    left = left || x < 0;
+    right = right || x > 0;
+    CHECK(z > 0);  // in front of the crown
+  }
+  CHECK(left && right);
+  // The sheet stays whole between the eyes: the cells either side of the centre line at eye height are kept.
+  const int eyeRow = cell_of(axis, {0.001f, shape.eyeForward + 0.001f}).second;  // off the grid line
+  CHECK(eyeRow >= 0);
+  CHECK(present.contains({cells / 2 - 1, eyeRow}) && present.contains({cells / 2, eyeRow}));
+}
+
+// The sheet is made already hanging over a head and shoulders, the crown at its origin, so the cloth does not fall
+// into place from a flat square: the further a point is from the centre on the flat sheet, the lower it hangs.
+void sheet_hangs_from_the_crown() {
+  const sh::SheetShape shape;
+  const sh::SheetMesh m = sh::make_sheet(shape);
+  CHECK(!m.vertices.empty() && m.flat.size() == m.vertices.size() && m.normals.size() == m.vertices.size());
+  if (m.vertices.empty() || m.flat.size() != m.vertices.size() || m.normals.size() != m.vertices.size()) return;
+  std::vector<std::pair<float, float>> byDistance;  // (flat distance, height)
+  for (size_t v = 0; v < m.vertices.size(); ++v) {
+    CHECK(m.vertices[v].y <= 1e-5f);
+    const sh::Vec3 n = m.normals[v];
+    CHECK(std::abs(std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z) - 1.0f) < 1e-3f);
+    byDistance.emplace_back(std::hypot(m.flat[v].x, m.flat[v].y), m.vertices[v].y);
+  }
+  std::sort(byDistance.begin(), byDistance.end());
+  for (size_t k = 1; k < byDistance.size(); ++k) CHECK(byDistance[k].second <= byDistance[k - 1].second + 1e-5f);
+  CHECK(byDistance.front().first == 0.0f && std::abs(byDistance.front().second) < 1e-6f);
+  CHECK(byDistance.back().second < -(shape.headRadius + shape.shoulderDrop));
+}
+
 }  // namespace
 
 int main() {
+  sheet_is_closed_grid_with_eye_holes();
+  sheet_pins_only_the_top();
+  eyes_are_mirrored();
+  sheet_hangs_from_the_crown();
   the_mod_loads_its_voice_from_its_assets();
   lurks_until_it_sees_someone();
   only_idling_wandering_and_its_room_pass();
