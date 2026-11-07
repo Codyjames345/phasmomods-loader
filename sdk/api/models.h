@@ -12,7 +12,7 @@
 // A mod's own figures: a local copy of the investigator's body, a mod's animator controller and states played on it,
 // and Unity Cloth on a mesh the mod builds. Everything here is local to the client that calls it: nothing is
 // networked, so a mod that wants every player to see the same figure creates it on every client and tells them what
-// to play through its own channel (sdk/README.md, "Talking to other players"). The walk-through is
+// to play through its own channel (sdk/README.md, "What the loader does for you"). The walk-through is
 // sdk/guides/custom-animation.md; what the engine test showed of each part is in sdk/internals/engine-experiments.md.
 //
 // The names follow Unity's own (Animator.Play, Cloth, Object.Instantiate), as mods for other Unity loaders use them.

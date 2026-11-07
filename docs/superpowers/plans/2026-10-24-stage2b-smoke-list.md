@@ -965,3 +965,20 @@ Tasks 12a to 12d and 12c's rounds. The ghost player is one of two or more client
   - [ ] Close the window (Alt+F4) as the ghost player, stepped out: the cleanup line, then an exit.
   - [ ] Lobby, investigator and the volunteer: Quit from the main menu or the lobby; an exit within a few seconds and `net: Photon's room cleanup finished`.
   - [ ] Play without mods: quit from the lobby and from a contract; no `net: Photon's room cleanup` line and no `context:` line.
+
+## Squatter
+
+The figure (Task 5). Before the test, build `squatter.bundle` (sdk/guides/custom-animation.md) with every state of `squatter_figure.h`'s table and put it in the staged `mods/custom-ghosts/assets/` folder by hand: the release payload gains it only in Task 11, so without it Custom Ghosts does not start.
+
+- Start
+  - [ ] With the bundle: Custom Ghosts starts, and `mods.log` has no `CustomGhosts inactive` line.
+  - [ ] Without the bundle, and with a bundle whose controller lacks one state: Custom Ghosts is off, its log line names the file or the missing state, and the other mods run.
+- The figure, in a private contract with the Squatter forced in a Custom difficulty
+  - [ ] A figure stands where the ghost is: the investigator's body under a white sheet, lit like the room, not black. Look at it from all sides and from below: the sheet shows from inside too.
+  - [ ] The sheet drapes over the head and shoulders and hangs, with two eye holes in front of the eyes, side by side, with sheet between them. Judge the look: shape, length, stiffness, hole size.
+  - [ ] The sheet follows the figure as the ghost wanders and turns, and settles when it stops; nothing flies off or spins.
+  - [ ] No `the Squatter's figure could not be built` line; if there is one, report its reason.
+  - [ ] Each clip plays: Run, Duck_A, Duck_B, Weave_A, Weave_B, Roll_A, Roll_B, Parkour_A, Parkour_B, Stumble, Sit, GetUp, Kick, Bang, Bump, OpenDoorOutwards, OpenDoorInwards (checkable once Task 7 drives the moves; until then only the controller's default state plays). Travelling clips stay in place and do not snap back each loop.
+  - [ ] All clients see the same figure in the same place, facing the same way.
+  - [ ] Walking into the figure, shining a torch at it and throwing an item at it: nothing collides with its sheet spheres.
+  - [ ] Leave the contract and start another: the old figure is gone, a new one appears, and the log shows no error.

@@ -10,6 +10,18 @@ major version `PmHostApi` and every published struct only grow at the end, and e
 
 ### Added
 
+- **Figures of a mod's own.** Helpers in the mod's own code (the host contract does not change): `load_bundle`,
+  `load_controller`, `load_bundle_asset`, `bundle_asset_names` and `unload_bundle` (`sdk/api/bundles.h`) load an
+  AssetBundle from the mod's assets folder; `copy_investigator_body`, `use_controller`, `play_state`,
+  `controller_has_states`, `two_sided_material`, `lit_material_of`, `add_cloth` and `destroy_cloth`
+  (`sdk/api/models.h`) copy the investigator's body without the game's scripts, play a controller's states on it and
+  drape Unity Cloth on a mesh the mod builds ([custom animation](guides/custom-animation.md)). The map gains the
+  entries behind them: Cloth, the Mesh and SkinnedMeshRenderer setters, `Material(Shader)`, the Lit shader's base
+  colour and culling, the investigator's body, Resources and AssetBundle loading, and Animator states and bones.
+- **Optional assemblies.** A build may lack an assembly that only `kOptional` Type entries name; those entries then
+  stay unresolved instead of the whole map failing. The Cloth entries are such.
+- **The fake game sizes arrays of a struct.** `pm::fake::element_size` sets the element size `array_new` gives a type.
+
 - **A ghost the Mimic never copies.** `PM_GHOST_NO_MIMIC_COPY`, a new bit of `PmGhostDef.flags` (`GhostDef::flags`):
   the host leaves the ghost off the Mimic's copy list for good.
 - **A ghost with no evidence.** Every evidence slot of a `PmGhostDef` may be empty; the game then gives only its own

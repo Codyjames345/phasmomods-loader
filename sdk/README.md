@@ -64,7 +64,9 @@ ghosts](guides/tells-for-vanilla-ghosts.md) follows Ghost Tells; [the Mimic and 
 ghost](guides/mimic-and-your-ghost.md) and [lobbies, saves and players](guides/lobbies-saves-and-players.md)
 say what the loader guarantees; [a mod's own files](guides/mod-files.md) says where a mod puts data files
 (an `assets` folder beside its DLL, copied for each launch and read-only, found with `pm::api::assets_folder()`, and a mod
-whose files cannot be copied is off); and [equipment](guides/equipment.md) describes the game's equipment system. Everything below
+whose files cannot be copied is off); [custom animation](guides/custom-animation.md) shows a figure of a mod's own
+(an AssetBundle of clips, a script-free copy of the investigator's body and Unity Cloth, with the helpers in
+`sdk/api/bundles.h` and `sdk/api/models.h`); and [equipment](guides/equipment.md) describes the game's equipment system. Everything below
 describes what is in the code now.
 
 ## Making a mod
@@ -900,7 +902,7 @@ entry a mod may use (an export gets none).
 The model is read from every assembly a Type entry names, and a build that lacks a required one
 cannot be resolved at all, for every mod. An assembly that only `kOptional` Type entries name is
 optional: a build without it is read without it, and those entries stay unresolved. Give a type in a
-Unity module the game might stop shipping `kOptional` (Cloth's module is one),
+Unity module the game might stop shipping `kOptional` (Cloth's module is one, `sdk/map/UnityCloth.h`),
 and have the mod that needs it check `available()` at its start and fail with a logged reason.
 
 ### How the resolver finds an entry

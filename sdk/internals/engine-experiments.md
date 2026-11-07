@@ -80,12 +80,16 @@ In the run:
 - A map that adds Cloth entries needs the Cloth module's assembly to resolve; a missing assembly fails the whole map, so check it
   first. This is a review finding, not something the run showed.
 
-Open, because the run showed them and nothing yet fixes them:
+What the run showed went wrong, and what the Squatter's figure does instead (not yet run in game):
 
 - **A plain sheet coloured from one texel of a borrowed texture rendered black.** The colour was taken from one point of the shirt's
-  texture. A material whose colour is set directly was not tried.
-- **A flat square did not drape well** over the six body spheres it rested on. Whether a different mesh, more colliders or other
-  coefficients fix it is open.
+  texture. The figure makes its own material on the body's lit shader with its colour set directly and both sides drawn
+  (`two_sided_material`, `sdk/api/models.h`).
+- **A flat square did not drape well** over the six body spheres it rested on. The figure's sheet is made already hanging over a
+  head and shoulders, its head sphere the same size as the cap it is made over (`mods/custom_ghosts/sheet_mesh.h`).
+
+The helpers that do each step of this page for any mod are in `sdk/api/bundles.h` and `sdk/api/models.h`, with a guide for
+authors: [custom animation](../guides/custom-animation.md).
 
 ## Method note
 

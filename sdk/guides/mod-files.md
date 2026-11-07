@@ -46,6 +46,9 @@ const std::filesystem::path cough = assets / "sounds" / "cough.wav";
 `assets_folder()` finds the folder from the path of the running DLL itself, so it needs no setting and no host call. It is
 empty when the mod shipped no `assets` folder or was not started by the launcher.
 
+An AssetBundle of a mod's own clips or models goes in the same folder; [custom animation](custom-animation.md)
+shows how to build one for this game and load it.
+
 ## Shipping them
 
 The release lists every file of a mod in `tools/payload.psd1`, so a mod's asset files are payload entries like its DLL
