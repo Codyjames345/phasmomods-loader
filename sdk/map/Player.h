@@ -637,6 +637,16 @@ inline constexpr pm::sdk::EntryDesc DragRigidbodyUse_OnInteract{
     .key = "DragRigidbodyUse.OnInteract", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "DragRigidbodyUse", .name = "OnInteract", .params = DragRigidbodyUse_OnInteract_params};
 
+/// Unity's physics step for the hand, on the local player's client. While the interact input is held
+/// (DragRigidbodyUse.OnInteract marks its start and clears it on release) and nothing is held yet, it casts a ray from the camera's centre and, for a collider tagged Door, takes
+/// the door's PhotonObjectInteract: it refuses a door that is locked (Door.locked) or not grabbable
+/// (Door.grabbable), and a locked DoorKind.Main door during a hunt. Otherwise it calls Door.GrabbedDoor,
+/// requests the door's PhotonView in a room (PhotonView.RequestOwnership) and frees the leaf's Rigidbody
+/// to follow the hand. While holding it drives the leaf toward the aim. Decompiled.
+inline constexpr pm::sdk::EntryDesc DragRigidbodyUse_FixedUpdate{
+    .key = "DragRigidbodyUse.FixedUpdate", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "DragRigidbodyUse", .name = "FixedUpdate"};
+
 }  // namespace pm::map
 
 // The game API for the investigators (sdk/api/game_api.h). Every member is called on Unity's main

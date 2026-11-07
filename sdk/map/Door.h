@@ -56,9 +56,10 @@ inline constexpr const char* Door_HuntingCloseDoorNetworked_params[] = {"PhotonM
 
 /// The RPC HuntingCloseDoor sends to every client. It refuses a sender that is not the room's first
 /// actor, and refuses outright on a friendly ghost's difficulty (Difficulty.friendlyGhost); otherwise it
-/// switches the door off for players, drops it from the local player's hand, and on the client that owns
-/// the door's PhotonView starts the coroutine that swings it shut, sets it to its closed angle once and
-/// calls LockDoor(true). A mod hooks it to see a hunt's lock; never call it (it is an RPC's body).
+/// clears Door.grabbable on every client, drops the door from the local player's hand, and on the client
+/// that owns the door's PhotonView starts the coroutine that swings it shut, sets it to its closed angle
+/// once and calls LockDoor(true). That owner is often the last player who grabbed the door, and then the
+/// lock reaches only that client (LockDoor), while the cleared grab switch keeps it shut everywhere. A mod hooks it to see a hunt's lock; never call it (it is an RPC's body).
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_HuntingCloseDoorNetworked{
     .key = "Door.HuntingCloseDoorNetworked", .kind = pm::sdk::Kind::Method,
@@ -82,8 +83,10 @@ inline constexpr const char* Door_bool[] = {"bool"};
 /// within a small angle of shut, it sets the leaf to its closed angle once and marks it closed; a door
 /// that is open and not forced stays unlocked. A closed door then sends NetworkedSyncCloseDoor to every
 /// client and is marked locked here; on the master it also sends SyncLockState(true) and
-/// NetworkedPlayLockSound. HingeDoor has its own override of the same steps. The hunt's close
-/// coroutine calls it with `force` set, on the door's owner. Decompiled.
+/// NetworkedPlayLockSound; called on another client it sends neither, so the lock stays on that client
+/// and no click plays.
+/// HingeDoor has its own override of the same steps. The hunt's close coroutine calls it with `force`
+/// set, on the door's owner. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_LockDoor{.key = "Door.LockDoor", .kind = pm::sdk::Kind::Method,
                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                   .name = "LockDoor", .params = Door_bool};
@@ -120,9 +123,10 @@ inline constexpr pm::sdk::EntryDesc Door_locked{.key = "Door.locked", .kind = pm
                                                 .type = "bool", .facts = Door_locked_facts,
                                                 .access = pm::sdk::Visibility::Public};
 
-/// A player's try at a locked door, on that player's own client: the interact input (DragRigidbodyUse)
-/// calls it for the door under the player's aim, and Door.GrabbedDoor runs the same steps for a locked
-/// door it is grabbed by. On an unlocked door it does nothing. Outside a hunt (GhostAI.isHunting) a key
+/// A player's try at a locked door, on that player's own client: the interact input
+/// (DragRigidbodyUse.OnInteract) calls it for the door under the player's aim. Door.GrabbedDoor runs the
+/// same steps for a locked door, but the PC player's grab never reaches it for one (DragRigidbodyUse.FixedUpdate
+/// refuses a locked door first). On an unlocked door it does nothing. Outside a hunt (GhostAI.isHunting) a key
 /// of the door's kind in the local player's keys (Player.keys) unlocks it (UnlockDoor). Otherwise a
 /// DoorKind.None door unlocks (unless LockDoorForTime holds it), and any other gets the locked sound:
 /// NetworkedPlayLockSound to every client in a room, the same clip played here offline. A mod hooks it
@@ -133,11 +137,37 @@ inline constexpr pm::sdk::EntryDesc Door_AttemptToUnlockDoor{.key = "Door.Attemp
                                                              .owner = "Door", .name = "AttemptToUnlockDoor"};
 
 /// A player grabbed the door, on that player's client: an unlocked door sends NetworkedGrabbedDoor to
-/// every client (runs it here offline); a locked one runs AttemptToUnlockDoor's steps instead. Door.Start
-/// gives it to the door's PhotonObjectInteract as a grab event. Decompiled.
+/// every client (runs it here offline); a locked one runs AttemptToUnlockDoor's steps instead. The PC
+/// player's grab (DragRigidbodyUse.FixedUpdate) calls it only for a door that is unlocked and grabbable
+/// (Door.grabbable). Door.Start also adds it to the door's PhotonObjectInteract grab event, under a
+/// static test of another class that was not traced. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_GrabbedDoor{.key = "Door.GrabbedDoor", .kind = pm::sdk::Kind::Method,
                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                      .owner = "Door", .name = "GrabbedDoor"};
+
+inline constexpr const char* Door_ForceDropDoorNetworked_params[] = {"bool", "bool"};
+
+/// The RPC Door.DisableOrEnableDoor sends to every client with `off` the opposite of its argument. It sets
+/// Door.grabbable to !off (and a flag of the door's PhotonObjectInteract with it); switching off, it drops
+/// the door from the local player's hand and, with its second argument on the master, requests the door's
+/// PhotonView. It checks no sender. A mod hooks it; never calls it. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_ForceDropDoorNetworked{
+    .key = "Door.ForceDropDoorNetworked", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "Door", .name = "ForceDropDoorNetworked", .params = Door_ForceDropDoorNetworked_params};
+
+// Of Door's bools ForceDropDoorNetworked stores only this one.
+inline constexpr pm::sdk::Fact Door_grabbable_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "Door.ForceDropDoorNetworked"}};
+
+/// Whether players may grab the door, on this client: the PC player's grab (DragRigidbodyUse.FixedUpdate)
+/// refuses a door with it clear, as it refuses a locked one. Door.ForceDropDoorNetworked sets it on every
+/// client; a hunt's lock (Door.HuntingCloseDoor, Door.HuntingCloseDoorNetworked) and ToggleDoorLock(false)
+/// clear it, ToggleDoorLock(true) sets it again. Unlocking (UnlockDoor, SyncLockState) leaves it alone, so a
+/// switched-off door stays shut when its lock clears. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_grabbable{.key = "Door.grabbable", .kind = pm::sdk::Kind::Field,
+                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                   .type = "bool", .facts = Door_grabbable_facts,
+                                                   .access = pm::sdk::Visibility::Public};
 
 /// The RPC of the locked sound: it plays one of the door's lock clips through its Noise, for a
 /// DoorKind.Main door only, while the door's object is active. It checks no sender. Decompiled.
@@ -148,10 +178,14 @@ inline constexpr pm::sdk::EntryDesc Door_NetworkedPlayLockSound{.key = "Door.Net
 
 inline constexpr const char* Door_LockDoorForTime_params[] = {"float", "bool"};
 
-/// Locks the door for `seconds` (the Monkey Paw's wish calls it): its coroutine, with `takeOwnership`
-/// first taking the door's PhotonView, calls ToggleDoorLock(false), waits, then ToggleDoorLock(true),
-/// which unlocks the door whoever locked it. A DoorKind.Main door is left alone while the ghost hunts.
-/// Decompiled.
+/// Locks the door for `seconds`, the Monkey Paw's timed lock. Its coroutine, with `takeOwnership` first
+/// requesting the door's PhotonView and waiting until this client owns it, calls ToggleDoorLock(false),
+/// which clears `locked` and switches the door off, then the close coroutine on the owner shuts and
+/// re-locks it; after `seconds` it calls ToggleDoorLock(true), which switches the door back on and
+/// unlocks it with no sound, whoever locked it. A DoorKind.Main door is skipped at the start, and left
+/// locked at the end, while the ghost hunts (GhostAI.isHunting), so that hunt's end
+/// (LevelController.UnlockHuntingDoors) opens it. Two wishes call it on every exit and one on the
+/// favourite room's doors (sdk/systems/doors.md, "The Monkey Paw"). Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_LockDoorForTime{.key = "Door.LockDoorForTime", .kind = pm::sdk::Kind::Method,
                                                          .confidence = pm::sdk::Confidence::Decompiled,
                                                          .owner = "Door", .name = "LockDoorForTime",
@@ -332,6 +366,11 @@ struct Door {
   static constexpr pm::api::Method<pm::map::Door_SyncLockState, void(void*, bool, void*)> SyncLockState{};
   /// Whether it is locked on this client: locked.get(door). Unresolved: false.
   static constexpr pm::api::Field<pm::map::Door_locked, bool> locked{};
+  /// Whether players may grab it on this client: grabbable.get(door). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Door_grabbable, bool> grabbable{};
+  /// ForceDropDoorNetworked(door, off, b), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_ForceDropDoorNetworked, void(void*, bool, bool)>
+      ForceDropDoorNetworked{};
   /// AttemptToUnlockDoor(door): the local player tries the door. A mod usually hooks it. Unresolved: does
   /// nothing.
   static constexpr pm::api::Method<pm::map::Door_AttemptToUnlockDoor, void(void*)> AttemptToUnlockDoor{};

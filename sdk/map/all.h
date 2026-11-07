@@ -1535,6 +1535,9 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &LevelRoom_OnTriggerEnter,
     &DragRigidbodyUse,
     &DragRigidbodyUse_OnInteract,
+    &DragRigidbodyUse_FixedUpdate,
+    &Door_ForceDropDoorNetworked,
+    &Door_grabbable,
 };
 
 }  // namespace pm::map
