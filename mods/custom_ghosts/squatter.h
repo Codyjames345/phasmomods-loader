@@ -18,7 +18,10 @@ namespace pm::custom::squatter {
 
 /** True: what it reads of the game are map entries the mod requires. Main thread, from pmmod_start. */
 bool resolve();
-/** Its own hooks, before hooks::enable_all; none yet (its restraint is restraint.cpp's). True. */
+/**
+ * Its own hooks, before hooks::enable_all: a player's try at a locked exit (squatter_door.h). Its restraint is
+ * restraint.cpp's.
+ */
 bool create_hooks();
 /**
  * Every frame on every client. `haunting` is the contract's ghost, its GhostAI (null for none), `type` the custom
@@ -29,7 +32,7 @@ bool create_hooks();
 void tick(void* haunting, int type, bool steered);
 /** Its phase while it haunts as the Squatter, else none. */
 std::optional<Phase> phase();
-/** Forgets the phase, as when the mods stop. */
+/** Forgets the phase and the exits' lock, as when the mods stop. */
 void reset();
 
 }  // namespace pm::custom::squatter

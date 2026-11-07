@@ -8,6 +8,7 @@
 #include "game_api.h"
 #include "ghosts.h"
 #include "runtime.h"
+#include "squatter_door.h"
 #include "squatter_figure.h"
 
 namespace pm::custom::squatter {
@@ -36,12 +37,13 @@ void show(void* ghost) {
 
 bool resolve() { return true; }
 
-bool create_hooks() { return true; }
+bool create_hooks() { return door::create_hooks(); }
 
 void tick(void* haunting, int type, bool /*steered: a player's own lines come in a later task*/) {
   if (!haunting || type != kSquatter) {
     g_phase.reset();
     figure::destroy();
+    door::reset();
     return;
   }
   if (!g_phase) g_phase = first_phase(friendly());
@@ -53,6 +55,7 @@ std::optional<Phase> phase() { return g_phase; }
 void reset() {
   g_phase.reset();
   figure::destroy();
+  door::reset();
 }
 
 }  // namespace pm::custom::squatter
