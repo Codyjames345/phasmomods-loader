@@ -272,14 +272,19 @@ void the_asterion_bursts_both_leaves_of_a_double_door() {
   int a = 0, b = 0, c = 0, d = 0;
   const std::vector<const void*> doors{&a, &b, &c, &d};
   const std::vector<const void*> others{&b, nullptr, nullptr, &c};  // a names b and d names c; b and c name nobody
-  CHECK(door_partner(doors, others, 0) == 1);   // a: the leaf it names
-  CHECK(door_partner(doors, others, 1) == 0);   // b: names nobody, but a names it
-  CHECK(door_partner(doors, others, 2) == 3);   // c: d names it
-  CHECK(door_partner(doors, others, 3) == 2);
+  const std::vector<const void*> nobody{nullptr, nullptr, nullptr, nullptr};
+  CHECK(door_partner(doors, others, nobody, 0) == 1);   // a: the leaf it names
+  CHECK(door_partner(doors, others, nobody, 1) == 0);   // b: names nobody, but a names it
+  CHECK(door_partner(doors, others, nobody, 2) == 3);   // c: d names it
+  CHECK(door_partner(doors, others, nobody, 3) == 2);
+  // The kitchen's double door keeps its partner in the second field (Door.pairedDoor), the first left empty.
+  const std::vector<const void*> paired{&b, &a, nullptr, nullptr};
+  CHECK(door_partner(doors, nobody, paired, 0) == 1 && door_partner(doors, nobody, paired, 1) == 0);
+  CHECK(door_partner(doors, nobody, paired, 2) == -1);
   const std::vector<const void*> single{&a}, none{nullptr};
-  CHECK(door_partner(single, none, 0) == -1);   // a single door
-  const std::vector<const void*> gone{&a, &b}, othersGone{&c, nullptr};  // names a leaf not tracked
-  CHECK(door_partner(gone, othersGone, 0) == -1 && door_partner(gone, othersGone, 1) == -1);
+  CHECK(door_partner(single, none, none, 0) == -1);   // a single door
+  const std::vector<const void*> gone{&a, &b}, othersGone{&c, nullptr}, twoNone{nullptr, nullptr};  // names a leaf not tracked
+  CHECK(door_partner(gone, othersGone, twoNone, 0) == -1 && door_partner(gone, othersGone, twoNone, 1) == -1);
   // Battering one leaf bursts it; its partner is jammed open with it and never battered again.
   DoorTrack partner;
   partner.jam();
@@ -903,6 +908,46 @@ void the_dullahan_charges_straight_and_stalls_at_corners() {
   CHECK(dullahan_speed(kGameBase, 90) < kGameBase * 0.5f);
   CHECK(dullahan_speed(kGameBase, 30) > dullahan_speed(kGameBase, 60));
   CHECK(dullahan_speed(kGameBase, 0) < brownie_speed(kGameBase, false));          // the user's ceiling (spec)
+}
+
+void the_draugr_drags_a_thing_by_a_corner() {
+  using drag::Point;
+  // The ghost holds the thing by the top corner of its box nearest the way it goes.
+  const Point c = drag::grab_corner({0, 0.5f, 0}, {0.2f, 0.1f, 0.3f}, {1, 0, 0});
+  CHECK(std::fabs(c.x - 0.2f) < 1e-5f && std::fabs(c.y - 0.6f) < 1e-5f);
+  const Point back = drag::grab_corner({0, 0.5f, 0}, {0.2f, 0.1f, 0.3f}, {-1, 0, -1});
+  CHECK(back.x < 0 && back.z < 0);
+  // A spring pulls the held corner toward where the ghost's hand is, damped by the corner's own motion.
+  const Point still = drag::pull({0, 0, 0}, {0, 0, 0}, {0, 0, 0});
+  CHECK(still.x == 0 && still.y == 0 && still.z == 0);
+  const Point toward = drag::pull({0, 0, 0}, {0.5f, 0, 0}, {0, 0, 0});
+  CHECK(toward.x > 0 && toward.y == 0 && toward.z == 0);
+  const Point damped = drag::pull({0, 0, 0}, {0, 0, 0}, {2, 0, 0});
+  CHECK(damped.x < 0);  // moving with nothing to reach: slowed down
+  const Point far = drag::pull({0, 0, 0}, {100, 0, 0}, {0, 0, 0});
+  CHECK(std::fabs(far.x - drag::kMaxPull) < 1e-3f);  // never a violent yank
+  // The hand moves on at the ghost's pace only while the thing keeps up, and waits when it snags.
+  CHECK(std::fabs(drag::advance(1, 10, 0.2f, 1.7f, 0.5f) - 1.85f) < 1e-4f);
+  CHECK(drag::advance(1, 10, drag::kLead + 0.1f, 1.7f, 0.5f) == 1);
+  CHECK(drag::advance(9.9f, 10, 0.1f, 1.7f, 1) == 10);  // never past the route's end
+  // It has arrived once the hand is at the end and the thing lies near its spot.
+  CHECK(drag::arrived(10, 10, {0.2f, 1, 0}, {0, 1, 0}) && !drag::arrived(9, 10, {0, 1, 0}, {0, 1, 0}));
+  CHECK(!drag::arrived(10, 10, {1, 1, 0}, {0, 1, 0}));
+  // While it moves, every client knocks it gently on a steady rhythm with its own gentle impact clips.
+  drag::Knocks k;
+  CHECK(!k.due(0, 1.0f));                           // the first knock waits a beat
+  CHECK(k.due(drag::kKnockMs, 1.0f));
+  CHECK(!k.due(drag::kKnockMs + 10, 1.0f));
+  CHECK(!k.due(drag::kKnockMs * 3, 0.0f));          // standing still: no knock
+  CHECK(drag::knock_speed(1.7f, 2.0f) == 1.7f);     // below the prop's cutoff: as fast as it moves
+  CHECK(drag::knock_speed(3.0f, 2.0f) < 2.0f);      // never past it, so the clip is a gentle one
+  // The host names the dragged thing, and when the drag ends, to every client.
+  const std::vector<uint8_t> on = net_msg::drag(4242, true), off = net_msg::drag(4242, false);
+  uint32_t id = 0;
+  bool dragging = false;
+  CHECK(net_msg::read_drag(on.data(), on.size(), id, dragging) && id == 4242 && dragging);
+  CHECK(net_msg::read_drag(off.data(), off.size(), id, dragging) && !dragging);
+  CHECK(!net_msg::read_drag(on.data(), on.size() - 1, id, dragging));
 }
 
 void the_draugr_drags_a_thing_back_along_the_floor() {
@@ -2106,6 +2151,7 @@ int main() {
   the_dullahan_charges_straight_and_stalls_at_corners();
   a_draugr_thing_leaves_its_room_at_the_rooms_colliders();
   the_draugr_drags_a_thing_back_along_the_floor();
+  the_draugr_drags_a_thing_by_a_corner();
   the_draugr_crawls_far_from_its_room();
   draugr_skips_long_roam_like_goryo();
   draugr_goryo_type_restored_when_picker_throws();

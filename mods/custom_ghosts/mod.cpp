@@ -213,6 +213,7 @@ void receive(int sender, const uint8_t* data, size_t size) {
     case net_msg::kViewing:
     case net_msg::kForget: lethe::receive(sender, data, size); break;
     case net_msg::kAnger: behaviour::receive(sender, data, size); break;
+    case net_msg::kDrag: behaviour::receive(sender, data, size); break;
     case net_msg::kSeen: brownie::receive(sender, data, size); break;
     case net_msg::kDoors: asterion::receive(sender, data, size); break;
     case 0: echo::receive(sender, data, size); break;

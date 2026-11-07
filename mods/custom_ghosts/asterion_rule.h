@@ -97,12 +97,14 @@ struct DoorTrack {
 
 /**
  * The other leaf of `doors[i]`, as an index into `doors`, or -1 for a single door or a leaf not tracked.
- * `others[k]` is doors[k]'s Door.otherDoor (null for none). A leaf may name its partner without the partner
- * naming it back, so the partner is the leaf it names or a leaf that names it.
+ * `others[k]` and `paired[k]` are doors[k]'s Door.otherDoor and Door.pairedDoor (null for none): the level keeps a
+ * double door's partner in either, and a leaf may name its partner without the partner naming it back.
  */
-inline int door_partner(const std::vector<const void*>& doors, const std::vector<const void*>& others, size_t i) {
+inline int door_partner(const std::vector<const void*>& doors, const std::vector<const void*>& others,
+                        const std::vector<const void*>& paired, size_t i) {
+  const auto names = [&](size_t a, const void* b) { return b && (others[a] == b || paired[a] == b); };
   for (size_t k = 0; k < doors.size(); ++k)
-    if (k != i && doors[k] && ((others[i] && others[i] == doors[k]) || others[k] == doors[i])) return static_cast<int>(k);
+    if (k != i && doors[k] && (names(i, doors[k]) || names(k, doors[i]))) return static_cast<int>(k);
   return -1;
 }
 

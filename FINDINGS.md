@@ -200,6 +200,12 @@ reports an entry whose problem is already gone.
     each client swings the broken leaves to HingeDoor.openAngle over 0.3 s and leaves them in the game's
     locked state (Door.locked, the body frozen, Door.CheckOcclusionPortal), the host naming them by ViewID
     (net_msg::kDoors). Not yet seen in the game.
+    Fourth run, 2026-11-07: the swing and padlock worked, but the kitchen's double door broke one leaf at
+    a time and a locked door still opened to a grab. Scene files: that door links its leaves through
+    Door+0x100 (now Door.pairedDoor), not +0xF8. Decompiled: a grab on a locked interior door (kind None)
+    runs Door.AttemptToUnlockDoor, which unlocks it unless the game holds it; a broken door now also
+    becomes DoorKind.PermanentLock, so a grab rattles it. Risk, not seen: hunts push and ghost events pick
+    doors of every kind but the front door's, so a ghost event may still swing a locked-open door.
   - Lithobolia: the throwing state is 6; ownership taken over before the aimed launch; the hit
   message and PlayerSanity.ChangeSanity(+5) on the hit player's client. No throw with nobody in
   sight (the game's sensor, GhostAI+0xA0, via Sensor.IsDetected); hunt throws (Prop.TryThrow from

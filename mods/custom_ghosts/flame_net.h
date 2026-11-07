@@ -19,6 +19,7 @@ enum Kind : uint8_t {
   kAnger = 8,   // host to all: the Draugr's anger, angered:u8 (0 or 1)
   kSeen = 9,    // host to all: whether anyone looks at the Brownie, seen:u8 (0 or 1)
   kDoors = 10,  // host to all: the Asterion breaks these doors open, count:u8 then ViewID:u32 each
+  kDrag = 11,   // host to all: the Draugr drags a thing, or stops, ViewID:u32 then dragging:u8 (0 or 1)
 };
 
 inline std::vector<uint8_t> header(Kind kind) { return {'C', 'G', 'F', kind}; }
@@ -125,6 +126,22 @@ inline bool read_doors(const uint8_t* data, size_t size, std::vector<uint32_t>& 
     take(data, size, at, id);
     ids.push_back(id);
   }
+  return true;
+}
+
+/** The thing the Draugr drags, by its PhotonView's ViewID, and whether the drag goes on or is over. */
+inline std::vector<uint8_t> drag(uint32_t id, bool dragging) {
+  std::vector<uint8_t> out = header(kDrag);
+  put(out, id);
+  out.push_back(dragging ? 1 : 0);
+  return out;
+}
+
+/** The host's drag message: false for another kind or a bad length. */
+inline bool read_drag(const uint8_t* data, size_t size, uint32_t& id, bool& dragging) {
+  size_t at = 4;
+  if (kind_of(data, size) != kDrag || size != 9 || data[8] > 1 || !take(data, size, at, id)) return false;
+  dragging = data[8] == 1;
   return true;
 }
 

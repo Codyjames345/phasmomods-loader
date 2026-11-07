@@ -116,7 +116,9 @@ void break_open(void* door) {
  * Locks a fully open leaf where it stands, leaving the state the game's lock (Door.SyncLockState) leaves:
  * Door.locked set (the padlock), the body frozen in every position and rotation, then the occlusion portal
  * updated. The game never locks an open door, and a mod never sends that RPC, so each client does this
- * itself (the user's ruling, 2026-11-06).
+ * itself (the user's ruling, 2026-11-06). It also becomes a DoorKind.PermanentLock door: a player who grabs
+ * it rattles it, where an ordinary interior door that is only locked is unlocked by the first grab
+ * (Door.AttemptToUnlockDoor), as the user's live run showed.
  */
 void lock_open(Swing& s) {
   const Vector3 still{0, 0, 0};
@@ -125,6 +127,7 @@ void lock_open(Swing& s) {
   phasmo::Rigidbody::set_isKinematic(s.body, false);
   phasmo::Rigidbody::set_constraints(s.body, phasmo::Rigidbody::kFreezeAll);
   phasmo::Door::locked.set(s.door, true);
+  phasmo::Door::kind.set(s.door, phasmo::DoorKind::PermanentLock());
   phasmo::Door::CheckOcclusionPortal(s.door);
   s.locked = true;
   PM_LOG("asterion: %s is locked open at %.0f degrees", name_of(s.door).c_str(), leaf_angle(s.door, s.leaf));
@@ -143,15 +146,16 @@ void break_everywhere(const std::vector<void*>& leaves) {
   net::send(message.data(), message.size(), net::To::Others, true);
 }
 
-/** The other leaf of the double door g.doors[i] (Door.otherDoor, named by either leaf), or null. */
+/** The other leaf of the double door g.doors[i] (Door.otherDoor or Door.pairedDoor, named by either leaf), or null. */
 Tracked* partner_of(size_t i) {
-  std::vector<const void*> doors, others;
+  std::vector<const void*> doors, others, paired;
   for (const Tracked& t : g.doors) {
     const bool alive = api::alive(t.door);
     doors.push_back(alive ? t.door.get() : nullptr);
     others.push_back(alive ? phasmo::Door::otherDoor.get(t.door) : nullptr);
+    paired.push_back(alive ? phasmo::Door::pairedDoor.get(t.door) : nullptr);
   }
-  const int k = door_partner(doors, others, i);
+  const int k = door_partner(doors, others, paired, i);
   return k < 0 ? nullptr : &g.doors[k];
 }
 

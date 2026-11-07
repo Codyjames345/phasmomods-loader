@@ -265,7 +265,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] Its things are the house's own props in its room when its rules started (never equipment). Carry one out: it is angered.
 - [ ] Angered, it may hunt from 65% sanity (the idle state's insanity bonus), and its hunts go only for the living player who last carried one out, until they are in the truck, dead or killed; then the game's own hunt.
-- [ ] Angered, outside hunts, it takes its things back one at a time to the very place each lay, every 25 to 45 s, never one a player carries: each is dragged along the floor, round walls and through doorways, at the ghost's walking pace, seen moving on the host and on a client.
+- [ ] Angered, outside hunts, it takes its things back one at a time to the very place each lay, every 25 to 45 s, never one a player carries: each is dragged along the floor by a corner, swinging and bumping, round walls, through doorways and over stairs without sinking into them, at the ghost's walking pace, knocking gently with its own impact sounds as it goes, seen and heard on the host and on a client.
 - [ ] Angered, its room is 3 °C colder on the host and on a client (thermometer and breath); with Freezing withheld its readings may still go below freezing (a tell). The room's own temperature comes back when the anger ends.
 - [ ] It keeps its room: no long roam that changes rooms (a Monkey Paw wish can still move it; its things are then the new room's, anger and thieves forgotten).
 - [ ] In a hunt: 2.8 m/s in its room, slowing 0.15 m/s per metre away, to 0.3 m/s from about 17 m.
@@ -573,8 +573,8 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Tells**
 
-- [ ] A closed door never stops it for good: it batters it down in 3 s, heard far away, then the door swings fully open and stays locked open, with the padlock on it, on the host and on a client.
-- [ ] A closed double door: both leaves swing fully open together and stay locked open.
+- [ ] A closed door never stops it for good: it batters it down in 3 s, heard far away, then the door swings fully open and stays locked open, with the padlock on it, on the host and on a client. Grabbing it rattles it and it doesn't move.
+- [ ] A closed double door, the kitchen's double doors included: it batters one leaf, then both leaves swing fully open together and stay locked open.
 - [ ] It never closes a door; no door closes behind it.
 - [ ] UV prints on a battered door only where the ghost gives Ultraviolet.
 
