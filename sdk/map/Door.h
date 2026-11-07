@@ -20,6 +20,9 @@ inline constexpr const char* Door_GhostOpenDoorEvent_params[] = {"bool", "bool",
 inline constexpr const char* Door_SyncLockState_params[] = {"bool", "PhotonMessageInfo"};
 inline constexpr const char* HingeDoor_LevelControllerOpenDoor_params[] = {"bool", "float"};
 inline constexpr const char* HingeDoor_LockDoor_params[] = {"bool"};
+// Door has two fields of its own type; the other one is not Door.otherDoor.
+inline constexpr pm::sdk::Fact Door_pairedDoor_facts[] = {
+    {.is = pm::sdk::Fact::Is::IsNot, .method = "Door.otherDoor"}};
 // Door.SyncLockState stores one of Door's bools, the locked flag, and nothing else of Door.
 inline constexpr pm::sdk::Fact Door_locked_facts[] = {
     {.is = pm::sdk::Fact::Is::Stores, .method = "Door.SyncLockState"}};
@@ -75,6 +78,29 @@ inline constexpr pm::sdk::EntryDesc Door_locked{.key = "Door.locked", .kind = pm
                                                 .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                 .type = "bool", .facts = Door_locked_facts};
 
+/// A double door's other leaf, kept in Door's second field of its own type: the level sets one of
+/// Door.otherDoor and Door.pairedDoor on each leaf of a double door, not always the same one (read from the
+/// scene files, 2026-11-06), so check both. Null otherwise. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_pairedDoor{.key = "Door.pairedDoor", .kind = pm::sdk::Kind::Field,
+                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                    .type = "@Door", .facts = Door_pairedDoor_facts};
+
+/// What a player's grab on a locked door does (Door.GrabbedDoor runs the same test). Outside a hunt, a key a
+/// player holds of the door's kind (Door.kind) unlocks it first. Then an ordinary interior door (kind None) is
+/// unlocked (Door.UnlockDoor, which tells every client) unless the game holds it (a flag of the door its own
+/// timed hold sets); any other door not unlocked by a key rattles instead. So a locked interior door opens to
+/// the first grab, and a DoorKind.PermanentLock door never does. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_AttemptToUnlockDoor{.key = "Door.AttemptToUnlockDoor",
+                                                             .kind = pm::sdk::Kind::Method,
+                                                             .confidence = pm::sdk::Confidence::Decompiled,
+                                                             .owner = "Door", .name = "AttemptToUnlockDoor"};
+
+/// What a player's grab on a door runs on their client: an unlocked door is grabbed on every client (it sends
+/// the RPC behind Door.NetworkedGrabbedDoor); a locked one gets Door.AttemptToUnlockDoor's test. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_GrabbedDoor{.key = "Door.GrabbedDoor", .kind = pm::sdk::Kind::Method,
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .owner = "Door", .name = "GrabbedDoor"};
+
 /// The door's PhotonView: Door's one field of that type. Its ViewID names the same door on every client.
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_view{.key = "Door.view", .kind = pm::sdk::Kind::Field,
@@ -99,7 +125,8 @@ inline constexpr pm::sdk::EntryDesc Door_GhostOpenDoorEvent{.key = "Door.GhostOp
                                                             .params = Door_GhostOpenDoorEvent_params};
 
 /// A double door's other leaf, null for a single door: the Door field Door.GhostOpenDoorEvent reads to
-/// push both leaves. A leaf may name its partner without the partner naming it back. Decompiled.
+/// push both leaves. Some double doors keep their partner in Door.pairedDoor instead, so check both.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_otherDoor{.key = "Door.otherDoor", .kind = pm::sdk::Kind::Field,
                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                    .type = "@Door", .facts = Door_otherDoor_facts};
@@ -146,6 +173,14 @@ inline constexpr pm::sdk::EntryDesc DoorKind{.key = "DoorKind", .assembly = "Ass
 /// Inferred: from the value's name.
 inline constexpr pm::sdk::EntryDesc DoorKind_Main{.key = "DoorKind.Main", .kind = pm::sdk::Kind::EnumValue,
                                                   .owner = "DoorKind", .name = "Main"};
+
+/// A door that never opens: a player's grab on it while locked rattles it (Door.AttemptToUnlockDoor), and no
+/// key unlocks it, as keys match a door's kind. The door code tests only for None and Main otherwise, so a
+/// door of this kind is still pushed by hunts and picked by ghost events. Decompiled.
+inline constexpr pm::sdk::EntryDesc DoorKind_PermanentLock{.key = "DoorKind.PermanentLock",
+                                                           .kind = pm::sdk::Kind::EnumValue,
+                                                           .confidence = pm::sdk::Confidence::Decompiled,
+                                                           .owner = "DoorKind", .name = "PermanentLock"};
 
 /// The door's kind: Door's one field of the DoorKind type. Inferred: from the type's values.
 inline constexpr pm::sdk::EntryDesc Door_kind{.key = "Door.kind", .kind = pm::sdk::Kind::Field, .owner = "Door",
@@ -273,6 +308,13 @@ struct Door {
   static constexpr pm::api::Field<pm::map::Door_view, void*> view{};
   /// CheckOcclusionPortal(door): updates whether the camera sees through the doorway. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Door_CheckOcclusionPortal, void(void*)> CheckOcclusionPortal{};
+  /// A double door's other leaf, when the level keeps it here rather than in otherDoor: pairedDoor.get(door).
+  /// Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Door_pairedDoor, void*> pairedDoor{};
+  /// GrabbedDoor(door): a player's grab on it, from this client. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_GrabbedDoor, void(void*)> GrabbedDoor{};
+  /// AttemptToUnlockDoor(door): what a player's grab on a locked door does. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_AttemptToUnlockDoor, void(void*)> AttemptToUnlockDoor{};
   /// A double door's other leaf: otherDoor.get(door), null for a single door. It may be set on one leaf
   /// only. Unresolved: null.
   static constexpr pm::api::Field<pm::map::Door_otherDoor, void*> otherDoor{};
@@ -300,6 +342,8 @@ struct Door {
 namespace DoorKind {
 /// Main(): the front door. Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::DoorKind_Main> Main{};
+/// PermanentLock(): a door that never opens to a grab. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DoorKind_PermanentLock> PermanentLock{};
 }  // namespace DoorKind
 
 /// A hinged door. `door` below is the HingeDoor.

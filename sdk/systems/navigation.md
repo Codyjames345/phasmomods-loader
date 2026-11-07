@@ -30,15 +30,27 @@ area mask for every area.
 
 ## Moving a thing along the floor
 
-Custom Ghosts' Draugr drags a thing back to where it lay this way (`mods/custom_ghosts/carry.cpp`,
-`mods/custom_ghosts/drag_rule.h`):
+Custom Ghosts' Draugr drags a thing back to where it lay this way, holding it by a corner so it swings, trails
+and bumps along the floor under physics (`mods/custom_ghosts/carry.cpp`, `mods/custom_ghosts/drag_rule.h`):
 
 1. Take the thing over through its `PhotonView`, as a player picking it up does, so every client sees the owner
    move it.
 2. Find the floor below the thing and below its goal with `NavMesh.SamplePosition`, and the route between them
-   with `NavMesh.CalculatePath`. Keep the thing's height above the floor along the route's corners.
-3. Make its body kinematic and move it a step along the route each frame (`Transform.set_position` and
-   `Rigidbody.set_position`), at the ghost's pace from `NavMeshAgent.get_speed`.
-4. At the goal, set it down, stop its motion, and give its body back its kinematic state.
+   with `NavMesh.CalculatePath`.
+3. Pick the point to hold: a top corner of its collider's box (`Component.GetComponentInChildren` with
+   `Collider.type`, then `Collider.get_bounds`). Keep it in the thing's own space with
+   `Transform.InverseTransformPoint`, and find it again each frame with `Transform.TransformPoint`.
+4. Leave the body under physics (`Rigidbody.set_isKinematic` false) and each frame pull the held point toward a
+   point moving along the route at the ghost's pace (`NavMeshAgent.get_speed`), at the held point's height above
+   the floor: `Rigidbody.AddForceAtPosition` with a spring and a damper on the point's velocity
+   (`Rigidbody.GetPointVelocity`). Give it as `Rigidbody.kVelocityChange` scaled by the frame's time: forces added
+   each frame build up until the next physics step, so they would pull harder at higher frame rates.
+5. Let the moving point wait while the thing snags, and give up after a while.
+6. At the goal, set it on its spot, stop its motion, and give its body back its kinematic state.
 
-With no floor in reach or no complete route, it goes straight to its goal.
+With no floor in reach or no complete route, it goes straight to its goal. Under physics the thing collides with
+stairs and floors on the way, where moved kinematically it passed through them (seen in the game, 2026-11-07).
+
+A prop sounds like itself through `Prop.PlayImpactSound`, on the calling client only: one of its gentle clips at or
+below `Prop.lowImpactVelocityCutoff`, else a hard one, louder the faster the impact. The Draugr's dragged thing
+knocks this way on every client at a steady rhythm while it moves.

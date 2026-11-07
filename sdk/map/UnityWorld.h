@@ -18,6 +18,7 @@ inline constexpr const char* NavMeshAgent_SetDestination_params[] = {"Vector3"};
 inline constexpr const char* NavMeshAgent_CalculatePath_params[] = {"Vector3", "NavMeshPath"};
 inline constexpr const char* NavMesh_CalculatePath_params[] = {"Vector3", "Vector3", "int", "NavMeshPath"};
 inline constexpr const char* Rigidbody_bool[] = {"bool"};
+inline constexpr const char* Rigidbody_AddForceAtPosition_params[] = {"Vector3", "Vector3", "ForceMode"};
 inline constexpr const char* Rigidbody_constraints_params[] = {"RigidbodyConstraints"};
 inline constexpr const char* NavMeshPathStatus_values[] = {"PathComplete", "PathPartial", "PathInvalid"};
 inline constexpr const char* Random_RandomRangeInt_params[] = {"int", "int"};
@@ -189,6 +190,20 @@ inline constexpr pm::sdk::EntryDesc Rigidbody_set_velocity{.key = "Rigidbody.set
 inline constexpr pm::sdk::EntryDesc Rigidbody_set_angularVelocity{
     .key = "Rigidbody.set_angularVelocity", .kind = pm::sdk::Kind::Method, .owner = "Rigidbody",
     .name = "set_angularVelocity", .params = NavMeshAgent_SetDestination_params};
+
+/// Pushes the body at a world point, so it also turns: `mode` is Unity's ForceMode (Rigidbody::kVelocityChange
+/// changes the velocity at once, whatever the mass). Added forces build up until the next physics step, so a force
+/// added each frame pulls harder the more frames run per step; a velocity change scaled by the frame's time does not. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Rigidbody_AddForceAtPosition{.key = "Rigidbody.AddForceAtPosition",
+                                                                 .kind = pm::sdk::Kind::Method, .owner = "Rigidbody",
+                                                                 .name = "AddForceAtPosition",
+                                                                 .params = Rigidbody_AddForceAtPosition_params};
+
+/// The velocity of a world point of the body, its motion and its spin together. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Rigidbody_GetPointVelocity{.key = "Rigidbody.GetPointVelocity",
+                                                               .kind = pm::sdk::Kind::Method, .owner = "Rigidbody",
+                                                               .name = "GetPointVelocity",
+                                                               .params = NavMeshAgent_SetDestination_params};
 
 /// Makes the body kinematic (true: moved only by code, no physics) or not. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Rigidbody_set_isKinematic{.key = "Rigidbody.set_isKinematic",
@@ -399,6 +414,13 @@ struct Rigidbody {
       set_angularVelocity{};
   /// set_position(body, &position). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Rigidbody_set_position, void(void*, const Vector3*)> set_position{};
+  /// AddForceAtPosition(body, &force, &worldPoint, mode). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Rigidbody_AddForceAtPosition, void(void*, const Vector3*, const Vector3*, int32_t)>
+      AddForceAtPosition{};
+  /// GetPointVelocity(body, &worldPoint): that point's velocity, metres a second. Unresolved: zeros.
+  static constexpr pm::api::Method<pm::map::Rigidbody_GetPointVelocity, Vector3(void*, const Vector3*)> GetPointVelocity{};
+  /// ForceMode.VelocityChange, Unity's documented value: a change of velocity, whatever the mass.
+  static constexpr int32_t kVelocityChange = 2;
   /// set_isKinematic(body, kinematic). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Rigidbody_set_isKinematic, void(void*, bool)> set_isKinematic{};
   /// set_constraints(body, flags): Unity's RigidbodyConstraints flags. Unresolved: does nothing.

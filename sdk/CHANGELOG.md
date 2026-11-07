@@ -14,7 +14,13 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   door's other leaf), `Door.forceRoutine`, `Door.useForceInsteadOfAnimations`, `Door.CheckOcclusionPortal`,
   `Door.GhostOpenDoorEvent`, `Door.SyncLockState` (documented, never to be sent), `HingeDoor.openAngle`,
   `HingeDoor.LockDoor` and `HingeDoor.LevelControllerOpenDoor`.
+- **Doors:** `Door.pairedDoor` (the other field a double door's partner may sit in), `Door.GrabbedDoor`,
+  `Door.AttemptToUnlockDoor` (what a player's grab on a locked door does) and `DoorKind.PermanentLock`.
 - **Navigation** ([navigation](systems/navigation.md)): `NavMesh.CalculatePath` for a route between any two points.
+- **Props:** `Prop.PlayImpactSound` and `Prop.lowImpactVelocityCutoff` (a prop's own impact sound), and
+  `ObjectPooler` with `ObjectPooler.SpawnFromPool`.
+- **Physics:** `Rigidbody.AddForceAtPosition` (with `kVelocityChange`), `Rigidbody.GetPointVelocity`,
+  `Transform.TransformPoint` and `Transform.InverseTransformPoint`.
 - **Unity:** `Rigidbody.set_isKinematic`, `Rigidbody.set_constraints` (with `kFreezeAll`) and
   `Transform.set_localEulerAngles`.
 - **Weather:** `LevelValues.weather` is decompiled: a Monkey Paw weather wish changes it mid-contract

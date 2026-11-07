@@ -185,6 +185,17 @@ inline constexpr pm::sdk::EntryDesc Transform_get_localRotation{.key = "Transfor
                                                                 .kind = pm::sdk::Kind::Method, .owner = "Transform",
                                                                 .name = "get_localRotation"};
 
+/// A point given in the Transform's own space, in world space. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Transform_TransformPoint{.key = "Transform.TransformPoint",
+                                                             .kind = pm::sdk::Kind::Method, .owner = "Transform",
+                                                             .name = "TransformPoint", .params = Transform_Vector3};
+
+/// A world point, in the Transform's own space. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Transform_InverseTransformPoint{.key = "Transform.InverseTransformPoint",
+                                                                    .kind = pm::sdk::Kind::Method, .owner = "Transform",
+                                                                    .name = "InverseTransformPoint",
+                                                                    .params = Transform_Vector3};
+
 /// Sets the Transform's rotation relative to its parent from Euler angles in degrees. Inferred: Unity's
 /// documented property setter.
 inline constexpr pm::sdk::EntryDesc Transform_set_localEulerAngles{
@@ -278,6 +289,11 @@ struct Transform {
   static constexpr pm::api::Method<pm::map::Transform_set_localPosition, void(void*, const Vector3*)> set_localPosition{};
   /// get_localRotation(t): its rotation relative to its parent. Unresolved: all zero.
   static constexpr pm::api::Method<pm::map::Transform_get_localRotation, Quaternion(void*)> get_localRotation{};
+  /// TransformPoint(t, &local): a point of its own space in world space. Unresolved: zeros.
+  static constexpr pm::api::Method<pm::map::Transform_TransformPoint, Vector3(void*, const Vector3*)> TransformPoint{};
+  /// InverseTransformPoint(t, &world): a world point in its own space. Unresolved: zeros.
+  static constexpr pm::api::Method<pm::map::Transform_InverseTransformPoint, Vector3(void*, const Vector3*)>
+      InverseTransformPoint{};
   /// set_localEulerAngles(t, &e): sets its rotation relative to its parent, in degrees. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Transform_set_localEulerAngles, void(void*, const Vector3*)>
       set_localEulerAngles{};

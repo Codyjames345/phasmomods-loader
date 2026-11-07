@@ -12,8 +12,9 @@ What a mod author needs to find, move, open and lock the level's doors. The entr
   picks.
 - `Door.view` is the door's `PhotonView`. Its `PhotonView.get_ViewID` names the same door on every client, so
   send that number when you tell other clients about a door.
-- `Door.otherDoor` is a double door's other leaf, null for a single door. One leaf may name the other without the
-  other naming it back, so look both ways.
+- A double door's leaves name each other in one of two fields, `Door.otherDoor` or `Door.pairedDoor`; the level
+  uses either (read from the scene files, 2026-11-06). One leaf may name the other without the other naming it
+  back, so check both fields both ways. A single door has neither set.
 
 ## A door's leaf and its angle
 
@@ -47,6 +48,14 @@ What a mod author needs to find, move, open and lock the level's doors. The entr
 - `Door.ToggleDoorLock` switches the door on or off for players (grabbing, colliders and the hunt collider) and
   unlocks a locked door. It never locks one.
 
+## A player's grab
+
+- A player's grab on a door runs `Door.GrabbedDoor` on their client. An unlocked door is grabbed on every client.
+- A locked door isn't grabbed. The grab runs `Door.AttemptToUnlockDoor` instead: outside a hunt, a key the player
+  holds of the door's kind (`Door.kind`) unlocks it; then an ordinary interior door (`DoorKind` None) is
+  unlocked (`Door.UnlockDoor`, on every client), and any other kind rattles. So a locked interior door opens to
+  the first grab. A `DoorKind.PermanentLock` door never does.
+
 ## Locking a door
 
 - `Door.locked` is the door's locked flag on each client. While it is set, the crosshair shows the padlock on the
@@ -59,7 +68,12 @@ What a mod author needs to find, move, open and lock the level's doors. The entr
   an open door.
 - To leave a door locked where it stands, open or shut, set on every client what `Door.SyncLockState` sets:
   `Door.locked` true, the body's constraints `Rigidbody.kFreezeAll` (`Rigidbody.set_constraints`), then
-  `Door.CheckOcclusionPortal`. Custom Ghosts' Asterion does this for a door it breaks open, after swinging the leaf
-  to `HingeDoor.openAngle`, with the host naming the door to each client by its ViewID.
+  `Door.CheckOcclusionPortal`. An interior door locked this way still opens to a player's first grab (above), so
+  to keep it locked set its `Door.kind` to `DoorKind.PermanentLock` as well: a grab then rattles it. Custom Ghosts'
+  Asterion does all of this for a door it breaks open, after swinging the leaf to `HingeDoor.openAngle`, with the
+  host naming the door to each client by its ViewID.
+- The door code tests a door's kind only for None and Main. A locked door of any other kind is still pushed by a
+  hunt that passes through it, and still picked by ghost events (`GhostActivity.GetDoorToOpen` skips only the front
+  door); not seen in the game yet.
 - `Door.CheckOcclusionPortal` updates whether the camera sees through the doorway. Call it after you open, shut
   or lock a door yourself.
