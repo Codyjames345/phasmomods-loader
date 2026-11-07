@@ -75,9 +75,10 @@ What a mod author needs to find, move, open and lock the level's doors. The entr
 - The door code tests a door's kind only for None and Main. A locked door of any other kind is still pushed by a
   hunt that passes through it, and still picked by ghost events (`GhostActivity.GetDoorToOpen` skips only the front
   door); not seen in the game yet.
-- Let a leaf you moved rest before you lock it. A hinge door sets the volume of its creak (`Door.loopSource`)
+- Stop a leaf you moved when you lock it. A hinge door sets the volume of its creak (`Door.loopSource`)
   from how fast its leaf turns, and only while it is unlocked, so a leaf locked while still turning creaks on
-  at that volume (seen in the game, 2026-11-07). Hold it still for half a second first; the game itself only
-  locks a door that is still. Custom Ghosts' Asterion rests its broken doors this way.
+  at that volume (seen in the game, 2026-11-07). As you lock it, zero its body's velocities and set the creak's
+  volume to 0 (`AudioSource.set_volume`), which is what `HingeDoor.Update` gives a leaf that is not turning.
+  Custom Ghosts' Asterion locks its broken doors this way, with no gap in which a player could move them.
 - `Door.CheckOcclusionPortal` updates whether the camera sees through the doorway. Call it after you open, shut
   or lock a door yourself.

@@ -304,12 +304,10 @@ void the_asterion_swings_a_broken_door_open() {
   const float mid = swing_angle(350, 80, kAsterionSwing / 2);
   CHECK(std::fabs(delta_angle(mid, 35)) < 0.001f);
   CHECK(kAsterionSwing > 0 && kAsterionSwing < 1);  // a fast swing, as the user asked
-  // It is locked only after resting fully open, so the game has hushed the creak the swing started: locked
-  // straight out of the swing, the creak played on at the swing's loudness (live, 2026-11-07).
-  CHECK(!asterion_locks(kAsterionSwing));
-  CHECK(!asterion_locks(kAsterionSwing + kAsterionSettle - 0.01f));
-  CHECK(asterion_locks(kAsterionSwing + kAsterionSettle));
-  CHECK(kAsterionSettle >= 0.3f);  // time for the game's hinge door to see a still leaf at a low frame rate
+  // It is locked the moment it is fully open, with no gap in which a player could move it (the user,
+  // 2026-11-07); the lock itself stops the leaf and hushes its creak (lock_open).
+  CHECK(!asterion_locks(kAsterionSwing - 0.01f));
+  CHECK(asterion_locks(kAsterionSwing));
   // The host names the broken leaves to every client by their PhotonView's ViewID.
   const std::vector<uint8_t> two = net_msg::doors({1001, 1002});
   std::vector<uint32_t> ids;

@@ -137,7 +137,8 @@ inline constexpr pm::sdk::EntryDesc Door_otherDoor{.key = "Door.otherDoor", .kin
 /// clear), HingeDoor.Update sets this source's volume from that speed (silent below a threshold set in the
 /// scene) and plays it if it has stopped. While the door is locked it leaves the source alone, so a leaf
 /// locked while it still turned creaks on at that volume until it is unlocked (seen in the game,
-/// 2026-11-07). Decompiled.
+/// 2026-11-07). To lock a leaf you moved, stop it and set this source's volume to 0, as Update does for a
+/// leaf that is not turning. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_loopSource{.key = "Door.loopSource", .kind = pm::sdk::Kind::Field,
                                                     .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                     .name = "loopSource", .type = "AudioSource"};

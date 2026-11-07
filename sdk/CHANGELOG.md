@@ -14,7 +14,7 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   door's other leaf), `Door.forceRoutine`, `Door.useForceInsteadOfAnimations`, `Door.CheckOcclusionPortal`,
   `Door.GhostOpenDoorEvent`, `Door.SyncLockState` (documented, never to be sent), `HingeDoor.openAngle`,
   `HingeDoor.LockDoor` and `HingeDoor.LevelControllerOpenDoor`.
-- **Doors:** `Door.loopSource` (a door's creak, and why to let a moved leaf rest before locking it),
+- **Doors:** `Door.loopSource` (a door's creak, and how to hush it when you lock a leaf you moved),
   `Door.pairedDoor` (the other field a double door's partner may sit in), `Door.GrabbedDoor`,
   `Door.AttemptToUnlockDoor` (what a player's grab on a locked door does) and `DoorKind.PermanentLock`.
 - **Navigation** ([navigation](systems/navigation.md)): `NavMesh.CalculatePath` for a route between any two points.

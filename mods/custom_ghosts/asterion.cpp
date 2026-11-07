@@ -10,6 +10,7 @@
 #include "GhostAI.h"
 #include "Photon.h"
 #include "Transform.h"
+#include "UnityAudio.h"
 #include "UnityObject.h"
 #include "UnityWorld.h"
 #include "asterion_rule.h"
@@ -93,7 +94,7 @@ void scan() {
 
 /**
  * This client breaks `door` open: its leaf starts its swing to the open angle, made kinematic so physics
- * does not fight it. Once it has rested fully open it is locked there (tick_doors, asterion_locks). A door
+ * does not fight it. The moment it is fully open it is locked there (tick_doors, asterion_locks). A door
  * already broken is left.
  */
 void break_open(void* door) {
@@ -116,7 +117,10 @@ void break_open(void* door) {
 /**
  * Locks a fully open leaf where it stands, leaving the state the game's lock (Door.SyncLockState) leaves:
  * Door.locked set (the padlock), the body frozen in every position and rotation, then the occlusion portal
- * updated. The game never locks an open door, and a mod never sends that RPC, so each client does this
+ * updated. First the leaf is stopped as a still door is: no motion, and its creak (Door.loopSource) at the
+ * volume HingeDoor.Update gives a leaf that is not turning, 0. A locked door's creak is left alone by the
+ * game, so a leaf locked straight out of its swing creaked at the swing's loudness for the rest of the
+ * contract (live, 2026-11-07). The game never locks an open door, and a mod never sends that RPC, so each client does this
  * itself (the user's ruling, 2026-11-06). It also becomes a DoorKind.PermanentLock door: a player who grabs
  * it rattles it, where an ordinary interior door that is only locked is unlocked by the first grab
  * (Door.AttemptToUnlockDoor), as the user's live run showed.
@@ -125,6 +129,8 @@ void lock_open(Swing& s) {
   const Vector3 still{0, 0, 0};
   phasmo::Rigidbody::set_velocity(s.body, &still);
   phasmo::Rigidbody::set_angularVelocity(s.body, &still);
+  void* creak = phasmo::Door::loopSource.get(s.door);
+  if (api::alive(creak)) phasmo::AudioSource::set_volume(creak, 0);
   phasmo::Rigidbody::set_isKinematic(s.body, false);
   phasmo::Rigidbody::set_constraints(s.body, phasmo::Rigidbody::kFreezeAll);
   phasmo::Door::locked.set(s.door, true);
@@ -223,7 +229,7 @@ void tick_doors(int type) {
   for (Swing& s : g.swings) {
     if (s.locked || !api::alive(s.door) || !api::alive(s.leaf) || !api::alive(s.body)) continue;
     const float seconds = (now - s.start) / 1000.0f;
-    set_leaf_angle(s.door, s.leaf, swing_angle(s.from, s.to, seconds));  // held fully open once there
+    set_leaf_angle(s.door, s.leaf, swing_angle(s.from, s.to, seconds));
     if (asterion_locks(seconds)) lock_open(s);
   }
 }
