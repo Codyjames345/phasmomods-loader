@@ -1,9 +1,14 @@
 #include "squatter.h"
 
+#include <cmath>
+
 #include "Difficulty.h"
+#include "Transform.h"
+#include "UnityObject.h"
 #include "game_api.h"
 #include "ghosts.h"
 #include "runtime.h"
+#include "squatter_figure.h"
 
 namespace pm::custom::squatter {
 namespace {
@@ -17,6 +22,16 @@ bool friendly() {
   return difficulty && phasmo::Difficulty::friendlyGhost.get(difficulty);
 }
 
+// Every client shows its own figure where the contract's ghost is, facing the way it faces.
+void show(void* ghost) {
+  void* t = phasmo::Component::get_transform(ghost);
+  if (!t) return;
+  const phasmo::Vector3 at = phasmo::Transform::get_position(t);
+  if (!figure::ready()) figure::create(at);
+  const phasmo::Vector3 f = phasmo::Transform::get_forward(t);
+  figure::place(at, std::atan2(f.x, f.z));
+}
+
 }  // namespace
 
 bool resolve() { return true; }
@@ -26,13 +41,18 @@ bool create_hooks() { return true; }
 void tick(void* haunting, int type, bool /*steered: a player's own lines come in a later task*/) {
   if (!haunting || type != kSquatter) {
     g_phase.reset();
+    figure::destroy();
     return;
   }
   if (!g_phase) g_phase = first_phase(friendly());
+  show(haunting);
 }
 
 std::optional<Phase> phase() { return g_phase; }
 
-void reset() { g_phase.reset(); }
+void reset() {
+  g_phase.reset();
+  figure::destroy();
+}
 
 }  // namespace pm::custom::squatter

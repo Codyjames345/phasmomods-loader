@@ -155,6 +155,7 @@ add_library(CustomGhosts SHARED
   mods/custom_ghosts/sound.cpp
   mods/custom_ghosts/squatter.cpp
   mods/custom_ghosts/squatter_voice.cpp
+  mods/custom_ghosts/squatter_figure.cpp
   mods/custom_ghosts/apparition.cpp
   mods/custom_ghosts/hydra.cpp
   mods/custom_ghosts/sensor_copy.cpp
@@ -307,12 +308,13 @@ pm_test(mods_panel host/mod_deps.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sd
 target_include_directories(mods_panel_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(custom_ghosts sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp
   sdk/runtime/content_acting.cpp mods/custom_ghosts/gremlin.cpp mods/custom_ghosts/hunt.cpp mods/custom_ghosts/squatter.cpp
-  mods/custom_ghosts/sensor_copy.cpp)
+  mods/custom_ghosts/squatter_figure.cpp mods/custom_ghosts/sensor_copy.cpp)
 target_compile_definitions(custom_ghosts_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(custom_ghosts_test PRIVATE pmmod)
 # Before the mods' folders, as for content_difficulty_test below.
 target_include_directories(custom_ghosts_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
-pm_test(squatter mods/custom_ghosts/squatter_voice.cpp mods/custom_ghosts/sound.cpp sdk/api/game_api.cpp
+pm_test(squatter mods/custom_ghosts/squatter_voice.cpp mods/custom_ghosts/sound.cpp mods/custom_ghosts/squatter_figure.cpp
+  sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/game_api.cpp
   sdk/api/runtime.cpp sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp
   sdk/runtime/content_acting.cpp core/log.cpp)
 target_compile_definitions(squatter_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

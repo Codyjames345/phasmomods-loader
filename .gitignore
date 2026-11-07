@@ -20,3 +20,5 @@
 /re/map-addresses.tsv
 
 /.vscode
+# A mod's AssetBundles hold third-party animation (Mixamo) that may not be redistributed raw: never committed.
+*.bundle

@@ -33,6 +33,7 @@
 #include "runtime.h"
 #include "sound.h"
 #include "squatter.h"
+#include "squatter_figure.h"
 #include "squatter_voice.h"
 #include "tempest.h"
 
@@ -236,6 +237,12 @@ bool start(const PmHostApi* api) {
     PM_LOG("CustomGhosts inactive: the Squatter's voice folder (squatter/voice in the mod's assets) is missing");
     return false;
   }
+  // Its figure's clips are in its AssetBundle, which must load with every state the figure plays (squatter_figure.h).
+  std::string why;
+  if (!squatter::figure::load(assets, why)) {
+    PM_LOG("CustomGhosts inactive: the Squatter's figure cannot load: %s", why.c_str());
+    return false;
+  }
   content::GhostDef callbacks;
   callbacks.useAbility = [](void* user) { return use_ability(type_of_user(user)); };
   callbacks.hudState = [](void* user) { return hud_state(type_of_user(user)); };
@@ -262,6 +269,7 @@ bool start(const PmHostApi* api) {
   rules.huntSpeed = &rules_hunt_speed;
   if (!register_content(callbacks, rules)) {
     PM_LOG("CustomGhosts inactive: the host refused its ghosts or their rules");
+    squatter::figure::unload();
     return false;
   }
   if (!(pm::game::resolve() && behaviour::resolve() && kikimora::resolve() && echo::resolve() && sound::resolve() &&
@@ -269,12 +277,14 @@ bool start(const PmHostApi* api) {
         gremlin::resolve() && bogeyman::resolve() && brownie::resolve() && lethe::resolve() && tempest::resolve() &&
         mesmer::resolve() && squatter::resolve())) {
     PM_LOG("CustomGhosts inactive: game binding resolution failed");
+    squatter::figure::unload();
     return false;
   }
   if (!(behaviour::create_hooks() && echo::create_hooks() && restraint::create_hooks() && lethe::create_hooks() &&
         mesmer::create_hooks() && brownie::create_hooks() && tempest::create_hooks() && squatter::create_hooks() &&
         pm::hooks::enable_all())) {
     PM_LOG("CustomGhosts inactive: hook installation failed");
+    squatter::figure::unload();
     return false;
   }
   pm::net::set_handler(&receive);
@@ -310,6 +320,7 @@ extern "C" __declspec(dllexport) void pmmod_stop() {
     pm::custom::mesmer::reset();
     pm::custom::kikimora::reset();
     pm::custom::squatter::reset();
+    pm::custom::squatter::figure::unload();
     pm::custom::behaviour::teardown();
   });
 }

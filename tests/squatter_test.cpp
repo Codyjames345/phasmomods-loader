@@ -5,14 +5,24 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <set>
 #include <utility>
 #include <string>
 #include <vector>
 
+#include "Animator.h"
+#include "UnityAssets.h"
+#include "UnityCloth.h"
+#include "UnityObject.h"
+#include "fake_game.h"
+#include "game_api.h"
+#include "runtime.h"
 #include "sheet_mesh.h"
+#include "squatter_figure.h"
 #include "squatter_rule.h"
 #include "squatter_voice.h"
 #include "wav.h"
@@ -637,9 +647,133 @@ void sheet_hangs_from_the_crown() {
   CHECK(byDistance.back().second < -(shape.headRadius + shape.shoulderDrop));
 }
 
+// The figure's state table (squatter_figure.h): the names the bundle's controller must have, exactly.
+void every_move_and_act_has_its_states() {
+  const std::vector<const char*> all = all_states();
+  std::set<std::string> names;
+  for (const char* s : all) names.insert(s);
+  CHECK(names.size() == all.size());  // each name once
+  CHECK((names == std::set<std::string>{"Run", "Duck_A", "Duck_B", "Weave_A", "Weave_B", "Roll_A", "Roll_B",
+                                        "Parkour_A", "Parkour_B", "Stumble", "Sit", "GetUp", "Kick", "Bang", "Bump",
+                                        "OpenDoorOutwards", "OpenDoorInwards"}));
+  for (const Move m : kAllMoves) {
+    const auto states = states_of(m);
+    const bool two = m == Move::Duck || m == Move::Weave || m == Move::Roll || m == Move::Parkour;
+    CHECK(states.size() == (two ? 2u : 1u));
+  }
+  CHECK(std::string(state_of(Act::Bang)) == "Bang" && std::string(state_of(Act::OpenDoorInwards)) == "OpenDoorInwards");
+  for (const Act a : kAllActs) CHECK(names.contains(state_of(a)));
+}
+
+// The master sends a variant and every client turns it into the same state.
+void move_variants_are_deterministic() {
+  CHECK(std::string(state_for(Move::Duck, 0)) == "Duck_A" && std::string(state_for(Move::Duck, 1)) == "Duck_B");
+  CHECK(std::string(state_for(Move::Parkour, 7)) == "Parkour_B");
+  for (const Move m : kAllMoves)
+    for (uint32_t v : {0u, 1u, 2u, 3u, 1000001u, 0xFFFFFFFFu}) {  // pm:not-game-data: variants
+      CHECK(std::string(state_for(m, v)) == state_for(m, v + static_cast<uint32_t>(states_of(m).size())));
+      CHECK(std::string(state_for(m, v)) == states_of(m)[v % states_of(m).size()]);
+    }
+  for (uint32_t v = 0; v < 8; ++v) CHECK(std::string(state_for(Move::Run, v)) == "Run");
+}
+
+// A fake game for figure::load: the bundle and its controller, and an Animator that knows the controller's states.
+namespace fig {
+int kGameObjectClass, kAnimatorClass, kControllerClass, kClothClass;
+struct Obj {
+  void* klass = nullptr;
+  unsigned char bytes[0x40]{};
+};
+Obj g_bundle, g_controller{&kControllerClass}, g_animator{&kAnimatorClass};
+std::set<std::string> g_states;
+std::map<int32_t, std::string> g_names;
+void* g_controllerSet = nullptr;
+bool g_unloaded = false;
+void* g_controllerType = nullptr;
+
+void* load_from_file(void*, uint32_t, uint64_t) { return &g_bundle; }
+void* load_asset(void*, void* name, void* type) {
+  return pm::api::to_utf8(name) == "assets/squatter.controller" && type == g_controllerType ? &g_controller : nullptr;
+}
+void unload(void*, bool) { g_unloaded = true; }
+void ctor(void*, void*, const void*) {}
+void* add_component(void*, void*, const void*) { return &g_animator; }
+void set_controller(void*, void* c, const void*) { g_controllerSet = c; }
+bool initialised(void*) { return g_controllerSet == &g_controller; }
+void rebind(void*, bool) {}
+int32_t hash(void* name, const void*) {
+  const std::string s = pm::api::to_utf8(name);
+  const auto h = static_cast<int32_t>(std::hash<std::string>{}(s) & 0x7fffffff);  // pm:not-game-data: a test hash
+  g_names[h] = s;
+  return h;
+}
+bool has_state(void*, int32_t layer, int32_t h) { return layer == 0 && g_states.contains(g_names[h]); }
+void destroy_immediate(void*, bool) {}
+
+void start() {
+  namespace map = pm::map;
+  pm::fake::reset();
+  pm::fake::type(map::GameObject, &kGameObjectClass);
+  pm::fake::type(map::Animator, &kAnimatorClass);
+  pm::fake::type(map::RuntimeAnimatorController, &kControllerClass);
+  pm::fake::type(map::Cloth, &kClothClass);
+  pm::fake::icall(map::AssetBundle_LoadFromFile, reinterpret_cast<void*>(&load_from_file));
+  pm::fake::icall(map::AssetBundle_LoadAsset, reinterpret_cast<void*>(&load_asset));
+  pm::fake::icall(map::AssetBundle_Unload, reinterpret_cast<void*>(&unload));
+  pm::fake::method(map::GameObject_ctor, reinterpret_cast<void*>(&ctor));
+  pm::fake::method(map::GameObject_AddComponent, reinterpret_cast<void*>(&add_component));
+  pm::fake::method(map::Animator_set_runtimeAnimatorController, reinterpret_cast<void*>(&set_controller));
+  pm::fake::icall(map::Animator_get_isInitialized, reinterpret_cast<void*>(&initialised));
+  pm::fake::icall(map::Animator_Rebind, reinterpret_cast<void*>(&rebind));
+  pm::fake::icall(map::Animator_HasState, reinterpret_cast<void*>(&has_state));
+  pm::fake::method(map::Animator_StringToHash, reinterpret_cast<void*>(&hash));
+  pm::fake::icall(map::UnityObject_DestroyImmediate, reinterpret_cast<void*>(&destroy_immediate));
+  std::string missing;
+  pm::api::bind(pm::fake::host(), missing);
+  g_controllerType = phasmo::RuntimeAnimatorController::type.type_object();
+  g_controllerSet = nullptr;
+  g_unloaded = false;
+  g_states.clear();
+  for (const char* s : all_states()) g_states.insert(s);
+}
+}  // namespace fig
+
+// The mod's start loads the bundle and refuses one whose controller lacks any state of the table, or that is missing:
+// a mod with an error is off (user, 2026-11-06).
+void the_start_check_refuses_a_bundle_missing_a_state() {
+  const fs::path assets = fs::temp_directory_path() / "pm_squatter_figure_test";
+  std::error_code ignored;
+  fs::remove_all(assets, ignored);
+  fs::create_directories(assets);
+  fig::start();
+  std::string why;
+  CHECK(!figure::load(assets, why));
+  CHECK(why.find("squatter.bundle") != std::string::npos && why.find("missing") != std::string::npos);
+  std::ofstream(assets / "squatter.bundle") << "bundle";
+  CHECK(figure::load(assets, why));
+  figure::unload();
+  CHECK(fig::g_unloaded);
+  for (const char* state : all_states()) {
+    fig::start();
+    fig::g_states.erase(state);
+    CHECK(!figure::load(assets, why));
+    CHECK(why == std::string("assets/squatter.controller lacks the state ") + state);
+    CHECK(fig::g_unloaded);  // nothing is kept
+  }
+  fig::start();
+  pm::fake::forget(pm::map::Cloth);  // a build without the Cloth module
+  pm::api::bind(pm::fake::host(), why);
+  CHECK(!figure::load(assets, why) && why == "Cloth is not available in this game build");
+  figure::unload();
+  fs::remove_all(assets, ignored);
+}
+
 }  // namespace
 
 int main() {
+  every_move_and_act_has_its_states();
+  move_variants_are_deterministic();
+  the_start_check_refuses_a_bundle_missing_a_state();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   eyes_are_mirrored();
