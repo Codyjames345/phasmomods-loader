@@ -45,10 +45,9 @@ gets up, becomes excited, says something like "yay new friends", then follows th
 kill. These are **(builder's call)**: no door locks, since nobody was chased out; it follows the nearest player, at a pace tuned in game; it
 searches the same way if it loses them; and at a hiding place it waits and talks rather than banging.
 
-**In Playable Ghost,** the player steers and chooses when its lines are said, a new exception to the same-rules rule, which the user allowed
-on 2026-11-04. Add it to `CLAUDE.md`'s list and `sdk/systems/ghost-ai.md`. Its moves stay automatic, as for the AI, and it keeps the AI's
-senses and limits **(builder's call)**. The chase still starts on first sight. On a friendly ghost's difficulty the player likewise starts
-seated, gets up on first sight, then steers and speaks **(builder's call)**.
+**It is not playable in Playable Ghost** (user, 2026-11-07, replacing the 2026-11-04 decision that it would be): it is meant as a gag the AI
+plays on the team. Playable Ghost never offers it and never gives it to a ghost player, so a contract with a ghost player never has the
+Squatter. How a ghost is kept out of Playable Ghost is a per-ghost option any mod author can set, like the Mimic one **(builder's call)**.
 
 Some consequences, all **(builder's call)**:
 
@@ -97,7 +96,7 @@ These rules still hold:
 
 - **Identifiable** on zero evidence, every map and every weather: it is visible and it talks. Evidence-giving is not a route to
   identifying it.
-- **AI and player share one ruleset,** except for the timing of lines, as above.
+- **AI and player share one ruleset** does not arise: no player ever controls it.
 - **The loader owns the lobby.** No per-mod checks. Everyone has the same mods, so everyone has the same clips and recordings.
 - **Saves and other players.** The ghost type stays subject to the existing rule that custom types never reach a save or a player
   without the content.
@@ -177,15 +176,14 @@ The host contract only grows at the end.
 ## Player-facing text
 
 The name "Squatter" is the user's. The journal text (description, strength, weakness) goes in `mods/custom_ghosts/i18n/default.json`, marked
-`PM_TEXT_TODO`, and listed for the user. AI does not write it. The same goes for any Playable Ghost ability name or text. Spoken lines are
+`PM_TEXT_TODO`, and listed for the user. AI does not write it. Spoken lines are
 audio, recorded by the user.
 
 ## Testing
 
 Tests first, as `CLAUDE.md` says. The pure parts belong in a `squatter_rule.h` with offline tests, in the manner of `shuck_rule.h` and
 `knell_rule.h`: the chase state (idle, chase, search, at a hiding place, door locked) and the friendly one (seated, excited, following), target
-choice, the speed from a given sprint speed and move, when the door locks, and which line set plays. The sheet mesh generator is pure too. AI and player cases run both ways, as
-`tests/restraint_test.cpp` does. `.\validate.ps1` each task, and `.\tools\gamecheck.ps1 -IfConfigured -Expect` for moved values.
+choice, the speed from a given sprint speed and move, when the door locks, and which line set plays. The sheet mesh generator is pure too. `.\validate.ps1` each task, and `.\tools\gamecheck.ps1 -IfConfigured -Expect` for moved values.
 
 Every in-game check goes on the smoke list. Only the user launches the game, told the ban risk first. No loader file goes in the game folder.
 
