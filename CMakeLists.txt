@@ -51,7 +51,8 @@ pm_options(gamecheck)
 add_custom_command(TARGET gamecheck POST_BUILD COMMAND gamecheck --map-digest "${CMAKE_BINARY_DIR}/map-digest.txt")
 
 # A mod's side of the host contract (core/mod_api.h) and the game API it calls (sdk/api, sdk/map).
-add_library(pmmod STATIC core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/api/assets.cpp)
+add_library(pmmod STATIC core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/api/assets.cpp
+  sdk/api/bundles.cpp sdk/api/models.cpp)
 target_include_directories(pmmod PUBLIC sdk/api sdk/map)
 target_link_libraries(pmmod PUBLIC pmcore)
 pm_options(pmmod)
@@ -317,6 +318,9 @@ pm_test(squatter mods/custom_ghosts/squatter_voice.cpp mods/custom_ghosts/sound.
 target_compile_definitions(squatter_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 # Before the mods' folders, as for content_difficulty_test below.
 target_include_directories(squatter_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+pm_test(models sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(models_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(brownie mods/custom_ghosts/brownie.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_compile_definitions(brownie_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

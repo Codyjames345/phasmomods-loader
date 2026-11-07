@@ -69,6 +69,7 @@ void* allocate(size_t bytes, void* klass) {
 }
 
 std::map<const void*, size_t> g_elementBytes;  // each fake array's element size, as the runtime would say
+std::map<std::string, size_t> g_typeElementBytes;  // element_size(): an array_new of that type's elements
 
 void* new_array(void* klass, size_t elementBytes, size_t length) {
   void* arr = allocate(kArrayData + elementBytes * length, klass);
@@ -198,7 +199,9 @@ size_t string_utf8(const void* str, char* out, size_t size) {
 }
 
 void* array_new(const char* elementTypeKey, size_t length) {
-  return class_for(elementTypeKey) ? new_array(&g_arrayClass, kElementBytes, length) : nullptr;
+  if (!class_for(elementTypeKey)) return nullptr;
+  const auto sized = g_typeElementBytes.find(elementTypeKey);
+  return new_array(&g_arrayClass, sized != g_typeElementBytes.end() ? sized->second : kElementBytes, length);
 }
 
 int32_t list_count(const void* list) {
@@ -549,6 +552,7 @@ void reset() {
   g_barrierWrites = 0;
   g_memory.clear();
   g_elementBytes.clear();
+  g_typeElementBytes.clear();
   g_parents.clear();
   g_overrides.clear();
   g_declared.clear();
@@ -615,6 +619,8 @@ void override_method(const sdk::EntryDesc& d, void* klass, void* fn) {
 }
 
 void* array(size_t elementSize, size_t length) { return new_array(&g_arrayClass, elementSize, length); }
+
+void element_size(const sdk::EntryDesc& d, size_t bytes) { g_typeElementBytes[d.key] = bytes; }
 
 void* collection(int32_t count) {
   auto* c = static_cast<FakeCollection*>(allocate(sizeof(FakeCollection), &g_collectionClass));

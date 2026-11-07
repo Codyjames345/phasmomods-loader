@@ -84,7 +84,7 @@ inline constexpr pm::sdk::EntryDesc CapsuleCollider_set_height{
 
 // The game API for Cloth (sdk/api/game_api.h). Every member is called on Unity's main thread. One that did not resolve
 // in the running game build logs "<key> is not available in this game build" once and returns its type's default
-// (null) or does nothing. The Cloth members are optional: check Cloth::type.available() first.
+// (null) or does nothing. The Cloth members are optional: check Cloth::available() first.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{
@@ -93,6 +93,11 @@ namespace phasmo {
 struct Cloth {
   /// The type: type_object() for GameObject.AddComponent. Optional: check available(). Unresolved: null.
   static constexpr pm::api::Type<pm::map::Cloth> type{};
+  /// Whether the Cloth type resolved in this game build, whose module may be absent. Never logs.
+  template <int = 0>
+  static bool available() {
+    return decltype(type)::use::resolved();
+  }
   /// set_capsuleColliders(cloth, capsules), a CapsuleCollider[]. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Cloth_set_capsuleColliders, void(void*, void*)> set_capsuleColliders{};
   /// set_coefficients(cloth, coefficients), a Vector2[] as long as the mesh's vertices (map note). Unresolved: does

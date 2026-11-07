@@ -178,6 +178,12 @@ inline constexpr pm::sdk::EntryDesc Animator_get_isInitialized{.key = "Animator.
                                                                .kind = pm::sdk::Kind::Icall,
                                                                .name = "UnityEngine.Animator::get_isInitialized"};
 
+/// Rebinds the Animator to its model and controller: the engine function of Animator.Rebind(writeDefaultValues),
+/// whose managed method this build keeps private. An active Animator binds when it gets a controller; this binds one
+/// that did not. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_Rebind{.key = "Animator.Rebind", .kind = pm::sdk::Kind::Icall,
+                                                    .name = "UnityEngine.Animator::Rebind", .params = Animator_bool};
+
 /// The Transform of a humanoid bone of a humanoid Animator's model, or null when the avatar does not map it. Inferred:
 /// Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Animator_GetBoneTransform{
@@ -277,6 +283,8 @@ struct Animator {
   static constexpr pm::api::Method<pm::map::Animator_Play, void(void*, int32_t, int32_t, float)> Play{};
   /// HasState(animator, layer, stateHash). Unresolved: false.
   static constexpr pm::api::Icall<pm::map::Animator_HasState, bool(void*, int32_t, int32_t)> HasState{};
+  /// Rebind(animator, writeDefaultValues). Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Animator_Rebind, void(void*, bool)> Rebind{};
   /// get_isInitialized(animator). Unresolved: false.
   static constexpr pm::api::Icall<pm::map::Animator_get_isInitialized, bool(void*)> get_isInitialized{};
   /// GetBoneTransform(animator, bone), a HumanBodyBones number. Unresolved: null.

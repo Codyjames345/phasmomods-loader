@@ -1494,6 +1494,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &Animator_Play,
     &Animator_HasState,
     &Animator_get_isInitialized,
+    &Animator_Rebind,
     &Animator_GetBoneTransform,
     &Animator_set_applyRootMotion,
     &Animator_set_cullingMode,

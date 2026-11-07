@@ -146,6 +146,9 @@ void declare_fields(void* klass, std::vector<DeclaredField> fields);
 void override_method(const sdk::EntryDesc& d, void* klass, void* fn);
 /// A new fake managed array of `length` zeroed elements of `elementSize` bytes, freed by reset.
 void* array(size_t elementSize, size_t length);
+/// The host contract's array_new makes arrays of the type entry `d`'s elements with `bytes` each, as the runtime
+/// sizes a struct of the game's (a Vector3 takes 12), instead of the 16 it gives any other type, until reset.
+void element_size(const sdk::EntryDesc& d, size_t bytes);
 /// A new fake System.Collections.Generic.HashSet of `count` items, as collection_count counts it, freed
 /// by reset.
 void* collection(int32_t count);
