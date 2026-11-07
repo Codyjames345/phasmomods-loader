@@ -1,5 +1,6 @@
 #include "inject.h"
 #include "text_table.h"
+#include "mod_assets.h"
 #include "mod_list.h"
 #include "text_files.h"
 #include "win_handle.h"
@@ -9,6 +10,7 @@
 #include <charconv>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <vector>
 
 namespace pm::loader {
@@ -146,6 +148,56 @@ void copy_manifest(const std::wstring& dll, const std::wstring& copy) {
     CopyFileW((folder + L"mod.ini").c_str(), (stem + L".ini").c_str(), FALSE);
 }
 
+/** Whether `path` is a link of any kind (a symbolic link or a junction), or cannot be inspected: never followed out of a mod's folder. */
+bool is_link_or_unknown(const std::filesystem::path& path) {
+  const DWORD attributes = GetFileAttributesW(path.c_str());
+  return attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_REPARSE_POINT);
+}
+
+/** Copy every file under `from` to `to`, keeping nested folders. False for a link, an entry that is neither file nor folder, a
+ *  name that would leave `from`, or any file that cannot be copied; what was copied before stays for the caller to remove. */
+bool copy_tree(const std::filesystem::path& from, const std::filesystem::path& to) {
+  namespace fs = std::filesystem;
+  std::error_code error;
+  fs::create_directories(to, error);
+  if (error) return false;
+  for (fs::directory_iterator it(from, error), end; !error && it != end; it.increment(error)) {
+    const fs::path name = it->path().filename();
+    if (name.empty() || name == L"." || name == L".." || name.has_parent_path()) return false;
+    if (is_link_or_unknown(it->path())) return false;
+    const fs::file_status status = it->status(error);
+    if (error) return false;
+    if (fs::is_directory(status)) {
+      if (!copy_tree(it->path(), to / name)) return false;
+    } else if (fs::is_regular_file(status)) {
+      if (!CopyFileW(it->path().c_str(), (to / name).c_str(), TRUE)) return false;
+    } else {
+      return false;
+    }
+  }
+  return !error;
+}
+
+/** Copy the assets folder beside a mod's DLL to the folder named after its copy (core/mod_assets.h), where the mod finds it
+ *  (sdk/api/assets.h). A mod with no assets folder copies nothing and succeeds. False when it has one that cannot be copied whole. */
+bool copy_assets(const std::wstring& dll, const std::wstring& copy) {
+  const std::filesystem::path from = std::filesystem::path(folder_of(dll)) / L"assets";
+  const DWORD attributes = GetFileAttributesW(from.c_str());
+  if (attributes == INVALID_FILE_ATTRIBUTES) {
+    const DWORD error = GetLastError();
+    return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;  // none; any other reason it cannot be read is a failure
+  }
+  if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) || !(attributes & FILE_ATTRIBUTE_DIRECTORY)) return false;
+  return copy_tree(from, pm::modassets::beside_copy(copy));
+}
+
+/** Remove a mod's copies made so far (its DLL and any assets folder), when it is left off. */
+void remove_copy(const std::wstring& copy) {
+  std::error_code ignored;
+  std::filesystem::remove_all(pm::modassets::beside_copy(copy), ignored);
+  DeleteFileW(copy.c_str());
+}
+
 /** Write the session file the host reads for this process: one UTF-8 mod path per line, then `extraLines` as they are. */
 bool write_session(const std::wstring& directory, DWORD pid, const std::vector<std::wstring>& copies, const std::vector<std::string>& extraLines) {
   std::string text;
@@ -172,6 +224,11 @@ std::string refused_line(const std::wstring& mod) {
   return modlist::session_refused_line({text::narrow(mod_folder_of(mod)), pm::i18n::text("launcher.mod-dll-unreadable")});
 }
 
+/** The session file's line for a mod whose assets folder the launcher cannot copy whole. */
+std::string assets_refused_line(const std::wstring& mod) {
+  return modlist::session_refused_line({text::narrow(mod_folder_of(mod)), pm::i18n::text("launcher.mod-assets-unreadable")});
+}
+
 /** Prepare local storage and make exclusive copies of the host and its mods for this process lifetime. */
 Result copy_native(DWORD pid, const wchar_t* host, const std::vector<std::wstring>& mods, const std::vector<std::string>& sessionLines, std::wstring& copy, std::wstring& log) {
   wchar_t base[32768];
@@ -188,6 +245,11 @@ Result copy_native(DWORD pid, const wchar_t* host, const std::vector<std::wstrin
     std::wstring modCopy;
     if (!fresh_copy(directory, mod.c_str(), stem_of(mod), pid, modCopy)) {
       lines.push_back(refused_line(mod));  // that mod stays off, and the others still start
+      continue;
+    }
+    if (!copy_assets(mod, modCopy)) {
+      remove_copy(modCopy);
+      lines.push_back(assets_refused_line(mod));  // as a failed DLL copy: that mod stays off
       continue;
     }
     copy_manifest(mod, modCopy);
