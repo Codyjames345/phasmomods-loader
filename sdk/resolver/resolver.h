@@ -60,6 +60,17 @@ const char* status_word(Status status);
 // would only add look-alike types. A native site's "UnityPlayer" is none of them.
 std::vector<std::string> assemblies_of(std::span<const EntryDesc* const> entries);
 
+// Of those, the ones only kOptional Type entries name, each once and sorted. A build may lack such an assembly (a
+// Unity module the game stops using is stripped from it): the model then leaves it out and its entries stay
+// unresolved, while a required assembly the build lacks fails the whole model. So one module a mod may do without
+// never takes the map, and every mod with it, away.
+std::vector<std::string> optional_assemblies_of(std::span<const EntryDesc* const> entries);
+
+// assemblies_of(entries), less each optional one (optional_assemblies_of) for which `present` says false: the
+// assemblies to read a model from. The offline check asks the dump whether it has a folder for one.
+std::vector<std::string> present_assemblies(std::span<const EntryDesc* const> entries,
+                                            const std::function<bool(const std::string&)>& present);
+
 class CodeImage;
 
 // The running runtime's il2cpp_resolve_icall: the code registered under an icall name, or null.

@@ -1271,6 +1271,27 @@ std::vector<std::string> assemblies_of(std::span<const EntryDesc* const> entries
   return out;
 }
 
+std::vector<std::string> optional_assemblies_of(std::span<const EntryDesc* const> entries) {
+  std::set<std::string> optional, required;
+  for (const EntryDesc* e : entries) {
+    if (!e->assembly || e->kind == Kind::NativeSite) continue;
+    (e->kind == Kind::Type && (e->flags & kOptional) ? optional : required).insert(e->assembly);
+  }
+  std::vector<std::string> out;
+  for (const std::string& a : optional)
+    if (!required.contains(a)) out.push_back(a);
+  return out;
+}
+
+std::vector<std::string> present_assemblies(std::span<const EntryDesc* const> entries,
+                                            const std::function<bool(const std::string&)>& present) {
+  const std::vector<std::string> optional = optional_assemblies_of(entries);
+  std::vector<std::string> out;
+  for (std::string& a : assemblies_of(entries))
+    if (!std::binary_search(optional.begin(), optional.end(), a) || present(a)) out.push_back(std::move(a));
+  return out;
+}
+
 Resolution resolve(std::span<const EntryDesc* const> entries, const GameModel& model, const CodeImage* image,
                    const IcallLookup& icalls, const CodeImage* unityPlayer) {
   return Resolver(entries, model, image, icalls, unityPlayer).run();

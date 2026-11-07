@@ -441,7 +441,12 @@ int run(int argc, wchar_t** argv) {
     return 2;
   }
 
-  const std::vector<std::string> assemblies = assemblies_of(pm::map::kAllEntries);
+  // An assembly only optional entries name may be absent from this build: read it only when the dump has it.
+  std::error_code dumpError;
+  const std::vector<std::string> assemblies = present_assemblies(pm::map::kAllEntries, [&](const std::string& a) {
+    const std::filesystem::path folder = args.dump / std::filesystem::path(std::u8string(a.begin(), a.end()));
+    return std::filesystem::is_directory(folder, dumpError);
+  });
   GameModel model;
   std::string error;
   size_t unparsed = 0;

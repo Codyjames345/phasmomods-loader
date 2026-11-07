@@ -2332,6 +2332,25 @@ void assemblies_named_once_sorted() {
   CHECK((assemblies_of(entries) == std::vector<std::string>{"Assembly-CSharp", "UnityEngine.CoreModule"}));
 }
 
+// An assembly only optional type entries name may be absent from a build: the model leaves it out and those entries
+// stay unresolved, where a required assembly that is absent fails the whole model.
+void optional_assemblies_are_those_only_optional_types_name() {
+  constexpr EntryDesc kCloth{.key = "Cloth", .flags = kOptional, .name = "Cloth", .assembly = "UnityEngine.ClothModule"};
+  constexpr EntryDesc kRare{.key = "Rare", .flags = kOptional, .name = "Rare", .assembly = "UnityEngine.CoreModule"};
+  constexpr EntryDesc kCamera{.key = "Camera", .name = "Camera", .assembly = "UnityEngine.CoreModule"};
+  const EntryDesc* entries[] = {&kGhostAI, &kCloth, &kRare, &kCamera, &kCloth};
+  CHECK((optional_assemblies_of(entries) == std::vector<std::string>{"UnityEngine.ClothModule"}));
+  const EntryDesc* required[] = {&kGhostAI, &kCamera};
+  CHECK(optional_assemblies_of(required).empty());
+  // The ones to read: every assembly named, less an optional one that is absent.
+  const std::vector<std::string> all = assemblies_of(entries);
+  CHECK((all == std::vector<std::string>{"Assembly-CSharp", "UnityEngine.ClothModule", "UnityEngine.CoreModule"}));
+  const auto none = [](const std::string&) { return false; };
+  const auto every = [](const std::string&) { return true; };
+  CHECK((present_assemblies(entries, none) == std::vector<std::string>{"Assembly-CSharp", "UnityEngine.CoreModule"}));
+  CHECK(present_assemblies(entries, every) == all);
+}
+
 }  // namespace
 
 int main() {
@@ -2404,6 +2423,7 @@ int main() {
   pattern_inside_method();
   pattern_needs_readable_code();
   assemblies_named_once_sorted();
+  optional_assemblies_are_those_only_optional_types_name();
   static_field_by_shape();
   icall_resolves_by_name();
   icall_without_runtime_is_checked_at_startup();

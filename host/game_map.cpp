@@ -196,7 +196,8 @@ std::string build_and_resolve(void* gameAssembly, void* unityPlayer, void* stopE
   const char* stopped = nullptr;
   const std::function<bool()> proceed = [&] { return !(stopped = stop_reason(stopEvent, deadline)); };
   const auto base = reinterpret_cast<uintptr_t>(gameAssembly);
-  if (!sdk::load_runtime(api, base, sdk::assemblies_of(map::kAllEntries), g_model, proceed))
+  if (!sdk::load_runtime(api, base, sdk::assemblies_of(map::kAllEntries), g_model, proceed,
+                         sdk::optional_assemblies_of(map::kAllEntries)))
     return stopped ? stopped : "the runtime's metadata could not be read";
   if (const char* why = stop_reason(stopEvent, deadline)) return why;
   // The loaded module's own memory, only read.

@@ -897,6 +897,12 @@ Code entry or a native site `pattern`, `within` and `patternOffset`, and for a s
 `path` and `component`. A map header ends with its `phasmo::` wrappers; add one for each
 entry a mod may use (an export gets none).
 
+The model is read from every assembly a Type entry names, and a build that lacks a required one
+cannot be resolved at all, for every mod. An assembly that only `kOptional` Type entries name is
+optional: a build without it is read without it, and those entries stay unresolved. Give a type in a
+Unity module the game might stop shipping `kOptional` (Cloth's module is one),
+and have the mod that needs it check `available()` at its start and fail with a logged reason.
+
 ### How the resolver finds an entry
 
 Strategies, most robust first. It accepts an entry only when exactly one candidate survives every
