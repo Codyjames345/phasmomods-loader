@@ -62,7 +62,9 @@ whole mods: [adding a ghost](guides/adding-a-ghost.md) builds `sdk/examples/exam
 [adding evidence](guides/adding-evidence.md) follows Spectral Flame; [tells for vanilla
 ghosts](guides/tells-for-vanilla-ghosts.md) follows Ghost Tells; [the Mimic and your
 ghost](guides/mimic-and-your-ghost.md) and [lobbies, saves and players](guides/lobbies-saves-and-players.md)
-say what the loader guarantees; and [equipment](guides/equipment.md) describes the game's equipment system. Everything below
+say what the loader guarantees; [a mod's own files](guides/mod-files.md) says where a mod puts data files
+(an `assets` folder beside its DLL, copied for each launch and read-only, found with `pm::api::assets_folder()`, and a mod
+whose files cannot be copied is off); and [equipment](guides/equipment.md) describes the game's equipment system. Everything below
 describes what is in the code now.
 
 ## Making a mod
