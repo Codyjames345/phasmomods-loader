@@ -45,15 +45,15 @@ and bumps along the floor under physics (`mods/custom_ghosts/carry.cpp`, `mods/c
    the floor: `Rigidbody.AddForceAtPosition` with a spring and a damper on the point's velocity
    (`Rigidbody.GetPointVelocity`). Give it as `Rigidbody.kVelocityChange` scaled by the frame's time: forces added
    each frame build up until the next physics step, so they would pull harder at higher frame rates.
-5. End the route where the held point lies with the thing on its spot, not on the floor below it. For a thing
-   that lay up on a table or shelf, lift it off the floor where nothing is overhead: walk back from the route's
-   end and cast a ray upward from the floor (`Physics.Raycast`, with `QueryTriggerInteraction.Ignore` so room
-   volumes don't count) until one reaches the carrying height clear. Rise there, cross above the spot high enough
-   that the thing hanging by its corner clears the surface, and come down onto it. A route that ends on the
-   floor below the spot pulls the thing under the table, where it can't reach its spot (seen in the game,
-   2026-11-07).
-6. Let the moving point wait while the thing snags, and let go when it has made no headway for a few seconds,
-   leaving the thing where it lies.
+5. End the route where the held point lies with the thing on its spot, not on the floor below it. A thing
+   that lay up on a table or shelf is left on the floor beside it: walk back from the route's end and cast a ray
+   upward from the floor (`Physics.Raycast`, with `QueryTriggerInteraction.Ignore` so room volumes don't count)
+   until one passes the surface's height clear, and end the route there. A route that ends on the floor below
+   the spot pulls the thing under the table, where it can't reach its spot, and carrying it up onto the table
+   looks like it glides through the air (both seen in the game, 2026-11-07).
+6. Let the moving point wait while the thing snags, and raise it a little while it waits so the thing rides
+   over what caught it, such as a rug's edge. Let go when it has made no headway for a few seconds, leaving the
+   thing where it lies.
 7. At the goal, set it on its spot, stop its motion, and give its body back its kinematic state.
 
 With no floor in reach or no complete route, it goes straight to its goal. Under physics the thing collides with

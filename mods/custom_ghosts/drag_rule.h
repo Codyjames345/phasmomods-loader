@@ -6,8 +6,8 @@
 
 // The route a ghost drags a thing along, kept free of game calls so it can be tested offline (carry.cpp
 // follows it). The thing keeps its height above the floor along the navigation mesh's corners, then goes
-// onto the spot it came from; a thing that lay up on a table or shelf is lifted where nothing is overhead,
-// carried over and set down. With no path over the mesh it goes straight there.
+// onto the spot it came from. A thing that lay up on a table or shelf is never lifted: it is left on the floor
+// beside it, where nothing is overhead. With no path over the mesh it goes straight there.
 namespace pm::custom::drag {
 
 struct Point {
@@ -54,19 +54,11 @@ inline Point along(const Route& r, float metres) {
   return r.points.back();
 }
 
-// A thing that lay up on a table or shelf: the ghost lifts it off the floor where nothing is overhead, near the
-// floor's end, and carries it over its spot. The numbers are the drag's own feel.
+// A thing that lay up on a table or shelf is left on the floor beside it (the user, 2026-11-07: carried up
+// onto it, it glided through the air). The numbers are the drag's own feel.
 constexpr float kRaised = 0.2f;      // metres: a thing whose bottom lay higher than this above the floor lay up on something
-constexpr float kClear = 0.1f;       // metres the hanging thing clears the surface it is carried over
-constexpr float kRiseStep = 0.25f;   // metres between the places along the floor tried for the lift
-constexpr float kRiseSearch = 3.0f;  // metres back from the floor's end the lift may be tried
-
-/**
- * How much higher than it rests the held corner is carried over the thing's spot so the thing clears the
- * surface: hanging by the corner it reaches at most `hang` metres below it (its box's diagonal), and at rest
- * the corner is `drop` metres above its bottom.
- */
-inline float lift_over(float hang, float drop) { return std::max(0.0f, hang - drop) + kClear; }
+constexpr float kRiseStep = 0.25f;   // metres between the places along the floor tried for where it is left
+constexpr float kRiseSearch = 3.0f;  // metres back from the floor's end it may be left
 
 /** The route's points up to `metres` along it, ending exactly there. */
 inline std::vector<Point> cut(const Route& r, float metres) {
@@ -86,33 +78,28 @@ inline std::vector<Point> cut(const Route& r, float metres) {
 }
 
 /**
- * The route onto a raised spot: from `start` along `corners` (on the floor) raised by `lift`, as route(), to the
- * last place within kRiseSearch of the floor's end where `clear(floor point)` says nothing is overhead up to
- * `over` (a height); straight up there to `over`, across to above `rest` (where the held corner lies when the
- * thing is on its spot) and down onto it. With nowhere clear it lifts at the floor's end.
+ * The route to beside a raised spot: from `start` along `corners` (on the floor) raised by `lift`, as route(),
+ * ending at the last place within kRiseSearch of the floor's end where `clear(floor point)` says nothing is
+ * overhead, so the thing is left beside its table or shelf rather than under it. With nowhere clear it goes to
+ * the floor's end.
  */
 template <class Clear>
-Route route_onto(Point start, const std::vector<Point>& corners, float lift, Point rest, float over, Clear clear) {
+Route route_beside(Point start, const std::vector<Point>& corners, float lift, Clear clear) {
   const float up = std::max(0.0f, lift);
   Route floor;
   floor.points.push_back(start);
   for (const Point& c : corners) floor.points.push_back({c.x, c.y + up, c.z});
   for (size_t i = 1; i < floor.points.size(); ++i) floor.length += distance(floor.points[i - 1], floor.points[i]);
-  float riseAt = floor.length;
+  float endAt = floor.length;
   for (float back = 0; back <= kRiseSearch && back <= floor.length; back += kRiseStep) {
     const Point p = along(floor, floor.length - back);
     if (clear(Point{p.x, p.y - up, p.z})) {
-      riseAt = floor.length - back;
+      endAt = floor.length - back;
       break;
     }
   }
   Route r;
-  r.points = cut(floor, riseAt);
-  const Point rise = r.points.back();
-  const float top = std::max(over, rise.y);
-  r.points.push_back({rise.x, top, rise.z});
-  r.points.push_back({rest.x, top, rest.z});
-  r.points.push_back(rest);
+  r.points = cut(floor, endAt);
   for (size_t i = 1; i < r.points.size(); ++i) r.length += distance(r.points[i - 1], r.points[i]);
   return r;
 }
@@ -159,7 +146,15 @@ inline bool arrived(float travelled, float length, Point at, Point home) {
   return travelled >= length && distance(at, home) <= kArrived;
 }
 
-constexpr unsigned kSnagMs = 3000;  // the ghost lets go of a thing that makes no headway this long
+constexpr unsigned kSnagMs = 5000;  // the ghost lets go of a thing that makes no headway this long
+constexpr float kTugRate = 0.3f;   // metres a second the held corner is raised while the thing is snagged
+constexpr float kMaxTug = 0.3f;    // metres: the most it is raised, a tug and never a lift off the floor
+
+/** How far above the route the held corner is pulled after `dt` seconds: raised while the hand `waiting` on a
+ * snagged thing, so it rides over what caught it (a rug's edge), and lowered again once it comes. */
+inline float tug(float lifted, bool waiting, float dt) {
+  return waiting ? std::min(kMaxTug, lifted + kTugRate * dt) : std::max(0.0f, lifted - kTugRate * dt);
+}
 
 /** Whether the ghost lets go: its hand has not moved on along the route for kSnagMs (the thing snagged, or
  * can't reach its spot), so the thing is left where it lies, close enough. */

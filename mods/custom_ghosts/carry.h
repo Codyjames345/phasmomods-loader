@@ -42,11 +42,12 @@ class Carry {
    * Every frame on the host: once the thing is the host's, sets it down (Set) or drags it a step (Moving, then
    * Set on its spot). Leaves it where it is, under physics, when it is gone, `still` says it may not be moved,
    * the takeover has not landed in time, the drag has gone on too long, or a dragged thing has made no
-   * headway for drag::kSnagMs, so it lies close enough (Dropped).
+   * headway for drag::kSnagMs (Dropped). A dragged thing that lay up on a table or shelf is left on the floor
+   * beside it (Set, gap() above 0).
    */
   Step step(ULONGLONG now, Still still);
   void reset();
-  /** After a Dropped step: how far from its spot the thing was left, metres; -1 when it was gone. */
+  /** After a Set or Dropped step: how far from its spot the thing was left, metres (0 on it); -1 when it was gone. */
   float gap() const { return gap_; }
 
  private:
@@ -64,6 +65,8 @@ class Carry {
   ULONGLONG last_ = 0;
   bool wasKinematic_ = false;
   drag::Headway headway_;  // lets go of a thing that makes no headway
+  float tugged_ = 0;       // metres the held corner is raised to free a snagged thing
+  bool beside_ = false;    // it lay up on something: its route ends on the floor beside it
   float gap_ = -1;
   api::Held path_;  // the NavMeshPath routes are worked out into, made once
 };

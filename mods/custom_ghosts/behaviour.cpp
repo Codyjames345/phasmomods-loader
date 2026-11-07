@@ -417,7 +417,10 @@ void tick_draugr(bool hunting, ULONGLONG now) {
   if (step == carry::Carry::Step::Moving && !g_dragAnnounced) announce_drag(dragging, true);
   if ((step == carry::Carry::Step::Set || step == carry::Carry::Step::Dropped) && g_dragAnnounced)
     announce_drag(dragging, false);
-  if (step == carry::Carry::Step::Set) PM_LOG("behaviour: the Draugr put something back where it lay");
+  if (step == carry::Carry::Step::Set && g.takingBack.gap() > 0)
+    PM_LOG("behaviour: the Draugr left something on the floor beside where it lay, %.1f m from it", g.takingBack.gap());
+  else if (step == carry::Carry::Step::Set)
+    PM_LOG("behaviour: the Draugr put something back where it lay");
   if (step == carry::Carry::Step::Dropped)
     PM_LOG("behaviour: the Draugr let something go on its way back; left where it is, %.1f m from where it lay",
            g.takingBack.gap());

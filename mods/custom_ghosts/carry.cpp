@@ -29,7 +29,8 @@ bool floor_below(phasmo::Vector3 at, phasmo::Vector3& floor) {
 /** Unity's default raycast layers: every layer but Ignore Raycast (Physics.DefaultRaycastLayers). */
 constexpr int32_t kDefaultRaycastLayers = -5;
 
-/** Whether nothing solid is overhead from the floor at `floor` up to the height `over` (Physics.Raycast). */
+/** Whether nothing solid is overhead from the floor at `floor` up to the height `over` (Physics.Raycast,
+ * triggers such as room volumes ignored). */
 bool open_above(drag::Point floor, float over) {
   const float reach = over - floor.y - 0.05f;
   if (reach <= 0) return true;
@@ -64,8 +65,8 @@ bool Carry::take_dragging(void* item, phasmo::Vector3 spot, ULONGLONG now, float
  * home; the route runs from it over the navigation mesh (NavMesh.CalculatePath, the corners of a complete
  * path, from the floor below the thing to the floor below its spot) at the corner's height above the floor,
  * at least kMinHold, to where the corner lies with the thing on its spot. A thing that lay up on a table or
- * shelf is lifted where nothing is overhead near the floor's end (Physics.Raycast upward), carried over and
- * set down. With no floor in reach or no complete path it goes straight.
+ * shelf is never lifted: its route ends on the floor beside it, where nothing is overhead up to its surface
+ * (Physics.Raycast upward), and it is left there. With no floor in reach or no complete path it goes straight.
  */
 void Carry::start_drag(void* item, ULONGLONG now) {
   void* tr = game::transform_of(item);
@@ -94,20 +95,20 @@ void Carry::start_drag(void* item, ULONGLONG now) {
     }
   void* collider = phasmo::Component::GetComponentInChildren(item, phasmo::Collider::type.type_object(), false);
   drag::Point grab = point(from);
-  float drop = 0, hang = 0;  // the corner's height above the thing's bottom, and the box's diagonal
+  float drop = 0;  // the corner's height above the thing's bottom
   if (api::alive(collider)) {
     const phasmo::Bounds b = phasmo::Collider::get_bounds(collider);
     grab = drag::grab_corner(point(b.center), point(b.extents), {ahead.x - from.x, 0, ahead.z - from.z});
     drop = 2 * b.extents.y;
-    hang = 2 * std::sqrt(b.extents.x * b.extents.x + b.extents.y * b.extents.y + b.extents.z * b.extents.z);
   }
   const float hold = std::max(drag::kMinHold, floors ? grab.y - floorFrom.y : grab.y - from.y);
   // Where the corner lies with the thing on its spot, as high above the thing's middle as it is now.
   const drag::Point rest{spot_.x, spot_.y + (grab.y - from.y), spot_.z};
-  const bool raised = floors && !corners.empty() && rest.y - drop - floorTo.y > drag::kRaised;
-  if (raised) {
-    const float over = rest.y + drag::lift_over(hang, drop);
-    route_ = drag::route_onto(grab, corners, hold, rest, over, [over](drag::Point f) { return open_above(f, over); });
+  const float surface = rest.y - drop;  // the top of what it lay on
+  beside_ = floors && !corners.empty() && surface - floorTo.y > drag::kRaised;
+  if (beside_) {
+    const float above = surface + 0.1f;  // up through the top of the table or shelf, to tell what is under it
+    route_ = drag::route_beside(grab, corners, hold, [above](drag::Point f) { return open_above(f, above); });
   } else {
     route_ = drag::route(grab, corners, rest, hold);
   }
@@ -116,6 +117,7 @@ void Carry::start_drag(void* item, ULONGLONG now) {
   travelled_ = 0;
   last_ = now;
   headway_ = {};
+  tugged_ = 0;
   const float walk = route_.length / speed_ * 1000.0f;
   deadline_ = now + static_cast<ULONGLONG>(walk) + kDragSpareMs;
   void* rb = phasmo::PhotonObjectInteract::body.get(item);
@@ -143,24 +145,40 @@ Carry::Step Carry::step(ULONGLONG now, Still still) {
     void* tr = game::transform_of(item);
     const phasmo::Vector3 grab = phasmo::Transform::TransformPoint(tr, &grabLocal_);
     const drag::Point hand = drag::along(route_, travelled_);
-    travelled_ = drag::advance(travelled_, route_.length, drag::distance(point(grab), hand), speed_, dt);
-    if (!drag::arrived(travelled_, route_.length, point(game::position(tr)), point(spot_))) {
-      if (headway_.stuck(travelled_, now)) {  // snagged, or it can't reach its spot: close enough
+    const float lag = drag::distance(point(grab), hand);
+    travelled_ = drag::advance(travelled_, route_.length, lag, speed_, dt);
+    tugged_ = drag::tug(tugged_, lag > drag::kLead, dt);
+    // Beside a table or shelf the held corner is to reach the route's end; else the thing its spot.
+    const bool there = beside_ ? travelled_ >= route_.length &&
+                                     drag::distance(point(grab), route_.points.back()) <= drag::kArrived
+                               : drag::arrived(travelled_, route_.length, point(game::position(tr)), point(spot_));
+    if (!there) {
+      if (headway_.stuck(travelled_, now)) {  // snagged for good: left where it lies
         let_go(item);
         return Step::Dropped;
       }
-      // The pull, given as this frame's change of velocity at the held corner (Rigidbody.AddForceAtPosition).
+      // The pull, given as this frame's change of velocity at the held corner (Rigidbody.AddForceAtPosition),
+      // toward the hand, raised by any tug.
+      drag::Point to = drag::along(route_, travelled_);
+      to.y += tugged_;
       const phasmo::Vector3 v = phasmo::Rigidbody::GetPointVelocity(rb, &grab);
-      const drag::Point a = drag::pull(point(grab), drag::along(route_, travelled_), point(v));
+      const drag::Point a = drag::pull(point(grab), to, point(v));
       const phasmo::Vector3 change{a.x * dt, a.y * dt, a.z * dt};
       phasmo::Rigidbody::AddForceAtPosition(rb, &change, &grab, phasmo::Rigidbody::kVelocityChange);
       return Step::Moving;
     }
   }
+  if (speed_ > 0 && beside_) {
+    // Beside the table or shelf it lay on: left on the floor there, under physics, never lifted onto it.
+    gap_ = drag::distance(point(game::position(game::transform_of(item))), point(spot_));
+    reset();
+    return Step::Set;
+  }
   place(item, spot_);
   phasmo::Rigidbody::set_velocity(rb, &still3);
   phasmo::Rigidbody::set_angularVelocity(rb, &still3);
   if (speed_ > 0) phasmo::Rigidbody::set_isKinematic(rb, wasKinematic_);  // on its spot as it lay before
+  gap_ = 0;
   reset();
   return Step::Set;
 }
@@ -185,6 +203,8 @@ void Carry::reset() {
   travelled_ = 0;
   last_ = 0;
   headway_ = {};
+  tugged_ = 0;
+  beside_ = false;
 }
 
 }  // namespace pm::custom::carry
