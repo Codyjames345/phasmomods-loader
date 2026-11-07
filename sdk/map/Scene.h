@@ -249,10 +249,12 @@ inline constexpr pm::sdk::EntryDesc Layer_LaserGhost{.key = "Layer.LaserGhost", 
 /// layer, and the layer the journal's canvas leaves the PlayerView layer for.
 inline constexpr pm::sdk::EntryDesc Layer_UI{.key = "Layer.UI", .kind = pm::sdk::Kind::Layer, .name = "UI"};
 
-/// Unity's built-in Ignore Raycast layer. The game's physics matrix lets it collide only with an unnamed layer, so a
-/// collider on it touches nothing of the game's; Cloth still collides with the colliders it is given, whatever their
-/// layer, so a mod puts a cloth's colliders here (sdk/api/models.h). Decompiled: the layer's name and the physics
-/// matrix read from the asset files.
+/// Unity's built-in Ignore Raycast layer. The game's physics matrix lets it collide only with a layer the game leaves
+/// unnamed, so no body or character controller of the game's bumps into a collider on it; Cloth still collides with
+/// the colliders it is given, whatever their layer, so a mod puts a cloth's colliders here (sdk/api/models.h). The
+/// matrix does not govern queries: Unity's default ray mask leaves this layer out, but a ray or overlap query of the
+/// game's with a mask that includes it (all layers, say) can still hit such a collider, and the game's own masks have
+/// not been audited. Decompiled: the layer's name and the physics matrix read from the asset files.
 inline constexpr pm::sdk::EntryDesc Layer_IgnoreRaycast{.key = "Layer.IgnoreRaycast", .kind = pm::sdk::Kind::Layer,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .name = "Ignore Raycast"};

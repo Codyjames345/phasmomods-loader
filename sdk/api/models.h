@@ -26,11 +26,12 @@ namespace pm::api {
  * @param name The copy's GameObject name, for the game's hierarchy and logs.
  * @param why Set to the reason when it fails, if not null.
  * @return The copy's GameObject, active, at the world origin, with no parent; null on failure. It has the body's
- *         renderers and skeleton and its Animator, still on the game's own controller (whose state machine behaviours
- *         live on the controller asset, so they run until use_controller replaces it). Every MonoBehaviour,
- *         AudioSource, Collider and Rigidbody is taken off while the copy is inactive, so none of the game's scripts
- *         ever wakes on it, and the rigs and targets that draw nothing are removed. When a script cannot be taken
- *         off, nothing is kept and it fails. Destroy the copy with Object.Destroy; a scene load destroys it too.
+ *         renderers and skeleton and its Animator, with no controller: the game's own is taken off while the copy is
+ *         still inactive, since its state machine behaviours live on the controller asset, where no strip reaches
+ *         them. Give it one with use_controller. Every MonoBehaviour, AudioSource, AudioListener, Camera, Light,
+ *         Collider and Rigidbody is taken off while the copy is inactive too, so none of the game's scripts ever
+ *         wakes on it, and the rigs and targets that draw nothing are removed. When any of those cannot be taken off,
+ *         nothing is kept and it fails. Destroy the copy with Object.Destroy; a scene load destroys it too.
  * @pre Main thread, in any scene: it needs no player.
  * @note This client only: a local object, never a networked one. The prefab's own outfit, never a player's.
  * @since Contract 2.3 (a helper in the mod's own code; the host contract itself does not change)
@@ -73,10 +74,34 @@ bool controller_has_states(void* controller, std::span<const char* const> states
  * @param like A material on URP's Lit shader, as every material of the investigator's body is (lit_material_of).
  * @param why Set to the reason when it fails, if not null.
  * @return The new material (keep it in a Held, and destroy it with Object.Destroy when done), or null when `like` is
- *         null or its shader has not the Lit shader's base colour and cull properties (ShaderProperty.Lit.*).
+ *         null, material_available() is false, or its shader has not the Lit shader's base colour and cull properties.
  * @since Contract 2.3 (a helper in the mod's own code)
  */
 void* two_sided_material(void* like, phasmo::Color colour, std::string* why = nullptr);
+
+/**
+ * @brief Whether this game build has the optional entries two_sided_material needs: the Lit shader's base colour and
+ *        culling properties (ShaderProperty.Lit.BaseColor and ShaderProperty.Lit.Cull). Call it in pmmod_start and
+ *        fail the start when it is false; the material's other entries are required, so a mod using it does not start
+ *        without them anyway.
+ * @param why Set to "<key> is not available in this game build" for the first missing entry, if not null.
+ * @return True when every one resolved. Never logs.
+ * @pre Main thread, once the mod is bound. The host resolves these before any mod starts.
+ * @since Contract 2.3 (a helper in the mod's own code)
+ */
+bool material_available(std::string* why = nullptr);
+
+/**
+ * @brief Whether this game build has the optional entries add_cloth needs: the Cloth type, its capsule colliders,
+ *        coefficients, gravity, stiffnesses and damping (sdk/map/UnityCloth.h), and the Ignore Raycast layer its
+ *        spheres go on. Call it in pmmod_start and fail the start when it is false; add_cloth's other entries are
+ *        required, so a mod using it does not start without them anyway.
+ * @param why Set to "<key> is not available in this game build" for the first missing entry, if not null.
+ * @return True when every one resolved. Never logs.
+ * @pre Main thread, once the mod is bound. The host resolves these before any mod starts.
+ * @since Contract 2.3 (a helper in the mod's own code)
+ */
+bool cloth_available(std::string* why = nullptr);
 
 /**
  * @brief The shared material of the first renderer under a GameObject, inactive ones included: on
@@ -110,7 +135,7 @@ struct ClothSettings {
 
 /** A sphere the cloth rests on and cannot pass through, following a bone. */
 struct ClothSphere {
-  void* bone;              ///< A Transform (Animator.GetBoneTransform); a null one is skipped.
+  void* bone;              ///< A Transform (Animator.GetBoneTransform); a null one fails add_cloth.
   float radius;            ///< Metres.
   phasmo::Vector3 offset;  ///< From the bone, in world space when add_cloth is called.
 };
@@ -127,12 +152,14 @@ struct ClothParts {
  *        SkinnedMeshRenderer that carries every vertex with the GameObject itself, then a Cloth with `settings`, the
  *        mesh's coefficients and a sphere collider per `spheres` entry.
  * @param gameObject An active GameObject with no renderer, usually parented to a bone so the pinned vertices follow it.
- * @param spheres Each becomes a GameObject on the Ignore Raycast layer (Layer.IgnoreRaycast), parented to its bone, so
- *        it touches nothing of the game's.
+ * @param spheres Each becomes a GameObject on the Ignore Raycast layer (Layer.IgnoreRaycast), parented to its bone. The
+ *        game's physics matrix lets that layer collide with nothing the game names, so no body bumps into a sphere;
+ *        a ray or overlap query of the game's whose layer mask includes the layer can still find one (see the
+ *        layer's note).
  * @param out What was made; on failure it is left empty and nothing made stays.
  * @param why Set to the reason when it fails, if not null.
- * @return False when the Cloth entries did not resolve (they are optional: sdk/map/UnityCloth.h), the layer did not
- *         resolve, the mesh's spans disagree in length or index out of range, or the engine refused a part.
+ * @return False when cloth_available() is false, a sphere has no bone, the mesh's spans disagree in length or index
+ *         out of range, or the engine refused a part, a sphere included: nothing runs in part.
  * @note The engine test showed a flat square resting on body spheres drapes badly; give the mesh the shape it should
  *       settle in, as the Squatter's sheet does (mods/custom_ghosts/sheet_mesh.h).
  * @since Contract 2.3 (a helper in the mod's own code)

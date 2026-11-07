@@ -1,6 +1,7 @@
 #include "models.h"
 
 #include "Animator.h"
+#include "Camera.h"
 #include "Input.h"
 #include "LevelRoom.h"
 #include "Photon.h"
@@ -11,6 +12,7 @@
 #include "UnityCloth.h"
 #include "UnityObject.h"
 #include "UnityWorld.h"
+#include "log.h"
 #include "runtime.h"
 
 namespace pm::api {
@@ -41,14 +43,15 @@ size_t count_of(const std::vector<void*>& transforms, void* type) {
   return n;
 }
 
-// Takes every script, sound, collider and rigidbody off, in that order (a script may need a collider, a collider a
-// rigidbody), twice, since a component another requires only comes off once that one is gone. True when no script is
-// left.
+// Takes every script, sound source and listener, camera, light, collider and rigidbody off, in that order (a script
+// may need any of the others, a collider a rigidbody), twice, since a component another requires only comes off once
+// that one is gone. True when none of those kinds is left.
 bool strip(void* root) {
   std::vector<void*> transforms;
   each_transform(phasmo::GameObject::get_transform(root), 0, transforms);
-  void* const scripts = phasmo::MonoBehaviour::type.type_object();
-  void* const kinds[] = {scripts, phasmo::AudioSource::type.type_object(), phasmo::Collider::type.type_object(),
+  void* const kinds[] = {phasmo::MonoBehaviour::type.type_object(), phasmo::AudioSource::type.type_object(),
+                         phasmo::AudioListener::type.type_object(), phasmo::Camera::type.type_object(),
+                         phasmo::Light::type.type_object(),         phasmo::Collider::type.type_object(),
                          phasmo::Rigidbody::type.type_object()};
   for (void* kind : kinds)
     if (!kind) return false;
@@ -59,7 +62,9 @@ bool strip(void* root) {
         for (size_t i = 0; i < parts.size(); ++i)
           if (void* part = parts[i]) phasmo::Object::DestroyImmediate(part, false);
       }
-  return count_of(transforms, scripts) == 0;
+  for (void* kind : kinds)
+    if (count_of(transforms, kind)) return false;
+  return true;
 }
 
 // Removes the root's children that neither hold the skeleton nor draw anything: the prefab's rigs, aiming targets
@@ -113,12 +118,17 @@ void* copy_investigator_body(const char* name, std::string* why) {
   void* copy = phasmo::Object::Instantiate(body, phasmo::GameObject::get_transform(holder), false);
   if (!copy || !strip(copy)) {
     phasmo::Object::Destroy(holder, 0.0f);
-    return fail(why, copy ? "a script would not come off the copy" : "the body could not be copied"), nullptr;
+    return fail(why, copy ? "a component would not come off the copy" : "the body could not be copied"), nullptr;
   }
   phasmo::Object::set_name(copy, make_string(name));
   void* transform = phasmo::GameObject::get_transform(copy);
-  if (void* animator = phasmo::Component::GetComponent(transform, phasmo::Animator::type.type_object()))
+  if (void* animator = phasmo::Component::GetComponent(transform, phasmo::Animator::type.type_object())) {
     prune(copy, animator);
+    // The game's controller carries state machine behaviours on the asset, which the strip cannot reach: take it off
+    // while the copy is still inactive, so none of them is made for the copy.
+    phasmo::Animator::set_runtimeAnimatorController(animator, nullptr);
+  }
+  // Unparented, the copy is active: from here on it wakes.
   phasmo::Transform::SetParent(transform, nullptr, false);
   phasmo::Vector3 origin{};
   phasmo::Transform::set_position(transform, &origin);
@@ -145,29 +155,68 @@ bool play_state(void* animator, const char* state) {
 
 bool controller_has_states(void* controller, std::span<const char* const> states, std::string* missing) {
   if (!alive(controller)) return fail(missing, "no controller");
+  // These engine calls have not run in the game yet: each is logged before it runs, so a crash names its call.
+  PM_LOG("controller check: making its Animator");
   void* probe = new_game_object("Controller check");
   void* animator = probe ? phasmo::GameObject::AddComponent(probe, phasmo::Animator::type.type_object()) : nullptr;
   bool ok = animator != nullptr;
   if (!ok) fail(missing, "no Animator could be made to check it");
   if (ok) {
+    PM_LOG("controller check: calling Animator.set_runtimeAnimatorController");
     phasmo::Animator::set_runtimeAnimatorController(animator, controller);
-    if (!phasmo::Animator::get_isInitialized(animator)) phasmo::Animator::Rebind(animator, true);
+    PM_LOG("controller check: calling Animator.get_isInitialized");
+    if (!phasmo::Animator::get_isInitialized(animator)) {
+      PM_LOG("controller check: calling Animator.Rebind");
+      phasmo::Animator::Rebind(animator, true);
+      PM_LOG("controller check: calling Animator.get_isInitialized again");
+    }
     ok = phasmo::Animator::get_isInitialized(animator);
     if (!ok) fail(missing, "the Animator holding it did not initialise");
   }
+  if (ok) PM_LOG("controller check: calling Animator.HasState for %zu states", states.size());
   for (size_t i = 0; ok && i < states.size(); ++i)
     if (!states[i] || !phasmo::Animator::HasState(animator, 0, phasmo::Animator::StringToHash(make_string(states[i])))) {
       ok = false;
       if (missing) *missing = states[i] ? states[i] : "(null)";
     }
   if (probe) phasmo::Object::DestroyImmediate(probe, false);
+  PM_LOG("controller check: done, %s", ok ? "every state is there" : "refused");
   return ok;
+}
+
+bool cloth_available(std::string* why) {
+  struct Need {
+    bool resolved;
+    const char* key;
+  };
+  const Need needs[] = {
+      {phasmo::Cloth::available(), map::Cloth.key},
+      {phasmo::Cloth::set_capsuleColliders.available(), map::Cloth_set_capsuleColliders.key},
+      {phasmo::Cloth::set_coefficients.available(), map::Cloth_set_coefficients.key},
+      {phasmo::Cloth::set_useGravity.available(), map::Cloth_set_useGravity.key},
+      {phasmo::Cloth::set_bendingStiffness.available(), map::Cloth_set_bendingStiffness.key},
+      {phasmo::Cloth::set_stretchingStiffness.available(), map::Cloth_set_stretchingStiffness.key},
+      {phasmo::Cloth::set_damping.available(), map::Cloth_set_damping.key},
+      {phasmo::Layers::IgnoreRaycast.available(), map::Layer_IgnoreRaycast.key}};
+  for (const Need& n : needs)
+    if (!n.resolved) {
+      if (why) *why = std::string(n.key) + " is not available in this game build";
+      return false;
+    }
+  return true;
+}
+
+bool material_available(std::string* why) {
+  if (!phasmo::LitShader::BaseColor.available())
+    return fail(why, "ShaderProperty.Lit.BaseColor is not available in this game build");
+  if (!phasmo::LitShader::Cull.available())
+    return fail(why, "ShaderProperty.Lit.Cull is not available in this game build");
+  return true;
 }
 
 void* two_sided_material(void* like, phasmo::Color colour, std::string* why) {
   if (!alive(like)) return fail(why, "no material to take the shader from"), nullptr;
-  if (!phasmo::LitShader::BaseColor.available() || !phasmo::LitShader::Cull.available())
-    return fail(why, "the Lit shader's properties did not resolve"), nullptr;
+  if (!material_available(why)) return nullptr;
   void* shader = phasmo::Material::get_shader(like);
   void* material = shader ? phasmo::Material::type.make() : nullptr;
   if (!material) return fail(why, "no material could be made"), nullptr;
@@ -195,11 +244,9 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
                std::span<const ClothSphere> spheres, ClothParts& out, std::string* why) {
   out = ClothParts{};
   if (!alive(gameObject) || !alive(material)) return fail(why, "no GameObject or no material");
-  if (!phasmo::Cloth::available() || !phasmo::Cloth::set_coefficients.available() ||
-      !phasmo::Cloth::set_capsuleColliders.available())
-    return fail(why, "Cloth is not available in this game build");
-  if (!spheres.empty() && !phasmo::Layers::IgnoreRaycast.available())
-    return fail(why, "the Ignore Raycast layer did not resolve");
+  if (!cloth_available(why)) return false;
+  for (const ClothSphere& s : spheres)
+    if (!alive(s.bone)) return fail(why, "a sphere has no bone");
   const size_t n = mesh.vertices.size();
   if (!n || mesh.normals.size() != n || mesh.uv.size() != n || mesh.coefficients.size() != n ||
       mesh.triangles.empty() || mesh.triangles.size() % 3)
@@ -238,22 +285,23 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
   phasmo::Mesh::set_triangles(built, indices);
 
   void* renderer = phasmo::GameObject::AddComponent(gameObject, phasmo::SkinnedMeshRenderer::type.type_object());
-  if (!renderer) {
+  void* cloth = nullptr;
+  // On a failure from here, nothing made stays: no sphere is dropped and nothing runs in part.
+  const auto undo = [&](const char* reason) {
+    if (cloth) phasmo::Object::Destroy(cloth, 0.0f);
+    if (renderer) phasmo::Object::Destroy(renderer, 0.0f);
     destroy_cloth(out);
-    return fail(why, "no SkinnedMeshRenderer could be added");
-  }
+    return fail(why, reason);
+  };
+  if (!renderer) return undo("no SkinnedMeshRenderer could be added");
   phasmo::SkinnedMeshRenderer::set_bones(renderer, bones);
   phasmo::SkinnedMeshRenderer::set_rootBone(renderer, anchor);
   phasmo::SkinnedMeshRenderer::set_sharedMesh(renderer, built);
   phasmo::SkinnedMeshRenderer::set_updateWhenOffscreen(renderer, true);
   phasmo::Renderer::set_sharedMaterials(renderer, materials);
 
-  void* cloth = phasmo::GameObject::AddComponent(gameObject, phasmo::Cloth::type.type_object());
-  if (!cloth) {
-    phasmo::Object::Destroy(renderer, 0.0f);
-    destroy_cloth(out);
-    return fail(why, "no Cloth could be added");
-  }
+  cloth = phasmo::GameObject::AddComponent(gameObject, phasmo::Cloth::type.type_object());
+  if (!cloth) return undo("no Cloth could be added");
   out.cloth = cloth;
   phasmo::Cloth::set_useGravity(cloth, settings.useGravity);
   phasmo::Cloth::set_bendingStiffness(cloth, settings.bendingStiffness);
@@ -263,14 +311,10 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
 
   std::vector<void*> capsules;
   for (const ClothSphere& s : spheres) {
-    if (!alive(s.bone)) continue;
     void* go = new_game_object("Cloth collider");
+    if (go) out.colliders.emplace_back(go);
     void* capsule = go ? phasmo::GameObject::AddComponent(go, phasmo::CapsuleCollider::type.type_object()) : nullptr;
-    if (!capsule) {
-      if (go) phasmo::Object::Destroy(go, 0.0f);
-      continue;
-    }
-    out.colliders.emplace_back(go);
+    if (!capsule) return undo("a sphere collider could not be made");
     phasmo::GameObject::set_layer(go, phasmo::Layers::IgnoreRaycast.index());
     void* t = phasmo::GameObject::get_transform(go);
     phasmo::Transform::SetParent(t, s.bone, false);
@@ -282,8 +326,9 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
     capsules.push_back(capsule);
   }
   void* list = phasmo::CapsuleCollider::type.make_array(capsules.size());
-  for (size_t i = 0; list && i < capsules.size(); ++i) RefArray{list}.set(i, capsules[i]);
-  if (list) phasmo::Cloth::set_capsuleColliders(cloth, list);
+  if (!list) return undo("no CapsuleCollider[] could be made");
+  for (size_t i = 0; i < capsules.size(); ++i) RefArray{list}.set(i, capsules[i]);
+  phasmo::Cloth::set_capsuleColliders(cloth, list);
   return true;
 }
 

@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "Animator.h"
+#include "Camera.h"
 #include "Input.h"
 #include "LevelRoom.h"
 #include "Photon.h"
@@ -44,6 +45,7 @@ using phasmo::Vector2;
 using phasmo::Vector3;
 
 // The classes of the fake game's objects.
+int kCamera, kLight, kListener;
 int kGameObject, kTransform, kAnimator, kScript, kAudio, kCollider, kRigidbody, kRenderer, kSkinned, kCloth, kCapsule,
     kMaterial, kMesh, kController, kPlayerCosmetics, kVector3, kVector2, kInt32, kBoneWeight, kMatrix, kShader;
 
@@ -125,11 +127,24 @@ bool f_IsChildOf(void* t, void* parent, const void*) {
     if (&node(go).transform == parent) return true;
   return false;
 }
+// What happened to the copy, in order: its instantiation (under an active or an inactive parent), each component or
+// object destroyed, each controller set (and whether its Animator was awake), and the moment it woke.
+std::vector<std::string> g_events;
+bool awake(void* go) {
+  for (void* g = go; g; g = node(g).parent)
+    if (!node(g).active) return false;
+  return true;
+}
+void note_wake(void* go, bool was) {
+  if (!was && awake(go)) g_events.push_back("wake " + node(go).name);
+}
 void f_SetParent(void* t, void* parent, bool, const void*) {
   void* go = g_ownerOf[t];
+  const bool was = awake(go);
   if (void* old = node(go).parent) std::erase(node(old).children, go);
   node(go).parent = nullptr;
   if (parent) attach(go, g_ownerOf[parent]);
+  note_wake(go, was);
 }
 void f_set_position(void* t, const Vector3* at, const void*) { node(g_ownerOf[t]).position = *at; }
 Vector3 f_get_position(void* t, const void*) { return node(g_ownerOf[t]).position; }
@@ -137,7 +152,11 @@ void f_ctor(void* go, void* name, const void*) { node(go).name = text(name); }
 void f_set_name(void* o, void* name, const void*) {
   if (g_nodes.count(o)) node(o).name = text(name);
 }
-void f_SetActive(void* go, bool on, const void*) { node(go).active = on; }
+void f_SetActive(void* go, bool on, const void*) {
+  const bool was = awake(go);
+  node(go).active = on;
+  note_wake(go, was);
+}
 void f_set_layer(void* go, int32_t layer, const void*) { node(go).layer = layer; }
 void* f_GetComponents(void* go, void* type, const void*) {
   std::vector<void*> found;
@@ -170,6 +189,7 @@ void remove_component(void* c) {
 void f_DestroyImmediate(void* o, bool) {
   if (g_stuck.count(o)) return;
   g_destroyed.push_back(o);
+  g_events.push_back("destroy");
   if (g_ownerOf.count(o) && klass_of(o) != &kTransform) remove_component(o);
   if (g_nodes.count(o))
     if (void* parent = node(o).parent) std::erase(node(parent).children, o);
@@ -188,6 +208,7 @@ void* copy_of(void* go) {
   return copy;
 }
 void* f_Instantiate(void* original, void* parent, bool, const void*) {
+  g_events.push_back(std::string("instantiate under ") + (parent && awake(g_ownerOf[parent]) ? "awake" : "asleep"));
   void* copy = copy_of(original);
   if (parent) attach(copy, g_ownerOf[parent]);
   return copy;
@@ -225,6 +246,9 @@ void build_prefab() {
   std::memcpy(reinterpret_cast<unsigned char*>(g_prefab.cosmetics) + kPlayerAnimator, &animator, sizeof animator);
   add(g_prefab.body, &kScript);
   add(g_prefab.body, &kAudio);
+  add(g_prefab.body, &kListener);
+  add(g_prefab.body, &kCamera);
+  add(g_prefab.body, &kLight);
   void* hips = go_new("Hips");
   attach(hips, g_prefab.body);
   add(hips, &kScript);
@@ -286,7 +310,11 @@ int32_t f_StringToHash(void* name, const void*) {
   g_hashes[h] = s;
   return h;
 }
-void f_set_controller(void* animator, void* controller, const void*) { g_controllerOf[animator] = controller; }
+void f_set_controller(void* animator, void* controller, const void*) {
+  g_controllerOf[animator] = controller;
+  g_events.push_back(std::string(controller ? "controller" : "no controller") +
+                     (awake(g_ownerOf[animator]) ? " while awake" : " while asleep"));
+}
 bool f_isInitialized(void* animator) {
   return g_controllerOf.count(animator) && node(g_ownerOf[animator]).active && (g_initialises || g_rebound);
 }
@@ -376,6 +404,7 @@ void start(bool withCloth = true) {
   g_radius.clear();
   g_height.clear();
   g_unloaded = nullptr;
+  g_events.clear();
   fake::reset();
   type(map::GameObject, kGameObject);
   type(map::Transform, kTransform);
@@ -396,6 +425,9 @@ void start(bool withCloth = true) {
   type(map::Int32, kInt32);
   type(map::BoneWeight, kBoneWeight);
   type(map::Matrix4x4, kMatrix);
+  type(map::Camera, kCamera);
+  type(map::Light, kLight);
+  type(map::AudioListener, kListener);
   fake::element_size(map::Vector3, sizeof(Vector3));
   fake::element_size(map::Vector2, sizeof(Vector2));
   fake::element_size(map::Int32, sizeof(int32_t));
@@ -543,7 +575,20 @@ void the_body_copy_has_no_script_and_wakes_only_once_stripped() {
   CHECK(g_loadedPath == "PCPlayer");
   CHECK(copy != g_prefab.body && node(copy).name == "Squatter");
   CHECK(node(copy).active && node(copy).parent == nullptr);
-  CHECK(!find_in(copy, &kScript) && !find_in(copy, &kAudio) && !find_in(copy, &kRigidbody) && !find_in(copy, &kCapsule));
+  for (int* kind : {&kScript, &kAudio, &kListener, &kCamera, &kLight, &kRigidbody, &kCapsule})
+    CHECK(!find_in(copy, kind));
+  // It was made under a sleeping holder, lost every component and the game's controller while asleep, and woke once,
+  // last.
+  CHECK(!g_events.empty() && g_events.front() == "instantiate under asleep");
+  const auto at = [&](const std::string& e) { return std::find(g_events.begin(), g_events.end(), e) - g_events.begin(); };
+  const auto wake = at("wake Squatter");
+  CHECK(wake < static_cast<std::ptrdiff_t>(g_events.size()) && std::count(g_events.begin(), g_events.end(), "wake Squatter") == 1);
+  CHECK(at("no controller while asleep") < wake);
+  CHECK(std::find(g_events.begin(), g_events.end(), "no controller while awake") == g_events.end());
+  for (std::ptrdiff_t i = wake + 1; i < static_cast<std::ptrdiff_t>(g_events.size()); ++i)
+    CHECK(g_events[static_cast<size_t>(i)] != "destroy");  // nothing taken off after it woke
+  for (auto& [animator, controller] : g_controllerOf)
+    if (g_ownerOf[animator] == copy) CHECK(controller == nullptr);
   CHECK(find_in(copy, &kSkinned) && find_in(copy, &kAnimator));  // what draws it and moves it stays
   std::set<std::string> children;
   for (void* child : node(copy).children) children.insert(node(child).name);
@@ -568,7 +613,63 @@ void the_body_copy_has_no_script_and_wakes_only_once_stripped() {
   std::string ignored;
   api::bind(fake::host(), ignored);
   CHECK(!api::copy_investigator_body("Squatter", &why));
-  CHECK(why == "a script would not come off the copy");
+  CHECK(why == "a component would not come off the copy");
+  CHECK(std::count(g_events.begin(), g_events.end(), "wake Squatter") == 0);
+
+  // So does a light, a camera or a listener that will not come off.
+  for (int* kind : {&kLight, &kCamera, &kListener}) {
+    start();
+    static int* stuckKind;
+    stuckKind = kind;
+    m(map::UnityObject_Instantiate, +[](void* original, void* parent, bool, const void*) -> void* {
+      void* copy = copy_of(original);
+      if (parent) attach(copy, g_ownerOf[parent]);
+      for (void* c : node(copy).components)
+        if (klass_of(c) == stuckKind) g_stuck.insert(c);
+      return copy;
+    });
+    api::bind(fake::host(), ignored);
+    CHECK(!api::copy_investigator_body("Squatter", &why));
+    CHECK(std::count(g_events.begin(), g_events.end(), "wake Squatter") == 0);
+  }
+}
+
+// What add_cloth and two_sided_material need of the optional entries is checked at a mod's start, naming the entry.
+void availability_names_each_missing_entry() {
+  start();
+  std::string why;
+  CHECK(api::cloth_available(&why) && api::material_available(&why));
+  const pm::sdk::EntryDesc* const cloth[] = {&map::Cloth,
+                                             &map::Cloth_set_capsuleColliders,
+                                             &map::Cloth_set_coefficients,
+                                             &map::Cloth_set_useGravity,
+                                             &map::Cloth_set_bendingStiffness,
+                                             &map::Cloth_set_stretchingStiffness,
+                                             &map::Cloth_set_damping,
+                                             &map::Layer_IgnoreRaycast};
+  for (const pm::sdk::EntryDesc* d : cloth) {
+    start();
+    fake::forget(*d);
+    api::bind(fake::host(), why);
+    CHECK(!api::cloth_available(&why));
+    CHECK(why == std::string(d->key) + " is not available in this game build");
+    CHECK(api::material_available(&why));
+    // add_cloth refuses the same build, making nothing.
+    void* anchor = go_new("Sheet");
+    api::ClothParts parts;
+    CHECK(!api::add_cloth(anchor, {}, make_obj(&kMaterial), {}, {}, parts, &why));
+    CHECK(why == std::string(d->key) + " is not available in this game build" && !find_in(anchor, &kSkinned));
+  }
+  const pm::sdk::EntryDesc* const material[] = {&map::ShaderProperty_Lit_BaseColor, &map::ShaderProperty_Lit_Cull};
+  for (const pm::sdk::EntryDesc* d : material) {
+    start();
+    fake::forget(*d);
+    api::bind(fake::host(), why);
+    CHECK(!api::material_available(&why));
+    CHECK(why == std::string(d->key) + " is not available in this game build");
+    CHECK(api::cloth_available(&why));
+    CHECK(!api::two_sided_material(make_obj(&kMaterial), {1, 1, 1, 1}, &why));
+  }
 }
 
 void a_state_plays_only_when_the_controller_has_it() {
@@ -619,7 +720,7 @@ void cloth_builds_the_mesh_and_its_colliders() {
   void* bone = go_new("Head");
   node(bone).position = {0, 2, 0};
   void* material = make_obj(&kMaterial);
-  const api::ClothSphere spheres[] = {{&node(bone).transform, 0.1f, {0, 0.05f, 0}}, {nullptr, 0.2f, {}}};
+  const api::ClothSphere spheres[] = {{&node(bone).transform, 0.1f, {0, 0.05f, 0}}};
   api::ClothParts parts;
   std::string why;
   CHECK(api::add_cloth(anchor, sheet.mesh(), material, {true, 0.3f, 0.9f, 0.1f}, spheres, parts, &why));
@@ -642,7 +743,7 @@ void cloth_builds_the_mesh_and_its_colliders() {
   const api::Array<Vector2> coefficients{g_set[cloth]["coefficients"]};
   CHECK(coefficients.size() == 3 && coefficients[0].x == 0 && coefficients[1].x == 5);
   CHECK(g_clothSettings.size() == 4 && g_clothSettings[1].second == 0.3f && g_clothSettings[2].second == 0.9f);
-  // One sphere, the one with a bone, on the Ignore Raycast layer at the bone plus its offset, a sphere's height.
+  // The sphere is on the Ignore Raycast layer at the bone plus its offset, a sphere's height.
   CHECK(parts.colliders.size() == 1);
   void* sphereGo = parts.colliders.empty() ? nullptr : static_cast<void*>(parts.colliders[0]);
   if (sphereGo) {
@@ -679,6 +780,38 @@ void cloth_refuses_a_bad_mesh_and_a_build_without_cloth() {
   CHECK(why == "Cloth is not available in this game build" && !find_in(anchor, &kSkinned) && !parts.mesh);
 }
 
+// A sphere is never dropped: one with no bone, or one the engine will not make, fails the whole cloth.
+void cloth_refuses_a_sphere_it_cannot_make() {
+  start();
+  void* anchor = go_new("Sheet");
+  void* bone = go_new("Head");
+  void* material = make_obj(&kMaterial);
+  api::ClothParts parts;
+  std::string why;
+  const api::ClothSphere noBone[] = {{&node(bone).transform, 0.1f, {}}, {nullptr, 0.2f, {}}};
+  CHECK(!api::add_cloth(anchor, Sheet{}.mesh(), material, {}, noBone, parts, &why));
+  CHECK(why == "a sphere has no bone" && !find_in(anchor, &kSkinned) && !parts.mesh && parts.colliders.empty());
+  // The engine refuses the second capsule: everything made so far goes.
+  static int capsules;
+  capsules = 0;
+  m(map::GameObject_AddComponent, +[](void* go, void* type, const void*) -> void* {
+    if (class_of_type(type) == &kCapsule && ++capsules == 2) return nullptr;
+    return add(go, class_of_type(type));
+  });
+  api::bind(fake::host(), why);
+  const api::ClothSphere two[] = {{&node(bone).transform, 0.1f, {}}, {&node(bone).transform, 0.2f, {}}};
+  CHECK(!api::add_cloth(anchor, Sheet{}.mesh(), material, {}, two, parts, &why));
+  CHECK(why == "a sphere collider could not be made");
+  CHECK(!parts.mesh && !parts.cloth && parts.colliders.empty());
+  void* renderer = find_in(anchor, &kSkinned);
+  void* cloth = find_in(anchor, &kCloth);
+  CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), renderer) != g_destroyed.end());
+  CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), cloth) != g_destroyed.end());
+  size_t sphereObjects = 0;
+  for (void* o : g_destroyed) sphereObjects += g_nodes.count(o) && node(o).name == "Cloth collider";
+  CHECK(sphereObjects == 2);
+}
+
 }  // namespace
 
 int main() {
@@ -693,6 +826,8 @@ int main() {
   the_material_is_plain_and_two_sided();
   cloth_builds_the_mesh_and_its_colliders();
   cloth_refuses_a_bad_mesh_and_a_build_without_cloth();
+  cloth_refuses_a_sphere_it_cannot_make();
+  availability_names_each_missing_entry();
   std::filesystem::remove_all(scratch(), ignored);
   for (Obj* o : g_owned) delete o;
   return g_failures ? 1 : 0;

@@ -144,14 +144,16 @@ the copy. In `pmmod_stop`, destroy the copy with `Object.Destroy` and unload the
 `add_cloth` turns a mesh you build into Unity Cloth on a GameObject, usually one parented to a bone so the vertices you
 pin follow it. You give it, in that GameObject's space, each vertex's position, normal, uv and constraint (0 pins the
 vertex; a large number leaves it free), the triangles, and the spheres the cloth rests on, each following a bone
-(`Animator.GetBoneTransform`). Those spheres sit on the Ignore Raycast layer, which nothing of the game's collides with.
+(`Animator.GetBoneTransform`). Those spheres sit on the Ignore Raycast layer, which no body of the game's collides
+with; a ray or overlap query of the game's whose mask includes that layer can still find one.
 
 - **Make the mesh in the shape it should settle in.** A flat square dropped onto a body drapes badly. The Squatter's
   sheet is made already hanging over a head and shoulders (`mods/custom_ghosts/sheet_mesh.h`).
 - **Use a material of your own.** `two_sided_material(lit_material_of(copy), colour)` makes one on the body's lit
   shader with your colour, drawn on both sides, which a sheet seen from inside needs. Taking a colour from a borrowed
   texture rendered black in the engine test.
-- **Cloth is optional in the map.** Its Unity module could leave a later game build, so check
-  `phasmo::Cloth::available()` at your start and fail it if you need cloth.
+- **Cloth is optional in the map.** Its Unity module could leave a later game build, so call
+  `pm::api::cloth_available(&why)` and `pm::api::material_available(&why)` at your start and fail it, with `why` in
+  the log, if either is false.
 - In `pmmod_stop`, or when you remove the figure, call `destroy_cloth` for what the GameObject does not take with it,
   and destroy the material.

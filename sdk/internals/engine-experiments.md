@@ -25,10 +25,11 @@ Do not copy a live player's body instead. The game sets shadow-only casting and 
 `Player.SetPlayerModelLayer`) and it carries that player's outfit, so clients would differ. The `Male_N_Body` and `Female_N_Body`
 prefabs are templates for the cosmetic code, with most material slots empty.
 
-- **The game's controller still runs.** The Animator's controller, `PCPlayer (overhaul)`, holds StateMachineBehaviours on the
-  controller asset, not on the copy's GameObjects, so the strip in step 5 cannot reach them. They run on the copy from activation
-  until a mod replaces the controller. A code review walked them on the copy's default parameters and found nothing they reach that
-  matters; the in-game run did not test this separately.
+- **The game's controller came along.** The Animator's controller, `PCPlayer (overhaul)`, holds StateMachineBehaviours on the
+  controller asset, not on the copy's GameObjects, so the strip in step 5 cannot reach them. In the test they ran on the copy from
+  activation until the mod replaced the controller. A code review walked them on the copy's default parameters and found nothing
+  they reach that matters; the in-game run did not test this separately. The SDK's copy (`copy_investigator_body`,
+  `sdk/api/models.h`) takes the controller off while the copy is still inactive, so none of them is made for it.
 - **Humanoid rig.** The avatar maps 23 of 25 human bones; the two eyes are unmapped. Humanoid clips from outside the game played
   on it in the run.
 - **Look.** The copy appeared correctly in the run.

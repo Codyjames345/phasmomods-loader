@@ -25,7 +25,9 @@ files:
   (`ShaderProperty.Lit.Cull`, a `CullMode`) are entries. The body's materials cull back faces; a material that sets
   `CullMode.Off` draws both sides. A material made from that shader with `Material.ctor(Shader)` starts from the
   shader's defaults, so it carries none of a body material's textures or keywords.
-- **A layer the game ignores.** `Layer.IgnoreRaycast` is Unity's built-in layer of that name. The game's physics matrix
-  lets it collide only with a layer the game leaves unnamed, so a collider placed on it touches no player, prop or
-  ray of the game. Cloth collides with the colliders it is given whatever their layer, which makes this the place for
-  a cloth's private colliders.
+- **A layer for private colliders.** `Layer.IgnoreRaycast` is Unity's built-in layer of that name. The game's physics
+  matrix lets it collide only with a layer the game leaves unnamed, so no player, prop or other body bumps into a
+  collider placed on it. Cloth collides with the colliders it is given whatever their layer, which makes this the
+  place for a cloth's private colliders. The matrix does not govern queries, though: Unity's default ray mask leaves
+  the layer out, but a ray or overlap query of the game's whose mask includes it (all layers, say) can still hit such
+  a collider, and the game's own masks have not been audited.
