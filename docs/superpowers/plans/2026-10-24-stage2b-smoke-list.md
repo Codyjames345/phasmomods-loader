@@ -982,3 +982,22 @@ The figure (Task 5). Before the test, build `squatter.bundle` (sdk/guides/custom
   - [ ] All clients see the same figure in the same place, facing the same way.
   - [ ] Walking into the figure, shining a torch at it and throwing an item at it: nothing collides with its sheet spheres.
   - [ ] Leave the contract and start another: the old figure is gone, a new one appears, and the log shows no error.
+
+The way out (Task 6). The lock is the game's hunt lock (`Door.HuntingCloseDoor`) on every exit (sdk/systems/doors.md). The
+chase that calls it comes in Task 7, so these are checkable once Task 7 is in; a private contract with the Squatter
+forced in a Custom difficulty, two players where it says so.
+
+- Each kind of map, the doors locking once every living player is out
+  - [ ] A house with one exit (Tanglewood, Edgefield, Ridgeview or Willow Street): run out of the front door; it swings shut and locks, `mods.log` has `squatter: 1 exit(s) locked`, and no refused-RPC or exception line follows.
+  - [ ] A map with several exits: Brownstone High School (6), Nell's Diner (3) or Bleasdale Farmhouse (2). Every exit shuts and locks at once, not only the one used, and the log names the count the doors page gives.
+  - [ ] A map without a house: Camp Woodwind or Maple Lodge Campsite. Both leaves of the campsite's gate shut and lock once everyone is past it; a player at a campfire or in a tent still counts as inside (the gate stays open).
+  - [ ] A map with variations: Prison or Point Hope. Every exit locks, including on a smaller variation.
+  - [ ] With two players, one still inside (or hiding where it never looks): the exits stay open until that player is out too. A dead player inside does not keep them open.
+  - [ ] As a client, not the host: the exits lock for you too, and your log has no refused-RPC line.
+- The locked exits
+  - [ ] Grabbing a locked exit does not open it, and the lock's click played as it locked.
+  - [ ] Without the house key picked up this contract, trying a locked exit plays the game's locked rattle, each time.
+  - [ ] Having picked up the house key, try a locked exit: report whether it plays the unlock click, and whether it can then be grabbed open (the code says it stays shut; `sdk/systems/doors.md`, "Locking the exits outside a hunt").
+  - [ ] Each try at a locked exit, by the host or a client, reaches the mod (once Task 7 plays a line for it, each try plays one); a try at an ordinary door plays nothing.
+  - [ ] On a friendly ghost's difficulty nothing locks, and the log has no lock line.
+  - [ ] Leave and start another contract on the same map: its exits start as the map's own (locked until the key is used), not still switched off.
