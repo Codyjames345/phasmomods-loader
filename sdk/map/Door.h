@@ -1,8 +1,9 @@
 #pragma once
 
-// Door: a door of the level, HingeDoor (a door that swings on a hinge), and SmallMapVariation (one of
-// LevelController's map variations, with the doors its hunts lock). The types and their methods keep
-// their real names; Door's leaf body and closed angle are obfuscated and found by shape and facts.
+// Door: a door of the level, HingeDoor (a door that swings on a hinge), SmallMapVariation (one of
+// LevelController's map variations, with the doors its hunts lock), and the keys that open locked doors.
+// The types and their methods keep their real names; Door's leaf body, closed angle and lock are
+// obfuscated and found by shape and facts. How exits lock and open: sdk/systems/doors.md.
 // Notes read from decompiled code are from build 25811160.
 
 #include "entry.h"
@@ -40,29 +41,176 @@ inline constexpr pm::sdk::EntryDesc Door_GhostForceDoor{.key = "Door.GhostForceD
                                                         .owner = "Door", .name = "GhostForceDoor",
                                                         .params = Door_GhostForceDoor_params};
 
-/// Shuts and locks the door as a hunt does, on every client (an RPC), unless the contract's difficulty
-/// keeps doors open in hunts (it tests Difficulty.huntDoorsStayOpen first). Decompiled.
+/// Shuts and locks the door as a hunt does: LevelController.LockHuntingDoors calls it for every exit,
+/// on the master, as a hunt starts. It does nothing on a friendly ghost's difficulty (it tests the
+/// contract's Difficulty.friendlyGhost first, the flag HuntingCloseDoorNetworked refuses on). Otherwise
+/// it switches the door off for players (DisableOrEnableDoor(false), by RPC) and sends
+/// HuntingCloseDoorNetworked to every client, whose body swings the door shut on its owner's client and
+/// then locks it (LockDoor(true)). sdk/systems/doors.md has the whole path. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_HuntingCloseDoor{.key = "Door.HuntingCloseDoor",
                                                           .kind = pm::sdk::Kind::Method,
                                                           .confidence = pm::sdk::Confidence::Decompiled,
                                                           .owner = "Door", .name = "HuntingCloseDoor"};
 
-/// Locks (false) or unlocks (true) the door, on every client. Inferred: from the method's name.
+inline constexpr const char* Door_HuntingCloseDoorNetworked_params[] = {"PhotonMessageInfo"};
+
+/// The RPC HuntingCloseDoor sends to every client. It refuses a sender that is not the room's first
+/// actor, and refuses outright on a friendly ghost's difficulty (Difficulty.friendlyGhost); otherwise it
+/// switches the door off for players, drops it from the local player's hand, and on the client that owns
+/// the door's PhotonView starts the coroutine that swings it shut, sets it to its closed angle once and
+/// calls LockDoor(true). A mod hooks it to see a hunt's lock; never call it (it is an RPC's body).
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_HuntingCloseDoorNetworked{
+    .key = "Door.HuntingCloseDoorNetworked", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door", .name = "HuntingCloseDoorNetworked",
+    .params = Door_HuntingCloseDoorNetworked_params};
+
+/// Switches the door off (false) or back on (true) for players, as a hunt's end and the Monkey Paw's
+/// timed lock do: off, it switches the door off, drops it from the local player's hand and, on the
+/// client that owns its PhotonView, swings it shut and locks it (the coroutine HuntingCloseDoorNetworked
+/// starts); on, it switches the door and its collider back on. Either way it then clears the door's lock
+/// (`locked`) by SyncLockState, so `true` unlocks it. LevelController.UnlockHuntingDoors and
+/// Door.LockDoorForTime call it. Its RPCs check no sender. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_ToggleDoorLock{.key = "Door.ToggleDoorLock", .kind = pm::sdk::Kind::Method,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Door", .name = "ToggleDoorLock",
                                                         .params = Door_ToggleDoorLock_params};
 
+inline constexpr const char* Door_bool[] = {"bool"};
+
+/// Locks the door. It returns at once on a locked door. With `force`, or when the leaf is already
+/// within a small angle of shut, it sets the leaf to its closed angle once and marks it closed; a door
+/// that is open and not forced stays unlocked. A closed door then sends NetworkedSyncCloseDoor to every
+/// client and is marked locked here; on the master it also sends SyncLockState(true) and
+/// NetworkedPlayLockSound. HingeDoor has its own override of the same steps. The hunt's close
+/// coroutine calls it with `force` set, on the door's owner. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_LockDoor{.key = "Door.LockDoor", .kind = pm::sdk::Kind::Method,
+                                                  .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                  .name = "LockDoor", .params = Door_bool};
+
+/// Unlocks a locked door: it clears `locked`, sends SyncHasBeenUnlocked the first time, sends
+/// SyncLockState(false) to every client and, with its argument set, NetworkedPlayUnlockSound. It does
+/// nothing on an unlocked door. Door.AttemptToUnlockDoor calls it when the trying player holds the key.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_UnlockDoor{.key = "Door.UnlockDoor", .kind = pm::sdk::Kind::Method,
+                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                    .name = "UnlockDoor", .params = Door_bool};
+
+inline constexpr const char* Door_SyncLockState_params[] = {"bool", "PhotonMessageInfo"};
+
+/// The RPC that sets the door's lock on every client: it refuses a lock (true) from a sender that is
+/// not the room's first actor, but takes an unlock from anyone. It stores `locked`, freezes the leaf's
+/// Rigidbody while locked and frees it otherwise, and for a DoorKind.Main door tells
+/// SetupPhaseController.UnlockMainDoor and switches the door's hunt collider off. LockDoor sends it
+/// from the master only. A mod hooks it to see a lock change; never call it (it is an RPC's body).
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_SyncLockState{.key = "Door.SyncLockState", .kind = pm::sdk::Kind::Method,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .owner = "Door", .name = "SyncLockState",
+                                                       .params = Door_SyncLockState_params};
+
+// Of Door's bools SyncLockState stores only this one.
+inline constexpr pm::sdk::Fact Door_locked_facts[] = {{.is = pm::sdk::Fact::Is::Stores, .method = "Door.SyncLockState"}};
+
+/// Whether the door is locked, on this client: SyncLockState stores it, LockDoor and UnlockDoor set
+/// and clear it. Every exit (DoorKind.Main) starts a contract locked in the map's scene; a player opens
+/// it with the house key (sdk/systems/doors.md). Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_locked{.key = "Door.locked", .kind = pm::sdk::Kind::Field,
+                                                .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                .type = "bool", .facts = Door_locked_facts,
+                                                .access = pm::sdk::Visibility::Public};
+
+/// A player's try at a locked door, on that player's own client: the interact input (DragRigidbodyUse)
+/// calls it for the door under the player's aim, and Door.GrabbedDoor runs the same steps for a locked
+/// door it is grabbed by. On an unlocked door it does nothing. Outside a hunt (GhostAI.isHunting) a key
+/// of the door's kind in the local player's keys (Player.keys) unlocks it (UnlockDoor). Otherwise a
+/// DoorKind.None door unlocks (unless LockDoorForTime holds it), and any other gets the locked sound:
+/// NetworkedPlayLockSound to every client in a room, the same clip played here offline. A mod hooks it
+/// to see the try. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_AttemptToUnlockDoor{.key = "Door.AttemptToUnlockDoor",
+                                                             .kind = pm::sdk::Kind::Method,
+                                                             .confidence = pm::sdk::Confidence::Decompiled,
+                                                             .owner = "Door", .name = "AttemptToUnlockDoor"};
+
+/// A player grabbed the door, on that player's client: an unlocked door sends NetworkedGrabbedDoor to
+/// every client (runs it here offline); a locked one runs AttemptToUnlockDoor's steps instead. Door.Start
+/// gives it to the door's PhotonObjectInteract as a grab event. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_GrabbedDoor{.key = "Door.GrabbedDoor", .kind = pm::sdk::Kind::Method,
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .owner = "Door", .name = "GrabbedDoor"};
+
+/// The RPC of the locked sound: it plays one of the door's lock clips through its Noise, for a
+/// DoorKind.Main door only, while the door's object is active. It checks no sender. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_NetworkedPlayLockSound{.key = "Door.NetworkedPlayLockSound",
+                                                                .kind = pm::sdk::Kind::Method,
+                                                                .confidence = pm::sdk::Confidence::Decompiled,
+                                                                .owner = "Door", .name = "NetworkedPlayLockSound"};
+
+inline constexpr const char* Door_LockDoorForTime_params[] = {"float", "bool"};
+
+/// Locks the door for `seconds` (the Monkey Paw's wish calls it): its coroutine, with `takeOwnership`
+/// first taking the door's PhotonView, calls ToggleDoorLock(false), waits, then ToggleDoorLock(true),
+/// which unlocks the door whoever locked it. A DoorKind.Main door is left alone while the ghost hunts.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_LockDoorForTime{.key = "Door.LockDoorForTime", .kind = pm::sdk::Kind::Method,
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "Door", .name = "LockDoorForTime",
+                                                         .params = Door_LockDoorForTime_params};
+
 inline constexpr const char* DoorKind_values[] = {"None", "Main", "Secondary", "PermanentLock"};
 
-/// What kind of door a Door is (Assembly-CSharp, global namespace, name obfuscated): None, Main (the
-/// front door), Secondary or PermanentLock. Found by its values. Inferred: from the values' names.
-inline constexpr pm::sdk::EntryDesc DoorKind{.key = "DoorKind", .assembly = "Assembly-CSharp",
-                                             .ns = "", .values = DoorKind_values};
+/// What kind of door a Door is (Assembly-CSharp, global namespace, name obfuscated): None, Main (an
+/// exit), Secondary or PermanentLock; a key (KeyInfo.keyType) opens the doors of its own kind. Found by
+/// its values. Decompiled.
+inline constexpr pm::sdk::EntryDesc DoorKind{.key = "DoorKind", .confidence = pm::sdk::Confidence::Decompiled,
+                                             .assembly = "Assembly-CSharp", .ns = "", .values = DoorKind_values};
 
-/// The front door. GhostActivity.GetDoorToOpen never picks it, and the Asterion leaves it alone.
-/// Inferred: from the value's name.
+/// An exit: a door between the map's rooms and its outdoors (RoomKind.outsideMap). On every map of
+/// build 25811160 the Main doors are exactly LevelController.huntingDoors, one to six of them, and each
+/// starts the contract locked (scene read). Only a Main door plays the locked sound
+/// (NetworkedPlayLockSound) and calls SetupPhaseController.UnlockMainDoor when its lock changes.
+/// GhostActivity.GetDoorToOpen never picks it, and the Asterion leaves it alone. Decompiled.
 inline constexpr pm::sdk::EntryDesc DoorKind_Main{.key = "DoorKind.Main", .kind = pm::sdk::Kind::EnumValue,
+                                                  .confidence = pm::sdk::Confidence::Decompiled,
                                                   .owner = "DoorKind", .name = "Main"};
+
+/// A locked door inside the map, which a key of its kind opens (AttemptToUnlockDoor): Maple Lodge
+/// Campsite's cabin door and Point Hope's machine housing in build 25811160 (scene read). Optional.
+/// Inferred: from the value's name and the scenes.
+inline constexpr pm::sdk::EntryDesc DoorKind_Secondary{.key = "DoorKind.Secondary", .kind = pm::sdk::Kind::EnumValue,
+                                                       .flags = pm::sdk::kOptional, .owner = "DoorKind",
+                                                       .name = "Secondary"};
+
+/// A door that starts locked and is not an exit: wardrobes, toilet cubicles, a locked shed or safe, in
+/// build 25811160 (scene read). Optional. Inferred: from the value's name and the scenes.
+inline constexpr pm::sdk::EntryDesc DoorKind_PermanentLock{.key = "DoorKind.PermanentLock",
+                                                           .kind = pm::sdk::Kind::EnumValue,
+                                                           .flags = pm::sdk::kOptional, .owner = "DoorKind",
+                                                           .name = "PermanentLock"};
+
+/// A key's description (Assembly-CSharp, global namespace), a journal collectable's info. Decompiled.
+inline constexpr pm::sdk::EntryDesc KeyInfo{.key = "KeyInfo", .confidence = pm::sdk::Confidence::Decompiled,
+                                            .name = "KeyInfo", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The kind of door the key opens, a DoorKind number: Door.AttemptToUnlockDoor compares it with the
+/// door's kind. Decompiled.
+inline constexpr pm::sdk::EntryDesc KeyInfo_keyType{.key = "KeyInfo.keyType", .kind = pm::sdk::Kind::Field,
+                                                    .confidence = pm::sdk::Confidence::Decompiled,
+                                                    .owner = "KeyInfo", .name = "keyType"};
+
+/// A key lying in the level (Assembly-CSharp, global namespace): every map has a house key, and some a
+/// car, garage, cabin or cabinet key too (scene read). Its Start hides a DoorKind.Main key while
+/// GameController.allPlayersLoaded is false, outside the training; what shows it again was not traced.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Key{.key = "Key", .confidence = pm::sdk::Confidence::Decompiled, .name = "Key",
+                                        .assembly = "Assembly-CSharp", .ns = ""};
+
+/// A player picked the key up, on that player's client (Key.Start gives it to the key's
+/// PhotonObjectInteract as a grab event): it adds the key's KeyInfo to the local player's keys
+/// (Player.keys), so only that client's player gains it. Decompiled.
+inline constexpr pm::sdk::EntryDesc Key_GrabbedKey{.key = "Key.GrabbedKey", .kind = pm::sdk::Kind::Method,
+                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Key",
+                                                   .name = "GrabbedKey"};
 
 /// The door's kind: Door's one field of the DoorKind type. Inferred: from the type's values.
 inline constexpr pm::sdk::EntryDesc Door_kind{.key = "Door.kind", .kind = pm::sdk::Kind::Field, .owner = "Door",
@@ -136,6 +284,12 @@ inline constexpr pm::sdk::EntryDesc SmallMapVariation_huntingDoorsToLock{
     .key = "SmallMapVariation.huntingDoorsToLock", .kind = pm::sdk::Kind::Field,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "SmallMapVariation", .name = "huntingDoorsToLock"};
 
+/// The variation's rooms, a LevelRoom[]: LevelController.LockHuntingDoors locks the variation's doors
+/// only when the ghost's room is one of them and a player is in one of them. Decompiled.
+inline constexpr pm::sdk::EntryDesc SmallMapVariation_huntingRooms{
+    .key = "SmallMapVariation.huntingRooms", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "SmallMapVariation", .name = "huntingRooms"};
+
 }  // namespace pm::map
 
 // The game API for doors (sdk/api/game_api.h). Every member is called on Unity's main thread. One that
@@ -155,10 +309,39 @@ struct Door {
   static constexpr pm::api::Field<pm::map::Door_closedAngle, float> closedAngle{};
   /// GhostForceDoor(door, open, strength, skipRattle). A mod may hook it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Door_GhostForceDoor, void(void*, bool, float, bool)> GhostForceDoor{};
-  /// HuntingCloseDoor(door). Unresolved: does nothing.
+  /// HuntingCloseDoor(door): shuts, switches off and locks the door on every client, as a hunt locks its
+  /// exits. Call it on the master only, as LevelController.LockHuntingDoors does: its RPC refuses any other
+  /// sender, and refuses on a friendly ghost's difficulty, which this method itself skips. Unresolved: does
+  /// nothing.
   static constexpr pm::api::Method<pm::map::Door_HuntingCloseDoor, void(void*)> HuntingCloseDoor{};
-  /// ToggleDoorLock(door, unlock, b). Unresolved: does nothing.
+  /// HuntingCloseDoorNetworked(door, &info), an RPC. A mod hooks it; never calls it. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::Door_HuntingCloseDoorNetworked, void(void*, void*)>
+      HuntingCloseDoorNetworked{};
+  /// ToggleDoorLock(door, on, b): `on` false switches the door off and shuts it, true switches it back on;
+  /// either way it ends unlocked. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Door_ToggleDoorLock, void(void*, bool, bool)> ToggleDoorLock{};
+  /// LockDoor(door, force): locks the door, shutting it first with `force`; the lock reaches every client
+  /// only when the master calls it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_LockDoor, void(void*, bool)> LockDoor{};
+  /// UnlockDoor(door, sound): unlocks it on every client, with its unlock sound when `sound`. Unresolved:
+  /// does nothing.
+  static constexpr pm::api::Method<pm::map::Door_UnlockDoor, void(void*, bool)> UnlockDoor{};
+  /// SyncLockState(door, locked, &info), an RPC. A mod hooks it; never calls it. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::Door_SyncLockState, void(void*, bool, void*)> SyncLockState{};
+  /// Whether it is locked on this client: locked.get(door). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Door_locked, bool> locked{};
+  /// AttemptToUnlockDoor(door): the local player tries the door. A mod usually hooks it. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::Door_AttemptToUnlockDoor, void(void*)> AttemptToUnlockDoor{};
+  /// GrabbedDoor(door): the local player grabbed the door. A mod usually hooks it. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::Door_GrabbedDoor, void(void*)> GrabbedDoor{};
+  /// NetworkedPlayLockSound(door), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_NetworkedPlayLockSound, void(void*)> NetworkedPlayLockSound{};
+  /// LockDoorForTime(door, seconds, takeOwnership). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_LockDoorForTime, void(void*, float, bool)> LockDoorForTime{};
   /// Its kind, a DoorKind number: kind.get(door). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Door_kind, int32_t> kind{};
   /// Its PhotonObjectInteract: interact.get(door). Unresolved: null.
@@ -173,9 +356,29 @@ struct Door {
 
 /// What kind of door a Door is.
 namespace DoorKind {
-/// Main(): the front door. Unresolved: 0.
+/// Main(): an exit. Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::DoorKind_Main> Main{};
+/// Secondary(): a locked door inside the map that its own key opens. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DoorKind_Secondary> Secondary{};
+/// PermanentLock(): a door that stays locked. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DoorKind_PermanentLock> PermanentLock{};
 }  // namespace DoorKind
+
+/// A key's description. `info` below is the KeyInfo.
+struct KeyInfo {
+  /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::KeyInfo> type{};
+  /// The kind of door it opens, a DoorKind number: keyType.get(info). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::KeyInfo_keyType, int32_t> keyType{};
+};
+
+/// A key lying in the level. `key` below is the Key.
+struct Key {
+  /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::Key> type{};
+  /// GrabbedKey(key): the local player picked it up. A mod usually hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Key_GrabbedKey, void(void*)> GrabbedKey{};
+};
 
 /// A hinged door. `door` below is the HingeDoor.
 struct HingeDoor {
@@ -197,6 +400,9 @@ struct SmallMapVariation {
   /// Its hunts' doors, a Door[]: huntingDoorsToLock.get(variation), read as a pm::api::RefArray.
   /// Unresolved: null.
   static constexpr pm::api::Field<pm::map::SmallMapVariation_huntingDoorsToLock, void*> huntingDoorsToLock{};
+  /// Its hunts' rooms, a LevelRoom[]: huntingRooms.get(variation), read as a pm::api::RefArray.
+  /// Unresolved: null.
+  static constexpr pm::api::Field<pm::map::SmallMapVariation_huntingRooms, void*> huntingRooms{};
 };
 
 /// @}

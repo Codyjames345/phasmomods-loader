@@ -122,17 +122,28 @@ inline constexpr pm::sdk::EntryDesc LevelController_fireSources{
     .key = "LevelController.fireSources", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LevelController", .type = "List<@FireSource>"};
 
-/// Locks the level's hunt doors as a hunt starts: its own list (huntingDoors) and the map
-/// variations' (mapVariations). Decompiled.
+/// Locks the level's exits as a hunt starts, on the master (the hunt state calls it right after it sends
+/// GhostAI.Hunting): Door.HuntingCloseDoor on every door of its own list (huntingDoors), then on a map
+/// variation's doors (mapVariations) when the ghost's room is one of the variation's rooms and a player
+/// is in one of them. Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelController_LockHuntingDoors{
     .key = "LevelController.LockHuntingDoors", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "LevelController", .name = "LockHuntingDoors"};
+
+/// Opens the exits again as a hunt ends: Door.ToggleDoorLock(true, true) on every door of huntingDoors
+/// and of every variation's huntingDoorsToLock. GameController.ResetHuntEffects calls it, and that runs
+/// only when a hunt was on. Decompiled.
+inline constexpr pm::sdk::EntryDesc LevelController_UnlockHuntingDoors{
+    .key = "LevelController.UnlockHuntingDoors", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LevelController", .name = "UnlockHuntingDoors"};
 
 // Of the class's two Door[] fields, LockHuntingDoors reads only this one.
 inline constexpr pm::sdk::Fact LevelController_huntingDoors_facts[] = {
     {.is = pm::sdk::Fact::Is::Loads, .method = "LevelController.LockHuntingDoors"}};
 
-/// The doors a hunt locks, a Door[]: LockHuntingDoors and UnlockHuntingDoors walk it. Decompiled.
+/// The doors a hunt locks, a Door[]: the map's exits. LockHuntingDoors and UnlockHuntingDoors walk it.
+/// On every map of build 25811160 it holds exactly the map's DoorKind.Main doors, and every variation's
+/// huntingDoorsToLock is a part of it (scene read; sdk/systems/doors.md lists them). Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelController_huntingDoors{
     .key = "LevelController.huntingDoors", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LevelController", .type = "@Door[]", .facts = LevelController_huntingDoors_facts};
@@ -166,7 +177,8 @@ inline constexpr pm::sdk::Fact LevelController_outsideRoom_facts[] = {
     {.is = pm::sdk::Fact::Is::Stores, .method = "LevelController.SyncCurrentGhostRoomNetworked", .negate = true}};
 
 /// The level's outdoors, a LevelRoom, or null on a level without one: the room IsPointInOutsideRoom
-/// tests a point against. Decompiled.
+/// tests a point against. On every map of build 25811160 it is the map's one room of kind
+/// RoomKind.outsideMap, named Outside or Exterior (scene read). Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelController_outsideRoom{
     .key = "LevelController.outsideRoom", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LevelController", .type = "@LevelRoom", .facts = LevelController_outsideRoom_facts};

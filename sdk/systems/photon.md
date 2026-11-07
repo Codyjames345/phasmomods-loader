@@ -168,7 +168,7 @@ Most of the game's RPC bodies start by checking who sent them, and some also che
 
 | Check | Lets through | Examples |
 | --- | --- | --- |
-| The room's first actor | The lowest actor number in `PhotonNetwork.get_PlayerList`, or everyone outside a room or offline. A null list, entry or sender throws. | `ExitLevel.Exit`, `GameController.Exit`, `LiftButton.NetworkedUse`, `GhostAI.Hunting`, `Door`'s RPCs, `PlayerStats.SyncStatsNetworked`, `ServerManager.KickPlayerNetworked` |
+| The room's first actor | The lowest actor number in `PhotonNetwork.get_PlayerList`, or everyone outside a room or offline. A null list, entry or sender throws. | `ExitLevel.Exit`, `GameController.Exit`, `LiftButton.NetworkedUse`, `GhostAI.Hunting`, `Door.HuntingCloseDoorNetworked`, `Door.SyncLockState` when it locks ([doors](doors.md)), `PlayerStats.SyncStatsNetworked`, `ServerManager.KickPlayerNetworked` |
 | The object's owner | The sender equals a given player, usually the view's owner. | `Player.CompleteDeathSequenceNetworked`, `TarotCards.ChangeState`, `MonkeyPaw.MakeWishNetworked` |
 | The game's state | Depends on the RPC. | `Difficulty.friendlyGhost` refuses `GhostAI.Hunting`, `Door`'s hunt close and every kill. A kill of a player already dead is refused. `TarotCards.ChangeState` and `VoodooDoll`'s RPCs are refused unless a flag on the item is set. Lightning is refused unless the weather is a storm. |
 

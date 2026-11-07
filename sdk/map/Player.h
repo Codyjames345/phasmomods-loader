@@ -95,11 +95,22 @@ inline constexpr pm::sdk::EntryDesc Player_closet{.key = "Player.closet", .kind 
                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Player",
                                                   .type = "@ClosetZone"};
 
-/// The room the investigator is in, a LevelRoom: Player's one field of that type. The hunt's tests read
-/// it (the truck is a room) and throw for a player with none. Decompiled.
+/// The room the investigator is in, a LevelRoom: Player's one field of that type, on every client. It is
+/// the last room whose trigger the player's camera collider entered (LevelRoom.OnTriggerEnter sets it;
+/// nothing else in the room code clears it), so a player beyond the map's exits is in
+/// LevelController.outsideRoom (RoomKind.outsideMap) once they have entered its trigger. The hunt's tests
+/// read it and throw for a player with none. Decompiled.
 inline constexpr pm::sdk::EntryDesc Player_currentRoom{.key = "Player.currentRoom", .kind = pm::sdk::Kind::Field,
                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                        .owner = "Player", .type = "@LevelRoom"};
+
+/// The keys the investigator holds, a List<KeyInfo>: Player's one field of that type. Key.GrabbedKey adds
+/// to the local player's list, on that player's client (no other adder was traced), and
+/// Door.AttemptToUnlockDoor reads the local player's list: a door whose kind matches one of its keys
+/// unlocks, outside a hunt. Decompiled.
+inline constexpr pm::sdk::EntryDesc Player_keys{.key = "Player.keys", .kind = pm::sdk::Kind::Field,
+                                                .confidence = pm::sdk::Confidence::Decompiled, .owner = "Player",
+                                                .type = "List<@KeyInfo>"};
 
 /// The investigator's parts the ghost's sight looks for, a PlayerLOSTarget[]: Player's one field of
 /// that type. The hunt's sight test passes when the ghost's vision sensor detects any of them,
@@ -611,6 +622,21 @@ inline constexpr pm::sdk::EntryDesc PCControls_actions{.key = "PCControls.action
                                                        .owner = "PCControls",
                                                        .type = "InputActionAsset"};
 
+/// The PC player's hand for grabbing and using things (Assembly-CSharp, global namespace), a
+/// MonoBehaviour on the local player's rig. Decompiled.
+inline constexpr pm::sdk::EntryDesc DragRigidbodyUse{.key = "DragRigidbodyUse",
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .name = "DragRigidbodyUse", .assembly = "Assembly-CSharp", .ns = ""};
+
+inline constexpr const char* DragRigidbodyUse_OnInteract_params[] = {"CallbackContext"};
+
+/// The interact input's callback, on the local player's client: when the action is performed it casts a
+/// ray from the centre of the player's camera and, for a collider tagged Door, calls
+/// Door.AttemptToUnlockDoor on that door (which does nothing on an unlocked one). Decompiled.
+inline constexpr pm::sdk::EntryDesc DragRigidbodyUse_OnInteract{
+    .key = "DragRigidbodyUse.OnInteract", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "DragRigidbodyUse", .name = "OnInteract", .params = DragRigidbodyUse_OnInteract_params};
+
 }  // namespace pm::map
 
 // The game API for the investigators (sdk/api/game_api.h). Every member is called on Unity's main
@@ -689,6 +715,9 @@ struct Player {
   static constexpr pm::api::Field<pm::map::Player_stamina, void*> stamina{};
   /// The room it is in, or null: currentRoom.get(player). Unresolved: null.
   static constexpr pm::api::Field<pm::map::Player_currentRoom, void*> currentRoom{};
+  /// The keys it holds, a List<KeyInfo> (Door.h): keys.get(player), read as a pm::api::List. Read it
+  /// for the local player: Key.GrabbedKey fills that client's own. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Player_keys, void*> keys{};
   /// The parts the ghost's sight looks for, a PlayerLOSTarget[], or null: losTargets.get(player).
   /// Unresolved: null.
   static constexpr pm::api::Field<pm::map::Player_losTargets, void*> losTargets{};

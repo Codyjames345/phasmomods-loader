@@ -51,6 +51,7 @@ Does not exist yet. These arrive with stage 2, when every bundled mod is on the 
   documentation, and each header's `///` notes are the reference. The pages include
   [the contract](systems/contract.md) (its start, both ends, every way out) and
   [Photon](systems/photon.md) (rooms, views and the cleanup, and the game's RPC checks),
+  [doors, exits and keys](systems/doors.md) (every map's exits, the lock, and who is out of the map),
   [the menus](systems/menus.md) (how a menu button is clicked, and how a copy of one keeps working),
   [weather and lightning](systems/weather.md), [voice chat](systems/voice.md),
   [photos, video and screens](systems/media.md) and
@@ -1236,7 +1237,8 @@ The system overviews: [ghost AI](systems/ghost-ai.md), [ghost types and the Mimi
 [scene and asset facts](systems/scene.md), [the journal](systems/journal.md), [the custom
 difficulty](systems/difficulty.md), [evidence](systems/evidence.md), [flames](systems/flames.md),
 [players: death and revival](systems/players.md),
-[the contract](systems/contract.md), [Photon and refused RPCs](systems/photon.md). An
+[the contract](systems/contract.md), [Photon and refused RPCs](systems/photon.md), [doors, exits and
+keys](systems/doors.md). An
 overview may cite addresses and offsets as evidence for the build it names (an RVA where it shows
 decompiled logic), never as values to use: the map entries are the only source of a value, and
 `tools/gamecheck.ps1` prints them for the build in hand.
