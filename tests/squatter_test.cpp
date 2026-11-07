@@ -17,7 +17,9 @@
 #include "Animator.h"
 #include "UnityAssets.h"
 #include "UnityCloth.h"
+#include "Scene.h"
 #include "UnityObject.h"
+#include "UnityRendering.h"
 #include "fake_game.h"
 #include "game_api.h"
 #include "runtime.h"
@@ -709,6 +711,17 @@ int32_t hash(void* name, const void*) {
 }
 bool has_state(void*, int32_t layer, int32_t h) { return layer == 0 && g_states.contains(g_names[h]); }
 void destroy_immediate(void*, bool) {}
+void cloth_setter(void*, void*) {}
+void cloth_flag(void*, bool) {}
+void cloth_value(void*, float) {}
+void capsules(void*, void*, const void*) {}
+
+// The optional entries the figure's sheet needs, each of which the start checks for.
+const pm::sdk::EntryDesc* const kOptionalNeeds[] = {
+    &pm::map::Cloth, &pm::map::Cloth_set_capsuleColliders, &pm::map::Cloth_set_coefficients,
+    &pm::map::Cloth_set_useGravity, &pm::map::Cloth_set_bendingStiffness, &pm::map::Cloth_set_stretchingStiffness,
+    &pm::map::Cloth_set_damping, &pm::map::Layer_IgnoreRaycast, &pm::map::ShaderProperty_Lit_BaseColor,
+    &pm::map::ShaderProperty_Lit_Cull};
 
 void start() {
   namespace map = pm::map;
@@ -728,6 +741,16 @@ void start() {
   pm::fake::icall(map::Animator_HasState, reinterpret_cast<void*>(&has_state));
   pm::fake::method(map::Animator_StringToHash, reinterpret_cast<void*>(&hash));
   pm::fake::icall(map::UnityObject_DestroyImmediate, reinterpret_cast<void*>(&destroy_immediate));
+  pm::fake::method(map::Cloth_set_capsuleColliders, reinterpret_cast<void*>(&capsules));
+  pm::fake::icall(map::Cloth_set_coefficients, reinterpret_cast<void*>(&cloth_setter));
+  pm::fake::icall(map::Cloth_set_useGravity, reinterpret_cast<void*>(&cloth_flag));
+  pm::fake::icall(map::Cloth_set_bendingStiffness, reinterpret_cast<void*>(&cloth_value));
+  pm::fake::icall(map::Cloth_set_stretchingStiffness, reinterpret_cast<void*>(&cloth_value));
+  pm::fake::icall(map::Cloth_set_damping, reinterpret_cast<void*>(&cloth_value));
+  pm::fake::layer_names({"Default", "TransparentFX", "Ignore Raycast"});
+  pm::fake::layer(map::Layer_IgnoreRaycast);
+  pm::fake::shader_property(map::ShaderProperty_Lit_BaseColor);
+  pm::fake::shader_property(map::ShaderProperty_Lit_Cull);
   std::string missing;
   pm::api::bind(pm::fake::host(), missing);
   g_controllerType = phasmo::RuntimeAnimatorController::type.type_object();
@@ -760,10 +783,14 @@ void the_start_check_refuses_a_bundle_missing_a_state() {
     CHECK(why == std::string("assets/squatter.controller lacks the state ") + state);
     CHECK(fig::g_unloaded);  // nothing is kept
   }
-  fig::start();
-  pm::fake::forget(pm::map::Cloth);  // a build without the Cloth module
-  pm::api::bind(pm::fake::host(), why);
-  CHECK(!figure::load(assets, why) && why == "Cloth is not available in this game build");
+  // A build lacking any optional entry the sheet needs (the Cloth module, say) fails the start, naming the entry.
+  for (const pm::sdk::EntryDesc* d : fig::kOptionalNeeds) {
+    fig::start();
+    pm::fake::forget(*d);
+    pm::api::bind(pm::fake::host(), why);
+    CHECK(!figure::load(assets, why));
+    CHECK(why == std::string(d->key) + " is not available in this game build");
+  }
   figure::unload();
   fs::remove_all(assets, ignored);
 }

@@ -3,7 +3,6 @@
 #include <cmath>
 
 #include "Animator.h"
-#include "UnityCloth.h"
 #include "UnityObject.h"
 #include "UnityRendering.h"
 #include "bundles.h"
@@ -104,7 +103,8 @@ bool build_sheet() {
 bool load(const std::filesystem::path& assets, std::string& why) {
   unload();
   if (assets.empty()) return why = "the mod has no assets folder", false;
-  if (!phasmo::Cloth::available()) return why = "Cloth is not available in this game build", false;
+  // Every optional entry the sheet needs, so a build lacking one fails the start rather than every contract's figure.
+  if (!api::cloth_available(&why) || !api::material_available(&why)) return false;
   void* bundle = api::load_bundle(assets / kBundleFile, &why);
   if (!bundle) return why = std::string(kBundleFile) + ": " + why, false;
   g_bundle = bundle;
