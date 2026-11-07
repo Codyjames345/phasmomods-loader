@@ -21,6 +21,18 @@
         @{ Name = 'mods/custom-ghosts/CustomGhosts.dll'; Source = 'build/CustomGhosts.dll' }
         @{ Name = 'mods/custom-ghosts/manifest.json'; Source = 'mods/custom_ghosts/manifest.json' }
         @{ Name = 'mods/custom-ghosts/i18n/default.json'; Source = 'mods/custom_ghosts/i18n/default.json' }
+        # The Squatter's voice folders (sdk/api/assets.h): the launcher copies each mod's assets folder beside its DLL copy,
+        # and the mod does not start without these. A recording added to a folder is listed here too.
+        @{ Name = 'mods/custom-ghosts/assets/squatter/voice/lurk/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/lurk/.gitkeep' }
+        @{ Name = 'mods/custom-ghosts/assets/squatter/voice/chase/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/chase/.gitkeep' }
+        @{ Name = 'mods/custom-ghosts/assets/squatter/voice/search/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/search/.gitkeep' }
+        @{ Name = 'mods/custom-ghosts/assets/squatter/voice/hiding/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/hiding/.gitkeep' }
+        @{ Name = 'mods/custom-ghosts/assets/squatter/voice/catch/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/catch/.gitkeep' }
+        @{ Name = 'mods/custom-ghosts/assets/squatter/voice/door/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/door/.gitkeep' }
+        @{ Name = 'mods/custom-ghosts/assets/squatter/voice/tired/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/tired/.gitkeep' }
+        @{ Name = 'mods/custom-ghosts/assets/squatter/voice/mope/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/mope/.gitkeep' }
+        @{ Name = 'mods/custom-ghosts/assets/squatter/voice/excited/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/excited/.gitkeep' }
+        @{ Name = 'mods/custom-ghosts/assets/squatter/voice/friendly/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/friendly/.gitkeep' }
         @{ Name = 'mods/spectral-flame/SpectralFlame.dll'; Source = 'build/SpectralFlame.dll' }
         @{ Name = 'mods/spectral-flame/manifest.json'; Source = 'mods/spectral_flame/manifest.json' }
         @{ Name = 'mods/spectral-flame/i18n/default.json'; Source = 'mods/spectral_flame/i18n/default.json' }

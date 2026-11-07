@@ -1,11 +1,13 @@
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
 #include <limits>
 #include <string>
 
 #include "LevelController.h"
 #include "Photon.h"
 #include "apparition.h"
+#include "assets.h"
 #include "asterion.h"
 #include "behaviour.h"
 #include "bogeyman.h"
@@ -31,6 +33,7 @@
 #include "runtime.h"
 #include "sound.h"
 #include "squatter.h"
+#include "squatter_voice.h"
 #include "tempest.h"
 
 // The custom ghosts (ghosts.h) as a mod of the suite (core/mod_api.h). Each is a custom ghost of the
@@ -224,6 +227,15 @@ void receive(int sender, const uint8_t* data, size_t size) {
 
 bool start(const PmHostApi* api) {
   if (!pm::mod::bind(api, &kInfo)) return false;
+  // The Squatter's recordings are in the mod's own files (sdk/api/assets.h). Without their folder the mod does not start,
+  // before it has changed anything; a mod with an error is off.
+  const std::filesystem::path assets = pm::api::assets_folder();
+  const std::filesystem::path voice_folder = assets / "squatter" / "voice";
+  std::error_code voice_error;
+  if (assets.empty() || !std::filesystem::is_directory(voice_folder, voice_error)) {
+    PM_LOG("CustomGhosts inactive: the Squatter's voice folder (squatter/voice in the mod's assets) is missing");
+    return false;
+  }
   content::GhostDef callbacks;
   callbacks.useAbility = [](void* user) { return use_ability(type_of_user(user)); };
   callbacks.hudState = [](void* user) { return hud_state(type_of_user(user)); };
@@ -266,10 +278,8 @@ bool start(const PmHostApi* api) {
     return false;
   }
   pm::net::set_handler(&receive);
-  // SQUATTER_VOICE_TODO: squatter::voice::load(folder) goes here, or at contract start. Who passes the
-  // voice folder is undecided: the launcher copies only a mod's DLL, manifest and string table into its
-  // run folder, so a path beside this DLL is wrong. Until it is decided, no set is loaded and every
-  // squatter::voice::play stays silent.
+  // An empty set is no error, and a recording that cannot be read keeps its slot silent (squatter_voice.h).
+  squatter::voice::load(voice_folder);
   return true;
 }
 

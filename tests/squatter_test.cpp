@@ -451,10 +451,21 @@ void every_voice_file_is_in_the_payload() {
     CHECK(fs::is_directory(folder));
     for (const auto& e : fs::directory_iterator(folder)) {
       const std::string name = e.path().filename().string();
-      if (name == ".gitkeep") continue;  // keeps an empty folder in the repository; not a payload file
+      // The .gitkeep too: the launcher copies every file it finds, and the mod refuses to start without the voice folder,
+      // which a release with no file in it would not have.
       CHECK(payload.find("Source = '" + prefix + set + "/" + name + "'") != std::string::npos);
     }
   }
+}
+
+// The mod loads the voice folder from its assets folder and a missing one stops its start (a mod with an error is off).
+void the_mod_loads_its_voice_from_its_assets() {
+  const std::string mod = read_text(fs::path(PM_SOURCE_DIR) / "mods" / "custom_ghosts" / "mod.cpp");
+  CHECK(!mod.empty());
+  CHECK(mod.find("SQUATTER_VOICE_TODO") == std::string::npos);
+  CHECK(mod.find("squatter::voice::load(") != std::string::npos);
+  CHECK(mod.find("pm::api::assets_folder()") != std::string::npos);
+  CHECK(mod.find("\"squatter\" / \"voice\"") != std::string::npos);
 }
 
 // It may only idle, wander and go to its favourite room: every other GhostState (the game's numbers in build
@@ -469,6 +480,7 @@ void only_idling_wandering_and_its_room_pass() {
 }  // namespace
 
 int main() {
+  the_mod_loads_its_voice_from_its_assets();
   lurks_until_it_sees_someone();
   only_idling_wandering_and_its_room_pass();
   search_and_chase_alternate();
