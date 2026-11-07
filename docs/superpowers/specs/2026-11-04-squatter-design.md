@@ -20,13 +20,14 @@ well it works.
    runs until every living player is out of the house.
 3. **Chasing.** It runs at just under the players' sprint speed, so a sprinting player can barely outrun it and one whose sprint
    runs out gets caught. It is clumsy: it keeps breaking up its run with ducks, weaves, rolls and unnecessary parkour moves, and it
-   bumps into things, playing recordings as it goes. These moves change its speed where relevant. It goes for the nearest player when
+   bumps into things, playing recordings as it goes. When it goes through a door during the chase it plays an opening-door clip, inwards
+   or outwards (user, 2026-11-07). These moves change its speed where relevant. It goes for the nearest player when
    several are inside. When players can't sprint, its speed stays the same and it taunts them with a unique line, like "awww too tired to
    run?".
 4. **Losing track.** It does not always know where people are. When it loses them it searches, saying lines like "where are
    you?". It uses sight and hearing to find them again.
 5. **Hiding.** When it knows someone is in a closet or locker, it stands there, demands they come out and bangs on the door
-   repeatedly. It cannot open it. Hiding is safe, but loud. When they step out it goes straight back to chasing them. It knows
+   repeatedly, by kicking it with the kick's clip until a banging clip turns up (user, 2026-11-07). It cannot open it. Hiding is safe, but loud. When they step out it goes straight back to chasing them. It knows
    because it saw them go in, or found them while searching the way the game's own closet search does **(builder's call)**. Someone
    hiding where it never looks keeps the front door unlocked and the Squatter searching, for as long as they stay.
 6. **The catch.** It kills the player with a kick to the face, replacing the stock choke, and says a funny line.
@@ -58,6 +59,9 @@ Some consequences, all **(builder's call)**:
 - "Can't sprint" covers both a custom difficulty that turns sprinting off and a chased player whose sprint has run out, so the taunt can play
   for either. Its speed comes from the game's sprint speed as if sprinting were on, which reverse engineering has to establish.
 - Bumping into something is an animation and a pause. It moves no props, since that would read as a ghost interaction.
+- Whether going through a door moves the game's own door, and how, comes from reverse engineering the way a player opens one. It must not
+  send a game RPC by name, invoke an RPC body, or use the ghost's own door interaction (that is paranormal activity). If no clean route
+  exists, it plays the clip at a door already open, and the question goes to the user.
 
 ## Look and sound
 
@@ -67,7 +71,11 @@ Some consequences, all **(builder's call)**:
 - **Animation:** Mixamo clips, in variety: walk and run, ducks, weaves, rolls, parkour moves, stumbles, a kick, sitting on the floor,
   and getting up excited. The movement should feel human and
   natural; GTA V's walk and run are the user's reference for the feel. Only the feel: none of GTA's assets are used. The user
-  downloads the clips (Mixamo needs an Adobe login) and picks which ones to use.
+  downloads the clips (Mixamo needs an Adobe login) and picks which ones to use. The user's picks (2026-11-07): run `running`; duck
+  `crouched sneaking left` or `right`; weave `left cover sneak` or `right cover sneak`; roll `Sprinting Forward Roll` or `Stand To Roll`;
+  parkour `jumping up` or `hard landing`; stumble `Tripping` and bump `Jogging Stumble` (the builder's reading of the user's description);
+  sit `Sitting Idle`; get up `Getting Up`; kick and bang `Martelo 2`; doors `Open Door Outwards` and `Opening Door Inwards`. Where a move
+  has two clips, each time it plays one is picked at random, the same on every client.
 - **Sound:** every sound it makes is one of the user's recordings or a stock clip the user supplies. The user records all the
   lines and writes any more.
 
