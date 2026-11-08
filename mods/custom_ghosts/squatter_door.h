@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <vector>
 
@@ -18,7 +19,12 @@
 //  - Once every client holds the exits, no Monkey Paw wish opens them (the user's rule, 2026-11-08): the hooks refuse,
 //    on every client, Door.LockDoorForTime and Door.ToggleDoorLock on a held exit, and Door.UnlockDoor and
 //    Door.ForceToggleHuntCollider on one inside MonkeyPaw.OpenExitsWish. Every other call, and the rest of each wish,
-//    stays the game's. A wish another client began before the master's lock reached it is not held back there.
+//    stays the game's.
+//  - A wish another client began before the master's lock reached it is not held back there, and its unlock races the
+//    lock: the timed lock's window and the open-exits wish send Door.SyncLockState(false), which the game takes from
+//    anyone, and switch the exit back on for every client, and those can reach every client, the master included,
+//    after the lock. The master answers (relock): a held exit that reads grabbable again, or unlocked again, gets the
+//    game's own hunt lock once more, at most once each kRelockMs.
 namespace pm::custom::squatter::door {
 
 /**
@@ -49,6 +55,22 @@ bool lock_all();
 
 /** Whether this client holds the current map's exits. False once the map's LevelController is gone. */
 bool locked();
+
+// Milliseconds within which relock calls the game's lock on one exit at most once. A starting value, not a game value.
+inline constexpr uint64_t kRelockMs = 2000;
+
+/**
+ * On the master, while it holds the exits and not on a friendly ghost's difficulty (nor an unread one): calls
+ * Door.HuntingCloseDoor again on each held exit a raced wish has reopened, and returns how many. An exit is reopened
+ * when it reads grabbable here (Door.grabbable, which the lock clears on every client), or unlocked (Door.locked) after
+ * this client read it locked since the hold or since its last re-lock; an exit another player's client owns keeps the
+ * game's lock on that client alone and never reads locked here, so its plain unlocked state is the game's own and calls
+ * nothing. One exit is locked again at most once each kRelockMs, and not again until it reads reopened afresh. The
+ * house key's unlock outside a hunt (Door.AttemptToUnlockDoor) reads as unlocked again too, and is answered the same
+ * way. `now` is milliseconds on any steady clock. 0 on another client, before the hold and once the map is gone.
+ * Every frame on the master (squatter.cpp's tick).
+ */
+int relock(uint64_t now);
 
 /**
  * Whether the Squatter holds `door` on this client: an exit of the map whose exits it holds. False for null, for a door

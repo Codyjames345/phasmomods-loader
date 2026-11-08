@@ -1,6 +1,7 @@
 #include "squatter_door.h"
 
 #include <algorithm>
+#include <optional>
 #include <type_traits>
 
 #include "CursedItems.h"
@@ -19,8 +20,15 @@
 namespace pm::custom::squatter::door {
 namespace {
 
-api::Held g_level;                // the LevelController whose exits are held, or null
-std::vector<api::Held> g_locked;  // its exits, as they were when the hold began
+// An exit this client holds, and what the master's re-lock has read of it (relock).
+struct HeldExit {
+  api::Held door;
+  bool seenLocked = false;             // the master read it locked since the hold or since its last re-lock
+  std::optional<uint64_t> relockedAt;  // when the master last locked it again
+};
+
+api::Held g_level;               // the LevelController whose exits are held, or null
+std::vector<HeldExit> g_locked;  // its exits, as they were when the hold began
 Attempt g_callback;
 int g_openExitsWish = 0;  // MonkeyPaw.OpenExitsWish calls running on this thread
 bool g_haunting = false;  // set_haunting: the master's lock is the Squatter's
@@ -47,14 +55,18 @@ void add_doors(void* doors, std::vector<void*>& out) {
 /** Whether `d` is one of the exits lock_all locked for the current map. */
 bool locked_exit(void* d) {
   forget_old_level();
-  return d && std::any_of(g_locked.begin(), g_locked.end(), [d](const api::Held& h) { return h.get() == d; });
+  return d && std::any_of(g_locked.begin(), g_locked.end(), [d](const HeldExit& e) { return e.door.get() == d; });
 }
 
 /** Holds `doors`, the exits of the map whose LevelController is `l`, on this client from now on. */
 void hold(void* l, const std::vector<void*>& doors) {
   g_level = l;
   g_locked.clear();
-  for (void* d : doors) g_locked.emplace_back(d);
+  for (void* d : doors) {
+    HeldExit e;
+    e.door = d;
+    g_locked.push_back(std::move(e));
+  }
   PM_LOG("squatter: %zu exit(s) held", doors.size());
 }
 
@@ -210,6 +222,28 @@ bool locked() {
 }
 
 bool holds(void* door) { return locked_exit(door); }
+
+int relock(uint64_t now) {
+  forget_old_level();
+  if (!g_level || !phasmo::PhotonNetwork::get_IsMasterClient() || friendly()) return 0;
+  int relocked = 0;
+  for (HeldExit& e : g_locked) {
+    void* d = e.door.get();
+    if (!d || !api::alive(d)) continue;
+    const bool lockedHere = phasmo::Door::locked.get(d);
+    e.seenLocked = e.seenLocked || lockedHere;
+    // Grabbable again, or unlocked after this client read it locked: a wish's unlock that raced the lock. An exit
+    // another player's client owns never reads locked here, as the game's lock stays on its owner (doors.md).
+    const bool reopened = phasmo::Door::grabbable.get(d) || (e.seenLocked && !lockedHere);
+    if (!reopened || (e.relockedAt && now - *e.relockedAt < kRelockMs)) continue;
+    phasmo::Door::HuntingCloseDoor(d);
+    e.seenLocked = false;
+    e.relockedAt = now;
+    ++relocked;
+  }
+  if (relocked) PM_LOG("squatter: %d exit(s) a wish reopened locked again", relocked);
+  return relocked;
+}
 
 void on_attempt(Attempt callback) { g_callback = std::move(callback); }
 

@@ -45,6 +45,7 @@ constexpr int32_t kPlayerDead = 0x08, kPlayerRoom = 0x10;
 constexpr int32_t kRoomKind = 0x08;
 constexpr int32_t kValuesDifficulty = 0x08, kDifficultyFriendly = 0x08;
 constexpr int32_t kInfoSender = 0x08, kActorNumber = 0x08;
+constexpr int32_t kDoorGrabbable = 0x08, kDoorLocked = 0x09;  // Door.grabbable and Door.locked
 // Made-up numbers for RoomKind's insideRoom, outsideMap, exterior and exteriorRoom: the code reads outsideMap's from
 // the map, so none is the game's.
 constexpr int32_t kInside = 10, kOutsideMap = 11, kExterior = 12, kExteriorRoom = 13;
@@ -81,9 +82,15 @@ bool capture_hook_body(const char* key, uint32_t index, void* detour, void** ori
 }
 
 // The game's bodies.
+bool g_closeSwitchesOff = true;  // the hunt lock's switch-off reaches this client at once
+bool g_lockRunsHere = false;     // Photon runs the lock's RPC on its sender within the call
+void lock_arrives(void* d, int sender = 1);
 void fake_hunting_close(void* d, const void*) {
   g_calls.push_back("HuntingCloseDoor");
   g_closed.push_back(d);
+  // The game's switch-off (Door.DisableOrEnableDoor's RPC and the lock's own), which Photon runs on its sender too.
+  if (g_closeSwitchesOff) at<bool>(*static_cast<Obj*>(d), kDoorGrabbable) = false;
+  if (g_lockRunsHere) lock_arrives(d);
 }
 void fake_toggle_lock(void*, bool, bool, const void*) { g_calls.push_back("ToggleDoorLock"); }
 void fake_lock(void*, bool, const void*) { g_calls.push_back("LockDoor"); }
@@ -170,7 +177,7 @@ int32_t fake_actor_number(void* p, const void*) { return at<int32_t>(*static_cas
 
 // The master's hunt close for `d` arriving on this client, from actor `sender` (0: no sender), through whatever hook
 // the code under test made on the RPC's body.
-void lock_arrives(void* d, int sender = 1) {
+void lock_arrives(void* d, int sender) {
   Obj info;
   at<void*>(info, kInfoSender) = sender ? &g_photon[sender - 1] : nullptr;
   using F = void (*)(void*, void*, const void*);
@@ -207,6 +214,9 @@ void start(bool master = true, bool friendly = false) {
   g_netRef = &g_net;
   g_level = g_net = g_values = g_difficulty = g_variation = Obj{};
   g_bedroom = g_hall = g_garden = g_campfire = g_outside = Obj{};
+  g_front = g_back = g_gateLeft = g_gateRight = Obj{};
+  g_closeSwitchesOff = true;
+  g_lockRunsHere = false;
   at<int32_t>(g_bedroom, kRoomKind) = kInside;
   at<int32_t>(g_hall, kRoomKind) = kInside;
   at<int32_t>(g_garden, kRoomKind) = kExteriorRoom;
@@ -245,6 +255,8 @@ void start(bool master = true, bool friendly = false) {
   fake::method(map::PhotonNetwork_get_PlayerList, reinterpret_cast<void*>(&fake_player_list));
   fake::method(map::PhotonPlayer_get_ActorNumber, reinterpret_cast<void*>(&fake_actor_number));
   fake::field(map::PhotonMessageInfo_Sender, kInfoSender);
+  fake::field(map::Door_grabbable, kDoorGrabbable);
+  fake::field(map::Door_locked, kDoorLocked);
   // What the room's other gates read (core/room_gates.h), which the binding needs though nothing here calls them.
   for (const pm::sdk::EntryDesc* gate : {&map::PhotonNetwork_get_CurrentRoom, &map::PhotonNetwork_get_LocalPlayer,
                                          &map::PhotonNetwork_get_MasterClient, &map::PhotonRoom_get_IsVisible})
@@ -610,6 +622,91 @@ void the_open_exits_wish_count_returns_to_zero() {
   CHECK((g_calls == std::vector<std::string>{"UnlockDoor", "ForceToggleHuntCollider"}));
 }
 
+// The master's own lock reaches it within its own call (Photon runs an RPC sent to every client on its sender), so the
+// hold may begin inside lock_all's first Door.HuntingCloseDoor. lock_all still locks every exit once, and holds them
+// all once.
+void the_masters_own_rpc_holds_before_lock_all_does() {
+  start();
+  exits_are({&g_front, &g_back});
+  g_lockRunsHere = true;
+  CHECK(door::lock_all());
+  CHECK(g_closed.size() == 2 && count(g_closed, &g_front) == 1 && count(g_closed, &g_back) == 1);
+  CHECK(g_networkedBodies == 2 && door::locked() && door::holds(&g_front) && door::holds(&g_back));
+  CHECK(door::lock_all() && g_closed.size() == 2);
+}
+
+// A wish another client began before the master's lock reached it can unlock an exit after the lock, for every client
+// (its unlock reaches them all after the lock), and switch it back on. The master answers with the game's own hunt
+// lock (Door.HuntingCloseDoor) once more on that exit alone: when it reads grabbable again, or unlocked again after
+// this client read it locked. One reopening gets one re-lock.
+void the_master_relocks_an_exit_a_raced_wish_reopened() {
+  start();
+  exits_are({&g_front, &g_back});
+  CHECK(door::lock_all());
+  g_closed.clear();
+  CHECK(door::relock(1000) == 0);  // both shut and switched off
+  at<bool>(g_front, kDoorGrabbable) = true;  // the raced wish switched it back on
+  CHECK(door::relock(2000) == 1 && g_closed == std::vector<void*>{&g_front});
+  CHECK(door::relock(2001) == 0 && g_closed.size() == 1);  // the lock switched it off again
+  at<bool>(g_back, kDoorLocked) = true;  // the lock reached it
+  CHECK(door::relock(3000) == 0);
+  at<bool>(g_back, kDoorLocked) = false;  // the raced unlock came after
+  CHECK(door::relock(3001) == 1 && g_closed.back() == &g_back);
+  CHECK(door::relock(3002) == 0 && g_closed.size() == 2);  // not read locked since: nothing more
+  // Locked and then unlocked again later: one more re-lock.
+  at<bool>(g_back, kDoorLocked) = true;
+  CHECK(door::relock(9000) == 0);
+  at<bool>(g_back, kDoorLocked) = false;
+  CHECK(door::relock(9001) == 1 && g_closed.size() == 3);
+}
+
+// An exit another player's client owns keeps its lock on that client alone, so the master reads it unlocked from the
+// start, though shut and switched off everywhere (sdk/systems/doors.md, "When a player owns the exit"). That is the
+// game's own lock, not a raced wish: the master never re-locks it.
+void an_exit_locked_on_its_owner_is_left_alone() {
+  start();
+  CHECK(door::lock_all());
+  g_closed.clear();
+  for (const uint64_t t : {1000u, 5000u, 60000u}) CHECK(door::relock(t) == 0);
+  CHECK(g_closed.empty());
+}
+
+// An exit that stays grabbable is locked again at most once each kRelockMs, never every frame.
+void a_relock_is_rate_limited() {
+  start();
+  CHECK(door::lock_all());
+  g_closed.clear();
+  g_closeSwitchesOff = false;  // say the switch-off never lands
+  at<bool>(g_front, kDoorGrabbable) = true;
+  CHECK(door::relock(1000) == 1);
+  CHECK(door::relock(1001) == 0 && door::relock(1000 + door::kRelockMs - 1) == 0);
+  CHECK(door::relock(1000 + door::kRelockMs) == 1 && g_closed.size() == 2);
+}
+
+// Only the master re-locks, only exits it holds, and never on a friendly ghost's difficulty or an unread one: another
+// client holding the exits, a master before the lock, a door that is not an exit, and the map once its level is gone
+// all call nothing.
+void only_the_master_relocks_its_held_exits() {
+  hold_from_the_master({&g_front});
+  at<bool>(g_front, kDoorGrabbable) = true;
+  CHECK(door::relock(1000) == 0 && g_calls.empty());
+  start();
+  at<bool>(g_front, kDoorGrabbable) = true;
+  CHECK(door::relock(1000) == 0 && g_calls.empty());  // nothing held yet
+  CHECK(door::lock_all());
+  g_calls.clear();
+  at<bool>(g_bedroom, kDoorGrabbable) = true;
+  at<bool>(g_difficulty, kDifficultyFriendly) = true;
+  at<bool>(g_front, kDoorGrabbable) = true;
+  CHECK(door::relock(2000) == 0);
+  at<bool>(g_difficulty, kDifficultyFriendly) = false;
+  g_valuesRef = nullptr;
+  CHECK(door::relock(3000) == 0);
+  g_valuesRef = &g_values;
+  g_levelRef = nullptr;
+  CHECK(door::relock(4000) == 0 && g_calls.empty());
+}
+
 // A build that lacks an entry the doors need fails the mod's binding, naming it, as Custom Ghosts' start does.
 void a_missing_entry_fails_the_start() {
   for (const pm::sdk::EntryDesc* lacking : {&map::Door_HuntingCloseDoor, &map::Door_AttemptToUnlockDoor,
@@ -618,7 +715,8 @@ void a_missing_entry_fails_the_start() {
                                             &map::Door_LockDoorForTime, &map::Door_ToggleDoorLock,
                                             &map::Door_UnlockDoor, &map::Door_ForceToggleHuntCollider,
                                             &map::MonkeyPaw_OpenExitsWish,
-                                            &map::Door_HuntingCloseDoorNetworked}) {
+                                            &map::Door_HuntingCloseDoorNetworked, &map::Door_grabbable,
+                                            &map::Door_locked}) {
     start();
     fake::forget(*lacking);
     std::string missing;
@@ -645,6 +743,11 @@ int main() {
   a_lock_the_game_refuses_holds_nothing();
   a_new_master_never_locks_twice();
   the_open_exits_wish_count_returns_to_zero();
+  the_masters_own_rpc_holds_before_lock_all_does();
+  the_master_relocks_an_exit_a_raced_wish_reopened();
+  an_exit_locked_on_its_owner_is_left_alone();
+  a_relock_is_rate_limited();
+  only_the_master_relocks_its_held_exits();
   a_missing_entry_fails_the_start();
   door::reset();  // what it holds goes back before the fake's own storage does
   std::printf(g_failures ? "%d check(s) failed\n" : "all squatter door tests passed\n", g_failures);

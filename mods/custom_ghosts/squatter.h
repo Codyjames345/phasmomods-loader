@@ -36,8 +36,10 @@ bool create_hooks();
  * ghost it acts as (ghosts.h Type, 0 for none), `steered` whether a player controls it (on the host). While it haunts
  * as the Squatter its phase is kept, from first_phase(Difficulty.friendlyGhost) on the first frame the difficulty can
  * be read (none before it); on a client that is not the master it follows the last Shown instead, so a client that
- * becomes the master goes on from there (squatter_net.h kept_phase). Each client also tells the master its own
- * player's sprint. Otherwise it holds no phase, and forgets what the channel brought.
+ * becomes the master goes on from there (squatter_net.h kept_phase). On the master, the first frame the mod steers
+ * the ghost's agent changes it to GhostState.idle once (squatter_rule.h steering_begins), and each frame any held exit
+ * a raced wish reopened is locked again (squatter_door.h relock). Each client also tells the master its own player's
+ * sprint. Otherwise it holds no phase, and forgets what the channel brought.
  */
 void tick(void* haunting, int type, bool steered);
 /** Its phase while it haunts as the Squatter, else none. */

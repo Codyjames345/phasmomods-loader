@@ -2175,6 +2175,52 @@ void the_squatters_lock_survives_a_tick_without_it() {
   squatter::reset();
 }
 
+// The master's tick locks again a held exit that a raced Monkey Paw wish switched back on (squatter_door.h relock),
+// through the game's own Door.HuntingCloseDoor; another client's tick never does.
+void the_masters_tick_relocks_a_reopened_exit() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty, level, door, ghost;
+  void* valuesStatic = &values;
+  void* levelStatic = &level;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  fake::static_field(map::LevelController_instance, &levelStatic, sizeof levelStatic, true);
+  fake::field(map::LevelController_huntingDoors, 0x10);
+  fake::field(map::LevelController_mapVariations, 0x18);
+  fake::field(map::Door_grabbable, 0x10);
+  fake::field(map::Door_locked, 0x11);
+  fake::method(map::Door_HuntingCloseDoor, reinterpret_cast<void*>(&fake_hunting_close));
+  fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_is_master));
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  void* exits = fake::array(sizeof(void*), 1);
+  pm::api::RefArray{exits}.set(0, &door);
+  phasmo::LevelController::huntingDoors.set(&level, exits);
+  phasmo::LevelController::mapVariations.set(&level, fake::array(sizeof(void*), 0));
+  g_exitsClosed = 0;
+  g_isMaster = true;
+  squatter::reset();
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::door::lock_all() && g_exitsClosed == 1);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(g_exitsClosed == 1);  // shut and switched off: nothing to do
+  phasmo::Door::grabbable.set(&door, true);  // a raced wish switched it back on
+  g_isMaster = false;
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(g_exitsClosed == 1);
+  g_isMaster = true;
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(g_exitsClosed == 2);
+  squatter::reset();
+  g_isMaster = false;
+}
+
 // The rules run for the ghost the contract's ghost acts as, with its Type, and the Hydra's look for
 // Spectral Flame is green, by its identity.
 void the_rules_and_the_look_follow_the_ghost() {
@@ -2297,6 +2343,7 @@ int main() {
   wiring::without_spectral_flame_only_four_stay();
   wiring::the_squatter_begins_lurking_or_moping();
   wiring::the_squatters_lock_survives_a_tick_without_it();
+  wiring::the_masters_tick_relocks_a_reopened_exit();
   wiring::the_squatter_follows_the_masters_shown();
   wiring::the_master_idles_the_squatter_once_as_steering_begins();
   wiring::draugr_declares_freezing_priority();

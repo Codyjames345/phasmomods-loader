@@ -137,7 +137,10 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
   if (master && steering_begins(g.steered, g.phase))
     phasmo::GhostAI::ChangeState(haunting, phasmo::GhostState::idle(), nullptr, false);
   g.steered = master && steering();
-  if (master) g.sprints.drop_stale(now());
+  if (master) {
+    g.sprints.drop_stale(now());
+    door::relock(now());  // locks again any held exit a raced Monkey Paw wish reopened
+  }
   tell_sprint(master);
   show(haunting);
 }

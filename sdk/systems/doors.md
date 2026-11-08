@@ -198,7 +198,16 @@ them, from the master's word alone: the master as it calls `Door.HuntingCloseDoo
 call that brings that lock to it (`Door.HuntingCloseDoorNetworked`, watched after the game's own body has run and only
 when the game's checks take it), never from its own count of the players inside. So no Monkey Paw call on a client can
 fall between the lock reaching it and its hold. A wish that runs on another client before the master's lock has reached
-it is still the game's own there, as any wish before the lock is. The rest of each wish stays the game's: the
+it is still the game's own there, as any wish before the lock is, and its unlock races the lock: that client's
+`Door.ToggleDoorLock` (a timed window's start or end, or the open-exits wish on the exit's owner) and
+`Door.UnlockDoor` send `Door.SyncLockState(false)`, which the game takes from anyone, and switch the exit back on for
+every client, and those messages can reach every client, the master included, after the lock. So the master watches
+the exits it holds and answers: an exit that reads grabbable again (`Door.grabbable`), or unlocked again after the
+master read it locked, gets the game's own `Door.HuntingCloseDoor` once more, never on a friendly ghost's difficulty
+and at most once every two seconds an exit (`squatter_door.h` `relock`). An exit another player's client owns keeps
+the game's lock on that client alone (above), so the master reads it unlocked from the start; that is not a reopening
+and is left alone. The house key's unlock outside a hunt reads as unlocked again too, and the master locks that exit
+again the same way. The rest of each wish stays the game's: the
 summoning circle's ask, the interaction block, the fuse box, the ghost sent to its room, the trap wish, and the timing of
 every door that is not a held exit. Before the lock every wish is the game's own. The house key's unlock
 (`Door.AttemptToUnlockDoor`) is not a wish and stays the game's.
@@ -231,4 +240,5 @@ another ghost's force on one, reopens them.
 
 Custom Ghosts' Squatter locks every exit this way, on the master, once no living player is left in the map, and answers
 each try with a line of its own (`mods/custom_ghosts/squatter_door.h`). Every other client holds the exits once that lock
-reaches it ("The Monkey Paw" above).
+reaches it, and the master locks an exit again when a raced wish or the house key unlocks it or switches it back on
+("The Monkey Paw" above).
