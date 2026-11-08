@@ -112,6 +112,8 @@ void* fake_network(const void*) { return g_netRef; }
 bool fake_in_room(const void*) { return g_inRoom; }
 bool fake_offline(const void*) { return g_offline; }
 void* fake_player_list(const void*) { return g_playerList; }
+void* g_localPlayer = nullptr;  // what PhotonNetwork.get_LocalPlayer answers
+void* fake_local_player(const void*) { return g_localPlayer; }
 void* fake_none(const void*) { return nullptr; }
 int32_t fake_actor_number(void* p, const void*);
 // The hunt close's RPC body as it arrives on this client: the game's own (here, a record of it) runs whatever it then
@@ -294,14 +296,15 @@ void start(bool master = true, bool friendly = false) {
   g_opens.clear();
   g_viewsAsked.clear();
   // What the room's other gates read (core/room_gates.h), which the binding needs though nothing here calls them.
-  for (const pm::sdk::EntryDesc* gate : {&map::PhotonNetwork_get_CurrentRoom, &map::PhotonNetwork_get_LocalPlayer,
-                                         &map::PhotonNetwork_get_MasterClient, &map::PhotonRoom_get_IsVisible})
+  for (const pm::sdk::EntryDesc* gate :
+       {&map::PhotonNetwork_get_CurrentRoom, &map::PhotonNetwork_get_MasterClient, &map::PhotonRoom_get_IsVisible})
     fake::method(*gate, reinterpret_cast<void*>(&fake_none));
+  fake::method(map::PhotonNetwork_get_LocalPlayer, reinterpret_cast<void*>(&fake_local_player));
   for (int i = 0; i < 3; ++i) {
     g_photon[i] = Obj{};
     at<int32_t>(g_photon[i], kActorNumber) = i + 1;
   }
-  g_playerList = refs({&g_photon[1], &g_photon[0], &g_photon[2]});  // the list's order is not the actors'
+  g_localPlayer = &g_photon[0];  // this client is actor 1, the room's first
   g_inRoom = true;
   g_offline = false;
   g_networkedBodies = 0;
@@ -313,6 +316,8 @@ void start(bool master = true, bool friendly = false) {
   std::string missing;
   CHECK(pm::api::bind(&g_host, missing));
   CHECK(door::create_hooks());
+  // Made once bound: before the first bind the array reads empty.
+  g_playerList = refs({&g_photon[1], &g_photon[0], &g_photon[2]});  // the list's order is not the actors'
   g_master = master;
   g_calls.clear();
   g_closed.clear();
@@ -367,6 +372,22 @@ void locks_every_exit_once() {
   g_levelRef = &nextLevel;
   CHECK(!door::locked());
   CHECK(door::lock_all() && g_closed.size() == 3);
+}
+
+// The hunt lock's RPCs refuse any sender but the room's first actor, with a report, so a master that is not the first
+// actor (Photon's choice of a new master is its server's) locks nothing and locks nothing again (photon.md).
+void a_master_not_the_first_actor_sends_no_lock() {
+  start();
+  exits_are({&g_front, &g_back}, {});
+  g_localPlayer = &g_photon[1];  // actor 2: the master, but not the room's first actor
+  CHECK(!door::lock_all() && g_closed.empty() && !door::locked());
+  g_localPlayer = &g_photon[0];
+  CHECK(door::lock_all() && g_closed.size() == 2);
+  at<bool>(g_front, kDoorGrabbable) = true;  // a raced wish reopens it
+  g_localPlayer = &g_photon[1];
+  CHECK(door::relock(100000) == 0 && g_closed.size() == 2);
+  g_localPlayer = &g_photon[0];
+  CHECK(door::relock(100000) == 1 && g_closed.size() == 3);
 }
 
 // Only living players within the exits count: a dead one inside and a living one in the outside room do not, and
@@ -920,6 +941,7 @@ void a_missing_entry_fails_the_start() {
 
 int main() {
   locks_every_exit_once();
+  a_master_not_the_first_actor_sends_no_lock();
   counts_only_living_inside();
   a_failed_count_reads_as_unknown();
   a_map_with_no_house_still_locks_its_door();

@@ -106,6 +106,18 @@ bool sent_by_first_actor(void* info) {
   return sender && room_gates::actor_number(sender) == *std::min_element(actors.begin(), actors.end());
 }
 
+/**
+ * Whether this client may send the hunt lock: the room's first actor, whom its RPCs alone accept, or offline (photon.md,
+ * "What a mod must not do": the master alone is not enough). False when the room's list cannot be read.
+ */
+bool local_is_first_actor() {
+  if (!phasmo::PhotonNetwork::get_InRoom() || phasmo::PhotonNetwork::get_OfflineMode()) return true;
+  std::vector<int> actors;
+  if (!room_gates::room_actors(actors) || actors.empty()) return false;
+  const int local = room_gates::local_actor();
+  return local != 0 && local == *std::min_element(actors.begin(), actors.end());
+}
+
 /** Reports a try at a locked exit to the callback; nothing it throws reaches the game. */
 void report(void* d) {
   if (!g_callback || !locked_exit(d)) return;
@@ -226,7 +238,7 @@ bool lock_all() {
   forget_old_level();
   if (g_level) return true;
   // Another client holds the exits from the master's word alone (detour_hunting_close_networked), never its own count.
-  if (!phasmo::PhotonNetwork::get_IsMasterClient()) return false;
+  if (!phasmo::PhotonNetwork::get_IsMasterClient() || !local_is_first_actor()) return false;
   void* l = level();
   if (!l || friendly()) return false;  // an unreadable difficulty counts as friendly: never lock
   const std::vector<void*> doors = exits();
@@ -247,7 +259,7 @@ bool holds(void* door) { return locked_exit(door); }
 
 int relock(uint64_t now) {
   forget_old_level();
-  if (!g_level || !phasmo::PhotonNetwork::get_IsMasterClient() || friendly()) return 0;
+  if (!g_level || !phasmo::PhotonNetwork::get_IsMasterClient() || !local_is_first_actor() || friendly()) return 0;
   int relocked = 0;
   for (HeldExit& e : g_locked) {
     void* d = e.door.get();
