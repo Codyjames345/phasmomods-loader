@@ -1096,6 +1096,7 @@ int main() {
   with_no_last_place_it_searches_around_itself();
   an_unseen_figure_never_starts_a_chase();
   a_step_plays_each_stride();
+  it_never_sits_in_a_closed_hiding_place();
   friendly_starts_seated_in_the_favourite_room();
   gets_up_on_first_sight_and_says_its_line_once();
   follows_the_nearest_living_inside_and_stops_at_exits();

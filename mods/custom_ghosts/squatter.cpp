@@ -52,6 +52,8 @@ struct Chase {
   std::set<int> seen, heard;                 // whom the last sight pulse saw and who was heard talking
   std::optional<Point> searchAt;
   std::optional<Point> searchFrom;  // where the search centres (search_origin), fixed as it begins
+  std::optional<Point> seat;        // where a seated phase walks to before it sits, out of a closed hiding place
+  uint64_t nextSeatCheck = 0;
   std::optional<Point> openingDoor, openingForward;  // the door being opened quietly, for its clip
   float sprint = 0.0f;                       // the sprint speed it last chased at (chase_sprint)
   float seed = 0.0f;                         // offsets the move cycle per chase
@@ -176,6 +178,42 @@ struct Seen {
   void* room = nullptr;    // Player.currentRoom
   void* closet = nullptr;  // Player.closet, the hiding place they are in
 };
+
+// Whether `p` lies in a hiding place the difficulty closed (BlockedZone.blocked), by the zone's own trigger collider.
+bool in_closed_hiding_place(Point p) {
+  void* level = game::level_controller();
+  const api::RefArray zones{level ? phasmo::LevelController::blockedZones.get(level) : nullptr};
+  for (size_t i = 0; i < zones.size(); ++i) {
+    void* z = zones[i];
+    if (!z || !api::alive(z) || !phasmo::BlockedZone::blocked.get(z)) continue;
+    void* collider = phasmo::Component::GetComponent(z, phasmo::Collider::type.type_object());
+    if (!collider) continue;
+    const phasmo::Bounds b = phasmo::Collider::get_bounds(collider);
+    if (inside_box(p, point(b.center), point(b.extents))) return true;
+  }
+  return false;
+}
+
+// Where it sits instead of in a closed hiding place: just past the nearest door of the room it is in (squatter_chase.h
+// outside_spot); none when its room has no door to read.
+std::optional<Point> seat_outside(Point ghostAt) {
+  void* level = game::level_controller();
+  void* room = level ? phasmo::LevelController::currentGhostRoom.get(level) : nullptr;
+  const api::RefArray doors{room ? phasmo::LevelRoom::doors.get(room) : nullptr};
+  std::optional<Point> best;
+  float nearest = 0.0f;
+  for (size_t i = 0; i < doors.size(); ++i) {
+    void* d = doors[i];
+    if (!d || !api::alive(d)) continue;
+    const Point at = at_of(d);
+    const float metres = std::hypot(at.x - ghostAt.x, at.z - ghostAt.z);
+    if (!best || metres < nearest) {
+      best = at;
+      nearest = metres;
+    }
+  }
+  return best ? std::optional<Point>(outside_spot(ghostAt, *best)) : std::nullopt;
+}
 
 // Whether `p` lies in a room of the house: a room the map knows (game::room_at) that is not RoomKind.outsideMap.
 bool inside_at(Point p) {
@@ -342,6 +380,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     c.lines.reset();
     c.searchAt.reset();
     c.searchFrom.reset();
+    c.seat.reset();
     if (const std::optional<Act> stance = stance_for(next)) {
       act(*stance, 0, t, false);  // held for the whole phase
     } else if (const std::optional<Act> rise = entry_act(c.was, next)) {
@@ -440,6 +479,25 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     }
     default:  // Lurking, LockedOut, Moping and Excited: held where it sits or gets up
       to = ghostAt;
+      // Never seated inside a hiding place the difficulty closed, where nobody could reach it (user, 2026-11-09): it
+      // gets up, walks at the ghost's own base speed to just past its room's door, and sits there.
+      if ((next == Phase::Lurking || next == Phase::Moping) && !c.seat && t >= c.nextSeatCheck) {
+        c.nextSeatCheck = t + 500;
+        if (in_closed_hiding_place(ghostAt)) {
+          c.seat = seat_outside(ghostAt);
+          if (c.seat && c.out.act == static_cast<int8_t>(Act::Sit)) c.out.act = -1;
+        }
+      }
+      if (c.seat) {
+        if (std::hypot(c.seat->x - ghostAt.x, c.seat->z - ghostAt.z) >= kStandReach) {
+          c.out.move = Move::Run;
+          speed = phasmo::GhostAI::baseSpeed.get(ghost);
+          to = c.seat;
+        } else {
+          c.seat.reset();
+          act(Act::Sit, 0, t, false);
+        }
+      }
       break;
   }
 

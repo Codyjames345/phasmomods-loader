@@ -23,6 +23,10 @@ constexpr float kHeadCentreAboveBone = 0.08f;  // the head sphere's centre above
 const api::ClothSettings kCloth{true, 0.1f, 1.0f, 0.2f};
 // The spheres the sheet rests on besides the head, from the engine test: chest, spine, hips and both upper arms.
 constexpr float kChest = 0.19f, kSpine = 0.17f, kHips = 0.18f, kArm = 0.08f;
+// The floor the sheet rests on: Cloth collides only with spheres and capsules, so a sphere this large lies under the
+// feet, its top level with them. Across the sheet's spread (about 0.6 m) its surface falls only a few centimetres, so the
+// hem settles on the floor rather than through it (user, 2026-11-09: it showed through the ceiling below).
+constexpr float kFloorRadius = 3.0f;
 
 api::Held g_bundle;
 bool g_failed = false;  // a create that failed, logged once, until destroy()
@@ -93,7 +97,9 @@ bool build_sheet() {
       {bone(phasmo::HumanBodyBones::Spine()), kSpine, none},
       {bone(phasmo::HumanBodyBones::Hips()), kHips, none},
       {bone(phasmo::HumanBodyBones::LeftUpperArm()), kArm, none},
-      {bone(phasmo::HumanBodyBones::RightUpperArm()), kArm, none}};
+      {bone(phasmo::HumanBodyBones::RightUpperArm()), kArm, none},
+      // The figure's root is at its feet, and follows the ghost's position each frame (place).
+      {phasmo::GameObject::get_transform(g.root), kFloorRadius, {0, -kFloorRadius, 0}}};
   if (!api::add_cloth(anchor, mesh, material, kCloth, spheres, g.cloth, &why)) return fail("cloth", why), false;
   return true;
 }

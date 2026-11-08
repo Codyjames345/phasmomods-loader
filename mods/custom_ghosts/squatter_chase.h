@@ -334,6 +334,26 @@ class StepCounter {
   float walked_ = 0.0f;
 };
 
+// How far past its room's door it sits when its room is a hiding place the difficulty closed (BlockedZone.blocked).
+inline constexpr float kOutsideStep = 1.2f;
+
+/** Whether `p` lies in the box at `centre` with half sizes `extents` (a Collider's bounds, Collider.get_bounds). */
+inline bool inside_box(Point p, Point centre, Point extents) {
+  return std::fabs(p.x - centre.x) <= extents.x && std::fabs(p.y - centre.y) <= extents.y &&
+         std::fabs(p.z - centre.z) <= extents.z;
+}
+
+/**
+ * Where to sit when it stands in a closed hiding place: kOutsideStep past the door at `door`, on the far side from
+ * `ghost`, at the ghost's own height; the doorway itself when it already stands in it.
+ */
+inline Point outside_spot(Point ghost, Point door) {
+  const float dx = door.x - ghost.x, dz = door.z - ghost.z;
+  const float d = std::hypot(dx, dz);
+  if (d < 1e-3f) return {door.x, ghost.y, door.z};
+  return {door.x + dx / d * kOutsideStep, ghost.y, door.z + dz / d * kOutsideStep};
+}
+
 /** What a client starts playing for a Shown. */
 struct Cues {
   bool move = false;  // play the move (figure::play), its act being over or none

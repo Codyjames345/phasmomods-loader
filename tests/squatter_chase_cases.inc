@@ -248,6 +248,18 @@ void a_step_plays_each_stride() {
   CHECK(std::string(voice::folder_name(Lines::Steps)) == "steps");
 }
 
+// A seated phase never sits inside a hiding place the difficulty closed (a blocked pantry on Willow Street, user
+// 2026-11-09): it sits just past the nearest door of its room instead, where players can reach it.
+void it_never_sits_in_a_closed_hiding_place() {
+  CHECK(inside_box({1, 0, 1}, {0, 0, 0}, {2, 2, 2}));
+  CHECK(!inside_box({3, 0, 0}, {0, 0, 0}, {2, 2, 2}));
+  CHECK(!inside_box({0, 3, 0}, {0, 0, 0}, {2, 2, 2}));
+  const Point out = outside_spot({0, 0, 0}, {2, 0.5f, 0});
+  CHECK(std::fabs(out.x - (2 + kOutsideStep)) < 1e-4f && out.z == 0 && out.y == 0.0f);
+  const Point same = outside_spot({2, 0, 0}, {2, 0, 0});  // standing in the doorway: the doorway itself
+  CHECK(same.x == 2 && same.z == 0);
+}
+
 // The tunables keep the chase sane: a search is slower than the chase, and pauses are short.
 void the_chase_tunables_are_sane() {
   CHECK(kSearchPace > 0.0f && kSearchPace < 1.0f);
