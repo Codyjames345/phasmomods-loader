@@ -18,9 +18,13 @@
 // steady clock. Main thread.
 namespace pm::custom::squatter {
 
+/** How many Phase values there are: a byte at or above it is no Phase (read_shown). */
 inline constexpr int kPhaseValues = static_cast<int>(Phase::Following) + 1;
+/** How many Move values there are: a byte at or above it is no Move (read_shown). */
 inline constexpr int kMoveValues = static_cast<int>(Move::Stumble) + 1;
+/** How many Lines sets there are: a set at or above it is none (read_shown). */
 inline constexpr int kLinesValues = static_cast<int>(Lines::Friendly) + 1;
+/** How many Act values there are (squatter_figure.h): an act at or above it is none (read_shown). */
 inline constexpr int kActValues = static_cast<int>(Act::OpenDoorInwards) + 1;
 
 /**
@@ -110,6 +114,10 @@ inline std::vector<uint8_t> try_message() { return net_msg::header(net_msg::kSqu
 /** Whether this client's try at a locked exit goes to the master now: one per input, the first in each kTryWindowMs. */
 class TryTeller {
  public:
+  /**
+   * Whether a try reported at `now` (milliseconds) goes to the master: true for the first, and for each one at least
+   * kTryWindowMs after the last that went; true also records it as the last that went.
+   */
   bool due(uint64_t now) {
     if (sent_ && now - last_ < kTryWindowMs) return false;
     sent_ = true;
@@ -151,6 +159,7 @@ class TryInbox {
     out.swap(queue_);
     return out;
   }
+  /** Forgets every queued try and every player's last one, as when the Squatter stops haunting. */
   void clear() { *this = TryInbox{}; }
 
  private:
@@ -167,8 +176,10 @@ struct Sprint {
 
 /**
  * The speed, in metres a second, a player's rig would sprint at in a contract with sprinting on, as the game works it
- * out on that player's client (LocalPCPlayer.UpdatePlayerSpeed on PC, VRStamina.Update on VR): LocalPlayer.sprintSpeed
- * times LocalPlayer.speedMultiplier, but for a dead rig (LocalPlayer.isDead), whose speed skips the multiplier.
+ * out on that player's client: LocalPlayer.sprintSpeed times LocalPlayer.speedMultiplier, but for a dead rig
+ * (LocalPlayer.isDead), whose speed skips the multiplier. That is LocalPCPlayer.UpdatePlayerSpeed on PC; on VR,
+ * VRStamina.Update does the same on the branch a flag of VRStamina picks, and its other branch was not traced
+ * (sdk/systems/players.md, "Speed and stamina").
  */
 inline float sprint_speed_if_on(float sprintSpeed, float multiplier, bool rigDead) {
   return rigDead ? sprintSpeed : sprintSpeed * multiplier;
@@ -215,6 +226,11 @@ inline bool sprint_from(int sender, bool master, const std::vector<int>& room, c
 /** Whether this client tells the master its sprint now: on any change, and every kSprintResendMs while none comes. */
 class SprintTeller {
  public:
+  /**
+   * Whether this client sends `now`, its player's sprint read at `ms` (milliseconds), to the master: true for the
+   * first, for one that differs from the last sent, and for an unchanged one kSprintResendMs or more after the last
+   * send; true also records it as the last sent.
+   */
   bool due(const Sprint& now, uint64_t ms) {
     if (sent_ && *sent_ == now && ms - at_ < kSprintResendMs) return false;
     sent_ = now;
@@ -242,7 +258,9 @@ class SprintBook {
   void drop_stale(uint64_t now) {
     std::erase_if(book_, [now](const auto& e) { return now - e.second.at > kSprintStaleMs; });
   }
+  /** How many players' reports the book holds, stale ones not yet dropped included. */
   size_t size() const { return book_.size(); }
+  /** Forgets every report, as when the Squatter stops haunting. */
   void clear() { book_.clear(); }
 
  private:

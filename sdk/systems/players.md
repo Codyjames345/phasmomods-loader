@@ -142,11 +142,14 @@ otherwise:
 
 It then multiplies that speed by the multiplier, except in a contract while the rig's player is dead
 (`LocalPlayer.isDead`, which `LocalPlayer.CompleteLocalPlayerDeath` sets and the rig's revive clears). On VR the
-stamina's own update (`VRStamina.Update`) gives the VR movement the sprint or the walk speed and, in a contract, the
-same multiplier with the same exception; outside a contract it applies no multiplier, where the PC does.
+stamina's own update (`VRStamina.Update`), on the branch a flag of `VRStamina` picks (not traced), gives the VR movement
+the sprint or the walk speed and, in a contract, the same multiplier with the same exception; outside a contract it
+applies no multiplier, where the PC does. The other branch, and where VR's movement reads the sprint gate, were not
+traced.
 
-So in a contract the speed a living player would sprint at, whether sprinting is on or not, is `sprintSpeed` times
-`speedMultiplier` of that player's rig, and a dead one's is `sprintSpeed` alone, on PC and VR alike.
+So in a contract the speed a living PC player would sprint at, whether sprinting is on or not, is `sprintSpeed` times
+`speedMultiplier` of that player's rig, and a dead one's is `sprintSpeed` alone; a VR player's is the same on the
+traced branch above.
 `LocalPCPlayer.SetPlayerSpeedMultiplier` changes the multiplier on that client only (a Monkey Paw wish calls it), so
 another client knows the multiplier only through the difficulty, unless the player's own client says. Custom Ghosts'
 Squatter has each client tell the master its own player's sprint this way (`mods/custom_ghosts/squatter_net.h`).

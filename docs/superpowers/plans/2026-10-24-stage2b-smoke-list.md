@@ -1025,3 +1025,14 @@ The mod channel and the exits' hold (Task 7b). Squatter messages go on Custom Gh
   - [ ] The host leaves after the exits have locked: they stay locked, with no second lock click and no refused-RPC line, and later tries still get a line.
 - Doors on maps other than Grafton
   - [ ] On Brownstone High School or Nell's Diner, the Squatter's agent passes doors as on Grafton: only Grafton's doors were checked for a NavMeshObstacle (`sdk/systems/doors.md`, "A ghost walking through"); report a door it stops at.
+
+Restraint while steering and the host's re-lock (Task 7c1). A private contract with the Squatter forced in a Custom difficulty, two players (one the host) unless it says otherwise.
+
+- The door push: not built. `Door.GhostForceDoor` leaves a door-moved EMF reading, the ghost's door sound, a count in the results' "doors moved" and ghost interactions and, for an Ultraviolet ghost, fingerprints (`sdk/systems/doors.md`, "A ghost's force"), so the push waits on the user's decision and has nothing to check yet.
+- Steering
+  - [ ] On a friendly ghost's difficulty the Squatter mopes where it starts: it never wanders off or walks to its favourite room, and the log has no exception line.
+  - [ ] On a normal difficulty, while it lurks, it still idles and wanders as before.
+- The host's re-lock
+  - [ ] As the client, make the Monkey Paw wish that opens every exit at the moment the exits lock (or the 6 s wish just before): if an exit reopens, the host's `mods.log` has `squatter: 1 exit(s) a wish reopened locked again` and the exit shuts and locks again within about two seconds, for both players. Repeat a few times; a wish that lands after the lock leaves the exits shut with no re-lock line.
+  - [ ] After the lock, on an exit nobody grabbed but the host (so the host's lock clicked), a player holding the house key tries it: it unlocks with the game's click, then the host locks it again (a second click), and it never opens. On an exit the client grabbed last, the key does nothing new and the host's log has no re-lock line.
+  - [ ] With the exits locked and nobody wishing, the host's log has no re-lock line, also when the client was the last to grab an exit before the lock.

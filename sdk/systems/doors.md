@@ -118,9 +118,12 @@ runs, unless the door's `PhotonObjectInteract` is off or already in use:
 - either way, one more in `LevelStats.doorsMoved`, which the results show and add into the ghost's interactions
   (`LevelStats.amountOfGhostInteractions`).
 
-So the force cannot move a door without leaving paranormal activity behind. For Custom Ghosts' Squatter these routes are closed: its restraint refuses every
-change of state but idling, wandering and its favourite room, whose states call neither method, and refuses its
-interactions (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet`). For another mod's ghost they are open.
+So the force cannot move a door without leaving paranormal activity behind.
+
+For Custom Ghosts' Squatter the force's callers above are closed off: its restraint refuses every change of state but
+idling, wandering and its favourite room (only idling while the mod steers it), whose states call neither method, and
+refuses its interactions (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet`). For another mod's ghost
+they are open.
 
 **Who owns an exit's PhotonView.** Every exit's view is set to `OwnershipOption.Takeover` in the map's scene
 (`PhotonView.OwnershipTransfer`, scene read on all 13 maps), and the grab asks for the view each time a player grabs a
@@ -206,11 +209,11 @@ the exits it holds and answers: an exit that reads grabbable again (`Door.grabba
 master read it locked, gets the game's own `Door.HuntingCloseDoor` once more, never on a friendly ghost's difficulty
 and at most once every two seconds an exit (`squatter_door.h` `relock`). An exit another player's client owns keeps
 the game's lock on that client alone (above), so the master reads it unlocked from the start; that is not a reopening
-and is left alone. The house key's unlock outside a hunt reads as unlocked again too, and the master locks that exit
-again the same way. The rest of each wish stays the game's: the
-summoning circle's ask, the interaction block, the fuse box, the ghost sent to its room, the trap wish, and the timing of
+and is left alone. The house key's unlock outside a hunt, on an exit the master read locked, reads as unlocked again
+too, and the master locks that exit again the same way. The rest of each wish stays the game's: the summoning circle's
+ask, the interaction block, the fuse box, the ghost sent to its room, the trap wish, and the timing of
 every door that is not a held exit. Before the lock every wish is the game's own. The house key's unlock
-(`Door.AttemptToUnlockDoor`) is not a wish and stays the game's.
+(`Door.AttemptToUnlockDoor`) is not a wish: nothing refuses it, though the master may then lock the exit again as above.
 
 **At the contract's end** the doors go with the map's scene; the next contract loads the scene afresh, with every exit
 locked as above. Nothing carries over.

@@ -66,9 +66,9 @@ inline constexpr uint64_t kRelockMs = 2000;
  * this client read it locked since the hold or since its last re-lock; an exit another player's client owns keeps the
  * game's lock on that client alone and never reads locked here, so its plain unlocked state is the game's own and calls
  * nothing. One exit is locked again at most once each kRelockMs, and not again until it reads reopened afresh. The
- * house key's unlock outside a hunt (Door.AttemptToUnlockDoor) reads as unlocked again too, and is answered the same
- * way. `now` is milliseconds on any steady clock. 0 on another client, before the hold and once the map is gone.
- * Every frame on the master (squatter.cpp's tick).
+ * house key's unlock outside a hunt (Door.AttemptToUnlockDoor) of an exit this client read locked reads as unlocked
+ * again too, and is answered the same way. `now` is milliseconds on any steady clock. 0 on another client, before
+ * the hold and once the map is gone. Every frame on the master (squatter.cpp's tick).
  */
 int relock(uint64_t now);
 

@@ -47,10 +47,11 @@ inline constexpr pm::sdk::EntryDesc Door_closedAngle{.key = "Door.closedAngle", 
 /// that gives fingerprints, so before the leaf moves the door's ghost-use step runs (unless the door's
 /// PhotonObjectInteract is off or in use): on the master it tries for fingerprints
 /// (Fingerprint.AttemptToSpawnFingerprints, for a ghost with that evidence); unless LevelValues.eventsBlocked is
-/// set, it plays the door's rattle by RPC most times (the three-argument overload's last flag skips it), then calls Door.CreateDoorNoise, which plays the ghost's door sound by RPC and leaves a door-moved EMF reading at
-/// the door (GhostInteraction.CreateInteractionEMF); either way it adds one to LevelStats.doorsMoved, which the
-/// results show and count among the ghost's interactions. So no mod can use it to move a door with no paranormal
-/// trace (sdk/systems/doors.md, "A ghost's force"). Decompiled.
+/// set, it plays the door's rattle by RPC most times (the three-argument overload's last flag skips it), then calls
+/// Door.CreateDoorNoise, which plays the ghost's door sound by RPC and leaves a door-moved EMF reading at the door
+/// (GhostInteraction.CreateInteractionEMF); either way it adds one to LevelStats.doorsMoved, which the results show
+/// and count among the ghost's interactions. So no mod can use it to move a door with no paranormal trace
+/// (sdk/systems/doors.md, "A ghost's force"). Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_GhostForceDoor{.key = "Door.GhostForceDoor", .kind = pm::sdk::Kind::Method,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Door", .name = "GhostForceDoor",
