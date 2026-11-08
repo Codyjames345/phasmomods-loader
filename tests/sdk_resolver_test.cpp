@@ -94,7 +94,8 @@ void not_generic_type_among_its_generic_kin() {
   CHECK(run({&byName}, model).find("UnityEvent")->status == Status::Ambiguous);
   constexpr EntryDesc plainOnly{.key = "UnityEvent", .flags = kNotGeneric, .name = "UnityEvent",
                                 .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine.Events"};
-  const Result* r = run({&plainOnly}, model).find("UnityEvent");
+  const Resolution resolved = run({&plainOnly}, model);  // r points into it
+  const Result* r = resolved.find("UnityEvent");
   CHECK(r && r->status == Status::Resolved && r->type == plain);
   constexpr EntryDesc nested{.key = "Nested", .flags = kNotGeneric, .owner = "UnityEvent", .name = "Nested"};
   CHECK(run({&plainOnly, &nested}, model).find("Nested")->status == Status::Missing);
