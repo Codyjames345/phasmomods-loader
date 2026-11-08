@@ -216,7 +216,8 @@ not read as a hunt for one, has two routes: a hunt with its effects taken away, 
 wheel. The second is the clean one.
 
 **What a hunt turns on.** The hunt state's start, on the master, sends `GhostAI.Hunting` to every client by name, then
-calls `LevelController.LockHuntingDoors` ([doors](doors.md), "How a hunt locks the exits") and
+calls `LevelController.LockHuntingDoors` ([doors](doors.md), "How a hunt locks the exits"),
+`GhostInteraction.CreateAppearedEMF` at the ghost's position (an EMF reading where it appears) and
 `GhostActivity.UpdateElectronics`. On each client `Hunting`'s start sets `GhostAI.isHunting`, plays the hunt's sound
 through the ghost's GhostAudio noise, counts the hunt in LevelStats and invokes one of GameController's events; its end
 stops the sound, hides the model and invokes another. While `isHunting` is set, `GhostAI.Update` makes the model blink

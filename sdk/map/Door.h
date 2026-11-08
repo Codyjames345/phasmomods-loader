@@ -44,6 +44,7 @@ inline constexpr pm::sdk::EntryDesc Door_closedAngle{.key = "Door.closedAngle", 
 /// (the state GhostState.door enters uses it), ClosetZone for its closet doors, and the training rooms. The
 /// states GhostState.idle, wander and favouriteRoom enter call neither. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_GhostForceDoor{.key = "Door.GhostForceDoor", .kind = pm::sdk::Kind::Method,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Door", .name = "GhostForceDoor",
                                                         .params = Door_GhostForceDoor_params};
 
@@ -96,6 +97,16 @@ inline constexpr const char* Door_bool[] = {"bool"};
 inline constexpr pm::sdk::EntryDesc Door_LockDoor{.key = "Door.LockDoor", .kind = pm::sdk::Kind::Method,
                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                   .name = "LockDoor", .params = Door_bool};
+
+/// A hunting ghost's push of the door: while the door keeps no coroutine of this push yet, it starts the one
+/// that moves the leaf, with one of two strengths (the argument, true by default, picks which), and keeps it in
+/// a field of the door (what clears that field was not traced). The hunt's closet search reaches it through
+/// ClosetZone.CheckCloset, on a closet's left door. It is the ghost moving a door. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_CheckDoorDuringHunt{.key = "Door.CheckDoorDuringHunt",
+                                                             .kind = pm::sdk::Kind::Method,
+                                                             .confidence = pm::sdk::Confidence::Decompiled,
+                                                             .owner = "Door", .name = "CheckDoorDuringHunt",
+                                                             .params = Door_bool};
 
 /// Unlocks a locked door: it clears `locked`, sends SyncHasBeenUnlocked the first time, sends
 /// SyncLockState(false) to every client and, with its argument set, NetworkedPlayUnlockSound. It does

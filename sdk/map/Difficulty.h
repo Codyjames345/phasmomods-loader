@@ -329,7 +329,7 @@ inline constexpr pm::sdk::EntryDesc Difficulty_loseItemsOnDeath{
     .owner = "Difficulty", .name = "loseItemsOnDeath", .type = "bool"};
 
 /// Whether players may sprint: 0 off, 1 on, 2 infinite (its tooltip). With 0, LocalPCPlayer.UpdatePlayerSpeed
-/// gives the walk speed in a contract and PCStamina.OutOfBreath does nothing (unless a flag of the rig is set).
+/// gives the walk speed in a contract and PCStamina.OutOfBreath does nothing (unless LocalPlayer.isDead is set).
 /// In a contract the stamina's update (PlayerStamina's) works only while it is 1, so with 2 a player never tires.
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_sprinting{

@@ -305,9 +305,9 @@ inline constexpr pm::sdk::EntryDesc LocalPlayer_sprintSpeed{
 
 /// Applies the rig's speed to its FirstPersonController, on the local player's client: the sprint speed
 /// while the sprint input is held, sprinting is allowed (Difficulty.sprinting is not 0, or no contract is
-/// running) and PlayerStamina.canSprint is set, otherwise the walk speed; times the speed multiplier
-/// (in a contract unless a bool of the rig, not traced, is set). LocalPlayer.Start and the multiplier's
-/// setters run it. Decompiled.
+/// running) and PlayerStamina.canSprint is set, otherwise the walk speed; times the speed multiplier, which
+/// in a contract it skips while LocalPlayer.isDead is set. LocalPlayer.Start and the multiplier's setters run
+/// it. The VR rig's stamina applies its speed instead (VRStamina.Update). Decompiled.
 inline constexpr pm::sdk::EntryDesc LocalPCPlayer_UpdatePlayerSpeed{
     .key = "LocalPCPlayer.UpdatePlayerSpeed", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPCPlayer", .name = "UpdatePlayerSpeed"};
@@ -329,10 +329,38 @@ inline constexpr pm::sdk::Fact LocalPlayer_speedMultiplier_facts[] = {
 
 /// The factor the rig's walk and sprint speeds are multiplied by, on this client: LocalPlayer.Start sets it
 /// from the contract's Difficulty.playerSpeed (and keeps a copy that ResetPlayerSpeedMultiplier restores);
-/// LocalPCPlayer.SetPlayerSpeedMultiplier changes it. Decompiled.
+/// LocalPCPlayer.SetPlayerSpeedMultiplier changes it. In a contract the speed skips it while LocalPlayer.isDead
+/// is set. Decompiled.
 inline constexpr pm::sdk::EntryDesc LocalPlayer_speedMultiplier{
     .key = "LocalPlayer.speedMultiplier", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LocalPlayer", .type = "float", .facts = LocalPlayer_speedMultiplier_facts};
+
+/// The rig's start, on its own client: in a contract it copies Difficulty.playerSpeed into
+/// LocalPlayer.speedMultiplier (and keeps the copy ResetPlayerSpeedMultiplier restores), then applies the speed
+/// (UpdatePlayerSpeed). Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_Start{.key = "LocalPlayer.Start", .kind = pm::sdk::Kind::Method,
+                                                      .confidence = pm::sdk::Confidence::Decompiled,
+                                                      .owner = "LocalPlayer", .name = "Start"};
+
+/// The end of the local player's death, on its own client: among other steps it counts the death in
+/// LevelStats and sets LocalPlayer.isDead. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_CompleteLocalPlayerDeath{
+    .key = "LocalPlayer.CompleteLocalPlayerDeath", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPlayer", .name = "CompleteLocalPlayerDeath"};
+
+// The speed update reads one bool of the rig, this one. (The death's end stores it too, but through a register
+// the reader cannot prove holds the rig, so that fact cannot decide.)
+inline constexpr pm::sdk::Fact LocalPlayer_isDead_facts[] = {
+    {.is = pm::sdk::Fact::Is::Loads, .method = "LocalPCPlayer.UpdatePlayerSpeed"}};
+
+/// Whether the rig's player has died, on its own client only: LocalPlayer.CompleteLocalPlayerDeath sets it and
+/// the rig's revive clears it. While it is set in a contract the rig's speed skips LocalPlayer.speedMultiplier
+/// (LocalPCPlayer.UpdatePlayerSpeed, and VRStamina.Update on VR), and PCStamina.OutOfBreath works even with
+/// sprinting off (Difficulty.sprinting 0). Other clients read Player.isDead. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_isDead{.key = "LocalPlayer.isDead", .kind = pm::sdk::Kind::Field,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .owner = "LocalPlayer", .type = "bool",
+                                                       .facts = LocalPlayer_isDead_facts};
 
 /// A player's stamina on its own client (Assembly-CSharp, global namespace), abstract; PCStamina is the PC
 /// one. It reports sprinting and walking to every client through the player's NetworkedStamina. Decompiled.
@@ -342,6 +370,19 @@ inline constexpr pm::sdk::EntryDesc PlayerStamina{.key = "PlayerStamina", .confi
 /// The PC player's stamina (Assembly-CSharp, global namespace), a PlayerStamina. Decompiled.
 inline constexpr pm::sdk::EntryDesc PCStamina{.key = "PCStamina", .confidence = pm::sdk::Confidence::Decompiled,
                                               .name = "PCStamina", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The VR player's stamina (Assembly-CSharp, global namespace), a PlayerStamina. Decompiled.
+inline constexpr pm::sdk::EntryDesc VRStamina{.key = "VRStamina", .confidence = pm::sdk::Confidence::Decompiled,
+                                              .name = "VRStamina", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The VR stamina's update, every frame on the player's own client. On the branch a flag of VRStamina picks
+/// (not traced) it gives the VR movement the rig's sprint speed while the stamina's sprint flag is set and the
+/// walk speed otherwise, then, in a contract, multiplies it by LocalPlayer.speedMultiplier unless
+/// LocalPlayer.isDead is set. Outside a contract it applies no multiplier, where the PC's
+/// LocalPCPlayer.UpdatePlayerSpeed does. Decompiled.
+inline constexpr pm::sdk::EntryDesc VRStamina_Update{.key = "VRStamina.Update", .kind = pm::sdk::Kind::Method,
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .owner = "VRStamina", .name = "Update"};
 
 /// The rig's stamina, a PlayerStamina: LocalPlayer's one field of that type. Decompiled.
 inline constexpr pm::sdk::EntryDesc LocalPlayer_stamina{.key = "LocalPlayer.stamina", .kind = pm::sdk::Kind::Field,
@@ -354,7 +395,7 @@ inline constexpr pm::sdk::Fact PCStamina_OutOfBreath_facts[] = {
     {.is = pm::sdk::Fact::Is::Calls, .method = "NetworkedStamina.ForceOutOfBreatheLocal"}};
 
 /// The PC player's stamina running out, on its own client: in a contract with sprinting off
-/// (Difficulty.sprinting 0) it does nothing unless a flag of the rig is set; otherwise it clears
+/// (Difficulty.sprinting 0) it does nothing unless LocalPlayer.isDead is set; otherwise it clears
 /// PlayerStamina.canSprint and a flag of the FirstPersonController, then plays the out-of-breath sound:
 /// in a room by RPC to every client (NetworkedStamina's PlayOutOfBreathSound, which checks its sender),
 /// alone through NetworkedStamina.ForceOutOfBreatheLocal. No direct call reaches it. Decompiled.
@@ -372,8 +413,9 @@ inline constexpr pm::sdk::Fact PlayerStamina_canSprint_facts[] = {
 
 /// Whether the player may sprint now, on that player's own client only (no other client holds it):
 /// PCStamina.OutOfBreath clears it as the stamina runs out, and other PCStamina methods set it again (which
-/// of them is the recovery was not traced). LocalPCPlayer.UpdatePlayerSpeed gives the walk speed while it
-/// is clear. Decompiled.
+/// of them is the recovery was not traced). On VR the stamina's out-of-breath step (a VRStamina method that
+/// also plays the out-of-breath sound) clears it too. LocalPCPlayer.UpdatePlayerSpeed gives the walk speed
+/// while it is clear. Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerStamina_canSprint{
     .key = "PlayerStamina.canSprint", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "PlayerStamina", .type = "bool", .facts = PlayerStamina_canSprint_facts};
@@ -823,6 +865,9 @@ struct LocalPlayer {
   static constexpr pm::api::Field<pm::map::LocalPlayer_speedMultiplier, float> speedMultiplier{};
   /// Its stamina, a PlayerStamina: stamina.get(rig). Unresolved: null.
   static constexpr pm::api::Field<pm::map::LocalPlayer_stamina, void*> stamina{};
+  /// Whether its player has died, on this client only (others read Player.isDead): isDead.get(rig). Unresolved:
+  /// false.
+  static constexpr pm::api::Field<pm::map::LocalPlayer_isDead, bool> isDead{};
 };
 
 /// A player's stamina on its own client. `stamina` below is the PlayerStamina.

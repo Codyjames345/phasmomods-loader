@@ -1566,6 +1566,14 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &ClosetZone_OpenCloseClosetDoors,
     &GhostActivity_UpdateElectronics,
     &NavMeshAgent_set_acceleration,
+    &LocalPlayer_Start,
+    &LocalPlayer_CompleteLocalPlayerDeath,
+    &LocalPlayer_isDead,
+    &VRStamina,
+    &VRStamina_Update,
+    &GhostAI_Update,
+    &GhostInteraction_CreateAppearedEMF,
+    &Door_CheckDoorDuringHunt,
 };
 
 }  // namespace pm::map

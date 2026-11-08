@@ -134,24 +134,31 @@ Read from decompiled code of build 25811160. A player's speed is worked out on t
 sprinting speed (`LocalPlayer.sprintSpeed`), serialized floats its prefab sets, and a multiplier
 (`LocalPlayer.speedMultiplier`), which `LocalPlayer.Start` copies from the contract's `Difficulty.playerSpeed`.
 `LocalPCPlayer.UpdatePlayerSpeed` gives the controller the sprint speed while three things hold, and the walk speed
-otherwise, times the multiplier:
+otherwise:
 
 - the sprint input is held;
 - sprinting is allowed: `Difficulty.sprinting` is not 0 (0 off, 1 on, 2 infinite), or no contract is running;
 - the stamina may sprint (`PlayerStamina.canSprint`, of the rig's `LocalPlayer.stamina`).
 
-So the speed a player would sprint at, whether sprinting is on or not, is `sprintSpeed` times `speedMultiplier` of
-that player's rig. `LocalPCPlayer.SetPlayerSpeedMultiplier` changes the multiplier on that client only (a Monkey Paw
-wish calls it), so another client knows the multiplier only through the difficulty, unless the player's own client
-says.
+It then multiplies that speed by the multiplier, except in a contract while the rig's player is dead
+(`LocalPlayer.isDead`, which `LocalPlayer.CompleteLocalPlayerDeath` sets and the rig's revive clears). On VR the
+stamina's own update (`VRStamina.Update`) gives the VR movement the sprint or the walk speed and, in a contract, the
+same multiplier with the same exception; outside a contract it applies no multiplier, where the PC does.
+
+So in a contract the speed a living player would sprint at, whether sprinting is on or not, is `sprintSpeed` times
+`speedMultiplier` of that player's rig, and a dead one's is `sprintSpeed` alone, on PC and VR alike.
+`LocalPCPlayer.SetPlayerSpeedMultiplier` changes the multiplier on that client only (a Monkey Paw wish calls it), so
+another client knows the multiplier only through the difficulty, unless the player's own client says. Custom Ghosts'
+Squatter has each client tell the master its own player's sprint this way (`mods/custom_ghosts/squatter_net.h`).
 
 The stamina drains in a contract only while `Difficulty.sprinting` is 1, so with 2 nobody tires. When it runs out on
 PC, `PCStamina.OutOfBreath` clears `canSprint` and plays the out-of-breath sound: in a room by an RPC to every
 client, which checks that the player's own client sent it, and alone through `NetworkedStamina.ForceOutOfBreatheLocal`.
-With sprinting off it does nothing (unless a flag of the rig, not traced, is set). `canSprint` itself is never sent:
-only the player's own client holds it. What every client does get is the player's `NetworkedStamina` (`Player.stamina`):
-the player's client sends whether it walks and whether it sprints in the view's serialization, and `moving` follows
-them, so another client sees a sprint stop but not why.
+With sprinting off it does nothing unless `LocalPlayer.isDead` is set. On VR the stamina's out-of-breath step (a
+`VRStamina` method that also plays the out-of-breath sound) clears `canSprint` the same way. `canSprint` itself is
+never sent: only the player's own client holds it. What every client does get is the player's `NetworkedStamina`
+(`Player.stamina`): the player's client sends whether it walks and whether it sprints in the view's serialization, and
+`moving` follows them, so another client sees a sprint stop but not why.
 
 ## How this was read
 
