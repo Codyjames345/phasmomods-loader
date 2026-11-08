@@ -366,7 +366,7 @@ target_include_directories(senses_test BEFORE PRIVATE sdk/api sdk/map sdk/fake s
 pm_test(loadout mods/playable_ghost/session.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(loadout_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
-pm_test(round mods/playable_ghost/round.cpp mods/playable_ghost/session.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp
+pm_test(round mods/playable_ghost/round.cpp mods/playable_ghost/session.cpp sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp
   sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp
   core/log.cpp)
 target_include_directories(round_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)

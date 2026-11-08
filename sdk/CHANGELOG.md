@@ -24,6 +24,9 @@ major version `PmHostApi` and every published struct only grow at the end, and e
 
 - **A ghost the Mimic never copies.** `PM_GHOST_NO_MIMIC_COPY`, a new bit of `PmGhostDef.flags` (`GhostDef::flags`):
   the host leaves the ghost off the Mimic's copy list for good.
+- **A ghost no player plays.** `PM_GHOST_NOT_PLAYABLE`, a new bit of `PmGhostDef.flags`, and `content::flags_of(type)`
+  (`PmHostApi.content_flags_of`, added at the end) to read any type's flags. Playable Ghost never offers such a ghost
+  to its ghost player, draws the type roll again past it in a contract with one, and never keeps it from a pick.
 - **A ghost with no evidence.** Every evidence slot of a `PmGhostDef` may be empty; the game then gives only its own
   "no evidence" for it ([evidence](systems/evidence.md#a-ghost-that-gives-no-evidence)). Allowed since 2.2, now stated
   and tested.

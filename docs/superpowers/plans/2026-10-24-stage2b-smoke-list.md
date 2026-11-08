@@ -1094,3 +1094,8 @@ Friendly mode (Task 9). A private contract with the Squatter forced in a Custom 
 - [ ] It never follows anyone outside: leaving the house, it waits inside. No exit ever locks, and nobody is ever kicked or killed.
 - [ ] Hiding in a closet in its sight: it waits at the door and talks, and never bangs.
 - [ ] Losing it: it goes to where it last saw you and waits there.
+
+Not playable (Task 10). A private contract with Custom Ghosts and Playable Ghost, a ghost player chosen in the lobby.
+
+- [ ] The ghost player's journal pick never lists the Squatter, and its type is never the Squatter however many contracts are started without choosing.
+- [ ] Without a ghost player, a Random contract can still be the Squatter.

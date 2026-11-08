@@ -59,6 +59,8 @@ struct Ghost {
   bool blindInHunts = false;
   // Never on the Mimic's copy list (the content layer's PM_GHOST_NO_MIMIC_COPY): a Mimic never copies it.
   bool noMimicCopy = false;
+  // Never played by a player (the content layer's PM_GHOST_NOT_PLAYABLE): Playable Ghost never offers or rolls it.
+  bool notPlayable = false;
 };
 
 inline constexpr Ghost kGhosts[] = {
@@ -109,10 +111,10 @@ inline constexpr Ghost kGhosts[] = {
      nullptr, nullptr, "green"},
     // No evidence at all: it is told apart by sight and sound, being visible and talking (the spec's "Rules this
     // ghost breaks on purpose"). Its interactions, events and hunts are refused in restraint.cpp. A Mimic never
-    // copies it (user, 2026-11-06).
+    // copies it (user, 2026-11-06), and no player ever plays it, a gag its AI plays (user, 2026-11-07).
     {kSquatter, "Squatter", {nullptr, nullptr, nullptr},
      i18n::key("ghost.squatter.description"), i18n::key("ghost.squatter.strength"), i18n::key("ghost.squatter.weakness"),
-     nullptr, nullptr, nullptr, false, false, true}
+     nullptr, nullptr, nullptr, false, false, true, true}
 
 };
 constexpr int kGhostCount = static_cast<int>(sizeof kGhosts / sizeof kGhosts[0]);

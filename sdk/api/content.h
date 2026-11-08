@@ -70,7 +70,9 @@ struct GhostDef {
   /// What sets it apart in the game's own rules, PM_GHOST_* bits ORed together (core/mod_api.h): 0 for none.
   /// PM_GHOST_KEEPS_LAST_EVIDENCE: a difficulty never withholds its third evidence. PM_GHOST_BLIND_IN_HUNTS: a player
   /// controlling it sees only its playerView while it hunts. PM_GHOST_NO_MIMIC_COPY (since 2.3): a Mimic never copies
-  /// it; the host leaves it off the Mimic's copy list. Read once, when it is registered.
+  /// it; the host leaves it off the Mimic's copy list. PM_GHOST_NOT_PLAYABLE (since 2.3): no player ever plays it; a
+  /// mod that lets a player be the ghost (Playable Ghost) reads it with flags_of and never offers, rolls or keeps it
+  /// for them. Read once, when it is registered.
   uint32_t flags = 0;
   // Its one target, to which the host holds each of its hunts as the game holds its Banshee's, for its AI
   // and a player controlling it alike: never dead nor one of the `excludedCount` players at `excluded` (null
@@ -221,5 +223,10 @@ bool interaction_lost();
 bool roll_taken();
 /// The ghost's flags (GhostDef::flags, PM_GHOST_* bits): PM_GHOST_BLIND_IN_HUNTS, say.
 uint32_t flags();
+/// The flags (GhostDef::flags, PM_GHOST_* bits) of the custom ghost whose game value is `type` (a GhostType number),
+/// while content is active or a contract holds it; 0 for a vanilla type, an unknown one and while no content is
+/// active. A mod that lets a player be the ghost asks it for PM_GHOST_NOT_PLAYABLE before it offers or keeps a type.
+/// Read-only, main thread. @since 2.3
+uint32_t flags_of(int32_t type);
 
 }  // namespace pm::api::content

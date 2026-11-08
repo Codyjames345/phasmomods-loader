@@ -130,7 +130,8 @@ void the_squatter_gives_nothing() {
   CHECK(!g->ability && !g->abilityDescription && !g->flameLook && !g->keepsLastEvidence && !g->blindInHunts);
   const pm::api::content::GhostDef def = definition(*g, {});
   for (const std::string& e : def.evidence) CHECK(e.empty());
-  CHECK(def.abilityName.empty() && def.abilityDescription.empty() && def.flags == PM_GHOST_NO_MIMIC_COPY);
+  CHECK(def.abilityName.empty() && def.abilityDescription.empty() &&
+        def.flags == (PM_GHOST_NO_MIMIC_COPY | PM_GHOST_NOT_PLAYABLE));
 }
 
 // Each ghost's content id is its name in lower case, spaces as _, after the mod's prefix.
@@ -1962,7 +1963,12 @@ void only_the_squatter_is_never_copied() {
     const pm::content::Ghost* def = fake::content_registry().registered(id_of(g));
     CHECK(def != nullptr);
     if (def) CHECK(((def->flags & PM_GHOST_NO_MIMIC_COPY) != 0) == (g.type == kSquatter));
+    // Nor does a player ever play it (user, 2026-11-07), as the content layer tells Playable Ghost.
+    if (def) CHECK(((def->flags & PM_GHOST_NOT_PLAYABLE) != 0) == (g.type == kSquatter));
+    const int32_t type = pm::api::content::type_of(id_of(g));
+    CHECK(((pm::api::content::flags_of(type) & PM_GHOST_NOT_PLAYABLE) != 0) == (g.type == kSquatter));
   }
+  CHECK(pm::api::content::flags_of(3) == 0);  // a vanilla type has none
 }
 
 // Without Spectral Flame's evidence, every ghost that gives it is dropped once every mod has started:

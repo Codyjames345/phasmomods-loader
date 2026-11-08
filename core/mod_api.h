@@ -164,6 +164,10 @@ typedef struct PmGhostDef {
 /// (GhostController.BuildMimicCopies); the game's own types and every other custom ghost are added as before. A
 /// host of version 2.2 does not know the bit and adds the ghost like any other.
 #define PM_GHOST_NO_MIMIC_COPY 4u
+/// PmGhostDef.flags, added in version 2.3: no player ever plays it. A mod that lets a player be the ghost (Playable
+/// Ghost) never offers it, never rolls it for a contract with a ghost player and never keeps it from a pick; it asks
+/// content_flags_of. Its AI haunts as usual in every other contract. The host itself does nothing with the bit.
+#define PM_GHOST_NOT_PLAYABLE 8u
 
 // A custom evidence.
 typedef struct PmEvidenceDef {
@@ -615,6 +619,10 @@ struct PmHostApi {
   // cannot be copied (logged once). Null `title` or `body`: nothing. The loader draws no window of its own (vanilla UI only).
   // Main thread.
   void (*show_message)(const char* title, const char* body);
+  // Added in version 2.3, after show_message: the flags (PmGhostDef.flags, PM_GHOST_* bits) of the custom ghost whose
+  // game value is `type`, while content is active or a contract holds it; 0 for a vanilla type, an unknown one and
+  // while no content is active. Read-only. Main thread.
+  uint32_t (*content_flags_of)(int32_t type);
 };
 
 enum PmModFlags : uint32_t {

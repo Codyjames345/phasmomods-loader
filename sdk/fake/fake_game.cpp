@@ -424,6 +424,11 @@ uint32_t content_flags() {
   const content::Ghost* g = g_acting->acting_ghost();
   return g ? g->flags : 0u;
 }
+uint32_t content_flags_of(int32_t type) {
+  const char* id = g_content.id_of(type);
+  const content::Ghost* g = id ? g_content.ghost(id) : nullptr;
+  return g ? g->flags : 0u;
+}
 
 // The rest of the contract does nothing.
 void log(const char*) {}
@@ -521,8 +526,8 @@ uint32_t fields_of_type(const char* typeKey, const void* obj, const char* fieldT
   return count;
 }
 
-// Positional: a member added to PmHostApi after show_message fails this until it is given here too.
-static_assert(offsetof(PmHostApi, show_message) + sizeof(PmHostApi::show_message) == sizeof(PmHostApi),
+// Positional: a member added to PmHostApi after content_flags_of fails this until it is given here too.
+static_assert(offsetof(PmHostApi, content_flags_of) + sizeof(PmHostApi::content_flags_of) == sizeof(PmHostApi),
               "kHost lists every PmHostApi member");
 const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_hook, &enable_hooks, &send,
                       &set_receiver, &peer_has_mod, &register_service, &service, &mod_game_entry, &hook_entry,
@@ -537,7 +542,8 @@ const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_ho
                       &content_player_view, &content_target, &content_flags,
                       &room_agrees, &collection_count, &array_element_size, &host_list_remove_at,
                       &content_player_move, &content_interaction_lost, &content_roll_taken, &steer_agent,
-                      &abandon_ghost_spawn, &dictionary_int_entries, &mod_started, &show_message};
+                      &abandon_ghost_spawn, &dictionary_int_entries, &mod_started, &show_message,
+                      &content_flags_of};
 
 }  // namespace
 
