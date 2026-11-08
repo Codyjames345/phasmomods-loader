@@ -2165,11 +2165,15 @@ void the_master_idles_the_squatter_once_as_steering_begins() {
   fake::field(map::Difficulty_friendlyGhost, 0x18);
   fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_is_master));
   fake::method(map::GhostAI_ChangeState, reinterpret_cast<void*>(&fake_change_state));
+  fake::method(map::Player_BeginDeathSequence, reinterpret_cast<void*>(&fake_begin_death));
+  fake::method(map::Door_HuntingCloseDoor, reinterpret_cast<void*>(&fake_hunting_close));
   fake::value(map::GhostState_idle, kIdle);
   std::string missing;
   pm::api::bind(fake::host(), missing);
   phasmo::LevelValues::difficulty.set(&values, &difficulty);
   g_stateChanges.clear();
+  g_kills.clear();
+  g_exitsClosed = 0;
   // Lurking: the mod holds it in its room, so the master idles it once.
   g_isMaster = true;
   squatter::reset();
@@ -2183,6 +2187,9 @@ void the_master_idles_the_squatter_once_as_steering_begins() {
   squatter::tick(&ghost, kSquatter, false);
   squatter::tick(&ghost, kSquatter, false);
   CHECK(squatter::phase() == squatter::Phase::Moping && g_stateChanges == std::vector<int32_t>{kIdle});
+  // No friendly frame reaches the kill or the hunt's door close.
+  for (int i = 0; i < 20; ++i) squatter::tick(&ghost, kSquatter, false);
+  CHECK(g_kills.empty() && g_exitsClosed == 0);
   // Another client never changes the master's ghost.
   squatter::tick(nullptr, 0, false);
   g_stateChanges.clear();

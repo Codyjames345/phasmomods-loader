@@ -238,6 +238,54 @@ class TauntBook {
   std::optional<uint64_t> last_;
 };
 
+// Friendly mode (the spec's builder's calls): it follows at this share of its chase pace, stopping this far from the
+// player it follows.
+inline constexpr float kFollowPace = 0.5f;
+inline constexpr float kFollowGap = 1.5f;
+
+/**
+ * The act a phase holds for as long as it lasts, none for a phase that moves: it sits while it lurks, mopes and once
+ * everyone is locked out. The bundle has no standing clip, so sitting is its stillness.
+ */
+inline std::optional<Act> stance_for(Phase p) {
+  if (p == Phase::Lurking || p == Phase::Moping || p == Phase::LockedOut) return Act::Sit;
+  return std::nullopt;
+}
+
+/** The act that starts a phase: getting up, out of a seated phase into a moving one. None for any other change. */
+inline std::optional<Act> entry_act(std::optional<Phase> was, Phase next) {
+  if (!was) return std::nullopt;
+  const bool rises = (*was == Phase::Lurking && next == Phase::Chasing) || (*was == Phase::Moping && next == Phase::Excited);
+  return rises ? std::optional<Act>(Act::GetUp) : std::nullopt;
+}
+
+/** Where to walk and at what share of its pace; `bang` asks it to kick a hiding place's door. */
+struct Step {
+  std::optional<Point> to;  // none: stay where it is
+  float pace = 0.0f;        // a share of its chase pace (move_speed of Run)
+  bool bang = false;
+};
+
+/**
+ * A friendly Squatter's step while it follows (the spec's builder's calls): to the hiding place's stand point when it
+ * knows its target hides (`hidingStand`), waiting there to talk, never banging; else after its target (`targetAt`),
+ * stopping kFollowGap from them; else to where it last knew them (`lastAt`); else nowhere.
+ */
+inline Step follow_step(Point ghost, std::optional<Point> targetAt, std::optional<Point> hidingStand,
+                        std::optional<Point> lastAt) {
+  const auto flat = [&](Point p) { return std::hypot(p.x - ghost.x, p.z - ghost.z); };
+  if (hidingStand) {
+    if (flat(*hidingStand) < kStandReach) return {std::nullopt, 0.0f, false};
+    return {hidingStand, kFollowPace, false};
+  }
+  if (targetAt) {
+    if (flat(*targetAt) < kFollowGap) return {std::nullopt, 0.0f, false};
+    return {targetAt, kFollowPace, false};
+  }
+  if (lastAt && flat(*lastAt) >= kStandReach) return {lastAt, kFollowPace, false};
+  return {};
+}
+
 /** What a client starts playing for a Shown. */
 struct Cues {
   bool move = false;  // play the move (figure::play), its act being over or none

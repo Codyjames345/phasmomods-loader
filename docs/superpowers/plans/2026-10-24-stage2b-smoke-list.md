@@ -1085,3 +1085,12 @@ The kick (Task 8). A private contract with the Squatter forced in a Custom diffi
 - [ ] Both players caught one after the other: each is kicked once, and with everyone dead the contract ends as vanilla.
 - [ ] As the client being caught: the same kick and death, and the host's `mods.log` has no exception line.
 - [ ] On a friendly ghost's difficulty nothing is ever kicked (Task 9 checks the rest of friendly mode).
+
+Friendly mode (Task 9). A private contract with the Squatter forced in a Custom difficulty with the friendly ghost on, two players (one the host) unless it says otherwise.
+
+- [ ] It starts seated in the ghost room, saying mope lines every few seconds, and stays there until it sees someone.
+- [ ] On first sight it gets up, says one excited line, then follows the nearest player around inside at a walking pace, stopping a step from them and saying friendly lines.
+- [ ] It opens shut doors on the way quietly, as in the chase, and bumps into things now and then.
+- [ ] It never follows anyone outside: leaving the house, it waits inside. No exit ever locks, and nobody is ever kicked or killed.
+- [ ] Hiding in a closet in its sight: it waits at the door and talks, and never bangs.
+- [ ] Losing it: it goes to where it last saw you and waits there.

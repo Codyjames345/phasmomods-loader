@@ -328,14 +328,16 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     c.phaseSince = t;
     c.lines.reset();
     c.searchAt.reset();
-    if (next == Phase::Lurking || next == Phase::LockedOut || next == Phase::Moping) {
-      act(Act::Sit, 0, t, false);
-    } else if (c.was == Phase::Lurking && next == Phase::Chasing) {
-      act(Act::GetUp, kGetUpMs, t);
-      c.seed = static_cast<float>(roll() % 1000u) / 100.0f;
-      c.nextBump = t + kBumpGapMinMs + roll() % (kBumpGapMaxMs - kBumpGapMinMs);
+    if (const std::optional<Act> stance = stance_for(next)) {
+      act(*stance, 0, t, false);  // held for the whole phase
+    } else if (const std::optional<Act> rise = entry_act(c.was, next)) {
+      act(*rise, kGetUpMs, t);
     } else if (c.out.act == static_cast<int8_t>(Act::Sit)) {
       c.out.act = -1;
+    }
+    if (next == Phase::Chasing && c.was == Phase::Lurking) {
+      c.seed = static_cast<float>(roll() % 1000u) / 100.0f;
+      c.nextBump = t + kBumpGapMinMs + roll() % (kBumpGapMaxMs - kBumpGapMinMs);
     }
     c.was = next;
   }
@@ -403,13 +405,26 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       }
       break;
     }
-    default:  // Lurking, LockedOut and the friendly phases (a later task): held where it stands
+    case Phase::Following: {  // friendly: after its target, waiting and talking at a hiding place, never banging
+      void* stand = c.hidingKnown && target && target->closet
+                        ? phasmo::ClosetZone::standOutsideEntrancePoint.get(target->closet)
+                        : nullptr;
+      const bool known = target && (targetSensed || c.tracker.tracks(t));
+      const Step step = follow_step(ghostAt, known ? std::optional<Point>(target->at) : std::nullopt,
+                                    stand ? std::optional<Point>(point(game::position(stand))) : std::nullopt,
+                                    c.tracker.last_at());
+      c.out.move = Move::Run;
+      speed = move_speed(c.sprint, Move::Run) * step.pace;
+      to = step.to ? step.to : std::optional<Point>(ghostAt);
+      break;
+    }
+    default:  // Lurking, LockedOut, Moping and Excited: held where it sits or gets up
       to = ghostAt;
       break;
   }
 
-  // On the chase and the search: shut doors opened quietly, stalls and clumsy bumps.
-  if (next == Phase::Chasing || next == Phase::Searching) {
+  // Moving about: shut doors opened quietly, stalls and clumsy bumps.
+  if (next == Phase::Chasing || next == Phase::Searching || next == Phase::Following) {
     if (open_doors(ghostAt, t)) speed = 0.0f;
     phasmo::Vector3 v = phasmo::NavMeshAgent::get_velocity(agent);
     const float pace = std::hypot(v.x, v.z);

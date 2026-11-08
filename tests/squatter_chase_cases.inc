@@ -159,6 +159,57 @@ void cues_play_once_and_never_replay_on_joining() {
   CHECK(c.move && !c.line && !c.act);
 }
 
+// Friendly mode (Task 9). On a friendly ghost's difficulty it starts seated (and sits while lurking or locked out).
+void friendly_starts_seated_in_the_favourite_room() {
+  CHECK(first_phase(true) == Phase::Moping);
+  CHECK(stance_for(Phase::Moping) == Act::Sit);
+  CHECK(stance_for(Phase::Lurking) == Act::Sit && stance_for(Phase::LockedOut) == Act::Sit);
+  CHECK(!stance_for(Phase::Chasing) && !stance_for(Phase::Following) && !stance_for(Phase::Excited));
+  CHECK(steers(Phase::Moping));  // held where it sits, never wandering off
+}
+
+// On first sight it gets up, and its excited line comes once, at the start of getting up.
+void gets_up_on_first_sight_and_says_its_line_once() {
+  const Facts sees{true, true, false, false, 2, false};
+  CHECK(next_phase(Phase::Moping, sees) == Phase::Excited);
+  CHECK(entry_act(Phase::Moping, Phase::Excited) == Act::GetUp);
+  CHECK(entry_act(Phase::Lurking, Phase::Chasing) == Act::GetUp);
+  CHECK(!entry_act(Phase::Chasing, Phase::Searching) && !entry_act(std::nullopt, Phase::Excited));
+  CHECK(lines_for(Phase::Excited) == Lines::Excited);
+  CHECK(kGetUpMs < kLineGapMinMs);  // the next line is due only after it has got up and moved on
+  const Facts up{true, false, false, false, 2, true};
+  CHECK(next_phase(Phase::Excited, up) == Phase::Following);
+  CHECK(lines_for(Phase::Following) == Lines::Friendly);
+}
+
+// Following: after the nearest living player inside, stopping a step from them; never after one outside, so never past
+// the exits; with nobody, where it last knew them.
+void follows_the_nearest_living_inside_and_stops_at_exits() {
+  const Point ghost{0, 0, 0};
+  const Step far = follow_step(ghost, Point{5, 0, 0}, std::nullopt, std::nullopt);
+  CHECK(far.to && far.to->x == 5 && far.pace == kFollowPace && !far.bang);
+  const Step near = follow_step(ghost, Point{kFollowGap - 0.1f, 0, 0}, std::nullopt, std::nullopt);
+  CHECK(near.pace == 0.0f && !near.bang);
+  const Step lost = follow_step(ghost, std::nullopt, std::nullopt, Point{3, 0, 3});
+  CHECK(lost.to && lost.to->x == 3 && lost.pace > 0.0f);
+  const Step none = follow_step(ghost, std::nullopt, std::nullopt, std::nullopt);
+  CHECK(none.pace == 0.0f);
+  const std::vector<Candidate> c = {{1, 2.0f, true, false, true, false}, {2, 6.0f, true, true, true, false}};
+  CHECK(pick_target(c, -1, false) == 2);  // the one outside is never followed
+}
+
+// At a hiding place a friendly Squatter waits at the door and talks, and never bangs.
+void waits_and_talks_at_a_hiding_place_without_banging() {
+  const Point ghost{0, 0, 0};
+  const Step going = follow_step(ghost, Point{4, 0, 0}, Point{4, 0, 1}, std::nullopt);
+  CHECK(going.to && going.to->z == 1 && going.pace == kFollowPace && !going.bang);
+  const Step there = follow_step(ghost, Point{0.2f, 0, 0}, Point{0.2f, 0, 0.2f}, std::nullopt);
+  CHECK(there.pace == 0.0f && !there.bang);
+  CHECK(next_phase(Phase::Following, Facts{true, false, false, true, 2, true}) == Phase::Following);
+  CHECK(!doors_lock(Phase::Following, Facts{true, false, false, false, 0, true}));
+  CHECK(!may_kick(Phase::Following, true, true, 0.1f, kKickReach));
+}
+
 // The tunables keep the chase sane: a search is slower than the chase, and pauses are short.
 void the_chase_tunables_are_sane() {
   CHECK(kSearchPace > 0.0f && kSearchPace < 1.0f);
