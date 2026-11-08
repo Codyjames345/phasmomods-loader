@@ -968,7 +968,10 @@ check the entry declares.
      object), and one through a register loaded from fields of `this` (straight-line code, up to three
      loads deep) whose last type and the owner are of unrelated families: neither among the other's
      possible ancestors, read from the base lists (each base name standing for every model type of that
-     name) and known only when every base names a model type.
+     name) and known only when every base names a model type. The fact method may also be a leaf the
+     exception table does not list, a constructor that stores its defaults and tail-jumps to its base
+     (`LocalPlayer.ctor`): it is read as straight-line code up to its ret or tail jump, with rcx
+     holding `this` until an instruction writes it, and one that branches cannot decide.
    - `StoresConst`: it stores the constant `value` there with an immediate `mov`.
    - `Called` names no method: the candidate method is called (or jumped to) directly from another
      method of its own type. The obfuscator's decoys, near-copies with other constants, are never

@@ -127,6 +127,32 @@ wait is over (`mods/playable_ghost/outlist.h`). Because of the section above it 
 - puts the spot back in the list's sort order while still in a room, and lets it go once out of one
   (`Network.OnLeftRoom` empties the list as the client leaves a room).
 
+## Speed and stamina
+
+Read from decompiled code of build 25811160. A player's speed is worked out on that player's own client, by its rig
+(`LocalPlayer`, `Network.localRig`; `LocalPCPlayer` on PC). The rig holds a walking speed (`LocalPlayer.walkSpeed`) and a
+sprinting speed (`LocalPlayer.sprintSpeed`), serialized floats its prefab sets, and a multiplier
+(`LocalPlayer.speedMultiplier`), which `LocalPlayer.Start` copies from the contract's `Difficulty.playerSpeed`.
+`LocalPCPlayer.UpdatePlayerSpeed` gives the controller the sprint speed while three things hold, and the walk speed
+otherwise, times the multiplier:
+
+- the sprint input is held;
+- sprinting is allowed: `Difficulty.sprinting` is not 0 (0 off, 1 on, 2 infinite), or no contract is running;
+- the stamina may sprint (`PlayerStamina.canSprint`, of the rig's `LocalPlayer.stamina`).
+
+So the speed a player would sprint at, whether sprinting is on or not, is `sprintSpeed` times `speedMultiplier` of
+that player's rig. `LocalPCPlayer.SetPlayerSpeedMultiplier` changes the multiplier on that client only (a Monkey Paw
+wish calls it), so another client knows the multiplier only through the difficulty, unless the player's own client
+says.
+
+The stamina drains in a contract only while `Difficulty.sprinting` is 1, so with 2 nobody tires. When it runs out on
+PC, `PCStamina.OutOfBreath` clears `canSprint` and plays the out-of-breath sound: in a room by an RPC to every
+client, which checks that the player's own client sent it, and alone through `NetworkedStamina.ForceOutOfBreatheLocal`.
+With sprinting off it does nothing (unless a flag of the rig, not traced, is set). `canSprint` itself is never sent:
+only the player's own client holds it. What every client does get is the player's `NetworkedStamina` (`Player.stamina`):
+the player's client sends whether it walks and whether it sprints in the view's serialization, and `moving` follows
+them, so another client sees a sprint stop but not why.
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/players.md).

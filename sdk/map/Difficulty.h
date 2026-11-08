@@ -328,6 +328,20 @@ inline constexpr pm::sdk::EntryDesc Difficulty_loseItemsOnDeath{
     .key = "Difficulty.loseItemsOnDeath", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "Difficulty", .name = "loseItemsOnDeath", .type = "bool"};
 
+/// Whether players may sprint: 0 off, 1 on, 2 infinite (its tooltip). With 0, LocalPCPlayer.UpdatePlayerSpeed
+/// gives the walk speed in a contract and PCStamina.OutOfBreath does nothing (unless a flag of the rig is set).
+/// In a contract the stamina's update (PlayerStamina's) works only while it is 1, so with 2 a player never tires.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_sprinting{
+    .key = "Difficulty.sprinting", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "Difficulty", .name = "sprinting", .type = "int"};
+
+/// The contract's player speed factor: LocalPlayer.Start copies it into the rig's LocalPlayer.speedMultiplier
+/// in a contract, which multiplies the walk and the sprint speed. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_playerSpeed{
+    .key = "Difficulty.playerSpeed", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "Difficulty", .name = "playerSpeed", .type = "float"};
+
 /// System.Enum (mscorlib). Inferred: the .NET class.
 inline constexpr pm::sdk::EntryDesc SystemEnum{.key = "Enum", .name = "Enum", .assembly = "mscorlib", .ns = "System"};
 
@@ -392,6 +406,10 @@ struct Difficulty {
   static constexpr pm::api::Field<pm::map::Difficulty_evidenceGiven, int32_t> evidenceGiven{};
   /// Whether its ghost is friendly (hunts lock no doors): friendlyGhost.get(d). Unresolved: false.
   static constexpr pm::api::Field<pm::map::Difficulty_friendlyGhost, bool> friendlyGhost{};
+  /// Whether players may sprint, 0 off, 1 on, 2 infinite: sprinting.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_sprinting, int32_t> sprinting{};
+  /// The players' speed factor: playerSpeed.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_playerSpeed, float> playerSpeed{};
   /// What it multiplies a contract's reward by: GetRewardMultiplier(d). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::Difficulty_GetRewardMultiplier, float(void*)> GetRewardMultiplier{};
 };

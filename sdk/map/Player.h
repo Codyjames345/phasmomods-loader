@@ -5,6 +5,9 @@
 // real names, and so do PlayerSpot's fields; Network's and Player's own fields are obfuscated, so they
 // are found by shape and facts. Notes read from decompiled code are from build 25811160.
 
+#include <bit>
+#include <cstdint>
+
 #include "Transform.h"
 #include "entry.h"
 #include "game_api.h"
@@ -90,7 +93,9 @@ inline constexpr pm::sdk::EntryDesc Player_stamina{.key = "Player.stamina", .kin
                                                    .owner = "Player", .type = "NetworkedStamina"};
 
 /// The closet the investigator hides in, a ClosetZone, or null: Player's one field of that type. The
-/// hunt's closet search reads it. Decompiled.
+/// closet's trigger sets it as a living player's body enters and clears it as the body leaves (ClosetZone's
+/// OnTriggerEnter and OnTriggerExit, on each client its physics runs on), and the hunt's closet search,
+/// which runs on the master, reads it of the player it targets. Decompiled.
 inline constexpr pm::sdk::EntryDesc Player_closet{.key = "Player.closet", .kind = pm::sdk::Kind::Field,
                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Player",
                                                   .type = "@ClosetZone"};
@@ -177,13 +182,21 @@ inline constexpr pm::sdk::EntryDesc PlayerAudio{.key = "PlayerAudio", .confidenc
 
 inline constexpr const char* PlayerAudio_float[] = {"float"};
 
-/// Whether the player is talking above a loudness (0.1 by default). The hunt's voice test
-/// calls it for a player within its hearing. Decompiled.
+/// Whether the player is talking above a loudness (0.1 by default), or talks on a walkie-talkie. When it
+/// answers true it also clears the loudness it read, so the next asker needs new sound. The hunt's voice
+/// test (GhostHuntState.Hears) calls it for a player within its hearing, and LevelRoom's
+/// ArePlayersTalkingInRoom, which only the idle state asks, for each player in a room. Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerAudio_IsTalkingLoudly{.key = "PlayerAudio.IsTalkingLoudly",
                                                                 .kind = pm::sdk::Kind::Method,
                                                                 .confidence = pm::sdk::Confidence::Decompiled,
                                                                 .owner = "PlayerAudio", .name = "IsTalkingLoudly",
                                                                 .params = PlayerAudio_float};
+
+/// The investigator's own voice and sounds, a PlayerAudio: Player's one field of that type, on every client.
+/// The hunt's voice test asks it of the player it tests. Decompiled.
+inline constexpr pm::sdk::EntryDesc Player_audio{.key = "Player.audio", .kind = pm::sdk::Kind::Field,
+                                                 .confidence = pm::sdk::Confidence::Decompiled, .owner = "Player",
+                                                 .type = "@PlayerAudio"};
 
 /// The level the lobby board shows for the player, within their prestige (1 for a new player):
 /// ServerManager.UpdatePlayerLevelInformation, the buffered RPC each player sends with their saved experience,
@@ -258,6 +271,112 @@ inline constexpr pm::sdk::EntryDesc LocalPlayer_player{.key = "LocalPlayer.playe
 /// The rig's eyes, a Camera: LocalPlayer's one Camera field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc LocalPlayer_camera{.key = "LocalPlayer.camera", .kind = pm::sdk::Kind::Field,
                                                        .owner = "LocalPlayer", .type = "Camera"};
+
+// How fast the local investigator moves. LocalPlayer declares the speeds and LocalPCPlayer (and the VR
+// rig) applies them; sdk/systems/players.md, "Speed and stamina", ties them together.
+
+/// The rig's constructor, which LocalPCPlayer's shares: it gives the walk and sprint speeds their
+/// defaults, which the rig's prefab then overrides. Found only for those facts. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_ctor{.key = "LocalPlayer.ctor", .kind = pm::sdk::Kind::Method,
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .owner = "LocalPlayer", .name = ".ctor"};
+
+// The constructor stores two float constants, 1.6 into the walk speed and 3.0 into the sprint speed.
+inline constexpr pm::sdk::Fact LocalPlayer_walkSpeed_facts[] = {
+    {.is = pm::sdk::Fact::Is::StoresConst, .method = "LocalPlayer.ctor", .value = std::bit_cast<int32_t>(1.6f)}};
+inline constexpr pm::sdk::Fact LocalPlayer_sprintSpeed_facts[] = {
+    {.is = pm::sdk::Fact::Is::StoresConst, .method = "LocalPlayer.ctor", .value = std::bit_cast<int32_t>(3.0f)}};
+
+/// The rig's walking speed in metres a second, before the speed multiplier: a serialized float the
+/// prefab sets (the constructor's default is 1.6). LocalPCPlayer.UpdatePlayerSpeed takes it whenever the
+/// player does not sprint. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_walkSpeed{.key = "LocalPlayer.walkSpeed", .kind = pm::sdk::Kind::Field,
+                                                          .confidence = pm::sdk::Confidence::Decompiled,
+                                                          .owner = "LocalPlayer", .type = "float",
+                                                          .facts = LocalPlayer_walkSpeed_facts};
+
+/// The rig's sprinting speed in metres a second, before the speed multiplier: a serialized float the
+/// prefab sets (the constructor's default is 3.0). LocalPCPlayer.UpdatePlayerSpeed takes it only while the
+/// sprint input is held, sprinting is allowed (Difficulty.sprinting not 0, or no contract) and the stamina
+/// can sprint (PlayerStamina.canSprint); it holds the value even when sprinting is off. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_sprintSpeed{
+    .key = "LocalPlayer.sprintSpeed", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LocalPlayer", .type = "float", .facts = LocalPlayer_sprintSpeed_facts};
+
+/// Applies the rig's speed to its FirstPersonController, on the local player's client: the sprint speed
+/// while the sprint input is held, sprinting is allowed (Difficulty.sprinting is not 0, or no contract is
+/// running) and PlayerStamina.canSprint is set, otherwise the walk speed; times the speed multiplier
+/// (in a contract unless a bool of the rig, not traced, is set). LocalPlayer.Start and the multiplier's
+/// setters run it. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPCPlayer_UpdatePlayerSpeed{
+    .key = "LocalPCPlayer.UpdatePlayerSpeed", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPCPlayer", .name = "UpdatePlayerSpeed"};
+
+inline constexpr const char* LocalPCPlayer_float[] = {"float"};
+
+/// Sets the rig's speed multiplier (LocalPlayer.speedMultiplier) and applies it through UpdatePlayerSpeed,
+/// on this client only. A Monkey Paw wish calls it. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPCPlayer_SetPlayerSpeedMultiplier{
+    .key = "LocalPCPlayer.SetPlayerSpeedMultiplier", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPCPlayer", .name = "SetPlayerSpeedMultiplier",
+    .params = LocalPCPlayer_float};
+
+// Of the rig's floats the multiplier's setter stores only this one, and the speed update reads it with
+// the two speeds. Both methods are LocalPCPlayer's, so each fact matches the offset through any register.
+inline constexpr pm::sdk::Fact LocalPlayer_speedMultiplier_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "LocalPCPlayer.SetPlayerSpeedMultiplier"},
+    {.is = pm::sdk::Fact::Is::Loads, .method = "LocalPCPlayer.UpdatePlayerSpeed"}};
+
+/// The factor the rig's walk and sprint speeds are multiplied by, on this client: LocalPlayer.Start sets it
+/// from the contract's Difficulty.playerSpeed (and keeps a copy that ResetPlayerSpeedMultiplier restores);
+/// LocalPCPlayer.SetPlayerSpeedMultiplier changes it. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_speedMultiplier{
+    .key = "LocalPlayer.speedMultiplier", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LocalPlayer", .type = "float", .facts = LocalPlayer_speedMultiplier_facts};
+
+/// A player's stamina on its own client (Assembly-CSharp, global namespace), abstract; PCStamina is the PC
+/// one. It reports sprinting and walking to every client through the player's NetworkedStamina. Decompiled.
+inline constexpr pm::sdk::EntryDesc PlayerStamina{.key = "PlayerStamina", .confidence = pm::sdk::Confidence::Decompiled,
+                                                  .name = "PlayerStamina", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The PC player's stamina (Assembly-CSharp, global namespace), a PlayerStamina. Decompiled.
+inline constexpr pm::sdk::EntryDesc PCStamina{.key = "PCStamina", .confidence = pm::sdk::Confidence::Decompiled,
+                                              .name = "PCStamina", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The rig's stamina, a PlayerStamina: LocalPlayer's one field of that type. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_stamina{.key = "LocalPlayer.stamina", .kind = pm::sdk::Kind::Field,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .owner = "LocalPlayer", .type = "@PlayerStamina"};
+
+// Of PCStamina's void() methods only the out-of-breath step calls NetworkedStamina.ForceOutOfBreatheLocal
+// (its look-alikes send other RPCs or none).
+inline constexpr pm::sdk::Fact PCStamina_OutOfBreath_facts[] = {
+    {.is = pm::sdk::Fact::Is::Calls, .method = "NetworkedStamina.ForceOutOfBreatheLocal"}};
+
+/// The PC player's stamina running out, on its own client: in a contract with sprinting off
+/// (Difficulty.sprinting 0) it does nothing unless a flag of the rig is set; otherwise it clears
+/// PlayerStamina.canSprint and a flag of the FirstPersonController, then plays the out-of-breath sound:
+/// in a room by RPC to every client (NetworkedStamina's PlayOutOfBreathSound, which checks its sender),
+/// alone through NetworkedStamina.ForceOutOfBreatheLocal. No direct call reaches it. Decompiled.
+inline constexpr pm::sdk::EntryDesc PCStamina_OutOfBreath{.key = "PCStamina.OutOfBreath",
+                                                          .kind = pm::sdk::Kind::Method,
+                                                          .confidence = pm::sdk::Confidence::Decompiled,
+                                                          .owner = "PCStamina", .type = "void",
+                                                          .facts = PCStamina_OutOfBreath_facts};
+
+// The out-of-breath step clears one bool of the stamina (the FirstPersonController's flag it also
+// clears is another type's); the speed update reads that bool through the rig's stamina field.
+inline constexpr pm::sdk::Fact PlayerStamina_canSprint_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "PCStamina.OutOfBreath"},
+    {.is = pm::sdk::Fact::Is::Loads, .method = "LocalPCPlayer.UpdatePlayerSpeed"}};
+
+/// Whether the player may sprint now, on that player's own client only (no other client holds it):
+/// PCStamina.OutOfBreath clears it as the stamina runs out, and other PCStamina methods set it again (which
+/// of them is the recovery was not traced). LocalPCPlayer.UpdatePlayerSpeed gives the walk speed while it
+/// is clear. Decompiled.
+inline constexpr pm::sdk::EntryDesc PlayerStamina_canSprint{
+    .key = "PlayerStamina.canSprint", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "PlayerStamina", .type = "bool", .facts = PlayerStamina_canSprint_facts};
 
 inline constexpr const char* Player_RevivePlayer_params[] = {"bool"};
 
@@ -695,6 +814,29 @@ struct LocalPlayer {
   static constexpr pm::api::Field<pm::map::LocalPlayer_player, void*> player{};
   /// Its Camera: camera.get(rig). Unresolved: null.
   static constexpr pm::api::Field<pm::map::LocalPlayer_camera, void*> camera{};
+  /// Its walking speed in metres a second, before the multiplier: walkSpeed.get(rig). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::LocalPlayer_walkSpeed, float> walkSpeed{};
+  /// Its sprinting speed in metres a second, before the multiplier, whether sprinting is on or not:
+  /// sprintSpeed.get(rig). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::LocalPlayer_sprintSpeed, float> sprintSpeed{};
+  /// The factor both speeds are multiplied by on this client: speedMultiplier.get(rig). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::LocalPlayer_speedMultiplier, float> speedMultiplier{};
+  /// Its stamina, a PlayerStamina: stamina.get(rig). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LocalPlayer_stamina, void*> stamina{};
+};
+
+/// A player's stamina on its own client. `stamina` below is the PlayerStamina.
+struct PlayerStamina {
+  /// Whether the player may sprint now (cleared as the stamina runs out): canSprint.get(stamina). Only the
+  /// player's own client holds it. Unresolved: false.
+  static constexpr pm::api::Field<pm::map::PlayerStamina_canSprint, bool> canSprint{};
+};
+
+/// An investigator's own voice and sounds. `audio` below is the PlayerAudio.
+struct PlayerAudio {
+  /// IsTalkingLoudly(audio, loudness): whether the player talks above `loudness` (the game passes 0.1) or on a
+  /// walkie-talkie. A true answer clears the loudness it read (map note). Unresolved: false.
+  static constexpr pm::api::Method<pm::map::PlayerAudio_IsTalkingLoudly, bool(void*, float)> IsTalkingLoudly{};
 };
 
 /// One player of the room. `spot` below is the PlayerSpot.
@@ -740,6 +882,8 @@ struct Player {
   static constexpr pm::api::Field<pm::map::Player_journal, void*> journal{};
   /// Its NetworkedPropGrab, what it carries: propGrab.get(player). Unresolved: null.
   static constexpr pm::api::Field<pm::map::Player_propGrab, void*> propGrab{};
+  /// Its PlayerAudio, its voice: audio.get(player). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Player_audio, void*> audio{};
   /// RevivePlayer(player, flag): revives it once it is marked dead, by RPC to every client. A mod hooks it.
   /// Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Player_RevivePlayer, void(void*, bool)> RevivePlayer{};
@@ -760,6 +904,13 @@ struct LocalPCPlayer {
   static constexpr pm::api::Field<pm::map::LocalPCPlayer_canvas, void*> canvas{};
   /// Its PCControls: controls.get(localPlayer). Unresolved: null.
   static constexpr pm::api::Field<pm::map::LocalPCPlayer_controls, void*> controls{};
+  /// UpdatePlayerSpeed(player): applies its walk or sprint speed. A mod usually hooks it. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::LocalPCPlayer_UpdatePlayerSpeed, void(void*)> UpdatePlayerSpeed{};
+  /// SetPlayerSpeedMultiplier(player, factor): sets its speed multiplier on this client. A mod usually hooks it.
+  /// Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::LocalPCPlayer_SetPlayerSpeedMultiplier, void(void*, float)>
+      SetPlayerSpeedMultiplier{};
 };
 
 /// The local player's HUD.

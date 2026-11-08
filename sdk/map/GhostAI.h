@@ -553,6 +553,14 @@ inline constexpr pm::sdk::EntryDesc GhostActivity_electronicsSensor{
     .key = "GhostActivity.electronicsSensor", .kind = pm::sdk::Kind::Field, .owner = "GhostActivity",
     .name = "electronicsSensor"};
 
+/// Pulses the electronics sensor (GhostActivity.electronicsSensor) through its virtual PulseAll, so that
+/// GhostActivity.nearElectronics is fresh. The hunt's start (after it sends GhostAI.Hunting and locks the
+/// exits) and the hunt's speed update run it on the master, and so do helpers of the idle state outside
+/// hunts. Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostActivity_UpdateElectronics{
+    .key = "GhostActivity.UpdateElectronics", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostActivity", .name = "UpdateElectronics"};
+
 inline constexpr const char* GhostActivity_bool[] = {"bool"};
 // GhostActivity's private bool(bool) methods roll its interactions. Two that are called compare the
 // behaviour type with the Mare's (the second roll keeps the Mare from flickering); only the light chance
@@ -855,6 +863,9 @@ struct GhostActivity {
   static constexpr pm::api::Field<pm::map::GhostActivity_nearElectronics, bool> nearElectronics{};
   /// The Raiju's electronics sensor, a RangeSensor: electronicsSensor.get(activity). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GhostActivity_electronicsSensor, void*> electronicsSensor{};
+  /// UpdateElectronics(activity): pulses the electronics sensor, as a hunt's start and the idle state do. A mod
+  /// usually hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::GhostActivity_UpdateElectronics, void(void*)> UpdateElectronics{};
   /// One interaction attempt of the ghost's own: TryInteract(activity). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::GhostActivity_TryInteract, void(void*)> TryInteract{};
   /// One pulse of its interaction sensor: NormalInteraction(activity, force). A mod usually hooks it.

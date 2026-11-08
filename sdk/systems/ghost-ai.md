@@ -209,6 +209,74 @@ steers can change without a mod rebuild. They are the map's most fragile (`sdk/R
 that changes the code they pin leaves them unresolved: the host logs which at startup, the offline check prints them
 on its `HOST steering` line, steering reports unavailable, and a mod that needs it stays off.
 
+## Moving the ghost outside a hunt
+
+Read from decompiled code and the scene files of build 25811160. A mod that moves the ghost itself, a chase that must
+not read as a hunt for one, has two routes: a hunt with its effects taken away, or a quiet state with the mod at the
+wheel. The second is the clean one.
+
+**What a hunt turns on.** The hunt state's start, on the master, sends `GhostAI.Hunting` to every client by name, then
+calls `LevelController.LockHuntingDoors` ([doors](doors.md), "How a hunt locks the exits") and
+`GhostActivity.UpdateElectronics`. On each client `Hunting`'s start sets `GhostAI.isHunting`, plays the hunt's sound
+through the ghost's GhostAudio noise, counts the hunt in LevelStats and invokes one of GameController's events; its end
+stops the sound, hides the model and invokes another. While `isHunting` is set, `GhostAI.Update` makes the model blink
+on a timer and the Kormos's hearing pulses. On a friendly ghost's difficulty `Hunting` refuses with a report on the
+sender. A hunt without those effects would need a hook on each of them whose only job is to undo the mod's own hunt.
+Which code flickers the lights and upsets the electronics in a hunt was not traced; every path to a hunt effect found
+starts at the hunt's start or reads `isHunting`, and the quiet route reaches neither.
+
+**The quiet route.** The ghost stays in `GhostState.idle` and the mod drives `GhostAI.agent` on the master:
+
+- `GhostAI.Update` runs the state machine there every frame and once a second records where the agent has moved;
+  nothing else in it touches the agent outside a hunt.
+- The idle state holds no agent (its constructor takes only the GhostAI). Its entry sets the agent's speed to
+  `GhostAI.baseSpeed`; no idle method sets a destination, stops, resets or warps the agent. Its roll asks
+  `GhostAI.ChangeState` for wandering, the favourite room, the fuse box, events, abilities and hunts, and
+  `GhostActivity.TryInteract` for interactions, so a mod refuses there whatever it does not want.
+- Wandering (`GhostWanderState`) sets destinations and resets paths, and the favourite room's state sets the
+  destination, so either would take the agent back: a mod that steers keeps the ghost out of both while it steers.
+- Only the summoning circle's and the salt's state stop an agent (`isStopped`), besides the game's player-shaped
+  event's own agent.
+- Outside the states the ghost's agent is changed by `GhostAI.Awake` (speed 1.7), the incense's coroutine (one
+  destination, where the ghost stands), `GhostController.WarpGhostToFavouriteRoom` (the truck's first use) and the
+  ghost's own teleports. `GameController.ResetHuntEffects` sets an agent's speed at a hunt's end, and Monkey Paw wishes
+  and the summoning circle warp one; whose agent those are was not traced.
+
+The ghost's object carries a PhotonTransformView, so where the master's agent takes it shows on every client. Its agent
+(the scene's settings) has acceleration 5 metres a second each second, angular speed 1000, stopping distance 0, radius
+0.15 and height 1.9, with auto-braking and off-mesh link traversal off. A mod steers it with
+`NavMeshAgent.SetDestination`, `set_speed` and `set_acceleration`, and reads `get_remainingDistance`, `CalculatePath`
+and `get_velocity`; `NavMeshAgent::steer` (above) turns it for a frame instead.
+
+**Doors on the way.** No door leaf carries a NavMeshObstacle (read on Grafton, 64 doors), and the Ghost layer does not
+collide with the Door layer in the game's physics settings. So the agent's path runs through a doorway whatever the
+door's state, the ghost passes through a shut leaf, and the leaf does not move. A player opens a door by grabbing it on
+their own client (`DragRigidbodyUse.FixedUpdate`, [doors](doors.md), "Grabbing a door open"); a ghost moves one only by
+its force (`Door.GhostForceDoor`, `Door.CheckDoorDuringHunt`), which is a ghost interaction. No other way to move a leaf
+for a mod-driven ghost was found. `LevelController.currentGhostRoom` names the room the ghost is in on every client, and
+`LevelRoom.doors` that room's doors.
+
+**Sight.** `GhostAI.vision` detects nobody outside hunts. Custom Ghosts' Lithobolia sees through copies of the vision's
+two sensors that it pulses itself (`mods/custom_ghosts/sensor_copy.h`, "The ghost's sensors and throws" above): a player
+is seen when the copy detects any of their `Player.losTargets`.
+
+**Hearing.** The hunt hears by voice and by electronics (`GhostHuntState.Listen`, through `Hears` and `SensesGear`).
+The voice rule (`GhostHuntState.Hears`): the player's body within 9 m of the ghost's head, 2.5 m for the Yokai, any
+distance and floor for a player a Monkey Paw wish marks (`Player.wished`), always for the Deogen; on the floor of the
+ghost's room otherwise; not outdoors; and `PlayerAudio.IsTalkingLoudly(0.1)` of `Player.audio`. A mod mirrors it with
+those members. `IsTalkingLoudly` clears the loudness it answers true for, and its only other asker is the idle state's
+check for talking in a room. Footsteps are heard only by the Kormos's hunt: `GhostHearing` pulses only while the ghost
+hunts.
+
+**Hiding places.** A closet's trigger keeps `ClosetZone.occupants` and each occupant's `Player.closet` on each client
+its physics runs on, and the hunt, on the master, reads `Player.closet`. The hunt's closet search learns a closet only
+from the player it goes for: `GhostHuntState.SetTarget` (a player its sight found) and `GhostHuntState.Listen` (one it
+heard or sensed) give `SetCloset` that player's closet. It then goes to the closet (`ClosetZone.navSpot`) and runs
+`ClosetZone.CheckCloset`, which moves the closet's doors as a hunting ghost does, and kills whoever hides there.
+`ClosetZone.standOutsideEntrancePoint` is where a ghost stands outside the entrance without going in, and
+`ClosetZone.leftClosetDoor` and `rightClosetDoor` are its doors. A `HidingSpot` (under a bed, behind a curtain) has no
+part in the search: `SetCloset` and `Player.closet` take a ClosetZone only.
+
 ## A player and its AI: the rules and the exceptions
 
 A ghost's player-controlled and AI-controlled versions follow the same rules. Custom Ghosts' hooks take no input

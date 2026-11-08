@@ -29,11 +29,41 @@ inline constexpr pm::sdk::EntryDesc ClosetZone_rightClosetDoor{.key = "ClosetZon
 inline constexpr pm::sdk::EntryDesc ClosetZone_navSpot{.key = "ClosetZone.navSpot", .kind = pm::sdk::Kind::Field,
                                                        .owner = "ClosetZone", .name = "navSpot"};
 
-/// The closet check the hunt's closet search runs on a closet it reaches. Inferred: from the method's
-/// name; Custom Ghosts' Bogeyman has called it since 2026-10-20.
+/// The closet check the hunt's closet search runs on a closet it reaches: it marks the closet searched and
+/// moves its doors as a hunting ghost does (Door.CheckDoorDuringHunt on the left door, the door's force
+/// coroutine on the right), the closet's open or close kind deciding which way. It is the ghost moving
+/// doors. Custom Ghosts' Bogeyman has called it since 2026-10-20. Decompiled.
 inline constexpr pm::sdk::EntryDesc ClosetZone_CheckCloset{.key = "ClosetZone.CheckCloset",
-                                                           .kind = pm::sdk::Kind::Method, .owner = "ClosetZone",
-                                                           .name = "CheckCloset"};
+                                                           .kind = pm::sdk::Kind::Method,
+                                                           .confidence = pm::sdk::Confidence::Decompiled,
+                                                           .owner = "ClosetZone", .name = "CheckCloset"};
+
+/// Where a ghost stands outside the closet's entrance, a Transform (its tooltip says "usually centred and
+/// about a foot away from the door"): the place to wait at a closet without opening it. Inferred: from the
+/// field's name and tooltip.
+inline constexpr pm::sdk::EntryDesc ClosetZone_standOutsideEntrancePoint{
+    .key = "ClosetZone.standOutsideEntrancePoint", .kind = pm::sdk::Kind::Field, .owner = "ClosetZone",
+    .name = "standOutsideEntrancePoint"};
+
+/// The players hiding in the closet, a List<Player>: the closet's one list of them. Its trigger adds a living
+/// player whose body enters and sets their Player.closet, and removes them and clears it as they leave, on
+/// each client its physics runs on. Decompiled.
+inline constexpr pm::sdk::EntryDesc ClosetZone_occupants{.key = "ClosetZone.occupants", .kind = pm::sdk::Kind::Field,
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "ClosetZone", .type = "List<Player>"};
+
+/// Whether anyone hides in the closet: true while ClosetZone.occupants is not empty. Decompiled.
+inline constexpr pm::sdk::EntryDesc ClosetZone_ArePlayersInside{.key = "ClosetZone.ArePlayersInside",
+                                                                .kind = pm::sdk::Kind::Method,
+                                                                .confidence = pm::sdk::Confidence::Decompiled,
+                                                                .owner = "ClosetZone", .name = "ArePlayersInside"};
+
+/// Forces the closet's doors as the ghost does (Door.GhostForceDoor on the left door, the force coroutine on
+/// the right): a ghost's interaction with the doors, which Door.GhostForceDoor sends to every client.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc ClosetZone_OpenCloseClosetDoors{
+    .key = "ClosetZone.OpenCloseClosetDoors", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "ClosetZone", .name = "OpenCloseClosetDoors"};
 
 /// A hiding place that is not a closet (Assembly-CSharp, global namespace): under a bed, behind a
 /// curtain. Inferred: from its name.
@@ -59,8 +89,19 @@ struct ClosetZone {
   static constexpr pm::api::Field<pm::map::ClosetZone_rightClosetDoor, void*> rightClosetDoor{};
   /// Where a searcher stands, a Transform: navSpot.get(closet). Unresolved: null.
   static constexpr pm::api::Field<pm::map::ClosetZone_navSpot, void*> navSpot{};
-  /// CheckCloset(closet). Unresolved: does nothing.
+  /// Where a ghost stands outside its entrance, a Transform: standOutsideEntrancePoint.get(closet).
+  /// Unresolved: null.
+  static constexpr pm::api::Field<pm::map::ClosetZone_standOutsideEntrancePoint, void*> standOutsideEntrancePoint{};
+  /// The players hiding in it, a List<Player>: occupants.get(closet), read as a pm::api::List. Unresolved:
+  /// null.
+  static constexpr pm::api::Field<pm::map::ClosetZone_occupants, void*> occupants{};
+  /// CheckCloset(closet): the hunt's check, which moves its doors as a ghost does. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::ClosetZone_CheckCloset, void(void*)> CheckCloset{};
+  /// ArePlayersInside(closet): whether anyone hides in it. Unresolved: false.
+  static constexpr pm::api::Method<pm::map::ClosetZone_ArePlayersInside, bool(void*)> ArePlayersInside{};
+  /// OpenCloseClosetDoors(closet): forces its doors as a ghost does. A mod usually hooks it. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::ClosetZone_OpenCloseClosetDoors, void(void*)> OpenCloseClosetDoors{};
 };
 
 /// A hiding place that is not a closet.

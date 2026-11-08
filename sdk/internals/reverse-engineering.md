@@ -32,6 +32,13 @@ signature) and `re/map-addresses.tsv` (each map key's resolved value). Then:
 | `re/names.mjs` | Builds `re/names.tsv` from a DiffableCs dump. |
 | `tools/assetcheck.py` | Checks scene and asset facts with the pinned UnityPy ([Scene and asset facts](../systems/scene.md)). |
 
+- **Ghidra refuses a project path with a folder whose name starts with a dot** ("Path element starting with '.' is not
+  permitted"), so `re/decomp.mjs` fails inside a git worktree kept under a dotted folder. Copy `re/ghidra` to a path
+  without one and point a copy of the script at it.
+- **A scene's components without a type tree** still name their scripts: UnityPy reads the script reference raw, and the
+  scene's GameObjects give their layer. The physics layer matrix (`PhysicsManager.m_LayerCollisionMatrix`) and the layer
+  names (`TagManager`) are in `globalgamemanagers`; that is how the ghost was shown to pass through doors
+  ([ghost AI](../systems/ghost-ai.md), "Moving the ghost outside a hunt").
 - **Full analysis of GameAssembly.dll does not finish** in an interactive Ghidra session's time limit, and reopening it
   analyses it again. Decompile by key with `re/decomp.mjs`, or open a slim PE of the few functions you need. Keep a slice to
   a few megabytes of code; a ten-megabyte slice timed out on reopening.

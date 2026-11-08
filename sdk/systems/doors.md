@@ -113,6 +113,10 @@ interactions (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet
 door in a room. So in practice an exit's owner is the last player who grabbed it, often not the master. Before anyone has,
 it is the master's, as Photon gives a scene's views to the master.
 
+**A ghost walking through.** No door leaf carries a NavMeshObstacle and the Ghost layer does not collide with the Door
+layer, so the ghost's agent walks through a shut door and leaves the leaf where it is ([ghost AI](ghost-ai.md), "Moving
+the ghost outside a hunt"). Only the grab above or a ghost's force moves a leaf.
+
 ## How a hunt locks the exits
 
 1. As a hunt starts, the hunt state on the master sends `GhostAI.Hunting` and calls `LevelController.LockHuntingDoors`.
