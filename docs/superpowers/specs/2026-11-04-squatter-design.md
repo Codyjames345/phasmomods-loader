@@ -61,9 +61,12 @@ Some consequences, all **(builder's call)**:
 - "Can't sprint" covers both a custom difficulty that turns sprinting off and a chased player whose sprint has run out, so the taunt can play
   for either. Its speed comes from the game's sprint speed as if sprinting were on, which reverse engineering has to establish.
 - Bumping into something is an animation and a pause. It moves no props, since that would read as a ghost interaction.
-- Whether going through a door moves the game's own door, and how, comes from reverse engineering the way a player opens one. It must not
-  send a game RPC by name, invoke an RPC body, or use the ghost's own door interaction (that is paranormal activity). If no clean route
-  exists, it plays the clip at a door already open, and the question goes to the user.
+- At a shut door during the chase, the Squatter swings it open with the game's own ghost door push (`Door.GhostForceDoor`) and plays
+  the opening-door clip (user, 2026-11-08). In the game a ghost passes through shut doors and a player's open is their own local grab,
+  so the push is the only way to move the leaf. First, reverse engineering has to show the push leaves no EMF reading, interaction
+  count or other paranormal trace. If it leaves one, the question goes back to the user. Restraint lets the push through for the
+  chase only, never on an exit, and the exits' hold survives the push's reset of `Door.grabbable`. It must not send a game RPC by
+  name or invoke an RPC body.
 
 ## Look and sound
 
