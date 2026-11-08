@@ -2025,6 +2025,63 @@ int g_exitsClosed = 0;  // Door.HuntingCloseDoor calls
 void fake_hunting_close(void*, const void*) { ++g_exitsClosed; }
 bool fake_master(const void*) { return true; }
 
+bool g_isMaster = false;
+bool fake_is_master(const void*) { return g_isMaster; }
+bool fake_in_room(const void*) { return true; }
+struct PhotonPlayerObj {
+  void* klass = nullptr;
+  int32_t actor = 0;
+} g_masterClient{nullptr, 1};
+void* fake_master_client(const void*) { return &g_masterClient; }
+int32_t fake_actor(void* p, const void*) { return static_cast<PhotonPlayerObj*>(p)->actor; }
+
+// Through the mod's own channel handler: on a client that is not the master the Squatter's phase follows the master's
+// Shown, and nobody else's; a malformed Shown changes nothing; once this client becomes the master it goes on from the
+// last Shown it followed (a host migration).
+void the_squatter_follows_the_masters_shown() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty, ghost;
+  void* valuesStatic = &values;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_is_master));
+  fake::method(map::PhotonNetwork_get_InRoom, reinterpret_cast<void*>(&fake_in_room));
+  fake::method(map::PhotonNetwork_get_MasterClient, reinterpret_cast<void*>(&fake_master_client));
+  fake::method(map::PhotonPlayer_get_ActorNumber, reinterpret_cast<void*>(&fake_actor));
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  g_isMaster = false;
+  squatter::reset();
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Lurking);
+  squatter::Shown chasing;
+  chasing.phase = squatter::Phase::Chasing;
+  const std::vector<uint8_t> word = squatter::shown_message(chasing);
+  squatter::receive(2, word.data(), word.size());  // not the master's
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Lurking && !squatter::shown());
+  squatter::receive(1, word.data(), word.size() - 1);  // the master's, but short
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Lurking);
+  squatter::receive(1, word.data(), word.size());
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Chasing && squatter::shown() == chasing);
+  g_isMaster = true;  // the master leaves and this client takes over
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Chasing);
+  CHECK(!squatter::share(chasing));  // unchanged: nothing to send
+  squatter::tick(nullptr, 0, false);  // the contract ends: what the channel brought goes with it
+  CHECK(!squatter::phase() && !squatter::shown());
+  squatter::reset();
+  g_isMaster = false;
+}
+
 // The exits' lock belongs to the map, not to the ghost: a tick without the ghost mid-contract keeps it, so the master
 // never calls Door.HuntingCloseDoor twice for one map; the next map's LevelController starts unlocked.
 void the_squatters_lock_survives_a_tick_without_it() {
@@ -2187,6 +2244,7 @@ int main() {
   wiring::without_spectral_flame_only_four_stay();
   wiring::the_squatter_begins_lurking_or_moping();
   wiring::the_squatters_lock_survives_a_tick_without_it();
+  wiring::the_squatter_follows_the_masters_shown();
   wiring::draugr_declares_freezing_priority();
   wiring::black_shuck_declares_itself_blind_in_hunts();
   wiring::only_the_squatter_is_never_copied();

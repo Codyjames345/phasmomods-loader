@@ -25,6 +25,7 @@
 #include "runtime.h"
 #include "sheet_mesh.h"
 #include "squatter_figure.h"
+#include "squatter_net.h"
 #include "squatter_rule.h"
 #include "squatter_voice.h"
 #include "wav.h"
@@ -679,6 +680,226 @@ void move_variants_are_deterministic() {
   for (uint32_t v = 0; v < 8; ++v) CHECK(std::string(state_for(Move::Run, v)) == "Run");
 }
 
+// What the master shows every client (squatter_net.h): each field comes back as it went, for every phase, move, line
+// set and act, and with no line or act at all.
+void shown_round_trips() {
+  for (const Phase p : kAllPhases)
+    for (const Move m : kAllMoves) {
+      Shown s;
+      s.phase = p;
+      s.move = m;
+      s.variant = 3;
+      s.lineSet = static_cast<int8_t>(Lines::Chase);
+      s.lineIndex = 7;
+      s.lineCue = 250;
+      s.act = static_cast<int8_t>(Act::Bang);
+      s.actCue = 9;
+      const std::vector<uint8_t> bytes = shown_message(s);
+      Shown back;
+      CHECK(read_shown(bytes.data(), bytes.size(), back) && back == s);
+      CHECK(pm::custom::net_msg::kind_of(bytes.data(), bytes.size()) == pm::custom::net_msg::kSquatter);
+    }
+  for (const Act a : kAllActs) {
+    Shown s;
+    s.act = static_cast<int8_t>(a);
+    const std::vector<uint8_t> bytes = shown_message(s);
+    Shown back;
+    CHECK(read_shown(bytes.data(), bytes.size(), back) && back == s);
+  }
+  const Shown none;  // no line and no act
+  CHECK(none.lineSet == -1 && none.lineIndex == -1 && none.act == -1);
+  const std::vector<uint8_t> bytes = shown_message(none);
+  Shown back;
+  back.phase = Phase::Following;
+  CHECK(read_shown(bytes.data(), bytes.size(), back) && back == none);
+}
+
+// A Shown is taken only whole, in range and from the master: a short or long message, a value no client knows, and one
+// any other player sent are dropped, and the last good one is kept.
+void bad_shown_is_dropped() {
+  Shown s;
+  s.phase = Phase::Chasing;
+  s.lineSet = static_cast<int8_t>(Lines::Chase);
+  s.lineIndex = 2;
+  const std::vector<uint8_t> good = shown_message(s);
+  Shown out;
+  for (size_t n = 0; n < good.size(); ++n) CHECK(!read_shown(good.data(), n, out));
+  std::vector<uint8_t> longer = good;
+  longer.push_back(0);
+  CHECK(!read_shown(longer.data(), longer.size(), out));
+  CHECK(!read_shown(nullptr, good.size(), out));
+  const auto broken = [&](size_t at, uint8_t value) {
+    std::vector<uint8_t> b = good;
+    b[at] = value;
+    Shown o;
+    return !read_shown(b.data(), b.size(), o);
+  };
+  CHECK(broken(4, 8));      // no phase 8
+  CHECK(broken(5, 6));      // no move 6
+  CHECK(broken(7, 10));     // no line set 10
+  CHECK(broken(7, 0xFE));   // a set below -1
+  CHECK(broken(8, 0xFE));   // a line below -1
+  CHECK(broken(10, 7));     // no act 7
+  CHECK(broken(3, pm::custom::net_msg::kSquatterTry));  // another kind
+  {
+    std::vector<uint8_t> b = good;
+    b[7] = 0xFF;  // a line with no set
+    Shown o;
+    CHECK(!read_shown(b.data(), b.size(), o));
+  }
+  // Only the master's word counts: not another player's, nor any while the master is unknown (0).
+  ShownInbox inbox;
+  CHECK(!inbox.take(3, 1, good.data(), good.size()));
+  CHECK(!inbox.take(0, 0, good.data(), good.size()));
+  CHECK(!inbox.last);
+  CHECK(inbox.take(1, 1, good.data(), good.size()) && inbox.last && *inbox.last == s);
+  Shown later = s;
+  later.phase = Phase::Searching;
+  const std::vector<uint8_t> forged = shown_message(later);
+  CHECK(!inbox.take(2, 1, forged.data(), forged.size()));
+  CHECK(!inbox.take(1, 1, good.data(), 5));
+  CHECK(*inbox.last == s);  // the master's last good word stands
+}
+
+// A player's try at a locked exit reaches the master once per input: the interact and grab paths of one input, within
+// the window, are one try, and a later input is another.
+void one_try_is_sent_per_input() {
+  TryTeller teller;
+  CHECK(teller.due(1000));
+  CHECK(!teller.due(1000));                     // the grab path of the same input
+  CHECK(!teller.due(1000 + kTryWindowMs - 1));  // still within the window
+  CHECK(teller.due(1000 + kTryWindowMs));       // the next input
+  teller = TryTeller{};
+  CHECK(teller.due(0));  // a clock at 0 still sends the first
+  const std::vector<uint8_t> message = try_message();
+  CHECK(message.size() == 4 && pm::custom::net_msg::kind_of(message.data(), 4) == pm::custom::net_msg::kSquatterTry);
+}
+
+// The master takes another player's try, and dedupes a double report from one player too; each player's tries are
+// their own, and taking them empties the queue.
+void a_non_masters_try_reaches_the_master() {
+  const std::vector<uint8_t> message = try_message();
+  const std::vector<int> room{1, 2, 3};
+  CHECK(try_from(2, true, room, message.data(), message.size()));
+  TryInbox inbox;
+  CHECK(inbox.report(2, 5000));
+  CHECK(!inbox.report(2, 5000 + kTryWindowMs - 1));
+  CHECK(inbox.report(3, 5001));
+  CHECK(inbox.report(2, 5000 + kTryWindowMs));
+  CHECK((inbox.take() == std::vector<int>{2, 3, 2}));
+  CHECK(inbox.take().empty());
+  CHECK(inbox.report(0, 6000));  // the master's own player with no actor number (single player)
+  CHECK((inbox.take() == std::vector<int>{0}));
+}
+
+// The sender is Photon's, from the event, never from the message, so a try cannot speak for another player: one with
+// a body (naming someone) is dropped, as is a sender that is not in the room or unknown (0), and any try that reaches a
+// client that is not the master.
+void a_forged_try_is_ignored() {
+  const std::vector<uint8_t> message = try_message();
+  const std::vector<int> room{1, 2, 3};
+  std::vector<uint8_t> naming = message;
+  naming.insert(naming.end(), {3, 0, 0, 0});
+  CHECK(!try_from(2, true, room, naming.data(), naming.size()));
+  CHECK(!try_from(9, true, room, message.data(), message.size()));
+  CHECK(!try_from(0, true, room, message.data(), message.size()));
+  CHECK(!try_from(2, false, room, message.data(), message.size()));
+  CHECK(!try_from(2, true, room, message.data(), 3));
+  CHECK(!try_from(2, true, room, nullptr, message.size()));
+}
+
+// Each client's sprint report: whether its player may sprint and the speed it would sprint at, worked out as the game
+// works out its own (LocalPCPlayer.UpdatePlayerSpeed): the multiplier applies but to a dead rig, and the sprint is off
+// when Difficulty.sprinting is 0 or the stamina cannot sprint. The message comes back as it went and refuses a bad one.
+void sprint_report_round_trips() {
+  CHECK(sprint_speed_if_on(3.0f, 1.5f, false) == 4.5f);
+  CHECK(sprint_speed_if_on(3.0f, 1.5f, true) == 3.0f);
+  CHECK(sprint_speed_if_on(3.0f, 0.0f, false) == 0.0f);
+  CHECK(can_sprint(true, 1) && can_sprint(true, 2));
+  CHECK(!can_sprint(true, 0) && !can_sprint(false, 1) && !can_sprint(false, 2));
+  for (const Sprint s : {Sprint{true, 4.5f}, Sprint{false, 3.0f}, Sprint{false, 0.0f}}) {
+    const std::vector<uint8_t> bytes = sprint_message(s);
+    CHECK(pm::custom::net_msg::kind_of(bytes.data(), bytes.size()) == pm::custom::net_msg::kSquatterSprint);
+    Sprint back{!s.canSprint, -1.0f};
+    CHECK(read_sprint(bytes.data(), bytes.size(), back) && back == s);
+    for (size_t n = 0; n < bytes.size(); ++n) CHECK(!read_sprint(bytes.data(), n, back));
+  }
+  std::vector<uint8_t> bad = sprint_message({true, 4.5f});
+  bad[4] = 2;  // a flag neither 0 nor 1
+  Sprint out{};
+  CHECK(!read_sprint(bad.data(), bad.size(), out));
+  for (const float speed : {-1.0f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
+                            kMaxReportedSpeed * 2}) {
+    const std::vector<uint8_t> b = sprint_message({true, speed});
+    CHECK(!read_sprint(b.data(), b.size(), out));
+  }
+  // A client tells the master on a change, and again at a modest rate while nothing changes.
+  SprintTeller teller;
+  CHECK(teller.due({true, 4.5f}, 100));
+  CHECK(!teller.due({true, 4.5f}, 101));
+  CHECK(teller.due({false, 4.5f}, 102));  // the sprint ran out
+  CHECK(teller.due({false, 3.0f}, 103));  // the multiplier changed
+  CHECK(!teller.due({false, 3.0f}, 103 + kSprintResendMs - 1));
+  CHECK(teller.due({false, 3.0f}, 103 + kSprintResendMs));
+}
+
+// A sprint report is its sender's own: the master takes one from a player in the room, never one from an unknown
+// sender (0) or one not in the room, and a client that is not the master takes none.
+void a_sprint_report_is_the_senders_own() {
+  const std::vector<uint8_t> message = sprint_message({true, 4.5f});
+  const std::vector<int> room{1, 2, 3};
+  Sprint s;
+  CHECK(sprint_from(2, true, room, message.data(), message.size(), s) && s == (Sprint{true, 4.5f}));
+  Sprint untouched{false, 1.0f};
+  CHECK(!sprint_from(0, true, room, message.data(), message.size(), untouched));
+  CHECK(!sprint_from(9, true, room, message.data(), message.size(), untouched));
+  CHECK(!sprint_from(2, false, room, message.data(), message.size(), untouched));
+  CHECK(!sprint_from(2, true, room, message.data(), message.size() - 1, untouched));
+  CHECK(untouched == (Sprint{false, 1.0f}));
+}
+
+// The master's book of reports: each player's last word, which goes stale once that player has not reported for
+// kSprintStaleMs (a player who left, or whose client stopped), and is then dropped.
+void a_stale_sprint_report_is_dropped() {
+  SprintBook book;
+  CHECK(!book.of(2, 0));
+  book.report(2, {true, 4.5f}, 1000);
+  book.report(3, {false, 3.0f}, 1000);
+  CHECK(book.of(2, 1000 + kSprintStaleMs) && *book.of(2, 1000 + kSprintStaleMs) == (Sprint{true, 4.5f}));
+  book.report(3, {true, 3.0f}, 1000 + kSprintStaleMs);
+  CHECK(!book.of(2, 1001 + kSprintStaleMs));  // stale
+  CHECK(book.of(3, 1001 + kSprintStaleMs) && book.of(3, 1001 + kSprintStaleMs)->canSprint);
+  book.drop_stale(1001 + kSprintStaleMs);
+  CHECK(book.size() == 1);
+  book.clear();
+  CHECK(book.size() == 0 && !book.of(3, 1001 + kSprintStaleMs));
+}
+
+// After a host migration the new master continues from the last Shown: the phase it followed stays, Chasing or
+// LockedOut, and a LockedOut Squatter never locks the exits a second time (doors_lock; squatter_door_test checks that
+// lock_all calls nothing more on a client that already holds them).
+void a_new_master_continues_from_the_last_shown_phase() {
+  Shown chasing;
+  chasing.phase = Phase::Chasing;
+  std::optional<Phase> kept = first_phase(false);
+  kept = kept_phase(kept, chasing, false);  // a client that is not the master follows the master's word
+  CHECK(kept == Phase::Chasing);
+  kept = kept_phase(kept, chasing, true);  // it becomes the master
+  CHECK(kept == Phase::Chasing);
+  CHECK(next_phase(*kept, hostile(2)) == Phase::Searching);  // its own tick goes on from the chase, not the start
+  CHECK(kept_phase(Phase::Searching, chasing, true) == Phase::Searching);  // the master's own phase is its own
+  Shown out;
+  out.phase = Phase::LockedOut;
+  kept = kept_phase(Phase::Chasing, out, false);
+  CHECK(kept == Phase::LockedOut);
+  kept = kept_phase(kept, out, true);
+  CHECK(kept == Phase::LockedOut);
+  CHECK(next_phase(*kept, hostile(0)) == Phase::LockedOut && !doors_lock(*kept, hostile(0)));
+  // Before any word from the master a client keeps its own first phase, and with none at all, none.
+  CHECK(kept_phase(Phase::Lurking, std::nullopt, false) == Phase::Lurking);
+  CHECK(!kept_phase(std::nullopt, std::nullopt, false));
+}
+
 // A fake game for figure::load: the bundle and its controller, and an Animator that knows the controller's states.
 namespace fig {
 int kGameObjectClass, kAnimatorClass, kControllerClass, kClothClass;
@@ -824,6 +1045,15 @@ int main() {
   tired_taunt_fires_once_per_lapse();
   lines_match_the_phase();
   picks_never_repeat_and_handle_nothing();
+  shown_round_trips();
+  bad_shown_is_dropped();
+  one_try_is_sent_per_input();
+  a_non_masters_try_reaches_the_master();
+  a_forged_try_is_ignored();
+  sprint_report_round_trips();
+  a_sprint_report_is_the_senders_own();
+  a_stale_sprint_report_is_dropped();
+  a_new_master_continues_from_the_last_shown_phase();
   wav_decodes_mono_and_stereo();
   wav_refuses_malformed();
   every_set_has_a_folder_name();

@@ -92,7 +92,7 @@ void frame(int type) {
   lethe::tick(haunting, type);        // and forgets with the Lethe
   tempest::tick(haunting, type);      // and sees the Tempest's storm
   mesmer::tick(haunting, type);       // and sees the Mesmer as no one else does
-  squatter::tick(haunting, type, steered);  // and keeps the Squatter's phase
+  squatter::tick(haunting, type, steered);  // and keeps the Squatter's phase, its channel and the exits' hold
 }
 
 // The rules of one custom ghost (PmGhostRules). `user` is its Type.
@@ -221,6 +221,9 @@ void receive(int sender, const uint8_t* data, size_t size) {
     case net_msg::kForget: lethe::receive(sender, data, size); break;
     case net_msg::kAnger: behaviour::receive(sender, data, size); break;
     case net_msg::kSeen: brownie::receive(sender, data, size); break;
+    case net_msg::kSquatter:
+    case net_msg::kSquatterTry:
+    case net_msg::kSquatterSprint: squatter::receive(sender, data, size); break;
     case 0: echo::receive(sender, data, size); break;
     default: break;
   }

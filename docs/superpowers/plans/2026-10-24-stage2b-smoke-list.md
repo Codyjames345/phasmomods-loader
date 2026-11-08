@@ -988,7 +988,7 @@ chase that calls it comes in Task 7, so these are checkable once Task 7 is in; a
 forced in a Custom difficulty, two players where it says so.
 
 - Each kind of map, the doors locking once every living player is out
-  - [ ] A house with one exit (Tanglewood, Edgefield, Ridgeview or Willow Street): run out of the front door; it swings shut and locks, `mods.log` has `squatter: 1 exit(s) locked`, and no refused-RPC or exception line follows.
+  - [ ] A house with one exit (Tanglewood, Edgefield, Ridgeview or Willow Street): run out of the front door; it swings shut and locks, `mods.log` has `squatter: 1 exit(s) held`, and no refused-RPC or exception line follows.
   - [ ] A map with several exits: Brownstone High School (6), Nell's Diner (3) or Bleasdale Farmhouse (2). Every exit shuts and locks at once, not only the one used, and the log names the count the doors page gives.
   - [ ] A map without a house: Camp Woodwind or Maple Lodge Campsite. Both leaves of the campsite's gate shut and lock once everyone is past it; a player at a campfire or in a tent still counts as inside (the gate stays open).
   - [ ] A map with variations: Prison or Point Hope. Every exit locks, including on a smaller variation.
@@ -1008,3 +1008,20 @@ forced in a Custom difficulty, two players where it says so.
   - [ ] Each try at a locked exit, by the host or a client, reaches the mod (once Task 7 plays a line for it, each try plays one); a try at an ordinary door plays nothing.
   - [ ] On a friendly ghost's difficulty nothing locks, and the log has no lock line.
   - [ ] Leave and start another contract on the same map: its exits start as the map's own (locked until the key is used), not still switched off.
+
+The mod channel and the exits' hold (Task 7b). Squatter messages go on Custom Ghosts' channel (`mods/custom_ghosts/squatter_net.h`); most of what they carry shows only once Task 7c's chase uses it. A private contract with the Squatter forced in a Custom difficulty, two players (one the host) unless it says otherwise.
+
+- The exits' hold follows the host's lock
+  - [ ] As the client, when the host's lock shuts the exits: your `mods.log` has `squatter: N exit(s) held` as they swing shut, with no refused-RPC or exception line, and your count matches the map's exits.
+  - [ ] As the client, make a Monkey Paw wish on the exits as soon as they lock (the 6 s wish, then the one that opens every exit): every exit stays shut for both players.
+  - [ ] On a contract with another ghost (not the Squatter) that hunts: after the hunt, a Monkey Paw wish on the exits does what the game does; nothing in the log says the exits are held.
+- Tries and sprint reach the host
+  - [ ] As the client, try a locked exit once by the interact key and once by grabbing: each press reaches the host once (once 7c plays a line for it, one line per press, never two).
+  - [ ] As the client, run out of breath while chased: the host's Squatter taunts you (needs 7c). On a Custom difficulty with sprinting off, the taunt plays without running.
+  - [ ] As the client, take a Monkey Paw wish that changes your speed: the Squatter's pace follows your new speed (needs 7c).
+  - [ ] With a VR player as the client: running out of breath reaches the host as on PC (VR's stamina clears the same flag).
+- Host migration
+  - [ ] The host leaves mid-chase: the new host's Squatter carries on chasing, with no restart in its room.
+  - [ ] The host leaves after the exits have locked: they stay locked, with no second lock click and no refused-RPC line, and later tries still get a line.
+- Doors on maps other than Grafton
+  - [ ] On Brownstone High School or Nell's Diner, the Squatter's agent passes doors as on Grafton: only Grafton's doors were checked for a NavMeshObstacle (`sdk/systems/doors.md`, "A ghost walking through"); report a door it stops at.
