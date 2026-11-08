@@ -69,20 +69,51 @@ size_t g_groupStart = 0;         // hooks from here on belong to the open group
 // patching the detour to chain on one target would put the newer hook on all of them; patching the
 // link's own relay puts it on that target's chain alone. A relay is never freed or reused: a call
 // may still be passing through one after its link is removed.
+//
+// MinHook places the trampoline of what it patches within kMinHookReach of it (MAX_MEMORY_RANGE in
+// its buffer.c), so a relay that a newer link chains on needs free memory near it. The game fills
+// whole gigabytes of its address space, and an unhinted block can land among them, where every
+// chained hook then fails (MH_ERROR_MEMORY_ALLOC). So a relay's block sits near the game function it
+// serves, where MinHook placed that function's own trampoline, and its blocks there stay in reach.
 constexpr size_t kRelayBytes = 16;
 constexpr size_t kRelayBlock = 0x10000;
-uint8_t* g_relays = nullptr;  // the current block
-size_t g_relaysUsed = kRelayBlock / kRelayBytes;
+constexpr uintptr_t kMinHookReach = 0x40000000;
+// How far from a target a relay block serves it: half of MinHook's reach, so the trampoline MinHook
+// made near the target stays within its reach of the relay.
+constexpr uintptr_t kRelayReach = kMinHookReach / 2;
+struct RelayBlock {
+  uint8_t* base;
+  size_t used;  // relays taken
+};
+std::vector<RelayBlock> g_relayBlocks;
+size_t g_relayPending = 0;  // the block write_relay wrote in, which take_relay takes from
 
-// Writes a relay to `detour` in the next free slot, which stays free until take_relay.
-void* write_relay(void* detour) {
-  if (g_relaysUsed == kRelayBlock / kRelayBytes) {
-    void* block = VirtualAlloc(nullptr, kRelayBlock, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READ);
+uint8_t* alloc_near(uintptr_t site, uintptr_t reach, size_t size, DWORD protect);
+
+// Writes a relay to `detour` in the next free slot of a block near `target`, which stays free until
+// take_relay. Null when no block can be had near the target.
+void* write_relay(void* target, void* detour) {
+  const auto site = reinterpret_cast<uintptr_t>(target);
+  auto serves = [&](const RelayBlock& b) {
+    const auto base = reinterpret_cast<uintptr_t>(b.base);
+    return b.used < kRelayBlock / kRelayBytes && (base > site ? base - site : site - base) < kRelayReach;
+  };
+  const auto found = std::find_if(g_relayBlocks.begin(), g_relayBlocks.end(), serves);
+  if (found != g_relayBlocks.end()) {
+    g_relayPending = static_cast<size_t>(found - g_relayBlocks.begin());
+  } else {
+    uint8_t* const block = alloc_near(site, kRelayReach, kRelayBlock, PAGE_EXECUTE_READ);
     if (!block) return nullptr;
-    g_relays = static_cast<uint8_t*>(block);
-    g_relaysUsed = 0;
+    try {
+      g_relayBlocks.push_back({block, 0});
+    } catch (const std::bad_alloc&) {
+      VirtualFree(block, 0, MEM_RELEASE);
+      return nullptr;
+    }
+    g_relayPending = g_relayBlocks.size() - 1;
   }
-  uint8_t* relay = g_relays + g_relaysUsed * kRelayBytes;
+  const RelayBlock& b = g_relayBlocks[g_relayPending];
+  uint8_t* relay = b.base + b.used * kRelayBytes;
   DWORD old = 0;
   // The page keeps execute access throughout: other relays on it may be running.
   if (!VirtualProtect(relay, kRelayBytes, PAGE_EXECUTE_READWRITE, &old)) return nullptr;
@@ -96,7 +127,7 @@ void* write_relay(void* detour) {
   return relay;
 }
 
-void take_relay() { ++g_relaysUsed; }
+void take_relay() { ++g_relayBlocks[g_relayPending].used; }
 
 void* head(void* target) {
   auto first = g_head.find(target);
@@ -331,29 +362,33 @@ bool overlaps(const uint8_t* site, size_t size) {
   return false;
 }
 
-// A page of kStubPage bytes, readable, writable and executable, within rel32 range of `site`, or null.
-uint8_t* page_near(uintptr_t site) {
-#ifdef PM_HOOKS_TEST
-  if (g_noPageNear) return nullptr;
-#endif
+// `size` bytes with `protect` access, the nearest free ones to `site` within `reach` of it, or null.
+uint8_t* alloc_near(uintptr_t site, uintptr_t reach, size_t size, DWORD protect) {
   SYSTEM_INFO system{};
   GetSystemInfo(&system);
   const uintptr_t granule = system.dwAllocationGranularity;
   const auto lowest = reinterpret_cast<uintptr_t>(system.lpMinimumApplicationAddress);
   const auto highest = reinterpret_cast<uintptr_t>(system.lpMaximumApplicationAddress);
-  for (uintptr_t delta = granule; delta < kNear; delta += granule) {
+  for (uintptr_t delta = granule; delta < reach; delta += granule) {
     for (const bool below : {true, false}) {
       if (below ? site < lowest + delta : site > highest - delta) continue;
       const uintptr_t candidate = (below ? site - delta : site + delta) & ~(granule - 1);
       MEMORY_BASIC_INFORMATION region{};
       if (!VirtualQuery(reinterpret_cast<void*>(candidate), &region, sizeof region) || region.State != MEM_FREE)
         continue;
-      if (void* page = VirtualAlloc(reinterpret_cast<void*>(candidate), kStubPage, MEM_COMMIT | MEM_RESERVE,
-                                    PAGE_EXECUTE_READWRITE))
+      if (void* page = VirtualAlloc(reinterpret_cast<void*>(candidate), size, MEM_COMMIT | MEM_RESERVE, protect))
         return static_cast<uint8_t*>(page);
     }
   }
   return nullptr;
+}
+
+// A page of kStubPage bytes, readable, writable and executable, within rel32 range of `site`, or null.
+uint8_t* page_near(uintptr_t site) {
+#ifdef PM_HOOKS_TEST
+  if (g_noPageNear) return nullptr;
+#endif
+  return alloc_near(site, kNear, kStubPage, PAGE_EXECUTE_READWRITE);
 }
 
 // Writes a site patch's replaced bytes back with the other threads stopped, unless something else
@@ -395,9 +430,9 @@ bool create(void* target, void* detour, void** original, const char* name) {
     PM_LOG("hooks: %s at %p is inside a site patch; nothing hooked", name, target);
     return false;
   }
-  void* relay = write_relay(detour);
+  void* relay = write_relay(target, detour);
   if (!relay) {
-    PM_LOG("hooks: create %s at %p failed: no memory for its relay", name, target);
+    PM_LOG("hooks: create %s at %p failed: no memory near it for its relay", name, target);
     return false;
   }
   void* earlier = head(target);
@@ -411,7 +446,7 @@ bool create(void* target, void* detour, void** original, const char* name) {
   g_head[target] = relay;
   g_created.push_back({target, at, detour, false});
   if (at == target) PM_LOG("hooks: created %s at %p", name, target);
-  else PM_LOG("hooks: created %s at %p, chained ahead of an earlier detour", name, target);
+  else PM_LOG("hooks: created %s at %p, chained ahead of an earlier detour (its relay at %p)", name, target, at);
   return true;
 }
 

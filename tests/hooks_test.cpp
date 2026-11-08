@@ -5,8 +5,10 @@
 // Run: build\hooks_test.exe
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <initializer_list>
 #include <map>
@@ -14,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "code_memory.h"
@@ -94,6 +97,73 @@ __declspec(noinline) int detour_twin2(int x) { return g_origTwin2(x) + 5; }
 __declspec(noinline) int detour_solo(int x) { return g_origSolo(x) * 100; }
 __declspec(noinline) int detour_solo2(int x) { return g_origSolo2(x) + 7; }
 __declspec(noinline) int detour_folded(int x) { return g_origFolded(x) * 100; }
+
+__declspec(noinline) int crowded(int x) {
+  volatile int y = x;
+  return y + 14;
+}
+Fn g_origCrowd1 = nullptr, g_origCrowd2 = nullptr;
+__declspec(noinline) int detour_crowd1(int x) { return g_origCrowd1(x) * 2; }
+__declspec(noinline) int detour_crowd2(int x) { return g_origCrowd2(x) + 300; }
+
+// Reserves every free region within `reach` of `centre` except the granule at `centre`, as a game's
+// own reservations can fill the memory around wherever an unhinted allocation lands.
+std::vector<void*> crowd_around(uintptr_t centre, uintptr_t reach) {
+  SYSTEM_INFO system{};
+  GetSystemInfo(&system);
+  const uintptr_t granule = system.dwAllocationGranularity;
+  std::vector<void*> taken;
+  const uintptr_t begin = centre > reach ? centre - reach : granule, end = centre + reach;
+  for (uintptr_t at = begin; at < end;) {
+    MEMORY_BASIC_INFORMATION region{};
+    if (!VirtualQuery(reinterpret_cast<void*>(at), &region, sizeof region)) break;
+    const auto base = reinterpret_cast<uintptr_t>(region.BaseAddress);
+    const uintptr_t top = std::min(base + region.RegionSize, end);
+    if (region.State == MEM_FREE) {
+      // Granule-aligned pieces of the free region, around the kept granule.
+      uintptr_t from = (std::max(base, at) + granule - 1) & ~(granule - 1);
+      for (const auto [lo, hi] : {std::pair{from, std::min(top, centre)}, std::pair{std::max(from, centre + granule), top}}) {
+        const uintptr_t size = hi > lo ? (hi - lo) & ~(granule - 1) : 0;
+        if (size)
+          if (void* r = VirtualAlloc(reinterpret_cast<void*>(lo), size, MEM_RESERVE, PAGE_NOACCESS)) taken.push_back(r);
+      }
+    }
+    at = top;
+  }
+  return taken;
+}
+
+// The game's address space can be full for a gigabyte around where an unhinted allocation lands.
+// A chained hook makes MinHook patch the earlier link's relay, and MinHook places its trampoline
+// within 1 GB of what it patches, so the relays sit near the game function they serve: chaining
+// works however crowded the rest of the address space is.
+void chained_hook_survives_a_crowded_heap() {
+  g_log.clear();
+  void* probe = VirtualAlloc(nullptr, 0x10000, MEM_RESERVE, PAGE_NOACCESS);
+  CHECK(probe != nullptr);
+  VirtualFree(probe, 0, MEM_RELEASE);
+  constexpr uintptr_t kMinHookReach = 0x40000000;  // MinHook's MAX_MEMORY_RANGE
+  const std::vector<void*> crowd = crowd_around(reinterpret_cast<uintptr_t>(probe), kMinHookReach + 0x10000000);
+  const size_t before = pm::hooks::mark();
+  pm::hooks::begin_group();
+  const bool first = pm::hooks::create(p(crowded), p(detour_crowd1), reinterpret_cast<void**>(&g_origCrowd1), "crowd 1");
+  const bool second = pm::hooks::create(p(crowded), p(detour_crowd2), reinterpret_cast<void**>(&g_origCrowd2), "crowd 2");
+  for (void* r : crowd) VirtualFree(r, 0, MEM_RELEASE);
+  CHECK(first && second);
+  CHECK(!logged("MH_ERROR_MEMORY_ALLOC"));
+  // The chained link's relay is within MinHook's reach of the function it serves.
+  void* relay = nullptr;
+  for (const std::string& line : g_log)
+    if (const size_t at = line.find("its relay at "); at != std::string::npos)
+      sscanf_s(line.c_str() + at + 13, "%p", &relay);
+  CHECK(relay != nullptr);
+  const auto gap = reinterpret_cast<intptr_t>(relay) - reinterpret_cast<intptr_t>(p(crowded));
+  CHECK(gap > -static_cast<intptr_t>(kMinHookReach) && gap < static_cast<intptr_t>(kMinHookReach));
+  CHECK(pm::hooks::enable_all());
+  CHECK(call(crowded, 1) == 330);  // crowd 2 runs first and reaches crowd 1
+  pm::hooks::rollback_to(before);
+  CHECK(call(crowded, 1) == 15);
+}
 
 bool hook_entry(Fn canonical, std::initializer_list<void*> twins, Fn detour, Fn* original, const char* name, bool all) {
   const std::vector<void*> list(twins);
@@ -865,6 +935,9 @@ int main() {
   using namespace pm::hooks;
   CHECK(init());
   CHECK(call(target, 1) == 2);
+  // First, so the host's first relay block is allocated while the heap is crowded.
+  pm::log::set_sink(&capture, "");
+  chained_hook_survives_a_crowded_heap();
 
   // The host's own hooks, before any mod group.
   CHECK(create(p(target), p(detour_a), reinterpret_cast<void**>(&g_origA), "a"));
