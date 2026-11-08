@@ -2082,6 +2082,59 @@ void the_squatter_follows_the_masters_shown() {
   g_isMaster = false;
 }
 
+std::vector<int32_t> g_stateChanges;  // the states GhostAI.ChangeState was asked for
+void fake_change_state(void*, int32_t state, void*, bool, const void*) { g_stateChanges.push_back(state); }
+
+// As the mod begins steering the Squatter's agent the master idles it once (GhostAI.ChangeState to GhostState.idle),
+// leaving wandering or the favourite room, whose states would take the agent back; it does not again while it steers,
+// nor while it lurks, nor on another client, where the master's ghost is not its own.
+void the_master_idles_the_squatter_once_as_steering_begins() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty, ghost;
+  constexpr int32_t kIdle = 7;  // a made-up number: the code reads GhostState.idle's from the map
+  void* valuesStatic = &values;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_is_master));
+  fake::method(map::GhostAI_ChangeState, reinterpret_cast<void*>(&fake_change_state));
+  fake::value(map::GhostState_idle, kIdle);
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  g_stateChanges.clear();
+  // Lurking: the ghost's own states still move it.
+  g_isMaster = true;
+  squatter::reset();
+  squatter::tick(&ghost, kSquatter, false);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Lurking && g_stateChanges.empty());
+  // Moping on a friendly ghost's difficulty: the mod holds it seated, so the master idles it once.
+  squatter::tick(nullptr, 0, false);
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, true);
+  squatter::tick(&ghost, kSquatter, false);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Moping && g_stateChanges == std::vector<int32_t>{kIdle});
+  // Another client never changes the master's ghost.
+  squatter::tick(nullptr, 0, false);
+  g_stateChanges.clear();
+  g_isMaster = false;
+  squatter::tick(&ghost, kSquatter, false);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Moping && g_stateChanges.empty());
+  // A client that becomes the master while it steers idles the ghost once, as its own now.
+  g_isMaster = true;
+  squatter::tick(&ghost, kSquatter, false);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(g_stateChanges == std::vector<int32_t>{kIdle});
+  squatter::reset();
+  g_isMaster = false;
+}
+
 // The exits' lock belongs to the map, not to the ghost: a tick without the ghost mid-contract keeps it, so the master
 // never calls Door.HuntingCloseDoor twice for one map; the next map's LevelController starts unlocked.
 void the_squatters_lock_survives_a_tick_without_it() {
@@ -2245,6 +2298,7 @@ int main() {
   wiring::the_squatter_begins_lurking_or_moping();
   wiring::the_squatters_lock_survives_a_tick_without_it();
   wiring::the_squatter_follows_the_masters_shown();
+  wiring::the_master_idles_the_squatter_once_as_steering_begins();
   wiring::draugr_declares_freezing_priority();
   wiring::black_shuck_declares_itself_blind_in_hunts();
   wiring::only_the_squatter_is_never_copied();

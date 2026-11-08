@@ -165,7 +165,8 @@ there returns to the caller, whose own code goes on: what the item does to a pla
 box's song, the board's breaking) stays the game's, as none of that waits on the change. Refusing before the game's
 change also means a forced hunt on a friendly ghost's difficulty never reaches the game's own turn of it into idling.
 Custom Ghosts' Squatter does this (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet`): it lets only
-idling, wandering and the favourite room through.
+idling, wandering and the favourite room through, and only idling while the mod steers its agent ("Moving the ghost
+outside a hunt" below).
 
 ## The ghost's sensors and throws
 
@@ -253,7 +254,9 @@ and `get_velocity`; `NavMeshAgent::steer` (above) turns it for a frame instead.
 collide with the Door layer in the game's physics settings. So the agent's path runs through a doorway whatever the
 door's state, the ghost passes through a shut leaf, and the leaf does not move. A player opens a door by grabbing it on
 their own client (`DragRigidbodyUse.FixedUpdate`, [doors](doors.md), "Grabbing a door open"); a ghost moves one only by
-its force (`Door.GhostForceDoor`, `Door.CheckDoorDuringHunt`), which is a ghost interaction. No other way to move a leaf
+its force (`Door.GhostForceDoor`, `Door.CheckDoorDuringHunt`), which is a ghost interaction with a ghost's traces: an
+EMF reading, the door's ghost sound, a count in the results and, for a ghost with Ultraviolet, fingerprints
+([doors](doors.md), "A ghost's force"). No other way to move a leaf
 for a mod-driven ghost was found. `LevelController.currentGhostRoom` names the room the ghost is in on every client, and
 `LevelRoom.doors` that room's doors.
 

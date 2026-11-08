@@ -12,7 +12,8 @@
 // (docs/superpowers/specs/2026-11-04-squatter-design.md). Main thread.
 //  - It gives no evidence (ghosts.h: three empty slots) and attempts nothing: restraint.cpp refuses its
 //    interactions, every pulse of its interaction sensor and every state change but idling, wandering and its
-//    favourite room (squatter_rule.h keeps_quiet), forced or not, its AI's and a player's alike. A cursed
+//    favourite room (squatter_rule.h keeps_quiet), every one but idling while the mod steers its agent (steering),
+//    forced or not, its AI's and a player's alike. On the master, steering's first frame idles it once. A cursed
 //    possession's effect on a player alone stays the game's (sdk/systems/ghost-ai.md, "Every route to a state
 //    change").
 //  - A Mimic never copies it (ghosts.h, the content layer's PM_GHOST_NO_MIMIC_COPY).
@@ -41,6 +42,12 @@ bool create_hooks();
 void tick(void* haunting, int type, bool steered);
 /** Its phase while it haunts as the Squatter, else none. */
 std::optional<Phase> phase();
+/**
+ * Whether the mod steers the ghost's agent now: it haunts as the Squatter in a phase that steers (squatter_rule.h
+ * steers). Restraint then lets only idling through (keeps_quiet). Any client; only the master's matters, as the
+ * ghost's states run there.
+ */
+bool steering();
 
 /**
  * One message of the Squatter's from Custom Ghosts' channel (squatter_net.h), `sender` being Photon's actor number

@@ -21,6 +21,7 @@
 #include "kikimora.h"
 #include "lithobolia.h"
 #include "runtime.h"
+#include "squatter.h"
 #include "squatter_rule.h"
 #include "tempest.h"
 
@@ -47,10 +48,14 @@ bool skip(Kind kind) {
   return held_back(g_type, kind);
 }
 
-/** The Squatter refuses the change to `state` (squatter_rule.h keeps_quiet), by the running game's numbers. */
+/**
+ * The Squatter refuses the change to `state` (squatter_rule.h keeps_quiet), by the running game's numbers, and only
+ * idling while the mod steers its agent (squatter.h steering).
+ */
 bool squatter_refuses(int32_t state) {
   namespace GhostState = phasmo::GhostState;
-  return squatter::keeps_quiet({GhostState::idle(), GhostState::wander(), GhostState::favouriteRoom()}, state);
+  return squatter::keeps_quiet({GhostState::idle(), GhostState::wander(), GhostState::favouriteRoom()}, state,
+                               squatter::steering());
 }
 
 void detour_try_interact(api::Original<GhostActivity::TryInteract> original, void* activity) {

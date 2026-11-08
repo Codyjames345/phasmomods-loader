@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <optional>
 
 // The Squatter's rules, kept free of game calls so they can be tested offline. It lurks in its room until
 // it first sees a player, chases at just under the players' sprint speed until every living player is out of
@@ -63,9 +64,42 @@ struct QuietStates {
  * Whether the Squatter refuses GhostAI.ChangeState to `state`, forced or not: every state but idling, wandering and
  * going to its favourite room, so no interaction, event, ability, cursed pull, evidence state or hunt begins, and a
  * state the game adds later is refused too. There is no paranormal activity (the spec, "What happens in a contract").
+ * While the mod steers the ghost's agent (`steering`, see steers) wandering and the favourite room are refused as
+ * well, since each sets the agent's destination and would take it back; idling never touches the agent but its
+ * speed (sdk/systems/ghost-ai.md, "Moving the ghost outside a hunt").
  */
-inline bool keeps_quiet(const QuietStates& s, int state) {
-  return state < 0 || (state != s.idle && state != s.wander && state != s.favouriteRoom);
+inline bool keeps_quiet(const QuietStates& s, int state, bool steering) {
+  if (state < 0) return true;
+  if (steering) return state != s.idle;
+  return state != s.idle && state != s.wander && state != s.favouriteRoom;
+}
+
+/**
+ * Whether the mod steers the ghost's agent (GhostAI.agent) in phase `p`: in every phase but Lurking, where the
+ * ghost's own idling, wandering and favourite room still move it. In the others the mod moves it, or holds it where
+ * it is: seated, getting up, at a hiding place, at the exits.
+ */
+inline bool steers(Phase p) {
+  switch (p) {
+    case Phase::Lurking: return false;
+    case Phase::Chasing:
+    case Phase::Searching:
+    case Phase::AtHidingPlace:
+    case Phase::LockedOut:
+    case Phase::Moping:
+    case Phase::Excited:
+    case Phase::Following: return true;
+  }
+  return false;
+}
+
+/**
+ * Whether steering begins this frame: `now` steers and the last frame (`steeredBefore`) did not. The master then
+ * changes the ghost to idling once, leaving wandering or the favourite room. Idling's start sets the agent's speed
+ * to GhostAI.baseSpeed, so the mod sets its own speed after that change.
+ */
+inline bool steering_begins(bool steeredBefore, std::optional<Phase> now) {
+  return !steeredBefore && now && steers(*now);
 }
 
 /**

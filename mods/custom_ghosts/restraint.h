@@ -16,8 +16,8 @@
 //    (GhostActivity.GetDoorToOpen); its AI's and a ghost player's alike.
 //  - Squatter: attempts nothing at all, forced or not: no interaction from its roll, no pulse of its interaction
 //    sensor (a voodoo pin's forced one included), and no state change but idling, wandering and its favourite room
-//    (squatter_rule.h keeps_quiet), so no event, ability, interaction, cursed pull or hunt begins, whatever starts it.
-//    Its rules hold back every kind a player may ask.
+//    (squatter_rule.h keeps_quiet), so no event, ability, interaction, cursed pull or hunt begins, whatever starts it;
+//    while the mod steers its agent (squatter.h steering) only idling. Its rules hold back every kind a player may ask.
 // Its attempts are held back through GhostActivity.TryInteract and GhostAI.ChangeState, where a roll a player
 // takes (sdk/api/content.h roll_taken) goes straight on, as it attempts nothing yet; a player controlling the
 // ghost asks held_back() before acting (the ghost's PmGhostDef.heldBack, which Playable Ghost asks through the

@@ -54,6 +54,7 @@ Obj g_ghost, g_activity, g_gameDoor, g_closetDoor, g_prop, g_target, g_stateA, g
 int g_state = kIdle;
 void* g_stateObject = &g_stateA;
 bool g_master = true;
+bool g_steering = false;  // whether the mod steers the Squatter's agent (squatter.h steering)
 
 // What each hook's game body and each stubbed rule saw.
 int g_interactBodies = 0, g_pulseBodies = 0, g_throwBodies = 0, g_changeBodies = 0;
@@ -439,6 +440,31 @@ void the_squatter_starts_no_interaction_event_or_hunt() {
   });
 }
 
+// While the mod steers the Squatter's agent (squatter.h steering), its wandering and its favourite room would take
+// the agent back, so only idling passes, forced or not, whoever asks; once it stops steering both are the game's
+// again. Another ghost is left alone either way.
+void the_steered_squatter_only_idles() {
+  for_ai_and_player(kSquatter, [] {
+    g_steering = true;
+    for (const bool forced : {false, true}) {
+      change_state(&g_ghost, kWander, nullptr, forced);
+      change_state(&g_ghost, kFavouriteRoom, nullptr, forced);
+      change_state(&g_ghost, kHunting, nullptr, forced);
+    }
+    CHECK(g_changeBodies == 0);
+    change_state(&g_ghost, kIdle);
+    CHECK(g_changeBodies == 1 && g_lastChange == kIdle);
+    Obj other;
+    change_state(&other, kWander);
+    CHECK(g_changeBodies == 2);
+    g_steering = false;
+    change_state(&g_ghost, kWander);
+    change_state(&g_ghost, kFavouriteRoom);
+    CHECK(g_changeBodies == 4 && g_lastChange == kFavouriteRoom);
+  });
+  g_steering = false;
+}
+
 }  // namespace
 
 // What restraint.cpp calls of the game.
@@ -493,6 +519,9 @@ bool intercept_hunt_throw(void*, void*) {
 namespace tempest {
 void event_begins() { ++g_tempestEvents; }
 }  // namespace tempest
+namespace squatter {
+bool steering() { return g_steering; }
+}  // namespace squatter
 }  // namespace pm::custom
 
 int main() {
@@ -505,6 +534,7 @@ int main() {
   a_dormant_echo_loses_three_in_four();
   the_lithobolias_hunt_throw_is_aimed();
   the_squatter_starts_no_interaction_event_or_hunt();
+  the_steered_squatter_only_idles();
   restraint::tick(nullptr, 0);  // what it holds goes back before the fake's own storage does
   std::printf(g_failures ? "%d check(s) failed\n" : "all restraint tests passed\n", g_failures);
   return g_failures ? 1 : 0;

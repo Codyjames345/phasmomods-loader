@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "Difficulty.h"
+#include "GhostAI.h"
 #include "Player.h"
 #include "Transform.h"
 #include "UnityObject.h"
@@ -24,6 +25,7 @@ namespace {
 
 struct State {
   std::optional<Phase> phase;
+  bool steered = false;  // the master steered its ghost's agent last frame (squatter_rule.h steering_begins)
   ShownInbox shown;  // .last: the master's last word on another client, the master's own on the master
   TryTeller tryTeller;
   TryInbox tries;
@@ -118,6 +120,7 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
   door::set_haunting(squatter);
   if (!squatter) {
     g.phase.reset();
+    g.steered = false;
     forget_channel();
     figure::destroy();
     // The exits' lock is kept: it belongs to the map, and squatter_door forgets it once the map's LevelController
@@ -129,12 +132,19 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
   if (!g.phase)
     if (const std::optional<bool> friendlyGhost = friendly_if_read()) g.phase = first_phase(*friendlyGhost);
   g.phase = kept_phase(g.phase, g.shown.last, master);
+  // The first frame the mod steers the master's ghost, it leaves wandering or the favourite room for idling, which
+  // restraint lets through; the agent's speed is set after this change, since idling's start sets its own.
+  if (master && steering_begins(g.steered, g.phase))
+    phasmo::GhostAI::ChangeState(haunting, phasmo::GhostState::idle(), nullptr, false);
+  g.steered = master && steering();
   if (master) g.sprints.drop_stale(now());
   tell_sprint(master);
   show(haunting);
 }
 
 std::optional<Phase> phase() { return g.phase; }
+
+bool steering() { return g.phase && steers(*g.phase); }
 
 void receive(int sender, const uint8_t* data, size_t size) {
   switch (net_msg::kind_of(data, size)) {
