@@ -51,6 +51,8 @@ searches the same way if it loses them; and at a hiding place it waits and talks
 **It is not playable in Playable Ghost** (user, 2026-11-07, replacing the 2026-11-04 decision that it would be): it is meant as a gag the AI
 plays on the team. Playable Ghost never offers it and never gives it to a ghost player, so a contract with a ghost player never has the
 Squatter. How a ghost is kept out of Playable Ghost is a per-ghost option any mod author can set, like the Mimic one **(builder's call)**.
+When a Custom difficulty forces the Squatter and a ghost player was chosen, Playable Ghost stands aside for that contract: the AI plays
+the Squatter, every volunteer joins as an investigator, and each is told why in the game's own popup (user, 2026-11-08).
 
 Some consequences, all **(builder's call)**:
 

@@ -99,6 +99,8 @@
   "hud.sanity-team": "Team sanity {{sanity}}%",  // PM_TEXT_AI
   "hud.team": "(team {{sanity}}%)",  // PM_TEXT_AI
   "hud.you-are": "You are a <b>{{type}}</b>",  // PM_TEXT_AI
+  "lobby.ghost-not-playable": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "lobby.ghost-not-playable.title": "PM_TEXT_TODO",  // PM_TEXT_TODO
   "lobby.play-as-ghost": "Play as ghost",  // PM_TEXT_AI
   "lobby.you-are-the-ghost": "You are the ghost",  // PM_TEXT_AI
   "pick.begin": "Begin the haunting",  // PM_TEXT_AI

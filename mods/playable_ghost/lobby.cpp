@@ -13,6 +13,7 @@
 #include "game.h"
 #include "held.h"
 #include "log.h"
+#include "mod_glue.h"
 #include "runtime.h"
 #include "text_table.h"
 #include "ui.h"
@@ -231,6 +232,15 @@ bool resolve() {
 void tick(session::Session& s) {
   // FindObjectOfType searches the whole scene: look for the lobby at most once a second.
   const ULONGLONG now = GetTickCount64();
+  // A volunteer learns once, in the game's own popup, that the difficulty forces a ghost no player plays, so nobody is
+  // the ghost this contract (session.h set_ghost_allowed; user, 2026-11-08).
+  static bool told = false;
+  if (s.volunteer() && !s.ghost_allowed()) {
+    if (!told) mod::show_message(i18n::text("lobby.ghost-not-playable.title"), i18n::text("lobby.ghost-not-playable"));
+    told = true;
+  } else {
+    told = false;
+  }
   if (!game::private_room()) {
     teardown();
     return;

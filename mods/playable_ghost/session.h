@@ -251,6 +251,11 @@ class Session {
   // Every client, every frame: whether a contract is running here (round.cpp: the level exists). A client that becomes
   // master while one runs takes over its round as it stands, so it draws nobody new until the contract ends.
   void set_contract(bool running) { contract_ = running; }
+  // Master, every frame in the lobby: whether the next contract may have a ghost player. False while the lobby's
+  // difficulty forces a ghost no player plays (PM_GHOST_NOT_PLAYABLE, round.cpp): the master then draws nobody, so
+  // every volunteer joins as an investigator, and draws again once it is true.
+  void set_ghost_allowed(bool on) { ghostAllowed_ = on; }
+  bool ghost_allowed() const { return ghostAllowed_; }
 
   // kNobody or the ghost player's actor.
   int ghost_actor() const { return ghost_; }
@@ -337,6 +342,7 @@ class Session {
   bool inRound_ = false;
   bool contract_ = false;  // a contract runs here (set_contract)
   bool volunteer_ = false;
+  bool ghostAllowed_ = true;
   bool steppedOut_ = false;
   std::map<int, Peer> peers_;
   // Actors whose last HELLO said they stepped out of their investigator; kept through silence, so a

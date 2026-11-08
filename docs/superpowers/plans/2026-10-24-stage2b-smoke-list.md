@@ -1099,3 +1099,4 @@ Not playable (Task 10). A private contract with Custom Ghosts and Playable Ghost
 
 - [ ] The ghost player's journal pick never lists the Squatter, and its type is never the Squatter however many contracts are started without choosing.
 - [ ] Without a ghost player, a Random contract can still be the Squatter.
+- [ ] With the Custom difficulty's Ghost Type set to the Squatter and a volunteer ticked: nobody is drawn as the ghost (the tape no longer says "You are the ghost"), each volunteer sees the game's popup once (its text is still PM_TEXT_TODO), and the contract starts with every player an investigator and the Squatter played by its AI. Setting Ghost Type back draws a ghost player again.

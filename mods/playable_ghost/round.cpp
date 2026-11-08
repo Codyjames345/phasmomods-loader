@@ -351,6 +351,9 @@ void tick(session::Session& s) {
   g_session = &s;
   const uint64_t now = g_clock();
   s.set_contract(game::level_controller() != nullptr);  // every client, so a new master knows a contract runs
+  // No ghost player while the lobby's difficulty forces a ghost no player plays (user, 2026-11-08): the AI plays it.
+  const int forced = forced_type_override();
+  s.set_ghost_allowed(forced < 0 || playable(forced));
   if (!game::level_controller()) {
     if (s.in_round()) s.end_round();
     if (g_phase != Phase::Idle) reset_round();

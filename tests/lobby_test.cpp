@@ -243,6 +243,11 @@ void write(const char* format, ...) {
   char text[1024]; va_list args; va_start(args, format); vsnprintf(text, sizeof text, format, args); va_end(args); logs.emplace_back(text);
 }
 }
+// The game's popup (core/mod_glue.h): what the lobby asked it to show.
+std::vector<std::string> popups;
+namespace pm::mod {
+void show_message(const std::string& title, const std::string&) { popups.push_back(title); }
+}
 namespace {
 /** An ID card showing the given actor, as ServerManager's card list holds it. */
 Node* card_for(int actor) {
@@ -390,6 +395,24 @@ void click_and_draw() {
   privateRoom = false; pm::lobby::tick(session); CHECK(controls().empty());
   privateRoom = true; fixtureClock += 1000; pm::lobby::tick(session); CHECK(controls().size() == 1);
 }
+/** A volunteer is told once, in the game's popup, while the difficulty forces a ghost no player plays; nobody else is. */
+void a_volunteer_is_told_once_when_nobody_may_be_the_ghost() {
+  auto session = reset(); pm::lobby::tick(session);
+  popups.clear();
+  session.set_ghost_allowed(false); pm::lobby::tick(session);
+  CHECK(popups.empty());  // not a volunteer
+  auto clones = controls(); CHECK(clones.size() == 1);
+  if (clones.empty()) return;
+  user_click(clones[0]); pm::lobby::tick(session);  // the click turns volunteering on during this frame
+  pm::lobby::tick(session);
+  CHECK(session.volunteer() && popups.size() == 1);
+  pm::lobby::tick(session); pm::lobby::tick(session);
+  CHECK(popups.size() == 1);  // once
+  session.set_ghost_allowed(true); pm::lobby::tick(session);
+  session.set_ghost_allowed(false); pm::lobby::tick(session);
+  CHECK(popups.size() == 2);  // again after it changed back
+  session.set_ghost_allowed(true); pm::lobby::tick(session);
+}
 /** The tape follows this player when the lobby moves them to another card, and waits for one. */
 void follows_card() {
   auto session = reset(); pm::lobby::tick(session);
@@ -458,6 +481,6 @@ void wrong_contents_are_named() {
 /** Run deterministic regressions against the production lobby implementation. */
 int main() {
   use_text({"mods/playable_ghost/i18n/default.json"});  // the tape's labels are Playable Ghost's table's
-  tape_on_own_card(); kept_objects_are_held(); click_and_draw(); follows_card(); failure_regression(); wrong_contents_are_named();
+  tape_on_own_card(); kept_objects_are_held(); click_and_draw(); a_volunteer_is_told_once_when_nobody_may_be_the_ghost(); follows_card(); failure_regression(); wrong_contents_are_named();
   pm::lobby::teardown(); std::printf("lobby: %d failures\n", failures); return failures ? 1 : 0;
 }
