@@ -42,7 +42,15 @@ inline constexpr pm::sdk::EntryDesc Door_closedAngle{.key = "Door.closedAngle", 
 /// Door.grabbable and PhotonObjectInteract.grabbable again on every client, whatever Door.locked or the
 /// door's kind. Callers: ghost states and the hunt state, directly or through Door's GhostOpenDoorAnimated
 /// (the state GhostState.door enters uses it), ClosetZone for its closet doors, and the training rooms. The
-/// states GhostState.idle, wander and favouriteRoom enter call neither. Decompiled.
+/// states GhostState.idle, wander and favouriteRoom enter call neither.
+/// It is a ghost interaction and leaves a ghost's traces. Both overloads mark the push as the ghost's and as one
+/// that gives fingerprints, so before the leaf moves the door's ghost-use step runs (unless the door's
+/// PhotonObjectInteract is off or in use): on the master it tries for fingerprints
+/// (Fingerprint.AttemptToSpawnFingerprints, for a ghost with that evidence); unless LevelValues.eventsBlocked is
+/// set, it plays the door's rattle by RPC most times (the three-argument overload's last flag skips it), then calls Door.CreateDoorNoise, which plays the ghost's door sound by RPC and leaves a door-moved EMF reading at
+/// the door (GhostInteraction.CreateInteractionEMF); either way it adds one to LevelStats.doorsMoved, which the
+/// results show and count among the ghost's interactions. So no mod can use it to move a door with no paranormal
+/// trace (sdk/systems/doors.md, "A ghost's force"). Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_GhostForceDoor{.key = "Door.GhostForceDoor", .kind = pm::sdk::Kind::Method,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Door", .name = "GhostForceDoor",
@@ -101,7 +109,9 @@ inline constexpr pm::sdk::EntryDesc Door_LockDoor{.key = "Door.LockDoor", .kind 
 /// A hunting ghost's push of the door: while the door keeps no coroutine of this push yet, it starts the one
 /// that moves the leaf, with one of two strengths (the argument, true by default, picks which), and keeps it in
 /// a field of the door (what clears that field was not traced). The hunt's closet search reaches it through
-/// ClosetZone.CheckCloset, on a closet's left door. It is the ghost moving a door. Decompiled.
+/// ClosetZone.CheckCloset, on a closet's left door. It is the ghost moving a door, the coroutine
+/// Door.GhostForceDoor starts, with the same flags and so the same traces: the noise, the EMF reading, the count
+/// and the fingerprints. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_CheckDoorDuringHunt{.key = "Door.CheckDoorDuringHunt",
                                                              .kind = pm::sdk::Kind::Method,
                                                              .confidence = pm::sdk::Confidence::Decompiled,
@@ -162,6 +172,18 @@ inline constexpr pm::sdk::EntryDesc Door_AttemptToUnlockDoor{.key = "Door.Attemp
 inline constexpr pm::sdk::EntryDesc Door_GrabbedDoor{.key = "Door.GrabbedDoor", .kind = pm::sdk::Kind::Method,
                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                      .owner = "Door", .name = "GrabbedDoor"};
+
+inline constexpr const char* Door_CreateDoorNoise_params[] = {"Door"};
+
+/// The sound and EMF a ghost leaves at a door it moves, on the client that moves it: it sends the door's
+/// PlayDoorNoise RPC to every client (whose body checks its sender, then plays one of the ghost's door clips
+/// through the door's Noise) and leaves a door-moved EMF reading at the door's handle, or the door itself, through
+/// the contract ghost's GhostInteraction.CreateInteractionEMF. Door.GhostForceDoor's ghost-use step calls it.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_CreateDoorNoise{.key = "Door.CreateDoorNoise", .kind = pm::sdk::Kind::Method,
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "Door", .name = "CreateDoorNoise",
+                                                         .params = Door_CreateDoorNoise_params};
 
 inline constexpr const char* Door_ForceDropDoorNetworked_params[] = {"bool", "bool"};
 

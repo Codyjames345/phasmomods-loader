@@ -179,6 +179,8 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &EvidenceController_ForceRespawnGhostOrb,
     &EvidenceController_SpawnAllGhostTypeEvidence,
     &EvidenceController_IsFingerPrintEvidence,
+    &Fingerprint,
+    &Fingerprint_AttemptToSpawnFingerprints,
     &GameController,
     &GameController_GetAveragePlayerInsanity,
     &GhostHuntState,
@@ -1161,6 +1163,8 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &LevelStats_objectivesCompleted,
     &LevelStats_objectivesFailed,
     &LevelStats_averageFPS,
+    &LevelStats_doorsMoved,
+    &LevelStats_amountOfGhostInteractions,
     &Network_OnPlayerLeftRoom,
     &Network_OnLeftRoom,
     &Network_GetPlayerFromPhotonPlayer,
@@ -1537,6 +1541,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &DragRigidbodyUse_OnInteract,
     &DragRigidbodyUse_FixedUpdate,
     &Door_ForceDropDoorNetworked,
+    &Door_CreateDoorNoise,
     &Door_grabbable,
     &PhotonObjectInteract_Start,
     &PhotonObjectInteract_Reset,
@@ -1573,6 +1578,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &VRStamina_Update,
     &GhostAI_Update,
     &GhostInteraction_CreateAppearedEMF,
+    &GhostInteraction_CreateInteractionEMF,
     &Door_CheckDoorDuringHunt,
 };
 

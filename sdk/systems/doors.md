@@ -104,7 +104,21 @@ through that flag alone.
 ends, which sets `Door.grabbable` and `PhotonObjectInteract.grabbable` again on every client whatever `Door.locked` or the
 door's kind. Its callers: ghost states and the hunt state, directly or through Door's GhostOpenDoorAnimated (the door
 state, `GhostState.door`, uses it), `ClosetZone` for its closet doors, and the training rooms. So a ghost that forces a
-switched-off exit leaves it grabbable. For Custom Ghosts' Squatter these routes are closed: its restraint refuses every
+switched-off exit leaves it grabbable.
+
+The force is a ghost interaction, with a ghost's traces. Both overloads mark it as the ghost's and as one that gives
+fingerprints (so does `Door.CheckDoorDuringHunt`, the hunt's push), so before the leaf moves the door's ghost-use step
+runs, unless the door's `PhotonObjectInteract` is off or already in use:
+
+- on the master, a try for fingerprints (`Fingerprint.AttemptToSpawnFingerprints`), which leaves none unless the ghost
+  gives Ultraviolet;
+- unless `LevelValues.eventsBlocked` is set, most times the door's rattle (by RPC to every client; the
+  three-argument overload's last flag skips it), then `Door.CreateDoorNoise`: the ghost's door sound by RPC, and an EMF
+  reading of the door-moved type at the door (`GhostInteraction.CreateInteractionEMF` on the contract ghost's);
+- either way, one more in `LevelStats.doorsMoved`, which the results show and add into the ghost's interactions
+  (`LevelStats.amountOfGhostInteractions`).
+
+So the force cannot move a door without leaving paranormal activity behind. For Custom Ghosts' Squatter these routes are closed: its restraint refuses every
 change of state but idling, wandering and its favourite room, whose states call neither method, and refuses its
 interactions (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet`). For another mod's ghost they are open.
 

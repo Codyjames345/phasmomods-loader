@@ -518,6 +518,18 @@ inline constexpr pm::sdk::EntryDesc GhostInteraction_CreateThrowingEMF{
     .key = "GhostInteraction.CreateThrowingEMF", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostInteraction", .name = "CreateThrowingEMF"};
 
+inline constexpr const char* GhostInteraction_CreateInteractionEMF_params[] = {"Vector3", "Quaternion", "int",
+                                                                                 "@EMFType"};
+
+/// Leaves an EMF reading at a point, facing a rotation, through GhostInteraction's own EMF spawn: the overload
+/// of (position, rotation, a number, the reading's EMFType). Door.CreateDoorNoise calls it on the contract ghost's
+/// GhostInteraction with the door's PhotonView number and the door-moved type. Its two other overloads (a
+/// position alone, an object's PhotonObjectInteract) are not mapped. Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostInteraction_CreateInteractionEMF{
+    .key = "GhostInteraction.CreateInteractionEMF", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostInteraction", .name = "CreateInteractionEMF",
+    .params = GhostInteraction_CreateInteractionEMF_params};
+
 inline constexpr const char* GhostInteraction_Vector3[] = {"Vector3"};
 
 /// Leaves an EMF reading at a point in the world through GhostInteraction's own EMF spawn: the hunt state's

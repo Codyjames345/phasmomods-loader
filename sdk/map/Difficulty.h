@@ -290,7 +290,9 @@ inline constexpr pm::sdk::Fact LevelValues_eventsBlocked_facts[] = {
     {.is = pm::sdk::Fact::Is::Loads, .method = "GhostActivity.GhostAbility"}};
 
 /// While set, GhostActivity.GhostAbility does not change the ghost to
-/// randomEvent on its last path, where it would otherwise. Decompiled.
+/// randomEvent on its last path, where it would otherwise, and a ghost's push of a door (Door.GhostForceDoor)
+/// plays no rattle or door sound and leaves no EMF reading, though it still counts in LevelStats.doorsMoved.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelValues_eventsBlocked{
     .key = "LevelValues.eventsBlocked", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LevelValues", .type = "bool", .facts = LevelValues_eventsBlocked_facts};

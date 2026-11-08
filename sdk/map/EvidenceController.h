@@ -37,6 +37,19 @@ inline constexpr pm::sdk::EntryDesc EvidenceController_IsFingerPrintEvidence{
     .key = "EvidenceController.IsFingerPrintEvidence", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "EvidenceController", .name = "IsFingerPrintEvidence"};
 
+/// The fingerprints a ghost can leave on one object, such as a door (Assembly-CSharp, global namespace), a
+/// MonoBehaviourPun. Decompiled.
+inline constexpr pm::sdk::EntryDesc Fingerprint{.key = "Fingerprint", .confidence = pm::sdk::Confidence::Decompiled,
+                                                .name = "Fingerprint", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// Tries to leave fingerprints on the object, on the master only: nothing unless the contract's ghost gives
+/// Ultraviolet (EvidenceController.IsFingerPrintEvidence); otherwise a roll against a chance the difficulty sets
+/// (higher for one ghost type) picks whether, and an RPC shows them on every client. A ghost's push of a door
+/// (Door.GhostForceDoor) calls it for the door's prints. Decompiled.
+inline constexpr pm::sdk::EntryDesc Fingerprint_AttemptToSpawnFingerprints{
+    .key = "Fingerprint.AttemptToSpawnFingerprints", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Fingerprint", .name = "AttemptToSpawnFingerprints"};
+
 }  // namespace pm::map
 
 // The game API for EvidenceController (sdk/api/game_api.h). Every member is called on Unity's main
