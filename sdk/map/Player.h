@@ -626,7 +626,8 @@ inline constexpr pm::sdk::EntryDesc PCControls_actions{.key = "PCControls.action
 /// MonoBehaviour on the local player's rig. Decompiled.
 inline constexpr pm::sdk::EntryDesc DragRigidbodyUse{.key = "DragRigidbodyUse",
                                                      .confidence = pm::sdk::Confidence::Decompiled,
-                                                     .name = "DragRigidbodyUse", .assembly = "Assembly-CSharp", .ns = ""};
+                                                     .name = "DragRigidbodyUse", .assembly = "Assembly-CSharp",
+                                                     .ns = ""};
 
 inline constexpr const char* DragRigidbodyUse_OnInteract_params[] = {"CallbackContext"};
 
@@ -634,18 +635,20 @@ inline constexpr const char* DragRigidbodyUse_OnInteract_params[] = {"CallbackCo
 /// ray from the centre of the player's camera and, for a collider tagged Door, calls
 /// Door.AttemptToUnlockDoor on that door (which does nothing on an unlocked one). Decompiled.
 inline constexpr pm::sdk::EntryDesc DragRigidbodyUse_OnInteract{
-    .key = "DragRigidbodyUse.OnInteract", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
-    .owner = "DragRigidbodyUse", .name = "OnInteract", .params = DragRigidbodyUse_OnInteract_params};
+    .key = "DragRigidbodyUse.OnInteract", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "DragRigidbodyUse", .name = "OnInteract",
+    .params = DragRigidbodyUse_OnInteract_params};
 
 /// Unity's physics step for the hand, on the local player's client. While the interact input is held
-/// (DragRigidbodyUse.OnInteract marks its start and clears it on release) and nothing is held yet, it casts a ray from the camera's centre and, for a collider tagged Door, takes
-/// the door's PhotonObjectInteract: it refuses a door that is locked (Door.locked) or not grabbable
+/// (DragRigidbodyUse.OnInteract marks its start and clears it on release) and nothing is held yet, it
+/// casts a ray from the camera's centre and, for a collider tagged Door, takes the door's
+/// PhotonObjectInteract: it refuses a door that is locked (Door.locked) or not grabbable
 /// (Door.grabbable), and a locked DoorKind.Main door during a hunt. Otherwise it calls Door.GrabbedDoor,
 /// requests the door's PhotonView in a room (PhotonView.RequestOwnership) and frees the leaf's Rigidbody
 /// to follow the hand. While holding it drives the leaf toward the aim. Decompiled.
 inline constexpr pm::sdk::EntryDesc DragRigidbodyUse_FixedUpdate{
-    .key = "DragRigidbodyUse.FixedUpdate", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
-    .owner = "DragRigidbodyUse", .name = "FixedUpdate"};
+    .key = "DragRigidbodyUse.FixedUpdate", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "DragRigidbodyUse", .name = "FixedUpdate"};
 
 }  // namespace pm::map
 

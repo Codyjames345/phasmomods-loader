@@ -1538,6 +1538,13 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &DragRigidbodyUse_FixedUpdate,
     &Door_ForceDropDoorNetworked,
     &Door_grabbable,
+    &PhotonObjectInteract_Start,
+    &PhotonObjectInteract_Reset,
+    &PhotonObjectInteract_grabbable,
+    &VRGrabbable,
+    &VRGrabbable_IsSelectableBy,
+    &Door_ForceToggleHuntCollider,
+    &MonkeyPaw_OpenExitsWish,
 };
 
 }  // namespace pm::map

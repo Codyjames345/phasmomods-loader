@@ -36,7 +36,13 @@ inline constexpr pm::sdk::EntryDesc Door_closedAngle{.key = "Door.closedAngle", 
                                                      .facts = Door_closedAngle_facts};
 
 /// The ghost forces the door open or shut (the overload with three arguments: open, strength, -1 for
-/// the game's own, and a third flag). Inferred: from the method's name and its default arguments.
+/// the game's own, and a third flag; the one-argument overload is the same with strength 3). Both start
+/// one coroutine, unless one is running: it sends Door.ForceDropDoorNetworked(true, true) to every client
+/// at its start, moves the leaf, and at its end sends Door.ForceDropDoorNetworked(false, true), which sets
+/// Door.grabbable and PhotonObjectInteract.grabbable again on every client, whatever Door.locked or the
+/// door's kind. Callers: ghost states and the hunt state, directly or through Door's GhostOpenDoorAnimated
+/// (the state GhostState.door enters uses it), ClosetZone for its closet doors, and the training rooms. The
+/// states GhostState.idle, wander and favouriteRoom enter call neither. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_GhostForceDoor{.key = "Door.GhostForceDoor", .kind = pm::sdk::Kind::Method,
                                                         .owner = "Door", .name = "GhostForceDoor",
                                                         .params = Door_GhostForceDoor_params};
@@ -59,19 +65,19 @@ inline constexpr const char* Door_HuntingCloseDoorNetworked_params[] = {"PhotonM
 /// clears Door.grabbable on every client, drops the door from the local player's hand, and on the client
 /// that owns the door's PhotonView starts the coroutine that swings it shut, sets it to its closed angle
 /// once and calls LockDoor(true). That owner is often the last player who grabbed the door, and then the
-/// lock reaches only that client (LockDoor), while the cleared grab switch keeps it shut everywhere. A mod hooks it to see a hunt's lock; never call it (it is an RPC's body).
-/// Decompiled.
+/// lock reaches only that client (LockDoor), while the cleared grab switch keeps it shut everywhere. A mod
+/// hooks it to see a hunt's lock; never call it (it is an RPC's body). Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_HuntingCloseDoorNetworked{
     .key = "Door.HuntingCloseDoorNetworked", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door", .name = "HuntingCloseDoorNetworked",
     .params = Door_HuntingCloseDoorNetworked_params};
 
-/// Switches the door off (false) or back on (true) for players, as a hunt's end and the Monkey Paw's
-/// timed lock do: off, it switches the door off, drops it from the local player's hand and, on the
-/// client that owns its PhotonView, swings it shut and locks it (the coroutine HuntingCloseDoorNetworked
-/// starts); on, it switches the door and its collider back on. Either way it then clears the door's lock
-/// (`locked`) by SyncLockState, so `true` unlocks it. LevelController.UnlockHuntingDoors and
-/// Door.LockDoorForTime call it. Its RPCs check no sender. Decompiled.
+/// Switches the door off (false) or back on (true) for players, as a hunt's end and the Monkey Paw do:
+/// off, it switches the door off, drops it from the local player's hand and, on the client that owns its
+/// PhotonView, swings it shut and locks it (the coroutine HuntingCloseDoorNetworked starts); on, it
+/// switches the door and its collider back on. Either way it then clears the door's lock (`locked`) by
+/// SyncLockState, so `true` unlocks it. Callers: LevelController.UnlockHuntingDoors, Door.LockDoorForTime,
+/// and MonkeyPaw.OpenExitsWish (on each exit's owner). Its RPCs check no sender. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_ToggleDoorLock{.key = "Door.ToggleDoorLock", .kind = pm::sdk::Kind::Method,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Door", .name = "ToggleDoorLock",
@@ -113,7 +119,8 @@ inline constexpr pm::sdk::EntryDesc Door_SyncLockState{.key = "Door.SyncLockStat
                                                        .params = Door_SyncLockState_params};
 
 // Of Door's bools SyncLockState stores only this one.
-inline constexpr pm::sdk::Fact Door_locked_facts[] = {{.is = pm::sdk::Fact::Is::Stores, .method = "Door.SyncLockState"}};
+inline constexpr pm::sdk::Fact Door_locked_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "Door.SyncLockState"}};
 
 /// Whether the door is locked, on this client: SyncLockState stores it, LockDoor and UnlockDoor set
 /// and clear it. Every exit (DoorKind.Main) starts a contract locked in the map's scene; a player opens
@@ -162,8 +169,9 @@ inline constexpr pm::sdk::Fact Door_grabbable_facts[] = {
 /// Whether players may grab the door, on this client: the PC player's grab (DragRigidbodyUse.FixedUpdate)
 /// refuses a door with it clear, as it refuses a locked one. Door.ForceDropDoorNetworked sets it on every
 /// client; a hunt's lock (Door.HuntingCloseDoor, Door.HuntingCloseDoorNetworked) and ToggleDoorLock(false)
-/// clear it, ToggleDoorLock(true) sets it again. Unlocking (UnlockDoor, SyncLockState) leaves it alone, so a
-/// switched-off door stays shut when its lock clears. Decompiled.
+/// clear it. ToggleDoorLock(true) sets it again, and so does the end of a ghost's force (Door.GhostForceDoor),
+/// whatever the lock. Unlocking (UnlockDoor, SyncLockState) leaves it alone, so a switched-off door stays shut
+/// when its lock clears. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_grabbable{.key = "Door.grabbable", .kind = pm::sdk::Kind::Field,
                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                    .type = "bool", .facts = Door_grabbable_facts,
@@ -190,6 +198,13 @@ inline constexpr pm::sdk::EntryDesc Door_LockDoorForTime{.key = "Door.LockDoorFo
                                                          .confidence = pm::sdk::Confidence::Decompiled,
                                                          .owner = "Door", .name = "LockDoorForTime",
                                                          .params = Door_LockDoorForTime_params};
+
+/// Switches the door's hunt collider (the box a hunt switches on across a DoorKind.Main doorway) on or off,
+/// on this client only. MonkeyPaw.OpenExitsWish switches it off on every exit. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_ForceToggleHuntCollider{
+    .key = "Door.ForceToggleHuntCollider", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door", .name = "ForceToggleHuntCollider",
+    .params = Door_bool};
 
 inline constexpr const char* DoorKind_values[] = {"None", "Main", "Secondary", "PermanentLock"};
 
@@ -379,6 +394,9 @@ struct Door {
   static constexpr pm::api::Method<pm::map::Door_GrabbedDoor, void(void*)> GrabbedDoor{};
   /// NetworkedPlayLockSound(door), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Door_NetworkedPlayLockSound, void(void*)> NetworkedPlayLockSound{};
+  /// ForceToggleHuntCollider(door, on): its hunt collider, on this client. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_ForceToggleHuntCollider, void(void*, bool)>
+      ForceToggleHuntCollider{};
   /// LockDoorForTime(door, seconds, takeOwnership). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Door_LockDoorForTime, void(void*, float, bool)> LockDoorForTime{};
   /// Its kind, a DoorKind number: kind.get(door). Unresolved: 0.

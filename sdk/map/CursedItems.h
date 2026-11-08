@@ -102,6 +102,21 @@ inline constexpr pm::sdk::EntryDesc MonkeyPaw_ReviveWish{
     .owner = "MonkeyPaw", .type = "void", .params = MonkeyPaw_ReviveWish_params,
     .facts = MonkeyPaw_ReviveWish_facts};
 
+// Of the paw's void methods that take a Player, only this wish unlocks a door (Door.UnlockDoor).
+inline constexpr pm::sdk::Fact MonkeyPaw_OpenExitsWish_facts[] = {
+    {.is = pm::sdk::Fact::Is::Calls, .method = "Door.UnlockDoor"}};
+
+/// The wish that opens every exit for good, given the wisher's Photon player; the wish's coroutine runs it on
+/// every client, once, on its own once-only flag. For each door of LevelController.huntingDoors it clears the
+/// door's timed-lock flag (Door.LockDoorForTime's), on the master calls Door.UnlockDoor(true) (the unlock's
+/// click for everyone), on the client that owns the door's PhotonView calls Door.ToggleDoorLock(true) (the
+/// door back on, Door.grabbable set on every client), and calls Door.ForceToggleHuntCollider(false). It
+/// checks no hunt and sets no timer. Name obfuscated. Decompiled.
+inline constexpr pm::sdk::EntryDesc MonkeyPaw_OpenExitsWish{
+    .key = "MonkeyPaw.OpenExitsWish", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "MonkeyPaw", .type = "void", .params = MonkeyPaw_ReviveWish_params,
+    .facts = MonkeyPaw_OpenExitsWish_facts};
+
 inline constexpr const char* TarotCards_HighPriestess_params[] = {"PhotonMessageInfo"};
 
 /// The High Priestess card, an RPC: it first checks that the sender owns the cards' view, with the report on
@@ -238,6 +253,9 @@ struct MonkeyPaw {
   /// ReviveWish(paw, wisher): the revive wish, `wisher` a Photon player. A mod hooks it. Unresolved: does
   /// nothing.
   static constexpr pm::api::Method<pm::map::MonkeyPaw_ReviveWish, void(void*, void*)> ReviveWish{};
+  /// OpenExitsWish(paw, wisher): the wish that opens every exit, `wisher` a Photon player. A mod hooks it.
+  /// Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::MonkeyPaw_OpenExitsWish, void(void*, void*)> OpenExitsWish{};
 };
 
 /// The jackalope, a seasonal item.

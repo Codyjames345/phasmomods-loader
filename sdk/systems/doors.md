@@ -91,8 +91,22 @@ player's aim. So a door can be swung open on a client only while both its lock a
 
 `Door.grabbable` is set on every client by `Door.ForceDropDoorNetworked`, the RPC `Door.DisableOrEnableDoor` sends to
 every client, and the hunt's lock clears it on every client as well (below). Unlocking leaves it alone: `Door.UnlockDoor`
-and `Door.SyncLockState` touch only `Door.locked`, so a switched-off door stays shut when its lock clears. Only
-`Door.ToggleDoorLock(true)` switches it back on.
+and `Door.SyncLockState` touch only `Door.locked`, so a switched-off door stays shut when its lock clears. Two calls switch
+it back on: `Door.ToggleDoorLock(true)`, and the end of a ghost's force (below).
+
+**A VR player's grab** is gated by `VRGrabbable.IsSelectableBy`, which refuses an object while its
+`PhotonObjectInteract.grabbable` is clear and never reads `Door.locked`. `Door.ForceDropDoorNetworked` sets that flag with
+`Door.grabbable` on every client, so the same calls switch both off and on, and a locked exit holds for a VR player
+through that flag alone.
+
+**A ghost's force.** `Door.GhostForceDoor` (both overloads) starts one coroutine. It sends
+`Door.ForceDropDoorNetworked(true, true)` to every client as it starts and `Door.ForceDropDoorNetworked(false, true)` as it
+ends, which sets `Door.grabbable` and `PhotonObjectInteract.grabbable` again on every client whatever `Door.locked` or the
+door's kind. Its callers: ghost states and the hunt state, directly or through Door's GhostOpenDoorAnimated (the door
+state, `GhostState.door`, uses it), `ClosetZone` for its closet doors, and the training rooms. So a ghost that forces a
+switched-off exit leaves it grabbable. For Custom Ghosts' Squatter these routes are closed: its restraint refuses every
+change of state but idling, wandering and its favourite room, whose states call neither method, and refuses its
+interactions (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet`). For another mod's ghost they are open.
 
 **Who owns an exit's PhotonView.** Every exit's view is set to `OwnershipOption.Takeover` in the map's scene
 (`PhotonView.OwnershipTransfer`, scene read on all 13 maps), and the grab asks for the view each time a player grabs a
@@ -104,9 +118,9 @@ it is the master's, as Photon gives a scene's views to the master.
 1. As a hunt starts, the hunt state on the master sends `GhostAI.Hunting` and calls `LevelController.LockHuntingDoors`.
 2. It calls `Door.HuntingCloseDoor` on every exit (and on a variation's, as above). On a friendly ghost's difficulty
    (`Difficulty.friendlyGhost`) that does nothing. Otherwise it switches the door off for players through
-   `Door.DisableOrEnableDoor(false)`, whose RPC drops the door from the local hand holding it and clears a flag of its
-   `PhotonObjectInteract` (`Door.interact`), and sends `Door.HuntingCloseDoorNetworked` to every client.
-3. That RPC's body, on every client, clears `Door.grabbable` and the same `PhotonObjectInteract` flag, drops the door
+   `Door.DisableOrEnableDoor(false)`, whose RPC drops the door from the local hand holding it and clears `Door.grabbable`
+   and `PhotonObjectInteract.grabbable`, and sends `Door.HuntingCloseDoorNetworked` to every client.
+3. That RPC's body, on every client, clears `Door.grabbable` and `PhotonObjectInteract.grabbable`, drops the door
    from the local hand, switches the door's hunt collider on, and on the client that owns the door's PhotonView starts a
    coroutine. For a door that is open and unlocked, the coroutine switches the door's collider off and moves the leaf
    through the door's own `OpenDoor`; then it waits, sets the leaf to its closed angle once, switches the collider on,
@@ -122,7 +136,7 @@ door and so rattle (or, holding the key, unlock it); on every other client a try
 
 As the hunt ends, `GameController.ResetHuntEffects` (whose two callers run it only when a hunt was on) calls
 `LevelController.UnlockHuntingDoors`, which calls `Door.ToggleDoorLock(true, true)` on the same doors: they switch back
-on and unlock. Nothing else opens them, except the Monkey Paw (below).
+on and unlock. Otherwise only a ghost's force (above) and the Monkey Paw (below) switch them back on.
 
 ## The Monkey Paw
 
@@ -133,7 +147,7 @@ owner. After `seconds` it calls `Door.ToggleDoorLock(true)`, which switches the 
 whoever locked it. A `DoorKind.Main` door is skipped at the start, and left at the end, while the ghost hunts
 (`GhostAI.isHunting`), so that hunt's end (`LevelController.UnlockHuntingDoors`) opens it.
 
-Three wishes (`MonkeyPaw.MakeWishNetworked`) use it:
+Four wishes (`MonkeyPaw.MakeWishNetworked`) reach the exits, three of them through it:
 
 - One, in its coroutine on the master, first calls `GhostAI.ChangeState` to `GhostState.summoningCircle` when the ghost is
   not hunting, then `LockDoorForTime(6, true)` on every exit (`LevelController.huntingDoors`).
@@ -142,12 +156,18 @@ Three wishes (`MonkeyPaw.MakeWishNetworked`) use it:
 - One times the doors of the ghost's favourite room, and of the room the wishing player is in, with `LockDoorForTime`,
   after sending the ghost to its favourite room, then on the master starts `GhostAI.TrapWish`. An exit among those rooms'
   doors (`LevelRoom.doors`) is timed with them.
+- One, `MonkeyPaw.OpenExitsWish`, opens every exit for good. For each door of `LevelController.huntingDoors` it clears
+  the timed-lock flag, calls `Door.UnlockDoor(true)` on the master (the unlock's click), `Door.ToggleDoorLock(true)` on the
+  client that owns the door's PhotonView (the door back on, `Door.grabbable` set on every client), and
+  `Door.ForceToggleHuntCollider(false)`. It checks no hunt and sets no timer.
 
-Whatever locked the exits before, each of these reopens them when its window ends.
+Whatever locked the exits before, the three timed wishes reopen them when their windows end, and the fourth opens them at
+once and for the rest of the contract.
 
 With Custom Ghosts' Squatter haunting, its restraint refuses every change of state but idling, wandering and its
 favourite room, whoever asks (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet`), so the first wish's
-`GhostState.summoningCircle` never begins and brings no hunt; the wish's timed lock of the exits still runs.
+`GhostState.summoningCircle` never begins and brings no hunt. The wishes' work on the exits is the game's own as described
+here.
 
 **At the contract's end** the doors go with the map's scene; the next contract loads the scene afresh, with every exit
 locked as above. Nothing carries over.
@@ -172,8 +192,8 @@ A mod that locks the exits with `Door.HuntingCloseDoor` while no hunt is on gets
 off for players and lock. One thing differs from a hunt, because `GhostAI.isHunting` is clear: a player holding the house
 key who tries an exit unlocks it (step 1 above), with the unlock's click for everyone. `Door.locked` is clear from then on
 and later tries make no sound, but the door stays shut: `Door.grabbable` stays clear on every client, and the grab refuses
-it ("Grabbing a door open"). This was read from the code, not yet seen in a game. A Monkey Paw wish that times the exits
-reopens them when it ends.
+it ("Grabbing a door open"). This was read from the code, not yet seen in a game. A Monkey Paw wish on the exits, or
+another ghost's force on one, reopens them.
 
 Custom Ghosts' Squatter locks every exit this way once no living player is left in the map, and answers each try with a
 line of its own (`mods/custom_ghosts/squatter_door.h`).
