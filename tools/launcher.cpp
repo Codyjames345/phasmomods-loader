@@ -549,7 +549,7 @@ struct WindowState {
   HWND developmentBox = nullptr;
   std::wstring executable;
   std::wstring launchOption;
-  std::wstring usualStatus;  // the status box's text when nothing is running
+  std::wstring usualStatus;  // the status box's text when nothing is running: what is wrong with the mods, or nothing
   HWND status = nullptr;
   HWND attachButton = nullptr;
   bool busy = false;
@@ -724,9 +724,11 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
         if (state->updateReport.outcome == update::Outcome::Restarting) { DestroyWindow(window); return 0; }
         set_controls(state, true);
         SetFocus(state->attachButton);
-        // Why the update failed comes first, then the usual text, which names any broken mods.
+        // What the update found comes first, then the usual text, which names any broken mods.
         const std::wstring& why = state->updateReport.message;
-        SetWindowTextW(state->status, (why.empty() ? state->usualStatus : why + L"\r\n" + state->usualStatus).c_str());
+        const std::wstring both = why.empty() || state->usualStatus.empty() ? why + state->usualStatus
+                                                                           : why + L"\r\n" + state->usualStatus;
+        SetWindowTextW(state->status, both.c_str());
         if (state->closing) DestroyWindow(window);
         return 0;
       }
@@ -802,7 +804,7 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
   control(L"STATIC", pm::text::widen(pm::i18n::text("launcher.copy-intro")).c_str(), 0, 18, y + 74, 600, 24, 0);
   control(L"EDIT", state.launchOption.c_str(), WS_TABSTOP | WS_BORDER | ES_READONLY | ES_AUTOHSCROLL, 18, y + 101, 600, 26, 103);
   control(L"BUTTON", pm::text::widen(pm::i18n::text("launcher.copy")).c_str(), WS_TABSTOP, 18, y + 135, 205, 30, 102);
-  state.usualStatus = problems.empty() ? pm::text::widen(pm::i18n::text("launcher.keep-folder-outside-directory")) : problems;
+  state.usualStatus = problems;
   state.status = control(L"EDIT", state.usualStatus.c_str(),
     WS_TABSTOP | ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL, 18, y + 186, 600, 75, 104);
   ShowWindow(window, SW_SHOW);

@@ -72,6 +72,7 @@ Tasks 12g, 13b, 13c and 14 (string tables).
 - [ ] Setup.exe shows the PM icon in Explorer. After installing, the Start menu entry and Settings' installed apps read "PhasmoMods Loader", with the space and the icon.
 - [ ] An install from before this change (0.2.1): after it updates to this release, check whether the Start menu entry is renamed or still reads "PhasmoModsLoader".
 - [ ] The launcher window's buttons and checkboxes use the current Windows style, and still fit.
+- [ ] With no newer release, the installed launcher's status box reads "You are running the latest version." and nothing else when every mod is fine; a broken mod's reason follows on the next line.
 - [ ] With a newer release published, opening the launcher shows the popup naming it, with Update now, Remind me later and Ignore. Update now shows a progress bar that moves, then the launcher restarts on the new version.
 - [ ] Remind me later starts the installed version, and the next start asks again. Closing the popup with its X does the same.
 - [ ] Ignore starts the installed version, writes `%LOCALAPPDATA%\PhasmoMods\update_ignored.txt`, and the next start doesn't ask. A later release asks again.

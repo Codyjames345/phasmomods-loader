@@ -588,3 +588,7 @@ slammed door goes quiet at once and the padlock comes the moment it is fully ope
 - validate.ps1 78/78 and all script tests pass. The dialog itself has no harness (only an installed copy shows it):
   smoke list gains "Updates and Setup", and its development-box checks now expect the confirmation. Unknown: whether a
   Velopack update renames an existing install's Start menu shortcut.
+- User, same day: an up-to-date check now says "You are running the latest version." (their words, updater.latest;
+  test red then green), and the status box's "Keep this folder outside the game directory." is gone as redundant
+  (launcher.keep-folder-outside-directory removed). validate.ps1 78/78. Push held until the user writes
+  updater.available and updater.download-stalled, or says to push with the placeholders.

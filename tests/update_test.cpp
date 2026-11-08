@@ -143,7 +143,9 @@ void not_installed_skips_quietly() {
 void same_version_is_up_to_date() {
   auto fake = std::make_shared<FakeBackend>();
   fake->result = {Check::Kind::UpToDate, "", L""};
-  CHECK(check(fake, 1s).outcome == Outcome::UpToDate);
+  const auto report = check(fake, 1s);
+  CHECK(report.outcome == Outcome::UpToDate);
+  CHECK(report.message == pm::text::widen(pm::i18n::text("updater.latest")));  // the player hears the check found nothing
   CHECK(fake->downloads == 0);
 }
 

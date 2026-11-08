@@ -28,7 +28,7 @@ Report ask(Backend& backend) {
   try {
     const Check check = backend.check();
     if (check.kind == Check::Kind::Failed) return carry_on(pm::i18n::text("updater.check-failed", {{"reason", reason_of(check.error)}}));
-    if (check.kind == Check::Kind::UpToDate) return {Outcome::UpToDate, L"", ""};
+    if (check.kind == Check::Kind::UpToDate) return {Outcome::UpToDate, pm::text::widen(pm::i18n::text("updater.latest")), ""};
     return {Outcome::Available, L"", check.version};
   } catch (const std::exception& error) {
     return carry_on(pm::i18n::text("updater.check-failed", {{"reason", error.what()}}));

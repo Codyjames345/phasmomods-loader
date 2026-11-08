@@ -45,7 +45,7 @@ enum class Outcome {
 
 struct Report {
   Outcome outcome = Outcome::CarryOn;
-  std::wstring message;  // for the log or the user; empty for NotInstalled, UpToDate and Available
+  std::wstring message;  // for the log or the user; empty for NotInstalled and Available
   std::string version;   // the version on offer, when Available
 };
 
