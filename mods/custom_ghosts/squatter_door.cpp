@@ -241,7 +241,7 @@ int relock(uint64_t now) {
     e.relockedAt = now;
     ++relocked;
   }
-  if (relocked) PM_LOG("squatter: %d exit(s) a wish reopened locked again", relocked);
+  if (relocked) PM_LOG("squatter: %d reopened exit(s) locked again", relocked);
   return relocked;
 }
 
