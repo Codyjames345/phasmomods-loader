@@ -75,13 +75,14 @@ inline bool keeps_quiet(const QuietStates& s, int state, bool steering) {
 }
 
 /**
- * Whether the mod steers the ghost's agent (GhostAI.agent) in phase `p`: in every phase but Lurking, where the
- * ghost's own idling, wandering and favourite room still move it. In the others the mod moves it, or holds it where
- * it is: seated, getting up, at a hiding place, at the exits.
+ * Whether the mod steers the ghost's agent (GhostAI.agent) in phase `p`: in every phase. Lurking too, since the spec
+ * keeps the Squatter in the ghost room until the chase starts and the ghost's own wandering would walk it out; there
+ * the mod holds it where it is. In the others the mod moves it, or holds it: seated, getting up, at a hiding place,
+ * at the exits.
  */
 inline bool steers(Phase p) {
   switch (p) {
-    case Phase::Lurking: return false;
+    case Phase::Lurking:
     case Phase::Chasing:
     case Phase::Searching:
     case Phase::AtHidingPlace:

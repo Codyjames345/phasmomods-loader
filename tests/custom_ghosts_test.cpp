@@ -2087,7 +2087,7 @@ void fake_change_state(void*, int32_t state, void*, bool, const void*) { g_state
 
 // As the mod begins steering the Squatter's agent the master idles it once (GhostAI.ChangeState to GhostState.idle),
 // leaving wandering or the favourite room, whose states would take the agent back; it does not again while it steers,
-// nor while it lurks, nor on another client, where the master's ghost is not its own.
+// nor on another client, where the master's ghost is not its own. Lurking steers too: the spec keeps it in its room.
 void the_master_idles_the_squatter_once_as_steering_begins() {
   start();
   namespace map = pm::map;
@@ -2107,14 +2107,15 @@ void the_master_idles_the_squatter_once_as_steering_begins() {
   pm::api::bind(fake::host(), missing);
   phasmo::LevelValues::difficulty.set(&values, &difficulty);
   g_stateChanges.clear();
-  // Lurking: the ghost's own states still move it.
+  // Lurking: the mod holds it in its room, so the master idles it once.
   g_isMaster = true;
   squatter::reset();
   squatter::tick(&ghost, kSquatter, false);
   squatter::tick(&ghost, kSquatter, false);
-  CHECK(squatter::phase() == squatter::Phase::Lurking && g_stateChanges.empty());
+  CHECK(squatter::phase() == squatter::Phase::Lurking && g_stateChanges == std::vector<int32_t>{kIdle});
   // Moping on a friendly ghost's difficulty: the mod holds it seated, so the master idles it once.
   squatter::tick(nullptr, 0, false);
+  g_stateChanges.clear();
   phasmo::Difficulty::friendlyGhost.set(&difficulty, true);
   squatter::tick(&ghost, kSquatter, false);
   squatter::tick(&ghost, kSquatter, false);

@@ -505,15 +505,13 @@ void only_idling_passes_while_it_steers() {
   CHECK(keeps_quiet(unread, -1, true) && keeps_quiet(unread, 0, true));
 }
 
-// The mod steers the agent in every phase but Lurking, where the ghost's own idling, wandering and favourite room
-// still move it; the master idles the ghost once as steering begins, and again only after it has stopped.
-void steering_covers_every_phase_but_lurking() {
-  for (int p = 0; p < kPhaseValues; ++p) {
-    const auto phase = static_cast<Phase>(p);
-    CHECK(steers(phase) == (phase != Phase::Lurking));
-  }
+// The mod steers the agent in every phase, Lurking included, since the spec keeps it in the ghost room until the
+// chase; the master idles the ghost once as steering begins, and again only after it has stopped.
+void steering_covers_every_phase() {
+  for (int p = 0; p < kPhaseValues; ++p) CHECK(steers(static_cast<Phase>(p)));
   CHECK(steering_begins(false, Phase::Chasing) && steering_begins(false, Phase::Moping));
-  CHECK(!steering_begins(true, Phase::Chasing) && !steering_begins(false, Phase::Lurking));
+  CHECK(steering_begins(false, Phase::Lurking));
+  CHECK(!steering_begins(true, Phase::Chasing) && !steering_begins(true, Phase::Lurking));
   CHECK(!steering_begins(false, std::nullopt) && !steering_begins(true, std::nullopt));
 }
 
@@ -1055,7 +1053,7 @@ int main() {
   lurks_until_it_sees_someone();
   only_idling_wandering_and_its_room_pass();
   only_idling_passes_while_it_steers();
-  steering_covers_every_phase_but_lurking();
+  steering_covers_every_phase();
   search_and_chase_alternate();
   door_locks_only_when_everyone_is_out();
   walking_back_in_keeps_the_door_open();
