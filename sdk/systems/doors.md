@@ -113,9 +113,11 @@ interactions (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet
 door in a room. So in practice an exit's owner is the last player who grabbed it, often not the master. Before anyone has,
 it is the master's, as Photon gives a scene's views to the master.
 
-**A ghost walking through.** No door leaf carries a NavMeshObstacle and the Ghost layer does not collide with the Door
-layer, so the ghost's agent walks through a shut door and leaves the leaf where it is ([ghost AI](ghost-ai.md), "Moving
-the ghost outside a hunt"). Only the grab above or a ghost's force moves a leaf.
+**A ghost walking through.** On Grafton Farmhouse, the one map checked, no door leaf carries a NavMeshObstacle (its 64
+doors, the leaves and their children), and in the game's physics settings the Ghost layer does not collide with the
+Door layer. So there the ghost's agent walks through a shut door and leaves the leaf where it is ([ghost AI](ghost-ai.md),
+"Moving the ghost outside a hunt"); the other maps' doors were not checked. Only the grab above or a ghost's force moves
+a leaf.
 
 ## How a hunt locks the exits
 
@@ -176,10 +178,16 @@ favourite room, whoever asks (`mods/custom_ghosts/restraint.cpp`, `squatter_rule
 every client that runs it, only the call that would undo the lock on an exit it holds (`squatter_door.h` `holds`):
 `Door.LockDoorForTime` (the timed wishes and the rooms wish, so neither the lock's clearing at a window's start nor the
 reopening at its end happens), `Door.ToggleDoorLock` either way, and, inside `MonkeyPaw.OpenExitsWish`, `Door.UnlockDoor`
-and `Door.ForceToggleHuntCollider`. These are plain methods, not RPC bodies, and a refused call sends nothing, so every
-client keeps the same door. The rest of each wish stays the game's: the summoning circle's ask, the interaction block, the
-fuse box, the ghost sent to its room, the trap wish, and the timing of every door that is not a held exit. Before the lock
-every wish is the game's own. The house key's unlock (`Door.AttemptToUnlockDoor`) is not a wish and stays the game's.
+and `Door.ForceToggleHuntCollider`. These are plain methods, not RPC bodies, and a refused call sends nothing, so once
+every client holds the exits every client keeps the same door. Every client holds them exactly when the master locked
+them, from the master's word alone: the master as it calls `Door.HuntingCloseDoor`, and every other client in the same
+call that brings that lock to it (`Door.HuntingCloseDoorNetworked`, watched after the game's own body has run and only
+when the game's checks take it), never from its own count of the players inside. So no Monkey Paw call on a client can
+fall between the lock reaching it and its hold. A wish that runs on another client before the master's lock has reached
+it is still the game's own there, as any wish before the lock is. The rest of each wish stays the game's: the
+summoning circle's ask, the interaction block, the fuse box, the ghost sent to its room, the trap wish, and the timing of
+every door that is not a held exit. Before the lock every wish is the game's own. The house key's unlock
+(`Door.AttemptToUnlockDoor`) is not a wish and stays the game's.
 
 **At the contract's end** the doors go with the map's scene; the next contract loads the scene afresh, with every exit
 locked as above. Nothing carries over.
@@ -207,5 +215,6 @@ and later tries make no sound, but the door stays shut: `Door.grabbable` stays c
 it ("Grabbing a door open"). This was read from the code, not yet seen in a game. A Monkey Paw wish on the exits, or
 another ghost's force on one, reopens them.
 
-Custom Ghosts' Squatter locks every exit this way once no living player is left in the map, and answers each try with a
-line of its own (`mods/custom_ghosts/squatter_door.h`).
+Custom Ghosts' Squatter locks every exit this way, on the master, once no living player is left in the map, and answers
+each try with a line of its own (`mods/custom_ghosts/squatter_door.h`). Every other client holds the exits once that lock
+reaches it ("The Monkey Paw" above).

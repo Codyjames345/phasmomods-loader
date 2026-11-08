@@ -12,16 +12,18 @@
 #include "game_api.h"
 #include "held.h"
 #include "log.h"
+#include "room_gates.h"
 #include "runtime.h"
 #include "squatter_difficulty.h"
 
 namespace pm::custom::squatter::door {
 namespace {
 
-api::Held g_level;                // the LevelController whose exits are locked, or null
-std::vector<api::Held> g_locked;  // its exits, as lock_all locked them
+api::Held g_level;                // the LevelController whose exits are held, or null
+std::vector<api::Held> g_locked;  // its exits, as they were when the hold began
 Attempt g_callback;
 int g_openExitsWish = 0;  // MonkeyPaw.OpenExitsWish calls running on this thread
+bool g_haunting = false;  // set_haunting: the master's lock is the Squatter's
 
 /** The current map's live LevelController, or null. */
 void* level() {
@@ -48,6 +50,28 @@ bool locked_exit(void* d) {
   return d && std::any_of(g_locked.begin(), g_locked.end(), [d](const api::Held& h) { return h.get() == d; });
 }
 
+/** Holds `doors`, the exits of the map whose LevelController is `l`, on this client from now on. */
+void hold(void* l, const std::vector<void*>& doors) {
+  g_level = l;
+  g_locked.clear();
+  for (void* d : doors) g_locked.emplace_back(d);
+  PM_LOG("squatter: %zu exit(s) held", doors.size());
+}
+
+/**
+ * Whether the game's own check of Door.HuntingCloseDoorNetworked's sender lets the call in `info` (a
+ * PhotonMessageInfo) through: outside a room or offline every call, in a room only one from the room's first actor, the
+ * lowest actor number of PhotonNetwork.get_PlayerList (sdk/systems/photon.md, "The game's checks on an RPC"). A list
+ * the game would throw on, or no sender, lets nothing through.
+ */
+bool sent_by_first_actor(void* info) {
+  if (!phasmo::PhotonNetwork::get_InRoom() || phasmo::PhotonNetwork::get_OfflineMode()) return true;
+  std::vector<int> actors;
+  if (!room_gates::room_actors(actors) || actors.empty()) return false;
+  void* sender = info ? phasmo::PhotonMessageInfo::Sender.get(info) : nullptr;
+  return sender && room_gates::actor_number(sender) == *std::min_element(actors.begin(), actors.end());
+}
+
 /** Reports a try at a locked exit to the callback; nothing it throws reaches the game. */
 void report(void* d) {
   if (!g_callback || !locked_exit(d)) return;
@@ -66,6 +90,19 @@ void detour_attempt(api::Original<phasmo::Door::AttemptToUnlockDoor> original, v
 void detour_grabbed(api::Original<phasmo::Door::GrabbedDoor> original, void* d) {
   report(d);
   original(d);
+}
+
+// The master's lock reaching this client: the game's own RPC body runs first, as it would, checks and all. Once it has
+// taken a lock of an exit from the room's first actor while the Squatter haunts, this client holds every exit of the
+// map, in the same call that brought the lock, so no Monkey Paw call on this client falls between the two. Nothing here
+// changes what the body does or what it refuses.
+void detour_hunting_close_networked(api::Original<phasmo::Door::HuntingCloseDoorNetworked> original, void* d,
+                                    void* info) {
+  original(d, info);
+  forget_old_level();
+  if (g_level || !g_haunting || friendly() || !sent_by_first_actor(info)) return;
+  const std::vector<void*> doors = exits();
+  if (std::find(doors.begin(), doors.end(), d) != doors.end()) hold(level(), doors);
 }
 
 // The Monkey Paw never opens an exit the Squatter holds (the user's rule, 2026-11-08). Each detour refuses only the call
@@ -154,18 +191,16 @@ int living_inside() {
 bool lock_all() {
   forget_old_level();
   if (g_level) return true;
+  // Another client holds the exits from the master's word alone (detour_hunting_close_networked), never its own count.
+  if (!phasmo::PhotonNetwork::get_IsMasterClient()) return false;
   void* l = level();
   if (!l || friendly()) return false;  // an unreadable difficulty counts as friendly: never lock
   const std::vector<void*> doors = exits();
   if (doors.empty()) return false;
   // The game's own hunt lock, from the client a hunt calls it on: its RPCs refuse any sender but the room's first
   // actor (sdk/systems/doors.md, "Who may send what").
-  if (phasmo::PhotonNetwork::get_IsMasterClient())
-    for (void* d : doors) phasmo::Door::HuntingCloseDoor(d);
-  g_level = l;
-  g_locked.clear();
-  for (void* d : doors) g_locked.emplace_back(d);
-  PM_LOG("squatter: %zu exit(s) locked", doors.size());
+  for (void* d : doors) phasmo::Door::HuntingCloseDoor(d);
+  if (!g_level) hold(l, doors);  // the master's own RPC may have held them already
   return true;
 }
 
@@ -178,18 +213,20 @@ bool holds(void* door) { return locked_exit(door); }
 
 void on_attempt(Attempt callback) { g_callback = std::move(callback); }
 
+void set_haunting(bool on) { g_haunting = on; }
+
 bool create_hooks() {
-  return api::hook<phasmo::Door::AttemptToUnlockDoor>(&detour_attempt, "Door.AttemptToUnlockDoor",
-                                                      api::Twins::CanonicalOnly) &&
-         api::hook<phasmo::Door::GrabbedDoor>(&detour_grabbed, "Door.GrabbedDoor", api::Twins::CanonicalOnly) &&
-         api::hook<phasmo::Door::LockDoorForTime>(&detour_lock_for_time, "Door.LockDoorForTime",
-                                                  api::Twins::CanonicalOnly) &&
-         api::hook<phasmo::Door::ToggleDoorLock>(&detour_toggle_lock, "Door.ToggleDoorLock", api::Twins::CanonicalOnly) &&
-         api::hook<phasmo::Door::UnlockDoor>(&detour_unlock, "Door.UnlockDoor", api::Twins::CanonicalOnly) &&
+  constexpr api::Twins only = api::Twins::CanonicalOnly;
+  return api::hook<phasmo::Door::AttemptToUnlockDoor>(&detour_attempt, "Door.AttemptToUnlockDoor", only) &&
+         api::hook<phasmo::Door::GrabbedDoor>(&detour_grabbed, "Door.GrabbedDoor", only) &&
+         api::hook<phasmo::Door::LockDoorForTime>(&detour_lock_for_time, "Door.LockDoorForTime", only) &&
+         api::hook<phasmo::Door::ToggleDoorLock>(&detour_toggle_lock, "Door.ToggleDoorLock", only) &&
+         api::hook<phasmo::Door::UnlockDoor>(&detour_unlock, "Door.UnlockDoor", only) &&
          api::hook<phasmo::Door::ForceToggleHuntCollider>(&detour_hunt_collider, "Door.ForceToggleHuntCollider",
-                                                          api::Twins::CanonicalOnly) &&
-         api::hook<phasmo::MonkeyPaw::OpenExitsWish>(&detour_open_exits_wish, "MonkeyPaw.OpenExitsWish",
-                                                     api::Twins::CanonicalOnly);
+                                                          only) &&
+         api::hook<phasmo::MonkeyPaw::OpenExitsWish>(&detour_open_exits_wish, "MonkeyPaw.OpenExitsWish", only) &&
+         api::hook<phasmo::Door::HuntingCloseDoorNetworked>(&detour_hunting_close_networked,
+                                                            "Door.HuntingCloseDoorNetworked", only);
 }
 
 void reset() {

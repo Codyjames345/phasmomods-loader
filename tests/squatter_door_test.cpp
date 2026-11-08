@@ -44,6 +44,7 @@ constexpr int32_t kNetworkSpots = 0x08, kSpotPlayer = 0x08;
 constexpr int32_t kPlayerDead = 0x08, kPlayerRoom = 0x10;
 constexpr int32_t kRoomKind = 0x08;
 constexpr int32_t kValuesDifficulty = 0x08, kDifficultyFriendly = 0x08;
+constexpr int32_t kInfoSender = 0x08, kActorNumber = 0x08;
 // Made-up numbers for RoomKind's insideRoom, outsideMap, exterior and exteriorRoom: the code reads outsideMap's from
 // the map, so none is the game's.
 constexpr int32_t kInside = 10, kOutsideMap = 11, kExterior = 12, kExteriorRoom = 13;
@@ -56,10 +57,13 @@ T& at(Obj& o, int32_t offset) {
 Obj g_level, g_net, g_values, g_difficulty, g_variation, g_front, g_back, g_gateLeft, g_gateRight, g_bedroom;
 Obj g_hall, g_garden, g_campfire, g_outside;
 Obj g_spots[4], g_players[4];
+Obj g_photon[3];  // the room's Photon players, actors 1 (the first, the master's), 2 and 3
 void* g_levelRef = nullptr;   // LevelController.instance
 void* g_valuesRef = nullptr;  // LevelValues.instance
 void* g_netRef = nullptr;     // what Network.get_Instance answers
 bool g_master = true;
+bool g_inRoom = true, g_offline = false;
+void* g_playerList = nullptr;  // what PhotonNetwork.get_PlayerList answers
 
 // What the game's door methods were asked, in order.
 std::vector<std::string> g_calls;
@@ -93,6 +97,19 @@ void fake_attempt(void*, const void*) { ++g_attemptBodies; }
 void fake_grabbed(void*, const void*) { ++g_grabBodies; }
 bool fake_is_master(const void*) { return g_master; }
 void* fake_network(const void*) { return g_netRef; }
+bool fake_in_room(const void*) { return g_inRoom; }
+bool fake_offline(const void*) { return g_offline; }
+void* fake_player_list(const void*) { return g_playerList; }
+void* fake_none(const void*) { return nullptr; }
+int32_t fake_actor_number(void* p, const void*);
+// The hunt close's RPC body as it arrives on this client: the game's own (here, a record of it) runs whatever it then
+// refuses.
+int g_networkedBodies = 0;
+void fake_hunting_close_networked(void*, void*, const void*) {
+  ++g_networkedBodies;
+  g_calls.push_back("HuntingCloseDoorNetworked");
+}
+bool g_throwInWish = false;
 
 // A player's try at `d` through the hooked game methods.
 void attempt(void* d) {
@@ -133,6 +150,7 @@ void fake_open_exits_wish(void*, void*, const void*) {
     toggle_lock(d, true);
     hunt_collider(d);
   }
+  if (g_throwInWish) throw 1;  // a body that ends in an exception
 }
 void open_exits_wish() {
   using F = void (*)(void*, void*, const void*);
@@ -145,6 +163,18 @@ void* refs(const std::vector<void*>& items) {
   void* arr = fake::array(sizeof(void*), items.size());
   for (size_t i = 0; i < items.size(); ++i) pm::api::RefArray{arr}.set(i, items[i]);
   return arr;
+}
+
+int32_t fake_actor_number(void* p, const void*) { return at<int32_t>(*static_cast<Obj*>(p), kActorNumber); }
+
+// The master's hunt close for `d` arriving on this client, from actor `sender` (0: no sender), through whatever hook the
+// code under test made on the RPC's body.
+void lock_arrives(void* d, int sender = 1) {
+  Obj info;
+  at<void*>(info, kInfoSender) = sender ? &g_photon[sender - 1] : nullptr;
+  using F = void (*)(void*, void*, const void*);
+  void* body = reinterpret_cast<void*>(&fake_hunting_close_networked);
+  reinterpret_cast<F>(entry_of("Door.HuntingCloseDoorNetworked", body))(d, &info, nullptr);
 }
 
 // The map's exits: `doors` in LevelController.huntingDoors, `variationDoors` in its one variation's list.
@@ -208,6 +238,25 @@ void start(bool master = true, bool friendly = false) {
   fake::method(map::Door_LockDoorForTime, reinterpret_cast<void*>(&fake_lock_for_time));
   fake::method(map::Door_ForceToggleHuntCollider, reinterpret_cast<void*>(&fake_hunt_collider));
   fake::method(map::MonkeyPaw_OpenExitsWish, reinterpret_cast<void*>(&fake_open_exits_wish));
+  fake::method(map::Door_HuntingCloseDoorNetworked, reinterpret_cast<void*>(&fake_hunting_close_networked));
+  fake::method(map::PhotonNetwork_get_InRoom, reinterpret_cast<void*>(&fake_in_room));
+  fake::method(map::PhotonNetwork_get_OfflineMode, reinterpret_cast<void*>(&fake_offline));
+  fake::method(map::PhotonNetwork_get_PlayerList, reinterpret_cast<void*>(&fake_player_list));
+  fake::method(map::PhotonPlayer_get_ActorNumber, reinterpret_cast<void*>(&fake_actor_number));
+  fake::field(map::PhotonMessageInfo_Sender, kInfoSender);
+  // What the room's other gates read (core/room_gates.h), which the binding needs though nothing here calls them.
+  for (const pm::sdk::EntryDesc* gate : {&map::PhotonNetwork_get_CurrentRoom, &map::PhotonNetwork_get_LocalPlayer,
+                                         &map::PhotonNetwork_get_MasterClient, &map::PhotonRoom_get_IsVisible})
+    fake::method(*gate, reinterpret_cast<void*>(&fake_none));
+  for (int i = 0; i < 3; ++i) {
+    g_photon[i] = Obj{};
+    at<int32_t>(g_photon[i], kActorNumber) = i + 1;
+  }
+  g_playerList = refs({&g_photon[1], &g_photon[0], &g_photon[2]});  // the list's order is not the actors'
+  g_inRoom = true;
+  g_offline = false;
+  g_networkedBodies = 0;
+  g_throwInWish = false;
   g_host = *fake::host();
   g_fakeHookBody = g_host.hook_body;
   g_host.hook_body = &capture_hook_body;
@@ -222,8 +271,25 @@ void start(bool master = true, bool friendly = false) {
   g_wishExits.clear();
   g_reported.clear();
   door::on_attempt([](void* d) { g_reported.push_back(d); });
+  door::set_haunting(true);
   exits_are({&g_front});
   players_in({&g_bedroom});
+}
+
+// Another client, which holds what the master locked once the master's lock reaches it: `exits` are the map's.
+void hold_from_the_master(const std::vector<void*>& exits) {
+  start(false);
+  exits_are(exits);
+  lock_arrives(exits.front());
+  g_calls.clear();
+}
+
+// Locks the map's exits as each client comes to hold them: the master by its own lock_all, another client when the
+// master's lock of its first exit (`first`) reaches it.
+bool lock_on(bool master, void* first) {
+  if (master) return door::lock_all();
+  lock_arrives(first);
+  return door::locked();
 }
 
 int count(const std::vector<void*>& list, void* item) {
@@ -319,7 +385,7 @@ void an_attempt_on_a_locked_door_reports_it() {
   for (const bool master : {true, false}) {
     start(master);
     exits_are({&g_front, &g_back});
-    CHECK(door::lock_all());
+    CHECK(lock_on(master, &g_front));
     attempt(&g_front);
     CHECK(g_reported.size() == 1 && g_reported[0] == &g_front && g_attemptBodies == 1);
     grab(&g_back);
@@ -345,14 +411,16 @@ void an_attempt_on_an_unlocked_door_reports_nothing() {
 }
 
 // The lock is the game's own: Door.HuntingCloseDoor on the master and nothing else, which sends what the game sends.
-// Another client calls nothing in the game but knows its exits are locked. Nothing locks on a friendly ghost's
-// difficulty, or when the difficulty cannot be read, or with no exits.
+// Another client's lock_all calls nothing in the game and holds nothing: its own count of the players inside never
+// decides; it holds the exits once the master's lock reaches it. Nothing locks on a friendly ghost's difficulty, or when
+// the difficulty cannot be read, or with no exits.
 void locking_takes_the_games_own_path() {
   start();
   CHECK(door::lock_all());
   CHECK(g_calls == std::vector<std::string>{"HuntingCloseDoor"});
   start(false);
-  CHECK(door::lock_all() && g_calls.empty() && door::locked());
+  players_in({&g_outside});
+  CHECK(!door::lock_all() && g_calls.empty() && !door::locked());
   start(true, true);
   CHECK(!door::lock_all() && g_calls.empty() && !door::locked());
   start();
@@ -374,8 +442,8 @@ void the_squatter_holds_only_its_locked_exits() {
   CHECK(!door::holds(&g_front) && !door::holds(nullptr));
   CHECK(door::lock_all());
   CHECK(door::holds(&g_front) && door::holds(&g_back) && !door::holds(&g_bedroom) && !door::holds(nullptr));
-  start(false);  // another client holds what its own lock_all locked
-  CHECK(door::lock_all() && door::holds(&g_front));
+  hold_from_the_master({&g_front, &g_back});  // another client holds what the master locked
+  CHECK(door::holds(&g_front) && door::holds(&g_back) && !door::holds(&g_bedroom));
   g_levelRef = nullptr;  // the contract is over
   CHECK(!door::holds(&g_front));
 }
@@ -390,7 +458,7 @@ void the_paws_timed_lock_leaves_a_held_exit_shut() {
     lock_for_time(&g_front);
     toggle_lock(&g_front, true);
     CHECK((g_calls == std::vector<std::string>{"LockDoorForTime", "ToggleDoorLock"}));  // before the lock
-    CHECK(door::lock_all());
+    CHECK(lock_on(master, &g_front));
     g_calls.clear();
     lock_for_time(&g_front);
     toggle_lock(&g_front, false);
@@ -411,7 +479,7 @@ void the_open_exits_wish_leaves_held_exits_locked() {
     g_wishExits = {&g_front, &g_back};
     open_exits_wish();
     CHECK(g_wishBodies == 1 && g_calls.size() == 6);  // before the lock: both exits opened
-    CHECK(door::lock_all());
+    CHECK(lock_on(master, &g_front));
     g_calls.clear();
     open_exits_wish();
     CHECK(g_wishBodies == 2 && g_calls.empty());
@@ -431,13 +499,124 @@ void outside_the_wish_a_held_exit_keeps_the_games_unlock() {
   CHECK((g_calls == std::vector<std::string>{"HuntingCloseDoor", "UnlockDoor", "ForceToggleHuntCollider"}));
 }
 
+// Every client holds the exits exactly when the master locked them: once the master's lock (the game's own RPC,
+// Door.HuntingCloseDoorNetworked) reaches it, whatever its own count of the players inside says. The game's body runs
+// first and unchanged; then every exit of the map is held, and a try at one is reported.
+void the_hold_follows_the_masters_lock() {
+  start(false);
+  exits_are({&g_front, &g_back});
+  players_in({&g_bedroom});  // this client still counts a player inside
+  CHECK(!door::locked());
+  lock_arrives(&g_front);
+  CHECK(g_networkedBodies == 1 && g_calls == std::vector<std::string>{"HuntingCloseDoorNetworked"});
+  CHECK(door::locked() && door::holds(&g_front) && door::holds(&g_back) && !door::holds(&g_bedroom));
+  attempt(&g_back);
+  CHECK(g_reported.size() == 1 && g_reported[0] == &g_back);
+  lock_arrives(&g_back);  // the master's lock of its next exit holds nothing more
+  CHECK(g_networkedBodies == 2 && door::locked());
+  // The master's own lock reaches it too, as Photon runs an RPC sent to every client on its sender: no second lock.
+  start();
+  exits_are({&g_front});
+  CHECK(door::lock_all());
+  lock_arrives(&g_front);
+  CHECK(g_closed.size() == 1 && door::locked());
+}
+
+// The gap Task 6 left: a client that had not yet held the exits ran the Monkey Paw's calls on them after the master's
+// lock reached it, and its unlock went to everyone. Now the hold starts in the same call that brings the lock, so the
+// very next call on this client, before any frame of the mod's, is refused: the timed lock and ToggleDoorLock on any
+// exit, and the open-exits wish's unlock.
+void the_masters_lock_closes_the_same_frame_gap() {
+  start(false);
+  exits_are({&g_front, &g_back});
+  g_wishExits = {&g_front, &g_back};
+  lock_for_time(&g_front);  // before the lock: the game's own
+  CHECK((g_calls == std::vector<std::string>{"LockDoorForTime"}));
+  g_calls.clear();
+  lock_arrives(&g_front);
+  lock_for_time(&g_front);
+  toggle_lock(&g_front, true);
+  toggle_lock(&g_back, true);  // an exit whose own lock is still on its way
+  open_exits_wish();
+  CHECK((g_calls == std::vector<std::string>{"HuntingCloseDoorNetworked"}));
+  CHECK(g_wishBodies == 1);
+}
+
+// Only the master's lock, as the game takes it, holds the exits. A sender the game's own check refuses (any but the
+// room's first actor, or none) holds nothing, though the game's body still runs and refuses it; so do a lock while the
+// Squatter does not haunt (another ghost's hunt), one on a friendly ghost's difficulty or an unread one, and a door that
+// is not an exit. Outside a room or offline the game takes every call, and so does the hold.
+void a_lock_the_game_refuses_holds_nothing() {
+  start(false);
+  lock_arrives(&g_front, 2);
+  lock_arrives(&g_front, 3);
+  lock_arrives(&g_front, 0);
+  CHECK(g_networkedBodies == 3 && !door::locked());
+  g_playerList = refs({&g_photon[1], nullptr});  // a list the game would throw on
+  lock_arrives(&g_front, 2);
+  CHECK(!door::locked());
+  start(false);
+  door::set_haunting(false);
+  lock_arrives(&g_front);
+  CHECK(g_networkedBodies == 1 && !door::locked());
+  start(false, true);
+  lock_arrives(&g_front);
+  CHECK(!door::locked());
+  start(false);
+  g_valuesRef = nullptr;
+  lock_arrives(&g_front);
+  CHECK(!door::locked());
+  start(false);
+  lock_arrives(&g_bedroom);
+  CHECK(!door::locked());
+  start(false);
+  g_offline = true;
+  lock_arrives(&g_front, 3);
+  CHECK(door::locked());
+  start(false);
+  g_inRoom = false;
+  lock_arrives(&g_front, 0);
+  CHECK(door::locked());
+}
+
+// A client that held the exits from the master's lock and then becomes the master (a host migration) never locks
+// them again: its lock_all finds them held and calls nothing.
+void a_new_master_never_locks_twice() {
+  hold_from_the_master({&g_front, &g_back});
+  g_master = true;
+  CHECK(door::lock_all() && g_closed.empty() && g_calls.empty());
+}
+
+// The open-exits wish's count of running calls returns to 0 when the wish ends, normally or by an exception, so the
+// house key's unlock and the collider switch on a held exit stay the game's own afterwards.
+void the_open_exits_wish_count_returns_to_zero() {
+  start();
+  exits_are({&g_front});
+  g_wishExits = {&g_front};
+  CHECK(door::lock_all());
+  open_exits_wish();
+  g_throwInWish = true;
+  bool threw = false;
+  try {
+    open_exits_wish();
+  } catch (int) {
+    threw = true;
+  }
+  CHECK(threw && g_wishBodies == 2);
+  g_calls.clear();
+  unlock(&g_front);
+  hunt_collider(&g_front);
+  CHECK((g_calls == std::vector<std::string>{"UnlockDoor", "ForceToggleHuntCollider"}));
+}
+
 // A build that lacks an entry the doors need fails the mod's binding, naming it, as Custom Ghosts' start does.
 void a_missing_entry_fails_the_start() {
   for (const pm::sdk::EntryDesc* lacking : {&map::Door_HuntingCloseDoor, &map::Door_AttemptToUnlockDoor,
                                             &map::Door_GrabbedDoor, &map::LevelController_huntingDoors,
                                             &map::SmallMapVariation_huntingDoorsToLock, &map::RoomKind_outsideMap,
                                             &map::Door_LockDoorForTime, &map::Door_ToggleDoorLock, &map::Door_UnlockDoor,
-                                            &map::Door_ForceToggleHuntCollider, &map::MonkeyPaw_OpenExitsWish}) {
+                                            &map::Door_ForceToggleHuntCollider, &map::MonkeyPaw_OpenExitsWish,
+                                            &map::Door_HuntingCloseDoorNetworked}) {
     start();
     fake::forget(*lacking);
     std::string missing;
@@ -459,6 +638,11 @@ int main() {
   the_paws_timed_lock_leaves_a_held_exit_shut();
   the_open_exits_wish_leaves_held_exits_locked();
   outside_the_wish_a_held_exit_keeps_the_games_unlock();
+  the_hold_follows_the_masters_lock();
+  the_masters_lock_closes_the_same_frame_gap();
+  a_lock_the_game_refuses_holds_nothing();
+  a_new_master_never_locks_twice();
+  the_open_exits_wish_count_returns_to_zero();
   a_missing_entry_fails_the_start();
   door::reset();  // what it holds goes back before the fake's own storage does
   std::printf(g_failures ? "%d check(s) failed\n" : "all squatter door tests passed\n", g_failures);
