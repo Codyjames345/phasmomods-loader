@@ -12,6 +12,10 @@
 //  - The lock is the game's hunt lock, Door.HuntingCloseDoor, called on the master only, never on a friendly ghost's
 //    difficulty: its RPCs then pass every check on the receiving side (sdk/systems/photon.md). Nothing here unlocks:
 //    the doors go with the map's scene when the contract ends.
+//  - Once locked, no Monkey Paw wish opens a held exit (the user's rule, 2026-11-08): the hooks refuse, on every
+//    client, Door.LockDoorForTime and Door.ToggleDoorLock on a held exit, and Door.UnlockDoor and
+//    Door.ForceToggleHuntCollider on one inside MonkeyPaw.OpenExitsWish. Every other call, and the rest of each wish,
+//    stays the game's.
 namespace pm::custom::squatter::door {
 
 /**
@@ -43,6 +47,12 @@ bool lock_all();
 /** Whether lock_all has locked the current map's exits on this client. False once the map's LevelController is gone. */
 bool locked();
 
+/**
+ * Whether the Squatter holds `door`: an exit lock_all has locked on this client, for the current map. False for null,
+ * for a door that is not an exit, before the lock and once the map's LevelController is gone.
+ */
+bool holds(void* door);
+
 /** What on_attempt calls: the Door a player tried. */
 using Attempt = std::function<void(void* door)>;
 
@@ -55,7 +65,11 @@ using Attempt = std::function<void(void* door)>;
  */
 void on_attempt(Attempt callback);
 
-/** Hooks Door.AttemptToUnlockDoor and Door.GrabbedDoor, before hooks::enable_all. False when either cannot be hooked. */
+/**
+ * Hooks Door.AttemptToUnlockDoor and Door.GrabbedDoor (the tries), and Door.LockDoorForTime, Door.ToggleDoorLock,
+ * Door.UnlockDoor, Door.ForceToggleHuntCollider and MonkeyPaw.OpenExitsWish (the paw's way to a held exit), before
+ * hooks::enable_all. False when any cannot be hooked.
+ */
 bool create_hooks();
 
 /**

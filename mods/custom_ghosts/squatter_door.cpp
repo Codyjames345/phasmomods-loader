@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <type_traits>
 
+#include "CursedItems.h"
 #include "Door.h"
 #include "LevelController.h"
 #include "LevelRoom.h"
@@ -20,6 +21,7 @@ namespace {
 api::Held g_level;                // the LevelController whose exits are locked, or null
 std::vector<api::Held> g_locked;  // its exits, as lock_all locked them
 Attempt g_callback;
+int g_openExitsWish = 0;  // MonkeyPaw.OpenExitsWish calls running on this thread
 
 /** The current map's live LevelController, or null. */
 void* level() {
@@ -64,6 +66,47 @@ void detour_attempt(api::Original<phasmo::Door::AttemptToUnlockDoor> original, v
 void detour_grabbed(api::Original<phasmo::Door::GrabbedDoor> original, void* d) {
   report(d);
   original(d);
+}
+
+// The Monkey Paw never opens an exit the Squatter holds (the user's rule, 2026-11-08). Each detour refuses only the call
+// that would undo the lock for a held exit, on every client that runs it, and lets every other call through; the rest of
+// each wish stays the game's (sdk/systems/doors.md, "The Monkey Paw").
+
+// The paw's timed lock, whose only callers are the wishes: it would clear the lock at once and reopen the door after.
+void detour_lock_for_time(api::Original<phasmo::Door::LockDoorForTime> original, void* d, float seconds,
+                          bool takeOwnership) {
+  if (holds(d)) {
+    PM_LOG("squatter: a Monkey Paw wish left a locked exit shut");
+    return;
+  }
+  original(d, seconds, takeOwnership);
+}
+
+// Either way it clears the lock, and `true` switches the door back on: the timed lock's start and end, the wish that
+// opens every exit, and a hunt's end, which the Squatter never has.
+void detour_toggle_lock(api::Original<phasmo::Door::ToggleDoorLock> original, void* d, bool on, bool b) {
+  if (holds(d)) return;
+  original(d, on, b);
+}
+
+// Inside the wish that opens every exit only: the house key's unlock (Door.AttemptToUnlockDoor) stays the game's.
+void detour_unlock(api::Original<phasmo::Door::UnlockDoor> original, void* d, bool sound) {
+  if (g_openExitsWish > 0 && holds(d)) return;
+  original(d, sound);
+}
+
+void detour_hunt_collider(api::Original<phasmo::Door::ForceToggleHuntCollider> original, void* d, bool on) {
+  if (g_openExitsWish > 0 && holds(d)) return;
+  original(d, on);
+}
+
+void detour_open_exits_wish(api::Original<phasmo::MonkeyPaw::OpenExitsWish> original, void* paw, void* wisher) {
+  struct Running {
+    Running() { ++g_openExitsWish; }
+    ~Running() { --g_openExitsWish; }
+  } running;
+  if (locked()) PM_LOG("squatter: a Monkey Paw wish to open the exits leaves the locked exits shut");
+  original(paw, wisher);
 }
 
 }  // namespace
@@ -131,12 +174,22 @@ bool locked() {
   return static_cast<bool>(g_level.get());
 }
 
+bool holds(void* door) { return locked_exit(door); }
+
 void on_attempt(Attempt callback) { g_callback = std::move(callback); }
 
 bool create_hooks() {
   return api::hook<phasmo::Door::AttemptToUnlockDoor>(&detour_attempt, "Door.AttemptToUnlockDoor",
                                                       api::Twins::CanonicalOnly) &&
-         api::hook<phasmo::Door::GrabbedDoor>(&detour_grabbed, "Door.GrabbedDoor", api::Twins::CanonicalOnly);
+         api::hook<phasmo::Door::GrabbedDoor>(&detour_grabbed, "Door.GrabbedDoor", api::Twins::CanonicalOnly) &&
+         api::hook<phasmo::Door::LockDoorForTime>(&detour_lock_for_time, "Door.LockDoorForTime",
+                                                  api::Twins::CanonicalOnly) &&
+         api::hook<phasmo::Door::ToggleDoorLock>(&detour_toggle_lock, "Door.ToggleDoorLock", api::Twins::CanonicalOnly) &&
+         api::hook<phasmo::Door::UnlockDoor>(&detour_unlock, "Door.UnlockDoor", api::Twins::CanonicalOnly) &&
+         api::hook<phasmo::Door::ForceToggleHuntCollider>(&detour_hunt_collider, "Door.ForceToggleHuntCollider",
+                                                          api::Twins::CanonicalOnly) &&
+         api::hook<phasmo::MonkeyPaw::OpenExitsWish>(&detour_open_exits_wish, "MonkeyPaw.OpenExitsWish",
+                                                     api::Twins::CanonicalOnly);
 }
 
 void reset() {

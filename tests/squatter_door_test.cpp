@@ -13,6 +13,7 @@
 #include "Door.h"
 #include "LevelController.h"
 #include "LevelRoom.h"
+#include "CursedItems.h"
 #include "Photon.h"
 #include "Player.h"
 #include "check.h"
@@ -83,6 +84,10 @@ void fake_toggle_lock(void*, bool, bool, const void*) { g_calls.push_back("Toggl
 void fake_lock(void*, bool, const void*) { g_calls.push_back("LockDoor"); }
 void fake_unlock(void*, bool, const void*) { g_calls.push_back("UnlockDoor"); }
 void fake_disable(void*, bool, bool, const void*) { g_calls.push_back("DisableOrEnableDoor"); }
+void fake_lock_for_time(void*, float, bool, const void*) { g_calls.push_back("LockDoorForTime"); }
+void fake_hunt_collider(void*, bool, const void*) { g_calls.push_back("ForceToggleHuntCollider"); }
+std::vector<void*> g_wishExits;  // the exits MonkeyPaw.OpenExitsWish walks
+int g_wishBodies = 0;
 void fake_attempt(void*, const void*) { ++g_attemptBodies; }
 void fake_grabbed(void*, const void*) { ++g_grabBodies; }
 bool fake_is_master(const void*) { return g_master; }
@@ -96,6 +101,43 @@ void attempt(void* d) {
 void grab(void* d) {
   using F = void (*)(void*, const void*);
   reinterpret_cast<F>(g_detour.at("Door.GrabbedDoor"))(d, nullptr);
+}
+
+// The game's door calls, through whatever hook the code under test made on each, else straight to the game's body.
+void* entry_of(const char* key, void* body) { return g_detour.count(key) ? g_detour.at(key) : body; }
+void unlock(void* d) {
+  using F = void (*)(void*, bool, const void*);
+  reinterpret_cast<F>(entry_of("Door.UnlockDoor", reinterpret_cast<void*>(&fake_unlock)))(d, true, nullptr);
+}
+void toggle_lock(void* d, bool on) {
+  using F = void (*)(void*, bool, bool, const void*);
+  reinterpret_cast<F>(entry_of("Door.ToggleDoorLock", reinterpret_cast<void*>(&fake_toggle_lock)))(d, on, false, nullptr);
+}
+void lock_for_time(void* d) {
+  using F = void (*)(void*, float, bool, const void*);
+  reinterpret_cast<F>(entry_of("Door.LockDoorForTime", reinterpret_cast<void*>(&fake_lock_for_time)))(d, 6.0f, true,
+                                                                                                     nullptr);
+}
+void hunt_collider(void* d) {
+  using F = void (*)(void*, bool, const void*);
+  reinterpret_cast<F>(entry_of("Door.ForceToggleHuntCollider", reinterpret_cast<void*>(&fake_hunt_collider)))(
+      d, false, nullptr);
+}
+// MonkeyPaw.OpenExitsWish as the game runs it (sdk/map/CursedItems.h): for every exit, on the master the unlock with
+// its click, on the view's owner the door back on, and the hunt collider off; here this client is both.
+void fake_open_exits_wish(void*, void*, const void*) {
+  ++g_wishBodies;
+  for (void* d : g_wishExits) {
+    unlock(d);
+    toggle_lock(d, true);
+    hunt_collider(d);
+  }
+}
+void open_exits_wish() {
+  using F = void (*)(void*, void*, const void*);
+  static int paw = 0, wisher = 0;
+  reinterpret_cast<F>(entry_of("MonkeyPaw.OpenExitsWish", reinterpret_cast<void*>(&fake_open_exits_wish)))(
+      &paw, &wisher, nullptr);
 }
 
 void* refs(const std::vector<void*>& items) {
@@ -162,6 +204,9 @@ void start(bool master = true, bool friendly = false) {
   fake::method(map::Door_DisableOrEnableDoor, reinterpret_cast<void*>(&fake_disable));
   fake::method(map::Door_AttemptToUnlockDoor, reinterpret_cast<void*>(&fake_attempt));
   fake::method(map::Door_GrabbedDoor, reinterpret_cast<void*>(&fake_grabbed));
+  fake::method(map::Door_LockDoorForTime, reinterpret_cast<void*>(&fake_lock_for_time));
+  fake::method(map::Door_ForceToggleHuntCollider, reinterpret_cast<void*>(&fake_hunt_collider));
+  fake::method(map::MonkeyPaw_OpenExitsWish, reinterpret_cast<void*>(&fake_open_exits_wish));
   g_host = *fake::host();
   g_fakeHookBody = g_host.hook_body;
   g_host.hook_body = &capture_hook_body;
@@ -172,7 +217,8 @@ void start(bool master = true, bool friendly = false) {
   g_master = master;
   g_calls.clear();
   g_closed.clear();
-  g_attemptBodies = g_grabBodies = 0;
+  g_attemptBodies = g_grabBodies = g_wishBodies = 0;
+  g_wishExits.clear();
   g_reported.clear();
   door::on_attempt([](void* d) { g_reported.push_back(d); });
   exits_are({&g_front});
@@ -319,11 +365,78 @@ void locking_takes_the_games_own_path() {
   CHECK(door::exits().empty() && !door::lock_all() && g_calls.empty());
 }
 
+// Whether the Squatter holds a door: an exit it has locked on this client, for the map it locked it on. Nothing before
+// the lock, no door that is not an exit, nothing once the map's LevelController is gone.
+void the_squatter_holds_only_its_locked_exits() {
+  start();
+  exits_are({&g_front, &g_back});
+  CHECK(!door::holds(&g_front) && !door::holds(nullptr));
+  CHECK(door::lock_all());
+  CHECK(door::holds(&g_front) && door::holds(&g_back) && !door::holds(&g_bedroom) && !door::holds(nullptr));
+  start(false);  // another client holds what its own lock_all locked
+  CHECK(door::lock_all() && door::holds(&g_front));
+  g_levelRef = nullptr;  // the contract is over
+  CHECK(!door::holds(&g_front));
+}
+
+// The Monkey Paw's timed lock (Door.LockDoorForTime, the 6 s, 120 s and room wishes) and Door.ToggleDoorLock, either
+// way, never start on a held exit: neither the clearing of the lock at the window's start nor the reopening at its end.
+// Other doors, and every door before the lock, keep the game's own.
+void the_paws_timed_lock_leaves_a_held_exit_shut() {
+  for (const bool master : {true, false}) {
+    start(master);
+    exits_are({&g_front});
+    lock_for_time(&g_front);
+    toggle_lock(&g_front, true);
+    CHECK((g_calls == std::vector<std::string>{"LockDoorForTime", "ToggleDoorLock"}));  // before the lock
+    CHECK(door::lock_all());
+    g_calls.clear();
+    lock_for_time(&g_front);
+    toggle_lock(&g_front, false);
+    toggle_lock(&g_front, true);
+    CHECK(g_calls.empty());
+    lock_for_time(&g_bedroom);
+    toggle_lock(&g_bedroom, true);
+    CHECK((g_calls == std::vector<std::string>{"LockDoorForTime", "ToggleDoorLock"}));
+  }
+}
+
+// The wish that opens every exit (MonkeyPaw.OpenExitsWish) still runs, but inside it a held exit is neither unlocked,
+// switched back on nor stripped of its hunt collider, on every client. Before the lock it opens them as the game does.
+void the_open_exits_wish_leaves_held_exits_locked() {
+  for (const bool master : {true, false}) {
+    start(master);
+    exits_are({&g_front, &g_back});
+    g_wishExits = {&g_front, &g_back};
+    open_exits_wish();
+    CHECK(g_wishBodies == 1 && g_calls.size() == 6);  // before the lock: both exits opened
+    CHECK(door::lock_all());
+    g_calls.clear();
+    open_exits_wish();
+    CHECK(g_wishBodies == 2 && g_calls.empty());
+    g_wishExits = {&g_bedroom};  // a door that is not held keeps the game's own
+    open_exits_wish();
+    CHECK((g_calls == std::vector<std::string>{"UnlockDoor", "ToggleDoorLock", "ForceToggleHuntCollider"}));
+  }
+}
+
+// Outside the wish, Door.UnlockDoor and Door.ForceToggleHuntCollider on a held exit stay the game's own: the house key's
+// unlock (Door.AttemptToUnlockDoor) is not the wish's.
+void outside_the_wish_a_held_exit_keeps_the_games_unlock() {
+  start();
+  CHECK(door::lock_all());
+  unlock(&g_front);
+  hunt_collider(&g_front);
+  CHECK((g_calls == std::vector<std::string>{"HuntingCloseDoor", "UnlockDoor", "ForceToggleHuntCollider"}));
+}
+
 // A build that lacks an entry the doors need fails the mod's binding, naming it, as Custom Ghosts' start does.
 void a_missing_entry_fails_the_start() {
   for (const pm::sdk::EntryDesc* lacking : {&map::Door_HuntingCloseDoor, &map::Door_AttemptToUnlockDoor,
                                             &map::Door_GrabbedDoor, &map::LevelController_huntingDoors,
-                                            &map::SmallMapVariation_huntingDoorsToLock, &map::RoomKind_outsideMap}) {
+                                            &map::SmallMapVariation_huntingDoorsToLock, &map::RoomKind_outsideMap,
+                                            &map::Door_LockDoorForTime, &map::Door_ToggleDoorLock, &map::Door_UnlockDoor,
+                                            &map::Door_ForceToggleHuntCollider, &map::MonkeyPaw_OpenExitsWish}) {
     start();
     fake::forget(*lacking);
     std::string missing;
@@ -341,6 +454,10 @@ int main() {
   an_attempt_on_a_locked_door_reports_it();
   an_attempt_on_an_unlocked_door_reports_nothing();
   locking_takes_the_games_own_path();
+  the_squatter_holds_only_its_locked_exits();
+  the_paws_timed_lock_leaves_a_held_exit_shut();
+  the_open_exits_wish_leaves_held_exits_locked();
+  outside_the_wish_a_held_exit_keeps_the_games_unlock();
   a_missing_entry_fails_the_start();
   door::reset();  // what it holds goes back before the fake's own storage does
   std::printf(g_failures ? "%d check(s) failed\n" : "all squatter door tests passed\n", g_failures);
