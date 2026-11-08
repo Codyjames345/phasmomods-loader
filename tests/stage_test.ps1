@@ -69,6 +69,11 @@ try {
     Remove-Item -LiteralPath (Join-Path $fixture 'build/ModHost.dll')
     Assert-StageFailure $fixture 'ModHost.dll is missing'
 
+    # Custom Ghosts does not start without the Squatter's bundle, so no stage or release may drop it.
+    $fixture = New-StageFixture 'missing Squatter bundle'
+    Remove-Item -LiteralPath (Join-Path $fixture 'mods/custom_ghosts/assets/squatter.bundle')
+    Assert-StageFailure $fixture 'squatter.bundle is missing'
+
     $fixture = New-StageFixture 'launcher holds a file'
     foreach ($name in @('a-first.txt', 'z-last.txt')) {  # a deletion that stops at the held file would take one of these
         Set-Content -LiteralPath (Join-Path $fixture "dist/PhasmoMods/$name") -Value 'previous'
