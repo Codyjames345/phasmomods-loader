@@ -12,7 +12,7 @@
 //    possession's effect on a player alone stays the game's (sdk/systems/ghost-ai.md, "Every route to a state
 //    change").
 //  - A Mimic never copies it (ghosts.h, the content layer's PM_GHOST_NO_MIMIC_COPY).
-//  - tick keeps its phase, which begins at first_phase on the frame it starts to haunt.
+//  - tick keeps its phase, which begins at first_phase on the first frame it haunts with the difficulty read.
 // When something it needs cannot load, the whole mod fails its start (mod.cpp), as any mod with an error does.
 namespace pm::custom::squatter {
 
@@ -26,8 +26,8 @@ bool create_hooks();
 /**
  * Every frame on every client. `haunting` is the contract's ghost, its GhostAI (null for none), `type` the custom
  * ghost it acts as (ghosts.h Type, 0 for none), `steered` whether a player controls it (on the host). While it
- * haunts as the Squatter its phase is kept, from first_phase(Difficulty.friendlyGhost) on the frame it begins;
- * otherwise it holds none.
+ * haunts as the Squatter its phase is kept, from first_phase(Difficulty.friendlyGhost) on the first frame the
+ * difficulty can be read (none before it); otherwise it holds none.
  */
 void tick(void* haunting, int type, bool steered);
 /** Its phase while it haunts as the Squatter, else none. */

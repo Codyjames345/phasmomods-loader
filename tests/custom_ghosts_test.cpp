@@ -1982,7 +1982,8 @@ void without_spectral_flame_only_four_stay() {
 }
 
 // The Squatter begins each contract lurking in its room, or moping on a friendly ghost's difficulty
-// (squatter_rule.h first_phase), on the frame it starts to haunt; it holds no phase while it does not.
+// (squatter_rule.h first_phase), on the first frame it haunts with the difficulty read; it holds no phase before
+// that or while it does not haunt.
 void the_squatter_begins_lurking_or_moping() {
   start();
   namespace map = pm::map;
@@ -1996,10 +1997,18 @@ void the_squatter_begins_lurking_or_moping() {
   fake::field(map::Difficulty_friendlyGhost, 0x18);
   std::string missing;
   pm::api::bind(fake::host(), missing);
-  phasmo::LevelValues::difficulty.set(&values, &difficulty);
   Obj ghost;
   squatter::reset();
   CHECK(!squatter::phase());
+  // Until the difficulty can be read the Squatter holds no phase, rather than one guessed for the whole contract.
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(!squatter::phase());
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, true);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Moping);
+  squatter::tick(nullptr, 0, false);  // the contract ends
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, false);
   squatter::tick(&ghost, kSquatter, false);
   CHECK(squatter::phase() == squatter::Phase::Lurking);
   squatter::tick(nullptr, 0, false);  // the contract ends

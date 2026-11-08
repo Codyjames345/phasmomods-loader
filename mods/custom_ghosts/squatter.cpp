@@ -40,7 +40,9 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     // is gone, so a tick without the ghost mid-contract never locks them twice.
     return;
   }
-  if (!g_phase) g_phase = first_phase(friendly());
+  // The first phase waits for the difficulty: guessed once, it would hold for the whole contract.
+  if (!g_phase)
+    if (const std::optional<bool> friendlyGhost = friendly_if_read()) g_phase = first_phase(*friendlyGhost);
   show(haunting);
 }
 
