@@ -33,7 +33,10 @@ well it works.
 6. **The catch.** It kills the player with a kick to the face, replacing the stock choke, and says a funny line.
 7. **The door.** It never follows anyone past the way out. The door does not lock until all living players are out; then it
    locks, and each later attempt to open it gets another line, like "hit the road dude". On a map with several exits, it stops at all
-   of them and all of them lock. A map without a house still has a "door", which locks in the same way.
+   of them and all of them lock. A map without a house still has a "door", which locks in the same way. Once they have
+   locked, no Monkey Paw wish opens them: not the timed locks, not the rooms wish where an exit is among its doors, and not
+   the wish that opens every exit; everything else each wish does stays vanilla, and before the lock every wish is
+   vanilla (user, 2026-11-08).
 8. **The end.** The team finishes in the truck as usual, naming the Squatter in the journal.
 
 **There is no paranormal activity:** no events, interactions, evidence or hunts. Nothing about it may read as a hunt: no flickering

@@ -166,8 +166,16 @@ once and for the rest of the contract.
 
 With Custom Ghosts' Squatter haunting, its restraint refuses every change of state but idling, wandering and its
 favourite room, whoever asks (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet`), so the first wish's
-`GhostState.summoningCircle` never begins and brings no hunt. The wishes' work on the exits is the game's own as described
-here.
+`GhostState.summoningCircle` never begins and brings no hunt.
+
+**Once the Squatter has locked the exits, no wish opens them** (the user's rule, 2026-11-08). Custom Ghosts refuses, on
+every client that runs it, only the call that would undo the lock on an exit it holds (`squatter_door.h` `holds`):
+`Door.LockDoorForTime` (the timed wishes and the rooms wish, so neither the lock's clearing at a window's start nor the
+reopening at its end happens), `Door.ToggleDoorLock` either way, and, inside `MonkeyPaw.OpenExitsWish`, `Door.UnlockDoor`
+and `Door.ForceToggleHuntCollider`. These are plain methods, not RPC bodies, and a refused call sends nothing, so every
+client keeps the same door. The rest of each wish stays the game's: the summoning circle's ask, the interaction block, the
+fuse box, the ghost sent to its room, the trap wish, and the timing of every door that is not a held exit. Before the lock
+every wish is the game's own. The house key's unlock (`Door.AttemptToUnlockDoor`) is not a wish and stays the game's.
 
 **At the contract's end** the doors go with the map's scene; the next contract loads the scene afresh, with every exit
 locked as above. Nothing carries over.
