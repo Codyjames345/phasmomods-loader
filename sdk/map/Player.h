@@ -68,6 +68,26 @@ inline constexpr pm::sdk::EntryDesc Player_isDead{.key = "Player.isDead", .kind 
                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Player",
                                                   .type = "bool", .facts = Player_isDead_facts};
 
+inline constexpr const char* DeathType_values[] = {"HangedMan", "SnappedNeck"};
+
+/// The kinds of death a kill gives (Player.BeginDeathSequence's argument), an enum (name obfuscated, value names
+/// real): HangedMan and SnappedNeck. The victim's body plays the death animation of its kind
+/// (PlayerCharacterAnimations keeps one override controller per kind) and the body left behind lies as that kind.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc DeathType{.key = "DeathType", .confidence = pm::sdk::Confidence::Decompiled,
+                                              .assembly = "Assembly-CSharp", .ns = "", .values = DeathType_values};
+
+/// The Hanged Man tarot card's death. Decompiled: TarotCards.HangedMan passes it.
+inline constexpr pm::sdk::EntryDesc DeathType_HangedMan{.key = "DeathType.HangedMan", .kind = pm::sdk::Kind::EnumValue,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .owner = "DeathType", .name = "HangedMan"};
+
+/// A snapped neck: the death a hunt's kill gives, and the Monkey Paw's revive wish's. Decompiled.
+inline constexpr pm::sdk::EntryDesc DeathType_SnappedNeck{.key = "DeathType.SnappedNeck",
+                                                          .kind = pm::sdk::Kind::EnumValue,
+                                                          .confidence = pm::sdk::Confidence::Decompiled,
+                                                          .owner = "DeathType", .name = "SnappedNeck"};
+
 /// The player's body object, a GameObject: Player's one public GameObject field.
 /// The hunt's voice test measures a talking player's distance to it. Decompiled.
 inline constexpr pm::sdk::EntryDesc Player_body{.key = "Player.body", .kind = pm::sdk::Kind::Field,
@@ -897,6 +917,14 @@ struct PlayerSpot {
   /// The prestige the lobby board shows: prestige.get(spot). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::PlayerSpot_prestige, int32_t> prestige{};
 };
+
+/// The kinds of death a kill gives: the numbers Player::BeginDeathSequence takes.
+namespace DeathType {
+/// HangedMan(): the Hanged Man tarot card's. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DeathType_HangedMan> HangedMan{};
+/// SnappedNeck(): a hunt's kill's, and the Monkey Paw's revive wish's. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DeathType_SnappedNeck> SnappedNeck{};
+}  // namespace DeathType
 
 /// An investigator. `player` below is the Player.
 struct Player {

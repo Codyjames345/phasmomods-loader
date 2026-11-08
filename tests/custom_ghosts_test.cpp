@@ -2094,6 +2094,60 @@ void the_squatter_follows_the_masters_shown() {
 std::vector<int32_t> g_stateChanges;  // the states GhostAI.ChangeState was asked for
 void fake_change_state(void*, int32_t state, void*, bool, const void*) { g_stateChanges.push_back(state); }
 
+std::vector<std::pair<void*, int32_t>> g_kills;  // the victims and death types Player.BeginDeathSequence was given
+void fake_begin_death(void* player, int32_t type, const void*) { g_kills.emplace_back(player, type); }
+
+// The Squatter's kick kills with the game's own call as a hunt's kill makes it: once per player, on the master only,
+// never on a friendly ghost's difficulty (or one it cannot read) and never a player marked dead, whose kill the game's
+// animation would refuse with a report on the sender.
+void the_squatters_kick_kills_once_and_never_wrongly() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty, victim, other, dead;
+  constexpr int32_t kSnappedNeck = 6;  // a made-up number: the code reads DeathType.SnappedNeck's from the map
+  void* valuesStatic = &values;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  fake::field(map::Player_isDead, 0x20);
+  fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_is_master));
+  fake::method(map::Player_BeginDeathSequence, reinterpret_cast<void*>(&fake_begin_death));
+  fake::value(map::DeathType_SnappedNeck, kSnappedNeck);
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  g_kills.clear();
+  g_isMaster = true;
+  squatter::reset();
+  // Unreadable difficulty: no kill.
+  CHECK(!squatter::kick(&victim, 3) && g_kills.empty());
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  // kick_calls_the_kill_once
+  CHECK(squatter::kick(&victim, 3));
+  CHECK(g_kills.size() == 1 && g_kills[0].first == &victim && g_kills[0].second == kSnappedNeck);
+  CHECK(!squatter::kick(&victim, 3) && g_kills.size() == 1);
+  // kick_never_kills_a_dead_player
+  phasmo::Player::isDead.set(&dead, true);
+  CHECK(!squatter::kick(&dead, 4) && g_kills.size() == 1);
+  CHECK(!squatter::kick(nullptr, 5) && g_kills.size() == 1);
+  // Another client never kills.
+  g_isMaster = false;
+  CHECK(!squatter::kick(&other, 6) && g_kills.size() == 1);
+  g_isMaster = true;
+  // kick_never_kills_on_a_friendly_difficulty
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, true);
+  CHECK(!squatter::kick(&other, 6) && g_kills.size() == 1);
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, false);
+  CHECK(squatter::kick(&other, 6) && g_kills.size() == 2);
+  // A new contract forgets whom it kicked.
+  squatter::reset();
+  CHECK(squatter::kick(&victim, 3) && g_kills.size() == 3);
+  squatter::reset();
+  g_isMaster = false;
+}
+
 // As the mod begins steering the Squatter's agent the master idles it once (GhostAI.ChangeState to GhostState.idle),
 // leaving wandering or the favourite room, whose states would take the agent back; it does not again while it steers,
 // nor on another client, where the master's ghost is not its own. Lurking steers too: the spec keeps it in its room.
@@ -2356,6 +2410,7 @@ int main() {
   wiring::the_masters_tick_relocks_a_reopened_exit();
   wiring::the_squatter_follows_the_masters_shown();
   wiring::the_master_idles_the_squatter_once_as_steering_begins();
+  wiring::the_squatters_kick_kills_once_and_never_wrongly();
   wiring::draugr_declares_freezing_priority();
   wiring::black_shuck_declares_itself_blind_in_hunts();
   wiring::only_the_squatter_is_never_copied();

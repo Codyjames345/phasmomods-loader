@@ -63,6 +63,12 @@ inline constexpr uint64_t kShownResendMs = 2000;
 inline constexpr uint64_t kSteerMs = 200;
 // How near a hiding place's stand point counts as there.
 inline constexpr float kStandReach = 1.0f;
+// The kick stops it this long, its clip's length or so.
+inline constexpr uint64_t kKickMs = 1400;
+
+// A game value: how near a hunting ghost must be to kill (GhostHuntState.killReach, which the hunt state's constructor
+// sets to 1.1 m). It lives on the hunt's state object, which exists only in a hunt, so it cannot be read here.
+inline constexpr float kKickReach = 1.1f;
 
 /**
  * Whether a player is within its hearing, as the hunt's voice test bounds it before it asks the player's loudness

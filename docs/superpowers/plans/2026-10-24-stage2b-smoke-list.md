@@ -1077,3 +1077,11 @@ The chase (Task 7c2). A private contract with the Squatter forced in a Custom di
 - Sight
   - [ ] A Lithobolia contract still throws at players it sees outside hunts (its sight copies are now shared, `ghost_sight.h`).
 
+
+The kick (Task 8). A private contract with the Squatter forced in a Custom difficulty, two players (one the host) unless it says otherwise.
+
+- [ ] Caught within about a metre in the chase, the victim is kicked: the Squatter plays the kick, a catch line plays for both players, and the victim dies with the game's own snapped-neck death (no ghost choke, no ghost model). Note what the victim's camera does, and what the other player sees of the body.
+- [ ] The victim is dead for the game: the truck's sanity monitor shows "?", and a Monkey Paw revive brings them back.
+- [ ] Both players caught one after the other: each is kicked once, and with everyone dead the contract ends as vanilla.
+- [ ] As the client being caught: the same kick and death, and the host's `mods.log` has no exception line.
+- [ ] On a friendly ghost's difficulty nothing is ever kicked (Task 9 checks the rest of friendly mode).

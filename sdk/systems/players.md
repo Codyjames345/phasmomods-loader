@@ -13,6 +13,26 @@ owner's client). A kill sets the dying flag first: `Player.BeginDeathSequence` s
 client through the server and the death animation to the view's owner, and the animation refuses a victim already
 marked dead unless the High Priestess's flag is set (below).
 
+## Killing a player
+
+A kill takes a kind of death, `DeathType`: `HangedMan` or `SnappedNeck`. The victim's body plays that kind's death
+animation (the player's character keeps one override controller per kind) and the body left behind lies as that
+kind. The game's own kills, all on the master:
+
+| Caller | Kind | What it checks first |
+| --- | --- | --- |
+| A hunt's kill (the hunt state's kill attempt) | `SnappedNeck` | its target tests; it also adds the victim to its killed list and lengthens the hunt |
+| `MonkeyPaw.ReviveWish` | `SnappedNeck` | the wisher is neither dead (`Player.isDead`) nor dying (the bool after it, unmapped) |
+| `TarotCards.HangedMan` | `HangedMan` | the card's own tests |
+
+A hunt's choke is the ghost's model during its kill; `Player.BeginDeathSequence` itself plays only the victim's
+side. So a mod that kills outside a hunt calls `Player.BeginDeathSequence(player, DeathType.SnappedNeck)` on the
+master, as these callers do, and shows its own killer. It must not call it on a friendly ghost's difficulty or for a
+player marked dead: the animation refuses both, with a report on the sender (`sdk/systems/photon.md`, "The game's
+checks on an RPC"). The dying flag is not mapped, since no fact tells it from the bools beside it, so a mod kills
+each player at most once and reads `Player.isDead`. Custom Ghosts' Squatter kicks this way
+(`mods/custom_ghosts/squatter.h`, `kick`).
+
 ## Who reads it
 
 Most rules walk `Network.playerSpots` and read each spot's Player. Of the 2344 methods that reach `Network` (every

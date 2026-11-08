@@ -69,6 +69,7 @@ struct State {
   SprintBook sprints;
   Chase chase;      // the master's
   CuePlayer cues;   // what this client has played of the Shown
+  std::set<int> kicked;  // whom the master has kicked this contract (kick): each at most once
 };
 State g;
 
@@ -366,6 +367,16 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       }
       speed = move_speed(c.sprint, m);
       to = targetSensed ? std::optional<Point>(target->at) : c.tracker.last_at();
+      // The catch: a kick to the face, a line, and the game's own kill (kick).
+      if (target && !paused &&
+          may_kick(next, friendlyGhost, target->living, std::hypot(target->at.x - ghostAt.x, target->at.z - ghostAt.z),
+                   kKickReach) &&
+          kick(target->player, target->id)) {
+        act(Act::Kick, kKickMs, t);
+        say(Lines::Catch, t);
+        c.tracker.forget();
+        c.target = -1;
+      }
       break;
     }
     case Phase::Searching: {
@@ -449,6 +460,7 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     g.phase.reset();
     g.steered = false;
     g.chase = Chase{};
+    g.kicked.clear();
     forget_channel();
     figure::destroy();
     if (!haunting) ghost_sight::drop();  // shared (ghost_sight.h): kept while the contract's ghost lives
@@ -515,6 +527,17 @@ bool share(const Shown& s) {
 std::vector<int> take_tries() { return game::is_master() ? g.tries.take() : std::vector<int>{}; }
 
 std::optional<Sprint> sprint_of(int actor) { return g.sprints.of(actor, now()); }
+
+bool kick(void* player, int id) {
+  if (!game::is_master() || !player || !api::alive(player)) return false;
+  // Unreadable counts as friendly: the kill's animation refuses on a friendly ghost's difficulty, with a report.
+  const std::optional<bool> friendlyGhost = friendly_if_read();
+  if (!friendlyGhost || *friendlyGhost) return false;
+  if (phasmo::Player::isDead.get(player) || g.kicked.contains(id)) return false;
+  g.kicked.insert(id);
+  phasmo::Player::BeginDeathSequence(player, phasmo::DeathType::SnappedNeck());
+  return true;
+}
 
 void reset() {
   g = State{};

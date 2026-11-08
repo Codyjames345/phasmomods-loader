@@ -87,6 +87,16 @@ std::vector<int> take_tries();
  */
 std::optional<Sprint> sprint_of(int actor);
 
+/**
+ * On the master: kills `player` (id `id`, as the chase names players) with the game's own kill,
+ * Player.BeginDeathSequence(DeathType.SnappedNeck), the call and death a hunt's kill and the Monkey Paw's revive wish
+ * make, from the client they make it on. The victim's body plays the snapped neck's death and the Squatter's figure
+ * plays its kick (tick). True when it called the kill. False, calling nothing, on another client, on a friendly
+ * ghost's difficulty or one that cannot be read, for a player gone or marked dead (Player.isDead), whose kill the
+ * game's animation would refuse with a report on the sender, and for a player it has already kicked this contract.
+ */
+bool kick(void* player, int id);
+
 /** Forgets the phase, what the channel brought and the exits' lock, as when the mods stop. */
 void reset();
 
