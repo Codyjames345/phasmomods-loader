@@ -559,3 +559,7 @@ slammed door goes quiet at once and the padlock comes the moment it is fully ope
   feature/squatter (and spike/squatter); backup/pre-email-rewrite kept.
 - sdk/CHANGELOG.md still heads the doors/navigation/docs additions "[Unreleased]" though 0.2.1 ships them; the contract is
   still 2.2, so how to label a release with no contract change is the user's call.
+- User, 2026-11-08: CI gets a build cache before the next release, planned as the next task. Added as Task 14c in the plan
+  (after 14b, before 15): a content-keyed compiler cache (ccache or sccache, the user picks after research), because a fresh
+  checkout's timestamps make Ninja rebuild a restored build/ in full. Open questions for the user: which tool, and whether
+  the tag's release job uses the cache or builds cold. Not started.
