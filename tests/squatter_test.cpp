@@ -759,7 +759,7 @@ void bad_shown_is_dropped() {
   };
   CHECK(broken(4, 8));      // no phase 8
   CHECK(broken(5, 6));      // no move 6
-  CHECK(broken(7, 10));     // no line set 10
+  CHECK(broken(7, static_cast<uint8_t>(kLinesValues)));  // no line set past the last
   CHECK(broken(7, 0xFE));   // a set below -1
   CHECK(broken(8, 0xFE));   // a line below -1
   CHECK(broken(10, 7));     // no act 7
@@ -1095,6 +1095,7 @@ int main() {
   the_kick_never_reaches_through_a_floor();
   with_no_last_place_it_searches_around_itself();
   an_unseen_figure_never_starts_a_chase();
+  a_step_plays_each_stride();
   friendly_starts_seated_in_the_favourite_room();
   gets_up_on_first_sight_and_says_its_line_once();
   follows_the_nearest_living_inside_and_stops_at_exits();

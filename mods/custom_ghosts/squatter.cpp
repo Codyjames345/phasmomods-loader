@@ -71,6 +71,10 @@ struct State {
   Chase chase;      // the master's
   CuePlayer cues;   // what this client has played of the Shown
   std::set<int> kicked;  // whom the master has kicked this contract (kick): each at most once
+  // Every client's footsteps (the user's recordings, Lines::Steps): counted from the ghost's own movement here.
+  StepCounter steps;
+  std::optional<Point> stepFrom;
+  std::mt19937 stepRng{std::random_device{}()};
 };
 State g;
 
@@ -473,6 +477,11 @@ void play(void* ghost) {
   if (c.move) figure::play(s.move, s.variant);
   if (c.line && s.lineSet >= 0 && s.lineIndex >= 0)
     voice::play_index(static_cast<Lines>(s.lineSet), s.lineIndex, vector(at_of(ghost)));
+  // A footstep each stride it moves, on this client, from its own view of the ghost's movement.
+  const Point at = at_of(ghost);
+  if (g.stepFrom && g.steps.moved(std::hypot(at.x - g.stepFrom->x, at.z - g.stepFrom->z)))
+    voice::play(Lines::Steps, vector(at), static_cast<uint32_t>(g.stepRng()));
+  g.stepFrom = at;
 }
 
 }  // namespace
@@ -492,6 +501,8 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     g.steered = false;
     g.chase = Chase{};
     g.kicked.clear();
+    g.steps.reset();
+    g.stepFrom.reset();
     forget_channel();
     figure::destroy();
     if (!haunting) ghost_sight::drop();  // shared (ghost_sight.h): kept while the contract's ghost lives

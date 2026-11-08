@@ -233,6 +233,21 @@ void an_unseen_figure_never_starts_a_chase() {
   CHECK(!sees_for_phase(Phase::Chasing, true, true, false));
 }
 
+// Its footsteps are the user's recordings (user, 2026-11-09), one per stride of the distance it moves, on every client.
+void a_step_plays_each_stride() {
+  StepCounter s;
+  CHECK(!s.moved(kStrideMetres * 0.6f));
+  CHECK(s.moved(kStrideMetres * 0.6f));   // a stride reached
+  CHECK(!s.moved(kStrideMetres * 0.5f));  // the rest carries over
+  CHECK(s.moved(kStrideMetres * 0.4f));
+  s.reset();
+  CHECK(!s.moved(kStrideMetres * 0.9f));
+  CHECK(!s.moved(kMaxStepMetres + 1.0f));  // a jump of the figure is no walk: no step, and the count starts over
+  CHECK(!s.moved(kStrideMetres * 0.9f));
+  CHECK(!s.moved(-1.0f) && !s.moved(std::numeric_limits<float>::quiet_NaN()));
+  CHECK(std::string(voice::folder_name(Lines::Steps)) == "steps");
+}
+
 // The tunables keep the chase sane: a search is slower than the chase, and pauses are short.
 void the_chase_tunables_are_sane() {
   CHECK(kSearchPace > 0.0f && kSearchPace < 1.0f);

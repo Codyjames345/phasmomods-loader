@@ -24,8 +24,11 @@ enum class Phase : uint8_t {
 
 enum class Move : uint8_t { Run, Duck, Weave, Roll, Parkour, Stumble };
 
-/** Which set of recorded lines the Squatter speaks from; the mod holds the recordings. */
-enum class Lines : uint8_t { Lurk, Chase, Search, Hiding, Catch, Door, Tired, Mope, Excited, Friendly };
+/**
+ * Which set of recorded lines the Squatter speaks from; the mod holds the recordings. Steps is no line: its footsteps,
+ * the user's own recordings (user, 2026-11-09), one played per stride.
+ */
+enum class Lines : uint8_t { Lurk, Chase, Search, Hiding, Catch, Door, Tired, Mope, Excited, Friendly, Steps };
 
 /** What the mod has read from the game this frame. */
 struct Facts {

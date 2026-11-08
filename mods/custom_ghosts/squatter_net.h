@@ -23,7 +23,7 @@ inline constexpr int kPhaseValues = static_cast<int>(Phase::Following) + 1;
 /** How many Move values there are: a byte at or above it is no Move (read_shown). */
 inline constexpr int kMoveValues = static_cast<int>(Move::Stumble) + 1;
 /** How many Lines sets there are: a set at or above it is none (read_shown). */
-inline constexpr int kLinesValues = static_cast<int>(Lines::Friendly) + 1;
+inline constexpr int kLinesValues = static_cast<int>(Lines::Steps) + 1;
 /** How many Act values there are (squatter_figure.h): an act at or above it is none (read_shown). */
 inline constexpr int kActValues = static_cast<int>(Act::OpenDoorInwards) + 1;
 

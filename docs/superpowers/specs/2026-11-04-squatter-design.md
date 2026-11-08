@@ -87,8 +87,10 @@ Some consequences, all **(builder's call)**:
   lines and writes any more.
 
 Each move changes its speed where relevant: a roll can surge and a stumble stops it. "Barely outrun" holds across the whole chase, so tune
-the moves and base speed together in game **(builder's call)**. All players see the same move at the same time **(builder's call)**. It uses the game's own footsteps, as `docs/superpowers/specs/2026-10-21-custom-ghost-tells-design.md` requires
-of every custom ghost **(builder's call)**.
+the moves and base speed together in game **(builder's call)**. All players see the same move at the same time **(builder's call)**.
+Its footsteps are the user's own recordings, from a `steps` folder beside the voice sets, one per stride it moves on each player's game
+(user, 2026-11-09). The game's ghost footsteps were ruled out: each leaves a UV footprint that counts as photo evidence and adds to the
+ghost-distance stat, and the game sends them only in a hunt.
 
 ## Rules this ghost breaks on purpose
 

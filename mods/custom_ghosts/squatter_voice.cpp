@@ -21,7 +21,7 @@ namespace {
 
 namespace fs = std::filesystem;
 
-constexpr int kSetCount = static_cast<int>(Lines::Friendly) + 1;
+constexpr int kSetCount = static_cast<int>(Lines::Steps) + 1;
 constexpr std::uintmax_t kMaxFileBytes = 64u * 1024u * 1024u;  // a longer file is not a spoken line
 
 struct Line {

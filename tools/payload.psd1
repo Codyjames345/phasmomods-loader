@@ -37,6 +37,7 @@
         @{ Name = 'mods/custom-ghosts/assets/squatter/voice/mope/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/mope/.gitkeep' }
         @{ Name = 'mods/custom-ghosts/assets/squatter/voice/excited/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/excited/.gitkeep' }
         @{ Name = 'mods/custom-ghosts/assets/squatter/voice/friendly/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/friendly/.gitkeep' }
+        @{ Name = 'mods/custom-ghosts/assets/squatter/voice/steps/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/steps/.gitkeep' }
         @{ Name = 'mods/spectral-flame/SpectralFlame.dll'; Source = 'build/SpectralFlame.dll' }
         @{ Name = 'mods/spectral-flame/manifest.json'; Source = 'mods/spectral_flame/manifest.json' }
         @{ Name = 'mods/spectral-flame/i18n/default.json'; Source = 'mods/spectral_flame/i18n/default.json' }

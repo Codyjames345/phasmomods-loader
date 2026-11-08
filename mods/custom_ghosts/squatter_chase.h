@@ -308,6 +308,32 @@ inline bool sees_for_phase(Phase p, bool anySeen, bool targetSensed, bool figure
   return (p == Phase::Lurking || p == Phase::Moping) ? anySeen : targetSensed;
 }
 
+// Its footsteps (user, 2026-11-09: the user's recordings, Lines::Steps): one per stride of this length it moves. A move
+// of more than kMaxStepMetres in one frame is a jump of the figure (a warp, a new master's first word), not a walk.
+inline constexpr float kStrideMetres = 1.4f;
+inline constexpr float kMaxStepMetres = 3.0f;
+
+/** When each client plays a footstep: every kStrideMetres the Squatter moves, counted on that client. */
+class StepCounter {
+ public:
+  /** It moved `metres` since the last frame; true when that completes a stride. */
+  bool moved(float metres) {
+    if (!(metres >= 0.0f)) return false;
+    if (metres > kMaxStepMetres) {
+      walked_ = 0.0f;
+      return false;
+    }
+    walked_ += metres;
+    if (walked_ < kStrideMetres) return false;
+    walked_ -= kStrideMetres;
+    return true;
+  }
+  void reset() { walked_ = 0.0f; }
+
+ private:
+  float walked_ = 0.0f;
+};
+
 /** What a client starts playing for a Shown. */
 struct Cues {
   bool move = false;  // play the move (figure::play), its act being over or none
