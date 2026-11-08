@@ -16,6 +16,7 @@
 #include "CursedItems.h"
 #include "Photon.h"
 #include "Player.h"
+#include "Props.h"
 #include "check.h"
 #include "fake_game.h"
 #include "runtime.h"
@@ -46,6 +47,10 @@ constexpr int32_t kRoomKind = 0x08;
 constexpr int32_t kValuesDifficulty = 0x08, kDifficultyFriendly = 0x08;
 constexpr int32_t kInfoSender = 0x08, kActorNumber = 0x08;
 constexpr int32_t kDoorGrabbable = 0x08, kDoorLocked = 0x09;  // Door.grabbable and Door.locked
+constexpr int32_t kDoorShut = 0x0A, kDoorKind = 0x0C, kDoorInteract = 0x10, kDoorView = 0x18;  // the quiet opener's
+constexpr int32_t kInteractInUse = 0x08, kViewMine = 0x08;  // PhotonObjectInteract.inUse, PhotonView.IsMine
+// Made-up numbers for DoorKind's None, Main and Secondary: the code reads None's from the map.
+constexpr int32_t kKindNone = 20, kKindMain = 21, kKindSecondary = 22;
 // Made-up numbers for RoomKind's insideRoom, outsideMap, exterior and exteriorRoom: the code reads outsideMap's from
 // the map, so none is the game's.
 constexpr int32_t kInside = 10, kOutsideMap = 11, kExterior = 12, kExteriorRoom = 13;
@@ -117,6 +122,25 @@ void fake_hunting_close_networked(void*, void*, const void*) {
   g_calls.push_back("HuntingCloseDoorNetworked");
 }
 bool g_throwInWish = false;
+
+// The quiet opener's game side: HingeDoor and SlideDoor classes, the opener, and the door's view.
+char g_hingeClass, g_slideClass;
+struct OpenCall {
+  void* door;
+  bool flip;
+  float unused;
+};
+std::vector<OpenCall> g_opens;     // HingeDoor.LevelControllerOpenDoor's calls
+std::vector<void*> g_viewsAsked;   // PhotonView.RequestOwnership's calls
+void fake_open(void* d, bool flip, float unused, const void*) {
+  g_calls.push_back("LevelControllerOpenDoor");
+  g_opens.push_back({d, flip, unused});
+}
+bool fake_is_mine(void* view, const void*) { return view && at<bool>(*static_cast<Obj*>(view), kViewMine); }
+void fake_request_ownership(void* view, const void*) {
+  g_calls.push_back("RequestOwnership");
+  g_viewsAsked.push_back(view);
+}
 
 // A player's try at `d` through the hooked game methods.
 void attempt(void* d) {
@@ -257,6 +281,18 @@ void start(bool master = true, bool friendly = false) {
   fake::field(map::PhotonMessageInfo_Sender, kInfoSender);
   fake::field(map::Door_grabbable, kDoorGrabbable);
   fake::field(map::Door_locked, kDoorLocked);
+  fake::type(map::HingeDoor, &g_hingeClass);
+  fake::method(map::HingeDoor_LevelControllerOpenDoor, reinterpret_cast<void*>(&fake_open));
+  fake::field(map::Door_closed, kDoorShut);
+  fake::field(map::Door_kind, kDoorKind);
+  fake::field(map::Door_interact, kDoorInteract);
+  fake::field(map::Door_view, kDoorView);
+  fake::value(map::DoorKind_None, kKindNone);
+  fake::field(map::PhotonObjectInteract_inUse, kInteractInUse);
+  fake::method(map::PhotonView_get_IsMine, reinterpret_cast<void*>(&fake_is_mine));
+  fake::method(map::PhotonView_RequestOwnership, reinterpret_cast<void*>(&fake_request_ownership));
+  g_opens.clear();
+  g_viewsAsked.clear();
   // What the room's other gates read (core/room_gates.h), which the binding needs though nothing here calls them.
   for (const pm::sdk::EntryDesc* gate : {&map::PhotonNetwork_get_CurrentRoom, &map::PhotonNetwork_get_LocalPlayer,
                                          &map::PhotonNetwork_get_MasterClient, &map::PhotonRoom_get_IsVisible})
@@ -707,6 +743,158 @@ void only_the_master_relocks_its_held_exits() {
   CHECK(door::relock(4000) == 0 && g_calls.empty());
 }
 
+// The quiet opener (squatter_door.h open_quietly). The doors it may open: plain shut hinged doors inside the map.
+Obj g_kitchen, g_study, g_kitchenUse, g_studyUse, g_kitchenView, g_studyView;
+
+// `d` as a plain hinged door the game's contract-start opener would open: of kind None, shut, unlocked, grabbable,
+// with an interact nothing uses and a view this client owns unless `mine` is false.
+void plain_door(Obj& d, Obj& use, Obj& view, bool mine = true) {
+  d = use = view = Obj{};
+  d.klass = &g_hingeClass;
+  at<int32_t>(d, kDoorKind) = kKindNone;
+  at<bool>(d, kDoorShut) = true;
+  at<bool>(d, kDoorGrabbable) = true;
+  at<void*>(d, kDoorInteract) = &use;
+  at<void*>(d, kDoorView) = &view;
+  at<bool>(view, kViewMine) = mine;
+}
+
+// On the master, whose view it is (a scene door's view starts the master's), a shut plain door opens at once with the
+// game's own opener, called once with the game's own arguments (as LevelController's contract-start opener calls it)
+// and nothing else: no ownership asked, no other door method.
+void a_shut_door_opens_quietly_on_the_master() {
+  start();
+  plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
+  CHECK(door::may_open(&g_kitchen));
+  CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Opened);
+  CHECK(g_opens.size() == 1 && g_opens[0].door == &g_kitchen && !g_opens[0].flip && g_opens[0].unused == -1.0f);
+  CHECK((g_calls == std::vector<std::string>{"LevelControllerOpenDoor"}));
+  CHECK(door::open_step(1001) == door::Opening::Idle && g_opens.size() == 1);
+}
+
+// The leaf's angle reaches the other clients only from the view's owner (the door's PhotonTransformView), and a leaf
+// moved anywhere else is pulled back to the owner's angle. So while another player owns the door's view the master asks
+// for it once and opens nothing; it opens the door, once, only after the view is its own, so every client sees the
+// same open door.
+void every_client_sees_the_open_because_the_master_owns_the_view_first() {
+  start();
+  plain_door(g_kitchen, g_kitchenUse, g_kitchenView, false);
+  CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Waiting);
+  CHECK(g_viewsAsked == std::vector<void*>{&g_kitchenView} && g_opens.empty());
+  CHECK(door::open_step(1100) == door::Opening::Waiting && door::open_step(1200) == door::Opening::Waiting);
+  CHECK(g_opens.empty() && g_viewsAsked.size() == 1);
+  at<bool>(g_kitchenView, kViewMine) = true;  // the takeover came back
+  CHECK(door::open_step(1300) == door::Opening::Opened);
+  CHECK(g_opens.size() == 1 && g_opens[0].door == &g_kitchen);
+  CHECK(door::open_step(1400) == door::Opening::Idle && g_opens.size() == 1);
+  // Another client never opens anything: the angle comes to it from the master's view.
+  start(false);
+  plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
+  CHECK(!door::may_open(&g_kitchen));
+  CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Refused && g_calls.empty());
+}
+
+// A takeover that has not landed within kOpenWaitMs gives the open up, opening nothing, and frees the opener.
+void an_open_whose_view_never_comes_is_given_up() {
+  start();
+  plain_door(g_kitchen, g_kitchenUse, g_kitchenView, false);
+  CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Waiting);
+  CHECK(door::open_step(1000 + door::kOpenWaitMs - 1) == door::Opening::Waiting);
+  CHECK(door::open_step(1000 + door::kOpenWaitMs) == door::Opening::Refused);
+  at<bool>(g_kitchenView, kViewMine) = true;  // too late
+  CHECK(door::open_step(1000 + door::kOpenWaitMs + 1) == door::Opening::Idle && g_opens.empty());
+  CHECK(door::open_quietly(&g_kitchen, 9000) == door::Opening::Opened);
+}
+
+// It never acts on an exit: not one of the map's exits before the lock (even one whose kind reads None), not a held
+// one, and refusing leaves the hold and the master's re-lock as they were.
+void an_exit_is_never_opened() {
+  start();
+  plain_door(g_front, g_kitchenUse, g_kitchenView);
+  plain_door(g_back, g_studyUse, g_studyView);
+  at<int32_t>(g_front, kDoorKind) = kKindMain;
+  exits_are({&g_front, &g_back});  // g_back reads None, but the map lists it as an exit
+  CHECK(!door::may_open(&g_front) && !door::may_open(&g_back));
+  CHECK(door::open_quietly(&g_front, 1000) == door::Opening::Refused);
+  CHECK(door::open_quietly(&g_back, 1000) == door::Opening::Refused);
+  CHECK(door::lock_all());
+  at<bool>(g_back, kDoorGrabbable) = true;  // as if a raced wish switched it back on
+  g_calls.clear();
+  g_closed.clear();
+  CHECK(door::open_quietly(&g_back, 2000) == door::Opening::Refused && g_calls.empty());
+  CHECK(door::holds(&g_front) && door::holds(&g_back));
+  CHECK(door::relock(3000) == 1 && g_closed == std::vector<void*>{&g_back} && g_opens.empty());
+}
+
+// Only a door the game's own contract-start opener would take opens: a live HingeDoor of kind None that reads shut and
+// has an interact; and, as the game holds them, one that is unlocked, grabbable and that nothing is using; only on the
+// master and only in a contract.
+void only_a_door_the_game_would_open_opens() {
+  using Change = void (*)();
+  const Change changes[] = {
+      [] { g_kitchen.klass = &g_slideClass; },                       // another kind of door
+      [] { at<int32_t>(g_kitchen, kDoorKind) = kKindSecondary; },    // a key's door
+      [] { at<bool>(g_kitchen, kDoorShut) = false; },                // already open
+      [] { at<void*>(g_kitchen, kDoorInteract) = nullptr; },         // no interact
+      [] { at<bool>(g_kitchenUse, kInteractInUse) = true; },         // a player's hand or a ghost's force
+      [] { at<bool>(g_kitchen, kDoorLocked) = true; },               // the paw's timed lock
+      [] { at<bool>(g_kitchen, kDoorGrabbable) = false; },           // switched off
+      [] { g_master = false; },                                      // another client
+      [] { g_levelRef = nullptr; },                                  // no contract
+  };
+  for (const Change change : changes) {
+    start();
+    plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
+    change();
+    CHECK(!door::may_open(&g_kitchen));
+    CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Refused);
+    CHECK(g_calls.empty() && door::open_step(1001) == door::Opening::Idle);
+  }
+  start();
+  CHECK(!door::may_open(nullptr) && door::open_quietly(nullptr, 1000) == door::Opening::Refused);
+}
+
+// A waiting open is given up, opening nothing, when the door stops being one the game would open before the view
+// lands: a player grabs it, or this client stops being the master.
+void a_waiting_open_is_given_up_when_the_door_changes() {
+  for (const bool grabbed : {true, false}) {
+    start();
+    plain_door(g_kitchen, g_kitchenUse, g_kitchenView, false);
+    CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Waiting);
+    if (grabbed) {
+      at<bool>(g_kitchenUse, kInteractInUse) = true;
+      at<bool>(g_kitchen, kDoorShut) = false;
+    } else {
+      g_master = false;
+    }
+    at<bool>(g_kitchenView, kViewMine) = true;  // the grab took the view, or the takeover landed anyway
+    CHECK(door::open_step(1100) == door::Opening::Refused);
+    CHECK(door::open_step(1200) == door::Opening::Idle && g_opens.empty());
+  }
+}
+
+// One open waits at a time: another door is refused until it is done, and the same door again asks nothing more.
+void one_open_waits_at_a_time() {
+  start();
+  plain_door(g_kitchen, g_kitchenUse, g_kitchenView, false);
+  plain_door(g_study, g_studyUse, g_studyView);
+  CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Waiting);
+  CHECK(door::open_quietly(&g_study, 1010) == door::Opening::Refused && g_opens.empty());
+  CHECK(door::open_quietly(&g_kitchen, 1020) == door::Opening::Waiting && g_viewsAsked.size() == 1);
+  at<bool>(g_kitchenView, kViewMine) = true;
+  CHECK(door::open_step(1030) == door::Opening::Opened);
+  CHECK(door::open_quietly(&g_study, 1040) == door::Opening::Opened && g_opens.size() == 2);
+  // A new map forgets an open still waiting from the last one.
+  plain_door(g_kitchen, g_kitchenUse, g_kitchenView, false);
+  CHECK(door::open_quietly(&g_kitchen, 2000) == door::Opening::Waiting);
+  static Obj nextLevel;
+  nextLevel = Obj{};
+  g_levelRef = &nextLevel;
+  at<bool>(g_kitchenView, kViewMine) = true;
+  CHECK(door::open_step(2100) != door::Opening::Opened && g_opens.size() == 2);
+  CHECK(door::open_step(2200) == door::Opening::Idle);
+}
+
 // A build that lacks an entry the doors need fails the mod's binding, naming it, as Custom Ghosts' start does.
 void a_missing_entry_fails_the_start() {
   for (const pm::sdk::EntryDesc* lacking : {&map::Door_HuntingCloseDoor, &map::Door_AttemptToUnlockDoor,
@@ -716,7 +904,11 @@ void a_missing_entry_fails_the_start() {
                                             &map::Door_UnlockDoor, &map::Door_ForceToggleHuntCollider,
                                             &map::MonkeyPaw_OpenExitsWish,
                                             &map::Door_HuntingCloseDoorNetworked, &map::Door_grabbable,
-                                            &map::Door_locked}) {
+                                            &map::Door_locked, &map::HingeDoor_LevelControllerOpenDoor,
+                                            &map::HingeDoor, &map::Door_closed, &map::Door_kind,
+                                            &map::Door_interact, &map::Door_view, &map::DoorKind_None,
+                                            &map::PhotonObjectInteract_inUse, &map::PhotonView_get_IsMine,
+                                            &map::PhotonView_RequestOwnership}) {
     start();
     fake::forget(*lacking);
     std::string missing;
@@ -748,6 +940,13 @@ int main() {
   an_exit_locked_on_its_owner_is_left_alone();
   a_relock_is_rate_limited();
   only_the_master_relocks_its_held_exits();
+  a_shut_door_opens_quietly_on_the_master();
+  every_client_sees_the_open_because_the_master_owns_the_view_first();
+  an_open_whose_view_never_comes_is_given_up();
+  an_exit_is_never_opened();
+  only_a_door_the_game_would_open_opens();
+  a_waiting_open_is_given_up_when_the_door_changes();
+  one_open_waits_at_a_time();
   a_missing_entry_fails_the_start();
   door::reset();  // what it holds goes back before the fake's own storage does
   std::printf(g_failures ? "%d check(s) failed\n" : "all squatter door tests passed\n", g_failures);

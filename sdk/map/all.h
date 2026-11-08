@@ -1580,6 +1580,15 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &GhostInteraction_CreateAppearedEMF,
     &GhostInteraction_CreateInteractionEMF,
     &Door_CheckDoorDuringHunt,
+    &HingeDoor_LevelControllerOpenDoor,
+    &Door_SetDoorAndOcclusionOpen,
+    &Door_closed,
+    &Door_view,
+    &Door_ResetRigidbody,
+    &Door_UnGrabbedDoor,
+    &Door_NetworkedUngrabbedDoor,
+    &DoorKind_None,
+    &PhotonObjectInteract_inUse,
 };
 
 }  // namespace pm::map

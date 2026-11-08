@@ -257,6 +257,13 @@ inline constexpr pm::sdk::EntryDesc DoorKind_Main{.key = "DoorKind.Main", .kind 
                                                   .confidence = pm::sdk::Confidence::Decompiled,
                                                   .owner = "DoorKind", .name = "Main"};
 
+/// A plain door: no exit, no key's door, not kept locked. LevelController's contract-start opener opens only doors
+/// of this kind (HingeDoor.LevelControllerOpenDoor), and an unlocked try at one unlocks it
+/// (Door.AttemptToUnlockDoor). Decompiled.
+inline constexpr pm::sdk::EntryDesc DoorKind_None{.key = "DoorKind.None", .kind = pm::sdk::Kind::EnumValue,
+                                                  .confidence = pm::sdk::Confidence::Decompiled,
+                                                  .owner = "DoorKind", .name = "None"};
+
 /// A locked door inside the map, which a key of its kind opens (AttemptToUnlockDoor): Maple Lodge
 /// Campsite's cabin door and Point Hope's machine housing in build 25811160 (scene read). Optional.
 /// Inferred: from the value's name and the scenes.
@@ -325,6 +332,62 @@ inline constexpr pm::sdk::EntryDesc Door_NetworkedGrabbedDoor{.key = "Door.Netwo
                                                               .confidence = pm::sdk::Confidence::Decompiled,
                                                               .owner = "Door", .name = "NetworkedGrabbedDoor"};
 
+/// The RPC that marks the door open on every client: it opens the door's OcclusionPortal, when it has one, and
+/// clears Door.closed. It takes no PhotonMessageInfo, so it checks no sender. HingeDoor.LevelControllerOpenDoor
+/// sends it, buffered for players who join later. A mod hooks it; never calls it (it is an RPC's body).
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_SetDoorAndOcclusionOpen{
+    .key = "Door.SetDoorAndOcclusionOpen", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door", .name = "SetDoorAndOcclusionOpen"};
+
+// Of Door's bools SetDoorAndOcclusionOpen stores only this one.
+inline constexpr pm::sdk::Fact Door_closed_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "Door.SetDoorAndOcclusionOpen"}};
+
+/// Whether the door reads shut, on this client: NetworkedSyncCloseDoor, the RPC Door.LockDoor sends, sets it on
+/// every client, and Door.NetworkedGrabbedDoor and
+/// Door.SetDoorAndOcclusionOpen clear it on every client. LevelController's contract-start opener opens only
+/// doors that read shut (HingeDoor.LevelControllerOpenDoor). Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_closed{.key = "Door.closed", .kind = pm::sdk::Kind::Field,
+                                                .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                .type = "bool", .facts = Door_closed_facts,
+                                                .access = pm::sdk::Visibility::Public};
+
+/// The door's PhotonView: Door's one field of that type. In every map scene of build 25811160 that was read,
+/// the view is set to OwnershipOption.Takeover and observes the leaf's PhotonTransformView, which sends the
+/// leaf's position and rotation from the view's owner and, on every other client, moves the leaf to the
+/// owner's each frame (sdk/systems/doors.md, "Opening a door quietly"). Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_view{.key = "Door.view", .kind = pm::sdk::Kind::Field,
+                                              .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                              .type = "PhotonView"};
+
+/// The door is let go: it sends Door.NetworkedUngrabbedDoor to every client in a room (runs it here offline);
+/// HingeDoor's override first does a step of its own when its argument is set. Door.ResetRigidbody's wait, three
+/// seconds after HingeDoor.LevelControllerOpenDoor, calls it with `false` unless a player grabbed the door meanwhile.
+/// Its other callers were not traced. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_UnGrabbedDoor{.key = "Door.UnGrabbedDoor", .kind = pm::sdk::Kind::Method,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .owner = "Door", .name = "UnGrabbedDoor",
+                                                       .params = Door_bool};
+
+/// Starts the door's wait after a move: it clears the door's note of a player's grab, waits three seconds and,
+/// unless a player grabbed the door meanwhile (Door.NetworkedGrabbedDoor sets that note), calls
+/// Door.UnGrabbedDoor with its argument. Only while the door's object is active. HingeDoor.LevelControllerOpenDoor
+/// calls it. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_ResetRigidbody{.key = "Door.ResetRigidbody", .kind = pm::sdk::Kind::Method,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .owner = "Door", .name = "ResetRigidbody",
+                                                        .params = Door_bool};
+
+/// What every client runs when the door is let go (Door.UnGrabbedDoor's RPC): it clears the door's
+/// PhotonObjectInteract.inUse, stops the leaf's creak on a client that does not own the door's view, puts the
+/// view's syncing back to on-change after a wait, and checks the door's OcclusionPortal. It takes no
+/// PhotonMessageInfo, so it checks no sender. A mod hooks it; never calls it (it is an RPC's body). Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_NetworkedUngrabbedDoor{.key = "Door.NetworkedUngrabbedDoor",
+                                                                .kind = pm::sdk::Kind::Method,
+                                                                .confidence = pm::sdk::Confidence::Decompiled,
+                                                                .owner = "Door", .name = "NetworkedUngrabbedDoor"};
+
 /// A door that swings on a hinge (Assembly-CSharp, global namespace), a Door. Decompiled.
 inline constexpr pm::sdk::EntryDesc HingeDoor{.key = "HingeDoor", .confidence = pm::sdk::Confidence::Decompiled,
                                               .name = "HingeDoor", .assembly = "Assembly-CSharp", .ns = ""};
@@ -340,6 +403,27 @@ inline constexpr pm::sdk::EntryDesc HingeDoor_Awake{.key = "HingeDoor.Awake", .k
 /// Inferred: from the field's name and type.
 inline constexpr pm::sdk::EntryDesc HingeDoor_hingeAxis{.key = "HingeDoor.hingeAxis", .kind = pm::sdk::Kind::Field,
                                                         .owner = "HingeDoor", .name = "hingeAxis"};
+
+inline constexpr const char* HingeDoor_LevelControllerOpenDoor_params[] = {"bool", "float"};
+
+/// Opens the door part of the way with no ghost's trace, the way the game opens doors as a contract starts. Its one
+/// caller is LevelController's contract-start coroutine, on the master, which opens a number of random doors set by
+/// the difficulty and the map's size, each one of kind DoorKind.None that reads shut (Door.closed) and has a
+/// PhotonObjectInteract. On the client that calls it: it sets the leaf's Rigidbody's mass and gravity, makes it
+/// kinematic, turns the leaf to a random angle a tenth to most of the way from shut to its hinge's open limit (the
+/// bool swaps which end the fraction counts from; the float is unused), starts Door.ResetRigidbody's wait, makes the
+/// Rigidbody free again and sends Door.SetDoorAndOcclusionOpen to every client, buffered (runs it here offline).
+/// The leaf opens one way only, its hinge's, by an amount the call cannot choose.
+/// It makes no sound and leaves no EMF reading, LevelStats count or fingerprint; Door.locked, Door.grabbable and the
+/// door's kind are left as they were. The angle reaches other clients only through the door's PhotonTransformView,
+/// from the view's owner (Door.view): called on a client that does not own the view, the leaf is pulled back to the
+/// owner's angle the next frame and nobody else sees it open. So take the view first (PhotonView.RequestOwnership,
+/// then wait for PhotonView.get_IsMine), as the ghost's own door step does (sdk/systems/doors.md, "Opening a door
+/// quietly"). Its RPCs check no sender. Decompiled.
+inline constexpr pm::sdk::EntryDesc HingeDoor_LevelControllerOpenDoor{
+    .key = "HingeDoor.LevelControllerOpenDoor", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "HingeDoor", .name = "LevelControllerOpenDoor",
+    .params = HingeDoor_LevelControllerOpenDoor_params};
 
 inline constexpr const char* Axis_values[] = {"None", "X", "Y", "Z"};
 
@@ -443,10 +527,24 @@ struct Door {
   static constexpr pm::api::Method<pm::map::Door_DisableOrEnableDoor, void(void*, bool, bool)> DisableOrEnableDoor{};
   /// NetworkedGrabbedDoor(door). A mod usually hooks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Door_NetworkedGrabbedDoor, void(void*)> NetworkedGrabbedDoor{};
+  /// SetDoorAndOcclusionOpen(door), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_SetDoorAndOcclusionOpen, void(void*)> SetDoorAndOcclusionOpen{};
+  /// Whether it reads shut on this client: closed.get(door). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Door_closed, bool> closed{};
+  /// Its PhotonView: view.get(door). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Door_view, void*> view{};
+  /// ResetRigidbody(door, flag): the wait after a move, then UnGrabbedDoor(door, flag). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_ResetRigidbody, void(void*, bool)> ResetRigidbody{};
+  /// UnGrabbedDoor(door, flag): lets the door go on every client. A mod usually hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_UnGrabbedDoor, void(void*, bool)> UnGrabbedDoor{};
+  /// NetworkedUngrabbedDoor(door), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_NetworkedUngrabbedDoor, void(void*)> NetworkedUngrabbedDoor{};
 };
 
 /// What kind of door a Door is.
 namespace DoorKind {
+/// None(): a plain door, the kind the game's contract-start opener opens. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DoorKind_None> None{};
 /// Main(): an exit. Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::DoorKind_Main> Main{};
 /// Secondary(): a locked door inside the map that its own key opens. Unresolved: 0.
@@ -477,6 +575,10 @@ struct HingeDoor {
   static constexpr pm::api::Type<pm::map::HingeDoor> type{};
   /// The axis its leaf swings about: hingeAxis.get(door). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::HingeDoor_hingeAxis, int32_t> hingeAxis{};
+  /// LevelControllerOpenDoor(door, flip, unused): opens it part of the way with no ghost's trace, on this client;
+  /// other clients see it only when this client owns the door's view (Door::view). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::HingeDoor_LevelControllerOpenDoor, void(void*, bool, float)>
+      LevelControllerOpenDoor{};
 };
 
 /// Unity's axis flags, the values HingeDoor::hingeAxis holds.

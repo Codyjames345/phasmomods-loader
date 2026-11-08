@@ -1028,7 +1028,14 @@ The mod channel and the exits' hold (Task 7b). Squatter messages go on Custom Gh
 
 Restraint while steering and the host's re-lock (Task 7c1). A private contract with the Squatter forced in a Custom difficulty, two players (one the host) unless it says otherwise.
 
-- The door push: not built. `Door.GhostForceDoor` leaves a door-moved EMF reading, the ghost's door sound, a count in the results' "doors moved" and ghost interactions and, for an Ultraviolet ghost, fingerprints (`sdk/systems/doors.md`, "A ghost's force"), so the push waits on the user's decision and has nothing to check yet.
+- The door push: not built. `Door.GhostForceDoor` leaves a door-moved EMF reading, the ghost's door sound, a count in the results' "doors moved" and ghost interactions and, for an Ultraviolet ghost, fingerprints (`sdk/systems/doors.md`, "A ghost's force"). The user chose the quiet opener instead (below).
+- The quiet opener (`squatter_door.h` `open_quietly`; the chase calls it from Task 7c2, so these wait on 7c2)
+  - [ ] When the Squatter reaches a shut door on the chase, the door swings open part of the way for both players at the same angle, and the host's `mods.log` has `squatter: a door opened quietly`. Test once with a door the host grabbed last and once with a door the client grabbed last (the host takes the client's door's view first, so that one opens a moment later).
+  - [ ] No EMF reading appears at an opened door (hold an EMF reader at it), no ghost door sound or rattle plays, and the results screen's "doors moved" and ghost interactions do not count it.
+  - [ ] The opened door creaks and closes normally when a player then pushes it shut, and either player can grab it.
+  - [ ] A door the client is holding when the Squatter reaches it stays in the client's hand: the Squatter does not open it.
+  - [ ] The exits never open this way: with an exit shut and unlocked before the lock, the Squatter passes it without opening it, and after the lock the exits stay locked.
+  - [ ] A late or failed takeover (a laggy client owning the door) gives up after about two seconds: the door stays shut, and nothing in the log says it opened.
 - Steering
   - [ ] On a friendly ghost's difficulty the Squatter mopes where it starts: it never wanders off or walks to its favourite room, and the log has no exception line.
   - [ ] On a normal difficulty, while it lurks, it still idles and wanders as before.

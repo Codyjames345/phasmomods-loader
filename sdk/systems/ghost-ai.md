@@ -256,8 +256,9 @@ door's state, the ghost passes through a shut leaf, and the leaf does not move. 
 their own client (`DragRigidbodyUse.FixedUpdate`, [doors](doors.md), "Grabbing a door open"); a ghost moves one only by
 its force (`Door.GhostForceDoor`, `Door.CheckDoorDuringHunt`), which is a ghost interaction with a ghost's traces: an
 EMF reading, the door's ghost sound, a count in the results and, for a ghost with Ultraviolet, fingerprints
-([doors](doors.md), "A ghost's force"). No other way to move a leaf
-for a mod-driven ghost was found. `LevelController.currentGhostRoom` names the room the ghost is in on every client, and
+([doors](doors.md), "A ghost's force"). A mod-driven ghost can instead use the game's quiet opener,
+`HingeDoor.LevelControllerOpenDoor`, which opens a shut door at a random angle with no trace, once the master owns the
+door's view ([doors](doors.md), "Opening a door quietly"). `LevelController.currentGhostRoom` names the room the ghost is in on every client, and
 `LevelRoom.doors` that room's doors.
 
 **Sight.** `GhostAI.vision` detects nobody outside hunts. Custom Ghosts' Lithobolia sees through copies of the vision's

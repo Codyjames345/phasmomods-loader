@@ -133,8 +133,53 @@ it is the master's, as Photon gives a scene's views to the master.
 **A ghost walking through.** On Grafton Farmhouse, the one map checked, no door leaf carries a NavMeshObstacle (its 64
 doors, the leaves and their children), and in the game's physics settings the Ghost layer does not collide with the
 Door layer. So there the ghost's agent walks through a shut door and leaves the leaf where it is ([ghost AI](ghost-ai.md),
-"Moving the ghost outside a hunt"); the other maps' doors were not checked. Only the grab above or a ghost's force moves
-a leaf.
+"Moving the ghost outside a hunt"); the other maps' doors were not checked. Only the grab above, a ghost's force and
+the game's quiet opener (below) move a leaf.
+
+## Opening a door quietly
+
+`HingeDoor.LevelControllerOpenDoor` opens a door part of the way and leaves no ghost's trace. The game calls it in one
+place: a coroutine `LevelController.Start` begins on the master, which waits for the contract's ghost and then opens some
+random doors. The difficulty and the map's size set how many. It takes only doors that are:
+
+- of kind `DoorKind.None`;
+- reading shut (`Door.closed`);
+- fitted with a `PhotonObjectInteract`.
+
+**What it does**, on the client that calls it:
+
+1. It sets the leaf's Rigidbody's mass and gravity and makes it kinematic.
+2. It turns the leaf to a random angle between a tenth and most of the way from shut to its hinge's open limit. Its
+   bool swaps which end that fraction counts from, and its float is unused. So the door opens one way only, its hinge's,
+   by an amount the caller cannot choose.
+3. It starts `Door.ResetRigidbody`, whose wait calls `Door.UnGrabbedDoor(false)` three seconds later, unless a player
+   grabbed the door meanwhile. That sends `Door.NetworkedUngrabbedDoor` to every client: it clears
+   `PhotonObjectInteract.inUse` and puts the view's syncing back to its usual rate.
+4. It makes the Rigidbody free again.
+5. It sends `Door.SetDoorAndOcclusionOpen` to every client, buffered (and runs it directly offline). On every client
+   that opens the door's OcclusionPortal and clears `Door.closed`.
+
+It calls no noise, no EMF reading, no `LevelStats` count and no fingerprint try, and it leaves `Door.locked`,
+`Door.grabbable` and the door's kind alone. Neither RPC takes a `PhotonMessageInfo`, so neither checks its sender.
+
+**Who sees it.** The angle is not in either RPC. It reaches other clients through the door's own view (`Door.view`). In
+the map scene read (Grafton Farmhouse), every door's PhotonView is a Takeover view observing the leaf's
+PhotonTransformView, which sends the leaf's position and rotation. On every client but the view's owner, the transform
+view moves the leaf to the owner's angle each frame. So:
+
+- called on the view's owner, the door opens on every client;
+- called anywhere else, the leaf is pulled back to the owner's angle the next frame, and nobody else sees it open.
+
+A scene door's view starts the master's, which is why the game's own call at the contract's start reaches everyone. Later
+a door's view is often a player's: the grab asks for it (above). To open a door mid-contract, take its view first:
+`PhotonView.RequestOwnership`, then wait until `PhotonView.get_IsMine` reads true, as the ghost's own door step does
+before it moves a leaf. Taking the view also makes a player who holds that door let it go (`Door`'s controller-change
+callback), so leave alone a door whose `PhotonObjectInteract.inUse` is set.
+
+For Custom Ghosts' Squatter, `mods/custom_ghosts/squatter_door.h` `open_quietly` does exactly this on the master. It
+opens only a hinged door the game's own opener would take (kind None, shut, with an interact) that is unlocked,
+grabbable, not in use and not an exit. It never opens an exit, so the exits' hold and the master's re-lock are
+unaffected.
 
 ## How a hunt locks the exits
 

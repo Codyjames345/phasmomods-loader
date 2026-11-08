@@ -10,6 +10,7 @@
 #include "LevelRoom.h"
 #include "Photon.h"
 #include "Player.h"
+#include "Props.h"
 #include "game_api.h"
 #include "held.h"
 #include "log.h"
@@ -33,15 +34,36 @@ Attempt g_callback;
 int g_openExitsWish = 0;  // MonkeyPaw.OpenExitsWish calls running on this thread
 bool g_haunting = false;  // set_haunting: the master's lock is the Squatter's
 
+// The quiet open waiting for the door's view (open_quietly, open_step).
+api::Held g_opening;            // the door, or null
+api::Held g_openingLevel;       // the LevelController it was asked under
+uint64_t g_openDeadline = 0;
+
 /** The current map's live LevelController, or null. */
 void* level() {
   void* l = phasmo::LevelController::instance.get();
   return l && api::alive(l) ? l : nullptr;
 }
 
-/** Forgets a lock whose map is gone, so the next contract starts unlocked. */
+void forget_open() {
+  g_opening = nullptr;
+  g_openingLevel = nullptr;
+  g_openDeadline = 0;
+}
+
+/** Forgets a lock, and an open still waiting, whose map is gone, so the next contract starts afresh. */
 void forget_old_level() {
   if (g_level && g_level.get() != level()) reset();
+  if (g_opening && g_openingLevel.get() != level()) forget_open();
+}
+
+/**
+ * The game's own quiet opener on `d`, with the arguments LevelController's contract-start opener passes: the leaf turns
+ * to a random angle on its hinge's open side, and the door's view, this client's, carries it to every other client.
+ */
+void open_now(void* d) {
+  phasmo::HingeDoor::LevelControllerOpenDoor(d, false, -1.0f);
+  PM_LOG("squatter: a door opened quietly");
 }
 
 /** Adds the live doors of the Door[] `doors` to `out`, each once. */
@@ -245,6 +267,51 @@ int relock(uint64_t now) {
   return relocked;
 }
 
+bool may_open(void* d) {
+  void* l = level();
+  if (!d || !l || !api::alive(d) || !phasmo::PhotonNetwork::get_IsMasterClient()) return false;
+  if (!phasmo::HingeDoor::type.is(d)) return false;  // the opener traced is HingeDoor's own
+  const std::vector<void*> doors = exits();
+  if (std::find(doors.begin(), doors.end(), d) != doors.end() || holds(d)) return false;
+  // The game's own contract-start opener's tests (sdk/systems/doors.md, "Opening a door quietly").
+  if (phasmo::Door::kind.get(d) != phasmo::DoorKind::None() || !phasmo::Door::closed.get(d)) return false;
+  void* interact = phasmo::Door::interact.get(d);
+  if (!interact || !api::alive(interact)) return false;
+  // What the game holds the door to now, left as it is: a lock, a switch-off, a hand or a ghost's force on it.
+  return !phasmo::Door::locked.get(d) && phasmo::Door::grabbable.get(d) &&
+         !phasmo::PhotonObjectInteract::inUse.get(interact);
+}
+
+Opening open_quietly(void* d, uint64_t now) {
+  forget_old_level();
+  if (g_opening) return g_opening.get() == d ? Opening::Waiting : Opening::Refused;
+  if (!may_open(d)) return Opening::Refused;
+  void* view = phasmo::Door::view.get(d);
+  if (phasmo::PhotonView::get_IsMine(view)) {
+    open_now(d);
+    return Opening::Opened;
+  }
+  phasmo::PhotonView::RequestOwnership(view);  // a door's view is a Takeover view: granted when it comes back
+  g_opening = d;
+  g_openingLevel = level();
+  g_openDeadline = now + kOpenWaitMs;
+  return Opening::Waiting;
+}
+
+Opening open_step(uint64_t now) {
+  forget_old_level();
+  void* d = g_opening.get();
+  if (!d) return Opening::Idle;
+  if (!may_open(d) || now >= g_openDeadline) {
+    forget_open();
+    return Opening::Refused;
+  }
+  if (!phasmo::PhotonView::get_IsMine(phasmo::Door::view.get(d))) return Opening::Waiting;
+  forget_open();
+  open_now(d);
+  return Opening::Opened;
+}
+
 void on_attempt(Attempt callback) { g_callback = std::move(callback); }
 
 void set_haunting(bool on) { g_haunting = on; }
@@ -266,6 +333,7 @@ bool create_hooks() {
 void reset() {
   g_locked.clear();
   g_level = nullptr;
+  forget_open();
 }
 
 }  // namespace pm::custom::squatter::door
