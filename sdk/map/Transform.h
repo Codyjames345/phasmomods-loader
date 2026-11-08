@@ -222,33 +222,43 @@ inline constexpr pm::sdk::EntryDesc Transform_IsChildOf{.key = "Transform.IsChil
 
 }  // namespace pm::map
 
-// The game API for the hierarchy (sdk/api/game_api.h), but Find, which only the host's scene facts
-// use. Every member is called on Unity's main thread. One that did not resolve in the running game
-// build logs "<key> is not available in this game build" once and returns its type's default (0, null)
-// without touching the game. A Transform it returns is a managed reference: keep it across frames only
-// in a pm::api::Held.
+/// @file
+/// @brief The game API for the hierarchy (sdk/api/game_api.h), but Find, which only the host's scene facts use.
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, null) without touching the game. A
+/// Transform it returns is a managed reference: keep it across frames only in a pm::api::Held.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{
 
 /// Two floats, as Unity's Vector2.
 struct Vector2 {
-  float x, y;
+  float x;  ///< x
+  float y;  ///< y
 };
 
 /// Three floats, as Unity's Vector3.
 struct Vector3 {
-  float x, y, z;
+  float x;  ///< x, in metres for a position
+  float y;  ///< y, up, in metres for a position
+  float z;  ///< z, in metres for a position
 };
 
 /// Four floats, as Unity's Quaternion: a rotation.
 struct Quaternion {
-  float x, y, z, w;
+  float x;  ///< the rotation's x part
+  float y;  ///< the rotation's y part
+  float z;  ///< the rotation's z part
+  float w;  ///< the rotation's w part; (0, 0, 0, 1) is no rotation
 };
 
 /// Four floats, as Unity's Rect: its corner and its size.
 struct Rect {
-  float x, y, width, height;
+  float x;       ///< the corner's x
+  float y;       ///< the corner's y
+  float width;   ///< its width
+  float height;  ///< its height
 };
 
 /// Unity's transform component. `transform` below is the Transform.

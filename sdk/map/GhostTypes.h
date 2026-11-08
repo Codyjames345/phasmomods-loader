@@ -107,8 +107,9 @@ inline constexpr pm::sdk::EntryDesc GhostType_Yurei{.key = "GhostType.Yurei", .k
                                                     .confidence = pm::sdk::Confidence::Decompiled,
                                                     .owner = "GhostType", .name = "Yurei"};
 
-/// The Onryo. FireSource's count of a ghost's blow-outs (FireSource.CountGhostBlowOut) compares the
-/// ghost's behaviour type with it before it adds to GhostAI.flamesBlownOut. Decompiled.
+/// The Onryo (16). FireSource's count of a ghost's blow-outs (FireSource.CountGhostBlowOut) compares the
+/// ghost's behaviour type with it before it adds to GhostAI.flamesBlownOut, and the idle state
+/// (GhostIdleState.Execute) starts a hunt once that count passes 2. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostType_Onryo{.key = "GhostType.Onryo", .kind = pm::sdk::Kind::EnumValue,
                                                     .confidence = pm::sdk::Confidence::Decompiled,
                                                     .owner = "GhostType", .name = "Onryo"};
@@ -154,10 +155,12 @@ inline constexpr pm::sdk::EntryDesc GhostType_Poltergeist{.key = "GhostType.Polt
 
 }  // namespace pm::map
 
-// The game API for the ghost-type and evidence enums (sdk/api/game_api.h). Every member is called on
-// Unity's main thread. An unresolved value logs "<key> is not available in this game build" once and
-// gives 0, which is a real value of both enums (Spirit, and no evidence): check
-// `use::resolved()` before relying on one.
+/// @file
+/// @brief The game API for the ghost-type and evidence enums (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. An unresolved value logs "<key> is not available in this game
+/// build" once and gives 0, which is a real value of both enums (Spirit, and no evidence): check `use::resolved()`
+/// before relying on one.
 namespace phasmo {
 /// @addtogroup ghost
 /// @{

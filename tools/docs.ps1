@@ -6,7 +6,7 @@
 # usage: tools\docs.ps1 [-IfConfigured]
 param([switch]$IfConfigured)
 $ErrorActionPreference = 'Stop'
-$pinned = '1.9.8'
+$pinned = '1.18.0'
 
 $doxygen = $env:PM_DOXYGEN
 if (-not $doxygen -and -not $IfConfigured) {

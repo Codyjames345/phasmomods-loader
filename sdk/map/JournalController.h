@@ -421,9 +421,10 @@ inline constexpr pm::sdk::EntryDesc Evidence{.key = "Evidence", .name = "Evidenc
 
 inline constexpr const char* MediaSubject_values[] = {"emfSpot", "ouijaBoard", "fingerprint", "emf5"};
 
+// Found by its values.
 /// What a piece of media shows, an enum nested in Evidence (name obfuscated, value names real):
-/// emfSpot, ouijaBoard, fingerprint, ... emf5; the numbers MediaValues.evidenceType holds. Found by its
-/// values. Inferred: from the class dump.
+/// emfSpot, ouijaBoard, fingerprint, ... emf5; the numbers MediaValues.evidenceType holds. Inferred:
+/// from the class dump.
 inline constexpr pm::sdk::EntryDesc MediaSubject{.key = "MediaSubject", .owner = "Evidence",
                                                  .values = MediaSubject_values};
 
@@ -716,25 +717,27 @@ inline constexpr pm::sdk::EntryDesc JournalRigController_journalMeshObject{
 
 }  // namespace pm::map
 
-// The game API for the journal (sdk/api/game_api.h). Every member is called on Unity's main thread. One
-// that did not resolve in the running game build logs "<key> is not available in this game build" once
-// and returns its type's default (0, null) without touching the game. A reference it returns is valid
-// for the current frame: keep it across frames only in a pm::api::Held.
+/// @file
+/// @brief The game API for the journal (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, null) without touching the game. A
+/// reference it returns is valid for the current frame: keep it across frames only in a pm::api::Held.
 namespace phasmo {
 /// @addtogroup journal
 /// @{
 
-/// The journal. `journal` below is the JournalController.
 /// The sync controller of a journal's guess buttons. Unresolved: null and false.
 struct JournalGhostSyncController {
-  static constexpr pm::api::Type<pm::map::JournalGhostSyncController> type{};
+  static constexpr pm::api::Type<pm::map::JournalGhostSyncController> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
 };
 
 /// The sync controller of a journal's evidence rows. Unresolved: null and false.
 struct JournalEvidenceSyncController {
-  static constexpr pm::api::Type<pm::map::JournalEvidenceSyncController> type{};
+  static constexpr pm::api::Type<pm::map::JournalEvidenceSyncController> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
 };
 
+/// The journal. `journal` below is the JournalController.
 struct JournalController {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::JournalController> type{};
@@ -879,34 +882,34 @@ struct MediaValues {
 
 /// What a piece of media shows (MediaValues.evidenceType). Unresolved values are 0, which is emfSpot.
 namespace MediaSubject {
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_emfSpot> emfSpot{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_fingerprint> fingerprint{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_footstep> footstep{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghost> ghost{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_dirtyWater> dirtyWater{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostWriting> ghostWriting{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_usedCrucifix> usedCrucifix{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_dotsGhost> dotsGhost{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostOrb> ghostOrb{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_salt> salt{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_freezingTemperature> freezingTemperature{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostSmoke> ghostSmoke{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_camoGhost> camoGhost{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_paranormalSound> paranormalSound{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_spiritBox> spiritBox{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostHunt> ghostHunt{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_bansheeWail> bansheeWail{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_spiritBoxBreath> spiritBoxBreath{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_motionSensor> motionSensor{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_shadowGhost> shadowGhost{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostGroan> ghostGroan{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostLaugh> ghostLaugh{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostTalk> ghostTalk{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostWhisper> ghostWhisper{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_obakeFingerprint> obakeFingerprint{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_burningChapelCrucifix> burningChapelCrucifix{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_obakeShapeshift> obakeShapeshift{};
-inline constexpr pm::api::EnumValue<pm::map::MediaSubject_emf5> emf5{};
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_emfSpot> emfSpot{};  ///< emfSpot(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_fingerprint> fingerprint{};  ///< fingerprint(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_footstep> footstep{};  ///< footstep(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghost> ghost{};  ///< ghost(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_dirtyWater> dirtyWater{};  ///< dirtyWater(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostWriting> ghostWriting{};  ///< ghostWriting(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_usedCrucifix> usedCrucifix{};  ///< usedCrucifix(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_dotsGhost> dotsGhost{};  ///< dotsGhost(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostOrb> ghostOrb{};  ///< ghostOrb(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_salt> salt{};  ///< salt(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_freezingTemperature> freezingTemperature{};  ///< freezingTemperature(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostSmoke> ghostSmoke{};  ///< ghostSmoke(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_camoGhost> camoGhost{};  ///< camoGhost(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_paranormalSound> paranormalSound{};  ///< paranormalSound(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_spiritBox> spiritBox{};  ///< spiritBox(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostHunt> ghostHunt{};  ///< ghostHunt(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_bansheeWail> bansheeWail{};  ///< bansheeWail(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_spiritBoxBreath> spiritBoxBreath{};  ///< spiritBoxBreath(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_motionSensor> motionSensor{};  ///< motionSensor(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_shadowGhost> shadowGhost{};  ///< shadowGhost(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostGroan> ghostGroan{};  ///< ghostGroan(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostLaugh> ghostLaugh{};  ///< ghostLaugh(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostTalk> ghostTalk{};  ///< ghostTalk(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_ghostWhisper> ghostWhisper{};  ///< ghostWhisper(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_obakeFingerprint> obakeFingerprint{};  ///< obakeFingerprint(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_burningChapelCrucifix> burningChapelCrucifix{};  ///< burningChapelCrucifix(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_obakeShapeshift> obakeShapeshift{};  ///< obakeShapeshift(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::MediaSubject_emf5> emf5{};  ///< emf5(): the value's number in this game build
 }  // namespace MediaSubject
 
 /// A tab of the book. `tab` below is the JournalTab.

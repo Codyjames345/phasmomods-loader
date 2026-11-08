@@ -143,10 +143,11 @@ inline constexpr pm::sdk::EntryDesc LoadoutManager_CheckEquipped{.key = "Loadout
 
 }  // namespace pm::map
 
-// The game API for the lobby's managers (sdk/api/game_api.h).
-// Every member is called on Unity's main thread. One that did not resolve in the running game
-// build logs "<key> is not available in this game build" once and returns its type's default
-// without touching the game.
+/// @file
+/// @brief The game API for the lobby's managers (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default without touching the game.
 namespace phasmo {
 /// @addtogroup lobby
 /// @{

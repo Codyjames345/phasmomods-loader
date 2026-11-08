@@ -86,16 +86,19 @@ inline constexpr pm::sdk::EntryDesc Camera_get_aspect{.key = "Camera.get_aspect"
 
 }  // namespace pm::map
 
-// The game API for Camera (sdk/api/game_api.h). Every member is called on Unity's main thread. One
-// that did not resolve in the running game build logs "<key> is not available in this game build"
-// once and returns its type's default (0, null) without touching the game.
+/// @file
+/// @brief The game API for Camera (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, null) without touching the game.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{
 
 /// A ray, as Unity's Ray: where it starts and its direction (unit length).
 struct Ray {
-  Vector3 origin, direction;
+  Vector3 origin;     ///< where it starts, in world space
+  Vector3 direction;  ///< its direction, unit length
 };
 
 /// Unity's camera component. `camera` below is the Camera object.

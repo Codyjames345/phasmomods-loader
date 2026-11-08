@@ -97,10 +97,13 @@ inline pm::api::content::GhostDef definition() {
   `"freezing"`, `"dots"`) or a custom evidence any started mod registers. `""` leaves a slot empty, and no evidence may
   appear twice.
 
-`GhostDef` has more members, each optional and each documented in `sdk/api/content.h`: tells (lines on its journal
-page), `flags` (`PM_GHOST_KEEPS_LAST_EVIDENCE`, `PM_GHOST_BLIND_IN_HUNTS`), a single `target` for its hunts, the
-evidence's look (`evidenceLook`), and the members a player who controls the ghost uses (an ability, a HUD line, a limit
-on steering).
+`GhostDef` has more members, each optional and each documented in `sdk/api/content.h`:
+
+- tells, the lines on its journal page;
+- `flags` (`PM_GHOST_KEEPS_LAST_EVIDENCE`, `PM_GHOST_BLIND_IN_HUNTS`);
+- a single `target` for its hunts;
+- the evidence's look (`evidenceLook`);
+- the members a player who controls the ghost uses: an ability, a HUD line, a limit on steering.
 
 ### ghost.h: the rules
 
@@ -236,9 +239,9 @@ The README's "Testing without the game" lists everything else the fake can do.
 
 ## An ability
 
-The Knell has no ability. A ghost a player can control may have one: give `GhostDef` an `abilityName` and an
-`abilityDescription` (both with English, from your table) and a `useAbility` callback, which the host calls on the host
-when the player uses it, and which returns false when it could not. Custom Ghosts' Echo is the worked case: its ability
+The Knell has no ability. A ghost a player can control may have one. Give `GhostDef` an `abilityName` and an
+`abilityDescription` (both with English, from your table), and a `useAbility` callback. The host calls it on the host
+when the player uses the ability, and it returns false when it could not. Custom Ghosts' Echo is the worked case: its ability
 "Speak" (`mods/custom_ghosts/i18n/default.json`), dispatched by `use_ability` in `mods/custom_ghosts/mod.cpp` to
 `echo::speak` in `mods/custom_ghosts/echo.cpp`, with its state on the player's HUD through `hudState` and `hudLine`.
 Playable Ghost reaches the ability through the content layer by the type the ghost acts as, so it names no ghost of

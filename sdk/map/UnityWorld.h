@@ -296,19 +296,22 @@ inline constexpr pm::sdk::EntryDesc Physics_RaycastHit{.key = "Physics.RaycastHi
 
 }  // namespace pm::map
 
-// The game API for Unity's world queries (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and returns its type's default (0, false) without touching the game.
+/// @file
+/// @brief The game API for Unity's world queries (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, false) without touching the game.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{
 
 /// Unity's NavMeshHit: where SamplePosition found the mesh. Its layout is Unity's own.
 struct NavMeshHit {
-  Vector3 position, normal;
-  float distance;
-  int32_t mask;
-  int32_t hit;  // non-zero when something was found
+  Vector3 position;  ///< the point found on the mesh, in world space
+  Vector3 normal;    ///< the mesh's normal there
+  float distance;    ///< the distance from the point asked about, in metres
+  int32_t mask;      ///< the area mask of the mesh found there
+  int32_t hit;       ///< non-zero when something was found
 };
 
 /// Unity's physics queries.

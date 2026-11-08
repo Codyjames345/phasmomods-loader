@@ -517,3 +517,26 @@ Door.loopSource's volume set to 0, the value HingeDoor.Update gives a leaf at or
 (decompiled, the same read as ddd3eaf). Test updated red then green; validate.ps1 exit 0, 78/78. No map
 values moved. doors.md and the Door.loopSource note now say to hush the creak at the lock. Live check: a
 slammed door goes quiet at once and the padlock comes the moment it is fully open.
+
+## 2026-11-08 Task 14 Step 1e: the reference builds clean (Claude, user's go)
+- User, 2026-11-08: pin Doxygen 1.18.0 (was 1.9.8; the user's installed version, tools/docs.ps1), include sdk/internals in the
+  reference as related pages (the plan said exclude; plan line updated), and do Step 1e, on development.
+- Carried over from the main checkout first (uncommitted there, same day): the SDK docs pass. sdk/systems/vanilla-ghosts.md (every
+  mapped per-type rule with keys), the Onryo hunt RE'd and documented (FireSource.CountGhostBlowOut counts; GhostIdleState.Execute
+  hunts at > 2 with eventsBlocked/postHuntCooldown/huntsHeldOff clear, before the sanity roll; decompiled), ghost types named in
+  notes ("the Onryo (16)"), how-found clauses moved from /// notes to // comments, the README's mapping half moved to
+  sdk/internals/mapping.md, systems/ghost-ai.md's resolver detail moved to internals, an item-by-item table in guides/equipment.md,
+  long sentences split on 15 pages, CLAUDE.md "Where to find things". CHANGELOG Unreleased merged with development's.
+- Warnings 373 -> 0: core/mod_api.h's // comments became Doxygen (///, ///<, @name member groups per "Added in version", @since per
+  member, @file in group content); @param/@return on every sdk/api template and free function; every undocumented map wrapper,
+  enum value and value struct documented; each map header's "game API for X" block is now its @file page (thread, failure);
+  MARKDOWN_ID_STYLE=GITHUB so #anchor links resolve; groups.dox links the main page with @ref index.
+- Required now: validate.ps1 runs tools/docs.ps1 without -IfConfigured, and CI's three validating jobs fetch Doxygen 1.18.0 from
+  doxygen.nl, checked by SHA-256 (the zip's doxygen.exe is byte-identical to the user's install).
+- Watched it fail once: a scratch undocumented inline function in sdk/api/runtime.h gave
+  "sdk/api/runtime.h:260: error: Member scratch_undocumented(int x) (function) of namespace pm::api is not documented." and
+  docs.ps1 threw "The API reference has warnings (1)". Removed (file byte-identical to before).
+- Not done of Step 1e's standard: @since on the map wrappers (their version is not recorded per entry), @code on every type and
+  common call, @pre/networking on wrappers whose one-line note does not say. Choices left for the user: room_agrees and
+  peer_has_mod are kept-for-2.x members whose notes say a mod has no need of them; I did not mark them @deprecated (the user's call).
+- Review sample: phasmo::GhostAI's page answers call form, clients, failure; thread is on the file page.

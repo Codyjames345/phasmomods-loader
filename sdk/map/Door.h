@@ -176,8 +176,9 @@ inline constexpr pm::sdk::EntryDesc Door_ToggleDoorLock{.key = "Door.ToggleDoorL
 
 inline constexpr const char* DoorKind_values[] = {"None", "Main", "Secondary", "PermanentLock"};
 
+// Found by its values.
 /// What kind of door a Door is (Assembly-CSharp, global namespace, name obfuscated): None, Main (the
-/// front door), Secondary or PermanentLock. Found by its values. Inferred: from the values' names.
+/// front door), Secondary or PermanentLock. Inferred: from the values' names.
 inline constexpr pm::sdk::EntryDesc DoorKind{.key = "DoorKind", .assembly = "Assembly-CSharp",
                                              .ns = "", .values = DoorKind_values};
 
@@ -295,9 +296,11 @@ inline constexpr pm::sdk::EntryDesc SmallMapVariation_huntingDoorsToLock{
 
 }  // namespace pm::map
 
-// The game API for doors (sdk/api/game_api.h). Every member is called on Unity's main thread. One that
-// did not resolve in the running game build logs "<key> is not available in this game build" once and
-// returns its type's default (0, null) without touching the game.
+/// @file
+/// @brief The game API for doors (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, null) without touching the game.
 namespace phasmo {
 /// @addtogroup rooms
 /// @{
@@ -378,7 +381,7 @@ struct HingeDoor {
 namespace Axis {
 /// X(), Z(). Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::Axis_X> X{};
-inline constexpr pm::api::EnumValue<pm::map::Axis_Z> Z{};
+inline constexpr pm::api::EnumValue<pm::map::Axis_Z> Z{};  ///< Z(): the value's number in this game build
 }  // namespace Axis
 
 /// A map variation. `variation` below is the SmallMapVariation.

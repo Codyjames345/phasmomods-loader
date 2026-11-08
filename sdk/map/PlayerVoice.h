@@ -125,8 +125,8 @@ inline constexpr pm::sdk::EntryDesc VolumeStack{.key = "VolumeStack", .confidenc
 
 inline constexpr const char* VolumeMultiplier_fieldTypes[] = {"float", "List<@VolumeStack>"};
 
-/// One factor of a voice's volume (Assembly-CSharp, global namespace; obfuscated, so found by its
-/// fields): a float and the stacks it belongs to. Decompiled.
+// Obfuscated, so found by its fields.
+/// One factor of a voice's volume (Assembly-CSharp, global namespace): a float and the stacks it belongs to. Decompiled.
 inline constexpr pm::sdk::EntryDesc VolumeMultiplier{.key = "VolumeMultiplier",
                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                      .flags = pm::sdk::kExactFields,
@@ -157,9 +157,11 @@ inline constexpr pm::sdk::EntryDesc VolumeMultiplier_set_value{
 
 }  // namespace pm::map
 
-// The game API for voice chat (sdk/api/game_api.h). Every member is called on Unity's main thread. One
-// that did not resolve in the running game build logs "<key> is not available in this game build" once
-// and returns its type's default (0, null) without touching the game.
+/// @file
+/// @brief The game API for voice chat (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, null) without touching the game.
 namespace phasmo {
 /// @addtogroup voice
 /// @{

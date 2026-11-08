@@ -859,7 +859,8 @@ Asked for by the user on 2026-11-03: "Every mod should treat loading the same, a
     - Each `sdk/systems/*.md` page splits in two. The author-facing concept page keeps what the system is, its lifecycle and which declarations to use. Its RE content moves to `sdk/internals/`.
   - **Generation.** Doxygen at a pinned version, used for the docs build only, run by a `docs` CMake target and by `validate.ps1`. It outputs HTML with search into the build directory, which is never committed.
     - It is grouped by game system (`@defgroup`: ghost, players, sanity, map and rooms, equipment, weather, journal, voice, lobby, content, runtime), with the guides and concept pages as related pages.
-    - It excludes `pg::map`, every `detail` namespace, `PG_HOST`-only declarations and `sdk/internals/`.
+    - It excludes `pg::map`, every `detail` namespace and `PG_HOST`-only declarations. (`sdk/internals/` was excluded too, until the
+      user included it as related pages on 2026-11-08, since the concept pages link to it.)
     - Warnings are errors (`WARN_IF_UNDOCUMENTED`, `WARN_NO_PARAMDOC`, `WARN_AS_ERROR`). An undocumented public declaration, a missing `@param` or `@return`, or a broken `@see` fails the build. Watch it fail once on an undocumented declaration added in a scratch commit that is then dropped, and record the output.
   - **Versioning.** `sdk/CHANGELOG.md`, in the Keep a Changelog form, records each SDK version's additions, deprecations and removals, under the library-style versioning already decided (additive within a major, deprecate before removal).
   - **Review.** The task review reads a sample of generated pages, one per group. For each, it confirms the page alone answers four questions: how to call it, what comes back, on which clients, and what happens when it fails. It also confirms the page names no implementation detail.

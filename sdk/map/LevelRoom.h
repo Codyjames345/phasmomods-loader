@@ -51,23 +51,25 @@ inline constexpr pm::sdk::EntryDesc LevelRoom_ArePlayersTalkingInRoom{.key = "Le
 
 inline constexpr const char* RoomKind_values[] = {"insideRoom", "outsideMap", "exterior", "exteriorRoom"};
 
+// Found by its values.
 /// What kind of room a LevelRoom is, an enum nested in LevelRoom (name obfuscated, value names real):
-/// insideRoom, outsideMap, exterior, exteriorRoom. Found by its values. Decompiled.
+/// insideRoom, outsideMap, exterior, exteriorRoom. Decompiled.
 inline constexpr pm::sdk::EntryDesc RoomKind{.key = "RoomKind", .confidence = pm::sdk::Confidence::Decompiled,
                                              .owner = "LevelRoom", .values = RoomKind_values};
 
+// The test's look-alikes test otherwise: one passes only a room of kind 0, and another tests the room of the
+// ghost's own player, not the candidate's, and passes when that room is of this kind.
 /// A room outside the map (the truck). The hunt's test of whom it may go for (a GhostHuntState
-/// method) never goes for a player whose room is of this kind. Its look-alikes test otherwise: one
-/// passes only a room of kind 0, and another tests the room of the ghost's own player, not the
-/// candidate's, and passes when that room is of this kind. Decompiled.
+/// method) never goes for a player whose room is of this kind. Decompiled.
 inline constexpr pm::sdk::EntryDesc RoomKind_outsideMap{.key = "RoomKind.outsideMap", .kind = pm::sdk::Kind::EnumValue,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "RoomKind", .name = "outsideMap"};
 
 inline constexpr const char* FloorType_values[] = {"basement", "firstFloor", "secondFloor"};
 
+// Found by its values.
 /// A floor, an enum nested in LevelRoom (name obfuscated, value names real): basement 0, firstFloor 1
-/// and up. Found by its values. Inferred: from the class dump.
+/// and up. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc FloorType{.key = "FloorType", .owner = "LevelRoom",
                                               .values = FloorType_values};
 
@@ -149,16 +151,19 @@ inline constexpr pm::sdk::EntryDesc Collider_get_enabled{.key = "Collider.get_en
 
 }  // namespace pm::map
 
-// The game API for rooms (sdk/api/game_api.h). Every member is called on Unity's main thread. One that
-// did not resolve in the running game build logs "<key> is not available in this game build" once
-// and returns its type's default (null, zero) without touching the game.
+/// @file
+/// @brief The game API for rooms (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (null, zero) without touching the game.
 namespace phasmo {
 /// @addtogroup rooms
 /// @{
 
 /// Unity's Bounds: a box by its centre and its extents (half its size on each axis).
 struct Bounds {
-  Vector3 center, extents;
+  Vector3 center;   ///< the box's centre, in world space
+  Vector3 extents;  ///< half the box's size on each axis
 };
 
 /// A room of the level. `room` below is the LevelRoom.

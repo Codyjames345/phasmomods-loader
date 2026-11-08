@@ -167,14 +167,16 @@ inline constexpr const char* GalluState_values[] = {"Normal", "Enraged", "Exhaus
 inline constexpr const char* DayanState_values[] = {"Normal", "Empowered", "Weakened"};
 inline constexpr const char* ThayeAge_fieldTypes[] = {"int", "int", "float", "float", "float"};
 
+// Found by its values.
 /// The Gallu's rage, an enum nested in GhostController (name obfuscated, value names real): Normal,
-/// Enraged, Exhausted. Found by its values. Decompiled.
+/// Enraged, Exhausted. Decompiled.
 inline constexpr pm::sdk::EntryDesc GalluState{.key = "GalluState", .confidence = pm::sdk::Confidence::Decompiled,
                                                .owner = "GhostController",
                                                .values = GalluState_values};
 
+// Found by its values.
 /// The Dayan's strength, an enum nested in GhostController (name obfuscated, value names real): Normal,
-/// Empowered, Weakened. Found by its values. Decompiled.
+/// Empowered, Weakened. Decompiled.
 inline constexpr pm::sdk::EntryDesc DayanState{.key = "DayanState", .confidence = pm::sdk::Confidence::Decompiled,
                                                .owner = "GhostController",
                                                .values = DayanState_values};
@@ -310,18 +312,20 @@ inline constexpr pm::sdk::EntryDesc GhostController_CreateGhost{
 
 }  // namespace pm::map
 
-// The game API for GhostController (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this
-// game build" once and returns its type's default (0, false, null) without touching the game. The
-// traits field has no wrapper: it is a struct holding managed references.
+/// @file
+/// @brief The game API for GhostController (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, false, null) without touching the
+/// game. The traits field has no wrapper: it is a struct holding managed references.
 namespace phasmo {
 /// @addtogroup ghost
 /// @{
 
 /// A Nullable<GhostType> as the runtime lays it out: the flag, then the value.
 struct NullableGhostType {
-  bool hasValue;
-  int32_t value;
+  bool hasValue;  ///< whether it holds a type
+  int32_t value;  ///< the GhostType number, when hasValue is set
 };
 
 /// The contract's ghost roll and the Mimic's copying. `controller` below is the GhostController.

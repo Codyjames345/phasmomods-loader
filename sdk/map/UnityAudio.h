@@ -140,9 +140,12 @@ inline constexpr pm::sdk::EntryDesc AudioSource_PlayOneShot{.key = "AudioSource.
 
 }  // namespace pm::map
 
-// The game API for Unity's audio and time (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and returns its type's default (0, false, null) without touching the game.
+/// @file
+/// @brief The game API for Unity's audio and time (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, false, null) without touching the
+/// game.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{

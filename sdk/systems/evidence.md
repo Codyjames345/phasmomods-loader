@@ -1,16 +1,20 @@
 # Evidence
 
 How the game picks the evidence a ghost gives, how a difficulty hides some of it, how what is given
-reaches every client, and how the journal's evidence page marks evidence and filters the ghosts; then
-how the host's content evidence (`host/content_evidence.h`) adds a custom evidence. The entries are in
-`sdk/map/GhostController.h` (`givenEvidence`, `PickEvidence`), `GhostInfo.h` (`givenEvidence`,
-`SyncValues`, `SyncEvidence`), `Difficulty.h` (`evidenceGiven`), `GhostCollection.h` (the GhostData
-evidence), `JournalController.h` (`evidenceButtons`, `evidenceSync`, `AddEvidence`, `FilterOutEvidence`,
-`RemoveEvidence`, `SetGhostTypes`, `EvidenceButton`, `ThreeStateButton.textLabel`,
-`JournalEvidenceSyncController`), `UnityUI.h` (`HorizontalOrVerticalLayoutGroup`) and `Scene.h`
-(`Scene.JournalEvidenceRows`, `Scene.JournalEvidenceButton`); their `///` notes are the authority. Facts
-were read from decompiled code of Steam build 25811160 (`re/decomp.mjs`) and from the PCPlayer prefab in
-`resources.assets` with UnityPy; the RVAs below are evidence for that build only.
+reaches every client, and how the journal's evidence page marks evidence and filters the ghosts. Then how
+the host's content evidence (`host/content_evidence.h`) adds a custom evidence. Facts were read from
+decompiled code of Steam build 25811160 (`re/decomp.mjs`) and from the PCPlayer prefab in
+`resources.assets` with UnityPy. The entries' `///` notes are the authority. They are in:
+
+- `sdk/map/GhostController.h`: `givenEvidence`, `PickEvidence`;
+- `GhostInfo.h`: `givenEvidence`, `SyncValues`, `SyncEvidence`;
+- `Difficulty.h`: `evidenceGiven`;
+- `GhostCollection.h`: the GhostData evidence;
+- `JournalController.h`: `evidenceButtons`, `evidenceSync`, `AddEvidence`, `FilterOutEvidence`,
+  `RemoveEvidence`, `SetGhostTypes`, `EvidenceButton`, `ThreeStateButton.textLabel`,
+  `JournalEvidenceSyncController`;
+- `UnityUI.h`: `HorizontalOrVerticalLayoutGroup`;
+- `Scene.h`: `Scene.JournalEvidenceRows`, `Scene.JournalEvidenceButton`.
 
 ## Numbers, not a count
 
@@ -64,8 +68,8 @@ evidence is hidden by its slot and the roll, whatever its number.
 - `GhostInfo.SyncValues` (from `StartGhost` on the master) sends `SyncValuesNetworked` to
   every client, then makes an `int[]` of `evidenceGiven` elements, the first that many of the traits'
   `givenEvidence`, and sends it with the RPC `SyncEvidence` to every client.
-- `GhostInfo.SyncEvidence`, on every client, runs once (a flag of GhostInfo, set at its end) and only after its
-  check of the sender: it makes `givenEvidence` a new list holding each number received, then passes the traits
+- `GhostInfo.SyncEvidence` runs on every client, once (a flag of GhostInfo, set at its end), and only after its
+  check of the sender. It makes `givenEvidence` a new list holding each number received, then passes the traits
   to `EvidenceController.SpawnAllGhostTypeEvidence`.
 
 So every client's `GhostInfo.givenEvidence` holds the numbers the master's pick gave, a custom evidence's
@@ -75,12 +79,15 @@ does: a ghost whose given list lacks the flame is treated as one that never give
 ## The journal's evidence page
 
 - The page's rows (`Scene.JournalEvidenceRows`, a VerticalLayoutGroup) are seven `EvidenceButton`s, all active:
-  EMF, DOTS, Fingerprints, Freezing, Ghost Orbs, Ghost Writing, Spirit Box. Each holds its number
-  (`EvidenceButton.evidence`), its name (`ThreeStateButton.textLabel`) and the line under it
-  (`EvidenceButton.descriptionLabel`), each a TextMeshPro text with a `TextLocaliserUI`. The name's key is the
-  evidence's (`Journal2_EMF5`, `Journal2_DOTS`, `Journal2_Fingerprints`, ...), and the line's is the name's key
-  with `_Tooltip` after it, on every row. A ghost's page shows its evidence by the rows' name keys (the
-  Banshee's: `Journal2_Fingerprints`, `Journal2_GhostOrbs`, `Journal2_DOTS`).
+  EMF, DOTS, Fingerprints, Freezing, Ghost Orbs, Ghost Writing, Spirit Box. Each holds:
+  - its number (`EvidenceButton.evidence`);
+  - its name (`ThreeStateButton.textLabel`), whose key is the evidence's (`Journal2_EMF5`, `Journal2_DOTS`,
+    `Journal2_Fingerprints`, ...);
+  - the line under it (`EvidenceButton.descriptionLabel`), whose key is the name's key with `_Tooltip` after it,
+    on every row.
+
+  The name and the line are each a TextMeshPro text with a `TextLocaliserUI`. A ghost's page shows its evidence
+  by the rows' name keys (the Banshee's: `Journal2_Fingerprints`, `Journal2_GhostOrbs`, `Journal2_DOTS`).
 - The journal keeps the rows in `JournalController.evidenceButtons`, an `EvidenceButton[]`.
 - A row has a state (a field of ThreeStateButton: 0 unmarked, 1 found, 2 ruled out). When it changes,
   `EvidenceButton`'s override of the state change runs the base's, then, on its journal, the body of
@@ -88,12 +95,13 @@ does: a ghost whose given list lacks the flame is treated as one that never give
 - `AddEvidence` takes the number off the ruled-out list, adds it to the found list unless it is there, and runs
   `SetGhostTypes`. `FilterOutEvidence` is its mirror. `RemoveEvidence` takes it off both and tail-jumps to
   `SetGhostTypes`.
-- `SetGhostTypes` empties the list of ghosts left and walks `ghostButtons`: a ghost stays when each found
-  number is one of its three, and leaves when a ruled-out number is one of its three; each button's look is set
-  by a virtual method of the button by whether its ghost stayed.
-- `JournalEvidenceSyncController` is the same generic base as the guess sync (`systems/journal.md`): its getter
-  of the buttons returns `evidenceButtons`, its getter of a button's value the button's number, so a mark is
-  sent and matched by number. `Initialise` reads the buttons and subscribes to each one's `userStateChanged`.
+- `SetGhostTypes` empties the list of ghosts left and walks `ghostButtons`. A ghost stays when each found
+  number is one of its three, and leaves when a ruled-out number is one of its three. A virtual method of each
+  button sets its look by whether its ghost stayed.
+- `JournalEvidenceSyncController` is the same generic base as the guess sync ([the journal](journal.md)). Its
+  getter of the buttons returns `evidenceButtons`, and its getter of a button's value returns the button's
+  number, so a mark is sent and matched by number. `Initialise` reads the buttons and subscribes to each one's
+  `userStateChanged`.
 - `HighlightGhostEvidence` and `ScratchWrongEvidence` walk the rows by their numbers as well.
 
 ## Read from the game, not fixed

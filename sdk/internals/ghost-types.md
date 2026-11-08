@@ -41,7 +41,7 @@ The game API is `phasmo::EvidenceType`, `phasmo::GhostType`, `phasmo::GhostTrait
 value of both enums (Spirit, and no evidence), so check `use::resolved()` before relying on one.
 
 **The identity and the behaviour type** are the first two fields of `GhostTraits`, both of type
-`GhostType`, so each is a field `within` the class's traits field (see `sdk/README.md`): it resolves to
+`GhostType`, so each is a field `within` the class's traits field (see [mapping](mapping.md)): it resolves to
 its place in GhostInfo or GhostController, and its facts read that class's code. Shape alone cannot tell
 the two apart, so:
 

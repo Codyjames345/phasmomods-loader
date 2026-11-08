@@ -12,18 +12,20 @@ GENERATE_TREEVIEW      = YES
 FULL_PATH_NAMES        = YES
 STRIP_FROM_PATH        = .
 MARKDOWN_SUPPORT       = YES
+# Headings get GitHub's anchors, so a page's #anchor links work in the reference as they do on GitHub.
+MARKDOWN_ID_STYLE      = GITHUB
 USE_MDFILE_AS_MAINPAGE = sdk/README.md
 OPTIMIZE_OUTPUT_FOR_C  = NO
 QUIET                  = YES
 
 # What an author reads: the game API, the runtime, the content API and the host contract, then the guides and concept pages.
-INPUT                  = sdk/README.md sdk/groups.dox sdk/CHANGELOG.md sdk/api core/mod_api.h sdk/map sdk/systems sdk/guides
+INPUT                  = sdk/README.md sdk/groups.dox sdk/CHANGELOG.md sdk/api core/mod_api.h sdk/map sdk/systems sdk/guides sdk/internals
 FILE_PATTERNS          = *.h *.md *.dox
 RECURSIVE              = YES
 
-# Left out: how entries are found (the map's own namespace, the implementation's details), the host's own declarations, and the
-# maintainers' pages.
-EXCLUDE                = sdk/internals sdk/map/all.h
+# The maintainers' pages (sdk/internals) are related pages, since the concept pages link to them (the user's choice, 2026-11-08).
+# Left out: how entries are found (the map's own namespace, the implementation's details) and the host's own declarations.
+EXCLUDE                = sdk/map/all.h
 EXCLUDE_SYMBOLS        = pm::map pm::map::* pm::sdk pm::sdk::* detail *::detail *::detail::* host_only *::host_only *::host_only::*
 ENABLE_PREPROCESSING   = YES
 MACRO_EXPANSION        = NO

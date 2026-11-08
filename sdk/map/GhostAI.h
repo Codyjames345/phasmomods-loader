@@ -69,8 +69,8 @@ inline constexpr pm::sdk::EntryDesc GhostState_appear{.key = "GhostState.appear"
 /// for the event. Unless forced, some ghost types may go back to idle instead (one by the players'
 /// average insanity); otherwise it starts one of five event state objects, chosen by chance, the
 /// ghost's type and whether its audio plays: event 0 while an AudioSource plays, a fixed array for
-/// type 0x1C, event 1 perhaps forced for type 4, and events 1, 3 and 4 remapped for types 8 and 0xB.
-/// Decompiled.
+/// the Kormos (28), event 1 perhaps forced for the Banshee (4), and events 1, 3 and 4 remapped for
+/// the Shade (8) and the Oni (11). Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostState_randomEvent{.key = "GhostState.randomEvent",
                                                            .kind = pm::sdk::Kind::EnumValue,
                                                            .confidence = pm::sdk::Confidence::Decompiled,
@@ -400,8 +400,8 @@ inline constexpr pm::sdk::EntryDesc GhostState_ignite{.key = "GhostState.ignite"
 
 inline constexpr const char* GhostAI_GetNearestPlayer_params[] = {"out Player"};
 
-/// Gives the living player nearest the ghost, and whether there is one. Mapped for GhostDotsState.GoToNearest's
-/// fact. Decompiled.
+// Mapped for GhostDotsState.GoToNearest's fact.
+/// Gives the living player nearest the ghost, and whether there is one. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostAI_GetNearestPlayer{
     .key = "GhostAI.GetNearestPlayer", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "GhostAI", .name = "GetNearestPlayer", .type = "bool", .params = GhostAI_GetNearestPlayer_params};
@@ -414,8 +414,8 @@ inline constexpr pm::sdk::Fact GhostAI_isAppeared_facts[] = {
     {.is = pm::sdk::Fact::Is::Stores, .method = "GhostAI.MakeGhostAppear"}};
 
 /// Shows the ghost: when it is not showing itself already (isAppeared clear) it sends an RPC through
-/// its PhotonView, after behaviour types 8 and 0xB may change the form asked for by a
-/// Random.RandomRangeInt(0, 2) roll. It does nothing while the ghost shows itself. Decompiled.
+/// its PhotonView, after which, for the Shade (8) and the Oni (11), a Random.RandomRangeInt(0, 2)
+/// roll may change the form asked for. It does nothing while the ghost shows itself. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostAI_Appear{.key = "GhostAI.Appear", .kind = pm::sdk::Kind::Method,
                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostAI",
                                                    .name = "Appear", .params = GhostAI_Appear_params};
@@ -436,7 +436,7 @@ inline constexpr pm::sdk::EntryDesc GhostAI_isAppeared{.key = "GhostAI.isAppeare
 /// Makes the coroutine that holds the ghost's hunts off for a while. Its only callers are the incense's
 /// smudge of the ghost (in WhiteSage) and a Monkey Paw wish. The coroutine does nothing when a hold is
 /// already on; otherwise it sets the hold, waits a time chosen by the ghost's behaviour type (one for
-/// type 0, another for type 9, a third for the rest), and clears it. Calling it starts nothing: the
+/// the Spirit (0), another for the Demon (9), a third for the rest), and clears it. Calling it starts nothing: the
 /// caller starts the coroutine. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostAI_StopGhostFromHunting{
     .key = "GhostAI.StopGhostFromHunting", .kind = pm::sdk::Kind::Method,
@@ -470,9 +470,11 @@ inline constexpr pm::sdk::EntryDesc GhostAI_smudge{.key = "GhostAI.smudge", .kin
 inline constexpr pm::sdk::Fact GhostAI_flamesBlownOut_facts[] = {
     {.is = pm::sdk::Fact::Is::Stores, .method = "FireSource.CountGhostBlowOut"}};
 
-/// The Onryo's count of flames blown out, an int. FireSource's blow-out by the ghost
-/// (FireSource.CountGhostBlowOut) adds one when the ghost's behaviour type is 0x10, and sets it back to
-/// 0 when it has reached 3 and the ghost's hunt flags allow. Decompiled.
+/// The Onryo's count of flames blown out, an int. Once it reaches 3, the idle state starts a hunt.
+/// FireSource.CountGhostBlowOut adds one for each blow-out by the Onryo (16), and clears a count of
+/// 3 reached while the ghost hunts or its hunts are held off. GhostIdleState.Execute starts the hunt:
+/// when its idle timer runs out with the count above 2, it clears the count and changes the state to
+/// GhostState.hunting, without the sanity roll (see that entry). Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostAI_flamesBlownOut{.key = "GhostAI.flamesBlownOut",
                                                            .kind = pm::sdk::Kind::Field,
                                                            .confidence = pm::sdk::Confidence::Decompiled,
@@ -516,8 +518,9 @@ inline constexpr pm::sdk::EntryDesc EMF{.key = "EMF", .name = "EMF", .assembly =
 
 inline constexpr const char* EMFType_values[] = {"interaction", "objectMoved", "windowKnock", "lightSwitched"};
 
+// Found by its values.
 /// What made an EMF reading (nested in EMF, name obfuscated): interaction, objectMoved, windowKnock and
-/// six more. Found by its values. Inferred: from the values' names.
+/// six more. Inferred: from the values' names.
 inline constexpr pm::sdk::EntryDesc EMFType{.key = "EMFType", .owner = "EMF",
                                             .values = EMFType_values};
 
@@ -701,9 +704,12 @@ inline constexpr pm::sdk::EntryDesc GhostActivity_TwinInteraction{
 
 }  // namespace pm::map
 
-// The game API for GhostAI (sdk/api/game_api.h). Every member is called on Unity's main thread. One
-// that did not resolve in the running game build logs "<key> is not available in this game build"
-// once and returns its type's default (0, false, null) without touching the game.
+/// @file
+/// @brief The game API for GhostAI (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, false, null) without touching the
+/// game.
 namespace phasmo {
 /// @addtogroup ghost
 /// @{
@@ -805,8 +811,8 @@ struct GhostAI {
   /// The incense that smudged it in this hunt, a WhiteSage, or null: smudge.get(ghost). Unresolved:
   /// null.
   static constexpr pm::api::Field<pm::map::GhostAI_smudge, void*> smudge{};
-  /// The Onryo's count of flames blown out: flamesBlownOut.get(ghost). Unresolved: reads 0, writes
-  /// nothing.
+  /// The Onryo's count of flames blown out; at 3 the idle state starts a hunt (see
+  /// GhostIdleState.Execute): flamesBlownOut.get(ghost). Unresolved: reads 0, writes nothing.
   static constexpr pm::api::Field<pm::map::GhostAI_flamesBlownOut, int32_t> flamesBlownOut{};
   /// Its GhostActivity: activity.get(ghost). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GhostAI_activity, void*> activity{};
@@ -894,23 +900,23 @@ inline constexpr pm::api::EnumValue<pm::map::GhostState_appear> appear{};
 inline constexpr pm::api::EnumValue<pm::map::GhostState_randomEvent> randomEvent{};
 /// The other states by their names: favouriteRoom(), light(), ... Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::GhostState_favouriteRoom> favouriteRoom{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_light> light{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_door> door{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_throwing> throwing{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_fusebox> fusebox{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_doorKnock> doorKnock{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_windowKnock> windowKnock{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_carAlarm> carAlarm{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_flicker> flicker{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_cctv> cctv{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_dots> dots{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_GhostAbility> GhostAbility{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_mannequin> mannequin{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_teleportObject> teleportObject{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_interact> interact{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_summoningCircle> summoningCircle{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_musicBox> musicBox{};
-inline constexpr pm::api::EnumValue<pm::map::GhostState_ignite> ignite{};
+inline constexpr pm::api::EnumValue<pm::map::GhostState_light> light{};  ///< light(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_door> door{};  ///< door(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_throwing> throwing{};  ///< throwing(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_fusebox> fusebox{};  ///< fusebox(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_doorKnock> doorKnock{};  ///< doorKnock(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_windowKnock> windowKnock{};  ///< windowKnock(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_carAlarm> carAlarm{};  ///< carAlarm(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_flicker> flicker{};  ///< flicker(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_cctv> cctv{};  ///< cctv(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_dots> dots{};  ///< dots(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_GhostAbility> GhostAbility{};  ///< GhostAbility(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_mannequin> mannequin{};  ///< mannequin(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_teleportObject> teleportObject{};  ///< teleportObject(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_interact> interact{};  ///< interact(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_summoningCircle> summoningCircle{};  ///< summoningCircle(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_musicBox> musicBox{};  ///< musicBox(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::GhostState_ignite> ignite{};  ///< ignite(): the value's number in this game build
 }  // namespace GhostState
 
 /// @}

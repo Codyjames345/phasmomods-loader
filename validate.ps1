@@ -10,7 +10,7 @@ if ($LASTEXITCODE -ne 0) { throw 'The scene check tests failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'The offline game check failed.' }
 & (Join-Path $PSScriptRoot 'tests/docs_test.ps1')
 & (Join-Path $PSScriptRoot 'tests/dev_release_test.ps1')
-& (Join-Path $PSScriptRoot 'tools/docs.ps1') -IfConfigured
+& (Join-Path $PSScriptRoot 'tools/docs.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'The API reference failed.' }
 & (Join-Path $PSScriptRoot 'tests/package_test.ps1')
 & (Join-Path $PSScriptRoot 'tests/stage_test.ps1')

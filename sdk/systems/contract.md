@@ -61,8 +61,9 @@ no path for `eventsBlocked`.
 ## Leaving and quitting
 
 - **`PauseMenuController.Leave`** silences the listener, writes the status, reads the local investigator, sets
-  `Network.sceneChanging`, clears `LevelValues.completed` and starts its coroutine: `LoadingController.LoadScene`
-  to the main menu, a wait for `LoadingController.ready` and one frame more, then `PhotonNetwork.Disconnect`.
+  `Network.sceneChanging` and clears `LevelValues.completed`. Then it starts its coroutine, which runs
+  `LoadingController.LoadScene` to the main menu, waits for `LoadingController.ready` and one frame more, and then
+  calls `PhotonNetwork.Disconnect`.
 - **`PauseMenuController.Quit`** writes the status, reads the local investigator and ends with `Application.Quit`.
   With `Network.localPlayer` null it throws there, and the game does not close.
 - The coroutine needs the menu's object active. `PauseMenuController` shares the canvas with `JournalController`,

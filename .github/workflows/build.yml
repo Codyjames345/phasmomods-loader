@@ -25,6 +25,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The API reference is built with the Doxygen tools/docs.ps1 pins, from Doxygen's own download, checked against
+      # its hash before it runs.
+      - name: Get Doxygen
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'doxygen.zip'
+          Invoke-WebRequest -Uri 'https://www.doxygen.nl/files/doxygen-1.18.0.windows.x64.bin.zip' -OutFile $zip
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
+          if ($hash -ne 'E84F54CFD49EF06B0B16536056DBEC0C496323DE28ABCCE53A4269463DE35EAF') {
+            throw "The Doxygen download's hash is $hash, not the pinned one."
+          }
+          $dir = Join-Path $env:RUNNER_TEMP 'doxygen'
+          Expand-Archive -LiteralPath $zip -DestinationPath $dir
+          "PM_DOXYGEN=$(Join-Path $dir 'doxygen.exe')" | Add-Content -LiteralPath $env:GITHUB_ENV
       # build.ps1 finds Visual Studio with vswhere and loads its developer environment, which supplies
       # CMake and Ninja.
       - name: Validate
@@ -58,6 +72,20 @@ jobs:
           $version = Get-DevVersion (Get-Content -LiteralPath VERSION -Raw) ([int]$env:BUILD)
           Set-Content -LiteralPath VERSION -Value $version
           "DEV_VERSION=$version" | Add-Content -LiteralPath $env:GITHUB_ENV
+      # The API reference is built with the Doxygen tools/docs.ps1 pins, from Doxygen's own download, checked against
+      # its hash before it runs.
+      - name: Get Doxygen
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'doxygen.zip'
+          Invoke-WebRequest -Uri 'https://www.doxygen.nl/files/doxygen-1.18.0.windows.x64.bin.zip' -OutFile $zip
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
+          if ($hash -ne 'E84F54CFD49EF06B0B16536056DBEC0C496323DE28ABCCE53A4269463DE35EAF') {
+            throw "The Doxygen download's hash is $hash, not the pinned one."
+          }
+          $dir = Join-Path $env:RUNNER_TEMP 'doxygen'
+          Expand-Archive -LiteralPath $zip -DestinationPath $dir
+          "PM_DOXYGEN=$(Join-Path $dir 'doxygen.exe')" | Add-Content -LiteralPath $env:GITHUB_ENV
       - name: Pack the build
         shell: pwsh
         run: .\package.ps1 -Channel dev
@@ -121,6 +149,20 @@ jobs:
               Write-Error "The tag is $env:TAG but VERSION says $expected."
               exit 1
           }
+      # The API reference is built with the Doxygen tools/docs.ps1 pins, from Doxygen's own download, checked against
+      # its hash before it runs.
+      - name: Get Doxygen
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'doxygen.zip'
+          Invoke-WebRequest -Uri 'https://www.doxygen.nl/files/doxygen-1.18.0.windows.x64.bin.zip' -OutFile $zip
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
+          if ($hash -ne 'E84F54CFD49EF06B0B16536056DBEC0C496323DE28ABCCE53A4269463DE35EAF') {
+            throw "The Doxygen download's hash is $hash, not the pinned one."
+          }
+          $dir = Join-Path $env:RUNNER_TEMP 'doxygen'
+          Expand-Archive -LiteralPath $zip -DestinationPath $dir
+          "PM_DOXYGEN=$(Join-Path $dir 'doxygen.exe')" | Add-Content -LiteralPath $env:GITHUB_ENV
       # package.ps1 validates again, then packs into dist/releases, which it replaces whole. Updates
       # are therefore full packages, not deltas: a delta needs the previous release beside the new
       # pack, and the script packs into an empty folder.

@@ -182,10 +182,11 @@ inline constexpr pm::sdk::EntryDesc DifficultyUIManager_ForceSyncDifficulty{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "DifficultyUIManager", .name = "ForceSyncDifficulty",
     .params = DifficultyParams_difficulty};
 
+// Two never-called look-alikes write other constants.
 /// The Ghost Type option's change handler, a private void(): index 0 writes None to the lobby
 /// difficulty's ghostTypeOverride, index i the type of allGhostsData's ghost i - 1; then it names the
 /// choice on the option. The option's arrows and dice run it; a loaded or synced difficulty is shown by
-/// writing the option's index alone. Two never-called look-alikes write other constants. Decompiled.
+/// writing the option's index alone. Decompiled.
 inline constexpr pm::sdk::EntryDesc DifficultyUIManager_GhostTypeChosen{
     .key = "DifficultyUIManager.GhostTypeChosen", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "DifficultyUIManager",
@@ -334,9 +335,9 @@ inline constexpr pm::sdk::EntryDesc Difficulty_loseItemsOnDeath{
 /// System.Enum (mscorlib). Inferred: the .NET class.
 inline constexpr pm::sdk::EntryDesc SystemEnum{.key = "Enum", .name = "Enum", .assembly = "mscorlib", .ns = "System"};
 
+// Found by shape, since its overloads share the name.
 /// Enum.ToString(), the overload without parameters: the value's name, its number when it has none.
-/// Found by shape, since its overloads share the name; the menu's summary calls it on a GhostType
-/// boxed on the stack. Decompiled.
+/// The menu's summary calls it on a GhostType boxed on the stack. Decompiled.
 inline constexpr pm::sdk::EntryDesc SystemEnum_ToString{.key = "Enum.ToString", .kind = pm::sdk::Kind::Method,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Enum", .hint = "ToString", .type = "string"};
@@ -355,9 +356,12 @@ inline constexpr pm::sdk::EntryDesc Difficulty_actualWeather{.key = "Difficulty.
 
 }  // namespace pm::map
 
-// The game API for the custom difficulty (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and returns its type's default (0, null, false) without touching the game.
+/// @file
+/// @brief The game API for the custom difficulty (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, null, false) without touching the
+/// game.
 namespace phasmo {
 /// @addtogroup lobby
 /// @{

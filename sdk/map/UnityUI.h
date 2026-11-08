@@ -479,9 +479,11 @@ inline constexpr pm::sdk::EntryDesc TextAlignmentOptions_Center{.key = "TextAlig
 
 }  // namespace pm::map
 
-// The game API for Unity's UI (sdk/api/game_api.h). Every member is called on Unity's main thread. One
-// that did not resolve in the running game build logs "<key> is not available in this game build" once
-// and returns its type's default (0, null) without touching the game.
+/// @file
+/// @brief The game API for Unity's UI (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, null) without touching the game.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{
@@ -631,7 +633,7 @@ struct ToggleEvent {
 
 /// How a Canvas is drawn. Unresolved: 0.
 namespace RenderMode {
-inline constexpr pm::api::EnumValue<pm::map::RenderMode_ScreenSpaceOverlay> ScreenSpaceOverlay{};
+inline constexpr pm::api::EnumValue<pm::map::RenderMode_ScreenSpaceOverlay> ScreenSpaceOverlay{};  ///< ScreenSpaceOverlay(): the value's number in this game build
 }  // namespace RenderMode
 
 /// Scales a canvas to the screen. `scaler` below is the CanvasScaler.
@@ -737,10 +739,10 @@ struct TMP_Text {
 
 /// How a TextMeshPro text is aligned. Unresolved: 0.
 namespace TextAlignmentOptions {
-inline constexpr pm::api::EnumValue<pm::map::TextAlignmentOptions_TopLeft> TopLeft{};
-inline constexpr pm::api::EnumValue<pm::map::TextAlignmentOptions_Top> Top{};
-inline constexpr pm::api::EnumValue<pm::map::TextAlignmentOptions_Left> Left{};
-inline constexpr pm::api::EnumValue<pm::map::TextAlignmentOptions_Center> Center{};
+inline constexpr pm::api::EnumValue<pm::map::TextAlignmentOptions_TopLeft> TopLeft{};  ///< TopLeft(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::TextAlignmentOptions_Top> Top{};  ///< Top(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::TextAlignmentOptions_Left> Left{};  ///< Left(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::TextAlignmentOptions_Center> Center{};  ///< Center(): the value's number in this game build
 }  // namespace TextAlignmentOptions
 
 /// @}

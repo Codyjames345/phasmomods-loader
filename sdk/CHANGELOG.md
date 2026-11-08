@@ -26,11 +26,21 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   `Transform.set_localEulerAngles`.
 - **Weather:** `LevelValues.weather` is decompiled: a Monkey Paw weather wish changes it mid-contract
   ([weather](systems/weather.md)).
+- **[The vanilla ghosts, type by type](systems/vanilla-ghosts.md):** every mapped rule of each vanilla ghost type, with
+  the entries that hold it.
+- **The Onryo's hunt:** `GhostIdleState.Execute` hunts once `GhostAI.flamesBlownOut` passes 2, without the sanity
+  check. [Ghost AI](systems/ghost-ai.md) has a new section, "How a hunt starts".
+- **Equipment, item by item:** a table of what the map holds for each item and cursed possession
+  ([equipment](guides/equipment.md)).
 
 ### Changed
 
 - `Door.ToggleDoorLock`, `Door.GhostForceDoor` and `Door.DisableOrEnableDoor` are decompiled. `Door.ToggleDoorLock`
   switches a door on or off for players and unlocks a locked door; it never locks one, as its earlier note said.
+- **Mapping the game moved** from this README to [its own page](internals/mapping.md), with its sections (an entry, the
+  resolver, confidence, commands, game builds, adding an entry, moving code onto the SDK).
+- **Entry notes name ghost types:** "the Onryo (16)", where a note gave only the number. Notes say what a member does,
+  and how an entry is found moved to the `//` comments above it.
 
 ## [2.2] - 2026-11-03
 

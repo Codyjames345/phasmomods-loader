@@ -1,5 +1,9 @@
 #pragma once
 
+/// @file
+/// @brief How a mod catches a managed exception the game throws.
+/// @ingroup runtime
+
 /// @brief The C++ type the game's runtime throws a managed exception as (libil2cpp's Il2CppExceptionWrapper).
 /// A game method called through the game API that throws unwinds through the mod as this type, so a mod
 /// that must survive one catches it by name: `catch (const Il2CppExceptionWrapper& e)`. It is declared in
@@ -15,5 +19,5 @@
 /// }
 /// @endcode
 struct Il2CppExceptionWrapper {
-  void* ex;
+  void* ex;  ///< the managed exception object, valid only inside the catch
 };

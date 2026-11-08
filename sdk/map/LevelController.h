@@ -152,8 +152,8 @@ inline constexpr pm::sdk::EntryDesc LevelController_IsPointInOutsideRoom{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "LevelController", .name = "IsPointInOutsideRoom",
     .params = LevelController_IsPointInOutsideRoom_params};
 
-/// Unity's Awake: among its set-up it copies outsideRoom into another LevelRoom field. Found only for
-/// outsideRoom's fact. Decompiled.
+// Found only for outsideRoom's fact.
+/// Unity's Awake: among its set-up it copies outsideRoom into another LevelRoom field. Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelController_Awake{.key = "LevelController.Awake", .kind = pm::sdk::Kind::Method,
                                                           .confidence = pm::sdk::Confidence::Decompiled,
                                                           .owner = "LevelController", .name = "Awake"};
@@ -186,9 +186,11 @@ inline constexpr pm::sdk::EntryDesc SetupPhaseController_instance{
 
 }  // namespace pm::map
 
-// The game API for LevelController (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this
-// game build" once and returns its type's default (null, false) without touching the game.
+/// @file
+/// @brief The game API for LevelController (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (null, false) without touching the game.
 namespace phasmo {
 /// @addtogroup rooms
 /// @{

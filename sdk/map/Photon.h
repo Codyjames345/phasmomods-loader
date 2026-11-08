@@ -445,9 +445,12 @@ inline constexpr pm::sdk::EntryDesc Int32{.key = "Int32", .name = "Int32", .asse
 
 }  // namespace pm::map
 
-// The game API for Photon (sdk/api/game_api.h). Every member is called on Unity's main thread. One
-// that did not resolve in the running game build logs "<key> is not available in this game build"
-// once and returns its type's default (0, false, null) without touching the game.
+/// @file
+/// @brief The game API for Photon (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, false, null) without touching the
+/// game.
 namespace phasmo {
 /// @addtogroup lobby
 /// @{
@@ -525,18 +528,18 @@ struct PhotonView {
 
 /// Who an RPC goes to. Unresolved: 0.
 namespace RpcTarget {
-inline constexpr pm::api::EnumValue<pm::map::RpcTarget_All> All{};
+inline constexpr pm::api::EnumValue<pm::map::RpcTarget_All> All{};  ///< All(): the value's number in this game build
 }  // namespace RpcTarget
 
 /// Photon PUN's synchronisation options. Unresolved: 0.
 namespace ViewSynchronization {
-inline constexpr pm::api::EnumValue<pm::map::ViewSynchronization_UnreliableOnChange> UnreliableOnChange{};
-inline constexpr pm::api::EnumValue<pm::map::ViewSynchronization_Off> Off{};
+inline constexpr pm::api::EnumValue<pm::map::ViewSynchronization_UnreliableOnChange> UnreliableOnChange{};  ///< UnreliableOnChange(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::ViewSynchronization_Off> Off{};  ///< Off(): the value's number in this game build
 }  // namespace ViewSynchronization
 
 /// Photon PUN's ownership options. Unresolved: 0.
 namespace OwnershipOption {
-inline constexpr pm::api::EnumValue<pm::map::OwnershipOption_Takeover> Takeover{};
+inline constexpr pm::api::EnumValue<pm::map::OwnershipOption_Takeover> Takeover{};  ///< Takeover(): the value's number in this game build
 }  // namespace OwnershipOption
 
 /// What an RPC method is told about its call, a struct it receives by address. `info` below is that
@@ -568,15 +571,15 @@ struct RaiseEventOptions {
 
 /// The groups of a room's players. Unresolved: 0.
 namespace ReceiverGroup {
-inline constexpr pm::api::EnumValue<pm::map::ReceiverGroup_Others> Others{};
-inline constexpr pm::api::EnumValue<pm::map::ReceiverGroup_MasterClient> MasterClient{};
-inline constexpr pm::api::EnumValue<pm::map::ReceiverGroup_All> All{};
+inline constexpr pm::api::EnumValue<pm::map::ReceiverGroup_Others> Others{};  ///< Others(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::ReceiverGroup_MasterClient> MasterClient{};  ///< MasterClient(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::ReceiverGroup_All> All{};  ///< All(): the value's number in this game build
 }  // namespace ReceiverGroup
 
 /// How a message is delivered. Unresolved: 0.
 namespace DeliveryMode {
-inline constexpr pm::api::EnumValue<pm::map::DeliveryMode_Unreliable> Unreliable{};
-inline constexpr pm::api::EnumValue<pm::map::DeliveryMode_Reliable> Reliable{};
+inline constexpr pm::api::EnumValue<pm::map::DeliveryMode_Unreliable> Unreliable{};  ///< Unreliable(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::DeliveryMode_Reliable> Reliable{};  ///< Reliable(): the value's number in this game build
 }  // namespace DeliveryMode
 
 /// How PhotonNetwork.RaiseEvent delivers an event. `options` below is a struct of 8 bytes, zeroed.

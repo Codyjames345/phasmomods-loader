@@ -10,6 +10,39 @@ Each claim cites the map key it was read from. An entry's confidence matters her
 from the game's code; **Inferred** entries are known only from a class or method name, and their notes say so. Where
 the map has nothing, this page says "not mapped" rather than guess.
 
+## Item by item
+
+What the map holds for each item, to find an entry quickly. **Inferred** means the map knows the type or member only by
+its name. Members every item shares (`Equipment.Use`, `Equipment.isOn`, `Equipment.storeItem`, `Equipment.placed` and
+the grab and place RPCs) are in the sections below. An item without a row is not mapped.
+
+### Equipment
+
+| Item | Map type | Mapped members and what is known | More |
+| --- | --- | --- | --- |
+| Candle, lantern (Firelight), the level's candles | `Candle`, `CandleObject` | its flames (`Candle.candleObjects`, each with `CandleObject.fireSource` and its wax `candleRend`), the wax's glow (`candleEmissionColor`), the time left to burn (`candleDuration`) | [flames](../systems/flames.md) |
+| Candelabra of the level | `Candlebra` | its candles (`allCandles`) and its own light, set by how many burn (`lightSource`) | [flames](../systems/flames.md) |
+| Video camera | `CCTV` (**inferred**) | the truck's monitor is `CCTVController`: `instance`, who views it (`viewers`), the switched-on cameras it shows (`GetCCTVCamerasByCurrentCameraType`) | [media](../systems/media.md) |
+| Spirit box | `EVPRecorder` (**inferred** from its prefabs) | its answers about where the ghost is, what it is and how hard the contract is (`PlayLocationSound`, `PlayAboutSound`, `PlayDifficultySound`; **inferred**) | |
+| D.O.T.S. projector | `IRLightSensor` (**inferred** from its prefab) | the type only | |
+| Crucifix | `Crucifix` (**inferred**) | its use on every client (`CrucifixUseNetworked`) and its use count (`useCount`; both **inferred**) | |
+| Incense | `WhiteSage` | its use (`UseNetworked`, **inferred**); its Yurei trap (`YureiTrap`); the smudge holds hunts off (`GhostAI.StopGhostFromHunting`, `GhostAI.smudge`) | [ghost AI](../systems/ghost-ai.md), "How a hunt starts" |
+| EMF reader, thermometer, motion sensor, sound sensor, parabolic microphone, sound recorder, torch | `EMFReader`, `Thermometer`, `MotionSensor`, `SoundSensor`, `ParabolicMicrophone`, `SoundRecorder`, `Torch` (all **inferred**) | the type only | [evidence](../systems/evidence.md) for how evidence reaches the world |
+
+### Cursed possessions
+
+| Item | Map type | Mapped members and what is known |
+| --- | --- | --- |
+| Tarot cards | `TarotCards` (**inferred**) | a draw on every client (`ChangeState`, **inferred**); the High Priestess's revive (`HighPriestess`); the Hanged Man's kill (`HangedMan`); the Hermit stops the ghost wandering (`GhostAI.TemporarilyStopWander`) |
+| Monkey paw | `MonkeyPaw` (**inferred**) | a wish on every client (`MakeWishNetworked`, **inferred**); the revive wish and its kill roll (`ReviveWish`); a wish may hold hunts off (`GhostAI.StopGhostFromHunting`) |
+| Voodoo doll | `VoodooDoll` (**inferred**) | a pin on every client (`NetworkedUse`, **inferred**); its pins force an interaction (`GhostActivity.NormalInteraction`) |
+| Music box | `MusicBox` (**inferred**) | its use on every client and its tween (`UseNetworked`, `tween`; **inferred**); the ghost's pull to it is `GhostState.musicBox` |
+| Haunted mirror | `HauntedMirror` (**inferred**) | its use or putting away (`UseNetworked`, **inferred**) |
+| Ouija board | `OuijaBoard` (**inferred**) | the answer it spells out (`PlayMessageSequence`, **inferred**) |
+| Summoning circle | `SummoningCircle` (**inferred**) | the type; the ghost's pull to it is `GhostState.summoningCircle` |
+
+[Players](../systems/players.md) has the revives in full, and `sdk/map/CursedItems.h` the cursed possessions' notes.
+
 ## An item in the world
 
 `Equipment` (`sdk/map/Equipment.h`) is the base class of every item a player carries, sets down and uses. A `Candle`

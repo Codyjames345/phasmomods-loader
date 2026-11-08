@@ -17,9 +17,9 @@ inline constexpr pm::sdk::EntryDesc WeatherProfile{.key = "WeatherProfile", .nam
 
 inline constexpr const char* WeatherType_values[] = {"clear", "foggy", "rain", "heavyRain"};
 
+// Found by its values.
 /// The weather types, an enum nested in LevelValues (name obfuscated, value names real): clear,
-/// foggy, rain, heavyRain, snow, wind, sunrise, bloodMoon and dead. Found by its values. Inferred:
-/// from the class dump.
+/// foggy, rain, heavyRain, snow, wind, sunrise, bloodMoon and dead. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc WeatherType{.key = "WeatherType", .owner = "LevelValues",
                                                 .values = WeatherType_values};
 
@@ -99,9 +99,11 @@ inline constexpr pm::sdk::EntryDesc WeatherProfile_weatherType{.key = "WeatherPr
 
 }  // namespace pm::map
 
-// The game API for the weather (sdk/api/game_api.h). Every member is called on Unity's main thread.
-// One that did not resolve in the running game build logs "<key> is not available in this game build"
-// once and returns its type's default (0) without touching the game.
+/// @file
+/// @brief The game API for the weather (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0) without touching the game.
 namespace phasmo {
 /// @addtogroup weather
 /// @{

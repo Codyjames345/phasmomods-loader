@@ -206,9 +206,12 @@ inline constexpr pm::sdk::EntryDesc ButtonControl_get_wasPressedThisFrame{
 
 }  // namespace pm::map
 
-// The game API for input (sdk/api/game_api.h). Every member is called on Unity's main thread. One that
-// did not resolve in the running game build logs "<key> is not available in this game build" once and
-// returns its type's default (null, zero, false) without touching the game.
+/// @file
+/// @brief The game API for input (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (null, zero, false) without touching the
+/// game.
 namespace phasmo {
 /// @addtogroup players
 /// @{
@@ -225,8 +228,8 @@ struct Cursor {
 
 /// How the cursor is held. Unresolved: 0.
 namespace CursorLockMode {
-inline constexpr pm::api::EnumValue<pm::map::CursorLockMode_None> None{};
-inline constexpr pm::api::EnumValue<pm::map::CursorLockMode_Locked> Locked{};
+inline constexpr pm::api::EnumValue<pm::map::CursorLockMode_None> None{};  ///< None(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::CursorLockMode_Locked> Locked{};  ///< Locked(): the value's number in this game build
 }  // namespace CursorLockMode
 
 /// A Vector2 control. `control` below is one (Pointer::get_delta, Pointer::get_position give one).

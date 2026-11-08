@@ -234,10 +234,12 @@ inline constexpr pm::sdk::EntryDesc MonoBehaviour_StartCoroutine{
 
 }  // namespace pm::map
 
-// The game API for Unity's base classes (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and returns its type's default (0, false, null) without touching the game. Every object
-// they return is a managed reference: keep it across frames only in a pm::api::Held.
+/// @file
+/// @brief The game API for Unity's base classes (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, false, null) without touching the
+/// game. Every object they return is a managed reference: keep it across frames only in a pm::api::Held.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{

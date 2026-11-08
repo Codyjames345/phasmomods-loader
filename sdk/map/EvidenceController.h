@@ -24,9 +24,11 @@ inline constexpr pm::sdk::EntryDesc EvidenceController_ForceRespawnGhostOrb{
 
 }  // namespace pm::map
 
-// The game API for EvidenceController (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and does nothing.
+/// @file
+/// @brief The game API for EvidenceController (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and does nothing.
 namespace phasmo {
 /// @addtogroup equipment
 /// @{
