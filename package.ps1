@@ -38,7 +38,9 @@ try {
         Copy-Item -LiteralPath (Join-Path $root $file.Source) -Destination $destination
     }
     $channelArguments = if ($Channel) { @('--channel', $Channel) } else { @() }
+    # The title names the Start menu shortcut and the installed-apps entry; the icon is Setup.exe's and that entry's.
     & $Vpk[0] @($Vpk | Select-Object -Skip 1) pack --packId PhasmoModsLoader --packVersion $version `
+        --packTitle 'PhasmoMods Loader' --icon (Join-Path $root 'tools/launcher.ico') `
         --packDir $content --mainExe 'PhasmoMods Loader.exe' --runtime win-x64 --outputDir $output @channelArguments
     if ($LASTEXITCODE -ne 0) { throw "vpk failed with exit code $LASTEXITCODE." }
 
