@@ -24,6 +24,7 @@
 #include "game_api.h"
 #include "runtime.h"
 #include "sheet_mesh.h"
+#include "squatter_chase.h"
 #include "squatter_figure.h"
 #include "squatter_net.h"
 #include "squatter_rule.h"
@@ -515,6 +516,8 @@ void steering_covers_every_phase_but_lurking() {
   CHECK(!steering_begins(true, Phase::Chasing) && !steering_begins(false, Phase::Lurking));
   CHECK(!steering_begins(false, std::nullopt) && !steering_begins(true, std::nullopt));
 }
+
+#include "squatter_chase_cases.inc"
 
 // The Squatter's sheet (sheet_mesh.h). A cell is cut for an eye when it overlaps the eye's rectangle, so a hole is the
 // rectangle rounded out to whole cells.
@@ -1078,6 +1081,18 @@ int main() {
   a_sprint_report_is_the_senders_own();
   a_stale_sprint_report_is_dropped();
   a_new_master_continues_from_the_last_shown_phase();
+  hears_as_the_hunts_voice_test();
+  the_target_is_the_nearest_sensed_player_inside();
+  tracking_lapses_after_the_window();
+  a_hiding_place_is_known_from_tracking();
+  lines_come_at_a_random_gap();
+  stuck_for_a_while_is_a_bump();
+  search_points_stay_near_the_last_place();
+  the_door_clip_follows_the_side();
+  a_door_is_reached_within_reach();
+  the_chase_speed_comes_from_the_target();
+  a_target_who_cannot_sprint_is_taunted();
+  cues_play_once_and_never_replay_on_joining();
   wav_decodes_mono_and_stereo();
   wav_refuses_malformed();
   every_set_has_a_folder_name();

@@ -1,0 +1,249 @@
+#pragma once
+
+#include <cmath>
+#include <cstdint>
+#include <map>
+#include <numbers>
+#include <optional>
+#include <span>
+
+#include "squatter_figure.h"
+#include "squatter_net.h"
+#include "squatter_rule.h"
+
+// The Squatter's chase as rules, free of game calls so they can be tested offline: whom it goes for, how long it
+// keeps track of them, what it hears, when it knows someone hides, when it speaks, bumps and opens a door, and what
+// each client plays of the master's Shown. squatter.cpp reads the game and feeds them. Times are milliseconds on any
+// steady clock; distances are metres. Main thread.
+namespace pm::custom::squatter {
+
+/** A point in the world, as the rules see one. */
+struct Point {
+  float x = 0, y = 0, z = 0;
+};
+
+// Game values, from the hunt's voice test (GhostHuntState.Hears, sdk/map/GhostHuntState.h): how far the ghost hears
+// a player talk, and a player a Monkey Paw wish marks (Player.wished).
+inline constexpr float kHearRange = 9.0f;
+inline constexpr float kWishedHearRange = 1000.0f;
+
+// Starting values, to be tuned with the user in game.
+
+// How long it still knows where a target is after it last saw or heard them.
+inline constexpr uint64_t kTrackMs = 4000;
+// The gap between two of its lines in a phase that talks, picked at random in this range.
+inline constexpr uint64_t kLineGapMinMs = 4000;
+inline constexpr uint64_t kLineGapMaxMs = 9000;
+// It counts as stuck after moving at under kStuckFraction of the pace it wants for kStuckMs: it bumps into something.
+inline constexpr uint64_t kStuckMs = 700;
+inline constexpr float kStuckFraction = 0.25f;
+// A pace under this is standing still on purpose, never a stall.
+inline constexpr float kStillPace = 0.5f;
+// How far from where it lost a target it looks for them.
+inline constexpr float kSearchRadius = 6.0f;
+// How near a door's hinge it must be to open it, and how far above or below still counts as the same floor.
+inline constexpr float kDoorReach = 1.3f;
+inline constexpr float kDoorRise = 1.5f;
+
+/**
+ * Whether a player is within its hearing, as the hunt's voice test bounds it before it asks the player's loudness
+ * (GhostHuntState.Hears): never outdoors (the player's room is RoomKind.outsideMap); a wished player within
+ * kWishedHearRange on any floor; any other within kHearRange on the ghost's own floor. The caller then asks
+ * PlayerAudio.IsTalkingLoudly(0.1), which clears the loudness it answers true for, so it asks only past this test.
+ * `metres` is from the ghost's head to the player's body; a value that is not a number is out of hearing.
+ */
+inline bool within_hearing(float metres, bool wished, bool sameFloor, bool outdoors) {
+  if (outdoors || !(metres >= 0.0f)) return false;
+  if (wished) return metres <= kWishedHearRange;
+  return sameFloor && metres <= kHearRange;
+}
+
+/** A player as the target choice sees them. */
+struct Candidate {
+  int id;        // whatever the caller names players by
+  float metres;  // from the ghost
+  bool living;   // not dead
+  bool inside;   // in the house: their room is not RoomKind.outsideMap
+  bool sensed;   // seen or heard this frame
+  bool hiding;   // in a hiding place it knows of (knows_hiding)
+};
+
+/**
+ * Its target: the nearest living player inside it senses now; with nobody sensed, the `current` target while it
+ * still tracks them (`currentTracked`) or knows their hiding place, as long as they are living and inside. -1 for
+ * none. It never chooses a player outside, so it never follows anyone past the exits.
+ */
+inline int pick_target(std::span<const Candidate> players, int current, bool currentTracked) {
+  int best = -1;
+  float nearest = 0.0f;
+  for (const Candidate& c : players) {
+    if (!c.living || !c.inside || !c.sensed) continue;
+    if (best < 0 || c.metres < nearest) {
+      best = c.id;
+      nearest = c.metres;
+    }
+  }
+  if (best >= 0) return best;
+  for (const Candidate& c : players)
+    if (c.id == current && c.living && c.inside && (currentTracked || c.hiding)) return current;
+  return -1;
+}
+
+/** Where its target was when it last sensed them, and whether it still knows (kTrackMs). */
+class Tracker {
+ public:
+  /** It sensed `target` at `at` at `now`. */
+  void sensed(int target, Point at, uint64_t now) {
+    target_ = target;
+    at_ = at;
+    when_ = now;
+  }
+  /** Whether it still knows where its target is at `now`: within kTrackMs of the last sensing. */
+  bool tracks(uint64_t now) const { return at_ && now - when_ <= kTrackMs; }
+  /** The target it last sensed, -1 for none. */
+  int target() const { return target_; }
+  /** Where it last sensed its target, none before the first. */
+  std::optional<Point> last_at() const { return at_; }
+  /** Forgets the target, as when it is gone or the chase ends. */
+  void forget() { *this = Tracker{}; }
+
+ private:
+  int target_ = -1;
+  std::optional<Point> at_;
+  uint64_t when_ = 0;
+};
+
+/**
+ * Whether it knows its target is in a hiding place: they are in one (Player.closet) and it tracked them as they went
+ * in, or senses them there now, or already knew. The game's own closet search learns a closet the same way, from the
+ * player it goes for (sdk/systems/ghost-ai.md). False once they step out.
+ */
+inline bool knows_hiding(bool inHidingPlace, bool trackedOrSensed, bool knewBefore) {
+  return inHidingPlace && (trackedOrSensed || knewBefore);
+}
+
+/** When its next line is due: at once at first, then a random gap after each. */
+class LineClock {
+ public:
+  bool due(uint64_t now) const { return !next_ || now >= *next_; }
+  /** It spoke at `now`; `roll` picks the gap. */
+  void spoke(uint64_t now, uint32_t roll) {
+    next_ = now + kLineGapMinMs + roll % (kLineGapMaxMs - kLineGapMinMs + 1);
+  }
+  void reset() { next_.reset(); }
+
+ private:
+  std::optional<uint64_t> next_;
+};
+
+/** Whether it has stalled against something: true once per stall of kStuckMs. */
+class StuckClock {
+ public:
+  /** This frame's `pace` (metres a second it moves) against the `wanted` pace, at `now`. */
+  bool update(float pace, float wanted, uint64_t now) {
+    if (wanted < kStillPace || pace >= wanted * kStuckFraction) {
+      since_.reset();
+      fired_ = false;
+      return false;
+    }
+    if (!since_) since_ = now;
+    if (fired_ || now - *since_ < kStuckMs) return false;
+    fired_ = true;
+    return true;
+  }
+  void reset() { *this = StuckClock{}; }
+
+ private:
+  std::optional<uint64_t> since_;
+  bool fired_ = false;
+};
+
+/** A place to look for a lost target: between 1 m and kSearchRadius from where it last sensed them, `roll` picking it. */
+inline Point search_point(Point last, uint32_t roll) {
+  const float angle = static_cast<float>(roll % 3600u) * (2.0f * std::numbers::pi_v<float> / 3600.0f);
+  const float metres = 1.0f + static_cast<float>((roll / 3600u) % 1000u) * ((kSearchRadius - 1.0f) / 999.0f);
+  return {last.x + std::cos(angle) * metres, last.y, last.z + std::sin(angle) * metres};
+}
+
+/**
+ * The opening-door clip for a door it opens from `ghost`'s side of a door at `door` whose Transform faces
+ * `doorForward`: outwards from the side the door faces, inwards from the other. Which way a leaf swings was not
+ * traced (sdk/systems/doors.md, "Opening a door quietly"), so this only matches the clip to where it stands.
+ */
+inline Act door_act(Point ghost, Point door, Point doorForward) {
+  const float side = (ghost.x - door.x) * doorForward.x + (ghost.z - door.z) * doorForward.z;
+  return side >= 0.0f ? Act::OpenDoorOutwards : Act::OpenDoorInwards;
+}
+
+/** Whether a door at `door` is within its reach from `ghost`: kDoorReach on the flat, kDoorRise up or down. */
+inline bool at_door(Point ghost, Point door) {
+  return std::hypot(door.x - ghost.x, door.z - ghost.z) <= kDoorReach && std::fabs(door.y - ghost.y) <= kDoorRise;
+}
+
+/**
+ * The sprint speed it chases a target at (move_speed): the target's own as their client reports it, else the
+ * master's own player's, else `last`. A tired target's report still carries the speed they would sprint at, so the
+ * Squatter's pace never changes when a player cannot sprint (the spec).
+ */
+inline float chase_sprint(std::optional<Sprint> target, std::optional<Sprint> own, float last) {
+  if (target && target->speed > 0.0f) return target->speed;
+  if (own && own->speed > 0.0f) return own->speed;
+  return last;
+}
+
+/**
+ * When to taunt a target about their sprint (tired_taunt_due), by target: a target who cannot sprint as the chase
+ * first turns to them counts as one whose sprint has just lapsed, so a difficulty without sprinting gets the taunt too.
+ */
+class TauntBook {
+ public:
+  /** Whether to taunt `target`, who `canSprint` or not at `now`; true also records the taunt. */
+  bool due(int target, bool canSprint, uint64_t now) {
+    auto [it, fresh] = could_.try_emplace(target, true);
+    const float since = last_ ? static_cast<float>(now - *last_) / 1000.0f : kTauntCooldown;
+    const bool taunt = tired_taunt_due(canSprint, it->second, since);
+    it->second = canSprint;
+    if (taunt) last_ = now;
+    return taunt;
+  }
+  void reset() { *this = TauntBook{}; }
+
+ private:
+  std::map<int, bool> could_;
+  std::optional<uint64_t> last_;
+};
+
+/** What a client starts playing for a Shown. */
+struct Cues {
+  bool move = false;  // play the move (figure::play), its act being over or none
+  bool line = false;  // play the line (voice::play_index)
+  bool act = false;   // play the act (figure::play_act)
+};
+
+/**
+ * What each client plays of the master's Shown: a line or an act once per new cue, and the move when it changes or an
+ * act ends. The first Shown after a reset plays its move but no line or act, so a client that takes it late (or the
+ * master's resend) never replays an old one.
+ */
+class CuePlayer {
+ public:
+  Cues take(const Shown& s) {
+    Cues c;
+    if (!last_) {
+      c.move = true;  // an act already under way is old news: the move, not the act's clip
+    } else {
+      c.line = s.lineCue != last_->lineCue && s.lineSet >= 0 && s.lineIndex >= 0;
+      c.act = s.actCue != last_->actCue && s.act >= 0;
+      const bool actEnded = last_->act >= 0 && s.act < 0;
+      c.move = s.act < 0 && (actEnded || s.move != last_->move || s.variant != last_->variant);
+    }
+    last_ = s;
+    return c;
+  }
+  void reset() { last_.reset(); }
+
+ private:
+  std::optional<Shown> last_;
+};
+
+}  // namespace pm::custom::squatter
