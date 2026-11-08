@@ -47,10 +47,11 @@ The Squatter's AssetBundle (`mods/custom_ghosts/assets/squatter.bundle`) holds M
 repository, so it is gitignored. Every build still ships it (`tools/payload.psd1`), and staging fails without it.
 
 - **Locally,** build the bundle in Unity (`sdk/guides/custom-animation.md`) and copy it to that path.
-- **On GitHub,** each job fetches it from a private repository holding `squatter.bundle` at its root. Set it up once, under
-  the repository's Settings, Secrets and variables, Actions:
+- **On GitHub,** each job fetches it from the private repository `phasmomods-private`, which holds `squatter.bundle` at its
+  root. Set up once, under this repository's Settings, Secrets and variables, Actions:
   - the variable `ASSETS_REPOSITORY`: the private repository, as `owner/name`;
-  - the secret `ASSETS_TOKEN`: a fine-grained token with read-only access to that repository's contents and nothing else.
+  - the secret `ASSETS_DEPLOY_KEY`: the private half of an SSH key whose public half is a read-only deploy key of the
+    private repository, so the build can read that one repository and nothing else.
 - **A new bundle** is a commit to the private repository; the next build takes it.
 - **Pull requests from forks** get no secrets, so their checks fail at the fetch. A maintainer reviews them and runs the build.
 

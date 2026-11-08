@@ -26,14 +26,14 @@ jobs:
         with:
           persist-credentials: false
       # The Squatter's AssetBundle holds Mixamo's clips, which may not be in this public repository: it comes from the
-      # private assets repository (the ASSETS_REPOSITORY variable, owner/name) with a read-only token (the ASSETS_TOKEN
-      # secret). Without them the build fails at its stage, as it must: Custom Ghosts does not start without the bundle
-      # (tools/payload.psd1).
+      # private assets repository (the ASSETS_REPOSITORY variable, owner/name) with a read-only deploy key of that
+      # repository (the ASSETS_DEPLOY_KEY secret). Without them the build fails at its stage, as it must: Custom Ghosts
+      # does not start without the bundle (tools/payload.psd1).
       - name: Fetch the private assets
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ vars.ASSETS_REPOSITORY }}
-          token: ${{ secrets.ASSETS_TOKEN }}
+          ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
           path: private-assets
           persist-credentials: false
       - name: Place the Squatter's bundle
@@ -62,14 +62,14 @@ jobs:
         with:
           persist-credentials: false
       # The Squatter's AssetBundle holds Mixamo's clips, which may not be in this public repository: it comes from the
-      # private assets repository (the ASSETS_REPOSITORY variable, owner/name) with a read-only token (the ASSETS_TOKEN
-      # secret). Without them the build fails at its stage, as it must: Custom Ghosts does not start without the bundle
-      # (tools/payload.psd1).
+      # private assets repository (the ASSETS_REPOSITORY variable, owner/name) with a read-only deploy key of that
+      # repository (the ASSETS_DEPLOY_KEY secret). Without them the build fails at its stage, as it must: Custom Ghosts
+      # does not start without the bundle (tools/payload.psd1).
       - name: Fetch the private assets
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ vars.ASSETS_REPOSITORY }}
-          token: ${{ secrets.ASSETS_TOKEN }}
+          ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
           path: private-assets
           persist-credentials: false
       - name: Place the Squatter's bundle
@@ -127,14 +127,14 @@ jobs:
           persist-credentials: false
           fetch-depth: 0 # the whole history, so the next step can see whether main contains the tag
       # The Squatter's AssetBundle holds Mixamo's clips, which may not be in this public repository: it comes from the
-      # private assets repository (the ASSETS_REPOSITORY variable, owner/name) with a read-only token (the ASSETS_TOKEN
-      # secret). Without them the build fails at its stage, as it must: Custom Ghosts does not start without the bundle
-      # (tools/payload.psd1).
+      # private assets repository (the ASSETS_REPOSITORY variable, owner/name) with a read-only deploy key of that
+      # repository (the ASSETS_DEPLOY_KEY secret). Without them the build fails at its stage, as it must: Custom Ghosts
+      # does not start without the bundle (tools/payload.psd1).
       - name: Fetch the private assets
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ vars.ASSETS_REPOSITORY }}
-          token: ${{ secrets.ASSETS_TOKEN }}
+          ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
           path: private-assets
           persist-credentials: false
       - name: Place the Squatter's bundle
