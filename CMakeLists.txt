@@ -161,6 +161,7 @@ add_library(CustomGhosts SHARED
   mods/custom_ghosts/hydra.cpp
   mods/custom_ghosts/sensor_copy.cpp
   mods/custom_ghosts/asterion.cpp
+  mods/custom_ghosts/ghost_sight.cpp
   mods/custom_ghosts/lithobolia.cpp
   mods/custom_ghosts/gremlin.cpp
   mods/custom_ghosts/bogeyman.cpp
@@ -309,7 +310,8 @@ pm_test(mods_panel host/mod_deps.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sd
 target_include_directories(mods_panel_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(custom_ghosts sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp
   sdk/runtime/content_acting.cpp mods/custom_ghosts/gremlin.cpp mods/custom_ghosts/hunt.cpp mods/custom_ghosts/squatter.cpp
-  mods/custom_ghosts/squatter_figure.cpp mods/custom_ghosts/squatter_door.cpp mods/custom_ghosts/sensor_copy.cpp)
+  mods/custom_ghosts/squatter_figure.cpp mods/custom_ghosts/squatter_door.cpp mods/custom_ghosts/sensor_copy.cpp
+  mods/custom_ghosts/ghost_sight.cpp)
 target_compile_definitions(custom_ghosts_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(custom_ghosts_test PRIVATE pmmod)
 # Before the mods' folders, as for content_difficulty_test below.
