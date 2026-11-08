@@ -592,3 +592,5 @@ slammed door goes quiet at once and the padlock comes the moment it is fully ope
   test red then green), and the status box's "Keep this folder outside the game directory." is gone as redundant
   (launcher.keep-folder-outside-directory removed). validate.ps1 78/78. Push held until the user writes
   updater.available and updater.download-stalled, or says to push with the placeholders.
+- User wrote updater.available and updater.download-stalled; PM_TEXT_TODO marks off, player-text.md back to 0.
+  validate.ps1 78/78. Pushed to development.
