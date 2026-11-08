@@ -132,18 +132,31 @@ initialization. To change which mods run, use the **Mods** button in the game.
 
 ## Updates
 
-PhasmoMods Loader checks GitHub for the latest release each time it starts, waits at
-most ten seconds, and then carries on with the version you have. When the latest
-release differs from yours, newer or older, it installs that release and restarts
-itself, with the same Steam launch option. A release that is taken down therefore
-moves everyone back to the one before it. With no network, it starts the installed
-version unchanged.
+PhasmoMods Loader checks GitHub for the latest release each time it starts. The check
+waits at most ten seconds. With no network, or no answer in time, PhasmoMods Loader
+starts the installed version unchanged and writes why in its status box, or in its
+log when Steam starts it.
+
+When the latest release differs from yours, newer or older, a popup names it and
+offers three choices:
+
+- **Update now** downloads the release with a progress bar, installs it and restarts
+  PhasmoMods Loader, with the same Steam launch option. A slow connection is left to
+  finish. The download gives up only if it fails or makes no progress for 30 seconds,
+  and then the installed version starts. **Cancel** starts the installed version too.
+- **Remind me later** starts the installed version and asks again next time.
+- **Ignore** starts the installed version and never asks about that release again.
+  Any other release, newer or older, asks again. The choice is kept in
+  `%LOCALAPPDATA%\PhasmoMods\update_ignored.txt`; delete it to be asked again.
+
+A release that is taken down therefore offers everyone the one before it.
 
 ## Development builds
 
 PhasmoMods Loader has a checkbox for development builds, which are newer and less tested than a release, with the same ban risk.
-Ticking it installs the latest development build and restarts. Each time the program starts after that, it moves to the newest
-one. Unticking it moves you back to the latest release. The box can't be changed once mods are loaded into the game.
+Ticking it asks you to confirm the development build it will install, then installs it and restarts. Each time the program starts after that, it moves to the newest
+one. Unticking it asks the same, then moves you back to the latest release. If you say no, or the check
+can't reach GitHub, the box stays as it was. The box can't be changed once mods are loaded into the game.
 
 Everyone in a lobby needs the same build, so a player on a development build can only play with others on that same build. After
 a new one comes out, restart PhasmoMods Loader before joining.

@@ -59,12 +59,26 @@ Tasks 12g, 13b, 13c and 14 (string tables).
 
 ## Development builds
 
-- [ ] Installed from the release, the development box starts unticked. Ticking it moves to the latest development build and restarts, with the box still ticked.
-- [ ] Unticking it moves back to the latest release, a lower version, and restarts, with the box unticked and the mods and the notice's answer kept.
-- [ ] With the box ticked and a new development build published, the next start updates to it. With the box unticked, a player sees no development build.
+- [ ] Installed from the release, the development box starts unticked. Ticking it asks "This will install version <x>, continue?" with the latest development build's version. Yes shows the progress bar, then restarts, with the box still ticked.
+- [ ] Ticking it and answering No (or closing the question) leaves the box unticked, and the next start stays on the release.
+- [ ] Unticking it asks the same with the release's version; Yes moves back to it, a lower version, and restarts, with the box unticked and the mods and the notice's answer kept.
+- [ ] With the box ticked and a new development build published, the next start offers it in the update popup. With the box unticked, a player is never offered a development build.
 - [ ] The box can't be changed once mods are attached, and works again after the program restarts.
 - [ ] A player on a development build joining a host on the release is removed with the list of what the lobby needs, and the reverse too.
 - [ ] Started through the Steam launch option, the program updates along the channel the box chose.
+
+## Updates and Setup
+
+- [ ] Setup.exe shows the PM icon in Explorer. After installing, the Start menu entry and Settings' installed apps read "PhasmoMods Loader", with the space and the icon.
+- [ ] An install from before this change (0.2.1): after it updates to this release, check whether the Start menu entry is renamed or still reads "PhasmoModsLoader".
+- [ ] The launcher window's buttons and checkboxes use the current Windows style, and still fit.
+- [ ] With a newer release published, opening the launcher shows the popup naming it, with Update now, Remind me later and Ignore. Update now shows a progress bar that moves, then the launcher restarts on the new version.
+- [ ] Remind me later starts the installed version, and the next start asks again. Closing the popup with its X does the same.
+- [ ] Ignore starts the installed version, writes `%LOCALAPPDATA%\PhasmoMods\update_ignored.txt`, and the next start doesn't ask. A later release asks again.
+- [ ] Started through the Steam launch option with a newer release published: the popup shows before the game, in front of Steam. Update now restarts through Steam and the game starts on the new version; Remind me later starts the game.
+- [ ] Cancel on the progress bar starts the installed version, and the next start offers the release again.
+- [ ] On a slow connection (limit it, for example with Windows' metered settings or a throttling tool), a download that takes over 30 seconds in all still finishes.
+- [ ] Unplug the network partway through a download: within about 30 seconds the popup closes, and the status box (or `launcher.log` under Steam) says why, and the installed version starts.
 
 ## Lobbies and players
 

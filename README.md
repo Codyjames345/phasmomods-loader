@@ -107,8 +107,8 @@ Requires Windows x64 and Phasmophobia on Steam. Mods have been tested on the lat
 3. Tick the mods in PhasmoMods Loader, start Phasmophobia through Steam, and choose
    **Attach to running game** at the main menu. Answer the notice in the game.
 
-PhasmoMods Loader installs into `%LOCALAPPDATA%\PhasmoModsLoader`, checks for updates
-each time it starts, and keeps your settings in `%LOCALAPPDATA%\PhasmoMods`. See the
+PhasmoMods Loader installs into `%LOCALAPPDATA%\PhasmoModsLoader`, offers each new
+release when it starts, and keeps your settings in `%LOCALAPPDATA%\PhasmoMods`. See the
 [installation guide](docs/installation.md) for the Steam launch option, removal and troubleshooting.
 
 ## Build from source

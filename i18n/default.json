@@ -1,5 +1,6 @@
 // PhasmoMods Loader's player-facing text: the host's popups and the Mods panel, and the launcher's window.
-// A {{token}} is a placeholder the code fills in. Keep one entry per line.
+// A {{token}} is a placeholder the code fills in. Keep one entry per line. One marked PM_TEXT_TODO is a placeholder
+// waiting for the author's words.
 {
   "consent.account": "<b>Your account is at risk.</b> Phasmophobia's anti-cheat may detect and report your modified game to Kinetic Games, which can result in a ban. I cannot guarantee a mod or game update won't change how the anti-cheat works. To protect your account, mods only run in private lobbies. Do not attempt to bypass this restriction.",
   "consent.agree": "I agree",
@@ -43,6 +44,7 @@
   "launcher.copy": "&Copy Steam launch option",
   "launcher.copy-intro": "To load automatically, copy this command into Steam's Launch Options:",
   "launcher.development": "Use &development builds (newer and less tested)",
+  "launcher.development-confirm": "This will install version {{version}}, continue?",
   "launcher.development-not-saved": "Your choice of development builds could not be saved.",
   "launcher.finish-close": "PhasmoMods Loader could not finish. Restart it and try again.",
   "launcher.finish-loading": "PhasmoMods Loader could not finish loading. Restart it and try again.",
@@ -224,6 +226,8 @@
   "start.waiting": "Waiting for {{players}}. The loader is still checking their mods, please try again in a moment.",
   "updater.check-failed": "Could not check for updates ({{reason}}). Using the installed version.",
   "updater.checking-updates-took-too": "Checking for updates took too long. Using the installed version.",
+  "updater.available": "{{version}}",  // PM_TEXT_TODO: the update popup's message
+  "updater.download-stalled": "{{version}}",  // PM_TEXT_TODO: the download made no progress for 30 seconds; the installed version starts
   "updater.download-failed": "Could not download version {{version}} ({{reason}}). Using the installed version.",
   "updater.failed": "The update failed ({{reason}}). Using the installed version.",
   "updater.install-failed": "Could not install version {{version}} ({{reason}}). Using the installed version.",
@@ -232,6 +236,8 @@
   "updater.not-found": "the update to download was not found",
   "updater.not-installed": "PhasmoMods Loader is not installed",
   "updater.unknown-error": "unknown error",
-  "updater.updated-on-close": "Updated to {{version}}. It will be installed when PhasmoMods Loader closes.",
+  "updater.ignore": "Ignore",
+  "updater.remind-later": "Remind me later",
+  "updater.update-now": "Update now",
   "updater.updated-restarting": "Updated to {{version}}. Restarting."
 }

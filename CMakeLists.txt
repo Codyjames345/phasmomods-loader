@@ -219,7 +219,9 @@ set_target_properties(velopack PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/third_party/velopack)
 
 add_executable(ModLauncher WIN32 tools/launcher.cpp host/mod_deps.cpp tools/update.cpp tools/update_velopack.cpp tools/launcher.rc)
-target_link_libraries(ModLauncher PRIVATE pmloader velopack user32 shell32 gdi32)
+target_link_libraries(ModLauncher PRIVATE pmloader velopack user32 shell32 gdi32 comctl32)
+# Common Controls 6, which the update popup's task dialog needs; it also gives the window the current Windows style.
+target_link_options(ModLauncher PRIVATE "/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'")
 set_target_properties(ModLauncher PROPERTIES OUTPUT_NAME "PhasmoMods Loader")
 pm_options(ModLauncher)
 target_compile_definitions(ModLauncher PRIVATE UNICODE _UNICODE PM_SUITE_VERSION="${PM_SUITE_VERSION}")

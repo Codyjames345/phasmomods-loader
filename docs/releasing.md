@@ -47,8 +47,9 @@ git push
   own copy of `VERSION`, so only release versions are ever committed.
 - **Channel:** Velopack's `dev`, published under a `dev-*` tag as a GitHub pre-release, so GitHub's latest-release link and every player
   who hasn't ticked the box stay on the release. Releases stay on Velopack's default channel, `win`.
-- **The checkbox:** it saves the choice in `%LOCALAPPDATA%\PhasmoMods\update_channel.txt` and updates straight away, unless mods are
-  loaded. Unticking reads the release's feed and moves down to its version, which is why the updater allows a lower version.
+- **The checkbox:** it saves the choice in `%LOCALAPPDATA%\PhasmoMods\update_channel.txt`, checks the other feed, and asks the player
+  to confirm the version it found before installing it, unless mods are loaded. Declining, or a check that fails, puts the choice
+  back. Unticking reads the release's feed and moves down to its version, which is why the updater allows a lower version.
 - **Only three stay on GitHub.** Velopack's GitHub source reads only the newest ten releases and filters them afterwards, so ten
   development builds would hide the latest release from every player. The job deletes older ones (`tools/dev_releases.ps1`).
 - **Testing the switch without GitHub:** `PM_UPDATE_SOURCE` names a folder to update from instead, for either channel.

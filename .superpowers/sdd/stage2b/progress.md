@@ -563,3 +563,28 @@ slammed door goes quiet at once and the padlock comes the moment it is fully ope
   (after 14b, before 15): a content-keyed compiler cache (ccache or sccache, the user picks after research), because a fresh
   checkout's timestamps make Ninja rebuild a restored build/ in full. Open questions for the user: which tool, and whether
   the tag's release job uses the cache or builds cold. Not started.
+
+## 2026-11-08 Update popup, development confirmation, Setup's title and icon (Claude, user's go)
+- Trigger: the user's 0.2.0 install said "Checking for updates took too long". Cause was GitHub: every github.com
+  releases page and /releases/download/ URL answered 504 from every region (API, raw and codeload fine, status page
+  green); 0.2.0 reads releases.win.json from three releases, about 11.4 s each, so 34 s against a 10 s limit. Not ours.
+- User: the 10 s limit wrongly treated a slow download as a failure. Agreed design: the check keeps its 10 s limit and
+  downloads nothing; a found version opens a task dialog with the user's buttons Update now / Remind me later / Ignore;
+  Update now moves to a progress bar with Cancel; the download has no overall limit and gives up only on an error or
+  30 s with no progress (kDownloadStall, my call); Ignore saves the version in %LOCALAPPDATA%\PhasmoMods\update_ignored.txt
+  and only that exact version is skipped. Old installs update silently to the release carrying this (user: fine).
+- User picked Common Controls 6 for the whole launcher (manifest dependency in CMakeLists.txt), so its window takes the
+  current Windows style. User's development box rule: "This will install version x, continue?" (their words,
+  launcher.development-confirm); No, closing it or a failed check puts the box and update_channel.txt back.
+- update::run and Progress replaced by update::check (Available carries the version) and update::Install (poll with a
+  stall, cancel; the apply is never interrupted). Backend::download takes a progress callback, apply always restarts,
+  so updater.updated-on-close (no longer reachable) left the table. Tests in update_test.cpp; the stall rule switched
+  off failed four checks.
+- Text for the user: updater.available and updater.download-stalled are PM_TEXT_TODO (placeholder "{{version}}"). The
+  progress page reuses launcher.updating.
+- Setup: package.ps1 passes --packTitle 'PhasmoMods Loader' (Start menu entry and installed apps had "PhasmoModsLoader")
+  and --icon tools/launcher.ico (Setup.exe had Velopack's default). package_test.ps1 checks both, red then green; a real
+  vpk 1.2.161 pack of the built launcher gave Setup.exe the PM icon and the nuspec title.
+- validate.ps1 78/78 and all script tests pass. The dialog itself has no harness (only an installed copy shows it):
+  smoke list gains "Updates and Setup", and its development-box checks now expect the confirmation. Unknown: whether a
+  Velopack update renames an existing install's Start menu shortcut.
