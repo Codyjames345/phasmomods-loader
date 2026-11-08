@@ -1590,6 +1590,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &GhostInteraction_CreateInteractionEMF,
     &Door_CheckDoorDuringHunt,
     &HingeDoor_LevelControllerOpenDoor,
+    &HingeDoor_OpenDoor,
     &Door_SetDoorAndOcclusionOpen,
     &Door_closed,
     &Door_view,

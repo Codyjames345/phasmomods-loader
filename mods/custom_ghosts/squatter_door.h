@@ -72,9 +72,9 @@ inline constexpr uint64_t kRelockMs = 2000;
  */
 int relock(uint64_t now);
 
-// The quiet opener (sdk/systems/doors.md, "Opening a door quietly"): the game's own HingeDoor.LevelControllerOpenDoor,
-// which opens doors as a contract starts and leaves no ghost's trace. Its angle reaches the other clients only from the
-// door's view's owner, through the door's PhotonTransformView, so the master takes the view first, as the ghost's own
+// The quiet opener (sdk/systems/doors.md, "Opening a door quietly"): the game's own HingeDoor.OpenDoor, which swings the
+// leaf with its physics and leaves no ghost's trace. The swing reaches the other clients only from the door's view's
+// owner, through the door's PhotonTransformView, so the master takes the view first, as the ghost's own
 // door step does, and opens the door once it owns it. Nothing is carried on the mod's channel.
 
 // Milliseconds the master waits for a door's view to become its own before it gives the open up. A starting value, as
@@ -85,13 +85,13 @@ inline constexpr uint64_t kOpenWaitMs = 2000;
 enum class Opening {
   Idle,     // no open waits (open_step only)
   Waiting,  // asked for the door's view; open_step opens it once it lands
-  Opened,   // HingeDoor.LevelControllerOpenDoor ran on the master, which owns the door's view
+  Opened,   // HingeDoor.OpenDoor ran on the master, which owns the door's view
   Refused,  // nothing opened: may_open said no, another door waits, or (open_step) the open was given up
 };
 
 /**
  * Whether the master may open `door` quietly now. True only on the master, in a contract (a live LevelController), for
- * a live HingeDoor (HingeDoor.LevelControllerOpenDoor is HingeDoor's own) that is not an exit of the map (exits, so
+ * a live HingeDoor (HingeDoor.OpenDoor is HingeDoor's own) that is not an exit of the map (exits, so
  * never one the Squatter holds), of kind DoorKind.None, unlocked (Door.locked), grabbable (Door.grabbable), reading shut
  * (Door.closed), and whose PhotonObjectInteract nothing is using (PhotonObjectInteract.inUse). The kind, shut and
  * interact tests are the game's own contract-start opener's; the lock, the grab switch and the use are left as the game
@@ -100,9 +100,9 @@ enum class Opening {
 bool may_open(void* door);
 
 /**
- * On the master: opens the shut `door` part of the way with the game's own quiet opener
- * (HingeDoor.LevelControllerOpenDoor), which turns the leaf to a random angle on its hinge's one open side, makes no
- * sound and leaves no EMF reading, count or fingerprint. Opened at once when this client owns the door's view (always
+ * On the master: swings the shut `door` open with the game's own HingeDoor.OpenDoor, a push of the game's
+ * random strength through the leaf's physics, which makes no ghost sound and leaves no EMF reading, count or
+ * fingerprint. Opened at once when this client owns the door's view (always
  * offline). Otherwise it asks for the view (PhotonView.RequestOwnership, granted to a Takeover view when it comes back)
  * and answers Waiting; open_step opens the door once the view is this client's, since a leaf moved on a client that does
  * not own its view is pulled back to the owner's angle and seen by nobody. Refused, doing nothing, when may_open says

@@ -419,11 +419,28 @@ inline constexpr const char* HingeDoor_LevelControllerOpenDoor_params[] = {"bool
 /// from the view's owner (Door.view): called on a client that does not own the view, the leaf is pulled back to the
 /// owner's angle the next frame and nobody else sees it open. So take the view first (PhotonView.RequestOwnership,
 /// then wait for PhotonView.get_IsMine), as the ghost's own door step does (sdk/systems/doors.md, "Opening a door
-/// quietly"). Its RPCs check no sender. Decompiled.
+/// quietly"). Its RPCs check no sender. Mid-contract its angle does not hold: in the user's test of 2026-11-09 a door
+/// it opened seven times in seven seconds, from the master owning its view, never moved. It sets the angle directly
+/// rather than through the leaf's physics, which HingeDoor.OpenDoor does. Decompiled.
 inline constexpr pm::sdk::EntryDesc HingeDoor_LevelControllerOpenDoor{
     .key = "HingeDoor.LevelControllerOpenDoor", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "HingeDoor", .name = "LevelControllerOpenDoor",
     .params = HingeDoor_LevelControllerOpenDoor_params};
+
+inline constexpr const char* HingeDoor_OpenDoor_params[] = {"bool", "float", "bool"};
+
+/// Swings the door with its leaf's physics: a coroutine on the client that calls it, which frees the leaf's Rigidbody
+/// (not kinematic, its mass and gravity set, a high angular drag a moment), then pushes it about its hinge with
+/// Rigidbody.AddRelativeTorque, toward shut when its first argument is true and open otherwise, by its second argument
+/// when that is above 0 or by a random strength, within the hinge's limit (its ConfigurableJoint). Then it checks the
+/// door's occlusion portal and tells every client by an RPC that takes no PhotonMessageInfo, buffered when its third
+/// argument is true. It makes no Noise sound and leaves no EMF reading, LevelStats count or fingerprint. Physics moves
+/// the leaf on the view's owner only, and the door's PhotonTransformView carries it to the rest, so call it on the owner
+/// (Door.view; take the view first). No direct caller: the game reaches it through its virtual slot. Decompiled.
+inline constexpr pm::sdk::EntryDesc HingeDoor_OpenDoor{.key = "HingeDoor.OpenDoor", .kind = pm::sdk::Kind::Method,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .owner = "HingeDoor", .name = "OpenDoor",
+                                                       .params = HingeDoor_OpenDoor_params};
 
 inline constexpr const char* Axis_values[] = {"None", "X", "Y", "Z"};
 
@@ -579,6 +596,9 @@ struct HingeDoor {
   /// other clients see it only when this client owns the door's view (Door::view). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::HingeDoor_LevelControllerOpenDoor, void(void*, bool, float)>
       LevelControllerOpenDoor{};
+  /// OpenDoor(door, close, strength, buffered): swings it with its leaf's physics, open or shut, with no ghost's trace,
+  /// on the view's owner (strength -1 for the game's random push). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::HingeDoor_OpenDoor, void(void*, bool, float, bool)> OpenDoor{};
 };
 
 /// Unity's axis flags, the values HingeDoor::hingeAxis holds.

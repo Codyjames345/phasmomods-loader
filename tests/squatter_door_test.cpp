@@ -129,14 +129,15 @@ bool g_throwInWish = false;
 char g_hingeClass, g_slideClass;
 struct OpenCall {
   void* door;
-  bool flip;
-  float unused;
+  bool close;     // HingeDoor.OpenDoor's first argument: shut it rather than open it
+  float strength;  // its push, -1 for the game's own random one
+  bool buffered;   // whether its RPC is buffered
 };
-std::vector<OpenCall> g_opens;     // HingeDoor.LevelControllerOpenDoor's calls
+std::vector<OpenCall> g_opens;     // HingeDoor.OpenDoor's calls
 std::vector<void*> g_viewsAsked;   // PhotonView.RequestOwnership's calls
-void fake_open(void* d, bool flip, float unused, const void*) {
-  g_calls.push_back("LevelControllerOpenDoor");
-  g_opens.push_back({d, flip, unused});
+void fake_open(void* d, bool close, float strength, bool buffered, const void*) {
+  g_calls.push_back("OpenDoor");
+  g_opens.push_back({d, close, strength, buffered});
 }
 bool fake_is_mine(void* view, const void*) { return view && at<bool>(*static_cast<Obj*>(view), kViewMine); }
 void fake_request_ownership(void* view, const void*) {
@@ -284,7 +285,7 @@ void start(bool master = true, bool friendly = false) {
   fake::field(map::Door_grabbable, kDoorGrabbable);
   fake::field(map::Door_locked, kDoorLocked);
   fake::type(map::HingeDoor, &g_hingeClass);
-  fake::method(map::HingeDoor_LevelControllerOpenDoor, reinterpret_cast<void*>(&fake_open));
+  fake::method(map::HingeDoor_OpenDoor, reinterpret_cast<void*>(&fake_open));
   fake::field(map::Door_closed, kDoorShut);
   fake::field(map::Door_kind, kDoorKind);
   fake::field(map::Door_interact, kDoorInteract);
@@ -788,8 +789,9 @@ void a_shut_door_opens_quietly_on_the_master() {
   plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
   CHECK(door::may_open(&g_kitchen));
   CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Opened);
-  CHECK(g_opens.size() == 1 && g_opens[0].door == &g_kitchen && !g_opens[0].flip && g_opens[0].unused == -1.0f);
-  CHECK((g_calls == std::vector<std::string>{"LevelControllerOpenDoor"}));
+  CHECK(g_opens.size() == 1 && g_opens[0].door == &g_kitchen && !g_opens[0].close && g_opens[0].strength == -1.0f &&
+        !g_opens[0].buffered);
+  CHECK((g_calls == std::vector<std::string>{"OpenDoor"}));
   CHECK(door::open_step(1001) == door::Opening::Idle && g_opens.size() == 1);
 }
 
@@ -925,7 +927,7 @@ void a_missing_entry_fails_the_start() {
                                             &map::Door_UnlockDoor, &map::Door_ForceToggleHuntCollider,
                                             &map::MonkeyPaw_OpenExitsWish,
                                             &map::Door_HuntingCloseDoorNetworked, &map::Door_grabbable,
-                                            &map::Door_locked, &map::HingeDoor_LevelControllerOpenDoor,
+                                            &map::Door_locked, &map::HingeDoor_OpenDoor,
                                             &map::HingeDoor, &map::Door_closed, &map::Door_kind,
                                             &map::Door_interact, &map::Door_view, &map::DoorKind_None,
                                             &map::PhotonObjectInteract_inUse, &map::PhotonView_get_IsMine,

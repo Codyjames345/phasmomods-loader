@@ -138,6 +138,17 @@ the game's quiet opener (below) move a leaf.
 
 ## Opening a door quietly
 
+**Mid-contract, open a door with `HingeDoor.OpenDoor(false, -1, false)`, not the contract-start opener below.** `OpenDoor` swings the leaf
+with its own physics: a coroutine frees the leaf's Rigidbody and pushes it about its hinge with `Rigidbody.AddRelativeTorque`,
+within the hinge's `ConfigurableJoint` limit, by a random strength (or the float given, when above 0), shut when its first
+argument is true. Then it checks the door's occlusion portal and tells every client by an RPC that takes no `PhotonMessageInfo`,
+buffered when its last argument is true. It makes no Noise sound and leaves no EMF reading, `LevelStats` count or
+fingerprint. Like the opener below it moves the leaf only on the view's owner, so take the view first. The contract-start
+opener sets the angle outright, and mid-contract that does not hold: in the user's test of 2026-11-09 a door it opened
+seven times in seven seconds, from the master owning its view, never moved. Custom Ghosts' Squatter uses `OpenDoor`.
+
+The contract-start opener:
+
 `HingeDoor.LevelControllerOpenDoor` opens a door part of the way and leaves no ghost's trace. The game calls it in one
 place: a coroutine `LevelController.Start` begins on the master, which waits for the contract's ghost and then opens some
 random doors. The difficulty and the map's size set how many. It takes only doors that are:

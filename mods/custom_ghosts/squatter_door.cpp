@@ -58,12 +58,14 @@ void forget_old_level() {
 }
 
 /**
- * The game's own quiet opener on `d`, with the arguments LevelController's contract-start opener passes: the leaf turns
- * to a random angle on its hinge's open side, and the door's view, this client's, carries it to every other client.
+ * Swings `d` open with its leaf's physics, the game's own HingeDoor.OpenDoor: a push of the game's random strength
+ * about its hinge, its RPC unbuffered. The door's view, this client's, carries the swing to every other client. The
+ * contract-start opener (HingeDoor.LevelControllerOpenDoor) sets the angle outright, which does not hold mid-contract
+ * (user, 2026-11-09: a door it opened over and over never moved).
  */
 void open_now(void* d) {
-  phasmo::HingeDoor::LevelControllerOpenDoor(d, false, -1.0f);
-  PM_LOG("squatter: a door opened quietly");
+  phasmo::HingeDoor::OpenDoor(d, false, -1.0f, false);
+  PM_LOG("squatter: a door swung open");
 }
 
 /** Adds the live doors of the Door[] `doors` to `out`, each once. */
