@@ -44,8 +44,9 @@ constexpr int32_t kNetworkSpots = 0x08, kSpotPlayer = 0x08;
 constexpr int32_t kPlayerDead = 0x08, kPlayerRoom = 0x10;
 constexpr int32_t kRoomKind = 0x08;
 constexpr int32_t kValuesDifficulty = 0x08, kDifficultyFriendly = 0x08;
-// RoomKind's numbers in build 25811160: insideRoom 0, outsideMap 1, exterior 2, exteriorRoom 3.
-constexpr int32_t kInside = 0, kOutsideMap = 1, kExterior = 2, kExteriorRoom = 3;
+// Made-up numbers for RoomKind's insideRoom, outsideMap, exterior and exteriorRoom: the code reads outsideMap's from
+// the map, so none is the game's.
+constexpr int32_t kInside = 10, kOutsideMap = 11, kExterior = 12, kExteriorRoom = 13;
 
 template <class T>
 T& at(Obj& o, int32_t offset) {

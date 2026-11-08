@@ -1565,7 +1565,8 @@ void called_fact_drops_uncalled_decoys() {
 
 // A field fact reads a leaf function the exception table does not list, straight-line code up to a ret
 // or a tail jump, as it reads a listed one: a constructor that stores its defaults and jumps to its base
-// tells two floats apart by the constants it stores through `this`.
+// tells two floats apart by the constants it stores through `this`. The offsets are made up, not any
+// game type's.
 void field_fact_reads_a_leaf() {
   constexpr EntryDesc rig{.key = "Rig", .name = "Rig", .assembly = "Assembly-CSharp", .ns = ""};
   constexpr EntryDesc ctor{.key = "Rig.ctor", .kind = Kind::Method, .owner = "Rig", .name = ".ctor"};
@@ -1575,9 +1576,9 @@ void field_fact_reads_a_leaf() {
     ModelBuilder m;
     Code code;
     const int t = m.type("Assembly-CSharp", "", "Rig");
-    m.field(t, "a", "float", 0x90);
-    m.field(t, "b", "float", 0x94);
-    m.field(t, "c", "float", 0x98);
+    m.field(t, "a", "float", 0x24);
+    m.field(t, "b", "float", 0x28);
+    m.field(t, "c", "float", 0x2C);
     m.method(t, ".ctor", "void", {}, 0x1400);
     code.b.code(0x1400, std::move(body));
     const EntryDesc field{.key = "Rig.speed", .kind = Kind::Field, .owner = "Rig", .type = "float", .facts = facts};
@@ -1585,17 +1586,17 @@ void field_fact_reads_a_leaf() {
     const Result* f = r.find("Rig.speed");
     return f ? std::pair{f->status, f->offset} : std::pair{Status::Missing, int32_t{-1}};
   };
-  // mov dword [rcx+0x90], 1.6f; mov dword [rcx+0x94], 3.0f; jmp out
-  const std::vector<uint8_t> stores{0xC7, 0x81, 0x90, 0x00, 0x00, 0x00, 0xCD, 0xCC, 0xCC, 0x3F,
-                                    0xC7, 0x81, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x40};
+  // mov dword [rcx+0x24], 1.6f; mov dword [rcx+0x28], 3.0f; jmp out
+  const std::vector<uint8_t> stores{0xC7, 0x81, 0x24, 0x00, 0x00, 0x00, 0xCD, 0xCC, 0xCC, 0x3F,
+                                    0xC7, 0x81, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x40};
   const std::vector<uint8_t> tailJump = rel(0x1400 + stores.size(), {0xE9}, 0x9000);
-  CHECK((run(join({stores, tailJump}), walk) == std::pair{Status::Resolved, int32_t{0x90}}));
-  CHECK((run(join({stores, tailJump}), sprint) == std::pair{Status::Resolved, int32_t{0x94}}));
+  CHECK((run(join({stores, tailJump}), walk) == std::pair{Status::Resolved, int32_t{0x24}}));
+  CHECK((run(join({stores, tailJump}), sprint) == std::pair{Status::Resolved, int32_t{0x28}}));
   CHECK(run(join({stores, kRet}), walk).first == Status::Resolved);
   // A leaf that branches cannot be read in full: the fact cannot decide, so nothing is picked.
   CHECK(run(join({stores, {0xEB, 0x00}, kRet}), walk).first == Status::Ambiguous);
   // Stores through rcx after the leaf wrote it are not through `this`: the fact cannot decide by them.
-  const std::vector<uint8_t> reloaded{0x48, 0x8B, 0x49, 0x40};  // mov rcx, [rcx+0x40]
+  const std::vector<uint8_t> reloaded{0x48, 0x8B, 0x49, 0x18};  // mov rcx, [rcx+0x18]
   CHECK(run(join({reloaded, stores, kRet}), walk).first == Status::Ambiguous);
 }
 
