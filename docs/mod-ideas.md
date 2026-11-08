@@ -23,12 +23,3 @@ looks for five seconds, at the cost of an event charge. The game's own `GhostEve
 particle cloud, so every client bakes that investigator's body into a still figure that moves and
 turns with the ghost. There is no version for the game's own AI ghosts yet; this idea would bring
 the event to normal contracts without a ghost player.
-
-## Squatter ghost type
-
-A custom ghost type whose model is just a person in a bedsheet making ghost noises. It has no
-evidence and no paranormal activity of any kind.
-
-Notes: a ghost type with no evidence would be the first of its kind, so the journal's evidence
-filtering and the stage 2b content layer's ghost registration (`sdk/api/content.h`, still to be
-written) need to allow a type with zero evidence.

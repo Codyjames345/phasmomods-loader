@@ -10,6 +10,9 @@ This product includes third-party software under its own licence:
 - Velopack, MIT (third_party/velopack/LICENSE.txt)
 - JSON for Modern C++ (nlohmann/json) 3.12.0, Copyright (c) 2013-2025 Niels Lohmann, MIT (third_party/nlohmann/LICENSE.MIT)
 
+Custom Ghosts' Squatter uses character animations from Mixamo (https://www.mixamo.com), by Adobe, under
+Adobe's terms for Mixamo. They ship only inside the mod's compiled AssetBundle, never as raw animation files.
+
 Phasmophobia is a game by Kinetic Games. This project is not affiliated with,
 endorsed by or supported by Kinetic Games. Using mods may put your game account
 at risk; play with mods in private lobbies only.
