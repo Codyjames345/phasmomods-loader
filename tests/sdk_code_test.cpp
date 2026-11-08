@@ -578,8 +578,35 @@ void returns_tells_a_stub_that_never_does() {
   CHECK(!read_leaf(leafTail, 0x1000).returns);
 }
 
+// A leaf's field accesses, as a constructor that stores its defaults and tail-jumps to its base has them:
+// through rcx they are through `this` until something writes rcx, and a base just loaded from a fixed
+// address is a runtime slot.
+void leaf_accesses() {
+  // mov dword [rcx+0x90], 0x3FCCCCCD; mov rcx, [rcx+0x40]; mov dword [rcx+0x94], 0x40400000;
+  // mov rax, [rip+0x100]; mov edx, [rax+0xE0]; jmp out
+  const std::vector<uint8_t> code{0xC7, 0x81, 0x90, 0x00, 0x00, 0x00, 0xCD, 0xCC, 0xCC, 0x3F,
+                                  0x48, 0x8B, 0x49, 0x40,
+                                  0xC7, 0x81, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x40,
+                                  0x48, 0x8B, 0x05, 0x00, 0x01, 0x00, 0x00,
+                                  0x8B, 0x90, 0xE0, 0x00, 0x00, 0x00,
+                                  0xE9, 0x00, 0x10, 0x00, 0x00};
+  const CodeFacts f = read_leaf(code, 0x1000);
+  CHECK(f.complete);
+  CHECK(f.accesses.size() == 4);
+  if (f.accesses.size() != 4) return;
+  CHECK(f.accesses[0].disp == 0x90 && f.accesses[0].store && f.accesses[0].hasImm &&
+        f.accesses[0].imm == 0x3FCCCCCD && f.accesses[0].thisBase && !f.accesses[0].global);
+  CHECK(f.accesses[1].disp == 0x40 && !f.accesses[1].store && f.accesses[1].thisBase);  // the load writes rcx
+  CHECK(f.accesses[2].disp == 0x94 && f.accesses[2].store && !f.accesses[2].thisBase);
+  CHECK(f.accesses[3].disp == 0xE0 && !f.accesses[3].thisBase && f.accesses[3].global);
+  // A leaf that branches is not read: it gives no complete facts to decide by.
+  const std::vector<uint8_t> branch{0xC7, 0x81, 0x90, 0x00, 0x00, 0x00, 0xCD, 0xCC, 0xCC, 0x3F, 0xEB, 0x00, 0xC3};
+  CHECK(!read_leaf(branch, 0x1000).complete);
+}
+
 int main() {
   returns_tells_a_stub_that_never_does();
+  leaf_accesses();
   function_bounds_from_pdata();
   chained_unwind_entry_maps_to_primary();
   map_pe_file_lays_out_by_rva();

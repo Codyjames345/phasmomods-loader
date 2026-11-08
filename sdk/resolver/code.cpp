@@ -794,11 +794,23 @@ CodeFacts read_code(std::span<const uint8_t> fn, uint64_t rva) {
 CodeFacts read_leaf(std::span<const uint8_t> code, uint64_t rva) {
   CodeFacts facts;
   facts.complete = false;
+  // Straight-line code runs every instruction in order, so a register's last write is the one before.
+  uint16_t written = 0;      // the registers written so far
+  uint16_t fromGlobal = 0;   // those whose last write loaded a fixed address (mov r64, [rip+X])
   for (size_t offset = 0; offset < code.size();) {
     const Insn in = decode_one(code, rva, offset);
     if (!in.ok()) return facts;
     const hde64s& h = in.hs;
     facts.starts.push_back(in.at);
+    if (auto a = access(in)) {
+      a->thisBase = a->base == kRcx && !(written >> kRcx & 1);  // rcx still holds what the caller passed
+      a->global = (fromGlobal >> a->base & 1) != 0;
+      facts.accesses.push_back(*a);
+    }
+    const uint16_t w = register_writes(in);
+    written |= w;
+    const bool loadsGlobal = h.opcode == 0x8B && h.rex_w && rip_relative(h);
+    fromGlobal = static_cast<uint16_t>((fromGlobal & ~w) | (loadsGlobal ? 1u << (h.modrm_reg | h.rex_r << 3) : 0u));
     if (h.opcode == 0xC3 || h.opcode == 0xC2) {  // ret
       facts.returns = true;
       facts.complete = true;
