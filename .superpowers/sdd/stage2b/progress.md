@@ -537,6 +537,9 @@ slammed door goes quiet at once and the padlock comes the moment it is fully ope
   "sdk/api/runtime.h:260: error: Member scratch_undocumented(int x) (function) of namespace pm::api is not documented." and
   docs.ps1 threw "The API reference has warnings (1)". Removed (file byte-identical to before).
 - Not done of Step 1e's standard: @since on the map wrappers (their version is not recorded per entry), @code on every type and
-  common call, @pre/networking on wrappers whose one-line note does not say. Choices left for the user: room_agrees and
-  peer_has_mod are kept-for-2.x members whose notes say a mod has no need of them; I did not mark them @deprecated (the user's call).
+  common call, @pre/networking on wrappers whose one-line note does not say.
+- User, 2026-11-08: mark room_agrees and peer_has_mod deprecated (the 2.2 changelog already listed them). @deprecated on
+  PmHostApi::peer_has_mod, PmHostApi::room_agrees and content::room_agrees; core/mod_glue.h's peer_has says so too. The
+  changelog left the reference's input: its "### Deprecated" heading took the anchor of Doxygen's Deprecated List (a
+  clash under MARKDOWN_ID_STYLE=GITHUB), and turning the list off hides every member's deprecation box.
 - Review sample: phasmo::GhostAI's page answers call form, clients, failure; thread is on the file page.

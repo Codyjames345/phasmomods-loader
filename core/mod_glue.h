@@ -17,7 +17,8 @@ bool bind(const PmHostApi* api, const PmModInfo* info);
 const PmHostApi& host();
 const PmModInfo& info();
 
-// Whether the client of `actor` is verified and the host runs the mod `id` (core/mod_api.h peer_has_mod). A mod has no need of it.
+// Whether the client of `actor` is verified and the host runs the mod `id` (core/mod_api.h peer_has_mod). Deprecated, as
+// peer_has_mod is: a mod has no need of it.
 bool peer_has(int actor, const char* id);
 // Whether the mod `id` has started on this client: for an optional dependency, from pmmod_start onwards (core/mod_api.h
 // mod_started). False before bind.

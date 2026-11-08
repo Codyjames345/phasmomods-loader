@@ -19,7 +19,9 @@ OPTIMIZE_OUTPUT_FOR_C  = NO
 QUIET                  = YES
 
 # What an author reads: the game API, the runtime, the content API and the host contract, then the guides and concept pages.
-INPUT                  = sdk/README.md sdk/groups.dox sdk/CHANGELOG.md sdk/api core/mod_api.h sdk/map sdk/systems sdk/guides sdk/internals
+# sdk/CHANGELOG.md stays out: its "### Deprecated" heading would take the anchor of Doxygen's own Deprecated List, which
+# shows each deprecated member. The changelog ships beside the reference as a file.
+INPUT                  = sdk/README.md sdk/groups.dox sdk/api core/mod_api.h sdk/map sdk/systems sdk/guides sdk/internals
 FILE_PATTERNS          = *.h *.md *.dox
 RECURSIVE              = YES
 

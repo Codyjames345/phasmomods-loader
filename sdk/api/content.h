@@ -221,7 +221,7 @@ bool player_controlled();
 /// content, rules and journal lines on it already, and a mod has no need of it: it stays so 2.x mods load. False before
 /// bind.
 /// @return True while this client's mods match the host's.
-/// @note A mod has no need of it: the loader keeps every player in a contract to the host's list.
+/// @deprecated Deprecated in contract 2.2: a mod has no need of it, since the loader keeps every player in a contract to the host's list. It stays so mods built for 2.x load.
 bool room_agrees();
 
 /// Attaches `rules` to the ghost `ghostId`, a custom ghost's id or a vanilla one ("vanilla.mare"),

@@ -287,6 +287,7 @@ struct PmHostApi {
   /// equal that list (sdk/README.md, "The host's list"). Kept so 2.x mods load. A mod has no need of it: the loader
   /// keeps every player in a contract to the same mods, and a mod does no matching of its own.
   /// @since Contract 1.0
+  /// @deprecated Deprecated in contract 2.2: a mod has no need of it, since the loader keeps every player in a contract to the host's list. It stays so mods built for 2.x load.
   bool (*peer_has_mod)(int32_t actor, const char* modId);
   /// Named tables of C function pointers that cooperating mods publish for each other. A table must
   /// stay valid for the process lifetime. A name is published once: registering a name already
@@ -696,6 +697,7 @@ struct PmHostApi {
   /// mods' content, rules and journal lines on. Kept so 2.x mods load: a mod has no need of it, since the loader removes
   /// or switches off whoever does not match, and no unverified player reaches a contract. Main thread.
   /// @since Contract 2.2
+  /// @deprecated Deprecated in contract 2.2: a mod has no need of it, since the loader keeps every player in a contract to the host's list. It stays so mods built for 2.x load.
   bool (*room_agrees)(void);
 
   /// @}
