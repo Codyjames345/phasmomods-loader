@@ -105,9 +105,9 @@ void detour_hunting_close_networked(api::Original<phasmo::Door::HuntingCloseDoor
   if (std::find(doors.begin(), doors.end(), d) != doors.end()) hold(level(), doors);
 }
 
-// The Monkey Paw never opens an exit the Squatter holds (the user's rule, 2026-11-08). Each detour refuses only the call
-// that would undo the lock for a held exit, on every client that runs it, and lets every other call through; the rest of
-// each wish stays the game's (sdk/systems/doors.md, "The Monkey Paw").
+// The Monkey Paw never opens an exit the Squatter holds (the user's rule, 2026-11-08). Each detour refuses only the
+// call that would undo the lock for a held exit, on every client that runs it, and lets every other call through; the
+// rest of each wish stays the game's (sdk/systems/doors.md, "The Monkey Paw").
 
 // The paw's timed lock, whose only callers are the wishes: it would clear the lock at once and reopen the door after.
 void detour_lock_for_time(api::Original<phasmo::Door::LockDoorForTime> original, void* d, float seconds,

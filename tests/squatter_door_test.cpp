@@ -129,7 +129,8 @@ void unlock(void* d) {
 }
 void toggle_lock(void* d, bool on) {
   using F = void (*)(void*, bool, bool, const void*);
-  reinterpret_cast<F>(entry_of("Door.ToggleDoorLock", reinterpret_cast<void*>(&fake_toggle_lock)))(d, on, false, nullptr);
+  void* body = reinterpret_cast<void*>(&fake_toggle_lock);
+  reinterpret_cast<F>(entry_of("Door.ToggleDoorLock", body))(d, on, false, nullptr);
 }
 void lock_for_time(void* d) {
   using F = void (*)(void*, float, bool, const void*);
@@ -167,8 +168,8 @@ void* refs(const std::vector<void*>& items) {
 
 int32_t fake_actor_number(void* p, const void*) { return at<int32_t>(*static_cast<Obj*>(p), kActorNumber); }
 
-// The master's hunt close for `d` arriving on this client, from actor `sender` (0: no sender), through whatever hook the
-// code under test made on the RPC's body.
+// The master's hunt close for `d` arriving on this client, from actor `sender` (0: no sender), through whatever hook
+// the code under test made on the RPC's body.
 void lock_arrives(void* d, int sender = 1) {
   Obj info;
   at<void*>(info, kInfoSender) = sender ? &g_photon[sender - 1] : nullptr;
@@ -412,8 +413,8 @@ void an_attempt_on_an_unlocked_door_reports_nothing() {
 
 // The lock is the game's own: Door.HuntingCloseDoor on the master and nothing else, which sends what the game sends.
 // Another client's lock_all calls nothing in the game and holds nothing: its own count of the players inside never
-// decides; it holds the exits once the master's lock reaches it. Nothing locks on a friendly ghost's difficulty, or when
-// the difficulty cannot be read, or with no exits.
+// decides; it holds the exits once the master's lock reaches it. Nothing locks on a friendly ghost's difficulty, or
+// when the difficulty cannot be read, or with no exits.
 void locking_takes_the_games_own_path() {
   start();
   CHECK(door::lock_all());
@@ -489,8 +490,8 @@ void the_open_exits_wish_leaves_held_exits_locked() {
   }
 }
 
-// Outside the wish, Door.UnlockDoor and Door.ForceToggleHuntCollider on a held exit stay the game's own: the house key's
-// unlock (Door.AttemptToUnlockDoor) is not the wish's.
+// Outside the wish, Door.UnlockDoor and Door.ForceToggleHuntCollider on a held exit stay the game's own: the house
+// key's unlock (Door.AttemptToUnlockDoor) is not the wish's.
 void outside_the_wish_a_held_exit_keeps_the_games_unlock() {
   start();
   CHECK(door::lock_all());
@@ -543,9 +544,9 @@ void the_masters_lock_closes_the_same_frame_gap() {
 }
 
 // Only the master's lock, as the game takes it, holds the exits. A sender the game's own check refuses (any but the
-// room's first actor, or none) holds nothing, though the game's body still runs and refuses it; so do a lock while the
-// Squatter does not haunt (another ghost's hunt), one on a friendly ghost's difficulty or an unread one, and a door that
-// is not an exit. Outside a room or offline the game takes every call, and so does the hold.
+// room's first actor, or none) holds nothing, though the game's body still runs and refuses it; so do a lock while
+// the Squatter does not haunt (another ghost's hunt), one on a friendly ghost's difficulty or an unread one, and a door
+// that is not an exit. Outside a room or offline the game takes every call, and so does the hold.
 void a_lock_the_game_refuses_holds_nothing() {
   start(false);
   lock_arrives(&g_front, 2);
@@ -614,8 +615,9 @@ void a_missing_entry_fails_the_start() {
   for (const pm::sdk::EntryDesc* lacking : {&map::Door_HuntingCloseDoor, &map::Door_AttemptToUnlockDoor,
                                             &map::Door_GrabbedDoor, &map::LevelController_huntingDoors,
                                             &map::SmallMapVariation_huntingDoorsToLock, &map::RoomKind_outsideMap,
-                                            &map::Door_LockDoorForTime, &map::Door_ToggleDoorLock, &map::Door_UnlockDoor,
-                                            &map::Door_ForceToggleHuntCollider, &map::MonkeyPaw_OpenExitsWish,
+                                            &map::Door_LockDoorForTime, &map::Door_ToggleDoorLock,
+                                            &map::Door_UnlockDoor, &map::Door_ForceToggleHuntCollider,
+                                            &map::MonkeyPaw_OpenExitsWish,
                                             &map::Door_HuntingCloseDoorNetworked}) {
     start();
     fake::forget(*lacking);

@@ -71,9 +71,9 @@ void on_attempt(Attempt callback);
 /**
  * Whether the Squatter haunts the contract on this client (squatter.cpp's tick says so every frame). While it does,
  * the master's hunt lock of an exit reaching this client (Door.HuntingCloseDoorNetworked, after the game's own body has
- * run, unchanged) makes it hold every exit of the map in that same call, when the game's own checks take the call: from
- * the room's first actor (anyone outside a room or offline), and not on a friendly ghost's difficulty or one that cannot
- * be read. While it does not, no lock holds anything, so another ghost's hunt leaves every wish the game's.
+ * run, unchanged) makes it hold every exit of the map in that same call, when the game's own checks take the call:
+ * from the room's first actor (anyone outside a room or offline), and not on a friendly ghost's difficulty or one that
+ * cannot be read. While it does not, no lock holds anything, so another ghost's hunt leaves every wish the game's.
  */
 void set_haunting(bool on);
 
