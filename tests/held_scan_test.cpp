@@ -42,6 +42,9 @@ const Exempt kNotObjects[] = {
     {"host/hooks.cpp", "at", "a hooked function's or a relay's code address"},
     {"host/hooks.cpp", "detour", "a detour's code address"},
     {"mods/custom_ghosts/draugr_rule.h", "holder", "a survey's view of who carries a thing, made and read in one call"},
+    {"mods/custom_ghosts/squatter.cpp", "player", "the chase's read of the players (Seen), made and read in one frame"},
+    {"mods/custom_ghosts/squatter.cpp", "room", "the chase's read of the players (Seen), made and read in one frame"},
+    {"mods/custom_ghosts/squatter.cpp", "closet", "the chase's read of the players (Seen), made and read in one frame"},
 };
 
 struct Hit {

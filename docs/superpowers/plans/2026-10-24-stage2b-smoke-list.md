@@ -1038,8 +1038,42 @@ Restraint while steering and the host's re-lock (Task 7c1). A private contract w
   - [ ] A late or failed takeover (a laggy client owning the door) gives up after about two seconds: the door stays shut, and nothing in the log says it opened.
 - Steering
   - [ ] On a friendly ghost's difficulty the Squatter mopes where it starts: it never wanders off or walks to its favourite room, and the log has no exception line.
-  - [ ] On a normal difficulty, while it lurks, it still idles and wanders as before.
+  - [ ] On a normal difficulty, while it lurks, it stays where it started in the ghost room, sitting, and never wanders off (Task 7c2 holds it there).
 - The host's re-lock
   - [ ] As the client, make the Monkey Paw wish that opens every exit at the moment the exits lock (or the 6 s wish just before): if an exit reopens, the host's `mods.log` has `squatter: 1 reopened exit(s) locked again` and the exit shuts and locks again within about two seconds, for both players. Repeat a few times; a wish that lands after the lock leaves the exits shut with no re-lock line.
   - [ ] After the lock, on an exit nobody grabbed but the host (so the host's lock clicked), a player holding the house key tries it: it unlocks with the game's click, then the host locks it again (a second click), and it never opens. On an exit the client grabbed last, the key does nothing new and the host's log has no re-lock line.
   - [ ] With the exits locked and nobody wishing, the host's log has no re-lock line, also when the client was the last to grab an exit before the lock.
+
+The chase (Task 7c2). A private contract with the Squatter forced in a Custom difficulty, two players (one the host) unless it says otherwise. The voice folders must hold recordings for lines to play.
+
+- Lurking
+  - [ ] It sits in the ghost room saying lurk lines every few seconds, and both players hear the same line at the same time from where it sits.
+  - [ ] It never wanders out of the room before it sees someone.
+  - [ ] Walking into its sight starts the chase: it gets up, then runs at the nearest player, saying chase lines. Talking near it on its floor without being seen does not start it.
+- No hunt
+  - [ ] During the chase no light flickers, no electronics interfere, no hunt sound plays, and no door locks before everyone is out (7a could not trace the flicker code; report any flicker).
+- The chase
+  - [ ] A player sprinting away barely outruns it; a walking player is caught up with. Tune `kSprintMargin` and the move multipliers with the user.
+  - [ ] Its run is broken by ducks, weaves, rolls, parkour and stumbles, the roll a burst forward and the stumble a stop, and both players see the same move at the same moment.
+  - [ ] It bumps into things every so often, and when it stalls against something: it plays the bump clip and stops briefly.
+  - [ ] It goes for the nearest player when two are inside, and switches when the other comes nearer.
+  - [ ] A player whose sprint runs out hears a tired line, at most once every twenty seconds; with sprinting off in the Custom difficulty, the chased player hears it as the chase turns to them. Its speed is the same either way.
+  - [ ] As the client, being chased gives the same pace as the host being chased (the client's sprint reaches the host).
+- Losing track and searching
+  - [ ] Breaking line of sight and staying quiet loses it after about four seconds: it searches around the last place it saw you, saying search lines, slower than its chase.
+  - [ ] Talking loudly near it on its floor, or being seen again, starts the chase again.
+- Hiding
+  - [ ] Running into a closet or locker in its sight: it goes to stand outside, says hiding lines and kicks the door over and over. The door never opens and the player is never caught there.
+  - [ ] Hiding unseen: it searches and never finds you (unless you talk loudly).
+  - [ ] Stepping out: it chases at once.
+- Doors on the way: the quiet opener entries above (Task 7c1), now live.
+  - [ ] The opening-door clip plays as it opens one, outwards or inwards by the side it stands on, and it stops briefly.
+- Out of the house
+  - [ ] It never follows a player past an exit. Once every living player is out, the exits lock, and it sits down inside.
+  - [ ] Each try at a locked exit gets a door line, once per try.
+  - [ ] One player out and one inside: the exits stay unlocked and it keeps after the one inside.
+- Host migration
+  - [ ] The host leaving mid-chase: the new host's Squatter carries on chasing, no line or clip replays, and after the lock nothing locks twice.
+- Sight
+  - [ ] A Lithobolia contract still throws at players it sees outside hunts (its sight copies are now shared, `ghost_sight.h`).
+

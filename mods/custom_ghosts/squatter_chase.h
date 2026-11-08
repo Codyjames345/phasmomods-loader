@@ -44,6 +44,25 @@ inline constexpr float kSearchRadius = 6.0f;
 // How near a door's hinge it must be to open it, and how far above or below still counts as the same floor.
 inline constexpr float kDoorReach = 1.3f;
 inline constexpr float kDoorRise = 1.5f;
+// Searching, it runs at this share of its chase pace.
+inline constexpr float kSearchPace = 0.6f;
+// Besides stalling, it bumps into something at a random gap in this range while it chases, and each bump stops it.
+inline constexpr uint64_t kBumpGapMinMs = 12000;
+inline constexpr uint64_t kBumpGapMaxMs = 20000;
+inline constexpr uint64_t kBumpPauseMs = 1200;
+// At a hiding place it bangs on the door this often.
+inline constexpr uint64_t kBangGapMs = 1600;
+// Opening a door, and getting up, stop it this long.
+inline constexpr uint64_t kDoorPauseMs = 900;
+inline constexpr uint64_t kGetUpMs = 1800;
+// How often the host pulses the ghost's sight copies and asks who is talking: each pulse is the sensor's window.
+inline constexpr uint64_t kSightMs = 250;
+// How often the master resends an unchanged Shown, for a client that missed it (squatter.cpp).
+inline constexpr uint64_t kShownResendMs = 2000;
+// Where it walks to is renewed this often while the place moves.
+inline constexpr uint64_t kSteerMs = 200;
+// How near a hiding place's stand point counts as there.
+inline constexpr float kStandReach = 1.0f;
 
 /**
  * Whether a player is within its hearing, as the hunt's voice test bounds it before it asks the player's loudness
@@ -222,15 +241,17 @@ struct Cues {
 
 /**
  * What each client plays of the master's Shown: a line or an act once per new cue, and the move when it changes or an
- * act ends. The first Shown after a reset plays its move but no line or act, so a client that takes it late (or the
- * master's resend) never replays an old one.
+ * act ends. The first Shown after a reset plays the act it carries (one still under way, such as sitting) or else its
+ * move, and never its line, so a client that takes it late (or the master's resend) never replays an old line.
  */
 class CuePlayer {
  public:
   Cues take(const Shown& s) {
     Cues c;
     if (!last_) {
-      c.move = true;  // an act already under way is old news: the move, not the act's clip
+      // An act still set is under way (the master clears a one-off as it ends): join it; never an old line.
+      c.act = s.act >= 0;
+      c.move = !c.act;
     } else {
       c.line = s.lineCue != last_->lineCue && s.lineSet >= 0 && s.lineIndex >= 0;
       c.act = s.actCue != last_->actCue && s.act >= 0;

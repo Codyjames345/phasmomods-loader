@@ -311,7 +311,7 @@ target_include_directories(mods_panel_test BEFORE PRIVATE sdk/api sdk/map sdk/fa
 pm_test(custom_ghosts sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp
   sdk/runtime/content_acting.cpp mods/custom_ghosts/gremlin.cpp mods/custom_ghosts/hunt.cpp mods/custom_ghosts/squatter.cpp
   mods/custom_ghosts/squatter_figure.cpp mods/custom_ghosts/squatter_door.cpp mods/custom_ghosts/sensor_copy.cpp
-  mods/custom_ghosts/ghost_sight.cpp)
+  mods/custom_ghosts/ghost_sight.cpp mods/custom_ghosts/squatter_voice.cpp mods/custom_ghosts/sound.cpp)
 target_compile_definitions(custom_ghosts_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(custom_ghosts_test PRIVATE pmmod)
 # Before the mods' folders, as for content_difficulty_test below.

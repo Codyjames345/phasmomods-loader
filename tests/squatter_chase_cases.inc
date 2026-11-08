@@ -128,17 +128,18 @@ void a_target_who_cannot_sprint_is_taunted() {
   CHECK(!b.due(2, true, 0));          // a fresh target who can sprint
 }
 
-// Every client plays each new cue once; the first Shown a client takes plays the move but no old line or act.
+// Every client plays each new cue once; the first Shown a client takes joins the act under way (or plays the move)
+// but never an old line.
 void cues_play_once_and_never_replay_on_joining() {
   CuePlayer p;
   Shown s;
   s.lineSet = static_cast<int8_t>(Lines::Chase);
   s.lineIndex = 2;
   s.lineCue = 5;
-  s.act = static_cast<int8_t>(Act::Bump);
+  s.act = static_cast<int8_t>(Act::Sit);
   s.actCue = 3;
   Cues c = p.take(s);
-  CHECK(c.move && !c.line && !c.act);
+  CHECK(c.act && !c.line && !c.move);
   c = p.take(s);
   CHECK(!c.move && !c.line && !c.act);
   s.lineCue = 6;
@@ -156,4 +157,11 @@ void cues_play_once_and_never_replay_on_joining() {
   p.reset();
   c = p.take(s);
   CHECK(c.move && !c.line && !c.act);
+}
+
+// The tunables keep the chase sane: a search is slower than the chase, and pauses are short.
+void the_chase_tunables_are_sane() {
+  CHECK(kSearchPace > 0.0f && kSearchPace < 1.0f);
+  CHECK(kBumpGapMinMs < kBumpGapMaxMs && kBumpPauseMs < kBumpGapMinMs);
+  CHECK(kBangGapMs > 0 && kDoorPauseMs > 0 && kGetUpMs > 0 && kSightMs > 0 && kShownResendMs > 0);
 }

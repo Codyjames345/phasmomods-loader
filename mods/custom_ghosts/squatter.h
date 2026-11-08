@@ -38,8 +38,15 @@ bool create_hooks();
  * be read (none before it); on a client that is not the master it follows the last Shown instead, so a client that
  * becomes the master goes on from there (squatter_net.h kept_phase). On the master, the first frame the mod steers
  * the ghost's agent changes it to GhostState.idle once (squatter_rule.h steering_begins), and each frame any held exit
- * a raced wish reopened is locked again (squatter_door.h relock). Each client also tells the master its own player's
- * sprint. Otherwise it holds no phase, and forgets what the channel brought.
+ * a raced wish reopened is locked again (squatter_door.h relock). Then the master runs the chase (squatter_chase.h):
+ * every kSightMs it asks the shared sight copies (ghost_sight.h) whom the ghost sees and the hunt's voice test's bounds
+ * whom it hears (asking a player's loudness clears it, as the game's own test does); it picks the nearest player it
+ * senses inside, keeps track of them for kTrackMs, moves the phase on (next_phase), locks the exits once nobody living
+ * is inside (doors_lock, door::lock_all), steers the agent (NavMeshAgent speed and destination), opens shut doors on
+ * the way quietly (door::open_quietly), bangs at a known hiding place, and fills the Shown it shares. A client that
+ * becomes the master goes on from the last Shown. Every client plays the Shown on its figure and voice (CuePlayer).
+ * Each client also tells the master its own player's sprint. Otherwise it holds no phase, and forgets what the
+ * channel brought.
  */
 void tick(void* haunting, int type, bool steered);
 /** Its phase while it haunts as the Squatter, else none. */

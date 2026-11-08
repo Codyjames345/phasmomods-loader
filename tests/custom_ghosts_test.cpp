@@ -2073,9 +2073,18 @@ void the_squatter_follows_the_masters_shown() {
   squatter::tick(&ghost, kSquatter, false);
   CHECK(squatter::phase() == squatter::Phase::Chasing && squatter::shown() == chasing);
   g_isMaster = true;  // the master leaves and this client takes over
+  chasing.lineCue = 9;  // where the old master's cues stood
+  chasing.actCue = 4;
+  const std::vector<uint8_t> cued = squatter::shown_message(chasing);
+  g_isMaster = false;
+  squatter::receive(1, cued.data(), cued.size());
   squatter::tick(&ghost, kSquatter, false);
+  g_isMaster = true;
+  squatter::tick(&ghost, kSquatter, false);
+  // It goes on from the last Shown: still chasing, its cues where the old master left them (no line to say offline).
   CHECK(squatter::phase() == squatter::Phase::Chasing);
-  CHECK(!squatter::share(chasing));  // unchanged: nothing to send
+  CHECK(squatter::shown() && squatter::shown()->phase == squatter::Phase::Chasing &&
+        squatter::shown()->lineCue == 9 && squatter::shown()->actCue == 4);
   squatter::tick(nullptr, 0, false);  // the contract ends: what the channel brought goes with it
   CHECK(!squatter::phase() && !squatter::shown());
   squatter::reset();

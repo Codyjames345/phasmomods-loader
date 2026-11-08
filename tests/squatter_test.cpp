@@ -1091,6 +1091,7 @@ int main() {
   the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();
   cues_play_once_and_never_replay_on_joining();
+  the_chase_tunables_are_sane();
   wav_decodes_mono_and_stereo();
   wav_refuses_malformed();
   every_set_has_a_folder_name();
