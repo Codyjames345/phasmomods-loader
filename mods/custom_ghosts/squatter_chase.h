@@ -286,6 +286,28 @@ inline Step follow_step(Point ghost, std::optional<Point> targetAt, std::optiona
   return {};
 }
 
+/**
+ * Whether a target at `target` is within the kick's reach of the Squatter at `ghost`: kKickReach in three dimensions, as
+ * the hunt's kill measures its reach in all three (GhostHuntState.Kill), so never through a floor or a ceiling.
+ */
+inline bool within_kick(Point ghost, Point target) {
+  const float d = std::hypot(target.x - ghost.x, target.y - ghost.y, target.z - ghost.z);
+  return d <= kKickReach;  // false for a distance that is not a number
+}
+
+/** Where a search centres: where it last sensed its target, else where it stands, so it never just stands still. */
+inline Point search_origin(std::optional<Point> lastAt, Point ghost) { return lastAt ? *lastAt : ghost; }
+
+/**
+ * Facts.seesPlayer for phase `p`: in a seated phase (Lurking, Moping) whether it sees anyone inside (`anySeen`), else
+ * whether it senses its target (`targetSensed`); always false while its figure cannot be shown (`figureShown`), so it
+ * never starts a chase nobody can see.
+ */
+inline bool sees_for_phase(Phase p, bool anySeen, bool targetSensed, bool figureShown) {
+  if (!figureShown) return false;
+  return (p == Phase::Lurking || p == Phase::Moping) ? anySeen : targetSensed;
+}
+
 /** What a client starts playing for a Shown. */
 struct Cues {
   bool move = false;  // play the move (figure::play), its act being over or none

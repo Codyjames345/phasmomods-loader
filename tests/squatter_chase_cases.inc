@@ -210,6 +210,29 @@ void waits_and_talks_at_a_hiding_place_without_banging() {
   CHECK(!may_kick(Phase::Following, true, true, 0.1f, kKickReach));
 }
 
+// The kick's reach is measured in three dimensions, as the hunt's kill measures it: never through a floor or ceiling.
+void the_kick_never_reaches_through_a_floor() {
+  CHECK(within_kick({0, 0, 0}, {kKickReach - 0.1f, 0, 0}));
+  CHECK(!within_kick({0, 0, 0}, {kKickReach + 0.1f, 0, 0}));
+  CHECK(!within_kick({0, 0, 0}, {0.3f, 2.8f, 0.2f}));  // the floor above, right over it
+  CHECK(!within_kick({0, 0, 0}, {0, std::numeric_limits<float>::quiet_NaN(), 0}));
+}
+
+// With no last place for its target (after a kick, a death, a disconnect or a new master) it searches around itself
+// rather than standing still.
+void with_no_last_place_it_searches_around_itself() {
+  CHECK(search_origin(std::nullopt, Point{3, 1, 4}).x == 3 && search_origin(std::nullopt, Point{3, 1, 4}).z == 4);
+  CHECK(search_origin(Point{7, 0, 7}, Point{3, 1, 4}).x == 7);
+}
+
+// While its figure cannot be shown, it neither starts a chase nor kicks: nobody is chased by what they cannot see.
+void an_unseen_figure_never_starts_a_chase() {
+  CHECK(sees_for_phase(Phase::Lurking, true, true, true) && !sees_for_phase(Phase::Lurking, true, true, false));
+  CHECK(sees_for_phase(Phase::Moping, true, false, true) && !sees_for_phase(Phase::Moping, true, false, false));
+  CHECK(sees_for_phase(Phase::Chasing, false, true, true) && !sees_for_phase(Phase::Chasing, true, false, true));
+  CHECK(!sees_for_phase(Phase::Chasing, true, true, false));
+}
+
 // The tunables keep the chase sane: a search is slower than the chase, and pauses are short.
 void the_chase_tunables_are_sane() {
   CHECK(kSearchPace > 0.0f && kSearchPace < 1.0f);

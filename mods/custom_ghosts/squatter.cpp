@@ -51,6 +51,7 @@ struct Chase {
   uint64_t nextBump = 0, nextBang = 0, nextSight = 0, nextSteer = 0, lastSent = 0;
   std::set<int> seen, heard;                 // whom the last sight pulse saw and who was heard talking
   std::optional<Point> searchAt;
+  std::optional<Point> searchFrom;  // where the search centres (search_origin), fixed as it begins
   std::optional<Point> openingDoor, openingForward;  // the door being opened quietly, for its clip
   float sprint = 0.0f;                       // the sprint speed it last chased at (chase_sprint)
   float seed = 0.0f;                         // offsets the move cycle per chase
@@ -171,6 +172,12 @@ struct Seen {
   void* room = nullptr;    // Player.currentRoom
   void* closet = nullptr;  // Player.closet, the hiding place they are in
 };
+
+// Whether `p` lies in a room of the house: a room the map knows (game::room_at) that is not RoomKind.outsideMap.
+bool inside_at(Point p) {
+  void* room = game::room_at(vector(p));
+  return room && phasmo::LevelRoom::kind.get(room) != phasmo::RoomKind::outsideMap();
+}
 
 std::vector<Seen> read_players() {
   std::vector<Seen> out;
@@ -316,9 +323,11 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   bool anySeen = false;
   for (const Seen& s : players) anySeen = anySeen || (s.living && s.inside && c.seen.contains(s.id));
   const Phase now = *g.phase;
-  const bool waiting = now == Phase::Lurking || now == Phase::Moping;
-  const Facts f{friendlyGhost,   waiting ? anySeen : targetSensed, c.target >= 0 && c.tracker.tracks(t),
-                c.hidingKnown,   door::living_inside(),            t >= c.pauseUntil};
+  // Nothing is chased or kicked by a figure nobody can see (one that failed to build is logged by squatter_figure).
+  const bool shown = figure::ready();
+  const Facts f{friendlyGhost, sees_for_phase(now, anySeen, targetSensed, shown),
+                shown && c.target >= 0 && c.tracker.tracks(t), c.hidingKnown, door::living_inside(),
+                t >= c.pauseUntil};
   if (doors_lock(now, f)) door::lock_all();
   const Phase next = next_phase(now, f);
   g.phase = next;
@@ -328,6 +337,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     c.phaseSince = t;
     c.lines.reset();
     c.searchAt.reset();
+    c.searchFrom.reset();
     if (const std::optional<Act> stance = stance_for(next)) {
       act(*stance, 0, t, false);  // held for the whole phase
     } else if (const std::optional<Act> rise = entry_act(c.was, next)) {
@@ -371,9 +381,10 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       to = targetSensed ? std::optional<Point>(target->at) : c.tracker.last_at();
       // The catch: a kick to the face, a line, and the game's own kill (kick).
       if (target && !paused &&
-          may_kick(next, friendlyGhost, target->living, std::hypot(target->at.x - ghostAt.x, target->at.z - ghostAt.z),
+          // may_kick's distance is given as 0 or past reach: within_kick measures it in three dimensions.
+          may_kick(next, friendlyGhost, target->living, within_kick(ghostAt, target->at) ? 0.0f : kKickReach + 1.0f,
                    kKickReach) &&
-          kick(target->player, target->id)) {
+          shown && kick(target->player, target->id)) {
         act(Act::Kick, kKickMs, t);
         say(Lines::Catch, t);
         c.tracker.forget();
@@ -384,10 +395,15 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     case Phase::Searching: {
       c.out.move = Move::Run;
       speed = move_speed(c.sprint, Move::Run) * kSearchPace;
-      const std::optional<Point> last = c.tracker.last_at();
-      if (!c.searchAt && last) c.searchAt = search_point(*last, roll());
+      // Around where it last sensed its target, else around where the search began, so it never stands still; a point
+      // not inside the house is dropped and another tried next frame, so it never searches past an exit.
+      if (!c.searchFrom) c.searchFrom = search_origin(c.tracker.last_at(), ghostAt);
       if (c.searchAt && std::hypot(c.searchAt->x - ghostAt.x, c.searchAt->z - ghostAt.z) < kStandReach)
-        c.searchAt = last ? std::optional<Point>(search_point(*last, roll())) : std::nullopt;
+        c.searchAt.reset();
+      if (!c.searchAt) {
+        const Point p = search_point(*c.searchFrom, roll());
+        if (inside_at(p)) c.searchAt = p;
+      }
       to = c.searchAt;
       break;
     }

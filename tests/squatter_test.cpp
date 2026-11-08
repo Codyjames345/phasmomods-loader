@@ -1092,6 +1092,9 @@ int main() {
   a_target_who_cannot_sprint_is_taunted();
   cues_play_once_and_never_replay_on_joining();
   the_chase_tunables_are_sane();
+  the_kick_never_reaches_through_a_floor();
+  with_no_last_place_it_searches_around_itself();
+  an_unseen_figure_never_starts_a_chase();
   friendly_starts_seated_in_the_favourite_room();
   gets_up_on_first_sight_and_says_its_line_once();
   follows_the_nearest_living_inside_and_stops_at_exits();
