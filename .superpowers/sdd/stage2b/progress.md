@@ -543,3 +543,19 @@ slammed door goes quiet at once and the padlock comes the moment it is fully ope
   changelog left the reference's input: its "### Deprecated" heading took the anchor of Doxygen's Deprecated List (a
   clash under MARKDOWN_ID_STYLE=GITHUB), and turning the list off hides every member's deprecation box.
 - Review sample: phasmo::GhostAI's page answers call form, clients, failure; thread is on the file page.
+
+## 2026-11-08 Consolidate onto development and release 0.2.1 (Claude, user's go)
+- User: tidy development, move everything from main onto it (only the Squatter may be missing), test, merge to main, release 0.2.1.
+- Main's two commits (3a60578 README grammar, merge 7d9ef79) merged into development: 8947c91. Main's uncommitted docs pass was
+  already on development in a newer form (trial merge: every header and systems page merged as a no-op; CLAUDE.md and the
+  CHANGELOG conflicted only where development is newer). Those edits sit in stash 7066af8 ("pre-0.2.1-main-uncommitted-docs-pass").
+- fix/hydra-lithobolia-throws needed nothing: merged into the old stage2b (352e12d, line 106 above), ported in Task 11, squashed
+  into cc690eb. feature/sdk-stage2b is that squash's pre-squash history. feature/sdk-stage2a and merge-0.2.0 are merged.
+- validate.ps1 on development: exit 0, 78/78, API reference no warnings (offline game check not configured in that shell).
+- main fast-forwarded to development; tools/release.ps1 -Version 0.2.1 -Push: 8661469, tag v0.2.1; development fast-forwarded to it.
+- Left for the user (auto mode refused the deletions): remove the stage2a and fix-throws worktrees and the branches
+  feature/sdk-stage2a, merge-0.2.0, fix/hydra-lithobolia-throws, feature/sdk-stage2b. The stage2a worktree's ignored
+  .superpowers/sdd/stage2a holds task briefs and reports found nowhere else; copy them out first. Squatter work stays on
+  feature/squatter (and spike/squatter); backup/pre-email-rewrite kept.
+- sdk/CHANGELOG.md still heads the doors/navigation/docs additions "[Unreleased]" though 0.2.1 ships them; the contract is
+  still 2.2, so how to label a release with no contract change is the user's call.
