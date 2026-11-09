@@ -849,6 +849,24 @@ void a_door_reads_shut_as_the_game_snaps_it() {
   CHECK(!door::shut(nullptr));  // no door shuts nothing
 }
 
+// A door lets the Squatter through when its gap fits, or when its leaf stands at its own open angle (within the game's
+// snap of HingeDoor.openAngle), as a closet door that swings less than kPassDegrees does once opened: it is as open as
+// it goes, so opening it again would only replay the clip.
+void a_door_open_as_far_as_it_goes_lets_it_through() {
+  start();
+  plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
+  at<float>(g_kitchen, kDoorOpenAngle) = 90.0f + 50.0f;  // swings only 50 degrees
+  CHECK(!door::lets_through(&g_kitchen));                // shut
+  g_euler[&g_kitchen].y = 90.0f + 30.0f;
+  CHECK(!door::lets_through(&g_kitchen));  // ajar
+  g_euler[&g_kitchen].y = 90.0f + 48.0f;
+  CHECK(door::lets_through(&g_kitchen));  // as far as it goes
+  at<float>(g_kitchen, kDoorOpenAngle) = 90.0f + 120.0f;
+  g_euler[&g_kitchen].y = 90.0f + door::kPassDegrees;
+  CHECK(door::lets_through(&g_kitchen));  // wide enough, short of its open angle
+  CHECK(door::lets_through(nullptr));     // no door stands in the way
+}
+
 // The Squatter never passes through a door (user, 2026-11-09): it opens one whose gap is too narrow for it, measured by
 // how far the leaf stands from shut (Door.closedAngle) on its hinge axis, the shorter way round. Door.closed is not it:
 // the game sets it when a door snaps shut and clears it on a grab or the contract-start opener's RPC, so a door swung
@@ -1080,6 +1098,7 @@ void a_missing_entry_fails_the_start() {
 int main() {
   a_door_too_narrow_to_pass_is_opened();
   a_door_reads_shut_as_the_game_snaps_it();
+  a_door_open_as_far_as_it_goes_lets_it_through();
   locks_every_exit_once();
   a_master_not_the_first_actor_sends_no_lock();
   counts_only_living_inside();

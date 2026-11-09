@@ -66,6 +66,7 @@ struct Chase {
   api::Held passing;                                 // the door it waits at until it can pass (hold_at_doors)
   uint64_t passDeadline = 0;
   std::optional<float> lurkSpeed;                    // the ghost's own agent speed, while a door pauses its lurk
+  api::Held openAtHand;  // a hiding place's door it stands at to open this frame (hold_at_doors)
   float steeredSpeed = 0.0f;                         // the speed steer last set (stops_dead)
   float sprint = 0.0f;                       // the sprint speed it last chased at (chase_sprint)
   uint64_t moveUntil = 0;                    // when it next looks at the way ahead (a clumsy move's clip, or kSenseMs)
@@ -334,13 +335,27 @@ std::optional<KickSpot> kick_spot(void* closet, Point from) {
   return KickSpot{point(hit.position), point(mid)};
 }
 
-// Whether the hiding place `closet` stands open: one of its doors is not shut (door::shut). None read shut stays a place
-// it kicks at, as before (user, 2026-11-09: an open one it walks into for the kill).
-bool hiding_place_open(void* closet) {
-  if (!closet) return false;
-  for (void* d : {phasmo::ClosetZone::leftClosetDoor.get(closet), phasmo::ClosetZone::rightClosetDoor.get(closet)})
-    if (d && api::alive(d) && !door::shut(d)) return true;
-  return false;
+// Its way into the hiding place `closet` from `ghostAt` (way_in), and the door it opens for Open. It never passes
+// through a door (user, 2026-11-09): a door not shut but too narrow it opens with the opening clip first, and a shut one
+// it never opens. Kick for no closet or no door read.
+struct HidingWay {
+  Entry entry;
+  api::Held door;  // Open: the door to open
+};
+HidingWay hiding_way_in(void* closet, Point ghostAt) {
+  if (!closet || !api::alive(closet)) return {};
+  void* doors[2] = {phasmo::ClosetZone::leftClosetDoor.get(closet), phasmo::ClosetZone::rightClosetDoor.get(closet)};
+  std::vector<HidingDoor> read;
+  std::vector<void*> of;
+  for (void* d : doors) {
+    if (!d || !api::alive(d)) continue;
+    const std::optional<phasmo::Vector3> m = door_middle(d);
+    const float metres = m ? std::hypot(m->x - ghostAt.x, m->z - ghostAt.z) : 0.0f;
+    read.push_back({door::shut(d), door::lets_through(d), door::may_open(d), metres});
+    of.push_back(d);
+  }
+  const Entry e = way_in(read);
+  return {e, e.how == WayIn::Open ? of[static_cast<size_t>(e.door)] : nullptr};
 }
 
 // Turns the master's ghost to face `p` on the flat, for a kick or a wait at a door; every client's figure follows its
@@ -490,13 +505,13 @@ void* door_to_open(Point ghostAt, Point velocity) {
 bool hold_at_doors(void* agent, Point ghostAt, uint64_t t) {
   Chase& c = g.chase;
   if (c.passing) {
-    if (!door::passable(c.passing.get()) && t < c.passDeadline) return true;
+    if (!door::lets_through(c.passing.get()) && t < c.passDeadline) return true;
     c.passing = nullptr;
   }
   door::Opening o = door::open_step(t);
   if (o == door::Opening::Idle && t >= c.pauseUntil) {
     const phasmo::Vector3 v = agent ? phasmo::NavMeshAgent::get_velocity(agent) : phasmo::Vector3{};
-    if (void* d = door_to_open(ghostAt, point(v))) {
+    if (void* d = c.openAtHand ? c.openAtHand.get() : door_to_open(ghostAt, point(v))) {
       const std::optional<door::Leaf> leaf = door::leaf_of(d);
       c.openingToward = leaf && door::swings_toward(*leaf, {ghostAt.x, ghostAt.y, ghostAt.z});
       c.passing = d;
@@ -549,9 +564,10 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       target && !unnoticed(*target) && (c.seen.contains(target->id) || c.heard.contains(target->id));
   if (targetSensed) c.tracker.sensed(target->id, target->at, t);
   c.hidingKnown = target && knows_hiding(target->closet != nullptr, targetSensed || c.tracker.tracks(t), c.hidingKnown);
-  // A hiding place standing open hides nobody from it: it knows where they are and goes in for them.
-  const bool placeOpen = c.hidingKnown && hiding_place_open(target->closet);
-  if (placeOpen) c.tracker.sensed(target->id, target->at, t);
+  // A hiding place it has a way into hides nobody from it: it knows where they are and goes in for them, opening the
+  // door first when one stands ajar (hiding_way_in).
+  const HidingWay way = c.hidingKnown ? hiding_way_in(target->closet, ghostAt) : HidingWay{};
+  if (c.hidingKnown && way.entry.how != WayIn::Kick) c.tracker.sensed(target->id, target->at, t);
 
   bool anySeen = false;
   for (const Seen& s : players) anySeen = anySeen || (s.living && s.inside && !unnoticed(s) && c.seen.contains(s.id));
@@ -561,7 +577,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   const Facts f{friendlyGhost,
                 sees_for_phase(now, anySeen, targetSensed, shown),
                 shown && c.target >= 0 && c.tracker.tracks(t),
-                waits_at_hiding_place(c.hidingKnown, placeOpen),
+                waits_at_hiding_place(c.hidingKnown, way.entry.how),
                 door::living_inside(),
                 t >= c.pauseUntil,
                 c.interest.lost(t)};
@@ -615,6 +631,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
 
   float speed = 0.0f;
   std::optional<Point> to;
+  c.openAtHand = nullptr;
   switch (next) {
     case Phase::Chasing: {
       // It runs, and reads the way ahead every kSenseMs: a clumsy move plays where the way calls for one (move_for), for
@@ -627,7 +644,9 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
         const bool facesAhead =
             g.facing && g.local != State::Local::Turning && faces_ahead(*g.facing, std::atan2(v.x, v.z));
         if (t >= c.nextClumsy && !paused && facesAhead)
-          pick = move_for(surroundings(agent, ghostAt, targetSensed ? target : nullptr, t >= c.nextDive));
+          // Never a dive at a player in a hiding place: it would roll through the door.
+          pick = move_for(
+              surroundings(agent, ghostAt, targetSensed && !c.hidingKnown ? target : nullptr, t >= c.nextDive));
         if (pick.move != c.out.move || plays_once(pick.move)) {
           c.out.move = pick.move;
           c.out.variant = pick.variant;
@@ -644,6 +663,21 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       const Move m = c.out.move;
       speed = moves_by_clip(m) ? 0.0f : move_speed(c.sprint, m);  // a roll or a trip carries it by its clip
       to = targetSensed ? std::optional<Point>(target->at) : c.tracker.last_at();
+      // A hiding place's door stands ajar: it walks to the doors and opens it with the opening clip (hold_at_doors),
+      // and walks in once it lets it through, never through the door itself.
+      if (way.entry.how == WayIn::Open && target) {
+        const std::optional<KickSpot> at = kick_spot(target->closet, ghostAt);
+        const bool there = at && std::hypot(at->stand.x - ghostAt.x, at->stand.z - ghostAt.z) < kStandReach;
+        if (there) {
+          if (const std::optional<phasmo::Vector3> mid = door_middle(way.door.get()))
+            face_toward(ghost, ghostAt, point(*mid));
+          speed = 0.0f;
+          to = ghostAt;
+          c.openAtHand = way.door.get();
+        } else if (at) {
+          to = at->stand;
+        }
+      }
       // The catch: a kick to the face, a line, and the game's own kill (kick).
       if (target && !paused &&
           // may_kick's distance is given as 0 or past reach: within_kick measures it in three dimensions.
@@ -772,21 +806,28 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   }
 }
 
-// The hinged door nearest the ghost within kReachDoorMetres, among its room's doors, as door_to_open looks: the one a
-// door clip opens, on this client. Null when none is that near.
-void* door_near(Point ghostAt) {
+// The hinged door nearest the ghost within kReachDoorMetres, among its room's doors, as door_to_open looks, and the
+// doors of `closet`, the hiding place of the player it is after (hiding_way_in): the one a door clip opens, on this
+// client. Null when none is that near.
+void* door_near(Point ghostAt, void* closet) {
   void* level = game::level_controller();
   void* room = level ? phasmo::LevelController::currentGhostRoom.get(level) : nullptr;
-  const api::RefArray doors{room ? phasmo::LevelRoom::doors.get(room) : nullptr};
+  const api::RefArray roomDoors{room ? phasmo::LevelRoom::doors.get(room) : nullptr};
+  std::vector<void*> doors;
+  for (size_t i = 0; i < roomDoors.size(); ++i) doors.push_back(roomDoors[i]);
+  if (closet && api::alive(closet)) {
+    doors.push_back(phasmo::ClosetZone::leftClosetDoor.get(closet));
+    doors.push_back(phasmo::ClosetZone::rightClosetDoor.get(closet));
+  }
   void* best = nullptr;
   float nearest = kReachDoorMetres;
-  for (size_t i = 0; i < doors.size(); ++i) {
-    const std::optional<door::Leaf> leaf = door::leaf_of(doors[i]);
+  for (void* d : doors) {
+    const std::optional<door::Leaf> leaf = door::leaf_of(d);
     if (!leaf) continue;
     const float metres = std::hypot(leaf->centre.x - ghostAt.x, leaf->centre.z - ghostAt.z);
     if (metres < nearest) {
       nearest = metres;
-      best = doors[i];
+      best = d;
     }
   }
   return best;
@@ -794,9 +835,9 @@ void* door_near(Point ghostAt) {
 
 // As a door clip starts, the hand nearer the door's handle takes it: the handle near the leaf's far edge at handle
 // height on the Squatter's side, kept in the leaf's own space so it swings with the door.
-void start_reach(Point ghostAt) {
+void start_reach(Point ghostAt, void* closet) {
   g.reachDoor = nullptr;
-  void* d = door_near(ghostAt);
+  void* d = door_near(ghostAt, closet);
   const std::optional<door::Leaf> leaf = d ? door::leaf_of(d) : std::nullopt;
   if (!leaf) return;
   const float along = 2.0f * kHandleAlong;
@@ -930,7 +971,7 @@ void play(void* ghost) {
   // In a door clip, the nearer hand takes the door's handle and follows it as the leaf swings, blending in and out.
   const bool doorAct =
       s.act == static_cast<int8_t>(Act::OpenDoorOutwards) || s.act == static_cast<int8_t>(Act::OpenDoorInwards);
-  if (c.act && doorAct) start_reach(here);
+  if (c.act && doorAct) start_reach(here, watched ? phasmo::Player::closet.get(watched) : nullptr);
   const bool reaching = doorAct && api::alive(g.reachDoor) &&
                         t - g.reachSince >= static_cast<uint64_t>(kReachDelaySeconds * 1000.0f);
   g.reachWeight = approach(g.reachWeight, reaching ? 1.0f : 0.0f, dt / kReachBlendSeconds);

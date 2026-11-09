@@ -180,12 +180,23 @@ void it_loses_interest_at_a_hiding_place() {
   CHECK(!steering_ends(true, std::nullopt) && !steering_ends(false, std::nullopt));
 }
 
-// It waits and kicks only at a hiding place whose doors are shut; one it can see into it walks into for the kill
-// (user, 2026-11-09).
-void an_open_hiding_place_is_walked_into() {
-  CHECK(waits_at_hiding_place(true, false));
-  CHECK(!waits_at_hiding_place(true, true));
-  CHECK(!waits_at_hiding_place(false, false) && !waits_at_hiding_place(false, true));
+// Its way into a hiding place (user, 2026-11-09: it never passes through a door): it walks in through a door that is
+// not shut and already lets it through; else it opens the nearest door that is not shut, with the opening clip, and
+// walks in once it lets it through; it never opens a shut door, so with no other way in it kicks at the doors.
+void its_way_into_a_hiding_place() {
+  using D = HidingDoor;
+  CHECK(way_in({}).how == WayIn::Kick);                                         // no doors read
+  CHECK(way_in(std::vector<D>{{true, false, true, 1.0f}}).how == WayIn::Kick);  // shut: never opened
+  const std::vector<D> wide = {{true, false, true, 1.0f}, {false, true, false, 2.0f}};
+  CHECK(way_in(wide).how == WayIn::Walk);
+  const std::vector<D> ajar = {{false, false, true, 2.0f}, {false, false, true, 1.0f}, {true, false, true, 0.5f}};
+  const Entry e = way_in(ajar);
+  CHECK(e.how == WayIn::Open && e.door == 1);  // the nearest ajar door, never the shut one beside it
+  const std::vector<D> stuck = {{false, false, false, 1.0f}};  // ajar but not one it may open: it kicks
+  CHECK(way_in(stuck).how == WayIn::Kick);
+  CHECK(waits_at_hiding_place(true, WayIn::Kick));
+  CHECK(!waits_at_hiding_place(true, WayIn::Open) && !waits_at_hiding_place(true, WayIn::Walk));
+  CHECK(!waits_at_hiding_place(false, WayIn::Kick));
 }
 
 void hearing_a_target_resumes_the_chase() {
@@ -1192,7 +1203,7 @@ int main() {
   locked_out_is_final();
   a_hiding_target_is_safe();
   it_loses_interest_at_a_hiding_place();
-  an_open_hiding_place_is_walked_into();
+  its_way_into_a_hiding_place();
   hearing_a_target_resumes_the_chase();
   an_unknown_count_never_locks();
   the_move_clock_survives_bad_times();

@@ -37,7 +37,10 @@ well it works.
    door being slammed: the door's own slam sound, played on every client as the foot lands (user, 2026-11-09). It cannot open
    it. Hiding is safe, but loud. After 10 seconds of kicking it loses interest and wanders off as it lurked, leaving whoever
    hides there alone until they step out, so they have a chance to get away (user, 2026-11-09). A hiding place whose door
-   stands open (not shut, by the game's own snap test) hides nobody: it walks in and kills them (user, 2026-11-09). When they
+   is not shut (by the game's own snap test) hides nobody: it never passes through a door, so it walks to the doors, opens
+   the door that stands ajar with the opening-door clip, and walks in once the gap lets it through to kill them; a door
+   already open that far it walks straight through (user, 2026-11-09). It never opens a shut door, and kicks when the only
+   door ajar is one it may not open. When they
    step out it goes straight back to chasing them. It knows
    because it saw them go in, or found them while searching the way the game's own closet search does **(builder's call)**. Someone
    hiding where it never looks keeps the front door unlocked and the Squatter searching, for as long as they stay.

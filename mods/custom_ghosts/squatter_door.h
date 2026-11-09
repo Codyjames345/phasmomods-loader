@@ -191,6 +191,13 @@ bool passable(void* door);
 bool shut(void* door);
 
 /**
+ * Whether `door` lets the Squatter through on this client: passable, or a hinged door whose leaf stands at its own open
+ * angle (HingeDoor.openAngle, within kShutDegrees), as open as it goes even when that is under kPassDegrees. True for no
+ * door or one gone. Any client. Main thread.
+ */
+bool lets_through(void* door);
+
+/**
  * The leaf of the hinged `door` as this client sees it now: Door.body's Transform, which HingeDoor.SwingDoor turns, and
  * the middle of the first collider under it. Empty for a door gone, not hinged, or without a body or collider. Any
  * client. Main thread.

@@ -149,12 +149,49 @@ inline bool knows_hiding(bool inHidingPlace, bool trackedOrSensed, bool knewBefo
   return inHidingPlace && (trackedOrSensed || knewBefore);
 }
 
+/** One door of a hiding place, as its way in reads it. */
+struct HidingDoor {
+  bool shut = true;      // reads shut (door::shut)
+  bool through = false;  // lets it through (door::lets_through)
+  bool mayOpen = false;  // the master may open it (door::may_open)
+  float metres = 0.0f;   // from the Squatter
+};
+
+/** How it gets at a player in a hiding place. */
+enum class WayIn : uint8_t {
+  Kick,  // no way in: it waits at the doors, kicking them
+  Open,  // it opens a door with the opening clip first
+  Walk,  // a door already lets it through
+};
+
+/** Its way in, and for Open the index of the door it opens. */
+struct Entry {
+  WayIn how = WayIn::Kick;
+  int door = -1;
+};
+
 /**
- * Whether it waits at its target's hiding place, kicking the doors: it knows they hide there (`hidingKnown`) and the
- * place is shut. A hiding place standing open (`placeOpen`: one of its doors not shut, door::shut) it walks into and
- * kills them, as the chase does anywhere (user, 2026-11-09).
+ * Its way into a hiding place by its `doors` (user, 2026-11-09: it never passes through a door, and an open hiding place
+ * hides nobody): Walk through a door that is not shut and lets it through; else Open the nearest door that is not shut
+ * and the master may open; else Kick. A shut door is never opened, so a hiding place with every door shut is kicked at.
  */
-inline bool waits_at_hiding_place(bool hidingKnown, bool placeOpen) { return hidingKnown && !placeOpen; }
+inline Entry way_in(std::span<const HidingDoor> doors) {
+  Entry e;
+  float nearest = 0.0f;
+  for (size_t i = 0; i < doors.size(); ++i) {
+    const HidingDoor& d = doors[i];
+    if (d.shut) continue;
+    if (d.through) return {WayIn::Walk, static_cast<int>(i)};
+    if (d.mayOpen && (e.door < 0 || d.metres < nearest)) {
+      e = {WayIn::Open, static_cast<int>(i)};
+      nearest = d.metres;
+    }
+  }
+  return e;
+}
+
+/** Whether it waits at its target's hiding place, kicking the doors: it knows they hide there and has no way in. */
+inline bool waits_at_hiding_place(bool hidingKnown, WayIn way) { return hidingKnown && way == WayIn::Kick; }
 
 // How long it kicks at a hiding place before it loses interest and lurks again, so the player has a chance to get away
 // (user, 2026-11-09: 10 seconds).

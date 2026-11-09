@@ -311,6 +311,13 @@ bool shut(void* d) {
   return phasmo::HingeDoor::type.is(d) ? reads_shut(leaf_gap(d)) : phasmo::Door::closed.get(d);
 }
 
+bool lets_through(void* d) {
+  if (passable(d)) return true;  // no door, another kind of door, or a gap that fits
+  const phasmo::Vector3 euler = phasmo::Transform::get_localEulerAngles(leaf_transform(d));
+  const float angle = leaf_angle(euler, phasmo::HingeDoor::hingeAxis.get(d), phasmo::Axis::X(), phasmo::Axis::Z());
+  return reads_shut(gap_degrees(angle, phasmo::HingeDoor::openAngle.get(d)));  // as far open as it swings
+}
+
 std::optional<Leaf> leaf_of(void* d) {
   if (!d || !api::alive(d) || !phasmo::HingeDoor::type.is(d)) return std::nullopt;
   void* t = leaf_transform(d);
