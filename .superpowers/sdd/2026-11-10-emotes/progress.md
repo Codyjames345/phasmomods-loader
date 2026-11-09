@@ -148,3 +148,27 @@ Task 16: complete (commits adb0f45 + 97cf7bf, tests: emotes_wheel_test passed 4 
 - Task 17: no AudioSource.set_time: every song loop starts at 0 (both measured loops start at 0), so a restart is Stop + Play.
 - Milestone (after the mod): validate.ps1 -> 91/91, docs, reference, package, stage, pinned, release pass; gamecheck -Expect -Mods -> exit 0, 1821 entries, 0 missing, no mod switched off.
 Task 17: complete (commit 37ebce1, tests: emotes_play_test 15 cases red (no header) then passed; validate 91/91)
+Task 18: complete (commit 3a30563: docs/emotes.md, sdk/guides/emotes.md, CHANGELOG, sdk/README, README and installation rows, the spec's later decisions; tests: validate.ps1 91/91)
+Final review: self-review (the harness asks that no subagent be spawned unless the user asks); findings fixed in 2fbdc19:
+- Final: fixed a new emote started while the view eased back stayed first person - a_new_start_while_easing_back_turns_out_again RED->GREEN, suite 91/91
+- Final: fixed an item switched to mid-dance floated before the head and the wrong item went back at the end - glue only (checked in game); held_scan passes
+- Final: fixed the mod's clock in seconds since boot lost float precision - glue only
+- Final: minor (deferred): the VR wheel re-sets its eight colours and name text every frame (a managed string a frame)
+- Final: minor (deferred): the keybinds search for rows runs once a second for the whole session, even with every row made
+Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1821 entries, 0 missing, no mod switched off.
+
+## Smoke list (the user's in-game test)
+1. The Mods panel lists Emotes; it starts (log: "Emotes: <clip> ... looping, song loop ...") for all eight.
+2. Keybinds menu: an Emotes row under keyboard and one under controller, labelled (PM_TEXT_TODO until the author writes it); rebind, restart, the rebinding holds.
+3. Keyboard: hold X: the wheel (grey disc, gaps, icons), blur and vignette behind; the camera does not turn; mouse up picks the top (blue, name below); release plays; release at rest plays nothing; Esc/journal while held closes it.
+4. Gamepad: hold D-pad up, right stick picks, release plays.
+5. VR: left X opens the wheel over the left hand facing you; right controller points, trigger plays; X again closes; view never moves; your body shows; the head does not block the view.
+6. The camera eases straight back from the head, character facing away; mouse turns it; body stays within 90 degrees, then follows; it eases back on the end.
+7. Ends: walking 0.5 m, E/F/RMB/LMB/G/C (use, place, pick up, drop, throw, door, light switch, crouch), death; switching items (Q, scroll, 1-4) and the torch do not.
+8. Held item stays in the hand on screen in third person; switching mid-dance; after the end the item is back in view.
+9. Another player sees and hears the dance from the dancer, falling off with distance, and the body turns as the dancer turns.
+10. Floss and Take The L: the song runs past the dance's loop and loops at 16.692 s and 12.631 s; the other six restart with their dance.
+11. The ghost hunting near a dancer finds them as it would someone talking; the ghost's room events react to dancing nearby.
+12. A dead dancer is seen and heard by the dead only.
+13. Root motion: the dance does not move the player (or a dance ends itself by "moving" 0.5 m).
+14. The body's Animator is not on the root (no log line "the body's Animator is on the player's root").
