@@ -268,9 +268,9 @@ inline std::optional<Act> stance_for(Phase p) {
  */
 inline bool stops_dead(float before, float now) { return before > 0.0f && now <= 0.0f; }
 
-/** The move shown at `speed`: standing for a walk or run that is not moving, any other move as it is. */
+/** The move shown at `speed`: standing for a walk, sneak or run that is not moving, any other move as it is. */
 inline Move rest_move(Move m, float speed) {
-  return (m == Move::Run || m == Move::Walk) && speed <= 0.0f ? Move::Stand : m;
+  return (m == Move::Run || m == Move::Walk || m == Move::Sneak) && speed <= 0.0f ? Move::Stand : m;
 }
 
 /** The act that starts a phase: getting up, out of moping into excitement. None for any other change. */

@@ -789,7 +789,7 @@ void every_move_and_act_has_its_states() {
   CHECK(names.size() == all.size());  // each name once
   CHECK((names == std::set<std::string>{"Run", "Duck_A", "Duck_B", "Weave_A", "Weave_B", "Roll_A", "Roll_B",
                                         "Parkour_A", "Parkour_B", "Stumble", "Sit", "GetUp", "Kick", "Bang", "Bump",
-                                        "OpenDoorOutwards", "OpenDoorInwards", "Walk", "Stand"}));
+                                        "OpenDoorOutwards", "OpenDoorInwards", "Walk", "Stand", "Sneak"}));
   for (const Move m : kAllMoves) {
     const auto states = states_of(m);
     const bool two = m == Move::Duck || m == Move::Weave || m == Move::Roll || m == Move::Parkour;
@@ -1200,6 +1200,7 @@ int main() {
   search_points_stay_near_the_last_place();
   the_door_clip_follows_the_side();
   a_fall_stops_it_where_it_stands();
+  walking_and_running_keep_pace_with_the_ground();
   a_door_is_reached_within_reach();
   the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();

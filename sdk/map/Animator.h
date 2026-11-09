@@ -9,6 +9,7 @@
 // Animator onto a copy), lists them with get_parameters and reads each one's name and type.
 
 #include "entry.h"
+#include "Transform.h"
 #include "game_api.h"
 
 namespace pm::map {
@@ -186,6 +187,13 @@ inline constexpr pm::sdk::EntryDesc Animator_Rebind{.key = "Animator.Rebind", .k
 
 inline constexpr const char* Animator_CrossFade_params[] = {"int", "float", "int", "float", "float"};
 
+/// How far the Animator's clips moved the model's root over its last update, metres in the world (root motion): what
+/// Apply Root Motion would add to the model's position. It is worked out whether or not the Animator applies it.
+/// Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc Animator_get_deltaPosition{.key = "Animator.get_deltaPosition",
+                                                               .kind = pm::sdk::Kind::Method, .owner = "Animator",
+                                                               .name = "get_deltaPosition"};
+
 /// Blends from the state playing into another: the engine function of Animator.CrossFade(stateHashName,
 /// normalizedTransitionDuration, layer, normalizedTimeOffset, normalizedTransitionTime), the hash Animator.StringToHash of
 /// the state's name, the blend's length as a fraction of the playing state's length, the layer, where to start in the
@@ -354,6 +362,8 @@ struct Animator {
   /// length. Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::Animator_CrossFade, void(void*, int32_t, float, int32_t, float, float)>
       CrossFade{};
+  /// get_deltaPosition(animator): how far its clips moved the root last update (root motion). Unresolved: zero.
+  static constexpr pm::api::Method<pm::map::Animator_get_deltaPosition, Vector3(void*)> get_deltaPosition{};
   /// Update(animator, seconds): steps it now; 0 poses the model in its state. Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::Animator_Update, void(void*, float)> Update{};
   /// get_isInitialized(animator). Unresolved: false.

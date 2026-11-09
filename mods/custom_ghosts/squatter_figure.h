@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <algorithm>
 #include <filesystem>
 #include <span>
 #include <string>
@@ -26,19 +27,20 @@ enum class Act : uint8_t { Sit, GetUp, Kick, Bang, Bump, OpenDoorOutwards, OpenD
 
 inline constexpr Act kAllActs[] = {Act::Sit, Act::GetUp, Act::Kick, Act::Bang, Act::Bump, Act::OpenDoorOutwards,
                                    Act::OpenDoorInwards};
-inline constexpr Move kAllMoves[] = {Move::Run,     Move::Duck,    Move::Weave, Move::Roll,
-                                     Move::Parkour, Move::Stumble, Move::Walk,  Move::Stand};
+inline constexpr Move kAllMoves[] = {Move::Run,     Move::Duck,    Move::Weave, Move::Roll, Move::Parkour,
+                                     Move::Stumble, Move::Walk,    Move::Stand, Move::Sneak};
 
 // The controller's state names, the one table the figure and the start check use (the user's clip choice,
 // 2026-11-07): a move with two clips has two states, and each time it plays one of them is picked.
-inline constexpr const char* kRunStates[] = {"Run"};
-inline constexpr const char* kWalkStates[] = {"Walk"};    // Crouched Walking
+inline constexpr const char* kRunStates[] = {"Run"};      // Jogging into Running by the ground speed (Speed)
+inline constexpr const char* kWalkStates[] = {"Walk"};    // Walking
+inline constexpr const char* kSneakStates[] = {"Sneak"};  // Crouched Walking
 inline constexpr const char* kStandStates[] = {"Stand"};  // Standing Idle
 inline constexpr const char* kDuckStates[] = {"Duck_A", "Duck_B"};
 inline constexpr const char* kWeaveStates[] = {"Weave_A", "Weave_B"};
 inline constexpr const char* kRollStates[] = {"Roll_A", "Roll_B"};
 inline constexpr const char* kParkourStates[] = {"Parkour_A", "Parkour_B"};
-inline constexpr const char* kStumbleStates[] = {"Stumble"};
+inline constexpr const char* kStumbleStates[] = {"Stumble"};  // Soccer Trip, a trip from a run (user, 2026-11-09)
 
 /** The states a move may play, one or two. */
 inline std::span<const char* const> states_of(Move m) {
@@ -51,6 +53,7 @@ inline std::span<const char* const> states_of(Move m) {
     case Move::Stumble: return kStumbleStates;
     case Move::Walk: return kWalkStates;
     case Move::Stand: return kStandStates;
+    case Move::Sneak: return kSneakStates;
   }
   return kRunStates;
 }
@@ -87,11 +90,34 @@ struct StateClip {
 // Each state's clip length in seconds, as the bundle's build reads the user's clips: how long a move that plays once
 // holds the chase (move_hold_seconds), and what a cross-fade's length is measured against. They change with the clips.
 inline constexpr StateClip kStateClips[] = {
-    {"Run", 0.7000f},     {"Walk", 1.0333f},      {"Stand", 6.0000f},     {"Duck_A", 1.2667f},
+    {"Run", 0.7000f},     {"Walk", 1.0333f},      {"Stand", 6.0000f},     {"Sneak", 1.0333f}, {"Duck_A", 1.2667f},
     {"Duck_B", 1.1000f},  {"Weave_A", 1.1333f},   {"Weave_B", 1.1333f},   {"Roll_A", 1.1667f},
-    {"Roll_B", 2.3667f},  {"Parkour_A", 0.2333f}, {"Parkour_B", 2.0000f}, {"Stumble", 2.7667f},
+    {"Roll_B", 2.3667f},  {"Parkour_A", 0.2333f}, {"Parkour_B", 2.0000f}, {"Stumble", 1.6000f},
     {"Sit", 10.2667f},    {"GetUp", 2.7000f},     {"Kick", 1.3000f},      {"Bang", 1.3000f},
     {"Bump", 1.1667f},    {"OpenDoorOutwards", 4.1000f}, {"OpenDoorInwards", 6.3667f}};
+
+// How fast each paced move's clips travel on their own, metres a second, as the bundle's build reads them: the Run
+// blend goes from Jogging at the first to Running at the second by the ground speed, and Walk and Sneak are one clip.
+inline constexpr float kJogSpeed = 1.8825f, kRunSpeed = 4.5229f, kWalkSpeed = 1.7006f, kSneakSpeed = 1.3565f;
+// The slowest and fastest a paced clip plays, as a share of its own speed: starting values, judged with the user.
+inline constexpr float kMinPlayRate = 0.25f, kMaxPlayRate = 2.0f;
+
+/**
+ * How fast move `m`'s clip plays (the controller's PlayRate) for a body moving at `speed` metres a second, so its feet
+ * keep pace with the ground, as games match a stride to the speed: the ground speed over the speed its clips travel
+ * at, which for Run is the blend's own between Jogging and Running. 1 for a move that is not paced, or not moving.
+ */
+inline float play_rate(Move m, float speed) {
+  float own = 0.0f;
+  switch (m) {
+    case Move::Run: own = std::clamp(speed, kJogSpeed, kRunSpeed); break;
+    case Move::Walk: own = kWalkSpeed; break;
+    case Move::Sneak: own = kSneakSpeed; break;
+    default: return 1.0f;
+  }
+  if (!(speed > 0.0f)) return 1.0f;
+  return std::clamp(speed / own, kMinPlayRate, kMaxPlayRate);
+}
 
 /** How long `state`'s clip lasts in seconds; 0 for a state the table does not name. */
 inline float seconds_of(const char* state) {
@@ -134,6 +160,13 @@ void place(phasmo::Vector3 at, float yaw);
 void play(Move m, uint32_t variant);
 /** Plays act `a`'s state. */
 void play_act(Act a);
+/**
+ * Paces the figure's walking and running for a body moving at `speed` metres a second while it plays move `m`: the
+ * controller's Speed (the Run blend) and PlayRate (play_rate). Every frame, on every client.
+ */
+void set_pace(Move m, float speed);
+/** How far the figure's clip carried it last frame (root motion), metres in the world; zero when it is not built. */
+phasmo::Vector3 clip_step();
 /** Whether the figure is built and still in the scene (a scene load destroys it, and its own assets with it). */
 bool ready();
 

@@ -1509,6 +1509,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &Animator_get_isInitialized,
     &Animator_Rebind,
     &Animator_CrossFade,
+    &Animator_get_deltaPosition,
     &Animator_Update,
     &Animator_GetBoneTransform,
     &Animator_set_applyRootMotion,

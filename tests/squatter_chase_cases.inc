@@ -105,6 +105,28 @@ void a_fall_stops_it_where_it_stands() {
   CHECK(move_speed(4.0f, Move::Stumble) == 0.0f);  // the trip holds it still
 }
 
+// Its walking and running keep pace with the ground (user, 2026-11-09: research how games animate humanoids and
+// copy it): each paced clip plays at the ground speed over the speed it travels on its own, the Run blend's own speed
+// being the ground speed between Jogging's and Running's, within kMinPlayRate and kMaxPlayRate; nothing else is paced.
+void walking_and_running_keep_pace_with_the_ground() {
+  CHECK(std::fabs(play_rate(Move::Walk, kWalkSpeed) - 1.0f) < 1e-5f);
+  CHECK(std::fabs(play_rate(Move::Walk, kWalkSpeed / 2) - 0.5f) < 1e-5f);
+  CHECK(std::fabs(play_rate(Move::Sneak, kSneakSpeed * 1.5f) - 1.5f) < 1e-5f);
+  CHECK(std::fabs(play_rate(Move::Run, 3.0f) - 1.0f) < 1e-5f);  // within the blend: the blend's own pace
+  CHECK(std::fabs(play_rate(Move::Run, kRunSpeed * 1.2f) - 1.2f) < 1e-4f);  // past Running: played faster
+  CHECK(std::fabs(play_rate(Move::Run, kJogSpeed / 2) - 0.5f) < 1e-5f);   // under Jogging: played slower
+  CHECK(play_rate(Move::Walk, 100.0f) == kMaxPlayRate && play_rate(Move::Walk, 0.01f) == kMinPlayRate);
+  CHECK(play_rate(Move::Walk, 0.0f) == 1.0f && play_rate(Move::Roll, 3.0f) == 1.0f && play_rate(Move::Stand, 1.0f) == 1.0f);
+  CHECK(play_rate(Move::Walk, std::numeric_limits<float>::quiet_NaN()) == 1.0f);
+  // The rolls, the trip and the jump carry it by their clips; a pace carries every other move.
+  CHECK(moves_by_clip(Move::Roll) && moves_by_clip(Move::Stumble) && moves_by_clip(Move::Parkour));
+  CHECK(!moves_by_clip(Move::Run) && !moves_by_clip(Move::Duck) && !moves_by_clip(Move::Weave) &&
+        !moves_by_clip(Move::Walk) && !moves_by_clip(Move::Sneak) && !moves_by_clip(Move::Stand));
+  // It searches at a sneak, which loops and stands when still, as a walk does.
+  CHECK(std::string(states_of(Move::Sneak)[0]) == "Sneak" && !plays_once(Move::Sneak));
+  CHECK(rest_move(Move::Sneak, 0.0f) == Move::Stand && rest_move(Move::Sneak, 1.0f) == Move::Sneak);
+}
+
 // The door clip follows the leaf's swing (door::swings_toward): it pulls a door that comes toward it (Opening Door
 // Inwards) and pushes one that goes away (Open Door Outwards).
 void the_door_clip_follows_the_side() {
@@ -289,7 +311,7 @@ void it_stands_still_and_walks_with_its_own_clips() {
   CHECK(rest_move(Move::Run, 0.0f) == Move::Stand && rest_move(Move::Walk, 0.0f) == Move::Stand);
   CHECK(rest_move(Move::Run, 3.0f) == Move::Run && rest_move(Move::Walk, 1.0f) == Move::Walk);
   CHECK(rest_move(Move::Stumble, 0.0f) == Move::Stumble);  // a clumsy move plays its own clip, whatever its pace
-  for (const Move m : kMoveCycle) CHECK(m != Move::Stand && m != Move::Walk);  // the chase never strolls
+  for (const Move m : kMoveCycle) CHECK(m != Move::Stand && m != Move::Walk && m != Move::Sneak);  // never strolls
 }
 
 // A door counts only when it walks into it, never one it passes beside or leaves behind.

@@ -82,7 +82,14 @@ struct State {
   StepCounter steps;
   std::optional<Point> stepFrom;
   std::mt19937 stepRng{std::random_device{}()};
+  // How fast the ghost moves on this client, for the figure's pace (figure::set_pace).
+  std::optional<Point> paceFrom;
+  uint64_t paceAt = 0;
+  float pace = 0.0f;
 };
+
+// Over how long the ghost's speed is smoothed for the figure's pace, seconds: a starting value.
+constexpr float kPaceSmoothSeconds = 0.25f;
 State g;
 
 uint64_t now() { return GetTickCount64(); }
@@ -443,7 +450,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
         c.moveUntil = t + static_cast<uint64_t>(hold * 1000.0f);
       }
       const Move m = c.out.move;
-      speed = move_speed(c.sprint, m);
+      speed = moves_by_clip(m) ? 0.0f : move_speed(c.sprint, m);  // a roll or a trip carries it by its clip
       to = targetSensed ? std::optional<Point>(target->at) : c.tracker.last_at();
       // The catch: a kick to the face, a line, and the game's own kill (kick).
       if (target && !paused &&
@@ -459,7 +466,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       break;
     }
     case Phase::Searching: {
-      c.out.move = Move::Walk;  // the user's walking clip (2026-11-09)
+      c.out.move = Move::Sneak;  // creeping about, the user's Crouched Walking clip (2026-11-09)
       speed = move_speed(c.sprint, Move::Run) * kSearchPace;
       // Around where it last sensed its target, else around where the search began, so it never stands still; a point
       // not inside the house is dropped and another tried next frame, so it never searches past an exit.
@@ -558,6 +565,17 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   if (steers(next)) {
     c.out.move = rest_move(c.out.move, speed);  // standing, never running on the spot
     if (agent) steer(agent, to, speed, t);
+    // A roll, a trip or a landing carries it as far as its clip travels (root motion), on the navigation mesh.
+    if (agent && next == Phase::Chasing && moves_by_clip(c.out.move) && c.out.act < 0) {
+      const phasmo::Vector3 step = figure::clip_step();
+      if (step.x != 0.0f || step.z != 0.0f) {
+        phasmo::Vector3 there = phasmo::Transform::get_position(phasmo::Component::get_transform(agent));
+        there.x += step.x;
+        there.z += step.z;
+        phasmo::NavMeshAgent::Warp(agent, &there);
+        c.nextSteer = 0;
+      }
+    }
   }
 
   c.out.phase = next;
@@ -576,6 +594,17 @@ void play(void* ghost) {
   const Cues c = g.cues.take(s);
   if (c.act && s.act >= 0) figure::play_act(static_cast<Act>(s.act));
   if (c.move) figure::play(s.move, s.variant);
+  // Its walking and running keep pace with how fast the ghost moves here (figure::set_pace), smoothed over a moment.
+  const uint64_t t = now();
+  const Point here = at_of(ghost);
+  if (g.paceFrom && t > g.paceAt) {
+    const float seconds = static_cast<float>(t - g.paceAt) / 1000.0f;
+    const float raw = std::hypot(here.x - g.paceFrom->x, here.z - g.paceFrom->z) / seconds;
+    g.pace += (raw - g.pace) * std::min(1.0f, seconds / kPaceSmoothSeconds);
+  }
+  g.paceFrom = here;
+  g.paceAt = t;
+  figure::set_pace(s.move, g.pace);
   if (c.line && s.lineSet >= 0 && s.lineIndex >= 0)
     voice::play_index(static_cast<Lines>(s.lineSet), s.lineIndex, vector(at_of(ghost)));
   // A footstep each stride it moves, on this client, from its own view of the ghost's movement.
@@ -604,6 +633,8 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     g.kicked.clear();
     g.steps.reset();
     g.stepFrom.reset();
+    g.paceFrom.reset();
+    g.pace = 0.0f;
     forget_channel();
     figure::destroy();
     if (!haunting) ghost_sight::drop();  // shared (ghost_sight.h): kept while the contract's ghost lives

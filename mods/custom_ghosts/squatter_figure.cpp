@@ -283,6 +283,16 @@ void play(Move m, uint32_t variant) { blend_to(state_for(m, variant)); }
 
 void play_act(Act a) { blend_to(state_of(a)); }
 
+void set_pace(Move m, float speed) {
+  if (!check()) return;
+  static const int32_t kSpeed = phasmo::Animator::StringToHash(api::make_string("Speed"));
+  static const int32_t kPlayRate = phasmo::Animator::StringToHash(api::make_string("PlayRate"));
+  phasmo::Animator::SetFloatID(g.animator, kSpeed, std::max(speed, 0.0f));
+  phasmo::Animator::SetFloatID(g.animator, kPlayRate, play_rate(m, speed));
+}
+
+phasmo::Vector3 clip_step() { return check() ? phasmo::Animator::get_deltaPosition(g.animator) : phasmo::Vector3{}; }
+
 bool ready() { return check(); }
 
 }  // namespace pm::custom::squatter::figure

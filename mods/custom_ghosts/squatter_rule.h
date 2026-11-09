@@ -24,7 +24,7 @@ enum class Phase : uint8_t {
 
 // Walk and Stand are the user's walking and standing clips (2026-11-09): it walks to search, follow and find a
 // seat, and stands still rather than running on the spot. Neither is in the chase's cycle.
-enum class Move : uint8_t { Run, Duck, Weave, Roll, Parkour, Stumble, Walk, Stand };
+enum class Move : uint8_t { Run, Duck, Weave, Roll, Parkour, Stumble, Walk, Stand, Sneak };
 
 /**
  * Which set of recorded lines the Squatter speaks from; the mod holds the recordings. Steps is no line: its footsteps,
@@ -165,6 +165,7 @@ inline float move_speed(float sprintSpeed, Move m) {
     case Move::Stumble: scale = 0.0f; break;
     case Move::Walk: scale = 0.6f; break;
     case Move::Stand: scale = 0.0f; break;
+    case Move::Sneak: scale = 0.6f; break;
   }
   return sprintSpeed * kSprintMargin * scale;
 }
@@ -180,7 +181,14 @@ inline float average_chase_speed(float sprintSpeed) {
 inline Move move_of(int index) { return kMoveCycle[((index % kMoveCount) + kMoveCount) % kMoveCount]; }
 
 /** Whether move `m` plays its clip once, as against Run, Walk and Stand, whose clips loop. */
-inline bool plays_once(Move m) { return m != Move::Run && m != Move::Walk && m != Move::Stand; }
+inline bool plays_once(Move m) { return m != Move::Run && m != Move::Walk && m != Move::Stand && m != Move::Sneak; }
+
+/**
+ * Whether move `m` carries the Squatter by its own clip (root motion) rather than by a pace: the rolls, the trip and
+ * the jump and landing, whose clips travel as far as they show, so the body never slides under them (user,
+ * 2026-11-09: it slid along the floor after tripping).
+ */
+inline bool moves_by_clip(Move m) { return m == Move::Roll || m == Move::Stumble || m == Move::Parkour; }
 
 /**
  * How long the chase keeps move `m` before the cycle moves on, in seconds, when its clip lasts `clipSeconds`: a slot of
