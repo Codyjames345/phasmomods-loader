@@ -594,3 +594,13 @@ slammed door goes quiet at once and the padlock comes the moment it is fully ope
   updater.available and updater.download-stalled, or says to push with the placeholders.
 - User wrote updater.available and updater.download-stalled; PM_TEXT_TODO marks off, player-text.md back to 0.
   validate.ps1 78/78. Pushed to development.
+
+## 2026-11-09 Merge the Squatter into development, ready for a dev release (Claude, user's request)
+- feature/squatter (its ledger: .superpowers/sdd/2026-11-04-squatter, kept in the private repo) merged with --no-ff: 7056539,
+  no conflicts. Before it: the user's wording commit afaf439 (loader notices say PhasmoMods); its join_guard test fixed in
+  b63f32a. Sixteen ghosts in README, docs, manifest and sdk/README; the Squatter's README and custom-ghosts rows; its journal
+  description, strength and weakness drafted at the user's request, marked PM_TEXT_AI; its docs difficulty left as
+  "(the author's call)". sdk/CHANGELOG [2.3] gains the door slam, closet obstacle, Layer.Item and hide_renderers keep list.
+- The bundle is pinned (tools/payload.psd1 Sha256) and published to the private repo under pinned/<sha>/; CI places it with
+  tools/place_assets.ps1. validate.ps1 on development: exit 0, 82/82 and the script tests; gamecheck -Expect 0, 1685/1600.
+- Not pushed: a push to development publishes a pre-release; it waits for the user's text pass and go.
