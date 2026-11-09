@@ -1353,6 +1353,12 @@ void play(void* ghost) {
     const FallPhase is = g.fall.update(t, figure::fall_speed(), get_up_ms());
     if (was == FallPhase::Falling && is != FallPhase::Falling) rise(ghost);
     if (is == FallPhase::Up) {
+      // It stands facing the way its body faces at the get-up's end, which the clip turned as it rose; the root turns
+      // under it, and it turns to its way from there as it always turns (it_stands_facing_the_way_its_body_faces).
+      if (const std::optional<phasmo::Quaternion> body = figure::body_rotation()) {
+        g.facing = body_heading(*body);
+        figure::turn_root(*g.facing);
+      }
       if (s.act >= 0) figure::play_act(static_cast<Act>(s.act));
       else figure::play(s.move, s.variant);
     }

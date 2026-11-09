@@ -66,6 +66,35 @@ inline constexpr pm::sdk::EntryDesc Cloth_set_damping{.key = "Cloth.set_damping"
                                                       .name = "UnityEngine.Cloth::set_damping",
                                                       .params = UnityCloth_float};
 
+/// How much the cloth answers its object's motion through the world, 0 (not at all) to 1: lower hangs heavier and sways
+/// less as the body runs. Unity's default is 0.5. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Cloth_set_worldVelocityScale{
+    .key = "Cloth.set_worldVelocityScale", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kOptional,
+    .name = "UnityEngine.Cloth::set_worldVelocityScale", .params = UnityCloth_float};
+
+/// How much the cloth answers its object's acceleration, 0 to 1: lower whips less as the body starts, stops and turns.
+/// Unity's default is 1. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Cloth_set_worldAccelerationScale{
+    .key = "Cloth.set_worldAccelerationScale", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kOptional,
+    .name = "UnityEngine.Cloth::set_worldAccelerationScale", .params = UnityCloth_float};
+
+/// Whether the cloth adds a virtual particle in each triangle for its collisions, 0 or 1: with it the colliders press
+/// the cloth in smooth bulges rather than poking it at its points. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Cloth_set_useVirtualParticles{
+    .key = "Cloth.set_useVirtualParticles", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kOptional,
+    .name = "UnityEngine.Cloth::set_useVirtualParticles", .params = UnityCloth_float};
+
+/// The cloth's points as simulated, a new Vector3[] of one per mesh vertex, in its SkinnedMeshRenderer's space (or the
+/// world's: a reader checks). Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc Cloth_get_vertices{.key = "Cloth.get_vertices", .kind = pm::sdk::Kind::Icall,
+                                                       .flags = pm::sdk::kOptional,
+                                                       .name = "UnityEngine.Cloth::get_vertices"};
+
+/// The cloth's normals as simulated, a new Vector3[] beside get_vertices'. Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc Cloth_get_normals{.key = "Cloth.get_normals", .kind = pm::sdk::Kind::Icall,
+                                                      .flags = pm::sdk::kOptional,
+                                                      .name = "UnityEngine.Cloth::get_normals"};
+
 /// Unity's capsule collider (UnityEngine.PhysicsModule), a Collider: what a Cloth collides with. Inferred: Unity's
 /// documented API.
 inline constexpr pm::sdk::EntryDesc CapsuleCollider{.key = "CapsuleCollider", .name = "CapsuleCollider",
@@ -125,6 +154,17 @@ struct Cloth {
   static constexpr pm::api::Icall<pm::map::Cloth_set_stretchingStiffness, void(void*, float)> set_stretchingStiffness{};
   /// set_damping(cloth, damping). Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::Cloth_set_damping, void(void*, float)> set_damping{};
+  /// set_worldVelocityScale(cloth, share), 0 to 1. Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Cloth_set_worldVelocityScale, void(void*, float)> set_worldVelocityScale{};
+  /// set_worldAccelerationScale(cloth, share), 0 to 1. Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Cloth_set_worldAccelerationScale, void(void*, float)>
+      set_worldAccelerationScale{};
+  /// set_useVirtualParticles(cloth, 0 or 1). Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Cloth_set_useVirtualParticles, void(void*, float)> set_useVirtualParticles{};
+  /// get_vertices(cloth): its simulated points, a new Vector3[]. Unresolved: null.
+  static constexpr pm::api::Icall<pm::map::Cloth_get_vertices, void*(void*)> get_vertices{};
+  /// get_normals(cloth): its simulated normals, a new Vector3[]. Unresolved: null.
+  static constexpr pm::api::Icall<pm::map::Cloth_get_normals, void*(void*)> get_normals{};
 };
 
 /// Unity's capsule collider. `capsule` below is one.

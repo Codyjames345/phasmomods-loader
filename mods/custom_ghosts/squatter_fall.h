@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "squatter_chase.h"
+#include "quat.h"
 #include "squatter_figure.h"
 
 // The Squatter's falls on every client (user, 2026-11-09: every trip ends in a ragdoll before it gets up): the body
@@ -97,6 +98,12 @@ inline const char* get_up_state(GetUp g) { return g == GetUp::FaceDown ? kStandU
  * (kStandUpState, then kTripGetUpState), read from the clips with the bundle's probe (2026-11-09).
  */
 inline constexpr float kGetUpHeadYaw[] = {5.0f, 175.0f};
+
+/** The heading, radians clockwise from +z seen from above, of a body turned by `rotation` (its forward on the flat). */
+inline float body_heading(phasmo::Quaternion rotation) {
+  const phasmo::Vector3 f = qrot(rotation, {0, 0, 1});
+  return std::atan2(f.x, f.z);
+}
 
 /** Where and which way the figure's root stands as it gets up. */
 struct RootPose {

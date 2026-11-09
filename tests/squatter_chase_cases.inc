@@ -68,6 +68,8 @@ void lines_come_at_a_random_gap() {
   c.spoke(10000, 0xFFFFFFFFu);
   CHECK(!c.due(10000 + kLineGapMinMs));
   CHECK(c.due(10000 + kLineGapMaxMs));
+  // Not chatty (user, 2026-11-10: lines played too often): at least 12 s between two, up to 24 s.
+  CHECK(kLineGapMinMs == 12000 && kLineGapMaxMs == 24000);
 }
 
 // It is stuck when it moves at under kStuckFraction of the pace it wants for kStuckMs, which plays a bump.
@@ -767,4 +769,26 @@ void an_open_doorway_does_not_muffle_its_voice() {
   CHECK(open.x == listener.x && open.y == listener.y && open.z == listener.z);
   const Point shut = mixer_point(spoken, listener, true);
   CHECK(shut.x == spoken.x && shut.y == spoken.y && shut.z == spoken.z);
+}
+
+// It stands from a get-up facing the way its body faces (Animator's body rotation), not the way its root was turned as
+// it lay, so it turns to its way from there rather than spinning (user, 2026-11-10: it did not turn cleanly to run on).
+void it_stands_facing_the_way_its_body_faces() {
+  constexpr float kDeg = std::numbers::pi_v<float> / 180.0f;
+  for (const float degrees : {0.0f, 119.0f, -150.0f, 179.0f}) {
+    const float h = degrees * kDeg / 2;
+    CHECK(std::abs(wrap_angle(body_heading({0, std::sin(h), 0, std::cos(h)}) - degrees * kDeg)) < 1e-4f);
+  }
+  // A body pitched forward 60 degrees, turned 90: its heading is still 90.
+  const phasmo::Quaternion yaw{0, std::sin(45 * kDeg), 0, std::cos(45 * kDeg)}, pitch{std::sin(30 * kDeg), 0, 0,
+                                                                                        std::cos(30 * kDeg)};
+  CHECK(std::abs(wrap_angle(body_heading(pm::custom::qmul(yaw, pitch)) - 90 * kDeg)) < 1e-4f);
+}
+
+// The second dive (Stand To Roll) stands still for its last half second, upright from 1.9 s (the bundle's probe), so it
+// is trimmed at 1.8 s, while it still comes up out of the roll, and the run takes over from there (user, 2026-11-10:
+// a dive ended standing still instead of running on).
+void the_standing_roll_hands_back_to_the_run() {
+  CHECK(std::abs(seconds_of("Roll_B") - 1.8f) < 1e-4f);
+  CHECK(travel_of("Roll_B") > 4.0f && travel_of("Roll_B") < 4.4f);
 }

@@ -64,6 +64,10 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   `CapsuleCollider.set_center` and `set_direction`, `Rigidbody.set_mass`, `set_useGravity` and `get_angularVelocity`,
   `Collider.get_attachedRigidbody`, `Physics.OverlapSphere`, and `Layer.DeadPlayer`, the layer that meets only the
   house's fixed world.
+- **Heavier cloth and its simulated shape:** `ClothSettings` gains `worldVelocityScale`, `worldAccelerationScale` and
+  `virtualParticles`, set only when a mod asks; the map gains `Cloth.get_vertices` and `Cloth.get_normals` (the cloth
+  as simulated, through the engine's functions), `Mesh.RecalculateBounds`, `MeshUpdateFlags` and `Mesh.MarkDynamic`,
+  so a mod can draw a mesh that follows a cloth each frame (the Squatter draws its sheet's thickness so).
 - **A matte material:** `ShaderProperty.Lit.Smoothness` and `set_smoothness` (`sdk/api/models.h`), which sets a Lit
   material's smoothness, 0 being matte as the game's own untextured fabric.
 - **A pass after the Animator:** `IKExecutionOrder.LateUpdate`, where Final IK runs its solvers, for a hook that changes

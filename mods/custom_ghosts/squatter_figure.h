@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -109,7 +110,7 @@ struct StateClip {
 inline constexpr StateClip kStateClips[] = {
     {"Run", 0.7000f},     {"Walk", 1.0333f},      {"Stand", 6.0000f},     {"Sneak", 1.0333f}, {"Duck_A", 1.2667f},
     {"Duck_B", 1.1000f},  {"Weave_A", 1.1333f},   {"Weave_B", 1.1333f},   {"Roll_A", 1.1667f},
-    {"Roll_B", 2.3667f},  {"Parkour_A", 1.4000f}, {"Parkour_B", 2.0000f}, {"Stumble", 1.6000f}, {"Trip", 2.1000f},
+    {"Roll_B", 1.8000f},  {"Parkour_A", 1.4000f}, {"Parkour_B", 2.0000f}, {"Stumble", 1.6000f}, {"Trip", 2.1000f},
     {"Sit", 10.2667f},    {"GetUp", 2.7000f},     {"Kick", 1.3000f},      {"Bang", 1.3000f},
     {"Bump", 1.1667f},    {"OpenDoorOutwards", 4.1000f}, {"OpenDoorInwards", 6.3667f},
     {"TurnLeft", 1.0333f}, {"TurnRight", 1.0333f},  {"Turn180", 1.0000f},   {"StartWalk", 2.9333f},
@@ -148,7 +149,7 @@ struct StateTravel {
 // times its length): what a warped move's remaining travel is measured against. The trips are left out (their ragdoll
 // takes them), and the jump (it lands as recorded).
 inline constexpr StateTravel kClipTravel[] = {{"Duck_A", 1.28f},  {"Duck_B", 1.18f}, {"Weave_A", 1.28f},
-                                              {"Weave_B", 1.28f}, {"Roll_A", 5.52f}, {"Roll_B", 4.31f}};
+                                              {"Weave_B", 1.28f}, {"Roll_A", 5.52f}, {"Roll_B", 4.28f}};
 
 /** How far `state`'s clip carries the body, metres; 0 for a state the table does not name. */
 inline float travel_of(const char* state) {
@@ -234,6 +235,13 @@ void look_at(phasmo::Vector3 at, float weight);
 void* head();
 /** Whether the figure is built and still in the scene (a scene load destroys it, and its own assets with it). */
 bool ready();
+
+/** The world rotation of its body as the Animator last posed it (Animator.bodyRotation); none when it is not built. */
+std::optional<phasmo::Quaternion> body_rotation();
+
+/** Turns the figure's root to face `yaw` (radians clockwise from +z) where it stands, the body left as it is in the
+ * world, so a clip played next blends from the body as it stands. Does nothing when it is not built. */
+void turn_root(float yaw);
 
 /** Where its feet are in the world this frame (the foot bones), into `left` and `right`; false when it is not built. */
 bool feet(phasmo::Vector3& left, phasmo::Vector3& right);

@@ -420,6 +420,28 @@ inline constexpr pm::sdk::EntryDesc Mesh_set_triangles{.key = "Mesh.set_triangle
                                                        .owner = "Mesh", .name = "set_triangles",
                                                        .params = Mesh_Int32Array};
 
+inline constexpr const char* MeshUpdateFlags_values[] = {"Default", "DontValidateIndices", "DontResetBoneBounds",
+                                                         "DontNotifyMeshUsers", "DontRecalculateBounds"};
+
+/// What a mesh update may skip (UnityEngine.CoreModule, UnityEngine.Rendering), flags; 0 skips nothing. Inferred:
+/// Unity's documented API.
+inline constexpr pm::sdk::EntryDesc MeshUpdateFlags{.key = "MeshUpdateFlags", .name = "MeshUpdateFlags",
+                                                    .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine.Rendering",
+                                                    .values = MeshUpdateFlags_values};
+
+inline constexpr const char* Mesh_RecalculateBounds_params[] = {"@MeshUpdateFlags"};
+
+/// Works out the mesh's bounds again from its vertices, which a renderer culls it by: needed after setting vertices
+/// each frame. The flags are Unity's MeshUpdateFlags; 0 is the default. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Mesh_RecalculateBounds{.key = "Mesh.RecalculateBounds", .kind = pm::sdk::Kind::Method,
+                                                           .owner = "Mesh", .name = "RecalculateBounds",
+                                                           .params = Mesh_RecalculateBounds_params};
+
+/// Tells Unity the mesh will change often, so it keeps it where it is cheapest to update each frame. Inferred: Unity's
+/// documented API.
+inline constexpr pm::sdk::EntryDesc Mesh_MarkDynamic{.key = "Mesh.MarkDynamic", .kind = pm::sdk::Kind::Method,
+                                                     .owner = "Mesh", .name = "MarkDynamic"};
+
 /// Sets each vertex's bone weights, a BoneWeight[] as long as its vertices, for a SkinnedMeshRenderer. Inferred:
 /// Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc Mesh_set_boneWeights{.key = "Mesh.set_boneWeights", .kind = pm::sdk::Kind::Method,
@@ -592,6 +614,10 @@ struct Mesh {
   static constexpr pm::api::Method<pm::map::Mesh_set_uv, void(void*, void*)> set_uv{};
   /// set_triangles(mesh, indices), an Int32[]. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Mesh_set_triangles, void(void*, void*)> set_triangles{};
+  /// RecalculateBounds(mesh, flags): its bounds from its vertices again; flags 0. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Mesh_RecalculateBounds, void(void*, int32_t)> RecalculateBounds{};
+  /// MarkDynamic(mesh): it changes every frame. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Mesh_MarkDynamic, void(void*)> MarkDynamic{};
   /// set_boneWeights(mesh, weights), a BoneWeight[]. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Mesh_set_boneWeights, void(void*, void*)> set_boneWeights{};
   /// set_bindposes(mesh, poses), a Matrix4x4[]. Unresolved: does nothing.
