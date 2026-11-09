@@ -1145,6 +1145,7 @@ int main() {
   a_step_plays_each_stride();
   moping_moves_to_the_closest_place_outside_a_closed_hiding_place();
   it_stands_still_and_walks_with_its_own_clips();
+  it_opens_only_the_door_it_walks_into();
   friendly_starts_seated_in_the_favourite_room();
   gets_up_on_first_sight_and_says_its_line_once();
   follows_the_nearest_living_inside_and_stops_at_exits();

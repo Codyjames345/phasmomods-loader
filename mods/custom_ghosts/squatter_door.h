@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <vector>
@@ -83,19 +84,25 @@ int relock(uint64_t now);
 // carry.h's kOwnershipWaitMs, not a game value.
 inline constexpr uint64_t kOpenWaitMs = 2000;
 
-// A game value: how near its shut angle a door's leaf reads shut, in degrees, in HingeDoor.Update's own snap test.
-inline constexpr float kShutDegrees = 7.0f;
+// How far a door's leaf must stand from shut for the Squatter to pass, in degrees: a narrower gap it opens rather than
+// walks through (user, 2026-11-09: it never passes through doors). A starting value, judged with the user in game.
+inline constexpr float kPassDegrees = 70.0f;
+// The push it opens a door with: the top of the random strength the game's own HingeDoor.OpenDoor picks (1 to 5), so a
+// door swings wide rather than ajar.
+inline constexpr float kPushStrength = 5.0f;
 
 /**
- * Whether a leaf at `angle` degrees on its hinge axis reads shut, as HingeDoor.Update tests it before it snaps a still
- * door shut: within kShutDegrees of the door's shut angle (Door.closedAngle, `shut`), or, for a shut angle above 180,
- * within it the other way round. Door.closed is not this: the game sets it when a door snaps shut and clears it only on
- * a grab or the contract-start opener's RPC, so a door its physics swung open still reads closed.
+ * How far a leaf at `angle` degrees on its hinge axis stands from its shut angle `shut` (Door.closedAngle), the shorter
+ * way round, 0 to 180. Door.closed is not this: the game sets it when a door snaps shut and clears it only on a grab or
+ * the contract-start opener's RPC, so a door its physics swung open still reads closed.
  */
-inline bool reads_shut(float angle, float shut) {
-  const float d = angle > shut ? angle - shut : shut - angle;
-  return d < kShutDegrees || (shut - kShutDegrees < d && shut > 180.0f);
+inline float gap_degrees(float angle, float shut) {
+  float d = std::fmod(angle > shut ? angle - shut : shut - angle, 360.0f);
+  return d > 180.0f ? 360.0f - d : d;
 }
+
+/** Whether a door open `gap` degrees lets the Squatter through. */
+inline bool fits(float gap) { return gap >= kPassDegrees; }
 
 /**
  * The leaf's angle about its hinge from its local euler angles, `euler` (Transform.localEulerAngles), as the game's
@@ -122,6 +129,12 @@ enum class Opening {
  * holds them. Main thread.
  */
 bool may_open(void* door);
+
+/**
+ * Whether the Squatter can pass `door` without walking through its leaf: a hinged door whose gap fits (gap_degrees,
+ * fits), any other door, and a door gone. Any client; it reads only this client's leaf. Main thread.
+ */
+bool passable(void* door);
 
 /**
  * On the master: swings the shut `door` open with the game's own HingeDoor.OpenDoor, a push of the game's

@@ -281,6 +281,14 @@ void it_stands_still_and_walks_with_its_own_clips() {
   for (const Move m : kMoveCycle) CHECK(m != Move::Stand && m != Move::Walk);  // the chase never strolls
 }
 
+// A door counts only when it walks into it, never one it passes beside or leaves behind.
+void it_opens_only_the_door_it_walks_into() {
+  CHECK(heading_into({0, 0, 0}, {1, 0, 0}, {2, 0, 0.1f}));
+  CHECK(!heading_into({0, 0, 0}, {1, 0, 0}, {-2, 0, 0}));       // walking away
+  CHECK(!heading_into({0, 0, 0}, {1, 0, 0}, {0, 0, 2}));        // passing beside
+  CHECK(!heading_into({0, 0, 0}, {1, 0, 0}, {0.1f, 0, 0}));     // standing still
+}
+
 // The tunables keep the chase sane: a search is slower than the chase, and pauses are short.
 void the_chase_tunables_are_sane() {
   CHECK(kSearchPace > 0.0f && kSearchPace < 1.0f);

@@ -54,6 +54,9 @@ inline constexpr uint64_t kBumpPauseMs = 1200;
 inline constexpr uint64_t kBangGapMs = 1600;
 // Opening a door, and getting up, stop it this long.
 inline constexpr uint64_t kDoorPauseMs = 900;
+// How long it waits at a door it pushed for the gap to open wide enough to pass (user, 2026-11-09: it never passes
+// through doors). A starting value.
+inline constexpr uint64_t kPassWaitMs = 3000;
 inline constexpr uint64_t kGetUpMs = 1800;
 // How often the host pulses the ghost's sight copies and asks who is talking: each pulse is the sensor's window.
 inline constexpr uint64_t kSightMs = 250;
@@ -198,6 +201,17 @@ inline Point search_point(Point last, uint32_t roll) {
 inline Act door_act(Point ghost, Point door, Point doorForward) {
   const float side = (ghost.x - door.x) * doorForward.x + (ghost.z - door.z) * doorForward.z;
   return side >= 0.0f ? Act::OpenDoorOutwards : Act::OpenDoorInwards;
+}
+
+/**
+ * Whether the Squatter at `ghost`, moving at `velocity` (metres a second), walks into the door at `door`: it moves, at
+ * kStillPace or more, and its way lies within 45 degrees of the door, so a door it passes beside or leaves is not one.
+ */
+inline bool heading_into(Point ghost, Point door, Point velocity) {
+  const float dx = door.x - ghost.x, dz = door.z - ghost.z;
+  const float speed = std::hypot(velocity.x, velocity.z), to = std::hypot(dx, dz);
+  if (speed < kStillPace || to <= 0.0f) return false;
+  return (dx * velocity.x + dz * velocity.z) / (speed * to) >= std::sqrt(0.5f);
 }
 
 /** Whether a door at `door` is within its reach from `ghost`: kDoorReach on the flat, kDoorRise up or down. */

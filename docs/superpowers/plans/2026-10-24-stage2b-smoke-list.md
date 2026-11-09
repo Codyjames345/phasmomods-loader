@@ -1118,3 +1118,5 @@ The user's test of 2026-11-09 and its fixes.
 
 - [ ] The sheet hangs from the head over the whole body like a costume bedsheet, keeps that shape running, rolling and sitting, sways at the hem, and never slides off to one side.
 
+- [ ] It never walks through a door, chasing or lurking: at a shut or ajar door it walks into, it stops, plays the opening-door clip, the door swings wide for both players, and it goes through once the gap fits. A door it only passes beside is left alone.
+

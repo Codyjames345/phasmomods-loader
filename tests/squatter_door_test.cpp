@@ -797,26 +797,27 @@ void plain_door(Obj& d, Obj& use, Obj& view, bool mine = true) {
   at<bool>(view, kViewMine) = mine;
 }
 
-// A door reads shut as the game's own snap test reads it (HingeDoor.Update): its leaf within 7 degrees of
-// Door.closedAngle on its hinge axis, or, for a shut angle above 180, that far round the other way. Door.closed is not
-// it: the game sets it when a door snaps shut and clears it on a grab or the contract-start opener's RPC, so a door
-// swung open by its physics still reads closed (user, 2026-11-09: the Squatter reopened an open door every second).
-void a_door_reads_shut_by_its_leaf_angle() {
-  CHECK(door::reads_shut(90.0f, 90.0f) && door::reads_shut(96.9f, 90.0f) && door::reads_shut(83.1f, 90.0f));
-  CHECK(!door::reads_shut(97.1f, 90.0f) && !door::reads_shut(150.0f, 90.0f));
-  CHECK(door::reads_shut(1.0f, 359.0f));    // round the other way
-  CHECK(!door::reads_shut(1.0f, 120.0f));   // only for a shut angle above 180
+// The Squatter never passes through a door (user, 2026-11-09): it opens one whose gap is too narrow for it, measured by
+// how far the leaf stands from shut (Door.closedAngle) on its hinge axis, the shorter way round. Door.closed is not it:
+// the game sets it when a door snaps shut and clears it on a grab or the contract-start opener's RPC, so a door swung
+// open by its physics still reads closed.
+void a_door_too_narrow_to_pass_is_opened() {
+  CHECK(door::gap_degrees(90.0f, 90.0f) == 0.0f && door::gap_degrees(150.0f, 90.0f) == 60.0f);
+  CHECK(door::gap_degrees(1.0f, 359.0f) == 2.0f && door::gap_degrees(200.0f, 10.0f) == 170.0f);
+  CHECK(!door::fits(door::kPassDegrees - 1.0f) && door::fits(door::kPassDegrees));
   CHECK(door::leaf_angle({10, 20, 30}, kAxisX, kAxisX, kAxisZ) == 10.0f);
   CHECK(door::leaf_angle({10, 20, 30}, kAxisZ, kAxisX, kAxisZ) == 30.0f);
   CHECK(door::leaf_angle({10, 20, 30}, kAxisY, kAxisX, kAxisZ) == 20.0f);
-  // Through the game: a plain door at its shut angle may open; swung open, it may not, whatever Door.closed says.
+  // Through the game: shut or ajar, a plain door is opened; open wide enough, it is left alone, whatever Door.closed says.
   start();
   plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
   CHECK(door::may_open(&g_kitchen));
-  g_euler[&g_kitchen].y = 150.0f;
+  g_euler[&g_kitchen].y = 90.0f + door::kPassDegrees - 10.0f;  // ajar
+  CHECK(door::may_open(&g_kitchen));
+  g_euler[&g_kitchen].y = 90.0f + door::kPassDegrees + 5.0f;  // wide enough
   CHECK(!door::may_open(&g_kitchen));
   at<int32_t>(g_kitchen, kDoorAxis) = kAxisZ;  // the hinge's own axis is what counts
-  g_euler[&g_kitchen] = {0, 150.0f, 90.0f};
+  g_euler[&g_kitchen] = {0, 175.0f, 90.0f};
   CHECK(door::may_open(&g_kitchen));
 }
 
@@ -828,7 +829,7 @@ void a_shut_door_opens_quietly_on_the_master() {
   plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
   CHECK(door::may_open(&g_kitchen));
   CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Opened);
-  CHECK(g_opens.size() == 1 && g_opens[0].door == &g_kitchen && !g_opens[0].close && g_opens[0].strength == -1.0f &&
+  CHECK(g_opens.size() == 1 && g_opens[0].door == &g_kitchen && !g_opens[0].close && g_opens[0].strength == door::kPushStrength &&
         !g_opens[0].buffered);
   CHECK((g_calls == std::vector<std::string>{"OpenDoor"}));
   CHECK(door::open_step(1001) == door::Opening::Idle && g_opens.size() == 1);
@@ -896,7 +897,7 @@ void only_a_door_the_game_would_open_opens() {
   const Change changes[] = {
       [] { g_kitchen.klass = &g_slideClass; },                       // another kind of door
       [] { at<int32_t>(g_kitchen, kDoorKind) = kKindSecondary; },    // a key's door
-      [] { g_euler[&g_kitchen].y = 150.0f; },                         // already open
+      [] { g_euler[&g_kitchen].y = 175.0f; },                         // already open
       [] { at<void*>(g_kitchen, kDoorInteract) = nullptr; },         // no interact
       [] { at<bool>(g_kitchenUse, kInteractInUse) = true; },         // a player's hand or a ghost's force
       [] { at<bool>(g_kitchen, kDoorLocked) = true; },               // the paw's timed lock
@@ -925,7 +926,7 @@ void a_waiting_open_is_given_up_when_the_door_changes() {
     CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Waiting);
     if (grabbed) {
       at<bool>(g_kitchenUse, kInteractInUse) = true;
-      g_euler[&g_kitchen].y = 150.0f;
+      g_euler[&g_kitchen].y = 175.0f;
     } else {
       g_master = false;
     }
@@ -982,7 +983,7 @@ void a_missing_entry_fails_the_start() {
 }  // namespace
 
 int main() {
-  a_door_reads_shut_by_its_leaf_angle();
+  a_door_too_narrow_to_pass_is_opened();
   locks_every_exit_once();
   a_master_not_the_first_actor_sends_no_lock();
   counts_only_living_inside();

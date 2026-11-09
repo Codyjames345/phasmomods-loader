@@ -55,6 +55,9 @@ struct Chase {
   std::optional<Point> seat;        // where a seated phase walks to before it sits, out of a closed hiding place
   uint64_t nextSeatCheck = 0;
   std::optional<Point> openingDoor, openingForward;  // the door being opened quietly, for its clip
+  api::Held passing;                                 // the door it waits at until it can pass (hold_at_doors)
+  uint64_t passDeadline = 0;
+  std::optional<float> lurkSpeed;                    // the ghost's own agent speed, while a door pauses its lurk
   float sprint = 0.0f;                       // the sprint speed it last chased at (chase_sprint)
   float seed = 0.0f;                         // offsets the move cycle per chase
   Shown out;
@@ -289,33 +292,44 @@ void steer(void* agent, std::optional<Point> to, float speed, uint64_t t) {
 }
 
 // The shut door of the ghost's room it has reached, if one may be opened quietly (squatter_door.h may_open).
-void* door_to_open(Point ghostAt) {
+void* door_to_open(Point ghostAt, Point velocity) {
   void* level = game::level_controller();
   void* room = level ? phasmo::LevelController::currentGhostRoom.get(level) : nullptr;
   const api::RefArray doors{room ? phasmo::LevelRoom::doors.get(room) : nullptr};
   for (size_t i = 0; i < doors.size(); ++i) {
     void* d = doors[i];
-    if (d && api::alive(d) && at_door(ghostAt, at_of(d)) && door::may_open(d)) return d;
+    if (!d || !api::alive(d)) continue;
+    const Point at = at_of(d);
+    if (at_door(ghostAt, at) && heading_into(ghostAt, at, velocity) && door::may_open(d)) return d;
   }
   return nullptr;
 }
 
-// The master's quiet door opening on the chase: it stops at a shut door, opens it with the game's quiet opener and
-// plays the clip for its side (squatter_chase.h door_act). True while it waits for the door.
-bool open_doors(Point ghostAt, uint64_t t) {
+// The master's doors (user, 2026-11-09: it never passes through a door): at a door it walks into whose gap is too narrow
+// to pass, it stops, plays the opening-door clip for its side (door_act) and pushes the door open with the game's own
+// HingeDoor.OpenDoor, then waits until the gap fits or kPassWaitMs passes. True while it waits there.
+bool hold_at_doors(void* agent, Point ghostAt, uint64_t t) {
   Chase& c = g.chase;
+  if (c.passing) {
+    if (!door::passable(c.passing.get()) && t < c.passDeadline) return true;
+    c.passing = nullptr;
+  }
   door::Opening o = door::open_step(t);
   if (o == door::Opening::Idle && t >= c.pauseUntil) {
-    if (void* d = door_to_open(ghostAt)) {
+    const phasmo::Vector3 v = agent ? phasmo::NavMeshAgent::get_velocity(agent) : phasmo::Vector3{};
+    if (void* d = door_to_open(ghostAt, point(v))) {
       c.openingDoor = at_of(d);
       c.openingForward = point(game::forward(game::transform_of(d)));
+      c.passing = d;
+      c.passDeadline = t + kPassWaitMs;
       o = door::open_quietly(d, t);
     }
   }
   if (o == door::Opening::Opened && c.openingDoor && c.openingForward)
     act(door_act(ghostAt, *c.openingDoor, *c.openingForward), kDoorPauseMs, t);
   if (o != door::Opening::Waiting) c.openingDoor.reset();
-  return o == door::Opening::Waiting;
+  if (o == door::Opening::Refused) c.passing = nullptr;  // nothing it may open: the game's own way
+  return static_cast<bool>(c.passing);
 }
 
 // The master's Squatter, every frame it haunts with a phase: reads who it sees and hears, moves the phase on, locks
@@ -473,6 +487,15 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
         // The ghost's own states move it, as any ghost's: the figure walks while it moves and stands while it stops.
         const phasmo::Vector3 v = agent ? phasmo::NavMeshAgent::get_velocity(agent) : phasmo::Vector3{};
         c.out.move = std::hypot(v.x, v.z) >= kStillPace ? Move::Walk : Move::Stand;
+        // Never through a door: its own movement waits, its speed kept, while it opens one too narrow to pass.
+        if (agent && hold_at_doors(agent, ghostAt, t)) {
+          if (!c.lurkSpeed) c.lurkSpeed = phasmo::NavMeshAgent::get_speed(agent);
+          phasmo::NavMeshAgent::set_speed(agent, 0.0f);
+          c.out.move = Move::Stand;
+        } else if (agent && c.lurkSpeed) {
+          phasmo::NavMeshAgent::set_speed(agent, *c.lurkSpeed);
+          c.lurkSpeed.reset();
+        }
         break;
       }
       c.out.move = Move::Stand;
@@ -501,7 +524,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
 
   // Moving about: shut doors opened quietly, stalls and clumsy bumps.
   if (next == Phase::Chasing || next == Phase::Searching || next == Phase::Following) {
-    if (open_doors(ghostAt, t)) speed = 0.0f;
+    if (hold_at_doors(agent, ghostAt, t)) speed = 0.0f;
     phasmo::Vector3 v = phasmo::NavMeshAgent::get_velocity(agent);
     const float pace = std::hypot(v.x, v.z);
     if (!paused && c.stuck.update(pace, speed, t)) act(Act::Bump, kBumpPauseMs, t);

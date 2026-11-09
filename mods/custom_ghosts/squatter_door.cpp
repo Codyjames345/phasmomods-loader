@@ -59,13 +59,13 @@ void forget_old_level() {
 }
 
 /**
- * Swings `d` open with its leaf's physics, the game's own HingeDoor.OpenDoor: a push of the game's random strength
- * about its hinge, its RPC unbuffered. The door's view, this client's, carries the swing to every other client. The
+ * Swings `d` open with its leaf's physics, the game's own HingeDoor.OpenDoor: a push of kPushStrength, the top of the
+ * game's own random range, about its hinge, its RPC unbuffered. The door's view, this client's, carries the swing to every other client. The
  * contract-start opener (HingeDoor.LevelControllerOpenDoor) sets the angle outright, which does not hold mid-contract
  * (user, 2026-11-09: a door it opened over and over never moved).
  */
 void open_now(void* d) {
-  phasmo::HingeDoor::OpenDoor(d, false, -1.0f, false);
+  phasmo::HingeDoor::OpenDoor(d, false, kPushStrength, false);
   PM_LOG("squatter: a door swung open");
 }
 
@@ -282,19 +282,28 @@ int relock(uint64_t now) {
   return relocked;
 }
 
+// How far `d`'s leaf stands from shut, in degrees (gap_degrees), by its angle on its hinge axis.
+float leaf_gap(void* d) {
+  const phasmo::Vector3 euler = phasmo::Transform::get_localEulerAngles(phasmo::Component::get_transform(d));
+  const float angle = leaf_angle(euler, phasmo::HingeDoor::hingeAxis.get(d), phasmo::Axis::X(), phasmo::Axis::Z());
+  return gap_degrees(angle, phasmo::Door::closedAngle.get(d));
+}
+
+bool passable(void* d) {
+  if (!d || !api::alive(d)) return true;
+  return !phasmo::HingeDoor::type.is(d) || fits(leaf_gap(d));
+}
+
 bool may_open(void* d) {
   void* l = level();
   if (!d || !l || !api::alive(d) || !phasmo::PhotonNetwork::get_IsMasterClient()) return false;
   if (!phasmo::HingeDoor::type.is(d)) return false;  // the opener traced is HingeDoor's own
   const std::vector<void*> doors = exits();
   if (std::find(doors.begin(), doors.end(), d) != doors.end() || holds(d)) return false;
-  // A door of kind None, as the game's own contract-start opener takes, whose leaf reads shut as the game's snap test
-  // reads it (reads_shut), never Door.closed, which stays set on a door its physics swung open.
+  // A door of kind None, as the game's own contract-start opener takes, whose gap is too narrow to pass (gap_degrees,
+  // fits), never Door.closed, which stays set on a door its physics swung open.
   if (phasmo::Door::kind.get(d) != phasmo::DoorKind::None()) return false;
-  const phasmo::Vector3 euler = phasmo::Transform::get_localEulerAngles(phasmo::Component::get_transform(d));
-  const float angle =
-      leaf_angle(euler, phasmo::HingeDoor::hingeAxis.get(d), phasmo::Axis::X(), phasmo::Axis::Z());
-  if (!reads_shut(angle, phasmo::Door::closedAngle.get(d))) return false;
+  if (fits(leaf_gap(d))) return false;
   void* interact = phasmo::Door::interact.get(d);
   if (!interact || !api::alive(interact)) return false;
   // What the game holds the door to now, left as it is: a lock, a switch-off, a hand or a ghost's force on it.
