@@ -11,6 +11,7 @@
 #include <limits>
 #include <map>
 #include <set>
+#include <span>
 #include <utility>
 #include <string>
 #include <vector>
@@ -23,6 +24,7 @@
 #include "UnityRendering.h"
 #include "fake_game.h"
 #include "game_api.h"
+#include "inertia.h"
 #include "runtime.h"
 #include "sheet_mesh.h"
 #include "squatter_chase.h"
@@ -1224,6 +1226,48 @@ void the_start_check_refuses_a_bundle_missing_a_state() {
 
 }  // namespace
 
+// A new clip starts at once, and the old pose's difference from it dies away over kInertiaSeconds with no jump at
+// either end (user, 2026-11-09: no pose ever snaps or floats between clips).
+void inertialization_starts_from_the_old_pose_and_dies_away() {
+  using pm::custom::qmul;
+  using pm::custom::PoseInertia;
+  using pm::custom::kInertiaSeconds;
+  const auto turn = [](float x, float y, float z, float degrees) {
+    const float n = std::sqrt(x * x + y * y + z * z), h = degrees * 3.14159265f / 360.0f;
+    return phasmo::Quaternion{x / n * std::sin(h), y / n * std::sin(h), z / n * std::sin(h), std::cos(h)};
+  };
+  const auto near = [](phasmo::Quaternion a, phasmo::Quaternion b) {
+    const float dot = std::fabs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w);
+    return dot > 1.0f - 1e-4f;
+  };
+  const auto angle = [](phasmo::Quaternion q) { return 2.0f * std::acos(std::min(1.0f, std::fabs(q.w))); };
+  const phasmo::Quaternion from[] = {turn(1, 0, 0, 40), turn(0, 1, 0, -170), turn(1, 1, 0, 5), {0, 0, 0, 1}};
+  const phasmo::Quaternion to[] = {turn(0, 0, 1, 30), turn(0, 1, 0, 170), turn(1, 1, 0, 5), turn(0, 1, 1, 90)};
+  PoseInertia inertia;
+  CHECK(!inertia.active(0.0f));
+  inertia.begin(from, to, 10.0f);
+  CHECK(inertia.active(10.0f));
+  for (size_t i = 0; i < std::size(from); ++i) CHECK(near(qmul(inertia.offset(i, 10.0f), to[i]), from[i]));
+  for (size_t i = 0; i < std::size(from); ++i) {
+    float last = angle(inertia.offset(i, 10.0f));
+    for (float t = 10.0f; t <= 10.0f + kInertiaSeconds + 0.05f; t += 0.01f) {
+      const float now = angle(inertia.offset(i, t));
+      CHECK(now <= last + 1e-5f);
+      last = now;
+    }
+  }
+  CHECK(!inertia.active(10.0f + kInertiaSeconds));
+  for (size_t i = 0; i < std::size(from); ++i) CHECK(near(inertia.offset(i, 10.0f + kInertiaSeconds), {0, 0, 0, 1}));
+  CHECK(near(inertia.offset(std::size(from), 10.0f), {0, 0, 0, 1}));  // a bone it never saw
+  // Spans of different lengths are not two poses of one body: nothing starts.
+  PoseInertia odd;
+  odd.begin(std::span(from, 3), to, 10.0f);
+  CHECK(!odd.active(10.0f));
+  CHECK(near(odd.offset(0, 10.0f), {0, 0, 0, 1}));
+  inertia.clear();
+  CHECK(!inertia.active(10.0f));
+}
+
 // The pass after the animation runs for the figure's own IKExecutionOrder alone: Final IK's LateUpdate runs for every
 // model that has one, and a missing figure is never its own.
 void the_pass_after_the_animator_is_the_figures_own() {
@@ -1239,6 +1283,7 @@ int main() {
   move_variants_are_deterministic();
   the_start_check_refuses_a_bundle_missing_a_state();
   the_pass_after_the_animator_is_the_figures_own();
+  inertialization_starts_from_the_old_pose_and_dies_away();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();

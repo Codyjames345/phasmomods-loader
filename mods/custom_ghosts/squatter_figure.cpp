@@ -1,6 +1,7 @@
 #include "squatter_figure.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 
@@ -11,6 +12,7 @@
 #include "UnityRendering.h"
 #include "bundles.h"
 #include "held.h"
+#include "inertia.h"
 #include "log.h"
 #include "models.h"
 #include "quat.h"
@@ -61,6 +63,49 @@ struct Figure {
 
 AfterAnimation g_after = nullptr;
 std::chrono::steady_clock::time_point g_lastPass{};  // when the pass after the animation last ran; zero before the first
+PoseInertia g_inertia;  // what is left of the old pose after a change of clip
+
+// Seconds on the figure's own clock, from the first call: small enough that a float keeps a millisecond for hours.
+float seconds() {
+  static const auto start = std::chrono::steady_clock::now();
+  return std::chrono::duration<float>(std::chrono::steady_clock::now() - start).count();
+}
+
+// The humanoid bones the figure's pose is kept for: every one the map has.
+constexpr size_t kPoseBones = 19;
+std::array<int32_t, kPoseBones> pose_bones() {
+  namespace B = phasmo::HumanBodyBones;
+  return {B::Hips(),          B::Spine(),        B::Chest(),        B::Neck(),          B::Head(),
+          B::LeftShoulder(),  B::RightShoulder(), B::LeftUpperArm(), B::RightUpperArm(), B::LeftLowerArm(),
+          B::RightLowerArm(), B::LeftHand(),     B::RightHand(),    B::LeftUpperLeg(),  B::RightUpperLeg(),
+          B::LeftLowerLeg(),  B::RightLowerLeg(), B::LeftFoot(),     B::RightFoot()};
+}
+
+void* bone(int32_t which);
+
+// Each pose bone's rotation against its parent now; identity for one the model lacks.
+std::array<phasmo::Quaternion, kPoseBones> read_pose() {
+  std::array<phasmo::Quaternion, kPoseBones> pose;
+  const auto bones = pose_bones();
+  for (size_t i = 0; i < kPoseBones; ++i) {
+    void* b = bone(bones[i]);
+    pose[i] = b ? phasmo::Transform::get_localRotation(b) : phasmo::Quaternion{0, 0, 0, 1};
+  }
+  return pose;
+}
+
+// Puts what is left of the old pose before each bone's animated rotation, while any is left.
+void inertialize() {
+  const float now = seconds();
+  if (!g_inertia.active(now)) return;
+  const auto bones = pose_bones();
+  for (size_t i = 0; i < kPoseBones; ++i) {
+    void* b = bone(bones[i]);
+    if (!b) continue;
+    const phasmo::Quaternion shown = qmul(g_inertia.offset(i, now), phasmo::Transform::get_localRotation(b));
+    phasmo::Transform::set_localRotation(b, &shown);
+  }
+}
 
 // How much of the look the spine takes, against the head's whole turn, and how far past straight ahead it eases off:
 // starting values, judged with the user in game.
@@ -77,6 +122,7 @@ void clear() {
   if (api::alive(g.material)) phasmo::Object::Destroy(g.material, 0.0f);
   if (api::alive(g.root)) phasmo::Object::Destroy(g.root, 0.0f);
   g = Figure{};
+  g_inertia.clear();
 }
 
 // A scene load destroys the copy: forget it, freeing what the scene does not.
@@ -315,11 +361,12 @@ bool build_ik() {
 // Final IK's LateUpdate, for every model that has an IKExecutionOrder: on the figure's own, the pass after the
 // animation runs first, so the IK bends the pose the pass leaves.
 void detour_ik_late_update(api::Original<phasmo::IKExecutionOrder::LateUpdate> original, void* order) {
-  if (g_after && is_own_ik(order, g.order)) {
+  if (is_own_ik(order, g.order)) {
     const auto now = std::chrono::steady_clock::now();
     const float dt = g_lastPass == decltype(g_lastPass){} ? 0.0f : std::chrono::duration<float>(now - g_lastPass).count();
     g_lastPass = now;
-    g_after(dt);
+    inertialize();
+    if (g_after) g_after(dt);
   }
   original(order);
 }
@@ -407,14 +454,16 @@ void place(phasmo::Vector3 at, float yaw) {
   phasmo::Transform::set_rotation(t, &turn);
 }
 
-// Blends into `state` from the one playing over kBlendSeconds (user, 2026-11-09: the clips cut from one to the next),
-// or plays it outright when nothing plays yet.
+// Changes to `state` by inertialization (user, 2026-11-09: no pose snaps or floats between clips): the state plays at
+// once, posed this frame, and the old pose's difference from its first pose dies away in the pass after the animation.
 void blend_to(const char* state) {
   if (!check()) return;
-  const float from = seconds_of(g.playing);
-  const bool played = from > 0.0f ? api::fade_to_state(g.animator, state, kBlendSeconds / from)
-                                  : api::play_state(g.animator, state);
-  if (played) g.playing = state;
+  const auto from = read_pose();
+  if (!api::play_state(g.animator, state)) return;
+  api::pose_now(g.animator);
+  g.playing = state;
+  const auto to = read_pose();
+  g_inertia.begin(from, to, seconds());
 }
 
 void play(Move m, uint32_t variant) { blend_to(state_for(m, variant)); }
@@ -467,6 +516,7 @@ void snap_to(const char* state) {
   if (api::play_state(g.animator, state)) {
     g.playing = state;
     api::pose_now(g.animator);
+    g_inertia.clear();
   }
 }
 

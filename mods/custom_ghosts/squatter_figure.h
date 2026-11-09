@@ -151,10 +151,6 @@ inline float seconds_of(const char* state) {
   return 0.0f;
 }
 
-// How long one clip blends into the next, in seconds (Animator.CrossFade): Unity's own default transition length, so
-// the figure never snaps from one pose to another (user, 2026-11-09).
-inline constexpr float kBlendSeconds = 0.25f;
-
 /** Every state name of the table, each once: what the bundle's controller must have. */
 inline std::vector<const char*> all_states() {
   std::vector<const char*> out;
