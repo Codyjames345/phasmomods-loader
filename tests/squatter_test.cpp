@@ -1199,6 +1199,7 @@ int main() {
   stuck_for_a_while_is_a_bump();
   search_points_stay_near_the_last_place();
   the_door_clip_follows_the_side();
+  a_fall_stops_it_where_it_stands();
   a_door_is_reached_within_reach();
   the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();

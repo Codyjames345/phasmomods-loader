@@ -262,6 +262,12 @@ inline std::optional<Act> stance_for(Phase p) {
   return std::nullopt;
 }
 
+/**
+ * Whether the Squatter, steered at `before` metres a second and now at `now`, must stop where it stands rather than
+ * slow to a halt: it was moving and is now held still (a fall, a bump, a kick, a door, an arrival).
+ */
+inline bool stops_dead(float before, float now) { return before > 0.0f && now <= 0.0f; }
+
 /** The move shown at `speed`: standing for a walk or run that is not moving, any other move as it is. */
 inline Move rest_move(Move m, float speed) {
   return (m == Move::Run || m == Move::Walk) && speed <= 0.0f ? Move::Stand : m;

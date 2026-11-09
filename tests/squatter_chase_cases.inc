@@ -95,6 +95,16 @@ void search_points_stay_near_the_last_place() {
   CHECK(search_point(last, 1).x != search_point(last, 2).x || search_point(last, 1).z != search_point(last, 2).z);
 }
 
+// Held still after moving (the trip's fall, a bump, a kick, a door), it stops where it stands rather than sliding to a
+// halt (user, 2026-11-09: it moved along the floor after tripping); held still already, or moving on, nothing more.
+void a_fall_stops_it_where_it_stands() {
+  CHECK(stops_dead(4.0f, 0.0f));
+  CHECK(!stops_dead(0.0f, 0.0f));
+  CHECK(!stops_dead(4.0f, 3.0f));
+  CHECK(!stops_dead(0.0f, 4.0f));
+  CHECK(move_speed(4.0f, Move::Stumble) == 0.0f);  // the trip holds it still
+}
+
 // The door clip follows the leaf's swing (door::swings_toward): it pulls a door that comes toward it (Opening Door
 // Inwards) and pushes one that goes away (Open Door Outwards).
 void the_door_clip_follows_the_side() {

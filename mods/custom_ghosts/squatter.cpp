@@ -58,6 +58,7 @@ struct Chase {
   api::Held passing;                                 // the door it waits at until it can pass (hold_at_doors)
   uint64_t passDeadline = 0;
   std::optional<float> lurkSpeed;                    // the ghost's own agent speed, while a door pauses its lurk
+  float steeredSpeed = 0.0f;                         // the speed steer last set (stops_dead)
   float sprint = 0.0f;                       // the sprint speed it last chased at (chase_sprint)
   int moveIndex = 0;                         // where in kMoveCycle the chase is, started at random per chase
   uint64_t moveUntil = 0;                    // when the cycle moves on (move_hold_seconds)
@@ -283,10 +284,20 @@ void say(Lines set, uint64_t t) {
   ++c.out.lineCue;
 }
 
-// Where to walk to, renewed every kSteerMs; at most every frame's speed is set after the idle change (tick).
+// Where to walk to, renewed every kSteerMs; at most every frame's speed is set after the idle change (tick). Brought to a
+// stop (a fall, a bump, a kick, a door), it stops where it stands, as its clip does: the agent's speed alone would let
+// it slide to a halt at its acceleration (user, 2026-11-09: it moved along the floor after tripping). The game's own
+// ghost teleports stop an agent with NavMeshAgent.Warp, which leaves it standing with no path; it walks on once the
+// next destination is set.
 void steer(void* agent, std::optional<Point> to, float speed, uint64_t t) {
-  phasmo::NavMeshAgent::set_speed(agent, speed);
   Chase& c = g.chase;
+  if (stops_dead(c.steeredSpeed, speed)) {
+    phasmo::Vector3 here = phasmo::Transform::get_position(phasmo::Component::get_transform(agent));
+    phasmo::NavMeshAgent::Warp(agent, &here);
+    c.nextSteer = 0;
+  }
+  c.steeredSpeed = speed;
+  phasmo::NavMeshAgent::set_speed(agent, speed);
   if (!to || t < c.nextSteer) return;
   c.nextSteer = t + kSteerMs;
   if (!game::set_destination(agent, vector(*to))) c.searchAt.reset();  // off the navigation mesh: pick another

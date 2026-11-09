@@ -57,7 +57,7 @@ struct SheetShape {
   float headRadius = 0.12f;      // the cap the sheet is made over, the crown its top
   float shoulderRadius = 0.30f;  // how far out the sheet hangs at the shoulders
   float shoulderDrop = 0.14f;    // from the bottom of the cap down to the shoulders
-  float flare = 0.15f;           // how much further out it hangs for each metre below the shoulders
+  float flare = 0.10f;           // how much further out it hangs for each metre below the shoulders
 };
 
 /**

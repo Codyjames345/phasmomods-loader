@@ -63,9 +63,9 @@ bool check() {
 
 void* bone(int32_t which) { return phasmo::Animator::GetBoneTransform(g.animator, which); }
 
-// How much wider than the arms the sheet hangs at the shoulders, and how far past the floor its hem reaches so it rests
-// on it: starting values, judged with the user in game.
-constexpr float kSheetClearance = 0.06f;
+// How much wider than the shoulders' spheres the sheet hangs at the shoulders, and how far past the floor its hem
+// reaches so it rests on it: starting values, judged with the user in game (2026-11-09: wider ballooned it).
+constexpr float kSheetClearance = 0.02f;
 constexpr float kHemOnFloor = 0.05f;
 
 // The bones the sheet follows, each as a line to the next joint along it (sheet::Segment), and the Transform that
@@ -85,20 +85,20 @@ bool build_sheet() {
   g.material = material;
 
   // The body stands in its standing clip (create), so the sheet is laid over it as it stands: its cap on the head,
-  // its shoulders as wide as the arms, its hem on the floor at the feet.
+  // its shoulders just outside the upper arms' spheres, its hem on the floor at the feet. The arms below hang inside
+  // the flare, and carry the sheet with them (the skinning below).
   sheet::SheetShape shape;
   const phasmo::Vector3 h = phasmo::Transform::get_position(head);
   const phasmo::Vector3 crown{h.x, h.y + kHeadCentreAboveBone + shape.headRadius, h.z};
   const phasmo::Vector3 feet = phasmo::Transform::get_position(phasmo::GameObject::get_transform(g.root));
   float reach = 0.0f;
-  for (const int32_t arm : {B::LeftShoulder(), B::RightShoulder(), B::LeftUpperArm(), B::RightUpperArm(),
-                            B::LeftLowerArm(), B::RightLowerArm(), B::LeftHand(), B::RightHand()}) {
+  for (const int32_t arm : {B::LeftUpperArm(), B::RightUpperArm()}) {
     void* t = bone(arm);
     if (!t) return fail("sheet", "the body lacks an arm bone the sheet covers"), false;
     const phasmo::Vector3 at = phasmo::Transform::get_position(t);
     reach = std::max(reach, std::hypot(at.x - crown.x, at.z - crown.z));
   }
-  shape.shoulderRadius = std::max(shape.shoulderRadius, reach + kArm + kSheetClearance);
+  shape.shoulderRadius = std::max(shape.headRadius + kSheetClearance, reach + kArm + kSheetClearance);
   void* upperArm = bone(B::LeftUpperArm());
   shape.shoulderDrop = std::max(0.05f, crown.y - shape.headRadius - phasmo::Transform::get_position(upperArm).y);
   shape.side = 2.0f * (sheet::reach_distance(shape, crown.y - feet.y) + kHemOnFloor);
