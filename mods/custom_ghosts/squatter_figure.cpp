@@ -5,6 +5,7 @@
 
 #include "Animator.h"
 #include "FinalIK.h"
+#include "Scene.h"
 #include "UnityObject.h"
 #include "UnityRendering.h"
 #include "bundles.h"
@@ -44,7 +45,7 @@ struct Figure {
   api::Held root, animator, sheet, material;
   api::ClothParts cloth;
   const char* playing = nullptr;  // the state it plays, which a cross-fade blends from
-  api::Held hands[2], lookAt;      // Final IK's solvers: the left and right arms' LimbIK, and the head's LookAtIK
+  api::Held fullBody, lookAt;      // Final IK: the body's FullBodyBipedIK, and the head's LookAtIK
 } g;
 
 // How much of the look the spine takes, against the head's whole turn, and how far past straight ahead it eases off:
@@ -223,43 +224,86 @@ bool build_sheet() {
   return true;
 }
 
-// The figure's inverse kinematics (Final IK, which the game ships): a limb solver on each arm, its rotation left to
-// the clip, and a look-at solver on the spine and head, all at no weight until reach or look_at asks.
+// The figure's inverse kinematics (Final IK, which the game ships), as games bend an animated body to the world: a
+// full-body solver whose hands reach for what the figure touches and whose body follows them, a grounder on it that
+// sets each foot on the ground under it and lowers the hips to the lower foot on stairs and slopes, and a look-at on
+// the spine and head. Final IK's execution order runs the full body, then the look-at, after the Animator, as Final IK
+// asks when two solvers bend the same bones. The hands and head are at no weight until reach or look_at asks.
 bool build_ik() {
   namespace B = phasmo::HumanBodyBones;
   void* rootT = phasmo::GameObject::get_transform(g.root);
-  const int32_t arms[2][3] = {{B::LeftUpperArm(), B::LeftLowerArm(), B::LeftHand()},
-                              {B::RightUpperArm(), B::RightLowerArm(), B::RightHand()}};
-  const int32_t goals[2] = {phasmo::AvatarIKGoal::LeftHand(), phasmo::AvatarIKGoal::RightHand()};
-  for (int i = 0; i < 2; ++i) {
-    void* limb = phasmo::GameObject::AddComponent(g.root, phasmo::LimbIK::type.type_object());
-    void* solver = limb ? phasmo::LimbIK::solver.get(limb) : nullptr;
-    if (!solver) return fail("ik", "no LimbIK could be added"), false;
-    if (!phasmo::IKSolverTrigonometric::SetChain(solver, bone(arms[i][0]), bone(arms[i][1]), bone(arms[i][2]), rootT))
-      return fail("ik", "an arm's chain is not valid"), false;
-    phasmo::IKSolverLimb::goal.set(solver, goals[i]);
-    phasmo::IKSolverTrigonometric::IKRotationWeight.set(solver, 0.0f);
-    phasmo::IKSolver::IKPositionWeight.set(solver, 0.0f);
-    g.hands[i] = limb;
-  }
-  void* look = phasmo::GameObject::AddComponent(g.root, phasmo::LookAtIK::type.type_object());
-  void* solver = look ? phasmo::LookAtIK::solver.get(look) : nullptr;
+  void* refs = phasmo::BipedReferences::type.make();
   void* spine = phasmo::Transform::type.make_array(2);
-  void* eyes = phasmo::Transform::type.make_array(0);
-  if (!solver || !spine || !eyes) return fail("ik", "no LookAtIK could be added"), false;
+  void* none = phasmo::Transform::type.make_array(0);
+  if (!refs || !spine || !none) return fail("ik", "no BipedReferences could be made"), false;
+  phasmo::BipedReferences::ctor(refs);
   api::RefArray{spine}.set(0, bone(B::Spine()));
   api::RefArray{spine}.set(1, bone(B::Chest()));
-  if (!phasmo::IKSolverLookAt::SetChain(solver, spine, bone(B::Head()), eyes, rootT))
+  using R = phasmo::BipedReferences;
+  R::root.set(refs, rootT);
+  R::pelvis.set(refs, bone(B::Hips()));
+  R::leftThigh.set(refs, bone(B::LeftUpperLeg()));
+  R::leftCalf.set(refs, bone(B::LeftLowerLeg()));
+  R::leftFoot.set(refs, bone(B::LeftFoot()));
+  R::rightThigh.set(refs, bone(B::RightUpperLeg()));
+  R::rightCalf.set(refs, bone(B::RightLowerLeg()));
+  R::rightFoot.set(refs, bone(B::RightFoot()));
+  R::leftUpperArm.set(refs, bone(B::LeftUpperArm()));
+  R::leftForearm.set(refs, bone(B::LeftLowerArm()));
+  R::leftHand.set(refs, bone(B::LeftHand()));
+  R::rightUpperArm.set(refs, bone(B::RightUpperArm()));
+  R::rightForearm.set(refs, bone(B::RightLowerArm()));
+  R::rightHand.set(refs, bone(B::RightHand()));
+  R::head.set(refs, bone(B::Head()));
+  R::spine.set(refs, spine);
+  R::eyes.set(refs, none);
+
+  void* body = phasmo::GameObject::AddComponent(g.root, phasmo::FullBodyBipedIK::type.type_object());
+  if (!body) return fail("ik", "no FullBodyBipedIK could be added"), false;
+  phasmo::FullBodyBipedIK::SetReferences(body, refs, nullptr);
+  void* solver = phasmo::FullBodyBipedIK::solver.get(body);
+  if (!solver) return fail("ik", "the full-body solver is missing"), false;
+  phasmo::IKSolver::Initiate(solver, rootT);
+  g.fullBody = body;
+
+  void* grounder = phasmo::GameObject::AddComponent(g.root, phasmo::GrounderFBBIK::type.type_object());
+  void* grounding = grounder ? phasmo::Grounder::solver.get(grounder) : nullptr;
+  if (!grounding) return fail("ik", "no GrounderFBBIK could be added"), false;
+  phasmo::GrounderFBBIK::ik.set(grounder, body);
+  int32_t ground = 0;
+  for (const int32_t layer : {phasmo::Layers::Default.index(), phasmo::Layers::Floor.index(),
+                              phasmo::Layers::DefaultNoNavigation.index(), phasmo::Layers::StaticProps.index()})
+    if (layer >= 0 && layer < 32) ground |= 1 << layer;
+  phasmo::Grounding::layers.set(grounding, ground);
+
+  void* look = phasmo::GameObject::AddComponent(g.root, phasmo::LookAtIK::type.type_object());
+  void* lookSolver = look ? phasmo::LookAtIK::solver.get(look) : nullptr;
+  if (!lookSolver) return fail("ik", "no LookAtIK could be added"), false;
+  if (!phasmo::IKSolverLookAt::SetChain(lookSolver, spine, bone(B::Head()), none, rootT))
     return fail("ik", "the look-at chain is not valid"), false;
-  phasmo::IKSolverLookAt::headWeight.set(solver, 1.0f);
-  phasmo::IKSolverLookAt::bodyWeight.set(solver, kLookBody);
-  phasmo::IKSolverLookAt::clampWeight.set(solver, kLookClamp);
-  phasmo::IKSolver::IKPositionWeight.set(solver, 0.0f);
+  phasmo::IKSolverLookAt::headWeight.set(lookSolver, 1.0f);
+  phasmo::IKSolverLookAt::bodyWeight.set(lookSolver, kLookBody);
+  phasmo::IKSolverLookAt::clampWeight.set(lookSolver, kLookClamp);
+  phasmo::IKSolver::IKPositionWeight.set(lookSolver, 0.0f);
   g.lookAt = look;
+
+  void* order = phasmo::GameObject::AddComponent(g.root, phasmo::IKExecutionOrder::type.type_object());
+  void* list = phasmo::IK::type.make_array(2);
+  if (!order || !list) return fail("ik", "no IKExecutionOrder could be added"), false;
+  api::RefArray{list}.set(0, body);
+  api::RefArray{list}.set(1, look);
+  phasmo::IKExecutionOrder::IKComponents.set(order, list);
+  phasmo::IKExecutionOrder::animator.set(order, g.animator);
   return true;
 }
 
-void* solver_of(const api::Held& limb) { return api::alive(limb) ? phasmo::LimbIK::solver.get(limb) : nullptr; }
+// The full-body solver's effector for `hand`, or null.
+void* effector_of(int hand) {
+  void* solver = api::alive(g.fullBody) ? phasmo::FullBodyBipedIK::solver.get(g.fullBody) : nullptr;
+  if (!solver) return nullptr;
+  return hand == 0 ? phasmo::IKSolverFullBodyBiped::get_leftHandEffector(solver)
+                   : phasmo::IKSolverFullBodyBiped::get_rightHandEffector(solver);
+}
 
 }  // namespace
 
@@ -372,11 +416,11 @@ Hand nearer_hand(phasmo::Vector3 at) {
 void reach(Hand hand, phasmo::Vector3 at, float weight) {
   if (!check()) return;
   for (int i = 0; i < 2; ++i) {
-    void* solver = solver_of(g.hands[i]);
-    if (!solver) continue;
+    void* effector = effector_of(i);
+    if (!effector) continue;
     const bool reaching = static_cast<int>(hand) == i && weight > 0.0f;
-    if (reaching) phasmo::IKSolver::IKPosition.set(solver, at);
-    phasmo::IKSolver::IKPositionWeight.set(solver, reaching ? std::clamp(weight, 0.0f, 1.0f) : 0.0f);
+    if (reaching) phasmo::IKEffector::position.set(effector, at);
+    phasmo::IKEffector::positionWeight.set(effector, reaching ? std::clamp(weight, 0.0f, 1.0f) : 0.0f);
   }
 }
 

@@ -188,3 +188,13 @@ in LateUpdate, so a hand lands on a point or a head turns to look at one:
   `Transform[]`, either may be empty) and its `headWeight`, `bodyWeight` and `clampWeight`.
 - Each frame set the solver's `IKSolver::IKPosition` (world space) and `IKSolver::IKPositionWeight` (0 to 1), blending
   the weight in and out over a moment rather than jumping it.
+- **A whole body** takes `phasmo::FullBodyBipedIK`: make a `BipedReferences` (`type.make()`, `ctor`), set its bone
+  fields from `Animator.GetBoneTransform` (spine and eyes are `Transform[]`), call `FullBodyBipedIK::SetReferences(ik,
+  refs, nullptr)` and start the solver with `IKSolver::Initiate(solver, root)`. Its hands reach by their effectors
+  (`IKSolverFullBodyBiped::get_rightHandEffector`, then `IKEffector::position` and `positionWeight`), and the shoulders
+  and body follow.
+- **Feet on the ground**: add `phasmo::GrounderFBBIK`, set its `ik`, and set its solver's `Grounding::layers` to the
+  ground's layers (`phasmo::Layers::Default`, `Floor`, `DefaultNoNavigation` and `StaticProps`: what a living player
+  stands on). It starts itself once the body's solver has.
+- **Two solvers on the same bones** (a full body, then a look-at) run in a set order through
+  `phasmo::IKExecutionOrder`: fill its `IKComponents` (an `IK[]`) and `animator`.

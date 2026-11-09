@@ -187,8 +187,8 @@ enum class Hand : uint8_t { Left, Right };
 Hand nearer_hand(phasmo::Vector3 at);
 /**
  * Reaches `hand` for `at` (world space) by `weight`, 0 (the clip's own arm) to 1 (the hand on the point), with Final IK's
- * limb solver after the Animator has posed the arm, as games put a hand on a door handle. The other hand is let go.
- * Every frame while it reaches; a weight of 0 lets both go.
+ * full-body solver after the Animator has posed the body, so the shoulder and body lean into the reach as games put a
+ * hand on a door handle. The other hand is let go. Every frame while it reaches; a weight of 0 lets both go.
  */
 void reach(Hand hand, phasmo::Vector3 at, float weight);
 /**

@@ -1154,3 +1154,10 @@ The user's test of 2026-11-09 (arms through the sheet, hovering after a jump, ro
 - [ ] Standing, once it needs to face well away (over about 60 degrees) it turns on the spot with the Left Turn or Right Turn clip, or turns round with Walking Turn 180, and ends facing the new way without a snap; small turns while standing are left alone.
 - [ ] Moving, it turns smoothly toward where it goes, never snapping round.
 - [ ] Setting off from standing into a walk, it plays Start Walking for about a second, then walks.
+
+Full-body IK and grounding (user 2026-11-09).
+
+- [ ] On stairs and slopes the Squatter's hips drop to the lower foot and the sheet's hem follows the steps, rather than the body floating level or sinking into them.
+- [ ] Reaching for a door handle, its shoulder and body lean into the reach, not the arm alone.
+- [ ] Standing, walking and running on a flat floor look as before: no crouch, lean or twitch the IK adds.
+- [ ] The host's `mods.log` has no line saying the Squatter's figure could not be built (ik).
