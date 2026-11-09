@@ -59,6 +59,11 @@ void a_default_the_game_uses_falls_back() {
   CHECK(keys::pick_default("", {}, game).empty());
 }
 
+void menu_navigation_is_not_taken() {
+  CHECK(keys::menu_only("UIUp") && keys::menu_only("UISelectSouth"));
+  CHECK(!keys::menu_only("Torch") && !keys::menu_only("") && !keys::menu_only("Ui"));
+}
+
 void a_path_names_its_device() {
   CHECK(keys::device_of("<Keyboard>/x") == Device::Keyboard);
   CHECK(keys::device_of("<Mouse>/leftButton") == Device::Keyboard);
@@ -96,7 +101,8 @@ T& at(void* o, int32_t offset) {
 constexpr int32_t kMapBindings = 0x08;                                   // InputActionMap.m_Bindings
 constexpr int32_t kActionMap = 0x08, kActionPressed = 0x10, kActionDown = 0x11, kActionUp = 0x12;  // the fake's own
 constexpr int32_t kActionIndex = 0x14;  // the fake's own: the action's binding in its map
-constexpr int32_t kBindPath = 0x00, kBindOverride = 0x08, kBindId = 0x10, kBindingSize = 0x18;  // in an InputBinding
+constexpr int32_t kBindPath = 0x00, kBindOverride = 0x08, kBindId = 0x10, kBindAction = 0x18;  // in an InputBinding
+constexpr int32_t kBindingSize = 0x20;
 constexpr int32_t kAssetMaps = 0x08;                                                            // m_ActionMaps
 constexpr int32_t kLocalControls = 0x08, kControlsActions = 0x08;  // LocalPCPlayer.controls, PCControls.actions
 constexpr int32_t kRowAction = 0x08, kRowBindingId = 0x10, kRowLabel = 0x18;  // RebindActionUI's fields
@@ -120,12 +126,13 @@ Obj* make_obj(void* klass) {
 }
 
 // The game's map: Player's bindings, one of them D-pad down.
-void* binding_array(const std::vector<std::string>& paths) {
+void* binding_array(const std::vector<std::string>& paths, const std::vector<std::string>& actions = {}) {
   void* arr = fake::array(kBindingSize, paths.size());
   pm::api::ValueArray va{arr};
   for (size_t i = 0; i < paths.size(); ++i) {
     at<void*>(va.at(i), kBindPath) = pm::api::make_string(paths[i]);
     at<void*>(va.at(i), kBindId) = pm::api::make_string("game-" + std::to_string(i));
+    if (i < actions.size()) at<void*>(va.at(i), kBindAction) = pm::api::make_string(actions[i]);
   }
   return arr;
 }
@@ -202,6 +209,7 @@ void give_entries() {
   fake::field(map::InputBinding_m_Path, kBindPath);
   fake::field(map::InputBinding_m_OverridePath, kBindOverride);
   fake::field(map::InputBinding_m_Id, kBindId);
+  fake::field(map::InputBinding_m_Action, kBindAction);
   fake::field(map::InputActionAsset_m_ActionMaps, kAssetMaps);
   fake::field(map::LocalPCPlayer_controls, kLocalControls);
   fake::field(map::PCControls_actions, kControlsActions);
@@ -226,7 +234,8 @@ void give_entries() {
   *static_cast<void**>(pm::api::ValueArray{maps}.at(0)) = &g_gameMap;
   at<void*>(&g_gameAsset, kAssetMaps) = maps;
   at<void*>(&g_gameMap, kMapBindings) =
-      binding_array({"<Keyboard>/b", "<Gamepad>/dpad/down", "<Gamepad>/dpad/up", "<Keyboard>/e"});
+      binding_array({"<Keyboard>/b", "<Gamepad>/dpad/down", "<Gamepad>/dpad/up", "<Keyboard>/e"},
+                    {"GlobalPushToTalk", "Torch", "UIUp", "Pickup"});
   at<void*>(&g_controls, kControlsActions) = &g_gameAsset;
   at<void*>(&g_localRig, kLocalControls) = &g_controls;
   at<void*>(&g_net, kNetLocalRig) = &g_localRig;
@@ -261,7 +270,8 @@ void a_key_takes_the_defaults_the_game_leaves_free() {
   // B and D-pad down are the game's (walkie push to talk; torch), so the fallbacks are taken: X, and D-pad right
   // because D-pad up is the game's too.
   CHECK(keys::bound_path("emote", Device::Keyboard) == "<Keyboard>/x");
-  CHECK(keys::bound_path("emote", Device::Gamepad) == "<Gamepad>/dpad/right");
+  // D-pad up is the game's too, but only for menu navigation (UIUp): a key may share it.
+  CHECK(keys::bound_path("emote", Device::Gamepad) == "<Gamepad>/dpad/up");
   CHECK(keys::bound_path("emote", Device::Vr) == "<XRController>{LeftHand}/{PrimaryButton}");
   CHECK(keys::bound_path("other", Device::Keyboard).empty());
   keys::clear_keys();
@@ -439,6 +449,7 @@ int main() {
   paths_compare_as_the_input_system_does();
   a_default_the_game_uses_falls_back();
   a_path_names_its_device();
+  menu_navigation_is_not_taken();
   a_saved_rebinding_reads_back();
   a_key_takes_the_defaults_the_game_leaves_free();
   a_key_waits_for_the_games_bindings();

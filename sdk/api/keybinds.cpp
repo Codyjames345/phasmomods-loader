@@ -49,6 +49,8 @@ std::string pick_default(std::string_view wanted, std::span<const std::string> f
   return {};
 }
 
+bool menu_only(std::string_view action) { return action.size() > 2 && action.starts_with("UI"); }
+
 Device device_of(std::string_view path) {
   const size_t end = path.find('>');
   const std::string_view layout = end == std::string_view::npos ? path : path.substr(0, end);
@@ -122,11 +124,12 @@ std::string read_file(const std::filesystem::path& file) {
   return in ? std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()) : std::string();
 }
 
-// Every binding path of an InputActionMap's bindings.
+// Every binding path of an InputActionMap's bindings, but those of its menu-only actions (menu_only).
 void add_map_paths(void* map, std::vector<std::string>& out) {
   const ValueArray bindings{map ? phasmo::InputActionMap::m_Bindings.get(map) : nullptr};
   for (size_t i = 0; i < bindings.size(); ++i)
-    if (void* path = phasmo::InputBinding::m_Path.get(bindings.at(i))) out.push_back(to_utf8(path));
+    if (void* path = phasmo::InputBinding::m_Path.get(bindings.at(i)))
+      if (!menu_only(to_utf8(phasmo::InputBinding::m_Action.get(bindings.at(i))))) out.push_back(to_utf8(path));
 }
 
 // The game's own bindings: from the local PC player's controls, else from the keybinds menu's rows. Empty while

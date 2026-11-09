@@ -48,6 +48,13 @@ bool path_taken(std::string_view path, std::span<const std::string> gameBindings
 std::string pick_default(std::string_view wanted, std::span<const std::string> fallbacks,
                          std::span<const std::string> gameBindings);
 
+/// Whether a game action only moves through menus (the game names those "UI...": UIUp, UIDown, UISelectSouth): a
+/// mod's key may share its binding, since the game reads it only while a menu is open, so its bindings are not counted
+/// as taken.
+/// @param action The action's name.
+/// @return True for a name that begins with "UI".
+bool menu_only(std::string_view action);
+
 /// The device a binding path is for, by its layout: XR controllers are Vr; gamepads and their vendor layouts
 /// (XInput, DualShock, DualSense, Switch Pro, joysticks) are Gamepad; anything else Keyboard.
 /// @param path A binding path.
