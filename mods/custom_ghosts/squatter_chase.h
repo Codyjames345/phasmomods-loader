@@ -513,8 +513,10 @@ inline constexpr uint64_t kSenseMs = 150, kClumsyGapMs = 1500, kDiveGapMs = 8000
 inline constexpr float kKneeHeight = 0.45f, kChestHeight = 1.1f, kWaistHeight = 0.9f;
 
 // What its feet meet (foot_box): metres, starting values. A shoe stands about 0.1 m and equipment lying flat a few
-// centimetres, so the box runs from just above the floor to the shins.
-inline constexpr float kFootHalfWidth = 0.2f, kFootFloorGap = 0.02f, kFootHeight = 0.25f;
+// centimetres. The ghost stands on the navigation mesh, which may lie a little above the floor itself, so the box reaches
+// kFootBelow under the ghost's position: the floor is on none of the layers it checks, so nothing but what rests on the
+// floor is found there (user, 2026-11-09: it never tripped with the box starting above the ghost's position).
+inline constexpr float kFootHalfWidth = 0.2f, kFootBelow = 0.15f, kFootHeight = 0.25f;
 inline constexpr float kFootAhead = 0.35f, kFootBehind = 0.1f;  // a stride ahead, a little behind
 
 /** A box in the world: its centre, half its size along its own axes, and its turn about the vertical (radians from +z). */
@@ -524,15 +526,15 @@ struct FootBox {
 };
 
 /**
- * The box its feet sweep at `at` (the ghost's position, on the floor) heading `heading` (radians clockwise from +z): as
- * wide as its stance (kFootHalfWidth either side), from kFootFloorGap above the floor to kFootHeight, from kFootBehind
- * behind it to kFootAhead ahead. Whatever loose clutter lies in it, its feet meet: it trips (user, 2026-11-09: it never
+ * The box its feet sweep at `at` (the ghost's position, on the navigation mesh) heading `heading` (radians clockwise
+ * from +z): as wide as its stance (kFootHalfWidth either side), from kFootBelow under it to kFootHeight above, from
+ * kFootBehind behind it to kFootAhead ahead. Whatever loose clutter lies in it, its feet meet: it trips (user, 2026-11-09: it never
  * tripped while it looked for props with rays a metre ahead; tripping is contact, not foresight).
  */
 inline FootBox foot_box(Point at, float heading) {
   const float along = (kFootAhead - kFootBehind) / 2;
-  return {{at.x + std::sin(heading) * along, at.y + (kFootFloorGap + kFootHeight) / 2, at.z + std::cos(heading) * along},
-          {kFootHalfWidth, (kFootHeight - kFootFloorGap) / 2, (kFootAhead + kFootBehind) / 2},
+  return {{at.x + std::sin(heading) * along, at.y + (kFootHeight - kFootBelow) / 2, at.z + std::cos(heading) * along},
+          {kFootHalfWidth, (kFootHeight + kFootBelow) / 2, (kFootAhead + kFootBehind) / 2},
           heading};
 }
 inline constexpr float kPropLook = 1.2f;              // how far ahead a prop in its way counts
@@ -642,6 +644,10 @@ class PaceMeter {
 // outside hears them through the door (user, 2026-11-09: they were said where the ghost was, too far to hear). A
 // starting value.
 inline constexpr float kDoorLineFullVolume = 8.0f;
+
+// Its other lines carry only so far (user, 2026-11-09: they were heard from outside and on other floors): full volume
+// within kVoiceFullVolume metres, falling evenly to silence at kVoiceRange. Starting values, judged with the user.
+inline constexpr float kVoiceFullVolume = 2.0f, kVoiceRange = 10.0f;
 
 /** The index of the point of `points` nearest `p` on the flat, -1 for none. */
 inline int nearest_point(std::span<const Point> points, Point p) {

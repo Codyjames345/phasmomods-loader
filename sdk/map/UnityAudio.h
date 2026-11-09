@@ -55,6 +55,27 @@ inline constexpr pm::sdk::EntryDesc AudioSource_set_maxDistance{
     .key = "AudioSource.set_maxDistance", .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
     .name = "set_maxDistance", .params = UnityAudio_float};
 
+inline constexpr const char* AudioRolloffMode_values[] = {"Logarithmic", "Linear", "Custom"};
+
+/// How a 3D source's volume falls with distance (UnityEngine.AudioModule). Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc AudioRolloffMode{.key = "AudioRolloffMode", .name = "AudioRolloffMode",
+                                                     .assembly = "UnityEngine.AudioModule", .ns = "UnityEngine",
+                                                     .values = AudioRolloffMode_values};
+
+/// Linear rolloff: full volume within the source's minimum distance, falling evenly to silence at its maximum. The
+/// default, Logarithmic, never reaches silence: beyond the maximum distance it only stops falling. Inferred: Unity's
+/// documented API.
+inline constexpr pm::sdk::EntryDesc AudioRolloffMode_Linear{.key = "AudioRolloffMode.Linear",
+                                                            .kind = pm::sdk::Kind::EnumValue,
+                                                            .owner = "AudioRolloffMode", .name = "Linear"};
+
+inline constexpr const char* AudioSource_set_rolloffMode_params[] = {"@AudioRolloffMode"};
+
+/// Sets how the source's volume falls with distance (AudioRolloffMode). Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc AudioSource_set_rolloffMode{
+    .key = "AudioSource.set_rolloffMode", .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
+    .name = "set_rolloffMode", .params = AudioSource_set_rolloffMode_params};
+
 /// Sets the source's pitch, 1 as recorded. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc AudioSource_set_pitch{.key = "AudioSource.set_pitch",
                                                           .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
@@ -184,7 +205,15 @@ struct AudioSource {
   static constexpr pm::api::Method<pm::map::AudioSource_Stop, void(void*, bool)> Stop{};
   /// PlayOneShot(source, clip). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::AudioSource_PlayOneShot, void(void*, void*)> PlayOneShot{};
+  /// set_rolloffMode(source, mode): how its volume falls with distance, an AudioRolloffMode. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::AudioSource_set_rolloffMode, void(void*, int32_t)> set_rolloffMode{};
 };
+
+/// How a 3D source's volume falls with distance.
+namespace AudioRolloffMode {
+/// Linear(): full within the minimum distance, silent at the maximum. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::AudioRolloffMode_Linear> Linear{};
+}  // namespace AudioRolloffMode
 
 /// Unity's AudioClip. `clip` below is one.
 struct AudioClip {

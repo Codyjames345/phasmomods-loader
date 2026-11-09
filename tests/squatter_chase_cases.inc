@@ -523,8 +523,9 @@ void the_way_ahead_is_read_across_its_width() {
 }
 
 // It trips when its feet meet clutter, as a body does, not when a ray ahead finds some (user, 2026-11-09: it never
-// tripped, and was not to be bandaged): a box around its feet, as wide as its stance, from just above the floor to its
-// shins, reaching a stride ahead and a little behind, turned to the way it moves.
+// tripped, and was not to be bandaged): a box around its feet, as wide as its stance, from under the navigation mesh it
+// stands on (which may lie above the floor) to its shins, reaching a stride ahead and a little behind, turned to the
+// way it moves.
 void its_feet_meet_what_it_trips_over() {
   constexpr float pi = std::numbers::pi_v<float>;
   const FootBox north = foot_box({1, 0, 2}, 0.0f);  // heading +z
@@ -532,11 +533,14 @@ void its_feet_meet_what_it_trips_over() {
   CHECK(std::abs(north.half.z - (kFootAhead + kFootBehind) / 2) < 1e-6f);
   CHECK(std::abs(north.centre.x - 1.0f) < 1e-5f);
   CHECK(std::abs(north.centre.z - (2.0f + (kFootAhead - kFootBehind) / 2)) < 1e-5f);  // more ahead than behind
-  CHECK(std::abs(north.centre.y - (kFootFloorGap + kFootHeight) / 2) < 1e-5f);        // floor gap to shin height
-  CHECK(std::abs(north.half.y - (kFootHeight - kFootFloorGap) / 2) < 1e-5f);
+  CHECK(std::abs(north.centre.y - (kFootHeight - kFootBelow) / 2) < 1e-5f);  // under its feet to shin height
+  CHECK(std::abs(north.half.y - (kFootHeight + kFootBelow) / 2) < 1e-5f);
+  CHECK(std::abs(north.centre.y - north.half.y + kFootBelow) < 1e-5f);    // its bottom kFootBelow under the feet
   const FootBox east = foot_box({0, 0, 0}, pi / 2);  // heading +x
   CHECK(std::abs(east.centre.x - (kFootAhead - kFootBehind) / 2) < 1e-5f && std::abs(east.centre.z) < 1e-5f);
   CHECK(std::abs(east.yaw - pi / 2) < 1e-6f);
-  // Low enough for a shoe (about 0.1 m) and equipment lying flat, clear of the floor itself.
-  CHECK(kFootFloorGap > 0.0f && kFootFloorGap < 0.03f && kFootHeight >= 0.15f && kFootHeight < kKneeHeight);
+  // Low enough for a shoe (about 0.1 m) and equipment lying flat, wherever the mesh lies over the floor.
+  CHECK(kFootBelow >= 0.1f && kFootHeight >= 0.15f && kFootHeight < kKneeHeight);
+  // Its other lines carry only a little way; the door lines carry further (a_door_line_is_said_at_the_nearest_exit).
+  CHECK(kVoiceFullVolume > 0.0f && kVoiceFullVolume < kVoiceRange && kVoiceRange < 15.0f);
 }
