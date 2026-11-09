@@ -244,19 +244,23 @@ inline constexpr float kFollowPace = 0.5f;
 inline constexpr float kFollowGap = 1.5f;
 
 /**
- * The act a phase holds for as long as it lasts, none for a phase that moves: it sits while it lurks, mopes and once
- * everyone is locked out. The bundle has no standing clip, so sitting is its stillness.
+ * The act a phase holds for as long as it lasts: it sits while it mopes, as the spec has it. Every other phase holds
+ * none; standing still is a move (Move::Stand, rest_move).
  */
 inline std::optional<Act> stance_for(Phase p) {
-  if (p == Phase::Lurking || p == Phase::Moping || p == Phase::LockedOut) return Act::Sit;
+  if (p == Phase::Moping) return Act::Sit;  // it lurks and waits at the exits standing (Move::Stand)
   return std::nullopt;
 }
 
-/** The act that starts a phase: getting up, out of a seated phase into a moving one. None for any other change. */
+/** The move shown at `speed`: standing for a walk or run that is not moving, any other move as it is. */
+inline Move rest_move(Move m, float speed) {
+  return (m == Move::Run || m == Move::Walk) && speed <= 0.0f ? Move::Stand : m;
+}
+
+/** The act that starts a phase: getting up, out of moping into excitement. None for any other change. */
 inline std::optional<Act> entry_act(std::optional<Phase> was, Phase next) {
   if (!was) return std::nullopt;
-  const bool rises = (*was == Phase::Lurking && next == Phase::Chasing) || (*was == Phase::Moping && next == Phase::Excited);
-  return rises ? std::optional<Act>(Act::GetUp) : std::nullopt;
+  return *was == Phase::Moping && next == Phase::Excited ? std::optional<Act>(Act::GetUp) : std::nullopt;
 }
 
 /** Where to walk and at what share of its pace; `bang` asks it to kick a hiding place's door. */

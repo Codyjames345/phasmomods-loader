@@ -436,7 +436,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       break;
     }
     case Phase::Searching: {
-      c.out.move = Move::Run;
+      c.out.move = Move::Walk;  // the user's walking clip (2026-11-09)
       speed = move_speed(c.sprint, Move::Run) * kSearchPace;
       // Around where it last sensed its target, else around where the search began, so it never stands still; a point
       // not inside the house is dropped and another tried next frame, so it never searches past an exit.
@@ -472,15 +472,16 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       const Step step = follow_step(ghostAt, known ? std::optional<Point>(target->at) : std::nullopt,
                                     stand ? std::optional<Point>(point(game::position(stand))) : std::nullopt,
                                     c.tracker.last_at());
-      c.out.move = Move::Run;
+      c.out.move = Move::Walk;
       speed = move_speed(c.sprint, Move::Run) * step.pace;
       to = step.to ? step.to : std::optional<Point>(ghostAt);
       break;
     }
-    default:  // Lurking, LockedOut, Moping and Excited: held where it sits or gets up
+    default:  // Lurking, LockedOut, Moping and Excited: held where it stands, sits or gets up
+      c.out.move = Move::Stand;
       to = ghostAt;
-      // Never seated inside a hiding place the difficulty closed, where nobody could reach it (user, 2026-11-09): it
-      // gets up, walks at the ghost's own base speed to just past its room's door, and sits there.
+      // Never waiting inside a hiding place the difficulty closed, where nobody could reach it (user, 2026-11-09): it
+      // walks at the ghost's own base speed to just past its room's door, and waits there, sitting if it mopes.
       if ((next == Phase::Lurking || next == Phase::Moping) && !c.seat && t >= c.nextSeatCheck) {
         c.nextSeatCheck = t + 500;
         if (in_closed_hiding_place(ghostAt)) {
@@ -490,12 +491,12 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       }
       if (c.seat) {
         if (std::hypot(c.seat->x - ghostAt.x, c.seat->z - ghostAt.z) >= kStandReach) {
-          c.out.move = Move::Run;
+          c.out.move = Move::Walk;
           speed = phasmo::GhostAI::baseSpeed.get(ghost);
           to = c.seat;
         } else {
           c.seat.reset();
-          act(Act::Sit, 0, t, false);
+          if (next == Phase::Moping) act(Act::Sit, 0, t, false);
         }
       }
       break;
@@ -515,6 +516,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     }
   }
   if (t < c.pauseUntil) speed = 0.0f;
+  c.out.move = rest_move(c.out.move, speed);  // standing, never running on the spot
   if (agent) steer(agent, to, speed, t);
 
   c.out.phase = next;

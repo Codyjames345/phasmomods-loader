@@ -1038,7 +1038,7 @@ Restraint while steering and the host's re-lock (Task 7c1). A private contract w
   - [ ] A late or failed takeover (a laggy client owning the door) gives up after about two seconds: the door stays shut, and nothing in the log says it opened.
 - Steering
   - [ ] On a friendly ghost's difficulty the Squatter mopes where it starts: it never wanders off or walks to its favourite room, and the log has no exception line.
-  - [ ] On a normal difficulty, while it lurks, it stays where it started in the ghost room, sitting, and never wanders off (Task 7c2 holds it there).
+  - [ ] On a normal difficulty, while it lurks, it stays where it started in the ghost room, standing, and never wanders off (Task 7c2 holds it there).
 - The host's re-lock
   - [ ] As the client, make the Monkey Paw wish that opens every exit at the moment the exits lock (or the 6 s wish just before): if an exit reopens, the host's `mods.log` has `squatter: 1 reopened exit(s) locked again` and the exit shuts and locks again within about two seconds, for both players. Repeat a few times; a wish that lands after the lock leaves the exits shut with no re-lock line.
   - [ ] After the lock, on an exit nobody grabbed but the host (so the host's lock clicked), a player holding the house key tries it: it unlocks with the game's click, then the host locks it again (a second click), and it never opens. On an exit the client grabbed last, the key does nothing new and the host's log has no re-lock line.
@@ -1047,7 +1047,7 @@ Restraint while steering and the host's re-lock (Task 7c1). A private contract w
 The chase (Task 7c2). A private contract with the Squatter forced in a Custom difficulty, two players (one the host) unless it says otherwise. The voice folders must hold recordings for lines to play.
 
 - Lurking
-  - [ ] It sits in the ghost room saying lurk lines every few seconds, and both players hear the same line at the same time from where it sits.
+  - [ ] It stands in the ghost room (the Standing Idle clip) saying lurk lines every few seconds, and both players hear the same line at the same time from where it stands.
   - [ ] It never wanders out of the room before it sees someone.
   - [ ] Walking into its sight starts the chase: it gets up, then runs at the nearest player, saying chase lines. Talking near it on its floor without being seen does not start it.
 - No hunt
@@ -1069,7 +1069,7 @@ The chase (Task 7c2). A private contract with the Squatter forced in a Custom di
 - Doors on the way: the quiet opener entries above (Task 7c1), now live.
   - [ ] The opening-door clip plays as it opens one, outwards or inwards by the side it stands on, and it stops briefly.
 - Out of the house
-  - [ ] It never follows a player past an exit. Once every living player is out, the exits lock, and it sits down inside.
+  - [ ] It never follows a player past an exit. Once every living player is out, the exits lock, and it stands inside.
   - [ ] Each try at a locked exit gets a door line, once per try.
   - [ ] One player out and one inside: the exits stay unlocked and it keeps after the one inside.
 - Host migration
@@ -1105,3 +1105,11 @@ Footsteps (user, 2026-11-09). With recordings in `assets/squatter/voice/steps/`.
 
 - [ ] While it runs, searches or follows, both players hear a step about every stride from where it is, and none while it sits, bangs or stands still.
 - [ ] No UV footprint appears where it ran, the sound sensor reads its steps only as any sound, and the results screen's ghost distance does not grow.
+
+The user's test of 2026-11-09 and its fixes.
+
+- [ ] Willow Street with Custom hiding places set to none, the ghost room the pantry: the Squatter walks out of the blocked pantry to just past its door and waits there, reachable.
+- [ ] Its sheet never shows through the floor from the room below, standing, sitting (friendly) or after a roll.
+- [ ] At a shut door on the chase it stops once, the door swings open for both players (the host's `mods.log` has `squatter: a door swung open` once for that door), and it goes through; nothing repeats.
+- [ ] It searches and follows at a walk (the Crouched Walking clip), and stands rather than running on the spot whenever it holds still.
+

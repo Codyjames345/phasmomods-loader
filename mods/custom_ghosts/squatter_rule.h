@@ -22,7 +22,9 @@ enum class Phase : uint8_t {
   Following,      // friendly: follows the nearest player around inside
 };
 
-enum class Move : uint8_t { Run, Duck, Weave, Roll, Parkour, Stumble };
+// Walk and Stand are the user's walking and standing clips (2026-11-09): it walks to search, follow and find a
+// seat, and stands still rather than running on the spot. Neither is in the chase's cycle.
+enum class Move : uint8_t { Run, Duck, Weave, Roll, Parkour, Stumble, Walk, Stand };
 
 /**
  * Which set of recorded lines the Squatter speaks from; the mod holds the recordings. Steps is no line: its footsteps,
@@ -162,6 +164,8 @@ inline float move_speed(float sprintSpeed, Move m) {
     case Move::Roll: scale = 1.3f; break;
     case Move::Parkour: scale = 1.1f; break;
     case Move::Stumble: scale = 0.0f; break;
+    case Move::Walk: scale = 0.6f; break;
+    case Move::Stand: scale = 0.0f; break;
   }
   return sprintSpeed * kSprintMargin * scale;
 }

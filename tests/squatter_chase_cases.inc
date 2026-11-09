@@ -163,7 +163,7 @@ void cues_play_once_and_never_replay_on_joining() {
 void friendly_starts_seated_in_the_favourite_room() {
   CHECK(first_phase(true) == Phase::Moping);
   CHECK(stance_for(Phase::Moping) == Act::Sit);
-  CHECK(stance_for(Phase::Lurking) == Act::Sit && stance_for(Phase::LockedOut) == Act::Sit);
+  CHECK(!stance_for(Phase::Lurking) && !stance_for(Phase::LockedOut));  // they stand (Move::Stand, user 2026-11-09)
   CHECK(!stance_for(Phase::Chasing) && !stance_for(Phase::Following) && !stance_for(Phase::Excited));
   CHECK(steers(Phase::Moping));  // held where it sits, never wandering off
 }
@@ -173,7 +173,7 @@ void gets_up_on_first_sight_and_says_its_line_once() {
   const Facts sees{true, true, false, false, 2, false};
   CHECK(next_phase(Phase::Moping, sees) == Phase::Excited);
   CHECK(entry_act(Phase::Moping, Phase::Excited) == Act::GetUp);
-  CHECK(entry_act(Phase::Lurking, Phase::Chasing) == Act::GetUp);
+  CHECK(!entry_act(Phase::Lurking, Phase::Chasing));  // it lurks standing, so nothing to get up from
   CHECK(!entry_act(Phase::Chasing, Phase::Searching) && !entry_act(std::nullopt, Phase::Excited));
   CHECK(lines_for(Phase::Excited) == Lines::Excited);
   CHECK(kGetUpMs < kLineGapMinMs);  // the next line is due only after it has got up and moved on
@@ -258,6 +258,18 @@ void it_never_sits_in_a_closed_hiding_place() {
   CHECK(std::fabs(out.x - (2 + kOutsideStep)) < 1e-4f && out.z == 0 && out.y == 0.0f);
   const Point same = outside_spot({2, 0, 0}, {2, 0, 0});  // standing in the doorway: the doorway itself
   CHECK(same.x == 2 && same.z == 0);
+}
+
+// The user's standing and walking clips (2026-11-09): it stands rather than running on the spot, and walks to search,
+// follow and find a seat.
+void it_stands_still_and_walks_with_its_own_clips() {
+  CHECK(std::string(states_of(Move::Stand)[0]) == "Stand" && std::string(states_of(Move::Walk)[0]) == "Walk");
+  CHECK(move_speed(5.0f, Move::Stand) == 0.0f);
+  CHECK(move_speed(5.0f, Move::Walk) > 0.0f && move_speed(5.0f, Move::Walk) < move_speed(5.0f, Move::Run));
+  CHECK(rest_move(Move::Run, 0.0f) == Move::Stand && rest_move(Move::Walk, 0.0f) == Move::Stand);
+  CHECK(rest_move(Move::Run, 3.0f) == Move::Run && rest_move(Move::Walk, 1.0f) == Move::Walk);
+  CHECK(rest_move(Move::Stumble, 0.0f) == Move::Stumble);  // a clumsy move plays its own clip, whatever its pace
+  for (const Move m : kMoveCycle) CHECK(m != Move::Stand && m != Move::Walk);  // the chase never strolls
 }
 
 // The tunables keep the chase sane: a search is slower than the chase, and pauses are short.

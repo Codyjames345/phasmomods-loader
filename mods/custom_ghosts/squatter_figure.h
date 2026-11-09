@@ -25,11 +25,14 @@ enum class Act : uint8_t { Sit, GetUp, Kick, Bang, Bump, OpenDoorOutwards, OpenD
 
 inline constexpr Act kAllActs[] = {Act::Sit, Act::GetUp, Act::Kick, Act::Bang, Act::Bump, Act::OpenDoorOutwards,
                                    Act::OpenDoorInwards};
-inline constexpr Move kAllMoves[] = {Move::Run, Move::Duck, Move::Weave, Move::Roll, Move::Parkour, Move::Stumble};
+inline constexpr Move kAllMoves[] = {Move::Run,     Move::Duck,    Move::Weave, Move::Roll,
+                                     Move::Parkour, Move::Stumble, Move::Walk,  Move::Stand};
 
 // The controller's state names, the one table the figure and the start check use (the user's clip choice,
 // 2026-11-07): a move with two clips has two states, and each time it plays one of them is picked.
 inline constexpr const char* kRunStates[] = {"Run"};
+inline constexpr const char* kWalkStates[] = {"Walk"};    // Crouched Walking
+inline constexpr const char* kStandStates[] = {"Stand"};  // Standing Idle
 inline constexpr const char* kDuckStates[] = {"Duck_A", "Duck_B"};
 inline constexpr const char* kWeaveStates[] = {"Weave_A", "Weave_B"};
 inline constexpr const char* kRollStates[] = {"Roll_A", "Roll_B"};
@@ -45,6 +48,8 @@ inline std::span<const char* const> states_of(Move m) {
     case Move::Roll: return kRollStates;
     case Move::Parkour: return kParkourStates;
     case Move::Stumble: return kStumbleStates;
+    case Move::Walk: return kWalkStates;
+    case Move::Stand: return kStandStates;
   }
   return kRunStates;
 }
