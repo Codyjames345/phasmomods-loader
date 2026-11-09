@@ -434,6 +434,14 @@ void look_at(phasmo::Vector3 at, float weight) {
 
 void play_clip(const char* state) { blend_to(state); }
 
+void snap_to(const char* state) {
+  if (!check()) return;
+  if (api::play_state(g.animator, state)) {
+    g.playing = state;
+    api::pose_now(g.animator);
+  }
+}
+
 float clip_turn() {
   if (!check()) return 0.0f;
   const phasmo::Quaternion q = phasmo::Animator::get_deltaRotation(g.animator);

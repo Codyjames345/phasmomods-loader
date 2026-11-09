@@ -810,6 +810,21 @@ void sheet_hangs_from_the_crown() {
 }
 
 // The figure's state table (squatter_figure.h): the names the bundle's controller must have, exactly.
+// A trip ends lying face down, so the bundle runs it on into the user's Standing Up clip (user, 2026-11-09: getting up
+// was too quick): the Stumble state holds the trip and the get-up together, and once it stands each client turns the
+// figure's root by the angle the get-up was imported at, snapping to the standing idle, so the body itself never turns.
+void a_trip_gets_up_with_the_users_clip() {
+  CHECK(std::abs(seconds_of("Stumble") - (kTripSeconds + seconds_of(kStandUpState))) < 1e-4f);
+  CHECK(move_hold_seconds(Move::Stumble, seconds_of(state_for(Move::Stumble, 0))) == seconds_of("Stumble"));
+  CHECK(seconds_of(kStandUpState) > 1.0f);  // a get-up, not a pop
+  CHECK(kStandUpTurnDegrees > 90.0f && kStandUpTurnDegrees < 150.0f);
+  const float deg = std::numbers::pi_v<float> / 180.0f;
+  CHECK(std::abs(risen_facing(0.0f) - kStandUpTurnDegrees * deg) < 1e-5f);
+  CHECK(std::abs(risen_facing(170.0f * deg) - wrap_angle((170.0f + kStandUpTurnDegrees) * deg)) < 1e-5f);
+  CHECK(!stood_up(1000, 1000 + static_cast<uint64_t>(seconds_of("Stumble") * 1000.0f) - 1));
+  CHECK(stood_up(1000, 1000 + static_cast<uint64_t>(seconds_of("Stumble") * 1000.0f)));
+}
+
 void every_move_and_act_has_its_states() {
   const std::vector<const char*> all = all_states();
   std::set<std::string> names;
@@ -818,7 +833,7 @@ void every_move_and_act_has_its_states() {
   CHECK((names == std::set<std::string>{"Run", "Duck_A", "Duck_B", "Weave_A", "Weave_B", "Roll_A", "Roll_B",
                                         "Parkour_A", "Stumble", "Sit", "GetUp", "Kick", "Bang", "Bump",
                                         "OpenDoorOutwards", "OpenDoorInwards", "Walk", "Stand", "Sneak", "TurnLeft",
-                                        "TurnRight", "Turn180", "StartWalk"}));
+                                        "TurnRight", "Turn180", "StartWalk", "StandUp"}));
   for (const Move m : kAllMoves) {
     const auto states = states_of(m);
     const bool two = m == Move::Duck || m == Move::Weave || m == Move::Roll;
@@ -1208,6 +1223,7 @@ int main() {
   an_unknown_count_never_locks();
   the_move_clock_survives_bad_times();
   a_move_that_plays_once_holds_for_its_clip();
+  a_trip_gets_up_with_the_users_clip();
   friendly_never_chases_or_kicks();
   kick_needs_a_living_target_in_reach();
   speed_stays_just_under_sprint();

@@ -47,6 +47,15 @@ inline constexpr const char* kTurnRightState = "TurnRight";
 inline constexpr const char* kTurnAroundState = "Turn180";
 inline constexpr const char* kStartWalkState = "StartWalk";
 inline constexpr const char* kLocalStates[] = {kTurnLeftState, kTurnRightState, kTurnAroundState, kStartWalkState};
+// The user's Standing Up clip, which the bundle runs the trip (Stumble) on into, from where it lies face down as the
+// trip lands to standing (user, 2026-11-09: getting up from the trip was too quick). Nothing plays it by name.
+inline constexpr const char* kStandUpState = "StandUp";
+// The trip's own clip length in seconds, before the get-up.
+inline constexpr float kTripSeconds = 1.6000f;
+// The get-up is imported turned this far, degrees clockwise seen from above, so it begins lying the way the trip lands:
+// the turn about the vertical that leaves the least of the two clips' body rotations (their RootQ curves: the trip lands on
+// its side, Standing Up begins face down) to blend. It stands up facing this far round too.
+inline constexpr float kStandUpTurnDegrees = 119.0f;
 
 /** The states a move may play, one or two. */
 inline std::span<const char* const> states_of(Move m) {
@@ -98,10 +107,11 @@ struct StateClip {
 inline constexpr StateClip kStateClips[] = {
     {"Run", 0.7000f},     {"Walk", 1.0333f},      {"Stand", 6.0000f},     {"Sneak", 1.0333f}, {"Duck_A", 1.2667f},
     {"Duck_B", 1.1000f},  {"Weave_A", 1.1333f},   {"Weave_B", 1.1333f},   {"Roll_A", 1.1667f},
-    {"Roll_B", 2.3667f},  {"Parkour_A", 1.4000f}, {"Parkour_B", 2.0000f}, {"Stumble", 1.6000f},
+    {"Roll_B", 2.3667f},  {"Parkour_A", 1.4000f}, {"Parkour_B", 2.0000f}, {"Stumble", 6.1000f},
     {"Sit", 10.2667f},    {"GetUp", 2.7000f},     {"Kick", 1.3000f},      {"Bang", 1.3000f},
     {"Bump", 1.1667f},    {"OpenDoorOutwards", 4.1000f}, {"OpenDoorInwards", 6.3667f},
-    {"TurnLeft", 1.0333f}, {"TurnRight", 1.0333f},  {"Turn180", 1.0000f},   {"StartWalk", 2.9333f}};
+    {"TurnLeft", 1.0333f}, {"TurnRight", 1.0333f},  {"Turn180", 1.0000f},   {"StartWalk", 2.9333f},
+    {"StandUp", 4.5000f}};
 
 // How fast each paced move's clips travel on their own, metres a second, as the bundle's build reads them: the Run
 // blend goes from Jogging at the first to Running at the second by the ground speed, and Walk and Sneak are one clip.
@@ -144,6 +154,7 @@ inline std::vector<const char*> all_states() {
     for (const char* s : states_of(m)) out.push_back(s);
   for (const Act a : kAllActs) out.push_back(state_of(a));
   for (const char* s : kLocalStates) out.push_back(s);
+  out.push_back(kStandUpState);
   return out;
 }
 
@@ -176,6 +187,11 @@ void set_pace(Move m, float speed);
 /** How far the figure's clip carried it last frame (root motion), metres in the world; zero when it is not built. */
 phasmo::Vector3 clip_step();
 
+/**
+ * Plays `state` outright, with no blend, and poses the body in it this same frame (Animator.Update with no time), so a
+ * turn of the figure's root set with place() in the same frame shows with it and nothing between. This client alone.
+ */
+void snap_to(const char* state);
 /** Plays one of the figure's own clips (kLocalStates) on this client alone, blending into it. */
 void play_clip(const char* state);
 /** How far the figure's clip turned it last frame (root rotation about the vertical), radians, clockwise seen from above. */

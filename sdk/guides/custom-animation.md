@@ -175,6 +175,16 @@ with; a ray or overlap query of the game's whose mask includes that layer can st
   The Animator works these out only with Apply Root Motion on (`use_controller` turns it off), so turn it on and put
   the model back where you want it each frame. A NavMeshAgent can be moved with `NavMeshAgent.Warp` (its `Move` is
   stripped).
+- **Get up from a clip that ends on the ground** with a get-up clip, never a blend back into a run, which pulls the
+  body up in a quarter of a second. Chain the two in your controller (a transition at the first clip's end, exit time
+  1) and trim the get-up to its rise (`ModelImporterClipAnimation.firstFrame`, `lastFrame`). Where the first clip
+  lands facing another way than the get-up begins, import the get-up turned to meet it (`rotationOffset`, about the
+  vertical), choosing the turn that leaves the least of the two body rotations to blend: a humanoid clip stores the
+  body's rotation in its `RootQ` curves, read in the editor with `AnimationUtility.GetEditorCurve`. The offset is a
+  clip setting the Animator applies as it plays (`AnimationClipSettings.orientationOffsetY`), so those curves never show
+  it. The body then stands up turned that far from your object, so once it stands, turn your object as far and play the
+  standing state outright (`play_state`, then `pose_now`) in the same frame: the body stays where it stands. The
+  Squatter's trip does this (`mods/custom_ghosts/squatter.cpp`, `kStandUpState`).
 
 ## Inverse kinematics (Final IK)
 

@@ -115,6 +115,8 @@ struct State {
   std::optional<Move> lastMove;
   // The slam of a hiding place's door, due when its kick's foot lands (kSlamDelayMs), on this client.
   uint64_t slamAt = 0;
+  // When this client's figure began a trip, until it has stood up from it (stood_up): its facing holds while it is down.
+  std::optional<uint64_t> tripSince;
 };
 
 // Over how long the ghost's speed is smoothed for the figure's pace, seconds: a starting value.
@@ -951,10 +953,16 @@ void play(void* ghost) {
   if (!g.shown.last || !figure::ready()) return;
   const Shown& s = *g.shown.last;
   const Cues c = g.cues.take(s);
-  if (c.act && s.act >= 0) figure::play_act(static_cast<Act>(s.act));
-  if (c.move) figure::play(s.move, s.variant);
-  // Its walking and running keep pace with how fast the ghost moves here (figure::set_pace), smoothed over a moment.
   const uint64_t t = now();
+  if (c.act && s.act >= 0) {
+    figure::play_act(static_cast<Act>(s.act));
+    g.tripSince.reset();  // an act ends the get-up where it is
+  }
+  // A trip plays on into getting up (the bundle's Stumble); a move the master sends while the figure is still down waits
+  // until it stands.
+  if (c.move && !(g.tripSince && s.move != Move::Stumble)) figure::play(s.move, s.variant);
+  if (c.move && s.move == Move::Stumble && s.act < 0) g.tripSince = t;
+  // Its walking and running keep pace with how fast the ghost moves here (figure::set_pace), smoothed over a moment.
   const Point here = at_of(ghost);
   if (g.paceFrom && t > g.paceAt) {
     const float seconds = static_cast<float>(t - g.paceAt) / 1000.0f;
@@ -1007,7 +1015,7 @@ void play(void* ghost) {
   // before the walk, and standing it turns on the spot with a turn clip once its heading pulls far enough away. A new
   // act or move from the master ends either.
   if (c.act || c.move) g.local = State::Local::None;
-  if (c.move && s.act < 0 && s.move == Move::Walk && g.lastMove == Move::Stand) {
+  if (c.move && s.act < 0 && s.move == Move::Walk && g.lastMove == Move::Stand && !g.tripSince) {
     figure::play_clip(kStartWalkState);
     g.local = State::Local::Starting;
     g.localUntil = t + static_cast<uint64_t>(kStartWalkSeconds * 1000.0f);
@@ -1019,7 +1027,19 @@ void play(void* ghost) {
   }
   const float heading = heading_of(ghost);
   if (!g.facing) g.facing = heading;
-  if (g.local == State::Local::Turning) {
+  // Stood up from a trip: the get-up stands it facing kStandUpTurnDegrees round from its root, so the root turns as far
+  // and the figure snaps to standing in the same frame, the body staying as it stands; then it plays the master's move,
+  // and turns back to its way as it always turns.
+  if (g.tripSince && stood_up(*g.tripSince, t)) {
+    g.tripSince.reset();
+    g.facing = risen_facing(*g.facing);
+    show(ghost);
+    figure::snap_to(state_for(Move::Stand, 0));
+    if (s.act < 0 && s.move != Move::Stumble) figure::play(s.move, s.variant);
+  }
+  if (g.tripSince) {
+    // Down from a trip: it lies the way it fell, whichever way the ghost turns.
+  } else if (g.local == State::Local::Turning) {
     g.facing = wrap_angle(*g.facing + figure::clip_turn());  // the clip's own turn
   } else if (g.pace >= kStillPace || s.act >= 0 || s.move != Move::Stand || g.local == State::Local::Starting) {
     // A duck or a weave goes side-on, quickly, so its sidestep carries it along its way (move_facing).
@@ -1069,6 +1089,7 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     g.local = State::Local::None;
     g.lastMove.reset();
     g.slamAt = 0;
+    g.tripSince.reset();
     forget_channel();
     figure::destroy();
     if (!haunting) ghost_sight::drop();  // shared (ghost_sight.h): kept while the contract's ghost lives

@@ -100,7 +100,9 @@ Some consequences, all **(builder's call)**:
   parkour `jumping up` or `hard landing`; stumble `Tripping` and bump `Jogging Stumble` (the builder's reading of the user's description);
   sit `Sitting Idle`; get up `Getting Up`; kick and bang `Martelo 2`; doors `Open Door Outwards` and `Opening Door Inwards`; stand `Standing Idle` and walk `Crouched Walking` (user,
   2026-11-09): it stands while it lurks, waits at the exits or holds still, and walks to search, follow and find a
-  place to wait. Where a move
+  place to wait. The trip plays `Soccer Trip`, which lands face down, and runs on into the user's `Standing Up` clip, only
+  its rise from lying to standing (user, 2026-11-09: getting up from the trip was too quick); the rolls' own get-ups
+  stay as they are (user, 2026-11-09). Where a move
   has two clips, each time it plays one is picked at random, the same on every client.
 - **Sound:** every sound it makes is one of the user's recordings or a stock clip the user supplies. The user records all the
   lines and writes any more.

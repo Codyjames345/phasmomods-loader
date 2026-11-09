@@ -449,6 +449,16 @@ inline Pick move_for(const Surroundings& s) {
   return {};
 }
 
+/** The figure's facing once it has stood up from a trip facing `facing`: turned by the get-up's own angle. */
+inline float risen_facing(float facing) {
+  return wrap_angle(facing + kStandUpTurnDegrees * std::numbers::pi_v<float> / 180.0f);
+}
+
+/** Whether a trip whose clip began at `since` has stood up by `now`: the trip and its get-up (Stumble) have played. */
+inline bool stood_up(uint64_t since, uint64_t now) {
+  return now >= since && now - since >= static_cast<uint64_t>(seconds_of(kStumbleStates[0]) * 1000.0f);
+}
+
 /**
  * The way the figure faces, radians clockwise from +z, for move `m` and clip `variant` while it heads `heading`: a
  * duck or a weave goes side-on, so its sidestep carries it along its way, as one squeezes through a door (the A clips
