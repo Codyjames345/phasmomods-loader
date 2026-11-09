@@ -109,3 +109,6 @@ Task 8: complete (commit 71f590d, tests: player_anim_test -> passed, 5 cases)
 Task 9: complete (commit d572990, tests: third_person_test -> passed, 7 cases)
 - Task 10: Ruling: the SDK exposes the game's pace (Pace, once a second) and the mod raises the loudness at it, so the music is heard at most once per refresh, as a voice is - cost if wrong: none.
 Task 10: complete (commit 3b6fed8, tests: talk_loudness_test red 3 then passed, 6 cases)
+- Task 11: Ruling: no filled-image or rotation API: the wheel's segments are textures the mod draws in code (pm::ui::texture_from_rgba on RawImages), so Task 11 is the volume effects, a world canvas and that texture helper - cost if wrong: none.
+- Task 11: create_world_canvas and texture_from_rgba are covered by the wheel's tests (Task 16), where they are used, not by a test of their own.
+Task 11: complete (commit dc412f4, tests: screen_effects_test red 2 then passed, 3 cases; pmcore builds)
