@@ -52,7 +52,7 @@ When the host creates a lobby, a mod list will be created based on their enabled
 
 ## Bundled Mods
 
-I have included four mods to demonstrate the capabilities of PhasmoMods. They are as follows:
+I have included five mods to demonstrate the capabilities of PhasmoMods. They are as follows:
 
 | Mod | Source | What it does |
 | --- | --- | --- |
@@ -60,6 +60,7 @@ I have included four mods to demonstrate the capabilities of PhasmoMods. They ar
 | Spectral Flame | `mods/spectral_flame` | An eighth evidence: firelights will slowly turn blue when the ghost is in the same room ([details](docs/spectral-flame.md)). |
 | Custom Ghosts | `mods/custom_ghosts` | Sixteen new ghost types, each with their own lore and unique behaviour; requires Spectral Flame ([details](docs/custom-ghosts.md)). |
 | Ghost Tells | `mods/ghost_tells` | Additional unique behaviour for six vanilla ghosts, to make zero evidence a bit more manageable (targets ones that are a pain to identify) ([details](docs/ghost-tells.md)). |
+| Emotes | `mods/emotes` | A wheel of eight dances on a rebindable key: every player sees and hears them, and the ghost hears the song as you talking ([details](docs/emotes.md)). |
 
 `archive/` holds mods that were being developed but stopped for one reason or another. The most promising one was Bigger Lobbies but unfortunately a server-side change a few years ago has made this dream impossible without a custom server implementation. The 20 player lobby dream may return if someone is willing to investigate this, but it's out of my scope for now.
 

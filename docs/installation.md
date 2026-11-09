@@ -19,6 +19,7 @@ only in private lobbies with friends who have agreed to them.
 | Spectral Flame | An eighth evidence. A candle, lantern or candelabra left burning where the ghost spends its time slowly turns blue. A new row on the journal's evidence page. |
 | Custom Ghosts | Sixteen new ghost types, each with its own journal page and tells: the Echo, Dullahan and Black Shuck; twelve that carry Spectral Flame (Kikimora, Draugr, Lithobolia, Gremlin, Brownie, Bogeyman, Lethe, Mesmer, Knell, Asterion, Tempest, Hydra); and the Squatter, a person in a bedsheet with no evidence at all. Needs Spectral Flame, which switches on with it. |
 | Ghost Tells | Three new tells each for the Spirit, Mare, Shade, Yurei, Goryo and Onryo, so they can be told apart by how they behave. Their journal pages name the new tells. |
+| Emotes | A wheel of eight dances: hold X (D-pad up on a gamepad, X on the left VR controller), pick one and let go. Everyone sees and hears it, and the ghost hears the song as you talking. Moving, using an item or crouching ends it. Rebind the key in the game's keybinds menu. |
 
 Playing the ghost: Interact, Primary Use (tap: an event; hold: a hunt), Secondary Use (the type's
 ability), the torch key (the fuse box) and Crouch held while tapping Primary Use (an event in an
