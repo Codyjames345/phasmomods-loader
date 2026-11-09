@@ -167,12 +167,34 @@ void an_unknown_count_never_locks() {
 }
 
 void the_move_clock_survives_bad_times() {
-  const Move start = move_at(0.0f);
-  CHECK(move_at(std::numeric_limits<float>::quiet_NaN()) == start);
-  CHECK(move_at(std::numeric_limits<float>::infinity()) == start);
-  CHECK(move_at(-std::numeric_limits<float>::infinity()) == start);
-  const int index = static_cast<int>(move_at(1e9f));
-  CHECK(index >= 0 && index <= static_cast<int>(Move::Stumble));
+  CHECK(move_of(kMoveCount) == move_of(0) && move_of(-1) == move_of(kMoveCount - 1));
+  CHECK(move_of(-1000003) == move_of(-1000003 + kMoveCount * 1000));
+  CHECK(move_hold_seconds(Move::Roll, std::numeric_limits<float>::quiet_NaN()) == kMoveSlotSeconds);
+  CHECK(move_hold_seconds(Move::Roll, std::numeric_limits<float>::infinity()) == kMoveSlotSeconds);
+}
+
+// A move that plays once holds for its whole clip, so the next move never cuts it off (user, 2026-11-09: the roll cut
+// off early); a looping one holds a slot. Every state of the table has its clip's length, and the chase's pace, timed
+// by those lengths, stays under the sprint whichever clip of each move plays.
+void a_move_that_plays_once_holds_for_its_clip() {
+  CHECK(plays_once(Move::Roll) && plays_once(Move::Stumble) && plays_once(Move::Parkour));
+  CHECK(!plays_once(Move::Run) && !plays_once(Move::Walk) && !plays_once(Move::Stand));
+  CHECK(move_hold_seconds(Move::Roll, 2.4f) == 2.4f);
+  CHECK(move_hold_seconds(Move::Parkour, 0.2f) == kMoveSlotSeconds);  // a slot at least
+  CHECK(move_hold_seconds(Move::Run, 0.7f) == kMoveSlotSeconds);
+  for (const char* state : all_states()) CHECK(seconds_of(state) > 0.0f);
+  CHECK(seconds_of("no such state") == 0.0f);
+  for (const float sprint : {2.0f, 3.0f, 4.0f})
+    for (uint32_t variant = 0; variant < 2; ++variant) {
+      float distance = 0, time = 0;
+      for (int i = 0; i < kMoveCount; ++i) {
+        const Move m = move_of(i);
+        const float hold = move_hold_seconds(m, seconds_of(state_for(m, variant)));
+        distance += move_speed(sprint, m) * hold;
+        time += hold;
+      }
+      CHECK(distance / time < sprint);
+    }
 }
 
 void friendly_never_chases_or_kicks() {
@@ -228,11 +250,10 @@ void speed_stays_just_under_sprint() {
   }
   // The cycle holds every move, Run most of all, and repeats; a negative time reads as the start.
   int seen[6] = {};
-  for (float t = 0; t < kMoveCycleSeconds; t += 0.25f) ++seen[static_cast<int>(move_at(t))];
+  for (int i = 0; i < kMoveCount; ++i) ++seen[static_cast<int>(move_of(i))];
   for (const int n : seen) CHECK(n > 0);
   for (const int n : seen) CHECK(n <= seen[static_cast<int>(Move::Run)]);
-  CHECK(move_at(kMoveCycleSeconds) == move_at(0.0f));
-  CHECK(move_at(-3.0f) == move_at(0.0f));
+  CHECK(move_of(kMoveCount) == move_of(0));
 }
 
 void tired_taunt_fires_once_per_lapse() {
@@ -574,11 +595,16 @@ void sheet_is_closed_grid_with_eye_holes() {
   }
   const size_t cells = axis.size() - 1;
   size_t cut = 0;
+  size_t round = 0;  // the cells of the round sheet: those whose middle lies within its radius
   for (size_t i = 0; i < cells; ++i)
-    for (size_t j = 0; j < cells; ++j)
+    for (size_t j = 0; j < cells; ++j) {
+      const float x = (axis[i] + axis[i + 1]) / 2, z = (axis[j] + axis[j + 1]) / 2;
+      if (std::hypot(x, z) > shape.side / 2) continue;
+      ++round;
       if (overlaps_an_eye(shape, axis[i], axis[i + 1], axis[j], axis[j + 1])) ++cut;
-  CHECK(cut > 0);
-  CHECK(m.triangles.size() == 6 * (cells * cells - cut));
+    }
+  CHECK(cut > 0 && round < cells * cells);
+  CHECK(m.triangles.size() == 6 * (round - cut));
   const size_t n = m.vertices.size();
   CHECK(n > 0 && m.normals.size() == n && m.uv.size() == n && m.flat.size() == n && m.coefficients.size() == n);
   if (n == 0 || m.flat.size() != n || m.uv.size() != n) return;
@@ -652,19 +678,53 @@ void sheet_sways_only_near_its_shape() {
   CHECK(nearSway == 0.0f && std::fabs(farSway - sh::kHemSway) < 1e-5f && growing);
 }
 
-// Each point of the sheet follows the body by its height: the head's above it, the hips' below, blended between the
-// two bones it lies between, so the sheet bends with the body as it leans, rolls and sits.
-void sheet_follows_the_body_by_height() {
-  const std::vector<float> bones = {0.0f, -0.3f, -0.5f, -0.8f};  // head, chest, spine, hips below the crown
-  sh::Weight w = sh::weight_by_height(0.1f, bones);
-  CHECK(w.bone0 == 0 && w.weight0 == 1.0f && w.weight1 == 0.0f);
-  w = sh::weight_by_height(-2.0f, bones);
-  CHECK(w.bone0 == 3 && w.weight0 == 1.0f);
-  w = sh::weight_by_height(-0.4f, bones);  // halfway from the chest to the spine
-  CHECK(w.bone0 == 1 && w.bone1 == 2 && std::fabs(w.weight0 - 0.5f) < 1e-5f && std::fabs(w.weight1 - 0.5f) < 1e-5f);
-  w = sh::weight_by_height(-0.5f, bones);
-  CHECK(std::fabs(w.weight0 + w.weight1 - 1.0f) < 1e-5f);
-  CHECK(sh::weight_by_height(-0.4f, {}).weight0 == 1.0f);  // no bones read: the anchor alone
+// Each point of the sheet follows the bones nearest it, as worn clothing is skinned in games (user, 2026-11-09: the
+// arms and legs came out of the sheet): over an arm the arm carries it, between two bones both do, and the four that
+// pull most carry it, their weights adding up to 1.
+void sheet_follows_the_bones_nearest_it() {
+  const sh::Segment bones[] = {{{0, -0.2f, 0}, {0, 0, 0}},               // a spine, under the crown
+                               {{0.3f, -0.4f, 0}, {0.3f, -0.9f, 0}},     // an arm out to the right
+                               {{-0.1f, -1.0f, 0}, {-0.1f, -1.8f, 0}},   // a leg
+                               {{0.1f, -1.0f, 0}, {0.1f, -1.8f, 0}},     // the other leg
+                               {{-0.3f, -0.4f, 0}, {-0.3f, -0.9f, 0}}};  // the other arm
+  CHECK(sh::distance_to({0.3f, -0.6f, 0.1f}, bones[1]) - 0.1f < 1e-5f);
+  CHECK(std::fabs(sh::distance_to({0, 0.5f, 0}, bones[0]) - 0.5f) < 1e-5f);  // past its end: from the end
+  sh::Weight w = sh::weight_by_nearness({0.32f, -0.6f, 0.05f}, bones);  // on the right arm
+  CHECK(w.bone[0] == 1 && w.weight[0] > 0.8f);
+  float sum = 0;
+  for (const float x : w.weight) sum += x;
+  CHECK(std::fabs(sum - 1.0f) < 1e-5f);
+  for (int k = 1; k < 4; ++k) CHECK(w.weight[k] <= w.weight[k - 1]);
+  w = sh::weight_by_nearness({0, -1.4f, 0.1f}, bones);  // between the legs: both, alike
+  CHECK(((w.bone[0] == 2 && w.bone[1] == 3) || (w.bone[0] == 3 && w.bone[1] == 2)) &&
+        std::fabs(w.weight[0] - w.weight[1]) < 1e-4f);
+  const sh::Weight none = sh::weight_by_nearness({0, 0, 0}, {});
+  CHECK(none.bone[0] == 0 && none.weight[0] == 1.0f && none.weight[1] == 0.0f);  // no bones read: bone 0 alone
+}
+
+// The sheet reaches the floor (user, 2026-11-09: make it larger so it reaches the floor): a sheet as wide as
+// reach_distance gives for a drop hangs its hem that far below the crown, flaring a little out from the shoulders, and
+// its hem is round, every rim point hanging at the same height.
+void sheet_reaches_the_floor() {
+  sh::SheetShape shape;
+  const float drop = 1.8f;
+  shape.side = 2.0f * sh::reach_distance(shape, drop);
+  CHECK(sh::reach_distance(shape, shape.headRadius) == 0.0f);  // above the shoulders: no length
+  const sh::SheetMesh m = sh::make_sheet(shape);
+  float lowest = 0, widest = 0;
+  for (const sh::Vec3& v : m.vertices) {
+    lowest = std::min(lowest, v.y);
+    widest = std::max(widest, std::hypot(v.x, v.z));
+  }
+  CHECK(std::fabs(lowest + drop) < 1e-3f);
+  CHECK(widest > shape.shoulderRadius && widest < shape.shoulderRadius + shape.flare * drop + 1e-3f);
+  size_t rim = 0;
+  for (size_t v = 0; v < m.vertices.size(); ++v)
+    if (std::hypot(m.flat[v].x, m.flat[v].y) >= shape.side / 2) {
+      ++rim;
+      CHECK(std::fabs(m.vertices[v].y + drop) < 1e-3f);
+    }
+  CHECK(rim > 8);
 }
 
 void eyes_are_mirrored() {
@@ -679,8 +739,11 @@ void eyes_are_mirrored() {
   CHECK(!present.contains({-1, -1}));
   std::vector<std::pair<int, int>> holes;
   for (int i = 0; i < cells; ++i)
-    for (int j = 0; j < cells; ++j)
+    for (int j = 0; j < cells; ++j) {
+      const size_t x = static_cast<size_t>(i), z = static_cast<size_t>(j);
+      if (!sh::in_sheet(shape, axis[x], axis[x + 1], axis[z], axis[z + 1])) continue;  // beyond the round edge
       if (!present.contains({i, j})) holes.emplace_back(i, j);
+    }
   CHECK(!holes.empty());
   bool left = false, right = false;
   for (const auto& [i, j] : holes) {
@@ -1093,7 +1156,8 @@ int main() {
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();
-  sheet_follows_the_body_by_height();
+  sheet_follows_the_bones_nearest_it();
+  sheet_reaches_the_floor();
   eyes_are_mirrored();
   sheet_hangs_from_the_crown();
   the_mod_loads_its_voice_from_its_assets();
@@ -1111,6 +1175,7 @@ int main() {
   hearing_a_target_resumes_the_chase();
   an_unknown_count_never_locks();
   the_move_clock_survives_bad_times();
+  a_move_that_plays_once_holds_for_its_clip();
   friendly_never_chases_or_kicks();
   kick_needs_a_living_target_in_reach();
   speed_stays_just_under_sprint();

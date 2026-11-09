@@ -1,5 +1,7 @@
 #include "models.h"
 
+#include <algorithm>
+
 #include "Animator.h"
 #include "Camera.h"
 #include "Input.h"
@@ -153,6 +155,20 @@ bool play_state(void* animator, const char* state) {
   return true;
 }
 
+bool fade_to_state(void* animator, const char* state, float blend) {
+  if (!alive(animator) || !state || !phasmo::Animator::get_isInitialized(animator)) return false;
+  const int32_t hash = phasmo::Animator::StringToHash(make_string(state));
+  if (!phasmo::Animator::HasState(animator, 0, hash)) return false;
+  phasmo::Animator::CrossFade(animator, hash, std::clamp(blend, 0.0f, 1.0f), 0, 0.0f, 0.0f);
+  return true;
+}
+
+bool pose_now(void* animator) {
+  if (!alive(animator) || !phasmo::Animator::get_isInitialized(animator)) return false;
+  phasmo::Animator::Update(animator, 0.0f);
+  return true;
+}
+
 bool controller_has_states(void* controller, std::span<const char* const> states, std::string* missing) {
   if (!alive(controller)) return fail(missing, "no controller");
   // These engine calls have not run in the game yet: each is logged before it runs, so a crash names its call.
@@ -264,13 +280,15 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
       if (!alive(b)) return fail(why, "a bone is gone");
     const int32_t count = static_cast<int32_t>(mesh.bones.size());
     for (const ClothWeight& w : mesh.weights)
-      if (w.bone0 < 0 || w.bone0 >= count || w.bone1 < 0 || w.bone1 >= count) return fail(why, "a weight names no bone");
+      for (const int32_t b : w.bone)
+        if (b < 0 || b >= count) return fail(why, "a weight names no bone");
   }
   std::vector<phasmo::BoneWeight> weights;
   weights.reserve(n);
   for (size_t v = 0; v < n; ++v) {
     const ClothWeight w = skinned ? mesh.weights[v] : ClothWeight{};
-    weights.push_back(phasmo::BoneWeight{w.weight0, w.weight1, 0, 0, w.bone0, w.bone1, 0, 0});
+    weights.push_back(phasmo::BoneWeight{w.weight[0], w.weight[1], w.weight[2], w.weight[3], w.bone[0], w.bone[1],
+                                         w.bone[2], w.bone[3]});
   }
   const auto matrix_of = [](void* t) {
     return trs_matrix(phasmo::Transform::get_position(t), phasmo::Transform::get_rotation(t),

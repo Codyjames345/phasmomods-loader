@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Transform.h"
@@ -76,6 +77,32 @@ inline const char* state_for(Move m, uint32_t variant) {
   const std::span<const char* const> states = states_of(m);
   return states[variant % states.size()];
 }
+
+/** A state's clip and how long it lasts. */
+struct StateClip {
+  const char* state;
+  float seconds;
+};
+
+// Each state's clip length in seconds, as the bundle's build reads the user's clips: how long a move that plays once
+// holds the chase (move_hold_seconds), and what a cross-fade's length is measured against. They change with the clips.
+inline constexpr StateClip kStateClips[] = {
+    {"Run", 0.7000f},     {"Walk", 1.0333f},      {"Stand", 6.0000f},     {"Duck_A", 1.2667f},
+    {"Duck_B", 1.1000f},  {"Weave_A", 1.1333f},   {"Weave_B", 1.1333f},   {"Roll_A", 1.1667f},
+    {"Roll_B", 2.3667f},  {"Parkour_A", 0.2333f}, {"Parkour_B", 2.0000f}, {"Stumble", 2.7667f},
+    {"Sit", 10.2667f},    {"GetUp", 2.7000f},     {"Kick", 1.3000f},      {"Bang", 1.3000f},
+    {"Bump", 1.1667f},    {"OpenDoorOutwards", 4.1000f}, {"OpenDoorInwards", 6.3667f}};
+
+/** How long `state`'s clip lasts in seconds; 0 for a state the table does not name. */
+inline float seconds_of(const char* state) {
+  for (const StateClip& c : kStateClips)
+    if (state && std::string_view(c.state) == state) return c.seconds;
+  return 0.0f;
+}
+
+// How long one clip blends into the next, in seconds (Animator.CrossFade): Unity's own default transition length, so
+// the figure never snaps from one pose to another (user, 2026-11-09).
+inline constexpr float kBlendSeconds = 0.25f;
 
 /** Every state name of the table, each once: what the bundle's controller must have. */
 inline std::vector<const char*> all_states() {

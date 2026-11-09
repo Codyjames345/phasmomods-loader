@@ -65,11 +65,12 @@ Some consequences, all **(builder's call)**:
 - "Can't sprint" covers both a custom difficulty that turns sprinting off and a chased player whose sprint has run out, so the taunt can play
   for either. Its speed comes from the game's sprint speed as if sprinting were on, which reverse engineering has to establish.
 - Bumping into something is an animation and a pause. It moves no props, since that would read as a ghost interaction.
-- At a shut door during the chase, the Squatter swings it open with the game's own `HingeDoor.OpenDoor`, the leaf's physics, (user,
-  2026-11-09: the contract-start opener `HingeDoor.LevelControllerOpenDoor` did not hold mid-contract) and plays the opening-door clip (user, 2026-11-08). The ghost's own
+- At a shut door during the chase, the Squatter swings it open with the game's own `HingeDoor.SwingDoor`, all the way to its open angle (user,
+  2026-11-09: the contract-start opener `HingeDoor.LevelControllerOpenDoor` did not hold mid-contract, and
+  `HingeDoor.OpenDoor`'s physics push kept a door that swings away shut) and plays the opening-door clip (user, 2026-11-08). The ghost's own
   door push (`Door.GhostForceDoor`) was ruled out: it leaves an EMF reading, the ghost's door sounds and counts on the results screen.
   The quiet opener leaves none of those; the master takes the door's view first so every player sees the same open door. It never
-  opens an exit. The leaf opens to its hinge's one side by a random amount, which the game chooses. It must not send a game RPC by
+  opens an exit. The leaf opens to its hinge's one side, all the way, and the clip pulls a leaf that swings toward the Squatter and pushes one that swings away. It must not send a game RPC by
   name or invoke an RPC body.
 
 ## Look and sound

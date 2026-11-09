@@ -737,7 +737,7 @@ void cloth_builds_the_mesh_and_its_colliders() {
   const api::Array<int32_t> triangles{g_set[mesh]["triangles"]};
   CHECK(triangles.size() == 3 && triangles[1] == 2);
   const api::Array<phasmo::BoneWeight> weights{g_set[mesh]["boneWeights"]};
-  CHECK(weights.size() == 3 && weights[2].weight0 == 1 && weights[2].bone0 == 0);
+  CHECK(weights.size() == 3 && weights[2].weight0 == 1 && weights[2].bone0 == 0 && weights[2].weight1 == 0);
   const api::Array<phasmo::Matrix4x4> poses{g_set[mesh]["bindposes"]};
   CHECK(poses.size() == 1 && poses[0].m[0] == 1 && poses[0].m[15] == 1 && poses[0].m[1] == 0);
   void* renderer = find_in(anchor, &kSkinned);
@@ -796,7 +796,9 @@ void cloth_follows_its_bones() {
   void* hips = go_new("Hips");
   node(hips).position = {0, 1, 0};
   void* const bones[] = {&node(head).transform, &node(hips).transform};
-  const api::ClothWeight weights[] = {{0, 0, 1, 0}, {0, 1, 0.5f, 0.5f}, {1, 1, 1, 0}};
+  const api::ClothWeight weights[] = {{{0, 0, 0, 0}, {1, 0, 0, 0}},
+                                      {{0, 1, 0, 0}, {0.5f, 0.25f, 0.25f, 0}},
+                                      {{1, 1, 0, 0}, {1, 0, 0, 0}}};
   api::ClothMesh mesh = sheet.mesh();
   mesh.bones = bones;
   mesh.weights = weights;
@@ -804,7 +806,8 @@ void cloth_follows_its_bones() {
   std::string why;
   CHECK(api::add_cloth(anchor, mesh, make_obj(&kMaterial), {}, {}, parts, &why));
   const api::Array<phasmo::BoneWeight> w{g_set[parts.mesh]["boneWeights"]};
-  CHECK(w.size() == 3 && w[1].bone0 == 0 && w[1].bone1 == 1 && w[1].weight0 == 0.5f && w[1].weight1 == 0.5f);
+  CHECK(w.size() == 3 && w[1].bone0 == 0 && w[1].bone1 == 1 && w[1].weight0 == 0.5f && w[1].weight1 == 0.25f &&
+        w[1].weight2 == 0.25f && w[1].bone2 == 0);
   CHECK(w[2].bone0 == 1 && w[2].weight0 == 1);
   const api::Array<phasmo::Matrix4x4> poses{g_set[parts.mesh]["bindposes"]};
   CHECK(poses.size() == 2 && poses[0].m[13] == -1.0f && poses[1].m[13] == 0.0f);
@@ -813,7 +816,8 @@ void cloth_follows_its_bones() {
   CHECK(api::RefArray{g_set[renderer]["bones"]}[1] == &node(hips).transform);
   api::destroy_cloth(parts);
   // A weight naming no bone, or weights not one per vertex: nothing made.
-  const api::ClothWeight bad[] = {{0, 0, 1, 0}, {0, 2, 0.5f, 0.5f}, {1, 1, 1, 0}};
+  const api::ClothWeight bad[] = {{{0, 0, 0, 0}, {1, 0, 0, 0}}, {{0, 0, 2, 0}, {0.5f, 0.25f, 0.25f, 0}},
+                                  {{1, 1, 0, 0}, {1, 0, 0, 0}}};
   mesh.weights = bad;
   CHECK(!api::add_cloth(anchor, mesh, make_obj(&kMaterial), {}, {}, parts, &why) && !parts.mesh);
   mesh.weights = std::span<const api::ClothWeight>(weights, 2);

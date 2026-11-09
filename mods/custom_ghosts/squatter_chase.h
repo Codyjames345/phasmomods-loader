@@ -194,14 +194,10 @@ inline Point search_point(Point last, uint32_t roll) {
 }
 
 /**
- * The opening-door clip for a door it opens from `ghost`'s side of a door at `door` whose Transform faces
- * `doorForward`: outwards from the side the door faces, inwards from the other. Which way a leaf swings was not
- * traced (sdk/systems/doors.md, "Opening a door quietly"), so this only matches the clip to where it stands.
+ * The opening-door clip for a leaf that swings toward the Squatter as it opens (door::swings_toward), or away: it pulls
+ * one that comes toward it (Opening Door Inwards) and pushes one that goes away (Open Door Outwards).
  */
-inline Act door_act(Point ghost, Point door, Point doorForward) {
-  const float side = (ghost.x - door.x) * doorForward.x + (ghost.z - door.z) * doorForward.z;
-  return side >= 0.0f ? Act::OpenDoorOutwards : Act::OpenDoorInwards;
-}
+inline Act door_act(bool swingsToward) { return swingsToward ? Act::OpenDoorInwards : Act::OpenDoorOutwards; }
 
 /**
  * Whether the Squatter at `ghost`, moving at `velocity` (metres a second), walks into the door at `door`: it moves, at

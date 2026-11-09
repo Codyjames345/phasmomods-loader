@@ -50,6 +50,7 @@ constexpr int32_t kInfoSender = 0x08, kActorNumber = 0x08;
 constexpr int32_t kDoorGrabbable = 0x08, kDoorLocked = 0x09;  // Door.grabbable and Door.locked
 constexpr int32_t kDoorKind = 0x0C, kDoorInteract = 0x10, kDoorView = 0x18;  // the quiet opener's
 constexpr int32_t kDoorAxis = 0x20, kDoorShutAngle = 0x24;  // HingeDoor.hingeAxis and Door.closedAngle
+constexpr int32_t kDoorBody = 0x28, kDoorOpenAngle = 0x30;  // Door.body (none here) and HingeDoor.openAngle
 constexpr int32_t kAxisX = 1, kAxisY = 2, kAxisZ = 4;  // made-up as the game's Axis flags read: the code reads them
 std::map<void*, phasmo::Vector3> g_euler;  // each door leaf's Transform.localEulerAngles
 constexpr int32_t kInteractInUse = 0x08, kViewMine = 0x08;  // PhotonObjectInteract.inUse, PhotonView.IsMine
@@ -132,21 +133,30 @@ bool g_throwInWish = false;
 // A door's Transform is the door itself here, and its euler angles are the test's.
 void* fake_own_transform(void* component, const void*) { return component; }
 phasmo::Vector3 fake_euler(void* t, const void*) { return g_euler[t]; }
+// The leaf's place and its collider, which only the swing's side reads (leaf_of): no collider under any door here.
+char g_colliderClass;
+void* fake_no_child(void*, void*, bool, const void*) { return nullptr; }
+phasmo::Bounds fake_bounds(void*, const void*) { return {}; }
+phasmo::Vector3 fake_position(void*, const void*) { return {}; }
+phasmo::Quaternion fake_rotation(void*, const void*) { return {0, 0, 0, 1}; }
 
 // The quiet opener's game side: HingeDoor and SlideDoor classes, the opener, and the door's view.
 char g_hingeClass, g_slideClass;
 struct OpenCall {
   void* door;
-  bool close;     // HingeDoor.OpenDoor's first argument: shut it rather than open it
-  float strength;  // its push, -1 for the game's own random one
+  bool close;      // HingeDoor.SwingDoor's first argument: shut it rather than open it
+  float seconds;   // how long the swing takes
+  float fraction;  // how much of the way to its open angle
   bool buffered;   // whether its RPC is buffered
 };
-std::vector<OpenCall> g_opens;     // HingeDoor.OpenDoor's calls
+std::vector<OpenCall> g_opens;     // HingeDoor.SwingDoor's calls
 std::vector<void*> g_viewsAsked;   // PhotonView.RequestOwnership's calls
-void fake_open(void* d, bool close, float strength, bool buffered, const void*) {
-  g_calls.push_back("OpenDoor");
-  g_opens.push_back({d, close, strength, buffered});
+int g_pushes = 0;                  // HingeDoor.OpenDoor's calls: the physics push, which must never open a door
+void fake_swing(void* d, bool close, float seconds, float fraction, bool buffered, const void*) {
+  g_calls.push_back("SwingDoor");
+  g_opens.push_back({d, close, seconds, fraction, buffered});
 }
+void fake_push(void*, bool, float, bool, const void*) { ++g_pushes; }
 bool fake_is_mine(void* view, const void*) { return view && at<bool>(*static_cast<Obj*>(view), kViewMine); }
 void fake_request_ownership(void* view, const void*) {
   g_calls.push_back("RequestOwnership");
@@ -293,13 +303,21 @@ void start(bool master = true, bool friendly = false) {
   fake::field(map::Door_grabbable, kDoorGrabbable);
   fake::field(map::Door_locked, kDoorLocked);
   fake::type(map::HingeDoor, &g_hingeClass);
-  fake::method(map::HingeDoor_OpenDoor, reinterpret_cast<void*>(&fake_open));
+  fake::method(map::HingeDoor_SwingDoor, reinterpret_cast<void*>(&fake_swing));
+  fake::method(map::HingeDoor_OpenDoor, reinterpret_cast<void*>(&fake_push));
   fake::field(map::HingeDoor_hingeAxis, kDoorAxis);
   fake::field(map::Door_closedAngle, kDoorShutAngle);
   fake::value(map::Axis_X, kAxisX);
   fake::value(map::Axis_Z, kAxisZ);
   fake::method(map::Component_get_transform, reinterpret_cast<void*>(&fake_own_transform));
   fake::method(map::Transform_get_localEulerAngles, reinterpret_cast<void*>(&fake_euler));
+  fake::field(map::Door_body, kDoorBody);
+  fake::field(map::HingeDoor_openAngle, kDoorOpenAngle);
+  fake::type(map::Collider, &g_colliderClass);
+  fake::method(map::Component_GetComponentInChildren, reinterpret_cast<void*>(&fake_no_child));
+  fake::method(map::Collider_get_bounds, reinterpret_cast<void*>(&fake_bounds));
+  fake::method(map::Transform_get_position, reinterpret_cast<void*>(&fake_position));
+  fake::method(map::Transform_get_rotation, reinterpret_cast<void*>(&fake_rotation));
   g_euler.clear();
   fake::field(map::Door_kind, kDoorKind);
   fake::field(map::Door_interact, kDoorInteract);
@@ -309,6 +327,7 @@ void start(bool master = true, bool friendly = false) {
   fake::method(map::PhotonView_get_IsMine, reinterpret_cast<void*>(&fake_is_mine));
   fake::method(map::PhotonView_RequestOwnership, reinterpret_cast<void*>(&fake_request_ownership));
   g_opens.clear();
+  g_pushes = 0;
   g_viewsAsked.clear();
   // What the room's other gates read (core/room_gates.h), which the binding needs though nothing here calls them.
   for (const pm::sdk::EntryDesc* gate :
@@ -330,6 +349,7 @@ void start(bool master = true, bool friendly = false) {
   g_detour.clear();
   std::string missing;
   CHECK(pm::api::bind(&g_host, missing));
+  if (!missing.empty()) std::printf("missing: %s\n", missing.c_str());
   CHECK(door::create_hooks());
   // Made once bound: before the first bind the array reads empty.
   g_playerList = refs({&g_photon[1], &g_photon[0], &g_photon[2]});  // the list's order is not the actors'
@@ -821,17 +841,41 @@ void a_door_too_narrow_to_pass_is_opened() {
   CHECK(door::may_open(&g_kitchen));
 }
 
+// Which way a leaf swings as it opens, so the Squatter pulls a door that comes toward it and pushes one that goes away
+// (user, 2026-11-09: it pulled a door that swings away). The leaf turns about its own position toward its open angle
+// (HingeDoor.openAngle), the shorter way round, whatever axis it hinges on and however its parent is turned.
+void a_leaf_swings_toward_its_open_angle() {
+  CHECK(door::delta_angle(0, 90) == 90.0f && door::delta_angle(0, 270) == -90.0f && door::delta_angle(350, 10) == 20.0f);
+  // A leaf hinged at the origin on y, reaching out along +x, shut at 0. A turn of +y carries +x toward -z.
+  door::Leaf leaf{.pivot = {0, 0, 0}, .rotation = {0, 0, 0, 1}, .euler = {0, 0, 0}, .centre = {0.45f, 1, 0},
+                  .axis = kAxisY, .axisX = kAxisX, .axisZ = kAxisZ, .openAngle = 90};
+  CHECK(door::swings_toward(leaf, {0.45f, 0, -1}) && !door::swings_toward(leaf, {0.45f, 0, 1}));
+  leaf.openAngle = -90;  // the other side
+  CHECK(!door::swings_toward(leaf, {0.45f, 0, -1}) && door::swings_toward(leaf, {0.45f, 0, 1}));
+  leaf.openAngle = 270;  // the same, the shorter way round
+  CHECK(door::swings_toward(leaf, {0.45f, 0, 1}));
+  // Hinged on its own z, as a model turned upright by x -90: z then points up in the world, so a turn of +z swings it
+  // as the leaf above; turned by x +90 instead, z points down and the same turn swings it the other way.
+  door::Leaf upright{.pivot = {0, 0, 0}, .rotation = pm::custom::euler_quat({-90, 0, 0}), .euler = {-90, 0, 0},
+                     .centre = {0.45f, 0, 0}, .axis = kAxisZ, .axisX = kAxisX, .axisZ = kAxisZ, .openAngle = 90};
+  CHECK(door::swings_toward(upright, {0.45f, 0, -1}) && !door::swings_toward(upright, {0.45f, 0, 1}));
+  upright.rotation = pm::custom::euler_quat({90, 0, 0});
+  upright.euler = {90, 0, 0};
+  CHECK(door::swings_toward(upright, {0.45f, 0, 1}) && !door::swings_toward(upright, {0.45f, 0, -1}));
+}
+
 // On the master, whose view it is (a scene door's view starts the master's), a shut plain door opens at once with the
-// game's own opener, called once with the game's own arguments (as LevelController's contract-start opener calls it)
-// and nothing else: no ownership asked, no other door method.
+// game's own swing to its open angle (HingeDoor.SwingDoor), all the way, called once and nothing else: no ownership
+// asked, no other door method, and never HingeDoor.OpenDoor's push, which shuts a door whose open angle Awake reverses
+// (user, 2026-11-09: a door that swings away stayed shut).
 void a_shut_door_opens_quietly_on_the_master() {
   start();
   plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
   CHECK(door::may_open(&g_kitchen));
   CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Opened);
-  CHECK(g_opens.size() == 1 && g_opens[0].door == &g_kitchen && !g_opens[0].close && g_opens[0].strength == door::kPushStrength &&
-        !g_opens[0].buffered);
-  CHECK((g_calls == std::vector<std::string>{"OpenDoor"}));
+  CHECK(g_opens.size() == 1 && g_opens[0].door == &g_kitchen && !g_opens[0].close &&
+        g_opens[0].seconds == door::kSwingSeconds && g_opens[0].fraction == 1.0f && !g_opens[0].buffered);
+  CHECK((g_calls == std::vector<std::string>{"SwingDoor"}) && g_pushes == 0);
   CHECK(door::open_step(1001) == door::Opening::Idle && g_opens.size() == 1);
 }
 
@@ -967,7 +1011,7 @@ void a_missing_entry_fails_the_start() {
                                             &map::Door_UnlockDoor, &map::Door_ForceToggleHuntCollider,
                                             &map::MonkeyPaw_OpenExitsWish,
                                             &map::Door_HuntingCloseDoorNetworked, &map::Door_grabbable,
-                                            &map::Door_locked, &map::HingeDoor_OpenDoor,
+                                            &map::Door_locked, &map::HingeDoor_SwingDoor,
                                             &map::HingeDoor, &map::Door_closedAngle, &map::HingeDoor_hingeAxis,
                                             &map::Transform_get_localEulerAngles, &map::Door_kind,
                                             &map::Door_interact, &map::Door_view, &map::DoorKind_None,
@@ -1006,6 +1050,7 @@ int main() {
   an_exit_locked_on_its_owner_is_left_alone();
   a_relock_is_rate_limited();
   only_the_master_relocks_its_held_exits();
+  a_leaf_swings_toward_its_open_angle();
   a_shut_door_opens_quietly_on_the_master();
   every_client_sees_the_open_because_the_master_owns_the_view_first();
   an_open_whose_view_never_comes_is_given_up();

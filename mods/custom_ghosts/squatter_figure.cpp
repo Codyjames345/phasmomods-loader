@@ -1,5 +1,6 @@
 #include "squatter_figure.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "Animator.h"
@@ -9,6 +10,7 @@
 #include "held.h"
 #include "log.h"
 #include "models.h"
+#include "quat.h"
 #include "runtime.h"
 #include "sheet_mesh.h"
 
@@ -19,7 +21,7 @@ constexpr const char* kBundleFile = "squatter.bundle";
 constexpr const char* kController = "assets/squatter.controller";
 
 // How the sheet sits and moves: starting values, judged with the user in game.
-constexpr float kHeadCentreAboveBone = 0.08f;  // the head sphere's centre above the head bone, metres
+constexpr float kHeadCentreAboveBone = 0.09f;  // the head sphere's centre above the head bone, metres
 const api::ClothSettings kCloth{true, 0.1f, 1.0f, 0.2f};
 // The spheres the sheet rests on besides the head, so the body never shows through it (user, 2026-11-09: the sheet was
 // too thin and the legs and arms came through): a little larger than the body there, which gives the cloth its
@@ -37,6 +39,7 @@ bool g_failed = false;  // a create that failed, logged once, until destroy()
 struct Figure {
   api::Held root, animator, sheet, material;
   api::ClothParts cloth;
+  const char* playing = nullptr;  // the state it plays, which a cross-fade blends from
 } g;
 
 void fail(const char* step, const std::string& why) {
@@ -60,16 +63,47 @@ bool check() {
 
 void* bone(int32_t which) { return phasmo::Animator::GetBoneTransform(g.animator, which); }
 
+// How much wider than the arms the sheet hangs at the shoulders, and how far past the floor its hem reaches so it rests
+// on it: starting values, judged with the user in game.
+constexpr float kSheetClearance = 0.06f;
+constexpr float kHemOnFloor = 0.05f;
+
+// The bones the sheet follows, each as a line to the next joint along it (sheet::Segment), and the Transform that
+// carries that line: the head first, which alone carries the cap over it.
+struct Carrier {
+  int32_t bone;
+  int32_t to;  // the joint the line runs to; -1 for a point at the bone
+};
+
 bool build_sheet() {
-  void* head = bone(phasmo::HumanBodyBones::Head());
+  namespace B = phasmo::HumanBodyBones;
+  void* head = bone(B::Head());
   if (!head) return fail("sheet", "the body has no head bone"), false;
   std::string why;
   void* material = api::two_sided_material(api::lit_material_of(g.root), {1, 1, 1, 1}, &why);
   if (!material) return fail("sheet material", why), false;
   g.material = material;
 
+  // The body stands in its standing clip (create), so the sheet is laid over it as it stands: its cap on the head,
+  // its shoulders as wide as the arms, its hem on the floor at the feet.
+  sheet::SheetShape shape;
+  const phasmo::Vector3 h = phasmo::Transform::get_position(head);
+  const phasmo::Vector3 crown{h.x, h.y + kHeadCentreAboveBone + shape.headRadius, h.z};
+  const phasmo::Vector3 feet = phasmo::Transform::get_position(phasmo::GameObject::get_transform(g.root));
+  float reach = 0.0f;
+  for (const int32_t arm : {B::LeftShoulder(), B::RightShoulder(), B::LeftUpperArm(), B::RightUpperArm(),
+                            B::LeftLowerArm(), B::RightLowerArm(), B::LeftHand(), B::RightHand()}) {
+    void* t = bone(arm);
+    if (!t) return fail("sheet", "the body lacks an arm bone the sheet covers"), false;
+    const phasmo::Vector3 at = phasmo::Transform::get_position(t);
+    reach = std::max(reach, std::hypot(at.x - crown.x, at.z - crown.z));
+  }
+  shape.shoulderRadius = std::max(shape.shoulderRadius, reach + kArm + kSheetClearance);
+  void* upperArm = bone(B::LeftUpperArm());
+  shape.shoulderDrop = std::max(0.05f, crown.y - shape.headRadius - phasmo::Transform::get_position(upperArm).y);
+  shape.side = 2.0f * (sheet::reach_distance(shape, crown.y - feet.y) + kHemOnFloor);
+
   // The sheet's crown sits on top of the head sphere, facing the way the body faces; it follows the head.
-  const sheet::SheetShape shape;
   void* anchor = phasmo::GameObject::type.make();
   if (!anchor) return fail("sheet", "no GameObject could be made"), false;
   phasmo::GameObject::ctor(anchor, api::make_string("Squatter sheet"));
@@ -77,11 +111,14 @@ bool build_sheet() {
   phasmo::GameObject::set_layer(anchor, phasmo::GameObject::get_layer(g.root));
   void* t = phasmo::GameObject::get_transform(anchor);
   phasmo::Transform::SetParent(t, head, false);
-  const phasmo::Vector3 h = phasmo::Transform::get_position(head);
-  const phasmo::Vector3 crown{h.x, h.y + kHeadCentreAboveBone + shape.headRadius, h.z};
   const phasmo::Quaternion facing = phasmo::Transform::get_rotation(phasmo::GameObject::get_transform(g.root));
   phasmo::Transform::set_position(t, &crown);
   phasmo::Transform::set_rotation(t, &facing);
+  // A world point in the sheet's own space: from its crown, turned back from the way it faces.
+  const auto on_sheet = [&](phasmo::Vector3 w) {
+    const phasmo::Vector3 v = qrot(qinv(facing), {w.x - crown.x, w.y - crown.y, w.z - crown.z});
+    return sheet::Vec3{v.x, v.y, v.z};
+  };
 
   const sheet::SheetMesh m = sheet::make_sheet(shape);
   std::vector<phasmo::Vector3> vertices, normals;
@@ -92,40 +129,73 @@ bool build_sheet() {
     uv.push_back({m.uv[i].x, m.uv[i].y});
     coefficients.push_back({m.coefficients[i].maxDistance, m.coefficients[i].collisionSphereDistance});
   }
-  // Skinned to the body as worn cloth is in games: each point follows the head, chest, spine or hips by its height
-  // (sheet::weight_by_height), so the sheet bends with the body, and the cloth only sways about that (kHemSway).
-  void* const carriers[] = {head, bone(phasmo::HumanBodyBones::Chest()), bone(phasmo::HumanBodyBones::Spine()),
-                            bone(phasmo::HumanBodyBones::Hips())};
-  std::vector<float> heights;
-  for (void* b : carriers) {
-    if (!b) return fail("sheet", "the body lacks a bone the sheet follows"), false;
-    heights.push_back(phasmo::Transform::get_position(b).y - crown.y);
+  // Skinned to the whole body as worn clothing is in games (sheet::weight_by_nearness): each point follows the bones
+  // nearest it, so the sheet goes with the arms and legs, and the cloth only sways about that (kHemSway). The cap over
+  // the head follows the head alone, so the eye holes stay over the eyes.
+  const Carrier carriers[] = {
+      {B::Head(), -1},
+      {B::Neck(), B::Head()},
+      {B::Chest(), B::Neck()},
+      {B::Spine(), B::Chest()},
+      {B::Hips(), B::Spine()},
+      {B::LeftShoulder(), B::LeftUpperArm()},
+      {B::RightShoulder(), B::RightUpperArm()},
+      {B::LeftUpperArm(), B::LeftLowerArm()},
+      {B::RightUpperArm(), B::RightLowerArm()},
+      {B::LeftLowerArm(), B::LeftHand()},
+      {B::RightLowerArm(), B::RightHand()},
+      {B::LeftHand(), -1},
+      {B::RightHand(), -1},
+      {B::LeftUpperLeg(), B::LeftLowerLeg()},
+      {B::RightUpperLeg(), B::RightLowerLeg()},
+      {B::LeftLowerLeg(), B::LeftFoot()},
+      {B::RightLowerLeg(), B::RightFoot()},
+      {B::LeftFoot(), -1},
+      {B::RightFoot(), -1}};
+  std::vector<void*> bones;
+  std::vector<sheet::Segment> segments;
+  for (const Carrier& c : carriers) {
+    void* from = bone(c.bone);
+    void* to = c.to >= 0 ? bone(c.to) : from;
+    if (!from || !to) return fail("sheet", "the body lacks a bone the sheet follows"), false;
+    bones.push_back(from);
+    segments.push_back({on_sheet(phasmo::Transform::get_position(from)), on_sheet(phasmo::Transform::get_position(to))});
   }
+  // The head's line runs up to the middle of the head, which its sphere covers.
+  segments[0].to = on_sheet({h.x, h.y + kHeadCentreAboveBone, h.z});
+  const float cap = sheet::cap_distance(shape);
   std::vector<api::ClothWeight> weights;
-  for (const sheet::Vec3& v : m.vertices) {
-    const sheet::Weight w = sheet::weight_by_height(v.y, heights);
-    weights.push_back({w.bone0, w.bone1, w.weight0, w.weight1});
+  for (size_t v = 0; v < m.vertices.size(); ++v) {
+    api::ClothWeight w;  // the head alone
+    if (std::hypot(m.flat[v].x, m.flat[v].y) > cap) {
+      const sheet::Weight near = sheet::weight_by_nearness(m.vertices[v], segments);
+      for (int k = 0; k < 4; ++k) {
+        w.bone[k] = near.bone[k];
+        w.weight[k] = near.weight[k];
+      }
+    }
+    weights.push_back(w);
   }
   api::ClothMesh mesh{vertices, normals, uv, m.triangles, coefficients};
-  mesh.bones = carriers;
+  mesh.bones = bones;
   mesh.weights = weights;
   const phasmo::Vector3 none{};
   const api::ClothSphere spheres[] = {
       {head, shape.headRadius, {0, kHeadCentreAboveBone, 0}},
-      {bone(phasmo::HumanBodyBones::Chest()), kChest, none},
-      {bone(phasmo::HumanBodyBones::Spine()), kSpine, none},
-      {bone(phasmo::HumanBodyBones::Hips()), kHips, none},
-      {bone(phasmo::HumanBodyBones::LeftUpperArm()), kArm, none},
-      {bone(phasmo::HumanBodyBones::RightUpperArm()), kArm, none},
-      {bone(phasmo::HumanBodyBones::Neck()), kNeck, none},
-      {bone(phasmo::HumanBodyBones::LeftShoulder()), kShoulder, none},
-      {bone(phasmo::HumanBodyBones::RightShoulder()), kShoulder, none},
-      {bone(phasmo::HumanBodyBones::LeftLowerArm()), kForearm, none},
-      {bone(phasmo::HumanBodyBones::RightLowerArm()), kForearm, none},
-      {bone(phasmo::HumanBodyBones::LeftUpperLeg()), kThigh, none},
-      {bone(phasmo::HumanBodyBones::RightUpperLeg()), kThigh, none},
-      {bone(phasmo::HumanBodyBones::LeftLowerLeg()), kShin, none},
-      {bone(phasmo::HumanBodyBones::RightLowerLeg()), kShin, none},
+      {bone(B::Chest()), kChest, none},
+      {bone(B::Spine()), kSpine, none},
+      {bone(B::Hips()), kHips, none},
+      {bone(B::LeftUpperArm()), kArm, none},
+      {bone(B::RightUpperArm()), kArm, none},
+      {bone(B::Neck()), kNeck, none},
+      {bone(B::LeftShoulder()), kShoulder, none},
+      {bone(B::RightShoulder()), kShoulder, none},
+      {bone(B::LeftLowerArm()), kForearm, none},
+      {bone(B::RightLowerArm()), kForearm, none},
+      {bone(B::LeftUpperLeg()), kThigh, none},
+      {bone(B::RightUpperLeg()), kThigh, none},
+      {bone(B::LeftLowerLeg()), kShin, none},
+      {bone(B::RightLowerLeg()), kShin, none},
       // The figure's root is at its feet, and follows the ghost's position each frame (place).
       {phasmo::GameObject::get_transform(g.root), kFloorRadius, {0, -kFloorRadius, 0}}};
   if (!api::add_cloth(anchor, mesh, material, kCloth, spheres, g.cloth, &why)) return fail("cloth", why), false;
@@ -177,6 +247,12 @@ void create(phasmo::Vector3 at) {
     return fail("animator", "the body has no Animator or the bundle no controller");
   }
   place(at, 0.0f);
+  // The sheet is laid over the body as it stands: the standing clip's first pose, posed now, not whatever pose the copy
+  // was taken in (user, 2026-11-09: the sheet sat off the head and the arms came out of it).
+  if (api::play_state(g.animator, kStandStates[0])) {
+    g.playing = kStandStates[0];
+    api::pose_now(g.animator);
+  }
   if (!build_sheet()) clear();
 }
 
@@ -193,13 +269,19 @@ void place(phasmo::Vector3 at, float yaw) {
   phasmo::Transform::set_rotation(t, &turn);
 }
 
-void play(Move m, uint32_t variant) {
-  if (check()) api::play_state(g.animator, state_for(m, variant));
+// Blends into `state` from the one playing over kBlendSeconds (user, 2026-11-09: the clips cut from one to the next),
+// or plays it outright when nothing plays yet.
+void blend_to(const char* state) {
+  if (!check()) return;
+  const float from = seconds_of(g.playing);
+  const bool played = from > 0.0f ? api::fade_to_state(g.animator, state, kBlendSeconds / from)
+                                  : api::play_state(g.animator, state);
+  if (played) g.playing = state;
 }
 
-void play_act(Act a) {
-  if (check()) api::play_state(g.animator, state_of(a));
-}
+void play(Move m, uint32_t variant) { blend_to(state_for(m, variant)); }
+
+void play_act(Act a) { blend_to(state_of(a)); }
 
 bool ready() { return check(); }
 

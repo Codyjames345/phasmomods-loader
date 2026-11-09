@@ -184,6 +184,23 @@ inline constexpr pm::sdk::EntryDesc Animator_get_isInitialized{.key = "Animator.
 inline constexpr pm::sdk::EntryDesc Animator_Rebind{.key = "Animator.Rebind", .kind = pm::sdk::Kind::Icall,
                                                     .name = "UnityEngine.Animator::Rebind", .params = Animator_bool};
 
+inline constexpr const char* Animator_CrossFade_params[] = {"int", "float", "int", "float", "float"};
+
+/// Blends from the state playing into another: the engine function of Animator.CrossFade(stateHashName,
+/// normalizedTransitionDuration, layer, normalizedTimeOffset, normalizedTransitionTime), the hash Animator.StringToHash of
+/// the state's name, the blend's length as a fraction of the playing state's length, the layer, where to start in the
+/// new state (0 to 1), and how far into the blend to begin (0). This build keeps only the hash overload's engine
+/// function; the fixed-time CrossFadeInFixedTime is stripped. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_CrossFade{.key = "Animator.CrossFade", .kind = pm::sdk::Kind::Icall,
+                                                       .name = "UnityEngine.Animator::CrossFade",
+                                                       .params = Animator_CrossFade_params};
+
+/// Steps the Animator by a time in seconds now, outside the game's own update: the engine function of
+/// Animator.Update(deltaTime). With 0 it poses the model in the state it plays, without moving the state on, as
+/// Unity's documentation shows for sampling a pose. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_Update{.key = "Animator.Update", .kind = pm::sdk::Kind::Icall,
+                                                    .name = "UnityEngine.Animator::Update", .params = Animator_float};
+
 /// The Transform of a humanoid bone of a humanoid Animator's model, or null when the avatar does not map it. Inferred:
 /// Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Animator_GetBoneTransform{
@@ -275,6 +292,18 @@ inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftLowerLeg{
 inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightLowerLeg{
     .key = "HumanBodyBones.RightLowerLeg", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
     .name = "RightLowerLeg"};
+/// The left hand. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftHand{
+    .key = "HumanBodyBones.LeftHand", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones", .name = "LeftHand"};
+/// The right hand. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightHand{
+    .key = "HumanBodyBones.RightHand", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones", .name = "RightHand"};
+/// The left foot. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftFoot{
+    .key = "HumanBodyBones.LeftFoot", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones", .name = "LeftFoot"};
+/// The right foot. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightFoot{
+    .key = "HumanBodyBones.RightFoot", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones", .name = "RightFoot"};
 
 }  // namespace pm::map
 
@@ -321,6 +350,12 @@ struct Animator {
   static constexpr pm::api::Icall<pm::map::Animator_HasState, bool(void*, int32_t, int32_t)> HasState{};
   /// Rebind(animator, writeDefaultValues). Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::Animator_Rebind, void(void*, bool)> Rebind{};
+  /// CrossFade(animator, stateHash, blend, layer, startAt, blendStartAt): blend is a fraction of the playing state's
+  /// length. Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Animator_CrossFade, void(void*, int32_t, float, int32_t, float, float)>
+      CrossFade{};
+  /// Update(animator, seconds): steps it now; 0 poses the model in its state. Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Animator_Update, void(void*, float)> Update{};
   /// get_isInitialized(animator). Unresolved: false.
   static constexpr pm::api::Icall<pm::map::Animator_get_isInitialized, bool(void*)> get_isInitialized{};
   /// GetBoneTransform(animator, bone), a HumanBodyBones number. Unresolved: null.
@@ -375,6 +410,14 @@ inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightUpperLeg> Right
 inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftLowerLeg> LeftLowerLeg{};
 /// The right shin: RightLowerLeg(). Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightLowerLeg> RightLowerLeg{};
+/// The left hand: LeftHand(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftHand> LeftHand{};
+/// The right hand: RightHand(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightHand> RightHand{};
+/// The left foot: LeftFoot(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftFoot> LeftFoot{};
+/// The right foot: RightFoot(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightFoot> RightFoot{};
 }  // namespace HumanBodyBones
 
 /// One parameter of an Animator's controller. `parameter` below is one.

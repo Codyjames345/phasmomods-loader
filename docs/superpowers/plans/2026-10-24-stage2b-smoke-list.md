@@ -1120,3 +1120,12 @@ The user's test of 2026-11-09 and its fixes.
 
 - [ ] It never walks through a door, chasing or lurking: at a shut or ajar door it walks into, it stops, plays the opening-door clip, the door swings wide for both players, and it goes through once the gap fits. A door it only passes beside is left alone.
 
+
+The user's test of 2026-11-09 (sheet, doors, roll, blending) and its fixes.
+
+- [ ] A door that swings away from the Squatter: it plays the push clip (Open Door Outwards) and the door swings all the way open, away from it, for both players. A door that swings toward it: it plays the pull clip (Opening Door Inwards) and the door swings toward it. Either way it goes through once, with one `squatter: a door swung open` in the host's `mods.log`.
+- [ ] A door it opened stays open (it does not drift shut), a player can still grab and close it, and the opened door makes no ghost door sound, EMF reading or fingerprint.
+- [ ] The sheet reaches the floor all round when it stands, a little wider than its arms, with a round hem resting on the floor; the head and hair never show through the top, and the eye holes stay over the eyes.
+- [ ] Running, crouch-walking, rolling and falling, the sheet moves with the arms and legs: no arm, hand, shoulder or leg comes out of it. Note where it stretches or tears.
+- [ ] A roll, a fall (Stumble) and the jump-and-land (Parkour) play to their end before the run takes over.
+- [ ] Every change of clip blends over a quarter second instead of snapping: run into roll, roll into run, walk into stand, stand into the door clip, the get-up and the kick.

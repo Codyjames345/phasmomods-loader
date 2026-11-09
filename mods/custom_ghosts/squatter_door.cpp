@@ -59,14 +59,18 @@ void forget_old_level() {
 }
 
 /**
- * Swings `d` open with its leaf's physics, the game's own HingeDoor.OpenDoor: a push of kPushStrength, the top of the
- * game's own random range, about its hinge, its RPC unbuffered. The door's view, this client's, carries the swing to every other client. The
- * contract-start opener (HingeDoor.LevelControllerOpenDoor) sets the angle outright, which does not hold mid-contract
- * (user, 2026-11-09: a door it opened over and over never moved).
+ * Swings `d` all the way open with the game's own HingeDoor.SwingDoor, over kSwingSeconds, its RPC unbuffered. The
+ * door's view, this client's, carries the swing to every other client.
  */
 void open_now(void* d) {
-  phasmo::HingeDoor::OpenDoor(d, false, kPushStrength, false);
+  phasmo::HingeDoor::SwingDoor(d, false, kSwingSeconds, 1.0f, false);
   PM_LOG("squatter: a door swung open");
+}
+
+/** The Transform HingeDoor.SwingDoor turns: Door.body's, or the door's own when it has no body. */
+void* leaf_transform(void* d) {
+  void* body = phasmo::Door::body.get(d);
+  return phasmo::Component::get_transform(body && api::alive(body) ? body : d);
 }
 
 /** Adds the live doors of the Door[] `doors` to `out`, each once. */
@@ -284,7 +288,7 @@ int relock(uint64_t now) {
 
 // How far `d`'s leaf stands from shut, in degrees (gap_degrees), by its angle on its hinge axis.
 float leaf_gap(void* d) {
-  const phasmo::Vector3 euler = phasmo::Transform::get_localEulerAngles(phasmo::Component::get_transform(d));
+  const phasmo::Vector3 euler = phasmo::Transform::get_localEulerAngles(leaf_transform(d));
   const float angle = leaf_angle(euler, phasmo::HingeDoor::hingeAxis.get(d), phasmo::Axis::X(), phasmo::Axis::Z());
   return gap_degrees(angle, phasmo::Door::closedAngle.get(d));
 }
@@ -292,6 +296,24 @@ float leaf_gap(void* d) {
 bool passable(void* d) {
   if (!d || !api::alive(d)) return true;
   return !phasmo::HingeDoor::type.is(d) || fits(leaf_gap(d));
+}
+
+std::optional<Leaf> leaf_of(void* d) {
+  if (!d || !api::alive(d) || !phasmo::HingeDoor::type.is(d)) return std::nullopt;
+  void* t = leaf_transform(d);
+  void* collider = t ? phasmo::Component::GetComponentInChildren(t, phasmo::Collider::type.type_object(), false)
+                     : nullptr;
+  if (!collider) return std::nullopt;
+  Leaf leaf;
+  leaf.pivot = phasmo::Transform::get_position(t);
+  leaf.rotation = phasmo::Transform::get_rotation(t);
+  leaf.euler = phasmo::Transform::get_localEulerAngles(t);
+  leaf.centre = phasmo::Collider::get_bounds(collider).center;
+  leaf.axis = phasmo::HingeDoor::hingeAxis.get(d);
+  leaf.axisX = phasmo::Axis::X();
+  leaf.axisZ = phasmo::Axis::Z();
+  leaf.openAngle = phasmo::HingeDoor::openAngle.get(d);
+  return leaf;
 }
 
 bool may_open(void* d) {

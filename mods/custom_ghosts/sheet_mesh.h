@@ -11,9 +11,10 @@
 // The Squatter's bedsheet as a mesh for Unity's Cloth, kept free of game calls so it can be tested offline. A plain
 // sheet generated in code, not an art asset (the user's ruling of 2026-11-04, in the Squatter's design).
 //
-// The sheet is a square grid laid over the head, its centre on the crown. It is made already hanging: each point keeps
-// its distance from the centre measured along the sheet, and the sheet follows a head and shoulders profile (a cap
-// over the head, a slope out to the shoulders, then straight down). So the cloth starts close to where it settles,
+// The sheet is a round sheet cut from a square grid laid over the head, its centre on the crown. It is made already
+// hanging: each point keeps its distance from the centre measured along the sheet, and the sheet follows a head and
+// shoulders profile (a cap over the head, a slope out to the shoulders, then down to the floor, flaring a little), so a
+// sheet as wide as the body reaches the floor all round (user, 2026-11-09). So the cloth starts close to where it settles,
 // instead of falling into place from a flat square, which the engine test showed drapes badly
 // (sdk/internals/engine-experiments.md). The grid is fine around the head, where the eyes are cut, and coarse
 // further out. The two eye holes are mirrored about the centre line, in front of the crown. Only the crown is
@@ -39,20 +40,24 @@ struct Coefficient {
   float maxDistance, collisionSphereDistance;
 };
 
-/** The sheet's size, grid, eyes and the profile it is made hanging over. Metres. Starting values, tuned in game. */
+/**
+ * The sheet's size, grid, eyes and the profile it is made hanging over. Metres. Starting values, tuned in game; the
+ * figure sets the sheet's size, the shoulders' width and drop from the body it covers (squatter_figure.cpp).
+ */
 struct SheetShape {
-  float side = 2.0f;            // length of one side of the square sheet
+  float side = 2.0f;            // the round sheet's diameter, and the side of the square grid it is cut from
   float fineSpacing = 0.02f;    // grid spacing within fineHalf of the centre lines, where the eyes are cut
   float fineHalf = 0.24f;       // a whole number of fineSpacing
-  float coarseSpacing = 0.06f;  // the largest grid spacing further out
+  float coarseSpacing = 0.08f;  // the largest grid spacing further out
   float pinRadius = 0.08f;      // points this close to the centre, measured on the sheet, stay with the head
   float eyeAcross = 0.04f;      // each eye's centre from the centre line
   float eyeForward = 0.16f;     // the eyes' centres in front of the crown, measured on the sheet
   float eyeWidth = 0.04f;       // each eye's rectangle; a hole is it rounded out to whole cells
   float eyeHeight = 0.03f;
-  float headRadius = 0.10f;      // the cap the sheet is made over, the crown its top
-  float shoulderRadius = 0.24f;  // how far out the sheet hangs below the shoulders
+  float headRadius = 0.12f;      // the cap the sheet is made over, the crown its top
+  float shoulderRadius = 0.30f;  // how far out the sheet hangs at the shoulders
   float shoulderDrop = 0.14f;    // from the bottom of the cap down to the shoulders
+  float flare = 0.15f;           // how much further out it hangs for each metre below the shoulders
 };
 
 /**
@@ -120,11 +125,34 @@ inline void hang(const SheetShape& s, float distance, float& out, float& height,
     normalOut = s.shoulderDrop / slope;
     normalUp = slopeOut / slope;
   } else {
-    out = s.shoulderRadius;
-    height = -r - s.shoulderDrop - (distance - cap - slope);
-    normalOut = 1.0f;
-    normalUp = 0.0f;
+    const float n = std::sqrt(1.0f + s.flare * s.flare);  // along the sheet per metre down
+    const float down = (distance - cap - slope) / n;
+    out = s.shoulderRadius + s.flare * down;
+    height = -r - s.shoulderDrop - down;
+    normalOut = 1.0f / n;
+    normalUp = s.flare / n;
   }
+}
+
+/**
+ * How far from the centre, measured along the sheet, a point hangs `drop` metres below the crown (hang): what the
+ * sheet's radius must be for its hem to reach a floor `drop` below the crown. 0 for a drop above the shoulders.
+ */
+inline float reach_distance(const SheetShape& s, float drop) {
+  const float r = s.headRadius;
+  const float slopeOut = s.shoulderRadius - r;
+  const float slope = std::sqrt(slopeOut * slopeOut + s.shoulderDrop * s.shoulderDrop);
+  const float below = drop - r - s.shoulderDrop;
+  if (below <= 0) return 0.0f;
+  return r * std::numbers::pi_v<float> / 2 + slope + below * std::sqrt(1.0f + s.flare * s.flare);
+}
+
+/** How far the cap over the head reaches from the centre, measured along the sheet: the part the head alone carries. */
+inline float cap_distance(const SheetShape& s) { return s.headRadius * std::numbers::pi_v<float> / 2; }
+
+/** Whether the grid cell [x0, x1] x [z0, z1] belongs to the round sheet: its middle lies within side / 2 of the centre. */
+inline bool in_sheet(const SheetShape& s, float x0, float x1, float z0, float z1) {
+  return std::hypot((x0 + x1) / 2, (z0 + z1) / 2) <= s.side / 2;
 }
 
 // How worn cloth is set up in games (Unity's Cloth maxDistance, Unreal's painted max distance, the Polygon Treehouse
@@ -139,32 +167,57 @@ inline float sway_at(const SheetShape& s, float distance, float far) {
   return kHemSway * std::min(1.0f, (distance - s.pinRadius) / (far - s.pinRadius));
 }
 
-/** Which bones carry a point, and how much: up to two bones by index, their weights adding up to 1. */
+/** Which bones carry a point, and how much: up to four bones by index, heaviest first, their weights adding up to 1. */
 struct Weight {
-  int32_t bone0 = 0, bone1 = 0;
-  float weight0 = 1.0f, weight1 = 0.0f;
+  int32_t bone[4] = {0, 0, 0, 0};
+  float weight[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 };
 
-/**
- * Which bones carry a point at height `y` (the sheet's space, below its crown negative), given the heights of the
- * bones it may follow, `bones`, top first (head, chest, spine, hips): the top bone above the first height, the bottom
- * one below the last, and between two the pair it lies between, blended by height. No bones: bone 0 alone.
- */
-inline Weight weight_by_height(float y, std::span<const float> bones) {
-  if (bones.size() < 2 || y >= bones.front()) return {};
-  const int32_t last = static_cast<int32_t>(bones.size()) - 1;
-  if (y <= bones.back()) return {last, last, 1.0f, 0.0f};
-  for (int32_t i = 0; i < last; ++i) {
-    const float top = bones[static_cast<size_t>(i)], below = bones[static_cast<size_t>(i) + 1];
-    if (y <= top && y >= below) {
-      const float t = top > below ? (top - y) / (top - below) : 0.0f;
-      return {i, i + 1, 1.0f - t, t};
-    }
-  }
-  return {last, last, 1.0f, 0.0f};
+/** A bone as a line from its joint to the next joint along the limb (a point when both ends are one), in the sheet's space. */
+struct Segment {
+  Vec3 from, to;
+};
+
+/** How far `p` lies from the segment `b`. */
+inline float distance_to(Vec3 p, const Segment& b) {
+  const float dx = b.to.x - b.from.x, dy = b.to.y - b.from.y, dz = b.to.z - b.from.z;
+  const float length2 = dx * dx + dy * dy + dz * dz;
+  float t = length2 > 0 ? ((p.x - b.from.x) * dx + (p.y - b.from.y) * dy + (p.z - b.from.z) * dz) / length2 : 0.0f;
+  t = std::clamp(t, 0.0f, 1.0f);
+  const float x = b.from.x + t * dx - p.x, y = b.from.y + t * dy - p.y, z = b.from.z + t * dz - p.z;
+  return std::sqrt(x * x + y * y + z * z);
 }
 
-/** The sheet for `s`: the grid less the eye cells, made hanging, its crown pinned. Vertices no triangle uses are left out. */
+// How sharply a point's nearer bones outweigh its further ones: each bone's pull falls with the square of its distance.
+inline constexpr float kNearnessPower = 2.0f;
+
+/**
+ * Which bones carry a point at `p` (the sheet's space) as worn clothing is skinned in games, by nearness: every bone of
+ * `bones` pulls by the inverse of its distance to the power kNearnessPower, and the four that pull most carry the
+ * point, their pulls scaled to add up to 1. So the sheet over an arm or a leg moves with it, and between two bones it
+ * blends (user, 2026-11-09: the arms and legs came out of the sheet). No bones: bone 0 alone.
+ */
+inline Weight weight_by_nearness(Vec3 p, std::span<const Segment> bones) {
+  Weight w;
+  if (bones.empty()) return w;
+  std::vector<std::pair<float, int32_t>> pulls;
+  for (size_t i = 0; i < bones.size(); ++i) {
+    const float d = std::max(distance_to(p, bones[i]), 0.01f);
+    pulls.emplace_back(1.0f / std::pow(d, kNearnessPower), static_cast<int32_t>(i));
+  }
+  const size_t kept = std::min<size_t>(4, pulls.size());
+  std::partial_sort(pulls.begin(), pulls.begin() + static_cast<std::ptrdiff_t>(kept), pulls.end(),
+                    [](const auto& a, const auto& b) { return a.first > b.first; });
+  float sum = 0;
+  for (size_t i = 0; i < kept; ++i) sum += pulls[i].first;
+  for (size_t i = 0; i < 4; ++i) {
+    w.bone[i] = i < kept ? pulls[i].second : pulls[0].second;
+    w.weight[i] = i < kept ? pulls[i].first / sum : 0.0f;
+  }
+  return w;
+}
+
+/** The sheet for `s`: the round sheet's cells less the eye cells, made hanging, its crown pinned. Vertices no triangle uses are left out. */
 inline SheetMesh make_sheet(const SheetShape& s) {
   SheetMesh m;
   const std::vector<float> axis = sheet_axis(s);
@@ -173,21 +226,23 @@ inline SheetMesh make_sheet(const SheetShape& s) {
   std::vector<bool> kept(cells * cells), used(lines * lines);
   for (size_t j = 0; j < cells; ++j)
     for (size_t i = 0; i < cells; ++i) {
-      const bool keep = !cuts_an_eye(s, axis[i], axis[i + 1], axis[j], axis[j + 1]);
+      const bool keep = in_sheet(s, axis[i], axis[i + 1], axis[j], axis[j + 1]) &&
+                        !cuts_an_eye(s, axis[i], axis[i + 1], axis[j], axis[j + 1]);
       kept[j * cells + i] = keep;
       if (keep)
         for (const size_t corner : {j * lines + i, j * lines + i + 1, (j + 1) * lines + i, (j + 1) * lines + i + 1})
           used[corner] = true;
     }
   std::vector<int32_t> index(lines * lines, -1);
-  const float far = std::hypot(axis.front(), axis.front());  // a corner: the furthest any point lies from the crown
+  const float far = s.side / 2;  // the hem: the furthest any point hangs from the crown
   for (size_t j = 0; j < lines; ++j)
     for (size_t i = 0; i < lines; ++i) {
       if (!used[j * lines + i]) continue;
       index[j * lines + i] = static_cast<int32_t>(m.vertices.size());
       const float x = axis[i], z = axis[j];
-      const float distance = std::hypot(x, z);
-      const float across = distance > 0 ? x / distance : 0.0f, forward = distance > 0 ? z / distance : 0.0f;
+      // A point of a rim cell beyond the round edge hangs at the edge, so the hem is round.
+      const float flat = std::hypot(x, z), distance = std::min(flat, far);
+      const float across = flat > 0 ? x / flat : 0.0f, forward = flat > 0 ? z / flat : 0.0f;
       float out = 0, height = 0, normalOut = 0, normalUp = 1;
       hang(s, distance, out, height, normalOut, normalUp);
       if (distance == 0) normalOut = 0, normalUp = 1;

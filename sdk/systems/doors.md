@@ -138,14 +138,27 @@ the game's quiet opener (below) move a leaf.
 
 ## Opening a door quietly
 
-**Mid-contract, open a door with `HingeDoor.OpenDoor(false, -1, false)`, not the contract-start opener below.** `OpenDoor` swings the leaf
-with its own physics: a coroutine frees the leaf's Rigidbody and pushes it about its hinge with `Rigidbody.AddRelativeTorque`,
-within the hinge's `ConfigurableJoint` limit, by a random strength (or the float given, when above 0), shut when its first
-argument is true. Then it checks the door's occlusion portal and tells every client by an RPC that takes no `PhotonMessageInfo`,
-buffered when its last argument is true. It makes no Noise sound and leaves no EMF reading, `LevelStats` count or
-fingerprint. Like the opener below it moves the leaf only on the view's owner, so take the view first. The contract-start
-opener sets the angle outright, and mid-contract that does not hold: in the user's test of 2026-11-09 a door it opened
-seven times in seven seconds, from the master owning its view, never moved. Custom Ghosts' Squatter uses `OpenDoor`.
+**Mid-contract, open a door with `HingeDoor.SwingDoor(false, seconds, 1, false)`.** `SwingDoor` turns the leaf
+(`Door.body`'s Transform) with a DOTween rotation from where it stands to the door's open angle (`HingeDoor.openAngle`),
+the shorter way round, over the seconds given; the third argument is how much of the way (1: all of it), and the first
+turns it to `Door.closedAngle` instead. It makes the leaf kinematic while it turns and frees it at the end, when the game
+lets the door go as a player's release does (`Door.UnGrabbedDoor`). Then it checks the door's occlusion portal and tells
+every client by an RPC that takes no `PhotonMessageInfo`, buffered when its last argument is true. It makes no Noise
+sound and leaves no EMF reading, `LevelStats` count or fingerprint: the ghost's own door move does those around its
+turn. It moves the leaf only on the view's owner, so take the view first. Its caller in the game was not traced (it is
+reached through its virtual slot). Custom Ghosts' Squatter uses `SwingDoor`.
+
+**Don't open a door with `HingeDoor.OpenDoor`'s physics push.** `OpenDoor` frees the leaf's Rigidbody and pushes it about
+its hinge with `Rigidbody.AddRelativeTorque`, by 0.05 times `Random.Range(1, 5)` (or the strength given, when above 0).
+Its side comes from `isDoorRotationBackwards` and whether the hinge joint's low angular limit is 0, but leaves out the
+flag `HingeDoor.Awake` also applies to the open angle, so on a door with that flag set the push drives the leaf against
+its shut stop (the Squatter's test of 2026-11-09: a door that swings away stayed shut). The game calls `OpenDoor` only
+to shut a door, and then sets the shut rotation outright. The contract-start opener below sets the angle outright too,
+and mid-contract that did not hold: in the user's test of 2026-11-09 a door it opened seven times in seven seconds, from
+the master owning its view, never moved; why was not found.
+
+Which way a leaf swings as it opens: turn its middle (its collider's box) a little about its own position, toward
+`HingeDoor.openAngle` from the angle it stands at on `HingeDoor.hingeAxis`, and see which side it moves to.
 
 The contract-start opener:
 

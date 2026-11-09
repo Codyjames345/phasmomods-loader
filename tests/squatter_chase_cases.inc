@@ -95,10 +95,11 @@ void search_points_stay_near_the_last_place() {
   CHECK(search_point(last, 1).x != search_point(last, 2).x || search_point(last, 1).z != search_point(last, 2).z);
 }
 
-// The door clip: outwards when it stands on the side the door's forward points to, inwards otherwise.
+// The door clip follows the leaf's swing (door::swings_toward): it pulls a door that comes toward it (Opening Door
+// Inwards) and pushes one that goes away (Open Door Outwards).
 void the_door_clip_follows_the_side() {
-  CHECK(door_act({0, 0, 1}, {0, 0, 0}, {0, 0, 1}) == Act::OpenDoorOutwards);
-  CHECK(door_act({0, 0, -1}, {0, 0, 0}, {0, 0, 1}) == Act::OpenDoorInwards);
+  CHECK(door_act(true) == Act::OpenDoorInwards);
+  CHECK(door_act(false) == Act::OpenDoorOutwards);
 }
 
 // It only reaches a door within kDoorReach of its feet, on the flat.

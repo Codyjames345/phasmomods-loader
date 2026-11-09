@@ -54,12 +54,13 @@ struct Chase {
   std::optional<Point> searchFrom;  // where the search centres (search_origin), fixed as it begins
   std::optional<Point> seat;        // where a seated phase walks to before it sits, out of a closed hiding place
   uint64_t nextSeatCheck = 0;
-  std::optional<Point> openingDoor, openingForward;  // the door being opened quietly, for its clip
+  std::optional<bool> openingToward;                 // the door being opened swings toward it, for its clip
   api::Held passing;                                 // the door it waits at until it can pass (hold_at_doors)
   uint64_t passDeadline = 0;
   std::optional<float> lurkSpeed;                    // the ghost's own agent speed, while a door pauses its lurk
   float sprint = 0.0f;                       // the sprint speed it last chased at (chase_sprint)
-  float seed = 0.0f;                         // offsets the move cycle per chase
+  int moveIndex = 0;                         // where in kMoveCycle the chase is, started at random per chase
+  uint64_t moveUntil = 0;                    // when the cycle moves on (move_hold_seconds)
   Shown out;
   std::mt19937 rng{std::random_device{}()};
   Chase() { lastLine.fill(-1); }
@@ -306,8 +307,8 @@ void* door_to_open(Point ghostAt, Point velocity) {
 }
 
 // The master's doors (user, 2026-11-09: it never passes through a door): at a door it walks into whose gap is too narrow
-// to pass, it stops, plays the opening-door clip for its side (door_act) and pushes the door open with the game's own
-// HingeDoor.OpenDoor, then waits until the gap fits or kPassWaitMs passes. True while it waits there.
+// to pass, it stops, plays the opening-door clip for the way the leaf swings (door_act) and swings the door open with the
+// game's own HingeDoor.SwingDoor, then waits until the gap fits or kPassWaitMs passes. True while it waits there.
 bool hold_at_doors(void* agent, Point ghostAt, uint64_t t) {
   Chase& c = g.chase;
   if (c.passing) {
@@ -318,16 +319,15 @@ bool hold_at_doors(void* agent, Point ghostAt, uint64_t t) {
   if (o == door::Opening::Idle && t >= c.pauseUntil) {
     const phasmo::Vector3 v = agent ? phasmo::NavMeshAgent::get_velocity(agent) : phasmo::Vector3{};
     if (void* d = door_to_open(ghostAt, point(v))) {
-      c.openingDoor = at_of(d);
-      c.openingForward = point(game::forward(game::transform_of(d)));
+      const std::optional<door::Leaf> leaf = door::leaf_of(d);
+      c.openingToward = leaf && door::swings_toward(*leaf, {ghostAt.x, ghostAt.y, ghostAt.z});
       c.passing = d;
       c.passDeadline = t + kPassWaitMs;
       o = door::open_quietly(d, t);
     }
   }
-  if (o == door::Opening::Opened && c.openingDoor && c.openingForward)
-    act(door_act(ghostAt, *c.openingDoor, *c.openingForward), kDoorPauseMs, t);
-  if (o != door::Opening::Waiting) c.openingDoor.reset();
+  if (o == door::Opening::Opened && c.openingToward) act(door_act(*c.openingToward), kDoorPauseMs, t);
+  if (o != door::Opening::Waiting) c.openingToward.reset();
   if (o == door::Opening::Refused) c.passing = nullptr;  // nothing it may open: the game's own way
   return static_cast<bool>(c.passing);
 }
@@ -394,7 +394,8 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       c.out.act = -1;
     }
     if (next == Phase::Chasing && c.was == Phase::Lurking) {
-      c.seed = static_cast<float>(roll() % 1000u) / 100.0f;
+      c.moveIndex = static_cast<int>(roll() % static_cast<uint32_t>(kMoveCount));
+      c.moveUntil = 0;
       c.nextBump = t + kBumpGapMinMs + roll() % (kBumpGapMaxMs - kBumpGapMinMs);
     }
     c.was = next;
@@ -419,12 +420,18 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   std::optional<Point> to;
   switch (next) {
     case Phase::Chasing: {
-      const float seconds = static_cast<float>(t - c.phaseSince) / 1000.0f + c.seed;
-      const Move m = move_at(seconds);
-      if (m != c.out.move) {
-        c.out.move = m;
-        c.out.variant = static_cast<uint8_t>(roll() & 0xFF);
+      // The cycle moves on once the move it holds is over: a slot, or the whole clip of one that plays once.
+      if (t >= c.moveUntil) {
+        c.moveIndex = (c.moveIndex + 1) % kMoveCount;
+        const Move upcoming = move_of(c.moveIndex);
+        if (upcoming != c.out.move || plays_once(upcoming)) {
+          c.out.move = upcoming;
+          c.out.variant = static_cast<uint8_t>(roll() & 0xFF);
+        }
+        const float hold = move_hold_seconds(upcoming, seconds_of(state_for(upcoming, c.out.variant)));
+        c.moveUntil = t + static_cast<uint64_t>(hold * 1000.0f);
       }
+      const Move m = c.out.move;
       speed = move_speed(c.sprint, m);
       to = targetSensed ? std::optional<Point>(target->at) : c.tracker.last_at();
       // The catch: a kick to the face, a line, and the game's own kill (kick).

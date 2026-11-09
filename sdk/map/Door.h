@@ -438,11 +438,43 @@ inline constexpr const char* HingeDoor_OpenDoor_params[] = {"bool", "float", "bo
 /// door's occlusion portal and tells every client by an RPC that takes no PhotonMessageInfo, buffered when its third
 /// argument is true. It makes no Noise sound and leaves no EMF reading, LevelStats count or fingerprint. Physics moves
 /// the leaf on the view's owner only, and the door's PhotonTransformView carries it to the rest, so call it on the owner
-/// (Door.view; take the view first). No direct caller: the game reaches it through its virtual slot. Decompiled.
+/// (Door.view; take the view first). No direct caller: the game reaches it through its virtual slot. The push is
+/// 0.05 times Random.Range(1, 5) when the strength is not above 0; to shut, the strength times 5. Its side comes from
+/// isDoorRotationBackwards and whether the hinge joint's low angular limit is 0, and leaves out the flag Awake also
+/// applies to HingeDoor.openAngle: on a door with that flag set, opening pushes the leaf against its shut stop. The game
+/// itself calls it only to shut a door, and then sets the shut rotation outright. To open a door, HingeDoor.SwingDoor
+/// turns the leaf to HingeDoor.openAngle. Decompiled.
 inline constexpr pm::sdk::EntryDesc HingeDoor_OpenDoor{.key = "HingeDoor.OpenDoor", .kind = pm::sdk::Kind::Method,
                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                        .owner = "HingeDoor", .name = "OpenDoor",
                                                        .params = HingeDoor_OpenDoor_params};
+
+inline constexpr pm::sdk::Fact HingeDoor_openAngle_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "HingeDoor.Awake"}};
+
+/// The leaf's angle when the door stands open, in degrees on its hinge axis (HingeDoor.hingeAxis): Awake sets it to
+/// Door.closedAngle plus the hinge joint's limit, on the side the joint opens to. HingeDoor.SwingDoor turns the leaf
+/// to it, and HingeDoor.LevelControllerOpenDoor part of the way to it. HingeDoor's float that Awake stores. Decompiled.
+inline constexpr pm::sdk::EntryDesc HingeDoor_openAngle{.key = "HingeDoor.openAngle", .kind = pm::sdk::Kind::Field,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .owner = "HingeDoor", .type = "float",
+                                                        .facts = HingeDoor_openAngle_facts};
+
+inline constexpr const char* HingeDoor_SwingDoor_params[] = {"bool", "float", "float", "bool"};
+
+/// Turns the leaf (Door.body's Transform) with a DOTween rotation, not its physics: (close, seconds, fraction,
+/// buffered). It makes the leaf kinematic, ends any swing under way, and turns it from where it stands toward
+/// Door.closedAngle when `close` is set, else HingeDoor.openAngle, `fraction` of the way (1: all of it), over `seconds`.
+/// At the end the leaf is free again and the game lets the door go as a player's release does (Door.UnGrabbedDoor).
+/// Then it checks the door's occlusion portal and tells every client by an RPC that takes no PhotonMessageInfo, buffered
+/// when `buffered` is set. It makes no Noise sound and leaves no EMF reading, LevelStats count or fingerprint: the
+/// game's own ghost door move does those around it. The rotation moves the leaf on the view's owner only, and the
+/// door's PhotonTransformView carries it to the rest, so call it on the owner (Door.view; take the view first). No direct
+/// caller: the game reaches it through its virtual slot. HingeDoor's one method of this shape. Decompiled.
+inline constexpr pm::sdk::EntryDesc HingeDoor_SwingDoor{.key = "HingeDoor.SwingDoor", .kind = pm::sdk::Kind::Method,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .owner = "HingeDoor", .type = "void",
+                                                        .params = HingeDoor_SwingDoor_params};
 
 inline constexpr const char* Axis_values[] = {"None", "X", "Y", "Z"};
 
@@ -601,6 +633,11 @@ struct HingeDoor {
   /// OpenDoor(door, close, strength, buffered): swings it with its leaf's physics, open or shut, with no ghost's trace,
   /// on the view's owner (strength -1 for the game's random push). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::HingeDoor_OpenDoor, void(void*, bool, float, bool)> OpenDoor{};
+  /// The leaf's open angle in degrees: openAngle.get(door). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::HingeDoor_openAngle, float> openAngle{};
+  /// SwingDoor(door, close, seconds, fraction, buffered): turns the leaf toward its open angle (or shut) with no ghost's
+  /// trace, on the view's owner. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::HingeDoor_SwingDoor, void(void*, bool, float, float, bool)> SwingDoor{};
 };
 
 /// Unity's axis flags, the values HingeDoor::hingeAxis holds.

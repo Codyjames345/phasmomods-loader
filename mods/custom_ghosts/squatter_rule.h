@@ -46,7 +46,7 @@ struct Facts {
 
 // How far under the players' sprint speed the Squatter's running pace sits.
 constexpr float kSprintMargin = 0.95f;
-// Seconds each entry of kMoveCycle lasts.
+// Seconds each entry of kMoveCycle lasts at least (move_hold_seconds).
 constexpr float kMoveSlotSeconds = 1.0f;
 // Seconds between two taunts about a player's lapsed sprint.
 constexpr float kTauntCooldown = 20.0f;
@@ -55,7 +55,6 @@ constexpr float kTauntCooldown = 20.0f;
 constexpr Move kMoveCycle[] = {Move::Run, Move::Run,  Move::Duck, Move::Run,     Move::Weave,  Move::Run,
                                Move::Run, Move::Roll, Move::Run,  Move::Parkour, Move::Run,    Move::Stumble};
 constexpr int kMoveCount = static_cast<int>(sizeof(kMoveCycle) / sizeof(kMoveCycle[0]));
-constexpr float kMoveCycleSeconds = kMoveCount * kMoveSlotSeconds;
 
 /** The phase a friendly or hostile Squatter begins a contract in: Lurking, or Moping on a friendly ghost's difficulty. */
 inline Phase first_phase(bool friendly) { return friendly ? Phase::Moping : Phase::Lurking; }
@@ -177,11 +176,19 @@ inline float average_chase_speed(float sprintSpeed) {
   return sum / kMoveCount;
 }
 
-/** The move `seconds` into a chase, walking kMoveCycle; offset the time per ghost for a seed. Before 0 reads as 0, and a non-finite time as the start. */
-inline Move move_at(float seconds) {
-  if (!std::isfinite(seconds)) return kMoveCycle[0];
-  const float t = std::fmod(std::max(seconds, 0.0f), kMoveCycleSeconds);
-  return kMoveCycle[std::min(static_cast<int>(t / kMoveSlotSeconds), kMoveCount - 1)];
+/** Entry `index` of kMoveCycle, counting round it either way. */
+inline Move move_of(int index) { return kMoveCycle[((index % kMoveCount) + kMoveCount) % kMoveCount]; }
+
+/** Whether move `m` plays its clip once, as against Run, Walk and Stand, whose clips loop. */
+inline bool plays_once(Move m) { return m != Move::Run && m != Move::Walk && m != Move::Stand; }
+
+/**
+ * How long the chase keeps move `m` before the cycle moves on, in seconds, when its clip lasts `clipSeconds`: a slot of
+ * kMoveSlotSeconds, or for a move that plays once its whole clip when that is longer, so a roll or a fall is never cut
+ * off by the next move (user, 2026-11-09).
+ */
+inline float move_hold_seconds(Move m, float clipSeconds) {
+  return plays_once(m) && std::isfinite(clipSeconds) ? std::max(kMoveSlotSeconds, clipSeconds) : kMoveSlotSeconds;
 }
 
 /** The set of lines spoken in a phase. Catch and Tired are triggered by events instead, not by a phase. */

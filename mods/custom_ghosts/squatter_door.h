@@ -3,9 +3,11 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <vector>
 
 #include "Transform.h"
+#include "quat.h"
 
 // The Squatter's way out (sdk/systems/doors.md): the map's exits as the game holds them, the living players still
 // within them, the exits' lock, and a player's try at a locked exit. Main thread.
@@ -75,10 +77,12 @@ inline constexpr uint64_t kRelockMs = 2000;
  */
 int relock(uint64_t now);
 
-// The quiet opener (sdk/systems/doors.md, "Opening a door quietly"): the game's own HingeDoor.OpenDoor, which swings the
-// leaf with its physics and leaves no ghost's trace. The swing reaches the other clients only from the door's view's
-// owner, through the door's PhotonTransformView, so the master takes the view first, as the ghost's own
-// door step does, and opens the door once it owns it. Nothing is carried on the mod's channel.
+// The quiet opener (sdk/systems/doors.md, "Opening a door quietly"): the game's own HingeDoor.SwingDoor, which turns the
+// leaf to its open angle (HingeDoor.openAngle) and leaves no ghost's trace. HingeDoor.OpenDoor's physics push is not
+// used: on a door whose open angle Awake reverses it pushes the leaf shut (user, 2026-11-09: a door that swings away
+// stayed shut). The swing reaches the other clients only from the door's view's owner, through the door's
+// PhotonTransformView, so the master takes the view first, as the ghost's own door step does, and opens the door once
+// it owns it. Nothing is carried on the mod's channel.
 
 // Milliseconds the master waits for a door's view to become its own before it gives the open up. A starting value, as
 // carry.h's kOwnershipWaitMs, not a game value.
@@ -87,9 +91,9 @@ inline constexpr uint64_t kOpenWaitMs = 2000;
 // How far a door's leaf must stand from shut for the Squatter to pass, in degrees: a narrower gap it opens rather than
 // walks through (user, 2026-11-09: it never passes through doors). A starting value, judged with the user in game.
 inline constexpr float kPassDegrees = 70.0f;
-// The push it opens a door with: the top of the random strength the game's own HingeDoor.OpenDoor picks (1 to 5), so a
-// door swings wide rather than ajar.
-inline constexpr float kPushStrength = 5.0f;
+// How long the leaf takes to swing open, in seconds (HingeDoor.SwingDoor). A starting value, judged with the user in
+// game against the opening-door clips.
+inline constexpr float kSwingSeconds = 1.0f;
 
 /**
  * How far a leaf at `angle` degrees on its hinge axis stands from its shut angle `shut` (Door.closedAngle), the shorter
@@ -110,6 +114,40 @@ inline bool fits(float gap) { return gap >= kPassDegrees; }
  */
 inline float leaf_angle(phasmo::Vector3 euler, int32_t axis, int32_t axisX, int32_t axisZ) {
   return axis == axisX ? euler.x : axis == axisZ ? euler.z : euler.y;
+}
+
+/** The shorter way round from `from` degrees to `to`, -180 to 180, as Mathf.DeltaAngle and HingeDoor.SwingDoor take it. */
+inline float delta_angle(float from, float to) {
+  float d = std::fmod(to - from, 360.0f);
+  if (d < 0) d += 360.0f;
+  return d > 180.0f ? d - 360.0f : d;
+}
+
+/** A door's leaf as this client sees it, for the side it swings to and where its handle is. */
+struct Leaf {
+  phasmo::Vector3 pivot;           // the leaf's Transform's position: SwingDoor turns it about this point
+  phasmo::Quaternion rotation;     // its world rotation
+  phasmo::Vector3 euler;           // its local Euler angles
+  phasmo::Vector3 centre;          // the middle of its collider's box
+  int32_t axis = 0, axisX = 0, axisZ = 0;  // HingeDoor.hingeAxis and the Axis values X and Z (leaf_angle)
+  float openAngle = 0;             // HingeDoor.openAngle
+};
+
+/**
+ * Whether opening `leaf` swings it toward `ghost`: its middle, turned a little about the hinge from where it stands
+ * toward its open angle as HingeDoor.SwingDoor turns it, moves (on the flat) toward where `ghost` stands.
+ */
+inline bool swings_toward(const Leaf& leaf, phasmo::Vector3 ghost) {
+  const float now = leaf_angle(leaf.euler, leaf.axis, leaf.axisX, leaf.axisZ);
+  const float step = delta_angle(now, leaf.openAngle) >= 0 ? 10.0f : -10.0f;
+  phasmo::Vector3 turned = leaf.euler;
+  (leaf.axis == leaf.axisX ? turned.x : leaf.axis == leaf.axisZ ? turned.z : turned.y) += step;
+  const phasmo::Quaternion parent = qmul(leaf.rotation, qinv(euler_quat(leaf.euler)));
+  const phasmo::Vector3 r{leaf.centre.x - leaf.pivot.x, leaf.centre.y - leaf.pivot.y, leaf.centre.z - leaf.pivot.z};
+  const phasmo::Vector3 offset = qrot(qinv(leaf.rotation), r);
+  const phasmo::Vector3 moved = qrot(qmul(parent, euler_quat(turned)), offset);
+  const float mx = moved.x - r.x, mz = moved.z - r.z;
+  return mx * (ghost.x - leaf.centre.x) + mz * (ghost.z - leaf.centre.z) > 0;
 }
 
 /** What a quiet open came to. */
@@ -137,14 +175,20 @@ bool may_open(void* door);
 bool passable(void* door);
 
 /**
- * On the master: swings the shut `door` open with the game's own HingeDoor.OpenDoor, a push of the game's
- * random strength through the leaf's physics, which makes no ghost sound and leaves no EMF reading, count or
- * fingerprint. Opened at once when this client owns the door's view (always
+ * The leaf of the hinged `door` as this client sees it now: Door.body's Transform, which HingeDoor.SwingDoor turns, and
+ * the middle of the first collider under it. Empty for a door gone, not hinged, or without a body or collider. Any
+ * client. Main thread.
+ */
+std::optional<Leaf> leaf_of(void* door);
+
+/**
+ * On the master: swings the shut `door` open with the game's own HingeDoor.SwingDoor, all the way to its open angle
+ * over kSwingSeconds, which makes no ghost sound and leaves no EMF reading, count or fingerprint. Opened at once when this client owns the door's view (always
  * offline). Otherwise it asks for the view (PhotonView.RequestOwnership, granted to a Takeover view when it comes back)
  * and answers Waiting; open_step opens the door once the view is this client's, since a leaf moved on a client that does
  * not own its view is pulled back to the owner's angle and seen by nobody. Refused, doing nothing, when may_open says
- * no, or while another door waits (the same door again answers Waiting and asks nothing more). The open's side and
- * amount are the game's random choice. `now` is milliseconds on any steady clock. Main thread.
+ * no, or while another door waits (the same door again answers Waiting and asks nothing more). The side is the
+ * door's own open side (HingeDoor.openAngle). `now` is milliseconds on any steady clock. Main thread.
  */
 Opening open_quietly(void* door, uint64_t now);
 

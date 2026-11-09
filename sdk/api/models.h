@@ -58,6 +58,25 @@ bool use_controller(void* animator, void* controller);
 bool play_state(void* animator, const char* state);
 
 /**
+ * @brief Blends into a state of the Animator's controller from the one playing, from the new state's start, on the
+ *        first layer, as Animator.CrossFade does: the two poses mix over the blend, so the model never jumps.
+ * @param state The state's name as the controller has it, case sensitive.
+ * @param blend The blend's length as a fraction of the playing state's length (Animator.CrossFade's own unit), 0 to 1:
+ *        a blend of `s` seconds out of a state `length` seconds long is s / length.
+ * @return False, playing nothing, as play_state.
+ * @since Contract 2.3 (a helper in the mod's own code)
+ */
+bool fade_to_state(void* animator, const char* state, float blend);
+
+/**
+ * @brief Poses the Animator's model in the state it plays now, without moving the state on (Animator.Update with no
+ *        time): after play_state, the bones stand as the state's first frame has them in this same frame.
+ * @return False, doing nothing, when the Animator is null, destroyed or not initialised.
+ * @since Contract 2.3 (a helper in the mod's own code)
+ */
+bool pose_now(void* animator);
+
+/**
  * @brief Whether a controller has every one of `states` on its first layer: a check for a mod's start, so a bundle
  *        built without a state fails the start instead of a figure standing still in a contract.
  * @param controller A controller load_controller gave.
@@ -115,10 +134,13 @@ void* lit_material_of(void* gameObject);
  * @brief A mesh for add_cloth, in the space of the GameObject that will hold it. Every span but `triangles` has one
  *        element per vertex.
  */
-/** Which of ClothMesh::bones carry a vertex, and how much: up to two, their weights adding up to 1. */
+/**
+ * Which of ClothMesh::bones carry a vertex, and how much: up to four, as Unity's BoneWeight holds them, heaviest first,
+ * their weights adding up to 1. The game's quality settings may skin with fewer; then the heaviest count.
+ */
 struct ClothWeight {
-  int32_t bone0 = 0, bone1 = 0;
-  float weight0 = 1.0f, weight1 = 0.0f;
+  int32_t bone[4] = {0, 0, 0, 0};
+  float weight[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 };
 
 struct ClothMesh {
