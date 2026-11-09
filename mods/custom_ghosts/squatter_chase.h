@@ -430,7 +430,7 @@ inline float turn_toward(float from, float to, float step) {
 struct Surroundings {
   bool dropAhead = false;  // the floor ahead falls away: stairs down, a step off
   bool kneeProp = false;   // a knee-high prop in its way, clear above
-  bool ankleProp = false;  // an ankle-high prop in its way, clear at the knee
+  bool ankleProp = false;  // its feet meet loose clutter (foot_box), so it trips
   bool gap = false;        // walls or furniture close on both sides: a doorway, a narrow gap
   int furniture = 0;       // furniture close on one side: -1 on its left, +1 on its right, 0 none
   bool diveAt = false;     // the player it chases is straight ahead, in diving range
@@ -471,7 +471,7 @@ inline bool stood_up(uint64_t since, uint64_t now) {
 /** What in `s` calls a clumsy move, in move_for's order, for the log; null when nothing does. */
 inline const char* clumsy_reason(const Surroundings& s) {
   if (s.dropAhead || s.kneeProp) return "drop or knee-high prop";
-  if (s.ankleProp) return "ankle-high prop";
+  if (s.ankleProp) return "its feet met clutter";
   if (s.diveAt) return "dive at the target";
   if (s.gap) return "gap";
   if (s.furniture != 0) return "furniture beside";
@@ -488,7 +488,7 @@ inline std::string sensed_list(const Surroundings& s) {
   };
   add(s.dropAhead, "drop");
   add(s.kneeProp, "knee");
-  add(s.ankleProp, "ankle");
+  add(s.ankleProp, "feet");
   add(s.diveAt, "dive");
   add(s.gap, "gap");
   add(s.furniture > 0, "furniture right");
@@ -510,10 +510,31 @@ inline float move_facing(Move m, uint32_t variant, float heading) {
 // How it reads the way ahead, metres and milliseconds: starting values, judged with the user in game. It looks every
 // kSenseMs while it runs, and after a clumsy move it runs kClumsyGapMs before another.
 inline constexpr uint64_t kSenseMs = 150, kClumsyGapMs = 1500, kDiveGapMs = 8000;
-inline constexpr float kAnkleHeight = 0.15f, kKneeHeight = 0.45f, kChestHeight = 1.1f, kWaistHeight = 0.9f;
-// Just above the floor, where most of what it trips over lies: a shoe stands about 0.1 m, equipment lying flat a few
-// centimetres, both under the ankle's sweep (user, 2026-11-09: it still never tripped). A starting value.
-inline constexpr float kUnderfootHeight = 0.04f;
+inline constexpr float kKneeHeight = 0.45f, kChestHeight = 1.1f, kWaistHeight = 0.9f;
+
+// What its feet meet (foot_box): metres, starting values. A shoe stands about 0.1 m and equipment lying flat a few
+// centimetres, so the box runs from just above the floor to the shins.
+inline constexpr float kFootHalfWidth = 0.2f, kFootFloorGap = 0.02f, kFootHeight = 0.25f;
+inline constexpr float kFootAhead = 0.35f, kFootBehind = 0.1f;  // a stride ahead, a little behind
+
+/** A box in the world: its centre, half its size along its own axes, and its turn about the vertical (radians from +z). */
+struct FootBox {
+  Point centre, half;
+  float yaw = 0.0f;
+};
+
+/**
+ * The box its feet sweep at `at` (the ghost's position, on the floor) heading `heading` (radians clockwise from +z): as
+ * wide as its stance (kFootHalfWidth either side), from kFootFloorGap above the floor to kFootHeight, from kFootBehind
+ * behind it to kFootAhead ahead. Whatever loose clutter lies in it, its feet meet: it trips (user, 2026-11-09: it never
+ * tripped while it looked for props with rays a metre ahead; tripping is contact, not foresight).
+ */
+inline FootBox foot_box(Point at, float heading) {
+  const float along = (kFootAhead - kFootBehind) / 2;
+  return {{at.x + std::sin(heading) * along, at.y + (kFootFloorGap + kFootHeight) / 2, at.z + std::cos(heading) * along},
+          {kFootHalfWidth, (kFootHeight - kFootFloorGap) / 2, (kFootAhead + kFootBehind) / 2},
+          heading};
+}
 inline constexpr float kPropLook = 1.2f;              // how far ahead a prop in its way counts
 inline constexpr float kDropAhead = 1.5f, kDropDepth = 0.5f;  // where it looks for the floor, and how far down is a drop
 inline constexpr float kGapHalf = 0.5f;               // either side within this: a doorway or gap

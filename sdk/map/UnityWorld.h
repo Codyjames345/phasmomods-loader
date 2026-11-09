@@ -13,6 +13,8 @@ namespace pm::map {
 
 inline constexpr const char* Physics_Raycast_params[] = {"Vector3", "Vector3", "float", "int",
                                                          "@QueryTriggerInteraction"};
+inline constexpr const char* Physics_CheckBox_params[] = {"Vector3", "Vector3", "Quaternion", "int",
+                                                          "@QueryTriggerInteraction"};
 inline constexpr const char* NavMesh_SamplePosition_params[] = {"Vector3", "out NavMeshHit", "float", "int"};
 inline constexpr const char* NavMeshAgent_SetDestination_params[] = {"Vector3"};
 inline constexpr const char* NavMeshAgent_CalculatePath_params[] = {"Vector3", "NavMeshPath"};
@@ -27,6 +29,12 @@ inline constexpr const char* QueryTriggerInteraction_values[] = {"UseGlobal", "I
 /// Unity's physics queries (UnityEngine.PhysicsModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Physics{.key = "Physics", .name = "Physics", .assembly = "UnityEngine.PhysicsModule",
                                             .ns = "UnityEngine"};
+
+/// Whether any collider on the layers of a mask overlaps a box (its centre, half its size on each axis, and its
+/// rotation), with triggers counted as the last argument says. Static. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Physics_CheckBox{.key = "Physics.CheckBox", .kind = pm::sdk::Kind::Method,
+                                                     .flags = pm::sdk::kStatic, .owner = "Physics", .name = "CheckBox",
+                                                     .type = "bool", .params = Physics_CheckBox_params};
 
 /// Whether a ray from an origin along a direction hits a collider within a distance, on the layers of
 /// a mask, with triggers counted as the last argument says. Static. Inferred: Unity's documented API.
@@ -331,6 +339,11 @@ struct Physics {
   /// (RaycastHit::type.make_array(1) and pm::api::ValueArray::stride). Unresolved: false.
   static constexpr pm::api::Method<pm::map::Physics_RaycastHit, bool(const Ray*, void*, float, int32_t, int32_t)>
       RaycastHit{};
+  /// CheckBox(&centre, &halfExtents, &rotation, layerMask, triggers): whether any collider on the mask's layers
+  /// overlaps the box, the structs passed by address as the x64 convention passes them. Unresolved: false.
+  static constexpr pm::api::Method<pm::map::Physics_CheckBox, bool(const Vector3*, const Vector3*, const Quaternion*,
+                                                                   int32_t, int32_t)>
+      CheckBox{};
 };
 
 /// Whether a physics query counts triggers.

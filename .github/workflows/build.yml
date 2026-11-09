@@ -37,6 +37,13 @@ jobs:
           ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
           path: private-assets
           persist-credentials: false
+          # Named, so the checkout never looks the default branch up (a run hung there, 2026-11-09), and only the
+          # pinned builds: the repository also keeps the working files and the bundle's Unity project, which no build
+          # needs.
+          ref: main
+          sparse-checkout: /pinned/
+          sparse-checkout-cone-mode: false
+          filter: blob:none
       - name: Place the Squatter's bundle
         shell: pwsh
         run: |
@@ -88,6 +95,13 @@ jobs:
           ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
           path: private-assets
           persist-credentials: false
+          # Named, so the checkout never looks the default branch up (a run hung there, 2026-11-09), and only the
+          # pinned builds: the repository also keeps the working files and the bundle's Unity project, which no build
+          # needs.
+          ref: main
+          sparse-checkout: /pinned/
+          sparse-checkout-cone-mode: false
+          filter: blob:none
       - name: Place the Squatter's bundle
         shell: pwsh
         run: |
@@ -168,6 +182,13 @@ jobs:
           ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
           path: private-assets
           persist-credentials: false
+          # Named, so the checkout never looks the default branch up (a run hung there, 2026-11-09), and only the
+          # pinned builds: the repository also keeps the working files and the bundle's Unity project, which no build
+          # needs.
+          ref: main
+          sparse-checkout: /pinned/
+          sparse-checkout-cone-mode: false
+          filter: blob:none
       - name: Place the Squatter's bundle
         shell: pwsh
         run: |
