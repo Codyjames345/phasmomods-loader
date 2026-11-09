@@ -359,7 +359,8 @@ void bundled_manifests_are_valid() {
   for (const Bundled& b : {Bundled{"custom_ghosts", "phasmomods.custom-ghosts", "Custom Ghosts", "CustomGhosts.dll"},
                            Bundled{"ghost_tells", "phasmomods.ghost-tells", "Ghost Tells", "GhostTells.dll"},
                            Bundled{"playable_ghost", "phasmomods.playable-ghost", "Playable Ghost", "PlayableGhost.dll"},
-                           Bundled{"spectral_flame", "phasmomods.spectral-flame", "Spectral Flame", "SpectralFlame.dll"}}) {
+                           Bundled{"spectral_flame", "phasmomods.spectral-flame", "Spectral Flame", "SpectralFlame.dll"},
+                           Bundled{"emotes", "phasmomods.emotes", "Emotes", "Emotes.dll"}}) {
     Manifest m;
     std::string why;
     CHECK(parse_manifest_json(read_source(std::string("mods/") + b.folder + "/manifest.json"), m, why));

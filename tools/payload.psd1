@@ -190,6 +190,9 @@
         @{ Name = 'mods/ghost-tells/GhostTells.dll'; Source = 'build/GhostTells.dll' }
         @{ Name = 'mods/ghost-tells/manifest.json'; Source = 'mods/ghost_tells/manifest.json' }
         @{ Name = 'mods/ghost-tells/i18n/default.json'; Source = 'mods/ghost_tells/i18n/default.json' }
+        @{ Name = 'mods/emotes/Emotes.dll'; Source = 'build/Emotes.dll' }
+        @{ Name = 'mods/emotes/manifest.json'; Source = 'mods/emotes/manifest.json' }
+        @{ Name = 'mods/emotes/i18n/default.json'; Source = 'mods/emotes/i18n/default.json' }
     )
     Records = @{ Name = 'builds'; Source = 'sdk/builds' }
 }

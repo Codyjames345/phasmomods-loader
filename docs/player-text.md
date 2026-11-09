@@ -7,6 +7,7 @@ Everything a player reads lives in string tables, never in the code (the author'
 | --- | --- | --- | --- |
 | `i18n/default.json` | 239 | 0 | 1 |
 | `mods/custom_ghosts/i18n/default.json` | 78 | 9 | 0 |
+| `mods/emotes/i18n/default.json` | 9 | 0 | 1 |
 | `mods/ghost_tells/i18n/default.json` | 6 | 0 | 0 |
 | `mods/playable_ghost/i18n/default.json` | 142 | 140 | 2 |
 | `mods/spectral_flame/i18n/default.json` | 2 | 0 | 0 |

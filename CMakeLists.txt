@@ -209,6 +209,13 @@ target_include_directories(GhostTells BEFORE PRIVATE sdk/api sdk/map)
 target_link_libraries(GhostTells PRIVATE pmmod)
 pm_options(GhostTells)
 
+# Emotes: an eight-dance wheel on a rebindable key (docs/superpowers/specs/2026-11-10-emotes-design.md).
+add_library(Emotes SHARED mods/emotes/mod.cpp)
+target_include_directories(Emotes PRIVATE mods/emotes mods/custom_ghosts)
+target_include_directories(Emotes BEFORE PRIVATE sdk/api sdk/map)
+target_link_libraries(Emotes PRIVATE pmmod)
+pm_options(Emotes)
+
 add_executable(pminject tools/inject.cpp)
 target_include_directories(pminject PRIVATE tools core)
 pm_options(pminject)

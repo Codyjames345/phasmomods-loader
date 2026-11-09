@@ -1001,7 +1001,7 @@ void bundled_mods_declare_their_dependencies() {
   CHECK(pm::modlist::parse_manifest_json(read_source("mods/playable_ghost/manifest.json"), m, why));
   CHECK(m.dependencies.size() == 1 && m.dependencies[0].id == "phasmomods.custom-ghosts" &&
         m.dependencies[0].minimumVersion.empty() && !m.dependencies[0].required);
-  for (const char* folder : {"spectral_flame", "ghost_tells"}) {
+  for (const char* folder : {"spectral_flame", "ghost_tells", "emotes"}) {
     CHECK(pm::modlist::parse_manifest_json(read_source(std::string("mods/") + folder + "/manifest.json"), m, why));
     CHECK(m.dependencies.empty() && m.incompatibilities.empty());
   }
@@ -1009,7 +1009,7 @@ void bundled_mods_declare_their_dependencies() {
 
 // Each bundled mod's manifest says what its DLL does about voice, or the host would keep it off.
 void bundled_manifests_say_what_their_dlls_do_about_voice() {
-  for (const char* folder : {"custom_ghosts", "playable_ghost", "spectral_flame", "ghost_tells"}) {
+  for (const char* folder : {"custom_ghosts", "playable_ghost", "spectral_flame", "ghost_tells", "emotes"}) {
     pm::modlist::Manifest m;
     std::string why;
     CHECK(pm::modlist::parse_manifest_json(read_source(std::string("mods/") + folder + "/manifest.json"), m, why));

@@ -33,3 +33,8 @@
 # Mixamo's raw downloads (FBX, packs), which may not be redistributed: the bundle built from them is pinned instead
 # (tools/payload.psd1), and the downloads are kept in the private assets repository.
 /.mixamo/
+
+# The Emotes mod's songs and icons, as the author supplied them: they go into the Emotes bundle, built in the private
+# assets repository, and are kept there. Only each song's measured loudness (loudness.txt) is committed.
+/mods/emotes/assets/*/*.mp3
+/mods/emotes/assets/*/*.png
