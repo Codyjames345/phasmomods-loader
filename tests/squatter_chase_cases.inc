@@ -585,3 +585,63 @@ void a_door_line_comes_from_behind_the_door() {
   CHECK(same.x == 0.0f && same.z == 0.0f);
   CHECK(kBehindDoor > 0.0f && kBehindDoor < 2.0f);
 }
+
+// A fall settles once its bodies have slowed below kSettleSpeed for kSettleMs, or after kFallMaxMs whatever they do,
+// and never before; it is up again once the get-up's clip has played.
+void a_fall_settles_then_gets_up() {
+  FallState f;
+  CHECK(f.phase() == FallPhase::Up);
+  CHECK(f.update(5, 0.0f, 1000) == FallPhase::Up);  // nothing falls before a fall begins
+  f.begin(1000);
+  CHECK(f.phase() == FallPhase::Falling);
+  CHECK(f.update(1100, 3.0f, 1000) == FallPhase::Falling);
+  CHECK(f.update(1200, kSettleSpeed / 2, 1000) == FallPhase::Falling);  // slow, but not for long enough
+  CHECK(f.update(1200 + kSettleMs - 1, kSettleSpeed / 2, 1000) == FallPhase::Falling);
+  CHECK(f.update(1200 + kSettleMs, kSettleSpeed / 2, 1000) == FallPhase::GettingUp);
+  const uint64_t rose = 1200 + kSettleMs;
+  CHECK(f.update(rose + 999, 0.0f, 1000) == FallPhase::GettingUp);
+  CHECK(f.update(rose + 1000, 0.0f, 1000) == FallPhase::Up);
+  // A bounce restarts the settling.
+  f.begin(0);
+  CHECK(f.update(100, 0.0f, 1000) == FallPhase::Falling);
+  CHECK(f.update(200, 1.0f, 1000) == FallPhase::Falling);  // the bounce
+  CHECK(f.update(250, 0.0f, 1000) == FallPhase::Falling);  // still again from here
+  CHECK(f.update(100 + kSettleMs, 0.0f, 1000) == FallPhase::Falling);
+  CHECK(f.update(250 + kSettleMs - 1, 0.0f, 1000) == FallPhase::Falling);
+  CHECK(f.update(250 + kSettleMs, 0.0f, 1000) == FallPhase::GettingUp);
+  // A body that never settles (wedged, rocking) gets up at the time limit.
+  f.begin(0);
+  CHECK(f.update(kFallMaxMs - 1, 2.0f, 1000) == FallPhase::Falling);
+  CHECK(f.update(kFallMaxMs, 2.0f, 1000) == FallPhase::GettingUp);
+  f.reset();
+  CHECK(f.phase() == FallPhase::Up);
+  CHECK(kSettleSpeed > 0.0f && kSettleMs < kFallMaxMs && kRecoverSeconds > 0.0f);
+}
+
+// Face down gets up with Standing Up, face up with Getting Up; a body on its side keeps the choice it had, so it never
+// flips between them (Review Focus 5).
+void the_get_up_follows_how_it_landed() {
+  CHECK(get_up_for({0, -1, 0}, GetUp::FaceUp) == GetUp::FaceDown);
+  CHECK(get_up_for({0, 1, 0}, GetUp::FaceDown) == GetUp::FaceUp);
+  CHECK(get_up_for({0.9f, -kSideBand - 0.01f, 0}, GetUp::FaceUp) == GetUp::FaceDown);
+  CHECK(get_up_for({0.9f, -kSideBand + 0.01f, 0}, GetUp::FaceUp) == GetUp::FaceUp);    // on its side: kept
+  CHECK(get_up_for({0.9f, kSideBand - 0.01f, 0}, GetUp::FaceDown) == GetUp::FaceDown);  // on its side: kept
+  CHECK(get_up_for({1, 0, 0}, GetUp::FaceDown) == GetUp::FaceDown);
+  CHECK(get_up_for({1, 0, 0}, GetUp::FaceUp) == GetUp::FaceUp);
+  CHECK(std::string(get_up_state(GetUp::FaceDown)) == kStandUpState);
+  CHECK(std::string(get_up_state(GetUp::FaceUp)) == kTripGetUpState);
+}
+
+// It gets up where it lies: the root at the hips on the flat, turned so the get-up clip's own head lies along the
+// landed body's hips to head.
+void it_gets_up_where_it_lies() {
+  constexpr float kDeg = std::numbers::pi_v<float> / 180.0f;
+  const RootPose down = get_up_root({2, 0.2f, 3}, {2, 0.25f, 4.5f}, GetUp::FaceDown);  // head toward +z
+  CHECK(down.at.x == 2.0f && down.at.y == 0.2f && down.at.z == 3.0f);
+  CHECK(std::abs(wrap_angle(down.yaw - (0.0f - kGetUpHeadYaw[0] * kDeg))) < 1e-4f);
+  const RootPose up = get_up_root({0, 0, 0}, {1, 0, 0}, GetUp::FaceUp);  // head toward +x: 90 degrees clockwise
+  CHECK(std::abs(wrap_angle(up.yaw - (90.0f * kDeg - kGetUpHeadYaw[1] * kDeg))) < 1e-4f);
+  // A head straight above the hips (it never lies that way, but a wedged body might): no turn is read from it.
+  const RootPose standing = get_up_root({0, 0, 0}, {0, 1, 0}, GetUp::FaceDown);
+  CHECK(std::isfinite(standing.yaw));
+}

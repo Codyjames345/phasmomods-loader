@@ -28,15 +28,19 @@ inline float inertia_left(float u) {
   return rest * rest * rest * rest * (1.0f + 4.0f * u);
 }
 
-/** The pose difference of a body's bones after a change of clip, dying away over kInertiaSeconds. */
+/** The pose difference of a body's bones after a change of clip, dying away over a moment (kInertiaSeconds unless
+ * begin says). */
 class PoseInertia {
  public:
   /**
    * Starts from a change of clip at `now` (seconds): `from` is each bone's rotation before it, `to` the new clip's first
-   * rotation of the same bone. Spans of different lengths are not one body's poses, and start nothing.
+   * rotation of the same bone, dying away over `seconds`. Spans of different lengths are not one body's poses, and
+   * start nothing.
    */
-  void begin(std::span<const phasmo::Quaternion> from, std::span<const phasmo::Quaternion> to, float now) {
+  void begin(std::span<const phasmo::Quaternion> from, std::span<const phasmo::Quaternion> to, float now,
+             float seconds = kInertiaSeconds) {
     clear();
+    seconds_ = std::max(seconds, 1e-3f);
     if (from.size() != to.size() || from.empty()) return;
     bones_.reserve(from.size());
     for (size_t i = 0; i < from.size(); ++i) {
@@ -58,13 +62,13 @@ class PoseInertia {
   phasmo::Quaternion offset(size_t bone, float now) const {
     if (!active(now) || bone >= bones_.size()) return {0, 0, 0, 1};
     const Bone& b = bones_[bone];
-    const float half = 0.5f * b.angle * inertia_left((now - start_) / kInertiaSeconds);
+    const float half = 0.5f * b.angle * inertia_left((now - start_) / seconds_);
     const float s = std::sin(half);
     return {b.axis.x * s, b.axis.y * s, b.axis.z * s, std::cos(half)};
   }
 
   /** Whether any of the difference is left at `now`. */
-  bool active(float now) const { return !bones_.empty() && now - start_ < kInertiaSeconds; }
+  bool active(float now) const { return !bones_.empty() && now - start_ < seconds_; }
 
   /** Forgets the difference. */
   void clear() { bones_.clear(); }
@@ -76,6 +80,7 @@ class PoseInertia {
   };
   std::vector<Bone> bones_;
   float start_ = 0.0f;
+  float seconds_ = kInertiaSeconds;
 };
 
 }  // namespace pm::custom

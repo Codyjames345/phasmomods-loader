@@ -28,6 +28,7 @@
 #include "runtime.h"
 #include "sheet_mesh.h"
 #include "squatter_chase.h"
+#include "squatter_fall.h"
 #include "squatter_figure.h"
 #include "squatter_net.h"
 #include "squatter_rule.h"
@@ -1284,6 +1285,9 @@ int main() {
   the_start_check_refuses_a_bundle_missing_a_state();
   the_pass_after_the_animator_is_the_figures_own();
   inertialization_starts_from_the_old_pose_and_dies_away();
+  a_fall_settles_then_gets_up();
+  the_get_up_follows_how_it_landed();
+  it_gets_up_where_it_lies();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();

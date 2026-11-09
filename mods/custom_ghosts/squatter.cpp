@@ -35,6 +35,7 @@
 #include "squatter_chase.h"
 #include "squatter_difficulty.h"
 #include "squatter_door.h"
+#include "squatter_fall.h"
 #include "squatter_figure.h"
 #include "sound.h"
 #include "squatter_voice.h"
@@ -136,6 +137,11 @@ struct State {
   // When this client's figure began a trip, until it has stood up from it (stood_up): its facing holds while it is down.
   std::optional<uint64_t> tripSince;
   uint32_t tripVariant = 0;  // which of the two trips it is down from
+  // This client's own fall (squatter_fall.h): the ragdoll falls, settles and gets up where it landed, the figure then
+  // easing from there (riseFrom) to the ghost while it gets up. How it lies picks its get-up.
+  FallState fall;
+  GetUp landing = GetUp::FaceDown;
+  phasmo::Vector3 riseFrom{};
 };
 
 State g;
@@ -155,13 +161,28 @@ float heading_of(void* ghost) {
   return std::atan2(f.x, f.z);
 }
 
-// Every client shows its own figure where the contract's ghost is, facing its own way (play turns it).
+// How long the get-up it lies for takes, milliseconds.
+uint64_t get_up_ms() { return static_cast<uint64_t>(seconds_of(get_up_state(g.landing)) * 1000.0f); }
+
+// Every client shows its own figure where the contract's ghost is, facing its own way (play turns it). While it falls,
+// physics has it where it is; while it gets up, it eases from where it landed to the ghost.
 void show(void* ghost) {
   void* t = phasmo::Component::get_transform(ghost);
   if (!t) return;
-  const phasmo::Vector3 at = phasmo::Transform::get_position(t);
-  if (!figure::ready()) figure::create(at);
+  phasmo::Vector3 at = phasmo::Transform::get_position(t);
+  if (!figure::ready()) {
+    figure::create(at);
+    g.fall.reset();  // a new figure stands
+  }
   if (!g.facing) g.facing = heading_of(ghost);
+  if (g.fall.phase() == FallPhase::Falling) return;
+  if (g.fall.phase() == FallPhase::GettingUp) {
+    const uint64_t ms = std::max<uint64_t>(get_up_ms(), 1);
+    const float u = std::min(1.0f, static_cast<float>(now() - g.fall.since()) / static_cast<float>(ms));
+    const float ease = u * u * (3.0f - 2.0f * u);
+    at = {g.riseFrom.x + (at.x - g.riseFrom.x) * ease, g.riseFrom.y + (at.y - g.riseFrom.y) * ease,
+          g.riseFrom.z + (at.z - g.riseFrom.z) * ease};
+  }
   figure::place(at, *g.facing);
 }
 
@@ -919,10 +940,10 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     // A roll, a trip or a landing carries it as far as its clip travels (root motion), on the navigation mesh.
     if (agent && next == Phase::Chasing && moves_by_clip(c.out.move) && c.out.act < 0) {
       const phasmo::Vector3 step = figure::clip_step();
-      const Point now = point(phasmo::Transform::get_position(phasmo::Component::get_transform(agent)));
-      if (c.carryFrom) c.carryAgent += std::hypot(now.x - c.carryFrom->x, now.z - c.carryFrom->z);
+      const Point agentAt = point(phasmo::Transform::get_position(phasmo::Component::get_transform(agent)));
+      if (c.carryFrom) c.carryAgent += std::hypot(agentAt.x - c.carryFrom->x, agentAt.z - c.carryFrom->z);
       if (step.x != 0.0f || step.z != 0.0f) {
-        phasmo::Vector3 there = vector(now);
+        phasmo::Vector3 there = vector(agentAt);
         there.x += step.x;
         there.z += step.z;
         c.carryClip += std::hypot(step.x, step.z);
@@ -931,7 +952,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
         phasmo::NavMeshAgent::Warp(agent, &there);
         c.nextSteer = 0;
       }
-      c.carryFrom = now;
+      c.carryFrom = agentAt;
       if (t >= c.nextCarryLog) {
         if (c.nextCarryLog)
           PM_LOG("squatter: carried by %s: clip %.3f m, agent %.3f m, off the mesh %d", state_for(c.out.move, c.out.variant),
@@ -1098,19 +1119,56 @@ Point eyes_of(void* player) {
   return {p.x, p.y + kEyeHeight, p.z};
 }
 
+// The figure falls on this client, carrying its own run (its pace along its facing) and `push` (metres a second) into
+// the fall. False when it cannot (no ragdoll here): it then plays on as it stands.
+[[maybe_unused]] bool start_fall(phasmo::Vector3 push) {  // the master's Fall cue calls it (Task 7)
+  const float facing = g.facing.value_or(0.0f), pace = g.pace.pace();
+  const phasmo::Vector3 v{std::sin(facing) * pace + push.x, push.y, std::cos(facing) * pace + push.z};
+  if (!figure::fall(v)) return false;
+  g.fall.begin(now());
+  g.landing = GetUp::FaceDown;
+  g.local = State::Local::None;
+  return true;
+}
+
+// It has settled: it gets up where it lies, its root on the floor under its hips (the navigation mesh within 1 m, else
+// the ghost's own height), turned so the get-up begins as the body lies.
+void rise(void* ghost) {
+  const figure::Landing l = figure::landing();
+  RootPose r = get_up_root(point(l.hips), point(l.head), g.landing);
+  phasmo::Vector3 hips = l.hips;
+  phasmo::NavMeshHit hit{};
+  r.at.y = phasmo::NavMesh::SamplePosition(&hips, &hit, 1.0f, -1) ? hit.position.y : at_of(ghost).y;
+  g.riseFrom = vector(r.at);
+  g.facing = r.yaw;
+  figure::rise(get_up_state(g.landing), g.riseFrom, r.yaw, kRecoverSeconds);
+}
+
 // Every client plays the Shown: the master's own on the master, the master's last word elsewhere.
 void play(void* ghost) {
   if (!g.shown.last || !figure::ready()) return;
   const Shown& s = *g.shown.last;
   const Cues c = g.cues.take(s);
   const uint64_t t = now();
-  if (c.act && s.act >= 0) {
+  // A fall runs its course on this client: it settles, gets up where it landed, then plays what the master shows now.
+  if (g.fall.phase() != FallPhase::Up) {
+    const FallPhase was = g.fall.phase();
+    if (was == FallPhase::Falling) g.landing = get_up_for(point(figure::landing().front), g.landing);
+    const FallPhase is = g.fall.update(t, figure::fall_speed(), get_up_ms());
+    if (was == FallPhase::Falling && is != FallPhase::Falling) rise(ghost);
+    if (is == FallPhase::Up) {
+      if (s.act >= 0) figure::play_act(static_cast<Act>(s.act));
+      else figure::play(s.move, s.variant);
+    }
+  }
+  const bool down = g.fall.phase() != FallPhase::Up;
+  if (c.act && s.act >= 0 && !down) {
     figure::play_act(static_cast<Act>(s.act));
     g.tripSince.reset();  // an act ends the get-up where it is
   }
   // A trip plays on into getting up (the bundle's Stumble); a move the master sends while the figure is still down waits
   // until it stands.
-  if (c.move && !(g.tripSince && s.move != Move::Stumble)) figure::play(s.move, s.variant);
+  if (c.move && !down && !(g.tripSince && s.move != Move::Stumble)) figure::play(s.move, s.variant);
   if (c.move && s.move == Move::Stumble && s.act < 0) {
     g.tripSince = t;
     g.tripVariant = s.variant;
@@ -1165,7 +1223,7 @@ void play(void* ghost) {
   // before the walk, and standing it turns on the spot with a turn clip once its heading pulls far enough away. A new
   // act or move from the master ends either.
   if (c.act || c.move) g.local = State::Local::None;
-  if (c.move && s.act < 0 && s.move == Move::Walk && g.lastMove == Move::Stand && !g.tripSince) {
+  if (c.move && s.act < 0 && s.move == Move::Walk && g.lastMove == Move::Stand && !g.tripSince && !down) {
     figure::play_clip(kStartWalkState);
     g.local = State::Local::Starting;
     g.localUntil = t + static_cast<uint64_t>(kStartWalkSeconds * 1000.0f);
@@ -1173,7 +1231,7 @@ void play(void* ghost) {
   if (c.move) g.lastMove = s.move;
   if (g.local != State::Local::None && t >= g.localUntil) {
     g.local = State::Local::None;
-    if (s.act < 0) figure::play(s.move, s.variant);
+    if (s.act < 0 && !down) figure::play(s.move, s.variant);
   }
   const float heading = heading_of(ghost);
   if (!g.facing) g.facing = heading;
@@ -1187,8 +1245,8 @@ void play(void* ghost) {
     figure::snap_to(state_for(Move::Stand, 0));
     if (s.act < 0 && s.move != Move::Stumble) figure::play(s.move, s.variant);
   }
-  if (g.tripSince) {
-    // Down from a trip: it lies the way it fell, whichever way the ghost turns.
+  if (g.tripSince || down) {
+    // Down: it lies the way it fell, whichever way the ghost turns, and gets up facing the way its get-up stands it.
   } else if (g.local == State::Local::Turning) {
     g.facing = wrap_angle(*g.facing + figure::clip_turn());  // the clip's own turn
   } else if (g.pace.pace() >= kStillPace || s.act >= 0 || s.move != Move::Stand || g.local == State::Local::Starting) {
@@ -1263,6 +1321,7 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     g.slamCloset = nullptr;
     g.voice.reset();
     g.tripSince.reset();
+    g.fall.reset();
     forget_channel();
     figure::destroy();
     if (!haunting) ghost_sight::drop();  // shared (ghost_sight.h): kept while the contract's ghost lives

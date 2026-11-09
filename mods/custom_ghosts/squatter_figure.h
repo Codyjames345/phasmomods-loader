@@ -222,6 +222,34 @@ void* head();
 /** Whether the figure is built and still in the scene (a scene load destroys it, and its own assets with it). */
 bool ready();
 
+/** Where a fallen body lies, in the world: its hips, its head, and its chest's front (a unit vector). */
+struct Landing {
+  phasmo::Vector3 hips, head, front;
+};
+
+/**
+ * Lets the body fall (user, 2026-11-09: every trip ends in a ragdoll): its Animator and its IK stop and its ragdoll turns
+ * physical, moving at `velocity` (metres a second, capped by the ragdoll). False, with nothing changed, when the figure
+ * or its ragdoll is not built. Every client, its own figure.
+ */
+bool fall(phasmo::Vector3 velocity);
+
+/** Whether the body is falling under physics. */
+bool falling();
+
+/** The fastest of the falling body's parts, metres a second; 0 when it is not falling. */
+float fall_speed();
+
+/** Where the body lies now; all zero when the figure is not built. */
+Landing landing();
+
+/**
+ * Gets up from a fall: the ragdoll turns kinematic, the root goes to `at` facing `yaw` (radians clockwise from +z) with
+ * the body left where it lies, and `state` plays from its start, the landed pose blending into it over `blendSeconds`
+ * (inertialization, in the pass after the animation). Does nothing when the figure is not built.
+ */
+void rise(const char* state, phasmo::Vector3 at, float yaw, float blendSeconds);
+
 /** Whether a call of Final IK's IKExecutionOrder.LateUpdate on `instance` is for the figure's own `own`: both set and
  * the same. Every model with an IKExecutionOrder runs it. */
 inline bool is_own_ik(const void* instance, const void* own) { return instance && instance == own; }
