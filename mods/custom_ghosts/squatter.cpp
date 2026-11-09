@@ -127,6 +127,7 @@ struct State {
   api::Held slamCloset;
   // When this client's figure began a trip, until it has stood up from it (stood_up): its facing holds while it is down.
   std::optional<uint64_t> tripSince;
+  uint32_t tripVariant = 0;  // which of the two trips it is down from
 };
 
 State g;
@@ -752,6 +753,8 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
           if (const char* why = clumsy_reason(around))
             PM_LOG("squatter: a clumsy move (%s; it read: %s)", why, sensed_list(around).c_str());
         }
+        // A trip and a dive each pick one of their two clips at random (user, 2026-11-09), the same on every client.
+        if (pick.move == Move::Stumble || pick.move == Move::Roll) pick.variant = static_cast<uint8_t>(roll() % 2);
         if (pick.move != c.out.move || plays_once(pick.move)) {
           c.out.move = pick.move;
           c.out.variant = pick.variant;
@@ -1083,7 +1086,10 @@ void play(void* ghost) {
   // A trip plays on into getting up (the bundle's Stumble); a move the master sends while the figure is still down waits
   // until it stands.
   if (c.move && !(g.tripSince && s.move != Move::Stumble)) figure::play(s.move, s.variant);
-  if (c.move && s.move == Move::Stumble && s.act < 0) g.tripSince = t;
+  if (c.move && s.move == Move::Stumble && s.act < 0) {
+    g.tripSince = t;
+    g.tripVariant = s.variant;
+  }
   // Its walking and running keep pace with how fast the ghost moves here (figure::set_pace), smoothed over a moment.
   const Point here = at_of(ghost);
   const double seconds = seconds_now();
@@ -1149,9 +1155,9 @@ void play(void* ghost) {
   // Stood up from a trip: the get-up stands it facing kStandUpTurnDegrees round from its root, so the root turns as far
   // and the figure snaps to standing in the same frame, the body staying as it stands; then it plays the master's move,
   // and turns back to its way as it always turns.
-  if (g.tripSince && stood_up(*g.tripSince, t)) {
+  if (g.tripSince && stood_up(*g.tripSince, t, g.tripVariant)) {
     g.tripSince.reset();
-    g.facing = risen_facing(*g.facing);
+    g.facing = risen_facing(*g.facing, g.tripVariant);
     show(ghost);
     figure::snap_to(state_for(Move::Stand, 0));
     if (s.act < 0 && s.move != Move::Stumble) figure::play(s.move, s.variant);

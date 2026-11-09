@@ -40,7 +40,8 @@ inline constexpr const char* kDuckStates[] = {"Duck_A", "Duck_B"};
 inline constexpr const char* kWeaveStates[] = {"Weave_A", "Weave_B"};
 inline constexpr const char* kRollStates[] = {"Roll_A", "Roll_B"};
 inline constexpr const char* kParkourStates[] = {"Parkour_A"};  // jumping up, which runs on into a forward roll
-inline constexpr const char* kStumbleStates[] = {"Stumble"};  // Soccer Trip, a trip from a run (user, 2026-11-09)
+// A trip from a run, one of two at random (user, 2026-11-09): Soccer Trip, or Tripping.
+inline constexpr const char* kStumbleStates[] = {"Stumble", "Trip"};
 // Clips each client plays of its own around the master's moves: turning on the spot, and setting off from standing.
 inline constexpr const char* kTurnLeftState = "TurnLeft";
 inline constexpr const char* kTurnRightState = "TurnRight";
@@ -56,6 +57,13 @@ inline constexpr float kTripSeconds = 1.6000f;
 // the turn about the vertical that leaves the least of the two clips' body rotations (their RootQ curves: the trip lands on
 // its side, Standing Up begins face down) to blend. It stands up facing this far round too.
 inline constexpr float kStandUpTurnDegrees = 119.0f;
+// The second trip's get-up: the user's Getting Up, imported again as its own state, trimmed to its rise and turned -143
+// degrees to begin lying as Tripping lands (the bundle's build says how). Tripping lasts kTrippingSeconds.
+inline constexpr const char* kTripGetUpState = "TripGetUp";
+inline constexpr float kTrippingSeconds = 2.1000f;
+// How far round from its root each trip's get-up stands it (kStumbleStates' order): Standing Up stands facing its own
+// turn; Getting Up ends 7 degrees short of its clip's forward, so its -143 turn stands it at -150.
+inline constexpr float kRiseTurnDegrees[] = {kStandUpTurnDegrees, -150.0f};
 
 /** The states a move may play, one or two. */
 inline std::span<const char* const> states_of(Move m) {
@@ -107,11 +115,11 @@ struct StateClip {
 inline constexpr StateClip kStateClips[] = {
     {"Run", 0.7000f},     {"Walk", 1.0333f},      {"Stand", 6.0000f},     {"Sneak", 1.0333f}, {"Duck_A", 1.2667f},
     {"Duck_B", 1.1000f},  {"Weave_A", 1.1333f},   {"Weave_B", 1.1333f},   {"Roll_A", 1.1667f},
-    {"Roll_B", 2.3667f},  {"Parkour_A", 1.4000f}, {"Parkour_B", 2.0000f}, {"Stumble", 6.1000f},
+    {"Roll_B", 2.3667f},  {"Parkour_A", 1.4000f}, {"Parkour_B", 2.0000f}, {"Stumble", 6.1000f}, {"Trip", 4.3000f},
     {"Sit", 10.2667f},    {"GetUp", 2.7000f},     {"Kick", 1.3000f},      {"Bang", 1.3000f},
     {"Bump", 1.1667f},    {"OpenDoorOutwards", 4.1000f}, {"OpenDoorInwards", 6.3667f},
     {"TurnLeft", 1.0333f}, {"TurnRight", 1.0333f},  {"Turn180", 1.0000f},   {"StartWalk", 2.9333f},
-    {"StandUp", 4.5000f}};
+    {"StandUp", 4.5000f}, {"TripGetUp", 2.2000f}};
 
 // How fast each paced move's clips travel on their own, metres a second, as the bundle's build reads them: the Run
 // blend goes from Jogging at the first to Running at the second by the ground speed, and Walk and Sneak are one clip.
@@ -155,6 +163,7 @@ inline std::vector<const char*> all_states() {
   for (const Act a : kAllActs) out.push_back(state_of(a));
   for (const char* s : kLocalStates) out.push_back(s);
   out.push_back(kStandUpState);
+  out.push_back(kTripGetUpState);
   return out;
 }
 
