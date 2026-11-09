@@ -707,6 +707,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
           c.moveUntil = t + static_cast<uint64_t>(hold * 1000.0f);
           c.nextClumsy = c.moveUntil + kClumsyGapMs;
           if (pick.move == Move::Roll) c.nextDive = t + kDiveGapMs;
+          if (const std::optional<Lines> line = line_for_move(pick.move)) say(*line, t);  // a trip's line as it falls
         } else {
           c.moveUntil = t + kSenseMs;
         }

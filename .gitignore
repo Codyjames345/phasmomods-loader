@@ -25,3 +25,7 @@
 /.vscode
 # A mod's AssetBundles hold third-party animation (Mixamo) that may not be redistributed raw: never committed.
 *.bundle
+
+# Audacity projects: the recordings they make are exported as WAV into the mods' assets; the projects stay local.
+*.aup4
+*.aup3

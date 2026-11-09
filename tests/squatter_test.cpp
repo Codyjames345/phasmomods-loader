@@ -447,14 +447,23 @@ void wav_refuses_malformed() {
 }
 
 void every_set_has_a_folder_name() {
-  const char* expected[] = {"lurk", "chase", "search", "hiding", "catch", "door", "tired", "mope", "excited", "friendly"};
+  const char* expected[] = {"lurk", "chase",   "search",   "hiding", "catch", "door",
+                            "tired", "mope", "excited", "friendly", "trip"};
+  CHECK(kLinesValues == 11);
   std::set<std::string> seen;
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < kLinesValues; ++i) {
     const char* name = voice::folder_name(static_cast<Lines>(i));
     CHECK(std::string(name) == expected[i]);
     seen.insert(name);
   }
-  CHECK(seen.size() == 10);
+  CHECK(seen.size() == 11);
+}
+
+// A trip says one of the user's trip lines as it falls (user, 2026-11-09: the trip folder); no other move speaks.
+void a_trip_says_its_line() {
+  CHECK(line_for_move(Move::Stumble) == Lines::Trip);
+  for (int m = 0; m < kMoveValues; ++m)
+    if (static_cast<Move>(m) != Move::Stumble) CHECK(!line_for_move(static_cast<Move>(m)));
 }
 
 void sets_list_their_files_sorted_by_name() {
@@ -512,7 +521,7 @@ void every_voice_file_is_in_the_payload() {
   const std::string payload = read_text(root / "tools" / "payload.psd1");
   CHECK(!payload.empty());
   const std::string prefix = "mods/custom_ghosts/assets/squatter/voice/";
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < kLinesValues; ++i) {
     const std::string set = voice::folder_name(static_cast<Lines>(i));
     const fs::path folder = root / "mods" / "custom_ghosts" / "assets" / "squatter" / "voice" / set;
     CHECK(fs::is_directory(folder));
@@ -1283,6 +1292,7 @@ int main() {
   wav_decodes_mono_and_stereo();
   wav_refuses_malformed();
   every_set_has_a_folder_name();
+  a_trip_says_its_line();
   sets_list_their_files_sorted_by_name();
   missing_sets_stay_silent();
   every_voice_file_is_in_the_payload();

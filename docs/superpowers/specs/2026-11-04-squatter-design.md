@@ -25,7 +25,7 @@ well it works.
    for them, never on a timer (user, 2026-11-09), and only once it faces the way it runs, since each carries it the way it
    faces (user, 2026-11-09: it rolled before it had turned to the player): it jumps down stairs and drops and over knee-high props, landing into a forward
    roll; it dive-rolls at the player it chases when they are a few metres straight ahead; it trips over ankle-high props (the
-   builder's call); it weaves side-on through doorways and gaps and ducks past furniture beside it. It runs a little slower to
+   builder's call), saying one of the user's trip lines as it falls (user, 2026-11-09); it weaves side-on through doorways and gaps and ducks past furniture beside it. It runs a little slower to
    keep under the sprint without them. It bumps into things it stalls against, playing recordings as it goes. When it goes through a door during the chase it plays an opening-door clip, inwards
    or outwards (user, 2026-11-07). These moves change its speed where relevant. It goes for the nearest player when
    several are inside. When players can't sprint, its speed stays the same and it taunts them with a unique line, like "awww too tired to

@@ -27,7 +27,8 @@ enum class Phase : uint8_t {
 enum class Move : uint8_t { Run, Duck, Weave, Roll, Parkour, Stumble, Walk, Stand, Sneak };
 
 /** Which set of recorded lines the Squatter speaks from; the mod holds the recordings. */
-enum class Lines : uint8_t { Lurk, Chase, Search, Hiding, Catch, Door, Tired, Mope, Excited, Friendly };
+// Trip, the user's lines as it trips (2026-11-09), comes last so the sets before it keep their numbers on the wire.
+enum class Lines : uint8_t { Lurk, Chase, Search, Hiding, Catch, Door, Tired, Mope, Excited, Friendly, Trip };
 
 /** What the mod has read from the game this frame. */
 struct Facts {
@@ -200,7 +201,7 @@ inline float move_hold_seconds(Move m, float clipSeconds) {
   return plays_once(m) && std::isfinite(clipSeconds) ? std::max(kMoveSlotSeconds, clipSeconds) : kMoveSlotSeconds;
 }
 
-/** The set of lines spoken in a phase. Catch and Tired are triggered by events instead, not by a phase. */
+/** The set of lines spoken in a phase. Catch, Tired, Door and Trip are triggered by events instead, not by a phase. */
 inline Lines lines_for(Phase now) {
   switch (now) {
     case Phase::Lurking: return Lines::Lurk;
@@ -213,6 +214,11 @@ inline Lines lines_for(Phase now) {
     case Phase::Following: return Lines::Friendly;
   }
   return Lines::Lurk;
+}
+
+/** The line a move says as it begins: a trip its trip line (user, 2026-11-09); any other move none. */
+inline std::optional<Lines> line_for_move(Move m) {
+  return m == Move::Stumble ? std::optional<Lines>(Lines::Trip) : std::nullopt;
 }
 
 /** Whether to taunt now: the target's sprint has just lapsed and `secondsSinceTaunt` has passed the cooldown. */
