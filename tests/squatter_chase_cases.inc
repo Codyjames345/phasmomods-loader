@@ -486,6 +486,10 @@ void the_pace_keeps_the_distance_of_a_frame_with_no_time() {
 // tripped; a ray down its middle missed what its feet met). The rays are spread evenly, symmetric about its line.
 void the_way_ahead_is_read_across_its_width() {
   CHECK(kSweepRays >= 3 && kSweepRays % 2 == 1);  // one down the middle
+  // What lies on a floor is low (a shoe about 0.1 m, equipment lying flat a few centimetres), so the trip reads just
+  // above the floor as well as at the ankle (user, 2026-11-09: it still never tripped).
+  CHECK(kUnderfootHeight > 0.0f && kUnderfootHeight <= 0.05f && kUnderfootHeight < kAnkleHeight);
+  CHECK(kAnkleHeight < kKneeHeight && kKneeHeight < kChestHeight);
   CHECK(std::abs(sweep_offset(0) + kSweepHalfWidth) < 1e-6f);
   CHECK(std::abs(sweep_offset(kSweepRays - 1) - kSweepHalfWidth) < 1e-6f);
   CHECK(std::abs(sweep_offset(kSweepRays / 2)) < 1e-6f);

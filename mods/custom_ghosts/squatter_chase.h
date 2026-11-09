@@ -491,6 +491,9 @@ inline float move_facing(Move m, uint32_t variant, float heading) {
 // kSenseMs while it runs, and after a clumsy move it runs kClumsyGapMs before another.
 inline constexpr uint64_t kSenseMs = 150, kClumsyGapMs = 1500, kDiveGapMs = 8000;
 inline constexpr float kAnkleHeight = 0.15f, kKneeHeight = 0.45f, kChestHeight = 1.1f, kWaistHeight = 0.9f;
+// Just above the floor, where most of what it trips over lies: a shoe stands about 0.1 m, equipment lying flat a few
+// centimetres, both under the ankle's sweep (user, 2026-11-09: it still never tripped). A starting value.
+inline constexpr float kUnderfootHeight = 0.04f;
 inline constexpr float kPropLook = 1.2f;              // how far ahead a prop in its way counts
 inline constexpr float kDropAhead = 1.5f, kDropDepth = 0.5f;  // where it looks for the floor, and how far down is a drop
 inline constexpr float kGapHalf = 0.5f;               // either side within this: a doorway or gap
