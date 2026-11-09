@@ -1,5 +1,7 @@
 #include "ui.h"
 
+#include <algorithm>
+
 #include "Transform.h"
 #include "UnityObject.h"
 #include "UnityRendering.h"
@@ -155,6 +157,47 @@ void set_color(void* graphic, Color color) {
 Color color(void* graphic) {
   const phasmo::Color c = phasmo::Graphic::get_color.virtual_call(graphic);
   return {c.r, c.g, c.b, c.a};
+}
+
+}  // namespace pm::ui
+
+namespace pm::ui {
+
+void* create_world_canvas(const char* name, void* follow, float metresPerUnit) {
+  if (!follow || !game::alive(follow)) return nullptr;
+  void* go = game::new_game_object(name);
+  if (!go) return nullptr;
+  void* canvas = game::add_component(go, phasmo::Canvas::type.type_object());
+  if (!canvas) {
+    game::destroy(go);
+    return nullptr;
+  }
+  phasmo::Canvas::set_renderMode(canvas, phasmo::RenderMode::WorldSpace());
+  void* t = game::object_transform(go);
+  phasmo::Transform::SetParent(t, follow, false);
+  game::set_local_position(t, {0.0f, 0.0f, 0.0f});
+  game::set_local_rotation(t, {0.0f, 0.0f, 0.0f, 1.0f});
+  game::set_local_scale(t, {metresPerUnit, metresPerUnit, metresPerUnit});
+  return canvas;
+}
+
+void* texture_from_rgba(int width, int height, const uint8_t* rgba, size_t bytes) {
+  if (width <= 0 || height <= 0 || !rgba || bytes != static_cast<size_t>(width) * static_cast<size_t>(height) * 4)
+    return nullptr;
+  void* texture = phasmo::Texture2D::type.make();
+  if (!texture) return nullptr;
+  phasmo::Texture2D::ctor(texture, width, height);
+  phasmo::Object::set_hideFlags(texture, phasmo::HideFlags::DontUnloadUnusedAsset());
+  void* pixels = phasmo::Texture2D::GetPixels32(texture, 0);
+  const api::Array<phasmo::Color32> texels{pixels};
+  if (texels.size() * sizeof(phasmo::Color32) != bytes) {
+    game::destroy(texture);
+    return nullptr;
+  }
+  std::copy_n(rgba, bytes, reinterpret_cast<uint8_t*>(&texels[0]));
+  phasmo::Texture2D::SetPixels32(texture, pixels, 0);
+  phasmo::Texture2D::Apply(texture, false, true);
+  return texture;
 }
 
 }  // namespace pm::ui

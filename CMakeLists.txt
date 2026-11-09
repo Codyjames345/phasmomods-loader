@@ -53,7 +53,7 @@ add_custom_command(TARGET gamecheck POST_BUILD COMMAND gamecheck --map-digest "$
 # A mod's side of the host contract (core/mod_api.h) and the game API it calls (sdk/api, sdk/map).
 add_library(pmmod STATIC core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/api/assets.cpp
   sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/keybinds.cpp sdk/api/player_anim.cpp
-  sdk/api/third_person.cpp sdk/api/talk_loudness.cpp)
+  sdk/api/third_person.cpp sdk/api/talk_loudness.cpp sdk/api/screen_effects.cpp)
 target_include_directories(pmmod PUBLIC sdk/api sdk/map)
 target_link_libraries(pmmod PUBLIC pmcore)
 pm_options(pmmod)
@@ -355,6 +355,10 @@ target_include_directories(third_person_test BEFORE PRIVATE sdk/api sdk/map sdk/
 pm_test(talk_loudness sdk/api/talk_loudness.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(talk_loudness_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# A screen blur and vignette of a mod's own (sdk/api/screen_effects.h).
+pm_test(screen_effects sdk/api/screen_effects.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(screen_effects_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(models sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(models_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+
 // Screen-space UI built from the game's own Unity UI classes (Canvas, TextMeshPro, Image), using
 // the game's own font so mod UI reads as part of the game, through the game API. Main thread only.
 namespace pm::ui {
@@ -48,5 +51,14 @@ Color color(void* graphic);
 bool contains(void* component, Vec2 screenPoint, void* camera = nullptr);
 // Where screenPoint falls inside the element, 0..1 from its bottom-left corner; false if outside.
 bool normalized_point(void* component, Vec2 screenPoint, Vec2& out, void* camera = nullptr);
+
+// A canvas drawn in the world (RenderMode.WorldSpace), as a flat object under the Transform `follow`, at its origin and
+// turned with it: one canvas unit is `metresPerUnit` metres. For a VR player, whose screen is the world. Lay out its
+// children with place() as on an overlay canvas, centred on (0, 0) with a size in canvas units.
+void* create_world_canvas(const char* name, void* follow, float metresPerUnit);
+
+// A Texture2D of `width` by `height` RGBA texels (row by row from the bottom, 4 bytes each), kept until destroyed:
+// for shapes a mod draws in code. Null when `rgba` is not width * height * 4 bytes or the entries did not resolve.
+void* texture_from_rgba(int width, int height, const uint8_t* rgba, size_t bytes);
 
 }  // namespace pm::ui
