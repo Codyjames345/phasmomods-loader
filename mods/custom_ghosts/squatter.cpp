@@ -297,8 +297,10 @@ Surroundings surroundings(void* agent, Point at, const Seen* target, bool mayDiv
   const bool chest = sweep(kChestHeight, solid);
   const bool knee = sweep(kKneeHeight, furniture);
   s.kneeProp = knee && !chest;
-  // Underfoot, dropped equipment trips it as furniture does.
-  s.ankleProp = !knee && sweep(kAnkleHeight, furniture | mask_of({L::Item.index()}));
+  // Underfoot, dropped equipment trips it as furniture does; it reads just above the floor, where shoes and equipment
+  // lie, as well as at the ankle.
+  const int32_t underfoot = furniture | mask_of({L::Item.index()});
+  s.ankleProp = !knee && (sweep(kUnderfootHeight, underfoot) || sweep(kAnkleHeight, underfoot));
   const phasmo::Vector3 down{0, -1, 0};
   const phasmo::Vector3 there{at.x + ahead.x * kDropAhead, at.y + kDropDepth, at.z + ahead.z * kDropAhead};
   s.dropAhead = ground && !ray_hits(there, down, 2.0f * kDropDepth, ground);
@@ -712,10 +714,10 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
             g.facing && g.local != State::Local::Turning && faces_ahead(*g.facing, std::atan2(v.x, v.z));
         if (t >= c.nextClumsy && !paused && facesAhead) {
           // Never a dive at a player in a hiding place: it would roll through the door.
-          const Surroundings way =
+          const Surroundings around =
               surroundings(agent, ghostAt, targetSensed && !c.hidingKnown ? target : nullptr, t >= c.nextDive);
-          pick = move_for(way);
-          if (const char* why = clumsy_reason(way)) PM_LOG("squatter: a clumsy move (%s)", why);
+          pick = move_for(around);
+          if (const char* why = clumsy_reason(around)) PM_LOG("squatter: a clumsy move (%s)", why);
         }
         if (pick.move != c.out.move || plays_once(pick.move)) {
           c.out.move = pick.move;
