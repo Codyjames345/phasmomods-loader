@@ -35,9 +35,10 @@ inline constexpr float kWishedHearRange = 1000.0f;
 
 // How long it still knows where a target is after it last saw or heard them.
 inline constexpr uint64_t kTrackMs = 4000;
-// The gap between two of its lines in a phase that talks, picked at random in this range.
-inline constexpr uint64_t kLineGapMinMs = 4000;
-inline constexpr uint64_t kLineGapMaxMs = 9000;
+// The gap between two of its lines in a phase that talks, picked at random in this range (user, 2026-11-10: they came
+// too often at 4 to 9 s). Any line, an event's too, starts the gap again.
+inline constexpr uint64_t kLineGapMinMs = 12000;
+inline constexpr uint64_t kLineGapMaxMs = 24000;
 // It counts as stuck after moving at under kStuckFraction of the pace it wants for kStuckMs: it bumps into something.
 inline constexpr uint64_t kStuckMs = 700;
 inline constexpr float kStuckFraction = 0.25f;

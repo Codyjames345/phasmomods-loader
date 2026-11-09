@@ -68,6 +68,8 @@ void lines_come_at_a_random_gap() {
   c.spoke(10000, 0xFFFFFFFFu);
   CHECK(!c.due(10000 + kLineGapMinMs));
   CHECK(c.due(10000 + kLineGapMaxMs));
+  // Not chatty (user, 2026-11-10: lines played too often): at least 12 s between two, up to 24 s.
+  CHECK(kLineGapMinMs == 12000 && kLineGapMaxMs == 24000);
 }
 
 // It is stuck when it moves at under kStuckFraction of the pace it wants for kStuckMs, which plays a bump.
