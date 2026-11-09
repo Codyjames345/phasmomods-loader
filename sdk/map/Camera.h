@@ -84,6 +84,14 @@ inline constexpr pm::sdk::EntryDesc Camera_get_fieldOfView{
 inline constexpr pm::sdk::EntryDesc Camera_get_aspect{.key = "Camera.get_aspect", .kind = pm::sdk::Kind::Method,
                                                       .owner = "Camera", .name = "get_aspect"};
 
+inline constexpr const char* Camera_Camera[] = {"Camera"};
+
+/// Copies every setting of another camera onto this one (field of view, clip planes, culling mask, depth, target,
+/// clear flags) and moves this one to the other's place: the engine function behind Camera.CopyFrom. Inferred: Unity's
+/// documented API.
+inline constexpr pm::sdk::EntryDesc Camera_CopyFrom{.key = "Camera.CopyFrom", .kind = pm::sdk::Kind::Icall,
+                                                    .name = "UnityEngine.Camera::CopyFrom", .params = Camera_Camera};
+
 }  // namespace pm::map
 
 /// @file
@@ -141,6 +149,8 @@ struct Camera {
   static constexpr pm::api::Method<pm::map::Camera_get_fieldOfView, float(void*)> get_fieldOfView{};
   /// get_aspect(camera): its width over its height. Unresolved: 0.
   static constexpr pm::api::Method<pm::map::Camera_get_aspect, float(void*)> get_aspect{};
+  /// CopyFrom(camera, other): every setting of `other`, and its place. Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Camera_CopyFrom, void(void*, void*)> CopyFrom{};
 };
 
 /// @}

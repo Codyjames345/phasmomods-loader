@@ -57,6 +57,19 @@ pointer, and no selected state from a click.
 A copy's selection states keep their (empty) persistent listeners: the host does not replace those events. A build
 that gives a tape's states a listener would run it on the copy too.
 
+## Key bindings
+
+The game's actions and their default bindings are listed in [players](players.md#what-the-player-does-by-input-action).
+Every D-pad direction is bound on a gamepad (up and right only to the menu actions UIUp and UIRight). The keyboard's B is
+the walkie-talkie's push to talk. The VR controllers' actions are XR Interaction actions; the left controller's
+PrimaryButton and SecondaryButton (X and Y on a Touch controller) are bound to nothing.
+
+Each row of the keybinds menu is a `RebindActionUI`, Unity's rebinding sample: its `RebindActionUI.m_Action` (an
+`InputActionReference`) and `RebindActionUI.m_BindingId` name the binding it rebinds, and `RebindActionUI.m_ActionLabel`
+shows the action's name. The game saves its own actions' overrides as a JSON list of binding ids and paths. A mod key
+(`sdk/api/keybinds.h`) is a copy of a row pointed at a standalone action of the mod's own (`InputAction.ctor`,
+`InputActionReference.Create`), whose rebinding the SDK saves in the mod's data folder.
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/menus.md).

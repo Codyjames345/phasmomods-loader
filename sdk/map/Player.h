@@ -859,6 +859,95 @@ inline constexpr pm::sdk::EntryDesc DragRigidbodyUse_FixedUpdate{
     .key = "DragRigidbodyUse.FixedUpdate", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "DragRigidbodyUse", .name = "FixedUpdate"};
 
+// The investigator's body as a mod animates it (sdk/api/player_anim.h, sdk/api/third_person.h): its Animator, its
+// renderers, its hand anchors, and the local rig's parts that place the view and the held item. How the game animates,
+// hides and turns the body is in sdk/systems/players.md, "The body".
+
+/// The body's Animator: Player's one Animator field, on every client. Its controller is the game's (with override
+/// controllers per held item); Animation Rigging and PhotonAnimatorView act on it too. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc Player_animator{.key = "Player.animator", .kind = pm::sdk::Kind::Field,
+                                                    .owner = "Player", .type = "Animator"};
+
+/// The body's renderers, a Renderer[]: Player's one field of that type. Player.SetPlayerModelLayer moves each one's
+/// GameObject between two named layers, which is how the local player's own camera leaves its body out. Decompiled.
+inline constexpr pm::sdk::EntryDesc Player_renderers{.key = "Player.renderers", .kind = pm::sdk::Kind::Field,
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .owner = "Player", .type = "Renderer[]"};
+
+/// The body's animation scripts (Assembly-CSharp, global namespace): its Animator, hand anchors, rigs and the
+/// parameters it sets each frame. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc PlayerCharacterAnimations{.key = "PlayerCharacterAnimations",
+                                                             .name = "PlayerCharacterAnimations",
+                                                             .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The investigator's PlayerCharacterAnimations: Player's one field of that type. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc Player_characterAnimations{.key = "Player.characterAnimations",
+                                                               .kind = pm::sdk::Kind::Field, .owner = "Player",
+                                                               .type = "@PlayerCharacterAnimations"};
+
+/// The right hand's anchor, a Transform the held item hangs from on the body. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc PlayerCharacterAnimations_parentingTargetRightHand{
+    .key = "PlayerCharacterAnimations.parentingTargetRightHand", .kind = pm::sdk::Kind::Field,
+    .owner = "PlayerCharacterAnimations", .name = "parentingTargetRightHand"};
+
+/// The left hand's anchor, a Transform. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc PlayerCharacterAnimations_parentingTargetLeftHand{
+    .key = "PlayerCharacterAnimations.parentingTargetLeftHand", .kind = pm::sdk::Kind::Field,
+    .owner = "PlayerCharacterAnimations", .name = "parentingTargetLeftHand"};
+
+/// How loud the player is talking, the value PlayerAudio.IsTalkingLoudly compares: PlayerAudio's one public float.
+/// PlayerAudio.Update, on every client for every player, refreshes it once a second from GetPlayerVoiceAmplitude: the
+/// louder of the player's two Vivox participants' audio energy, less 0.4. IsTalkingLoudly zeroes it when it answers
+/// true. Decompiled.
+inline constexpr pm::sdk::EntryDesc PlayerAudio_loudness{.key = "PlayerAudio.loudness", .kind = pm::sdk::Kind::Field,
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "PlayerAudio", .type = "float",
+                                                         .access = pm::sdk::Visibility::Public};
+
+/// The player's positional voice, the AudioSource of its local Vivox participant's tap, or null before it has one.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc PlayerAudio_GetPlayerVoiceAudioSource{
+    .key = "PlayerAudio.GetPlayerVoiceAudioSource", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PlayerAudio", .name = "GetPlayerVoiceAudioSource"};
+
+/// The PC player's hands (Assembly-CSharp, global namespace): its input handlers for picking up, using, dropping and
+/// switching items, and the slot in front of the camera the held item hangs in on its own client. Inferred: from the
+/// class dump.
+inline constexpr pm::sdk::EntryDesc PCPropGrab{.key = "PCPropGrab", .name = "PCPropGrab", .assembly = "Assembly-CSharp",
+                                              .ns = ""};
+
+/// The item in the camera slot (the held item, on the PC player's own client), a PhotonObjectInteract, or null.
+/// Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc PCPropGrab_GetItemInCameraSlot{
+    .key = "PCPropGrab.GetItemInCameraSlot", .kind = pm::sdk::Kind::Method, .owner = "PCPropGrab",
+    .name = "GetItemInCameraSlot"};
+
+inline constexpr const char* PCPropGrab_PhotonObjectInteract[] = {"PhotonObjectInteract"};
+
+/// Puts an item back in the camera slot, at the item's own local offset and turn: what the game does on its own client
+/// when the player takes an item in hand. Local only: the held item's sync component is off while held
+/// (NetworkedPropGrab.GrabPropRPC), so nothing is sent. Decompiled.
+inline constexpr pm::sdk::EntryDesc PCPropGrab_ParentItemOnLocalPlayer{
+    .key = "PCPropGrab.ParentItemOnLocalPlayer", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PCPropGrab", .name = "ParentItemOnLocalPlayer",
+    .params = PCPropGrab_PhotonObjectInteract};
+
+/// The PC player's look on its own body (Assembly-CSharp, global namespace): in LateUpdate it bends the spine and head
+/// toward where the camera looks. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc PCLook{.key = "PCLook", .name = "PCLook", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The VR player's investigator (Assembly-CSharp, global namespace), a Player. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc VRPlayer{.key = "VRPlayer", .name = "VRPlayer", .assembly = "Assembly-CSharp",
+                                            .ns = ""};
+
+/// The left hand's IK target, a Transform that follows the left controller. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc VRPlayer_leftHandIK{.key = "VRPlayer.leftHandIK", .kind = pm::sdk::Kind::Field,
+                                                        .owner = "VRPlayer", .name = "leftHandIK"};
+
+/// The right hand's IK target, a Transform that follows the right controller. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc VRPlayer_rightHandIK{.key = "VRPlayer.rightHandIK", .kind = pm::sdk::Kind::Field,
+                                                         .owner = "VRPlayer", .name = "rightHandIK"};
+
 }  // namespace pm::map
 
 /// @file
@@ -932,6 +1021,11 @@ struct PlayerAudio {
   /// IsTalkingLoudly(audio, loudness): whether the player talks above `loudness` (the game passes 0.1) or on a
   /// walkie-talkie. A true answer clears the loudness it read (map note). Unresolved: false.
   static constexpr pm::api::Method<pm::map::PlayerAudio_IsTalkingLoudly, bool(void*, float)> IsTalkingLoudly{};
+  /// How loud the player talks, the value IsTalkingLoudly compares: loudness.get(audio). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::PlayerAudio_loudness, float> loudness{};
+  /// GetPlayerVoiceAudioSource(audio): the positional voice's AudioSource, or null. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::PlayerAudio_GetPlayerVoiceAudioSource, void*(void*)>
+      GetPlayerVoiceAudioSource{};
 };
 
 /// One player of the room. `spot` below is the PlayerSpot.
@@ -987,6 +1081,12 @@ struct Player {
   static constexpr pm::api::Field<pm::map::Player_propGrab, void*> propGrab{};
   /// Its PlayerAudio, its voice: audio.get(player). Unresolved: null.
   static constexpr pm::api::Field<pm::map::Player_audio, void*> audio{};
+  /// Its body's Animator: animator.get(player). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Player_animator, void*> animator{};
+  /// Its body's Renderer[]: renderers.get(player). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Player_renderers, void*> renderers{};
+  /// Its PlayerCharacterAnimations: characterAnimations.get(player). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Player_characterAnimations, void*> characterAnimations{};
   /// RevivePlayer(player, flag): revives it once it is marked dead, by RPC to every client. A mod hooks it.
   /// Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Player_RevivePlayer, void(void*, bool)> RevivePlayer{};
@@ -1022,6 +1122,43 @@ struct PCCanvas {
   static constexpr pm::api::Type<pm::map::PCCanvas> type{};
   /// Its crosshair, an Image: crosshair.get(canvas). Unresolved: null.
   static constexpr pm::api::Field<pm::map::PCCanvas_crosshair, void*> crosshair{};
+};
+
+/// The body's animation scripts.
+struct PlayerCharacterAnimations {
+  /// The right hand's anchor, a Transform: parentingTargetRightHand.get(anims). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::PlayerCharacterAnimations_parentingTargetRightHand, void*>
+      parentingTargetRightHand{};
+  /// The left hand's anchor, a Transform: parentingTargetLeftHand.get(anims). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::PlayerCharacterAnimations_parentingTargetLeftHand, void*>
+      parentingTargetLeftHand{};
+};
+
+/// The PC player's hands.
+struct PCPropGrab {
+  /// The type: type_object() for GetComponentInChildren. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::PCPropGrab> type{};
+  /// GetItemInCameraSlot(grab): the held item, a PhotonObjectInteract, or null. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::PCPropGrab_GetItemInCameraSlot, void*(void*)> GetItemInCameraSlot{};
+  /// ParentItemOnLocalPlayer(grab, item): puts the item back in the camera slot. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::PCPropGrab_ParentItemOnLocalPlayer, void(void*, void*)>
+      ParentItemOnLocalPlayer{};
+};
+
+/// The PC player's look on its own body.
+struct PCLook {
+  /// The type: type_object() for GetComponentInChildren. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::PCLook> type{};
+};
+
+/// The VR player's investigator.
+struct VRPlayer {
+  /// The type: is(player). Unresolved: false.
+  static constexpr pm::api::Type<pm::map::VRPlayer> type{};
+  /// The left hand's IK target, a Transform: leftHandIK.get(player). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::VRPlayer_leftHandIK, void*> leftHandIK{};
+  /// The right hand's IK target, a Transform: rightHandIK.get(player). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::VRPlayer_rightHandIK, void*> rightHandIK{};
 };
 
 /// What an investigator carries. `grab` below is a NetworkedPropGrab.

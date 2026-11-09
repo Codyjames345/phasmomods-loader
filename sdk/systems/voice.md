@@ -30,6 +30,17 @@ the consent notice says so before anyone agrees. A contract only begins once eve
 - `VoiceVolume.Update` reads this client's local Player with no null check, so it throws every frame on a client with none.
   Don't clear `Network.localPlayer` ([Players](players.md)).
 
+## How loud a player talks
+
+`PlayerAudio.loudness` is the value the ghost's two voice checks compare (`PlayerAudio.IsTalkingLoudly`, from the hunt's
+`GhostHuntState.Hears` and the idle state's `LevelRoom.ArePlayersTalkingInRoom`). `PlayerAudio.Update` runs on every
+client for every player and refreshes it once a second: the louder of the player's two Vivox participants' audio energy,
+less 0.4. `IsTalkingLoudly(threshold)` answers true when it is above the threshold (the game passes 0.1), or while the
+player transmits on a walkie-talkie, and then zeroes it, so the next ask needs a new refresh. The ghost runs on the
+master, so the master's copy is the one its checks read. A sound a mod adds to a player's loudness on the master
+(`sdk/api/talk_loudness.h`) is heard by the ghost as that player talking, with every rule the checks apply. The voice's
+own positional AudioSource is `PlayerAudio.GetPlayerVoiceAudioSource`.
+
 ## Speech recognition
 
 Each client runs the game's own offline voice recognition on its own player. Its only caller of

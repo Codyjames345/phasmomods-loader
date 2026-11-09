@@ -19,7 +19,8 @@ foreach(case "no-such-dump" "unreadable-image" "unreadable-unity-player")
       "${WORK}/dump/PhotonRealtime" "${WORK}/dump/Photon3Unity3D" "${WORK}/dump/DoozyRuntime" "${WORK}/dump/UnityEngine.PhysicsModule"
       "${WORK}/dump/UnityEngine.AIModule" "${WORK}/dump/UnityEngine.AudioModule" "${WORK}/dump/DOTween"
       "${WORK}/dump/Micosmo.SensorToolkit" "${WORK}/dump/Unity.Services.Vivox" "${WORK}/dump/UnityEngine.UIModule" "${WORK}/dump/Unity.InputSystem"
-      "${WORK}/dump/com.rlabrecque.steamworks.net" "${WORK}/dump/Assembly-CSharp-firstpass")
+      "${WORK}/dump/com.rlabrecque.steamworks.net" "${WORK}/dump/Assembly-CSharp-firstpass"
+      "${WORK}/dump/Unity.RenderPipelines.Core.Runtime" "${WORK}/dump/Unity.RenderPipelines.Universal.Runtime")
     set(args --dump "${WORK}/dump" --image "${WORK}/not-an-image.dll")
   endif()
   execute_process(COMMAND "${GAMECHECK}" ${args} --addresses "${table}" RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
@@ -65,7 +66,7 @@ message(STATUS "The HOST line names the steering entries this build lacks.")
 # An icall cannot be checked without the running game: it is listed as checked at startup only and
 # counted apart from the entries that failed.
 string(FIND "${out}" "STARTUP Animator.SetBoolID UnityEngine.Animator::SetBoolID (checked at startup only)\n" icall)
-string(REGEX MATCH "missing, [0-9]+ ambiguous, [0-9]+ blocked, 36 checked at startup only, 55 checked in the scene files\n"
+string(REGEX MATCH "missing, [0-9]+ ambiguous, [0-9]+ blocked, 53 checked at startup only, 55 checked in the scene files\n"
   counted "${out}")
 if(icall EQUAL -1 OR NOT counted)
   message(FATAL_ERROR "the icall is not listed and counted as checked at startup only\n${out}${err}")
@@ -156,7 +157,8 @@ file(MAKE_DIRECTORY "${expectDump}/Assembly-CSharp" "${expectDump}/UnityEngine.A
   "${expectDump}/com.rlabrecque.steamworks.net" "${expectDump}/PhotonRealtime" "${expectDump}/Photon3Unity3D" "${expectDump}/DoozyRuntime" "${expectDump}/UnityEngine.PhysicsModule"
   "${expectDump}/UnityEngine.AIModule" "${expectDump}/UnityEngine.AudioModule" "${expectDump}/DOTween"
   "${expectDump}/Micosmo.SensorToolkit" "${expectDump}/Unity.Services.Vivox" "${expectDump}/UnityEngine.UIModule" "${expectDump}/Unity.InputSystem"
-  "${expectDump}/Unity.TextMeshPro" "${expectDump}/Assembly-CSharp-firstpass")
+  "${expectDump}/Unity.TextMeshPro" "${expectDump}/Assembly-CSharp-firstpass"
+  "${expectDump}/Unity.RenderPipelines.Core.Runtime" "${expectDump}/Unity.RenderPipelines.Universal.Runtime")
 file(COPY "${EXPECT_DUMP}/GhostAI.cs" DESTINATION "${expectDump}/Assembly-CSharp")
 function(run_expect name text)
   set(file "${WORK}/${name}.txt")
@@ -211,7 +213,8 @@ function(content_dump name extra)
   file(MAKE_DIRECTORY "${dir}/Assembly-CSharp" "${dir}/UnityEngine.AnimationModule" "${dir}/UnityEngine.CoreModule" "${dir}/UnityEngine.UI" "${dir}/mscorlib" "${dir}/PhotonUnityNetworking"
     "${dir}/com.rlabrecque.steamworks.net" "${dir}/PhotonRealtime" "${dir}/Photon3Unity3D" "${dir}/DoozyRuntime" "${dir}/UnityEngine.PhysicsModule"
     "${dir}/UnityEngine.AIModule" "${dir}/UnityEngine.AudioModule" "${dir}/DOTween"
-    "${dir}/Micosmo.SensorToolkit" "${dir}/Unity.Services.Vivox" "${dir}/UnityEngine.UIModule" "${dir}/Unity.TextMeshPro" "${dir}/Unity.InputSystem" "${dir}/Assembly-CSharp-firstpass")
+    "${dir}/Micosmo.SensorToolkit" "${dir}/Unity.Services.Vivox" "${dir}/UnityEngine.UIModule" "${dir}/Unity.TextMeshPro" "${dir}/Unity.InputSystem" "${dir}/Assembly-CSharp-firstpass"
+    "${dir}/Unity.RenderPipelines.Core.Runtime" "${dir}/Unity.RenderPipelines.Universal.Runtime")
   set(values "")
   set(i 0)
   foreach(ghost IN LISTS ghostNames)
