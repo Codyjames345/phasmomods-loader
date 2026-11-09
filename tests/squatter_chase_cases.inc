@@ -837,3 +837,22 @@ void every_fall_says_its_line() {
     CHECK(line_for_fall(c) == std::optional<Lines>(Lines::Trip));
   CHECK(line_for_move(Move::Stumble) == std::optional<Lines>(Lines::Trip));
 }
+
+// While its body falls the sheet is let go of its standing shape so it drops onto the floor rather than holding its cone
+// out in the air (user, 2026-11-10: something kept the sheet floating); as it gets up, the slack shrinks back over the
+// get-up, never at once, so the sheet is drawn back to the body rather than snapped. A point the head carries stays put.
+void the_sheet_falls_with_the_body() {
+  CHECK(sheet_slack(FallPhase::Falling, 0.0f) == 1.0f);
+  CHECK(sheet_slack(FallPhase::Up, 0.5f) == 0.0f);
+  CHECK(sheet_slack(FallPhase::GettingUp, 0.0f) == 1.0f && sheet_slack(FallPhase::GettingUp, 1.0f) == 0.0f);
+  float last = 1.0f;
+  for (float u = 0.0f; u <= 1.0f; u += 0.05f) {  // shrinks smoothly, only ever down
+    const float now = sheet_slack(FallPhase::GettingUp, u);
+    CHECK(now <= last + 1e-6f && now >= 0.0f);
+    last = now;
+  }
+  CHECK(slack_distance(0.0f, 1.0f) == 0.0f);                          // pinned at the head: never let go
+  CHECK(std::abs(slack_distance(0.12f, 1.0f) - (0.12f + kFallSlack)) < 1e-6f);
+  CHECK(slack_distance(0.12f, 0.0f) == 0.12f);                        // standing: as the sheet was made
+  CHECK(kFallSlack >= 1.0f);  // enough for a hem to reach the floor from a body lying on its side
+}

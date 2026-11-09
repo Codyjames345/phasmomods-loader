@@ -1388,6 +1388,11 @@ void play(void* ghost) {
     }
   }
   const bool down = g.fall.phase() != FallPhase::Up;
+  // The sheet is let go of its standing shape while the body falls, and drawn back over the get-up (sheet_slack).
+  const float getUp = static_cast<float>(std::max<uint64_t>(get_up_ms(), 1));
+  const float riseShare =
+      g.fall.phase() == FallPhase::GettingUp ? static_cast<float>(t - g.fall.since()) / getUp : 0.0f;
+  figure::set_sheet_slack(sheet_slack(g.fall.phase(), riseShare));
   if (c.act && s.act >= 0 && !down) figure::play_act(static_cast<Act>(s.act));
   // A fall hands the body to its ragdoll, pushed the way the master says; a move the master sends while the figure is
   // still down waits until it stands.

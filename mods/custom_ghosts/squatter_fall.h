@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <numbers>
@@ -72,6 +73,26 @@ class FallState {
   uint64_t since_ = 0;
   std::optional<uint64_t> still_;  // since when its bodies have been slow
 };
+
+/** How much further, metres, each point of the sheet but those the head carries may move from where the body carries it
+ * while the body falls: enough for the hem to drop to the floor from a body on its side (a starting value). */
+inline constexpr float kFallSlack = 2.0f;
+
+/**
+ * How much of kFallSlack the sheet has (0 to 1): all of it while the body falls, shrinking smoothly to none over the
+ * get-up (`riseShare` of it gone, 0 to 1), none standing. The sheet is let go at once but drawn back gradually, so it
+ * never snaps to the body.
+ */
+inline float sheet_slack(FallPhase phase, float riseShare) {
+  if (phase == FallPhase::Falling) return 1.0f;
+  if (phase == FallPhase::Up) return 0.0f;
+  const float u = std::clamp(riseShare, 0.0f, 1.0f);
+  return 1.0f - u * u * (3.0f - 2.0f * u);
+}
+
+/** How far a point the sheet lets move `base` metres from the body may move with `slack` of kFallSlack; a pinned point
+ * (base 0) stays pinned. */
+inline float slack_distance(float base, float slack) { return base > 0.0f ? base + slack * kFallSlack : 0.0f; }
 
 /** How it gets up: from lying face down (Standing Up) or face up (Getting Up). */
 enum class GetUp { FaceDown, FaceUp };
