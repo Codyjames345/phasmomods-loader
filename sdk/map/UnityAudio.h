@@ -291,6 +291,8 @@ inline constexpr pm::api::EnumValue<pm::map::AudioSourceCurveType_CustomRolloff>
 
 /// Unity's AudioClip. `clip` below is one.
 struct AudioClip {
+  /// The type: type_object() for AssetBundle.LoadAsset_Internal. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::AudioClip> type{};
   /// Create(name, lengthSamples, channels, frequency, stream): a new clip, `name` a managed string
   /// (pm::api::make_string). Unresolved: null.
   static constexpr pm::api::Method<pm::map::AudioClip_Create, void*(void*, int32_t, int32_t, int32_t, bool)> Create{};

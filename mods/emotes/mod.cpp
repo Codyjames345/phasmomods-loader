@@ -1,7 +1,9 @@
 #include <windows.h>
 
+#include "emote.h"
 #include "log.h"
 #include "mod_glue.h"
+#include "net.h"
 
 // Emotes as a mod of the suite (core/mod_api.h): a wheel of eight dances on a key the player rebinds in the game's own
 // keybinds menu; each plays on the player's own body with its song, seen and heard by every player, heard by the ghost
@@ -15,9 +17,14 @@ constexpr PmModInfo kInfo{PMMOD_API_VERSION, kId, "Emotes", 7, 0};
 
 bool g_running = false;
 
-bool start(const PmHostApi* api) { return pm::mod::bind(api, &kInfo); }
+bool start(const PmHostApi* api) {
+  if (!pm::mod::bind(api, &kInfo)) return false;
+  if (!pm::emotes::play::start()) return false;
+  pm::net::set_handler(&pm::emotes::play::receive);
+  return true;
+}
 
-void tick() {}
+void tick() { pm::emotes::play::tick(); }
 
 }  // namespace
 
@@ -29,4 +36,4 @@ extern "C" __declspec(dllexport) bool pmmod_start(const PmHostApi* api) {
 
 extern "C" __declspec(dllexport) void pmmod_tick() { pm::mod::guarded_tick(g_running, &tick); }
 
-extern "C" __declspec(dllexport) void pmmod_stop() { pm::mod::guarded_stop(g_running, [] {}); }
+extern "C" __declspec(dllexport) void pmmod_stop() { pm::mod::guarded_stop(g_running, [] { pm::emotes::play::stop(); }); }
