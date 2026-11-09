@@ -82,7 +82,7 @@ I have included four mods to demonstrate the capabilities of PhasmoMods. They ar
 | Asterion | The birth name of the Minotaur, it is cursed to navigate the living realm as a labyrinth - unable to pass through doors. Though it lacks the ability to phase, its raging fury won't keep it trapped for long. Its sheer strength is enough to blast open doors after a few seconds and destroy their hinges, making them unusable for the rest of the contract. | Ghost Writing, D.O.T.S., Spectral Flame |
 | Tempest | A weather-based ghost, gifted ludicrous speed when supercharged by its conjured lightning strikes. Its power amplifies with raging weather - strongest in the rain, and weakest when skies are clear. During a hunt this demonic presence is invisible to the naked eye, only revealed by its lightning... | Spirit Box, Ultraviolet, Spectral Flame |
 | Hydra | Cut off one head, and two more take its place... the serpent of Lerna proves formidable against smudges. The true copy is difficult to identify, though a keen ear may help. Beware, a sickly green spectral flame provides warning to those who dare fight it. | Ghost Orbs, D.O.T.S., Spectral Flame |
-| Squatter | Not a ghost at all, but a person who has moved into the house, wearing a bedsheet and pretending to be one. It wants you off its property and says so, loudly. Once it sees you it gives chase - clumsily - until everyone is out, then locks the door behind you. | None |
+| Squatter | It seems someone made a false report to the Ghost Hunting Distribution after seeing a person draped in a bed sheet. They want you off its property and will make that clear through their rambles. Once they see you, they'll chase you out of the house and lock the door behind you. | None |
 
 ### Spectral Flame
 
