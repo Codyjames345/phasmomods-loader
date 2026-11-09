@@ -119,6 +119,11 @@ inline constexpr pm::sdk::EntryDesc Noise_loudness{.key = "Noise.loudness", .kin
                                                    .type = "float", .facts = Noise_loudness_facts,
                                                    .access = pm::sdk::Visibility::Public};
 
+/// The noise's AudioSource, which Noise.PlaySound plays its clip through: Noise's one field of that type. Decompiled.
+inline constexpr pm::sdk::EntryDesc Noise_source{.key = "Noise.source", .kind = pm::sdk::Kind::Field,
+                                                 .confidence = pm::sdk::Confidence::Decompiled, .owner = "Noise",
+                                                 .type = "AudioSource"};
+
 /// Sets how far the noise reaches, in metres. The hunt calls it on the ghost's sounds, and
 /// Footstep.Play on each step's. Decompiled.
 inline constexpr pm::sdk::EntryDesc Noise_SetMaxDistance{.key = "Noise.SetMaxDistance", .kind = pm::sdk::Kind::Method,
@@ -137,6 +142,13 @@ inline constexpr pm::sdk::EntryDesc FootstepController{.key = "FootstepControlle
                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                        .name = "FootstepController", .assembly = "Assembly-CSharp",
                                                        .ns = ""};
+/// The player's PlayerNoise its steps play through (FootstepController.AttemptPlaySound calls Noise.PlaySound on it, at a
+/// volume set for each surface in its code). Its AudioSource (Noise.source) holds how a player's step falls off with
+/// distance: a Custom rolloff curve, full to a fifth of its 15 m reach and silent at it (read from the asset files).
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc FootstepController_noise{
+    .key = "FootstepController.noise", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "FootstepController", .name = "noise"};
 /// The layers its downward line hits, a LayerMask. Decompiled.
 inline constexpr pm::sdk::EntryDesc FootstepController_mask{
     .key = "FootstepController.mask", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
@@ -308,6 +320,8 @@ struct Footstep {
 
 /// A sound in the world. `noise` below is one.
 struct Noise {
+  /// Its AudioSource: source.get(noise). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Noise_source, void*> source{};
   /// PlaySound(noise, clip, volume, a, b): plays `clip` through its AudioSource on this client only, at `volume`
   /// (-1 for Noise.volume). The two flags are the game's own; its door sounds pass false for both. Unresolved: does
   /// nothing.
@@ -326,6 +340,8 @@ struct Noise {
 struct FootstepController {
   /// The type. Unresolved: null.
   static constexpr pm::api::Type<pm::map::FootstepController> type{};
+  /// The player's PlayerNoise its steps play through: noise.get(steps). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::FootstepController_noise, void*> noise{};
   /// The layers its downward line hits, a bit per layer: mask.get(steps). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::FootstepController_mask, int32_t> mask{};
   /// Each surface's step clips, an AudioClip[]: carpetAudioClips and the rest walking, runCarpetAudioClips and the

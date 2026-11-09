@@ -1321,6 +1321,8 @@ int main() {
   a_move_lands_where_the_world_needs_it();
   the_clips_travel_as_built();
   a_drop_falls_as_the_jump_lands();
+  its_steps_are_as_loud_as_a_players();
+  an_open_doorway_does_not_muffle_its_voice();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();
@@ -1394,7 +1396,7 @@ int main() {
   the_kick_never_reaches_through_a_floor();
   with_no_last_place_it_searches_around_itself();
   an_unseen_figure_never_starts_a_chase();
-  a_step_plays_each_stride();
+  a_step_plays_as_each_foot_plants();
   moping_moves_to_the_closest_place_outside_a_closed_hiding_place();
   it_stands_still_and_walks_with_its_own_clips();
   it_opens_only_the_door_it_walks_into();

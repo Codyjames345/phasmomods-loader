@@ -235,6 +235,9 @@ void* head();
 /** Whether the figure is built and still in the scene (a scene load destroys it, and its own assets with it). */
 bool ready();
 
+/** Where its feet are in the world this frame (the foot bones), into `left` and `right`; false when it is not built. */
+bool feet(phasmo::Vector3& left, phasmo::Vector3& right);
+
 /** Where a fallen body lies, in the world: its hips, its head, and its chest's front (a unit vector). */
 struct Landing {
   phasmo::Vector3 hips, head, front;

@@ -584,6 +584,16 @@ bool fall(phasmo::Vector3 velocity) {
 
 bool falling() { return check() && g.falling; }
 
+bool feet(phasmo::Vector3& left, phasmo::Vector3& right) {
+  if (!check()) return false;
+  void* l = bone(phasmo::HumanBodyBones::LeftFoot());
+  void* r = bone(phasmo::HumanBodyBones::RightFoot());
+  if (!l || !r) return false;
+  left = phasmo::Transform::get_position(l);
+  right = phasmo::Transform::get_position(r);
+  return true;
+}
+
 float fall_speed() { return falling() ? ragdoll::fastest() : 0.0f; }
 
 Landing landing() {
