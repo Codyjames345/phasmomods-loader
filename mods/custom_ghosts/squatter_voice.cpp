@@ -141,7 +141,7 @@ float seconds(Lines set, int index) {
   const Set* s = set_of(set);
   if (!s || index < 0 || index >= static_cast<int>(s->lines.size())) return 0.0f;
   void* clip = s->lines[static_cast<size_t>(index)].clip;
-  return clip && api::alive(clip) ? phasmo::AudioClip::get_length(clip) : 0.0f;
+  return clip && api::alive(clip) ? played_seconds(phasmo::AudioClip::get_length(clip), kVoicePitch) : 0.0f;
 }
 
 void play_index(Lines set, int index, phasmo::Vector3 at, float fullVolumeWithin, void* follow, float silentBeyond,
@@ -156,8 +156,10 @@ void play_index(Lines set, int index, phasmo::Vector3 at, float fullVolumeWithin
     line.clip = nullptr;
     return;
   }
-  if (follow && api::alive(follow)) sound::play_on(clip, follow, 1.0f, fullVolumeWithin, silentBeyond, mixAt);
-  else sound::play_at(clip, at, 1.0f, fullVolumeWithin, silentBeyond, mixAt);
+  if (follow && api::alive(follow))
+    sound::play_on(clip, follow, 1.0f, fullVolumeWithin, silentBeyond, mixAt, kVoicePitch);
+  else
+    sound::play_at(clip, at, 1.0f, fullVolumeWithin, silentBeyond, mixAt, kVoicePitch);
 }
 
 }  // namespace pm::custom::squatter::voice

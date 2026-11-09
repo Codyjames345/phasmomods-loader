@@ -792,3 +792,12 @@ void the_standing_roll_hands_back_to_the_run() {
   CHECK(std::abs(seconds_of("Roll_B") - 1.8f) < 1e-4f);
   CHECK(travel_of("Roll_B") > 4.0f && travel_of("Roll_B") < 4.4f);
 }
+
+// Its voice plays pitched down a little (user, 2026-11-10: the lines sounded out of place). Unity's pitch is also the
+// playback rate, so a line lasts its length over the pitch: the queue waits that long and the sound outlives it.
+void its_voice_is_pitched_down() {
+  CHECK(voice::kVoicePitch < 1.0f && voice::kVoicePitch >= 0.8f);
+  CHECK(std::abs(voice::played_seconds(1.8f, 0.9f) - 2.0f) < 1e-5f);
+  CHECK(voice::played_seconds(2.0f, 1.0f) == 2.0f);
+  CHECK(voice::played_seconds(2.0f, 0.0f) == 2.0f && voice::played_seconds(-1.0f, 0.9f) == 0.0f);
+}
