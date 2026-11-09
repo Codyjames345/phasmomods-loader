@@ -716,3 +716,10 @@ void the_clips_travel_as_built() {
   }
   CHECK(std::abs(travel_of("Roll_A") - 5.52f) < 1e-4f && travel_of("Run") == 0.0f && travel_of(nullptr) == 0.0f);
 }
+
+// A jump down a drop falls as its take-off ends, where the bundle runs it on into a roll: the ragdoll tumbles down the
+// drop in place of the roll, never after it.
+void a_drop_falls_as_the_jump_lands() {
+  CHECK(kJumpTakeOffSeconds > 0.0f && kJumpTakeOffSeconds < seconds_of(state_for(Move::Parkour, 0)));
+  CHECK(std::abs(kJumpTakeOffSeconds + seconds_of("Roll_A") - seconds_of(state_for(Move::Parkour, 0))) < 1e-3f);
+}
