@@ -65,7 +65,7 @@ message(STATUS "The HOST line names the steering entries this build lacks.")
 # An icall cannot be checked without the running game: it is listed as checked at startup only and
 # counted apart from the entries that failed.
 string(FIND "${out}" "STARTUP Animator.SetBoolID UnityEngine.Animator::SetBoolID (checked at startup only)\n" icall)
-string(REGEX MATCH "missing, [0-9]+ ambiguous, [0-9]+ blocked, 31 checked at startup only, 55 checked in the scene files\n"
+string(REGEX MATCH "missing, [0-9]+ ambiguous, [0-9]+ blocked, 36 checked at startup only, 55 checked in the scene files\n"
   counted "${out}")
 if(icall EQUAL -1 OR NOT counted)
   message(FATAL_ERROR "the icall is not listed and counted as checked at startup only\n${out}${err}")

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -237,6 +238,15 @@ struct ClothSettings {
   float bendingStiffness = 0.1f;      ///< How stiffly it resists bending.
   float stretchingStiffness = 1.0f;   ///< How stiffly it resists stretching.
   float damping = 0.2f;               ///< How much its motion is damped.
+  /// How much it answers its object's motion through the world, 0 to 1 (Cloth.set_worldVelocityScale): lower hangs
+  /// heavier. None keeps Unity's own (0.5).
+  std::optional<float> worldVelocityScale;
+  /// How much it answers its object's acceleration, 0 to 1 (Cloth.set_worldAccelerationScale): lower whips less. None
+  /// keeps Unity's own (1).
+  std::optional<float> worldAccelerationScale;
+  /// Whether its colliders press it in smooth bulges rather than at its points (Cloth.set_useVirtualParticles). None
+  /// keeps Unity's own.
+  std::optional<bool> virtualParticles;
 };
 
 /** A sphere the cloth rests on and cannot pass through, following a bone. */

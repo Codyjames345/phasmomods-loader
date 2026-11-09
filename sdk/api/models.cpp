@@ -383,6 +383,11 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
   phasmo::Cloth::set_bendingStiffness(cloth, settings.bendingStiffness);
   phasmo::Cloth::set_stretchingStiffness(cloth, settings.stretchingStiffness);
   phasmo::Cloth::set_damping(cloth, settings.damping);
+  if (settings.worldVelocityScale)
+    phasmo::Cloth::set_worldVelocityScale(cloth, std::clamp(*settings.worldVelocityScale, 0.0f, 1.0f));
+  if (settings.worldAccelerationScale)
+    phasmo::Cloth::set_worldAccelerationScale(cloth, std::clamp(*settings.worldAccelerationScale, 0.0f, 1.0f));
+  if (settings.virtualParticles) phasmo::Cloth::set_useVirtualParticles(cloth, *settings.virtualParticles ? 1.0f : 0.0f);
   phasmo::Cloth::set_coefficients(cloth, coefficients);
 
   std::vector<void*> capsules;

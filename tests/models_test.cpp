@@ -371,6 +371,9 @@ void f_gravity(void*, bool on) { g_clothSettings.emplace_back("gravity", on ? 1.
 void f_bending(void*, float v) { g_clothSettings.emplace_back("bending", v); }
 void f_stretching(void*, float v) { g_clothSettings.emplace_back("stretching", v); }
 void f_damping(void*, float v) { g_clothSettings.emplace_back("damping", v); }
+void f_world_velocity(void*, float v) { g_clothSettings.emplace_back("worldVelocity", v); }
+void f_world_acceleration(void*, float v) { g_clothSettings.emplace_back("worldAcceleration", v); }
+void f_virtual(void*, float v) { g_clothSettings.emplace_back("virtual", v); }
 std::map<void*, float> g_radius, g_height;
 void f_radius(void* c, float v, const void*) { g_radius[c] = v; }
 void f_height(void* c, float v, const void*) { g_height[c] = v; }
@@ -458,6 +461,9 @@ void start(bool withCloth = true) {
     ic(map::Cloth_set_bendingStiffness, &f_bending);
     ic(map::Cloth_set_stretchingStiffness, &f_stretching);
     ic(map::Cloth_set_damping, &f_damping);
+    ic(map::Cloth_set_worldVelocityScale, &f_world_velocity);
+    ic(map::Cloth_set_worldAccelerationScale, &f_world_acceleration);
+    ic(map::Cloth_set_useVirtualParticles, &f_virtual);
   }
   m(map::GameObject_get_transform, &f_get_transform);
   m(map::Component_get_gameObject, &f_get_gameObject);
@@ -839,6 +845,31 @@ void a_bind_pose_undoes_the_bone() {
 
 // Given bones, add_cloth carries each vertex by its weights and gives each bone its bind pose, so the cloth bends with
 // a body as worn cloth does in games.
+// A cloth can be made to hang heavier: how much it answers its object's motion and acceleration, and smooth contact
+// with its colliders, set only when asked, so a cloth that asks nothing keeps Unity's own values.
+void a_cloth_can_hang_heavier() {
+  start();
+  void* anchor = go_new("Sheet");
+  void* material = make_obj(&kMaterial);
+  api::ClothParts parts;
+  std::string why;
+  api::ClothSettings heavy{true, 1.0f, 1.0f, 0.4f};
+  heavy.worldVelocityScale = 0.25f;
+  heavy.worldAccelerationScale = 0.5f;
+  heavy.virtualParticles = true;
+  CHECK(api::add_cloth(anchor, Sheet{}.mesh(), material, heavy, {}, parts, &why));
+  const auto set = [](const char* what) {
+    for (const auto& [name, v] : g_clothSettings)
+      if (name == what) return v;
+    return -1.0f;
+  };
+  CHECK(set("worldVelocity") == 0.25f && set("worldAcceleration") == 0.5f && set("virtual") == 1.0f);
+  g_clothSettings.clear();
+  api::ClothParts plain;
+  CHECK(api::add_cloth(go_new("Plain"), Sheet{}.mesh(), material, {}, {}, plain, &why));
+  CHECK(set("worldVelocity") == -1.0f && set("worldAcceleration") == -1.0f && set("virtual") == -1.0f);
+}
+
 void cloth_follows_its_bones() {
   start();
   const Sheet sheet;
@@ -946,6 +977,7 @@ int main() {
   a_costume_hides_only_what_it_covers();
   cloth_builds_the_mesh_and_its_colliders();
   a_bind_pose_undoes_the_bone();
+  a_cloth_can_hang_heavier();
   cloth_follows_its_bones();
   cloth_refuses_a_bad_mesh_and_a_build_without_cloth();
   cloth_refuses_a_sphere_it_cannot_make();
