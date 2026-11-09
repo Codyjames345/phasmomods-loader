@@ -220,6 +220,10 @@ void every_slot_has_its_names() {
   CHECK(folders.size() == kSegments && clips.size() == kSegments && keys.size() == kSegments);
   CHECK(std::string(kEmotes[0].clip) == "DiscoFever" && std::string(kEmotes[7].clip) == "TakeTheL");
   CHECK(clip_path(kEmotes[7]) == "assets/emotes/clips/takethel.anim");
+  // The two songs whose loop is not their clip's (the author, 2026-11-10), measured from the tracks: both from 0 s.
+  CHECK(kEmotes[2].songLoopStart == 0.0f && std::fabs(kEmotes[2].songLoopSeconds - 16.692f) < 1e-4f);  // Floss
+  CHECK(kEmotes[7].songLoopStart == 0.0f && std::fabs(kEmotes[7].songLoopSeconds - 12.631f) < 1e-4f);  // Take The L
+  for (int i : {0, 1, 3, 4, 5, 6}) CHECK(kEmotes[i].songLoopSeconds == 0.0f);  // the rest loop with their clips
 }
 
 }  // namespace

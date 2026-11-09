@@ -18,7 +18,7 @@ struct EmoteAsset {
   const char* clip;     ///< its AnimationClip's name in the animation package
   const char* nameKey;  ///< the key of its name under the wheel
   /// Where its song loops back to, in seconds, and how long its loop is; a length of 0 loops the song with its clip
-  /// (the author's rule, 2026-11-10). The songs mark no loop of their own, so every emote waits for the author's points.
+  /// (the author's rule, 2026-11-10). The songs mark no loop of their own: the two that differ were measured.
   float songLoopStart = 0.0f;
   float songLoopSeconds = 0.0f;
 };
@@ -26,12 +26,16 @@ struct EmoteAsset {
 inline constexpr EmoteAsset kEmotes[kSegments] = {
     {"disco_fever", "DiscoFever", pm::i18n::key("emotes.name.0")},
     {"electro_swing", "ElectroSwing", pm::i18n::key("emotes.name.1")},
-    {"floss", "Floss", pm::i18n::key("emotes.name.2")},
+    // Its song loops every 16.692 s from its start, not with its 1.633 s clip (the author, 2026-11-10; measured: the
+    // track repeats sample for sample, correlation 0.9994).
+    {"floss", "Floss", pm::i18n::key("emotes.name.2"), 0.0f, 16.692f},
     {"groove_jam", "GrooveJam", pm::i18n::key("emotes.name.3")},
     {"orange_justice", "OrangeJustice", pm::i18n::key("emotes.name.4")},
     {"scenario", "Scenario", pm::i18n::key("emotes.name.5")},
     {"smooth_moves", "SmoothMoves", pm::i18n::key("emotes.name.6")},
-    {"take_the_l", "TakeTheL", pm::i18n::key("emotes.name.7")},
+    // Its song loops every 12.631 s (eight bars) from its start, not with its 0.833 s clip (the author, 2026-11-10;
+    // measured on the loudness envelope, correlation 0.89 at 1 ms: the track varies a little from pass to pass).
+    {"take_the_l", "TakeTheL", pm::i18n::key("emotes.name.7"), 0.0f, 12.631f},
 };
 
 /// An emote's song loop: its own points when the author gave them, else its clip's length from the song's start.
