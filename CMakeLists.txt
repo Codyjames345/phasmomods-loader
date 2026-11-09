@@ -353,6 +353,8 @@ target_include_directories(keybinds_test BEFORE PRIVATE sdk/api sdk/map sdk/fake
 # The Emotes mod's rules, message and emotes' table (mods/emotes/emote_rule.h, emote_net.h, emote_assets.h).
 pm_test(emotes)
 target_include_directories(emotes_test PRIVATE mods/emotes)
+pm_test(emotes_wheel)
+target_include_directories(emotes_wheel_test PRIVATE mods/emotes)
 # Playing a clip on a player's own body (sdk/api/player_anim.h).
 pm_test(player_anim sdk/api/player_anim.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
