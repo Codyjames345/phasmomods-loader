@@ -48,22 +48,12 @@ inline constexpr const char* kTurnRightState = "TurnRight";
 inline constexpr const char* kTurnAroundState = "Turn180";
 inline constexpr const char* kStartWalkState = "StartWalk";
 inline constexpr const char* kLocalStates[] = {kTurnLeftState, kTurnRightState, kTurnAroundState, kStartWalkState};
-// The user's Standing Up clip, which the bundle runs the trip (Stumble) on into, from where it lies face down as the
-// trip lands to standing (user, 2026-11-09: getting up from the trip was too quick). Nothing plays it by name.
+// The user's Standing Up clip, the get-up from lying face down after a fall (user, 2026-11-09: getting up from the trip
+// was too quick).
 inline constexpr const char* kStandUpState = "StandUp";
-// The trip's own clip length in seconds, before the get-up.
-inline constexpr float kTripSeconds = 1.6000f;
-// The get-up is imported turned this far, degrees clockwise seen from above, so it begins lying the way the trip lands:
-// the turn about the vertical that leaves the least of the two clips' body rotations (their RootQ curves: the trip lands on
-// its side, Standing Up begins face down) to blend. It stands up facing this far round too.
-inline constexpr float kStandUpTurnDegrees = 119.0f;
-// The second trip's get-up: the user's Getting Up, imported again as its own state, trimmed to its rise and turned -143
-// degrees to begin lying as Tripping lands (the bundle's build says how). Tripping lasts kTrippingSeconds.
+// The get-up from lying face up: the user's Getting Up, imported again as its own state, trimmed to its rise. Both
+// get-ups stand alone, unturned: the figure's root is turned to the landed body as it gets up (squatter_fall.h).
 inline constexpr const char* kTripGetUpState = "TripGetUp";
-inline constexpr float kTrippingSeconds = 2.1000f;
-// How far round from its root each trip's get-up stands it (kStumbleStates' order): Standing Up stands facing its own
-// turn; Getting Up ends 7 degrees short of its clip's forward, so its -143 turn stands it at -150.
-inline constexpr float kRiseTurnDegrees[] = {kStandUpTurnDegrees, -150.0f};
 
 /** The states a move may play, one or two. */
 inline std::span<const char* const> states_of(Move m) {
@@ -77,6 +67,7 @@ inline std::span<const char* const> states_of(Move m) {
     case Move::Walk: return kWalkStates;
     case Move::Stand: return kStandStates;
     case Move::Sneak: return kSneakStates;
+    case Move::Fall: return kStandStates;  // a fall plays no clip: its ragdoll falls
   }
   return kRunStates;
 }
@@ -115,7 +106,7 @@ struct StateClip {
 inline constexpr StateClip kStateClips[] = {
     {"Run", 0.7000f},     {"Walk", 1.0333f},      {"Stand", 6.0000f},     {"Sneak", 1.0333f}, {"Duck_A", 1.2667f},
     {"Duck_B", 1.1000f},  {"Weave_A", 1.1333f},   {"Weave_B", 1.1333f},   {"Roll_A", 1.1667f},
-    {"Roll_B", 2.3667f},  {"Parkour_A", 1.4000f}, {"Parkour_B", 2.0000f}, {"Stumble", 6.1000f}, {"Trip", 4.3000f},
+    {"Roll_B", 2.3667f},  {"Parkour_A", 1.4000f}, {"Parkour_B", 2.0000f}, {"Stumble", 1.6000f}, {"Trip", 2.1000f},
     {"Sit", 10.2667f},    {"GetUp", 2.7000f},     {"Kick", 1.3000f},      {"Bang", 1.3000f},
     {"Bump", 1.1667f},    {"OpenDoorOutwards", 4.1000f}, {"OpenDoorInwards", 6.3667f},
     {"TurnLeft", 1.0333f}, {"TurnRight", 1.0333f},  {"Turn180", 1.0000f},   {"StartWalk", 2.9333f},
@@ -144,16 +135,31 @@ inline float play_rate(Move m, float speed) {
   return std::clamp(speed / own, kMinPlayRate, kMaxPlayRate);
 }
 
+/** How far a state's clip carries the body on its own (root motion), metres. */
+struct StateTravel {
+  const char* state;
+  float metres;
+};
+
+// How far each clip that carries the body travels, as the bundle's build reads the user's clips (its average speed
+// times its length): what a warped move's remaining travel is measured against. The trips are left out (their ragdoll
+// takes them), and the jump (it lands as recorded).
+inline constexpr StateTravel kClipTravel[] = {{"Duck_A", 1.28f},  {"Duck_B", 1.18f}, {"Weave_A", 1.28f},
+                                              {"Weave_B", 1.28f}, {"Roll_A", 5.52f}, {"Roll_B", 4.31f}};
+
+/** How far `state`'s clip carries the body, metres; 0 for a state the table does not name. */
+inline float travel_of(const char* state) {
+  for (const StateTravel& t : kClipTravel)
+    if (state && std::string_view(t.state) == state) return t.metres;
+  return 0.0f;
+}
+
 /** How long `state`'s clip lasts in seconds; 0 for a state the table does not name. */
 inline float seconds_of(const char* state) {
   for (const StateClip& c : kStateClips)
     if (state && std::string_view(c.state) == state) return c.seconds;
   return 0.0f;
 }
-
-// How long one clip blends into the next, in seconds (Animator.CrossFade): Unity's own default transition length, so
-// the figure never snaps from one pose to another (user, 2026-11-09).
-inline constexpr float kBlendSeconds = 0.25f;
 
 /** Every state name of the table, each once: what the bundle's controller must have. */
 inline std::vector<const char*> all_states() {
@@ -225,6 +231,49 @@ void look_at(phasmo::Vector3 at, float weight);
 void* head();
 /** Whether the figure is built and still in the scene (a scene load destroys it, and its own assets with it). */
 bool ready();
+
+/** Where a fallen body lies, in the world: its hips, its head, and its chest's front (a unit vector). */
+struct Landing {
+  phasmo::Vector3 hips, head, front;
+};
+
+/**
+ * Lets the body fall (user, 2026-11-09: every trip ends in a ragdoll): its Animator and its IK stop and its ragdoll turns
+ * physical, moving at `velocity` (metres a second, capped by the ragdoll). False, with nothing changed, when the figure
+ * or its ragdoll is not built. Every client, its own figure.
+ */
+bool fall(phasmo::Vector3 velocity);
+
+/** Whether the body is falling under physics. */
+bool falling();
+
+/** The fastest of the falling body's parts, metres a second; 0 when it is not falling. */
+float fall_speed();
+
+/** Where the body lies now; all zero when the figure is not built. */
+Landing landing();
+
+/**
+ * Gets up from a fall: the ragdoll turns kinematic, the root goes to `at` facing `yaw` (radians clockwise from +z) with
+ * the body left where it lies, and `state` plays from its start, the landed pose blending into it over `blendSeconds`
+ * (inertialization, in the pass after the animation). Does nothing when the figure is not built.
+ */
+void rise(const char* state, phasmo::Vector3 at, float yaw, float blendSeconds);
+
+/** Whether a call of Final IK's IKExecutionOrder.LateUpdate on `instance` is for the figure's own `own`: both set and
+ * the same. Every model with an IKExecutionOrder runs it. */
+inline bool is_own_ik(const void* instance, const void* own) { return instance && instance == own; }
+
+/** What runs once a frame on every client after the figure's Animator has posed it and before its IK bends it, with the
+ * seconds since the last such pass (0 on the first). */
+using AfterAnimation = void (*)(float dt);
+
+/** Sets the pass after the animation; null for none. Main thread. */
+void set_after_animation(AfterAnimation fn);
+
+/** Hooks IKExecutionOrder.LateUpdate for the pass after the animation. False when it did not resolve or could not be
+ * hooked (logged). At the mod's hook step. */
+bool create_hooks();
 
 }  // namespace figure
 }  // namespace pm::custom::squatter

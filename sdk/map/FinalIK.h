@@ -145,6 +145,12 @@ inline constexpr pm::sdk::EntryDesc IKExecutionOrder_IKComponents{.key = "IKExec
 inline constexpr pm::sdk::EntryDesc IKExecutionOrder_animator{.key = "IKExecutionOrder.animator",
                                                               .kind = pm::sdk::Kind::Field,
                                                               .owner = "IKExecutionOrder", .name = "animator"};
+/// Final IK runs its components' solvers from here each frame, after the Animator has written the pose (Unity's
+/// LateUpdate), in the order IKComponents gives. A hook here sees the animated pose before any IK bends it. Private.
+/// Inferred: Final IK's own documentation.
+inline constexpr pm::sdk::EntryDesc IKExecutionOrder_LateUpdate{.key = "IKExecutionOrder.LateUpdate",
+                                                                .kind = pm::sdk::Kind::Method,
+                                                                .owner = "IKExecutionOrder", .name = "LateUpdate"};
 
 /// What every Final IK grounder shares (RootMotion.FinalIK.Grounder): foot placement on the ground under each foot,
 /// the hips lowered to the lower foot, as games keep feet on stairs and slopes. Inferred: Final IK's own documentation.
@@ -382,6 +388,9 @@ struct IKExecutionOrder {
   static constexpr pm::api::Field<pm::map::IKExecutionOrder_IKComponents, void*> IKComponents{};
   /// The model's Animator. Unresolved: null.
   static constexpr pm::api::Field<pm::map::IKExecutionOrder_animator, void*> animator{};
+  /// LateUpdate(order): runs the components' solvers, after the Animator. For pm::api::hook: a detour sees the
+  /// animated pose before the IK; skipping `original` runs no IK on that model this frame. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::IKExecutionOrder_LateUpdate, void(void*)> LateUpdate{};
 };
 
 /// A grounder's solver. `grounding` below is one.

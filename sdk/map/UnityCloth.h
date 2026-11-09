@@ -19,6 +19,8 @@ namespace pm::map {
 inline constexpr const char* UnityCloth_array[] = {"Array"};
 inline constexpr const char* UnityCloth_bool[] = {"bool"};
 inline constexpr const char* UnityCloth_float[] = {"float"};
+inline constexpr const char* UnityCloth_int[] = {"int"};
+inline constexpr const char* UnityCloth_Vector3[] = {"Vector3"};
 inline constexpr const char* UnityCloth_CapsuleColliders[] = {"CapsuleCollider[]"};
 
 /// Unity's cloth component (UnityEngine.ClothModule). Add it to a GameObject that has a SkinnedMeshRenderer with a mesh,
@@ -80,6 +82,17 @@ inline constexpr pm::sdk::EntryDesc CapsuleCollider_set_height{
     .key = "CapsuleCollider.set_height", .kind = pm::sdk::Kind::Method, .owner = "CapsuleCollider",
     .name = "set_height", .params = UnityCloth_float};
 
+/// Sets the capsule's centre in its object's space. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc CapsuleCollider_set_center{
+    .key = "CapsuleCollider.set_center", .kind = pm::sdk::Kind::Method, .owner = "CapsuleCollider",
+    .name = "set_center", .params = UnityCloth_Vector3};
+
+/// Sets the object axis the capsule's length runs along: 0 for X, 1 for Y, 2 for Z. Inferred: Unity's documented
+/// property setter.
+inline constexpr pm::sdk::EntryDesc CapsuleCollider_set_direction{
+    .key = "CapsuleCollider.set_direction", .kind = pm::sdk::Kind::Method, .owner = "CapsuleCollider",
+    .name = "set_direction", .params = UnityCloth_int};
+
 }  // namespace pm::map
 
 // The game API for Cloth (sdk/api/game_api.h). Every member is called on Unity's main thread. One that did not resolve
@@ -122,6 +135,10 @@ struct CapsuleCollider {
   static constexpr pm::api::Method<pm::map::CapsuleCollider_set_radius, void(void*, float)> set_radius{};
   /// set_height(capsule, metres). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::CapsuleCollider_set_height, void(void*, float)> set_height{};
+  /// set_center(capsule, &centre). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::CapsuleCollider_set_center, void(void*, const Vector3*)> set_center{};
+  /// set_direction(capsule, axis): 0 X, 1 Y, 2 Z. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::CapsuleCollider_set_direction, void(void*, int32_t)> set_direction{};
 };
 
 /// @}

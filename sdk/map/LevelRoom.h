@@ -187,6 +187,12 @@ inline constexpr pm::sdk::EntryDesc LevelRoom_AnyPlayersInRoom{.key = "LevelRoom
 inline constexpr pm::sdk::EntryDesc Collider_get_enabled{.key = "Collider.get_enabled", .kind = pm::sdk::Kind::Method,
                                                          .owner = "Collider", .name = "get_enabled"};
 
+/// The Rigidbody the collider moves with: its own object's, or the nearest parent's; null when none. Inferred: Unity's
+/// documented property getter.
+inline constexpr pm::sdk::EntryDesc Collider_get_attachedRigidbody{.key = "Collider.get_attachedRigidbody",
+                                                                   .kind = pm::sdk::Kind::Method, .owner = "Collider",
+                                                                   .name = "get_attachedRigidbody"};
+
 }  // namespace pm::map
 
 /// @file
@@ -265,6 +271,8 @@ struct Collider {
   static constexpr pm::api::Type<pm::map::Collider> type{};
   /// get_enabled(collider): whether it takes part in physics. Unresolved: false.
   static constexpr pm::api::Method<pm::map::Collider_get_enabled, bool(void*)> get_enabled{};
+  /// get_attachedRigidbody(collider): the Rigidbody it moves with. Unresolved or none: null.
+  static constexpr pm::api::Method<pm::map::Collider_get_attachedRigidbody, void*(void*)> get_attachedRigidbody{};
 };
 
 /// @}

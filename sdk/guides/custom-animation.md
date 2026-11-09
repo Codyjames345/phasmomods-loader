@@ -162,7 +162,8 @@ with; a ray or overlap query of the game's whose mask includes that layer can st
 
 - **Blend between states** with `pm::api::fade_to_state(animator, "State", blend)` instead of `play_state`: the
   poses mix over `blend`, a fraction of the playing state's length (Animator.CrossFade's own unit; this build strips
-  the fixed-time CrossFadeInFixedTime). Unity's own default transition is a quarter of a second.
+  the fixed-time CrossFadeInFixedTime). Unity's own default transition is a quarter of a second. A cross-fade floats
+  between the two poses for its whole length; for a body that keeps its momentum, use inertialization (below).
 - **Pose the model now** with `pm::api::pose_now(animator)` after `play_state`, so its bones stand as the state's first
   frame in the same frame: do this before you measure the body or bind anything to its bones.
 - **Keep feet in step with the ground.** Build a 1D blend tree in your controller on a float parameter (the Squatter
@@ -175,16 +176,64 @@ with; a ray or overlap query of the game's whose mask includes that layer can st
   The Animator works these out only with Apply Root Motion on (`use_controller` turns it off), so turn it on and put
   the model back where you want it each frame. A NavMeshAgent can be moved with `NavMeshAgent.Warp` (its `Move` is
   stripped).
-- **Get up from a clip that ends on the ground** with a get-up clip, never a blend back into a run, which pulls the
-  body up in a quarter of a second. Chain the two in your controller (a transition at the first clip's end, exit time
-  1) and trim the get-up to its rise (`ModelImporterClipAnimation.firstFrame`, `lastFrame`). Where the first clip
-  lands facing another way than the get-up begins, import the get-up turned to meet it (`rotationOffset`, about the
-  vertical), choosing the turn that leaves the least of the two body rotations to blend: a humanoid clip stores the
-  body's rotation in its `RootQ` curves, read in the editor with `AnimationUtility.GetEditorCurve`. The offset is a
-  clip setting the Animator applies as it plays (`AnimationClipSettings.orientationOffsetY`), so those curves never show
-  it. The body then stands up turned that far from your object, so once it stands, turn your object as far and play the
-  standing state outright (`play_state`, then `pose_now`) in the same frame: the body stays where it stands. The
-  Squatter's trip does this (`mods/custom_ghosts/squatter.cpp`, `kStandUpState`).
+- **Get up from the ground** with a get-up clip, never a blend back into a run, which pulls the body up in a quarter
+  of a second. Trim the get-up to its rise (`ModelImporterClipAnimation.firstFrame`, `lastFrame`). A body that fell
+  as a ragdoll (below) gets up from where it lies: pick the get-up by which way its chest faces, turn your object so
+  the clip's first pose lies along the body, and blend from the landed pose into the clip by inertialization.
+
+## A pass after the Animator
+
+Some work must change the pose after the Animator has written it and before any IK bends it: inertialization, and a
+ragdoll's blend back into animation. Final IK runs its solvers from `IKExecutionOrder.LateUpdate`, after the Animator,
+so a hook there (`pm::api::hook<phasmo::IKExecutionOrder::LateUpdate>`) sees the animated pose first. Every model with
+an `IKExecutionOrder` runs that method, so act only when the instance is your own model's, then call `original`.
+Skipping `original` runs no IK on that model that frame, which is what you want while a ragdoll has the body. The
+Squatter's figure does this (`mods/custom_ghosts/squatter_figure.cpp`, `create_hooks`).
+
+## Inertialization
+
+Inertialization (David Bollo, GDC 2018, as Gears of War uses it) changes clips without a cross-fade: play the new state
+outright (`play_state`, then `pose_now`), read each bone's `Transform.get_localRotation` before and after, and keep the
+difference. In the pass after the Animator, put what is left of it before each bone's animated rotation
+(`Transform.set_localRotation`), shrinking it to nothing over a moment along Bollo's quintic, which starts and ends with
+no jump. The new clip starts at once and the body keeps its momentum. `mods/custom_ghosts/inertia.h` is a pure version
+with no game calls, which a mod may copy.
+
+## A ragdoll from Unity's parts
+
+The investigator's body has no ragdoll, but the game ships Unity's joints, so build one as Unity's Ragdoll Wizard does:
+on each major bone (`Animator.GetBoneTransform`) add a `Rigidbody` (`Rigidbody.set_mass`), a collider sized from the
+bone to its child (`CapsuleCollider` with `set_height`, `set_radius`, `set_center` and `set_direction`; a
+`BoxCollider` for the hips and chest; a `SphereCollider` for the head), and on every bone but the hips a
+`CharacterJoint` held to its parent's body (`Joint.set_connectedBody`), with its axes (`Joint.set_axis`,
+`CharacterJoint.set_swingAxis`) and limits (`set_lowTwistLimit`, `set_highTwistLimit`, `set_swing1Limit`,
+`set_swing2Limit`, each a `SoftJointLimit` in degrees).
+
+- **Put every part on `Layer.DeadPlayer`** (`GameObject.set_layer`, `phasmo::Layers::DeadPlayer`). The game's dead
+  players lie on it, and its physics matrix lets it meet only the house's fixed world, so a falling body never pushes a
+  prop, an item, a player or the ghost. Props and equipment are networked: a body that knocked them about on one client
+  would leave them in different places on each.
+- **Keep it kinematic, with its colliders off, while the body is animated** (`Rigidbody.set_isKinematic`,
+  `Collider.set_enabled`), so no ray the game casts and no grounder's foot meets it.
+- **To fall,** switch the Animator off (`Behaviour.set_enabled`), skip the IK (above), turn the parts physical and give
+  them the body's velocity (`Rigidbody.set_velocity`), capped so a fall that starts against a wall cannot launch it.
+  It has settled once the fastest body (`Rigidbody.get_velocity`) stays slow for a moment.
+- **To get up,** turn the parts kinematic, move your object under the hips with the body left where it lies
+  (`Transform.set_position` and `set_rotation` on the hips after you move it), switch the Animator on, play the get-up
+  outright and inertialize from the landed pose, hips' place included.
+- **Destroy the joints before the bodies** (`Object.DestroyImmediate`): Unity refuses to remove a Rigidbody a joint
+  still needs.
+
+The Squatter's ragdoll is `mods/custom_ghosts/squatter_ragdoll.cpp`.
+
+## Motion warping
+
+A clip that carries the body (a dive, a sidestep) travels as far as it was recorded. To make it land where the world
+needs it, as Unreal's motion warping does, take each frame's root step (`Animator.get_deltaPosition`), turn it toward
+the landing and scale it by how far the landing still is against the clip's travel still to come, within limits. Read
+a clip's travel in the editor as its average speed times its length. Take the landing and each frame's point onto the
+navigation mesh (`NavMesh.SamplePosition`) before you move the agent (`NavMeshAgent.Warp`), and hold a frame whose point
+is off it. `warp_step` in `mods/custom_ghosts/squatter_chase.h` is a pure version.
 
 ## Inverse kinematics (Final IK)
 

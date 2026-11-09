@@ -585,3 +585,134 @@ void a_door_line_comes_from_behind_the_door() {
   CHECK(same.x == 0.0f && same.z == 0.0f);
   CHECK(kBehindDoor > 0.0f && kBehindDoor < 2.0f);
 }
+
+// A fall settles once its bodies have slowed below kSettleSpeed for kSettleMs, or after kFallMaxMs whatever they do,
+// and never before; it is up again once the get-up's clip has played.
+void a_fall_settles_then_gets_up() {
+  FallState f;
+  CHECK(f.phase() == FallPhase::Up);
+  CHECK(f.update(5, 0.0f, 1000) == FallPhase::Up);  // nothing falls before a fall begins
+  f.begin(1000);
+  CHECK(f.phase() == FallPhase::Falling);
+  CHECK(f.update(1100, 3.0f, 1000) == FallPhase::Falling);
+  CHECK(f.update(1200, kSettleSpeed / 2, 1000) == FallPhase::Falling);  // slow, but not for long enough
+  CHECK(f.update(1200 + kSettleMs - 1, kSettleSpeed / 2, 1000) == FallPhase::Falling);
+  CHECK(f.update(1200 + kSettleMs, kSettleSpeed / 2, 1000) == FallPhase::GettingUp);
+  const uint64_t rose = 1200 + kSettleMs;
+  CHECK(f.update(rose + 999, 0.0f, 1000) == FallPhase::GettingUp);
+  CHECK(f.update(rose + 1000, 0.0f, 1000) == FallPhase::Up);
+  // A bounce restarts the settling.
+  f.begin(0);
+  CHECK(f.update(100, 0.0f, 1000) == FallPhase::Falling);
+  CHECK(f.update(200, 1.0f, 1000) == FallPhase::Falling);  // the bounce
+  CHECK(f.update(250, 0.0f, 1000) == FallPhase::Falling);  // still again from here
+  CHECK(f.update(100 + kSettleMs, 0.0f, 1000) == FallPhase::Falling);
+  CHECK(f.update(250 + kSettleMs - 1, 0.0f, 1000) == FallPhase::Falling);
+  CHECK(f.update(250 + kSettleMs, 0.0f, 1000) == FallPhase::GettingUp);
+  // A body that never settles (wedged, rocking) gets up at the time limit.
+  f.begin(0);
+  CHECK(f.update(kFallMaxMs - 1, 2.0f, 1000) == FallPhase::Falling);
+  CHECK(f.update(kFallMaxMs, 2.0f, 1000) == FallPhase::GettingUp);
+  f.reset();
+  CHECK(f.phase() == FallPhase::Up);
+  CHECK(kSettleSpeed > 0.0f && kSettleMs < kFallMaxMs && kRecoverSeconds > 0.0f);
+}
+
+// Face down gets up with Standing Up, face up with Getting Up; a body on its side keeps the choice it had, so it never
+// flips between them (Review Focus 5).
+void the_get_up_follows_how_it_landed() {
+  CHECK(get_up_for({0, -1, 0}, GetUp::FaceUp) == GetUp::FaceDown);
+  CHECK(get_up_for({0, 1, 0}, GetUp::FaceDown) == GetUp::FaceUp);
+  CHECK(get_up_for({0.9f, -kSideBand - 0.01f, 0}, GetUp::FaceUp) == GetUp::FaceDown);
+  CHECK(get_up_for({0.9f, -kSideBand + 0.01f, 0}, GetUp::FaceUp) == GetUp::FaceUp);    // on its side: kept
+  CHECK(get_up_for({0.9f, kSideBand - 0.01f, 0}, GetUp::FaceDown) == GetUp::FaceDown);  // on its side: kept
+  CHECK(get_up_for({1, 0, 0}, GetUp::FaceDown) == GetUp::FaceDown);
+  CHECK(get_up_for({1, 0, 0}, GetUp::FaceUp) == GetUp::FaceUp);
+  CHECK(std::string(get_up_state(GetUp::FaceDown)) == kStandUpState);
+  CHECK(std::string(get_up_state(GetUp::FaceUp)) == kTripGetUpState);
+}
+
+// It gets up where it lies: the root at the hips on the flat, turned so the get-up clip's own head lies along the
+// landed body's hips to head.
+void it_gets_up_where_it_lies() {
+  constexpr float kDeg = std::numbers::pi_v<float> / 180.0f;
+  const RootPose down = get_up_root({2, 0.2f, 3}, {2, 0.25f, 4.5f}, GetUp::FaceDown);  // head toward +z
+  CHECK(down.at.x == 2.0f && down.at.y == 0.2f && down.at.z == 3.0f);
+  CHECK(std::abs(wrap_angle(down.yaw - (0.0f - kGetUpHeadYaw[0] * kDeg))) < 1e-4f);
+  const RootPose up = get_up_root({0, 0, 0}, {1, 0, 0}, GetUp::FaceUp);  // head toward +x: 90 degrees clockwise
+  CHECK(std::abs(wrap_angle(up.yaw - (90.0f * kDeg - kGetUpHeadYaw[1] * kDeg))) < 1e-4f);
+  // A head straight above the hips (it never lies that way, but a wedged body might): no turn is read from it.
+  const RootPose standing = get_up_root({0, 0, 0}, {0, 1, 0}, GetUp::FaceDown);
+  CHECK(std::isfinite(standing.yaw));
+}
+
+// What knocks it over: a trip and a drop always; a bump, a door's swing and a thrown object only from their speed up.
+void what_knocks_it_over() {
+  CHECK(knocks_over(FallCause::Trip, 0.0f) && knocks_over(FallCause::Drop, 0.0f));
+  const std::pair<FallCause, float> paced[] = {
+      {FallCause::Bump, kBumpFallPace}, {FallCause::Door, kDoorKnockSpeed}, {FallCause::Thrown, kThrownKnockSpeed}};
+  for (const auto& [cause, speed] : paced) {
+    CHECK(!knocks_over(cause, speed - 0.01f));
+    CHECK(knocks_over(cause, speed));
+    CHECK(knocks_over(cause, speed + 0.01f));
+    CHECK(!knocks_over(cause, std::numeric_limits<float>::quiet_NaN()));
+  }
+  CHECK(kBumpFallPace > 0.0f && kDoorKnockReach > 0.0f && kThrownReach > 0.0f);
+  // Each cause pushes it its own way and no harder than the ragdoll's cap; a trip and a drop only carry its run.
+  for (int cause = 0; cause < kFallCauseValues; ++cause) CHECK(kFallPush[cause] >= 0.0f && kFallPush[cause] <= 6.0f);
+  CHECK(kFallPush[static_cast<int>(FallCause::Trip)] == 0.0f && kFallPush[static_cast<int>(FallCause::Drop)] == 0.0f);
+  const Point push = fall_push(FallCause::Door, 0.0f);  // heading +z
+  CHECK(std::abs(push.z - kFallPush[static_cast<int>(FallCause::Door)]) < 1e-5f && std::abs(push.x) < 1e-5f);
+}
+
+// A knock never lands while it is down, mid-act or already falling: no fall stacks on another or restarts it
+// (Review Focus 2).
+void a_fall_never_stacks() {
+  CHECK(may_fall(Move::Run, -1, false));
+  CHECK(may_fall(Move::Stumble, -1, false));  // a trip's own fall comes mid-clip
+  CHECK(!may_fall(Move::Run, -1, true));       // down
+  CHECK(!may_fall(Move::Fall, -1, false));     // already falling
+  CHECK(!may_fall(Move::Run, static_cast<int8_t>(Act::Kick), false));
+  CHECK(!may_fall(Move::Run, static_cast<int8_t>(Act::OpenDoorInwards), false));
+  CHECK(!may_fall(Move::Run, static_cast<int8_t>(Act::Bang), false));
+}
+
+// A door's leaf meets the body at the point of its hinge-to-edge line nearest the chest, on the flat.
+void a_leaf_meets_the_body_at_its_nearest_point() {
+  const Point hinge{0, 0, 0}, edge{1, 2, 0};
+  const Point mid = nearest_on_flat(hinge, edge, {0.4f, 1.2f, 0.5f});
+  CHECK(std::abs(mid.x - 0.4f) < 1e-6f && mid.z == 0.0f && mid.y == 1.2f);
+  CHECK(nearest_on_flat(hinge, edge, {-3, 0, 1}).x == 0.0f);  // past the hinge: the hinge
+  CHECK(nearest_on_flat(hinge, edge, {5, 0, -1}).x == 1.0f);  // past the edge: the edge
+  CHECK(nearest_on_flat(hinge, hinge, {5, 0, 5}).x == 0.0f);  // no length: the hinge
+}
+
+// A clip that carries the body is bent to land where the world needs it (motion warping): each frame's step turns toward
+// the target and stretches or shrinks so the clip's remaining travel reaches it, within limits; with no travel left the
+// step plays as recorded.
+void a_move_lands_where_the_world_needs_it() {
+  const Point ahead = warp_step({0, 0, 0.1f}, 2.0f, {2.0f, 0, 0});  // the target due +x, as far as the clip has left
+  CHECK(std::abs(ahead.x - 0.1f) < 1e-5f && std::abs(ahead.z) < 1e-5f);
+  const Point farther = warp_step({0, 0, 0.1f}, 2.0f, {0, 0, 2.6f});  // 1.3 times the travel left: stretched
+  CHECK(std::abs(farther.z - 0.13f) < 1e-5f);
+  const Point nearer = warp_step({0, 0, 0.1f}, 2.0f, {0, 0, 1.6f});  // 0.8 times: shrunk
+  CHECK(std::abs(nearer.z - 0.08f) < 1e-5f);
+  CHECK(std::abs(warp_step({0, 0, 0.1f}, 2.0f, {0, 0, 10.0f}).z - 0.1f * kWarpMaxScale) < 1e-5f);  // clamped
+  CHECK(std::abs(warp_step({0, 0, 0.1f}, 2.0f, {0, 0, 0.1f}).z - 0.1f * kWarpMinScale) < 1e-5f);
+  const Point asIs = warp_step({0.03f, 0, 0.1f}, 0.0f, {5, 0, 0});  // no travel left
+  CHECK(asIs.x == 0.03f && asIs.z == 0.1f);
+  const Point noWay = warp_step({0.03f, 0, 0.1f}, 2.0f, {0, 0, 0});  // on the target already
+  CHECK(noWay.x == 0.03f && noWay.z == 0.1f);
+  CHECK(kWarpMinScale == 0.5f && kWarpMaxScale == 1.5f);
+}
+
+// Every clip that carries the body has its travel, as the bundle's build measured it, but the trips (their ragdoll
+// takes them) and the jump (its landing is a drop's or a prop's far side, as recorded).
+void the_clips_travel_as_built() {
+  for (const StateTravel& t : kClipTravel) CHECK(t.metres > 0.0f && seconds_of(t.state) > 0.0f);
+  for (const Move m : kAllMoves) {
+    if (!moves_by_clip(m) || m == Move::Stumble || m == Move::Parkour) continue;
+    for (const char* s : states_of(m)) CHECK(travel_of(s) > 0.0f);
+  }
+  CHECK(std::abs(travel_of("Roll_A") - 5.52f) < 1e-4f && travel_of("Run") == 0.0f && travel_of(nullptr) == 0.0f);
+}

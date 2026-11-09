@@ -1,6 +1,8 @@
 #include "squatter_figure.h"
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
 
 #include "Animator.h"
@@ -10,11 +12,13 @@
 #include "UnityRendering.h"
 #include "bundles.h"
 #include "held.h"
+#include "inertia.h"
 #include "log.h"
 #include "models.h"
 #include "quat.h"
 #include "runtime.h"
 #include "sheet_mesh.h"
+#include "squatter_ragdoll.h"
 
 namespace pm::custom::squatter::figure {
 namespace {
@@ -55,7 +59,74 @@ struct Figure {
   api::ClothParts cloth;
   const char* playing = nullptr;  // the state it plays, which a cross-fade blends from
   api::Held fullBody, lookAt;      // Final IK: the body's FullBodyBipedIK, and the head's LookAtIK
+  api::Held order;                 // Final IK's IKExecutionOrder, whose LateUpdate is the pass after the animation
+  bool falling = false;            // its ragdoll has it, not its Animator or its IK
+  phasmo::Quaternion fallChest{0, 0, 0, 1};  // the chest's rotation as the fall began
+  phasmo::Vector3 fallFront{0, 0, 1};        // the body's front as the fall began
 } g;
+
+AfterAnimation g_after = nullptr;
+std::chrono::steady_clock::time_point g_lastPass{};  // when the pass after the animation last ran; zero before the first
+PoseInertia g_inertia;  // what is left of the old pose after a change of clip
+// What is left of the hips' old place after a get-up starts, against their parent, dying away as the rotations do.
+phasmo::Vector3 g_hipsOffset{};
+float g_hipsSince = 0.0f, g_hipsSeconds = 0.0f;
+
+// Seconds on the figure's own clock, from the first call: small enough that a float keeps a millisecond for hours.
+float seconds() {
+  static const auto start = std::chrono::steady_clock::now();
+  return std::chrono::duration<float>(std::chrono::steady_clock::now() - start).count();
+}
+
+// The humanoid bones the figure's pose is kept for: every one the map has.
+constexpr size_t kPoseBones = 19;
+std::array<int32_t, kPoseBones> pose_bones() {
+  namespace B = phasmo::HumanBodyBones;
+  return {B::Hips(),          B::Spine(),        B::Chest(),        B::Neck(),          B::Head(),
+          B::LeftShoulder(),  B::RightShoulder(), B::LeftUpperArm(), B::RightUpperArm(), B::LeftLowerArm(),
+          B::RightLowerArm(), B::LeftHand(),     B::RightHand(),    B::LeftUpperLeg(),  B::RightUpperLeg(),
+          B::LeftLowerLeg(),  B::RightLowerLeg(), B::LeftFoot(),     B::RightFoot()};
+}
+
+void* bone(int32_t which);
+
+// Each pose bone's rotation against its parent now; identity for one the model lacks.
+std::array<phasmo::Quaternion, kPoseBones> read_pose() {
+  std::array<phasmo::Quaternion, kPoseBones> pose;
+  const auto bones = pose_bones();
+  for (size_t i = 0; i < kPoseBones; ++i) {
+    void* b = bone(bones[i]);
+    pose[i] = b ? phasmo::Transform::get_localRotation(b) : phasmo::Quaternion{0, 0, 0, 1};
+  }
+  return pose;
+}
+
+void forget_inertia() {
+  g_inertia.clear();
+  g_hipsSeconds = 0.0f;
+}
+
+// Puts what is left of the old pose before each bone's animated rotation, and of the hips' old place on theirs, while
+// any is left.
+void inertialize() {
+  const float now = seconds();
+  if (g_hipsSeconds > 0.0f && now - g_hipsSince < g_hipsSeconds) {
+    if (void* hips = bone(phasmo::HumanBodyBones::Hips())) {
+      const float left = inertia_left((now - g_hipsSince) / g_hipsSeconds);
+      phasmo::Vector3 p = phasmo::Transform::get_localPosition(hips);
+      p = {p.x + g_hipsOffset.x * left, p.y + g_hipsOffset.y * left, p.z + g_hipsOffset.z * left};
+      phasmo::Transform::set_localPosition(hips, &p);
+    }
+  }
+  if (!g_inertia.active(now)) return;
+  const auto bones = pose_bones();
+  for (size_t i = 0; i < kPoseBones; ++i) {
+    void* b = bone(bones[i]);
+    if (!b) continue;
+    const phasmo::Quaternion shown = qmul(g_inertia.offset(i, now), phasmo::Transform::get_localRotation(b));
+    phasmo::Transform::set_localRotation(b, &shown);
+  }
+}
 
 // How much of the look the spine takes, against the head's whole turn, and how far past straight ahead it eases off:
 // starting values, judged with the user in game.
@@ -68,10 +139,12 @@ void fail(const char* step, const std::string& why) {
 
 // Destroys the figure's own assets, and its objects when the scene has not already.
 void clear() {
+  ragdoll::destroy();
   api::destroy_cloth(g.cloth);
   if (api::alive(g.material)) phasmo::Object::Destroy(g.material, 0.0f);
   if (api::alive(g.root)) phasmo::Object::Destroy(g.root, 0.0f);
   g = Figure{};
+  forget_inertia();
 }
 
 // A scene load destroys the copy: forget it, freeing what the scene does not.
@@ -303,7 +376,22 @@ bool build_ik() {
   api::RefArray{list}.set(1, look);
   phasmo::IKExecutionOrder::IKComponents.set(order, list);
   phasmo::IKExecutionOrder::animator.set(order, g.animator);
+  g.order = order;
   return true;
+}
+
+// Final IK's LateUpdate, for every model that has an IKExecutionOrder: on the figure's own, the pass after the
+// animation runs first, so the IK bends the pose the pass leaves.
+void detour_ik_late_update(api::Original<phasmo::IKExecutionOrder::LateUpdate> original, void* order) {
+  if (is_own_ik(order, g.order)) {
+    const auto now = std::chrono::steady_clock::now();
+    const float dt = g_lastPass == decltype(g_lastPass){} ? 0.0f : std::chrono::duration<float>(now - g_lastPass).count();
+    g_lastPass = now;
+    if (!g.falling) inertialize();
+    if (g_after) g_after(dt);
+    if (g.falling) return;  // physics has the body: no IK bends it
+  }
+  original(order);
 }
 
 // The full-body solver's effector for `hand`, or null.
@@ -373,7 +461,9 @@ void create(phasmo::Vector3 at) {
   // (user, 2026-11-09); its bones still shape the sheet. The head still draws, since it is a person under a bedsheet
   // (user, 2026-11-09). The sheet, added next, draws.
   api::hide_renderers(g.root, kShownParts);
-  if (!build_sheet() || !build_ik()) clear();
+  if (!build_sheet() || !build_ik()) return clear();
+  // The ragdoll a fall turns physical, built standing; without it (logged) a fall plays its clip as recorded.
+  ragdoll::build(g.animator);
 }
 
 void destroy() {
@@ -389,14 +479,16 @@ void place(phasmo::Vector3 at, float yaw) {
   phasmo::Transform::set_rotation(t, &turn);
 }
 
-// Blends into `state` from the one playing over kBlendSeconds (user, 2026-11-09: the clips cut from one to the next),
-// or plays it outright when nothing plays yet.
+// Changes to `state` by inertialization (user, 2026-11-09: no pose snaps or floats between clips): the state plays at
+// once, posed this frame, and the old pose's difference from its first pose dies away in the pass after the animation.
 void blend_to(const char* state) {
   if (!check()) return;
-  const float from = seconds_of(g.playing);
-  const bool played = from > 0.0f ? api::fade_to_state(g.animator, state, kBlendSeconds / from)
-                                  : api::play_state(g.animator, state);
-  if (played) g.playing = state;
+  const auto from = read_pose();
+  if (!api::play_state(g.animator, state)) return;
+  api::pose_now(g.animator);
+  g.playing = state;
+  const auto to = read_pose();
+  g_inertia.begin(from, to, seconds());
 }
 
 void play(Move m, uint32_t variant) { blend_to(state_for(m, variant)); }
@@ -449,6 +541,7 @@ void snap_to(const char* state) {
   if (api::play_state(g.animator, state)) {
     g.playing = state;
     api::pose_now(g.animator);
+    forget_inertia();
   }
 }
 
@@ -463,5 +556,73 @@ phasmo::Vector3 clip_step() { return check() ? phasmo::Animator::get_deltaPositi
 void* head() { return check() ? bone(phasmo::HumanBodyBones::Head()) : nullptr; }
 
 bool ready() { return check(); }
+
+bool fall(phasmo::Vector3 velocity) {
+  if (!check() || !ragdoll::built()) return false;
+  forget_inertia();
+  void* chest = bone(phasmo::HumanBodyBones::Chest());
+  const phasmo::Quaternion facing = phasmo::Transform::get_rotation(phasmo::GameObject::get_transform(g.root));
+  g.fallChest = chest ? phasmo::Transform::get_rotation(chest) : facing;
+  g.fallFront = qrot(facing, {0, 0, 1});
+  phasmo::Behaviour::set_enabled(g.animator, false);  // it would set the bones over physics every frame
+  ragdoll::set_physical(true, velocity);
+  g.falling = true;
+  return true;
+}
+
+bool falling() { return check() && g.falling; }
+
+float fall_speed() { return falling() ? ragdoll::fastest() : 0.0f; }
+
+Landing landing() {
+  if (!check()) return {};
+  void* hips = bone(phasmo::HumanBodyBones::Hips());
+  void* head = bone(phasmo::HumanBodyBones::Head());
+  void* chest = bone(phasmo::HumanBodyBones::Chest());
+  Landing l;
+  if (hips) l.hips = phasmo::Transform::get_position(hips);
+  l.head = head ? phasmo::Transform::get_position(head) : l.hips;
+  // The front it had, turned as far as the chest has turned since the fall began.
+  l.front = chest ? qrot(qmul(phasmo::Transform::get_rotation(chest), qinv(g.fallChest)), g.fallFront) : g.fallFront;
+  return l;
+}
+
+void rise(const char* state, phasmo::Vector3 at, float yaw, float blendSeconds) {
+  if (!check()) return;
+  void* hips = bone(phasmo::HumanBodyBones::Hips());
+  const phasmo::Vector3 hipsAt = hips ? phasmo::Transform::get_position(hips) : at;
+  const phasmo::Quaternion hipsTurn = hips ? phasmo::Transform::get_rotation(hips) : phasmo::Quaternion{0, 0, 0, 1};
+  ragdoll::set_physical(false, {});
+  g.falling = false;
+  // The root moves under the body, which stays where it lies.
+  place(at, yaw);
+  if (hips) {
+    phasmo::Transform::set_position(hips, &hipsAt);
+    phasmo::Transform::set_rotation(hips, &hipsTurn);
+  }
+  const auto from = read_pose();
+  const phasmo::Vector3 hipsFrom = hips ? phasmo::Transform::get_localPosition(hips) : phasmo::Vector3{};
+  phasmo::Behaviour::set_enabled(g.animator, true);
+  if (!api::play_state(g.animator, state)) return forget_inertia();
+  api::pose_now(g.animator);
+  g.playing = state;
+  const auto to = read_pose();
+  const phasmo::Vector3 hipsTo = hips ? phasmo::Transform::get_localPosition(hips) : phasmo::Vector3{};
+  const float now = seconds();
+  g_inertia.begin(from, to, now, blendSeconds);
+  g_hipsOffset = {hipsFrom.x - hipsTo.x, hipsFrom.y - hipsTo.y, hipsFrom.z - hipsTo.z};
+  g_hipsSince = now;
+  g_hipsSeconds = blendSeconds;
+}
+
+void set_after_animation(AfterAnimation fn) {
+  g_after = fn;
+  g_lastPass = {};
+}
+
+bool create_hooks() {
+  return api::hook<phasmo::IKExecutionOrder::LateUpdate>(&detour_ik_late_update, "IKExecutionOrder.LateUpdate",
+                                                         api::Twins::CanonicalOnly);
+}
 
 }  // namespace pm::custom::squatter::figure

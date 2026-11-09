@@ -1,6 +1,7 @@
 // Offline tests for the Squatter's rules (mods/custom_ghosts/squatter_rule.h).
 // Run: build\squatter_test.exe
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -10,6 +11,7 @@
 #include <limits>
 #include <map>
 #include <set>
+#include <span>
 #include <utility>
 #include <string>
 #include <vector>
@@ -22,9 +24,11 @@
 #include "UnityRendering.h"
 #include "fake_game.h"
 #include "game_api.h"
+#include "inertia.h"
 #include "runtime.h"
 #include "sheet_mesh.h"
 #include "squatter_chase.h"
+#include "squatter_fall.h"
 #include "squatter_figure.h"
 #include "squatter_net.h"
 #include "squatter_rule.h"
@@ -32,6 +36,10 @@
 #include "wav.h"
 
 #include "check.h"
+
+namespace pm::hooks {
+std::atomic<int> g_inflight{0};  // the count of hooked bodies running, which hooks.cpp keeps in the game
+}
 
 using namespace pm::custom::squatter;
 namespace wav = pm::custom::wav;
@@ -827,27 +835,18 @@ void sheet_hangs_from_the_crown() {
 }
 
 // The figure's state table (squatter_figure.h): the names the bundle's controller must have, exactly.
-// A trip ends lying face down, so the bundle runs it on into the user's Standing Up clip (user, 2026-11-09: getting up
-// was too quick): the Stumble state holds the trip and the get-up together, and once it stands each client turns the
-// figure's root by the angle the get-up was imported at, snapping to the standing idle, so the body itself never turns.
-// A trip picks one of two at random (user, 2026-11-09): Soccer Trip then Standing Up, or Tripping then Getting Up. Each
-// state holds its trip and its get-up together, and each get-up stands it turned its own way from its root, which the
-// client takes up as it stands.
-void a_trip_gets_up_with_the_users_clip() {
+// A trip picks one of two at random (user, 2026-11-09): Soccer Trip or Tripping. Each loses its footing partway
+// through its own clip (kFooting), where its ragdoll takes over, and each get-up stands alone, played from where the
+// body lands: the trips no longer run on into them.
+void the_get_ups_stand_alone() {
   CHECK(states_of(Move::Stumble).size() == 2);
-  CHECK(std::abs(seconds_of("Stumble") - (kTripSeconds + seconds_of(kStandUpState))) < 1e-4f);
-  CHECK(std::abs(seconds_of("Trip") - (kTrippingSeconds + seconds_of(kTripGetUpState))) < 1e-4f);
-  for (uint32_t v = 0; v < 2; ++v) {
-    const char* state = state_for(Move::Stumble, v);
-    CHECK(move_hold_seconds(Move::Stumble, seconds_of(state)) == seconds_of(state));
-    CHECK(!stood_up(1000, 1000 + static_cast<uint64_t>(seconds_of(state) * 1000.0f) - 1, v));
-    CHECK(stood_up(1000, 1000 + static_cast<uint64_t>(seconds_of(state) * 1000.0f), v));
-  }
+  CHECK(seconds_of("Stumble") == 1.6f && seconds_of("Trip") == 2.1f);
+  CHECK(kFooting[0] > 0.0f && kFooting[0] < seconds_of("Stumble"));
+  CHECK(kFooting[1] > 0.0f && kFooting[1] < seconds_of("Trip"));
+  const std::vector<const char*> all = all_states();
+  CHECK(std::count_if(all.begin(), all.end(), [](const char* x) { return std::string(x) == kStandUpState; }) == 1);
+  CHECK(std::count_if(all.begin(), all.end(), [](const char* x) { return std::string(x) == kTripGetUpState; }) == 1);
   CHECK(seconds_of(kStandUpState) > 1.0f && seconds_of(kTripGetUpState) > 1.0f);  // get-ups, not pops
-  const float deg = std::numbers::pi_v<float> / 180.0f;
-  CHECK(std::abs(risen_facing(0.0f, 0) - kRiseTurnDegrees[0] * deg) < 1e-5f);
-  CHECK(std::abs(risen_facing(170.0f * deg, 1) - wrap_angle((170.0f + kRiseTurnDegrees[1]) * deg)) < 1e-5f);
-  CHECK(kRiseTurnDegrees[0] == kStandUpTurnDegrees);
 }
 
 void every_move_and_act_has_its_states() {
@@ -917,6 +916,30 @@ void shown_round_trips() {
 
 // A Shown is taken only whole, in range and from the master: a short or long message, a value no client knows, and one
 // any other player sent are dropped, and the last good one is kept.
+// A fall goes to every client in the Shown: the move, which way it is pushed and what knocked it over. A cause no
+// client knows is dropped; a heading survives its byte to within half a step.
+void a_fall_is_shared() {
+  for (int cause = 0; cause < kFallCauseValues; ++cause) {
+    Shown s;
+    s.phase = Phase::Chasing;
+    s.move = Move::Fall;
+    s.fallYaw = 77;
+    s.fallCause = static_cast<FallCause>(cause);
+    const std::vector<uint8_t> bytes = shown_message(s);
+    Shown back;
+    CHECK(read_shown(bytes.data(), bytes.size(), back) && back == s);
+  }
+  Shown s;
+  s.move = Move::Fall;
+  std::vector<uint8_t> bytes = shown_message(s);
+  bytes.back() = static_cast<uint8_t>(kFallCauseValues);  // the cause is the last byte
+  Shown out;
+  CHECK(!read_shown(bytes.data(), bytes.size(), out));
+  const float step = 2.0f * std::numbers::pi_v<float> / 256.0f;
+  for (float yaw = -3.1f; yaw < 3.1f; yaw += 0.05f)
+    CHECK(std::abs(wrap_angle(byte_yaw(yaw_byte(yaw)) - yaw)) <= step / 2 + 1e-4f);
+}
+
 void bad_shown_is_dropped() {
   Shown s;
   s.phase = Phase::Chasing;
@@ -1219,10 +1242,72 @@ void the_start_check_refuses_a_bundle_missing_a_state() {
 
 }  // namespace
 
+// A new clip starts at once, and the old pose's difference from it dies away over kInertiaSeconds with no jump at
+// either end (user, 2026-11-09: no pose ever snaps or floats between clips).
+void inertialization_starts_from_the_old_pose_and_dies_away() {
+  using pm::custom::qmul;
+  using pm::custom::PoseInertia;
+  using pm::custom::kInertiaSeconds;
+  const auto turn = [](float x, float y, float z, float degrees) {
+    const float n = std::sqrt(x * x + y * y + z * z), h = degrees * 3.14159265f / 360.0f;
+    return phasmo::Quaternion{x / n * std::sin(h), y / n * std::sin(h), z / n * std::sin(h), std::cos(h)};
+  };
+  const auto near = [](phasmo::Quaternion a, phasmo::Quaternion b) {
+    const float dot = std::fabs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w);
+    return dot > 1.0f - 1e-4f;
+  };
+  const auto angle = [](phasmo::Quaternion q) { return 2.0f * std::acos(std::min(1.0f, std::fabs(q.w))); };
+  const phasmo::Quaternion from[] = {turn(1, 0, 0, 40), turn(0, 1, 0, -170), turn(1, 1, 0, 5), {0, 0, 0, 1}};
+  const phasmo::Quaternion to[] = {turn(0, 0, 1, 30), turn(0, 1, 0, 170), turn(1, 1, 0, 5), turn(0, 1, 1, 90)};
+  PoseInertia inertia;
+  CHECK(!inertia.active(0.0f));
+  inertia.begin(from, to, 10.0f);
+  CHECK(inertia.active(10.0f));
+  for (size_t i = 0; i < std::size(from); ++i) CHECK(near(qmul(inertia.offset(i, 10.0f), to[i]), from[i]));
+  for (size_t i = 0; i < std::size(from); ++i) {
+    float last = angle(inertia.offset(i, 10.0f));
+    for (float t = 10.0f; t <= 10.0f + kInertiaSeconds + 0.05f; t += 0.01f) {
+      const float now = angle(inertia.offset(i, t));
+      CHECK(now <= last + 1e-5f);
+      last = now;
+    }
+  }
+  CHECK(!inertia.active(10.0f + kInertiaSeconds));
+  for (size_t i = 0; i < std::size(from); ++i) CHECK(near(inertia.offset(i, 10.0f + kInertiaSeconds), {0, 0, 0, 1}));
+  CHECK(near(inertia.offset(std::size(from), 10.0f), {0, 0, 0, 1}));  // a bone it never saw
+  // Spans of different lengths are not two poses of one body: nothing starts.
+  PoseInertia odd;
+  odd.begin(std::span(from, 3), to, 10.0f);
+  CHECK(!odd.active(10.0f));
+  CHECK(near(odd.offset(0, 10.0f), {0, 0, 0, 1}));
+  inertia.clear();
+  CHECK(!inertia.active(10.0f));
+}
+
+// The pass after the animation runs for the figure's own IKExecutionOrder alone: Final IK's LateUpdate runs for every
+// model that has one, and a missing figure is never its own.
+void the_pass_after_the_animator_is_the_figures_own() {
+  int a = 0, b = 0;
+  CHECK(figure::is_own_ik(&a, &a));
+  CHECK(!figure::is_own_ik(&a, &b));
+  CHECK(!figure::is_own_ik(nullptr, nullptr));
+  CHECK(!figure::is_own_ik(&a, nullptr));
+}
+
 int main() {
   every_move_and_act_has_its_states();
   move_variants_are_deterministic();
   the_start_check_refuses_a_bundle_missing_a_state();
+  the_pass_after_the_animator_is_the_figures_own();
+  inertialization_starts_from_the_old_pose_and_dies_away();
+  a_fall_settles_then_gets_up();
+  the_get_up_follows_how_it_landed();
+  it_gets_up_where_it_lies();
+  what_knocks_it_over();
+  a_fall_never_stacks();
+  a_leaf_meets_the_body_at_its_nearest_point();
+  a_move_lands_where_the_world_needs_it();
+  the_clips_travel_as_built();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();
@@ -1248,7 +1333,7 @@ int main() {
   an_unknown_count_never_locks();
   the_move_clock_survives_bad_times();
   a_move_that_plays_once_holds_for_its_clip();
-  a_trip_gets_up_with_the_users_clip();
+  the_get_ups_stand_alone();
   friendly_never_chases_or_kicks();
   kick_needs_a_living_target_in_reach();
   speed_stays_just_under_sprint();
@@ -1256,6 +1341,7 @@ int main() {
   lines_match_the_phase();
   picks_never_repeat_and_handle_nothing();
   shown_round_trips();
+  a_fall_is_shared();
   bad_shown_is_dropped();
   one_try_is_sent_per_input();
   a_non_masters_try_reaches_the_master();

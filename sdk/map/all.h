@@ -50,6 +50,7 @@
 #include "UnityAssets.h"
 #include "UnityAudio.h"
 #include "UnityCloth.h"
+#include "UnityJoints.h"
 #include "FinalIK.h"
 #include "UnityEvents.h"
 #include "UnityObject.h"
@@ -1618,6 +1619,30 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &CapsuleCollider,
     &CapsuleCollider_set_radius,
     &CapsuleCollider_set_height,
+    &CapsuleCollider_set_center,
+    &CapsuleCollider_set_direction,
+    &Joint,
+    &Joint_set_connectedBody,
+    &Joint_set_axis,
+    &CharacterJoint,
+    &CharacterJoint_set_swingAxis,
+    &CharacterJoint_set_lowTwistLimit,
+    &CharacterJoint_set_highTwistLimit,
+    &CharacterJoint_set_swing1Limit,
+    &CharacterJoint_set_swing2Limit,
+    &BoxCollider,
+    &BoxCollider_set_size,
+    &BoxCollider_set_center,
+    &SphereCollider,
+    &SphereCollider_set_radius,
+    &SphereCollider_set_center,
+    &Rigidbody_set_mass,
+    &Rigidbody_set_useGravity,
+    &Rigidbody_get_angularVelocity,
+    &Physics_OverlapSphere,
+    &Collider_get_attachedRigidbody,
+    &Layer_DeadPlayer,
+    &IKExecutionOrder_LateUpdate,
     &Layer_IgnoreRaycast,
     &Vector3,
     &BoneWeight,
