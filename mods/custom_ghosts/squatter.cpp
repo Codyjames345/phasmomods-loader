@@ -4,12 +4,14 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <random>
 #include <set>
 #include <type_traits>
 #include <vector>
 
+#include "Animator.h"
 #include "ClosetZone.h"
 #include "Difficulty.h"
 #include "Door.h"
@@ -98,9 +100,7 @@ struct State {
   const void* lastStep = nullptr;  // the clip it last stepped with, compared only, never used
   std::mt19937 stepRng{std::random_device{}()};
   // How fast the ghost moves on this client, for the figure's pace (figure::set_pace).
-  std::optional<Point> paceFrom;
-  uint64_t paceAt = 0;
-  float pace = 0.0f;
+  PaceMeter pace;
   // Its head's turn to the player it is after, and the hand it puts on a door's handle (figure::look_at, reach).
   float lookWeight = 0.0f;
   phasmo::Vector3 lookPoint{};
@@ -109,13 +109,15 @@ struct State {
   figure::Hand reachHand = figure::Hand::Right;
   uint64_t reachSince = 0;
   float reachWeight = 0.0f;
-  uint64_t playAt = 0;  // the last frame play() ran, for the blends' steps
+  double playAt = 0.0;  // when play() last ran (seconds_now), for the blends' steps
   // The figure's own facing on this client, radians clockwise from +z, and the clip it plays of its own around the
   // master's moves (turning on the spot, setting off), until localUntil.
   std::optional<float> facing;
   enum class Local : uint8_t { None, Turning, Starting } local = Local::None;
   uint64_t localUntil = 0;
   std::optional<Move> lastMove;
+  // The head bone of the player it looks at (eyes_of), found once per player.
+  api::Held eyesOf, eyesBone;
   // The slam of a hiding place's door, due when its kick's foot lands (kSlamDelayMs), on this client, and the hiding
   // place, taken as the kick starts: by the time the foot lands it may have lost interest and looks at nobody.
   uint64_t slamAt = 0;
@@ -124,11 +126,15 @@ struct State {
   std::optional<uint64_t> tripSince;
 };
 
-// Over how long the ghost's speed is smoothed for the figure's pace, seconds: a starting value.
-constexpr float kPaceSmoothSeconds = 0.25f;
 State g;
 
 uint64_t now() { return GetTickCount64(); }
+
+// Seconds on a steady clock fine enough to tell frames apart, for what is measured per frame (the pace, the blends):
+// GetTickCount64 advances only every 10 to 16 ms, so frames inside one tick read no time at all.
+double seconds_now() {
+  return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 // The way the contract's ghost faces, radians clockwise from +z seen from above.
 float heading_of(void* ghost) {
@@ -996,6 +1002,26 @@ void slam(void* closet, Point ghostAt, uint32_t roll) {
   if (clip) phasmo::Noise::PlaySound(noise, clip, kSlamVolume, false, false);
 }
 
+// Where `player`'s eyes are: their body's head bone (PlayerCosmetics.playerAnimator, HumanBodyBones.Head), which follows
+// them crouching or standing; their position plus kEyeHeight only when it cannot be read. A player's position is not at
+// their feet (it stood 0.83 m above the floor in a test), so a fixed height above it had the Squatter crane its neck up
+// at a player close by (user, 2026-11-09).
+Point eyes_of(void* player) {
+  if (g.eyesOf.get() != player || !api::alive(g.eyesBone)) {
+    g.eyesOf = player;
+    g.eyesBone = nullptr;
+    void* t = player ? phasmo::Component::get_transform(player) : nullptr;
+    void* cosmetics = t ? phasmo::Component::GetComponentInChildren(t, phasmo::PlayerCosmetics::type.type_object(), true)
+                        : nullptr;
+    void* animator = cosmetics ? phasmo::PlayerCosmetics::playerAnimator.get(cosmetics) : nullptr;
+    if (animator && api::alive(animator))
+      g.eyesBone = phasmo::Animator::GetBoneTransform(animator, phasmo::HumanBodyBones::Head());
+  }
+  if (api::alive(g.eyesBone)) return point(phasmo::Transform::get_position(g.eyesBone.get()));
+  const Point p = at_of(player);
+  return {p.x, p.y + kEyeHeight, p.z};
+}
+
 // Every client plays the Shown: the master's own on the master, the master's last word elsewhere.
 void play(void* ghost) {
   if (!g.shown.last || !figure::ready()) return;
@@ -1012,24 +1038,18 @@ void play(void* ghost) {
   if (c.move && s.move == Move::Stumble && s.act < 0) g.tripSince = t;
   // Its walking and running keep pace with how fast the ghost moves here (figure::set_pace), smoothed over a moment.
   const Point here = at_of(ghost);
-  if (g.paceFrom && t > g.paceAt) {
-    const float seconds = static_cast<float>(t - g.paceAt) / 1000.0f;
-    const float raw = std::hypot(here.x - g.paceFrom->x, here.z - g.paceFrom->z) / seconds;
-    g.pace += (raw - g.pace) * std::min(1.0f, seconds / kPaceSmoothSeconds);
-  }
-  g.paceFrom = here;
-  g.paceAt = t;
-  figure::set_pace(s.move, g.pace);
+  const double seconds = seconds_now();
+  figure::set_pace(s.move, g.pace.update(here, seconds));
 
-  const float dt = g.playAt && t > g.playAt ? static_cast<float>(t - g.playAt) / 1000.0f : 0.0f;
-  g.playAt = t;
+  const float dt = g.playAt > 0.0 && seconds > g.playAt ? static_cast<float>(seconds - g.playAt) : 0.0f;
+  g.playAt = seconds;
 
   // Its head turns to the player it is after (Shown.lookAt), at their eyes, blending in and out.
   void* watched = nullptr;
   if (s.lookAt) watched = s.lookAt == game::local_actor() ? game::local_player() : game::player_of_actor(s.lookAt);
   if (watched) {
-    const Point p = at_of(watched);
-    g.lookPoint = {p.x, p.y + kEyeHeight, p.z};
+    const Point p = eyes_of(watched);
+    g.lookPoint = {p.x, p.y, p.z};
   }
   g.lookWeight = approach(g.lookWeight, watched ? 1.0f : 0.0f, dt / kLookBlendSeconds);
   figure::look_at(g.lookPoint, g.lookWeight);
@@ -1092,7 +1112,7 @@ void play(void* ghost) {
     // Down from a trip: it lies the way it fell, whichever way the ghost turns.
   } else if (g.local == State::Local::Turning) {
     g.facing = wrap_angle(*g.facing + figure::clip_turn());  // the clip's own turn
-  } else if (g.pace >= kStillPace || s.act >= 0 || s.move != Move::Stand || g.local == State::Local::Starting) {
+  } else if (g.pace.pace() >= kStillPace || s.act >= 0 || s.move != Move::Stand || g.local == State::Local::Starting) {
     // A duck or a weave goes side-on, quickly, so its sidestep carries it along its way (move_facing).
     const bool sideOn = s.act < 0 && (s.move == Move::Duck || s.move == Move::Weave);
     const float rate = kTurnRateDegrees * (sideOn ? 2.0f : 1.0f) * std::numbers::pi_v<float> / 180.0f;
@@ -1103,8 +1123,20 @@ void play(void* ghost) {
     g.local = State::Local::Turning;
     g.localUntil = t + static_cast<uint64_t>(seconds_of(clip) * 1000.0f);
   }
-  if (c.line && s.lineSet >= 0 && s.lineIndex >= 0)
-    voice::play_index(static_cast<Lines>(s.lineSet), s.lineIndex, vector(at_of(ghost)));
+  if (c.line && s.lineSet >= 0 && s.lineIndex >= 0) {
+    const Lines set = static_cast<Lines>(s.lineSet);
+    if (set == Lines::Door) {  // at the exit nearest this client's player, loud enough to carry through the door
+      std::vector<Point> exits;
+      for (void* d : door::exits())
+        if (const std::optional<phasmo::Vector3> m = door_middle(d)) exits.push_back(point(*m));
+      void* me = game::local_player();
+      const int i = nearest_point(exits, me ? at_of(me) : at_of(ghost));
+      voice::play_index(set, s.lineIndex, vector(i >= 0 ? exits[static_cast<size_t>(i)] : at_of(ghost)),
+                        kDoorLineFullVolume);
+    } else {
+      voice::play_index(set, s.lineIndex, vector(at_of(ghost)));
+    }
+  }
   // A footstep each stride it moves, on this client, from its own view of the ghost's movement.
   const Point at = at_of(ghost);
   if (g.stepFrom && g.steps.moved(std::hypot(at.x - g.stepFrom->x, at.z - g.stepFrom->z)))
@@ -1132,8 +1164,10 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     g.kicked.clear();
     g.steps.reset();
     g.stepFrom.reset();
-    g.paceFrom.reset();
-    g.pace = 0.0f;
+    g.pace.reset();
+    g.playAt = 0.0;
+    g.eyesOf = nullptr;
+    g.eyesBone = nullptr;
     g.lookWeight = 0.0f;
     g.reachDoor = nullptr;
     g.reachWeight = 0.0f;

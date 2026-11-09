@@ -40,11 +40,12 @@ constexpr float kWrist = 0.06f, kHand = 0.07f, kPalmAlong = 0.35f;
 // hem settles on the floor rather than through it (user, 2026-11-09: it showed through the ceiling below).
 constexpr float kFloorRadius = 3.0f;
 // The investigator body's parts left drawing under the sheet, by their GameObject's name in the PCPlayer prefab
-// (sdk/systems/scene.md): the head (CC_Base_Body is the head's mesh alone), its eyes, teeth, tongue and hair, and the
-// legs (trousers and boots). The jacket, shirt, hands and every cosmetic slot stay hidden.
-constexpr const char* kShownParts[] = {"CC_Base_Body",  "CC_Base_Eye",   "CC_Base_EyeOcclusion", "CC_Base_TearLine",
+// (sdk/systems/scene.md): the head alone (CC_Base_Body is the head's mesh alone), its eyes, teeth, tongue and hair. The
+// legs clipped through the sheet, so the trousers and boots are hidden with the jacket, shirt, hands and every cosmetic
+// slot (user, 2026-11-09).
+constexpr const char* kShownParts[] = {"CC_Base_Body",  "CC_Base_Eye",    "CC_Base_EyeOcclusion", "CC_Base_TearLine",
                                        "CC_Base_Teeth", "CC_Base_Tongue", "Hair", "Extra Hair Renderer 1",
-                                       "Extra Hair Renderer 2", "TrousersSkinnedMesh", "Boots"};
+                                       "Extra Hair Renderer 2"};
 
 api::Held g_bundle;
 bool g_failed = false;  // a create that failed, logged once, until destroy()
@@ -369,8 +370,8 @@ void create(phasmo::Vector3 at) {
     api::pose_now(g.animator);
   }
   // What the sheet covers is never drawn, as games hide what a costume covers, so no arm or hand ever shows through it
-  // (user, 2026-11-09); its bones still shape the sheet. The head and legs still draw, since it is a person under a
-  // bedsheet (user, 2026-11-09). The sheet, added next, draws.
+  // (user, 2026-11-09); its bones still shape the sheet. The head still draws, since it is a person under a bedsheet
+  // (user, 2026-11-09). The sheet, added next, draws.
   api::hide_renderers(g.root, kShownParts);
   if (!build_sheet() || !build_ik()) clear();
 }

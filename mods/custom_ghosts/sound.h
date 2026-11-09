@@ -11,6 +11,8 @@ namespace pm::custom::sound {
 
 bool resolve();    // true: its entries are the mod's requirements
 bool available();  // true while the mod runs
-void play_at(void* clip, phasmo::Vector3 at, float volume);
+// fullVolumeWithin: metres within which it plays at full volume, falling off beyond (AudioSource.minDistance); 0 or less
+// keeps Unity's own 1 m.
+void play_at(void* clip, phasmo::Vector3 at, float volume, float fullVolumeWithin = 0.0f);
 
 }  // namespace pm::custom::sound

@@ -1273,6 +1273,8 @@ int main() {
   a_kick_at_a_hiding_place_sounds_its_door();
   it_reaches_a_hider_at_the_closets_spot();
   a_closets_obstacle_opens_only_while_it_goes_in();
+  a_door_line_is_said_at_the_nearest_exit();
+  the_pace_keeps_the_distance_of_a_frame_with_no_time();
   a_door_is_reached_within_reach();
   the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();

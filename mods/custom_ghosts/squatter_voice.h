@@ -56,6 +56,6 @@ int count(Lines set);
 int play(Lines set, phasmo::Vector3 at, uint32_t roll);
 
 /** Plays line `index` of `set` at `at`; does nothing for an empty set, an index out of range or a line that failed to build. */
-void play_index(Lines set, int index, phasmo::Vector3 at);
+void play_index(Lines set, int index, phasmo::Vector3 at, float fullVolumeWithin = 0.0f);
 
 }  // namespace pm::custom::squatter::voice

@@ -450,3 +450,34 @@ void a_closets_obstacle_opens_only_while_it_goes_in() {
   CHECK(keeps_closet_open(false, true));  // done, but still inside: not yet
   CHECK(!keeps_closet_open(false, false));
 }
+
+// A door line is said at the exit nearest the listener, loud within kDoorLineFullVolume, so a player shut outside hears
+// it through the door (user, 2026-11-09).
+void a_door_line_is_said_at_the_nearest_exit() {
+  const std::vector<Point> exits = {{0, 0, 0}, {10, 0, 0}, {4, 3, 0}};
+  CHECK(nearest_point(exits, {9, 0, 1}) == 1);
+  CHECK(nearest_point(exits, {4, 0, 0}) == 2);  // on the flat: height does not count
+  CHECK(nearest_point({}, {0, 0, 0}) == -1);
+  CHECK(kDoorLineFullVolume >= 5.0f);
+}
+
+// How fast the ghost moves on this client, for the clips' pace. A frame in which no time passes keeps its distance for
+// the next (user, 2026-11-09: the walk played too slowly and the feet slid; frames inside one tick of a coarse clock
+// dropped their distance, so the pace read low).
+void the_pace_keeps_the_distance_of_a_frame_with_no_time() {
+  PaceMeter split, whole;
+  split.update({0, 0, 0}, 0.0);
+  whole.update({0, 0, 0}, 0.0);
+  split.update({0.05f, 0, 0}, 0.0);  // a frame inside the same tick
+  const float a = split.update({0.1f, 0, 0}, 0.1);
+  const float b = whole.update({0.1f, 0, 0}, 0.1);
+  CHECK(std::abs(a - b) < 1e-6f && a > 0.0f);
+  // Held long enough, it reads the true speed: 1 m/s.
+  PaceMeter steady;
+  for (int i = 0; i <= 200; ++i) steady.update({0.01f * i, 0, 0}, 0.01 * i);
+  CHECK(std::abs(steady.pace() - 1.0f) < 0.01f);
+  steady.update({100, 0, 0}, 1.0);  // time went backwards: ignored, nothing read
+  CHECK(std::abs(steady.pace() - 1.0f) < 0.01f);
+  steady.reset();
+  CHECK(steady.pace() == 0.0f);
+}

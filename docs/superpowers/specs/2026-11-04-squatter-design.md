@@ -50,7 +50,8 @@ well it works.
    hiding where it never looks keeps the front door unlocked and the Squatter searching, for as long as they stay.
 6. **The catch.** It kills the player with a kick to the face, replacing the stock choke, and says a funny line.
 7. **The door.** It never follows anyone past the way out. The door does not lock until all living players are out; then it
-   locks, and each later attempt to open it gets another line, like "hit the road dude". On a map with several exits, it stops at all
+   locks, and each later attempt to open it gets another line, like "hit the road dude", said at the exit nearest each
+   player and loud enough to carry through the door (user, 2026-11-09). On a map with several exits, it stops at all
    of them and all of them lock. A map without a house still has a "door", which locks in the same way. Once they have
    locked, no Monkey Paw wish opens them: not the timed locks, not the rooms wish where an exit is among its doors, and not
    the wish that opens every exit; everything else each wish does stays vanilla, and before the lock every wish is
@@ -91,9 +92,9 @@ Some consequences, all **(builder's call)**:
 
 ## Look and sound
 
-- **Body:** a vanilla player model, not a ghost model. Its head (with the hair) and its legs (trousers and boots)
-  show, since it is a person under a bedsheet; what the sheet covers (jacket, shirt, hands) is hidden so nothing
-  shows through it (user, 2026-11-09).
+- **Body:** a vanilla player model, not a ghost model. Its head (with the hair) shows, since it is a person under a
+  bedsheet; everything else is hidden so nothing shows through the sheet (user, 2026-11-09: the legs clipped through
+  it, so they were hidden again).
 - **Sheet:** a cloth-simulated white bedsheet draped over the model, with oval cutouts for the eyes (user,
   2026-11-09). It hangs thick and stiff, as a bedsheet does (user, 2026-11-09). The mesh is a plain sheet generated
   in code. The user ruled on 2026-11-04 that this is not a creative asset, so `AI_POLICY.md` does not forbid it.

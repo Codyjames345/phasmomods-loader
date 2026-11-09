@@ -9,6 +9,7 @@
 #include <system_error>
 
 #include "UnityAudio.h"
+#include "UnityObject.h"
 #include "game_api.h"
 #include "held.h"
 #include "log.h"
@@ -81,6 +82,10 @@ void* build(const fs::path& file) {
   }
   std::memcpy(&data[0], pcm.samples.data(), pcm.samples.size() * sizeof(float));
   phasmo::AudioClip::SetData(clip, samples, 0);
+  // Made once as the mod starts, in the menu, the clip is in no scene: a scene load's unload of unused assets would
+  // destroy it before any contract (user, 2026-11-09: the Squatter never spoke), as Spectral Flame's own textures are
+  // kept from it the same way.
+  phasmo::Object::set_hideFlags(clip, phasmo::HideFlags::DontUnloadUnusedAsset());
   return clip;
 }
 
@@ -99,6 +104,7 @@ std::vector<fs::path> list_wavs(const fs::path& folder) {
 
 bool load(const fs::path& folder) {
   bool any = false;
+  int files = 0, clips = 0;
   for (int i = 0; i < kSetCount; ++i) {
     Set& set = g_sets[i];
     set.lines.clear();
@@ -106,10 +112,13 @@ bool load(const fs::path& folder) {
     for (const fs::path& file : list_wavs(folder / folder_name(static_cast<Lines>(i)))) {
       Line line;
       line.clip = build(file);
+      ++files;
+      if (line.clip.get()) ++clips;
       any = any || line.clip.get() != nullptr;
       set.lines.push_back(std::move(line));
     }
   }
+  PM_LOG("squatter: voice: %d of %d recording(s) loaded", clips, files);
   return any;
 }
 
@@ -128,12 +137,18 @@ int play(Lines set, phasmo::Vector3 at, uint32_t roll) {
   return index;
 }
 
-void play_index(Lines set, int index, phasmo::Vector3 at) {
-  const Set* s = set_of(set);
+void play_index(Lines set, int index, phasmo::Vector3 at, float fullVolumeWithin) {
+  Set* s = set_of(set);
   if (!s || index < 0 || index >= static_cast<int>(s->lines.size())) return;
-  void* clip = s->lines[static_cast<size_t>(index)].clip;
+  Line& line = s->lines[static_cast<size_t>(index)];
+  void* clip = line.clip;
   if (!clip) return;
-  sound::play_at(clip, at, 1.0f);
+  if (!api::alive(clip)) {  // destroyed after it was made: said once in the log, then silent
+    PM_LOG("squatter: voice: %s line %d is gone", folder_name(set), index);
+    line.clip = nullptr;
+    return;
+  }
+  sound::play_at(clip, at, 1.0f, fullVolumeWithin);
 }
 
 }  // namespace pm::custom::squatter::voice

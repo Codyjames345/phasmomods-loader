@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <map>
@@ -535,6 +536,62 @@ inline Step follow_step(Point ghost, std::optional<Point> targetAt, std::optiona
   }
   if (lastAt && flat(*lastAt) >= kStandReach) return {lastAt, kFollowPace, false};
   return {};
+}
+
+// Over how long the ghost's speed is smoothed for the figure's pace, seconds: a starting value.
+inline constexpr float kPaceSmoothSeconds = 0.25f;
+
+/**
+ * How fast the ghost moves on this client, metres a second on the flat, smoothed over kPaceSmoothSeconds: what the
+ * walking and running clips keep pace with (figure::set_pace). `seconds` is on a steady clock fine enough to tell frames
+ * apart; a frame in which no time passed keeps its distance for the next one rather than dropping it (user, 2026-11-09:
+ * the walk played too slowly and slid, its pace read from a clock that advances only every 10 to 16 ms).
+ */
+class PaceMeter {
+ public:
+  /** The ghost stands at `at` at `seconds`; returns the pace. */
+  float update(Point at, double seconds) {
+    if (!from_) {
+      from_ = at;
+      at_ = seconds;
+      return pace_;
+    }
+    if (!(seconds > at_)) return pace_;  // no time yet: the distance waits for the next frame
+    const float dt = static_cast<float>(seconds - at_);
+    const float raw = std::hypot(at.x - from_->x, at.z - from_->z) / dt;
+    pace_ += (raw - pace_) * std::min(1.0f, dt / kPaceSmoothSeconds);
+    from_ = at;
+    at_ = seconds;
+    return pace_;
+  }
+  /** The last pace read, 0 before any. */
+  float pace() const { return pace_; }
+  /** Forgets everything, as when the ghost is gone. */
+  void reset() { *this = PaceMeter{}; }
+
+ private:
+  std::optional<Point> from_;
+  double at_ = 0.0;
+  float pace_ = 0.0f;
+};
+
+// The door lines are said at the exit nearest the listener, at full volume within this many metres, so a player shut
+// outside hears them through the door (user, 2026-11-09: they were said where the ghost was, too far to hear). A
+// starting value.
+inline constexpr float kDoorLineFullVolume = 8.0f;
+
+/** The index of the point of `points` nearest `p` on the flat, -1 for none. */
+inline int nearest_point(std::span<const Point> points, Point p) {
+  int best = -1;
+  float nearest = 0.0f;
+  for (size_t i = 0; i < points.size(); ++i) {
+    const float d = std::hypot(points[i].x - p.x, points[i].z - p.z);
+    if (best < 0 || d < nearest) {
+      best = static_cast<int>(i);
+      nearest = d;
+    }
+  }
+  return best;
 }
 
 /**

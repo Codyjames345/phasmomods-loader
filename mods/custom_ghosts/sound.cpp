@@ -13,7 +13,7 @@ bool resolve() { return true; }
 
 bool available() { return true; }
 
-void play_at(void* clip, phasmo::Vector3 at, float volume) {
+void play_at(void* clip, phasmo::Vector3 at, float volume, float fullVolumeWithin) {
   if (!api::alive(clip)) return;
   void* go = phasmo::GameObject::type.make();
   if (!go) return;
@@ -28,6 +28,7 @@ void play_at(void* clip, phasmo::Vector3 at, float volume) {
   phasmo::AudioSource::set_clip(source, clip);
   phasmo::AudioSource::set_spatialBlend(source, 1.0f);
   phasmo::AudioSource::set_volume(source, volume);
+  if (fullVolumeWithin > 0.0f) phasmo::AudioSource::set_minDistance(source, fullVolumeWithin);
   phasmo::AudioSource::Play(source, 0);
   phasmo::Object::Destroy(go, phasmo::AudioClip::get_length(clip) * std::max(phasmo::Time::get_timeScale(), 0.01f));
 }
