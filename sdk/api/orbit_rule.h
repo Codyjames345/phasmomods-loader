@@ -22,7 +22,9 @@ inline constexpr float kWallMargin = 0.2f;
 
 /// A point or direction in the world (y up), as Unity's Vector3.
 struct Point {
-  float x, y, z;
+  float x;  ///< metres east-west, as Unity's x
+  float y;  ///< metres up
+  float z;  ///< metres north-south, as Unity's z
 };
 
 /// Where the camera sits: `distance` straight back from the head along the look, raised by `height`.
