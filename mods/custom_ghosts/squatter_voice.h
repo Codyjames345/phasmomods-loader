@@ -57,6 +57,7 @@ int play(Lines set, phasmo::Vector3 at, uint32_t roll);
 
 /** Plays line `index` of `set` at `at`; does nothing for an empty set, an index out of range or a line that failed to build. */
 // With `follow` (a Transform, such as the figure's head), the line moves with it; else it stays at `at`.
-void play_index(Lines set, int index, phasmo::Vector3 at, float fullVolumeWithin = 0.0f, void* follow = nullptr);
+void play_index(Lines set, int index, phasmo::Vector3 at, float fullVolumeWithin = 0.0f, void* follow = nullptr,
+                float silentBeyond = 0.0f);
 
 }  // namespace pm::custom::squatter::voice

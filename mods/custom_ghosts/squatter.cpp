@@ -71,6 +71,9 @@ struct Chase {
   std::optional<float> lurkSpeed;                    // the ghost's own agent speed, while a door pauses its lurk
   api::Held openAtHand;  // a hiding place's door it stands at to open this frame (hold_at_doors)
   uint64_t nextHideLog = 0;  // when it next logs what it decides at a hiding place
+  // How often its feet were checked for clutter and found some, logged every 5 s while it chases (feet_meet_clutter).
+  int feetChecks = 0, feetHits = 0;
+  uint64_t nextFeetLog = 0;
   // The closet whose inside it opened to walk in (ClosetZone.internalAreaObstacle), and what its obstacle wanted before.
   api::Held openObstacle;
   bool obstacleWas = true;
@@ -719,7 +722,17 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       // its whole clip, and the next waits kClumsyGapMs after it.
       // Its feet meet clutter: it trips there and then, every frame it runs, not waiting for its next read of the way.
       const bool midMove = plays_once(c.out.move) && t < c.moveUntil;
-      const bool feet = !midMove && !paused && t >= c.nextClumsy && feet_meet_clutter(agent, ghostAt);
+      const bool mayTrip = !midMove && !paused && t >= c.nextClumsy;
+      const bool feet = mayTrip && feet_meet_clutter(agent, ghostAt);
+      c.feetChecks += mayTrip ? 1 : 0;
+      c.feetHits += feet ? 1 : 0;
+      if (t >= c.nextFeetLog) {  // for the user's tests: whether its feet were checked at all, and met anything
+        if (c.nextFeetLog)
+          PM_LOG("squatter: feet checked %d time(s), met clutter %d, in the last 5 s (ghost at height %.2f)", c.feetChecks,
+                 c.feetHits, ghostAt.y);
+        c.feetChecks = c.feetHits = 0;
+        c.nextFeetLog = t + 5000;
+      }
       if (feet) c.moveUntil = t;
       if (t >= c.moveUntil) {
         Pick pick;
@@ -1169,7 +1182,7 @@ void play(void* ghost) {
       voice::play_index(set, s.lineIndex, vector(i >= 0 ? exits[static_cast<size_t>(i)] : at_of(ghost)),
                         kDoorLineFullVolume);
     } else {  // from its head, moving with it as it runs (user, 2026-11-09: the lines stayed where they began)
-      voice::play_index(set, s.lineIndex, vector(at_of(ghost)), 0.0f, figure::head());
+      voice::play_index(set, s.lineIndex, vector(at_of(ghost)), kVoiceFullVolume, figure::head(), kVoiceRange);
     }
   }
   // A footstep each stride it moves, on this client, from its own view of the ghost's movement.
