@@ -142,6 +142,27 @@ void its_head_turns_to_the_player_it_is_after() {
   CHECK(approach(0.5f, 1.0f, 0.0f) == 0.5f && approach(0.5f, 1.0f, std::numeric_limits<float>::quiet_NaN()) == 0.5f);
 }
 
+// Turning on the spot as games do it (user, 2026-11-09: integrate the turning clips): standing, it keeps its facing
+// until its heading pulls kTurnStartDegrees away, then turns left or right by a clip, and past kTurnAroundDegrees it
+// turns round; moving, it turns toward its heading at up to a rate, the shorter way round.
+void it_turns_on_the_spot_by_its_clips() {
+  constexpr float deg = std::numbers::pi_v<float> / 180.0f;
+  CHECK(turn_for(30 * deg) == Turn::None && turn_for(-59 * deg) == Turn::None);
+  CHECK(turn_for(70 * deg) == Turn::Right && turn_for(-70 * deg) == Turn::Left);
+  CHECK(turn_for(150 * deg) == Turn::Around && turn_for(-170 * deg) == Turn::Around);
+  CHECK(turn_for(350 * deg) == Turn::None);  // ten degrees the other way round
+  CHECK(std::fabs(std::fabs(wrap_angle(3 * std::numbers::pi_v<float>)) - std::numbers::pi_v<float>) < 1e-4f);
+  CHECK(wrap_angle(std::numeric_limits<float>::quiet_NaN()) == 0.0f);
+  CHECK(std::fabs(turn_toward(0, 90 * deg, 10 * deg) - 10 * deg) < 1e-5f);
+  CHECK(std::fabs(turn_toward(0, -90 * deg, 10 * deg) + 10 * deg) < 1e-5f);
+  CHECK(std::fabs(turn_toward(0, 5 * deg, 10 * deg) - 5 * deg) < 1e-5f);  // never past it
+  CHECK(std::fabs(wrap_angle(turn_toward(170 * deg, -170 * deg, 10 * deg) - 180 * deg)) < 1e-4f);  // across the back
+  CHECK(turn_toward(1.0f, 2.0f, 0.0f) == 1.0f);
+  // The clips each client plays of its own are in the bundle's table, and a jump runs on into its landing.
+  for (const char* state : kLocalStates) CHECK(seconds_of(state) > 0.0f);
+  CHECK(std::string(state_for(Move::Parkour, 7)) == "Parkour_A" && seconds_of("Parkour_A") > seconds_of("Parkour_B"));
+}
+
 // The door clip follows the leaf's swing (door::swings_toward): it pulls a door that comes toward it (Opening Door
 // Inwards) and pushes one that goes away (Open Door Outwards).
 void the_door_clip_follows_the_side() {

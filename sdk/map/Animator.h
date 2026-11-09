@@ -187,8 +187,18 @@ inline constexpr pm::sdk::EntryDesc Animator_Rebind{.key = "Animator.Rebind", .k
 
 inline constexpr const char* Animator_CrossFade_params[] = {"int", "float", "int", "float", "float"};
 
+/// How far the Animator's clips turned the model's root over its last update (root motion): a turn-on-the-spot clip's
+/// own turn, when its root rotation is not baked into the pose. Only worked out while the Animator applies root motion
+/// (Animator.set_applyRootMotion): with it off it reads no turn (the Squatter's test of 2026-11-09). Inferred: Unity's
+/// documented property getter.
+inline constexpr pm::sdk::EntryDesc Animator_get_deltaRotation{.key = "Animator.get_deltaRotation",
+                                                               .kind = pm::sdk::Kind::Method, .owner = "Animator",
+                                                               .name = "get_deltaRotation"};
+
 /// How far the Animator's clips moved the model's root over its last update, metres in the world (root motion): what
-/// Apply Root Motion would add to the model's position. It is worked out whether or not the Animator applies it.
+/// Apply Root Motion adds to the model's position. Only worked out while the Animator applies root motion
+/// (Animator.set_applyRootMotion): with it off a roll read no step and rolled in place (the Squatter's test of
+/// 2026-11-09). To move something else by it, turn it on and put the model back where you want it each frame.
 /// Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Animator_get_deltaPosition{.key = "Animator.get_deltaPosition",
                                                                .kind = pm::sdk::Kind::Method, .owner = "Animator",
@@ -362,6 +372,8 @@ struct Animator {
   /// length. Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::Animator_CrossFade, void(void*, int32_t, float, int32_t, float, float)>
       CrossFade{};
+  /// get_deltaRotation(animator): how far its clips turned the root last update (root motion). Unresolved: zero.
+  static constexpr pm::api::Method<pm::map::Animator_get_deltaRotation, Quaternion(void*)> get_deltaRotation{};
   /// get_deltaPosition(animator): how far its clips moved the root last update (root motion). Unresolved: zero.
   static constexpr pm::api::Method<pm::map::Animator_get_deltaPosition, Vector3(void*)> get_deltaPosition{};
   /// Update(animator, seconds): steps it now; 0 poses the model in its state. Unresolved: does nothing.

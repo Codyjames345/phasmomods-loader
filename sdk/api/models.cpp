@@ -163,6 +163,22 @@ bool fade_to_state(void* animator, const char* state, float blend) {
   return true;
 }
 
+int hide_renderers(void* gameObject) {
+  if (!alive(gameObject)) return 0;
+  std::vector<void*> transforms;
+  each_transform(phasmo::GameObject::get_transform(gameObject), 0, transforms);
+  int hidden = 0;
+  for (void* t : transforms) {
+    const RefArray renderers{phasmo::GameObject::GetComponents(game_object_of(t), phasmo::Renderer::type.type_object())};
+    for (size_t i = 0; i < renderers.size(); ++i)
+      if (void* r = renderers[i]) {
+        phasmo::Renderer::set_enabled(r, false);
+        ++hidden;
+      }
+  }
+  return hidden;
+}
+
 bool pose_now(void* animator) {
   if (!alive(animator) || !phasmo::Animator::get_isInitialized(animator)) return false;
   phasmo::Animator::Update(animator, 0.0f);

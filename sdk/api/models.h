@@ -77,6 +77,15 @@ bool fade_to_state(void* animator, const char* state, float blend);
 bool pose_now(void* animator);
 
 /**
+ * @brief Stops drawing every Renderer under a GameObject, inactive ones included, keeping its bones, Animator and the
+ *        rest: what games do with a body a costume covers, so no part of it can show through the clothing.
+ *        Renderers added afterwards (a sheet's own) still draw.
+ * @return How many renderers it switched off; 0 for null or a destroyed GameObject.
+ * @since Contract 2.3 (a helper in the mod's own code)
+ */
+int hide_renderers(void* gameObject);
+
+/**
  * @brief Whether a controller has every one of `states` on its first layer: a check for a mod's start, so a bundle
  *        built without a state fails the start instead of a figure standing still in a contract.
  * @param controller A controller load_controller gave.

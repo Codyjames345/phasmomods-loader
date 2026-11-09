@@ -29,6 +29,9 @@ const api::ClothSettings kCloth{true, 0.1f, 1.0f, 0.2f};
 // thickness, on the torso, neck, shoulders, both arms and both legs. Starting values, judged with the user in game.
 constexpr float kChest = 0.24f, kSpine = 0.22f, kHips = 0.22f, kNeck = 0.09f, kShoulder = 0.10f;
 constexpr float kArm = 0.10f, kForearm = 0.08f, kThigh = 0.12f, kShin = 0.09f;
+// The forearms and hands push the sheet out where they go, a hand reaching for a door's handle among them: spheres
+// along each forearm, at the wrist and over the hand. Starting values.
+constexpr float kWrist = 0.06f, kHand = 0.07f, kPalmAlong = 0.35f;
 // The floor the sheet rests on: Cloth collides only with spheres and capsules, so a sphere this large lies under the
 // feet, its top level with them. Across the sheet's spread (about 0.6 m) its surface falls only a few centimetres, so the
 // hem settles on the floor rather than through it (user, 2026-11-09: it showed through the ceiling below).
@@ -170,6 +173,12 @@ bool build_sheet() {
   // The head's line runs up to the middle of the head, which its sphere covers.
   segments[0].to = on_sheet({h.x, h.y + kHeadCentreAboveBone, h.z});
   const float cap = sheet::cap_distance(shape);
+  // A sphere's offset from its bone, in the world as the body stands: `share` of the line from joint `from` to joint
+  // `to`. On `from`'s bone it lies along the line; on `to`'s, past it (the palm past the wrist).
+  const auto along = [&](int32_t from, int32_t to, float share) {
+    const phasmo::Vector3 a = phasmo::Transform::get_position(bone(from)), b = phasmo::Transform::get_position(bone(to));
+    return phasmo::Vector3{(b.x - a.x) * share, (b.y - a.y) * share, (b.z - a.z) * share};
+  };
   std::vector<api::ClothWeight> weights;
   for (size_t v = 0; v < m.vertices.size(); ++v) {
     api::ClothWeight w;  // the head alone
@@ -202,6 +211,12 @@ bool build_sheet() {
       {bone(B::RightUpperLeg()), kThigh, none},
       {bone(B::LeftLowerLeg()), kShin, none},
       {bone(B::RightLowerLeg()), kShin, none},
+      {bone(B::LeftLowerArm()), kWrist, along(B::LeftLowerArm(), B::LeftHand(), 0.5f)},
+      {bone(B::RightLowerArm()), kWrist, along(B::RightLowerArm(), B::RightHand(), 0.5f)},
+      {bone(B::LeftHand()), kWrist, none},
+      {bone(B::RightHand()), kWrist, none},
+      {bone(B::LeftHand()), kHand, along(B::LeftLowerArm(), B::LeftHand(), kPalmAlong)},
+      {bone(B::RightHand()), kHand, along(B::RightLowerArm(), B::RightHand(), kPalmAlong)},
       // The figure's root is at its feet, and follows the ghost's position each frame (place).
       {phasmo::GameObject::get_transform(g.root), kFloorRadius, {0, -kFloorRadius, 0}}};
   if (!api::add_cloth(anchor, mesh, material, kCloth, spheres, g.cloth, &why)) return fail("cloth", why), false;
@@ -290,6 +305,10 @@ void create(phasmo::Vector3 at) {
     clear();
     return fail("animator", "the body has no Animator or the bundle no controller");
   }
+  // Root motion on, so the Animator works out each clip's own step and turn (clip_step, clip_turn), which a roll, a trip
+  // and a turn on the spot move the Squatter by (user, 2026-11-09: it rolled in place). Every client puts the figure back
+  // where the ghost is, facing its own way, each frame (place), so the Animator's own move of it never shows.
+  phasmo::Animator::set_applyRootMotion(g.animator, true);
   place(at, 0.0f);
   // The sheet is laid over the body as it stands: the standing clip's first pose, posed now, not whatever pose the copy
   // was taken in (user, 2026-11-09: the sheet sat off the head and the arms came out of it).
@@ -297,6 +316,9 @@ void create(phasmo::Vector3 at) {
     g.playing = kStandStates[0];
     api::pose_now(g.animator);
   }
+  // The body under the sheet is never drawn, as games hide what a costume covers, so no arm or hand ever shows
+  // through it (user, 2026-11-09); its bones still shape the sheet. The sheet, added next, draws.
+  api::hide_renderers(g.root);
   if (!build_sheet() || !build_ik()) clear();
 }
 
@@ -364,6 +386,14 @@ void look_at(phasmo::Vector3 at, float weight) {
   if (!solver) return;
   if (weight > 0.0f) phasmo::IKSolver::IKPosition.set(solver, at);
   phasmo::IKSolver::IKPositionWeight.set(solver, std::clamp(weight, 0.0f, 1.0f));
+}
+
+void play_clip(const char* state) { blend_to(state); }
+
+float clip_turn() {
+  if (!check()) return 0.0f;
+  const phasmo::Quaternion q = phasmo::Animator::get_deltaRotation(g.animator);
+  return 2.0f * std::atan2(q.y, q.w);
 }
 
 phasmo::Vector3 clip_step() { return check() ? phasmo::Animator::get_deltaPosition(g.animator) : phasmo::Vector3{}; }

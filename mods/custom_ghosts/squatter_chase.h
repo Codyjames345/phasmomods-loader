@@ -294,6 +294,42 @@ inline constexpr float kHandleAlong = 0.9f, kHandleHeight = 0.95f, kHandleOut = 
 // How near a door must be for the hand to reach for it, metres, and how high a player's eyes are above their feet.
 inline constexpr float kReachDoorMetres = 1.8f, kEyeHeight = 1.5f;
 
+/** `radians` brought into -pi to pi, the same turn the shorter way round. */
+inline float wrap_angle(float radians) {
+  constexpr float pi = std::numbers::pi_v<float>;
+  if (!std::isfinite(radians)) return 0.0f;
+  float a = std::fmod(radians + pi, 2.0f * pi);
+  if (a < 0) a += 2.0f * pi;
+  return a - pi;
+}
+
+/** A turn on the spot the figure plays (the user's Left Turn, Right Turn and Walking Turn 180 clips). */
+enum class Turn : uint8_t { None, Left, Right, Around };
+
+// Turning on the spot as games do it: the figure keeps facing where it faces while it stands, and once where it should
+// face (the ghost's own heading) has pulled further than kTurnStartDegrees away it plays a turn clip, which turns it by
+// the clip's own root rotation; further than kTurnAroundDegrees, the half turn. Moving, it turns toward its heading at
+// up to kTurnRateDegrees a second. Starting values, judged with the user in game.
+inline constexpr float kTurnStartDegrees = 60.0f, kTurnAroundDegrees = 135.0f, kTurnRateDegrees = 360.0f;
+// How long the Start Walking clip plays as it sets off from standing before its walk takes over, seconds: a starting
+// value, judged with the user.
+inline constexpr float kStartWalkSeconds = 1.0f;
+
+/** The turn the figure plays standing, facing `delta` radians (wrap_angle) from where it should; clockwise seen from above is positive, a right turn. */
+inline Turn turn_for(float delta) {
+  const float degrees = std::fabs(wrap_angle(delta)) * 180.0f / std::numbers::pi_v<float>;
+  if (degrees >= kTurnAroundDegrees) return Turn::Around;
+  if (degrees >= kTurnStartDegrees) return wrap_angle(delta) > 0 ? Turn::Right : Turn::Left;
+  return Turn::None;
+}
+
+/** The facing `from` radians turned toward `to` by at most `step` radians, the shorter way round. */
+inline float turn_toward(float from, float to, float step) {
+  const float d = wrap_angle(to - from);
+  if (!(step > 0.0f)) return from;
+  return wrap_angle(from + std::clamp(d, -step, step));
+}
+
 /** The move shown at `speed`: standing for a walk, sneak or run that is not moving, any other move as it is. */
 inline Move rest_move(Move m, float speed) {
   return (m == Move::Run || m == Move::Walk || m == Move::Sneak) && speed <= 0.0f ? Move::Stand : m;

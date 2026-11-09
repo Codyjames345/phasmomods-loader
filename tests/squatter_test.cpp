@@ -788,11 +788,12 @@ void every_move_and_act_has_its_states() {
   for (const char* s : all) names.insert(s);
   CHECK(names.size() == all.size());  // each name once
   CHECK((names == std::set<std::string>{"Run", "Duck_A", "Duck_B", "Weave_A", "Weave_B", "Roll_A", "Roll_B",
-                                        "Parkour_A", "Parkour_B", "Stumble", "Sit", "GetUp", "Kick", "Bang", "Bump",
-                                        "OpenDoorOutwards", "OpenDoorInwards", "Walk", "Stand", "Sneak"}));
+                                        "Parkour_A", "Stumble", "Sit", "GetUp", "Kick", "Bang", "Bump",
+                                        "OpenDoorOutwards", "OpenDoorInwards", "Walk", "Stand", "Sneak", "TurnLeft",
+                                        "TurnRight", "Turn180", "StartWalk"}));
   for (const Move m : kAllMoves) {
     const auto states = states_of(m);
-    const bool two = m == Move::Duck || m == Move::Weave || m == Move::Roll || m == Move::Parkour;
+    const bool two = m == Move::Duck || m == Move::Weave || m == Move::Roll;
     CHECK(states.size() == (two ? 2u : 1u));
   }
   CHECK(std::string(state_of(Act::Bang)) == "Bang" && std::string(state_of(Act::OpenDoorInwards)) == "OpenDoorInwards");
@@ -802,7 +803,7 @@ void every_move_and_act_has_its_states() {
 // The master sends a variant and every client turns it into the same state.
 void move_variants_are_deterministic() {
   CHECK(std::string(state_for(Move::Duck, 0)) == "Duck_A" && std::string(state_for(Move::Duck, 1)) == "Duck_B");
-  CHECK(std::string(state_for(Move::Parkour, 7)) == "Parkour_B");
+  CHECK(std::string(state_for(Move::Parkour, 7)) == "Parkour_A");  // one state: the jump runs on into the landing
   for (const Move m : kAllMoves)
     for (uint32_t v : {0u, 1u, 2u, 3u, 1000001u, 0xFFFFFFFFu}) {  // pm:not-game-data: variants
       CHECK(std::string(state_for(m, v)) == state_for(m, v + static_cast<uint32_t>(states_of(m).size())));
@@ -1203,6 +1204,7 @@ int main() {
   a_fall_stops_it_where_it_stands();
   walking_and_running_keep_pace_with_the_ground();
   its_head_turns_to_the_player_it_is_after();
+  it_turns_on_the_spot_by_its_clips();
   a_door_is_reached_within_reach();
   the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();

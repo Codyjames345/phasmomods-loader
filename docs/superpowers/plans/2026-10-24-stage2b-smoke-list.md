@@ -1144,3 +1144,13 @@ Head and hand IK (Final IK, user 2026-11-09).
 - [ ] Opening a door, the hand nearer the handle reaches for the door's far edge at handle height and stays on it as the leaf swings, then lets go. Note which hand, and whether it reaches through the leaf or short of it.
 - [ ] Both players see the same head turn (toward the same player) and the same hand on the same door.
 - [ ] Nothing else changes: walking, running, rolls and sitting look as before when it is not looking or reaching.
+
+The user's test of 2026-11-09 (arms through the sheet, hovering after a jump, rolling in place) and turning.
+
+- [ ] No arm, hand or any part of the body ever shows through the sheet, from any side, reaching for a door included; through the eye holes only the inside of the sheet shows.
+- [ ] A hand reaching for a door pushes the sheet out toward the handle rather than vanishing into it.
+- [ ] The jump-and-land plays through into the landing: it never hangs in the air.
+- [ ] A roll carries the Squatter forward as far as the clip shows (Sprinting Forward Roll about 5.5 m, Stand To Roll about 4 m): it never rolls on the spot.
+- [ ] Standing, once it needs to face well away (over about 60 degrees) it turns on the spot with the Left Turn or Right Turn clip, or turns round with Walking Turn 180, and ends facing the new way without a snap; small turns while standing are left alone.
+- [ ] Moving, it turns smoothly toward where it goes, never snapping round.
+- [ ] Setting off from standing into a walk, it plays Start Walking for about a second, then walks.

@@ -95,6 +95,12 @@ struct State {
   uint64_t reachSince = 0;
   float reachWeight = 0.0f;
   uint64_t playAt = 0;  // the last frame play() ran, for the blends' steps
+  // The figure's own facing on this client, radians clockwise from +z, and the clip it plays of its own around the
+  // master's moves (turning on the spot, setting off), until localUntil.
+  std::optional<float> facing;
+  enum class Local : uint8_t { None, Turning, Starting } local = Local::None;
+  uint64_t localUntil = 0;
+  std::optional<Move> lastMove;
 };
 
 // Over how long the ghost's speed is smoothed for the figure's pace, seconds: a starting value.
@@ -103,14 +109,21 @@ State g;
 
 uint64_t now() { return GetTickCount64(); }
 
-// Every client shows its own figure where the contract's ghost is, facing the way it faces.
+// The way the contract's ghost faces, radians clockwise from +z seen from above.
+float heading_of(void* ghost) {
+  void* t = phasmo::Component::get_transform(ghost);
+  const phasmo::Vector3 f = t ? phasmo::Transform::get_forward(t) : phasmo::Vector3{0, 0, 1};
+  return std::atan2(f.x, f.z);
+}
+
+// Every client shows its own figure where the contract's ghost is, facing its own way (play turns it).
 void show(void* ghost) {
   void* t = phasmo::Component::get_transform(ghost);
   if (!t) return;
   const phasmo::Vector3 at = phasmo::Transform::get_position(t);
   if (!figure::ready()) figure::create(at);
-  const phasmo::Vector3 f = phasmo::Transform::get_forward(t);
-  figure::place(at, std::atan2(f.x, f.z));
+  if (!g.facing) g.facing = heading_of(ghost);
+  figure::place(at, *g.facing);
 }
 
 template <auto& Member>
@@ -687,6 +700,33 @@ void play(void* ghost) {
     figure::reach(g.reachHand, {}, 0.0f);
   }
   if (!doorAct && g.reachWeight <= 0.0f) g.reachDoor = nullptr;
+
+  // Its own clips around the master's moves, as games blend locomotion: setting off from standing plays Start Walking
+  // before the walk, and standing it turns on the spot with a turn clip once its heading pulls far enough away. A new
+  // act or move from the master ends either.
+  if (c.act || c.move) g.local = State::Local::None;
+  if (c.move && s.act < 0 && s.move == Move::Walk && g.lastMove == Move::Stand) {
+    figure::play_clip(kStartWalkState);
+    g.local = State::Local::Starting;
+    g.localUntil = t + static_cast<uint64_t>(kStartWalkSeconds * 1000.0f);
+  }
+  if (c.move) g.lastMove = s.move;
+  if (g.local != State::Local::None && t >= g.localUntil) {
+    g.local = State::Local::None;
+    if (s.act < 0) figure::play(s.move, s.variant);
+  }
+  const float heading = heading_of(ghost);
+  if (!g.facing) g.facing = heading;
+  if (g.local == State::Local::Turning) {
+    g.facing = wrap_angle(*g.facing + figure::clip_turn());  // the clip's own turn
+  } else if (g.pace >= kStillPace || s.act >= 0 || s.move != Move::Stand || g.local == State::Local::Starting) {
+    g.facing = turn_toward(*g.facing, heading, kTurnRateDegrees * std::numbers::pi_v<float> / 180.0f * dt);
+  } else if (const Turn turn = turn_for(heading - *g.facing); turn != Turn::None) {
+    const char* clip = turn == Turn::Around ? kTurnAroundState : turn == Turn::Right ? kTurnRightState : kTurnLeftState;
+    figure::play_clip(clip);
+    g.local = State::Local::Turning;
+    g.localUntil = t + static_cast<uint64_t>(seconds_of(clip) * 1000.0f);
+  }
   if (c.line && s.lineSet >= 0 && s.lineIndex >= 0)
     voice::play_index(static_cast<Lines>(s.lineSet), s.lineIndex, vector(at_of(ghost)));
   // A footstep each stride it moves, on this client, from its own view of the ghost's movement.
@@ -720,6 +760,9 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     g.lookWeight = 0.0f;
     g.reachDoor = nullptr;
     g.reachWeight = 0.0f;
+    g.facing.reset();
+    g.local = State::Local::None;
+    g.lastMove.reset();
     forget_channel();
     figure::destroy();
     if (!haunting) ghost_sight::drop();  // shared (ghost_sight.h): kept while the contract's ghost lives

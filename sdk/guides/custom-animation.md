@@ -171,8 +171,10 @@ with; a ray or overlap query of the game's whose mask includes that layer can st
   speed, and the ground speed over the speed the clip travels. Download walks and runs with Mixamo's In Place
   unticked, so their speed can be read.
 - **Let a one-off clip move the character** (a roll, a trip) by reading `Animator.get_deltaPosition` each frame, how
-  far the clip moved the root, and moving your object by it; the Animator works it out even with Apply Root Motion off.
-  A NavMeshAgent can be moved with `NavMeshAgent.Warp` (its `Move` is stripped).
+  far the clip moved the root, and moving your object by it; `Animator.get_deltaRotation` gives a turn clip's own turn.
+  The Animator works these out only with Apply Root Motion on (`use_controller` turns it off), so turn it on and put
+  the model back where you want it each frame. A NavMeshAgent can be moved with `NavMeshAgent.Warp` (its `Move` is
+  stripped).
 
 ## Inverse kinematics (Final IK)
 
