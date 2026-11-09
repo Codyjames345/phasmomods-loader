@@ -581,13 +581,14 @@ bool overlaps_an_eye(const sh::SheetShape& s, float x0, float x1, float z0, floa
   return false;
 }
 
-bool inside_an_eye(const sh::SheetShape& s, sh::Vec2 p) {
-  for (const float side : {-1.0f, 1.0f}) {
-    const float x = side * s.eyeAcross;
-    if (std::abs(p.x - x) < s.eyeWidth / 2 && std::abs(p.y - s.eyeForward) < s.eyeHeight / 2) return true;
-  }
-  return false;
+// How far `p` lies out on its eye's oval: 1 on the oval, under 1 inside it.
+float eye_oval(const sh::SheetShape& s, sh::Vec2 p) {
+  const float x = (p.x < 0 ? -1.0f : 1.0f) * s.eyeAcross;
+  const float u = (p.x - x) / (s.eyeWidth / 2), v = (p.y - s.eyeForward) / (s.eyeHeight / 2);
+  return std::sqrt(u * u + v * v);
 }
+
+bool inside_an_eye(const sh::SheetShape& s, sh::Vec2 p) { return eye_oval(s, p) < 1.0f - 1e-4f; }
 
 // The cell (column, row) of the axis a point lies in, or -1 for a coordinate on no cell.
 std::pair<int, int> cell_of(const std::vector<float>& axis, sh::Vec2 p) {
@@ -649,13 +650,20 @@ void sheet_is_closed_grid_with_eye_holes() {
   CHECK(inRange);
   CHECK(clearOfEyes);
   CHECK(std::count(used.begin(), used.end(), false) == 0);  // no vertex left over in a hole
-  // Each vertex lies on the grid, and its uv is its place on the sheet from 0 to 1.
+  // Each vertex lies on the grid but an eye's rim, which lies on the eye's oval (user, 2026-11-09: oval eye holes,
+  // not rectangles), eight to an eye, the two at its ends on the grid too; and its uv is its place on the sheet
+  // from 0 to 1.
+  size_t rim = 0;
   for (size_t v = 0; v < n; ++v) {
-    CHECK(std::find(axis.begin(), axis.end(), m.flat[v].x) != axis.end());
-    CHECK(std::find(axis.begin(), axis.end(), m.flat[v].y) != axis.end());
+    const bool onGrid = std::find(axis.begin(), axis.end(), m.flat[v].x) != axis.end() &&
+                        std::find(axis.begin(), axis.end(), m.flat[v].y) != axis.end();
+    const bool onOval = std::abs(eye_oval(shape, m.flat[v]) - 1.0f) < 1e-4f;
+    CHECK(onGrid || onOval);
+    if (onOval) ++rim;
     CHECK(std::abs(m.uv[v].x - (m.flat[v].x / shape.side + 0.5f)) < 1e-5f);
     CHECK(std::abs(m.uv[v].y - (m.flat[v].y / shape.side + 0.5f)) < 1e-5f);
   }
+  CHECK(rim == 16);
 }
 
 void sheet_pins_only_the_top() {
@@ -1255,6 +1263,7 @@ int main() {
   a_clumsy_move_waits_until_it_faces_its_way();
   a_kick_at_a_hiding_place_sounds_its_door();
   it_reaches_a_hider_at_the_closets_spot();
+  a_closets_obstacle_opens_only_while_it_goes_in();
   a_door_is_reached_within_reach();
   the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();

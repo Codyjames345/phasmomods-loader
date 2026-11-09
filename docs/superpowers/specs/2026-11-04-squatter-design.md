@@ -41,7 +41,9 @@ well it works.
    the door that stands ajar with the opening-door clip, and walks in once the gap lets it through to kill them; a door
    already open that far it walks straight through (user, 2026-11-09). It heads for the closet's own spot
    (`ClosetZone.navSpot` on the mesh), where the game's hunt goes, and has them once it stands there, as the hunt's closet
-   search kills whoever hides there. It never opens a shut door, and kicks when the only
+   search kills whoever hides there. A closet's inside is kept off a ghost's routes by its own obstacle
+   (`ClosetZone.internalAreaObstacle`), so while it walks in for a hider it switches that obstacle off, and back on
+   once it is done there and clear of it (user, 2026-11-09: its route stopped at Willow Street's pantry doorway). It never opens a shut door, and kicks when the only
    door ajar is one it may not open. When they
    step out it goes straight back to chasing them. It knows
    because it saw them go in, or found them while searching the way the game's own closet search does **(builder's call)**. Someone
@@ -89,8 +91,11 @@ Some consequences, all **(builder's call)**:
 
 ## Look and sound
 
-- **Body:** a vanilla player model, not a ghost model.
-- **Sheet:** a cloth-simulated white bedsheet draped over the model, with cutouts for the eyes. The mesh is a plain sheet generated
+- **Body:** a vanilla player model, not a ghost model. Its head (with the hair) and its legs (trousers and boots)
+  show, since it is a person under a bedsheet; what the sheet covers (jacket, shirt, hands) is hidden so nothing
+  shows through it (user, 2026-11-09).
+- **Sheet:** a cloth-simulated white bedsheet draped over the model, with oval cutouts for the eyes (user,
+  2026-11-09). It hangs thick and stiff, as a bedsheet does (user, 2026-11-09). The mesh is a plain sheet generated
   in code. The user ruled on 2026-11-04 that this is not a creative asset, so `AI_POLICY.md` does not forbid it.
 - **Animation:** Mixamo clips, in variety: walk and run, ducks, weaves, rolls, parkour moves, stumbles, a kick, sitting on the floor,
   and getting up excited. The movement should feel human and

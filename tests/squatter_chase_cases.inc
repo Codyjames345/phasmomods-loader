@@ -441,3 +441,12 @@ void it_reaches_a_hider_at_the_closets_spot() {
   CHECK(reaches_hider({0, 0, 1.2f}, hider, std::nullopt));         // within the kick
   CHECK(!reaches_hider({0, 0, -3.0f}, hider, std::nullopt));
 }
+
+// A closet's inside is kept off the ghost's routes by its own obstacle (ClosetZone.internalAreaObstacle), so it opens
+// the obstacle (DynamicNavMeshObstacle.targetActivity cleared) while it walks in for a hider, and puts it back only once
+// it no longer goes in and stands clear of the obstacle, so the game never switches it on under it.
+void a_closets_obstacle_opens_only_while_it_goes_in() {
+  CHECK(keeps_closet_open(true, false) && keeps_closet_open(true, true));
+  CHECK(keeps_closet_open(false, true));  // done, but still inside: not yet
+  CHECK(!keeps_closet_open(false, false));
+}

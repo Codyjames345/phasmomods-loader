@@ -162,6 +162,15 @@ void f_SetActive(void* go, bool on, const void*) {
   note_wake(go, was);
 }
 void f_set_layer(void* go, int32_t layer, const void*) { node(go).layer = layer; }
+std::set<void*> g_hiddenRenderers;  // renderers set_enabled(false) switched off
+void f_renderer_enabled(void* r, bool on, const void*) {
+  if (on) g_hiddenRenderers.erase(r);
+  else g_hiddenRenderers.insert(r);
+}
+void* f_get_name(void* o, const void*) {
+  void* go = g_nodes.count(o) ? o : (g_ownerOf.count(o) ? g_ownerOf[o] : nullptr);
+  return api::make_string(go ? node(go).name.c_str() : "");
+}
 void* f_GetComponents(void* go, void* type, const void*) {
   std::vector<void*> found;
   for (void* c : node(go).components)
@@ -391,6 +400,7 @@ void start(bool withCloth = true) {
   g_typeObjectClass.clear();
   g_types.clear();
   g_prefab = {};
+  g_hiddenRenderers.clear();
   g_loadedPath.clear();
   g_bundlePath.clear();
   g_refuseBundle = false;
@@ -496,6 +506,8 @@ void start(bool withCloth = true) {
   fake::shader_property(map::ShaderProperty_Lit_BaseColor);
   fake::shader_property(map::ShaderProperty_Lit_Cull);
   m(map::Renderer_get_sharedMaterial, &f_get_sharedMaterial);
+  m(map::Renderer_set_enabled, &f_renderer_enabled);
+  m(map::UnityObject_get_name, &f_get_name);
   m(map::Renderer_set_sharedMaterials, &f_set_sharedMaterials);
   m(map::Mesh_ctor, &f_mesh_ctor);
   m(map::Mesh_set_vertices, &f_set_vertices);
@@ -719,6 +731,28 @@ struct Sheet {
   api::ClothMesh mesh() const { return {vertices, normals, uv, triangles, coefficients}; }
 };
 
+// A costume covers only part of a body: hide_renderers keeps drawing the renderers whose GameObject a name of `keep`
+// names, at any depth, and switches every other off (user, 2026-11-09: the Squatter's head and legs show).
+void a_costume_hides_only_what_it_covers() {
+  start();
+  void* root = go_new("Body");
+  void* head = go_new("CC_Base_Body");
+  void* jacket = go_new("JacketSkinnedMesh");
+  void* boots = go_new("Boots");
+  attach(head, root);
+  attach(jacket, root);
+  attach(boots, jacket);  // deeper in the tree
+  void* headRenderer = add(head, &kSkinned);
+  void* jacketRenderer = add(jacket, &kSkinned);
+  void* bootsRenderer = add(boots, &kSkinned);
+  const char* keep[] = {"CC_Base_Body", "Boots"};
+  CHECK(api::hide_renderers(root, keep) == 1);
+  CHECK(g_hiddenRenderers == std::set<void*>{jacketRenderer});
+  CHECK(!g_hiddenRenderers.contains(headRenderer) && !g_hiddenRenderers.contains(bootsRenderer));
+  CHECK(api::hide_renderers(root) == 3);  // keeping nothing hides all
+  CHECK(api::hide_renderers(nullptr, keep) == 0);
+}
+
 void cloth_builds_the_mesh_and_its_colliders() {
   start();
   const Sheet sheet;
@@ -889,6 +923,7 @@ int main() {
   the_body_copy_has_no_script_and_wakes_only_once_stripped();
   a_state_plays_only_when_the_controller_has_it();
   the_material_is_plain_and_two_sided();
+  a_costume_hides_only_what_it_covers();
   cloth_builds_the_mesh_and_its_colliders();
   a_bind_pose_undoes_the_bone();
   cloth_follows_its_bones();

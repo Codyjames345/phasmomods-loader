@@ -80,10 +80,12 @@ bool pose_now(void* animator);
  * @brief Stops drawing every Renderer under a GameObject, inactive ones included, keeping its bones, Animator and the
  *        rest: what games do with a body a costume covers, so no part of it can show through the clothing.
  *        Renderers added afterwards (a sheet's own) still draw.
+ * @param keep GameObject names whose renderers keep drawing, at any depth: the parts the costume leaves showing (the
+ *        investigator body's names are in sdk/systems/scene.md). Empty to hide them all.
  * @return How many renderers it switched off; 0 for null or a destroyed GameObject.
- * @since Contract 2.3 (a helper in the mod's own code)
+ * @since Contract 2.3 (a helper in the mod's own code); `keep` since 2.3 as well
  */
-int hide_renderers(void* gameObject);
+int hide_renderers(void* gameObject, std::span<const char* const> keep = {});
 
 /**
  * @brief Whether a controller has every one of `states` on its first layer: a check for a mod's start, so a bundle

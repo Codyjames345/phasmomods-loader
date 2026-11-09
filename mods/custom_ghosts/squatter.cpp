@@ -69,6 +69,9 @@ struct Chase {
   std::optional<float> lurkSpeed;                    // the ghost's own agent speed, while a door pauses its lurk
   api::Held openAtHand;  // a hiding place's door it stands at to open this frame (hold_at_doors)
   uint64_t nextHideLog = 0;  // when it next logs what it decides at a hiding place
+  // The closet whose inside it opened to walk in (ClosetZone.internalAreaObstacle), and what its obstacle wanted before.
+  api::Held openObstacle;
+  bool obstacleWas = true;
   float steeredSpeed = 0.0f;                         // the speed steer last set (stops_dead)
   float sprint = 0.0f;                       // the sprint speed it last chased at (chase_sprint)
   uint64_t moveUntil = 0;                    // when it next looks at the way ahead (a clumsy move's clip, or kSenseMs)
@@ -113,8 +116,10 @@ struct State {
   enum class Local : uint8_t { None, Turning, Starting } local = Local::None;
   uint64_t localUntil = 0;
   std::optional<Move> lastMove;
-  // The slam of a hiding place's door, due when its kick's foot lands (kSlamDelayMs), on this client.
+  // The slam of a hiding place's door, due when its kick's foot lands (kSlamDelayMs), on this client, and the hiding
+  // place, taken as the kick starts: by the time the foot lands it may have lost interest and looks at nobody.
   uint64_t slamAt = 0;
+  api::Held slamCloset;
   // When this client's figure began a trip, until it has stood up from it (stood_up): its facing holds while it is down.
   std::optional<uint64_t> tripSince;
 };
@@ -362,6 +367,44 @@ HidingWay hiding_way_in(void* closet, Point ghostAt) {
   return {e, e.how == WayIn::Open ? of[static_cast<size_t>(e.door)] : nullptr};
 }
 
+// Whether the master's ghost at `at` stands inside the closet obstacle `obstacle` (DynamicNavMeshObstacle): within its
+// trigger's box (the collider its Start adds), widened by kObstacleMargin; with no collider read, within
+// kObstacleFallback of it.
+bool inside_obstacle(void* obstacle, Point at) {
+  constexpr float kObstacleMargin = 0.5f, kObstacleFallback = 2.0f;  // metres, starting values
+  if (!obstacle || !api::alive(obstacle)) return false;
+  if (void* collider = phasmo::Component::GetComponent(obstacle, phasmo::Collider::type.type_object())) {
+    const phasmo::Bounds b = phasmo::Collider::get_bounds(collider);
+    return inside_box(at, point(b.center),
+                      {b.extents.x + kObstacleMargin, b.extents.y + kObstacleMargin, b.extents.z + kObstacleMargin});
+  }
+  const Point o = at_of(obstacle);
+  return std::hypot(o.x - at.x, o.z - at.z) < kObstacleFallback;
+}
+
+// Puts back the closet obstacle the master opened, as it wanted before.
+void close_obstacle() {
+  Chase& c = g.chase;
+  if (api::alive(c.openObstacle)) phasmo::DynamicNavMeshObstacle::targetActivity.set(c.openObstacle.get(), c.obstacleWas);
+  c.openObstacle = nullptr;
+}
+
+// The master's closet obstacle this frame (user, 2026-11-09: it could not walk into Willow Street's pantry with its doors
+// open; its route stopped at the doorway): a closet's inside is kept off a ghost's routes while its obstacle is on, so
+// while it walks in for a hider (`wanted`, that closet's obstacle) the obstacle is wanted off, its Update switching it
+// off; the one it opened goes back once it no longer goes in and stands clear of it (keeps_closet_open).
+void keep_closet_open(void* wanted, Point ghostAt) {
+  Chase& c = g.chase;
+  if (c.openObstacle && c.openObstacle.get() != wanted &&
+      !keeps_closet_open(false, inside_obstacle(c.openObstacle.get(), ghostAt)))
+    close_obstacle();
+  if (wanted && api::alive(wanted) && !c.openObstacle) {
+    c.obstacleWas = phasmo::DynamicNavMeshObstacle::targetActivity.get(wanted);
+    phasmo::DynamicNavMeshObstacle::targetActivity.set(wanted, false);
+    c.openObstacle = wanted;
+  }
+}
+
 // Turns the master's ghost to face `p` on the flat, for a kick or a wait at a door; every client's figure follows its
 // heading (play's turn on the spot).
 void face_toward(void* ghost, Point at, Point p) {
@@ -572,6 +615,10 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   // door first when one stands ajar (hiding_way_in).
   const HidingWay way = c.hidingKnown ? hiding_way_in(target->closet, ghostAt) : HidingWay{};
   if (c.hidingKnown && way.entry.how != WayIn::Kick) c.tracker.sensed(target->id, target->at, t);
+  keep_closet_open(!friendlyGhost && c.hidingKnown && way.entry.how == WayIn::Walk
+                       ? phasmo::ClosetZone::internalAreaObstacle.get(target->closet)
+                       : nullptr,
+                   ghostAt);
 
   bool anySeen = false;
   for (const Seen& s : players) anySeen = anySeen || (s.living && s.inside && !unnoticed(s) && c.seen.contains(s.id));
@@ -987,11 +1034,14 @@ void play(void* ghost) {
   figure::look_at(g.lookPoint, g.lookWeight);
 
   // Its kick at a hiding place slams the door of the hiding place the player it is after hides in, as the foot lands.
-  if (c.act && s.act == static_cast<int8_t>(Act::Bang)) g.slamAt = t + kSlamDelayMs;
-  if (g.slamAt && t >= g.slamAt) {
+  if (c.act && s.act == static_cast<int8_t>(Act::Bang)) {
+    g.slamAt = t + kSlamDelayMs;
+    g.slamCloset = watched ? phasmo::Player::closet.get(watched) : nullptr;
+  }
+  if (g.slamAt && t >= g.slamAt) {  // the kick's foot lands, whatever the phase has become since
     g.slamAt = 0;
-    if (s.act == static_cast<int8_t>(Act::Bang) || s.phase == Phase::AtHidingPlace)
-      slam(watched ? phasmo::Player::closet.get(watched) : nullptr, here, static_cast<uint32_t>(g.stepRng()));
+    slam(g.slamCloset.get(), here, static_cast<uint32_t>(g.stepRng()));
+    g.slamCloset = nullptr;
   }
 
   // In a door clip, the nearer hand takes the door's handle and follows it as the leaf swings, blending in and out.
@@ -1076,6 +1126,7 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
   if (!squatter) {
     g.phase.reset();
     g.steered = false;
+    close_obstacle();  // a closet it opened goes back as it was
     g.chase = Chase{};
     g.kicked.clear();
     g.steps.reset();
@@ -1089,6 +1140,7 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     g.local = State::Local::None;
     g.lastMove.reset();
     g.slamAt = 0;
+    g.slamCloset = nullptr;
     g.tripSince.reset();
     forget_channel();
     figure::destroy();
@@ -1118,6 +1170,7 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     if (g.phase) run(haunting, friendly(), now());
     door::relock(now());  // locks again any held exit a raced Monkey Paw wish reopened
   } else {
+    close_obstacle();   // a closet this client opened while it was the master goes back as it was
     g.chase = Chase{};  // a client that becomes the master starts its chase afresh from the last Shown's phase
   }
   show(haunting);
@@ -1173,6 +1226,7 @@ bool kick(void* player, int id) {
 }
 
 void reset() {
+  close_obstacle();
   g = State{};
   figure::destroy();
   ghost_sight::drop();

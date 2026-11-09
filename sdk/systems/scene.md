@@ -19,7 +19,12 @@ files:
 
 - **The body.** The `PCPlayer` prefab in Resources holds the investigator's body, `Rigged PC Model Base`, which
   `PlayerCosmetics.playerAnimator` names. It is a humanoid with Unity's avatar, the same on every client, whoever is in
-  the room. Its renderers carry the prefab's own outfit, never a player's.
+  the room. Its renderers carry the prefab's own outfit, never a player's. Each renderer is on a GameObject of its
+  own under the body, by these names: `CC_Base_Body` (the head's mesh alone, with its eyelashes), `CC_Base_Hands`,
+  `CC_Base_Eye`, `CC_Base_EyeOcclusion`, `CC_Base_TearLine`, `CC_Base_Teeth`, `CC_Base_Tongue`, `Hair` (with `Extra
+  Hair Renderer 1` and `2`), `Boots`, `JacketSkinnedMesh`, `TrousersSkinnedMesh`, `ShirtSkinnedMesh` and
+  `NecklaceRenderer`, besides the cosmetic slots (rings, bracelets, nose, mouth, eyebrows, headphones, a watch, an ID
+  card holder). `pm::api::hide_renderers` keeps the ones you name drawing.
 - **The shader.** Every material of that body uses URP's lit shader, `Universal Render Pipeline/Lit`, which the
   first scene's shared assets hold (sharedassets0). Its base colour (`ShaderProperty.Lit.BaseColor`) and face culling
   (`ShaderProperty.Lit.Cull`, a `CullMode`) are entries. The body's materials cull back faces; a material that sets

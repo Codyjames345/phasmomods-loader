@@ -65,6 +65,41 @@ inline constexpr pm::sdk::EntryDesc ClosetZone_OpenCloseClosetDoors{
     .key = "ClosetZone.OpenCloseClosetDoors", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "ClosetZone", .name = "OpenCloseClosetDoors"};
 
+/// A NavMeshObstacle the game switches on and off by a wish of its own (Assembly-CSharp, global namespace). Each closet
+/// has one over its inside (ClosetZone.internalAreaObstacle), which keeps a ghost's route out of the closet while it is
+/// on. Decompiled.
+inline constexpr pm::sdk::EntryDesc DynamicNavMeshObstacle{.key = "DynamicNavMeshObstacle",
+                                                           .confidence = pm::sdk::Confidence::Decompiled,
+                                                           .name = "DynamicNavMeshObstacle",
+                                                           .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The obstacle's NavMeshObstacle, which Update switches on and off. Decompiled.
+inline constexpr pm::sdk::EntryDesc DynamicNavMeshObstacle_navMeshObstacle{
+    .key = "DynamicNavMeshObstacle.navMeshObstacle", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "DynamicNavMeshObstacle", .name = "navMeshObstacle"};
+
+/// Whether the obstacle is wanted on: Update follows it, on every client. Cleared, Update switches the NavMeshObstacle
+/// off at once, so routes may cross where it stood; set again, Update switches it back on only after a short wait (a
+/// DebouncerFilter of the game's), and never while a non-trigger collider with a particular tag stands inside the
+/// obstacle's own trigger. The obstacle's OnTriggerEnter and OnTriggerExit note that collider on the master only. The
+/// property TargetActivity reads and writes it. Decompiled.
+inline constexpr pm::sdk::EntryDesc DynamicNavMeshObstacle_targetActivity{
+    .key = "DynamicNavMeshObstacle.targetActivity", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "DynamicNavMeshObstacle", .name = "targetActivity"};
+
+/// Each frame: switches the NavMeshObstacle to follow DynamicNavMeshObstacle.targetActivity, as that entry says. A mod
+/// hooks it; never calls it. Decompiled.
+inline constexpr pm::sdk::EntryDesc DynamicNavMeshObstacle_Update{
+    .key = "DynamicNavMeshObstacle.Update", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "DynamicNavMeshObstacle", .name = "Update"};
+
+/// The obstacle over the closet's inside, a DynamicNavMeshObstacle: while it is on, a ghost's route stops at the
+/// closet's doorway, open doors or not (a mod's own walk into a closet on Willow Street's pantry, 2026-11-09). Which game
+/// code switches it was not traced. Inferred: from the class dump (the field's name and type).
+inline constexpr pm::sdk::EntryDesc ClosetZone_internalAreaObstacle{
+    .key = "ClosetZone.internalAreaObstacle", .kind = pm::sdk::Kind::Field, .owner = "ClosetZone",
+    .name = "internalAreaObstacle", .type = "@DynamicNavMeshObstacle"};
+
 /// A hiding place that is not a closet (Assembly-CSharp, global namespace): under a bed, behind a
 /// curtain. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc HidingSpot{.key = "HidingSpot", .name = "HidingSpot", .assembly = "Assembly-CSharp",
@@ -104,6 +139,18 @@ struct ClosetZone {
   /// OpenCloseClosetDoors(closet): forces its doors as a ghost does. A mod usually hooks it. Unresolved: does
   /// nothing.
   static constexpr pm::api::Method<pm::map::ClosetZone_OpenCloseClosetDoors, void(void*)> OpenCloseClosetDoors{};
+  /// The obstacle over its inside, a DynamicNavMeshObstacle: internalAreaObstacle.get(closet). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::ClosetZone_internalAreaObstacle, void*> internalAreaObstacle{};
+};
+
+/// A NavMeshObstacle the game switches on and off. `obstacle` below is one.
+struct DynamicNavMeshObstacle {
+  /// Whether it is wanted on: targetActivity.get(obstacle), targetActivity.set(obstacle, on). Cleared, its Update
+  /// switches the obstacle off on this client; set, back on after a short wait. Unresolved: false, and a set does
+  /// nothing.
+  static constexpr pm::api::Field<pm::map::DynamicNavMeshObstacle_targetActivity, bool> targetActivity{};
+  /// Its NavMeshObstacle: navMeshObstacle.get(obstacle). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::DynamicNavMeshObstacle_navMeshObstacle, void*> navMeshObstacle{};
 };
 
 /// A hiding place that is not a closet.

@@ -190,6 +190,12 @@ inline Entry way_in(std::span<const HidingDoor> doors) {
   return e;
 }
 
+/**
+ * Whether the closet whose obstacle it opened stays open: while it goes in for a hider there (`goingIn`), or while it
+ * still stands inside the obstacle (`inside`), so the game never switches the obstacle back on under it.
+ */
+inline bool keeps_closet_open(bool goingIn, bool inside) { return goingIn || inside; }
+
 /** Whether it waits at its target's hiding place, kicking the doors: it knows they hide there and has no way in. */
 inline bool waits_at_hiding_place(bool hidingKnown, WayIn way) { return hidingKnown && way == WayIn::Kick; }
 

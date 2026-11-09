@@ -52,8 +52,8 @@ struct SheetShape {
   float pinRadius = 0.08f;      // points this close to the centre, measured on the sheet, stay with the head
   float eyeAcross = 0.04f;      // each eye's centre from the centre line
   float eyeForward = 0.16f;     // the eyes' centres in front of the crown, measured on the sheet
-  float eyeWidth = 0.04f;       // each eye's rectangle; a hole is it rounded out to whole cells
-  float eyeHeight = 0.03f;
+  float eyeWidth = 0.04f;       // each eye's oval, across and forward: the cells it overlaps are cut, and the points
+  float eyeHeight = 0.03f;      // round the hole are moved onto the oval (onto_eye_oval)
   float headRadius = 0.12f;      // the cap the sheet is made over, the crown its top
   float shoulderRadius = 0.30f;  // how far out the sheet hangs at the shoulders
   float shoulderDrop = 0.14f;    // from the bottom of the cap down to the shoulders
@@ -100,6 +100,19 @@ inline bool cuts_an_eye(const SheetShape& s, float x0, float x1, float z0, float
       return true;
   }
   return false;
+}
+
+/**
+ * A point round an eye's hole on the flat sheet, `p`, moved along the line from its eye's centre onto the eye's oval
+ * (eyeWidth across, eyeHeight forward), so the hole is an oval rather than the rectangle its cut cells make (user,
+ * 2026-11-09). The eye is the one on `p`'s side of the centre line. `p` itself at the eye's centre stays where it is.
+ */
+inline Vec2 onto_eye_oval(const SheetShape& s, Vec2 p) {
+  const float cx = (p.x < 0 ? -1.0f : 1.0f) * s.eyeAcross, cz = s.eyeForward;
+  const float dx = p.x - cx, dz = p.y - cz;
+  const float u = dx / (s.eyeWidth / 2), v = dz / (s.eyeHeight / 2), out = std::sqrt(u * u + v * v);
+  if (out <= 0.0f) return p;
+  return {cx + dx / out, cz + dz / out};
 }
 
 /**
@@ -158,7 +171,8 @@ inline bool in_sheet(const SheetShape& s, float x0, float x1, float z0, float z1
 // How worn cloth is set up in games (Unity's Cloth maxDistance, Unreal's painted max distance, the Polygon Treehouse
 // poncho): each point may move only a little from where the body carries it, nothing where it is worn and more toward
 // the hem, so the cloth keeps its shape and only sways. Starting values, judged with the user in game.
-inline constexpr float kHemSway = 0.2f;   // how far the hem may move from where the body carries it, metres
+// A bedsheet hangs heavier than a thin cloth (user, 2026-11-09: thicker and stiffer), so its hem sways less.
+inline constexpr float kHemSway = 0.12f;  // how far the hem may move from where the body carries it, metres
 inline constexpr float kBackstop = 0.05f;  // how far a point may sink behind where the body carries it, metres
 
 /** How far a point `distance` from the centre may sway: 0 within the pin, growing evenly to kHemSway at `far`. */
@@ -217,17 +231,24 @@ inline Weight weight_by_nearness(Vec3 p, std::span<const Segment> bones) {
   return w;
 }
 
-/** The sheet for `s`: the round sheet's cells less the eye cells, made hanging, its crown pinned. Vertices no triangle uses are left out. */
+/**
+ * The sheet for `s`: the round sheet's cells less the eye cells, made hanging, its crown pinned, the points round each
+ * eye's hole on its oval (onto_eye_oval). Vertices no triangle uses are left out.
+ */
 inline SheetMesh make_sheet(const SheetShape& s) {
   SheetMesh m;
   const std::vector<float> axis = sheet_axis(s);
   if (axis.size() < 2) return m;
   const size_t lines = axis.size(), cells = lines - 1;
-  std::vector<bool> kept(cells * cells), used(lines * lines);
+  std::vector<bool> kept(cells * cells), used(lines * lines), rim(lines * lines);
   for (size_t j = 0; j < cells; ++j)
     for (size_t i = 0; i < cells; ++i) {
-      const bool keep = in_sheet(s, axis[i], axis[i + 1], axis[j], axis[j + 1]) &&
-                        !cuts_an_eye(s, axis[i], axis[i + 1], axis[j], axis[j + 1]);
+      const bool round = in_sheet(s, axis[i], axis[i + 1], axis[j], axis[j + 1]);
+      const bool eye = cuts_an_eye(s, axis[i], axis[i + 1], axis[j], axis[j + 1]);
+      const bool keep = round && !eye;
+      if (round && eye)
+        for (const size_t corner : {j * lines + i, j * lines + i + 1, (j + 1) * lines + i, (j + 1) * lines + i + 1})
+          rim[corner] = true;
       kept[j * cells + i] = keep;
       if (keep)
         for (const size_t corner : {j * lines + i, j * lines + i + 1, (j + 1) * lines + i, (j + 1) * lines + i + 1})
@@ -239,7 +260,9 @@ inline SheetMesh make_sheet(const SheetShape& s) {
     for (size_t i = 0; i < lines; ++i) {
       if (!used[j * lines + i]) continue;
       index[j * lines + i] = static_cast<int32_t>(m.vertices.size());
-      const float x = axis[i], z = axis[j];
+      // A point round an eye's hole lies on the eye's oval.
+      const Vec2 at = rim[j * lines + i] ? onto_eye_oval(s, {axis[i], axis[j]}) : Vec2{axis[i], axis[j]};
+      const float x = at.x, z = at.y;
       // A point of a rim cell beyond the round edge hangs at the edge, so the hem is round.
       const float flat = std::hypot(x, z), distance = std::min(flat, far);
       const float across = flat > 0 ? x / flat : 0.0f, forward = flat > 0 ? z / flat : 0.0f;
