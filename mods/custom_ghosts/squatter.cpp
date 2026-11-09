@@ -717,7 +717,8 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
           const Surroundings around =
               surroundings(agent, ghostAt, targetSensed && !c.hidingKnown ? target : nullptr, t >= c.nextDive);
           pick = move_for(around);
-          if (const char* why = clumsy_reason(around)) PM_LOG("squatter: a clumsy move (%s)", why);
+          if (const char* why = clumsy_reason(around))
+            PM_LOG("squatter: a clumsy move (%s; it read: %s)", why, sensed_list(around).c_str());
         }
         if (pick.move != c.out.move || plays_once(pick.move)) {
           c.out.move = pick.move;

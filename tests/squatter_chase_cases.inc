@@ -183,8 +183,18 @@ void the_way_ahead_picks_its_clumsy_move() {
   s = Surroundings{};
   s.dropAhead = true;
   CHECK(move_for(s).move == Move::Parkour);
+  // What lies at its feet comes before a dive at its target: it trips over the clutter between them, or jumps it, rather
+  // than rolling through it (user, 2026-11-09: it rolled where it should have tripped).
   s.diveAt = true;
+  CHECK(move_for(s).move == Move::Parkour);
+  s = Surroundings{};
+  s.diveAt = true;
+  s.ankleProp = true;
+  CHECK(move_for(s).move == Move::Stumble);
+  s.ankleProp = false;
   CHECK(move_for(s).move == Move::Roll && std::string(state_for(Move::Roll, move_for(s).variant)) == "Roll_A");
+  s.gap = true;  // a dive still comes before squeezing through a gap
+  CHECK(move_for(s).move == Move::Roll);
   for (const Move m : {Move::Roll, Move::Parkour, Move::Stumble, Move::Duck, Move::Weave}) CHECK(moves_by_clip(m));
   constexpr float quarter = std::numbers::pi_v<float> / 2;
   CHECK(std::fabs(wrap_angle(move_facing(Move::Weave, 0, 0.3f) - (0.3f + quarter))) < 1e-5f);  // steps left: faces right
@@ -503,6 +513,14 @@ void the_way_ahead_is_read_across_its_width() {
   CHECK(std::string(clumsy_reason(s)) == "ankle-high prop" && move_for(s).move == Move::Stumble);
   s.kneeProp = true;
   CHECK(std::string(clumsy_reason(s)) == "drop or knee-high prop" && move_for(s).move == Move::Parkour);
+  s.diveAt = true;  // at its feet first
+  CHECK(std::string(clumsy_reason(s)) == "drop or knee-high prop" && move_for(s).move == Move::Parkour);
+  s = Surroundings{};
   s.diveAt = true;
   CHECK(std::string(clumsy_reason(s)) == "dive at the target" && move_for(s).move == Move::Roll);
+  // The log lists every condition it read, not only the one that won.
+  s.ankleProp = true;
+  s.furniture = -1;
+  CHECK(sensed_list(s) == "ankle, dive, furniture left");
+  CHECK(sensed_list(Surroundings{}).empty());
 }
