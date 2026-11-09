@@ -828,3 +828,12 @@ void it_turns_with_its_clips_before_running_on() {
   CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, 179 * kDeg, -179 * kDeg, false));         // across the wrap
   CHECK(kRiseTurnMs >= 1000 && kRiseTurnMs <= 4000);
 }
+
+// Every fall says its trip line (user, 2026-11-10: a fall in friendly mode played no sound): a trip says it as it begins
+// (line_for_move), and a fall with any other cause (a bump, a drop, a door, a thrown object) as it is knocked over.
+void every_fall_says_its_line() {
+  CHECK(!line_for_fall(FallCause::Trip));  // already said as the trip began
+  for (const FallCause c : {FallCause::Bump, FallCause::Drop, FallCause::Door, FallCause::Thrown})
+    CHECK(line_for_fall(c) == std::optional<Lines>(Lines::Trip));
+  CHECK(line_for_move(Move::Stumble) == std::optional<Lines>(Lines::Trip));
+}

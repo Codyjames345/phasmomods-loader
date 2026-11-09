@@ -229,6 +229,12 @@ inline std::optional<Lines> line_for_move(Move m) {
   return m == Move::Stumble ? std::optional<Lines>(Lines::Trip) : std::nullopt;
 }
 
+/** The line a fall says as it is knocked over: the trip line for every cause but a trip, which said it as it began
+ * (line_for_move) (user, 2026-11-10: a fall from a thrown object said nothing). */
+inline std::optional<Lines> line_for_fall(FallCause c) {
+  return c == FallCause::Trip ? std::nullopt : std::optional<Lines>(Lines::Trip);
+}
+
 /** Whether to taunt now: the target's sprint has just lapsed and `secondsSinceTaunt` has passed the cooldown. */
 inline bool tired_taunt_due(bool targetCanSprint, bool targetCouldSprintBefore, float secondsSinceTaunt) {
   return !targetCanSprint && targetCouldSprintBefore && secondsSinceTaunt >= kTauntCooldown;
