@@ -57,7 +57,7 @@
   "launcher.launcher-requires-windows-x64": "This launcher requires the Windows x64 version of Phasmophobia. Please submit a request to support another build on GitHub.",
   "launcher.loaded-native-library-cannot": "The loaded native library cannot be verified. Restart the game and try again.",
   "launcher.loading-has-finished-before": "Loading has not finished. Restart the game before trying again.",
-  "launcher.loading-mods-waiting-confirm": "Loading the mods. Waiting for the game to confirm...",
+  "launcher.loading-mods-waiting-confirm": "Injecting PhasmoMods. Waiting for the game to confirm...",
   "launcher.loading-task-start-close": "The loading task could not start. Restart PhasmoMods Loader and try again.",
   "launcher.local-application-data-folder": "The %LOCALAPPDATA% folder is unavailable. Check your Windows profile.",
   "launcher.local-application-data-folder-2": "The %LOCALAPPDATA% folder is unavailable. Check the directory and try again.",
