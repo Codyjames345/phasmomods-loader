@@ -92,7 +92,23 @@ bool build_sheet() {
     uv.push_back({m.uv[i].x, m.uv[i].y});
     coefficients.push_back({m.coefficients[i].maxDistance, m.coefficients[i].collisionSphereDistance});
   }
-  const api::ClothMesh mesh{vertices, normals, uv, m.triangles, coefficients};
+  // Skinned to the body as worn cloth is in games: each point follows the head, chest, spine or hips by its height
+  // (sheet::weight_by_height), so the sheet bends with the body, and the cloth only sways about that (kHemSway).
+  void* const carriers[] = {head, bone(phasmo::HumanBodyBones::Chest()), bone(phasmo::HumanBodyBones::Spine()),
+                            bone(phasmo::HumanBodyBones::Hips())};
+  std::vector<float> heights;
+  for (void* b : carriers) {
+    if (!b) return fail("sheet", "the body lacks a bone the sheet follows"), false;
+    heights.push_back(phasmo::Transform::get_position(b).y - crown.y);
+  }
+  std::vector<api::ClothWeight> weights;
+  for (const sheet::Vec3& v : m.vertices) {
+    const sheet::Weight w = sheet::weight_by_height(v.y, heights);
+    weights.push_back({w.bone0, w.bone1, w.weight0, w.weight1});
+  }
+  api::ClothMesh mesh{vertices, normals, uv, m.triangles, coefficients};
+  mesh.bones = carriers;
+  mesh.weights = weights;
   const phasmo::Vector3 none{};
   const api::ClothSphere spheres[] = {
       {head, shape.headRadius, {0, kHeadCentreAboveBone, 0}},

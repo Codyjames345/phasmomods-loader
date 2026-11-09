@@ -65,6 +65,8 @@ struct Node {
   int layer = 0;
   std::string name;
   Vector3 position{};
+  phasmo::Quaternion rotation{0, 0, 0, 1};
+  Vector3 scale{1, 1, 1};
 };
 std::map<void*, Node> g_nodes;         // by GameObject
 std::map<void*, void*> g_ownerOf;      // a component (transform included) -> its GameObject
@@ -148,6 +150,8 @@ void f_SetParent(void* t, void* parent, bool, const void*) {
 }
 void f_set_position(void* t, const Vector3* at, const void*) { node(g_ownerOf[t]).position = *at; }
 Vector3 f_get_position(void* t, const void*) { return node(g_ownerOf[t]).position; }
+phasmo::Quaternion f_get_rotation(void* t, const void*) { return node(g_ownerOf[t]).rotation; }
+Vector3 f_get_lossyScale(void* t, const void*) { return node(g_ownerOf[t]).scale; }
 void f_ctor(void* go, void* name, const void*) { node(go).name = text(name); }
 void f_set_name(void* o, void* name, const void*) {
   if (g_nodes.count(o)) node(o).name = text(name);
@@ -453,6 +457,8 @@ void start(bool withCloth = true) {
   m(map::Transform_SetParent, &f_SetParent);
   m(map::Transform_set_position, &f_set_position);
   m(map::Transform_get_position, &f_get_position);
+  m(map::Transform_get_rotation, &f_get_rotation);
+  m(map::Transform_get_lossyScale, &f_get_lossyScale);
   m(map::GameObject_ctor, &f_ctor);
   m(map::UnityObject_set_name, &f_set_name);
   m(map::GameObject_SetActive, &f_SetActive);
@@ -759,6 +765,61 @@ void cloth_builds_the_mesh_and_its_colliders() {
   CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), sphereGo) != g_destroyed.end());
 }
 
+bool near(const phasmo::Matrix4x4& a, const phasmo::Matrix4x4& b) {
+  for (int i = 0; i < 16; ++i)
+    if (std::abs(a.m[i] - b.m[i]) > 1e-4f) return false;
+  return true;
+}
+
+// A bone's bind pose is the inverse of its matrix times the mesh's: carried by the bone where it stood, the mesh stays
+// where it was made, whatever the bone's turn, place and size.
+void a_bind_pose_undoes_the_bone() {
+  const float h = std::sqrt(0.5f);
+  const phasmo::Matrix4x4 bone = api::trs_matrix({1, 2, 3}, {0, h, 0, h}, {2, 2, 2});
+  const phasmo::Matrix4x4 mesh = api::trs_matrix({0, 1, 0}, {h, 0, 0, h}, {1, 1, 1});
+  CHECK(near(api::multiply(bone, api::bind_pose(bone, mesh)), mesh));
+  const phasmo::Matrix4x4 identity = api::trs_matrix({0, 0, 0}, {0, 0, 0, 1}, {1, 1, 1});
+  CHECK(identity.m[0] == 1 && identity.m[5] == 1 && identity.m[10] == 1 && identity.m[15] == 1 && identity.m[12] == 0);
+  const phasmo::Matrix4x4 moved = api::trs_matrix({4, 5, 6}, {0, 0, 0, 1}, {1, 1, 1});
+  CHECK(moved.m[12] == 4 && moved.m[13] == 5 && moved.m[14] == 6);  // a column-major translation
+}
+
+// Given bones, add_cloth carries each vertex by its weights and gives each bone its bind pose, so the cloth bends with
+// a body as worn cloth does in games.
+void cloth_follows_its_bones() {
+  start();
+  const Sheet sheet;
+  void* anchor = go_new("Sheet");
+  node(anchor).position = {0, 1, 0};
+  void* head = go_new("Head");
+  node(head).position = {0, 2, 0};
+  void* hips = go_new("Hips");
+  node(hips).position = {0, 1, 0};
+  void* const bones[] = {&node(head).transform, &node(hips).transform};
+  const api::ClothWeight weights[] = {{0, 0, 1, 0}, {0, 1, 0.5f, 0.5f}, {1, 1, 1, 0}};
+  api::ClothMesh mesh = sheet.mesh();
+  mesh.bones = bones;
+  mesh.weights = weights;
+  api::ClothParts parts;
+  std::string why;
+  CHECK(api::add_cloth(anchor, mesh, make_obj(&kMaterial), {}, {}, parts, &why));
+  const api::Array<phasmo::BoneWeight> w{g_set[parts.mesh]["boneWeights"]};
+  CHECK(w.size() == 3 && w[1].bone0 == 0 && w[1].bone1 == 1 && w[1].weight0 == 0.5f && w[1].weight1 == 0.5f);
+  CHECK(w[2].bone0 == 1 && w[2].weight0 == 1);
+  const api::Array<phasmo::Matrix4x4> poses{g_set[parts.mesh]["bindposes"]};
+  CHECK(poses.size() == 2 && poses[0].m[13] == -1.0f && poses[1].m[13] == 0.0f);
+  void* renderer = find_in(anchor, &kSkinned);
+  CHECK(renderer && api::RefArray{g_set[renderer]["bones"]}.size() == 2);
+  CHECK(api::RefArray{g_set[renderer]["bones"]}[1] == &node(hips).transform);
+  api::destroy_cloth(parts);
+  // A weight naming no bone, or weights not one per vertex: nothing made.
+  const api::ClothWeight bad[] = {{0, 0, 1, 0}, {0, 2, 0.5f, 0.5f}, {1, 1, 1, 0}};
+  mesh.weights = bad;
+  CHECK(!api::add_cloth(anchor, mesh, make_obj(&kMaterial), {}, {}, parts, &why) && !parts.mesh);
+  mesh.weights = std::span<const api::ClothWeight>(weights, 2);
+  CHECK(!api::add_cloth(anchor, mesh, make_obj(&kMaterial), {}, {}, parts, &why) && !parts.mesh);
+}
+
 void cloth_refuses_a_bad_mesh_and_a_build_without_cloth() {
   start();
   Sheet sheet;
@@ -825,6 +886,8 @@ int main() {
   a_state_plays_only_when_the_controller_has_it();
   the_material_is_plain_and_two_sided();
   cloth_builds_the_mesh_and_its_colliders();
+  a_bind_pose_undoes_the_bone();
+  cloth_follows_its_bones();
   cloth_refuses_a_bad_mesh_and_a_build_without_cloth();
   cloth_refuses_a_sphere_it_cannot_make();
   availability_names_each_missing_entry();

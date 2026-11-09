@@ -1,9 +1,11 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <numbers>
+#include <span>
 #include <vector>
 
 // The Squatter's bedsheet as a mesh for Unity's Cloth, kept free of game calls so it can be tested offline. A plain
@@ -125,6 +127,43 @@ inline void hang(const SheetShape& s, float distance, float& out, float& height,
   }
 }
 
+// How worn cloth is set up in games (Unity's Cloth maxDistance, Unreal's painted max distance, the Polygon Treehouse
+// poncho): each point may move only a little from where the body carries it, nothing where it is worn and more toward
+// the hem, so the cloth keeps its shape and only sways. Starting values, judged with the user in game.
+inline constexpr float kHemSway = 0.2f;   // how far the hem may move from where the body carries it, metres
+inline constexpr float kBackstop = 0.05f;  // how far a point may sink behind where the body carries it, metres
+
+/** How far a point `distance` from the centre may sway: 0 within the pin, growing evenly to kHemSway at `far`. */
+inline float sway_at(const SheetShape& s, float distance, float far) {
+  if (distance <= s.pinRadius || far <= s.pinRadius) return 0.0f;
+  return kHemSway * std::min(1.0f, (distance - s.pinRadius) / (far - s.pinRadius));
+}
+
+/** Which bones carry a point, and how much: up to two bones by index, their weights adding up to 1. */
+struct Weight {
+  int32_t bone0 = 0, bone1 = 0;
+  float weight0 = 1.0f, weight1 = 0.0f;
+};
+
+/**
+ * Which bones carry a point at height `y` (the sheet's space, below its crown negative), given the heights of the
+ * bones it may follow, `bones`, top first (head, chest, spine, hips): the top bone above the first height, the bottom
+ * one below the last, and between two the pair it lies between, blended by height. No bones: bone 0 alone.
+ */
+inline Weight weight_by_height(float y, std::span<const float> bones) {
+  if (bones.size() < 2 || y >= bones.front()) return {};
+  const int32_t last = static_cast<int32_t>(bones.size()) - 1;
+  if (y <= bones.back()) return {last, last, 1.0f, 0.0f};
+  for (int32_t i = 0; i < last; ++i) {
+    const float top = bones[static_cast<size_t>(i)], below = bones[static_cast<size_t>(i) + 1];
+    if (y <= top && y >= below) {
+      const float t = top > below ? (top - y) / (top - below) : 0.0f;
+      return {i, i + 1, 1.0f - t, t};
+    }
+  }
+  return {last, last, 1.0f, 0.0f};
+}
+
 /** The sheet for `s`: the grid less the eye cells, made hanging, its crown pinned. Vertices no triangle uses are left out. */
 inline SheetMesh make_sheet(const SheetShape& s) {
   SheetMesh m;
@@ -141,6 +180,7 @@ inline SheetMesh make_sheet(const SheetShape& s) {
           used[corner] = true;
     }
   std::vector<int32_t> index(lines * lines, -1);
+  const float far = std::hypot(axis.front(), axis.front());  // a corner: the furthest any point lies from the crown
   for (size_t j = 0; j < lines; ++j)
     for (size_t i = 0; i < lines; ++i) {
       if (!used[j * lines + i]) continue;
@@ -155,7 +195,7 @@ inline SheetMesh make_sheet(const SheetShape& s) {
       m.normals.push_back({normalOut * across, normalUp, normalOut * forward});
       m.uv.push_back({x / s.side + 0.5f, z / s.side + 0.5f});
       m.flat.push_back({x, z});
-      m.coefficients.push_back({distance <= s.pinRadius ? 0.0f : kUnconstrained, kUnconstrained});
+      m.coefficients.push_back({sway_at(s, distance, far), kBackstop});
     }
   for (size_t j = 0; j < cells; ++j)
     for (size_t i = 0; i < cells; ++i) {

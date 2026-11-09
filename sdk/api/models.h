@@ -115,15 +115,78 @@ void* lit_material_of(void* gameObject);
  * @brief A mesh for add_cloth, in the space of the GameObject that will hold it. Every span but `triangles` has one
  *        element per vertex.
  */
+/** Which of ClothMesh::bones carry a vertex, and how much: up to two, their weights adding up to 1. */
+struct ClothWeight {
+  int32_t bone0 = 0, bone1 = 0;
+  float weight0 = 1.0f, weight1 = 0.0f;
+};
+
 struct ClothMesh {
   std::span<const phasmo::Vector3> vertices;  ///< Each vertex's position, metres.
   std::span<const phasmo::Vector3> normals;   ///< Each vertex's normal, of length 1.
   std::span<const phasmo::Vector2> uv;        ///< Each vertex's texture coordinates.
   std::span<const int32_t> triangles;         ///< Three vertex indices each, clockwise as seen from the front.
-  /// Each vertex's constraint: x how far it may move from where its GameObject carries it (0 pins it), y the depth of
+  /// Each vertex's constraint: x how far it may move from where the skinning carries it (0 pins it), y the depth of
   /// the sphere it may not enter. A large value means no limit.
   std::span<const phasmo::Vector2> coefficients;
+  /// The Transforms that carry the mesh, as worn cloth in games is skinned to a body: empty, and every vertex follows
+  /// the GameObject itself. Each bone's bind pose is where it stands when add_cloth is called.
+  std::span<void* const> bones;
+  /// One per vertex when `bones` is not empty, naming bones by their index in it.
+  std::span<const ClothWeight> weights;
 };
+
+/**
+ * Unity's translate-rotate-scale matrix (Matrix4x4.TRS) for `position`, `rotation` and `scale`, by column as Matrix4x4
+ * holds it.
+ */
+inline phasmo::Matrix4x4 trs_matrix(phasmo::Vector3 position, phasmo::Quaternion rotation, phasmo::Vector3 scale) {
+  const float x = rotation.x, y = rotation.y, z = rotation.z, w = rotation.w;
+  const float r[3][3] = {{1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)},
+                         {2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)},
+                         {2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)}};
+  const float s[3] = {scale.x, scale.y, scale.z};
+  phasmo::Matrix4x4 m{};
+  for (int col = 0; col < 3; ++col)
+    for (int row = 0; row < 3; ++row) m.m[col * 4 + row] = r[row][col] * s[col];
+  m.m[12] = position.x;
+  m.m[13] = position.y;
+  m.m[14] = position.z;
+  m.m[15] = 1;
+  return m;
+}
+
+/** The product `a` times `b` of two matrices held by column. */
+inline phasmo::Matrix4x4 multiply(const phasmo::Matrix4x4& a, const phasmo::Matrix4x4& b) {
+  phasmo::Matrix4x4 out{};
+  for (int col = 0; col < 4; ++col)
+    for (int row = 0; row < 4; ++row) {
+      float sum = 0;
+      for (int k = 0; k < 4; ++k) sum += a.m[k * 4 + row] * b.m[col * 4 + k];
+      out.m[col * 4 + row] = sum;
+    }
+  return out;
+}
+
+/**
+ * A bone's bind pose for a mesh: the inverse of the bone's matrix `bone` (a trs_matrix with no shear) times the mesh's
+ * own matrix `mesh`, so the bone, where it stands, carries the mesh where it is.
+ */
+inline phasmo::Matrix4x4 bind_pose(const phasmo::Matrix4x4& bone, const phasmo::Matrix4x4& mesh) {
+  phasmo::Matrix4x4 inverse{};
+  for (int col = 0; col < 3; ++col) {  // the rotation's transpose, each row divided by its column's squared length
+    float lengthSq = 0;
+    for (int row = 0; row < 3; ++row) lengthSq += bone.m[col * 4 + row] * bone.m[col * 4 + row];
+    for (int row = 0; row < 3; ++row) inverse.m[row * 4 + col] = lengthSq > 0 ? bone.m[col * 4 + row] / lengthSq : 0;
+  }
+  for (int row = 0; row < 3; ++row) {
+    float t = 0;
+    for (int k = 0; k < 3; ++k) t += inverse.m[k * 4 + row] * bone.m[12 + k];
+    inverse.m[12 + row] = -t;
+  }
+  inverse.m[15] = 1;
+  return multiply(inverse, mesh);
+}
 
 /** How the cloth behaves. Unity's own ranges: stiffnesses and damping 0 to 1. */
 struct ClothSettings {

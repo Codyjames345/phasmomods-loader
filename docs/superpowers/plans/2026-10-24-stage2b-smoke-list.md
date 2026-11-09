@@ -1116,3 +1116,5 @@ The user's test of 2026-11-09 and its fixes.
 - [ ] At a shut door the Squatter opens it once and goes through: the host's `mods.log` has one `squatter: a door swung open` for it, not one a second, and it never cycles between the door clip and its run.
 - [ ] The sheet covers the body through runs, rolls and sitting: no leg, arm or shoulder shows through it, and it stays on rather than sliding off to one side.
 
+- [ ] The sheet hangs from the head over the whole body like a costume bedsheet, keeps that shape running, rolling and sitting, sways at the hem, and never slides off to one side.
+

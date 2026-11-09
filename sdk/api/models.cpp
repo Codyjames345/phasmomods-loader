@@ -254,23 +254,52 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
   for (const int32_t index : mesh.triangles)
     if (index < 0 || static_cast<size_t>(index) >= n) return fail(why, "a triangle indexes past the vertices");
 
-  // Every vertex follows the GameObject itself, its one bone, whose bind pose is the identity.
-  std::vector<phasmo::BoneWeight> weights(n, phasmo::BoneWeight{1, 0, 0, 0, 0, 0, 0, 0});
-  phasmo::Matrix4x4 identity{};
-  identity.m[0] = identity.m[5] = identity.m[10] = identity.m[15] = 1;
+  void* const anchor = phasmo::GameObject::get_transform(gameObject);
+  // The bones that carry the mesh: the GameObject itself alone, whose bind pose is the identity, or the given ones,
+  // each with its bind pose where it stands now (bind_pose).
+  const bool skinned = !mesh.bones.empty();
+  if (skinned) {
+    if (mesh.weights.size() != n) return fail(why, "the weights are not one per vertex");
+    for (void* const b : mesh.bones)
+      if (!alive(b)) return fail(why, "a bone is gone");
+    const int32_t count = static_cast<int32_t>(mesh.bones.size());
+    for (const ClothWeight& w : mesh.weights)
+      if (w.bone0 < 0 || w.bone0 >= count || w.bone1 < 0 || w.bone1 >= count) return fail(why, "a weight names no bone");
+  }
+  std::vector<phasmo::BoneWeight> weights;
+  weights.reserve(n);
+  for (size_t v = 0; v < n; ++v) {
+    const ClothWeight w = skinned ? mesh.weights[v] : ClothWeight{};
+    weights.push_back(phasmo::BoneWeight{w.weight0, w.weight1, 0, 0, w.bone0, w.bone1, 0, 0});
+  }
+  const auto matrix_of = [](void* t) {
+    return trs_matrix(phasmo::Transform::get_position(t), phasmo::Transform::get_rotation(t),
+                      phasmo::Transform::get_lossyScale(t));
+  };
+  std::vector<phasmo::Matrix4x4> poses;
+  if (skinned) {
+    const phasmo::Matrix4x4 own = matrix_of(anchor);
+    for (void* const b : mesh.bones) poses.push_back(bind_pose(matrix_of(b), own));
+  } else {
+    phasmo::Matrix4x4 identity{};
+    identity.m[0] = identity.m[5] = identity.m[10] = identity.m[15] = 1;
+    poses.push_back(identity);
+  }
   void* const vertices = filled_array(phasmo::Vector3::type, mesh.vertices);
   void* const normals = filled_array(phasmo::Vector3::type, mesh.normals);
   void* const uv = filled_array(pm::api::Type<pm::map::Vector2>{}, mesh.uv);
   void* const indices = filled_array(pm::api::Type<pm::map::Int32>{}, mesh.triangles);
   void* const boneWeights = filled_array(phasmo::BoneWeight::type, std::span<const phasmo::BoneWeight>(weights));
-  void* const bindposes = filled_array(phasmo::Matrix4x4::type, std::span<const phasmo::Matrix4x4>(&identity, 1));
+  void* const bindposes = filled_array(phasmo::Matrix4x4::type, std::span<const phasmo::Matrix4x4>(poses));
   void* const coefficients = filled_array(pm::api::Type<pm::map::Vector2>{}, mesh.coefficients);
-  void* const bones = phasmo::Transform::type.make_array(1);
+  void* const bones = phasmo::Transform::type.make_array(skinned ? mesh.bones.size() : 1);
   void* const materials = phasmo::Material::type.make_array(1);
   if (!vertices || !normals || !uv || !indices || !boneWeights || !bindposes || !coefficients || !bones || !materials)
     return fail(why, "an array type did not resolve or has another layout");
-  void* const anchor = phasmo::GameObject::get_transform(gameObject);
-  RefArray{bones}.set(0, anchor);
+  if (skinned)
+    for (size_t i = 0; i < mesh.bones.size(); ++i) RefArray{bones}.set(i, mesh.bones[i]);
+  else
+    RefArray{bones}.set(0, anchor);
   RefArray{materials}.set(0, material);
 
   void* built = phasmo::Mesh::type.make();

@@ -623,6 +623,50 @@ void sheet_pins_only_the_top() {
   CHECK(pinned > 0 && free > pinned);
 }
 
+// As worn cloth is set up in games (user, 2026-11-09: copy how other games do it): each point may move only a little
+// from where the body carries it, nothing at the crown and growing toward the hem to kHemSway, with a backstop, so the
+// sheet keeps its hanging shape and only sways.
+void sheet_sways_only_near_its_shape() {
+  const sh::SheetShape shape;
+  const sh::SheetMesh m = sh::make_sheet(shape);
+  float far = 0.0f;
+  for (const sh::Vec2& f : m.flat) far = std::max(far, std::hypot(f.x, f.y));
+  float nearSway = -1.0f, farSway = -1.0f, lastDistance = -1.0f, lastSway = -1.0f;
+  bool growing = true;
+  std::vector<std::pair<float, float>> byDistance;
+  for (size_t v = 0; v < m.flat.size(); ++v) {
+    const float d = std::hypot(m.flat[v].x, m.flat[v].y);
+    const float sway = m.coefficients[v].maxDistance;
+    CHECK(sway >= 0.0f && sway <= sh::kHemSway + 1e-5f);
+    CHECK(m.coefficients[v].collisionSphereDistance == sh::kBackstop);
+    byDistance.push_back({d, sway});
+    if (d == far) farSway = sway;
+    if (d <= shape.pinRadius) nearSway = sway;
+  }
+  std::sort(byDistance.begin(), byDistance.end());
+  for (const auto& [d, sway] : byDistance) {
+    if (d > lastDistance + 1e-4f && sway < lastSway - 1e-5f) growing = false;
+    lastDistance = d;
+    lastSway = sway;
+  }
+  CHECK(nearSway == 0.0f && std::fabs(farSway - sh::kHemSway) < 1e-5f && growing);
+}
+
+// Each point of the sheet follows the body by its height: the head's above it, the hips' below, blended between the
+// two bones it lies between, so the sheet bends with the body as it leans, rolls and sits.
+void sheet_follows_the_body_by_height() {
+  const std::vector<float> bones = {0.0f, -0.3f, -0.5f, -0.8f};  // head, chest, spine, hips below the crown
+  sh::Weight w = sh::weight_by_height(0.1f, bones);
+  CHECK(w.bone0 == 0 && w.weight0 == 1.0f && w.weight1 == 0.0f);
+  w = sh::weight_by_height(-2.0f, bones);
+  CHECK(w.bone0 == 3 && w.weight0 == 1.0f);
+  w = sh::weight_by_height(-0.4f, bones);  // halfway from the chest to the spine
+  CHECK(w.bone0 == 1 && w.bone1 == 2 && std::fabs(w.weight0 - 0.5f) < 1e-5f && std::fabs(w.weight1 - 0.5f) < 1e-5f);
+  w = sh::weight_by_height(-0.5f, bones);
+  CHECK(std::fabs(w.weight0 + w.weight1 - 1.0f) < 1e-5f);
+  CHECK(sh::weight_by_height(-0.4f, {}).weight0 == 1.0f);  // no bones read: the anchor alone
+}
+
 void eyes_are_mirrored() {
   const sh::SheetShape shape;
   const sh::SheetMesh m = sh::make_sheet(shape);
@@ -1048,6 +1092,8 @@ int main() {
   the_start_check_refuses_a_bundle_missing_a_state();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
+  sheet_sways_only_near_its_shape();
+  sheet_follows_the_body_by_height();
   eyes_are_mirrored();
   sheet_hangs_from_the_crown();
   the_mod_loads_its_voice_from_its_assets();
