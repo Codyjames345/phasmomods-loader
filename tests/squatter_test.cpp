@@ -1285,6 +1285,8 @@ int main() {
   the_pace_keeps_the_distance_of_a_frame_with_no_time();
   the_way_ahead_is_read_across_its_width();
   its_feet_meet_what_it_trips_over();
+  voice_lines_never_talk_over_each_other();
+  a_door_line_comes_from_behind_the_door();
   a_door_is_reached_within_reach();
   the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();

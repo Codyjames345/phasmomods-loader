@@ -3,7 +3,8 @@
 #include "Transform.h"
 
 // A clip played once at a point in the world, as AudioSource.PlayClipAtPoint does: a new object
-// there with a fully 3D AudioSource, destroyed when the clip ends. This game build strips that
+// there with a fully 3D AudioSource, destroyed when the clip ends, through the game's mixer group for
+// that place (SoundController.GetFloorAudioSnapshot), as the game's own noises play. This game build strips that
 // method, so its steps are taken here from the calls the build keeps, through the game API
 // (sdk/map/UnityAudio.h). The mod requires those entries, so it does not start without them. Main
 // thread.

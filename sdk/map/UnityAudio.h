@@ -69,6 +69,14 @@ inline constexpr pm::sdk::EntryDesc AudioRolloffMode_Linear{.key = "AudioRolloff
                                                             .kind = pm::sdk::Kind::EnumValue,
                                                             .owner = "AudioRolloffMode", .name = "Linear"};
 
+inline constexpr const char* AudioSource_set_outputAudioMixerGroup_params[] = {"AudioMixerGroup"};
+
+/// Sets the mixer group the source plays through (an AudioMixerGroup; null plays straight to the listener, past the
+/// game's mixer and its muffling). Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc AudioSource_set_outputAudioMixerGroup{
+    .key = "AudioSource.set_outputAudioMixerGroup", .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
+    .name = "set_outputAudioMixerGroup", .params = AudioSource_set_outputAudioMixerGroup_params};
+
 inline constexpr const char* AudioSource_set_rolloffMode_params[] = {"@AudioRolloffMode"};
 
 /// Sets how the source's volume falls with distance (AudioRolloffMode). Inferred: Unity's documented property setter.
@@ -205,6 +213,9 @@ struct AudioSource {
   static constexpr pm::api::Method<pm::map::AudioSource_Stop, void(void*, bool)> Stop{};
   /// PlayOneShot(source, clip). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::AudioSource_PlayOneShot, void(void*, void*)> PlayOneShot{};
+  /// set_outputAudioMixerGroup(source, group): the mixer group it plays through. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::AudioSource_set_outputAudioMixerGroup, void(void*, void*)>
+      set_outputAudioMixerGroup{};
   /// set_rolloffMode(source, mode): how its volume falls with distance, an AudioRolloffMode. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::AudioSource_set_rolloffMode, void(void*, int32_t)> set_rolloffMode{};
 };

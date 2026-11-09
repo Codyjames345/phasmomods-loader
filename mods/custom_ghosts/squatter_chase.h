@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <span>
+#include <vector>
 
 #include "squatter_figure.h"
 #include "squatter_net.h"
@@ -646,9 +647,64 @@ class PaceMeter {
 // starting value.
 inline constexpr float kDoorLineFullVolume = 8.0f;
 
+// One line at a time on each client (user, 2026-11-09: the door lines played over each other): at most kVoiceQueueMax
+// wait for the line playing to end, the newest kept, and one that has waited kVoiceWaitMs is dropped, so the voice
+// never runs behind what is happening. Starting values.
+inline constexpr int kVoiceQueueMax = 2;
+inline constexpr uint64_t kVoiceWaitMs = 4000;
+
+/** A line to play: its set and its index in the set. */
+struct QueuedLine {
+  Lines set;
+  int index;
+};
+
+/** The lines waiting to be said on this client, and when the one playing ends. Milliseconds on any steady clock. */
+class VoiceQueue {
+ public:
+  /** The master said a line at `now`: it waits its turn, the oldest dropped past kVoiceQueueMax. */
+  void push(QueuedLine line, uint64_t now) {
+    waiting_.push_back({line, now});
+    while (waiting_.size() > static_cast<size_t>(kVoiceQueueMax)) waiting_.erase(waiting_.begin());
+  }
+  /** The line to start at `now`, if one may: none while a line plays; lines that waited too long are dropped. */
+  std::optional<QueuedLine> next(uint64_t now) {
+    while (!waiting_.empty() && now - waiting_.front().since > kVoiceWaitMs) waiting_.erase(waiting_.begin());
+    if (now < busyUntil_ || waiting_.empty()) return std::nullopt;
+    const QueuedLine line = waiting_.front().line;
+    waiting_.erase(waiting_.begin());
+    return line;
+  }
+  /** A line started at `now` and lasts `ms`. */
+  void playing(uint64_t now, uint64_t ms) { busyUntil_ = now + ms; }
+  /** How many lines wait. */
+  size_t waiting() const { return waiting_.size(); }
+  /** Forgets everything, as when the ghost is gone. */
+  void reset() { *this = VoiceQueue{}; }
+
+ private:
+  struct Waiting {
+    QueuedLine line;
+    uint64_t since;
+  };
+  std::vector<Waiting> waiting_;
+  uint64_t busyUntil_ = 0;
+};
+
 // Its other lines carry only so far (user, 2026-11-09: they were heard from outside and on other floors): full volume
 // within kVoiceFullVolume metres, falling evenly to silence at kVoiceRange. Starting values, judged with the user.
 inline constexpr float kVoiceFullVolume = 2.0f, kVoiceRange = 10.0f;
+
+// How far behind the door, from where the listener stands, a door line is said: inside, as a voice through the door
+// (user, 2026-11-09). A starting value.
+inline constexpr float kBehindDoor = 0.75f;
+
+/** A point kBehindDoor beyond `door` (its middle) on the flat, away from `listener`: the door's far side from them. */
+inline Point behind_door(Point door, Point listener) {
+  const float dx = door.x - listener.x, dz = door.z - listener.z, d = std::hypot(dx, dz);
+  if (!(d > 0.0f)) return door;
+  return {door.x + dx / d * kBehindDoor, door.y, door.z + dz / d * kBehindDoor};
+}
 
 /** The index of the point of `points` nearest `p` on the flat, -1 for none. */
 inline int nearest_point(std::span<const Point> points, Point p) {

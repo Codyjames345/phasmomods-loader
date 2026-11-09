@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "Player.h"
 #include "Transform.h"
 #include "UnityAudio.h"
 #include "UnityObject.h"
@@ -15,14 +16,21 @@ bool available() { return true; }
 
 namespace {
 
-// Plays `clip` from the new object `go`, destroying it with the clip.
-void play_from(void* go, void* clip, float volume, float fullVolumeWithin, float silentBeyond) {
+// Plays `clip` from the new object `go` at `at`, destroying it with the clip. It plays through the game's mixer group for
+// that place, as the game's own noises do (Noise.PlaySound with Noise.changeMixerOnPlay: SoundController's
+// GetFloorAudioSnapshot), so the game muffles it as it does them, on another floor or from outdoors (user, 2026-11-09:
+// the Squatter was heard on other floors and from outside, its sounds having gone past the mixer).
+void play_from(void* go, void* clip, phasmo::Vector3 at, float volume, float fullVolumeWithin, float silentBeyond) {
   void* source = phasmo::GameObject::AddComponent(go, phasmo::AudioSource::type.type_object());
   if (!source) {
     phasmo::Object::Destroy(go, 0.0f);
     return;
   }
   phasmo::AudioSource::set_clip(source, clip);
+  void* sounds = phasmo::SoundController::instance.get();
+  if (sounds && api::alive(sounds))
+    if (void* group = phasmo::SoundController::GetFloorAudioSnapshot(sounds, &at))
+      phasmo::AudioSource::set_outputAudioMixerGroup(source, group);
   phasmo::AudioSource::set_spatialBlend(source, 1.0f);
   phasmo::AudioSource::set_volume(source, volume);
   if (fullVolumeWithin > 0.0f) phasmo::AudioSource::set_minDistance(source, fullVolumeWithin);
@@ -49,7 +57,7 @@ void play_at(void* clip, phasmo::Vector3 at, float volume, float fullVolumeWithi
   if (!go) return;
   const phasmo::Vector3 where{at.x, at.y, at.z};
   phasmo::Transform::set_position(phasmo::GameObject::get_transform(go), &where);
-  play_from(go, clip, volume, fullVolumeWithin, silentBeyond);
+  play_from(go, clip, where, volume, fullVolumeWithin, silentBeyond);
 }
 
 void play_on(void* clip, void* parent, float volume, float fullVolumeWithin, float silentBeyond) {
@@ -60,7 +68,7 @@ void play_on(void* clip, void* parent, float volume, float fullVolumeWithin, flo
   phasmo::Transform::SetParent(t, parent, false);
   const phasmo::Vector3 origin{0, 0, 0};
   phasmo::Transform::set_localPosition(t, &origin);
-  play_from(go, clip, volume, fullVolumeWithin, silentBeyond);
+  play_from(go, clip, phasmo::Transform::get_position(parent), volume, fullVolumeWithin, silentBeyond);
 }
 
 }  // namespace pm::custom::sound
