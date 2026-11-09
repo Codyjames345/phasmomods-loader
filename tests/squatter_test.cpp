@@ -1286,6 +1286,17 @@ void inertialization_starts_from_the_old_pose_and_dies_away() {
 
 // The pass after the animation runs for the figure's own IKExecutionOrder alone: Final IK's LateUpdate runs for every
 // model that has one, and a missing figure is never its own.
+// While the figure's body falls, Final IK runs nothing on it: neither its solvers (LateUpdate) nor the reset that puts
+// the bones back in their stored pose each frame (Update calls each solver's FixTransforms), which would stand the
+// ragdoll back up every frame. Every other model's IK runs as the game runs it.
+void the_ik_stands_aside_while_the_body_falls() {
+  int own = 0, other = 0;
+  CHECK(!figure::ik_runs(&own, &own, true));
+  CHECK(figure::ik_runs(&own, &own, false));
+  CHECK(figure::ik_runs(&other, &own, true));
+  CHECK(figure::ik_runs(&other, nullptr, true));
+}
+
 void the_pass_after_the_animator_is_the_figures_own() {
   int a = 0, b = 0;
   CHECK(figure::is_own_ik(&a, &a));
@@ -1299,6 +1310,7 @@ int main() {
   move_variants_are_deterministic();
   the_start_check_refuses_a_bundle_missing_a_state();
   the_pass_after_the_animator_is_the_figures_own();
+  the_ik_stands_aside_while_the_body_falls();
   inertialization_starts_from_the_old_pose_and_dies_away();
   a_fall_settles_then_gets_up();
   the_get_up_follows_how_it_landed();

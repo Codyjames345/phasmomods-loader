@@ -151,6 +151,14 @@ inline constexpr pm::sdk::EntryDesc IKExecutionOrder_animator{.key = "IKExecutio
 inline constexpr pm::sdk::EntryDesc IKExecutionOrder_LateUpdate{.key = "IKExecutionOrder.LateUpdate",
                                                                 .kind = pm::sdk::Kind::Method,
                                                                 .owner = "IKExecutionOrder", .name = "LateUpdate"};
+/// Unity's Update for the order: unless the Animator animates physics, it calls FixTransforms on the solver of each
+/// component in IKComponents that has fixTransforms set, which puts the solver's bones back in their stored local pose
+/// each frame before the Animator writes its own. So a model whose bones physics moves (a ragdoll) is pulled back to
+/// that pose every frame unless this is skipped for it. Private. Decompiled.
+inline constexpr pm::sdk::EntryDesc IKExecutionOrder_Update{.key = "IKExecutionOrder.Update",
+                                                            .kind = pm::sdk::Kind::Method,
+                                                            .confidence = pm::sdk::Confidence::Decompiled,
+                                                            .owner = "IKExecutionOrder", .name = "Update"};
 
 /// What every Final IK grounder shares (RootMotion.FinalIK.Grounder): foot placement on the ground under each foot,
 /// the hips lowered to the lower foot, as games keep feet on stairs and slopes. Inferred: Final IK's own documentation.
@@ -391,6 +399,9 @@ struct IKExecutionOrder {
   /// LateUpdate(order): runs the components' solvers, after the Animator. For pm::api::hook: a detour sees the
   /// animated pose before the IK; skipping `original` runs no IK on that model this frame. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::IKExecutionOrder_LateUpdate, void(void*)> LateUpdate{};
+  /// Update(order): puts each solver's bones back in their stored pose, before the Animator. For pm::api::hook: skipping
+  /// `original` leaves the bones where they are this frame. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::IKExecutionOrder_Update, void(void*)> Update{};
 };
 
 /// A grounder's solver. `grounding` below is one.

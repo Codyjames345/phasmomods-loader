@@ -1643,6 +1643,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &Collider_get_attachedRigidbody,
     &Layer_DeadPlayer,
     &IKExecutionOrder_LateUpdate,
+    &IKExecutionOrder_Update,
     &Layer_IgnoreRaycast,
     &Vector3,
     &BoneWeight,

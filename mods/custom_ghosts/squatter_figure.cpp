@@ -394,9 +394,16 @@ void detour_ik_late_update(api::Original<phasmo::IKExecutionOrder::LateUpdate> o
     g_lastPass = now;
     if (!g.falling) inertialize();
     if (g_after) g_after(dt);
-    if (g.falling) return;  // physics has the body: no IK bends it
+    if (!ik_runs(order, g.order, g.falling)) return;  // physics has the body: no IK bends it
   }
   original(order);
+}
+
+// Final IK's Update, for every model with an IKExecutionOrder: it puts the solvers' bones back in their stored pose each
+// frame (IKExecutionOrder.Update's note in the map), which would stand a falling body back up, so it is skipped for the
+// figure's own while it falls.
+void detour_ik_update(api::Original<phasmo::IKExecutionOrder::Update> original, void* order) {
+  if (ik_runs(order, g.order, g.falling)) original(order);
 }
 
 // The full-body solver's effector for `hand`, or null.
@@ -627,7 +634,9 @@ void set_after_animation(AfterAnimation fn) {
 
 bool create_hooks() {
   return api::hook<phasmo::IKExecutionOrder::LateUpdate>(&detour_ik_late_update, "IKExecutionOrder.LateUpdate",
-                                                         api::Twins::CanonicalOnly);
+                                                         api::Twins::CanonicalOnly) &&
+         api::hook<phasmo::IKExecutionOrder::Update>(&detour_ik_update, "IKExecutionOrder.Update",
+                                                     api::Twins::CanonicalOnly);
 }
 
 }  // namespace pm::custom::squatter::figure

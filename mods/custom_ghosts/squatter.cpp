@@ -155,6 +155,7 @@ struct State {
   FallState fall;
   GetUp landing = GetUp::FaceDown;
   phasmo::Vector3 riseFrom{};
+  uint64_t fellAt = 0;  // when this client's figure began its fall, for the log
 };
 
 State g;
@@ -1291,8 +1292,12 @@ Point eyes_of(void* player) {
 bool start_fall(phasmo::Vector3 push) {
   const float facing = g.facing.value_or(0.0f), pace = g.pace.pace();
   const phasmo::Vector3 v{std::sin(facing) * pace + push.x, push.y, std::cos(facing) * pace + push.z};
-  if (!figure::fall(v)) return false;
+  if (!figure::fall(v)) {
+    PM_LOG("squatter: its figure could not fall here (no ragdoll); it stands");
+    return false;
+  }
   g.fall.begin(now());
+  g.fellAt = now();
   g.landing = GetUp::FaceDown;
   g.local = State::Local::None;
   return true;
@@ -1309,6 +1314,8 @@ void rise(void* ghost) {
   r.at.y = phasmo::NavMesh::SamplePosition(&hips, &hit, 1.0f, -1) ? hit.position.y : at_of(ghost).y;
   g.riseFrom = vector(r.at);
   g.facing = r.yaw;
+  PM_LOG("squatter: fell for %llu ms, landed face %s, gets up", static_cast<unsigned long long>(now() - g.fellAt),
+         g.landing == GetUp::FaceDown ? "down" : "up");
   figure::rise(get_up_state(g.landing), g.riseFrom, r.yaw, kRecoverSeconds);
   if (game::is_master())
     if (void* agent = game::ghost_agent(ghost)) phasmo::NavMeshAgent::Warp(agent, &g.riseFrom);
