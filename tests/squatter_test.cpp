@@ -1361,6 +1361,7 @@ int main() {
   an_open_doorway_does_not_muffle_its_voice();
   it_stands_facing_the_way_its_body_faces();
   the_standing_roll_hands_back_to_the_run();
+  its_voice_is_pitched_down();
   sheet_is_closed_grid_with_eye_holes();
   the_sheet_has_a_thickness();
   sheet_pins_only_the_top();

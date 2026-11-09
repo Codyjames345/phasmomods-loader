@@ -21,7 +21,7 @@ namespace {
 // GetFloorAudioSnapshot), so the game muffles it as it does them, on another floor or from outdoors (user, 2026-11-09:
 // the Squatter was heard on other floors and from outside, its sounds having gone past the mixer).
 void play_from(void* go, void* clip, phasmo::Vector3 at, float volume, float fullVolumeWithin, float silentBeyond,
-               void* like = nullptr, const phasmo::Vector3* mixAt = nullptr) {
+               void* like = nullptr, const phasmo::Vector3* mixAt = nullptr, float pitch = 1.0f) {
   void* source = phasmo::GameObject::AddComponent(go, phasmo::AudioSource::type.type_object());
   if (!source) {
     phasmo::Object::Destroy(go, 0.0f);
@@ -47,8 +47,12 @@ void play_from(void* go, void* clip, phasmo::Vector3 at, float volume, float ful
     phasmo::AudioSource::set_maxDistance(source, phasmo::AudioSource::get_maxDistance(like));
     phasmo::AudioSource::set_rolloffMode(source, phasmo::AudioSource::get_rolloffMode(like));
   }
+  const float rate = pitch > 0.0f ? pitch : 1.0f;
+  if (rate != 1.0f) phasmo::AudioSource::set_pitch(source, rate);
   phasmo::AudioSource::Play(source, 0);
-  phasmo::Object::Destroy(go, phasmo::AudioClip::get_length(clip) * std::max(phasmo::Time::get_timeScale(), 0.01f));
+  // It lasts its length over its pitch, the playback rate.
+  phasmo::Object::Destroy(go, phasmo::AudioClip::get_length(clip) / rate *
+                                  std::max(phasmo::Time::get_timeScale(), 0.01f));
 }
 
 // A new object for one sound, or null.
@@ -61,13 +65,13 @@ void* one_shot() {
 }  // namespace
 
 void play_at(void* clip, phasmo::Vector3 at, float volume, float fullVolumeWithin, float silentBeyond,
-             const phasmo::Vector3* mixAt) {
+             const phasmo::Vector3* mixAt, float pitch) {
   if (!api::alive(clip)) return;
   void* go = one_shot();
   if (!go) return;
   const phasmo::Vector3 where{at.x, at.y, at.z};
   phasmo::Transform::set_position(phasmo::GameObject::get_transform(go), &where);
-  play_from(go, clip, where, volume, fullVolumeWithin, silentBeyond, nullptr, mixAt);
+  play_from(go, clip, where, volume, fullVolumeWithin, silentBeyond, nullptr, mixAt, pitch);
 }
 
 void play_like(void* clip, phasmo::Vector3 at, float volume, void* like) {
@@ -79,7 +83,7 @@ void play_like(void* clip, phasmo::Vector3 at, float volume, void* like) {
 }
 
 void play_on(void* clip, void* parent, float volume, float fullVolumeWithin, float silentBeyond,
-             const phasmo::Vector3* mixAt) {
+             const phasmo::Vector3* mixAt, float pitch) {
   if (!api::alive(clip) || !api::alive(parent)) return;
   void* go = one_shot();
   if (!go) return;
@@ -87,7 +91,8 @@ void play_on(void* clip, void* parent, float volume, float fullVolumeWithin, flo
   phasmo::Transform::SetParent(t, parent, false);
   const phasmo::Vector3 origin{0, 0, 0};
   phasmo::Transform::set_localPosition(t, &origin);
-  play_from(go, clip, phasmo::Transform::get_position(parent), volume, fullVolumeWithin, silentBeyond, nullptr, mixAt);
+  play_from(go, clip, phasmo::Transform::get_position(parent), volume, fullVolumeWithin, silentBeyond, nullptr, mixAt,
+            pitch);
 }
 
 }  // namespace pm::custom::sound

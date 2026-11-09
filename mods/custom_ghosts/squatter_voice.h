@@ -56,7 +56,18 @@ int count(Lines set);
 int play(Lines set, phasmo::Vector3 at, uint32_t roll);
 
 /** Plays line `index` of `set` at `at`; does nothing for an empty set, an index out of range or a line that failed to build. */
-/** How long line `index` of `set` lasts, seconds; 0 for none, or one gone. */
+/** How far its voice is pitched (user, 2026-11-10: pitch it down a bit), 1 as recorded: a starting value, judged
+ * with the user in game. Unity's pitch is also the playback rate, so a line plays slower by as much. */
+inline constexpr float kVoicePitch = 0.9f;
+
+/** How long a clip of `clipSeconds` plays at `pitch`: its length over the pitch; 0 for no length, as recorded for no
+ * pitch. */
+inline float played_seconds(float clipSeconds, float pitch) {
+  if (!(clipSeconds > 0.0f)) return 0.0f;
+  return pitch > 0.0f ? clipSeconds / pitch : clipSeconds;
+}
+
+/** How long line `index` of `set` lasts as played (at kVoicePitch), seconds; 0 for none, or one gone. */
 float seconds(Lines set, int index);
 // With `follow` (a Transform, such as the figure's head), the line moves with it; else it stays at `at`.
 // mixAt: where the game's mixer group is read for the line (sound.h); null for where it is said.
