@@ -322,11 +322,17 @@ void start(const PmHostApi* api, const std::vector<std::string>& ids, Group grou
     hooks::begin_group();
     if (group.begin) group.begin();
     m.started = m.start(api);
+    // What the host refused of the mod's content keeps it off, whatever its start answered: it never runs half there.
+    const std::string refused = group.refusal ? group.refusal() : std::string();
+    if (m.started && !refused.empty()) {
+      m.stop();
+      m.started = false;
+    }
     if (group.end) group.end(m.started);
     if (!m.started) {
       hooks::rollback_group();
       row = "It did not start. mods.log says why";
-      log = "its pmmod_start failed";
+      log = refused.empty() ? "its pmmod_start failed" : "the host refused its content (" + refused + ")";
       return false;
     }
     g_startOrder.push_back(id);

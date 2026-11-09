@@ -54,8 +54,16 @@ major version `PmHostApi` and every published struct only grow at the end, and e
 
 ### Changed
 
+- **A refused registration keeps its mod off.** The host keeps off a mod whose `pmmod_start` registered anything it
+  refused (`ghost_register`, `evidence_register`, `ghost_rules`, `journal_lines`), whatever `pmmod_start` returned: it
+  stops the mod, removes its hooks and content, and logs why, so a mod need not check what a registration returned.
+  While custom content is off on a client (the game's enums unreadable, or a game entry or hook the host's content needs
+  missing) every ghost and evidence is refused, so Custom Ghosts and Spectral Flame are off there instead of running with
+  nothing in the game. Rules and journal lines on the game's own ghosts still register.
 - `Door.ToggleDoorLock`, `Door.GhostForceDoor` and `Door.DisableOrEnableDoor` are decompiled. `Door.ToggleDoorLock`
-  switches a door on or off for players and unlocks a locked door; it never locks one, as its earlier note said.
+  switches a door on or off for players and unlocks a locked door at once; switched off, it also starts the hunt's close
+  coroutine on the door's owner, which shuts and locks the door again as it ends. Its earlier note, read from the name
+  alone, said that `false` locks the door.
 - **Mapping the game moved** from this README to [its own page](internals/mapping.md), with its sections (an entry, the
   resolver, confidence, commands, game builds, adding an entry, moving code onto the SDK).
 - **Entry notes name ghost types:** "the Onryo (16)", where a note gave only the number. Notes say what a member does,

@@ -88,11 +88,15 @@ bool save_chosen(const std::vector<std::string>& ids);
 // for a mod besides its hooks (its content): `begin` runs before each pmmod_start and `end` after it,
 // told whether the mod started, so what a failed mod recorded goes with its hooks. `untracked` says a
 // game method's calls could not be tracked (context::tracking_failed): a mod that requires one stays
-// off too, logged, since pm::api::inside would answer it false for ever.
+// off too, logged, since pm::api::inside would answer it false for ever. `refusal`, asked after each pmmod_start and
+// before `end`, says why the host refused something the mod registered during that start (a ghost while custom content is
+// off, say), or nothing: a mod with a refusal stays off whatever its pmmod_start answered. The host stops it and removes its
+// hooks and content, so no mod has to check what its own registrations returned.
 struct Group {
   void (*begin)() = nullptr;
   void (*end)(bool started) = nullptr;
   bool (*untracked)(const char* key) = nullptr;
+  std::string (*refusal)() = nullptr;
 };
 void start(const PmHostApi* api, const std::vector<std::string>& ids, Group group = {});
 // Why the last start that tried the mod `id` left it off, for its Mods panel row ("Needs Spectral Flame"), or why its DLL

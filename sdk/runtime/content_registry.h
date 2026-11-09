@@ -118,6 +118,9 @@ class Registry {
   unsigned agreement_decisions() const { return agreement_ ? agreement_->decisions() : 0; }
   /// After it: registration closes, and when the mod did not start its content is forgotten.
   void end_group(bool started);
+  /// Why this registry refused something the mod registered since begin_group (the first refusal's log line, without
+  /// "content: "), or empty. The host keeps a mod with a refusal off (host/mods.h, Group::refusal).
+  const std::string& refused_in_group() const { return groupRefusal_; }
   /// Once every mod has started: drops each ghost that gives an evidence no started mod registered
   /// (logged), and puts the content in the manifest.
   void commit();
@@ -247,6 +250,8 @@ class Registry {
   };
 
   bool open(const char* what, const char* id) const;
+  void refused(const std::string& line);  // logs a refusal, and keeps it for refused_in_group while a group is open
+  std::string off_reason() const;         // "custom content is off: <why>" while refused or withheld, else empty
   bool answering() const { return active() || contractHolds_; }  // the custom numbers answer
   void changed();
 
@@ -261,6 +266,7 @@ class Registry {
   GameEnums enums_;      // the game's enums; unread until set_game_enums
   std::string refused_;   // why content never activates, or empty
   std::string withheld_;  // why the host cannot put content into the game, or empty
+  std::string groupRefusal_;  // the first refusal since begin_group, or empty
   int local_ = 0;
   int master_ = 0;
   int32_t nextHandle_ = 1;

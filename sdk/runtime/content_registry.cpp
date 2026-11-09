@@ -119,6 +119,17 @@ int32_t index_of(const Map& m, std::string_view id) {
 void Registry::begin_group() {
   groupStart_ = nextHandle_;
   open_ = true;
+  groupRefusal_.clear();
+}
+
+void Registry::refused(const std::string& line) {
+  PM_LOG("content: %s", line.c_str());
+  if (open_ && groupRefusal_.empty()) groupRefusal_ = line;
+}
+
+std::string Registry::off_reason() const {
+  const std::string& why = refused_.empty() ? withheld_ : refused_;
+  return why.empty() ? std::string() : "custom content is off: " + why;
 }
 
 void Registry::end_group(bool started) {
@@ -209,12 +220,14 @@ bool Registry::open(const char* what, const char* id) const {
 
 int32_t Registry::add_ghost(const PmGhostDef* def) {
   if (!def || def->size < kGhostDefSize) {
-    PM_LOG("content: a ghost is refused: %s", def ? "its definition is smaller than contract 2.2's" : "it has no definition");
+    refused(std::string("a ghost is refused: ") + (def ? "its definition is smaller than contract 2.2's" : "it has no definition"));
     return 0;
   }
   const PmGhostDef d = copy_def(def);
   if (!open("ghost", d.id)) return 0;
-  std::string why = bad_id(d.id);
+  // A ghost the host cannot put into the game is refused, so its mod stays off rather than run without it.
+  std::string why = off_reason();
+  if (why.empty()) why = bad_id(d.id);
   Ghost g;
   if (why.empty() && ghosts_.count(std::string_view(d.id))) why = "it is already registered";
   if (why.empty() && d.tellCount > kMaxTells) why = "it has more than 64 tells";
@@ -241,7 +254,7 @@ int32_t Registry::add_ghost(const PmGhostDef* def) {
     }
   }
   if (!why.empty()) {
-    PM_LOG("content: the ghost \"%s\" is refused: %s", d.id ? d.id : "", why.c_str());
+    refused("the ghost \"" + std::string(d.id ? d.id : "") + "\" is refused: " + why);
     return 0;
   }
   g.id = d.id;
@@ -274,19 +287,20 @@ int32_t Registry::add_ghost(const PmGhostDef* def) {
 
 int32_t Registry::add_evidence(const PmEvidenceDef* def) {
   if (!def || def->size < kEvidenceDefSize) {
-    PM_LOG("content: an evidence is refused: %s",
-           def ? "its definition is smaller than contract 2.2's" : "it has no definition");
+    refused(std::string("an evidence is refused: ") +
+            (def ? "its definition is smaller than contract 2.2's" : "it has no definition"));
     return 0;
   }
   const PmEvidenceDef d = copy_def(def);
   if (!open("evidence", d.id)) return 0;
-  std::string why = bad_id(d.id);
+  std::string why = off_reason();
+  if (why.empty()) why = bad_id(d.id);
   Evidence e;
   if (why.empty() && evidence_.count(std::string_view(d.id))) why = "it is already registered";
   if (why.empty() && copy_text(d.name, true, "its name", e.name, why))
     copy_text(d.journalLine, true, "its journal line", e.journalLine, why);
   if (!why.empty()) {
-    PM_LOG("content: the evidence \"%s\" is refused: %s", d.id ? d.id : "", why.c_str());
+    refused("the evidence \"" + std::string(d.id ? d.id : "") + "\" is refused: " + why);
     return 0;
   }
   e.id = d.id;
@@ -303,8 +317,8 @@ int32_t Registry::add_evidence(const PmEvidenceDef* def) {
 
 int32_t Registry::add_rules(const char* id, const PmGhostRules* rules) {
   if (!rules || rules->size < kRulesSize) {
-    PM_LOG("content: rules on \"%s\" are refused: %s", id ? id : "",
-           rules ? "their definition is smaller than contract 2.2's" : "they have no definition");
+    refused("rules on \"" + std::string(id ? id : "") + "\" are refused: " +
+            (rules ? "their definition is smaller than contract 2.2's" : "they have no definition"));
     return 0;
   }
   if (!open_) {
@@ -317,7 +331,7 @@ int32_t Registry::add_rules(const char* id, const PmGhostRules* rules) {
     why = enums_.read() && enums_.ghost_type(id) < 0 ? "the game has no such ghost type" : "";
   else why = bad_id(id);
   if (!why.empty()) {
-    PM_LOG("content: rules on \"%s\" are refused: %s", id ? id : "", why.c_str());
+    refused("rules on \"" + std::string(id ? id : "") + "\" are refused: " + why);
     return 0;
   }
   Rules r;
@@ -343,7 +357,7 @@ int32_t Registry::add_lines(const char* id, const PmTextSet* lines, uint32_t cou
   Lines l;
   for (uint32_t i = 0; why.empty() && i < count; ++i) copy_text(lines[i], true, "a line", l.lines.emplace_back(), why);
   if (!why.empty()) {
-    PM_LOG("content: journal lines for \"%s\" are refused: %s", id ? id : "", why.c_str());
+    refused("journal lines for \"" + std::string(id ? id : "") + "\" are refused: " + why);
     return 0;
   }
   l.handle = nextHandle_++;

@@ -564,6 +564,10 @@ it keeps the answer in between. Playable Ghost shows it on its player's HUD.
   is neither vanilla nor a content id. A custom evidence a ghost gives may come from any mod that
   starts, before or after it: once every mod has started the host settles the content, and drops (and
   logs) a ghost whose evidence nobody registered. A mod that fails to start takes its content with it.
+  Since 2.3 the host also refuses every ghost and evidence while custom content is off on this client (the
+  game's enums unreadable, or a game entry or hook its content needs missing), and keeps off any mod whose
+  `pmmod_start` registered something it refused, whatever `pmmod_start` returned: it stops the mod, removes
+  its hooks and content, and logs why. A mod need not check what a registration returned.
 - `content_type(ghostId)`, `content_ghost_id(type)` and `content_evidence(evidenceId)`: a mod names
   content by its stable id, `"<mod id>.<name>"` (`phasmomods.custom-ghosts.draugr`), and never chooses a
   number. A name holds no dot, so the id splits at its last dot (`core/mod_ids.h`). Nothing here fixes the

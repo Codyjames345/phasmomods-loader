@@ -495,22 +495,25 @@ void game_enums_read_from_the_model() {
 }
 
 // When the game's enums cannot be read, content never activates, vanilla ids do not answer, the log says
-// why, and this client tells the others it has nothing they can agree on.
+// why, and a custom ghost is refused, so its mod stays off and this client has no content to tell the others of.
 void unreadable_enums_keep_content_off() {
   start();
   fake::game_enums({}, fake::audited_evidence(), fake::kAuditedNoGhost, fake::kAuditedNoEvidence);
   CHECK(logged("custom content stays off: the game's GhostType enum has no values"));
-  CHECK(content::register_ghost(ghost("brownies.brownie")) > 0);
+  CHECK(content::register_ghost(ghost("brownies.brownie")) == 0);  // refused: its mod stays off (host/mods.h)
+  CHECK(logged("the ghost \"brownies.brownie\" is refused: custom content is off: the game's GhostType enum has no values"));
   fake::commit_content();
   room(1, {1}, {});
   CHECK(!content::active() && fake::content_state() == State::Off);
   CHECK(content::type_of("brownies.brownie") == -1 && content::id_of(6).empty() && content::evidence_of("emf") == -1);
-  // Its peer hears an empty manifest and turns off too.
+  // It registered nothing, so it says nothing, as a host with no content: its peer waits, then turns off too.
   Peer other{1};
   other.runs({}, {ghost("brownies.brownie")});
   other.registry.observe(1, {1, 2}, 0, 2);
   fake::room(2, {1, 2}, 0, 2);
-  for (const std::vector<uint8_t>& m : fake::host_messages()) other.registry.receive(2, m.data(), m.size());
+  CHECK(fake::host_messages().empty());
+  CHECK(other.registry.state() == State::Pending);
+  other.registry.observe(1, {1, 2}, registry::kGraceMs, 2);
   CHECK(other.registry.state() == State::Off);
 }
 
@@ -2101,6 +2104,31 @@ void missing_entries_withhold_content() {
   CHECK(logged("custom content stays off: these game entries did not resolve"));
 }
 
+// Content the host has switched off before the mods start is refused at registration, so a mod whose ghost or evidence
+// could never come into play fails its own start and is off, with the reason logged, instead of running without it.
+// Rules and journal lines on the game's own ghosts are not content the host puts into the game, so they still register.
+void content_switched_off_refuses_custom_registrations() {
+  start();
+  fake::content_registry().withhold("its hooks on the game could not be made");
+  CHECK(content::register_ghost(ghost("brownies.brownie")) == 0);
+  CHECK(logged("the ghost \"brownies.brownie\" is refused: custom content is off: its hooks on the game could not be made"));
+  CHECK(content::register_evidence(evidence("flames.flame")) == 0);
+  CHECK(logged("the evidence \"flames.flame\" is refused: custom content is off: its hooks on the game could not be made"));
+  CHECK(content::attach_rules("vanilla.mare", {}) > 0);
+  CHECK(content::add_journal_lines("vanilla.mare", {content::Text("en", "Tells: dark.")}) > 0);
+
+  // The game's enums unreadable: the same.
+  g_lines.clear();
+  registry::Registry r;
+  r.refuse("the game's GhostType enum could not be read");
+  r.begin_group();
+  const content::GhostDef hydra = ghost("ghosts.hydra");
+  const content::EvidenceDef flame = evidence("flames.flame");
+  CHECK(r.add_ghost(&hydra.c_def()) == 0 && r.add_evidence(&flame.c_def()) == 0);
+  CHECK(logged("the ghost \"ghosts.hydra\" is refused: custom content is off: the game's GhostType enum could not be read"));
+  r.end_group(false);
+}
+
 }  // namespace
 
 int main() {
@@ -2167,6 +2195,7 @@ int main() {
   controlled_ghost_answers_through_its_definition();
   contract_numbers_answer_while_content_is_off();
   missing_entries_withhold_content();
+  content_switched_off_refuses_custom_registrations();
   agreement::a_host_without_a_mod_gets_nothing_run();
   agreement::the_hosts_mods_here_run();
   agreement::a_peer_leaving_changes_nothing_mid_contract();

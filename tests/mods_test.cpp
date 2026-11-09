@@ -176,6 +176,43 @@ void suspend_and_resume_in_a_room(const fs::path& data) {
   CHECK(target_answer(1) == 2);
 }
 
+// The host refused content the mod registered during its start (a ghost while custom content is off, say): the host keeps
+// the mod off itself, whatever its pmmod_start answered, so no mod has to check what its registrations returned. Its
+// hooks and content from that start come out, and the log says why.
+std::string g_refusal;
+bool g_endedStarted = true;
+void refused_content_keeps_the_mod_off(const fs::path& data) {
+  pm::log::set_sink(&capture, "");
+  g_mark = pm::hooks::mark();
+  pm::mods::set_installed(data, fake_install(PM_FAKE_MOD));
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  g_resolved = {"Camera", "GhostAI.UnAppear"};
+  pm::mods::Group group;
+  group.begin = &begin_mod;
+  group.refusal = [] { return g_refusal; };
+  group.end = [](bool started) {
+    g_endedStarted = started;
+    if (!started) g_content = 0;
+  };
+  g_refusal = "the ghost \"a.b\" is refused: custom content is off: its hooks on the game could not be made";
+  g_content = 0;
+  g_lines.clear();
+  pm::mods::start(&api, {"fake-mod"}, group);
+  CHECK(pm::mods::started_ids().empty() && !pm::mods::started("fake-mod"));
+  CHECK(!g_endedStarted && g_content == 0 && target_answer(1) == 2);
+  CHECK(logged("mods: fake-mod stays off: the host refused its content (the ghost \"a.b\" is refused: custom content is off"));
+  CHECK(pm::mods::off_reason("fake-mod") == "It did not start. mods.log says why");
+
+  g_refusal.clear();  // nothing refused: it starts
+  pm::mods::start(&api, {"fake-mod"}, group);
+  CHECK(pm::mods::started("fake-mod") && g_endedStarted && target_answer(1) == 102);
+  pm::mods::stop_all();
+  pm::hooks::rollback_to(g_mark);
+  pm::log::set_sink(nullptr, nullptr);
+}
+
 // A mod built against an older minor version of contract 2 (`minor`, from `dll`) loads and starts in
 // the 2.3 host: the contract only grew at the end.
 void older_minor_still_loads(const fs::path& data, const char* dll, uint32_t minor) {
@@ -957,6 +994,7 @@ int main() {
 
   mod_with_unresolved_requirement_stays_off(data);
   suspend_and_resume_in_a_room(data);
+  refused_content_keeps_the_mod_off(data);
   mod_built_for_2_0_still_loads(data);
   mod_built_for_2_1_still_loads(data);
   mod_built_for_2_2_still_loads(data);

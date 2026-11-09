@@ -177,7 +177,9 @@ struct GhostRules {
 
 /// Registers the ghost `def`, from pmmod_start only. Returns its handle, greater than 0, or 0 when the
 /// host refused it (outside pmmod_start, a repeated or malformed id, text without English or over the
-/// limits in core/mod_api.h; the log says which) and before bind. A custom evidence it gives may be
+/// limits in core/mod_api.h, or custom content off on this client; the log says which) and before bind. The host keeps
+/// off a mod whose start registered anything it refused, whatever the start returns, so checking the handle is
+/// optional (since 2.3). A custom evidence it gives may be
 /// registered by any mod that starts, before or after it; once every mod has started, a ghost whose
 /// evidence nobody registered is dropped (logged).
 /// @param def The ghost. The host copies it; `user` and the callbacks must stay valid while the mod runs.
@@ -192,7 +194,8 @@ struct GhostRules {
 /// if (pm::api::content::register_ghost(def) <= 0) return false;
 /// @endcode
 int32_t register_ghost(const GhostDef& def);
-/// Registers the evidence `def` likewise, from pmmod_start only.
+/// Registers the evidence `def` likewise, from pmmod_start only. As for register_ghost, the host keeps off a mod whose
+/// start registered anything it refused, so checking the handle is optional.
 /// @param def The evidence; the host copies it.
 /// @return Its handle, greater than 0, or 0 when refused (logged) and before bind.
 /// @pre Main thread, from pmmod_start.

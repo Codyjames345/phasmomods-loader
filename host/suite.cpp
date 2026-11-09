@@ -564,7 +564,8 @@ bool install_required_hooks() {
   return false;
 }
 
-// Custom content's own hooks on the game; without them content stays off and the mods run.
+// Custom content's own hooks on the game. Without them content stays off: a mod that registers a ghost or an evidence
+// is then refused and stays off (host/mods.h, Group::refusal), and the mods that register none run.
 void install_content_hooks() {
   if (!g_contentCanHook) return;
   if (!g_types.create_hooks() || !g_journal.create_hooks() || !g_localised.create_hook() || !g_difficulty.create_hooks() ||
@@ -586,7 +587,8 @@ bool install_session_hooks() {
 }
 
 mods::Group content_group() {
-  return {[] { g_content.begin_group(); }, [](bool started) { g_content.end_group(started); }, &context::tracking_failed};
+  return {[] { g_content.begin_group(); }, [](bool started) { g_content.end_group(started); }, &context::tracking_failed,
+          [] { return g_content.refused_in_group(); }};
 }
 
 // What every start of the mods owes the rest of the host, once they have started.

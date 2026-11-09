@@ -24,7 +24,8 @@ const bool ok = pm::api::content::register_evidence(def) > 0;
 ```
 
 (`mods/spectral_flame/contract.cpp`, `register_evidence`.) It answers 0, and logs why, outside `pmmod_start`, for a
-repeated or malformed id, or for text without English.
+repeated or malformed id, for text without English, or while custom content is off on this client. A refusal during
+`pmmod_start` keeps the whole mod off, whatever the start returns, so checking the answer is optional.
 
 A ghost gives it by naming its id in `GhostDef::evidence`, whichever mod registers that ghost. Custom Ghosts' twelve
 flame ghosts name `phasmomods.spectral-flame.flame`, and Custom Ghosts requires Spectral Flame in its manifest, so the

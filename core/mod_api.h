@@ -502,7 +502,9 @@ struct PmHostApi {
   /// client holds the same content and reaches the same numbers. Content also stays off when the game's
   /// ghost type and evidence enums cannot be read (logged at startup). Vanilla ghost types and evidence
   /// answer whenever those enums were read. The content goes when the mods stop or restart, and a
-  /// mod's own content when its pmmod_start fails.
+  /// mod's own content when its pmmod_start fails. The host keeps off a mod whose pmmod_start registered anything it
+  /// refused, whatever pmmod_start returns: it stops the mod, removes its hooks and content, and logs why, so a mod
+  /// need not check what a registration returned (since 2.3).
   /// @since Contract 2.2
   /// @{
 
@@ -510,12 +512,14 @@ struct PmHostApi {
   /// outside pmmod_start, a null `def`, a `size` smaller than version 2.2's, an id that is missing, has
   /// no '.', is longer than 255 bytes, begins with "vanilla." or is already registered, text without
   /// English (or with a null or repeated language, more than 64 languages, or a text over 64 KB), more
-  /// than 64 tells, or an evidence that is neither vanilla nor "<mod id>.<name>", or is listed twice.
-  /// The log names the ghost and why.
+  /// than 64 tells, or an evidence that is neither vanilla nor "<mod id>.<name>", or is listed twice, and
+  /// (since 2.3) any ghost while custom content is off on this client: the game's enums unreadable, or a game
+  /// entry or hook the host's content needs missing. The log names the ghost and why, and the mod stays off.
   /// @since Contract 2.2
   int32_t (*ghost_register)(const PmGhostDef* def);
   /// Records the evidence `def` like ghost_register: its handle, or 0 (logged) for a call outside
-  /// pmmod_start, a null `def`, a short `size`, a bad or repeated id, or text refused as above.
+  /// pmmod_start, a null `def`, a short `size`, a bad or repeated id, text refused as above, or (since 2.3)
+  /// custom content off on this client; then the mod stays off.
   /// @since Contract 2.2
   int32_t (*evidence_register)(const PmEvidenceDef* def);
   /// The game type number of the ghost `ghostId` while content is active, and while a contract that
