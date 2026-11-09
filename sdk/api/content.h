@@ -181,7 +181,7 @@ struct GhostRules {
 /// off a mod whose start registered anything it refused, whatever the start returns, so checking the handle is
 /// optional (since 2.3). A custom evidence it gives may be
 /// registered by any mod that starts, before or after it; once every mod has started, a ghost whose
-/// evidence nobody registered is dropped (logged).
+/// evidence nobody registered is dropped, and the mod that registered it stays off for that start (logged).
 /// @param def The ghost. The host copies it; `user` and the callbacks must stay valid while the mod runs.
 /// @return Its handle, greater than 0, or 0 when refused.
 /// @pre Main thread, from pmmod_start.

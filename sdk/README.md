@@ -562,12 +562,16 @@ it keeps the answer in between. Playable Ghost shows it on its player's HUD.
   0, or 0 (logged with the id and why) for a call outside `pmmod_start`, a repeated or malformed id,
   text without English or over the limits (64 tells, 64 languages, 64 KB a text), or an evidence that
   is neither vanilla nor a content id. A custom evidence a ghost gives may come from any mod that
-  starts, before or after it: once every mod has started the host settles the content, and drops (and
-  logs) a ghost whose evidence nobody registered. A mod that fails to start takes its content with it.
+  starts, before or after it: once every mod has started the host settles the content, and drops a
+  ghost whose evidence nobody registered. Since 2.3 the mod that registered it stays off for that start, logged
+  and on its Mods panel row, and the others start again without it. A mod that fails to start takes its
+  content with it.
   Since 2.3 the host also refuses every ghost and evidence while custom content is off on this client (the
   game's enums unreadable, or a game entry or hook its content needs missing), and keeps off any mod whose
   `pmmod_start` registered something it refused, whatever `pmmod_start` returned: it stops the mod, removes
-  its hooks and content, and logs why. A mod need not check what a registration returned.
+  its hooks and content, and logs why. The same holds for every host call that fails during `pmmod_start`:
+  a hook that cannot be made or switched on, a game entry that cannot be hooked, a service name already
+  taken. A mod need not check what such a call returned: no mod runs with part of itself missing.
 - `content_type(ghostId)`, `content_ghost_id(type)` and `content_evidence(evidenceId)`: a mod names
   content by its stable id, `"<mod id>.<name>"` (`phasmomods.custom-ghosts.draugr`), and never chooses a
   number. A name holds no dot, so the id splits at its last dot (`core/mod_ids.h`). Nothing here fixes the

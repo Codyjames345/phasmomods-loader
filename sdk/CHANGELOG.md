@@ -54,9 +54,13 @@ major version `PmHostApi` and every published struct only grow at the end, and e
 
 ### Changed
 
-- **A refused registration keeps its mod off.** The host keeps off a mod whose `pmmod_start` registered anything it
-  refused (`ghost_register`, `evidence_register`, `ghost_rules`, `journal_lines`), whatever `pmmod_start` returned: it
-  stops the mod, removes its hooks and content, and logs why, so a mod need not check what a registration returned.
+- **No mod runs with part of itself missing.** The host keeps off a mod whose `pmmod_start` met any failure of the
+  host's, whatever `pmmod_start` returned: a registration it refused (`ghost_register`, `evidence_register`,
+  `ghost_rules`, `journal_lines`), a hook that could not be made or switched on (`create_hook`, `hook_entry`,
+  `hook_body`, `enable_hooks`), or a service name already taken (`register_service`). It stops the mod, removes its
+  hooks and content, and logs why, so a mod need not check what those calls returned. Once every mod has started, a
+  mod whose ghost or rules the host drops (an evidence or a ghost no started mod registered) stays off for that start
+  too, and the others start again without it, until nothing is dropped.
   While custom content is off on a client (the game's enums unreadable, or a game entry or hook the host's content needs
   missing) every ghost and evidence is refused, so Custom Ghosts and Spectral Flame are off there instead of running with
   nothing in the game. Rules and journal lines on the game's own ghosts still register.

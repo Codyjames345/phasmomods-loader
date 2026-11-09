@@ -69,6 +69,7 @@ using Text = std::vector<std::pair<std::string, std::string>>;
 // (PmGhostDef in core/mod_api.h says what each means).
 struct Ghost {
   int32_t handle = 0;  // what ghost_register returned; handles grow in registration order
+  std::string owner;   // the id of the mod that registered it (begin_group), or empty
   std::string id;      // "<mod id>.<name>"
   Text name, description, strength, weakness;
   std::vector<Text> tells;               // one line each
@@ -92,6 +93,7 @@ struct Ghost {
 // callbacks as given.
 struct Rules {
   int32_t handle = 0;  // what ghost_rules returned
+  std::string owner;   // the id of the mod that attached them (begin_group), or empty
   std::string id;      // the ghost's id: custom, or "vanilla.<name>"
   PmGhostRules rules{};
 };
@@ -107,8 +109,8 @@ struct Evidence {
 class Registry {
  public:
   static constexpr int kLowestActor = -1;
-  /// Before a mod's pmmod_start: registration is open, and what is registered from now on is its.
-  void begin_group();
+  /// Before a mod's pmmod_start: registration is open, and what is registered from now on is its, the mod `owner`'s.
+  void begin_group(std::string owner = {});
   /// The answer (mod_agreement.h) the registry gates the mods' rules, journal lines and content on:
   /// rules_for and lines_for answer nothing, and content stays Pending, while this client's mods do not match
   /// the host's list. Null (the default) gates nothing.
@@ -121,9 +123,14 @@ class Registry {
   /// Why this registry refused something the mod registered since begin_group (the first refusal's log line, without
   /// "content: "), or empty. The host keeps a mod with a refusal off (host/mods.h, Group::refusal).
   const std::string& refused_in_group() const { return groupRefusal_; }
-  /// Once every mod has started: drops each ghost that gives an evidence no started mod registered
-  /// (logged), and puts the content in the manifest.
-  void commit();
+  /// What commit dropped: the mod that registered it (empty when begin_group named none) and why, logged.
+  struct Dropped {
+    std::string owner, why;
+  };
+  /// Once every mod has started: drops each ghost that gives an evidence no started mod registered, and the rules on a
+  /// custom ghost no started mod registered, and puts the rest in the manifest. Returns what it dropped: the host keeps
+  /// each owner off and starts the mods again without it, so nothing is dropped from a mod that runs.
+  std::vector<Dropped> commit();
   /// Forgets all content, as when the mods that registered it stop.
   void clear();
   /// The game's GhostType and EvidenceType enums as read from the map (content_ids.h): where custom
@@ -271,6 +278,7 @@ class Registry {
   int master_ = 0;
   int32_t nextHandle_ = 1;
   int32_t groupStart_ = 1;  // the first handle of the mod starting now
+  std::string groupOwner_;  // the id of the mod starting now, or empty
   bool open_ = false;       // a mod is starting: registration is open
   bool committed_ = false;
   uint8_t serial_ = 0;

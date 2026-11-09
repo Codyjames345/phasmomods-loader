@@ -281,7 +281,10 @@ struct PmHostApi {
   void (*log)(const char* line);
   /// A MinHook detour through the host's single MinHook instance, not yet enabled. A target that is
   /// already hooked (by the host or another mod) is chained: the newest detour runs first and its
-  /// `original` reaches the previous one.
+  /// `original` reaches the previous one. Since 2.3 a hook that cannot be made or switched on during a mod's
+  /// pmmod_start keeps that mod off, whatever pmmod_start returns, as every host call that fails then does
+  /// (hook_entry, hook_body, enable_hooks, register_service): the host stops the mod, removes its hooks and
+  /// content, and logs why.
   /// @since Contract 1.0
   bool (*create_hook)(void* target, void* detour, void** original, const char* name);
   /// enable every hook created so far
@@ -303,8 +306,8 @@ struct PmHostApi {
   bool (*peer_has_mod)(int32_t actor, const char* modId);
   /// Named tables of C function pointers that cooperating mods publish for each other. A table must
   /// stay valid for the process lifetime. A name is published once: registering a name already
-  /// registered is refused (logged) and the first table stays. service returns null for a name
-  /// nobody registered.
+  /// registered is refused (logged) and the first table stays; during a mod's pmmod_start that keeps the mod
+  /// off (since 2.3). service returns null for a name nobody registered.
   /// @since Contract 1.0
   void (*register_service)(const char* name, const void* table);
   /// The table a cooperating mod published under `name` with register_service, or null when nobody
@@ -490,8 +493,9 @@ struct PmHostApi {
   /// @name Content
   /// Added in version 2.2: content (sdk/api/content.h). Main thread. A mod registers content only from
   /// its pmmod_start; registration only records a definition. Once every mod has started the host
-  /// settles the content (a ghost whose custom evidence no started mod registered is dropped, logged)
-  /// and puts it into the game. Mods never choose a number: the host numbers custom ghost types from
+  /// settles the content and puts it into the game. A ghost whose custom evidence no started mod registered is
+  /// dropped, and so are rules on a custom ghost no started mod registered; since 2.3 the mod that registered either
+  /// stays off for that start, logged, and the mods start again without it, so nothing is dropped from a mod that runs. Mods never choose a number: the host numbers custom ghost types from
   /// one past the game's largest ghost type, and custom evidence from one past its largest evidence
   /// (both read from the game at startup: 31 and 8 in the audited build), each in byte order of its id,
   /// over the content the room's host has. Content is active only in a private room, on the host, or on a client
@@ -567,7 +571,7 @@ struct PmHostApi {
   /// a handle greater than 0, or 0 when refused (logged with the id and why): a call outside
   /// pmmod_start, a null id or `rules`, a `size` smaller than version 2.2's, an id that is neither
   /// "<mod id>.<name>" nor a vanilla id of the game's enums. Rules on a custom id that no started mod
-  /// registered are dropped once every mod has started (logged). A custom ghost's rules run in a
+  /// registered are dropped once every mod has started, and (since 2.3) the mod that attached them stays off, logged. A custom ghost's rules run in a
   /// contract that loaded while content was active, for the whole contract; a vanilla type's whenever
   /// the contract's ghost acts as it. No rules run outside a private room, nor while this client's mods do
   /// not match the host's list (sdk/runtime/mod_agreement.h). That answer holds from the contract's load until it ends, so a

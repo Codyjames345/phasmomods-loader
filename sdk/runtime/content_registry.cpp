@@ -116,8 +116,9 @@ int32_t index_of(const Map& m, std::string_view id) {
 
 }  // namespace
 
-void Registry::begin_group() {
+void Registry::begin_group(std::string owner) {
   groupStart_ = nextHandle_;
+  groupOwner_ = std::move(owner);
   open_ = true;
   groupRefusal_.clear();
 }
@@ -142,25 +143,31 @@ void Registry::end_group(bool started) {
   if (erased) changed();
 }
 
-void Registry::commit() {
+std::vector<Registry::Dropped> Registry::commit() {
   open_ = false;
+  std::vector<Dropped> dropped;
+  auto drop = [&](const std::string& owner, std::string why) {
+    PM_LOG("content: %s", why.c_str());
+    dropped.push_back({owner, std::move(why)});
+  };
   // Without the game's enums no evidence can be judged, and content stays off anyway.
   if (enums_.read()) std::erase_if(ghosts_, [&](const auto& entry) {
     for (const std::string& e : entry.second.evidence)
       if (!e.empty() && enums_.evidence_value(e) < 0 && !evidence_.count(e)) {
-        PM_LOG("content: the ghost \"%s\" is dropped: no mod that started registered its evidence \"%s\"",
-               entry.first.c_str(), e.c_str());
+        drop(entry.second.owner,
+             "the ghost \"" + entry.first + "\" is dropped: no mod that started registered its evidence \"" + e + "\"");
         return true;
       }
     return false;
   });
   std::erase_if(rules_, [&](const Rules& r) {
     if (r.id.substr(0, kVanillaPrefix.size()) == kVanillaPrefix || ghosts_.count(r.id)) return false;
-    PM_LOG("content: rules on \"%s\" are dropped: no mod that started registered that ghost", r.id.c_str());
+    drop(r.owner, "rules on \"" + r.id + "\" are dropped: no mod that started registered that ghost");
     return true;
   });
   committed_ = true;
   changed();
+  return dropped;
 }
 
 void Registry::clear() {
@@ -280,6 +287,7 @@ int32_t Registry::add_ghost(const PmGhostDef* def) {
   h.number(g.flags);  // its evidence pick depends on them
   g.hash = h.value;
   g.handle = nextHandle_++;
+  g.owner = groupOwner_;
   const int32_t handle = g.handle;
   ghosts_.emplace(g.id, std::move(g));
   return handle;
@@ -336,6 +344,7 @@ int32_t Registry::add_rules(const char* id, const PmGhostRules* rules) {
   }
   Rules r;
   r.handle = nextHandle_++;
+  r.owner = groupOwner_;
   r.id = id;
   r.rules = copy_def(rules);
   rules_.push_back(std::move(r));

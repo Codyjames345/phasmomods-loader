@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -88,17 +89,35 @@ bool save_chosen(const std::vector<std::string>& ids);
 // for a mod besides its hooks (its content): `begin` runs before each pmmod_start and `end` after it,
 // told whether the mod started, so what a failed mod recorded goes with its hooks. `untracked` says a
 // game method's calls could not be tracked (context::tracking_failed): a mod that requires one stays
-// off too, logged, since pm::api::inside would answer it false for ever. `refusal`, asked after each pmmod_start and
-// before `end`, says why the host refused something the mod registered during that start (a ghost while custom content is
-// off, say), or nothing: a mod with a refusal stays off whatever its pmmod_start answered. The host stops it and removes its
-// hooks and content, so no mod has to check what its own registrations returned.
+// off too, logged, since pm::api::inside would answer it false for ever. `begin` is given the mod's id. `refusal`, asked
+// after each pmmod_start and before `end`, says why the host refused something the mod registered during that start (a
+// ghost while custom content is off, say), or nothing. A mod whose start met any failure of the host's stays off whatever
+// its pmmod_start answered: a refusal, a hook that could not be made or switched on (hooks::group_failure), or a host call
+// that failed (start_error). The host stops it and removes its hooks and content, so no mod has to check what its own
+// calls returned.
 struct Group {
-  void (*begin)() = nullptr;
+  void (*begin)(const std::string& id) = nullptr;
   void (*end)(bool started) = nullptr;
   bool (*untracked)(const char* key) = nullptr;
   std::string (*refusal)() = nullptr;
 };
 void start(const PmHostApi* api, const std::vector<std::string>& ids, Group group = {});
+// During a mod's pmmod_start: notes `why` a host call the mod made failed (the first one counts), which keeps that mod
+// off (start, above). Outside a start it does nothing. Main thread.
+void start_error(const std::string& why);
+// After a start: the mod `id`, which started, is to stay off for that start, for `why` (the host dropped its content once
+// every mod had started, say). Logged and kept as its off_reason until a start tries it again. The caller then restarts
+// the mods without it, so the mods that require it stay off with it. Main thread.
+void keep_off(const std::string& id, const std::string& why);
+// Content dropped once every mod had started: its owner's id (empty for none) and why.
+struct Dropped {
+  std::string owner, why;
+};
+// After a start of `ids`: `commit` settles the content and says what it dropped. Each started owner of dropped content is
+// kept off (keep_off, "the host dropped its content (...)") and `restart` starts the mods again without it, then `commit`
+// runs again, until nothing more is dropped. Each round leaves one mod or more off, so it ends. Main thread.
+void settle(std::vector<std::string> ids, const std::function<std::vector<Dropped>()>& commit,
+            const std::function<void(const std::vector<std::string>&)>& restart);
 // Why the last start that tried the mod `id` left it off, for its Mods panel row ("Needs Spectral Flame"), or why its DLL
 // was refused once loaded, chosen or not; empty when it runs or nothing has tried it. A start that does not ask for it, as a
 // room's restart of a few mods does not, leaves its reason.

@@ -2104,6 +2104,29 @@ void missing_entries_withhold_content() {
   CHECK(logged("custom content stays off: these game entries did not resolve"));
 }
 
+// What commit drops it names with the mod that registered it, for the host to keep that mod off (host/mods.h, settle).
+void commit_names_what_it_drops() {
+  g_lines.clear();
+  pm::log::set_sink(&capture, "");
+  registry::Registry r = fresh();
+  const content::GhostDef hydra = ghost("ghosts.hydra", "flames.flame");  // nobody registers flames.flame
+  r.begin_group("ghosts");
+  CHECK(r.add_ghost(&hydra.c_def()) > 0);
+  r.end_group(true);
+  PmGhostRules rules{};
+  rules.size = sizeof rules;
+  r.begin_group("rulers");
+  CHECK(r.add_rules("ghosts.hydra", &rules) > 0 && r.add_rules("vanilla.mare", &rules) > 0);
+  r.end_group(true);
+  const std::vector<registry::Registry::Dropped> dropped = r.commit();
+  CHECK(dropped.size() == 2);
+  CHECK(dropped.size() == 2 && dropped[0].owner == "ghosts" &&
+        dropped[0].why == "the ghost \"ghosts.hydra\" is dropped: no mod that started registered its evidence \"flames.flame\"");
+  CHECK(dropped.size() == 2 && dropped[1].owner == "rulers" &&
+        dropped[1].why == "rules on \"ghosts.hydra\" are dropped: no mod that started registered that ghost");
+  CHECK(logged("content: the ghost \"ghosts.hydra\" is dropped"));
+}
+
 // Content the host has switched off before the mods start is refused at registration, so a mod whose ghost or evidence
 // could never come into play fails its own start and is off, with the reason logged, instead of running without it.
 // Rules and journal lines on the game's own ghosts are not content the host puts into the game, so they still register.
@@ -2196,6 +2219,7 @@ int main() {
   contract_numbers_answer_while_content_is_off();
   missing_entries_withhold_content();
   content_switched_off_refuses_custom_registrations();
+  commit_names_what_it_drops();
   agreement::a_host_without_a_mod_gets_nothing_run();
   agreement::the_hosts_mods_here_run();
   agreement::a_peer_leaving_changes_nothing_mid_contract();

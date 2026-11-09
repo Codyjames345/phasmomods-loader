@@ -124,7 +124,7 @@ size_t g_mark = 0;
 int g_content = 0;
 std::vector<std::string> g_order;
 bool g_runningWhileWithdrawing = false, g_stoppedBeforeCleanup = false;
-void begin_mod() {
+void begin_mod(const std::string& = {}) {
   CHECK(pm::hooks::create(reinterpret_cast<void*>(&target_answer), reinterpret_cast<void*>(&detour_target),
                           reinterpret_cast<void**>(&g_target_original), "target"));
   CHECK(pm::hooks::enable_all());
@@ -210,6 +210,99 @@ void refused_content_keeps_the_mod_off(const fs::path& data) {
   CHECK(pm::mods::started("fake-mod") && g_endedStarted && target_answer(1) == 102);
   pm::mods::stop_all();
   pm::hooks::rollback_to(g_mark);
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// Any failure of the host's during a mod's start keeps it off, whatever its pmmod_start answered: a hook that could not be
+// made, and a host call that failed (here mod_started, standing in for one), each logged with why.
+bool g_failCall = false;
+bool failing_mod_started(const char*) {
+  if (g_failCall) pm::mods::start_error("the service a.b is already registered");
+  return false;
+}
+void host_failures_in_a_start_keep_the_mod_off(const fs::path& data) {
+  pm::log::set_sink(&capture, "");
+  g_mark = pm::hooks::mark();
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  api.mod_started = &failing_mod_started;
+  g_resolved = {"Camera", "GhostAI.UnAppear"};
+
+  // A hook made in the start (the group's begin stands in for the mod) has no target.
+  pm::mods::set_installed(data, fake_install(PM_FAKE_MOD));
+  pm::mods::Group group;
+  group.begin = [](const std::string& id) {
+    CHECK(id == "fake-mod");
+    CHECK(!pm::hooks::create(nullptr, reinterpret_cast<void*>(&detour_target), nullptr, "lost"));
+  };
+  g_lines.clear();
+  pm::mods::start(&api, {"fake-mod"}, group);
+  CHECK(!pm::mods::started("fake-mod"));
+  CHECK(logged("mods: fake-mod stays off: a hook could not be made (lost has no target)"));
+  CHECK(pm::mods::off_reason("fake-mod") == "It did not start. mods.log says why");
+  pm::mods::start(&api, {"fake-mod"});  // a start with no failure, after one: it starts
+  CHECK(pm::mods::started("fake-mod"));
+  pm::mods::stop_all();
+
+  // A host call that failed during the start, of a mod that asks the host whether another mod runs.
+  pm::mods::set_installed(data, {{{PM_FAKE_MOD_OPTIONAL, fake_manifest("fake-optional")}}, {}});
+  g_failCall = true;
+  g_lines.clear();
+  pm::mods::start(&api, {"fake-optional"});
+  CHECK(!pm::mods::started("fake-optional"));
+  CHECK(logged("mods: fake-optional stays off: a call to the host failed (the service a.b is already registered)"));
+  g_failCall = false;
+  pm::mods::start_error("outside a start");  // counts for nothing
+  pm::mods::start(&api, {"fake-optional"});
+  CHECK(pm::mods::started("fake-optional"));
+  pm::mods::stop_all();
+  pm::hooks::rollback_to(g_mark);
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// Content the host drops once every mod has started keeps its owner off: the mods start again without it, and again while
+// that drops more (a ghost whose evidence came from the mod just left off), until nothing is dropped.
+void dropped_content_keeps_its_owner_off(const fs::path& data) {
+  pm::log::set_sink(&capture, "");
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  api.mod_started = &pm::mods::started;  // fake-optional asks it as it starts
+  g_resolved = {"Camera", "GhostAI.UnAppear"};
+  pm::mods::set_installed(data, {{{PM_FAKE_MOD_OPTIONAL, fake_manifest("fake-optional")}, {PM_FAKE_MOD, fake_manifest()}}, {}});
+  const std::vector<std::string> both{"fake-mod", "fake-optional"};
+  pm::mods::start(&api, both);
+  CHECK(pm::mods::started("fake-mod") && pm::mods::started("fake-optional"));
+  int round = 0;
+  std::vector<std::vector<std::string>> restarted;
+  g_lines.clear();
+  pm::mods::settle(
+      both,
+      [&]() -> std::vector<pm::mods::Dropped> {
+        ++round;
+        if (round == 1)  // one owned by nobody, one by a mod not running: neither is anyone's to keep off
+          return {{"fake-mod", "the ghost \"fake-mod.a\" is dropped: no mod that started registered its evidence \"x.e\""},
+                  {"", "rules on \"x.g\" are dropped: no mod that started registered that ghost"},
+                  {"nobody", "the ghost \"nobody.n\" is dropped"}};
+        if (round == 2) return {{"fake-optional", "the ghost \"fake-optional.b\" is dropped: its evidence went with fake-mod"}};
+        return {};
+      },
+      [&](const std::vector<std::string>& ids) {
+        restarted.push_back(ids);
+        pm::mods::restart(&api, ids, {}, {});
+      });
+  CHECK(round == 3 && restarted.size() == 2);
+  CHECK(restarted.size() == 2 && restarted[0] == std::vector<std::string>{"fake-optional"} && restarted[1].empty());
+  CHECK(!pm::mods::started("fake-mod") && !pm::mods::started("fake-optional"));
+  CHECK(logged("mods: fake-mod stays off: the host dropped its content (the ghost \"fake-mod.a\" is dropped"));
+  CHECK(logged("mods: fake-optional stays off: the host dropped its content (the ghost \"fake-optional.b\""));
+  CHECK(!logged("mods: nobody stays off"));
+  CHECK(pm::mods::off_reason("fake-mod") == "It did not start. mods.log says why" &&
+        pm::mods::off_reason("fake-optional") == "It did not start. mods.log says why");
+  pm::mods::start(&api, both);  // a later start tries them again
+  CHECK(pm::mods::started("fake-mod") && pm::mods::off_reason("fake-mod").empty());
+  pm::mods::stop_all();
   pm::log::set_sink(nullptr, nullptr);
 }
 
@@ -995,6 +1088,8 @@ int main() {
   mod_with_unresolved_requirement_stays_off(data);
   suspend_and_resume_in_a_room(data);
   refused_content_keeps_the_mod_off(data);
+  host_failures_in_a_start_keep_the_mod_off(data);
+  dropped_content_keeps_its_owner_off(data);
   mod_built_for_2_0_still_loads(data);
   mod_built_for_2_1_still_loads(data);
   mod_built_for_2_2_still_loads(data);

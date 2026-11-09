@@ -30,6 +30,8 @@ fs::path g_dataDirectory;
 fs::path g_buildRecords;
 std::vector<std::string> g_startOrder;  // the running mods' ids in the order they started
 std::vector<moddeps::LeftOut> g_off;   // the chosen mods the last start left off, with why
+bool g_starting = false;               // a mod's pmmod_start runs
+std::string g_startError;              // the first host call that failed during it
 
 /** The folder this host DLL was loaded from. */
 fs::path host_folder() {
@@ -320,11 +322,18 @@ void start(const PmHostApi* api, const std::vector<std::string>& ids, Group grou
       return false;
     }
     hooks::begin_group();
-    if (group.begin) group.begin();
+    if (group.begin) group.begin(id);
+    g_startError.clear();
+    g_starting = true;
     m.started = m.start(api);
-    // What the host refused of the mod's content keeps it off, whatever its start answered: it never runs half there.
-    const std::string refused = group.refusal ? group.refusal() : std::string();
-    if (m.started && !refused.empty()) {
+    g_starting = false;
+    // Any failure of the host's during the start keeps the mod off, whatever its start answered: it never runs half there.
+    std::string failure;
+    if (const std::string hook = hooks::group_failure(); !hook.empty()) failure = "a hook could not be made (" + hook + ")";
+    else if (!g_startError.empty()) failure = "a call to the host failed (" + g_startError + ")";
+    else if (const std::string refused = group.refusal ? group.refusal() : std::string(); !refused.empty())
+      failure = "the host refused its content (" + refused + ")";
+    if (m.started && !failure.empty()) {
       m.stop();
       m.started = false;
     }
@@ -332,7 +341,7 @@ void start(const PmHostApi* api, const std::vector<std::string>& ids, Group grou
     if (!m.started) {
       hooks::rollback_group();
       row = "It did not start. mods.log says why";
-      log = refused.empty() ? "its pmmod_start failed" : "the host refused its content (" + refused + ")";
+      log = failure.empty() ? "its pmmod_start failed" : failure;
       return false;
     }
     g_startOrder.push_back(id);
@@ -360,6 +369,31 @@ bool started(const char* id) {
   if (!id) return false;
   const Mod* m = find_mod(id);
   return m && m->started;
+}
+
+void start_error(const std::string& why) {
+  if (g_starting && g_startError.empty()) g_startError = why;
+}
+
+void keep_off(const std::string& id, const std::string& why) {
+  PM_LOG("mods: %s stays off: %s", id.c_str(), why.c_str());
+  std::erase_if(g_off, [&](const moddeps::LeftOut& o) { return o.id == id; });
+  g_off.push_back({id, "It did not start. mods.log says why", why, {}});
+}
+
+void settle(std::vector<std::string> ids, const std::function<std::vector<Dropped>()>& commit,
+            const std::function<void(const std::vector<std::string>&)>& restart) {
+  for (;;) {
+    std::vector<std::string> off;
+    for (const Dropped& d : commit()) {
+      if (d.owner.empty() || !started(d.owner.c_str()) || std::find(off.begin(), off.end(), d.owner) != off.end()) continue;
+      keep_off(d.owner, "the host dropped its content (" + d.why + ")");
+      off.push_back(d.owner);
+    }
+    if (off.empty()) return;
+    std::erase_if(ids, [&](const std::string& id) { return std::find(off.begin(), off.end(), id) != off.end(); });
+    restart(ids);
+  }
 }
 
 void tick_all() {
