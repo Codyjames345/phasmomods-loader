@@ -1133,8 +1133,8 @@ void play(void* ghost) {
       const int i = nearest_point(exits, me ? at_of(me) : at_of(ghost));
       voice::play_index(set, s.lineIndex, vector(i >= 0 ? exits[static_cast<size_t>(i)] : at_of(ghost)),
                         kDoorLineFullVolume);
-    } else {
-      voice::play_index(set, s.lineIndex, vector(at_of(ghost)));
+    } else {  // from its head, moving with it as it runs (user, 2026-11-09: the lines stayed where they began)
+      voice::play_index(set, s.lineIndex, vector(at_of(ghost)), 0.0f, figure::head());
     }
   }
   // A footstep each stride it moves, on this client, from its own view of the ghost's movement.

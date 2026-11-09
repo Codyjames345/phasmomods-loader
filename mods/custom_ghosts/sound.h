@@ -14,5 +14,8 @@ bool available();  // true while the mod runs
 // fullVolumeWithin: metres within which it plays at full volume, falling off beyond (AudioSource.minDistance); 0 or less
 // keeps Unity's own 1 m.
 void play_at(void* clip, phasmo::Vector3 at, float volume, float fullVolumeWithin = 0.0f);
+// The same, from an object made a child of the Transform `parent`, at its origin, so the sound moves with it (a voice
+// with the one speaking). It ends with the clip, or with `parent` when that is destroyed first.
+void play_on(void* clip, void* parent, float volume, float fullVolumeWithin = 0.0f);
 
 }  // namespace pm::custom::sound

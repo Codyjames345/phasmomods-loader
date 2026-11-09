@@ -460,6 +460,8 @@ float clip_turn() {
 
 phasmo::Vector3 clip_step() { return check() ? phasmo::Animator::get_deltaPosition(g.animator) : phasmo::Vector3{}; }
 
+void* head() { return check() ? bone(phasmo::HumanBodyBones::Head()) : nullptr; }
+
 bool ready() { return check(); }
 
 }  // namespace pm::custom::squatter::figure

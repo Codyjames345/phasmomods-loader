@@ -212,6 +212,8 @@ void reach(Hand hand, phasmo::Vector3 at, float weight);
  * look-at solver, as games turn a character's head to what it attends to. Every frame; 0 lets it go.
  */
 void look_at(phasmo::Vector3 at, float weight);
+/** The figure's head bone, a Transform, which its voice follows; null when the figure is not built. */
+void* head();
 /** Whether the figure is built and still in the scene (a scene load destroys it, and its own assets with it). */
 bool ready();
 
