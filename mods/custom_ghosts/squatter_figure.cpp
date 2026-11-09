@@ -18,6 +18,7 @@
 #include "quat.h"
 #include "runtime.h"
 #include "sheet_mesh.h"
+#include "squatter_ragdoll.h"
 
 namespace pm::custom::squatter::figure {
 namespace {
@@ -118,6 +119,7 @@ void fail(const char* step, const std::string& why) {
 
 // Destroys the figure's own assets, and its objects when the scene has not already.
 void clear() {
+  ragdoll::destroy();
   api::destroy_cloth(g.cloth);
   if (api::alive(g.material)) phasmo::Object::Destroy(g.material, 0.0f);
   if (api::alive(g.root)) phasmo::Object::Destroy(g.root, 0.0f);
@@ -438,7 +440,9 @@ void create(phasmo::Vector3 at) {
   // (user, 2026-11-09); its bones still shape the sheet. The head still draws, since it is a person under a bedsheet
   // (user, 2026-11-09). The sheet, added next, draws.
   api::hide_renderers(g.root, kShownParts);
-  if (!build_sheet() || !build_ik()) clear();
+  if (!build_sheet() || !build_ik()) return clear();
+  // The ragdoll a fall turns physical, built standing; without it (logged) a fall plays its clip as recorded.
+  ragdoll::build(g.animator);
 }
 
 void destroy() {
