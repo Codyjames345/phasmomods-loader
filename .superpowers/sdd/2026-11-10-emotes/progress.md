@@ -94,3 +94,9 @@ Pre-flight (consumer <- producer):
 - RESUMED after restart. Ruling: Player.IsVRPlayer is abstract (no code), dropped; VR is read as VRPlayer::type.is(player) - cost if wrong: none, same answer.
 - Ruling: the inflated set_value's float argument is "@Single" (the resolver canonicalises "Single" to "float", which no model type is named).
 Tasks 1-6: complete (commit f353d9e, tests: validate.ps1 -> 83/83, docs and scripts pass; gamecheck -Expect -> exit 0, 1817 entries, 0 missing)
+- Task 7: Ruling: a key's actions live in an InputActionAsset of the mod's own (ScriptableObject.CreateInstance + AddActionMap + AddAction), not standalone actions: Unity's InputActionReference refuses an action outside an asset (the game's metadata holds "must be part of an InputActionAsset") - cost if wrong: none.
+- Task 7: Ruling: the VR default is not checked against the game at run time (XR Interaction actions sit in assets no keybinds row or player control reaches); the left PrimaryButton was read unbound from the game's data - cost if wrong: an XRI action also fires on X while the wheel opens.
+- Task 7: Ruling: the SDK takes the save file and owner from the mod (begin_keys) rather than reading pm::mod glue, so tests run without the host contract - cost if wrong: none.
+- Ruling: validate.ps1 (about five minutes) runs at milestones (after Part 2, after the mod, at the end), each task runs its own tests plus map/game_map/gamecheck - cost if wrong: a break in another area is found a few tasks later.
+- Task 7: the row test was added after the implementation it covers (it passed first time); the other keybinds tests went red then green.
+Task 7: complete (commit 37d2f40, tests: keybinds_test -> passed, 9 cases)
