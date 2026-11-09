@@ -222,14 +222,32 @@ inline constexpr pm::sdk::EntryDesc InputActionType_Button{.key = "InputActionTy
                                                           .kind = pm::sdk::Kind::EnumValue, .owner = "InputActionType",
                                                           .name = "Button"};
 
-inline constexpr const char* InputAction_ctor_params[] = {"string", "InputActionType", "string",
-                                                          "string", "string", "string"};
+/// The Input System's helpers that build actions in code, a static class. Unity refuses an InputActionReference to an
+/// action outside an InputActionAsset ("must be part of an InputActionAsset"), so a mod's action for a keybinds row
+/// lives in an asset of its own (ScriptableObject.CreateInstance), a map and an action added by these. Inferred: the
+/// Input System's documented API.
+inline constexpr pm::sdk::EntryDesc InputActionSetupExtensions{
+    .key = "InputActionSetupExtensions", .name = "InputActionSetupExtensions", .assembly = "Unity.InputSystem",
+    .ns = "UnityEngine.InputSystem"};
 
-/// The constructor of a standalone action (name, type, one binding path, interactions, processors, expected control
-/// type), which belongs to no map; enable it before reading it. Inferred: the Input System's documented API.
-inline constexpr pm::sdk::EntryDesc InputAction_ctor{.key = "InputAction.ctor", .kind = pm::sdk::Kind::Method,
-                                                    .owner = "InputAction", .name = ".ctor",
-                                                    .params = InputAction_ctor_params};
+inline constexpr const char* InputActionSetupExtensions_AddActionMap_params[] = {"InputActionAsset", "string"};
+
+/// AddActionMap(asset, name): a new map in the asset, returned. Static; another overload takes a map. Inferred: the
+/// Input System's documented API.
+inline constexpr pm::sdk::EntryDesc InputActionSetupExtensions_AddActionMap{
+    .key = "InputActionSetupExtensions.AddActionMap", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic,
+    .owner = "InputActionSetupExtensions", .name = "AddActionMap", .type = "InputActionMap",
+    .params = InputActionSetupExtensions_AddActionMap_params};
+
+inline constexpr const char* InputActionSetupExtensions_AddAction_params[] = {
+    "InputActionMap", "string", "InputActionType", "string", "string", "string", "string", "string"};
+
+/// AddAction(map, name, type, binding, interactions, processors, groups, expectedControlLayout): a new action in the
+/// map with one binding to the path given, returned; the strings after the binding may be null. Static. Inferred: the
+/// Input System's documented API.
+inline constexpr pm::sdk::EntryDesc InputActionSetupExtensions_AddAction{
+    .key = "InputActionSetupExtensions.AddAction", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic,
+    .owner = "InputActionSetupExtensions", .name = "AddAction", .params = InputActionSetupExtensions_AddAction_params};
 
 /// Whether the action was pressed in this frame. Inferred: the Input System's documented API.
 inline constexpr pm::sdk::EntryDesc InputAction_WasPressedThisFrame{
@@ -245,11 +263,6 @@ inline constexpr pm::sdk::EntryDesc InputAction_WasReleasedThisFrame{
 inline constexpr pm::sdk::EntryDesc InputAction_IsPressed{.key = "InputAction.IsPressed", .kind = pm::sdk::Kind::Method,
                                                          .owner = "InputAction", .name = "IsPressed"};
 
-/// A standalone action's own bindings, an InputBinding[] (an action in a map keeps its bindings in the map). Inferred:
-/// the Input System's source.
-inline constexpr pm::sdk::EntryDesc InputAction_m_SingletonActionBindings{
-    .key = "InputAction.m_SingletonActionBindings", .kind = pm::sdk::Kind::Field, .owner = "InputAction",
-    .name = "m_SingletonActionBindings"};
 
 /// The Input System's binding override helpers, a static class. Inferred: the Input System's documented API.
 inline constexpr pm::sdk::EntryDesc InputActionRebindingExtensions{
@@ -278,6 +291,12 @@ inline constexpr pm::sdk::EntryDesc InputActionReference_Create{
     .key = "InputActionReference.Create", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic,
     .owner = "InputActionReference", .name = "Create", .params = InputActionReference_InputAction};
 
+/// The action a reference names, found in its asset. Inferred: the Input System's documented API.
+inline constexpr pm::sdk::EntryDesc InputActionReference_get_action{.key = "InputActionReference.get_action",
+                                                                   .kind = pm::sdk::Kind::Method,
+                                                                   .owner = "InputActionReference",
+                                                                   .name = "get_action"};
+
 /// One row of the game's keybinds menu (Assembly-CSharp, global namespace): Unity's rebinding sample. Its button starts
 /// an interactive rebind of the action it references, and it shows the binding's current key. Its fields keep their
 /// real names. Inferred: from the class dump.
@@ -298,6 +317,22 @@ inline constexpr pm::sdk::EntryDesc RebindActionUI_m_BindingId{.key = "RebindAct
 inline constexpr pm::sdk::EntryDesc RebindActionUI_m_ActionLabel{.key = "RebindActionUI.m_ActionLabel",
                                                                 .kind = pm::sdk::Kind::Field,
                                                                 .owner = "RebindActionUI", .name = "m_ActionLabel"};
+
+inline constexpr const char* RebindActionUI_InputActionReference[] = {"InputActionReference"};
+inline constexpr const char* RebindActionUI_string[] = {"string"};
+
+/// Sets the row's action and shows its name and current binding (the sample's setter: it updates the label and the
+/// binding text). Inferred: from the class dump and Unity's rebinding sample.
+inline constexpr pm::sdk::EntryDesc RebindActionUI_set_actionReference{
+    .key = "RebindActionUI.set_actionReference", .kind = pm::sdk::Kind::Method, .owner = "RebindActionUI",
+    .name = "set_actionReference", .params = RebindActionUI_InputActionReference};
+
+/// Sets the id of the binding the row rebinds, and shows it. Inferred: from the class dump and Unity's rebinding
+/// sample.
+inline constexpr pm::sdk::EntryDesc RebindActionUI_set_bindingId{.key = "RebindActionUI.set_bindingId",
+                                                                 .kind = pm::sdk::Kind::Method,
+                                                                 .owner = "RebindActionUI", .name = "set_bindingId",
+                                                                 .params = RebindActionUI_string};
 
 /// A gamepad (Unity.InputSystem). Inferred: the Input System's documented API.
 inline constexpr pm::sdk::EntryDesc Gamepad{.key = "Gamepad", .name = "Gamepad", .assembly = "Unity.InputSystem",
@@ -362,20 +397,12 @@ struct InputAction {
   static constexpr pm::api::Method<pm::map::InputAction_Enable, void(void*)> Enable{};
   /// Disable(action): disables it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::InputAction_Disable, void(void*)> Disable{};
-  /// The type: make() for a new action, then ctor. Unresolved: null.
-  static constexpr pm::api::Type<pm::map::InputAction> type{};
-  /// ctor(action, name, type, binding, interactions, processors, expectedControlType): strings may be null; type is an
-  /// InputActionType number. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::InputAction_ctor, void(void*, void*, int32_t, void*, void*, void*, void*)>
-      ctor{};
   /// WasPressedThisFrame(action). Unresolved: false.
   static constexpr pm::api::Method<pm::map::InputAction_WasPressedThisFrame, bool(void*)> WasPressedThisFrame{};
   /// WasReleasedThisFrame(action). Unresolved: false.
   static constexpr pm::api::Method<pm::map::InputAction_WasReleasedThisFrame, bool(void*)> WasReleasedThisFrame{};
   /// IsPressed(action). Unresolved: false.
   static constexpr pm::api::Method<pm::map::InputAction_IsPressed, bool(void*)> IsPressed{};
-  /// A standalone action's InputBinding[]: m_SingletonActionBindings.get(action). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputAction_m_SingletonActionBindings, void*> m_SingletonActionBindings{};
 };
 
 /// What an action reads.
@@ -392,10 +419,23 @@ struct InputActionRebindingExtensions {
       ApplyBindingOverride{};
 };
 
+/// Building a mod's own actions.
+struct InputActionSetupExtensions {
+  /// AddActionMap(asset, name): the new InputActionMap. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::InputActionSetupExtensions_AddActionMap, void*(void*, void*)> AddActionMap{};
+  /// AddAction(map, name, type, binding, interactions, processors, groups, layout): the new InputAction. Unresolved:
+  /// null.
+  static constexpr pm::api::Method<pm::map::InputActionSetupExtensions_AddAction,
+                                   void*(void*, void*, int32_t, void*, void*, void*, void*, void*)>
+      AddAction{};
+};
+
 /// A reference to an action.
 struct InputActionReference {
   /// Create(action): a new reference to it. Unresolved: null.
   static constexpr pm::api::Method<pm::map::InputActionReference_Create, void*(void*)> Create{};
+  /// get_action(reference): the InputAction, or null. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::InputActionReference_get_action, void*(void*)> get_action{};
 };
 
 /// A row of the game's keybinds menu.
@@ -408,6 +448,11 @@ struct RebindActionUI {
   static constexpr pm::api::Field<pm::map::RebindActionUI_m_BindingId, void*> m_BindingId{};
   /// Its label, a TMP_Text: m_ActionLabel.get(row). Unresolved: null.
   static constexpr pm::api::Field<pm::map::RebindActionUI_m_ActionLabel, void*> m_ActionLabel{};
+  /// set_actionReference(row, reference). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::RebindActionUI_set_actionReference, void(void*, void*)>
+      set_actionReference{};
+  /// set_bindingId(row, id): id a string. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::RebindActionUI_set_bindingId, void(void*, void*)> set_bindingId{};
 };
 
 /// A gamepad.
@@ -431,6 +476,8 @@ struct InputActionMap {
 
 /// A set of action maps. `asset` below is the InputActionAsset.
 struct InputActionAsset {
+  /// The type: type_object() for ScriptableObject::CreateInstance. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::InputActionAsset> type{};
   /// Its action maps, an InputActionMap[]: m_ActionMaps.get(asset). Unresolved: null.
   static constexpr pm::api::Field<pm::map::InputActionAsset_m_ActionMaps, void*> m_ActionMaps{};
 };
