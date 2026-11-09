@@ -4,6 +4,8 @@
 #include <functional>
 #include <vector>
 
+#include "Transform.h"
+
 // The Squatter's way out (sdk/systems/doors.md): the map's exits as the game holds them, the living players still
 // within them, the exits' lock, and a player's try at a locked exit. Main thread.
 //  - The exits are LevelController.huntingDoors and every map variation's SmallMapVariation.huntingDoorsToLock: on
@@ -80,6 +82,28 @@ int relock(uint64_t now);
 // Milliseconds the master waits for a door's view to become its own before it gives the open up. A starting value, as
 // carry.h's kOwnershipWaitMs, not a game value.
 inline constexpr uint64_t kOpenWaitMs = 2000;
+
+// A game value: how near its shut angle a door's leaf reads shut, in degrees, in HingeDoor.Update's own snap test.
+inline constexpr float kShutDegrees = 7.0f;
+
+/**
+ * Whether a leaf at `angle` degrees on its hinge axis reads shut, as HingeDoor.Update tests it before it snaps a still
+ * door shut: within kShutDegrees of the door's shut angle (Door.closedAngle, `shut`), or, for a shut angle above 180,
+ * within it the other way round. Door.closed is not this: the game sets it when a door snaps shut and clears it only on
+ * a grab or the contract-start opener's RPC, so a door its physics swung open still reads closed.
+ */
+inline bool reads_shut(float angle, float shut) {
+  const float d = angle > shut ? angle - shut : shut - angle;
+  return d < kShutDegrees || (shut - kShutDegrees < d && shut > 180.0f);
+}
+
+/**
+ * The leaf's angle about its hinge from its local euler angles, `euler` (Transform.localEulerAngles), as the game's
+ * opener reads the hinge's axis (HingeDoor.hingeAxis): x for `axisX` (Axis.X), z for `axisZ` (Axis.Z), else y.
+ */
+inline float leaf_angle(phasmo::Vector3 euler, int32_t axis, int32_t axisX, int32_t axisZ) {
+  return axis == axisX ? euler.x : axis == axisZ ? euler.z : euler.y;
+}
 
 /** What a quiet open came to. */
 enum class Opening {

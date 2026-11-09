@@ -18,6 +18,7 @@
 #include "Player.h"
 #include "Props.h"
 #include "check.h"
+#include "UnityObject.h"
 #include "fake_game.h"
 #include "runtime.h"
 #include "squatter_door.h"
@@ -47,7 +48,10 @@ constexpr int32_t kRoomKind = 0x08;
 constexpr int32_t kValuesDifficulty = 0x08, kDifficultyFriendly = 0x08;
 constexpr int32_t kInfoSender = 0x08, kActorNumber = 0x08;
 constexpr int32_t kDoorGrabbable = 0x08, kDoorLocked = 0x09;  // Door.grabbable and Door.locked
-constexpr int32_t kDoorShut = 0x0A, kDoorKind = 0x0C, kDoorInteract = 0x10, kDoorView = 0x18;  // the quiet opener's
+constexpr int32_t kDoorKind = 0x0C, kDoorInteract = 0x10, kDoorView = 0x18;  // the quiet opener's
+constexpr int32_t kDoorAxis = 0x20, kDoorShutAngle = 0x24;  // HingeDoor.hingeAxis and Door.closedAngle
+constexpr int32_t kAxisX = 1, kAxisY = 2, kAxisZ = 4;  // made-up as the game's Axis flags read: the code reads them
+std::map<void*, phasmo::Vector3> g_euler;  // each door leaf's Transform.localEulerAngles
 constexpr int32_t kInteractInUse = 0x08, kViewMine = 0x08;  // PhotonObjectInteract.inUse, PhotonView.IsMine
 // Made-up numbers for DoorKind's None, Main and Secondary: the code reads None's from the map.
 constexpr int32_t kKindNone = 20, kKindMain = 21, kKindSecondary = 22;
@@ -124,6 +128,10 @@ void fake_hunting_close_networked(void*, void*, const void*) {
   g_calls.push_back("HuntingCloseDoorNetworked");
 }
 bool g_throwInWish = false;
+
+// A door's Transform is the door itself here, and its euler angles are the test's.
+void* fake_own_transform(void* component, const void*) { return component; }
+phasmo::Vector3 fake_euler(void* t, const void*) { return g_euler[t]; }
 
 // The quiet opener's game side: HingeDoor and SlideDoor classes, the opener, and the door's view.
 char g_hingeClass, g_slideClass;
@@ -286,7 +294,13 @@ void start(bool master = true, bool friendly = false) {
   fake::field(map::Door_locked, kDoorLocked);
   fake::type(map::HingeDoor, &g_hingeClass);
   fake::method(map::HingeDoor_OpenDoor, reinterpret_cast<void*>(&fake_open));
-  fake::field(map::Door_closed, kDoorShut);
+  fake::field(map::HingeDoor_hingeAxis, kDoorAxis);
+  fake::field(map::Door_closedAngle, kDoorShutAngle);
+  fake::value(map::Axis_X, kAxisX);
+  fake::value(map::Axis_Z, kAxisZ);
+  fake::method(map::Component_get_transform, reinterpret_cast<void*>(&fake_own_transform));
+  fake::method(map::Transform_get_localEulerAngles, reinterpret_cast<void*>(&fake_euler));
+  g_euler.clear();
   fake::field(map::Door_kind, kDoorKind);
   fake::field(map::Door_interact, kDoorInteract);
   fake::field(map::Door_view, kDoorView);
@@ -774,11 +788,36 @@ void plain_door(Obj& d, Obj& use, Obj& view, bool mine = true) {
   d = use = view = Obj{};
   d.klass = &g_hingeClass;
   at<int32_t>(d, kDoorKind) = kKindNone;
-  at<bool>(d, kDoorShut) = true;
+  at<int32_t>(d, kDoorAxis) = kAxisY;
+  at<float>(d, kDoorShutAngle) = 90.0f;
+  g_euler[&d] = {0, 90.0f, 0};  // its leaf at its shut angle
   at<bool>(d, kDoorGrabbable) = true;
   at<void*>(d, kDoorInteract) = &use;
   at<void*>(d, kDoorView) = &view;
   at<bool>(view, kViewMine) = mine;
+}
+
+// A door reads shut as the game's own snap test reads it (HingeDoor.Update): its leaf within 7 degrees of
+// Door.closedAngle on its hinge axis, or, for a shut angle above 180, that far round the other way. Door.closed is not
+// it: the game sets it when a door snaps shut and clears it on a grab or the contract-start opener's RPC, so a door
+// swung open by its physics still reads closed (user, 2026-11-09: the Squatter reopened an open door every second).
+void a_door_reads_shut_by_its_leaf_angle() {
+  CHECK(door::reads_shut(90.0f, 90.0f) && door::reads_shut(96.9f, 90.0f) && door::reads_shut(83.1f, 90.0f));
+  CHECK(!door::reads_shut(97.1f, 90.0f) && !door::reads_shut(150.0f, 90.0f));
+  CHECK(door::reads_shut(1.0f, 359.0f));    // round the other way
+  CHECK(!door::reads_shut(1.0f, 120.0f));   // only for a shut angle above 180
+  CHECK(door::leaf_angle({10, 20, 30}, kAxisX, kAxisX, kAxisZ) == 10.0f);
+  CHECK(door::leaf_angle({10, 20, 30}, kAxisZ, kAxisX, kAxisZ) == 30.0f);
+  CHECK(door::leaf_angle({10, 20, 30}, kAxisY, kAxisX, kAxisZ) == 20.0f);
+  // Through the game: a plain door at its shut angle may open; swung open, it may not, whatever Door.closed says.
+  start();
+  plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
+  CHECK(door::may_open(&g_kitchen));
+  g_euler[&g_kitchen].y = 150.0f;
+  CHECK(!door::may_open(&g_kitchen));
+  at<int32_t>(g_kitchen, kDoorAxis) = kAxisZ;  // the hinge's own axis is what counts
+  g_euler[&g_kitchen] = {0, 150.0f, 90.0f};
+  CHECK(door::may_open(&g_kitchen));
 }
 
 // On the master, whose view it is (a scene door's view starts the master's), a shut plain door opens at once with the
@@ -857,7 +896,7 @@ void only_a_door_the_game_would_open_opens() {
   const Change changes[] = {
       [] { g_kitchen.klass = &g_slideClass; },                       // another kind of door
       [] { at<int32_t>(g_kitchen, kDoorKind) = kKindSecondary; },    // a key's door
-      [] { at<bool>(g_kitchen, kDoorShut) = false; },                // already open
+      [] { g_euler[&g_kitchen].y = 150.0f; },                         // already open
       [] { at<void*>(g_kitchen, kDoorInteract) = nullptr; },         // no interact
       [] { at<bool>(g_kitchenUse, kInteractInUse) = true; },         // a player's hand or a ghost's force
       [] { at<bool>(g_kitchen, kDoorLocked) = true; },               // the paw's timed lock
@@ -886,7 +925,7 @@ void a_waiting_open_is_given_up_when_the_door_changes() {
     CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Waiting);
     if (grabbed) {
       at<bool>(g_kitchenUse, kInteractInUse) = true;
-      at<bool>(g_kitchen, kDoorShut) = false;
+      g_euler[&g_kitchen].y = 150.0f;
     } else {
       g_master = false;
     }
@@ -928,7 +967,8 @@ void a_missing_entry_fails_the_start() {
                                             &map::MonkeyPaw_OpenExitsWish,
                                             &map::Door_HuntingCloseDoorNetworked, &map::Door_grabbable,
                                             &map::Door_locked, &map::HingeDoor_OpenDoor,
-                                            &map::HingeDoor, &map::Door_closed, &map::Door_kind,
+                                            &map::HingeDoor, &map::Door_closedAngle, &map::HingeDoor_hingeAxis,
+                                            &map::Transform_get_localEulerAngles, &map::Door_kind,
                                             &map::Door_interact, &map::Door_view, &map::DoorKind_None,
                                             &map::PhotonObjectInteract_inUse, &map::PhotonView_get_IsMine,
                                             &map::PhotonView_RequestOwnership}) {
@@ -942,6 +982,7 @@ void a_missing_entry_fails_the_start() {
 }  // namespace
 
 int main() {
+  a_door_reads_shut_by_its_leaf_angle();
   locks_every_exit_once();
   a_master_not_the_first_actor_sends_no_lock();
   counts_only_living_inside();

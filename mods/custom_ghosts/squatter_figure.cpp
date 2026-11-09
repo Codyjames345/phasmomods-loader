@@ -21,8 +21,11 @@ constexpr const char* kController = "assets/squatter.controller";
 // How the sheet sits and moves: starting values, judged with the user in game.
 constexpr float kHeadCentreAboveBone = 0.08f;  // the head sphere's centre above the head bone, metres
 const api::ClothSettings kCloth{true, 0.1f, 1.0f, 0.2f};
-// The spheres the sheet rests on besides the head, from the engine test: chest, spine, hips and both upper arms.
-constexpr float kChest = 0.19f, kSpine = 0.17f, kHips = 0.18f, kArm = 0.08f;
+// The spheres the sheet rests on besides the head, so the body never shows through it (user, 2026-11-09: the sheet was
+// too thin and the legs and arms came through): a little larger than the body there, which gives the cloth its
+// thickness, on the torso, neck, shoulders, both arms and both legs. Starting values, judged with the user in game.
+constexpr float kChest = 0.24f, kSpine = 0.22f, kHips = 0.22f, kNeck = 0.09f, kShoulder = 0.10f;
+constexpr float kArm = 0.10f, kForearm = 0.08f, kThigh = 0.12f, kShin = 0.09f;
 // The floor the sheet rests on: Cloth collides only with spheres and capsules, so a sphere this large lies under the
 // feet, its top level with them. Across the sheet's spread (about 0.6 m) its surface falls only a few centimetres, so the
 // hem settles on the floor rather than through it (user, 2026-11-09: it showed through the ceiling below).
@@ -98,6 +101,15 @@ bool build_sheet() {
       {bone(phasmo::HumanBodyBones::Hips()), kHips, none},
       {bone(phasmo::HumanBodyBones::LeftUpperArm()), kArm, none},
       {bone(phasmo::HumanBodyBones::RightUpperArm()), kArm, none},
+      {bone(phasmo::HumanBodyBones::Neck()), kNeck, none},
+      {bone(phasmo::HumanBodyBones::LeftShoulder()), kShoulder, none},
+      {bone(phasmo::HumanBodyBones::RightShoulder()), kShoulder, none},
+      {bone(phasmo::HumanBodyBones::LeftLowerArm()), kForearm, none},
+      {bone(phasmo::HumanBodyBones::RightLowerArm()), kForearm, none},
+      {bone(phasmo::HumanBodyBones::LeftUpperLeg()), kThigh, none},
+      {bone(phasmo::HumanBodyBones::RightUpperLeg()), kThigh, none},
+      {bone(phasmo::HumanBodyBones::LeftLowerLeg()), kShin, none},
+      {bone(phasmo::HumanBodyBones::RightLowerLeg()), kShin, none},
       // The figure's root is at its feet, and follows the ghost's position each frame (place).
       {phasmo::GameObject::get_transform(g.root), kFloorRadius, {0, -kFloorRadius, 0}}};
   if (!api::add_cloth(anchor, mesh, material, kCloth, spheres, g.cloth, &why)) return fail("cloth", why), false;

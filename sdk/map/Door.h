@@ -347,7 +347,9 @@ inline constexpr pm::sdk::Fact Door_closed_facts[] = {
 /// Whether the door reads shut, on this client: NetworkedSyncCloseDoor, the RPC Door.LockDoor sends, sets it on
 /// every client, and Door.NetworkedGrabbedDoor and
 /// Door.SetDoorAndOcclusionOpen clear it on every client. LevelController's contract-start opener opens only
-/// doors that read shut (HingeDoor.LevelControllerOpenDoor). Decompiled.
+/// doors that read shut (HingeDoor.LevelControllerOpenDoor). It is not the leaf's state: a door its physics swing open
+/// (HingeDoor.OpenDoor) keeps it set until a grab. Whether the leaf is shut is HingeDoor.Update's snap test: the leaf's
+/// angle on its hinge axis (HingeDoor.hingeAxis) within 7 degrees of Door.closedAngle. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_closed{.key = "Door.closed", .kind = pm::sdk::Kind::Field,
                                                 .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                 .type = "bool", .facts = Door_closed_facts,

@@ -239,6 +239,42 @@ inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftUpperArm{
 inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightUpperArm{
     .key = "HumanBodyBones.RightUpperArm", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
     .name = "RightUpperArm"};
+/// The neck. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_Neck{
+    .key = "HumanBodyBones.Neck", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "Neck"};
+/// The left shoulder. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftShoulder{
+    .key = "HumanBodyBones.LeftShoulder", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "LeftShoulder"};
+/// The right shoulder. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightShoulder{
+    .key = "HumanBodyBones.RightShoulder", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "RightShoulder"};
+/// The left forearm. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftLowerArm{
+    .key = "HumanBodyBones.LeftLowerArm", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "LeftLowerArm"};
+/// The right forearm. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightLowerArm{
+    .key = "HumanBodyBones.RightLowerArm", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "RightLowerArm"};
+/// The left thigh. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftUpperLeg{
+    .key = "HumanBodyBones.LeftUpperLeg", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "LeftUpperLeg"};
+/// The right thigh. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightUpperLeg{
+    .key = "HumanBodyBones.RightUpperLeg", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "RightUpperLeg"};
+/// The left shin. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftLowerLeg{
+    .key = "HumanBodyBones.LeftLowerLeg", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "LeftLowerLeg"};
+/// The right shin. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightLowerLeg{
+    .key = "HumanBodyBones.RightLowerLeg", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "RightLowerLeg"};
 
 }  // namespace pm::map
 
@@ -321,6 +357,24 @@ inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Head> Head{};
 inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftUpperArm> LeftUpperArm{};
 /// RightUpperArm(): the right upper arm.
 inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightUpperArm> RightUpperArm{};
+/// The neck: Neck(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Neck> Neck{};
+/// The left shoulder: LeftShoulder(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftShoulder> LeftShoulder{};
+/// The right shoulder: RightShoulder(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightShoulder> RightShoulder{};
+/// The left forearm: LeftLowerArm(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftLowerArm> LeftLowerArm{};
+/// The right forearm: RightLowerArm(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightLowerArm> RightLowerArm{};
+/// The left thigh: LeftUpperLeg(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftUpperLeg> LeftUpperLeg{};
+/// The right thigh: RightUpperLeg(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightUpperLeg> RightUpperLeg{};
+/// The left shin: LeftLowerLeg(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftLowerLeg> LeftLowerLeg{};
+/// The right shin: RightLowerLeg(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightLowerLeg> RightLowerLeg{};
 }  // namespace HumanBodyBones
 
 /// One parameter of an Animator's controller. `parameter` below is one.

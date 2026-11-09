@@ -11,6 +11,7 @@
 #include "Photon.h"
 #include "Player.h"
 #include "Props.h"
+#include "UnityObject.h"
 #include "game_api.h"
 #include "held.h"
 #include "log.h"
@@ -287,8 +288,13 @@ bool may_open(void* d) {
   if (!phasmo::HingeDoor::type.is(d)) return false;  // the opener traced is HingeDoor's own
   const std::vector<void*> doors = exits();
   if (std::find(doors.begin(), doors.end(), d) != doors.end() || holds(d)) return false;
-  // The game's own contract-start opener's tests (sdk/systems/doors.md, "Opening a door quietly").
-  if (phasmo::Door::kind.get(d) != phasmo::DoorKind::None() || !phasmo::Door::closed.get(d)) return false;
+  // A door of kind None, as the game's own contract-start opener takes, whose leaf reads shut as the game's snap test
+  // reads it (reads_shut), never Door.closed, which stays set on a door its physics swung open.
+  if (phasmo::Door::kind.get(d) != phasmo::DoorKind::None()) return false;
+  const phasmo::Vector3 euler = phasmo::Transform::get_localEulerAngles(phasmo::Component::get_transform(d));
+  const float angle =
+      leaf_angle(euler, phasmo::HingeDoor::hingeAxis.get(d), phasmo::Axis::X(), phasmo::Axis::Z());
+  if (!reads_shut(angle, phasmo::Door::closedAngle.get(d))) return false;
   void* interact = phasmo::Door::interact.get(d);
   if (!interact || !api::alive(interact)) return false;
   // What the game holds the door to now, left as it is: a lock, a switch-off, a hand or a ghost's force on it.
