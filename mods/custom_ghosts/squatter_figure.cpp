@@ -8,7 +8,6 @@
 #include "Animator.h"
 #include "FinalIK.h"
 #include "Scene.h"
-#include "Photon.h"
 #include "UnityCloth.h"
 #include "UnityObject.h"
 #include "UnityRendering.h"
@@ -44,18 +43,18 @@ const api::ClothSettings kCloth = [] {
 }();
 // The sheet material's smoothness: matte (user, 2026-11-10).
 constexpr float kSheetSmoothness = 0.0f;
-// The spheres the sheet rests on besides the head, so the body never shows through it (user, 2026-11-09: the sheet was
-// too thin and the legs and arms came through): a little larger than the body there, which gives the cloth its
-// thickness, on the torso, neck, shoulders, both arms and both legs. Starting values, judged with the user in game.
-constexpr float kChest = 0.24f, kSpine = 0.22f, kHips = 0.22f, kNeck = 0.09f, kShoulder = 0.10f;
-constexpr float kArm = 0.10f, kForearm = 0.08f, kThigh = 0.12f, kShin = 0.09f;
+// The spheres the sheet rests on besides the head, about the body's own size there with no padding, so it drapes over the
+// body as a sheet does (user, 2026-11-10: the padding held it off the body; only the head draws under it, so a limb
+// pressing at it shows only as the sheet's shape): the torso, neck, shoulders, both arms and both legs. Starting
+// values, judged with the user in game.
+constexpr float kChest = 0.16f, kSpine = 0.14f, kHips = 0.15f, kNeck = 0.06f, kShoulder = 0.07f;
+constexpr float kArm = 0.055f, kForearm = 0.045f, kThigh = 0.08f, kShin = 0.055f;
 // The forearms and hands push the sheet out where they go, a hand reaching for a door's handle among them: spheres
 // along each forearm, at the wrist and over the hand. Starting values.
-constexpr float kWrist = 0.06f, kHand = 0.07f, kPalmAlong = 0.35f;
-// The floor the sheet rests on: Cloth collides only with spheres and capsules, so a sphere this large lies under the
-// feet, its top level with them. Across the sheet's spread (about 0.6 m) its surface falls only a few centimetres, so the
-// hem settles on the floor rather than through it (user, 2026-11-09: it showed through the ceiling below).
-constexpr float kFloorRadius = 3.0f;
+constexpr float kWrist = 0.04f, kHand = 0.05f, kPalmAlong = 0.35f;
+// No floor under the sheet (user, 2026-11-10): a sphere under the root held the sheet up in the air where the ghost
+// stood while the body fell elsewhere. Cloth meets only the colliders it is given, so the hem is kept up by how far it
+// may move from the body (sheet::kHemSway) and by reaching only to the feet (kHemOnFloor 0).
 // The investigator body's parts left drawing under the sheet, by their GameObject's name in the PCPlayer prefab
 // (sdk/systems/scene.md): the head alone (CC_Base_Body is the head's mesh alone), its eyes, teeth, tongue and hair. The
 // legs clipped through the sheet, so the trousers and boots are hidden with the jacket, shirt, hands and every cosmetic
@@ -74,11 +73,6 @@ struct Figure {
   api::Held fullBody, lookAt;      // Final IK: the body's FullBodyBipedIK, and the head's LookAtIK
   api::Held order;                 // Final IK's IKExecutionOrder, whose LateUpdate is the pass after the animation
   bool falling = false;            // its ragdoll has it, not its Animator or its IK
-  // The sheet's thickness (sheet::shell_triangles): a mesh beside the cloth, its points and normals rewritten each
-  // frame from the cloth's simulated ones; shellWorld once the cloth's points read as world positions.
-  api::Held shell, shellMesh, shellPoints, shellNormals;
-  size_t shellN = 0;
-  std::optional<bool> shellWorld;
   phasmo::Quaternion fallChest{0, 0, 0, 1};  // the chest's rotation as the fall began
   phasmo::Vector3 fallFront{0, 0, 1};        // the body's front as the fall began
 } g;
@@ -159,8 +153,6 @@ void fail(const char* step, const std::string& why) {
 void clear() {
   ragdoll::destroy();
   api::destroy_cloth(g.cloth);
-  if (api::alive(g.shell)) phasmo::Object::Destroy(g.shell, 0.0f);
-  if (api::alive(g.shellMesh)) phasmo::Object::Destroy(g.shellMesh, 0.0f);
   if (api::alive(g.material)) phasmo::Object::Destroy(g.material, 0.0f);
   if (api::alive(g.root)) phasmo::Object::Destroy(g.root, 0.0f);
   g = Figure{};
@@ -175,10 +167,10 @@ bool check() {
 
 void* bone(int32_t which) { return phasmo::Animator::GetBoneTransform(g.animator, which); }
 
-// How much wider than the shoulders' spheres the sheet hangs at the shoulders, and how far past the floor its hem
-// reaches so it rests on it: starting values, judged with the user in game (2026-11-09: wider ballooned it).
-constexpr float kSheetClearance = 0.02f;
-constexpr float kHemOnFloor = 0.05f;
+// How much wider than the shoulders' spheres the sheet hangs at the shoulders, and how far past the feet its hem reaches:
+// none, so it drapes on the body and ends at the floor (user, 2026-11-10: no padding).
+constexpr float kSheetClearance = 0.0f;
+constexpr float kHemOnFloor = 0.0f;
 
 // The bones the sheet follows, each as a line to the next joint along it (sheet::Segment), and the Transform that
 // carries that line: the head first, which alone carries the cap over it.
@@ -186,108 +178,6 @@ struct Carrier {
   int32_t bone;
   int32_t to;  // the joint the line runs to; -1 for a point at the bone
 };
-
-// A Vector3[] of `count`, or null when the type does not resolve or lays its elements out at another size.
-void* vector3_array(size_t count) {
-  void* a = phasmo::Vector3::type.make_array(count);
-  return a && api::ValueArray{a}.stride() == sizeof(phasmo::Vector3) ? a : nullptr;
-}
-
-// Builds the sheet's thickness beside its cloth on `anchor` (sheet::shell_triangles): the inner layer and a strip along
-// every open edge, drawn with the sheet's own material, its points first laid as the sheet was made.
-void build_shell(void* anchor, const sheet::SheetMesh& m, void* material) {
-  const size_t n = m.vertices.size();
-  const auto borders = sheet::border_edges(m.triangles);
-  const std::vector<int32_t> tris = sheet::shell_triangles(n, m.triangles, borders);
-  std::vector<sheet::Vec3> points(2 * n), normals(2 * n);
-  sheet::shell_points(m.vertices, m.normals, sheet::kSheetThickness, points, normals);
-  void* go = phasmo::GameObject::type.make();
-  void* pointsArr = vector3_array(2 * n);
-  void* normalsArr = vector3_array(2 * n);
-  void* indices = pm::api::Type<pm::map::Int32>{}.make_array(tris.size());
-  void* materials = phasmo::Material::type.make_array(1);
-  void* mesh = phasmo::Mesh::type.make();
-  if (!go || !pointsArr || !normalsArr || !indices || !materials || !mesh) {
-    PM_LOG("squatter: the sheet has no thickness: a part could not be made");
-    return;
-  }
-  phasmo::GameObject::ctor(go, api::make_string("Squatter sheet shell"));
-  phasmo::GameObject::set_layer(go, phasmo::GameObject::get_layer(anchor));
-  phasmo::Transform::SetParent(phasmo::GameObject::get_transform(go), phasmo::GameObject::get_transform(anchor), false);
-  const api::Array<phasmo::Vector3> p{pointsArr}, q{normalsArr};
-  for (size_t i = 0; i < 2 * n; ++i) {
-    p[i] = {points[i].x, points[i].y, points[i].z};
-    q[i] = {normals[i].x, normals[i].y, normals[i].z};
-  }
-  const api::Array<int32_t> t{indices};
-  for (size_t i = 0; i < tris.size(); ++i) t[i] = tris[i];
-  phasmo::Mesh::ctor(mesh);
-  phasmo::Mesh::MarkDynamic(mesh);
-  phasmo::Mesh::set_vertices(mesh, pointsArr);
-  phasmo::Mesh::set_normals(mesh, normalsArr);
-  phasmo::Mesh::set_triangles(mesh, indices);
-  void* filter = phasmo::GameObject::AddComponent(go, phasmo::MeshFilter::type.type_object());
-  void* renderer = phasmo::GameObject::AddComponent(go, phasmo::MeshRenderer::type.type_object());
-  if (!filter || !renderer) {
-    PM_LOG("squatter: the sheet has no thickness: no renderer could be added");
-    phasmo::Object::Destroy(go, 0.0f);
-    phasmo::Object::Destroy(mesh, 0.0f);
-    return;
-  }
-  phasmo::MeshFilter::set_sharedMesh(filter, mesh);
-  api::RefArray{materials}.set(0, material);
-  phasmo::Renderer::set_sharedMaterials(renderer, materials);
-  g.shell = go;
-  g.shellMesh = mesh;
-  g.shellPoints = pointsArr;
-  g.shellNormals = normalsArr;
-  g.shellN = n;
-  g.shellWorld.reset();
-}
-
-// Moves the sheet's thickness onto the cloth as simulated: its outer points are the cloth's, its inner ones the
-// thickness in along the cloth's normals. The first time, it reads whether the cloth's points are in the sheet's space
-// or the world's (whichever puts their middle nearer the sheet's crown), and puts the shell in the same space.
-void update_shell() {
-  if (!g.shellN || !api::alive(g.shell) || !api::alive(g.shellMesh) || !api::alive(g.cloth.cloth)) return;
-  const api::Array<phasmo::Vector3> verts{phasmo::Cloth::get_vertices(g.cloth.cloth)};
-  const api::Array<phasmo::Vector3> norms{phasmo::Cloth::get_normals(g.cloth.cloth)};
-  const size_t n = g.shellN;
-  if (verts.size() != n || norms.size() != n) return;
-  if (!g.shellWorld) {
-    void* anchor = phasmo::GameObject::get_transform(g.sheet);
-    phasmo::Vector3 c{};
-    for (size_t i = 0; i < n; ++i) {
-      const phasmo::Vector3 v = verts[i];
-      c = {c.x + v.x / static_cast<float>(n), c.y + v.y / static_cast<float>(n), c.z + v.z / static_cast<float>(n)};
-    }
-    const phasmo::Vector3 crown = phasmo::Transform::get_position(anchor);
-    const phasmo::Vector3 asLocal = phasmo::Transform::TransformPoint(anchor, &c);
-    const auto away = [&](phasmo::Vector3 a) { return std::hypot(a.x - crown.x, a.y - crown.y, a.z - crown.z); };
-    g.shellWorld = away(c) < away(asLocal);
-    if (*g.shellWorld) {  // world positions: the shell stands at the world's origin, unturned
-      void* t = phasmo::GameObject::get_transform(g.shell);
-      phasmo::Transform::SetParent(t, nullptr, false);
-      const phasmo::Vector3 origin{};
-      const phasmo::Quaternion none{0, 0, 0, 1};
-      phasmo::Transform::set_position(t, &origin);
-      phasmo::Transform::set_rotation(t, &none);
-    }
-    PM_LOG("squatter: the sheet's thickness follows its cloth in %s space", *g.shellWorld ? "world" : "the sheet's");
-  }
-  const api::Array<phasmo::Vector3> p{g.shellPoints}, q{g.shellNormals};
-  const float t = sheet::kSheetThickness;
-  for (size_t i = 0; i < n; ++i) {
-    const phasmo::Vector3 v = verts[i], d = norms[i];
-    p[i] = v;
-    p[n + i] = {v.x - d.x * t, v.y - d.y * t, v.z - d.z * t};
-    q[i] = d;
-    q[n + i] = {-d.x, -d.y, -d.z};
-  }
-  phasmo::Mesh::set_vertices(g.shellMesh, g.shellPoints);
-  phasmo::Mesh::set_normals(g.shellMesh, g.shellNormals);
-  phasmo::Mesh::RecalculateBounds(g.shellMesh, 0);
-}
 
 bool build_sheet() {
   namespace B = phasmo::HumanBodyBones;
@@ -424,11 +314,8 @@ bool build_sheet() {
       {bone(B::LeftHand()), kWrist, none},
       {bone(B::RightHand()), kWrist, none},
       {bone(B::LeftHand()), kHand, along(B::LeftLowerArm(), B::LeftHand(), kPalmAlong)},
-      {bone(B::RightHand()), kHand, along(B::RightLowerArm(), B::RightHand(), kPalmAlong)},
-      // The figure's root is at its feet, and follows the ghost's position each frame (place).
-      {phasmo::GameObject::get_transform(g.root), kFloorRadius, {0, -kFloorRadius, 0}}};
+      {bone(B::RightHand()), kHand, along(B::RightLowerArm(), B::RightHand(), kPalmAlong)}};
   if (!api::add_cloth(anchor, mesh, material, kCloth, spheres, g.cloth, &why)) return fail("cloth", why), false;
-  build_shell(anchor, m, material);  // without it (logged) the sheet is drawn as the cloth alone
   return true;
 }
 
@@ -515,13 +402,7 @@ void detour_ik_late_update(api::Original<phasmo::IKExecutionOrder::LateUpdate> o
     g_lastPass = now;
     if (!g.falling) inertialize();
     if (g_after) g_after(dt);
-    if (!ik_runs(order, g.order, g.falling)) {  // physics has the body: no IK bends it
-      update_shell();
-      return;
-    }
-    original(order);
-    update_shell();
-    return;
+    if (!ik_runs(order, g.order, g.falling)) return;  // physics has the body: no IK bends it
   }
   original(order);
 }

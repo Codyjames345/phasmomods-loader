@@ -683,42 +683,6 @@ void sheet_is_closed_grid_with_eye_holes() {
   CHECK(rim == 16);
 }
 
-// The sheet looks as thick as a bedsheet (user, 2026-11-10): beside the simulated cloth it draws a shell of its inner
-// layer, moved in by the thickness along each normal and facing the other way, and a strip joining the two layers along
-// every open edge (its hem and both eye holes), where the cloth's thickness shows. The outer layer is the cloth's own,
-// so the shell never draws over it.
-void the_sheet_has_a_thickness() {
-  // Two triangles making a square: four border edges, the shared diagonal none.
-  const int32_t square[] = {0, 1, 2, 0, 2, 3};
-  const auto borders = sh::border_edges(square);
-  CHECK(borders.size() == 4);
-  for (const auto& [a, b] : borders) CHECK(!((a == 0 && b == 2) || (a == 2 && b == 0)));
-  const std::vector<int32_t> tris = sh::shell_triangles(4, square, borders);
-  CHECK(tris.size() == std::size(square) + 6 * borders.size());
-  CHECK(tris[0] == 4 + 0 && tris[1] == 4 + 2 && tris[2] == 4 + 1);  // the inner layer, turned the other way
-  for (const int32_t i : tris) CHECK(i >= 0 && i < 8);
-  for (size_t t = 0; t < std::size(square); ++t) CHECK(tris[t] >= 4);  // no outer-layer triangle: the cloth draws it
-  // The inner layer lies the thickness in from the outer, along each normal; the outer points are the cloth's.
-  const sh::Vec3 outer[] = {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}};
-  const sh::Vec3 normals[] = {{0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}};
-  std::vector<sh::Vec3> points(8), shellNormals(8);
-  sh::shell_points(outer, normals, sh::kSheetThickness, points, shellNormals);
-  CHECK(points[1].x == 1 && points[1].z == 0 && std::abs(points[5].z + sh::kSheetThickness) < 1e-6f);
-  CHECK(shellNormals[1].z == 1 && shellNormals[5].z == -1);
-  CHECK(sh::kSheetThickness > 0.005f && sh::kSheetThickness < 0.05f);
-  // The real sheet: its borders are its hem and its two eye holes, and nothing else.
-  const sh::SheetMesh m = sh::make_sheet(sh::SheetShape{});
-  const auto sheetBorders = sh::border_edges(m.triangles);
-  CHECK(!sheetBorders.empty());
-  std::set<int32_t> onBorder;
-  for (const auto& [a, b] : sheetBorders) onBorder.insert(a), onBorder.insert(b);
-  CHECK(onBorder.size() == sheetBorders.size());  // closed loops: each border point has two border edges
-  // A spans of the wrong length starts nothing.
-  std::vector<sh::Vec3> few(3), fewNormals(3);
-  sh::shell_points(outer, normals, sh::kSheetThickness, few, fewNormals);
-  CHECK(few[0].x == 0 && few[1].x == 0);
-}
-
 void sheet_pins_only_the_top() {
   const sh::SheetShape shape;
   const sh::SheetMesh m = sh::make_sheet(shape);
@@ -1363,7 +1327,6 @@ int main() {
   the_standing_roll_hands_back_to_the_run();
   its_voice_is_pitched_down();
   sheet_is_closed_grid_with_eye_holes();
-  the_sheet_has_a_thickness();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();
   sheet_follows_the_bones_nearest_it();
