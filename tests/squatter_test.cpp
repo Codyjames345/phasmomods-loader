@@ -836,13 +836,16 @@ void sheet_hangs_from_the_crown() {
 
 // The figure's state table (squatter_figure.h): the names the bundle's controller must have, exactly.
 // A trip picks one of two at random (user, 2026-11-09): Soccer Trip or Tripping. Each loses its footing partway
-// through its own clip (kFooting), where its ragdoll takes over; the get-ups play from where the body lands.
-void a_trip_gets_up_with_the_users_clip() {
+// through its own clip (kFooting), where its ragdoll takes over, and each get-up stands alone, played from where the
+// body lands: the trips no longer run on into them.
+void the_get_ups_stand_alone() {
   CHECK(states_of(Move::Stumble).size() == 2);
-  CHECK(std::abs(seconds_of("Stumble") - (kTripSeconds + seconds_of(kStandUpState))) < 1e-4f);
-  CHECK(std::abs(seconds_of("Trip") - (kTrippingSeconds + seconds_of(kTripGetUpState))) < 1e-4f);
-  CHECK(kFooting[0] > 0.0f && kFooting[0] < kTripSeconds);
-  CHECK(kFooting[1] > 0.0f && kFooting[1] < kTrippingSeconds);
+  CHECK(seconds_of("Stumble") == 1.6f && seconds_of("Trip") == 2.1f);
+  CHECK(kFooting[0] > 0.0f && kFooting[0] < seconds_of("Stumble"));
+  CHECK(kFooting[1] > 0.0f && kFooting[1] < seconds_of("Trip"));
+  const std::vector<const char*> all = all_states();
+  CHECK(std::count_if(all.begin(), all.end(), [](const char* x) { return std::string(x) == kStandUpState; }) == 1);
+  CHECK(std::count_if(all.begin(), all.end(), [](const char* x) { return std::string(x) == kTripGetUpState; }) == 1);
   CHECK(seconds_of(kStandUpState) > 1.0f && seconds_of(kTripGetUpState) > 1.0f);  // get-ups, not pops
 }
 
@@ -1330,7 +1333,7 @@ int main() {
   an_unknown_count_never_locks();
   the_move_clock_survives_bad_times();
   a_move_that_plays_once_holds_for_its_clip();
-  a_trip_gets_up_with_the_users_clip();
+  the_get_ups_stand_alone();
   friendly_never_chases_or_kicks();
   kick_needs_a_living_target_in_reach();
   speed_stays_just_under_sprint();

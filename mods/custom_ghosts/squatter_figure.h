@@ -51,16 +51,9 @@ inline constexpr const char* kLocalStates[] = {kTurnLeftState, kTurnRightState, 
 // The user's Standing Up clip, the get-up from lying face down after a fall (user, 2026-11-09: getting up from the trip
 // was too quick).
 inline constexpr const char* kStandUpState = "StandUp";
-// The trip's own clip length in seconds, before the get-up.
-inline constexpr float kTripSeconds = 1.6000f;
-// The get-up is imported turned this far, degrees clockwise seen from above, so it begins lying the way the trip lands:
-// the turn about the vertical that leaves the least of the two clips' body rotations (their RootQ curves: the trip lands on
-// its side, Standing Up begins face down) to blend. It stands up facing this far round too.
-inline constexpr float kStandUpTurnDegrees = 119.0f;
-// The second trip's get-up: the user's Getting Up, imported again as its own state, trimmed to its rise and turned -143
-// degrees to begin lying as Tripping lands (the bundle's build says how). Tripping lasts kTrippingSeconds.
+// The get-up from lying face up: the user's Getting Up, imported again as its own state, trimmed to its rise. Both
+// get-ups stand alone, unturned: the figure's root is turned to the landed body as it gets up (squatter_fall.h).
 inline constexpr const char* kTripGetUpState = "TripGetUp";
-inline constexpr float kTrippingSeconds = 2.1000f;
 
 /** The states a move may play, one or two. */
 inline std::span<const char* const> states_of(Move m) {
@@ -113,7 +106,7 @@ struct StateClip {
 inline constexpr StateClip kStateClips[] = {
     {"Run", 0.7000f},     {"Walk", 1.0333f},      {"Stand", 6.0000f},     {"Sneak", 1.0333f}, {"Duck_A", 1.2667f},
     {"Duck_B", 1.1000f},  {"Weave_A", 1.1333f},   {"Weave_B", 1.1333f},   {"Roll_A", 1.1667f},
-    {"Roll_B", 2.3667f},  {"Parkour_A", 1.4000f}, {"Parkour_B", 2.0000f}, {"Stumble", 6.1000f}, {"Trip", 4.3000f},
+    {"Roll_B", 2.3667f},  {"Parkour_A", 1.4000f}, {"Parkour_B", 2.0000f}, {"Stumble", 1.6000f}, {"Trip", 2.1000f},
     {"Sit", 10.2667f},    {"GetUp", 2.7000f},     {"Kick", 1.3000f},      {"Bang", 1.3000f},
     {"Bump", 1.1667f},    {"OpenDoorOutwards", 4.1000f}, {"OpenDoorInwards", 6.3667f},
     {"TurnLeft", 1.0333f}, {"TurnRight", 1.0333f},  {"Turn180", 1.0000f},   {"StartWalk", 2.9333f},
