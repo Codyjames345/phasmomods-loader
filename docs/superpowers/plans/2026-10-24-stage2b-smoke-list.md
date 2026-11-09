@@ -1129,3 +1129,11 @@ The user's test of 2026-11-09 (sheet, doors, roll, blending) and its fixes.
 - [ ] Running, crouch-walking, rolling and falling, the sheet moves with the arms and legs: no arm, hand, shoulder or leg comes out of it. Note where it stretches or tears.
 - [ ] A roll, a fall (Stumble) and the jump-and-land (Parkour) play to their end before the run takes over.
 - [ ] Every change of clip blends over a quarter second instead of snapping: run into roll, roll into run, walk into stand, stand into the door clip, the get-up and the kick.
+
+The user's new clips of 2026-11-09 (pacing, upright walking, root motion) and the stop after a fall.
+
+- [ ] Chasing, its legs keep pace with the ground: no feet sliding or running on the spot, a jog at slower speeds blending into a run at faster ones.
+- [ ] Lurking, following and walking to a seat it walks upright (Walking); searching it creeps (Crouched Walking); both keep pace with the ground.
+- [ ] A roll travels as far as the clip shows and the Squatter ends up where the clip leaves it, with no slide or snap back; the same for the trip (Soccer Trip) and the landing.
+- [ ] After a trip, a bump, a kick or a door clip it stops where it stands and never slides along the floor.
+- [ ] The sheet sits close round the body, not ballooned out, and still reaches the floor.
