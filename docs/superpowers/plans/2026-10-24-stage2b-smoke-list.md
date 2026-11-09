@@ -1137,3 +1137,10 @@ The user's new clips of 2026-11-09 (pacing, upright walking, root motion) and th
 - [ ] A roll travels as far as the clip shows and the Squatter ends up where the clip leaves it, with no slide or snap back; the same for the trip (Soccer Trip) and the landing.
 - [ ] After a trip, a bump, a kick or a door clip it stops where it stands and never slides along the floor.
 - [ ] The sheet sits close round the body, not ballooned out, and still reaches the floor.
+
+Head and hand IK (Final IK, user 2026-11-09).
+
+- [ ] Chasing, waiting at a hiding place, following or excited, the Squatter's head (its eye holes) turns toward the player it is after and follows them; lurking, searching and moping it looks ahead. The turn blends in and out, never snaps, and never twists the neck past a natural turn.
+- [ ] Opening a door, the hand nearer the handle reaches for the door's far edge at handle height and stays on it as the leaf swings, then lets go. Note which hand, and whether it reaches through the leaf or short of it.
+- [ ] Both players see the same head turn (toward the same player) and the same hand on the same door.
+- [ ] Nothing else changes: walking, running, rolls and sitting look as before when it is not looking or reaching.

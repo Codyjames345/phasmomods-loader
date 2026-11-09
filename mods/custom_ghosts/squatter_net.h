@@ -41,6 +41,7 @@ struct Shown {
   uint8_t lineCue = 0;    // counts up, wrapping, each time the master starts a line
   int8_t act = -1;        // an Act, or -1 for none
   uint8_t actCue = 0;     // counts up, wrapping, each time the master starts an act
+  uint8_t lookAt = 0;     // the Photon actor number of the player it is after, whom its head turns to; 0 for none
   bool operator==(const Shown&) const = default;
 };
 
@@ -49,7 +50,7 @@ inline std::vector<uint8_t> shown_message(const Shown& s) {
   std::vector<uint8_t> out = net_msg::header(net_msg::kSquatter);
   out.insert(out.end(), {static_cast<uint8_t>(s.phase), static_cast<uint8_t>(s.move), s.variant,
                          static_cast<uint8_t>(s.lineSet), static_cast<uint8_t>(s.lineIndex), s.lineCue,
-                         static_cast<uint8_t>(s.act), s.actCue});
+                         static_cast<uint8_t>(s.act), s.actCue, s.lookAt});
   return out;
 }
 
@@ -58,14 +59,14 @@ inline std::vector<uint8_t> shown_message(const Shown& s) {
  * or a value no client knows: a phase, move, line set or act out of range, a line below -1, or a line with no set.
  */
 inline bool read_shown(const uint8_t* data, size_t size, Shown& out) {
-  if (net_msg::kind_of(data, size) != net_msg::kSquatter || size != 12) return false;
+  if (net_msg::kind_of(data, size) != net_msg::kSquatter || size != 13) return false;
   const auto lineSet = static_cast<int8_t>(data[7]), lineIndex = static_cast<int8_t>(data[8]);
   const auto act = static_cast<int8_t>(data[10]);
   if (data[4] >= kPhaseValues || data[5] >= kMoveValues || lineSet < -1 || lineSet >= kLinesValues || lineIndex < -1 ||
       (lineSet < 0 && lineIndex >= 0) || act < -1 || act >= kActValues)
     return false;
   out = Shown{static_cast<Phase>(data[4]), static_cast<Move>(data[5]), data[6], lineSet, lineIndex, data[9], act,
-              data[11]};
+              data[11], data[12]};
   return true;
 }
 

@@ -167,6 +167,22 @@ void play_act(Act a);
 void set_pace(Move m, float speed);
 /** How far the figure's clip carried it last frame (root motion), metres in the world; zero when it is not built. */
 phasmo::Vector3 clip_step();
+
+/** A hand of the figure. */
+enum class Hand : uint8_t { Left, Right };
+/** The hand whose shoulder is nearer `at`, metres in the world. Right when the figure is not built. */
+Hand nearer_hand(phasmo::Vector3 at);
+/**
+ * Reaches `hand` for `at` (world space) by `weight`, 0 (the clip's own arm) to 1 (the hand on the point), with Final IK's
+ * limb solver after the Animator has posed the arm, as games put a hand on a door handle. The other hand is let go.
+ * Every frame while it reaches; a weight of 0 lets both go.
+ */
+void reach(Hand hand, phasmo::Vector3 at, float weight);
+/**
+ * Turns the figure's head, and a little of its spine, toward `at` (world space) by `weight`, 0 to 1, with Final IK's
+ * look-at solver, as games turn a character's head to what it attends to. Every frame; 0 lets it go.
+ */
+void look_at(phasmo::Vector3 at, float weight);
 /** Whether the figure is built and still in the scene (a scene load destroys it, and its own assets with it). */
 bool ready();
 

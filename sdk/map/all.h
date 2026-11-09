@@ -50,6 +50,7 @@
 #include "UnityAssets.h"
 #include "UnityAudio.h"
 #include "UnityCloth.h"
+#include "FinalIK.h"
 #include "UnityEvents.h"
 #include "UnityObject.h"
 #include "UnityUI.h"
@@ -1468,6 +1469,26 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &LobbyController_CreateServer,
     &ErrorManager_ShowErrors,
     &ErrorManager_NextMessageButton,
+    &IKSolver,
+    &IKSolver_IKPosition,
+    &IKSolver_IKPositionWeight,
+    &IKSolverTrigonometric,
+    &IKSolverTrigonometric_SetChain,
+    &IKSolverTrigonometric_IKRotationWeight,
+    &IKSolverLimb,
+    &IKSolverLimb_goal,
+    &LimbIK,
+    &LimbIK_solver,
+    &IKSolverLookAt,
+    &IKSolverLookAt_SetChain,
+    &IKSolverLookAt_bodyWeight,
+    &IKSolverLookAt_headWeight,
+    &IKSolverLookAt_clampWeight,
+    &LookAtIK,
+    &LookAtIK_solver,
+    &AvatarIKGoal,
+    &AvatarIKGoal_LeftHand,
+    &AvatarIKGoal_RightHand,
     &Cloth,
     &Cloth_set_capsuleColliders,
     &Cloth_set_coefficients,

@@ -86,6 +86,15 @@ struct State {
   std::optional<Point> paceFrom;
   uint64_t paceAt = 0;
   float pace = 0.0f;
+  // Its head's turn to the player it is after, and the hand it puts on a door's handle (figure::look_at, reach).
+  float lookWeight = 0.0f;
+  phasmo::Vector3 lookPoint{};
+  api::Held reachDoor;
+  phasmo::Vector3 reachLocal{};  // the handle, in the leaf's own space
+  figure::Hand reachHand = figure::Hand::Right;
+  uint64_t reachSince = 0;
+  float reachWeight = 0.0f;
+  uint64_t playAt = 0;  // the last frame play() ran, for the blends' steps
 };
 
 // Over how long the ghost's speed is smoothed for the figure's pace, seconds: a starting value.
@@ -579,12 +588,55 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   }
 
   c.out.phase = next;
+  c.out.lookAt = look_target(next, c.target);
   if (share(c.out)) c.lastSent = t;
   else if (t - c.lastSent >= kShownResendMs) {  // the same Shown again, for a client that missed it
     const std::vector<uint8_t> message = shown_message(c.out);
     net::send(message.data(), message.size(), net::To::Others, true);
     c.lastSent = t;
   }
+}
+
+// The hinged door nearest the ghost within kReachDoorMetres, among its room's doors, as door_to_open looks: the one a
+// door clip opens, on this client. Null when none is that near.
+void* door_near(Point ghostAt) {
+  void* level = game::level_controller();
+  void* room = level ? phasmo::LevelController::currentGhostRoom.get(level) : nullptr;
+  const api::RefArray doors{room ? phasmo::LevelRoom::doors.get(room) : nullptr};
+  void* best = nullptr;
+  float nearest = kReachDoorMetres;
+  for (size_t i = 0; i < doors.size(); ++i) {
+    const std::optional<door::Leaf> leaf = door::leaf_of(doors[i]);
+    if (!leaf) continue;
+    const float metres = std::hypot(leaf->centre.x - ghostAt.x, leaf->centre.z - ghostAt.z);
+    if (metres < nearest) {
+      nearest = metres;
+      best = doors[i];
+    }
+  }
+  return best;
+}
+
+// As a door clip starts, the hand nearer the door's handle takes it: the handle near the leaf's far edge at handle
+// height on the Squatter's side, kept in the leaf's own space so it swings with the door.
+void start_reach(Point ghostAt) {
+  g.reachDoor = nullptr;
+  void* d = door_near(ghostAt);
+  const std::optional<door::Leaf> leaf = d ? door::leaf_of(d) : std::nullopt;
+  if (!leaf) return;
+  const float along = 2.0f * kHandleAlong;
+  phasmo::Vector3 handle{leaf->pivot.x + (leaf->centre.x - leaf->pivot.x) * along, ghostAt.y + kHandleHeight,
+                         leaf->pivot.z + (leaf->centre.z - leaf->pivot.z) * along};
+  const float dx = ghostAt.x - handle.x, dz = ghostAt.z - handle.z, toward = std::hypot(dx, dz);
+  if (toward > 0.0f) {
+    handle.x += dx / toward * kHandleOut;
+    handle.z += dz / toward * kHandleOut;
+  }
+  g.reachDoor = d;
+  g.reachLocal = qrot(qinv(leaf->rotation), {handle.x - leaf->pivot.x, handle.y - leaf->pivot.y,
+                                              handle.z - leaf->pivot.z});
+  g.reachHand = figure::nearer_hand(handle);
+  g.reachSince = now();
 }
 
 // Every client plays the Shown: the master's own on the master, the master's last word elsewhere.
@@ -605,6 +657,36 @@ void play(void* ghost) {
   g.paceFrom = here;
   g.paceAt = t;
   figure::set_pace(s.move, g.pace);
+
+  const float dt = g.playAt && t > g.playAt ? static_cast<float>(t - g.playAt) / 1000.0f : 0.0f;
+  g.playAt = t;
+
+  // Its head turns to the player it is after (Shown.lookAt), at their eyes, blending in and out.
+  void* watched = nullptr;
+  if (s.lookAt) watched = s.lookAt == game::local_actor() ? game::local_player() : game::player_of_actor(s.lookAt);
+  if (watched) {
+    const Point p = at_of(watched);
+    g.lookPoint = {p.x, p.y + kEyeHeight, p.z};
+  }
+  g.lookWeight = approach(g.lookWeight, watched ? 1.0f : 0.0f, dt / kLookBlendSeconds);
+  figure::look_at(g.lookPoint, g.lookWeight);
+
+  // In a door clip, the nearer hand takes the door's handle and follows it as the leaf swings, blending in and out.
+  const bool doorAct =
+      s.act == static_cast<int8_t>(Act::OpenDoorOutwards) || s.act == static_cast<int8_t>(Act::OpenDoorInwards);
+  if (c.act && doorAct) start_reach(here);
+  const bool reaching = doorAct && api::alive(g.reachDoor) &&
+                        t - g.reachSince >= static_cast<uint64_t>(kReachDelaySeconds * 1000.0f);
+  g.reachWeight = approach(g.reachWeight, reaching ? 1.0f : 0.0f, dt / kReachBlendSeconds);
+  const std::optional<door::Leaf> leaf = g.reachWeight > 0.0f ? door::leaf_of(g.reachDoor.get()) : std::nullopt;
+  if (leaf) {
+    const phasmo::Vector3 turned = qrot(leaf->rotation, g.reachLocal);
+    figure::reach(g.reachHand, {leaf->pivot.x + turned.x, leaf->pivot.y + turned.y, leaf->pivot.z + turned.z},
+                  g.reachWeight);
+  } else {
+    figure::reach(g.reachHand, {}, 0.0f);
+  }
+  if (!doorAct && g.reachWeight <= 0.0f) g.reachDoor = nullptr;
   if (c.line && s.lineSet >= 0 && s.lineIndex >= 0)
     voice::play_index(static_cast<Lines>(s.lineSet), s.lineIndex, vector(at_of(ghost)));
   // A footstep each stride it moves, on this client, from its own view of the ghost's movement.
@@ -635,6 +717,9 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     g.stepFrom.reset();
     g.paceFrom.reset();
     g.pace = 0.0f;
+    g.lookWeight = 0.0f;
+    g.reachDoor = nullptr;
+    g.reachWeight = 0.0f;
     forget_channel();
     figure::destroy();
     if (!haunting) ghost_sight::drop();  // shared (ghost_sight.h): kept while the contract's ghost lives

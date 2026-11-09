@@ -825,6 +825,7 @@ void shown_round_trips() {
       s.lineCue = 250;
       s.act = static_cast<int8_t>(Act::Bang);
       s.actCue = 9;
+      s.lookAt = 200;  // the player it is after, by actor number
       const std::vector<uint8_t> bytes = shown_message(s);
       Shown back;
       CHECK(read_shown(bytes.data(), bytes.size(), back) && back == s);
@@ -1201,6 +1202,7 @@ int main() {
   the_door_clip_follows_the_side();
   a_fall_stops_it_where_it_stands();
   walking_and_running_keep_pace_with_the_ground();
+  its_head_turns_to_the_player_it_is_after();
   a_door_is_reached_within_reach();
   the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();

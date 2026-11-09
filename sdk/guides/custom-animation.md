@@ -157,3 +157,32 @@ with; a ray or overlap query of the game's whose mask includes that layer can st
   the log, if either is false.
 - In `pmmod_stop`, or when you remove the figure, call `destroy_cloth` for what the GameObject does not take with it,
   and destroy the material.
+
+## Blending, pacing and root motion
+
+- **Blend between states** with `pm::api::fade_to_state(animator, "State", blend)` instead of `play_state`: the
+  poses mix over `blend`, a fraction of the playing state's length (Animator.CrossFade's own unit; this build strips
+  the fixed-time CrossFadeInFixedTime). Unity's own default transition is a quarter of a second.
+- **Pose the model now** with `pm::api::pose_now(animator)` after `play_state`, so its bones stand as the state's first
+  frame in the same frame: do this before you measure the body or bind anything to its bones.
+- **Keep feet in step with the ground.** Build a 1D blend tree in your controller on a float parameter (the Squatter
+  uses `Speed`), each clip at the speed it travels on its own (`AnimationClip.averageSpeed` in the editor), and give
+  the state a speed multiplier parameter (`PlayRate`). Each frame set both with `Animator.SetFloatID`: the ground
+  speed, and the ground speed over the speed the clip travels. Download walks and runs with Mixamo's In Place
+  unticked, so their speed can be read.
+- **Let a one-off clip move the character** (a roll, a trip) by reading `Animator.get_deltaPosition` each frame, how
+  far the clip moved the root, and moving your object by it; the Animator works it out even with Apply Root Motion off.
+  A NavMeshAgent can be moved with `NavMeshAgent.Warp` (its `Move` is stripped).
+
+## Inverse kinematics (Final IK)
+
+The game ships RootMotion's Final IK, mapped in `sdk/map/FinalIK.h`. Its components bend bones after the Animator,
+in LateUpdate, so a hand lands on a point or a head turns to look at one:
+
+- Add `phasmo::LimbIK` to the model's GameObject, take its solver (`LimbIK::solver`), and set the arm with
+  `IKSolverTrigonometric::SetChain(solver, upperArm, forearm, hand, root)` and `IKSolverLimb::goal` (an
+  `AvatarIKGoal`). Set `IKSolverTrigonometric::IKRotationWeight` to 0 unless you also set the hand's rotation.
+- Add `phasmo::LookAtIK`, and set its solver with `IKSolverLookAt::SetChain(solver, spine, head, eyes, root)` (two
+  `Transform[]`, either may be empty) and its `headWeight`, `bodyWeight` and `clampWeight`.
+- Each frame set the solver's `IKSolver::IKPosition` (world space) and `IKSolver::IKPositionWeight` (0 to 1), blending
+  the weight in and out over a moment rather than jumping it.

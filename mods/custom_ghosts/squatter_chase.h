@@ -268,6 +268,32 @@ inline std::optional<Act> stance_for(Phase p) {
  */
 inline bool stops_dead(float before, float now) { return before > 0.0f && now <= 0.0f; }
 
+/**
+ * Whom its head turns to (Shown.lookAt): the player it is after, `target` by actor number, while it chases, waits at
+ * their hiding place, follows them or is excited to see them; 0 (nobody) in any other phase, with no target, or for an
+ * actor number a byte cannot hold.
+ */
+inline uint8_t look_target(Phase p, int target) {
+  const bool attends = p == Phase::Chasing || p == Phase::AtHidingPlace || p == Phase::Following || p == Phase::Excited;
+  return attends && target > 0 && target <= 255 ? static_cast<uint8_t>(target) : 0;
+}
+
+/** `now` moved toward `goal` by at most `step`, never past it: how an IK weight blends in and out. */
+inline float approach(float now, float goal, float step) {
+  if (!(step > 0.0f)) return now;
+  return now < goal ? std::min(goal, now + step) : std::max(goal, now - step);
+}
+
+// How the head and the door hand blend in and out, seconds from none to all, and how long into a door clip the hand
+// waits before it reaches: starting values, judged with the user in game.
+inline constexpr float kLookBlendSeconds = 0.4f, kReachBlendSeconds = 0.3f, kReachDelaySeconds = 0.15f;
+// Where a door's handle is taken to be: this share of the way from the hinge to the leaf's far edge, this high above
+// the floor, and this far out from the leaf on the Squatter's side, metres. Starting values; the game's doors have no
+// handle Transform.
+inline constexpr float kHandleAlong = 0.9f, kHandleHeight = 0.95f, kHandleOut = 0.06f;
+// How near a door must be for the hand to reach for it, metres, and how high a player's eyes are above their feet.
+inline constexpr float kReachDoorMetres = 1.8f, kEyeHeight = 1.5f;
+
 /** The move shown at `speed`: standing for a walk, sneak or run that is not moving, any other move as it is. */
 inline Move rest_move(Move m, float speed) {
   return (m == Move::Run || m == Move::Walk || m == Move::Sneak) && speed <= 0.0f ? Move::Stand : m;

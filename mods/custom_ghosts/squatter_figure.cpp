@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "Animator.h"
+#include "FinalIK.h"
 #include "UnityObject.h"
 #include "UnityRendering.h"
 #include "bundles.h"
@@ -40,7 +41,12 @@ struct Figure {
   api::Held root, animator, sheet, material;
   api::ClothParts cloth;
   const char* playing = nullptr;  // the state it plays, which a cross-fade blends from
+  api::Held hands[2], lookAt;      // Final IK's solvers: the left and right arms' LimbIK, and the head's LookAtIK
 } g;
+
+// How much of the look the spine takes, against the head's whole turn, and how far past straight ahead it eases off:
+// starting values, judged with the user in game.
+constexpr float kLookBody = 0.3f, kLookClamp = 0.5f;
 
 void fail(const char* step, const std::string& why) {
   if (!g_failed) PM_LOG("CustomGhosts: the Squatter's figure could not be built (%s): %s", step, why.c_str());
@@ -202,6 +208,44 @@ bool build_sheet() {
   return true;
 }
 
+// The figure's inverse kinematics (Final IK, which the game ships): a limb solver on each arm, its rotation left to
+// the clip, and a look-at solver on the spine and head, all at no weight until reach or look_at asks.
+bool build_ik() {
+  namespace B = phasmo::HumanBodyBones;
+  void* rootT = phasmo::GameObject::get_transform(g.root);
+  const int32_t arms[2][3] = {{B::LeftUpperArm(), B::LeftLowerArm(), B::LeftHand()},
+                              {B::RightUpperArm(), B::RightLowerArm(), B::RightHand()}};
+  const int32_t goals[2] = {phasmo::AvatarIKGoal::LeftHand(), phasmo::AvatarIKGoal::RightHand()};
+  for (int i = 0; i < 2; ++i) {
+    void* limb = phasmo::GameObject::AddComponent(g.root, phasmo::LimbIK::type.type_object());
+    void* solver = limb ? phasmo::LimbIK::solver.get(limb) : nullptr;
+    if (!solver) return fail("ik", "no LimbIK could be added"), false;
+    if (!phasmo::IKSolverTrigonometric::SetChain(solver, bone(arms[i][0]), bone(arms[i][1]), bone(arms[i][2]), rootT))
+      return fail("ik", "an arm's chain is not valid"), false;
+    phasmo::IKSolverLimb::goal.set(solver, goals[i]);
+    phasmo::IKSolverTrigonometric::IKRotationWeight.set(solver, 0.0f);
+    phasmo::IKSolver::IKPositionWeight.set(solver, 0.0f);
+    g.hands[i] = limb;
+  }
+  void* look = phasmo::GameObject::AddComponent(g.root, phasmo::LookAtIK::type.type_object());
+  void* solver = look ? phasmo::LookAtIK::solver.get(look) : nullptr;
+  void* spine = phasmo::Transform::type.make_array(2);
+  void* eyes = phasmo::Transform::type.make_array(0);
+  if (!solver || !spine || !eyes) return fail("ik", "no LookAtIK could be added"), false;
+  api::RefArray{spine}.set(0, bone(B::Spine()));
+  api::RefArray{spine}.set(1, bone(B::Chest()));
+  if (!phasmo::IKSolverLookAt::SetChain(solver, spine, bone(B::Head()), eyes, rootT))
+    return fail("ik", "the look-at chain is not valid"), false;
+  phasmo::IKSolverLookAt::headWeight.set(solver, 1.0f);
+  phasmo::IKSolverLookAt::bodyWeight.set(solver, kLookBody);
+  phasmo::IKSolverLookAt::clampWeight.set(solver, kLookClamp);
+  phasmo::IKSolver::IKPositionWeight.set(solver, 0.0f);
+  g.lookAt = look;
+  return true;
+}
+
+void* solver_of(const api::Held& limb) { return api::alive(limb) ? phasmo::LimbIK::solver.get(limb) : nullptr; }
+
 }  // namespace
 
 bool load(const std::filesystem::path& assets, std::string& why) {
@@ -253,7 +297,7 @@ void create(phasmo::Vector3 at) {
     g.playing = kStandStates[0];
     api::pose_now(g.animator);
   }
-  if (!build_sheet()) clear();
+  if (!build_sheet() || !build_ik()) clear();
 }
 
 void destroy() {
@@ -289,6 +333,37 @@ void set_pace(Move m, float speed) {
   static const int32_t kPlayRate = phasmo::Animator::StringToHash(api::make_string("PlayRate"));
   phasmo::Animator::SetFloatID(g.animator, kSpeed, std::max(speed, 0.0f));
   phasmo::Animator::SetFloatID(g.animator, kPlayRate, play_rate(m, speed));
+}
+
+Hand nearer_hand(phasmo::Vector3 at) {
+  if (!check()) return Hand::Right;
+  const auto away = [&](int32_t which) {
+    void* b = bone(which);
+    if (!b) return 1e9f;
+    const phasmo::Vector3 p = phasmo::Transform::get_position(b);
+    return std::hypot(p.x - at.x, p.z - at.z);
+  };
+  return away(phasmo::HumanBodyBones::LeftUpperArm()) < away(phasmo::HumanBodyBones::RightUpperArm()) ? Hand::Left
+                                                                                                      : Hand::Right;
+}
+
+void reach(Hand hand, phasmo::Vector3 at, float weight) {
+  if (!check()) return;
+  for (int i = 0; i < 2; ++i) {
+    void* solver = solver_of(g.hands[i]);
+    if (!solver) continue;
+    const bool reaching = static_cast<int>(hand) == i && weight > 0.0f;
+    if (reaching) phasmo::IKSolver::IKPosition.set(solver, at);
+    phasmo::IKSolver::IKPositionWeight.set(solver, reaching ? std::clamp(weight, 0.0f, 1.0f) : 0.0f);
+  }
+}
+
+void look_at(phasmo::Vector3 at, float weight) {
+  if (!check() || !api::alive(g.lookAt)) return;
+  void* solver = phasmo::LookAtIK::solver.get(g.lookAt);
+  if (!solver) return;
+  if (weight > 0.0f) phasmo::IKSolver::IKPosition.set(solver, at);
+  phasmo::IKSolver::IKPositionWeight.set(solver, std::clamp(weight, 0.0f, 1.0f));
 }
 
 phasmo::Vector3 clip_step() { return check() ? phasmo::Animator::get_deltaPosition(g.animator) : phasmo::Vector3{}; }

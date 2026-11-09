@@ -127,6 +127,21 @@ void walking_and_running_keep_pace_with_the_ground() {
   CHECK(rest_move(Move::Sneak, 0.0f) == Move::Stand && rest_move(Move::Sneak, 1.0f) == Move::Sneak);
 }
 
+// Its head turns to the player it is after while it chases, waits at their hiding place, follows them or is excited
+// to see them, and to nobody otherwise; the IK weights blend toward their goal a step at a time, never past it (user,
+// 2026-11-09: copy how games animate humanoids).
+void its_head_turns_to_the_player_it_is_after() {
+  CHECK(look_target(Phase::Chasing, 3) == 3 && look_target(Phase::AtHidingPlace, 3) == 3);
+  CHECK(look_target(Phase::Following, 7) == 7 && look_target(Phase::Excited, 7) == 7);
+  CHECK(look_target(Phase::Lurking, 3) == 0 && look_target(Phase::Searching, 3) == 0 &&
+        look_target(Phase::Moping, 3) == 0 && look_target(Phase::LockedOut, 3) == 0);
+  CHECK(look_target(Phase::Chasing, -1) == 0 && look_target(Phase::Chasing, 0) == 0 &&
+        look_target(Phase::Chasing, 256) == 0);
+  CHECK(approach(0.0f, 1.0f, 0.25f) == 0.25f && approach(0.9f, 1.0f, 0.25f) == 1.0f);
+  CHECK(approach(1.0f, 0.0f, 0.25f) == 0.75f && approach(0.1f, 0.0f, 0.25f) == 0.0f);
+  CHECK(approach(0.5f, 1.0f, 0.0f) == 0.5f && approach(0.5f, 1.0f, std::numeric_limits<float>::quiet_NaN()) == 0.5f);
+}
+
 // The door clip follows the leaf's swing (door::swings_toward): it pulls a door that comes toward it (Opening Door
 // Inwards) and pushes one that goes away (Open Door Outwards).
 void the_door_clip_follows_the_side() {
