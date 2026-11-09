@@ -1,6 +1,6 @@
 # The Squatter's physical animation: design
 
-Decided with the user on 2026-11-09. Items marked **(builder's call)** are not the user's decisions and may be changed by
+Decided with the user on 2026-11-09; approved by the user on 2026-11-10. Items marked **(builder's call)** are not the user's decisions and may be changed by
 whoever plans this. Everything else is the user's.
 
 ## Why
@@ -49,7 +49,17 @@ not fit, and it is out of scope.
 
 ## Where ragdolls go
 
-- **Every trip** (user). Other places are the user's to choose (see "Questions for the user"); until then, trips only.
+All chosen by the user (2026-11-09 and 2026-11-10); each falls, settles and gets up as a trip does:
+
+- **Every trip.**
+- **A hard bump** into a wall or furniture it stalls against (today's Bump act, which plays Jogging Stumble).
+- **Landing from a jump down a drop.**
+- **A door swinging into it.**
+- **An object a player throws hitting it.**
+
+How hard a bump, a door's swing or a thrown object must be to knock it over, and whether a lighter one only staggers it,
+are starting values judged with the user in game **(builder's call)**. What each of these reads from the game (a door's
+swing toward it, a thrown object's hit) is reverse engineered and cited by map key, never assumed.
 
 ## Constraints
 
@@ -123,12 +133,6 @@ carries the body about four metres forward, but that travel reaches the ghost on
 agent, so when the warp does not land (blocked, or off the mesh), the falling pose plays in place. Prove the cause before
 the rework (log each frame's clip travel against the agent's movement during a trip), and record what it was; the ragdoll
 fall then replaces the travel that failed.
-
-## Questions for the user
-
-1. Beyond trips, where else should the Squatter go physical? Places it could, none chosen: a hard bump into a wall or
-   furniture it stalls against; landing from a jump down a drop; a door swinging into it; an object a player throws
-   hitting it.
 
 ## Left to the builder
 
