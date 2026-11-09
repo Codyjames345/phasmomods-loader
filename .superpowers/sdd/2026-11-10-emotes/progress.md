@@ -112,3 +112,15 @@ Task 10: complete (commit 3b6fed8, tests: talk_loudness_test red 3 then passed, 
 - Task 11: Ruling: no filled-image or rotation API: the wheel's segments are textures the mod draws in code (pm::ui::texture_from_rgba on RawImages), so Task 11 is the volume effects, a world canvas and that texture helper - cost if wrong: none.
 - Task 11: create_world_canvas and texture_from_rgba are covered by the wheel's tests (Task 16), where they are used, not by a test of their own.
 Task 11: complete (commit dc412f4, tests: screen_effects_test red 2 then passed, 3 cases; pmcore builds)
+- Part 2 milestone: validate.ps1 -> 88/88 tests, docs and dev build pass; the API reference flagged orbit_rule.h's Point fields, fixed (4662968); the packaging steps after it rerun at the next milestone.
+- User, 2026-11-10: added mods/emotes/assets/<emote>/ with each emote's icon (PNG) and song (MP3), and asked for the 8 clips
+  matching the folder names: disco_fever, electro_swing, floss, groove_jam, orange_justice, scenario, smooth_moves,
+  take_the_l -> the package's DiscoFever, ElectroSwing, Floss, GrooveJam, OrangeJustice, Scenario, SmoothMoves, TakeTheL.
+- Ruling: the wheel's order is the folders' alphabetical order, clockwise from the top (segment 0 Disco Fever ... 7 Take The L) - one table to change - cost if wrong: emotes sit in other segments than the user pictured.
+- Ruling: the names shown under the wheel are the user's own track titles from the MP3 names ("Disco Fever", ..., "Take The L"), not AI text - cost if wrong: the user renames them in the string table.
+- Ruling: the songs are MP3, not WAV, so they go into the bundle as AudioClips (with the clips and icons), and each song's loudness envelope is measured once at build time from the same MP3 (ffmpeg) into a small text file the mod reads; the source MP3s and PNGs stay out of the public repo's git (gitignored) and are kept in the private repo's Unity project, as the Squatter's clips are - cost if wrong: none for play; an envelope out of step with a re-exported song until rebuilt.
+- Ruling: the manifest description is left empty (the Mods panel shows its own "no description" text) - it is player-facing text for the user to write.
+- Task 12: Ruling: the manifest's description is "PM_TEXT_TODO" (the manifest refuses an empty one), listed for the user with emotes.key-label.
+- Task 12: Ruling: the README's mod row waits for Task 18 (the README is in the user's own voice; it gets one factual row then).
+- Task 12: emote_assets.h (Task 15's names table) came early: the text-table test asks that every name key be named by code.
+Task 12: complete (commit e9bcf95, tests: mods_test, mod_manifest_test red then green; held_scan_test, text_table_test pass)
