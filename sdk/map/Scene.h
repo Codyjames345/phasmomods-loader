@@ -281,6 +281,12 @@ inline constexpr pm::sdk::EntryDesc Layer_DefaultProps{.key = "Layer.DefaultProp
 /// crucifix and photo camera bodies, among 252 objects). Decompiled: read from the asset files.
 inline constexpr pm::sdk::EntryDesc Layer_Item{.key = "Layer.Item", .kind = pm::sdk::Kind::Layer,
                                                .confidence = pm::sdk::Confidence::Decompiled, .name = "Item"};
+/// The game's DeadPlayer layer, where a dead player's ragdoll lies (DeadPlayer). The physics matrix lets it collide
+/// only with Default, Floor, Wall, Camera, DefaultNoNavigation, StaticLights, InvisibleWalls and StaticProps: the
+/// house's fixed world, never props, equipment, players or the ghost. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_DeadPlayer{.key = "Layer.DeadPlayer", .kind = pm::sdk::Kind::Layer,
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .name = "DeadPlayer"};
 /// The game's Cabinets layer. Decompiled: read from the asset files.
 inline constexpr pm::sdk::EntryDesc Layer_Cabinets{.key = "Layer.Cabinets", .kind = pm::sdk::Kind::Layer,
                                                    .confidence = pm::sdk::Confidence::Decompiled, .name = "Cabinets"};
@@ -399,6 +405,9 @@ struct Layers {
   static constexpr pm::api::Layer<pm::map::Layer_Cabinets> Cabinets{};  ///< the game's Cabinets layer. Unresolved: -1.
   /// The equipment players carry, place and drop (Layer_Item's note in the map). Unresolved: -1.
   static constexpr pm::api::Layer<pm::map::Layer_Item> Item{};
+  /// A dead player's ragdoll, which meets only the house's fixed world (Layer_DeadPlayer's note in the map).
+  /// Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_DeadPlayer> DeadPlayer{};
   static constexpr pm::api::Layer<pm::map::Layer_Wall> Wall{};  ///< the game's Wall layer. Unresolved: -1.
   static constexpr pm::api::Layer<pm::map::Layer_Door> Door{};  ///< the game's Door layer. Unresolved: -1.
   /// The LaserGhost layer: LaserGhost.index(), -1 when it did not resolve.

@@ -20,6 +20,8 @@ inline constexpr const char* NavMeshAgent_SetDestination_params[] = {"Vector3"};
 inline constexpr const char* NavMeshAgent_CalculatePath_params[] = {"Vector3", "NavMeshPath"};
 inline constexpr const char* NavMesh_CalculatePath_params[] = {"Vector3", "Vector3", "int", "NavMeshPath"};
 inline constexpr const char* Rigidbody_bool[] = {"bool"};
+inline constexpr const char* Rigidbody_float[] = {"float"};
+inline constexpr const char* Physics_OverlapSphere_params[] = {"Vector3", "float", "int", "@QueryTriggerInteraction"};
 inline constexpr const char* Rigidbody_AddForceAtPosition_params[] = {"Vector3", "Vector3", "ForceMode"};
 inline constexpr const char* Rigidbody_constraints_params[] = {"RigidbodyConstraints"};
 inline constexpr const char* NavMeshPathStatus_values[] = {"PathComplete", "PathPartial", "PathInvalid"};
@@ -35,6 +37,14 @@ inline constexpr pm::sdk::EntryDesc Physics{.key = "Physics", .name = "Physics",
 inline constexpr pm::sdk::EntryDesc Physics_CheckBox{.key = "Physics.CheckBox", .kind = pm::sdk::Kind::Method,
                                                      .flags = pm::sdk::kStatic, .owner = "Physics", .name = "CheckBox",
                                                      .type = "bool", .params = Physics_CheckBox_params};
+
+/// Every collider on the layers of a mask that touches or lies inside a sphere (its centre and radius, metres), with
+/// triggers counted as the last argument says: a new Collider[], empty when none. Static. Inferred: Unity's documented
+/// API.
+inline constexpr pm::sdk::EntryDesc Physics_OverlapSphere{.key = "Physics.OverlapSphere", .kind = pm::sdk::Kind::Method,
+                                                          .flags = pm::sdk::kStatic, .owner = "Physics",
+                                                          .name = "OverlapSphere", .type = "Collider[]",
+                                                          .params = Physics_OverlapSphere_params};
 
 /// Whether a ray from an origin along a direction hits a collider within a distance, on the layers of
 /// a mask, with triggers counted as the last argument says. Static. Inferred: Unity's documented API.
@@ -230,6 +240,21 @@ inline constexpr pm::sdk::EntryDesc Rigidbody_set_position{.key = "Rigidbody.set
                                                            .owner = "Rigidbody", .name = "set_position",
                                                            .params = NavMeshAgent_SetDestination_params};
 
+/// Sets the body's mass, kilograms. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Rigidbody_set_mass{.key = "Rigidbody.set_mass", .kind = pm::sdk::Kind::Method,
+                                                       .owner = "Rigidbody", .name = "set_mass",
+                                                       .params = Rigidbody_float};
+
+/// Sets whether gravity pulls the body. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Rigidbody_set_useGravity{.key = "Rigidbody.set_useGravity",
+                                                             .kind = pm::sdk::Kind::Method, .owner = "Rigidbody",
+                                                             .name = "set_useGravity", .params = Rigidbody_bool};
+
+/// The body's turn rate, radians a second about each world axis. Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc Rigidbody_get_angularVelocity{.key = "Rigidbody.get_angularVelocity",
+                                                                  .kind = pm::sdk::Kind::Method, .owner = "Rigidbody",
+                                                                  .name = "get_angularVelocity"};
+
 /// Sets the agent's top speed. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc NavMeshAgent_set_speed{.key = "NavMeshAgent.set_speed", .kind = pm::sdk::Kind::Method,
                                                            .owner = "NavMeshAgent", .name = "set_speed",
@@ -344,6 +369,10 @@ struct Physics {
   static constexpr pm::api::Method<pm::map::Physics_CheckBox, bool(const Vector3*, const Vector3*, const Quaternion*,
                                                                    int32_t, int32_t)>
       CheckBox{};
+  /// OverlapSphere(&centre, radius, layerMask, triggers): every collider on the mask's layers touching the sphere, a
+  /// new Collider[]. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Physics_OverlapSphere, void*(const Vector3*, float, int32_t, int32_t)>
+      OverlapSphere{};
 };
 
 /// Whether a physics query counts triggers.
@@ -452,6 +481,12 @@ struct Rigidbody {
   static constexpr int32_t kFreezeAll = 126;
   /// RigidbodyConstraints.None.
   static constexpr int32_t kFreeNone = 0;
+  /// set_mass(body, kilograms). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Rigidbody_set_mass, void(void*, float)> set_mass{};
+  /// set_useGravity(body, on). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Rigidbody_set_useGravity, void(void*, bool)> set_useGravity{};
+  /// get_angularVelocity(body): radians a second about each world axis. Unresolved: all zero.
+  static constexpr pm::api::Method<pm::map::Rigidbody_get_angularVelocity, Vector3(void*)> get_angularVelocity{};
 };
 
 /// DOTween's static API.
