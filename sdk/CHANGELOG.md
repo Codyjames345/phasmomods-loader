@@ -58,6 +58,14 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   (`targetActivity`, `navMeshObstacle`, `Update`). Clearing `targetActivity` switches the obstacle that keeps ghost
   routes out of the closet off.
 - **Layers:** `Layer.Item`, the equipment players carry, place and drop.
+- **A ragdoll from Unity's parts** ([custom animation](guides/custom-animation.md#a-ragdoll-from-unitys-parts)):
+  `Joint` (`set_connectedBody`, `set_axis`), `CharacterJoint` (`set_swingAxis` and its four limits, with
+  `phasmo::SoftJointLimit`), `BoxCollider` (`set_size`, `set_center`), `SphereCollider` (`set_radius`, `set_center`),
+  `CapsuleCollider.set_center` and `set_direction`, `Rigidbody.set_mass`, `set_useGravity` and `get_angularVelocity`,
+  `Collider.get_attachedRigidbody`, `Physics.OverlapSphere`, and `Layer.DeadPlayer`, the layer that meets only the
+  house's fixed world.
+- **A pass after the Animator:** `IKExecutionOrder.LateUpdate`, where Final IK runs its solvers, for a hook that changes
+  the animated pose before any IK bends it ([custom animation](guides/custom-animation.md#a-pass-after-the-animator)).
 - **Sounds as the game plays them:** `SoundController.GetFloorAudioSnapshot`, the mixer group a sound at a point plays
   through (what `Noise.PlaySound` gives a noise with `Noise.changeMixerOnPlay`), and `AudioSource.set_outputAudioMixerGroup`,
   so a mod's sound is muffled on another floor or from outdoors as the game's are; `AudioSource.set_rolloffMode` with

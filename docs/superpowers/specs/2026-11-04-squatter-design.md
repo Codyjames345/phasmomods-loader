@@ -92,6 +92,18 @@ Some consequences, all **(builder's call)**:
   opens an exit. The leaf opens to its hinge's one side, all the way, and the clip pulls a leaf that swings toward the Squatter and pushes one that swings away. It must not send a game RPC by
   name or invoke an RPC body.
 
+### Falls
+
+Five things knock it over (user, 2026-11-09 and 2026-11-10): every trip, a hard bump into a wall or furniture, landing
+from a jump down a drop, a door swinging into it, and an object a player throws. Each body falls as a ragdoll under
+physics, against the real floor and furniture, settles, then gets up from the pose it landed in with the get-up that
+matches it: Standing Up from face down, Getting Up from face up. The master decides each fall and shares it; every
+client simulates its own body's fall, and the ghost goes to where the master's body lies. A trip falls partway through
+its clip, where the body loses its footing. A stall falls only when it was trying to run hard, and plays the bump
+otherwise; a door and a thrown object knock it over only from a speed up. No knock lands while it is down, mid-act or
+falling. How hard each must be, and how hard each pushes, are starting values judged with the user in game **(builder's
+call)**. The design is `docs/superpowers/specs/2026-11-09-squatter-physical-animation-design.md`.
+
 ## Look and sound
 
 - **Body:** a vanilla player model, not a ghost model. Its head (with the hair) shows, since it is a person under a
@@ -108,8 +120,9 @@ Some consequences, all **(builder's call)**:
   parkour `jumping up` or `hard landing`; stumble `Tripping` and bump `Jogging Stumble` (the builder's reading of the user's description);
   sit `Sitting Idle`; get up `Getting Up`; kick and bang `Martelo 2`; doors `Open Door Outwards` and `Opening Door Inwards`; stand `Standing Idle` and walk `Crouched Walking` (user,
   2026-11-09): it stands while it lurks, waits at the exits or holds still, and walks to search, follow and find a
-  place to wait. The trip plays `Soccer Trip`, which lands face down, and runs on into the user's `Standing Up` clip, only
-  its rise from lying to standing (user, 2026-11-09: getting up from the trip was too quick); the rolls' own get-ups
+  place to wait. A trip plays `Soccer Trip` or `Tripping` until the body loses its footing, then falls as a ragdoll
+  (Falls, above) and gets up with the user's `Standing Up` clip, only its rise from lying to standing (user, 2026-11-09:
+  getting up from the trip was too quick), or `Getting Up`'s rise, whichever matches how it landed; the rolls' own get-ups
   stay as they are (user, 2026-11-09). Where a move
   has two clips, each time it plays one is picked at random, the same on every client.
 - **Sound:** every sound it makes is one of the user's recordings or a stock clip the user supplies. The user records all the
