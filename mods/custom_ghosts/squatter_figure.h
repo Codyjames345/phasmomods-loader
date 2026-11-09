@@ -246,6 +246,10 @@ void turn_root(float yaw);
 /** Where its feet are in the world this frame (the foot bones), into `left` and `right`; false when it is not built. */
 bool feet(phasmo::Vector3& left, phasmo::Vector3& right);
 
+/** Gives the sheet `slack` (0 to 1) of sheet's fall slack (squatter_fall.h sheet_slack, slack_distance): how much
+ * further its points may move from where the body carries them. Sent to the cloth only when it changes. */
+void set_sheet_slack(float slack);
+
 /** Where a fallen body lies, in the world: its hips, its head, and its chest's front (a unit vector). */
 struct Landing {
   phasmo::Vector3 hips, head, front;

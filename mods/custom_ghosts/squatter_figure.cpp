@@ -7,10 +7,12 @@
 
 #include "Animator.h"
 #include "FinalIK.h"
+#include "Input.h"
 #include "Scene.h"
 #include "UnityCloth.h"
 #include "UnityObject.h"
 #include "UnityRendering.h"
+#include "UnityWorld.h"
 #include "bundles.h"
 #include "held.h"
 #include "inertia.h"
@@ -19,6 +21,7 @@
 #include "quat.h"
 #include "runtime.h"
 #include "sheet_mesh.h"
+#include "squatter_fall.h"
 #include "squatter_ragdoll.h"
 
 namespace pm::custom::squatter::figure {
@@ -45,9 +48,13 @@ constexpr float kArm = 0.055f, kForearm = 0.045f, kThigh = 0.08f, kShin = 0.055f
 // The forearms and hands push the sheet out where they go, a hand reaching for a door's handle among them: spheres
 // along each forearm, at the wrist and over the hand. Starting values.
 constexpr float kWrist = 0.04f, kHand = 0.05f, kPalmAlong = 0.35f;
-// No floor under the sheet (user, 2026-11-10): a sphere under the root held the sheet up in the air where the ghost
-// stood while the body fell elsewhere. Cloth meets only the colliders it is given, so the hem is kept up by how far it
-// may move from the body (sheet::kHemSway) and by reaching only to the feet (kHemOnFloor 0).
+// The floor the sheet rests on: Cloth meets only the colliders it is given, so a sphere this large lies under the floor
+// with its top on it, across the sheet's spread nearly flat. It sits under the hips wherever the body is (place_floor),
+// never where the ghost stands while the body lies elsewhere (user, 2026-11-10: a sphere under the root held the sheet
+// up in the air). A starting value.
+constexpr float kFloorRadius = 10.0f;
+// How far down from the hips the floor is looked for on the navigation mesh, metres.
+constexpr float kFloorSearch = 2.0f;
 // The investigator body's parts left drawing under the sheet, by their GameObject's name in the PCPlayer prefab
 // (sdk/systems/scene.md): the head alone (CC_Base_Body is the head's mesh alone), its eyes, teeth, tongue and hair. The
 // legs clipped through the sheet, so the trousers and boots are hidden with the jacket, shirt, hands and every cosmetic
@@ -66,6 +73,11 @@ struct Figure {
   api::Held fullBody, lookAt;      // Final IK: the body's FullBodyBipedIK, and the head's LookAtIK
   api::Held order;                 // Final IK's IKExecutionOrder, whose LateUpdate is the pass after the animation
   bool falling = false;            // its ragdoll has it, not its Animator or its IK
+  // The sheet's floor: a large sphere the cloth rests on, hung on this marker, which sits on the floor under the hips
+  // each frame (place_floor), wherever the body is, a fallen one too.
+  api::Held floor;
+  std::vector<phasmo::Vector2> coefficients;  // the sheet's own constraints, as built, which slack adds to
+  float slack = 0.0f;                         // the slack last sent
   phasmo::Quaternion fallChest{0, 0, 0, 1};  // the chest's rotation as the fall began
   phasmo::Vector3 fallFront{0, 0, 1};        // the body's front as the fall began
 } g;
@@ -154,6 +166,7 @@ void fail(const char* step, const std::string& why) {
 void clear() {
   ragdoll::destroy();
   api::destroy_cloth(g.cloth);
+  if (api::alive(g.floor)) phasmo::Object::Destroy(g.floor, 0.0f);
   if (api::alive(g.material)) phasmo::Object::Destroy(g.material, 0.0f);
   if (api::alive(g.root)) phasmo::Object::Destroy(g.root, 0.0f);
   g = Figure{};
@@ -241,6 +254,14 @@ bool build_sheet() {
     uv.push_back({m.uv[i].x, m.uv[i].y});
     coefficients.push_back({m.coefficients[i].maxDistance, m.coefficients[i].collisionSphereDistance});
   }
+  g.coefficients = coefficients;
+  g.slack = 0.0f;
+  // The floor's marker, at the feet as the sheet is built; place_floor moves it under the hips each frame.
+  void* floor = phasmo::GameObject::type.make();
+  if (!floor) return fail("sheet", "no GameObject could be made for its floor"), false;
+  phasmo::GameObject::ctor(floor, api::make_string("Squatter sheet floor"));
+  g.floor = floor;
+  phasmo::Transform::set_position(phasmo::GameObject::get_transform(floor), &feet);
   // Skinned to the whole body as worn clothing is in games (sheet::weight_by_nearness): each point follows the bones
   // nearest it, so the sheet goes with the arms and legs, and the cloth only sways about that (kHemSway). The cap over
   // the head follows the head alone, so the eye holes stay over the eyes.
@@ -319,7 +340,8 @@ bool build_sheet() {
       {bone(B::LeftHand()), kWrist, none},
       {bone(B::RightHand()), kWrist, none},
       {bone(B::LeftHand()), kHand, along(B::LeftLowerArm(), B::LeftHand(), kPalmAlong)},
-      {bone(B::RightHand()), kHand, along(B::RightLowerArm(), B::RightHand(), kPalmAlong)}};
+      {bone(B::RightHand()), kHand, along(B::RightLowerArm(), B::RightHand(), kPalmAlong)},
+      {phasmo::GameObject::get_transform(floor), kFloorRadius, {0, -kFloorRadius, 0}}};
   if (!api::add_cloth(anchor, mesh, material, kCloth, spheres, g.cloth, &why)) return fail("cloth", why), false;
   return true;
 }
@@ -398,6 +420,19 @@ bool build_ik() {
   return true;
 }
 
+// Puts the sheet's floor on the navigation mesh under the hips, wherever the body is; where none is found within
+// kFloorSearch it stays where it last was.
+void place_floor() {
+  if (!api::alive(g.floor)) return;
+  void* hips = bone(phasmo::HumanBodyBones::Hips());
+  if (!hips) return;
+  phasmo::Vector3 at = phasmo::Transform::get_position(hips);
+  phasmo::NavMeshHit hit{};
+  if (!phasmo::NavMesh::SamplePosition(&at, &hit, kFloorSearch, -1)) return;
+  const phasmo::Vector3 under{at.x, hit.position.y, at.z};
+  phasmo::Transform::set_position(phasmo::GameObject::get_transform(g.floor), &under);
+}
+
 // Final IK's LateUpdate, for every model that has an IKExecutionOrder: on the figure's own, the pass after the
 // animation runs first, so the IK bends the pose the pass leaves.
 void detour_ik_late_update(api::Original<phasmo::IKExecutionOrder::LateUpdate> original, void* order) {
@@ -407,6 +442,7 @@ void detour_ik_late_update(api::Original<phasmo::IKExecutionOrder::LateUpdate> o
     g_lastPass = now;
     if (!g.falling) inertialize();
     if (g_after) g_after(dt);
+    place_floor();
     if (!ik_runs(order, g.order, g.falling)) return;  // physics has the body: no IK bends it
   }
   original(order);
@@ -597,6 +633,19 @@ bool fall(phasmo::Vector3 velocity) {
 }
 
 bool falling() { return check() && g.falling; }
+
+void set_sheet_slack(float slack) {
+  if (!check() || !api::alive(g.cloth.cloth) || g.coefficients.empty()) return;
+  slack = std::clamp(slack, 0.0f, 1.0f);
+  if (std::fabs(slack - g.slack) < 0.01f && !(slack == 0.0f && g.slack != 0.0f)) return;
+  void* arr = pm::api::Type<pm::map::Vector2>{}.make_array(g.coefficients.size());
+  if (!arr || api::ValueArray{arr}.stride() != sizeof(phasmo::Vector2)) return;
+  const api::Array<phasmo::Vector2> out{arr};
+  for (size_t i = 0; i < g.coefficients.size(); ++i)
+    out[i] = {slack_distance(g.coefficients[i].x, slack), g.coefficients[i].y};
+  phasmo::Cloth::set_coefficients(g.cloth.cloth, arr);
+  g.slack = slack;
+}
 
 std::optional<phasmo::Quaternion> body_rotation() {
   if (!check()) return std::nullopt;
