@@ -481,3 +481,24 @@ void the_pace_keeps_the_distance_of_a_frame_with_no_time() {
   steady.reset();
   CHECK(steady.pace() == 0.0f);
 }
+
+// The way ahead is read across the body's width, as its feet sweep it, not down one line (user, 2026-11-09: it never
+// tripped; a ray down its middle missed what its feet met). The rays are spread evenly, symmetric about its line.
+void the_way_ahead_is_read_across_its_width() {
+  CHECK(kSweepRays >= 3 && kSweepRays % 2 == 1);  // one down the middle
+  CHECK(std::abs(sweep_offset(0) + kSweepHalfWidth) < 1e-6f);
+  CHECK(std::abs(sweep_offset(kSweepRays - 1) - kSweepHalfWidth) < 1e-6f);
+  CHECK(std::abs(sweep_offset(kSweepRays / 2)) < 1e-6f);
+  for (int i = 0; i < kSweepRays; ++i) CHECK(std::abs(sweep_offset(i) + sweep_offset(kSweepRays - 1 - i)) < 1e-6f);
+  // What called a clumsy move, for the log: the same order move_for picks in.
+  Surroundings s;
+  CHECK(clumsy_reason(s) == nullptr);
+  s.furniture = 1;
+  CHECK(std::string(clumsy_reason(s)) == "furniture beside");
+  s.ankleProp = true;
+  CHECK(std::string(clumsy_reason(s)) == "ankle-high prop" && move_for(s).move == Move::Stumble);
+  s.kneeProp = true;
+  CHECK(std::string(clumsy_reason(s)) == "drop or knee-high prop" && move_for(s).move == Move::Parkour);
+  s.diveAt = true;
+  CHECK(std::string(clumsy_reason(s)) == "dive at the target" && move_for(s).move == Move::Roll);
+}

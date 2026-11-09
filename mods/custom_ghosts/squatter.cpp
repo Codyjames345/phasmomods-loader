@@ -285,10 +285,20 @@ Surroundings surroundings(void* agent, Point at, const Seen* target, bool mayDiv
   const int32_t ground =
       mask_of({L::Default.index(), L::Floor.index(), L::DefaultNoNavigation.index(), L::StaticProps.index()});
   const auto at_height = [&](float h) { return phasmo::Vector3{at.x, at.y + h, at.z}; };
-  const bool chest = ray_hits(at_height(kChestHeight), ahead, kPropLook, solid);
-  const bool knee = ray_hits(at_height(kKneeHeight), ahead, kPropLook, furniture);
+  // Each height is read across the body's width (sweep_offset), as its feet and knees sweep the way ahead.
+  const auto sweep = [&](float h, int32_t mask) {
+    for (int i = 0; i < kSweepRays; ++i) {
+      const float o = sweep_offset(i);
+      const phasmo::Vector3 from{at.x + right.x * o, at.y + h, at.z + right.z * o};
+      if (ray_hits(from, ahead, kPropLook, mask)) return true;
+    }
+    return false;
+  };
+  const bool chest = sweep(kChestHeight, solid);
+  const bool knee = sweep(kKneeHeight, furniture);
   s.kneeProp = knee && !chest;
-  s.ankleProp = !knee && ray_hits(at_height(kAnkleHeight), ahead, kPropLook, furniture);
+  // Underfoot, dropped equipment trips it as furniture does.
+  s.ankleProp = !knee && sweep(kAnkleHeight, furniture | mask_of({L::Item.index()}));
   const phasmo::Vector3 down{0, -1, 0};
   const phasmo::Vector3 there{at.x + ahead.x * kDropAhead, at.y + kDropDepth, at.z + ahead.z * kDropAhead};
   s.dropAhead = ground && !ray_hits(there, down, 2.0f * kDropDepth, ground);
@@ -700,10 +710,13 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
         const phasmo::Vector3 v = agent ? phasmo::NavMeshAgent::get_velocity(agent) : phasmo::Vector3{};
         const bool facesAhead =
             g.facing && g.local != State::Local::Turning && faces_ahead(*g.facing, std::atan2(v.x, v.z));
-        if (t >= c.nextClumsy && !paused && facesAhead)
+        if (t >= c.nextClumsy && !paused && facesAhead) {
           // Never a dive at a player in a hiding place: it would roll through the door.
-          pick = move_for(
-              surroundings(agent, ghostAt, targetSensed && !c.hidingKnown ? target : nullptr, t >= c.nextDive));
+          const Surroundings way =
+              surroundings(agent, ghostAt, targetSensed && !c.hidingKnown ? target : nullptr, t >= c.nextDive);
+          pick = move_for(way);
+          if (const char* why = clumsy_reason(way)) PM_LOG("squatter: a clumsy move (%s)", why);
+        }
         if (pick.move != c.out.move || plays_once(pick.move)) {
           c.out.move = pick.move;
           c.out.variant = pick.variant;

@@ -466,6 +466,16 @@ inline bool stood_up(uint64_t since, uint64_t now) {
   return now >= since && now - since >= static_cast<uint64_t>(seconds_of(kStumbleStates[0]) * 1000.0f);
 }
 
+/** What in `s` calls a clumsy move, in move_for's order, for the log; null when nothing does. */
+inline const char* clumsy_reason(const Surroundings& s) {
+  if (s.diveAt) return "dive at the target";
+  if (s.dropAhead || s.kneeProp) return "drop or knee-high prop";
+  if (s.ankleProp) return "ankle-high prop";
+  if (s.gap) return "gap";
+  if (s.furniture != 0) return "furniture beside";
+  return nullptr;
+}
+
 /**
  * The way the figure faces, radians clockwise from +z, for move `m` and clip `variant` while it heads `heading`: a
  * duck or a weave goes side-on, so its sidestep carries it along its way, as one squeezes through a door (the A clips
@@ -486,6 +496,15 @@ inline constexpr float kDropAhead = 1.5f, kDropDepth = 0.5f;  // where it looks 
 inline constexpr float kGapHalf = 0.5f;               // either side within this: a doorway or gap
 inline constexpr float kBesideReach = 0.6f;           // furniture this near on one side
 inline constexpr float kDiveMin = 2.5f, kDiveMax = 5.0f, kDiveConeDegrees = 25.0f;  // a target this far, this straight
+// How wide a strip ahead it reads for props in its way, metres either side of its line, in how many rays (user,
+// 2026-11-09: it never tripped; one ray down its middle missed what its feet met). Starting values.
+inline constexpr float kSweepHalfWidth = 0.2f;
+inline constexpr int kSweepRays = 5;
+
+/** The sideways offset of ray `i` of the kSweepRays across the strip: evenly from -kSweepHalfWidth to +kSweepHalfWidth. */
+inline float sweep_offset(int i) {
+  return kSweepRays > 1 ? -kSweepHalfWidth + 2.0f * kSweepHalfWidth * static_cast<float>(i) / (kSweepRays - 1) : 0.0f;
+}
 // How near the way it runs its figure must face for a clumsy move to begin (faces_ahead). A starting value.
 inline constexpr float kFaceAheadDegrees = 20.0f;
 

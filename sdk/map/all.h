@@ -1597,6 +1597,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &Layer_DefaultNoNavigation,
     &Layer_StaticProps,
     &Layer_DefaultProps,
+    &Layer_Item,
     &Layer_Cabinets,
     &Layer_Wall,
     &Layer_Door,

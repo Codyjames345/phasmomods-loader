@@ -277,6 +277,10 @@ inline constexpr pm::sdk::EntryDesc Layer_StaticProps{.key = "Layer.StaticProps"
 inline constexpr pm::sdk::EntryDesc Layer_DefaultProps{.key = "Layer.DefaultProps", .kind = pm::sdk::Kind::Layer,
                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                        .name = "DefaultProps"};
+/// The game's Item layer: the equipment players carry, place and drop (on Willow Street the thermometer, tripod,
+/// crucifix and photo camera bodies, among 252 objects). Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_Item{.key = "Layer.Item", .kind = pm::sdk::Kind::Layer,
+                                               .confidence = pm::sdk::Confidence::Decompiled, .name = "Item"};
 /// The game's Cabinets layer. Decompiled: read from the asset files.
 inline constexpr pm::sdk::EntryDesc Layer_Cabinets{.key = "Layer.Cabinets", .kind = pm::sdk::Kind::Layer,
                                                    .confidence = pm::sdk::Confidence::Decompiled, .name = "Cabinets"};
@@ -393,6 +397,8 @@ struct Layers {
   /// What a body bumps into (Layer_DefaultProps's note in the map). Unresolved: -1.
   static constexpr pm::api::Layer<pm::map::Layer_DefaultProps> DefaultProps{};
   static constexpr pm::api::Layer<pm::map::Layer_Cabinets> Cabinets{};  ///< the game's Cabinets layer. Unresolved: -1.
+  /// The equipment players carry, place and drop (Layer_Item's note in the map). Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_Item> Item{};
   static constexpr pm::api::Layer<pm::map::Layer_Wall> Wall{};  ///< the game's Wall layer. Unresolved: -1.
   static constexpr pm::api::Layer<pm::map::Layer_Door> Door{};  ///< the game's Door layer. Unresolved: -1.
   /// The LaserGhost layer: LaserGhost.index(), -1 when it did not resolve.
