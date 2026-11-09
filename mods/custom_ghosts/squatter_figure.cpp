@@ -584,6 +584,27 @@ bool fall(phasmo::Vector3 velocity) {
 
 bool falling() { return check() && g.falling; }
 
+std::optional<phasmo::Quaternion> body_rotation() {
+  if (!check()) return std::nullopt;
+  phasmo::Quaternion q{0, 0, 0, 0};
+  phasmo::Animator::get_bodyRotationInternal_Injected(g.animator, &q);
+  if (q.x == 0 && q.y == 0 && q.z == 0 && q.w == 0) return std::nullopt;  // not read
+  return q;
+}
+
+void turn_root(float yaw) {
+  if (!check()) return;
+  void* hips = bone(phasmo::HumanBodyBones::Hips());
+  const phasmo::Vector3 at = phasmo::Transform::get_position(phasmo::GameObject::get_transform(g.root));
+  const phasmo::Vector3 hipsAt = hips ? phasmo::Transform::get_position(hips) : at;
+  const phasmo::Quaternion hipsTurn = hips ? phasmo::Transform::get_rotation(hips) : phasmo::Quaternion{0, 0, 0, 1};
+  place(at, yaw);
+  if (hips) {
+    phasmo::Transform::set_position(hips, &hipsAt);
+    phasmo::Transform::set_rotation(hips, &hipsTurn);
+  }
+}
+
 bool feet(phasmo::Vector3& left, phasmo::Vector3& right) {
   if (!check()) return false;
   void* l = bone(phasmo::HumanBodyBones::LeftFoot());

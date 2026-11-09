@@ -1323,6 +1323,8 @@ int main() {
   a_drop_falls_as_the_jump_lands();
   its_steps_are_as_loud_as_a_players();
   an_open_doorway_does_not_muffle_its_voice();
+  it_stands_facing_the_way_its_body_faces();
+  the_standing_roll_hands_back_to_the_run();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();

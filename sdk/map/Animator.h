@@ -187,6 +187,15 @@ inline constexpr pm::sdk::EntryDesc Animator_Rebind{.key = "Animator.Rebind", .k
 
 inline constexpr const char* Animator_CrossFade_params[] = {"int", "float", "int", "float", "float"};
 
+inline constexpr const char* Animator_out_Quaternion[] = {"out Quaternion"};
+
+/// The humanoid body's rotation in the world as the Animator last posed it, written to the Quaternion given: the engine
+/// function behind Animator.bodyRotation, whose managed body this build strips. Its forward is the way the body faces,
+/// whatever the clip turned it by. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_get_bodyRotationInternal_Injected{
+    .key = "Animator.get_bodyRotationInternal_Injected", .kind = pm::sdk::Kind::Icall,
+    .name = "UnityEngine.Animator::get_bodyRotationInternal_Injected", .params = Animator_out_Quaternion};
+
 /// How far the Animator's clips turned the model's root over its last update (root motion): a turn-on-the-spot clip's
 /// own turn, when its root rotation is not baked into the pose. Only worked out while the Animator applies root motion
 /// (Animator.set_applyRootMotion): with it off it reads no turn (the Squatter's test of 2026-11-09). Inferred: Unity's
@@ -376,6 +385,10 @@ struct Animator {
       CrossFade{};
   /// get_deltaRotation(animator): how far its clips turned the root last update (root motion). Unresolved: zero.
   static constexpr pm::api::Method<pm::map::Animator_get_deltaRotation, Quaternion(void*)> get_deltaRotation{};
+  /// get_bodyRotationInternal_Injected(animator, &out): the humanoid body's world rotation as last posed. Unresolved:
+  /// does nothing.
+  static constexpr pm::api::Icall<pm::map::Animator_get_bodyRotationInternal_Injected, void(void*, Quaternion*)>
+      get_bodyRotationInternal_Injected{};
   /// get_deltaPosition(animator): how far its clips moved the root last update (root motion). Unresolved: zero.
   static constexpr pm::api::Method<pm::map::Animator_get_deltaPosition, Vector3(void*)> get_deltaPosition{};
   /// Update(animator, seconds): steps it now; 0 poses the model in its state. Unresolved: does nothing.
