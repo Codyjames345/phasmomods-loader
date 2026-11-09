@@ -110,6 +110,16 @@ bool controller_has_states(void* controller, std::span<const char* const> states
 void* two_sided_material(void* like, phasmo::Color colour, std::string* why = nullptr);
 
 /**
+ * @brief Sets a Lit material's smoothness (ShaderProperty.Lit.Smoothness): 0 is matte, as the game's own untextured
+ *        fabric, and 1 a mirror; the shader's default is 0.5. Main thread.
+ * @param material A material on the game's Lit shader, two_sided_material's for one.
+ * @param smoothness 0 to 1; a value outside is brought within it.
+ * @return False, changing nothing, for no material, or a shader without the property (or a build without the entry).
+ * @since Contract 2.3 (a helper in the mod's own code)
+ */
+bool set_smoothness(void* material, float smoothness);
+
+/**
  * @brief Whether this game build has the optional entries two_sided_material needs: the Lit shader's base colour and
  *        culling properties (ShaderProperty.Lit.BaseColor and ShaderProperty.Lit.Cull). Call it in pmmod_start and
  *        fail the start when it is false; the material's other entries are required, so a mod using it does not start

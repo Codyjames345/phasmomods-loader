@@ -1664,6 +1664,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &CullMode_Off,
     &ShaderProperty_Lit_BaseColor,
     &ShaderProperty_Lit_Cull,
+    &ShaderProperty_Lit_Smoothness,
     &PlayerCosmetics_playerAnimator,
     &Resources,
     &Resources_Load,

@@ -31,6 +31,8 @@ constexpr float kHeadCentreAboveBone = 0.09f;  // the head sphere's centre above
 // A heavier, stiffer cloth than Unity's defaults, as a bedsheet is (user, 2026-11-09: thicker and stiffer): it bends
 // less and its motion dies away sooner. Starting values, judged with the user in game.
 const api::ClothSettings kCloth{true, 0.5f, 1.0f, 0.4f};
+// The sheet material's smoothness: matte (user, 2026-11-10).
+constexpr float kSheetSmoothness = 0.0f;
 // The spheres the sheet rests on besides the head, so the body never shows through it (user, 2026-11-09: the sheet was
 // too thin and the legs and arms came through): a little larger than the body there, which gives the cloth its
 // thickness, on the torso, neck, shoulders, both arms and both legs. Starting values, judged with the user in game.
@@ -175,6 +177,9 @@ bool build_sheet() {
   void* material = api::two_sided_material(api::lit_material_of(g.root), {1, 1, 1, 1}, &why);
   if (!material) return fail("sheet material", why), false;
   g.material = material;
+  // Matte, as a cotton sheet is (user, 2026-11-10), and as the game's own untextured fabric sets it: no smoothness. A
+  // build without the property keeps the shader's sheen.
+  if (!api::set_smoothness(material, kSheetSmoothness)) PM_LOG("squatter: the sheet's material has no smoothness to set");
 
   // The body stands in its standing clip (create), so the sheet is laid over it as it stands: its cap on the head,
   // its shoulders just outside the upper arms' spheres, its hem on the floor at the feet. The arms below hang inside

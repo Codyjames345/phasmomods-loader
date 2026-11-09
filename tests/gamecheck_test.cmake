@@ -65,7 +65,7 @@ message(STATUS "The HOST line names the steering entries this build lacks.")
 # An icall cannot be checked without the running game: it is listed as checked at startup only and
 # counted apart from the entries that failed.
 string(FIND "${out}" "STARTUP Animator.SetBoolID UnityEngine.Animator::SetBoolID (checked at startup only)\n" icall)
-string(REGEX MATCH "missing, [0-9]+ ambiguous, [0-9]+ blocked, 30 checked at startup only, 54 checked in the scene files\n"
+string(REGEX MATCH "missing, [0-9]+ ambiguous, [0-9]+ blocked, 30 checked at startup only, 55 checked in the scene files\n"
   counted "${out}")
 if(icall EQUAL -1 OR NOT counted)
   message(FATAL_ERROR "the icall is not listed and counted as checked at startup only\n${out}${err}")
@@ -82,7 +82,7 @@ file(READ "${sceneEntries}" written)
 # One line per scene fact, in map order: the first, one whose path ends in a space (kept), the last.
 set(first "Scene.JournalBookContent\tscene\t1\tResources/PCPlayer\tContent/GhostHuntingBookContent\tJournalController\t\n")
 set(spaced "Scene.JournalGhostPageEvidence2\tscene\t1\tResources/PCPlayer\tContent/GhostHuntingBookContent/Spirit/Evidence 2 \tJournalController\t\n")
-set(last "ShaderProperty.Lit.Cull\tshader\t0\tTanglewood_Street_House\t\tUniversal Render Pipeline/Lit\t_Cull\n")
+set(last "ShaderProperty.Lit.Smoothness\tshader\t0\tTanglewood_Street_House\t\tUniversal Render Pipeline/Lit\t_Smoothness\n")
 string(FIND "${written}" "${first}" atFirst)
 string(FIND "${written}" "${spaced}" atSpaced)
 string(FIND "${written}" "${last}" atLast)
@@ -91,7 +91,7 @@ list(LENGTH lines count)
 string(LENGTH "${written}" size)
 string(LENGTH "${last}" lastSize)
 math(EXPR lastAt "${size} - ${lastSize}")
-if(NOT atFirst EQUAL 0 OR atSpaced EQUAL -1 OR NOT atLast EQUAL lastAt OR NOT count EQUAL 54)
+if(NOT atFirst EQUAL 0 OR atSpaced EQUAL -1 OR NOT atLast EQUAL lastAt OR NOT count EQUAL 55)
   message(FATAL_ERROR "--scene-entries wrote\n${written}")
 endif()
 message(STATUS "--scene-entries writes the scene facts for assetcheck.")
