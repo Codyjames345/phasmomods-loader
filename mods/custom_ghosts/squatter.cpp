@@ -1235,7 +1235,7 @@ bool resolve() { return true; }
 
 bool create_hooks() {
   door::on_attempt(&tried);
-  return door::create_hooks();
+  return door::create_hooks() && figure::create_hooks();
 }
 
 void tick(void* haunting, int type, bool /*steered: a player's own lines come in a later task*/) {

@@ -226,5 +226,20 @@ void* head();
 /** Whether the figure is built and still in the scene (a scene load destroys it, and its own assets with it). */
 bool ready();
 
+/** Whether a call of Final IK's IKExecutionOrder.LateUpdate on `instance` is for the figure's own `own`: both set and
+ * the same. Every model with an IKExecutionOrder runs it. */
+inline bool is_own_ik(const void* instance, const void* own) { return instance && instance == own; }
+
+/** What runs once a frame on every client after the figure's Animator has posed it and before its IK bends it, with the
+ * seconds since the last such pass (0 on the first). */
+using AfterAnimation = void (*)(float dt);
+
+/** Sets the pass after the animation; null for none. Main thread. */
+void set_after_animation(AfterAnimation fn);
+
+/** Hooks IKExecutionOrder.LateUpdate for the pass after the animation. False when it did not resolve or could not be
+ * hooked (logged). At the mod's hook step. */
+bool create_hooks();
+
 }  // namespace figure
 }  // namespace pm::custom::squatter

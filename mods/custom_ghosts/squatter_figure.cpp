@@ -1,6 +1,7 @@
 #include "squatter_figure.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 #include "Animator.h"
@@ -55,7 +56,11 @@ struct Figure {
   api::ClothParts cloth;
   const char* playing = nullptr;  // the state it plays, which a cross-fade blends from
   api::Held fullBody, lookAt;      // Final IK: the body's FullBodyBipedIK, and the head's LookAtIK
+  api::Held order;                 // Final IK's IKExecutionOrder, whose LateUpdate is the pass after the animation
 } g;
+
+AfterAnimation g_after = nullptr;
+std::chrono::steady_clock::time_point g_lastPass{};  // when the pass after the animation last ran; zero before the first
 
 // How much of the look the spine takes, against the head's whole turn, and how far past straight ahead it eases off:
 // starting values, judged with the user in game.
@@ -303,7 +308,20 @@ bool build_ik() {
   api::RefArray{list}.set(1, look);
   phasmo::IKExecutionOrder::IKComponents.set(order, list);
   phasmo::IKExecutionOrder::animator.set(order, g.animator);
+  g.order = order;
   return true;
+}
+
+// Final IK's LateUpdate, for every model that has an IKExecutionOrder: on the figure's own, the pass after the
+// animation runs first, so the IK bends the pose the pass leaves.
+void detour_ik_late_update(api::Original<phasmo::IKExecutionOrder::LateUpdate> original, void* order) {
+  if (g_after && is_own_ik(order, g.order)) {
+    const auto now = std::chrono::steady_clock::now();
+    const float dt = g_lastPass == decltype(g_lastPass){} ? 0.0f : std::chrono::duration<float>(now - g_lastPass).count();
+    g_lastPass = now;
+    g_after(dt);
+  }
+  original(order);
 }
 
 // The full-body solver's effector for `hand`, or null.
@@ -463,5 +481,15 @@ phasmo::Vector3 clip_step() { return check() ? phasmo::Animator::get_deltaPositi
 void* head() { return check() ? bone(phasmo::HumanBodyBones::Head()) : nullptr; }
 
 bool ready() { return check(); }
+
+void set_after_animation(AfterAnimation fn) {
+  g_after = fn;
+  g_lastPass = {};
+}
+
+bool create_hooks() {
+  return api::hook<phasmo::IKExecutionOrder::LateUpdate>(&detour_ik_late_update, "IKExecutionOrder.LateUpdate",
+                                                         api::Twins::CanonicalOnly);
+}
 
 }  // namespace pm::custom::squatter::figure

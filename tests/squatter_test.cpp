@@ -1,6 +1,7 @@
 // Offline tests for the Squatter's rules (mods/custom_ghosts/squatter_rule.h).
 // Run: build\squatter_test.exe
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -32,6 +33,10 @@
 #include "wav.h"
 
 #include "check.h"
+
+namespace pm::hooks {
+std::atomic<int> g_inflight{0};  // the count of hooked bodies running, which hooks.cpp keeps in the game
+}
 
 using namespace pm::custom::squatter;
 namespace wav = pm::custom::wav;
@@ -1219,10 +1224,21 @@ void the_start_check_refuses_a_bundle_missing_a_state() {
 
 }  // namespace
 
+// The pass after the animation runs for the figure's own IKExecutionOrder alone: Final IK's LateUpdate runs for every
+// model that has one, and a missing figure is never its own.
+void the_pass_after_the_animator_is_the_figures_own() {
+  int a = 0, b = 0;
+  CHECK(figure::is_own_ik(&a, &a));
+  CHECK(!figure::is_own_ik(&a, &b));
+  CHECK(!figure::is_own_ik(nullptr, nullptr));
+  CHECK(!figure::is_own_ik(&a, nullptr));
+}
+
 int main() {
   every_move_and_act_has_its_states();
   move_variants_are_deterministic();
   the_start_check_refuses_a_bundle_missing_a_state();
+  the_pass_after_the_animator_is_the_figures_own();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();
