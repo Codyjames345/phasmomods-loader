@@ -235,6 +235,9 @@ void* head();
 /** Whether the figure is built and still in the scene (a scene load destroys it, and its own assets with it). */
 bool ready();
 
+/** Where its feet are in the world this frame (the foot bones), into `left` and `right`; false when it is not built. */
+bool feet(phasmo::Vector3& left, phasmo::Vector3& right);
+
 /** Where a fallen body lies, in the world: its hips, its head, and its chest's front (a unit vector). */
 struct Landing {
   phasmo::Vector3 hips, head, front;
@@ -267,6 +270,10 @@ void rise(const char* state, phasmo::Vector3 at, float yaw, float blendSeconds);
  * the same. Every model with an IKExecutionOrder runs it. */
 inline bool is_own_ik(const void* instance, const void* own) { return instance && instance == own; }
 
+/** Whether Final IK runs on the model of IKExecutionOrder `instance` this frame: not on the figure's own (`own`) while
+ * its body falls (`falling`), so neither its solvers nor their reset of the bones to a stored pose fight the ragdoll. */
+inline bool ik_runs(const void* instance, const void* own, bool falling) { return !(falling && is_own_ik(instance, own)); }
+
 /** What runs once a frame on every client after the figure's Animator has posed it and before its IK bends it, with the
  * seconds since the last such pass (0 on the first). */
 using AfterAnimation = void (*)(float dt);
@@ -274,8 +281,8 @@ using AfterAnimation = void (*)(float dt);
 /** Sets the pass after the animation; null for none. Main thread. */
 void set_after_animation(AfterAnimation fn);
 
-/** Hooks IKExecutionOrder.LateUpdate for the pass after the animation. False when it did not resolve or could not be
- * hooked (logged). At the mod's hook step. */
+/** Hooks IKExecutionOrder.LateUpdate for the pass after the animation, and IKExecutionOrder.Update so the IK leaves a
+ * falling body alone. False when either did not resolve or could not be hooked (logged). At the mod's hook step. */
 bool create_hooks();
 
 }  // namespace figure

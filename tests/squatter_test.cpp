@@ -1286,6 +1286,17 @@ void inertialization_starts_from_the_old_pose_and_dies_away() {
 
 // The pass after the animation runs for the figure's own IKExecutionOrder alone: Final IK's LateUpdate runs for every
 // model that has one, and a missing figure is never its own.
+// While the figure's body falls, Final IK runs nothing on it: neither its solvers (LateUpdate) nor the reset that puts
+// the bones back in their stored pose each frame (Update calls each solver's FixTransforms), which would stand the
+// ragdoll back up every frame. Every other model's IK runs as the game runs it.
+void the_ik_stands_aside_while_the_body_falls() {
+  int own = 0, other = 0;
+  CHECK(!figure::ik_runs(&own, &own, true));
+  CHECK(figure::ik_runs(&own, &own, false));
+  CHECK(figure::ik_runs(&other, &own, true));
+  CHECK(figure::ik_runs(&other, nullptr, true));
+}
+
 void the_pass_after_the_animator_is_the_figures_own() {
   int a = 0, b = 0;
   CHECK(figure::is_own_ik(&a, &a));
@@ -1299,6 +1310,7 @@ int main() {
   move_variants_are_deterministic();
   the_start_check_refuses_a_bundle_missing_a_state();
   the_pass_after_the_animator_is_the_figures_own();
+  the_ik_stands_aside_while_the_body_falls();
   inertialization_starts_from_the_old_pose_and_dies_away();
   a_fall_settles_then_gets_up();
   the_get_up_follows_how_it_landed();
@@ -1309,6 +1321,8 @@ int main() {
   a_move_lands_where_the_world_needs_it();
   the_clips_travel_as_built();
   a_drop_falls_as_the_jump_lands();
+  its_steps_are_as_loud_as_a_players();
+  an_open_doorway_does_not_muffle_its_voice();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();
@@ -1382,7 +1396,7 @@ int main() {
   the_kick_never_reaches_through_a_floor();
   with_no_last_place_it_searches_around_itself();
   an_unseen_figure_never_starts_a_chase();
-  a_step_plays_each_stride();
+  a_step_plays_as_each_foot_plants();
   moping_moves_to_the_closest_place_outside_a_closed_hiding_place();
   it_stands_still_and_walks_with_its_own_clips();
   it_opens_only_the_door_it_walks_into();

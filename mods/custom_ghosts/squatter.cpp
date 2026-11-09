@@ -121,8 +121,7 @@ struct State {
   CuePlayer cues;   // what this client has played of the Shown
   std::set<int> kicked;  // whom the master has kicked this contract (kick): each at most once
   // Every client's footsteps (the players' own step sounds, play_step): counted from the ghost's own movement here.
-  StepCounter steps;
-  std::optional<Point> stepFrom;
+  FootPlants plants;
   const void* lastStep = nullptr;  // the clip it last stepped with, compared only, never used
   std::mt19937 stepRng{std::random_device{}()};
   // How fast the ghost moves on this client, for the figure's pace (figure::set_pace).
@@ -155,6 +154,7 @@ struct State {
   FallState fall;
   GetUp landing = GetUp::FaceDown;
   phasmo::Vector3 riseFrom{};
+  uint64_t fellAt = 0;  // when this client's figure began its fall, for the log
 };
 
 State g;
@@ -1235,7 +1235,11 @@ void play_step(Point at, bool running, uint32_t roll) {
   void* clip = clips[pick];
   if (!clip) return;
   g.lastStep = clip;
-  sound::play_at(clip, vector(at), 1.0f);
+  // As loud as a player's step on that surface, falling off as a player's does: through the local player's own step
+  // source's rolloff (FootstepController.noise, Noise.source), silent at its reach (user, 2026-11-10: heard from far).
+  void* noise = phasmo::FootstepController::noise.get(steps);
+  void* like = noise && api::alive(noise) ? phasmo::Noise::source.get(noise) : nullptr;
+  sound::play_like(clip, vector(at), step_volume(surface, running), like);
 }
 
 // The sound of the door of hiding place `closet` nearer `ghostAt` being slammed, on this client, as the door's own slam
@@ -1291,8 +1295,12 @@ Point eyes_of(void* player) {
 bool start_fall(phasmo::Vector3 push) {
   const float facing = g.facing.value_or(0.0f), pace = g.pace.pace();
   const phasmo::Vector3 v{std::sin(facing) * pace + push.x, push.y, std::cos(facing) * pace + push.z};
-  if (!figure::fall(v)) return false;
+  if (!figure::fall(v)) {
+    PM_LOG("squatter: its figure could not fall here (no ragdoll); it stands");
+    return false;
+  }
   g.fall.begin(now());
+  g.fellAt = now();
   g.landing = GetUp::FaceDown;
   g.local = State::Local::None;
   return true;
@@ -1309,9 +1317,27 @@ void rise(void* ghost) {
   r.at.y = phasmo::NavMesh::SamplePosition(&hips, &hit, 1.0f, -1) ? hit.position.y : at_of(ghost).y;
   g.riseFrom = vector(r.at);
   g.facing = r.yaw;
+  PM_LOG("squatter: fell for %llu ms, landed face %s, gets up", static_cast<unsigned long long>(now() - g.fellAt),
+         g.landing == GetUp::FaceDown ? "down" : "up");
   figure::rise(get_up_state(g.landing), g.riseFrom, r.yaw, kRecoverSeconds);
   if (game::is_master())
     if (void* agent = game::ghost_agent(ghost)) phasmo::NavMeshAgent::Warp(agent, &g.riseFrom);
+}
+
+// Where a line said at `from` takes the game's mixer group from on this client (mixer_point): where this client's
+// player hears it when nothing solid lies between them (an open doorway is open space), else where it is said, muffled
+// as the game muffles a sound there. Walls, floors, ceilings and shut doors block (Default, Floor, Wall, Door).
+Point heard_at(Point from) {
+  void* me = game::local_player();
+  if (!me) return from;
+  const Point ear = eyes_of(me);
+  const float dx = ear.x - from.x, dy = ear.y - from.y, dz = ear.z - from.z, metres = std::hypot(dx, dy, dz);
+  if (!(metres > 0.01f)) return from;
+  using L = phasmo::Layers;
+  const int32_t solid = mask_of({L::Default.index(), L::Floor.index(), L::Wall.index(), L::Door.index()});
+  const bool blocked =
+      !solid || game::raycast(vector(from), {dx / metres, dy / metres, dz / metres}, metres, solid) != nullptr;
+  return mixer_point(from, ear, blocked);
 }
 
 // Every client plays the Shown: the master's own on the master, the master's last word elsewhere.
@@ -1433,18 +1459,26 @@ void play(void* ghost) {
       const Point listener = me ? at_of(me) : at_of(ghost);
       const int i = nearest_point(exits, listener);
       // From just behind the door, its far side from this client's player, muffled as the game muffles a sound there.
-      voice::play_index(set, line->index,
-                        vector(i >= 0 ? behind_door(exits[static_cast<size_t>(i)], listener) : at_of(ghost)),
-                        kDoorLineFullVolume);
+      const Point from = i >= 0 ? behind_door(exits[static_cast<size_t>(i)], listener) : at_of(ghost);
+      const phasmo::Vector3 mix = vector(heard_at(from));
+      voice::play_index(set, line->index, vector(from), kDoorLineFullVolume, nullptr, 0.0f, &mix);
     } else {  // from its head, moving with it as it runs (user, 2026-11-09: the lines stayed where they began)
-      voice::play_index(set, line->index, vector(at_of(ghost)), kVoiceFullVolume, figure::head(), kVoiceRange);
+      void* head = figure::head();
+      const Point mouth = head ? point(phasmo::Transform::get_position(head)) : at_of(ghost);
+      const phasmo::Vector3 mix = vector(heard_at(mouth));
+      voice::play_index(set, line->index, vector(at_of(ghost)), kVoiceFullVolume, head, kVoiceRange, &mix);
     }
   }
-  // A footstep each stride it moves, on this client, from its own view of the ghost's movement.
+  // A footstep each time one of its feet plants in its clip, on this client; none while it is down (FootPlants).
   const Point at = at_of(ghost);
-  if (g.stepFrom && g.steps.moved(std::hypot(at.x - g.stepFrom->x, at.z - g.stepFrom->z)))
-    play_step(at, s.move == Move::Run || plays_once(s.move), static_cast<uint32_t>(g.stepRng()));
-  g.stepFrom = at;
+  phasmo::Vector3 left{}, right{};
+  if (!down && figure::feet(left, right)) {
+    const float clock = static_cast<float>(std::fmod(seconds, 3600.0));  // only its steps between frames count
+    if (g.plants.update(left.y - at.y, right.y - at.y, clock) > 0)
+      play_step(at, s.move == Move::Run || plays_once(s.move), static_cast<uint32_t>(g.stepRng()));
+  } else {
+    g.plants.reset();
+  }
 }
 
 }  // namespace
@@ -1465,8 +1499,7 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     close_obstacle();  // a closet it opened goes back as it was
     g.chase = Chase{};
     g.kicked.clear();
-    g.steps.reset();
-    g.stepFrom.reset();
+    g.plants.reset();
     g.pace.reset();
     g.playAt = 0.0;
     g.eyesOf = nullptr;

@@ -59,7 +59,9 @@ int play(Lines set, phasmo::Vector3 at, uint32_t roll);
 /** How long line `index` of `set` lasts, seconds; 0 for none, or one gone. */
 float seconds(Lines set, int index);
 // With `follow` (a Transform, such as the figure's head), the line moves with it; else it stays at `at`.
+// mixAt: where the game's mixer group is read for the line (sound.h); null for where it is said.
 void play_index(Lines set, int index, phasmo::Vector3 at, float fullVolumeWithin = 0.0f, void* follow = nullptr,
-                float silentBeyond = 0.0f);
+                float silentBeyond = 0.0f,
+                const phasmo::Vector3* mixAt = nullptr);
 
 }  // namespace pm::custom::squatter::voice

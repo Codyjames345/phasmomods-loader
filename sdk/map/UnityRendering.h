@@ -504,6 +504,14 @@ inline constexpr pm::sdk::EntryDesc ShaderProperty_Lit_Cull{
     .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kOptional, .name = "_Cull",
     .scene = "Tanglewood_Street_House", .component = "Universal Render Pipeline/Lit"};
 
+/// The Lit shader's smoothness, a float from 0 (matte) to 1 (mirror): how sharp its highlights and reflections are. The
+/// shader's default is 0.5. The game's untextured fabric (its denim jacket material) sets 0 with metallic 0; its
+/// textured fabrics take theirs from a gloss map. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc ShaderProperty_Lit_Smoothness{
+    .key = "ShaderProperty.Lit.Smoothness", .kind = pm::sdk::Kind::ShaderProperty,
+    .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kOptional, .name = "_Smoothness",
+    .scene = "Tanglewood_Street_House", .component = "Universal Render Pipeline/Lit"};
+
 }  // namespace pm::map
 
 /// @file
@@ -684,6 +692,8 @@ struct LitShader {
   static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_Lit_BaseColor> BaseColor{};
   /// The face culling, a float holding a CullMode number.
   static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_Lit_Cull> Cull{};
+  /// The smoothness, a float from 0 (matte) to 1.
+  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_Lit_Smoothness> Smoothness{};
 };
 
 /// Shaders.

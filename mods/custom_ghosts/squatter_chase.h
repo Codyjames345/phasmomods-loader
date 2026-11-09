@@ -518,6 +518,14 @@ inline Point warp_step(Point step, float clipLeft, Point toTarget) {
   return {toTarget.x / to * length * scale, step.y, toTarget.z / to * length * scale};
 }
 
+/**
+ * Where its voice takes the game's mixer group from (SoundController.GetFloorAudioSnapshot), spoken at `at` to a
+ * listener at `listener`: where it is spoken when something solid lies between (`blocked`: a wall, a floor, a shut
+ * door), so it is muffled as the game muffles a sound there; where the listener is when nothing does, an open doorway
+ * being open space (user, 2026-11-10).
+ */
+inline Point mixer_point(Point at, Point listener, bool blocked) { return blocked ? at : listener; }
+
 /** A heading, radians clockwise from +z, in one byte of the Shown. */
 inline uint8_t yaw_byte(float radians) {
   constexpr float turn = 2.0f * std::numbers::pi_v<float>;
@@ -823,9 +831,8 @@ inline bool sees_for_phase(Phase p, bool anySeen, bool targetSensed, bool figure
   return (p == Phase::Lurking || p == Phase::Moping) ? anySeen : targetSensed;
 }
 
-// Its footsteps (user, 2026-11-09: the players' own step sounds, by the surface under it): one per stride of this length
-// it moves. A move of more than kMaxStepMetres in one frame is a jump of the figure (a warp, a new master's first word),
-// not a walk.
+// Its footsteps (user, 2026-11-09: the players' own step sounds, by the surface under it), one each time a foot plants
+// (FootPlants, below).
 
 // The surfaces a player's footsteps know, by the tag of the collider under the player (FootstepController's note in the
 // map): each has its own clips, Stairs one list for walking and running. A tag that is none of these plays nothing.
@@ -839,28 +846,64 @@ inline int surface_of(std::string_view tag) {
     if (tag == kStepSurfaces[i]) return i;
   return -1;
 }
-inline constexpr float kStrideMetres = 1.4f;
-inline constexpr float kMaxStepMetres = 3.0f;
 
-/** When each client plays a footstep: every kStrideMetres the Squatter moves, counted on that client. */
-class StepCounter {
+/** A surface's step volumes, walking and running, as a player's own steps play them. */
+struct StepVolume {
+  float walk, run;
+};
+
+// Each surface's volumes in kStepSurfaces' order, the volume FootstepController.AttemptPlaySound gives Noise.PlaySound
+// for that surface's walking and running clips (decompiled: literals in its code, not fields, so they cannot be read at
+// run time). Stairs has one list, at one volume.
+inline constexpr StepVolume kStepVolumes[] = {
+    {0.1f, 0.1f},    {0.4f, 0.3f},    {0.1f, 0.3f},    {0.05f, 0.075f}, {0.6f, 0.3f},
+    {0.15f, 0.15f},  {0.09f, 0.07f},  {0.1f, 0.2f},    {0.1f, 0.5f},    {0.075f, 0.085f},
+    {0.075f, 0.085f}, {0.075f, 0.085f}, {0.075f, 0.085f}, {0.6f, 0.6f}};
+static_assert(std::size(kStepVolumes) == std::size(kStepSurfaces));
+
+/** The volume a step on `surface` (kStepSurfaces) plays at, walking or `running`; 0 for no surface. */
+inline float step_volume(int surface, bool running) {
+  if (surface < 0 || surface >= static_cast<int>(std::size(kStepVolumes))) return 0.0f;
+  return running ? kStepVolumes[surface].run : kStepVolumes[surface].walk;
+}
+
+// A step plays as each foot plants in the figure's own clip (user, 2026-11-10: the steps did not match the
+// animation), as games time footsteps to foot contacts: a foot counts as lifted once it is kFootLift above the lowest it
+// has been, and plants when it comes back within kFootPlant of it. That lowest height rises at kFootLowRise a second, so
+// it follows a body whose feet sit higher for a while (a stair, a slope). Starting values, judged with the user in game.
+inline constexpr float kFootLift = 0.05f, kFootPlant = 0.02f, kFootLowRise = 0.05f;
+
+/** Finds the moments the figure's feet plant, from each foot's height above the figure's root each frame. */
+class FootPlants {
  public:
-  /** It moved `metres` since the last frame; true when that completes a stride. */
-  bool moved(float metres) {
-    if (!(metres >= 0.0f)) return false;
-    if (metres > kMaxStepMetres) {
-      walked_ = 0.0f;
-      return false;
-    }
-    walked_ += metres;
-    if (walked_ < kStrideMetres) return false;
-    walked_ -= kStrideMetres;
-    return true;
+  /** This frame's heights of the left and right foot (metres above the root) at `now` (seconds); how many planted. */
+  int update(float left, float right, float now) {
+    const float dt = last_ && now > *last_ ? now - *last_ : 0.0f;
+    last_ = now;
+    return foot(feet_[0], left, dt) + foot(feet_[1], right, dt);
   }
-  void reset() { walked_ = 0.0f; }
+  void reset() { *this = FootPlants{}; }
 
  private:
-  float walked_ = 0.0f;
+  struct Foot {
+    std::optional<float> low;  // the lowest it has been, rising slowly
+    bool lifted = false;
+  };
+  static int foot(Foot& f, float height, float dt) {
+    if (!std::isfinite(height)) return 0;
+    f.low = f.low ? std::min(*f.low + kFootLowRise * dt, height) : height;
+    if (height > *f.low + kFootLift) {
+      f.lifted = true;
+      return 0;
+    }
+    if (f.lifted && height <= *f.low + kFootPlant) {
+      f.lifted = false;
+      return 1;
+    }
+    return 0;
+  }
+  Foot feet_[2];
+  std::optional<float> last_;
 };
 
 // How far past the side of a hiding place the difficulty closed (BlockedZone.blocked) a moping Squatter sits.

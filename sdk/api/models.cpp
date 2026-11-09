@@ -269,6 +269,14 @@ void* two_sided_material(void* like, phasmo::Color colour, std::string* why) {
   return material;
 }
 
+bool set_smoothness(void* material, float smoothness) {
+  if (!alive(material) || !phasmo::LitShader::Smoothness.available()) return false;
+  const int32_t id = phasmo::LitShader::Smoothness.id();
+  if (!phasmo::Material::HasProperty(material, id)) return false;
+  phasmo::Material::SetFloatImpl(material, id, std::clamp(smoothness, 0.0f, 1.0f));
+  return true;
+}
+
 void* lit_material_of(void* gameObject) {
   void* renderer = alive(gameObject) ? phasmo::Component::GetComponentInChildren(
                                            phasmo::GameObject::get_transform(gameObject),

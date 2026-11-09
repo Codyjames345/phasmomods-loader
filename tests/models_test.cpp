@@ -505,6 +505,7 @@ void start(bool withCloth = true) {
   fake::value(map::CullMode_Off, 0);
   fake::shader_property(map::ShaderProperty_Lit_BaseColor);
   fake::shader_property(map::ShaderProperty_Lit_Cull);
+  fake::shader_property(map::ShaderProperty_Lit_Smoothness);
   m(map::Renderer_get_sharedMaterial, &f_get_sharedMaterial);
   m(map::Renderer_set_enabled, &f_renderer_enabled);
   m(map::UnityObject_get_name, &f_get_name);
@@ -530,7 +531,8 @@ void start(bool withCloth = true) {
   g_bundle = make_obj(&kGameObject);  // any object stands for the engine's bundle
   g_controller = make_obj(&kController);
   g_shader = make_obj(&kShader);
-  g_shaderProperties = {phasmo::LitShader::BaseColor.id(), phasmo::LitShader::Cull.id()};
+  g_shaderProperties = {phasmo::LitShader::BaseColor.id(), phasmo::LitShader::Cull.id(),
+                        phasmo::LitShader::Smoothness.id()};
   build_prefab();
 }
 
@@ -719,6 +721,23 @@ void the_material_is_plain_and_two_sided() {
   CHECK(!api::two_sided_material(like, {1, 1, 1, 1}, &why));
   CHECK(why == "the shader is not the Lit shader");
   CHECK(!api::two_sided_material(nullptr, {1, 1, 1, 1}, &why));
+}
+
+// A material is made matte by its smoothness alone, as the game's own untextured fabric is (smoothness 0, metallic
+// 0); a smoothness past 0 to 1 is brought within it, and a shader with no smoothness is refused.
+void a_material_is_made_matte() {
+  start();
+  void* material = api::two_sided_material(make_obj(&kMaterial), {1, 1, 1, 1});
+  CHECK(material);
+  CHECK(api::set_smoothness(material, 0.0f));
+  CHECK(g_floats[material].count(phasmo::LitShader::Smoothness.id()) &&
+        g_floats[material][phasmo::LitShader::Smoothness.id()] == 0.0f);
+  CHECK(api::set_smoothness(material, 1.5f) && g_floats[material][phasmo::LitShader::Smoothness.id()] == 1.0f);
+  CHECK(api::set_smoothness(material, -1.0f) && g_floats[material][phasmo::LitShader::Smoothness.id()] == 0.0f);
+  CHECK(!api::set_smoothness(nullptr, 0.0f));
+  g_shaderProperties = {phasmo::LitShader::BaseColor.id(), phasmo::LitShader::Cull.id()};  // no smoothness
+  g_floats.clear();
+  CHECK(!api::set_smoothness(material, 0.0f) && g_floats[material].empty());
 }
 
 // A one-triangle sheet with two spheres.
@@ -923,6 +942,7 @@ int main() {
   the_body_copy_has_no_script_and_wakes_only_once_stripped();
   a_state_plays_only_when_the_controller_has_it();
   the_material_is_plain_and_two_sided();
+  a_material_is_made_matte();
   a_costume_hides_only_what_it_covers();
   cloth_builds_the_mesh_and_its_colliders();
   a_bind_pose_undoes_the_bone();

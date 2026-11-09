@@ -69,6 +69,52 @@ inline constexpr pm::sdk::EntryDesc AudioRolloffMode_Linear{.key = "AudioRolloff
                                                             .kind = pm::sdk::Kind::EnumValue,
                                                             .owner = "AudioRolloffMode", .name = "Linear"};
 
+/// How the source's volume falls with distance, an AudioRolloffMode. Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc AudioSource_get_rolloffMode{.key = "AudioSource.get_rolloffMode",
+                                                                .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
+                                                                .name = "get_rolloffMode"};
+
+/// The distance in metres within which a 3D source stops getting louder. Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc AudioSource_get_minDistance{.key = "AudioSource.get_minDistance",
+                                                                .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
+                                                                .name = "get_minDistance"};
+
+/// The distance in metres the source's rolloff is measured to: silent there with a Linear or a Custom curve that ends
+/// at 0. Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc AudioSource_get_maxDistance{.key = "AudioSource.get_maxDistance",
+                                                                .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
+                                                                .name = "get_maxDistance"};
+
+inline constexpr const char* AudioSourceCurveType_values[] = {"CustomRolloff", "SpatialBlend", "ReverbZoneMix",
+                                                              "Spread"};
+
+/// Which of a source's curves (UnityEngine.AudioModule). Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc AudioSourceCurveType{.key = "AudioSourceCurveType", .name = "AudioSourceCurveType",
+                                                         .assembly = "UnityEngine.AudioModule", .ns = "UnityEngine",
+                                                         .values = AudioSourceCurveType_values};
+
+/// The custom rolloff curve: the volume (0 to 1) against the distance over the maximum distance (0 to 1), which a Custom
+/// rolloff follows. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc AudioSourceCurveType_CustomRolloff{.key = "AudioSourceCurveType.CustomRolloff",
+                                                                       .kind = pm::sdk::Kind::EnumValue,
+                                                                       .owner = "AudioSourceCurveType",
+                                                                       .name = "CustomRolloff"};
+
+inline constexpr const char* AudioSource_GetCustomCurve_params[] = {"@AudioSourceCurveType"};
+inline constexpr const char* AudioSource_SetCustomCurve_params[] = {"@AudioSourceCurveType", "AnimationCurve"};
+
+/// A copy of one of the source's curves, a new AnimationCurve. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc AudioSource_GetCustomCurve{.key = "AudioSource.GetCustomCurve",
+                                                               .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
+                                                               .name = "GetCustomCurve",
+                                                               .params = AudioSource_GetCustomCurve_params};
+
+/// Sets one of the source's curves from an AnimationCurve. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc AudioSource_SetCustomCurve{.key = "AudioSource.SetCustomCurve",
+                                                               .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
+                                                               .name = "SetCustomCurve",
+                                                               .params = AudioSource_SetCustomCurve_params};
+
 inline constexpr const char* AudioSource_set_outputAudioMixerGroup_params[] = {"AudioMixerGroup"};
 
 /// Sets the mixer group the source plays through (an AudioMixerGroup; null plays straight to the listener, past the
@@ -193,6 +239,17 @@ struct AudioListener {
 struct AudioSource {
   /// The type: klass(), is(obj), type_object() (for GameObject.AddComponent). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::AudioSource> type{};
+  /// get_rolloffMode(source): an AudioRolloffMode number. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::AudioSource_get_rolloffMode, int32_t(void*)> get_rolloffMode{};
+  /// get_minDistance(source): metres. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::AudioSource_get_minDistance, float(void*)> get_minDistance{};
+  /// get_maxDistance(source): metres. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::AudioSource_get_maxDistance, float(void*)> get_maxDistance{};
+  /// GetCustomCurve(source, type): a copy of the curve, an AnimationCurve (type an AudioSourceCurveType). Unresolved:
+  /// null.
+  static constexpr pm::api::Method<pm::map::AudioSource_GetCustomCurve, void*(void*, int32_t)> GetCustomCurve{};
+  /// SetCustomCurve(source, type, curve). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::AudioSource_SetCustomCurve, void(void*, int32_t, void*)> SetCustomCurve{};
   /// set_clip(source, clip). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::AudioSource_set_clip, void(void*, void*)> set_clip{};
   /// set_spatialBlend(source, blend). Unresolved: does nothing.
@@ -225,6 +282,12 @@ namespace AudioRolloffMode {
 /// Linear(): full within the minimum distance, silent at the maximum. Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::AudioRolloffMode_Linear> Linear{};
 }  // namespace AudioRolloffMode
+
+/// Which of a source's curves (AudioSource.GetCustomCurve, SetCustomCurve).
+namespace AudioSourceCurveType {
+/// CustomRolloff(): the volume against distance a Custom rolloff follows. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::AudioSourceCurveType_CustomRolloff> CustomRolloff{};
+}  // namespace AudioSourceCurveType
 
 /// Unity's AudioClip. `clip` below is one.
 struct AudioClip {

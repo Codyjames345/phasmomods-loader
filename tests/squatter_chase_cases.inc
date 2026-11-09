@@ -341,20 +341,40 @@ void an_unseen_figure_never_starts_a_chase() {
   CHECK(!sees_for_phase(Phase::Chasing, true, true, false));
 }
 
-// Its footsteps are the players' own step sounds (user, 2026-11-09), one per stride of the distance it moves, on every
-// client, chosen by the surface under it as a player's are: each tag a player's footsteps know names its surface, and
-// any other tag none.
-void a_step_plays_each_stride() {
-  StepCounter s;
-  CHECK(!s.moved(kStrideMetres * 0.6f));
-  CHECK(s.moved(kStrideMetres * 0.6f));   // a stride reached
-  CHECK(!s.moved(kStrideMetres * 0.5f));  // the rest carries over
-  CHECK(s.moved(kStrideMetres * 0.4f));
-  s.reset();
-  CHECK(!s.moved(kStrideMetres * 0.9f));
-  CHECK(!s.moved(kMaxStepMetres + 1.0f));  // a jump of the figure is no walk: no step, and the count starts over
-  CHECK(!s.moved(kStrideMetres * 0.9f));
-  CHECK(!s.moved(-1.0f) && !s.moved(std::numeric_limits<float>::quiet_NaN()));
+// A step plays as each foot plants in the figure's own clip (user, 2026-11-10: the steps did not match the
+// animation): a foot that has lifted kFootLift above the lowest it has been comes back down within kFootPlant of it.
+// A foot that never lifts (standing, sliding) plays nothing, and a jitter under the lift plays nothing.
+void a_step_plays_as_each_foot_plants() {
+  constexpr float kPi = 3.14159265f;
+  FootPlants feet;
+  int steps = 0;
+  // A walk cycle of a second: each foot lifts 0.15 m once, half a cycle apart, over a planted height of 0.1 m.
+  for (int i = 0; i <= 300; ++i) {
+    const float t = static_cast<float>(i) / 100.0f;
+    const auto lift = [&](float phase) { return 0.1f + 0.15f * std::max(0.0f, std::sin(2.0f * kPi * (t + phase))); };
+    steps += feet.update(lift(0.0f), lift(0.5f), t);
+  }
+  CHECK(steps >= 5 && steps <= 6);  // two a second for three seconds, the first plant of each foot arming it
+  FootPlants still;
+  int idle = 0;
+  for (int i = 0; i <= 300; ++i) {
+    const float t = static_cast<float>(i) / 100.0f;
+    const float jitter = 0.1f + 0.4f * kFootLift * std::sin(13.0f * t);
+    idle += still.update(jitter, 0.1f, t);
+  }
+  CHECK(idle == 0);
+  FootPlants once;
+  CHECK(once.update(0.1f, 0.1f, 0.0f) == 0);
+  CHECK(once.update(0.1f + kFootLift + 0.01f, 0.1f, 0.1f) == 0);  // lifted: armed
+  CHECK(once.update(0.1f + kFootPlant / 2, 0.1f, 0.2f) == 1);     // down again: a step
+  CHECK(once.update(0.1f, 0.1f, 0.3f) == 0);                       // and only one
+  once.reset();
+  CHECK(once.update(0.1f + kFootPlant / 2, 0.1f, 0.4f) == 0);     // forgotten: not armed
+  CHECK(kFootPlant < kFootLift);
+  FootPlants broken;  // a height that is not a number plays nothing and arms nothing
+  CHECK(broken.update(std::numeric_limits<float>::quiet_NaN(), 0.1f, 0.0f) == 0);
+  // Each step plays the players' own sound for the surface under it (user, 2026-11-09): each tag a player's footsteps
+  // know names its surface, and any other tag none.
   CHECK(surface_of("Carpet") == 0 && surface_of("Heavyconcrete") == 12 && surface_of("Stairs") == kStairsSurface);
   CHECK(std::string(kStepSurfaces[kStairsSurface]) == "Stairs");
   CHECK(surface_of("Untagged") == -1 && surface_of("") == -1 && surface_of("carpet") == -1 && surface_of("Dirt") == -1);
@@ -722,4 +742,29 @@ void the_clips_travel_as_built() {
 void a_drop_falls_as_the_jump_lands() {
   CHECK(kJumpTakeOffSeconds > 0.0f && kJumpTakeOffSeconds < seconds_of(state_for(Move::Parkour, 0)));
   CHECK(std::abs(kJumpTakeOffSeconds + seconds_of("Roll_A") - seconds_of(state_for(Move::Parkour, 0))) < 1e-3f);
+}
+
+// Its steps play as loud as a player's on the same surface and at the same pace (FootstepController.AttemptPlaySound's
+// volumes, decompiled): walking on concrete 0.4, running 0.3; old wood 0.05 and 0.075; stairs 0.6 either way. Never
+// louder than 1, and nothing for a surface no step knows.
+void its_steps_are_as_loud_as_a_players() {
+  CHECK(step_volume(surface_of("Concrete"), false) == 0.4f && step_volume(surface_of("Concrete"), true) == 0.3f);
+  CHECK(step_volume(surface_of("OldWood"), false) == 0.05f && step_volume(surface_of("OldWood"), true) == 0.075f);
+  CHECK(step_volume(surface_of("Grass"), false) == 0.6f && step_volume(surface_of("Grass"), true) == 0.3f);
+  CHECK(step_volume(kStairsSurface, false) == 0.6f && step_volume(kStairsSurface, true) == 0.6f);
+  for (int s = 0; s < static_cast<int>(std::size(kStepSurfaces)); ++s)
+    for (bool run : {false, true}) CHECK(step_volume(s, run) > 0.0f && step_volume(s, run) <= 1.0f);
+  CHECK(step_volume(-1, false) == 0.0f && step_volume(static_cast<int>(std::size(kStepSurfaces)), true) == 0.0f);
+}
+
+// Its voice is muffled as the game muffles a sound where it is spoken (SoundController.GetFloorAudioSnapshot), unless
+// nothing solid lies between it and the listener: an open doorway is open space, so the line plays as heard where the
+// listener is (user, 2026-11-10: lines through an open door still sounded muffled). A shut door or a wall keeps it
+// muffled.
+void an_open_doorway_does_not_muffle_its_voice() {
+  const Point spoken{0, 1.5f, 0}, listener{5, 1.6f, 0};
+  const Point open = mixer_point(spoken, listener, false);
+  CHECK(open.x == listener.x && open.y == listener.y && open.z == listener.z);
+  const Point shut = mixer_point(spoken, listener, true);
+  CHECK(shut.x == spoken.x && shut.y == spoken.y && shut.z == spoken.z);
 }

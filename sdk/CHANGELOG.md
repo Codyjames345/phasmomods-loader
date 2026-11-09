@@ -64,6 +64,8 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   `CapsuleCollider.set_center` and `set_direction`, `Rigidbody.set_mass`, `set_useGravity` and `get_angularVelocity`,
   `Collider.get_attachedRigidbody`, `Physics.OverlapSphere`, and `Layer.DeadPlayer`, the layer that meets only the
   house's fixed world.
+- **A matte material:** `ShaderProperty.Lit.Smoothness` and `set_smoothness` (`sdk/api/models.h`), which sets a Lit
+  material's smoothness, 0 being matte as the game's own untextured fabric.
 - **A pass after the Animator:** `IKExecutionOrder.LateUpdate`, where Final IK runs its solvers, for a hook that changes
   the animated pose before any IK bends it ([custom animation](guides/custom-animation.md#a-pass-after-the-animator)).
 - **Sounds as the game plays them:** `SoundController.GetFloorAudioSnapshot`, the mixer group a sound at a point plays
