@@ -103,3 +103,7 @@ Task 7: complete (commit 37d2f40, tests: keybinds_test -> passed, 9 cases)
 - Task 8: Ruling: a switch of clips crossfades by two outputs (each clip its own graph, the newer sorted higher, its weight ramping over the older) instead of a mixer playable - only output weights are needed, no mixer entries - cost if wrong: none seen; two graphs on one Animator for the length of a blend.
 - Task 8: the test was written before the code but not run red before the implementation; a mutation (the older clip never ended) was run instead and failed the test as it should.
 Task 8: complete (commit 71f590d, tests: player_anim_test -> passed, 5 cases)
+- Task 9: Ruling: no game look is paused for third person: the view follows the head camera, which the game's MouseLook goes on turning; the plan's "pauses the game's camera placement" is not needed - cost if wrong: none.
+- Task 9: Ruling: the wall ray uses Physics.RaycastHit (mapped) with a mask that leaves out the body's own layers, not a sphere cast - cost if wrong: the view can clip a thin edge a sphere would catch.
+- Task 9: test red on first build (two failures, a test leaving the view on), green after the test stopped its view.
+Task 9: complete (commit d572990, tests: third_person_test -> passed, 7 cases)
