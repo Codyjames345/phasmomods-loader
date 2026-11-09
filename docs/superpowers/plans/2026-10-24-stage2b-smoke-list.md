@@ -1175,3 +1175,9 @@ The user's test of 2026-11-09: kicking the wall beside a closet, doors off their
 
 - [ ] At a closet it stands squarely in front of the doors, turns to face them, and its kick lands on the doors, not the wall beside them; the knock plays. Try a closet whose doors sit near a corner.
 - [ ] Every door it opens stays on its hinges, and it opens each door once: the host's `mods.log` has one `squatter: a door swung open` or `squatter: a door pushed open` per door. Note any door that comes off or opens again.
+
+Footsteps from the players' own sounds (user 2026-11-09).
+
+- [ ] The Squatter's steps sound like a player's on the same floor: carpet, wood, concrete, tiles (vinyl), stairs, grass and gravel outside; running steps while it chases, walking steps while it lurks, searches or follows.
+- [ ] Every player hears its steps from where it is, and nothing changes when they stand on another surface themselves.
+- [ ] Its steps never make a ghost react as if a player made them, and no UV footprint appears.

@@ -5,6 +5,7 @@
 #include <map>
 #include <numbers>
 #include <optional>
+#include <string_view>
 #include <span>
 
 #include "squatter_figure.h"
@@ -443,8 +444,22 @@ inline bool sees_for_phase(Phase p, bool anySeen, bool targetSensed, bool figure
   return (p == Phase::Lurking || p == Phase::Moping) ? anySeen : targetSensed;
 }
 
-// Its footsteps (user, 2026-11-09: the user's recordings, Lines::Steps): one per stride of this length it moves. A move
-// of more than kMaxStepMetres in one frame is a jump of the figure (a warp, a new master's first word), not a walk.
+// Its footsteps (user, 2026-11-09: the players' own step sounds, by the surface under it): one per stride of this length
+// it moves. A move of more than kMaxStepMetres in one frame is a jump of the figure (a warp, a new master's first word),
+// not a walk.
+
+// The surfaces a player's footsteps know, by the tag of the collider under the player (FootstepController's note in the
+// map): each has its own clips, Stairs one list for walking and running. A tag that is none of these plays nothing.
+inline constexpr const char* kStepSurfaces[] = {"Carpet", "Concrete", "Wood",  "OldWood", "Grass",         "Snow",  "Truck",
+                                                "Wet",    "Glass",    "Metal", "Gravel",  "Vinyl", "Heavyconcrete", "Stairs"};
+inline constexpr int kStairsSurface = 13;
+
+/** The surface of kStepSurfaces a collider's `tag` names, or -1 for none (case counts, as the game compares it). */
+inline int surface_of(std::string_view tag) {
+  for (int i = 0; i < static_cast<int>(std::size(kStepSurfaces)); ++i)
+    if (tag == kStepSurfaces[i]) return i;
+  return -1;
+}
 inline constexpr float kStrideMetres = 1.4f;
 inline constexpr float kMaxStepMetres = 3.0f;
 

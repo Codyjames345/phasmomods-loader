@@ -315,6 +315,11 @@ void each_running_camera(CameraScan& scan, uint64_t now, const std::function<boo
 }
 
 void* raycast(Vector3 origin, Vector3 direction, float maxDistance) {
+  // Physics.DefaultRaycastLayers: Unity's constant -5, every layer but Ignore Raycast.
+  return raycast(origin, direction, maxDistance, -5);
+}
+
+void* raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
   // The RaycastHit the query fills in, sized from the game: an array's stride is the struct's size.
   // Read once: a size that cannot be read or does not fit is remembered too, so no array is made per call.
   static size_t hitSize = 0;
@@ -327,9 +332,9 @@ void* raycast(Vector3 origin, Vector3 direction, float maxDistance) {
     return nullptr;
   }
   const phasmo::Ray ray{origin, direction};
-  // Physics.DefaultRaycastLayers (Unity's constant -5, every layer but Ignore Raycast) and
   // QueryTriggerInteraction.Ignore: room and sensor volumes are triggers and must not stop the ray.
-  if (!phasmo::Physics::RaycastHit(&ray, hit, maxDistance, -5, phasmo::QueryTriggerInteraction::Ignore())) return nullptr;
+  if (!phasmo::Physics::RaycastHit(&ray, hit, maxDistance, layerMask, phasmo::QueryTriggerInteraction::Ignore()))
+    return nullptr;
   return phasmo::RaycastHit::get_transform(hit);
 }
 bool is_child_of(void* transform, void* parent) { return phasmo::Transform::IsChildOf(transform, parent); }

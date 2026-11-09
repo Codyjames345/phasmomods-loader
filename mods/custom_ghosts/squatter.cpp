@@ -12,6 +12,7 @@
 #include "ClosetZone.h"
 #include "Difficulty.h"
 #include "Door.h"
+#include "Footstep.h"
 #include "GhostAI.h"
 #include "LevelController.h"
 #include "LevelRoom.h"
@@ -31,6 +32,7 @@
 #include "squatter_difficulty.h"
 #include "squatter_door.h"
 #include "squatter_figure.h"
+#include "sound.h"
 #include "squatter_voice.h"
 
 namespace pm::custom::squatter {
@@ -79,9 +81,10 @@ struct State {
   Chase chase;      // the master's
   CuePlayer cues;   // what this client has played of the Shown
   std::set<int> kicked;  // whom the master has kicked this contract (kick): each at most once
-  // Every client's footsteps (the user's recordings, Lines::Steps): counted from the ghost's own movement here.
+  // Every client's footsteps (the players' own step sounds, play_step): counted from the ghost's own movement here.
   StepCounter steps;
   std::optional<Point> stepFrom;
+  const void* lastStep = nullptr;  // the clip it last stepped with, compared only, never used
   std::mt19937 stepRng{std::random_device{}()};
   // How fast the ghost moves on this client, for the figure's pace (figure::set_pace).
   std::optional<Point> paceFrom;
@@ -769,6 +772,51 @@ void start_reach(Point ghostAt) {
   g.reachSince = now();
 }
 
+// The step clips a player's FootstepController holds for surface `surface` of kStepSurfaces, running or walking: an
+// AudioClip[], or null.
+void* step_clips(void* steps, int surface, bool running) {
+  using F = phasmo::FootstepController;
+  switch (surface) {
+    case 0: return running ? F::runCarpetAudioClips.get(steps) : F::carpetAudioClips.get(steps);
+    case 1: return running ? F::runConcreteAudioClips.get(steps) : F::concreteAudioClips.get(steps);
+    case 2: return running ? F::runWoodAudioClips.get(steps) : F::woodAudioClips.get(steps);
+    case 3: return running ? F::runOldWoodAudioClips.get(steps) : F::oldwoodAudioClips.get(steps);
+    case 4: return running ? F::runGrassAudioClips.get(steps) : F::grassAudioClips.get(steps);
+    case 5: return running ? F::runSnowAudioClips.get(steps) : F::snowAudioClips.get(steps);
+    case 6: return running ? F::runTruckAudioClips.get(steps) : F::truckAudioClips.get(steps);
+    case 7: return running ? F::runWetAudioClips.get(steps) : F::wetAudioClips.get(steps);
+    case 8: return running ? F::runGlassAudioClips.get(steps) : F::glassAudioClips.get(steps);
+    case 9: return running ? F::runMetalAudioClips.get(steps) : F::metalAudioClips.get(steps);
+    case 10: return running ? F::runGravelAudioClips.get(steps) : F::gravelAudioClips.get(steps);
+    case 11: return running ? F::runVinylAudioClips.get(steps) : F::vinylAudioClips.get(steps);
+    case 12: return running ? F::runHeavyconcreteAudioClips.get(steps) : F::heavyconcreteAudioClips.get(steps);
+    case kStairsSurface: return F::stairsAudioClips.get(steps);
+    default: return nullptr;
+  }
+}
+
+// One footstep of the Squatter at `at`, as a player's footsteps choose theirs (FootstepController.AttemptPlaySound): the
+// tag of what lies under it on the footsteps' own layers picks the surface, and one of that surface's clips plays, the
+// running ones while it runs (user, 2026-11-09: the players' own step sounds, kept per surface). The clips and layers
+// are this client's own player's; nothing plays on a surface the game's footsteps do not know. Played through the mod's
+// own sound, never the player's PlayerNoise, so no ghost hears it as a player.
+void play_step(Point at, bool running, uint32_t roll) {
+  void* player = game::local_player();
+  void* steps = player ? phasmo::FootstepController::footstepController.get(player) : nullptr;
+  if (!steps || !api::alive(steps)) return;
+  void* under = game::raycast({at.x, at.y + 0.5f, at.z}, {0, -1, 0}, 1.5f, phasmo::FootstepController::mask.get(steps));
+  void* tag = under ? phasmo::Component::get_tag(under) : nullptr;
+  const int surface = tag ? surface_of(api::to_utf8(tag)) : -1;
+  const api::RefArray clips{surface >= 0 ? step_clips(steps, surface, running) : nullptr};
+  if (clips.size() == 0) return;
+  size_t pick = roll % clips.size();
+  if (clips.size() > 1 && clips[pick] == g.lastStep) pick = (pick + 1) % clips.size();  // never the same twice running
+  void* clip = clips[pick];
+  if (!clip) return;
+  g.lastStep = clip;
+  sound::play_at(clip, vector(at), 1.0f);
+}
+
 // Every client plays the Shown: the master's own on the master, the master's last word elsewhere.
 void play(void* ghost) {
   if (!g.shown.last || !figure::ready()) return;
@@ -852,7 +900,7 @@ void play(void* ghost) {
   // A footstep each stride it moves, on this client, from its own view of the ghost's movement.
   const Point at = at_of(ghost);
   if (g.stepFrom && g.steps.moved(std::hypot(at.x - g.stepFrom->x, at.z - g.stepFrom->z)))
-    voice::play(Lines::Steps, vector(at), static_cast<uint32_t>(g.stepRng()));
+    play_step(at, s.move == Move::Run || plays_once(s.move), static_cast<uint32_t>(g.stepRng()));
   g.stepFrom = at;
 }
 

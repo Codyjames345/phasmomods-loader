@@ -179,6 +179,11 @@ inline constexpr pm::sdk::EntryDesc Component{.key = "Component", .name = "Compo
 inline constexpr pm::sdk::EntryDesc Component_get_transform{
     .key = "Component.get_transform", .kind = pm::sdk::Kind::Method, .owner = "Component", .name = "get_transform"};
 
+/// The tag of the component's GameObject, a string ("Untagged" when it has none). Inferred: Unity's documented property
+/// getter.
+inline constexpr pm::sdk::EntryDesc Component_get_tag{.key = "Component.get_tag", .kind = pm::sdk::Kind::Method,
+                                                      .owner = "Component", .name = "get_tag"};
+
 /// The component's GameObject. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Component_get_gameObject{
     .key = "Component.get_gameObject", .kind = pm::sdk::Kind::Method, .owner = "Component", .name = "get_gameObject"};
@@ -308,6 +313,8 @@ struct Component {
   static constexpr pm::api::Type<pm::map::Component> type{};
   /// get_transform(component). Unresolved: null.
   static constexpr pm::api::Method<pm::map::Component_get_transform, void*(void*)> get_transform{};
+  /// get_tag(component): its GameObject's tag, a managed string (pm::api::to_utf8). Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Component_get_tag, void*(void*)> get_tag{};
   /// get_gameObject(component). Unresolved: null.
   static constexpr pm::api::Method<pm::map::Component_get_gameObject, void*(void*)> get_gameObject{};
   /// GetComponent(component, systemType): systemType is a Type wrapper's type_object(). Unresolved: null.

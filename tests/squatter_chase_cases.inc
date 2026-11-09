@@ -331,7 +331,9 @@ void an_unseen_figure_never_starts_a_chase() {
   CHECK(!sees_for_phase(Phase::Chasing, true, true, false));
 }
 
-// Its footsteps are the user's recordings (user, 2026-11-09), one per stride of the distance it moves, on every client.
+// Its footsteps are the players' own step sounds (user, 2026-11-09), one per stride of the distance it moves, on every
+// client, chosen by the surface under it as a player's are: each tag a player's footsteps know names its surface, and
+// any other tag none.
 void a_step_plays_each_stride() {
   StepCounter s;
   CHECK(!s.moved(kStrideMetres * 0.6f));
@@ -343,7 +345,10 @@ void a_step_plays_each_stride() {
   CHECK(!s.moved(kMaxStepMetres + 1.0f));  // a jump of the figure is no walk: no step, and the count starts over
   CHECK(!s.moved(kStrideMetres * 0.9f));
   CHECK(!s.moved(-1.0f) && !s.moved(std::numeric_limits<float>::quiet_NaN()));
-  CHECK(std::string(voice::folder_name(Lines::Steps)) == "steps");
+  CHECK(surface_of("Carpet") == 0 && surface_of("Heavyconcrete") == 12 && surface_of("Stairs") == kStairsSurface);
+  CHECK(std::string(kStepSurfaces[kStairsSurface]) == "Stairs");
+  CHECK(surface_of("Untagged") == -1 && surface_of("") == -1 && surface_of("carpet") == -1 && surface_of("Dirt") == -1);
+  for (int i = 0; i < static_cast<int>(std::size(kStepSurfaces)); ++i) CHECK(surface_of(kStepSurfaces[i]) == i);
 }
 
 // A moping Squatter never sits inside a hiding place the difficulty closed (a blocked pantry on Willow Street, user

@@ -96,9 +96,11 @@ Some consequences, all **(builder's call)**:
 
 Each move changes its speed where relevant: a roll, a trip, a jump, a duck and a weave carry it as far as their clips travel. "Barely outrun" holds across the whole chase, so tune
 the moves and base speed together in game **(builder's call)**. All players see the same move at the same time **(builder's call)**.
-Its footsteps are the user's own recordings, from a `steps` folder beside the voice sets, one per stride it moves on each player's game
-(user, 2026-11-09). The game's ghost footsteps were ruled out: each leaves a UV footprint that counts as photo evidence and adds to the
-ghost-distance stat, and the game sends them only in a hunt.
+Its footsteps are the players' own step sounds, one per stride it moves on each player's game (user, 2026-11-09, replacing the
+user's own recordings): the tag of the surface under it picks that surface's clips as a player's footsteps do, the running ones while
+it runs. They play through the mod's own sound, never a player's noise, so no ghost hears them as a player. The game's ghost footsteps
+were ruled out: each leaves a UV footprint that counts as photo evidence and adds to the ghost-distance stat, and the game sends them
+only in a hunt.
 
 ## Rules this ghost breaks on purpose
 

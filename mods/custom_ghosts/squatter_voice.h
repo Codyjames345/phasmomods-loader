@@ -26,7 +26,6 @@ inline const char* folder_name(Lines set) {
     case Lines::Mope: return "mope";
     case Lines::Excited: return "excited";
     case Lines::Friendly: return "friendly";
-    case Lines::Steps: return "steps";
   }
   return "";
 }
