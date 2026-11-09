@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <random>
@@ -43,6 +44,10 @@ struct Chase {
   Tracker tracker;
   int target = -1;           // the target's id (id_of), -1 for none
   bool hidingKnown = false;  // it knows the target's hiding place (knows_hiding)
+  Interest interest;         // how long it has kicked at the hiding place it waits at (kKickInterestMs)
+  // The hiding place it lost interest in: whoever hides there is neither seen nor heard by it until nobody does, so the
+  // player has a chance to get away (user, 2026-11-09). Compared only.
+  const void* givenUp = nullptr;
   LineClock lines;
   StuckClock stuck;
   TauntBook taunts;
@@ -105,6 +110,8 @@ struct State {
   enum class Local : uint8_t { None, Turning, Starting } local = Local::None;
   uint64_t localUntil = 0;
   std::optional<Move> lastMove;
+  // The slam of a hiding place's door, due when its kick's foot lands (kSlamDelayMs), on this client.
+  uint64_t slamAt = 0;
 };
 
 // Over how long the ghost's speed is smoothed for the figure's pace, seconds: a starting value.
@@ -327,6 +334,15 @@ std::optional<KickSpot> kick_spot(void* closet, Point from) {
   return KickSpot{point(hit.position), point(mid)};
 }
 
+// Whether the hiding place `closet` stands open: one of its doors is not shut (door::shut). None read shut stays a place
+// it kicks at, as before (user, 2026-11-09: an open one it walks into for the kill).
+bool hiding_place_open(void* closet) {
+  if (!closet) return false;
+  for (void* d : {phasmo::ClosetZone::leftClosetDoor.get(closet), phasmo::ClosetZone::rightClosetDoor.get(closet)})
+    if (d && api::alive(d) && !door::shut(d)) return true;
+  return false;
+}
+
 // Turns the master's ghost to face `p` on the flat, for a kick or a wait at a door; every client's figure follows its
 // heading (play's turn on the spot).
 void face_toward(void* ghost, Point at, Point p) {
@@ -511,8 +527,12 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   // Its target: the nearest player it senses inside, else the one it still tracks or knows is hiding.
   std::vector<Candidate> candidates;
   const Seen* target = nullptr;
+  // Once nobody hides in the hiding place it gave up on, it may go for whoever hides there again.
+  if (c.givenUp && std::none_of(players.begin(), players.end(), [&](const Seen& s) { return s.closet == c.givenUp; }))
+    c.givenUp = nullptr;
+  const auto unnoticed = [&](const Seen& s) { return c.givenUp && s.closet == c.givenUp; };
   for (const Seen& s : players) {
-    const bool sensed = c.seen.contains(s.id) || c.heard.contains(s.id);
+    const bool sensed = !unnoticed(s) && (c.seen.contains(s.id) || c.heard.contains(s.id));
     const bool hiding = s.id == c.target && c.hidingKnown && s.closet;
     candidates.push_back({s.id, std::hypot(s.at.x - ghostAt.x, s.at.z - ghostAt.z), s.living, s.inside, sensed,
                           hiding});
@@ -525,24 +545,40 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   c.target = picked;
   for (const Seen& s : players)
     if (s.id == c.target) target = &s;
-  const bool targetSensed = target && (c.seen.contains(target->id) || c.heard.contains(target->id));
+  const bool targetSensed =
+      target && !unnoticed(*target) && (c.seen.contains(target->id) || c.heard.contains(target->id));
   if (targetSensed) c.tracker.sensed(target->id, target->at, t);
   c.hidingKnown = target && knows_hiding(target->closet != nullptr, targetSensed || c.tracker.tracks(t), c.hidingKnown);
+  // A hiding place standing open hides nobody from it: it knows where they are and goes in for them.
+  const bool placeOpen = c.hidingKnown && hiding_place_open(target->closet);
+  if (placeOpen) c.tracker.sensed(target->id, target->at, t);
 
   bool anySeen = false;
-  for (const Seen& s : players) anySeen = anySeen || (s.living && s.inside && c.seen.contains(s.id));
+  for (const Seen& s : players) anySeen = anySeen || (s.living && s.inside && !unnoticed(s) && c.seen.contains(s.id));
   const Phase now = *g.phase;
   // Nothing is chased or kicked by a figure nobody can see (one that failed to build is logged by squatter_figure).
   const bool shown = figure::ready();
-  const Facts f{friendlyGhost, sees_for_phase(now, anySeen, targetSensed, shown),
-                shown && c.target >= 0 && c.tracker.tracks(t), c.hidingKnown, door::living_inside(),
-                t >= c.pauseUntil};
+  const Facts f{friendlyGhost,
+                sees_for_phase(now, anySeen, targetSensed, shown),
+                shown && c.target >= 0 && c.tracker.tracks(t),
+                waits_at_hiding_place(c.hidingKnown, placeOpen),
+                door::living_inside(),
+                t >= c.pauseUntil,
+                c.interest.lost(t)};
   if (doors_lock(now, f)) door::lock_all();
   const Phase next = next_phase(now, f);
   g.phase = next;
 
   // A new phase: its first line at once, its stance.
   if (c.was != next) {
+    // Lost interest at a hiding place, it forgets whoever hides there and lurks, as any ghost wanders (user, 2026-11-09).
+    if (c.was == Phase::AtHidingPlace && next == Phase::Lurking) {
+      c.givenUp = target ? target->closet : nullptr;
+      c.tracker.forget();
+      c.target = -1;
+      c.hidingKnown = false;
+    }
+    c.interest.reset();
     c.phaseSince = t;
     c.lines.reset();
     c.searchAt.reset();
@@ -585,7 +621,12 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       // its whole clip, and the next waits kClumsyGapMs after it.
       if (t >= c.moveUntil) {
         Pick pick;
-        if (t >= c.nextClumsy && !paused)
+        // A clumsy move carries its figure the way the figure faces, so it waits until this client's figure, the
+        // master's own, has turned to the way the agent runs and is not turning on the spot (faces_ahead).
+        const phasmo::Vector3 v = agent ? phasmo::NavMeshAgent::get_velocity(agent) : phasmo::Vector3{};
+        const bool facesAhead =
+            g.facing && g.local != State::Local::Turning && faces_ahead(*g.facing, std::atan2(v.x, v.z));
+        if (t >= c.nextClumsy && !paused && facesAhead)
           pick = move_for(surroundings(agent, ghostAt, targetSensed ? target : nullptr, t >= c.nextDive));
         if (pick.move != c.out.move || plays_once(pick.move)) {
           c.out.move = pick.move;
@@ -642,6 +683,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       if (there && t >= c.nextBang && !paused) {  // demands they come out, kicking the door over and over
         act(Act::Bang, kBangGapMs / 2, t);
         c.nextBang = t + kBangGapMs;
+        c.interest.kicked(t);  // it loses interest kKickInterestMs after its first kick here
       }
       break;
     }
@@ -817,6 +859,34 @@ void play_step(Point at, bool running, uint32_t roll) {
   sound::play_at(clip, vector(at), 1.0f);
 }
 
+// The sound of the door of hiding place `closet` nearer `ghostAt` being slammed, on this client, as the door's own slam
+// RPC's body plays it (Door.PlayDoorSlamNoise): one of the door's slam clips, or of the game's shared ones when it has
+// none (slam_pick), through the door's Noise at the game's volume (kSlamVolume). Every client plays it from the kick's
+// cue rather than the master sending the RPC, which only the room's first actor may (sdk/systems/photon.md).
+void slam(void* closet, Point ghostAt, uint32_t roll) {
+  if (!closet || !api::alive(closet)) return;
+  void* d = nullptr;
+  float nearest = 0.0f;
+  for (void* each : {phasmo::ClosetZone::leftClosetDoor.get(closet), phasmo::ClosetZone::rightClosetDoor.get(closet)}) {
+    const std::optional<phasmo::Vector3> m = door_middle(each);
+    if (!m) continue;
+    const float metres = std::hypot(m->x - ghostAt.x, m->z - ghostAt.z);
+    if (!d || metres < nearest) {
+      d = each;
+      nearest = metres;
+    }
+  }
+  void* noise = d ? phasmo::Door::noise.get(d) : nullptr;
+  if (!noise || !api::alive(noise)) return;
+  const api::RefArray own{phasmo::Door::slamClips.get(d)};
+  void* sounds = phasmo::SoundController::instance.get();
+  const api::RefArray shared{sounds && api::alive(sounds) ? phasmo::SoundController::doorSlamClips.get(sounds)
+                                                          : nullptr};
+  const std::optional<SlamPick> pick = slam_pick(own.size(), shared.size(), roll);
+  void* clip = pick ? (pick->own ? own[pick->index] : shared[pick->index]) : nullptr;
+  if (clip) phasmo::Noise::PlaySound(noise, clip, kSlamVolume, false, false);
+}
+
 // Every client plays the Shown: the master's own on the master, the master's last word elsewhere.
 void play(void* ghost) {
   if (!g.shown.last || !figure::ready()) return;
@@ -848,6 +918,14 @@ void play(void* ghost) {
   }
   g.lookWeight = approach(g.lookWeight, watched ? 1.0f : 0.0f, dt / kLookBlendSeconds);
   figure::look_at(g.lookPoint, g.lookWeight);
+
+  // Its kick at a hiding place slams the door of the hiding place the player it is after hides in, as the foot lands.
+  if (c.act && s.act == static_cast<int8_t>(Act::Bang)) g.slamAt = t + kSlamDelayMs;
+  if (g.slamAt && t >= g.slamAt) {
+    g.slamAt = 0;
+    if (s.act == static_cast<int8_t>(Act::Bang) || s.phase == Phase::AtHidingPlace)
+      slam(watched ? phasmo::Player::closet.get(watched) : nullptr, here, static_cast<uint32_t>(g.stepRng()));
+  }
 
   // In a door clip, the nearer hand takes the door's handle and follows it as the leaf swings, blending in and out.
   const bool doorAct =
@@ -931,6 +1009,7 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     g.facing.reset();
     g.local = State::Local::None;
     g.lastMove.reset();
+    g.slamAt = 0;
     forget_channel();
     figure::destroy();
     if (!haunting) ghost_sight::drop();  // shared (ghost_sight.h): kept while the contract's ghost lives
@@ -946,6 +1025,10 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
   // The first frame the mod steers the master's ghost, it leaves wandering or the favourite room for idling, which
   // restraint lets through; the agent's speed is set after this change, since idling's start sets its own.
   if (master && steering_begins(g.steered, g.phase))
+    phasmo::GhostAI::ChangeState(haunting, phasmo::GhostState::idle(), nullptr, false);
+  // The frame it stops steering (it lost interest at a hiding place and lurks), the master idles the ghost again: the
+  // state's start gives the agent the ghost's own speed in place of the mod's, and its roll moves on to wandering.
+  if (master && steering_ends(g.steered, g.phase))
     phasmo::GhostAI::ChangeState(haunting, phasmo::GhostState::idle(), nullptr, false);
   g.steered = master && steering();
   tell_sprint(master);

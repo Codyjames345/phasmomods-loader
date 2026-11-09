@@ -306,6 +306,11 @@ bool passable(void* d) {
   return !phasmo::HingeDoor::type.is(d) || fits(leaf_gap(d));
 }
 
+bool shut(void* d) {
+  if (!d || !api::alive(d)) return false;
+  return phasmo::HingeDoor::type.is(d) ? reads_shut(leaf_gap(d)) : phasmo::Door::closed.get(d);
+}
+
 std::optional<Leaf> leaf_of(void* d) {
   if (!d || !api::alive(d) || !phasmo::HingeDoor::type.is(d)) return std::nullopt;
   void* t = leaf_transform(d);

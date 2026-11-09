@@ -777,6 +777,22 @@ inline constexpr pm::sdk::EntryDesc SoundController_GetPlayersAudioGroup{
     .key = "SoundController.GetPlayersAudioGroup", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "SoundController", .name = "GetPlayersAudioGroup"};
 
+/// The level's SoundController: the class's one static field of its own type. Door.PlayDoorSlamNoise reads its
+/// shared slam clips through it. Decompiled.
+inline constexpr pm::sdk::EntryDesc SoundController_instance{
+    .key = "SoundController.instance", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .flags = pm::sdk::kStatic, .owner = "SoundController", .type = "@SoundController"};
+
+// Door.PlayDoorSlamNoise reads one of SoundController's AudioClip[] fields: the shared slam clips.
+inline constexpr pm::sdk::Fact SoundController_doorSlamClips_facts[] = {
+    {.is = pm::sdk::Fact::Is::Loads, .method = "Door.PlayDoorSlamNoise"}};
+
+/// The game's shared door slam clips, an AudioClip[]: Door.PlayDoorSlamNoise plays one of them for a door with no
+/// slam clips of its own (Door.slamClips). SoundController's one AudioClip[] that method reads. Decompiled.
+inline constexpr pm::sdk::EntryDesc SoundController_doorSlamClips{
+    .key = "SoundController.doorSlamClips", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "SoundController", .type = "AudioClip[]", .facts = SoundController_doorSlamClips_facts};
+
 
 inline constexpr const char* Player_bool[] = {"bool"};
 
@@ -1044,6 +1060,16 @@ struct PCControls {
   static constexpr pm::api::Type<pm::map::PCControls> type{};
   /// The InputActionAsset its actions come from: actions.get(controls). Unresolved: null.
   static constexpr pm::api::Field<pm::map::PCControls_actions, void*> actions{};
+};
+
+/// The level's sounds. `sounds` below is the SoundController.
+struct SoundController {
+  /// The type: klass(), is(obj). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::SoundController> type{};
+  /// The level's one: instance.get(). Null outside a level. Unresolved: null.
+  static constexpr pm::api::StaticField<pm::map::SoundController_instance, void*> instance{};
+  /// The shared door slam clips, an AudioClip[]: doorSlamClips.get(sounds). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::SoundController_doorSlamClips, void*> doorSlamClips{};
 };
 
 /// @}

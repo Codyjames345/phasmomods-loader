@@ -52,6 +52,7 @@ constexpr int32_t kDoorKind = 0x0C, kDoorInteract = 0x10, kDoorView = 0x18;  // 
 constexpr int32_t kDoorAxis = 0x20, kDoorShutAngle = 0x24;  // HingeDoor.hingeAxis and Door.closedAngle
 constexpr int32_t kDoorBody = 0x28, kDoorOpenAngle = 0x30;  // Door.body (none here) and HingeDoor.openAngle
 constexpr int32_t kDoorForce = 0x34, kDoorReversed = 0x35;  // Door.useForceInsteadOfAnimations, HingeDoor.openAngleReversed
+constexpr int32_t kDoorClosed = 0x36;  // Door.closed
 constexpr int32_t kAxisX = 1, kAxisY = 2, kAxisZ = 4;  // made-up as the game's Axis flags read: the code reads them
 std::map<void*, phasmo::Vector3> g_euler;  // each door leaf's Transform.localEulerAngles
 constexpr int32_t kInteractInUse = 0x08, kViewMine = 0x08;  // PhotonObjectInteract.inUse, PhotonView.IsMine
@@ -321,6 +322,7 @@ void start(bool master = true, bool friendly = false) {
   fake::field(map::HingeDoor_openAngle, kDoorOpenAngle);
   fake::field(map::Door_useForceInsteadOfAnimations, kDoorForce);
   fake::field(map::HingeDoor_openAngleReversed, kDoorReversed);
+  fake::field(map::Door_closed, kDoorClosed);
   fake::type(map::Collider, &g_colliderClass);
   fake::method(map::Component_GetComponentInChildren, reinterpret_cast<void*>(&fake_no_child));
   fake::method(map::Collider_get_bounds, reinterpret_cast<void*>(&fake_bounds));
@@ -826,6 +828,27 @@ void plain_door(Obj& d, Obj& use, Obj& view, bool mine = true) {
   at<bool>(view, kViewMine) = mine;
 }
 
+// A hiding place's door reads shut as the game snaps a leaf shut (HingeDoor.Update: within 7 degrees of
+// Door.closedAngle on its hinge axis); a door with no hinge reads as the game marks it (Door.closed). The Squatter kicks
+// a shut one and walks into an open one (user, 2026-11-09).
+void a_door_reads_shut_as_the_game_snaps_it() {
+  CHECK(door::kShutDegrees == 7.0f);
+  CHECK(door::reads_shut(0.0f) && door::reads_shut(door::kShutDegrees) && !door::reads_shut(door::kShutDegrees + 0.5f));
+  start();
+  plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
+  CHECK(door::shut(&g_kitchen));
+  g_euler[&g_kitchen].y = 90.0f + door::kShutDegrees - 1.0f;  // within the snap
+  CHECK(door::shut(&g_kitchen));
+  g_euler[&g_kitchen].y = 90.0f + 30.0f;  // ajar
+  CHECK(!door::shut(&g_kitchen));
+  g_kitchen.klass = &g_slideClass;  // no hinge: the game's own mark
+  at<bool>(g_kitchen, kDoorClosed) = true;
+  CHECK(door::shut(&g_kitchen));
+  at<bool>(g_kitchen, kDoorClosed) = false;
+  CHECK(!door::shut(&g_kitchen));
+  CHECK(!door::shut(nullptr));  // no door shuts nothing
+}
+
 // The Squatter never passes through a door (user, 2026-11-09): it opens one whose gap is too narrow for it, measured by
 // how far the leaf stands from shut (Door.closedAngle) on its hinge axis, the shorter way round. Door.closed is not it:
 // the game sets it when a door snaps shut and clears it on a grab or the contract-start opener's RPC, so a door swung
@@ -1056,6 +1079,7 @@ void a_missing_entry_fails_the_start() {
 
 int main() {
   a_door_too_narrow_to_pass_is_opened();
+  a_door_reads_shut_as_the_game_snaps_it();
   locks_every_exit_once();
   a_master_not_the_first_actor_sends_no_lock();
   counts_only_living_inside();

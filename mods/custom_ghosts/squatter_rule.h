@@ -37,6 +37,7 @@ struct Facts {
   bool targetHiding;  // it knows its target is in a hiding place
   int livingInside;   // living players inside the house; negative when unknown (never locks, keeps the phase)
   bool actFinished;   // the get-up clip has ended (Excited)
+  bool lostInterest = false;  // it has kicked at its target's hiding place long enough (squatter_chase.h Interest)
 };
 
 // All the numbers below are starting values, to be tuned with the user in game.
@@ -101,12 +102,23 @@ inline bool steering_begins(bool steeredBefore, std::optional<Phase> now) {
 }
 
 /**
+ * Whether steering ends this frame: the last frame steered (`steeredBefore`) and `now` does not, as when it loses
+ * interest at a hiding place and lurks again. The master then changes the ghost to idling once: idling's start gives the
+ * agent the ghost's own speed (GhostAI.baseSpeed), and its roll moves on to wandering as any ghost's does
+ * (sdk/systems/ghost-ai.md, "Moving the ghost outside a hunt").
+ */
+inline bool steering_ends(bool steeredBefore, std::optional<Phase> now) {
+  return steeredBefore && now && !steers(*now);
+}
+
+/**
  * The phase after `now` given this frame's facts. Pure and stateless: the caller keeps the phase. LockedOut
  * is final under every facts. A friendly ghost only moves Moping, Excited, Following (any other phase it is
  * handed restarts at Moping); it never chases. A hostile one goes to LockedOut from a chase phase the frame
  * exactly 0 living players are inside; a negative count (unknown) keeps the phase. In a chase phase a hiding
  * target wins over knowing where it is (hiding is safe), then knowing where a target is (sight or tracking)
- * chases, and otherwise a ghost that lost them searches.
+ * chases, and otherwise a ghost that lost them searches. At a hiding place, once it has lost interest (kicked long
+ * enough, Facts.lostInterest) it lurks again, so the player has a chance to get away (user, 2026-11-09).
  */
 inline Phase next_phase(Phase now, const Facts& f) {
   if (now == Phase::LockedOut) return Phase::LockedOut;
@@ -125,6 +137,7 @@ inline Phase next_phase(Phase now, const Facts& f) {
     case Phase::AtHidingPlace:
       if (f.livingInside < 0) return now;
       if (f.livingInside == 0) return Phase::LockedOut;
+      if (now == Phase::AtHidingPlace && f.lostInterest) return Phase::Lurking;
       if (f.targetHiding) return Phase::AtHidingPlace;
       return f.seesPlayer || f.tracksPlayer ? Phase::Chasing : Phase::Searching;
     default: return Phase::Lurking;  // a friendly phase handed to a hostile ghost

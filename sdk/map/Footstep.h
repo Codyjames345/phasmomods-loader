@@ -298,6 +298,10 @@ struct Footstep {
 
 /// A sound in the world. `noise` below is one.
 struct Noise {
+  /// PlaySound(noise, clip, volume, a, b): plays `clip` through its AudioSource on this client only, at `volume`
+  /// (-1 for Noise.volume). The two flags are the game's own; its door sounds pass false for both. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::Noise_PlaySound, void(void*, void*, float, bool, bool)> PlaySound{};
   /// SetMaxDistance(noise, metres). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Noise_SetMaxDistance, void(void*, float)> SetMaxDistance{};
   /// The volume of its last play: volume.get(noise), volume.set(noise, v). What the sound sensor reads

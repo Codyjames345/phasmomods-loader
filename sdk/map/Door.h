@@ -312,11 +312,43 @@ inline constexpr pm::sdk::EntryDesc Door_interact{.key = "Door.interact", .kind 
                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                   .type = "@PhotonObjectInteract"};
 
-/// Plays the door's slam noise on every client (an RPC). Its Door argument may be null. Inferred: from
-/// the method's name; Custom Ghosts' Asterion has called it with null since 2026-10-20.
+/// Plays the door's slam noise on every client: it sends the door's PlayDoorSlamNoise RPC to every client through
+/// the door's PhotonView, and does nothing else. Its Door argument is never read, so it may be null. The RPC's body
+/// lets only the room's first actor through (sdk/systems/photon.md), so a client that is not the room's first actor
+/// must not call it. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_CreateDoorSlamNoise{.key = "Door.CreateDoorSlamNoise",
-                                                             .kind = pm::sdk::Kind::Method, .owner = "Door",
-                                                             .name = "CreateDoorSlamNoise"};
+                                                             .kind = pm::sdk::Kind::Method,
+                                                             .confidence = pm::sdk::Confidence::Decompiled,
+                                                             .owner = "Door", .name = "CreateDoorSlamNoise"};
+
+inline constexpr const char* Door_PlayDoorSlamNoise_params[] = {"PhotonMessageInfo"};
+
+/// The RPC Door.CreateDoorSlamNoise sends, the sound of the door being slammed, on every client: it checks its sender
+/// is the room's first actor (sdk/systems/photon.md), then plays one clip, picked at random, of the door's slam clips
+/// (Door.slamClips), or of the game's shared ones (SoundController.doorSlamClips) when the door has none, through the
+/// door's Noise (Door.noise, Noise.PlaySound) at a volume of 0.15, a constant in its code. A mod hooks it; never calls
+/// it. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_PlayDoorSlamNoise{.key = "Door.PlayDoorSlamNoise",
+                                                           .kind = pm::sdk::Kind::Method,
+                                                           .confidence = pm::sdk::Confidence::Decompiled,
+                                                           .owner = "Door", .name = "PlayDoorSlamNoise",
+                                                           .params = Door_PlayDoorSlamNoise_params};
+
+// Door.PlayDoorSlamNoise reads one of Door's AudioClip[] fields: the slam clips.
+inline constexpr pm::sdk::Fact Door_slamClips_facts[] = {
+    {.is = pm::sdk::Fact::Is::Loads, .method = "Door.PlayDoorSlamNoise"}};
+
+/// The door's slam clips, an AudioClip[] (empty on a door that has none of its own): Door.PlayDoorSlamNoise plays one
+/// of them. Door's one AudioClip[] that method reads. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_slamClips{.key = "Door.slamClips", .kind = pm::sdk::Kind::Field,
+                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                   .type = "AudioClip[]", .facts = Door_slamClips_facts};
+
+/// The door's Noise, a sound in the world at the door: its lock, unlock, slam and ghost door sounds play through it
+/// (Noise.PlaySound). Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_noise{.key = "Door.noise", .kind = pm::sdk::Kind::Field,
+                                               .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                               .name = "noise"};
 
 /// Switches the door on (true) or off (false) for players, on every client (an RPC): a door switched
 /// off cannot be grabbed or closed. Inferred: from the method's name.
@@ -594,8 +626,15 @@ struct Door {
   static constexpr pm::api::Field<pm::map::Door_kind, int32_t> kind{};
   /// Its PhotonObjectInteract: interact.get(door). Unresolved: null.
   static constexpr pm::api::Field<pm::map::Door_interact, void*> interact{};
-  /// CreateDoorSlamNoise(door, otherDoor): `otherDoor` may be null. Unresolved: does nothing.
+  /// CreateDoorSlamNoise(door, otherDoor): the slam sound on every client, by RPC. `otherDoor` is never read and may
+  /// be null. Call it only on the room's first actor, whom its RPC alone accepts. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Door_CreateDoorSlamNoise, void(void*, void*)> CreateDoorSlamNoise{};
+  /// PlayDoorSlamNoise(door, &info), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_PlayDoorSlamNoise, void(void*, void*)> PlayDoorSlamNoise{};
+  /// Its slam clips, an AudioClip[] (empty when it has none of its own): slamClips.get(door). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Door_slamClips, void*> slamClips{};
+  /// Its Noise, at the door: noise.get(door). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Door_noise, void*> noise{};
   /// DisableOrEnableDoor(door, enable, flag). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Door_DisableOrEnableDoor, void(void*, bool, bool)> DisableOrEnableDoor{};
   /// NetworkedGrabbedDoor(door). A mod usually hooks it. Unresolved: does nothing.

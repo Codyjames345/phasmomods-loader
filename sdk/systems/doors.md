@@ -299,6 +299,7 @@ locked as above. Nothing carries over.
 | --- | --- |
 | `Door.HuntingCloseDoorNetworked` | refuses a sender that is not the room's first actor, and refuses outright on a friendly ghost's difficulty |
 | `Door.SyncLockState` | refuses a lock (true) from a sender that is not the room's first actor; takes an unlock from anyone |
+| `Door.PlayDoorSlamNoise` | refuses a sender that is not the room's first actor |
 | `Door.NetworkedPlayLockSound`, `NetworkedSyncCloseDoor`, the unlock's click, `SyncHasBeenUnlocked`, and the RPCs of `Door.DisableOrEnableDoor` and of the door's collider switch | none: they take no sender |
 
 A refusal can harm an account ([Photon](photon.md), "The game's checks on an RPC"), so lock exits only as the game does:
@@ -306,6 +307,18 @@ call `Door.HuntingCloseDoor` on the master, never on a friendly ghost's difficul
 `Door.HuntingCloseDoor` checks `Difficulty.friendlyGhost` before it sends anything, and `Door.LockDoor` sends
 `SyncLockState` only from the master. Never call `Door.HuntingCloseDoorNetworked`, `Door.SyncLockState` or
 `Door.NetworkedPlayLockSound` yourself: they are RPC bodies.
+
+## A door's slam sound
+
+`Door.CreateDoorSlamNoise` sends the door's `Door.PlayDoorSlamNoise` RPC to every client and does nothing else; its Door
+argument is never read. The RPC's body checks that its sender is the room's first actor, then picks one clip at random
+from the door's own slam clips (`Door.slamClips`), or from the game's shared ones (`SoundController.doorSlamClips`, on
+`SoundController.instance`) when the door has none, and plays it through the door's Noise (`Door.noise`,
+`Noise.PlaySound`) at a volume of 0.15, a constant in its code. Read from decompiled code, 2026-11-09.
+
+Call `CreateDoorSlamNoise` only on the room's first actor. To play the slam on one client, with no message, do what the
+RPC's body does: pick the clip as it picks it and play it through `Noise.PlaySound` on the door's Noise. Custom Ghosts'
+Squatter does this on every client as its kick lands on a hiding place's door (`mods/custom_ghosts/squatter.cpp`).
 
 ## Locking the exits outside a hunt
 

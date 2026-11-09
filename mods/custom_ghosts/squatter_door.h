@@ -111,6 +111,13 @@ inline float gap_degrees(float angle, float shut) {
 /** Whether a door open `gap` degrees lets the Squatter through. */
 inline bool fits(float gap) { return gap >= kPassDegrees; }
 
+// How near its shut angle a leaf reads shut, in degrees: the game's own snap test (HingeDoor.Update, a constant in its
+// code; Door.closed's note).
+inline constexpr float kShutDegrees = 7.0f;
+
+/** Whether a leaf `gap` degrees from shut (gap_degrees) reads shut, as the game snaps one. */
+inline bool reads_shut(float gap) { return gap <= kShutDegrees; }
+
 /**
  * The leaf's angle about its hinge from its local euler angles, `euler` (Transform.localEulerAngles), as the game's
  * opener reads the hinge's axis (HingeDoor.hingeAxis): x for `axisX` (Axis.X), z for `axisZ` (Axis.Z), else y.
@@ -176,6 +183,12 @@ bool may_open(void* door);
  * fits), any other door, and a door gone. Any client; it reads only this client's leaf. Main thread.
  */
 bool passable(void* door);
+
+/**
+ * Whether `door` is shut on this client: a hinged door whose leaf reads shut (reads_shut, by its angle on its hinge
+ * axis), any other door as the game marks it (Door.closed). False for no door or one gone. Any client. Main thread.
+ */
+bool shut(void* door);
 
 /**
  * The leaf of the hinged `door` as this client sees it now: Door.body's Transform, which HingeDoor.SwingDoor turns, and

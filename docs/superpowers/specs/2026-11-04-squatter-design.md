@@ -22,7 +22,8 @@ well it works.
    runs until every living player is out of the house.
 3. **Chasing.** It runs at just under the players' sprint speed, so a sprinting player can barely outrun it and one whose sprint
    runs out gets caught. It is clumsy: it breaks up its run with ducks, weaves, rolls and parkour moves where the way ahead calls
-   for them, never on a timer (user, 2026-11-09): it jumps down stairs and drops and over knee-high props, landing into a forward
+   for them, never on a timer (user, 2026-11-09), and only once it faces the way it runs, since each carries it the way it
+   faces (user, 2026-11-09: it rolled before it had turned to the player): it jumps down stairs and drops and over knee-high props, landing into a forward
    roll; it dive-rolls at the player it chases when they are a few metres straight ahead; it trips over ankle-high props (the
    builder's call); it weaves side-on through doorways and gaps and ducks past furniture beside it. It runs a little slower to
    keep under the sprint without them. It bumps into things it stalls against, playing recordings as it goes. When it goes through a door during the chase it plays an opening-door clip, inwards
@@ -32,7 +33,12 @@ well it works.
 4. **Losing track.** It does not always know where people are. When it loses them it searches, saying lines like "where are
    you?". It uses sight and hearing to find them again.
 5. **Hiding.** When it knows someone is in a closet or locker, it stands there, demands they come out and bangs on the door
-   repeatedly, by kicking it with the kick's clip until a banging clip turns up (user, 2026-11-07). It cannot open it. Hiding is safe, but loud. When they step out it goes straight back to chasing them. It knows
+   repeatedly, by kicking it with the kick's clip until a banging clip turns up (user, 2026-11-07). Each kick sounds as that
+   door being slammed: the door's own slam sound, played on every client as the foot lands (user, 2026-11-09). It cannot open
+   it. Hiding is safe, but loud. After 10 seconds of kicking it loses interest and wanders off as it lurked, leaving whoever
+   hides there alone until they step out, so they have a chance to get away (user, 2026-11-09). A hiding place whose door
+   stands open (not shut, by the game's own snap test) hides nobody: it walks in and kills them (user, 2026-11-09). When they
+   step out it goes straight back to chasing them. It knows
    because it saw them go in, or found them while searching the way the game's own closet search does **(builder's call)**. Someone
    hiding where it never looks keeps the front door unlocked and the Squatter searching, for as long as they stay.
 6. **The catch.** It kills the player with a kick to the face, replacing the stock choke, and says a funny line.

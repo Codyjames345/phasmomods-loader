@@ -151,6 +151,43 @@ void a_hiding_target_is_safe() {
   }
 }
 
+// After kKickInterestMs of kicking at a hiding place it loses interest and goes back to lurking, where the ghost's own
+// idling and wandering move it, so the player has a chance to get away (user, 2026-11-09). Everyone out still locks.
+void it_loses_interest_at_a_hiding_place() {
+  CHECK(kKickInterestMs == 10000);  // the user's 10 seconds
+  Facts f = hostile();
+  f.tracksPlayer = true;
+  f.targetHiding = true;
+  CHECK(next_phase(Phase::AtHidingPlace, f) == Phase::AtHidingPlace);
+  f.lostInterest = true;
+  CHECK(next_phase(Phase::AtHidingPlace, f) == Phase::Lurking);
+  CHECK(next_phase(Phase::Chasing, f) == Phase::AtHidingPlace);  // only a wait at a hiding place runs out
+  f.livingInside = 0;
+  CHECK(next_phase(Phase::AtHidingPlace, f) == Phase::LockedOut);
+  Interest i;
+  CHECK(!i.lost(0) && !i.lost(1u << 30));  // never lost before its first kick
+  i.kicked(1000);
+  i.kicked(5000);  // a later kick never restarts the count
+  CHECK(!i.lost(1000 + kKickInterestMs - 1));
+  CHECK(i.lost(1000 + kKickInterestMs));
+  CHECK(!i.lost(500));  // a time before the first kick
+  i.reset();
+  CHECK(!i.lost(1000 + kKickInterestMs));
+  // Back to lurking, the mod lets go of the agent: the master idles the ghost once, so idling's start gives the agent
+  // the ghost's own speed and its roll moves on to wandering.
+  CHECK(steering_ends(true, Phase::Lurking));
+  CHECK(!steering_ends(true, Phase::AtHidingPlace) && !steering_ends(false, Phase::Lurking));
+  CHECK(!steering_ends(true, std::nullopt) && !steering_ends(false, std::nullopt));
+}
+
+// It waits and kicks only at a hiding place whose doors are shut; one it can see into it walks into for the kill
+// (user, 2026-11-09).
+void an_open_hiding_place_is_walked_into() {
+  CHECK(waits_at_hiding_place(true, false));
+  CHECK(!waits_at_hiding_place(true, true));
+  CHECK(!waits_at_hiding_place(false, false) && !waits_at_hiding_place(false, true));
+}
+
 void hearing_a_target_resumes_the_chase() {
   Facts heard = hostile();
   heard.tracksPlayer = true;
@@ -1154,6 +1191,8 @@ int main() {
   chase_ends_locked_out_when_everyone_is_out();
   locked_out_is_final();
   a_hiding_target_is_safe();
+  it_loses_interest_at_a_hiding_place();
+  an_open_hiding_place_is_walked_into();
   hearing_a_target_resumes_the_chase();
   an_unknown_count_never_locks();
   the_move_clock_survives_bad_times();
@@ -1186,6 +1225,8 @@ int main() {
   its_head_turns_to_the_player_it_is_after();
   it_turns_on_the_spot_by_its_clips();
   the_way_ahead_picks_its_clumsy_move();
+  a_clumsy_move_waits_until_it_faces_its_way();
+  a_kick_at_a_hiding_place_sounds_its_door();
   a_door_is_reached_within_reach();
   the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();

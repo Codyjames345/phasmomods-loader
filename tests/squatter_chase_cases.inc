@@ -398,3 +398,31 @@ void the_chase_tunables_are_sane() {
   CHECK(kBumpPauseMs > 0 && kClumsyGapMs > 0 && kSenseMs > 0 && kDiveMin < kDiveMax);
   CHECK(kBangGapMs > 0 && kDoorPauseMs > 0 && kGetUpMs > 0 && kSightMs > 0 && kShownResendMs > 0);
 }
+
+// A roll, a jump, a trip, a duck or a weave carries the figure by its clip the way the figure faces, so one begins only
+// once the figure faces the way it runs (user, 2026-11-09: it rolled before it had turned to the player, away from them,
+// then came back).
+void a_clumsy_move_waits_until_it_faces_its_way() {
+  constexpr float deg = std::numbers::pi_v<float> / 180.0f;
+  CHECK(faces_ahead(0.0f, 0.0f));
+  CHECK(faces_ahead(0.0f, (kFaceAheadDegrees - 1.0f) * deg));
+  CHECK(faces_ahead(0.0f, -(kFaceAheadDegrees - 1.0f) * deg));
+  CHECK(!faces_ahead(0.0f, (kFaceAheadDegrees + 1.0f) * deg));
+  CHECK(!faces_ahead(0.0f, 180.0f * deg));
+  CHECK(faces_ahead(179.0f * deg, -179.0f * deg));  // across the wrap
+  CHECK(!faces_ahead(std::numeric_limits<float>::quiet_NaN(), 0.0f));
+  CHECK(kFaceAheadDegrees > 0.0f && kFaceAheadDegrees <= kDiveConeDegrees);
+}
+
+// Its kick at a hiding place sounds as the door being slammed, as the door's own slam RPC picks the sound
+// (Door.PlayDoorSlamNoise): one of the door's slam clips, or the game's shared ones when the door has none, at the
+// game's volume. Every client plays it from the kick's cue, at the moment the foot lands.
+void a_kick_at_a_hiding_place_sounds_its_door() {
+  const std::optional<SlamPick> own = slam_pick(3, 5, 7);
+  CHECK(own && own->own && own->index == 7 % 3);
+  const std::optional<SlamPick> shared = slam_pick(0, 5, 7);
+  CHECK(shared && !shared->own && shared->index == 7 % 5);
+  CHECK(!slam_pick(0, 0, 7));
+  CHECK(kSlamVolume == 0.15f);
+  CHECK(kSlamDelayMs > 0 && kSlamDelayMs < kBangGapMs);
+}

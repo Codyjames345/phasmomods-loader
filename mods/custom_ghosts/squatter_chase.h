@@ -149,6 +149,55 @@ inline bool knows_hiding(bool inHidingPlace, bool trackedOrSensed, bool knewBefo
   return inHidingPlace && (trackedOrSensed || knewBefore);
 }
 
+/**
+ * Whether it waits at its target's hiding place, kicking the doors: it knows they hide there (`hidingKnown`) and the
+ * place is shut. A hiding place standing open (`placeOpen`: one of its doors not shut, door::shut) it walks into and
+ * kills them, as the chase does anywhere (user, 2026-11-09).
+ */
+inline bool waits_at_hiding_place(bool hidingKnown, bool placeOpen) { return hidingKnown && !placeOpen; }
+
+// How long it kicks at a hiding place before it loses interest and lurks again, so the player has a chance to get away
+// (user, 2026-11-09: 10 seconds).
+inline constexpr uint64_t kKickInterestMs = 10000;
+
+/** How long it has kicked at one hiding place: from its first kick there, until reset (a new phase). */
+class Interest {
+ public:
+  /** It kicked at `now`; only the first kick starts the count. */
+  void kicked(uint64_t now) {
+    if (!since_) since_ = now;
+  }
+  /** Whether it has kicked there kKickInterestMs by `now`. False before the first kick or for a time before it. */
+  bool lost(uint64_t now) const { return since_ && now >= *since_ && now - *since_ >= kKickInterestMs; }
+  /** Forgets the count. */
+  void reset() { since_.reset(); }
+
+ private:
+  std::optional<uint64_t> since_;
+};
+
+// Its kick at a hiding place sounds as the door being slammed (user, 2026-11-09), the sound the door's own slam RPC
+// plays (Door.PlayDoorSlamNoise): at this volume, a constant in that method's code (a game value)...
+inline constexpr float kSlamVolume = 0.15f;
+// ...this long after the kick's clip starts, when the foot lands (a starting value, judged with the user in game).
+inline constexpr uint64_t kSlamDelayMs = 500;
+
+/** Which list a slam's clip comes from and its index there. */
+struct SlamPick {
+  bool own = false;  // the door's own slam clips (Door.slamClips), else the game's shared ones
+  size_t index = 0;
+};
+
+/**
+ * The slam's clip as Door.PlayDoorSlamNoise picks it, `roll` choosing: one of the door's own `own` clips, or of the
+ * `shared` ones (SoundController.doorSlamClips) when it has none. None when both lists are empty.
+ */
+inline std::optional<SlamPick> slam_pick(size_t own, size_t shared, uint32_t roll) {
+  if (own > 0) return SlamPick{true, roll % own};
+  if (shared > 0) return SlamPick{false, roll % shared};
+  return std::nullopt;
+}
+
 /** When its next line is due: at once at first, then a random gap after each. */
 class LineClock {
  public:
@@ -383,6 +432,19 @@ inline constexpr float kDropAhead = 1.5f, kDropDepth = 0.5f;  // where it looks 
 inline constexpr float kGapHalf = 0.5f;               // either side within this: a doorway or gap
 inline constexpr float kBesideReach = 0.6f;           // furniture this near on one side
 inline constexpr float kDiveMin = 2.5f, kDiveMax = 5.0f, kDiveConeDegrees = 25.0f;  // a target this far, this straight
+// How near the way it runs its figure must face for a clumsy move to begin (faces_ahead). A starting value.
+inline constexpr float kFaceAheadDegrees = 20.0f;
+
+/**
+ * Whether a figure facing `facing` faces the way `way` it runs, both radians clockwise from +z: within
+ * kFaceAheadDegrees, the shorter way round. A roll, a jump, a trip, a duck or a weave carries the figure by its clip the
+ * way the figure faces (moves_by_clip), so one begins only then; one begun while the figure still turned took it off its
+ * way, a roll away from the player it then came back for (user, 2026-11-09). False for an angle that is not a number.
+ */
+inline bool faces_ahead(float facing, float way) {
+  if (!std::isfinite(facing) || !std::isfinite(way)) return false;
+  return std::fabs(wrap_angle(way - facing)) <= kFaceAheadDegrees * std::numbers::pi_v<float> / 180.0f;
+}
 
 /** The move shown at `speed`: standing for a walk, sneak or run that is not moving, any other move as it is. */
 inline Move rest_move(Move m, float speed) {
