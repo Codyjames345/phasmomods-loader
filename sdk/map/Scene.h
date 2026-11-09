@@ -269,6 +269,24 @@ inline constexpr pm::sdk::EntryDesc Layer_StaticProps{.key = "Layer.StaticProps"
                                                       .confidence = pm::sdk::Confidence::Decompiled,
                                                       .name = "StaticProps"};
 
+// What a body bumps into: the furniture layers (DefaultProps, Cabinets) and the walls and doors (Wall, Door), of the
+// layers the game's physics matrix lets a living player collide with. Decompiled: the layer names and the physics
+// matrix read from the asset files.
+
+/// The game's DefaultProps layer: props a player collides with. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_DefaultProps{.key = "Layer.DefaultProps", .kind = pm::sdk::Kind::Layer,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .name = "DefaultProps"};
+/// The game's Cabinets layer. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_Cabinets{.key = "Layer.Cabinets", .kind = pm::sdk::Kind::Layer,
+                                                   .confidence = pm::sdk::Confidence::Decompiled, .name = "Cabinets"};
+/// The game's Wall layer. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_Wall{.key = "Layer.Wall", .kind = pm::sdk::Kind::Layer,
+                                               .confidence = pm::sdk::Confidence::Decompiled, .name = "Wall"};
+/// The game's Door layer. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_Door{.key = "Layer.Door", .kind = pm::sdk::Kind::Layer,
+                                               .confidence = pm::sdk::Confidence::Decompiled, .name = "Door"};
+
 /// Unity's built-in Ignore Raycast layer. The game's physics matrix lets it collide only with a layer the game leaves
 /// unnamed, so no body or character controller of the game's bumps into a collider on it; Cloth still collides with
 /// the colliders it is given, whatever their layer, so a mod puts a cloth's colliders here (sdk/api/models.h). The
@@ -366,6 +384,11 @@ struct Layers {
   static constexpr pm::api::Layer<pm::map::Layer_Floor> Floor{};
   static constexpr pm::api::Layer<pm::map::Layer_DefaultNoNavigation> DefaultNoNavigation{};
   static constexpr pm::api::Layer<pm::map::Layer_StaticProps> StaticProps{};
+  /// What a body bumps into (Layer_DefaultProps's note in the map). Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_DefaultProps> DefaultProps{};
+  static constexpr pm::api::Layer<pm::map::Layer_Cabinets> Cabinets{};
+  static constexpr pm::api::Layer<pm::map::Layer_Wall> Wall{};
+  static constexpr pm::api::Layer<pm::map::Layer_Door> Door{};
   /// The LaserGhost layer: LaserGhost.index(), -1 when it did not resolve.
   static constexpr pm::api::Layer<pm::map::Layer_LaserGhost> LaserGhost{};
   /// The Ignore Raycast layer, which collides with nothing of the game's: IgnoreRaycast.index(), -1 when it did not

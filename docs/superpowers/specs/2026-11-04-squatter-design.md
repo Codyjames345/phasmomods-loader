@@ -21,8 +21,11 @@ well it works.
 2. **The chase starts** the first time it sees a player. Before then it only makes those sounds. From that moment the chase
    runs until every living player is out of the house.
 3. **Chasing.** It runs at just under the players' sprint speed, so a sprinting player can barely outrun it and one whose sprint
-   runs out gets caught. It is clumsy: it keeps breaking up its run with ducks, weaves, rolls and unnecessary parkour moves, and it
-   bumps into things, playing recordings as it goes. When it goes through a door during the chase it plays an opening-door clip, inwards
+   runs out gets caught. It is clumsy: it breaks up its run with ducks, weaves, rolls and parkour moves where the way ahead calls
+   for them, never on a timer (user, 2026-11-09): it jumps down stairs and drops and over knee-high props, landing into a forward
+   roll; it dive-rolls at the player it chases when they are a few metres straight ahead; it trips over ankle-high props (the
+   builder's call); it weaves side-on through doorways and gaps and ducks past furniture beside it. It runs a little slower to
+   keep under the sprint without them. It bumps into things it stalls against, playing recordings as it goes. When it goes through a door during the chase it plays an opening-door clip, inwards
    or outwards (user, 2026-11-07). These moves change its speed where relevant. It goes for the nearest player when
    several are inside. When players can't sprint, its speed stays the same and it taunts them with a unique line, like "awww too tired to
    run?".
@@ -91,7 +94,7 @@ Some consequences, all **(builder's call)**:
 - **Sound:** every sound it makes is one of the user's recordings or a stock clip the user supplies. The user records all the
   lines and writes any more.
 
-Each move changes its speed where relevant: a roll can surge and a stumble stops it. "Barely outrun" holds across the whole chase, so tune
+Each move changes its speed where relevant: a roll, a trip, a jump, a duck and a weave carry it as far as their clips travel. "Barely outrun" holds across the whole chase, so tune
 the moves and base speed together in game **(builder's call)**. All players see the same move at the same time **(builder's call)**.
 Its footsteps are the user's own recordings, from a `steps` folder beside the voice sets, one per stride it moves on each player's game
 (user, 2026-11-09). The game's ghost footsteps were ruled out: each leaves a UV footprint that counts as photo evidence and adds to the

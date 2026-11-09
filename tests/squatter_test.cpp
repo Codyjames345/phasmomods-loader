@@ -167,15 +167,12 @@ void an_unknown_count_never_locks() {
 }
 
 void the_move_clock_survives_bad_times() {
-  CHECK(move_of(kMoveCount) == move_of(0) && move_of(-1) == move_of(kMoveCount - 1));
-  CHECK(move_of(-1000003) == move_of(-1000003 + kMoveCount * 1000));
   CHECK(move_hold_seconds(Move::Roll, std::numeric_limits<float>::quiet_NaN()) == kMoveSlotSeconds);
   CHECK(move_hold_seconds(Move::Roll, std::numeric_limits<float>::infinity()) == kMoveSlotSeconds);
 }
 
 // A move that plays once holds for its whole clip, so the next move never cuts it off (user, 2026-11-09: the roll cut
-// off early); a looping one holds a slot. Every state of the table has its clip's length, and the chase's pace, timed
-// by those lengths, stays under the sprint whichever clip of each move plays.
+// off early); a looping one holds a slot. Every state of the table has its clip's length.
 void a_move_that_plays_once_holds_for_its_clip() {
   CHECK(plays_once(Move::Roll) && plays_once(Move::Stumble) && plays_once(Move::Parkour));
   CHECK(!plays_once(Move::Run) && !plays_once(Move::Walk) && !plays_once(Move::Stand));
@@ -184,17 +181,6 @@ void a_move_that_plays_once_holds_for_its_clip() {
   CHECK(move_hold_seconds(Move::Run, 0.7f) == kMoveSlotSeconds);
   for (const char* state : all_states()) CHECK(seconds_of(state) > 0.0f);
   CHECK(seconds_of("no such state") == 0.0f);
-  for (const float sprint : {2.0f, 3.0f, 4.0f})
-    for (uint32_t variant = 0; variant < 2; ++variant) {
-      float distance = 0, time = 0;
-      for (int i = 0; i < kMoveCount; ++i) {
-        const Move m = move_of(i);
-        const float hold = move_hold_seconds(m, seconds_of(state_for(m, variant)));
-        distance += move_speed(sprint, m) * hold;
-        time += hold;
-      }
-      CHECK(distance / time < sprint);
-    }
 }
 
 void friendly_never_chases_or_kicks() {
@@ -240,20 +226,14 @@ void kick_needs_a_living_target_in_reach() {
   CHECK(!may_kick(Phase::LockedOut, false, true, 0.5f, 1.0f));
 }
 
+// With the clumsy moves coming only from the way ahead, it runs a little slower (user, 2026-11-09), about the old
+// cycle's average: just under the sprint, never at it.
 void speed_stays_just_under_sprint() {
   for (const float s : {2.0f, 3.0f, 4.0f}) {
-    CHECK(average_chase_speed(s) < s);
-    CHECK(average_chase_speed(s) > 0.85f * s);
+    CHECK(move_speed(s, Move::Run) < 0.95f * s);
+    CHECK(move_speed(s, Move::Run) > 0.8f * s);
     CHECK(move_speed(s, Move::Stumble) == 0.0f);
-    CHECK(move_speed(s, Move::Roll) > move_speed(s, Move::Run));
-    CHECK(move_speed(s, Move::Duck) < move_speed(s, Move::Run));
   }
-  // The cycle holds every move, Run most of all, and repeats; a negative time reads as the start.
-  int seen[6] = {};
-  for (int i = 0; i < kMoveCount; ++i) ++seen[static_cast<int>(move_of(i))];
-  for (const int n : seen) CHECK(n > 0);
-  for (const int n : seen) CHECK(n <= seen[static_cast<int>(Move::Run)]);
-  CHECK(move_of(kMoveCount) == move_of(0));
 }
 
 void tired_taunt_fires_once_per_lapse() {
@@ -1205,6 +1185,7 @@ int main() {
   walking_and_running_keep_pace_with_the_ground();
   its_head_turns_to_the_player_it_is_after();
   it_turns_on_the_spot_by_its_clips();
+  the_way_ahead_picks_its_clumsy_move();
   a_door_is_reached_within_reach();
   the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();

@@ -16,6 +16,7 @@
 #include "LevelController.h"
 #include "LevelRoom.h"
 #include "Player.h"
+#include "Scene.h"
 #include "Transform.h"
 #include "UnityObject.h"
 #include "UnityWorld.h"
@@ -60,8 +61,8 @@ struct Chase {
   std::optional<float> lurkSpeed;                    // the ghost's own agent speed, while a door pauses its lurk
   float steeredSpeed = 0.0f;                         // the speed steer last set (stops_dead)
   float sprint = 0.0f;                       // the sprint speed it last chased at (chase_sprint)
-  int moveIndex = 0;                         // where in kMoveCycle the chase is, started at random per chase
-  uint64_t moveUntil = 0;                    // when the cycle moves on (move_hold_seconds)
+  uint64_t moveUntil = 0;                    // when it next looks at the way ahead (a clumsy move's clip, or kSenseMs)
+  uint64_t nextClumsy = 0, nextDive = 0;     // no clumsy move before the first, no dive before the second
   Shown out;
   std::mt19937 rng{std::random_device{}()};
   Chase() { lastLine.fill(-1); }
@@ -226,6 +227,59 @@ std::optional<Point> closet_spot(void* closet) {
   phasmo::NavMeshHit hit{};
   if (!phasmo::NavMesh::SamplePosition(&from, &hit, kNavSpotSample, kWalkableArea)) return std::nullopt;
   return point(hit.position);
+}
+
+// A layer mask of the layers given, those that resolved.
+int32_t mask_of(std::initializer_list<int32_t> layers) {
+  int32_t mask = 0;
+  for (const int32_t l : layers)
+    if (l >= 0 && l < 32) mask |= 1 << l;
+  return mask;
+}
+
+// Whether a ray from `from` along the unit `dir` hits something on `mask` within `metres`, triggers aside.
+bool ray_hits(phasmo::Vector3 from, phasmo::Vector3 dir, float metres, int32_t mask) {
+  return mask && phasmo::Physics::Raycast(&from, &dir, metres, mask, phasmo::QueryTriggerInteraction::Ignore());
+}
+
+// What the chasing Squatter reads of the way ahead, along the way its agent moves (Surroundings): rays at ankle, knee
+// and chest height ahead for props in its way, a ray down ahead for a drop, rays to each side at the waist for a
+// doorway, a gap or furniture beside it, and `target`, the player it senses, for a dive when `mayDive`. Nothing while
+// it barely moves. The layers are the game's: furniture (DefaultProps, StaticProps, Cabinets), walls and doors (Wall,
+// Door, Default), and the ground (Default, Floor, DefaultNoNavigation, StaticProps).
+Surroundings surroundings(void* agent, Point at, const Seen* target, bool mayDive) {
+  Surroundings s;
+  const phasmo::Vector3 v = agent ? phasmo::NavMeshAgent::get_velocity(agent) : phasmo::Vector3{};
+  const float speed = std::hypot(v.x, v.z);
+  if (speed < kStillPace) return s;
+  const phasmo::Vector3 ahead{v.x / speed, 0, v.z / speed}, right{ahead.z, 0, -ahead.x}, left{-ahead.z, 0, ahead.x};
+  using L = phasmo::Layers;
+  const int32_t furniture = mask_of({L::DefaultProps.index(), L::StaticProps.index(), L::Cabinets.index()});
+  const int32_t solid = furniture | mask_of({L::Wall.index(), L::Door.index(), L::Default.index()});
+  const int32_t ground =
+      mask_of({L::Default.index(), L::Floor.index(), L::DefaultNoNavigation.index(), L::StaticProps.index()});
+  const auto at_height = [&](float h) { return phasmo::Vector3{at.x, at.y + h, at.z}; };
+  const bool chest = ray_hits(at_height(kChestHeight), ahead, kPropLook, solid);
+  const bool knee = ray_hits(at_height(kKneeHeight), ahead, kPropLook, furniture);
+  s.kneeProp = knee && !chest;
+  s.ankleProp = !knee && ray_hits(at_height(kAnkleHeight), ahead, kPropLook, furniture);
+  const phasmo::Vector3 down{0, -1, 0};
+  const phasmo::Vector3 there{at.x + ahead.x * kDropAhead, at.y + kDropDepth, at.z + ahead.z * kDropAhead};
+  s.dropAhead = ground && !ray_hits(there, down, 2.0f * kDropDepth, ground);
+  const bool onLeft = ray_hits(at_height(kWaistHeight), left, kGapHalf, solid);
+  const bool onRight = ray_hits(at_height(kWaistHeight), right, kGapHalf, solid);
+  s.gap = onLeft && onRight;
+  if (!s.gap) {
+    if (ray_hits(at_height(kWaistHeight), right, kBesideReach, furniture)) s.furniture = 1;
+    else if (ray_hits(at_height(kWaistHeight), left, kBesideReach, furniture)) s.furniture = -1;
+  }
+  if (mayDive && target) {
+    const float dx = target->at.x - at.x, dz = target->at.z - at.z, metres = std::hypot(dx, dz);
+    const float cosine = metres > 0 ? (dx * ahead.x + dz * ahead.z) / metres : 0.0f;
+    s.diveAt = metres >= kDiveMin && metres <= kDiveMax &&
+               cosine >= std::cos(kDiveConeDegrees * std::numbers::pi_v<float> / 180.0f);
+  }
+  return s;
 }
 
 // The box of the hiding place the difficulty closed (BlockedZone.blocked) that `p` lies in, by the zone's own trigger
@@ -449,9 +503,8 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       c.out.act = -1;
     }
     if (next == Phase::Chasing && c.was == Phase::Lurking) {
-      c.moveIndex = static_cast<int>(roll() % static_cast<uint32_t>(kMoveCount));
       c.moveUntil = 0;
-      c.nextBump = t + kBumpGapMinMs + roll() % (kBumpGapMaxMs - kBumpGapMinMs);
+      c.nextClumsy = 0;
     }
     c.was = next;
   }
@@ -475,16 +528,24 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   std::optional<Point> to;
   switch (next) {
     case Phase::Chasing: {
-      // The cycle moves on once the move it holds is over: a slot, or the whole clip of one that plays once.
+      // It runs, and reads the way ahead every kSenseMs: a clumsy move plays where the way calls for one (move_for), for
+      // its whole clip, and the next waits kClumsyGapMs after it.
       if (t >= c.moveUntil) {
-        c.moveIndex = (c.moveIndex + 1) % kMoveCount;
-        const Move upcoming = move_of(c.moveIndex);
-        if (upcoming != c.out.move || plays_once(upcoming)) {
-          c.out.move = upcoming;
-          c.out.variant = static_cast<uint8_t>(roll() & 0xFF);
+        Pick pick;
+        if (t >= c.nextClumsy && !paused)
+          pick = move_for(surroundings(agent, ghostAt, targetSensed ? target : nullptr, t >= c.nextDive));
+        if (pick.move != c.out.move || plays_once(pick.move)) {
+          c.out.move = pick.move;
+          c.out.variant = pick.variant;
         }
-        const float hold = move_hold_seconds(upcoming, seconds_of(state_for(upcoming, c.out.variant)));
-        c.moveUntil = t + static_cast<uint64_t>(hold * 1000.0f);
+        if (plays_once(pick.move)) {
+          const float hold = move_hold_seconds(pick.move, seconds_of(state_for(pick.move, pick.variant)));
+          c.moveUntil = t + static_cast<uint64_t>(hold * 1000.0f);
+          c.nextClumsy = c.moveUntil + kClumsyGapMs;
+          if (pick.move == Move::Roll) c.nextDive = t + kDiveGapMs;
+        } else {
+          c.moveUntil = t + kSenseMs;
+        }
       }
       const Move m = c.out.move;
       speed = moves_by_clip(m) ? 0.0f : move_speed(c.sprint, m);  // a roll or a trip carries it by its clip
@@ -585,12 +646,6 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     phasmo::Vector3 v = phasmo::NavMeshAgent::get_velocity(agent);
     const float pace = std::hypot(v.x, v.z);
     if (!paused && c.stuck.update(pace, speed, t)) act(Act::Bump, kBumpPauseMs, t);
-    if (c.nextBump == 0)  // a chase this master did not start (a host migration): the first bump comes later
-      c.nextBump = t + kBumpGapMinMs + roll() % (kBumpGapMaxMs - kBumpGapMinMs);
-    if (next == Phase::Chasing && !paused && t >= c.nextBump) {
-      act(Act::Bump, kBumpPauseMs, t);
-      c.nextBump = t + kBumpGapMinMs + roll() % (kBumpGapMaxMs - kBumpGapMinMs);
-    }
   }
   if (t < c.pauseUntil) speed = 0.0f;
   // Only a phase the mod steers sets the agent: while it lurks the ghost's own states do.
@@ -730,7 +785,10 @@ void play(void* ghost) {
   if (g.local == State::Local::Turning) {
     g.facing = wrap_angle(*g.facing + figure::clip_turn());  // the clip's own turn
   } else if (g.pace >= kStillPace || s.act >= 0 || s.move != Move::Stand || g.local == State::Local::Starting) {
-    g.facing = turn_toward(*g.facing, heading, kTurnRateDegrees * std::numbers::pi_v<float> / 180.0f * dt);
+    // A duck or a weave goes side-on, quickly, so its sidestep carries it along its way (move_facing).
+    const bool sideOn = s.act < 0 && (s.move == Move::Duck || s.move == Move::Weave);
+    const float rate = kTurnRateDegrees * (sideOn ? 2.0f : 1.0f) * std::numbers::pi_v<float> / 180.0f;
+    g.facing = turn_toward(*g.facing, move_facing(s.move, s.variant, heading), rate * dt);
   } else if (const Turn turn = turn_for(heading - *g.facing); turn != Turn::None) {
     const char* clip = turn == Turn::Around ? kTurnAroundState : turn == Turn::Right ? kTurnRightState : kTurnLeftState;
     figure::play_clip(clip);

@@ -1161,3 +1161,12 @@ Full-body IK and grounding (user 2026-11-09).
 - [ ] Reaching for a door handle, its shoulder and body lean into the reach, not the arm alone.
 - [ ] Standing, walking and running on a flat floor look as before: no crouch, lean or twitch the IK adds.
 - [ ] The host's `mods.log` has no line saying the Squatter's figure could not be built (ik).
+
+Clumsy moves from the way ahead (user 2026-11-09) and the closet fix.
+
+- [ ] Hidden in a closet, the Squatter comes to stand at its door, kicks it and the knock plays, over and over; it never runs or rolls into the wall beside it. The same at a wardrobe and a locker.
+- [ ] In an open room with nothing in its way it runs without ducking, weaving, rolling, jumping or tripping, and it never jumps or hangs in the air there.
+- [ ] Chasing down a staircase it jumps at the top and rolls on down; over a knee-high prop in its way it jumps and rolls; over an ankle-high one it trips.
+- [ ] Through a doorway or a narrow gap it weaves through side-on; past furniture beside it, it ducks past side-on, stepping away from the furniture.
+- [ ] A few metres behind a player straight ahead, it dive-rolls at them now and then (not every few seconds).
+- [ ] A sprinting player still barely outruns it in open rooms; note whether it now feels too slow or too fast.

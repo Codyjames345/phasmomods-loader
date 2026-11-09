@@ -46,15 +46,11 @@ struct Facts {
 
 // How far under the players' sprint speed the Squatter's running pace sits.
 constexpr float kSprintMargin = 0.95f;
-// Seconds each entry of kMoveCycle lasts at least (move_hold_seconds).
+// Seconds a move that loops lasts at least (move_hold_seconds).
 constexpr float kMoveSlotSeconds = 1.0f;
 // Seconds between two taunts about a player's lapsed sprint.
 constexpr float kTauntCooldown = 20.0f;
 
-// The moves it runs through, in order, over and over: Run most of the time, broken up by the clumsy ones.
-constexpr Move kMoveCycle[] = {Move::Run, Move::Run,  Move::Duck, Move::Run,     Move::Weave,  Move::Run,
-                               Move::Run, Move::Roll, Move::Run,  Move::Parkour, Move::Run,    Move::Stumble};
-constexpr int kMoveCount = static_cast<int>(sizeof(kMoveCycle) / sizeof(kMoveCycle[0]));
 
 /** The phase a friendly or hostile Squatter begins a contract in: Lurking, or Moping on a friendly ghost's difficulty. */
 inline Phase first_phase(bool friendly) { return friendly ? Phase::Moping : Phase::Lurking; }
@@ -157,7 +153,9 @@ inline bool may_kick(Phase now, bool friendly, bool targetAlive, float distance,
 inline float move_speed(float sprintSpeed, Move m) {
   float scale = 1.0f;  // starting values: Run 1.0, Duck 0.7, Weave 0.9, Roll 1.3, Parkour 1.1, Stumble 0
   switch (m) {
-    case Move::Run: scale = 1.0f; break;
+    // A little under the sprint with no clumsy move to slow it (user, 2026-11-09: the clumsy moves come from the
+    // surroundings, so it runs a little slower), about the old move cycle's average. A starting value.
+    case Move::Run: scale = 0.92f; break;
     case Move::Duck: scale = 0.7f; break;
     case Move::Weave: scale = 0.9f; break;
     case Move::Roll: scale = 1.3f; break;
@@ -170,25 +168,18 @@ inline float move_speed(float sprintSpeed, Move m) {
   return sprintSpeed * kSprintMargin * scale;
 }
 
-/** The mean of move_speed over one kMoveCycle, which stays just under `sprintSpeed`. */
-inline float average_chase_speed(float sprintSpeed) {
-  float sum = 0.0f;
-  for (const Move m : kMoveCycle) sum += move_speed(sprintSpeed, m);
-  return sum / kMoveCount;
-}
-
-/** Entry `index` of kMoveCycle, counting round it either way. */
-inline Move move_of(int index) { return kMoveCycle[((index % kMoveCount) + kMoveCount) % kMoveCount]; }
 
 /** Whether move `m` plays its clip once, as against Run, Walk and Stand, whose clips loop. */
 inline bool plays_once(Move m) { return m != Move::Run && m != Move::Walk && m != Move::Stand && m != Move::Sneak; }
 
 /**
- * Whether move `m` carries the Squatter by its own clip (root motion) rather than by a pace: the rolls, the trip and
- * the jump and landing, whose clips travel as far as they show, so the body never slides under them (user,
- * 2026-11-09: it slid along the floor after tripping).
+ * Whether move `m` carries the Squatter by its own clip (root motion) rather than by a pace: the rolls, the trip, the
+ * jump into its roll, and the sidesteps of ducking and weaving, whose clips travel as far as they show, so the body
+ * never slides under them (user, 2026-11-09: it slid along the floor after tripping).
  */
-inline bool moves_by_clip(Move m) { return m == Move::Roll || m == Move::Stumble || m == Move::Parkour; }
+inline bool moves_by_clip(Move m) {
+  return m == Move::Roll || m == Move::Stumble || m == Move::Parkour || m == Move::Duck || m == Move::Weave;
+}
 
 /**
  * How long the chase keeps move `m` before the cycle moves on, in seconds, when its clip lasts `clipSeconds`: a slot of

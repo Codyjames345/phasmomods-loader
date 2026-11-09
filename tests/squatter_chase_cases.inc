@@ -120,8 +120,8 @@ void walking_and_running_keep_pace_with_the_ground() {
   CHECK(play_rate(Move::Walk, std::numeric_limits<float>::quiet_NaN()) == 1.0f);
   // The rolls, the trip and the jump carry it by their clips; a pace carries every other move.
   CHECK(moves_by_clip(Move::Roll) && moves_by_clip(Move::Stumble) && moves_by_clip(Move::Parkour));
-  CHECK(!moves_by_clip(Move::Run) && !moves_by_clip(Move::Duck) && !moves_by_clip(Move::Weave) &&
-        !moves_by_clip(Move::Walk) && !moves_by_clip(Move::Sneak) && !moves_by_clip(Move::Stand));
+  CHECK(!moves_by_clip(Move::Run) && !moves_by_clip(Move::Walk) && !moves_by_clip(Move::Sneak) &&
+        !moves_by_clip(Move::Stand));
   // It searches at a sneak, which loops and stands when still, as a walk does.
   CHECK(std::string(states_of(Move::Sneak)[0]) == "Sneak" && !plays_once(Move::Sneak));
   CHECK(rest_move(Move::Sneak, 0.0f) == Move::Stand && rest_move(Move::Sneak, 1.0f) == Move::Sneak);
@@ -160,7 +160,36 @@ void it_turns_on_the_spot_by_its_clips() {
   CHECK(turn_toward(1.0f, 2.0f, 0.0f) == 1.0f);
   // The clips each client plays of its own are in the bundle's table, and a jump runs on into its landing.
   for (const char* state : kLocalStates) CHECK(seconds_of(state) > 0.0f);
-  CHECK(std::string(state_for(Move::Parkour, 7)) == "Parkour_A" && seconds_of("Parkour_A") > seconds_of("Parkour_B"));
+  // The jump runs on into the forward roll, and holds for both clips.
+  CHECK(std::string(state_for(Move::Parkour, 7)) == "Parkour_A" && seconds_of("Parkour_A") > seconds_of("Roll_A"));
+}
+
+// The clumsy moves come from the way ahead (user, 2026-11-09): a dive at a close target first, then a jump down a drop or
+// over a knee-high prop, a trip over an ankle-high one, a weave through a doorway or gap, and a duck past furniture,
+// stepping away from it; nothing ahead, it runs. A duck or weave goes side-on so its sidestep follows its way.
+void the_way_ahead_picks_its_clumsy_move() {
+  Surroundings s;
+  CHECK(move_for(s).move == Move::Run);
+  s.furniture = 1;  // on its right: it steps left (Duck_A)
+  CHECK(move_for(s).move == Move::Duck && move_for(s).variant == 0);
+  s.furniture = -1;
+  CHECK(move_for(s).move == Move::Duck && move_for(s).variant == 1);
+  s.gap = true;
+  CHECK(move_for(s).move == Move::Weave);
+  s.ankleProp = true;
+  CHECK(move_for(s).move == Move::Stumble);
+  s.kneeProp = true;
+  CHECK(move_for(s).move == Move::Parkour);
+  s = Surroundings{};
+  s.dropAhead = true;
+  CHECK(move_for(s).move == Move::Parkour);
+  s.diveAt = true;
+  CHECK(move_for(s).move == Move::Roll && std::string(state_for(Move::Roll, move_for(s).variant)) == "Roll_A");
+  for (const Move m : {Move::Roll, Move::Parkour, Move::Stumble, Move::Duck, Move::Weave}) CHECK(moves_by_clip(m));
+  constexpr float quarter = std::numbers::pi_v<float> / 2;
+  CHECK(std::fabs(wrap_angle(move_facing(Move::Weave, 0, 0.3f) - (0.3f + quarter))) < 1e-5f);  // steps left: faces right
+  CHECK(std::fabs(wrap_angle(move_facing(Move::Duck, 1, 0.3f) - (0.3f - quarter))) < 1e-5f);
+  CHECK(move_facing(Move::Run, 0, 0.3f) == 0.3f && move_facing(Move::Roll, 1, -2.0f) == -2.0f);
 }
 
 // The door clip follows the leaf's swing (door::swings_toward): it pulls a door that comes toward it (Opening Door
@@ -347,7 +376,7 @@ void it_stands_still_and_walks_with_its_own_clips() {
   CHECK(rest_move(Move::Run, 0.0f) == Move::Stand && rest_move(Move::Walk, 0.0f) == Move::Stand);
   CHECK(rest_move(Move::Run, 3.0f) == Move::Run && rest_move(Move::Walk, 1.0f) == Move::Walk);
   CHECK(rest_move(Move::Stumble, 0.0f) == Move::Stumble);  // a clumsy move plays its own clip, whatever its pace
-  for (const Move m : kMoveCycle) CHECK(m != Move::Stand && m != Move::Walk && m != Move::Sneak);  // never strolls
+  CHECK(move_for({}).move == Move::Run);  // the chase runs where nothing calls for a clumsy move, never strolls
 }
 
 // A door counts only when it walks into it, never one it passes beside or leaves behind.
@@ -361,6 +390,6 @@ void it_opens_only_the_door_it_walks_into() {
 // The tunables keep the chase sane: a search is slower than the chase, and pauses are short.
 void the_chase_tunables_are_sane() {
   CHECK(kSearchPace > 0.0f && kSearchPace < 1.0f);
-  CHECK(kBumpGapMinMs < kBumpGapMaxMs && kBumpPauseMs < kBumpGapMinMs);
+  CHECK(kBumpPauseMs > 0 && kClumsyGapMs > 0 && kSenseMs > 0 && kDiveMin < kDiveMax);
   CHECK(kBangGapMs > 0 && kDoorPauseMs > 0 && kGetUpMs > 0 && kSightMs > 0 && kShownResendMs > 0);
 }

@@ -47,8 +47,6 @@ inline constexpr float kDoorRise = 1.5f;
 // Searching, it runs at this share of its chase pace.
 inline constexpr float kSearchPace = 0.6f;
 // Besides stalling, it bumps into something at a random gap in this range while it chases, and each bump stops it.
-inline constexpr uint64_t kBumpGapMinMs = 12000;
-inline constexpr uint64_t kBumpGapMaxMs = 20000;
 inline constexpr uint64_t kBumpPauseMs = 1200;
 // At a hiding place it bangs on the door this often.
 inline constexpr uint64_t kBangGapMs = 1600;
@@ -329,6 +327,61 @@ inline float turn_toward(float from, float to, float step) {
   if (!(step > 0.0f)) return from;
   return wrap_angle(from + std::clamp(d, -step, step));
 }
+
+/**
+ * What the chasing Squatter reads of the way ahead (squatter.cpp surroundings): the clumsy moves come from these, as
+ * games pick a vault, a duck or a squeeze from the world around a character (user, 2026-11-09: not on a timer).
+ */
+struct Surroundings {
+  bool dropAhead = false;  // the floor ahead falls away: stairs down, a step off
+  bool kneeProp = false;   // a knee-high prop in its way, clear above
+  bool ankleProp = false;  // an ankle-high prop in its way, clear at the knee
+  bool gap = false;        // walls or furniture close on both sides: a doorway, a narrow gap
+  int furniture = 0;       // furniture close on one side: -1 on its left, +1 on its right, 0 none
+  bool diveAt = false;     // the player it chases is straight ahead, in diving range
+};
+
+/** A move and its clip (variant), as the Shown carries them. */
+struct Pick {
+  Move move = Move::Run;
+  uint8_t variant = 0;
+};
+
+/**
+ * The move the way ahead calls for, the user's choice of 2026-11-09: a dive roll at a close target; a jump down a drop
+ * or over a knee-high prop (it lands into a roll); a trip over an ankle-high prop; a weave sideways through a doorway
+ * or gap; a duck past furniture beside it, stepping away from it (Duck_A goes left, Duck_B right). Run when nothing
+ * calls for one.
+ */
+inline Pick move_for(const Surroundings& s) {
+  if (s.diveAt) return {Move::Roll, 0};  // Sprinting Forward Roll
+  if (s.dropAhead || s.kneeProp) return {Move::Parkour, 0};
+  if (s.ankleProp) return {Move::Stumble, 0};
+  if (s.gap) return {Move::Weave, 0};
+  if (s.furniture != 0) return {Move::Duck, static_cast<uint8_t>(s.furniture > 0 ? 0 : 1)};
+  return {};
+}
+
+/**
+ * The way the figure faces, radians clockwise from +z, for move `m` and clip `variant` while it heads `heading`: a
+ * duck or a weave goes side-on, so its sidestep carries it along its way, as one squeezes through a door (the A clips
+ * step left, so it faces a quarter turn right of its way; the B clips the other way); any other move faces its way.
+ */
+inline float move_facing(Move m, uint32_t variant, float heading) {
+  if (m != Move::Duck && m != Move::Weave) return heading;
+  constexpr float quarter = std::numbers::pi_v<float> / 2;
+  return wrap_angle(heading + (variant % 2 == 0 ? quarter : -quarter));
+}
+
+// How it reads the way ahead, metres and milliseconds: starting values, judged with the user in game. It looks every
+// kSenseMs while it runs, and after a clumsy move it runs kClumsyGapMs before another.
+inline constexpr uint64_t kSenseMs = 150, kClumsyGapMs = 1500, kDiveGapMs = 8000;
+inline constexpr float kAnkleHeight = 0.15f, kKneeHeight = 0.45f, kChestHeight = 1.1f, kWaistHeight = 0.9f;
+inline constexpr float kPropLook = 1.2f;              // how far ahead a prop in its way counts
+inline constexpr float kDropAhead = 1.5f, kDropDepth = 0.5f;  // where it looks for the floor, and how far down is a drop
+inline constexpr float kGapHalf = 0.5f;               // either side within this: a doorway or gap
+inline constexpr float kBesideReach = 0.6f;           // furniture this near on one side
+inline constexpr float kDiveMin = 2.5f, kDiveMax = 5.0f, kDiveConeDegrees = 25.0f;  // a target this far, this straight
 
 /** The move shown at `speed`: standing for a walk, sneak or run that is not moving, any other move as it is. */
 inline Move rest_move(Move m, float speed) {

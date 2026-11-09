@@ -39,7 +39,7 @@ inline constexpr const char* kStandStates[] = {"Stand"};  // Standing Idle
 inline constexpr const char* kDuckStates[] = {"Duck_A", "Duck_B"};
 inline constexpr const char* kWeaveStates[] = {"Weave_A", "Weave_B"};
 inline constexpr const char* kRollStates[] = {"Roll_A", "Roll_B"};
-inline constexpr const char* kParkourStates[] = {"Parkour_A"};  // jumping up, which runs on into the hard landing
+inline constexpr const char* kParkourStates[] = {"Parkour_A"};  // jumping up, which runs on into a forward roll
 inline constexpr const char* kStumbleStates[] = {"Stumble"};  // Soccer Trip, a trip from a run (user, 2026-11-09)
 // Clips each client plays of its own around the master's moves: turning on the spot, and setting off from standing.
 inline constexpr const char* kTurnLeftState = "TurnLeft";
@@ -98,7 +98,7 @@ struct StateClip {
 inline constexpr StateClip kStateClips[] = {
     {"Run", 0.7000f},     {"Walk", 1.0333f},      {"Stand", 6.0000f},     {"Sneak", 1.0333f}, {"Duck_A", 1.2667f},
     {"Duck_B", 1.1000f},  {"Weave_A", 1.1333f},   {"Weave_B", 1.1333f},   {"Roll_A", 1.1667f},
-    {"Roll_B", 2.3667f},  {"Parkour_A", 2.2333f}, {"Parkour_B", 2.0000f}, {"Stumble", 1.6000f},
+    {"Roll_B", 2.3667f},  {"Parkour_A", 1.4000f}, {"Parkour_B", 2.0000f}, {"Stumble", 1.6000f},
     {"Sit", 10.2667f},    {"GetUp", 2.7000f},     {"Kick", 1.3000f},      {"Bang", 1.3000f},
     {"Bump", 1.1667f},    {"OpenDoorOutwards", 4.1000f}, {"OpenDoorInwards", 6.3667f},
     {"TurnLeft", 1.0333f}, {"TurnRight", 1.0333f},  {"Turn180", 1.0000f},   {"StartWalk", 2.9333f}};
