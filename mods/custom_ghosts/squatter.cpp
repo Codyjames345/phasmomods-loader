@@ -74,6 +74,12 @@ struct Chase {
   // How often its feet were checked for clutter and found some, logged every 5 s while it chases (feet_meet_clutter).
   int feetChecks = 0, feetHits = 0;
   uint64_t nextFeetLog = 0;
+  // While a clip carries it: how far the clip moved it and how far its agent really went, and how many of its warps
+  // aimed off the navigation mesh, logged every 250 ms (the hover, user 2026-11-09: a trip's pose played in place).
+  float carryClip = 0.0f, carryAgent = 0.0f;
+  int carryOff = 0;
+  std::optional<Point> carryFrom;
+  uint64_t nextCarryLog = 0;
   // The closet whose inside it opened to walk in (ClosetZone.internalAreaObstacle), and what its obstacle wanted before.
   api::Held openObstacle;
   bool obstacleWas = true;
@@ -913,13 +919,30 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     // A roll, a trip or a landing carries it as far as its clip travels (root motion), on the navigation mesh.
     if (agent && next == Phase::Chasing && moves_by_clip(c.out.move) && c.out.act < 0) {
       const phasmo::Vector3 step = figure::clip_step();
+      const Point now = point(phasmo::Transform::get_position(phasmo::Component::get_transform(agent)));
+      if (c.carryFrom) c.carryAgent += std::hypot(now.x - c.carryFrom->x, now.z - c.carryFrom->z);
       if (step.x != 0.0f || step.z != 0.0f) {
-        phasmo::Vector3 there = phasmo::Transform::get_position(phasmo::Component::get_transform(agent));
+        phasmo::Vector3 there = vector(now);
         there.x += step.x;
         there.z += step.z;
+        c.carryClip += std::hypot(step.x, step.z);
+        phasmo::NavMeshHit onMesh{};
+        if (!phasmo::NavMesh::SamplePosition(&there, &onMesh, 0.1f, -1)) ++c.carryOff;
         phasmo::NavMeshAgent::Warp(agent, &there);
         c.nextSteer = 0;
       }
+      c.carryFrom = now;
+      if (t >= c.nextCarryLog) {
+        if (c.nextCarryLog)
+          PM_LOG("squatter: carried by %s: clip %.3f m, agent %.3f m, off the mesh %d", state_for(c.out.move, c.out.variant),
+                 c.carryClip, c.carryAgent, c.carryOff);
+        c.carryClip = c.carryAgent = 0.0f;
+        c.carryOff = 0;
+        c.nextCarryLog = t + 250;
+      }
+    } else {
+      c.carryFrom.reset();
+      c.nextCarryLog = 0;
     }
   }
 
