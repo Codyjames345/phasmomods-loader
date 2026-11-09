@@ -2180,12 +2180,12 @@ void the_master_idles_the_squatter_once_as_steering_begins() {
   g_stateChanges.clear();
   g_kills.clear();
   g_exitsClosed = 0;
-  // Lurking: the mod holds it in its room, so the master idles it once.
+  // Lurking: the ghost's own states move it, as any ghost's do, so nothing changes its state.
   g_isMaster = true;
   squatter::reset();
   squatter::tick(&ghost, kSquatter, false);
   squatter::tick(&ghost, kSquatter, false);
-  CHECK(squatter::phase() == squatter::Phase::Lurking && g_stateChanges == std::vector<int32_t>{kIdle});
+  CHECK(squatter::phase() == squatter::Phase::Lurking && g_stateChanges.empty());
   // Moping on a friendly ghost's difficulty: the mod holds it seated, so the master idles it once.
   squatter::tick(nullptr, 0, false);
   g_stateChanges.clear();

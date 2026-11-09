@@ -179,8 +179,9 @@ struct Seen {
   void* closet = nullptr;  // Player.closet, the hiding place they are in
 };
 
-// Whether `p` lies in a hiding place the difficulty closed (BlockedZone.blocked), by the zone's own trigger collider.
-bool in_closed_hiding_place(Point p) {
+// The box of the hiding place the difficulty closed (BlockedZone.blocked) that `p` lies in, by the zone's own trigger
+// collider; none when it lies in none.
+std::optional<phasmo::Bounds> closed_hiding_place_at(Point p) {
   void* level = game::level_controller();
   const api::RefArray zones{level ? phasmo::LevelController::blockedZones.get(level) : nullptr};
   for (size_t i = 0; i < zones.size(); ++i) {
@@ -189,30 +190,20 @@ bool in_closed_hiding_place(Point p) {
     void* collider = phasmo::Component::GetComponent(z, phasmo::Collider::type.type_object());
     if (!collider) continue;
     const phasmo::Bounds b = phasmo::Collider::get_bounds(collider);
-    if (inside_box(p, point(b.center), point(b.extents))) return true;
+    if (inside_box(p, point(b.center), point(b.extents))) return b;
   }
-  return false;
+  return std::nullopt;
 }
 
-// Where it sits instead of in a closed hiding place: just past the nearest door of the room it is in (squatter_chase.h
-// outside_spot); none when its room has no door to read.
-std::optional<Point> seat_outside(Point ghostAt) {
-  void* level = game::level_controller();
-  void* room = level ? phasmo::LevelController::currentGhostRoom.get(level) : nullptr;
-  const api::RefArray doors{room ? phasmo::LevelRoom::doors.get(room) : nullptr};
-  std::optional<Point> best;
-  float nearest = 0.0f;
-  for (size_t i = 0; i < doors.size(); ++i) {
-    void* d = doors[i];
-    if (!d || !api::alive(d)) continue;
-    const Point at = at_of(d);
-    const float metres = std::hypot(at.x - ghostAt.x, at.z - ghostAt.z);
-    if (!best || metres < nearest) {
-      best = at;
-      nearest = metres;
-    }
-  }
-  return best ? std::optional<Point>(outside_spot(ghostAt, *best)) : std::nullopt;
+bool inside_at(Point p);
+
+// The closest valid place to mope from `ghostAt` inside the closed hiding place `zone` (user, 2026-11-09): the nearest
+// way out of its box (squatter_chase.h ways_out) that lies in the house and in no closed hiding place; none when no
+// side leads anywhere valid.
+std::optional<Point> closest_valid_place(Point ghostAt, const phasmo::Bounds& zone) {
+  for (const Point& p : ways_out(ghostAt, point(zone.center), point(zone.extents)))
+    if (inside_at(p) && !closed_hiding_place_at(p)) return p;
+  return std::nullopt;
 }
 
 // Whether `p` lies in a room of the house: a room the map knows (game::room_at) that is not RoomKind.outsideMap.
@@ -477,15 +468,21 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       to = step.to ? step.to : std::optional<Point>(ghostAt);
       break;
     }
-    default:  // Lurking, LockedOut, Moping and Excited: held where it stands, sits or gets up
+    default:  // Lurking, LockedOut, Moping and Excited
+      if (next == Phase::Lurking) {
+        // The ghost's own states move it, as any ghost's: the figure walks while it moves and stands while it stops.
+        const phasmo::Vector3 v = agent ? phasmo::NavMeshAgent::get_velocity(agent) : phasmo::Vector3{};
+        c.out.move = std::hypot(v.x, v.z) >= kStillPace ? Move::Walk : Move::Stand;
+        break;
+      }
       c.out.move = Move::Stand;
       to = ghostAt;
-      // Never waiting inside a hiding place the difficulty closed, where nobody could reach it (user, 2026-11-09): it
-      // walks at the ghost's own base speed to just past its room's door, and waits there, sitting if it mopes.
-      if ((next == Phase::Lurking || next == Phase::Moping) && !c.seat && t >= c.nextSeatCheck) {
+      // A moping Squatter never sits inside a hiding place the difficulty closed, where nobody could reach it (user,
+      // 2026-11-09): it walks at the ghost's own base speed to the closest valid place, and sits there.
+      if (next == Phase::Moping && !c.seat && t >= c.nextSeatCheck) {
         c.nextSeatCheck = t + 500;
-        if (in_closed_hiding_place(ghostAt)) {
-          c.seat = seat_outside(ghostAt);
+        if (const std::optional<phasmo::Bounds> zone = closed_hiding_place_at(ghostAt)) {
+          c.seat = closest_valid_place(ghostAt, *zone);
           if (c.seat && c.out.act == static_cast<int8_t>(Act::Sit)) c.out.act = -1;
         }
       }
@@ -496,7 +493,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
           to = c.seat;
         } else {
           c.seat.reset();
-          if (next == Phase::Moping) act(Act::Sit, 0, t, false);
+          act(Act::Sit, 0, t, false);
         }
       }
       break;
@@ -516,8 +513,11 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     }
   }
   if (t < c.pauseUntil) speed = 0.0f;
-  c.out.move = rest_move(c.out.move, speed);  // standing, never running on the spot
-  if (agent) steer(agent, to, speed, t);
+  // Only a phase the mod steers sets the agent: while it lurks the ghost's own states do.
+  if (steers(next)) {
+    c.out.move = rest_move(c.out.move, speed);  // standing, never running on the spot
+    if (agent) steer(agent, to, speed, t);
+  }
 
   c.out.phase = next;
   if (share(c.out)) c.lastSent = t;

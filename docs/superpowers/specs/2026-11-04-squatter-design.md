@@ -14,7 +14,9 @@ well it works.
 
 ## What happens in a contract
 
-1. **Finding it.** The Squatter stays in the ghost room, always visible, playing lines such as "ooOOOooo I'm a ghost", "this is
+1. **Finding it.** The Squatter keeps around the ghost room, moving about as any ghost does by its own idling,
+   wandering and favourite room (user, 2026-11-09: holding it still left it wherever it spawned, a closed
+   pantry among them), always visible, playing lines such as "ooOOOooo I'm a ghost", "this is
    private property" and "get out!". The team finds the room by listening.
 2. **The chase starts** the first time it sees a player. Before then it only makes those sounds. From that moment the chase
    runs until every living player is out of the house.
@@ -43,7 +45,7 @@ well it works.
 lights, no electronics interference and no hunt sounds.
 
 **On a friendly ghost's difficulty** (`Difficulty.friendlyGhost`), where the game refuses every kill, it starts seated and depressed on the
-floor of its favourite room, saying random phrases like "what's the point anyway, I'm not going to chase you". On first seeing a player it
+floor of its favourite room (outside any hiding place the difficulty closed: there it walks to the closest valid place first, user 2026-11-09), saying random phrases like "what's the point anyway, I'm not going to chase you". On first seeing a player it
 gets up, becomes excited, says something like "yay new friends", then follows them around inside saying random things. It never attempts a
 kill. These are **(builder's call)**: no door locks, since nobody was chased out; it follows the nearest player, at a pace tuned in game; it
 searches the same way if it loses them; and at a hiding place it waits and talks rather than banging.

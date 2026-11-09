@@ -338,8 +338,8 @@ class StepCounter {
   float walked_ = 0.0f;
 };
 
-// How far past its room's door it sits when its room is a hiding place the difficulty closed (BlockedZone.blocked).
-inline constexpr float kOutsideStep = 1.2f;
+// How far past the side of a hiding place the difficulty closed (BlockedZone.blocked) a moping Squatter sits.
+inline constexpr float kOutsideMargin = 0.5f;
 
 /** Whether `p` lies in the box at `centre` with half sizes `extents` (a Collider's bounds, Collider.get_bounds). */
 inline bool inside_box(Point p, Point centre, Point extents) {
@@ -348,14 +348,19 @@ inline bool inside_box(Point p, Point centre, Point extents) {
 }
 
 /**
- * Where to sit when it stands in a closed hiding place: kOutsideStep past the door at `door`, on the far side from
- * `ghost`, at the ghost's own height; the doorway itself when it already stands in it.
+ * The closest places outside the box at `centre` with half sizes `extents` (a closed hiding place's collider) from `p`
+ * inside it: straight out through each of its four sides, kOutsideMargin past it, at `p`'s height, nearest first (user,
+ * 2026-11-09: a moping Squatter moves to the closest valid position). The caller takes the first that is valid.
  */
-inline Point outside_spot(Point ghost, Point door) {
-  const float dx = door.x - ghost.x, dz = door.z - ghost.z;
-  const float d = std::hypot(dx, dz);
-  if (d < 1e-3f) return {door.x, ghost.y, door.z};
-  return {door.x + dx / d * kOutsideStep, ghost.y, door.z + dz / d * kOutsideStep};
+inline std::vector<Point> ways_out(Point p, Point centre, Point extents) {
+  std::vector<Point> out = {{centre.x + extents.x + kOutsideMargin, p.y, p.z},
+                            {centre.x - extents.x - kOutsideMargin, p.y, p.z},
+                            {p.x, p.y, centre.z + extents.z + kOutsideMargin},
+                            {p.x, p.y, centre.z - extents.z - kOutsideMargin}};
+  std::sort(out.begin(), out.end(), [&](const Point& a, const Point& b) {
+    return std::hypot(a.x - p.x, a.z - p.z) < std::hypot(b.x - p.x, b.z - p.z);
+  });
+  return out;
 }
 
 /** What a client starts playing for a Shown. */

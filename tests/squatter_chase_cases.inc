@@ -248,16 +248,25 @@ void a_step_plays_each_stride() {
   CHECK(std::string(voice::folder_name(Lines::Steps)) == "steps");
 }
 
-// A seated phase never sits inside a hiding place the difficulty closed (a blocked pantry on Willow Street, user
-// 2026-11-09): it sits just past the nearest door of its room instead, where players can reach it.
-void it_never_sits_in_a_closed_hiding_place() {
+// A moping Squatter never sits inside a hiding place the difficulty closed (a blocked pantry on Willow Street, user
+// 2026-11-09): it moves to the closest place outside it, nearest side first.
+void moping_moves_to_the_closest_place_outside_a_closed_hiding_place() {
   CHECK(inside_box({1, 0, 1}, {0, 0, 0}, {2, 2, 2}));
   CHECK(!inside_box({3, 0, 0}, {0, 0, 0}, {2, 2, 2}));
   CHECK(!inside_box({0, 3, 0}, {0, 0, 0}, {2, 2, 2}));
-  const Point out = outside_spot({0, 0, 0}, {2, 0.5f, 0});
-  CHECK(std::fabs(out.x - (2 + kOutsideStep)) < 1e-4f && out.z == 0 && out.y == 0.0f);
-  const Point same = outside_spot({2, 0, 0}, {2, 0, 0});  // standing in the doorway: the doorway itself
-  CHECK(same.x == 2 && same.z == 0);
+  const Point centre{0, 0, 0}, extents{2, 2, 1};
+  const std::vector<Point> out = ways_out({1.5f, 0.3f, 0.2f}, centre, extents);
+  CHECK(out.size() == 4);
+  if (out.size() != 4) return;
+  // The near side: +x at 2.5 is 1.0 m away, +z at 1.5 is 1.3 m.
+  CHECK(std::fabs(out[0].x - (2 + kOutsideMargin)) < 1e-4f && out[0].z == 0.2f && out[0].y == 0.3f);
+  float last = 0.0f;
+  for (const Point& p : out) {
+    CHECK(!inside_box(p, centre, extents));
+    const float d = std::hypot(p.x - 1.5f, p.z - 0.2f);
+    CHECK(d >= last);
+    last = d;
+  }
 }
 
 // The user's standing and walking clips (2026-11-09): it stands rather than running on the spot, and walks to search,
