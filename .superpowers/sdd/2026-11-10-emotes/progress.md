@@ -124,3 +124,7 @@ Task 11: complete (commit dc412f4, tests: screen_effects_test red 2 then passed,
 - Task 12: Ruling: the README's mod row waits for Task 18 (the README is in the user's own voice; it gets one factual row then).
 - Task 12: emote_assets.h (Task 15's names table) came early: the text-table test asks that every name key be named by code.
 Task 12: complete (commit e9bcf95, tests: mods_test, mod_manifest_test red then green; held_scan_test, text_table_test pass)
+- Tasks 13-14: Ruling: one commit for both (both pure, one test file); the headers were written before the test (while validate ran), so instead of a red run two mutations (the body never lagging the view; no magic check) were run and failed 6 checks.
+- Tasks 13-14: Ruling: a release with the key lost without a release (focus loss) closes the wheel with nothing played (wheel_step: !held && !released).
+Task 13: complete (commit de3a9d3, tests: emotes_test -> passed, 11 cases)
+Task 14: complete (commit de3a9d3, tests: emotes_test -> passed)
