@@ -107,3 +107,5 @@ Task 8: complete (commit 71f590d, tests: player_anim_test -> passed, 5 cases)
 - Task 9: Ruling: the wall ray uses Physics.RaycastHit (mapped) with a mask that leaves out the body's own layers, not a sphere cast - cost if wrong: the view can clip a thin edge a sphere would catch.
 - Task 9: test red on first build (two failures, a test leaving the view on), green after the test stopped its view.
 Task 9: complete (commit d572990, tests: third_person_test -> passed, 7 cases)
+- Task 10: Ruling: the SDK exposes the game's pace (Pace, once a second) and the mod raises the loudness at it, so the music is heard at most once per refresh, as a voice is - cost if wrong: none.
+Task 10: complete (commit 3b6fed8, tests: talk_loudness_test red 3 then passed, 6 cases)
