@@ -213,6 +213,21 @@ struct Seen {
   void* closet = nullptr;  // Player.closet, the hiding place they are in
 };
 
+// Where a ghost stands at a closet, as the game's own hunt goes to one: the closet's navSpot, taken onto the navigation
+// mesh within 1 m (NavMesh.SamplePosition in the walkable area; the game's hunt chase does the same, a constant in its
+// code, as Bogeyman cites). None for no closet, or none on the mesh that near. The entrance point outside its door was
+// not on the mesh at every closet, so the Squatter ran at the wall beside it and never kicked (user, 2026-11-09).
+std::optional<Point> closet_spot(void* closet) {
+  constexpr float kNavSpotSample = 1.0f;
+  constexpr int kWalkableArea = 1;
+  void* nav = closet ? phasmo::ClosetZone::navSpot.get(closet) : nullptr;
+  if (!nav) return std::nullopt;
+  const phasmo::Vector3 from = game::position(nav);
+  phasmo::NavMeshHit hit{};
+  if (!phasmo::NavMesh::SamplePosition(&from, &hit, kNavSpotSample, kWalkableArea)) return std::nullopt;
+  return point(hit.position);
+}
+
 // The box of the hiding place the difficulty closed (BlockedZone.blocked) that `p` lies in, by the zone's own trigger
 // collider; none when it lies in none.
 std::optional<phasmo::Bounds> closed_hiding_place_at(Point p) {
@@ -503,9 +518,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       break;
     }
     case Phase::AtHidingPlace: {
-      void* stand = target && target->closet ? phasmo::ClosetZone::standOutsideEntrancePoint.get(target->closet)
-                                             : nullptr;
-      const std::optional<Point> spot = stand ? std::optional<Point>(point(game::position(stand))) : std::nullopt;
+      const std::optional<Point> spot = target ? closet_spot(target->closet) : std::nullopt;
       const bool there = spot && std::hypot(spot->x - ghostAt.x, spot->z - ghostAt.z) < kStandReach;
       c.out.move = Move::Run;
       speed = there ? 0.0f : move_speed(c.sprint, Move::Run);
@@ -517,12 +530,9 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       break;
     }
     case Phase::Following: {  // friendly: after its target, waiting and talking at a hiding place, never banging
-      void* stand = c.hidingKnown && target && target->closet
-                        ? phasmo::ClosetZone::standOutsideEntrancePoint.get(target->closet)
-                        : nullptr;
+      const std::optional<Point> stand = c.hidingKnown && target ? closet_spot(target->closet) : std::nullopt;
       const bool known = target && (targetSensed || c.tracker.tracks(t));
-      const Step step = follow_step(ghostAt, known ? std::optional<Point>(target->at) : std::nullopt,
-                                    stand ? std::optional<Point>(point(game::position(stand))) : std::nullopt,
+      const Step step = follow_step(ghostAt, known ? std::optional<Point>(target->at) : std::nullopt, stand,
                                     c.tracker.last_at());
       c.out.move = Move::Walk;
       speed = move_speed(c.sprint, Move::Run) * step.pace;
