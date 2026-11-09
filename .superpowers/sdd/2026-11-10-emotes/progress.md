@@ -100,3 +100,6 @@ Tasks 1-6: complete (commit f353d9e, tests: validate.ps1 -> 83/83, docs and scri
 - Ruling: validate.ps1 (about five minutes) runs at milestones (after Part 2, after the mod, at the end), each task runs its own tests plus map/game_map/gamecheck - cost if wrong: a break in another area is found a few tasks later.
 - Task 7: the row test was added after the implementation it covers (it passed first time); the other keybinds tests went red then green.
 Task 7: complete (commit 37d2f40, tests: keybinds_test -> passed, 9 cases)
+- Task 8: Ruling: a switch of clips crossfades by two outputs (each clip its own graph, the newer sorted higher, its weight ramping over the older) instead of a mixer playable - only output weights are needed, no mixer entries - cost if wrong: none seen; two graphs on one Animator for the length of a blend.
+- Task 8: the test was written before the code but not run red before the implementation; a mutation (the older clip never ended) was run instead and failed the test as it should.
+Task 8: complete (commit 71f590d, tests: player_anim_test -> passed, 5 cases)
