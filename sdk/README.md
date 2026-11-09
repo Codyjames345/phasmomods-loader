@@ -35,7 +35,7 @@ ids (players, light switches, doors, incense, flames, the hunt state and Unity's
 Spectral Flame reaches the game only through the game API and the content functions, over the flames, candles, rooms, sanity, Photon
 and Unity rendering entries (`FireSource.h`, `Candle.h`, `Equipment.h`, `LevelRoom.h`,
 `PlayerSanity.h`, `Photon.h`, `UnityRendering.h`; [flames](systems/flames.md)). Custom Ghosts registers
-its fifteen ghosts and their rules through the content functions alone (`mods/custom_ghosts/registration.h`);
+its sixteen ghosts and their rules through the content functions alone (`mods/custom_ghosts/registration.h`);
 its ghosts' behaviour rules (`apparition`, `asterion`, `behaviour` with `hunt`, `bogeyman`, `brownie`, `echo`,
 `gremlin`, `hydra`, `kikimora`, `lethe`, `lithobolia`, `mesmer`, `restraint`, `sound` and `tempest`, with
 `sensor_copy` for the Hydra's and the Lithobolia's copies of the ghost's sensors) reach the game only through

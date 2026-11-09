@@ -58,7 +58,7 @@ I have included four mods to demonstrate the capabilities of PhasmoMods. They ar
 | --- | --- | --- |
 | Playable Ghost | `mods/playable_ghost` | One player plays as the ghost. All vanilla tells (speed, abilities, special rules) are maintained to the best of my knowledge, though do expect bugs. |
 | Spectral Flame | `mods/spectral_flame` | An eighth evidence: firelights will slowly turn blue when the ghost is in the same room ([details](docs/spectral-flame.md)). |
-| Custom Ghosts | `mods/custom_ghosts` | Fifteen new ghost types, each with their own lore and unique behaviour; requires Spectral Flame ([details](docs/custom-ghosts.md)). |
+| Custom Ghosts | `mods/custom_ghosts` | Sixteen new ghost types, each with their own lore and unique behaviour; requires Spectral Flame ([details](docs/custom-ghosts.md)). |
 | Ghost Tells | `mods/ghost_tells` | Additional unique behaviour for six vanilla ghosts, to make zero evidence a bit more manageable (targets ones that are a pain to identify) ([details](docs/ghost-tells.md)). |
 
 `archive/` holds mods that were being developed but stopped for one reason or another. The most promising one was Bigger Lobbies but unfortunately a server-side change a few years ago has made this dream impossible without a custom server implementation. The 20 player lobby dream may return if someone is willing to investigate this, but it's out of my scope for now.
@@ -82,6 +82,7 @@ I have included four mods to demonstrate the capabilities of PhasmoMods. They ar
 | Asterion | The birth name of the Minotaur, it is cursed to navigate the living realm as a labyrinth - unable to pass through doors. Though it lacks the ability to phase, its raging fury won't keep it trapped for long. Its sheer strength is enough to blast open doors after a few seconds and destroy their hinges, making them unusable for the rest of the contract. | Ghost Writing, D.O.T.S., Spectral Flame |
 | Tempest | A weather-based ghost, gifted ludicrous speed when supercharged by its conjured lightning strikes. Its power amplifies with raging weather - strongest in the rain, and weakest when skies are clear. During a hunt this demonic presence is invisible to the naked eye, only revealed by its lightning... | Spirit Box, Ultraviolet, Spectral Flame |
 | Hydra | Cut off one head, and two more take its place... the serpent of Lerna proves formidable against smudges. The true copy is difficult to identify, though a keen ear may help. Beware, a sickly green spectral flame provides warning to those who dare fight it. | Ghost Orbs, D.O.T.S., Spectral Flame |
+| Squatter | Not a ghost at all, but a person who has moved into the house, wearing a bedsheet and pretending to be one. It wants you off its property and says so, loudly. Once it sees you it gives chase - clumsily - until everyone is out, then locks the door behind you. | None |
 
 ### Spectral Flame
 

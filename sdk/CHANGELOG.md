@@ -51,8 +51,20 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   check. [Ghost AI](systems/ghost-ai.md) has a new section, "How a hunt starts".
 - **Equipment, item by item:** a table of what the map holds for each item and cursed possession
   ([equipment](guides/equipment.md)).
+- **A door's slam sound** ([doors](systems/doors.md#a-doors-slam-sound)): `Door.slamClips`, `Door.noise`,
+  `Door.PlayDoorSlamNoise` (documented, never to be sent), `SoundController.instance` and
+  `SoundController.doorSlamClips`, and a `Noise.PlaySound` wrapper, so a mod can play a door's slam on one client.
+- **A closet's inside on the ghost's routes:** `ClosetZone.internalAreaObstacle` and `DynamicNavMeshObstacle`
+  (`targetActivity`, `navMeshObstacle`, `Update`). Clearing `targetActivity` switches the obstacle that keeps ghost
+  routes out of the closet off.
+- **Layers:** `Layer.Item`, the equipment players carry, place and drop.
+- **Costumes:** `hide_renderers` takes the names of the parts to keep drawing; [scene](systems/scene.md) names each
+  renderer of the investigator's body.
 
 ### Changed
+
+- `Door.CreateDoorSlamNoise` is decompiled: it only sends `Door.PlayDoorSlamNoise`, whose body accepts the room's first
+  actor alone, so no other client may call it. Its Door argument is never read.
 
 - **No mod runs with part of itself missing.** The host keeps off a mod whose `pmmod_start` met any failure of the
   host's, whatever `pmmod_start` returned: a registration it refused (`ghost_register`, `evidence_register`,
