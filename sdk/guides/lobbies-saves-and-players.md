@@ -39,8 +39,8 @@ player's account ([Photon](../systems/photon.md), "The game's checks on an RPC")
 ## Saves
 
 - **Custom content never reaches a save file or a player without it.** The host keeps each custom difficulty's ghost
-  pick by id in its own file (`%LOCALAPPDATA%\PhasmoMods\custom_difficulty.txt`), and the game's own save and sync
-  hold Random in its place whenever content is not active ([difficulty](../systems/difficulty.md)).
+  pick by id in its own file (`%LOCALAPPDATA%\PhasmoMods\custom_difficulty.txt`). Whenever content is not active, the
+  game's own save and sync hold Random in its place ([difficulty](../systems/difficulty.md)).
 - **Keep your own data in your own files.** Never write a custom value into the game's save. Kinetic Games allows mods
   in private lobbies as long as they don't add excessive amounts of in-game currency or collectables, which would break
   progression.

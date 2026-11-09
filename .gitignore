@@ -19,6 +19,9 @@
 /re/dump/
 /re/map-addresses.tsv
 
+# Test run exports: a tester's name and numbers derived from the game.
+/playtest/
+
 /.vscode
 # A mod's AssetBundles hold third-party animation (Mixamo) that may not be redistributed raw: never committed.
 *.bundle

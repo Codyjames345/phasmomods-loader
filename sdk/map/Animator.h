@@ -325,9 +325,11 @@ inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightFoot{
 
 }  // namespace pm::map
 
-// The game API for Animator (sdk/api/game_api.h). Every member is called on Unity's main thread. One
-// that did not resolve in the running game build logs "<key> is not available in this game build"
-// once and returns its type's default (0, false, null) or does nothing.
+/// @file
+/// @brief The game API for Animator (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, false, null) or does nothing.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{

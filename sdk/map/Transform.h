@@ -190,6 +190,23 @@ inline constexpr pm::sdk::EntryDesc Transform_get_localRotation{.key = "Transfor
                                                                 .kind = pm::sdk::Kind::Method, .owner = "Transform",
                                                                 .name = "get_localRotation"};
 
+/// A point given in the Transform's own space, in world space. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Transform_TransformPoint{.key = "Transform.TransformPoint",
+                                                             .kind = pm::sdk::Kind::Method, .owner = "Transform",
+                                                             .name = "TransformPoint", .params = Transform_Vector3};
+
+/// A world point, in the Transform's own space. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Transform_InverseTransformPoint{.key = "Transform.InverseTransformPoint",
+                                                                    .kind = pm::sdk::Kind::Method, .owner = "Transform",
+                                                                    .name = "InverseTransformPoint",
+                                                                    .params = Transform_Vector3};
+
+/// Sets the Transform's rotation relative to its parent from Euler angles in degrees. Inferred: Unity's
+/// documented property setter.
+inline constexpr pm::sdk::EntryDesc Transform_set_localEulerAngles{
+    .key = "Transform.set_localEulerAngles", .kind = pm::sdk::Kind::Method, .owner = "Transform",
+    .name = "set_localEulerAngles", .params = Transform_Vector3};
+
 /// Sets the Transform's rotation relative to its parent. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc Transform_set_localRotation{
     .key = "Transform.set_localRotation", .kind = pm::sdk::Kind::Method, .owner = "Transform",
@@ -210,35 +227,45 @@ inline constexpr pm::sdk::EntryDesc Transform_IsChildOf{.key = "Transform.IsChil
 
 }  // namespace pm::map
 
-// The game API for the hierarchy (sdk/api/game_api.h), but Find, which only the host's scene facts
-// use. Every member is called on Unity's main thread. One that did not resolve in the running game
-// build logs "<key> is not available in this game build" once and returns its type's default (0, null)
-// without touching the game. A Transform it returns is a managed reference: keep it across frames only
-// in a pm::api::Held.
+/// @file
+/// @brief The game API for the hierarchy (sdk/api/game_api.h), but Find, which only the host's scene facts use.
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, null) without touching the game. A
+/// Transform it returns is a managed reference: keep it across frames only in a pm::api::Held.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{
 
 /// Two floats, as Unity's Vector2.
 struct Vector2 {
-  float x, y;
+  float x;  ///< x
+  float y;  ///< y
 };
 
 /// Three floats, as Unity's Vector3.
 struct Vector3 {
   /// The type: make_array() for a Vector3[]. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Vector3> type{};
-  float x, y, z;
+  float x;  ///< x, in metres for a position
+  float y;  ///< y, up, in metres for a position
+  float z;  ///< z, in metres for a position
 };
 
 /// Four floats, as Unity's Quaternion: a rotation.
 struct Quaternion {
-  float x, y, z, w;
+  float x;  ///< the rotation's x part
+  float y;  ///< the rotation's y part
+  float z;  ///< the rotation's z part
+  float w;  ///< the rotation's w part; (0, 0, 0, 1) is no rotation
 };
 
 /// Four floats, as Unity's Rect: its corner and its size.
 struct Rect {
-  float x, y, width, height;
+  float x;       ///< the corner's x
+  float y;       ///< the corner's y
+  float width;   ///< its width
+  float height;  ///< its height
 };
 
 /// Unity's transform component. `transform` below is the Transform.
@@ -279,6 +306,14 @@ struct Transform {
   static constexpr pm::api::Method<pm::map::Transform_set_localPosition, void(void*, const Vector3*)> set_localPosition{};
   /// get_localRotation(t): its rotation relative to its parent. Unresolved: all zero.
   static constexpr pm::api::Method<pm::map::Transform_get_localRotation, Quaternion(void*)> get_localRotation{};
+  /// TransformPoint(t, &local): a point of its own space in world space. Unresolved: zeros.
+  static constexpr pm::api::Method<pm::map::Transform_TransformPoint, Vector3(void*, const Vector3*)> TransformPoint{};
+  /// InverseTransformPoint(t, &world): a world point in its own space. Unresolved: zeros.
+  static constexpr pm::api::Method<pm::map::Transform_InverseTransformPoint, Vector3(void*, const Vector3*)>
+      InverseTransformPoint{};
+  /// set_localEulerAngles(t, &e): sets its rotation relative to its parent, in degrees. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Transform_set_localEulerAngles, void(void*, const Vector3*)>
+      set_localEulerAngles{};
   /// set_localRotation(t, &r): sets its rotation relative to its parent. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Transform_set_localRotation, void(void*, const Quaternion*)>
       set_localRotation{};

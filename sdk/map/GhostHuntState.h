@@ -101,7 +101,7 @@ inline constexpr pm::sdk::EntryDesc GhostHuntState_searchTarget{
 
 // The hunt's senses and its target. Each is one of several same-shape methods of the class (the
 // obfuscator's look-alikes), told apart by what its own code compares or calls. Read from decompiled
-// code of build 25811160; the RVAs below are that build's.
+// code of build 25811160.
 
 inline constexpr const char* GhostHuntState_Player[] = {"Player"};
 inline constexpr const char* GhostHuntState_Player_bool[] = {"Player", "bool"};
@@ -155,10 +155,10 @@ inline constexpr pm::sdk::EntryDesc GhostHuntState_SensesGear{
 inline constexpr pm::sdk::Fact GhostHuntState_Listen_facts[] = {
     {.is = pm::sdk::Fact::Is::Calls, .method = "GhostHuntState.Hears"}};
 
+// Found only for the facts of SetCloset and lastPlayer.
 /// The hunt's listening: for each living player outside the truck whom it may search for, when the
 /// voice test or the electronics test passes, it makes that player its searchTarget and lastPlayer,
-/// gives SetCloset the closet they hide in (null for none) and goes where they stand. Found only for
-/// the facts of SetCloset and lastPlayer. Decompiled.
+/// gives SetCloset the closet they hide in (null for none) and goes where they stand. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostHuntState_Listen{
     .key = "GhostHuntState.Listen", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "GhostHuntState", .type = "bool", .facts = GhostHuntState_Listen_facts};
@@ -229,9 +229,10 @@ inline constexpr pm::sdk::EntryDesc GhostHuntState_StartPick{
 inline constexpr pm::sdk::Fact GhostHuntState_TargetPick_facts[] = {
     {.is = pm::sdk::Fact::Is::Calls, .method = "GhostHuntState.SetTarget"}};
 
+// Mapped for the chase's facts.
 /// The hunt's target pick, which the chase runs while the hunt has no target: Listen first; then the
 /// player the hunt keeps, when Sees passes for them; then whoever SightPick finds. Each becomes the target
-/// through SetTarget. Mapped for the chase's facts. Decompiled.
+/// through SetTarget. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostHuntState_TargetPick{
     .key = "GhostHuntState.TargetPick", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "GhostHuntState", .type = "void", .facts = GhostHuntState_TargetPick_facts};
@@ -241,10 +242,11 @@ inline constexpr pm::sdk::EntryDesc GhostHuntState_TargetPick{
 inline constexpr pm::sdk::Fact GhostHuntState_Chase_facts[] = {
     {.is = pm::sdk::Fact::Is::Calls, .method = "GhostHuntState.TargetPick"}, {.is = pm::sdk::Fact::Is::Called}};
 
+// Mapped for KeepNearest's facts.
 /// The hunt's chase, every frame once the hunt has started: unless the hunt's ghostType is the Banshee's
 /// or the Kormos's it first runs KeepNearest; then, with no target, it walks to the closet or player it
 /// searches and takes the kept player as its target when Sees passes for them, or runs TargetPick; with a
-/// target, it follows them and kills them (Kill). Mapped for KeepNearest's facts. Decompiled.
+/// target, it follows them and kills them (Kill). Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostHuntState_Chase{
     .key = "GhostHuntState.Chase", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "GhostHuntState", .type = "void", .facts = GhostHuntState_Chase_facts};
@@ -316,17 +318,18 @@ inline constexpr pm::sdk::Fact GhostHuntState_Exit_facts[] = {
     {.is = pm::sdk::Fact::Is::Calls, .method = "GameController.ResetHuntEffects"},
     {.is = pm::sdk::Fact::Is::Calls, .method = "GhostHuntState.SetCloset"}};
 
+// Found only for its facts.
 /// The hunt's end, an override of the state interface: it stops the hunt's animation and speed, and
 /// when the hunt was on ends its effects (GameController.ResetHuntEffects), sends the ghost back to
 /// its room, completes the escape objective when `seen` is not empty, and clears the closet search
-/// (SetCloset(null)). Found only for its facts. Decompiled.
+/// (SetCloset(null)). Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostHuntState_Exit{
     .key = "GhostHuntState.Exit", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "GhostHuntState", .type = "void", .facts = GhostHuntState_Exit_facts};
 
+// Found only for its facts.
 /// The hunt state's constructor, (GhostAI, NavMeshAgent, PhotonView, bool): it makes the seen and
-/// killed lists and gives the hunt's numbers their starting values. Found only for its facts.
-/// Decompiled.
+/// killed lists and gives the hunt's numbers their starting values. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostHuntState_ctor{.key = "GhostHuntState.ctor", .kind = pm::sdk::Kind::Method,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "GhostHuntState", .name = ".ctor"};
@@ -425,11 +428,13 @@ inline constexpr pm::sdk::EntryDesc GhostHuntState_ghostType{.key = "GhostHuntSt
 
 }  // namespace pm::map
 
-// The game API for the hunt state (sdk/api/game_api.h). Every member is called on Unity's main thread.
-// One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and returns its type's default (0, null) without touching the game. A mod sets a ghost's
-// hunt speed through content rules (sdk/api/content.h, GhostRules::huntSpeed), which write the base and
-// the speed-up here, never the speed they produce.
+/// @file
+/// @brief The game API for the hunt state (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, null) without touching the game. A mod
+/// sets a ghost's hunt speed through content rules (sdk/api/content.h, GhostRules::huntSpeed), which write the base
+/// and the speed-up here, never the speed they produce.
 namespace phasmo {
 /// @addtogroup ghost
 /// @{

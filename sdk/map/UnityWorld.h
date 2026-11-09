@@ -16,6 +16,10 @@ inline constexpr const char* Physics_Raycast_params[] = {"Vector3", "Vector3", "
 inline constexpr const char* NavMesh_SamplePosition_params[] = {"Vector3", "out NavMeshHit", "float", "int"};
 inline constexpr const char* NavMeshAgent_SetDestination_params[] = {"Vector3"};
 inline constexpr const char* NavMeshAgent_CalculatePath_params[] = {"Vector3", "NavMeshPath"};
+inline constexpr const char* NavMesh_CalculatePath_params[] = {"Vector3", "Vector3", "int", "NavMeshPath"};
+inline constexpr const char* Rigidbody_bool[] = {"bool"};
+inline constexpr const char* Rigidbody_AddForceAtPosition_params[] = {"Vector3", "Vector3", "ForceMode"};
+inline constexpr const char* Rigidbody_constraints_params[] = {"RigidbodyConstraints"};
 inline constexpr const char* NavMeshPathStatus_values[] = {"PathComplete", "PathPartial", "PathInvalid"};
 inline constexpr const char* Random_RandomRangeInt_params[] = {"int", "int"};
 inline constexpr const char* QueryTriggerInteraction_values[] = {"UseGlobal", "Ignore", "Collide"};
@@ -55,6 +59,13 @@ inline constexpr pm::sdk::EntryDesc NavMesh_SamplePosition{.key = "NavMesh.Sampl
                                                            .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic,
                                                            .owner = "NavMesh", .name = "SamplePosition",
                                                            .params = NavMesh_SamplePosition_params};
+
+/// A path over the navigation mesh between two points into `path` (an existing NavMeshPath), for the areas
+/// in `areaMask` (-1: all). False when there is none. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc NavMesh_CalculatePath{.key = "NavMesh.CalculatePath",
+                                                          .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic,
+                                                          .owner = "NavMesh", .name = "CalculatePath",
+                                                          .params = NavMesh_CalculatePath_params};
 
 /// A path over the navigation mesh (UnityEngine.AIModule, namespace UnityEngine.AI), as GhostWanderState.PickDestination
 /// makes one to test a long roam: a new one, its agent's CalculatePath, then its status. Decompiled.
@@ -180,6 +191,32 @@ inline constexpr pm::sdk::EntryDesc Rigidbody_set_angularVelocity{
     .key = "Rigidbody.set_angularVelocity", .kind = pm::sdk::Kind::Method, .owner = "Rigidbody",
     .name = "set_angularVelocity", .params = NavMeshAgent_SetDestination_params};
 
+/// Pushes the body at a world point, so it also turns: `mode` is Unity's ForceMode (Rigidbody::kVelocityChange
+/// changes the velocity at once, whatever the mass). Added forces build up until the next physics step, so a force
+/// added each frame pulls harder the more frames run per step; a velocity change scaled by the frame's time does not. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Rigidbody_AddForceAtPosition{.key = "Rigidbody.AddForceAtPosition",
+                                                                 .kind = pm::sdk::Kind::Method, .owner = "Rigidbody",
+                                                                 .name = "AddForceAtPosition",
+                                                                 .params = Rigidbody_AddForceAtPosition_params};
+
+/// The velocity of a world point of the body, its motion and its spin together. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Rigidbody_GetPointVelocity{.key = "Rigidbody.GetPointVelocity",
+                                                               .kind = pm::sdk::Kind::Method, .owner = "Rigidbody",
+                                                               .name = "GetPointVelocity",
+                                                               .params = NavMeshAgent_SetDestination_params};
+
+/// Makes the body kinematic (true: moved only by code, no physics) or not. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Rigidbody_set_isKinematic{.key = "Rigidbody.set_isKinematic",
+                                                              .kind = pm::sdk::Kind::Method, .owner = "Rigidbody",
+                                                              .name = "set_isKinematic", .params = Rigidbody_bool};
+
+/// Sets which axes physics may move and turn the body on (Unity's RigidbodyConstraints flags; 126 freezes
+/// every position and rotation). Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Rigidbody_set_constraints{.key = "Rigidbody.set_constraints",
+                                                              .kind = pm::sdk::Kind::Method, .owner = "Rigidbody",
+                                                              .name = "set_constraints",
+                                                              .params = Rigidbody_constraints_params};
+
 /// Moves the body there at once. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Rigidbody_set_position{.key = "Rigidbody.set_position", .kind = pm::sdk::Kind::Method,
                                                            .owner = "Rigidbody", .name = "set_position",
@@ -264,19 +301,22 @@ inline constexpr pm::sdk::EntryDesc Physics_RaycastHit{.key = "Physics.RaycastHi
 
 }  // namespace pm::map
 
-// The game API for Unity's world queries (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and returns its type's default (0, false) without touching the game.
+/// @file
+/// @brief The game API for Unity's world queries (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, false) without touching the game.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{
 
 /// Unity's NavMeshHit: where SamplePosition found the mesh. Its layout is Unity's own.
 struct NavMeshHit {
-  Vector3 position, normal;
-  float distance;
-  int32_t mask;
-  int32_t hit;  // non-zero when something was found
+  Vector3 position;  ///< the point found on the mesh, in world space
+  Vector3 normal;    ///< the mesh's normal there
+  float distance;    ///< the distance from the point asked about, in metres
+  int32_t mask;      ///< the area mask of the mesh found there
+  int32_t hit;       ///< non-zero when something was found
 };
 
 /// Unity's physics queries.
@@ -305,6 +345,9 @@ struct NavMesh {
   /// Unresolved: false.
   static constexpr pm::api::Method<pm::map::NavMesh_SamplePosition, bool(const Vector3*, NavMeshHit*, float, int32_t)>
       SamplePosition{};
+  /// CalculatePath(&from, &to, areaMask, path): a path from `from` to `to` into `path`. Unresolved: false.
+  static constexpr pm::api::Method<pm::map::NavMesh_CalculatePath, bool(const Vector3*, const Vector3*, int32_t, void*)>
+      CalculatePath{};
 };
 
 /// How far a path got.
@@ -381,6 +424,21 @@ struct Rigidbody {
       set_angularVelocity{};
   /// set_position(body, &position). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Rigidbody_set_position, void(void*, const Vector3*)> set_position{};
+  /// AddForceAtPosition(body, &force, &worldPoint, mode). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Rigidbody_AddForceAtPosition, void(void*, const Vector3*, const Vector3*, int32_t)>
+      AddForceAtPosition{};
+  /// GetPointVelocity(body, &worldPoint): that point's velocity, metres a second. Unresolved: zeros.
+  static constexpr pm::api::Method<pm::map::Rigidbody_GetPointVelocity, Vector3(void*, const Vector3*)> GetPointVelocity{};
+  /// ForceMode.VelocityChange, Unity's documented value: a change of velocity, whatever the mass.
+  static constexpr int32_t kVelocityChange = 2;
+  /// set_isKinematic(body, kinematic). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Rigidbody_set_isKinematic, void(void*, bool)> set_isKinematic{};
+  /// set_constraints(body, flags): Unity's RigidbodyConstraints flags. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Rigidbody_set_constraints, void(void*, int32_t)> set_constraints{};
+  /// RigidbodyConstraints.FreezeAll, Unity's documented value: no position or rotation change.
+  static constexpr int32_t kFreezeAll = 126;
+  /// RigidbodyConstraints.None.
+  static constexpr int32_t kFreeNone = 0;
 };
 
 /// DOTween's static API.

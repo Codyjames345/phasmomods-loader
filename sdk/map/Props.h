@@ -115,6 +115,43 @@ inline constexpr pm::sdk::EntryDesc VRGrabbable_IsSelectableBy{
 inline constexpr pm::sdk::EntryDesc Prop{.key = "Prop", .confidence = pm::sdk::Confidence::Decompiled, .name = "Prop",
                                          .assembly = "Assembly-CSharp", .ns = ""};
 
+inline constexpr const char* Prop_PlayImpactSound_params[] = {"float", "AudioClip[]"};
+inline constexpr const char* ObjectPooler_SpawnFromPool_params[] = {"string", "Vector3", "Quaternion", "bool"};
+// Prop has six methods of this shape; only the real one spawns a pooled sound object (it then plays its clip as
+// its last act, a jump the Calls fact does not see).
+inline constexpr pm::sdk::Fact Prop_PlayImpactSound_facts[] = {
+    {.is = pm::sdk::Fact::Is::Calls, .method = "ObjectPooler.SpawnFromPool"}};
+
+/// The game's pool of reusable objects (Assembly-CSharp, global namespace), such as the sound object a prop's
+/// impact plays through. Decompiled.
+inline constexpr pm::sdk::EntryDesc ObjectPooler{.key = "ObjectPooler", .confidence = pm::sdk::Confidence::Decompiled,
+                                                 .name = "ObjectPooler", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// Takes an object of the named pool and puts it at a position and rotation, as Prop.PlayImpactSound does for
+/// its sound object. Decompiled.
+inline constexpr pm::sdk::EntryDesc ObjectPooler_SpawnFromPool{.key = "ObjectPooler.SpawnFromPool",
+                                                               .kind = pm::sdk::Kind::Method,
+                                                               .confidence = pm::sdk::Confidence::Decompiled,
+                                                               .owner = "ObjectPooler", .name = "SpawnFromPool",
+                                                               .params = ObjectPooler_SpawnFromPool_params};
+
+/// Plays the prop's impact sound on this client only, at the prop: a pooled sound object's Noise plays one of
+/// the prop's gentle clips when `velocity` (metres a second) is no more than Prop.lowImpactVelocityCutoff and it
+/// has some, else one of its hard ones (or the game's default impact clip when it has none), at a volume that
+/// grows with `velocity`. `clips` (may be null) replaces the prop's own clips. The prop's collision handler calls
+/// it on each client as the prop hits something. Decompiled.
+inline constexpr pm::sdk::EntryDesc Prop_PlayImpactSound{.key = "Prop.PlayImpactSound", .kind = pm::sdk::Kind::Method,
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "Prop", .type = "void",
+                                                         .params = Prop_PlayImpactSound_params,
+                                                         .facts = Prop_PlayImpactSound_facts};
+
+/// The impact speed, metres a second, at or below which the prop plays its gentle clips. Decompiled.
+inline constexpr pm::sdk::EntryDesc Prop_lowImpactVelocityCutoff{.key = "Prop.lowImpactVelocityCutoff",
+                                                                 .kind = pm::sdk::Kind::Field,
+                                                                 .confidence = pm::sdk::Confidence::Decompiled,
+                                                                 .owner = "Prop", .name = "lowImpactVelocityCutoff"};
+
 /// Its PhotonObjectInteract: Prop's one field of that type. Decompiled.
 inline constexpr pm::sdk::EntryDesc Prop_interact{.key = "Prop.interact", .kind = pm::sdk::Kind::Field,
                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Prop",
@@ -165,9 +202,12 @@ inline constexpr pm::sdk::EntryDesc SaltSpot_SyncSalt{.key = "SaltSpot.SyncSalt"
 
 }  // namespace pm::map
 
-// The game API for the world's props (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and returns its type's default (0, false, null) without touching the game.
+/// @file
+/// @brief The game API for the world's props (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, false, null) without touching the
+/// game.
 namespace phasmo {
 /// @addtogroup equipment
 /// @{
@@ -208,6 +248,11 @@ struct Prop {
   static constexpr pm::api::Type<pm::map::Prop> type{};
   /// Its PhotonObjectInteract: interact.get(prop). Unresolved: null.
   static constexpr pm::api::Field<pm::map::Prop_interact, void*> interact{};
+  /// PlayImpactSound(prop, velocity, clips): its impact sound on this client; clips may be null. Unresolved:
+  /// does nothing.
+  static constexpr pm::api::Method<pm::map::Prop_PlayImpactSound, void(void*, float, void*)> PlayImpactSound{};
+  /// The speed at or below which it plays its gentle clips: lowImpactVelocityCutoff.get(prop). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Prop_lowImpactVelocityCutoff, float> lowImpactVelocityCutoff{};
   /// TryThrow(prop, a, b). A mod usually hooks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Prop_TryThrow, void(void*, bool, bool)> TryThrow{};
 };

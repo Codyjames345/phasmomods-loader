@@ -74,8 +74,9 @@ inline constexpr pm::sdk::Fact GhostWanderState_GoToPoint_facts[] = {
     {.is = pm::sdk::Fact::Is::Calls, .method = "GhostWanderState.PickDestination"},
     {.is = pm::sdk::Fact::Is::Compares, .method = "GhostType.Goryo"}};
 
+// Mapped for hasDestination's fact.
 /// Sends the wander to its next point, from its enter and its step: it asks PickDestination for destination, sends
-/// the agent there and sets hasDestination; or ends the wander. Mapped for hasDestination's fact. Decompiled.
+/// the agent there and sets hasDestination; or ends the wander. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostWanderState_GoToPoint{
     .key = "GhostWanderState.GoToPoint", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "GhostWanderState", .type = "void", .facts = GhostWanderState_GoToPoint_facts};
@@ -109,9 +110,9 @@ inline constexpr pm::sdk::EntryDesc GhostWanderState_hasDestination{
 inline constexpr const char* GhostDotsState_fieldTypes[] = {"@GhostAI", "NavMeshAgent", "float", "int", "bool",
                                                             "Vector3",  "float",        "bool",  "bool"};
 
+// Its class and every member are obfuscated, so they are found by an exact shape and machine-code facts.
 /// The ghost's walk for a D.O.T.S. sighting, the state object GhostAI.ChangeState makes for GhostState.dots: a
-/// wander's walk with a radius of its own, which its constructor sets to 2. Its class and every member are
-/// obfuscated, so they are found by an exact shape and machine-code facts. Decompiled.
+/// wander's walk with a radius of its own, which its constructor sets to 2. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostDotsState{.key = "GhostDotsState",
                                                    .confidence = pm::sdk::Confidence::Decompiled,
                                                    .flags = pm::sdk::kExactFields,
@@ -123,8 +124,8 @@ inline constexpr pm::sdk::Fact GhostDotsState_GoToNearest_facts[] = {
     {.is = pm::sdk::Fact::Is::Calls, .method = "GhostAI.GetNearestPlayer"},
     {.is = pm::sdk::Fact::Is::Compares, .method = "GhostType.Goryo"}};
 
-/// Sends a Goryo's D.O.T.S. walk to the nearest player and sets hasDestination. Mapped for hasDestination's fact.
-/// Decompiled.
+// Mapped for hasDestination's fact.
+/// Sends a Goryo's D.O.T.S. walk to the nearest player and sets hasDestination. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostDotsState_GoToNearest{
     .key = "GhostDotsState.GoToNearest", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "GhostDotsState", .type = "void", .facts = GhostDotsState_GoToNearest_facts};
@@ -150,9 +151,11 @@ inline constexpr pm::sdk::EntryDesc GhostDotsState_hasDestination{
 
 }  // namespace pm::map
 
-// The game API for the wander (sdk/api/game_api.h). Every member is called on Unity's main thread. One
-// that did not resolve in the running game build logs "<key> is not available in this game build" once
-// and returns its type's default (null, false) without touching the game.
+/// @file
+/// @brief The game API for the wander (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (null, false) without touching the game.
 namespace phasmo {
 /// @addtogroup ghost
 /// @{

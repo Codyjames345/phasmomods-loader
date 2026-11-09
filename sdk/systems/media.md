@@ -36,8 +36,8 @@ full screen, stay on that viewer's own client, so no other client can tell exact
 
 ## Engine features the game does not use
 
-- `VideoPlayer` and `AsyncGPUReadback` have no managed methods left in this build (stripped), but the engine still
-  registers their calls (setting a URL, a render target and looping; prepare, play, pause and stop; asking for a texture's
-  data and reading it back). A mod reaches them through icall entries, which the map supports. The vanilla maps' TVs use a
-  `VideoPlayer`.
+- `VideoPlayer` and `AsyncGPUReadback` have no managed methods left in this build (they were stripped). The engine
+  still registers their calls: setting a URL, a render target and looping; prepare, play, pause and stop; asking for a
+  texture's data and reading it back. A mod reaches them through icall entries, which the map supports. The vanilla
+  maps' TVs use a `VideoPlayer`.
 - Steam's timeline markers are not available: the game's Steam library has no `ISteamTimeline`.

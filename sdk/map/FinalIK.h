@@ -323,22 +323,22 @@ struct BipedReferences {
   static constexpr pm::api::Method<pm::map::BipedReferences_ctor, void(void*)> ctor{};
   /// A Transform each; spine and eyes a Transform[]. Unresolved: null.
   static constexpr pm::api::Field<pm::map::BipedReferences_root, void*> root{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_pelvis, void*> pelvis{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftThigh, void*> leftThigh{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftCalf, void*> leftCalf{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftFoot, void*> leftFoot{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightThigh, void*> rightThigh{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightCalf, void*> rightCalf{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightFoot, void*> rightFoot{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftUpperArm, void*> leftUpperArm{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftForearm, void*> leftForearm{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftHand, void*> leftHand{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightUpperArm, void*> rightUpperArm{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightForearm, void*> rightForearm{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightHand, void*> rightHand{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_head, void*> head{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_spine, void*> spine{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_eyes, void*> eyes{};
+  static constexpr pm::api::Field<pm::map::BipedReferences_pelvis, void*> pelvis{};  ///< the pelvis, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftThigh, void*> leftThigh{};  ///< the left thigh, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftCalf, void*> leftCalf{};  ///< the left calf, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftFoot, void*> leftFoot{};  ///< the left foot, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightThigh, void*> rightThigh{};  ///< the right thigh, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightCalf, void*> rightCalf{};  ///< the right calf, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightFoot, void*> rightFoot{};  ///< the right foot, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftUpperArm, void*> leftUpperArm{};  ///< the left upper arm, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftForearm, void*> leftForearm{};  ///< the left forearm, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftHand, void*> leftHand{};  ///< the left hand, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightUpperArm, void*> rightUpperArm{};  ///< the right upper arm, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightForearm, void*> rightForearm{};  ///< the right forearm, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightHand, void*> rightHand{};  ///< the right hand, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_head, void*> head{};  ///< the head, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_spine, void*> spine{};  ///< the spine, a Transform[]
+  static constexpr pm::api::Field<pm::map::BipedReferences_eyes, void*> eyes{};  ///< the eyes, a Transform[]
 };
 
 /// Final IK's full-body solver for a two-legged body. `ik` below is one.
@@ -357,7 +357,7 @@ struct IKSolverFullBodyBiped {
   static constexpr pm::api::Method<pm::map::IKSolverFullBodyBiped_get_leftHandEffector, void*(void*)>
       get_leftHandEffector{};
   static constexpr pm::api::Method<pm::map::IKSolverFullBodyBiped_get_rightHandEffector, void*(void*)>
-      get_rightHandEffector{};
+      get_rightHandEffector{};  ///< the right hand's IKEffector
 };
 
 /// A full-body solver's effector. `effector` below is one.
@@ -408,7 +408,7 @@ struct GrounderFBBIK {
 namespace AvatarIKGoal {
 /// LeftHand(), RightHand(). Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::AvatarIKGoal_LeftHand> LeftHand{};
-inline constexpr pm::api::EnumValue<pm::map::AvatarIKGoal_RightHand> RightHand{};
+inline constexpr pm::api::EnumValue<pm::map::AvatarIKGoal_RightHand> RightHand{};  ///< the right hand's goal
 }  // namespace AvatarIKGoal
 
 /// @}

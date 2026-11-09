@@ -1,41 +1,46 @@
 #pragma once
 
-// The game API: the typed surface a mod calls to reach the game, by the readable names of the game
-// map (sdk/map). A mod never holds a game address or a field offset; the host resolves the map in
-// the running game and hands each entry over through the host contract (core/mod_api.h).
-//
-// Each map header ends with ready-made wrappers in namespace phasmo, for example
-// `phasmo::GhostAI::UnAppear(ghost)`, `phasmo::GhostAI::state.get(ghost)` and
-// `phasmo::GhostState::hunting()`. They are built from the templates below.
-//
-// What a mod requires is what its code calls. Every accessor's members are templates, so a wrapper's
-// entry is registered only when code in the mod calls it, and the mod's pmmod_requires export lists
-// exactly those entries (less the ones marked kOptional). The host does not start a mod while one of
-// them did not resolve in the running game build.
-//
-// A wrapper's shape must be its entry's: where the map gives a method's or icall's params, a wrapper
-// with another number of arguments does not compile, and where it gives a field's type as a C#
-// value type by name (bool, int, float and the like), neither does a T of another size.
-//
-// A call of a game method is never virtual: it runs the body the map entry names, even when the
-// object's class overrides it. Method::virtual_call runs the override, as C# calls a virtual method.
-//
-// When an entry did not resolve anyway (an optional one, or the mod was not bound), nothing jumps to
-// null: a call, a read or a write logs "<key> is not available in this game build" once and returns
-// the type's default value (0, false, null) or does nothing.
-//
-// A managed reference a wrapper gives (a void* read from a field or returned by a call, a type
-// object, a new object or array) is valid for the current frame only. Do not keep it across frames:
-// keep the object in a pm::api::Held (held.h) instead.
-//
-// Threading: everything here runs on Unity's main thread, where the host calls pmmod_start and
-// pmmod_tick, except the registration a wrapper makes while the mod's DLL loads. Each "logged once"
-// is kept with an atomic flag, so even two threads log a line once.
-//
-// Exports of GameAssembly.dll (Export below) are for the host's own code only: a mod never sees the
-// handle, and the host contract's game_entry answers null for an export.
-//
-// Managed strings, arrays, lists, alive checks and GC holds are in runtime.h and held.h.
+/// @file
+/// @brief The game API's templates: the typed surface a mod calls to reach the game, by the readable
+/// names of the game map (sdk/map).
+///
+/// A mod never holds a game address or a field offset; the host resolves the map in the running game
+/// and hands each entry over through the host contract (core/mod_api.h).
+///
+/// Each map header ends with ready-made wrappers in namespace phasmo, for example
+/// `phasmo::GhostAI::UnAppear(ghost)`, `phasmo::GhostAI::state.get(ghost)` and
+/// `phasmo::GhostState::hunting()`. They are built from the templates below.
+///
+/// **What a mod requires is what its code calls.** Every accessor's members are templates, so a
+/// wrapper's entry is registered only when code in the mod calls it, and the mod's pmmod_requires
+/// export lists exactly those entries (less the ones marked kOptional). The host does not start a mod
+/// while one of them did not resolve in the running game build.
+///
+/// **A wrapper's shape must be its entry's:** where the map gives a method's or icall's params, a
+/// wrapper with another number of arguments does not compile, and where it gives a field's type as a
+/// C# value type by name (bool, int, float and the like), neither does a T of another size.
+///
+/// **A call of a game method is never virtual:** it runs the body the map entry names, even when the
+/// object's class overrides it. Method::virtual_call runs the override, as C# calls a virtual method.
+///
+/// **Failure:** when an entry did not resolve anyway (an optional one, or the mod was not bound),
+/// nothing jumps to null: a call, a read or a write logs "<key> is not available in this game build"
+/// once and returns the type's default value (0, false, null) or does nothing.
+///
+/// **Lifetime:** a managed reference a wrapper gives (a void* read from a field or returned by a call,
+/// a type object, a new object or array) is valid for the current frame only. Do not keep it across
+/// frames: keep the object in a pm::api::Held (held.h) instead.
+///
+/// **Threading:** everything here runs on Unity's main thread, where the host calls pmmod_start and
+/// pmmod_tick, except the registration a wrapper makes while the mod's DLL loads. Each "logged once"
+/// is kept with an atomic flag, so even two threads log a line once.
+///
+/// Exports of GameAssembly.dll (Export below) are for the host's own code only: a mod never sees the
+/// handle, and the host contract's game_entry answers null for an export.
+///
+/// Managed strings, arrays, lists, alive checks and GC holds are in runtime.h and held.h.
+/// @ingroup runtime
+/// @since Contract 2.0
 
 #include <array>
 #include <atomic>
@@ -156,16 +161,19 @@ void abandon_ghost_spawn();
 template <const sdk::EntryDesc& D>
 struct Use {
   /// The resolved entry, or null when it did not resolve (logged once per bind). Main thread.
+  /// @return The host's PmGameEntry for D, or null.
   static const PmGameEntry* entry() {
     if (!resolved()) detail::report_unavailable(slot());
     return slot().entry;
   }
   /// Whether the entry resolved, without logging. Main thread.
+  /// @return True when the host resolved D in this game build.
   static bool resolved() {
     static_cast<void>(detail::Registration<D>::done);
     return slot().entry != nullptr;
   }
   /// What the host gave for D at bind, and whether its lines were logged.
+  /// @return D's slot, which the game API keeps for the process lifetime.
   static detail::Slot& slot() { return detail::slot<D>; }
 };
 
@@ -193,6 +201,10 @@ struct Method<D, R(A...)> {
   /// Calls the method's code with the arguments and its MethodInfo, as the game does. The call is
   /// never virtual: it runs the declared body even when the object's class overrides it (see
   /// virtual_call). Unresolved: logs once and returns R{} without calling anything.
+  /// @param a The method's arguments, the object first for an instance method, as the entry's params
+  ///   give them.
+  /// @return What the method returns; R{} when the entry did not resolve. A void* is a managed
+  ///   reference, valid this frame only.
   template <int = 0>
   R operator()(A... a) const {
     const PmGameEntry* e = use::entry();
@@ -208,6 +220,9 @@ struct Method<D, R(A...)> {
   /// object, or one not of the method's declaring type, is refused: nothing is called, R{} is
   /// returned, and the refusal is logged once per bind. Before bind it calls the declared body, as
   /// operator() does. Unresolved: logs once and returns R{} without calling anything.
+  /// @param a The method's arguments, the object first.
+  /// @return What the method the object's class runs returns; R{} when the call is refused or the entry
+  ///   did not resolve.
   template <int = 0>
   R virtual_call(A... a) const {
     static_assert(!(D.flags & sdk::kStatic), "a static method has no object to dispatch on");
@@ -234,6 +249,7 @@ struct Method<D, R(A...)> {
   }
 
   /// Whether the method resolved in this game build. Never logs.
+  /// @return True when the entry resolved. Calling available() makes the entry required, unless it is kOptional.
   template <int = 0>
   bool available() const {
     return use::resolved();
@@ -259,6 +275,8 @@ struct Field {
 
   /// The field's value in the managed object `obj`. Unresolved (logged once) or a null `obj`: T{}.
   /// A reference (void*) is valid for the current frame only: do not keep it across frames.
+  /// @param obj The managed object that holds the field, of the entry's owner type; null allowed.
+  /// @return The field's value, or T{}.
   template <int = 0>
   T get(const void* obj) const {
     const PmGameEntry* e = use::entry();
@@ -270,7 +288,11 @@ struct Field {
 
   /// Stores `value` in the managed object `obj`. A managed reference (void*) goes through the GC
   /// write barrier (the host's set_reference); a plain value is written directly. Unresolved (logged
-  /// once) or a null `obj`: nothing is written.
+  /// once) or a null `obj`: nothing is written. A write changes only this client's copy, and skips
+  /// whatever the game does when it sets the field itself: the field's note names the method to call
+  /// for the game's own behaviour.
+  /// @param obj The managed object that holds the field, of the entry's owner type; null allowed.
+  /// @param value The value to store.
   template <int = 0>
   void set(void* obj, T value) const {
     const PmGameEntry* e = use::entry();
@@ -308,6 +330,7 @@ struct StaticField {
   /// The field's value. Unresolved: logs once and returns T{}. When the host cannot read it (T's size
   /// is not the field's, or the class's static constructor threw): logs once per bind and returns T{}.
   /// A reference (void*) is valid for the current frame only: do not keep it across frames.
+  /// @return The field's value, or T{}.
   template <int = 0>
   T get() const {
     if (!use::entry()) return T{};
@@ -320,6 +343,8 @@ struct StaticField {
   /// Whether the field could be read, with its value in `out`: false, leaving `out` alone and logging nothing, when it did
   /// not resolve or the host could not read it (T's size is not the field's, or the class's static constructor threw). For
   /// a gate that must tell "null" from "unknown", which get() answers alike. A reference is valid for the current frame only.
+  /// @param out Receives the value when the read succeeds.
+  /// @return True when the field was read.
   template <int = 0>
   bool read(T& out) const {
     return use::resolved() && detail::static_get(D.key, &out, sizeof out);
@@ -327,7 +352,8 @@ struct StaticField {
 
   /// Stores `value` in the field; a managed reference goes through the GC write barrier. Unresolved:
   /// logs once and writes nothing. When the host cannot write it: logs once per bind and writes
-  /// nothing.
+  /// nothing. The write is this client's alone.
+  /// @param value The value to store.
   template <int = 0>
   void set(T value) const {
     if (!use::entry()) return;
@@ -335,6 +361,7 @@ struct StaticField {
   }
 
   /// Whether the field resolved in this game build. Never logs.
+  /// @return True when the entry resolved.
   template <int = 0>
   bool available() const {
     return use::resolved();
@@ -364,6 +391,8 @@ struct Icall<D, R(A...)> {
 
   /// Calls the engine function with the arguments. Unresolved: logs once and returns R{} without
   /// calling anything.
+  /// @param a The function's arguments, the object first unless the entry is kStatic.
+  /// @return What the function returns; R{} when the entry did not resolve.
   template <int = 0>
   R operator()(A... a) const {
     const PmGameEntry* e = use::entry();
@@ -375,6 +404,7 @@ struct Icall<D, R(A...)> {
   }
 
   /// Whether the icall resolved in this game build. Never logs.
+  /// @return True when the entry resolved.
   template <int = 0>
   bool available() const {
     return use::resolved();
@@ -399,6 +429,7 @@ struct EnumValue {
   using use = Use<D>;
 
   /// The value's number in this game build. Unresolved: logs once and returns 0.
+  /// @return The number, read from the running game: never write it into a mod's code.
   template <int = 0>
   int32_t operator()() const {
     const PmGameEntry* e = use::entry();
@@ -417,6 +448,7 @@ struct Type {
 
   /// The type's Il2CppClass*: runtime metadata, never a managed object. Unresolved: logs once and
   /// returns null.
+  /// @return The class, or null.
   template <int = 0>
   void* klass() const {
     const PmGameEntry* e = use::entry();
@@ -426,6 +458,8 @@ struct Type {
   /// Whether the managed object `obj` is of this type or of a class derived from it (following the
   /// class's parents). An interface type never matches: the check does not look at the interfaces
   /// a class implements. False for a null `obj`, and when the type did not resolve (logged once).
+  /// @param obj Any managed object, or null.
+  /// @return True when `obj` is of this type.
   template <int = 0>
   bool is(const void* obj) const {
     return use::entry() && obj && detail::is_instance(obj, D.key);
@@ -434,6 +468,7 @@ struct Type {
   /// The type's System.Type object, as C#'s typeof gives it (for GetComponent, AddComponent and
   /// the like). A managed object: do not keep it across frames without a pm::api::Held. Unresolved:
   /// logs once and returns null.
+  /// @return The System.Type, or null.
   template <int = 0>
   void* type_object() const {
     return use::entry() ? detail::type_object(D.key) : nullptr;
@@ -443,6 +478,7 @@ struct Type {
   /// refers to it yet, so do not keep it across frames without a pm::api::Held (held.h). Not for engine
   /// objects: a Component or MonoBehaviour comes from AddComponent or Instantiate, never from
   /// make(), which gives an object Unity knows nothing of. Unresolved: logs once and returns null.
+  /// @return The new object, or null.
   template <int = 0>
   void* make() const {
     return use::entry() ? detail::object_new(D.key) : nullptr;
@@ -451,6 +487,8 @@ struct Type {
   /// A new managed array of `length` elements of this type, zeroed (read it with pm::api::Array or
   /// RefArray, runtime.h). Do not keep it across frames without a pm::api::Held. Unresolved: logs
   /// once and returns null.
+  /// @param length The number of elements.
+  /// @return The new array, or null.
   template <int = 0>
   void* make_array(size_t length) const {
     return use::entry() ? detail::array_new(D.key, length) : nullptr;
@@ -463,6 +501,9 @@ struct Type {
   /// Inherited fields and reference fields are left alone. False, copying nothing, when either object
   /// is null or not of the class, when the runtime cannot type one of the settings (the host logs it),
   /// and when the type did not resolve (logged once).
+  /// @param dst The object to copy onto.
+  /// @param src The object to copy from.
+  /// @return True when every setting was copied; false when nothing was.
   template <int = 0>
   bool copy_settings(void* dst, const void* src) const {
     return use::entry() && dst && src && detail::copy_settings(D.key, dst, src);
@@ -474,6 +515,12 @@ struct Type {
   /// `max` is possible). For fields of one type that nothing in the game's code tells apart, so no map
   /// entry can name one (the host contract's fields_of_type). 0 for a null or foreign `obj`, and when
   /// either type did not resolve (logged once).
+  /// @tparam FieldType The Type wrapper of the fields' type, for example phasmo::GhostModel::type.
+  /// @param obj The managed object of this class to read.
+  /// @param arrayOf True to read the fields of an array of FieldType instead.
+  /// @param out Room for `max` references, in layout order; null only with `max` 0.
+  /// @param max How many references `out` takes.
+  /// @return How many such fields the class declares, or 0.
   template <auto& FieldType>
   size_t fields_of(const void* obj, bool arrayOf, void** out, size_t max) const {
     using F = std::remove_cvref_t<decltype(FieldType)>;
@@ -501,6 +548,8 @@ struct SceneObject {
   /// when `root` is null (at once: no search, nothing logged, the kept answer stays), and when the
   /// entry did not resolve (logged once). A managed reference: do not keep it across
   /// frames without a pm::api::Held.
+  /// @param root The Transform to search under; null allowed.
+  /// @return The Transform found, or null.
   template <int = 0>
   void* find(void* root) const {
     return use::entry() ? detail::scene_find(D.key, root) : nullptr;
@@ -508,6 +557,7 @@ struct SceneObject {
 
   /// Whether the entry resolved in this game build. Never logs. A resolved entry may still be missing
   /// from the scene that is loaded: find says so.
+  /// @return True when the entry resolved.
   template <int = 0>
   bool available() const {
     return use::resolved();
@@ -526,6 +576,7 @@ struct Layer {
 
   /// The layer's index, 0 to 31. Unresolved (no layer has the name in this build): logs once and
   /// returns -1, never 0, which is the Default layer; check available() before using it.
+  /// @return The index, or -1.
   template <int = 0>
   int32_t index() const {
     const PmGameEntry* e = use::entry();
@@ -533,6 +584,7 @@ struct Layer {
   }
 
   /// Whether the layer resolved in this game build. Never logs.
+  /// @return True when the entry resolved.
   template <int = 0>
   bool available() const {
     return use::resolved();
@@ -553,6 +605,8 @@ struct AnimatorParam {
   /// that Animator is asked, and again after a scene load. 0 when `animator` lacks it (logged once per
   /// scene load), when `animator` is null, destroyed or not an Animator, and when the entry did not
   /// resolve (logged once).
+  /// @param animator The Animator to check the parameter against.
+  /// @return The hash, or 0.
   template <int = 0>
   int32_t hash(const void* animator) const {
     int32_t value = 0;
@@ -562,6 +616,7 @@ struct AnimatorParam {
 
   /// Whether the entry resolved in this game build. Never logs. A resolved parameter may still be
   /// missing from a given Animator: hash says so.
+  /// @return True when the entry resolved.
   template <int = 0>
   bool available() const {
     return use::resolved();
@@ -581,6 +636,7 @@ struct ShaderProperty {
   using use = Use<D>;
 
   /// The property's id. Unresolved: logs once and returns 0; check available() before using it.
+  /// @return The id (Shader.PropertyToID), or 0.
   template <int = 0>
   int32_t id() const {
     const PmGameEntry* e = use::entry();
@@ -588,6 +644,7 @@ struct ShaderProperty {
   }
 
   /// Whether the property's id was read in this game build. Never logs.
+  /// @return True when the entry resolved.
   template <int = 0>
   bool available() const {
     return use::resolved();
@@ -673,8 +730,11 @@ struct OriginalOf;
 /// only during the detour's call: do not keep it. Main thread, as the hooked call.
 template <const sdk::EntryDesc& D, class R, class... A>
 struct OriginalOf<Method<D, R(A...)>> {
-  R (*code)(A..., const void*);
-  const void* method;
+  R (*code)(A..., const void*);  ///< the next detour or the body; null before the hook is placed
+  const void* method;            ///< the game's MethodInfo, passed on as the call's last argument
+  /// Goes on with the game's call.
+  /// @param a The call's arguments, as the detour received them or changed.
+  /// @return What the rest of the chain returns; R{} when `code` is null.
   R operator()(A... a) const {
     if (code) return code(a..., method);
     if constexpr (!std::is_void_v<R>) return R{};
@@ -749,6 +809,21 @@ struct Hooked<Method<D, R(A...)>> {
 /// not hook a body (it logs why). After such a partial failure the bodies hooked before it stay
 /// hooked (the contract cannot unhook them) but run no detour: each passes the call straight on, as
 /// if nothing were hooked, until the host removes them when the mod's start fails. Main thread.
+/// @tparam M The Method wrapper to hook, for example phasmo::GhostAI::ChangeState.
+/// @param detour The detour, called for every call of the method on this client, on the thread the game
+///   calls it on (the main thread for the game's own code).
+/// @param name What the log calls the hook; null for the entry's key.
+/// @param twins Twins::All (the default) to cover every body the obfuscator made, so the detour runs
+///   whichever body the game calls; Twins::CanonicalOnly for the canonical body alone.
+/// @return True when every body was hooked; enable it with the host contract's enable_hooks.
+/// @note A detour that does not call `original` skips the game's method and every older detour on
+///   that body: the game then does not do what the method does, on this client.
+/// @code
+/// void on_unappear(pm::api::Original<phasmo::GhostAI::UnAppear> original, void* ghost) {
+///   original(ghost);  // the game's own UnAppear first
+/// }
+/// pm::api::hook<phasmo::GhostAI::UnAppear>(&on_unappear, "my mod: UnAppear");
+/// @endcode
 template <auto& M>
 bool hook(typename detail::Hooked<std::remove_cvref_t<decltype(M)>>::Detour detour, const char* name,
           Twins twins = Twins::All) {
@@ -770,6 +845,8 @@ bool hook(typename detail::Hooked<std::remove_cvref_t<decltype(M)>>::Detour deto
 /// MethodInfo. Before hook<M>, or when M did not resolve, it does nothing and returns R{}. After the mods stop it is invalid
 /// until hook<M> succeeds again: the host has removed the hook, and calling it then calls freed code. A later hook on M by
 /// another mod does not see such a call: use M's wrapper itself for the game's own entry. Main thread.
+/// @tparam M The Method wrapper this mod hooked with hook<M>.
+/// @return The callable for the chain under this mod's hook on the canonical body.
 template <auto& M>
 Original<M> below_hook() {
   using W = std::remove_cvref_t<decltype(M)>;
@@ -779,6 +856,8 @@ Original<M> below_hook() {
 
 /// Whether a call of the game method M names is running on this thread, as the host's hook on it
 /// sees it. False when M did not resolve or the host does not track it. Never logs. Main thread.
+/// @tparam M The Method wrapper to ask about, for example phasmo::GhostController::Spawn.
+/// @return True while a call of the method runs on this thread.
 template <auto& M>
 bool inside() {
   using W = std::remove_cvref_t<decltype(M)>;
@@ -790,6 +869,8 @@ bool inside() {
 /// needs them all: all_resolved<phasmo::Light::type, phasmo::Light::set_range>(). Like each wrapper's
 /// available(), it never logs; naming a wrapper here makes its entry required unless the entry is
 /// kOptional. False before bind. Main thread.
+/// @tparam W The wrappers a feature needs.
+/// @return True when each of them resolved.
 template <const auto&... W>
 bool all_resolved() {
   return (std::remove_cvref_t<decltype(W)>::use::resolved() && ...);
@@ -800,12 +881,17 @@ bool all_resolved() {
 /// keys that did not, sorted and separated by ", ". Each entry's "not available" line may be logged
 /// again after it. `host` must be compatible with this game API (pm_api_compatible); pm::mod::bind
 /// checks that and calls this. Main thread.
+/// @param host The host contract pmmod_start was given.
+/// @param missing Receives the keys of the required entries that did not resolve.
+/// @return True when every required entry resolved.
 bool bind(const PmHostApi* host, std::string& missing);
 
 /// The keys of the entries the mod's code uses that are not kOptional, sorted. Points `keys` at an
 /// array the mod keeps, unchanged, for as long as its DLL stays loaded, and returns its length; the
 /// array is built at the first call, when every entry has registered. The mod's pmmod_requires
 /// export returns this. Any thread, once the mod's DLL has loaded.
+/// @param keys Receives the array of keys.
+/// @return How many keys the array holds.
 size_t used_required(const char* const** keys);
 
 }  // namespace pm::api

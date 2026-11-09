@@ -47,10 +47,16 @@ inline constexpr pm::sdk::EntryDesc GhostIdleState_HuntInsanity{
 inline constexpr pm::sdk::Fact GhostIdleState_Execute_facts[] = {
     {.is = pm::sdk::Fact::Is::Calls, .method = "GhostIdleState.HuntInsanity"}};
 
-/// The idle state's step, its override of the state interface's update, run each frame: when its timer
-/// runs out it works out the hunt insanity (HuntInsanity), and the roll begins. Its own
-/// Random.RandomRangeInt calls, in order: a 0-to-2 coin; on 1 the hunt branch, which after the type's,
-/// sanity and setup checks (the Thaye's against GhostController.thayeThreshold) draws its final 1-in-3, 4
+/// The idle state's step, its override of the state interface's update, run each frame. For the Dayan
+/// (26) it runs GhostAI.DayanPlayerChecks on the frames its FrameSkipFilter lets through. When its timer
+/// runs out it works out the hunt insanity (HuntInsanity), and the roll begins.
+/// The Onryo's hunt comes first. If GhostAI.flamesBlownOut is above 2, and none of
+/// LevelValues.eventsBlocked, GhostAI.postHuntCooldown and GhostAI.huntsHeldOff is set, it clears the
+/// count, calls GhostAI.ChangeState with GhostState.hunting and adds one to a LevelStats count (not
+/// mapped). That hunt draws no random number and skips the sanity check. Only the Onryo (16) adds to
+/// the count (FireSource.CountGhostBlowOut).
+/// Otherwise its own Random.RandomRangeInt calls run, in order: a 0-to-2 coin; on 1 the hunt branch,
+/// which needs the same three flags clear and, after the type's, sanity and setup checks (the Thaye's against GhostController.thayeThreshold) draws its final 1-in-3, 4
 /// or 5 chance; then the activity roll. The callees it runs before that final chance (DayanPlayerChecks,
 /// HuntInsanity, LevelValues' getters) draw no random numbers. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostIdleState_Execute{
@@ -69,9 +75,11 @@ inline constexpr pm::sdk::EntryDesc GhostIdleState_insanity{
 
 }  // namespace pm::map
 
-// The game API for the idle state (sdk/api/game_api.h). Every member is called on Unity's main thread.
-// One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and returns its type's default (0, null) without touching the game.
+/// @file
+/// @brief The game API for the idle state (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, null) without touching the game.
 namespace phasmo {
 /// @addtogroup ghost
 /// @{

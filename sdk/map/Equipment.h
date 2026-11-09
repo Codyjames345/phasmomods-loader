@@ -56,8 +56,8 @@ inline constexpr pm::sdk::EntryDesc StoreItem{.key = "StoreItem", .confidence = 
 
 inline constexpr const char* StoreItemTier_values[] = {"One", "Two", "Three"};
 
-/// The tier of a store item, an obfuscated enum (Assembly-CSharp, global namespace) found by its values'
-/// names. Decompiled.
+// Found by its values' names.
+/// The tier of a store item, an obfuscated enum (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc StoreItemTier{.key = "StoreItemTier", .confidence = pm::sdk::Confidence::Decompiled,
                                                   .assembly = "Assembly-CSharp", .ns = "",
                                                   .values = StoreItemTier_values};
@@ -221,10 +221,10 @@ inline constexpr pm::sdk::Fact WhiteSage_YureiTrap_facts[] = {
     {.is = pm::sdk::Fact::Is::Calls, .method = "GhostAI.TemporarilyStopWander"},
     {.is = pm::sdk::Fact::Is::Compares, .method = "GhostType.Yurei"}};
 
+// Its four look-alikes are the handlers above whose constants name no ghost type.
 /// The incense's handler that traps the Yurei: when the ghost's behaviour type is the Yurei it calls
 /// GhostAI.TemporarilyStopWander, and it removes itself as a listener of the incense's sensor event.
-/// Its four look-alikes (same shape, same calls) compare the behaviour type with 0x5F, -0x34, 0x5D and
-/// -0x6E, which name no ghost type. Nothing calls it directly; it is reached through a delegate.
+/// Nothing calls it directly; it is reached through a delegate.
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc WhiteSage_YureiTrap{
     .key = "WhiteSage.YureiTrap", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
@@ -233,9 +233,12 @@ inline constexpr pm::sdk::EntryDesc WhiteSage_YureiTrap{
 
 }  // namespace pm::map
 
-// The game API for equipment (sdk/api/game_api.h). Every member is called on Unity's main thread. One
-// that did not resolve in the running game build logs "<key> is not available in this game build" once
-// and returns its type's default (null, false, 0) without touching the game.
+/// @file
+/// @brief The game API for equipment (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (null, false, 0) without touching the
+/// game.
 namespace phasmo {
 /// @addtogroup equipment
 /// @{
@@ -272,28 +275,35 @@ struct CCTVController {
       GetCCTVCamerasByCurrentCameraType{};
 };
 
-/// The other kinds of electronic equipment. Each type: klass(), is(obj), type_object(). Unresolved:
-/// null and false.
+/// The other kinds of electronic equipment, each mapped by its type only (some with a few methods).
+/// Each type: klass(), is(obj), type_object(). Unresolved: null and false. This one is a motion sensor
+/// (MotionSensor).
 struct MotionSensor {
-  static constexpr pm::api::Type<pm::map::MotionSensor> type{};
+  static constexpr pm::api::Type<pm::map::MotionSensor> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
 };
+/// A sound sensor (SoundSensor).
 struct SoundSensor {
-  static constexpr pm::api::Type<pm::map::SoundSensor> type{};
+  static constexpr pm::api::Type<pm::map::SoundSensor> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
 };
+/// The EMF reader (EMFReader).
 struct EMFReader {
-  static constexpr pm::api::Type<pm::map::EMFReader> type{};
+  static constexpr pm::api::Type<pm::map::EMFReader> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
 };
+/// The parabolic microphone (ParabolicMicrophone).
 struct ParabolicMicrophone {
-  static constexpr pm::api::Type<pm::map::ParabolicMicrophone> type{};
+  static constexpr pm::api::Type<pm::map::ParabolicMicrophone> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
 };
+/// The sound recorder (SoundRecorder).
 struct SoundRecorder {
-  static constexpr pm::api::Type<pm::map::SoundRecorder> type{};
+  static constexpr pm::api::Type<pm::map::SoundRecorder> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
 };
+/// The thermometer (Thermometer).
 struct Thermometer {
-  static constexpr pm::api::Type<pm::map::Thermometer> type{};
+  static constexpr pm::api::Type<pm::map::Thermometer> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
 };
+/// The spirit box (EVPRecorder). `box` below is the spirit box.
 struct EVPRecorder {
-  static constexpr pm::api::Type<pm::map::EVPRecorder> type{};
+  static constexpr pm::api::Type<pm::map::EVPRecorder> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
   /// PlayLocationSound(box, a, b). A mod hooks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::EVPRecorder_PlayLocationSound, void(void*, int32_t, int32_t)>
       PlayLocationSound{};
@@ -303,11 +313,13 @@ struct EVPRecorder {
   static constexpr pm::api::Method<pm::map::EVPRecorder_PlayDifficultySound, void(void*, int32_t, int32_t)>
       PlayDifficultySound{};
 };
+/// The D.O.T.S. projector (IRLightSensor).
 struct IRLightSensor {
-  static constexpr pm::api::Type<pm::map::IRLightSensor> type{};
+  static constexpr pm::api::Type<pm::map::IRLightSensor> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
 };
+/// A torch (Torch).
 struct Torch {
-  static constexpr pm::api::Type<pm::map::Torch> type{};
+  static constexpr pm::api::Type<pm::map::Torch> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
 };
 /// A crucifix.
 struct Crucifix {

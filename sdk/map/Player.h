@@ -849,10 +849,12 @@ inline constexpr pm::sdk::EntryDesc DragRigidbodyUse_FixedUpdate{
 
 }  // namespace pm::map
 
-// The game API for the investigators (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and returns its type's default (false, null) without touching the game. A Player it
-// returns is a managed reference: keep it across frames only in a pm::api::Held.
+/// @file
+/// @brief The game API for the investigators (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (false, null) without touching the game. A
+/// Player it returns is a managed reference: keep it across frames only in a pm::api::Held.
 namespace phasmo {
 /// @addtogroup players
 /// @{

@@ -7,8 +7,9 @@ name) and the **behaviour type** (whose type-specific rules the AI follows). The
 evidence come from `GhostCollection` and `GhostData`. The entries are in `sdk/map/GhostTypes.h`,
 `GhostInfo.h`, `GhostController.h`, `GhostCollection.h`, `LevelStats.h` and `GhostAI.h`; their `///`
 notes are the authority, and this page ties them together. Facts were read from decompiled code of Steam
-build 25811160. The RVAs below belong to that build and are given as evidence only: `tools/gamecheck.ps1`
-prints every entry's value for the build in hand.
+build 25811160. `tools/gamecheck.ps1`
+prints every entry's value for the build in hand. Each type's own rules are gathered in
+[the vanilla ghosts, type by type](vanilla-ghosts.md).
 
 ## How a ghost gets its type
 

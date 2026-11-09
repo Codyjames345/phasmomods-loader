@@ -43,8 +43,9 @@ inline constexpr pm::sdk::EntryDesc PlayerNoise{.key = "PlayerNoise", .name = "P
 
 inline constexpr const char* NoiseKind_values[] = {"WalkFootstep", "SprintFootstep", "CrouchFootstep"};
 
+// Found by its values.
 /// The kind of a player's footstep, an enum nested in PlayerNoise (name obfuscated, value names real):
-/// WalkFootstep 0, SprintFootstep 1, CrouchFootstep 2. Found by its values. Inferred: from the class dump.
+/// WalkFootstep 0, SprintFootstep 1, CrouchFootstep 2. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc NoiseKind{.key = "NoiseKind", .owner = "PlayerNoise",
                                               .values = NoiseKind_values};
 /// A sprinting player's footstep. Inferred: from the value's name.
@@ -104,9 +105,12 @@ inline constexpr pm::sdk::EntryDesc NetworkedStamina_ForceOutOfBreatheLocal{
 
 }  // namespace pm::map
 
-// The game API for what a ghost senses (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and returns its type's default (null, 0, false) without touching the game.
+/// @file
+/// @brief The game API for what a ghost senses (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (null, 0, false) without touching the
+/// game.
 namespace phasmo {
 /// @addtogroup ghost
 /// @{

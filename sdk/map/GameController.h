@@ -419,9 +419,11 @@ inline constexpr pm::sdk::EntryDesc GameSettings_gameplay{
 
 }  // namespace pm::map
 
-// The game API for the contract's way in and out (sdk/api/game_api.h). Every member is called on
-// Unity's main thread. One that did not resolve in the running game build logs "<key> is not available
-// in this game build" once and returns its type's default without touching the game.
+/// @file
+/// @brief The game API for the contract's way in and out (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default without touching the game.
 namespace phasmo {
 /// @addtogroup lobby
 /// @{
@@ -488,7 +490,7 @@ struct LiftButton {
 
 /// What RewardManager.EventRow answers: a Nullable of the score to send, 32 bytes in this build. All zero is no event.
 struct RewardEventRow {
-  uint64_t words[4]{};
+  uint64_t words[4]{};  ///< the Nullable's bytes, copied whole; all zero is no event
 };
 
 /// The reward screen. `screen` below is the RewardManager. A mod hooks these to act around the screen's own work.

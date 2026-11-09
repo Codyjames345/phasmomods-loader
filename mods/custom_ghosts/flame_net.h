@@ -18,10 +18,12 @@ enum Kind : uint8_t {
   kForget = 7,  // host to all: the Lethe makes a piece of media fade, list:u8 (0 photo, 1 video, 2 sound) slot:u8
   kAnger = 8,   // host to all: the Draugr's anger, angered:u8 (0 or 1)
   kSeen = 9,    // host to all: whether anyone looks at the Brownie, seen:u8 (0 or 1)
+  kDoors = 10,  // host to all: the Asterion breaks these doors open, count:u8 then ViewID:u32 each
+  kDrag = 11,   // host to all: the Draugr drags a thing, or stops, ViewID:u32 then dragging:u8 (0 or 1)
   // The Squatter's (squatter_net.h, which reads and writes their bodies):
-  kSquatter = 10,       // master to all: what every client shows, a squatter::Shown
-  kSquatterTry = 11,    // a client to the master: its player tried a locked exit, no body
-  kSquatterSprint = 12, // a client to the master: its player's sprint, canSprint:u8 (0 or 1) then speed:f32
+  kSquatter = 12,       // master to all: what every client shows, a squatter::Shown
+  kSquatterTry = 13,    // a client to the master: its player tried a locked exit, no body
+  kSquatterSprint = 14, // a client to the master: its player's sprint, canSprint:u8 (0 or 1) then speed:f32
 };
 
 inline std::vector<uint8_t> header(Kind kind) { return {'C', 'G', 'F', kind}; }
@@ -106,6 +108,44 @@ inline std::vector<uint8_t> seen(bool seen) {
 inline bool read_seen(const uint8_t* data, size_t size, bool& seen) {
   if (kind_of(data, size) != kSeen || size != 5 || data[4] > 1) return false;
   seen = data[4] == 1;
+  return true;
+}
+
+/** The doors the Asterion breaks open, by their PhotonView's ViewID (at most 255). */
+inline std::vector<uint8_t> doors(const std::vector<uint32_t>& ids) {
+  std::vector<uint8_t> out = header(kDoors);
+  const size_t n = ids.size() > 255 ? 255 : ids.size();
+  out.push_back(static_cast<uint8_t>(n));
+  for (size_t i = 0; i < n; ++i) put(out, ids[i]);
+  return out;
+}
+
+/** The doors the host says the Asterion broke open: false for another kind, a bad length or none. */
+inline bool read_doors(const uint8_t* data, size_t size, std::vector<uint32_t>& ids) {
+  if (kind_of(data, size) != kDoors || size < 5 || data[4] == 0 || size != 5 + 4 * size_t{data[4]}) return false;
+  ids.clear();
+  size_t at = 5;
+  for (int i = 0; i < data[4]; ++i) {
+    uint32_t id = 0;
+    take(data, size, at, id);
+    ids.push_back(id);
+  }
+  return true;
+}
+
+/** The thing the Draugr drags, by its PhotonView's ViewID, and whether the drag goes on or is over. */
+inline std::vector<uint8_t> drag(uint32_t id, bool dragging) {
+  std::vector<uint8_t> out = header(kDrag);
+  put(out, id);
+  out.push_back(dragging ? 1 : 0);
+  return out;
+}
+
+/** The host's drag message: false for another kind or a bad length. */
+inline bool read_drag(const uint8_t* data, size_t size, uint32_t& id, bool& dragging) {
+  size_t at = 4;
+  if (kind_of(data, size) != kDrag || size != 9 || data[8] > 1 || !take(data, size, at, id)) return false;
+  dragging = data[8] == 1;
   return true;
 }
 

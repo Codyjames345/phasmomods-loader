@@ -17,7 +17,7 @@ struct Check {
 
 /**
  * The update source and installer. The Velopack backend implements it; tests fake it.
- * `run` calls it from a worker thread that can outlive `run`, which is why `run` co-owns it.
+ * `check` and `Install` call it from worker threads that can outlive them, which is why they co-own it.
  * Any method may throw (the Velopack wrapper does on every native error); the layer catches it
  * and carries on with the installed version.
  */
@@ -29,9 +29,10 @@ class Backend {
   /** The installed version. */
   virtual std::string current() = 0;
   virtual Check check() = 0;
-  virtual bool download(const std::string& version, std::wstring& error) = 0;
-  /** Apply the downloaded version once this program exits, then, when `restart`, start the new launcher with `arguments`. */
-  virtual bool apply(const std::vector<std::wstring>& arguments, bool restart, std::wstring& error) = 0;
+  /** Download what the last check found. `progress` hears 0 to 100 as it goes, on the calling thread. */
+  virtual bool download(const std::string& version, const std::function<void(int percent)>& progress, std::wstring& error) = 0;
+  /** Apply the downloaded version once this program exits, then start the new launcher with `arguments`. */
+  virtual bool apply(const std::vector<std::wstring>& arguments, std::wstring& error) = 0;
 };
 
 enum class Outcome {
@@ -39,31 +40,60 @@ enum class Outcome {
   UpToDate,
   Restarting,    // the new version is applied once this program exits, which it must do now
   CarryOn,       // no update happened: start the installed version
+  Available,     // the check found a version to install; nothing is downloaded yet
 };
 
 struct Report {
   Outcome outcome = Outcome::CarryOn;
-  std::wstring message;  // for the log or the user; empty for NotInstalled
-};
-
-/** What the caller hears from the worker while an update runs. Both are called on the worker thread; either may be empty. */
-struct Progress {
-  /** The check found `version`, and the update to it starts. Not called once `run` has stopped waiting. */
-  std::function<void(const std::string& version)> found;
-  /** Asked just before the apply: whether the new version starts once it is applied (empty: it does). */
-  std::function<bool()> restart;
+  std::wstring message;  // for the log or the user; empty for NotInstalled and Available
+  std::string version;   // the version on offer, when Available
 };
 
 /**
- * Check, download and apply on a worker thread, waiting at most `limit` for the check and
- * download. When `limit` passes first, run returns CarryOn and the worker is told it was
- * abandoned: it starts neither a download nor an apply afterwards. The worker shares ownership
- * of `backend`, so it stays valid however long an abandoned call takes. `arguments` are copied.
- * Once an apply has started, run waits for it without a limit. Velopack's apply only starts its
- * updater, which waits for this program to exit, and returns, so that wait is short.
+ * Ask the update source for another version on a worker thread, waiting at most `limit`. The check
+ * only reads the release feed, so a short limit suits every connection. When `limit` passes first,
+ * the result is CarryOn and the worker, which shares ownership of `backend`, ends on its own.
+ * Available leaves `backend` ready to download that version with `Install::start`.
  */
-Report run(std::shared_ptr<Backend> backend, const std::vector<std::wstring>& arguments,
-           std::chrono::milliseconds limit, Progress progress = {});
+Report check(std::shared_ptr<Backend> backend, std::chrono::milliseconds limit);
+
+/**
+ * A download and apply running on a worker thread. It has no overall time limit, so a slow
+ * connection finishes; it gives up only when the download fails or stops making progress.
+ * Once the apply has started it is never interrupted: Velopack's apply only starts its updater,
+ * which waits for this program to exit, and returns, so it is short.
+ */
+class Install {
+ public:
+  struct Status {
+    bool finished = false;
+    int percent = 0;  // the download's progress, 0 to 100
+    Report report;    // when finished: Restarting, or CarryOn with why
+  };
+  /** Start downloading `version`, which the last `check` on `backend` found, then apply it to restart with `arguments`. */
+  static Install start(std::shared_ptr<Backend> backend, std::string version, std::vector<std::wstring> arguments);
+  /**
+   * Where the install is at `now`. When the download has reported no progress for longer than `stall`
+   * (counted from the start until its first report), it is abandoned: the result is CarryOn, and the
+   * worker finishes the download in the background but never applies it.
+   */
+  Status poll(std::chrono::steady_clock::time_point now, std::chrono::milliseconds stall);
+  /** Stop waiting, so the download is never applied. False once the apply has started: keep polling for its result. */
+  bool cancel();
+
+  struct Job;  // what the handle and its worker share (tools/update.cpp)
+
+ private:
+  explicit Install(std::shared_ptr<Job> job) : job_(std::move(job)) {}
+  std::shared_ptr<Job> job_;
+};
+
+/** Whether to offer `version` to the player: every version but the one they chose to ignore. */
+bool should_offer(const std::string& version, const std::string& ignored);
+/** The version saved in `file` as ignored; empty when none is saved or it can't be read. */
+std::string read_ignored_version(const std::filesystem::path& file);
+/** Saves `version` as ignored in `file`, making its folder. False when it could not be saved. */
+bool save_ignored_version(const std::filesystem::path& file, const std::string& version);
 
 /** The launcher's own arguments after argv[0], unchanged, for the restarted launcher. */
 std::vector<std::wstring> restart_arguments(const std::vector<std::wstring>& launcherArguments);

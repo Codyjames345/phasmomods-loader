@@ -76,6 +76,7 @@ void frame(int type) {
   void* ghost = haunting && phasmo::PhotonNetwork::get_IsMasterClient() ? haunting : nullptr;
   const bool steered = ghost && content::player_controlled();
   asterion::tick(ghost, type);  // before the speed rules: it may stop the ghost
+  asterion::tick_doors(haunting ? type : 0);  // every client: broken doors swing open and lock
   lithobolia::tick(ghost, type);
   bogeyman::tick(ghost, type, steered);  // before the speed rules: its room sets its speed
   brownie::tick_host(ghost, type);       // and who is looking sets the Brownie's
@@ -220,7 +221,9 @@ void receive(int sender, const uint8_t* data, size_t size) {
     case net_msg::kViewing:
     case net_msg::kForget: lethe::receive(sender, data, size); break;
     case net_msg::kAnger: behaviour::receive(sender, data, size); break;
+    case net_msg::kDrag: behaviour::receive(sender, data, size); break;
     case net_msg::kSeen: brownie::receive(sender, data, size); break;
+    case net_msg::kDoors: asterion::receive(sender, data, size); break;
     case net_msg::kSquatter:
     case net_msg::kSquatterTry:
     case net_msg::kSquatterSprint: squatter::receive(sender, data, size); break;

@@ -1,9 +1,9 @@
 # Doors, exits and keys
 
-Which doors are a map's way out, how the game locks and opens them, who may send each of their RPCs, how a player's try at
-a locked door reaches code, and how to tell that a player is out of the map. The entries are in `sdk/map/Door.h`,
-`LevelController.h`, `LevelRoom.h` and `Player.h`; their `///` notes are the authority. Code facts were read from
-decompiled code of Steam build 25811160 (`re/decomp.mjs <key>`); scene facts from copies of that build's map scenes with
+How to find a door and turn its leaf, which doors are a map's way out, how the game locks and opens them, who may send
+each of their RPCs, how a player's try at a locked door reaches code, and how to tell that a player is out of the map. The
+entries are in `sdk/map/Door.h`, `LevelController.h`, `LevelRoom.h`, `Player.h` and `UnityWorld.h`; their `///` notes are
+the authority. Code facts were read from decompiled code of Steam build 25811160 (`re/decomp.mjs <key>`); scene facts from copies of that build's map scenes with
 the pinned UnityPy. This page names map keys, never addresses.
 
 ## The exits
@@ -46,6 +46,32 @@ drains no sanity for it, and the hunt never goes for a player in one (`GhostHunt
 living player (`Player.isDead` clear) is in the map exactly when their room is not of kind `RoomKind.outsideMap`. A
 player with no room yet has not entered any trigger, and a count that meets one cannot be trusted.
 
+## Finding a door
+
+- Every swinging door is a `HingeDoor`, which is a `Door`. Find them with `Object.FindObjectsOfType` on
+  `HingeDoor.type`. `LevelRoom.doors` holds a room's doors.
+- `Door.kind` says what kind it is. `DoorKind.Main` is an exit (above), which the ghost's own door choice
+  (`GhostActivity.GetDoorToOpen`) never picks.
+- `Door.view` is the door's `PhotonView`. Its `PhotonView.get_ViewID` names the same door on every client, so
+  send that number when you tell other clients about a door.
+- A double door's leaves name each other in one of two fields, `Door.otherDoor` or `Door.pairedDoor`; the level
+  uses either (read from the scene files, 2026-11-06). One leaf may name the other without the other naming it
+  back, so check both fields both ways. A single door has neither set.
+
+## A door's leaf and its angle
+
+- `Door.body` is the leaf's `Rigidbody`. The leaf turns with its `Transform` (`Component.get_transform` on the
+  body).
+- The leaf turns about `HingeDoor.hingeAxis` (a Unity `Axis`). Read its angle from
+  `Transform.get_localEulerAngles` on that axis: x for `Axis.X`, z for `Axis.Z`, else y.
+- `Door.closedAngle` is its angle when shut and `HingeDoor.openAngle` its angle when fully open, both in degrees
+  on that axis. `HingeDoor.Awake` sets the open angle from the hinge's limit, so read it once the door is awake.
+- `Door.closed` is not the leaf's state (see "Opening a door quietly"): whether the leaf is shut is
+  `HingeDoor.Update`'s snap test, its angle within 7 degrees of `Door.closedAngle`.
+- To turn a leaf yourself, make its body kinematic (`Rigidbody.set_isKinematic`), set the angle on the hinge's
+  axis with `Transform.set_localEulerAngles`, and keep the other two angles as they were. This moves the leaf on
+  your client only. Do it on every client, or tell them with your mod's own message.
+
 ## The lock and the house key
 
 `Door.locked` is each client's copy of the lock. `Door.SyncLockState`, an RPC to every client, stores it: it freezes the
@@ -62,6 +88,29 @@ Keys open locked doors. Every map has a `Key` object named as its main or house 
 or cabinet key too. A player who
 picks one up runs `Key.GrabbedKey` on their own client, which adds the key's `KeyInfo` to that client's local player's
 `Player.keys`. `KeyInfo.keyType` is the `DoorKind` it opens.
+
+## Locking a door yourself
+
+- **Never send or call `Door.SyncLockState`** ([Photon](photon.md), "The game's checks on an RPC").
+- `HingeDoor.LockDoor` is a hinged door's own lock, the same steps as `Door.LockDoor` above: it locks a shut door
+  only, with `force` true or when the leaf is nearly shut snapping the leaf shut first. An open door, unforced,
+  stays unlocked. The game never locks an open door.
+- To leave a door locked where it stands, open or shut, set on every client what `Door.SyncLockState` sets:
+  `Door.locked` true, the body's constraints `Rigidbody.kFreezeAll` (`Rigidbody.set_constraints`), then
+  `Door.CheckOcclusionPortal`. An interior door locked this way still opens to a player's first try ("A player's try
+  at a locked door", step 2), so to keep it locked set its `Door.kind` to `DoorKind.PermanentLock` as well: a try
+  then rattles it. Custom Ghosts' Asterion does all of this for a door it breaks open, after swinging the leaf to
+  `HingeDoor.openAngle`, with the host naming the door to each client by its ViewID.
+- The door code tests a door's kind only for None and Main. A locked door of any other kind is still pushed by a
+  hunt that passes through it, and still picked by ghost events (`GhostActivity.GetDoorToOpen` skips only the
+  exits); not seen in the game yet.
+- Stop a leaf you moved when you lock it. A hinge door sets the volume of its creak (`Door.loopSource`)
+  from how fast its leaf turns, and only while it is unlocked, so a leaf locked while still turning creaks on
+  at that volume (seen in the game, 2026-11-07). As you lock it, zero its body's velocities and set the creak's
+  volume to 0 (`AudioSource.set_volume`), which is what `HingeDoor.Update` gives a leaf that is not turning.
+  Custom Ghosts' Asterion locks its broken doors this way, with no gap in which a player could move them.
+- `Door.CheckOcclusionPortal` updates whether the camera sees through the doorway. Call it after you open, shut
+  or lock a door yourself.
 
 ## A player's try at a locked door
 
@@ -119,6 +168,12 @@ runs, unless the door's `PhotonObjectInteract` is off or already in use:
   (`LevelStats.amountOfGhostInteractions`).
 
 So the force cannot move a door without leaving paranormal activity behind.
+
+**The ghost's other pushes.** `Door.GhostForceDoor` does nothing while `Door.forceRoutine` is set, and keeps its
+push there until the push ends. `Door.GhostOpenDoorEvent` is a ghost event's push: it starts without checking
+`Door.forceRoutine`, clears it as it ends, and when its first argument is true pushes the double door's other leaf
+too, one time in three. Live (2026-11-06): on a shut door the force often leaves the leaf where it is; three of four
+shut doors did not turn.
 
 For Custom Ghosts' Squatter the force's callers above are closed off: its restraint refuses every change of state but
 idling, wandering and its favourite room (only idling while the mod steers it), whose states call neither method, and

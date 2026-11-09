@@ -6,12 +6,15 @@
 #include "win_handle.h"
 #include "../host/mod_deps.h"
 #include <windows.h>
+#include <commctrl.h>
 #include <shellapi.h>
 #include <algorithm>
 #include <filesystem>
 #include <atomic>
 #include <chrono>
 #include <fstream>
+#include <memory>
+#include <optional>
 #include <thread>
 #include <utility>
 
@@ -366,9 +369,10 @@ std::wstring describe(const Result& result) {
 constexpr wchar_t kName[] = L"PhasmoMods Loader";      // the message boxes' title
 constexpr wchar_t kTitle[] = L"PhasmoMods Loader " PM_WIDEN(PM_SUITE_VERSION);  // the window's title
 constexpr int kIcon = 1;                               // tools/launcher.rc
-constexpr std::chrono::seconds kUpdateLimit{10};       // the longest an update check delays play
-constexpr UINT kUpdateFound = WM_APP + 1;              // sent by the worker; lParam is the version (std::string*)
+constexpr std::chrono::seconds kCheckLimit{10};        // the longest an update check delays play
+constexpr std::chrono::seconds kDownloadStall{30};     // a download with no progress for this long gives up
 constexpr int kDevelopmentBox = 105;                   // the checkbox that takes development builds
+constexpr int kUpdateNow = 1001, kRemindLater = 1002, kIgnore = 1003;  // the update popup's buttons
 
 /** Add a timestamped line to launcher_log(), for what `--steam` mode cannot show in a window. */
 void append_log(const std::wstring& message) {
@@ -392,12 +396,145 @@ bool takes_development() {
   return update::wants_development(update::read_development_choice(development_file()), PM_SUITE_VERSION);
 }
 
-/** Check for updates on this thread, waiting at most kUpdateLimit. A check that cannot start reports CarryOn. */
-update::Report update_now(const std::vector<std::wstring>& launcherArguments, update::Progress progress = {}) {
-  update::Report report{update::Outcome::CarryOn, pm::text::widen(pm::i18n::text("launcher.check-updates-starting-installed"))};
+/** %LOCALAPPDATA%\PhasmoMods\update_ignored.txt, the version the player chose to ignore. */
+fs::path ignored_file() { return data_file(L"update_ignored.txt"); }
+
+/** How the player is asked: the update popup at start-up, or the development box's confirmation. */
+enum class Ask { Offer, Confirm };
+/** What the player chose in the update dialog. */
+enum class Choice { UpdateNow, RemindLater, Ignore, Declined };
+
+/** What the update dialog and its callback share; the strings live as long as the dialog. */
+struct UpdateDialog {
+  std::shared_ptr<update::Backend> backend;
+  std::string version;
+  std::vector<std::wstring> arguments;
+  std::wstring question, yes, later, ignore, downloading;
+  TASKDIALOG_BUTTON buttons[3]{};
+  TASKDIALOGCONFIG progressPage{};
+  std::optional<update::Install> install;
+  bool finished = false;
+  update::Report report{update::Outcome::CarryOn, L"", ""};
+};
+
+/** Settle the dialog's result and close it. */
+void close_with(HWND dialog, UpdateDialog* state, update::Report report) {
+  state->finished = true;
+  state->report = std::move(report);
+  SendMessageW(dialog, TDM_CLICK_BUTTON, IDCANCEL, 0);
+}
+
+HRESULT CALLBACK update_dialog_proc(HWND dialog, UINT note, WPARAM wParam, LPARAM, LONG_PTR data) {
+  auto* state = reinterpret_cast<UpdateDialog*>(data);
+  switch (note) {
+    case TDN_BUTTON_CLICKED:
+      if (!state->install && !state->finished) {
+        // The question's page: Update now (or Yes) moves to the progress page; any other button closes it.
+        if (wParam == kUpdateNow || wParam == IDYES) {
+          SendMessageW(dialog, TDM_NAVIGATE_PAGE, 0, reinterpret_cast<LPARAM>(&state->progressPage));
+          return S_FALSE;
+        }
+        return S_OK;
+      }
+      // The progress page's Cancel. Once the apply has started it runs to its end, so the click waits for it.
+      if (state->finished) return S_OK;
+      if (!state->install->cancel()) return S_FALSE;
+      state->finished = true;
+      state->report = {update::Outcome::CarryOn, L"", ""};
+      return S_OK;
+    case TDN_NAVIGATED:
+      try {
+        state->install = update::Install::start(state->backend, state->version, state->arguments);
+      } catch (...) {
+        close_with(dialog, state, {update::Outcome::CarryOn,
+                   pm::text::widen(pm::i18n::text("updater.failed", {{"reason", pm::i18n::text("updater.unknown-error")}})), ""});
+      }
+      return S_OK;
+    case TDN_TIMER: {
+      if (!state->install || state->finished) return S_OK;
+      const update::Install::Status status = state->install->poll(std::chrono::steady_clock::now(), kDownloadStall);
+      SendMessageW(dialog, TDM_SET_PROGRESS_BAR_POS, status.percent, 0);
+      if (status.finished) close_with(dialog, state, status.report);
+      return S_OK;
+    }
+  }
+  return S_OK;
+}
+
+/**
+ * Ask the player about `version` with the Windows task dialog, over `owner` (null: on its own, as under Steam).
+ * Updating moves to a progress bar until the install restarts this program, fails, stalls or is cancelled.
+ */
+update::Report ask_to_update(HWND owner, std::shared_ptr<update::Backend> backend, const std::string& version,
+                             std::vector<std::wstring> arguments, Ask ask, Choice& choice) {
+  UpdateDialog state;
+  state.backend = std::move(backend);
+  state.version = version;
+  state.arguments = std::move(arguments);
+  state.question = pm::text::widen(ask == Ask::Offer ? pm::i18n::text("updater.available", {{"version", version}})
+                                                    : pm::i18n::text("launcher.development-confirm", {{"version", version}}));
+  state.yes = pm::text::widen(pm::i18n::text("updater.update-now"));
+  state.later = pm::text::widen(pm::i18n::text("updater.remind-later"));
+  state.ignore = pm::text::widen(pm::i18n::text("updater.ignore"));
+  state.downloading = pm::text::widen(pm::i18n::text("launcher.updating", {{"version", version}}));
+  state.buttons[0] = {kUpdateNow, state.yes.c_str()};
+  state.buttons[1] = {kRemindLater, state.later.c_str()};
+  state.buttons[2] = {kIgnore, state.ignore.c_str()};
+
+  TASKDIALOGCONFIG question{};
+  question.cbSize = sizeof(question);
+  question.hwndParent = owner;
+  question.hInstance = GetModuleHandleW(nullptr);
+  question.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_POSITION_RELATIVE_TO_WINDOW;
+  question.pszWindowTitle = kName;
+  question.pszMainInstruction = state.question.c_str();
+  if (ask == Ask::Offer) {
+    question.pButtons = state.buttons;
+    question.cButtons = 3;
+    question.nDefaultButton = kUpdateNow;
+  } else {
+    question.dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON;
+    question.nDefaultButton = IDYES;
+  }
+  question.pfCallback = update_dialog_proc;
+  question.lpCallbackData = reinterpret_cast<LONG_PTR>(&state);
+
+  state.progressPage = question;
+  state.progressPage.pButtons = nullptr;
+  state.progressPage.cButtons = 0;
+  state.progressPage.dwCommonButtons = TDCBF_CANCEL_BUTTON;
+  state.progressPage.nDefaultButton = IDCANCEL;
+  state.progressPage.dwFlags = TDF_SHOW_PROGRESS_BAR | TDF_CALLBACK_TIMER | TDF_POSITION_RELATIVE_TO_WINDOW;
+  state.progressPage.pszMainInstruction = state.downloading.c_str();
+
+  int button = IDCANCEL;
+  if (FAILED(TaskDialogIndirect(&question, &button, nullptr, nullptr))) {
+    choice = Choice::RemindLater;
+    return {update::Outcome::CarryOn, pm::text::widen(pm::i18n::text("launcher.check-updates-starting-installed")), ""};
+  }
+  if (state.install || state.finished) choice = Choice::UpdateNow;
+  else if (button == kIgnore) choice = Choice::Ignore;
+  else if (ask == Ask::Confirm) choice = Choice::Declined;
+  else choice = Choice::RemindLater;  // Remind me later, or the dialog closed
+  return state.report;
+}
+
+/**
+ * The start-up update: check, waiting at most kCheckLimit, then offer any version the player has not ignored.
+ * Remind me later and Ignore carry on with the installed version. A check that cannot start reports CarryOn.
+ */
+update::Report update_at_start(HWND owner, const std::vector<std::wstring>& launcherArguments) {
+  update::Report report{update::Outcome::CarryOn, pm::text::widen(pm::i18n::text("launcher.check-updates-starting-installed")), ""};
   try {
-    report = update::run(update::velopack_backend(update::feed_for(takes_development())),
-                         update::restart_arguments(launcherArguments), kUpdateLimit, std::move(progress));
+    auto backend = update::velopack_backend(update::feed_for(takes_development()));
+    report = update::check(backend, kCheckLimit);
+    if (report.outcome != update::Outcome::Available) return report;
+    if (!update::should_offer(report.version, update::read_ignored_version(ignored_file())))
+      return {update::Outcome::CarryOn, L"", ""};
+    Choice choice = Choice::RemindLater;
+    const std::string version = report.version;
+    report = ask_to_update(owner, backend, version, update::restart_arguments(launcherArguments), Ask::Offer, choice);
+    if (choice == Choice::Ignore) update::save_ignored_version(ignored_file(), version);
   } catch (...) { /* An update that cannot start never stops the game: keep the prepared report. */ }
   return report;
 }
@@ -412,11 +549,13 @@ struct WindowState {
   HWND developmentBox = nullptr;
   std::wstring executable;
   std::wstring launchOption;
-  std::wstring usualStatus;  // the status box's text when nothing is running
+  std::wstring usualStatus;  // the status box's text when nothing is running: what is wrong with the mods, or nothing
   HWND status = nullptr;
   HWND attachButton = nullptr;
   bool busy = false;
   bool updating = false;  // the worker is checking for updates, not attaching
+  bool switching = false;  // that check follows a click on the development box, which the player confirms
+  std::shared_ptr<update::Backend> updateBackend;  // what the check asked, ready to download what it found
   bool attached = false;  // mods were loaded into the game: what they run from can't be replaced until it closes
   std::atomic<bool> closing{false};  // the window was closed while busy: it goes when the worker ends
   Result result;
@@ -432,24 +571,31 @@ void set_controls(WindowState* state, bool on) {
   EnableWindow(state->developmentBox, on && !state->attached ? TRUE : FALSE);
 }
 
-/** Check for updates on a worker, with the controls off until it ends; WM_TIMER shows the result. False when it could not start. */
-bool start_update(HWND window, WindowState* state) {
+/** Put the development box and its saved choice back as they were, after the player declined the switch or it could not be checked. */
+void undo_switch(WindowState* state) {
+  const bool ticked = SendMessageW(state->developmentBox, BM_GETCHECK, 0, 0) == BST_CHECKED;
+  update::save_development_choice(development_file(), !ticked);
+  SendMessageW(state->developmentBox, BM_SETCHECK, ticked ? BST_UNCHECKED : BST_CHECKED, 0);
+}
+
+/**
+ * Check for updates on a worker, with the controls off until it ends; WM_TIMER asks the player and shows the result.
+ * `switching`: the check follows a click on the development box. False when it could not start.
+ */
+bool start_update(HWND window, WindowState* state, bool switching) {
   if (!SetTimer(window, 1, 100, nullptr)) return false;
   state->busy = state->updating = true;
+  state->switching = switching;
   state->completed.store(false, std::memory_order_relaxed);
   set_controls(state, false);
   SetWindowTextW(state->status, pm::text::widen(pm::i18n::text("launcher.checking-updates")).c_str());
   try {
-    state->updateReport = {update::Outcome::CarryOn, pm::text::widen(pm::i18n::text("launcher.check-updates-starting-installed"))};
-    state->worker = std::thread([state, window] {
+    state->updateReport = {update::Outcome::CarryOn, pm::text::widen(pm::i18n::text("launcher.check-updates-starting-installed")), ""};
+    state->worker = std::thread([state] {
       try {
-        update::Progress progress;
-        // Sent, not posted: the version string lives only for this call, and the window outlives the worker.
-        progress.found = [window](const std::string& version) {
-          SendMessageW(window, kUpdateFound, 0, reinterpret_cast<LPARAM>(&version));
-        };
-        progress.restart = [state] { return !state->closing; };  // closed: install, but do not come back
-        state->updateReport = update_now({state->executable}, std::move(progress));
+        auto backend = update::velopack_backend(update::feed_for(takes_development()));
+        state->updateBackend = backend;
+        state->updateReport = update::check(backend, kCheckLimit);
       } catch (...) { /* Keep the prepared report. */ }
       state->completed.store(true, std::memory_order_release);
     });
@@ -461,6 +607,31 @@ bool start_update(HWND window, WindowState* state) {
     return false;
   }
   return true;
+}
+
+/**
+ * After the check: ask the player about what it found, and install it if they agree. The start-up check offers
+ * Update now, Remind me later and Ignore; the development box asks for confirmation, and declining undoes the switch.
+ */
+update::Report settle_update(HWND window, WindowState* state) {
+  update::Report report = state->updateReport;
+  if (report.outcome == update::Outcome::Available && !state->closing) {
+    const std::string version = report.version;
+    Choice choice = Choice::RemindLater;
+    if (state->switching) {
+      report = ask_to_update(window, state->updateBackend, version, {}, Ask::Confirm, choice);
+      if (choice == Choice::Declined) undo_switch(state);
+    } else if (update::should_offer(version, update::read_ignored_version(ignored_file()))) {
+      report = ask_to_update(window, state->updateBackend, version, {}, Ask::Offer, choice);
+      if (choice == Choice::Ignore) update::save_ignored_version(ignored_file(), version);
+    } else {
+      report = {update::Outcome::CarryOn, L"", ""};
+    }
+  } else if (state->switching && report.outcome == update::Outcome::CarryOn) {
+    undo_switch(state);  // the other builds could not be checked, so the box keeps the ones installed
+  }
+  state->updateBackend.reset();
+  return report;
 }
 
 /** Copy only the displayed setup command, transferring clipboard ownership on success. */
@@ -532,8 +703,8 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
         if (!update::save_development_choice(development_file(), on)) {
           SendMessageW(state->developmentBox, BM_SETCHECK, on ? BST_UNCHECKED : BST_CHECKED, 0);
           SetWindowTextW(state->status, pm::text::widen(pm::i18n::text("launcher.development-not-saved")).c_str());
-        } else {
-          start_update(window, state);
+        } else if (!start_update(window, state, true)) {
+          undo_switch(state);
         }
       } else if (LOWORD(wParam) == 102) {
         const bool copied = copy_option(window, state->launchOption);
@@ -548,14 +719,16 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
       state->busy = false;
       if (state->updating) {
         state->updating = false;
-        // Velopack's updater applies the new version once this program exits, then starts it unless
-        // the window was closing.
+        state->updateReport = settle_update(window, state);
+        // Velopack's updater applies the new version once this program exits, then starts it again.
         if (state->updateReport.outcome == update::Outcome::Restarting) { DestroyWindow(window); return 0; }
         set_controls(state, true);
         SetFocus(state->attachButton);
-        // Why the update failed comes first, then the usual text, which names any broken mods.
+        // What the update found comes first, then the usual text, which names any broken mods.
         const std::wstring& why = state->updateReport.message;
-        SetWindowTextW(state->status, (why.empty() ? state->usualStatus : why + L"\r\n" + state->usualStatus).c_str());
+        const std::wstring both = why.empty() || state->usualStatus.empty() ? why + state->usualStatus
+                                                                           : why + L"\r\n" + state->usualStatus;
+        SetWindowTextW(state->status, both.c_str());
         if (state->closing) DestroyWindow(window);
         return 0;
       }
@@ -565,10 +738,6 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
       if (state->closing) DestroyWindow(window);
       return 0;
     }
-    case kUpdateFound:
-      SetWindowTextW(state->status,
-                     pm::text::widen(pm::i18n::text("launcher.updating", {{"version", *reinterpret_cast<const std::string*>(lParam)}})).c_str());
-      return 0;
     case WM_CLOSE:
       if (state->busy) { state->closing = true; ShowWindow(window, SW_HIDE); }
       else DestroyWindow(window);
@@ -635,13 +804,13 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
   control(L"STATIC", pm::text::widen(pm::i18n::text("launcher.copy-intro")).c_str(), 0, 18, y + 74, 600, 24, 0);
   control(L"EDIT", state.launchOption.c_str(), WS_TABSTOP | WS_BORDER | ES_READONLY | ES_AUTOHSCROLL, 18, y + 101, 600, 26, 103);
   control(L"BUTTON", pm::text::widen(pm::i18n::text("launcher.copy")).c_str(), WS_TABSTOP, 18, y + 135, 205, 30, 102);
-  state.usualStatus = problems.empty() ? pm::text::widen(pm::i18n::text("launcher.keep-folder-outside-directory")) : problems;
+  state.usualStatus = problems;
   state.status = control(L"EDIT", state.usualStatus.c_str(),
     WS_TABSTOP | ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL, 18, y + 186, 600, 75, 104);
   ShowWindow(window, SW_SHOW);
   SetFocus(state.attachButton);
   // Check for updates on the worker before Attach is usable.
-  start_update(window, &state);
+  start_update(window, &state, false);
   MSG message{};
   while (GetMessageW(&message, nullptr, 0, 0) > 0) {
     if (!IsDialogMessageW(window, &message)) { TranslateMessage(&message); DispatchMessageW(&message); }
@@ -677,13 +846,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     const bool steam = values.size() > 2 && values[1] == L"--steam";
     if (result.outcome != pm::loader::Outcome::ready) {
       // A damaged install still updates, which is how it repairs itself.
-      const auto update = pm::launcher::update_now(values);
+      const auto update = pm::launcher::update_at_start(nullptr, values);
       if (update.outcome == pm::update::Outcome::Restarting) return 0;
       if (steam) pm::launcher::append_log(update.message);
       if (!update.message.empty()) result.detail += L"\r\n" + update.message;
     } else if (steam) {
-      // Update before the game starts. Steam shows no window, so anything but a restart goes to the log.
-      const auto update = pm::launcher::update_now(values);
+      // Update before the game starts. Steam shows no window, so the popup stands on its own, and anything
+      // but a restart goes to the log.
+      const auto update = pm::launcher::update_at_start(nullptr, values);
       if (update.outcome == pm::update::Outcome::Restarting) return 0;
       pm::launcher::append_log(update.message);
       std::wstring problems;

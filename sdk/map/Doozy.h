@@ -80,8 +80,9 @@ inline constexpr const char* DoozyBehaviourName_values[] = {
     "PointerDoubleClick", "PointerLongClick", "PointerLeftClick", "PointerMiddleClick", "PointerRightClick",
     "Selected",         "Deselected",        "Submit"};
 
-/// What a behaviour answers to, an enum nested in DoozyBehaviour (name obfuscated). Found by its values. Inferred:
-/// from the values' names.
+// Found by its values.
+/// What a behaviour answers to, an enum nested in DoozyBehaviour (name obfuscated). Inferred: from the values'
+/// names.
 inline constexpr pm::sdk::EntryDesc DoozyBehaviourName{.key = "DoozyBehaviourName", .owner = "DoozyBehaviour",
                                                        .assembly = "DoozyRuntime",
                                                        .values = DoozyBehaviourName_values};
@@ -140,9 +141,11 @@ inline constexpr pm::sdk::EntryDesc UISelectableColorAnimator_Play{
 
 }  // namespace pm::map
 
-// The game API for Doozy's UI (sdk/api/game_api.h). Every member is called on Unity's main thread. One that did not
-// resolve in the running game build logs "<key> is not available in this game build" once and returns its type's
-// default without touching the game.
+/// @file
+/// @brief The game API for Doozy's UI (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default without touching the game.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{

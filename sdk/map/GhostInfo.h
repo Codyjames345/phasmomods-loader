@@ -2,7 +2,7 @@
 
 // GhostInfo: the contract ghost's identity on every client, a component beside its GhostAI. The type
 // and its RPCs keep their real names; its traits field is obfuscated and found by shape, and the two
-// types inside the traits are found within it (sdk/README.md, "within" and "sameFieldAs"). Notes read
+// types inside the traits are found within it (sdk/internals/mapping.md, "within" and "sameFieldAs"). Notes read
 // from decompiled code are from build 25811160. sdk/systems/ghost-types.md ties it to the Mimic.
 
 #include "entry.h"
@@ -57,13 +57,13 @@ inline constexpr pm::sdk::EntryDesc GhostInfo_behaviourType{.key = "GhostInfo.be
                                                             .facts = GhostInfo_behaviourType_facts,
                                                             .within = "GhostInfo.traits"};
 
+// Found as the same GhostTraits field as GhostController.givenEvidence, whose fact decides it: SyncEvidence
+// stores the list at that place, but not through a register the resolver can prove holds this.
 /// The evidence the ghost gives in this contract, as the difficulty left it, on every client: a
-/// List<EvidenceType>, the first of the traits' two evidence lists, placed in GhostInfo. SyncEvidence
-/// makes it anew from the numbers it receives; the host's own copy comes with the traits from
+/// List<EvidenceType>, the first of the traits' two evidence lists, placed in GhostInfo. SyncEvidence makes
+/// it anew from the numbers it receives; the host's own copy comes with the traits from
 /// GhostController.givenEvidence through GhostAI.Init first. Empty when the difficulty gives none.
-/// Found as the same GhostTraits field as GhostController.givenEvidence, whose fact decides it:
-/// SyncEvidence stores the list at that place, but not through a register the resolver can prove
-/// holds this. Decompiled.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostInfo_givenEvidence{.key = "GhostInfo.givenEvidence",
                                                             .kind = pm::sdk::Kind::Field,
                                                             .confidence = pm::sdk::Confidence::Decompiled,
@@ -113,10 +113,12 @@ inline constexpr pm::sdk::EntryDesc GhostInfo_favouriteRoom{.key = "GhostInfo.fa
 
 }  // namespace pm::map
 
-// The game API for GhostInfo (sdk/api/game_api.h). Every member is called on Unity's main thread. One
-// that did not resolve in the running game build logs "<key> is not available in this game build"
-// once and returns its type's default (0, false, null) without touching the game. The traits field
-// has no wrapper: it is a struct holding managed references.
+/// @file
+/// @brief The game API for GhostInfo (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, false, null) without touching the
+/// game. The traits field has no wrapper: it is a struct holding managed references.
 namespace phasmo {
 /// @addtogroup ghost
 /// @{

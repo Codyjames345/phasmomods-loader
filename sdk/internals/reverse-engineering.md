@@ -1,7 +1,7 @@
 # Mapping the game: tools and pitfalls
 
 For whoever extends the SDK: how the game's code is read, and the mistakes earlier work made, so nobody makes them again.
-The rules for an entry are in the [SDK guide](../README.md#mapping-the-game). This page names map keys and class names,
+The rules for an entry are in the [mapping page](mapping.md). This page names map keys and class names,
 never addresses: the numbers belong to one build, and `re/decomp.mjs <key>` finds a key again on any build. Raw numbers go
 only in the gitignored `re/dump/`.
 
@@ -19,7 +19,7 @@ folder, and nothing here touches or describes the game's anti-cheat.
 
 ## The tools
 
-`tools/gamecheck.ps1` makes the dumps everything else reads ([Commands](../README.md#commands)): a Cpp2IL DiffableCs dump in
+`tools/gamecheck.ps1` makes the dumps everything else reads ([Commands](mapping.md#commands)): a Cpp2IL DiffableCs dump in
 `re/dump` (one C# file per class, with each field's offset as a comment), `re/names.tsv` (each method's address and
 signature) and `re/map-addresses.tsv` (each map key's resolved value). Then:
 

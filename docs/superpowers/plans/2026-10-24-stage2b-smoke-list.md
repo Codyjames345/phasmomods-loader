@@ -1,6 +1,6 @@
 # Stage 2b in-game test list
 
-The checks the user runs in the game for stage 2b (plan Task 14 Step 3), gathered from the task reports, the ledger, the plan and FINDINGS. The custom ghosts and Ghost Tells' ghosts, and their journal text, are read from the code and the string tables. The published page of this list keeps each result and note; this file is its source in the repository.
+The checks the user runs in the game for stage 2b (plan Task 14 Step 3), gathered from the task reports, the ledger, the plan and FINDINGS. The custom ghosts and Ghost Tells' ghosts, and their journal text, are read from the code and the string tables. The published page of this list keeps each result and note.
 
 ## Before you start
 
@@ -51,7 +51,7 @@ Tasks 12g, 13b, 13c and 14 (string tables).
 - [ ] Toggle Ghost Tells off and on, then Apply: `mods.log` shows it starting last. Apply with a mod left off and the panel open: its reason goes when it starts.
 - [ ] A long reason ("This game build lacks <key> and 3 more") fits the row's description column.
 - [ ] A folder with a broken `manifest.json`, and one with a DLL only: the launcher names both, the game starts, the panel shows greyed rows saying why, and the other mods run.
-- [ ] A corrupt or wrong-architecture DLL as a mod: a greyed row with a reason, **no Windows dialog**, and the other mods run.
+- [ ] A corrupt or wrong-architecture DLL as a mod: a greyed row with a reason, no Windows dialog, and the other mods run.
 - [ ] A copy of a bundled mod's folder with `"author": "PhasmoMods"` and another id beside a host copy in `bin`: a greyed row says the author is reserved, and the real mods run.
 - [ ] With a v0.1.0-era `launcher.ini` (`enabled=ghost-tells,custom-ghosts,spectral-flame`): the same mods start, and `launcher.ini` now holds the `phasmomods.` ids.
 - [ ] A saved custom difficulty pick survives the id change: a `custom_difficulty.txt` line `6=custom_ghosts.echo` becomes `6=phasmomods.custom-ghosts.echo`, and Custom 1's pick is still the Echo.
@@ -59,12 +59,27 @@ Tasks 12g, 13b, 13c and 14 (string tables).
 
 ## Development builds
 
-- [ ] Installed from the release, the development box starts unticked. Ticking it moves to the latest development build and restarts, with the box still ticked.
-- [ ] Unticking it moves back to the latest release, a lower version, and restarts, with the box unticked and the mods and the notice's answer kept.
-- [ ] With the box ticked and a new development build published, the next start updates to it. With the box unticked, a player sees no development build.
+- [ ] Installed from the release, the development box starts unticked. Ticking it asks "This will install version <x>, continue?" with the latest development build's version. Yes shows the progress bar, then restarts, with the box still ticked.
+- [ ] Ticking it and answering No (or closing the question) leaves the box unticked, and the next start stays on the release.
+- [ ] Unticking it asks the same with the release's version; Yes moves back to it, a lower version, and restarts, with the box unticked and the mods and the notice's answer kept.
+- [ ] With the box ticked and a new development build published, the next start offers it in the update popup. With the box unticked, a player is never offered a development build.
 - [ ] The box can't be changed once mods are attached, and works again after the program restarts.
 - [ ] A player on a development build joining a host on the release is removed with the list of what the lobby needs, and the reverse too.
 - [ ] Started through the Steam launch option, the program updates along the channel the box chose.
+
+## Updates and Setup
+
+- [ ] Setup.exe shows the PM icon in Explorer. After installing, the Start menu entry and Settings' installed apps read "PhasmoMods Loader", with the space and the icon.
+- [ ] An install from before this change (0.2.1): after it updates to this release, check whether the Start menu entry is renamed or still reads "PhasmoModsLoader".
+- [ ] The launcher window's buttons and checkboxes use the current Windows style, and still fit.
+- [ ] With no newer release, the installed launcher's status box reads "You are running the latest version." and nothing else when every mod is fine; a broken mod's reason follows on the next line.
+- [ ] With a newer release published, opening the launcher shows the popup naming it, with Update now, Remind me later and Ignore. Update now shows a progress bar that moves, then the launcher restarts on the new version.
+- [ ] Remind me later starts the installed version, and the next start asks again. Closing the popup with its X does the same.
+- [ ] Ignore starts the installed version, writes `%LOCALAPPDATA%\PhasmoMods\update_ignored.txt`, and the next start doesn't ask. A later release asks again.
+- [ ] Started through the Steam launch option with a newer release published: the popup shows before the game, in front of Steam. Update now restarts through Steam and the game starts on the new version; Remind me later starts the game.
+- [ ] Cancel on the progress bar starts the installed version, and the next start offers the release again.
+- [ ] On a slow connection (limit it, for example with Windows' metered settings or a throttling tool), a download that takes over 30 seconds in all still finishes.
+- [ ] Unplug the network partway through a download: within about 30 seconds the popup closes, and the status box (or `launcher.log` under Steam) says why, and the installed version starts.
 
 ## Lobbies and players
 
@@ -82,7 +97,7 @@ Tasks 13, 13b, 13c and 13d, with the closed-room start.
 - [ ] A vanilla friend joins a modded lobby: the host's tells and custom ghosts stay on for everyone else, the difficulty menu still offers the custom ghosts on the host, and the friend is kicked within 10 s and sees the game's own kick.
 - [ ] With a vanilla friend who pressed Ready: Start shows the popup, and within 10 s the friend is kicked and the host can start.
 - [ ] A joiner lacking a host mod, and one with another build of one: it leaves, and the game's popup lists every required mod with versions, the missing ones highlighted. Force it to stay (or use an old build) and the host's kick removes it.
-- [ ] A joiner with one extra mod: within a moment the extra's name appears in the game's popup **on the lobby's paper**, OK closes it, nobody is kicked, the extra's effects are gone, and it is back after leaving. Walk away from the board and back: the popup returns if not yet clicked.
+- [ ] A joiner with one extra mod: within a moment the extra's name appears in the game's popup on the lobby's paper, OK closes it, nobody is kicked, the extra's effects are gone, and it is back after leaving. Walk away from the board and back: the popup returns if not yet clicked.
 - [ ] A joiner with an extra mod that another of its extras requires (needs a test mod pair): both go off, the notice names both as extras, both come back on leaving.
 - [ ] A modded joiner under a vanilla host: the vanilla notice after 10 s, nothing custom runs, and mods return on leaving.
 - [ ] Host a public lobby: the public notice for the host and a modded joiner, nobody removed, mods off through a contract and the return to the lobby, and on after leaving. Then single player: mods on, no notice.
@@ -97,11 +112,11 @@ Tasks 13, 13b, 13c and 13d, with the closed-room start.
 - [ ] A v0.1.0 peer in a lobby: no mod of this build reacts to its messages.
 - [ ] A public room: no mod sends anything. A non-host client: no difficulty sync.
 - [ ] Suspend and resume in a lobby (a vanilla host, then leave): `mods.log` shows the same start order after resuming.
-- [ ] Steam achievements are the game's own: with mods on, an easy one (the training achievement) unlocks.
+- [ ] Steam achievements still work with mods on: an easy one (the training achievement) unlocks.
 
 ## The SDK's platform (stage 2a's untested parts)
 
-Watch `mods.log` through the sessions above; each item is a line to find, or to never find.
+Watch `mods.log` through the sessions above. Each item names a line to look for, or one that must not appear.
 
 - [ ] Scene facts (`scene_engine`): the journal's book and the PlayerView layer resolve; no `game map: the scene facts could not be resolved` and no `scene facts: exception` line, in the menu, a lobby and a contract.
 - [ ] The steering site (`patch_site`): the ghost steers in a hunt and a wander. Restart the mods from the Mods panel (out of a room), then steering still works: a new page, and the site restored by the host (`hooks: restored the N bytes at ...` at the stop). At game exit no `stays writable` line.
@@ -118,7 +133,7 @@ Tasks 5, 6, 7, 9b and FINDINGS 26.
 - [ ] Two players in a modded lobby: one turns to a ghost's page, and the other, looking at their book, sees the same ghost's page.
 - [ ] Clicks open each custom ghost's page; a guess on a custom ghost's button syncs between players.
 - [ ] Each custom ghost's page is laid out as the game's own: description, then strength and weakness under the game's labels, then the ability.
-- [ ] The Spectral Flame row appears after the game's rows while a ghost that gives it is shown; its name and line read right; it is marked, synced and filters the ghost buttons as the game's rows do; the rows' spacing fits.
+- [ ] The Spectral Flame row appears after the game's rows while a ghost that gives it is shown; its name and line are formatted correctly; it is marked, synced and filters the ghost buttons as the game's rows do; the rows' spacing fits.
 - [ ] A non-English journal: switch the game's language; vanilla text follows it, custom pages fall back to English, and the labels are in the chosen language.
 - The lobby journal
   - [ ] Custom ghost pages, list entries, evidence rows and lines (Ghost Tells' too) show in the lobby before a contract and after one.
@@ -147,7 +162,7 @@ Task 8. `docs/spectral-flame.md` describes every look.
 
 ## Custom ghosts
 
-One section for each custom ghost, in the order Custom Ghosts registers them (`mods/custom_ghosts/ghosts.h`). For each: set it up with Custom 1's Ghost Type option, once with evidence and once on zero evidence, in single player. The journal text is quoted from the table; read it for accuracy and tone. The player-controlled checks need Playable Ghost and a second client.
+One section for each custom ghost, in the order Custom Ghosts registers them (`mods/custom_ghosts/ghosts.h`). For each: set it up with Custom 1's Ghost Type option, once with evidence and once on zero evidence, in single player. The journal text is quoted from the table. The player-controlled checks need Playable Ghost and a second client.
 
 ### Echo
 
@@ -157,6 +172,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Echo; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Echo can be told from every other ghost by its tells below.
+- [ ] Its voice needs another player, since it hears only other players' voices; in single player it is dormant all along, so check there that the repeats still show and most other actions are lost, on zero evidence.
 
 **Tells**
 
@@ -165,11 +181,6 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 - [ ] With nobody heard near it for a minute it falls quiet: no speech, and 3 in 4 of its interactions and events do not happen, though a repeat always does.
 - [ ] A voice whose audio stopped (a player who died or left) no longer wakes it. Recordings go when the contract ends.
 - [ ] Which tap carries positional voice: check the voice is heard where the ghost was.
-
-**Told apart**
-
-- [ ] Its voice needs another player, since it hears only other players' voices; in single player it is dormant all along, so check there that the repeats still show and most other actions are lost, on zero evidence.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -181,7 +192,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -199,16 +210,12 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Dullahan; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Dullahan can be told from every other ghost by its tells below.
+- [ ] Needs a hunt with a straight run and a corner. Check on a small map too.
 
 **Tells**
 
 - [ ] In a hunt, very fast on long straight runs (3.4 m/s before the shared multipliers).
 - [ ] Turns slowly (45 degrees a second) and loses most of its speed at every corner (0.43 m/s facing away from its path).
-
-**Told apart**
-
-- [ ] Needs a hunt with a straight run and a corner. Check on a small map too.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -219,7 +226,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -234,16 +241,12 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Kikimora; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Kikimora can be told from every other ghost by its tells below.
+- [ ] Needs equipment left loose and a dark room. Check with all lights on in its room: nothing moves.
 
 **Tells**
 
 - [ ] Carries off loose equipment near it and hides it in another dark, empty room, leaving EMF where it was (the takeover and move).
 - [ ] Never touches anything in a room with the lights on.
-
-**Told apart**
-
-- [ ] Needs equipment left loose and a dark room. Check with all lights on in its room: nothing moves.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -255,7 +258,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -271,20 +274,16 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Draugr; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Draugr can be told from every other ghost by its tells below.
+- [ ] Needs a player to carry a prop out of its room. Check on zero evidence in single player, and the cold with Freezing withheld.
 
 **Tells**
 
 - [ ] Its things are the house's own props in its room when its rules started (never equipment). Carry one out: it is angered.
 - [ ] Angered, it may hunt from 65% sanity (the idle state's insanity bonus), and its hunts go only for the living player who last carried one out, until they are in the truck, dead or killed; then the game's own hunt.
-- [ ] Angered, outside hunts, it takes its things back one at a time to the very place each lay, every 25 to 45 s, never one a player carries.
+- [ ] Angered, outside hunts, it takes its things back one at a time to the very place each lay, every 25 to 45 s, never one a player carries: each is dragged along the floor by a corner, swinging and bumping, round walls, through doorways and over stairs without sinking into them, at the ghost's walking pace, knocking gently with its own impact sounds as it goes, seen and heard on the host and on a client.
 - [ ] Angered, its room is 3 °C colder on the host and on a client (thermometer and breath); with Freezing withheld its readings may still go below freezing (a tell). The room's own temperature comes back when the anger ends.
 - [ ] It keeps its room: no long roam that changes rooms (a Monkey Paw wish can still move it; its things are then the new room's, anger and thieves forgotten).
 - [ ] In a hunt: 2.8 m/s in its room, slowing 0.15 m/s per metre away, to 0.3 m/s from about 17 m.
-
-**Told apart**
-
-- [ ] Needs a player to carry a prop out of its room. Check on zero evidence in single player, and the cold with Freezing withheld.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -295,7 +294,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -312,6 +311,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Black Shuck; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Black Shuck can be told from every other ghost by its tells below.
+- [ ] Needs a hunt and a trail. Rain: outdoors it lays no trail. Check indoors on zero evidence in every weather, and with salt in a doorway.
 
 **Tells**
 
@@ -320,11 +320,6 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 - [ ] Closets do not hide you: a trail ending at a closet or locker leads it there, and the game's closet search finds you.
 - [ ] Salt or running water breaks a trail (a running sink; baths and showers only where the game makes them sinks), and rain outdoors lays none. Smudges stun it.
 - [ ] No hitch at a doorway with salt on the way round a wall, or with a running sink; it comes free when scent gives out.
-
-**Told apart**
-
-- [ ] Needs a hunt and a trail. **Rain:** outdoors it lays no trail. Check indoors on zero evidence in every weather, and with salt in a doorway.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -335,7 +330,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -353,17 +348,13 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Lithobolia; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Lithobolia can be told from every other ghost by its tells below.
+- [ ] Check in single player on zero evidence: no throw with nobody in sight, throws at you in sight.
 
 **Tells**
 
 - [ ] Throws objects only at a player its vision sensor detects within 8 m; a hit costs 5% sanity on the hit player's client.
 - [ ] With nobody in sight it throws nothing at all.
 - [ ] In a hunt what it throws flies at its target if it sees them within 8 m, else the throw is swallowed.
-
-**Told apart**
-
-- [ ] Check in single player on zero evidence: no throw with nobody in sight, throws at you in sight.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -375,7 +366,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -391,16 +382,12 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Gremlin; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Gremlin can be told from every other ghost by its tells below.
+- [ ] Needs running electronics in its room, with nobody within 2 m.
 
 **Tells**
 
 - [ ] Half of its interactions with running electronics in its room switch one off, for every client (EMF where it stands).
 - [ ] Never touches equipment within 2 m of a living player.
-
-**Told apart**
-
-- [ ] Needs running electronics in its room, with nobody within 2 m.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -412,7 +399,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -427,6 +414,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Brownie; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Brownie can be told from every other ghost by its tells below.
+- [ ] Check on the host and on a client, AI and player-controlled, with a sound sensor and a parabolic microphone.
 
 **Tells**
 
@@ -435,11 +423,6 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 - [ ] Seen on the truck's monitor in a hunt, whichever grid page or full-screen camera the viewer has open (any switched-on camera of the kind on show counts): with a player at the monitor and a switched-on camera of the kind it shows pointing at the Brownie, it slows to 1.02 m/s and its steps are heard up close, as if a player looked at it. With nobody at the monitor, that camera does not slow it.
 - [ ] Outside hunts its steps are the game's own, and it never interacts or causes an event while a player or a running video camera can see it.
 - [ ] A non-Brownie ghost's steps after a Brownie contract, and after switching the mod off mid-hunt, are detected again.
-
-**Told apart**
-
-- [ ] Check on the host and on a client, AI and player-controlled, with a sound sensor and a parabolic microphone.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -450,7 +433,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -465,6 +448,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Bogeyman; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Bogeyman can be told from every other ghost by its tells below.
+- [ ] Needs a closet or locker within 10 m of the youngest player on their floor. Check on a map without one near; a second player shows the youngest rule.
 
 **Tells**
 
@@ -472,11 +456,6 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 - [ ] Its hunts go only for that player: while they are in the truck it goes for anyone it hears and its sight stays on them; when they die it takes the next youngest. With no target it searches closets and hiding spots, nearest first (8 s at most on one it cannot reach).
 - [ ] Outside hunts, 3 in 4 of its door interactions are on a closet door its door sensor detects (with prints).
 - [ ] Slower in open rooms, where it loses prey beyond 7 m.
-
-**Told apart**
-
-- [ ] **Needs a closet or locker** within 10 m of the youngest player on their floor. Check on a map without one near; **a second player** shows the youngest rule.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -487,7 +466,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -504,17 +483,13 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Lethe; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Lethe can be told from every other ghost by its tells below.
+- [ ] Needs a photo or recording of its activity and three minutes.
 
 **Tells**
 
 - [ ] Photos, videos and recordings of its activity fade from the journal after three minutes unless someone looks at them first.
 - [ ] In a hunt it forgets prey out of its sight for 1 s, and no longer wanders where it lost them (`lethe: it forgets its prey`).
 - [ ] Its appearance replays through the hooked Appear (Task 11b).
-
-**Told apart**
-
-- [ ] Needs a photo or recording of its activity and three minutes.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -525,7 +500,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -540,6 +515,8 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Mesmer; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Mesmer can be told from every other ghost by its tells below.
+- [ ] Check the camera and D.O.T.S. view against the eye, on zero evidence in single player.
+- [ ] On zero evidence in single player with no camera: the favourite room's lights slowly dim and brighten instead of flickering, and the truck monitor reads higher than the wristwatch's sanity bar.
 
 **Tells**
 
@@ -552,12 +529,6 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 - [ ] Video cameras, photos and the D.O.T.S. projector show it as it is.
 - [ ] Its one-shot sound plays.
 
-**Told apart**
-
-- [ ] Check the camera and D.O.T.S. view against the eye, on zero evidence in single player.
-- [ ] On zero evidence in single player with no camera: the favourite room's lights slowly dim and brighten instead of flickering, and the truck monitor reads higher than the wristwatch's sanity bar.
-- [ ] On every map and in every weather, apart from any condition named above.
-
 **Journal text** (from the table):
 
 > **Name:** Mesmer  
@@ -567,7 +538,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -582,16 +553,12 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Knell; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Knell can be told from every other ghost by its tells below.
+- [ ] Needs a hunt.
 
 **Tells**
 
 - [ ] In a hunt it surges to 1.75 times the base speed for one second in every two, and crawls at 0.35 times the base in between.
 - [ ] The game's own footsteps quicken in every surge and slow in every crawl.
-
-**Told apart**
-
-- [ ] Needs a hunt. Every map, every weather.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -602,7 +569,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -617,17 +584,14 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Asterion; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Asterion can be told from every other ghost by its tells below.
+- [ ] Needs a closed door in its way in a hunt.
 
 **Tells**
 
-- [ ] A closed door never stops it for good: it batters it down in 3 s, heard far away, and the door stays broken open.
+- [ ] A closed door never stops it for good: it batters it down in 3 s, heard far away, then the door swings fully open and stays locked open, with the padlock on it, on the host and on a client. Grabbing it rattles it and it doesn't move.
+- [ ] A closed double door, the kitchen's double doors included: it batters one leaf, then both leaves swing fully open together and stay locked open.
 - [ ] It never closes a door; no door closes behind it.
 - [ ] UV prints on a battered door only where the ghost gives Ultraviolet.
-
-**Told apart**
-
-- [ ] **Needs a closed door** in its way in a hunt.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -638,7 +602,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -653,18 +617,24 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Tempest; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Tempest can be told from every other ghost by its tells below.
+- [ ] Needs a hunt. Check in each weather: the strikes' rhythm changes with the rain.
 
 **Tells**
 
 - [ ] In a hunt it cannot be seen except for 1.5 s after each lightning strike, when it shows in full and runs at 3.83 m/s.
-- [ ] Every hunt opens with a strike; more follow every 3 to 6 s in heavy rain (the game's storm lightning counts too), 6 to 10 s in rain, 9 to 14 s in any other weather.
+- [ ] Every hunt opens with a strike.
+- Time between strikes in a hunt, in each weather
+  - [ ] Clear: 9 to 14 s; `mods.log` has `so it strikes rarely`.
+  - [ ] Foggy: 9 to 14 s; `mods.log` has `so it strikes rarely`.
+  - [ ] Rain: 6 to 10 s; `mods.log` has `so it strikes now and then`.
+  - [ ] Heavy rain: 3 to 6 s, and the game's storm lightning lights it up too; `mods.log` has `so it strikes often`.
+  - [ ] Snow: 9 to 14 s; `mods.log` has `so it strikes rarely`.
+  - [ ] Wind: 9 to 14 s; `mods.log` has `so it strikes rarely`.
+  - [ ] Sunrise: 9 to 14 s; `mods.log` has `so it strikes rarely`.
+  - [ ] Blood Moon: 9 to 14 s; `mods.log` has `so it strikes rarely`.
+  - [ ] A Monkey Paw weather wish mid-contract, on the host and on a client: `mods.log` on the host has a new `tempest: weather` line naming the new rate, and from the strike after the next one the gaps follow the new weather.
 - [ ] In the dark between strikes it crawls at 1.02 m/s and never speeds up on sight of its prey.
 - [ ] It never changes the weather; outside hunts, lightning flashes as each of its events begins.
-
-**Told apart**
-
-- [ ] Needs a hunt. **Check in each weather**: the strikes' rhythm changes with the rain.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -675,7 +645,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -690,17 +660,13 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 - [ ] With evidence: Custom 1, Ghost Type Hydra; the journal's evidence and its guess button work.
 - [ ] On zero evidence, in single player: Hydra can be told from every other ghost by its tells below.
+- [ ] The green flame names it on zero evidence. The heads need a smudge in a hunt.
 
 **Tells**
 
 - [ ] Each smudge in a hunt grows a false head (at most three) that walks and flickers as it does and throws objects as the hunting ghost does; no object is thrown twice in one tick.
 - [ ] The false heads are harmless and silent: they never kill and make no footsteps.
 - [ ] Its Spectral Flame burns green: pale green at the false-positive limit even when withheld, deep green when given.
-
-**Told apart**
-
-- [ ] The green flame names it on zero evidence. The heads need a smudge in a hunt.
-- [ ] On every map and in every weather, apart from any condition named above.
 
 **Journal text** (from the table):
 
@@ -711,7 +677,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 
 **Journal**
 
-- [ ] The journal text reads right: accurate to the tells as built, and in your tone.
+- [ ] The journal text is formatted correctly, and matches the ghost's behaviour.
 
 **Player-controlled**
 
@@ -728,6 +694,7 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 
 - [ ] Custom 1, Ghost Type Spirit, two clients: `mods.log` has `spirit:` lines and the tells run on both.
 - [ ] The tells run on every contract, with evidence and on zero evidence; a Mimic copying the Spirit shows them too.
+- [ ] Needs incense; the knock needs voice recognition.
 
 **Tells**
 
@@ -735,17 +702,13 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 - [ ] Incense outside a hunt silences it for a minute: no interactions, events or ability.
 - [ ] With voice recognition on, say its first name within 10 m: a knock on a door 1 to 3 s later, not again within 20 s.
 
-**Told apart**
-
-- [ ] Needs incense; the knock needs voice recognition.
-
 **Line its journal page gains** (from the table):
 
 > **Line:** Tells: incense stops it dead in a hunt and silences it for a minute; it knocks when you say its name.
 
 **Journal**
 
-- [ ] The line reads right and fits the page, in the lobby journal too.
+- [ ] The line is formatted correctly, matches the ghost's behaviour and fits the page, in the lobby journal too.
 
 **Player-controlled**
 
@@ -757,6 +720,7 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 
 - [ ] Custom 1, Ghost Type Mare, two clients: `mods.log` has `mare:` lines and the tells run on both.
 - [ ] The tells run on every contract, with evidence and on zero evidence; a Mimic copying the Mare shows them too.
+- [ ] Needs a light switch.
 
 **Tells**
 
@@ -764,17 +728,13 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 - [ ] The rooms it hunted through are dark when the hunt ends.
 - [ ] It switches off a light just turned on near it 1 time in 2 (vanilla 1 in 7): switch one on near it again and again.
 
-**Told apart**
-
-- [ ] Needs a light switch.
-
 **Line its journal page gains** (from the table):
 
 > **Line:** Tells: it puts the lights out before it shows itself, leaves the rooms it hunted through dark, and often switches off a light you have just turned on.
 
 **Journal**
 
-- [ ] The line reads right and fits the page, in the lobby journal too.
+- [ ] The line is formatted correctly, matches the ghost's behaviour and fits the page, in the lobby journal too.
 
 **Player-controlled**
 
@@ -786,6 +746,7 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 
 - [ ] Custom 1, Ghost Type Shade, two clients: `mods.log` has `shade:` lines and the tells run on both.
 - [ ] The tells run on every contract, with evidence and on zero evidence; a Mimic copying the Shade shows them too.
+- [ ] Needs a second player for two of its tells; the stare works alone.
 
 **Tells**
 
@@ -793,17 +754,13 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 - [ ] With two players within 5 m it does nothing at all.
 - [ ] In a hunt it stops for 1.5 s when its prey has another player beside them.
 
-**Told apart**
-
-- [ ] **Needs a second player** for two of its tells; the stare works alone.
-
 **Line its journal page gains** (from the table):
 
 > **Line:** Tells: it vanishes the moment you stare at it, does nothing with two of you nearby, and hesitates when it sees you together.
 
 **Journal**
 
-- [ ] The line reads right and fits the page, in the lobby journal too.
+- [ ] The line is formatted correctly, matches the ghost's behaviour and fits the page, in the lobby journal too.
 
 **Player-controlled**
 
@@ -815,17 +772,14 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 
 - [ ] Custom 1, Ghost Type Yurei, two clients: `mods.log` has `yurei:` lines and the tells run on both.
 - [ ] The tells run on every contract, with evidence and on zero evidence; a Mimic copying the Yurei shows them too.
+- [ ] Needs a door in its room, and incense.
 
 **Tells**
 
 - [ ] When incense traps it, it shuts the doors of its room and shuts any opened one again 3 s later, for the 90 s trap.
 - [ ] The door its ability slams is locked for 3 s with the hunt's lock (try it).
 - [ ] A door left open in its room for 20 s draws its ability to that door (within about a minute).
-- [ ] Tarot cards still pass the gate.
-
-**Told apart**
-
-- [ ] **Needs a door** in its room, and incense.
+- [ ] While a tell holds it back, tarot cards still force their changes (Death's hunt, the Devil's event).
 
 **Line its journal page gains** (from the table):
 
@@ -833,7 +787,7 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 
 **Journal**
 
-- [ ] The line reads right and fits the page, in the lobby journal too.
+- [ ] The line is formatted correctly, matches the ghost's behaviour and fits the page, in the lobby journal too.
 
 **Player-controlled**
 
@@ -845,6 +799,7 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 
 - [ ] Custom 1, Ghost Type Goryo, two clients: `mods.log` has `goryo:` lines and the tells run on both.
 - [ ] The tells run on every contract, with evidence and on zero evidence; a Mimic copying the Goryo shows them too.
+- [ ] Needs a video camera in its room.
 
 **Tells**
 
@@ -852,17 +807,13 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 - [ ] In those conditions it makes an extra interaction every 20 s.
 - [ ] In a hunt, having lost everyone more than 12 m from its room, it walks home; it chases anyone it detects, anywhere. It has no leash.
 
-**Told apart**
-
-- [ ] Needs a video camera in its room.
-
 **Line its journal page gains** (from the table):
 
 > **Line:** Tells: a video camera can catch it standing in its room while nobody is near, where it also acts more; it heads home when it loses you far from there.
 
 **Journal**
 
-- [ ] The line reads right and fits the page, in the lobby journal too.
+- [ ] The line is formatted correctly, matches the ghost's behaviour and fits the page, in the lobby journal too.
 
 **Player-controlled**
 
@@ -874,6 +825,7 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 
 - [ ] Custom 1, Ghost Type Onryo, two clients: `mods.log` has `onryo:` lines and the tells run on both.
 - [ ] The tells run on every contract, with evidence and on zero evidence; a Mimic copying the Onryo shows them too.
+- [ ] Needs a flame and a lighter.
 
 **Tells**
 
@@ -881,17 +833,13 @@ One section for each vanilla ghost Ghost Tells changes (`mods/ghost_tells/tells.
 - [ ] Every flame gutters as its count rises and burns low at two.
 - [ ] A flame it blew out will not catch for 15 s, on every client.
 
-**Told apart**
-
-- [ ] Needs a flame and a lighter.
-
 **Line its journal page gains** (from the table):
 
 > **Line:** Tells: it snuffs a flame lit near it, every flame gutters as its count of snuffed flames rises, and a flame it snuffed will not relight for a while.
 
 **Journal**
 
-- [ ] The line reads right and fits the page, in the lobby journal too.
+- [ ] The line is formatted correctly, matches the ghost's behaviour and fits the page, in the lobby journal too.
 
 **Player-controlled**
 
@@ -936,7 +884,7 @@ Tasks 12a to 12d and 12c's rounds. The ghost player is one of two or more client
   - [ ] The kill restriction (sight, hearing, gear and kill hooks); the target's HUD on a non-host controlling client.
   - [ ] As master, pick up and use items an investigator has not touched yet (lighter, matchbox, camera): nothing happens to the investigator's own hands or animation.
   - [ ] The journal opens and closes on the ghost player's client: open, close, the pause menu with its player list, the evidence spread, hover, the sounds, with its pages written.
-  - [ ] The ghost player turns the journal's pages and marks a guess: no page-turn sound or change reaches the other clients' parked body in the truck. Now that the journal's own RPC hook is gone, this rests on the game's check of `IsMine` alone.
+  - [ ] The ghost player turns the journal's pages and marks a guess: no page-turn sound or change reaches the other clients' parked body in the truck. The only guard here is the game's check of `IsMine` alone.
   - [ ] Every mod-drawn UI (HUD, notices, picker, map view, panorama) is in the game's font, alignment and colours; each is marked `PM_UI_TODO` for your design (FINDINGS 31).
 - Investigators after the ghost player (provisional difference 6)
   - [ ] With 3 or more players and the ghost player not last, compare for each investigator: lobby card colour against their evidence mark colours on another player's journal, their vote icon on a photo, and their bar on the watch. Check the last sanity bar on the watch (does one stop moving?) and each pause card's photo. Record what differs, for your ruling.

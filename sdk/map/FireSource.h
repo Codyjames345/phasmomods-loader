@@ -76,9 +76,11 @@ inline constexpr pm::sdk::Fact FireSource_CountGhostBlowOut_facts[] = {
     {.is = pm::sdk::Fact::Is::CalledBy, .method = "FireSource.BlowOutFire"},
     {.is = pm::sdk::Fact::Is::Compares, .method = "GhostType.Onryo"}};
 
-/// Counts a blow-out by the ghost (called by BlowOutFire): for behaviour type 0x10 it adds one to
-/// GhostAI.flamesBlownOut, and sets it back to 0 when it has reached 3 and the ghost's hunt flags
-/// allow. Decompiled.
+/// Counts a blow-out by the ghost for the Onryo's hunt (called by BlowOutFire). When the ghost's
+/// behaviour type is the Onryo (16) it adds one to GhostAI.flamesBlownOut. Then, if the count is 3
+/// while the ghost is hunting (GhostAI.isHunting) or its hunts are held off (GhostAI.huntsHeldOff),
+/// it sets the count back to 0, so that third flame is wasted. The hunt itself starts in the idle
+/// state (GhostIdleState.Execute). Decompiled.
 inline constexpr pm::sdk::EntryDesc FireSource_CountGhostBlowOut{
     .key = "FireSource.CountGhostBlowOut", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "FireSource", .type = "void", .facts = FireSource_CountGhostBlowOut_facts};
@@ -97,9 +99,11 @@ inline constexpr pm::sdk::EntryDesc FireSource_IgniteFireNetworked{
 
 }  // namespace pm::map
 
-// The game API for flames (sdk/api/game_api.h). Every member is called on Unity's main thread. One that
-// did not resolve in the running game build logs "<key> is not available in this game build" once and
-// returns its type's default (null, false) without touching the game.
+/// @file
+/// @brief The game API for flames (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (null, false) without touching the game.
 namespace phasmo {
 /// @addtogroup rooms
 /// @{

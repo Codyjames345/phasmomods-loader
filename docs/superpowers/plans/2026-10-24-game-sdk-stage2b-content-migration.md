@@ -859,7 +859,8 @@ Asked for by the user on 2026-11-03: "Every mod should treat loading the same, a
     - Each `sdk/systems/*.md` page splits in two. The author-facing concept page keeps what the system is, its lifecycle and which declarations to use. Its RE content moves to `sdk/internals/`.
   - **Generation.** Doxygen at a pinned version, used for the docs build only, run by a `docs` CMake target and by `validate.ps1`. It outputs HTML with search into the build directory, which is never committed.
     - It is grouped by game system (`@defgroup`: ghost, players, sanity, map and rooms, equipment, weather, journal, voice, lobby, content, runtime), with the guides and concept pages as related pages.
-    - It excludes `pg::map`, every `detail` namespace, `PG_HOST`-only declarations and `sdk/internals/`.
+    - It excludes `pg::map`, every `detail` namespace and `PG_HOST`-only declarations. (`sdk/internals/` was excluded too, until the
+      user included it as related pages on 2026-11-08, since the concept pages link to it.)
     - Warnings are errors (`WARN_IF_UNDOCUMENTED`, `WARN_NO_PARAMDOC`, `WARN_AS_ERROR`). An undocumented public declaration, a missing `@param` or `@return`, or a broken `@see` fails the build. Watch it fail once on an undocumented declaration added in a scratch commit that is then dropped, and record the output.
   - **Versioning.** `sdk/CHANGELOG.md`, in the Keep a Changelog form, records each SDK version's additions, deprecations and removals, under the library-style versioning already decided (additive within a major, deprecate before removal).
   - **Review.** The task review reads a sample of generated pages, one per group. For each, it confirms the page alone answers four questions: how to call it, what comes back, on which clients, and what happens when it fails. It also confirms the page names no implementation detail.
@@ -898,6 +899,33 @@ The updater moves every existing install to a release without asking, so everyon
 - [ ] **Step 2: A short solo check by the user** (recommended by the controller; the user may skip it), on a local build that the updater won't replace (`PG_UPDATE_SOURCE`, with the steps in the test list). Read the log, then the consent notice, the Mods panel and a single-player contract. Raise the ban risk first; the user launches the game.
 - [ ] **Step 3: Merge to `main`, with the user's go.** `NOTICE` is an add/add conflict: keep the nlohmann line. `tools/payload.psd1` needs `main`'s `LICENSE.txt` and `NOTICE.txt` lines. Run the stage and release tests on the merged result.
 - [ ] **Step 4: Release v0.2.0, with the user's go at that moment.** Say in the release notes that the consent notice asks again, that mods run only in private lobbies, and that every player needs the same mods.
+
+### Task 14c: Cache the CI build
+
+The user decided on 2026-11-08, after v0.2.1, that CI gets a build cache **before the next release**. Do it as the next task, ahead of any other work that would end in a release.
+
+**Why CI is slow.** On `windows-latest`, a run's setup (checkout, vpk, Doxygen) takes about 30 seconds. The pack step (`package.ps1`, which runs the whole of `validate.ps1` and then `vpk pack`) takes 10 to 19 minutes (builds #20 to #29). Every run starts on a fresh VM with no `build/` folder and no compiler cache, so all of Ninja's ~481 steps compile cold on 4 vCPUs. Locally `build/` is warm and Ninja rebuilds only what changed.
+
+**What won't work.** Caching `build/` alone doesn't help. `actions/checkout` gives every source file the checkout time as its timestamp, so Ninja sees every input as newer than its restored object and rebuilds everything. The cache has to key on file contents. A compiler cache does that: ccache (4.6 and later) and sccache both support MSVC through `CMAKE_<LANG>_COMPILER_LAUNCHER`. The Release config adds no `/Zi` in `CMakeLists.txt` (checked 2026-11-08), so objects can be cached. If any target needs debug info, it uses `/Z7` (`CMAKE_MSVC_DEBUG_INFORMATION_FORMAT`), not a shared PDB.
+
+**Files:** `.github/workflows/build.yml`, `CMakeLists.txt` (the launcher, only when the cache tool is present), `tests/dev_release_test.ps1` or a new `tests/ci_cache_test.ps1`, `docs/releasing.md`.
+
+**Decide with the user before Step 1** (conventions rule: research first, then give the options):
+- ccache or sccache. Compare MSVC support, how each stores its cache in `actions/cache`, and how the binary is fetched and checked.
+- Whether the release job (the tag) uses the cache, or always builds cold. Content-keyed objects give the same result, but a cold release never depends on an earlier run. GitHub lets a run restore caches from its own ref and the default branch; check what a tag run can see.
+
+**Constraints:**
+- The cache only makes compiling faster. It never skips a step. `package.ps1` still runs all of `validate.ps1` in the publishing job, and a release is still packed only from a payload validated in that same job on that exact commit.
+- A cache miss, or a cache that fails to restore, still builds correctly, only slower. No check is weakened to make the cache work.
+- The key covers the compiler version (the MSVC toolset `vcvars64.bat` picks), the build config and the cache tool's version. Stale entries age out by GitHub's own eviction.
+- A third-party action is pinned to a full commit SHA, as `actions/checkout` is. A downloaded binary is checked against its SHA-256 before it runs, as Doxygen is.
+- A local build without the tool installed behaves exactly as now.
+
+- [ ] **Step 1: Test first.** Extend the workflow test so it fails until every building job (Validate, Publish the development build, Publish the release, as decided) sets up the cache, pins any action by SHA and checks any downloaded binary by hash. Watch it fail.
+- [ ] **Step 2: Add the cache** to the workflow and the launcher to `CMakeLists.txt`.
+- [ ] **Step 3: Measure.** Push to development twice: the first run fills the cache, and the second should hit it. Record both pack-step times, and the cache hit rate the tool reports, in the ledger and in `docs/releasing.md`.
+- [ ] **Step 4: Run** `.\validate.ps1`. Expected: pass, and a local build without the tool is unchanged.
+- [ ] **Step 5: Commit,** and push development (no release needed to prove it).
 
 ### Task 15: The user's in-game test (replaces the roster audit)
 

@@ -1,7 +1,8 @@
 /**
 @defgroup ghost The ghost
 The ghost's AI, its states, its type and evidence, its senses and its footsteps. Concept pages:
-[ghost AI](systems/ghost-ai.md) and [ghost types](systems/ghost-types.md).
+[ghost AI](systems/ghost-ai.md), [ghost types](systems/ghost-types.md) and
+[the vanilla ghosts, type by type](systems/vanilla-ghosts.md).
 
 @defgroup players Players
 The investigators, each client's copy of them, and the input the game reads. Concept page: [players](systems/players.md).
@@ -10,7 +11,8 @@ The investigators, each client's copy of them, and the input the game reads. Con
 A player's sanity and what drains it. Concept page: [flames](systems/flames.md), "Sanity and Firelight".
 
 @defgroup rooms Map and rooms
-The level, its rooms and doors, its lights, its temperature and its flames. Concept page: [flames](systems/flames.md).
+The level, its rooms and doors, its lights, its temperature and its flames. Concept pages: [flames](systems/flames.md)
+and [doors](systems/doors.md).
 
 @defgroup equipment Equipment
 What players carry and what the level holds, and the evidence the equipment shows. Concept page: [evidence](systems/evidence.md), and
@@ -35,5 +37,5 @@ Registering ghosts and evidence, rules on a ghost type, and the contract a mod's
 
 @defgroup runtime The runtime and Unity
 Reaching the game through the map: typed entries, hooks, keeping objects alive, and the Unity types the game uses. See
-[the SDK's README](README.md).
+@ref index "the SDK's README", and [navigation](systems/navigation.md) for routes over the level's navigation mesh.
 */

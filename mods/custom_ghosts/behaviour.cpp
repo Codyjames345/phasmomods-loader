@@ -18,6 +18,7 @@
 #include "GhostInfo.h"
 #include "LevelController.h"
 #include "LevelRoom.h"
+#include "Photon.h"
 #include "Player.h"
 #include "Props.h"
 #include "Transform.h"
@@ -59,7 +60,6 @@ constexpr ULONGLONG kTrailStepMs = 500;
 constexpr float kSameSink = 0.1f;                 // metres: a running sink this close to one of the last step's is the same
 constexpr float kStandingStill = 0.01f;           // metres: a destination this close to the ghost stops it where it is
 constexpr ULONGLONG kSurveyMs = 1000;
-constexpr float kRoomMargin = 1.0f;               // metres outside a room's colliders still counted as in it
 constexpr ULONGLONG kAngerResendMs = 5000;        // the host says the Draugr's anger again this often
 
 struct Scent {
@@ -107,6 +107,73 @@ struct Cold {
   draugr::RoomCold rule;
 } g_cold;
 bool g_heardAnger = false;  // a client's: whether the host last said the Draugr is angered
+
+// The thing the Draugr drags, on every client: its own gentle impact clips knock on a steady rhythm while it
+// moves (Prop.PlayImpactSound, local to each client), the user's choice of drag sound (2026-11-07).
+struct DragSound {
+  api::Held item;              // the dragged thing's PhotonObjectInteract; null while none
+  phasmo::Vector3 last{};      // where it was at the last frame
+  ULONGLONG start = 0, lastAt = 0;
+  drag::Knocks knocks;
+} g_drag;
+bool g_dragAnnounced = false;  // the host's: it told every client of the drag in hand
+
+/** This client hears `item` dragged from now on (null: no drag). */
+void drag_sound(void* item) {
+  g_drag = DragSound{};
+  if (!item) return;
+  g_drag.item = item;
+  g_drag.start = g_drag.lastAt = GetTickCount64();
+  g_drag.last = game::position(game::transform_of(item));
+}
+
+/** Every frame on every client: the dragged thing knocks gently while it moves. */
+void tick_drag_sound() {
+  void* item = g_drag.item.get();
+  if (!item) return;
+  if (!api::alive(item)) {
+    drag_sound(nullptr);
+    return;
+  }
+  const ULONGLONG now = GetTickCount64();
+  const phasmo::Vector3 at = game::position(game::transform_of(item));
+  const float dt = (now - g_drag.lastAt) / 1000.0f;
+  if (dt <= 0) return;
+  const float dx = at.x - g_drag.last.x, dy = at.y - g_drag.last.y, dz = at.z - g_drag.last.z;
+  const float speed = std::sqrt(dx * dx + dy * dy + dz * dz) / dt;
+  g_drag.last = at;
+  g_drag.lastAt = now;
+  if (!g_drag.knocks.due(static_cast<unsigned>(now - g_drag.start), speed)) return;
+  void* prop = phasmo::PhotonObjectInteract::prop.get(item);
+  if (!api::alive(prop)) return;
+  phasmo::Prop::PlayImpactSound(prop, drag::knock_speed(speed, phasmo::Prop::lowImpactVelocityCutoff.get(prop)), nullptr);
+}
+
+/** The ViewID that names `item` (a PhotonObjectInteract) on every client, or 0. */
+uint32_t view_id(void* item) {
+  const int32_t id = phasmo::PhotonView::get_ViewID(phasmo::PhotonObjectInteract::view.get(item));
+  return id > 0 ? static_cast<uint32_t>(id) : 0;
+}
+
+/** The host: tell every client the drag of `item` starts (`on`) or is over, and hear it here too. */
+void announce_drag(void* item, bool on) {
+  g_dragAnnounced = on;
+  drag_sound(on ? item : nullptr);
+  const uint32_t id = item ? view_id(item) : 0;
+  if (!id) return;
+  const std::vector<uint8_t> message = net_msg::drag(id, on);
+  net::send(message.data(), message.size(), net::To::Others, true);
+}
+
+/** The PhotonObjectInteract whose view is `id`, or null (a client's lookup for the host's drag message). */
+void* item_by_view(uint32_t id) {
+  const api::RefArray props{phasmo::Object::FindObjectsOfType(phasmo::Prop::type.type_object())};
+  for (size_t i = 0; i < props.size(); ++i) {
+    void* item = api::alive(props[i]) ? phasmo::Prop::interact.get(props[i]) : nullptr;
+    if (item && view_id(item) == id) return item;
+  }
+  return nullptr;
+}
 
 std::mt19937 g_random{static_cast<unsigned>(GetTickCount64())};
 
@@ -247,7 +314,8 @@ void survey_room(void* room) {
     g.roomItems.emplace_back(item);
     g.hoard.things.push_back({.home = {at.x, at.y, at.z}});
   }
-  PM_LOG("behaviour: the Draugr's room holds %zu things", g.roomItems.size());
+  PM_LOG("behaviour: the Draugr's room (%s) holds %zu things", api::to_utf8(phasmo::LevelRoom::name.get(room)).c_str(),
+         g.roomItems.size());
 }
 
 /** The investigator carrying `item` (in a hand or put away, NetworkedPropGrab.inventory), or null. */
@@ -291,9 +359,14 @@ void tell_anger(ULONGLONG now, bool changed) {
  */
 void survey_things(void* room, bool hunting, ULONGLONG now) {
   std::vector<draugr::Seen> seen;
-  for (const api::Held& item : g.roomItems) {
-    const bool alive = api::alive(item.get());
-    const bool out = alive && !game::in_room(room, game::position(game::transform_of(item.get())), kRoomMargin);
+  for (size_t i = 0; i < g.roomItems.size(); ++i) {
+    void* item = g.roomItems[i].get();
+    const bool alive = api::alive(item);
+    const Vector3 at = alive ? game::position(game::transform_of(item)) : Vector3{};
+    const bool out = alive && !game::in_room(room, at, draugr::kLeftRoomMargin);
+    if (out && !g.hoard.things[i].out)
+      PM_LOG("behaviour: %s has left the Draugr's room, %.1f m from it", api::to_utf8(phasmo::Object::get_name(item)).c_str(),
+             game::distance_to_room(room, at));
     seen.push_back({alive, out, alive ? carrier_of(item) : nullptr});
   }
   const bool angered = draugr::survey(g.hoard.things, seen, now);
@@ -308,7 +381,16 @@ void survey_things(void* room, bool hunting, ULONGLONG now) {
   const int i = draugr::to_take_back(g.hoard.things, seen);
   if (i < 0) return;
   const draugr::Point home = g.hoard.things[i].home;
-  if (g.takingBack.take(g.roomItems[i], {home.x, home.y, home.z}, now)) PM_LOG("behaviour: the Draugr takes something back");
+  void* item = g.roomItems[i].get();
+  const Vector3 from = game::position(game::transform_of(item));
+  const float away = std::sqrt((from.x - home.x) * (from.x - home.x) + (from.y - home.y) * (from.y - home.y) +
+                              (from.z - home.z) * (from.z - home.z));
+  // Dragged back along the floor at the ghost's own walking pace: its agent's speed, outside a hunt as every
+  // take-back is (the user's choice, 2026-11-06).
+  const float pace = g.ghost ? phasmo::NavMeshAgent::get_speed(game::ghost_agent(g.ghost)) : 0.0f;
+  if (g.takingBack.take_dragging(g.roomItems[i], {home.x, home.y, home.z}, now, pace))
+    PM_LOG("behaviour: the Draugr drags %s back, %.1f m to where it lay, at %.2f m/s",
+           api::to_utf8(phasmo::Object::get_name(item)).c_str(), away, pace);
 }
 
 /** A speed rule applies to this hunt this frame: `s` is what hunt_speed answers. */
@@ -330,9 +412,18 @@ void tick_draugr(bool hunting, ULONGLONG now) {
     }
   }
   draugr::note_carriers(g.hoard.things, carriers_now());
+  void* dragging = g.takingBack.item();
   const carry::Carry::Step step = g.takingBack.step(now, &may_take_back);
-  if (step == carry::Carry::Step::Set) PM_LOG("behaviour: the Draugr put something back where it lay");
-  if (step == carry::Carry::Step::Dropped) PM_LOG("behaviour: the Draugr could not take something back; left where it was");
+  if (step == carry::Carry::Step::Moving && !g_dragAnnounced) announce_drag(dragging, true);
+  if ((step == carry::Carry::Step::Set || step == carry::Carry::Step::Dropped) && g_dragAnnounced)
+    announce_drag(dragging, false);
+  if (step == carry::Carry::Step::Set && g.takingBack.gap() > 0)
+    PM_LOG("behaviour: the Draugr left something on the floor beside where it lay, %.1f m from it", g.takingBack.gap());
+  else if (step == carry::Carry::Step::Set)
+    PM_LOG("behaviour: the Draugr put something back where it lay");
+  if (step == carry::Carry::Step::Dropped)
+    PM_LOG("behaviour: the Draugr let something go on its way back; left where it is, %.1f m from where it lay",
+           g.takingBack.gap());
   if (now >= g.nextSurvey) {
     g.nextSurvey = now + kSurveyMs;
     survey_things(room, hunting, now);
@@ -706,6 +797,8 @@ bool hunt_speed(float* base, float* losScale) {
 }
 
 void tick_room(void* haunting, int type) {
+  if (type == kDraugr && haunting) tick_drag_sound();
+  else if (g_drag.item) drag_sound(nullptr);
   void* info = haunting && type == kDraugr ? phasmo::GhostAI::info.get(haunting) : nullptr;
   void* room = info ? phasmo::GhostInfo::favouriteRoom.get(info) : nullptr;
   if (room && !api::alive(room)) room = nullptr;
@@ -726,14 +819,18 @@ void* target(int type, std::span<const void* const> excluded) {
 }
 
 void receive(int sender, const uint8_t* data, size_t size) {
-  bool angered = false;
-  if (sender != game::master_actor() || !net_msg::read_anger(data, size, angered)) return;
-  g_heardAnger = angered;
+  if (sender != game::master_actor()) return;
+  bool angered = false, dragging = false;
+  uint32_t id = 0;
+  if (net_msg::read_anger(data, size, angered)) g_heardAnger = angered;
+  else if (net_msg::read_drag(data, size, id, dragging)) drag_sound(dragging ? item_by_view(id) : nullptr);
 }
 
 void teardown() {
   end_cold();
   g_heardAnger = false;
+  drag_sound(nullptr);
+  g_dragAnnounced = false;
   reset(nullptr, 0);
 }
 

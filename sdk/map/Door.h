@@ -17,6 +17,23 @@ inline constexpr const char* Door_ToggleDoorLock_params[] = {"bool", "bool"};
 // derived type's method, so the fact also matches that offset through another register.
 inline constexpr pm::sdk::Fact Door_closedAngle_facts[] = {
     {.is = pm::sdk::Fact::Is::Loads, .method = "HingeDoor.Awake"}};
+inline constexpr const char* Door_GhostOpenDoorEvent_params[] = {"bool", "bool", "float"};
+inline constexpr const char* Door_SyncLockState_params[] = {"bool", "PhotonMessageInfo"};
+inline constexpr const char* HingeDoor_LevelControllerOpenDoor_params[] = {"bool", "float"};
+inline constexpr const char* HingeDoor_LockDoor_params[] = {"bool"};
+// Door has two fields of its own type; the other one is not Door.otherDoor.
+inline constexpr pm::sdk::Fact Door_pairedDoor_facts[] = {
+    {.is = pm::sdk::Fact::Is::IsNot, .method = "Door.otherDoor"}};
+// Door.SyncLockState stores one of Door's bools, the locked flag, and nothing else of Door.
+inline constexpr pm::sdk::Fact Door_locked_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "Door.SyncLockState"}};
+// HingeDoor has two floats of its own; HingeDoor.Awake stores only the open angle.
+inline constexpr pm::sdk::Fact HingeDoor_openAngle_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "HingeDoor.Awake"}};
+// Door has two fields of its own type. Of Door's methods only GhostOpenDoorEvent reads the other leaf, and
+// Door.Convert copies both, so the load singles it out.
+inline constexpr pm::sdk::Fact Door_otherDoor_facts[] = {
+    {.is = pm::sdk::Fact::Is::Loads, .method = "Door.GhostOpenDoorEvent"}};
 
 /// A door (Assembly-CSharp, global namespace), an abstract MonoBehaviour. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door{.key = "Door", .confidence = pm::sdk::Confidence::Decompiled,
@@ -35,14 +52,17 @@ inline constexpr pm::sdk::EntryDesc Door_closedAngle{.key = "Door.closedAngle", 
                                                      .type = "float",
                                                      .facts = Door_closedAngle_facts};
 
-/// The ghost forces the door open or shut (the overload with three arguments: open, strength, -1 for
-/// the game's own, and a third flag; the one-argument overload is the same with strength 3). Both start
-/// one coroutine, unless one is running: it sends Door.ForceDropDoorNetworked(true, true) to every client
-/// at its start, moves the leaf, and at its end sends Door.ForceDropDoorNetworked(false, true), which sets
-/// Door.grabbable and PhotonObjectInteract.grabbable again on every client, whatever Door.locked or the
-/// door's kind. Callers: ghost states and the hunt state, directly or through Door's GhostOpenDoorAnimated
-/// (the state GhostState.door enters uses it), ClosetZone for its closet doors, and the training rooms. The
-/// states GhostState.idle, wander and favouriteRoom enter call neither.
+/// The ghost pushes the door open or shut (the overload with three arguments: open, strength, -1 for the
+/// game's own, and whether to skip the rattle; the one-argument overload is the same with strength 3). Both do
+/// nothing while Door.forceRoutine is set; otherwise they start the push and keep it there. The push sends
+/// Door.ForceDropDoorNetworked(true, true) to every client at its start, switching the door off for players
+/// (taking the door over on the master), waits until no player holds it and this client owns it, pushes the
+/// leaf with the hinge's physics, waits, and at its end sends Door.ForceDropDoorNetworked(false, true), which sets
+/// Door.grabbable and PhotonObjectInteract.grabbable again on every client, whatever Door.locked or the door's
+/// kind, and clears Door.forceRoutine. Callers: ghost states and the hunt state, directly or through Door's
+/// GhostOpenDoorAnimated (the state GhostState.door enters uses it), ClosetZone for its closet doors, and the
+/// training rooms; the hunt pushes doors between the ghost and a player this way. The states GhostState.idle,
+/// wander and favouriteRoom enter call neither.
 /// It is a ghost interaction and leaves a ghost's traces. Both overloads mark the push as the ghost's and as one
 /// that gives fingerprints, so before the leaf moves the door's ghost-use step runs (unless the door's
 /// PhotonObjectInteract is off or in use): on the master it tries for fingerprints
@@ -56,6 +76,66 @@ inline constexpr pm::sdk::EntryDesc Door_GhostForceDoor{.key = "Door.GhostForceD
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Door", .name = "GhostForceDoor",
                                                         .params = Door_GhostForceDoor_params};
+
+/// A double door's other leaf, kept in Door's second field of its own type: the level sets one of
+/// Door.otherDoor and Door.pairedDoor on each leaf of a double door, not always the same one (read from the
+/// scene files, 2026-11-06), so check both. Null otherwise. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_pairedDoor{.key = "Door.pairedDoor", .kind = pm::sdk::Kind::Field,
+                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                    .type = "@Door", .facts = Door_pairedDoor_facts};
+
+/// Starts the door's update of its occlusion portal, which decides whether the camera sees through the
+/// doorway, when the door has a portal and is active. Door.SyncLockState ends with it. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_CheckOcclusionPortal{.key = "Door.CheckOcclusionPortal",
+                                                              .kind = pm::sdk::Kind::Method,
+                                                              .confidence = pm::sdk::Confidence::Decompiled,
+                                                              .owner = "Door", .name = "CheckOcclusionPortal"};
+
+/// A ghost event's door push: pushes this door open or shut (its second argument; the third is a strength)
+/// and, when its first argument is true, one time in three the double door's other leaf (Door.otherDoor)
+/// too. Unlike Door.GhostForceDoor it starts without checking Door.forceRoutine, and its push clears
+/// Door.forceRoutine as it ends. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_GhostOpenDoorEvent{.key = "Door.GhostOpenDoorEvent",
+                                                            .kind = pm::sdk::Kind::Method,
+                                                            .confidence = pm::sdk::Confidence::Decompiled,
+                                                            .owner = "Door", .name = "GhostOpenDoorEvent",
+                                                            .params = Door_GhostOpenDoorEvent_params};
+
+/// A double door's other leaf, null for a single door: the Door field Door.GhostOpenDoorEvent reads to
+/// push both leaves. Some double doors keep their partner in Door.pairedDoor instead, so check both.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_otherDoor{.key = "Door.otherDoor", .kind = pm::sdk::Kind::Field,
+                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                   .type = "@Door", .facts = Door_otherDoor_facts};
+
+/// The door's looping creak, an AudioSource set in the scene. A HingeDoor measures how fast its leaf turns
+/// on each physics step, in degrees a second from the change of its angle on the hinge's axis, so a leaf
+/// turned by setting its angle counts too. Every third frame, while the door is unlocked (Door.locked
+/// clear), HingeDoor.Update sets this source's volume from that speed (silent below a threshold set in the
+/// scene) and plays it if it has stopped. While the door is locked it leaves the source alone, so a leaf
+/// locked while it still turned creaks on at that volume until it is unlocked (seen in the game,
+/// 2026-11-07). To lock a leaf you moved, stop it and set this source's volume to 0, as Update does for a
+/// leaf that is not turning. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_loopSource{.key = "Door.loopSource", .kind = pm::sdk::Kind::Field,
+                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                    .name = "loopSource", .type = "AudioSource"};
+
+/// Whether the ghost moves this door by force, its leaf's physics, rather than by its animated turn, set in the
+/// scene: the ghost's door move (Door.GhostOpenDoorAnimated) reads it and pushes the leaf with physics when it is set,
+/// and turns it with the animated move otherwise. Door.GhostForceDoor never reads it and always pushes with physics.
+/// The animated turn sets the leaf's other two angles to 0, so a door set this way comes off its hinges under
+/// HingeDoor.SwingDoor. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_useForceInsteadOfAnimations{
+    .key = "Door.useForceInsteadOfAnimations", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door", .name = "useForceInsteadOfAnimations",
+    .type = "bool"};
+
+/// The door's running push, a Coroutine: Door's one field of that type. Door.GhostForceDoor and the ghost's
+/// animated door moves start only while it is null and store their coroutine here, and the push clears it
+/// as it ends, so while it is set a ghost push does nothing. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_forceRoutine{.key = "Door.forceRoutine", .kind = pm::sdk::Kind::Field,
+                                                      .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
+                                                      .type = "Coroutine"};
 
 /// Shuts and locks the door as a hunt does: LevelController.LockHuntingDoors calls it for every exit,
 /// on the master, as a hunt starts. It does nothing on a friendly ghost's difficulty (it tests the
@@ -82,12 +162,16 @@ inline constexpr pm::sdk::EntryDesc Door_HuntingCloseDoorNetworked{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door", .name = "HuntingCloseDoorNetworked",
     .params = Door_HuntingCloseDoorNetworked_params};
 
-/// Switches the door off (false) or back on (true) for players, as a hunt's end and the Monkey Paw do:
-/// off, it switches the door off, drops it from the local player's hand and, on the client that owns its
-/// PhotonView, swings it shut and locks it (the coroutine HuntingCloseDoorNetworked starts); on, it
-/// switches the door and its collider back on. Either way it then clears the door's lock (`locked`) by
-/// SyncLockState, so `true` unlocks it. Callers: LevelController.UnlockHuntingDoors, Door.LockDoorForTime,
-/// and MonkeyPaw.OpenExitsWish (on each exit's owner). Its RPCs check no sender. Decompiled.
+/// Switches the door off (false) or back on (true) for players, as a hunt's end and the Monkey Paw do. Off, it
+/// switches the door off for grabbing and, on the client that owns its PhotonView, starts the coroutine
+/// HuntingCloseDoorNetworked starts (the same virtual slot), which swings the door shut and locks it
+/// (LockDoor(true)) as it ends. Either way it then sets the door's colliders to `on` and its hunt collider the
+/// other way round (Door.DisableOrEnableDoor, which drops a switched-off door from any hand, and its collider
+/// step), and on a locked door clears the lock (`locked`) on every client by SyncLockState. So `true` unlocks a
+/// door at once, and `false` unlocks it too but leaves it locked again once its close coroutine ends on the owner.
+/// Callers: LevelController.UnlockHuntingDoors, Door.LockDoorForTime, and MonkeyPaw.OpenExitsWish (on each
+/// exit's owner); Ghost Tells' Yurei unlocks a door it locked with (true, true). Its RPCs check no sender.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_ToggleDoorLock{.key = "Door.ToggleDoorLock", .kind = pm::sdk::Kind::Method,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Door", .name = "ToggleDoorLock",
@@ -127,26 +211,22 @@ inline constexpr pm::sdk::EntryDesc Door_UnlockDoor{.key = "Door.UnlockDoor", .k
                                                     .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                     .name = "UnlockDoor", .params = Door_bool};
 
-inline constexpr const char* Door_SyncLockState_params[] = {"bool", "PhotonMessageInfo"};
-
 /// The RPC that sets the door's lock on every client: it refuses a lock (true) from a sender that is
 /// not the room's first actor, but takes an unlock from anyone. It stores `locked`, freezes the leaf's
-/// Rigidbody while locked and frees it otherwise, and for a DoorKind.Main door tells
-/// SetupPhaseController.UnlockMainDoor and switches the door's hunt collider off. LockDoor sends it
-/// from the master only. A mod hooks it to see a lock change; never call it (it is an RPC's body).
-/// Decompiled.
+/// Rigidbody while locked (every position and rotation constraint) and frees it otherwise, for a
+/// DoorKind.Main door tells SetupPhaseController.UnlockMainDoor and switches the door's hunt collider off,
+/// and ends with Door.CheckOcclusionPortal. LockDoor and HingeDoor.LockDoor send it from the master only. A
+/// mod hooks it to see a lock change; never send or call it (it is an RPC's body). Custom Ghosts' Asterion
+/// leaves the same state on each client itself. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_SyncLockState{.key = "Door.SyncLockState", .kind = pm::sdk::Kind::Method,
                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                        .owner = "Door", .name = "SyncLockState",
                                                        .params = Door_SyncLockState_params};
 
-// Of Door's bools SyncLockState stores only this one.
-inline constexpr pm::sdk::Fact Door_locked_facts[] = {
-    {.is = pm::sdk::Fact::Is::Stores, .method = "Door.SyncLockState"}};
-
 /// Whether the door is locked, on this client: SyncLockState stores it, LockDoor and UnlockDoor set
-/// and clear it. Every exit (DoorKind.Main) starts a contract locked in the map's scene; a player opens
-/// it with the house key (sdk/systems/doors.md). Decompiled.
+/// and clear it. While it is set the crosshair shows the padlock on the door (PCPropGrab.Update). Every
+/// exit (DoorKind.Main) starts a contract locked in the map's scene; a player opens it with the house key
+/// (sdk/systems/doors.md). Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_locked{.key = "Door.locked", .kind = pm::sdk::Kind::Field,
                                                 .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                 .type = "bool", .facts = Door_locked_facts,
@@ -242,9 +322,9 @@ inline constexpr pm::sdk::EntryDesc Door_ForceToggleHuntCollider{
 
 inline constexpr const char* DoorKind_values[] = {"None", "Main", "Secondary", "PermanentLock"};
 
+// Found by its values.
 /// What kind of door a Door is (Assembly-CSharp, global namespace, name obfuscated): None, Main (an
-/// exit), Secondary or PermanentLock; a key (KeyInfo.keyType) opens the doors of its own kind. Found by
-/// its values. Decompiled.
+/// exit), Secondary or PermanentLock; a key (KeyInfo.keyType) opens the doors of its own kind. Decompiled.
 inline constexpr pm::sdk::EntryDesc DoorKind{.key = "DoorKind", .confidence = pm::sdk::Confidence::Decompiled,
                                              .assembly = "Assembly-CSharp", .ns = "", .values = DoorKind_values};
 
@@ -272,11 +352,14 @@ inline constexpr pm::sdk::EntryDesc DoorKind_Secondary{.key = "DoorKind.Secondar
                                                        .name = "Secondary"};
 
 /// A door that starts locked and is not an exit: wardrobes, toilet cubicles, a locked shed or safe, in
-/// build 25811160 (scene read). Optional. Inferred: from the value's name and the scenes.
+/// build 25811160 (scene read). A player's grab on it while locked rattles it, and only a key of its own kind
+/// would unlock it (Door.AttemptToUnlockDoor matches KeyInfo.keyType with the door's kind). The door code tests
+/// only for None and Main otherwise, so a door of this kind is still pushed by hunts and picked by ghost events.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc DoorKind_PermanentLock{.key = "DoorKind.PermanentLock",
                                                            .kind = pm::sdk::Kind::EnumValue,
-                                                           .flags = pm::sdk::kOptional, .owner = "DoorKind",
-                                                           .name = "PermanentLock"};
+                                                           .confidence = pm::sdk::Confidence::Decompiled,
+                                                           .owner = "DoorKind", .name = "PermanentLock"};
 
 /// A key's description (Assembly-CSharp, global namespace), a journal collectable's info. Decompiled.
 inline constexpr pm::sdk::EntryDesc KeyInfo{.key = "KeyInfo", .confidence = pm::sdk::Confidence::Decompiled,
@@ -350,11 +433,13 @@ inline constexpr pm::sdk::EntryDesc Door_noise{.key = "Door.noise", .kind = pm::
                                                .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door",
                                                .name = "noise"};
 
-/// Switches the door on (true) or off (false) for players, on every client (an RPC): a door switched
-/// off cannot be grabbed or closed. Inferred: from the method's name.
+/// Switches the door on (true) or off (false) for players, on every client (an RPC): switched off, it is
+/// dropped from any player's hand and cannot be grabbed, so no player can move it. It does not hold the
+/// leaf still. Door.GhostForceDoor's push switches the door back on as it ends. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door_DisableOrEnableDoor{.key = "Door.DisableOrEnableDoor",
-                                                             .kind = pm::sdk::Kind::Method, .owner = "Door",
-                                                             .name = "DisableOrEnableDoor"};
+                                                             .kind = pm::sdk::Kind::Method,
+                                                             .confidence = pm::sdk::Confidence::Decompiled,
+                                                             .owner = "Door", .name = "DisableOrEnableDoor"};
 
 /// What every client runs when a player grabs an unlocked door: the RPC Door.GrabbedDoor sends. Its only
 /// callers are DragRigidbodyUse (the player's grab) and ClothDoor's override, which calls it first; no
@@ -387,7 +472,7 @@ inline constexpr pm::sdk::EntryDesc Door_closed{.key = "Door.closed", .kind = pm
                                                 .type = "bool", .facts = Door_closed_facts,
                                                 .access = pm::sdk::Visibility::Public};
 
-/// The door's PhotonView: Door's one field of that type. In every map scene of build 25811160 that was read,
+/// The door's PhotonView: Door's one field of that type. Its ViewID names the same door on every client. In every map scene of build 25811160 that was read,
 /// the view is set to OwnershipOption.Takeover and observes the leaf's PhotonTransformView, which sends the
 /// leaf's position and rotation from the view's owner and, on every other client, moves the leaf to the
 /// owner's each frame (sdk/systems/doors.md, "Opening a door quietly"). Decompiled.
@@ -438,8 +523,6 @@ inline constexpr pm::sdk::EntryDesc HingeDoor_Awake{.key = "HingeDoor.Awake", .k
 inline constexpr pm::sdk::EntryDesc HingeDoor_hingeAxis{.key = "HingeDoor.hingeAxis", .kind = pm::sdk::Kind::Field,
                                                         .owner = "HingeDoor", .name = "hingeAxis"};
 
-inline constexpr const char* HingeDoor_LevelControllerOpenDoor_params[] = {"bool", "float"};
-
 /// Opens the door part of the way with no ghost's trace, the way the game opens doors as a contract starts. Its one
 /// caller is LevelController's contract-start coroutine, on the master, which opens a number of random doors set by
 /// the difficulty and the map's size, each one of kind DoorKind.None that reads shut (Door.closed) and has a
@@ -481,14 +564,6 @@ inline constexpr pm::sdk::EntryDesc HingeDoor_OpenDoor{.key = "HingeDoor.OpenDoo
                                                        .owner = "HingeDoor", .name = "OpenDoor",
                                                        .params = HingeDoor_OpenDoor_params};
 
-/// Whether the ghost moves this door by force, its leaf's physics, rather than by its animated turn: the ghost's door
-/// move (Door.GhostOpenDoorAnimated) pushes it with Door.GhostForceDoor when set, and turns it with the animated move
-/// otherwise. The animated turn sets the leaf's other two angles to 0, so a door set this way comes off its hinges
-/// under HingeDoor.SwingDoor. Decompiled.
-inline constexpr pm::sdk::EntryDesc Door_useForceInsteadOfAnimations{
-    .key = "Door.useForceInsteadOfAnimations", .kind = pm::sdk::Kind::Field,
-    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door", .name = "useForceInsteadOfAnimations"};
-
 inline constexpr pm::sdk::Fact HingeDoor_openAngleReversed_facts[] = {
     {.is = pm::sdk::Fact::Is::Loads, .method = "HingeDoor.Awake"}};
 
@@ -500,8 +575,14 @@ inline constexpr pm::sdk::EntryDesc HingeDoor_openAngleReversed{
     .owner = "HingeDoor", .type = "bool", .facts = HingeDoor_openAngleReversed_facts,
     .access = pm::sdk::Visibility::Public};
 
-inline constexpr pm::sdk::Fact HingeDoor_openAngle_facts[] = {
-    {.is = pm::sdk::Fact::Is::Stores, .method = "HingeDoor.Awake"}};
+/// Locks the door the game's way, a shut door only: when it is not locked yet and either `force` is true or its
+/// leaf is nearly shut, the leaf snaps to its closed angle; then a shut (or forced) door is marked locked here,
+/// its door sound stopped, and on the master Door.SyncLockState is sent to every client. An open door, unforced,
+/// is left as it is. Decompiled.
+inline constexpr pm::sdk::EntryDesc HingeDoor_LockDoor{.key = "HingeDoor.LockDoor", .kind = pm::sdk::Kind::Method,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .owner = "HingeDoor", .name = "LockDoor",
+                                                       .params = HingeDoor_LockDoor_params};
 
 /// The leaf's angle when the door stands open, in degrees on its hinge axis (HingeDoor.hingeAxis): Awake sets it to
 /// Door.closedAngle plus the hinge joint's limit, on the side the joint opens to. HingeDoor.SwingDoor turns the leaf
@@ -561,9 +642,11 @@ inline constexpr pm::sdk::EntryDesc SmallMapVariation_huntingRooms{
 
 }  // namespace pm::map
 
-// The game API for doors (sdk/api/game_api.h). Every member is called on Unity's main thread. One that
-// did not resolve in the running game build logs "<key> is not available in this game build" once and
-// returns its type's default (0, null) without touching the game.
+/// @file
+/// @brief The game API for doors (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, null) without touching the game.
 namespace phasmo {
 /// @addtogroup rooms
 /// @{
@@ -574,11 +657,27 @@ struct Door {
   static constexpr pm::api::Type<pm::map::Door> type{};
   /// The leaf's Rigidbody: body.get(door). Unresolved: null.
   static constexpr pm::api::Field<pm::map::Door_body, void*> body{};
-  /// Whether the ghost moves it by force rather than by its animated turn: useForceInsteadOfAnimations.get(door).
-  /// Unresolved: false.
-  static constexpr pm::api::Field<pm::map::Door_useForceInsteadOfAnimations, bool> useForceInsteadOfAnimations{};
   /// The leaf's closed angle in degrees: closedAngle.get(door). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Door_closedAngle, float> closedAngle{};
+  /// Whether the ghost moves it by force (its leaf's physics) rather than by its animated turn:
+  /// useForceInsteadOfAnimations.get(door). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Door_useForceInsteadOfAnimations, bool> useForceInsteadOfAnimations{};
+  /// Its looping creak, an AudioSource: loopSource.get(door). Its hinge door sets the volume from how fast the
+  /// leaf turns, only while unlocked. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Door_loopSource, void*> loopSource{};
+  /// Whether it is locked on this client (the padlock): locked.get(door), .set(door, v). Unresolved: false,
+  /// writes nothing.
+  static constexpr pm::api::Field<pm::map::Door_locked, bool> locked{};
+  /// CheckOcclusionPortal(door): updates whether the camera sees through the doorway. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Door_CheckOcclusionPortal, void(void*)> CheckOcclusionPortal{};
+  /// A double door's other leaf, when the level keeps it here rather than in otherDoor: pairedDoor.get(door).
+  /// Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Door_pairedDoor, void*> pairedDoor{};
+  /// A double door's other leaf: otherDoor.get(door), null for a single door. It may be set on one leaf
+  /// only. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Door_otherDoor, void*> otherDoor{};
+  /// The door's running push: forceRoutine.get(door), null when none runs. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Door_forceRoutine, void*> forceRoutine{};
   /// GhostForceDoor(door, open, strength, skipRattle). A mod may hook it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Door_GhostForceDoor, void(void*, bool, float, bool)> GhostForceDoor{};
   /// HuntingCloseDoor(door): shuts, switches off and locks the door on every client, as a hunt locks its
@@ -590,8 +689,8 @@ struct Door {
   /// nothing.
   static constexpr pm::api::Method<pm::map::Door_HuntingCloseDoorNetworked, void(void*, void*)>
       HuntingCloseDoorNetworked{};
-  /// ToggleDoorLock(door, on, b): `on` false switches the door off and shuts it, true switches it back on;
-  /// either way it ends unlocked. Unresolved: does nothing.
+  /// ToggleDoorLock(door, on, b): `on` false switches the door off, unlocks it, and on its view's owner shuts and
+  /// locks it again; true switches it back on and unlocks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Door_ToggleDoorLock, void(void*, bool, bool)> ToggleDoorLock{};
   /// LockDoor(door, force): locks the door, shutting it first with `force`; the lock reaches every client
   /// only when the master calls it. Unresolved: does nothing.
@@ -602,8 +701,6 @@ struct Door {
   /// SyncLockState(door, locked, &info), an RPC. A mod hooks it; never calls it. Unresolved: does
   /// nothing.
   static constexpr pm::api::Method<pm::map::Door_SyncLockState, void(void*, bool, void*)> SyncLockState{};
-  /// Whether it is locked on this client: locked.get(door). Unresolved: false.
-  static constexpr pm::api::Field<pm::map::Door_locked, bool> locked{};
   /// Whether players may grab it on this client: grabbable.get(door). Unresolved: false.
   static constexpr pm::api::Field<pm::map::Door_grabbable, bool> grabbable{};
   /// ForceDropDoorNetworked(door, off, b), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
@@ -661,7 +758,7 @@ inline constexpr pm::api::EnumValue<pm::map::DoorKind_None> None{};
 inline constexpr pm::api::EnumValue<pm::map::DoorKind_Main> Main{};
 /// Secondary(): a locked door inside the map that its own key opens. Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::DoorKind_Secondary> Secondary{};
-/// PermanentLock(): a door that stays locked. Unresolved: 0.
+/// PermanentLock(): a door that starts locked, which no grab opens. Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::DoorKind_PermanentLock> PermanentLock{};
 }  // namespace DoorKind
 
@@ -701,13 +798,16 @@ struct HingeDoor {
   /// SwingDoor(door, close, seconds, fraction, buffered): turns the leaf toward its open angle (or shut) with no ghost's
   /// trace, on the view's owner. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::HingeDoor_SwingDoor, void(void*, bool, float, float, bool)> SwingDoor{};
+  /// LockDoor(door, force): locks a shut door (force: snaps it shut first), on every client when the master
+  /// calls it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::HingeDoor_LockDoor, void(void*, bool)> LockDoor{};
 };
 
 /// Unity's axis flags, the values HingeDoor::hingeAxis holds.
 namespace Axis {
 /// X(), Z(). Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::Axis_X> X{};
-inline constexpr pm::api::EnumValue<pm::map::Axis_Z> Z{};
+inline constexpr pm::api::EnumValue<pm::map::Axis_Z> Z{};  ///< Z(): the value's number in this game build
 }  // namespace Axis
 
 /// A map variation. `variation` below is the SmallMapVariation.

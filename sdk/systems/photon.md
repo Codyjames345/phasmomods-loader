@@ -19,9 +19,9 @@ decompiled code of Steam build 25811160 (`re/decomp.mjs <key>`), and this page n
 
 ## A room holds four players
 
-Kinetic's Photon servers cap a room at four players: creating one for eight fails with the server's error that the room's
-max players value is too big (limit 4), seen in a run. It is a setting on the servers, so no client can raise it, and the
-project does not try (Bigger Lobbies was archived for this: `archive/bigger_lobbies`).
+Kinetic's Photon servers cap a room at four players. Creating one for eight fails with the server's error that the
+room's max players value is too big (limit 4), seen in a run. The cap is a setting on the servers, so no client can
+raise it, and the project does not try. Bigger Lobbies was archived for this reason (`archive/bigger_lobbies`).
 
 ## Whether a room is public
 
@@ -38,9 +38,10 @@ project does not try (Bigger Lobbies was archived for this: `archive/bigger_lobb
   value. This is the game's only other call to either setter, and it runs in the lobby, never during a contract. No room
   turns public during a contract.
 - **A new master keeps its own value.** The value is kept on the client that called `CreateServer`, in a level value
-  that outlives scenes. A player who later becomes the master restores the value from *its own* last `CreateServer`, not
-  the room's. So a private lobby can turn public, in the lobby, on the new master's return from a contract, when that
-  player last created a public room. Judge a room in every lobby frame and treat public as lasting until the room is left.
+  that outlives scenes. A player who later becomes the master restores the value from *its own* last `CreateServer`,
+  not the room's. So if that player last created a public room, a private lobby can turn public on the new master's
+  return from a contract, in the lobby. Judge a room in every lobby frame, and treat public as lasting until the room
+  is left.
 
 The loader's rule for mods follows from these (host/join_guard.h): a room read as public in the lobby stays public for
 that client until it leaves the room.
@@ -78,12 +79,12 @@ nobody is judged and no mod is switched on or off.
   button out; a join runs it at the end of `ServerManager.AssignNewPlayerSpot`'s work and a leave in `ServerManager.RemovePlayerCard`. So a
   join makes everyone ready again, the joiner too. But a joiner is in `PhotonNetwork.get_PlayerList` well before that, while a
   cloud check of their name runs, and until then the button stays lit. Offline the button needs no Ready.
-- **The gate says nothing about mods.** A player who has not been verified can press Ready, and the game's gate has no input
-  for anything else. Making it say so would mean overriding the button every frame and working out its state again afterwards,
-  and it could still not cover a click in the frame a join arrives (Photon's messages are dispatched in `FixedUpdate`, ahead of
-  the `EventSystem`'s `Update`). So the loader leaves the gate alone and refuses the press itself, leaving the game's state
-  unchanged, and also refuses the `LoadScene` send: the task can wait, and a player can join meanwhile
-  (host/lobby_gate.h).
+- **The gate says nothing about mods.** A player who has not been verified can press Ready, and the game's gate has no
+  input for anything else. Making the gate check mods would mean overriding the button every frame and working out its
+  state again afterwards. Even then it could not cover a click in the frame a join arrives, because Photon's messages are
+  dispatched in `FixedUpdate`, ahead of the `EventSystem`'s `Update`. So the loader leaves the gate alone. It refuses the
+  press itself, which leaves the game's state unchanged, and it also refuses the `LoadScene` send, because the task can
+  wait and a player can join meanwhile (host/lobby_gate.h).
 
 ## Nobody joins a running contract
 
@@ -94,17 +95,23 @@ nobody is judged and no mod is switched on or off.
 - **The one window is the start itself.** The master's own `LoadScene` is the server's echo of what it sent, so in the game the
   room stays open for about one round trip after the send. A join the server takes in that window gets the buffered `LoadScene`
   and loads with everyone else.
-- **The loader closes that window** (host/start_close.h, the user's ruling of 2026-11-03). On a modded host the start's
-  `LoadScene` send is held, the master calls `PhotonRoom.set_IsOpen` with false itself, and raises a marker on the loader's own
-  channel to `ReceiverGroup.All`, the way the game's own via-server sends reach everyone and come back to their sender; other
-  clients ignore it. That the server applies the close first, so any join it took earlier reaches the master before the marker,
-  rests on Photon's ordering and not on the game's code, and the smoke list checks it. When the marker comes back the master reads the room again: if everyone there is
-  verified the held send goes, exactly as the game made it; otherwise the room opens again and the host hears who it waits for.
-  No answer in 5 seconds opens the room again too, and the host is told to press Start again. Once the send has gone, no press or
-  send starts anything until the game's `LoadScene` leaves the lobby, and nothing opens the room from then on. A master who loses the
-  seat and stays opens the room again, and stopping the mods does too. A master who leaves the room in that moment leaves it closed
-  for the next master, who can still start or leave, and it opens with the next contract's return. So nobody reaches a contract
-  unverified. Outside a private room none of this runs: the start goes as the game sent it.
+- **The loader closes that window** (host/start_close.h, the user's ruling of 2026-11-03). On a modded host, in a
+  private room:
+  1. The start's `LoadScene` send is held.
+  2. The master calls `PhotonRoom.set_IsOpen` with false itself.
+  3. It raises a marker on the loader's own channel to `ReceiverGroup.All`. That is how the game's own via-server sends
+     reach everyone and come back to their sender. Other clients ignore the marker.
+  4. When the marker comes back, the master reads the room again. If everyone there is verified, the held send goes,
+     exactly as the game made it. Otherwise the room opens again and the host hears who it waits for. With no answer in
+     5 seconds the room opens again too, and the host is told to press Start again.
+
+  That the server applies the close first, so that any join it took earlier reaches the master before the marker, rests
+  on Photon's ordering and not on the game's code; the smoke list checks it. Once the send has gone, no press or send
+  starts anything until the game's `LoadScene` leaves the lobby, and nothing opens the room from then on. A master who
+  loses the seat and stays opens the room again, and so does stopping the mods. A master who leaves the room in that
+  moment leaves it closed for the next master, who can still start or leave; it opens with the next contract's return.
+  So nobody reaches a contract unverified. Outside a private room none of this runs, and the start goes as the game
+  sent it.
 - **What that rests on, unproven by the game's code:** that Photon's server handles one client's operations in order, so the
   marker returns only after the close was applied, and a join the server took before the close reaches the master ahead of the
   marker. That is Photon's documented behaviour, not the game's. That the marker comes back at all is what the game itself relies
@@ -122,8 +129,9 @@ nobody is judged and no mod is switched on or off.
 
 ## What must not reach a player who may not have the mods
 
-A modded host's mods stay on while a player is being verified, so whatever goes to the whole room in the lobby must not carry a
-custom value until everyone present is verified. The host holds these back (host/lobby_gate.h, host/content_difficulty.h):
+A modded host's mods stay on while a player is being verified. So anything sent to the whole room in the lobby must not
+carry a custom value until everyone present is verified. The host holds these back (host/lobby_gate.h,
+host/content_difficulty.h):
 
 | What | How it is sent | While a player is unverified |
 | --- | --- | --- |
@@ -144,13 +152,13 @@ Buffered RPCs in the lobby that carry no custom value, and so reach a joiner as 
 
 ## PhotonViews and the cleanup
 
-- `PhotonNetwork.LeftRoomCleanup` runs as a client leaves a room, before its peer disconnects, from
-  `PhotonNetwork.OnClientStateChanged`, and from `PhotonNetwork.set_OfflineMode`. It reads the GameObject of every view PUN holds registered from a network
-  instantiation and destroys those objects.
-- **A registered view whose object Unity destroyed without its `OnDestroy` makes it throw**, and on a disconnect the
-  peer then never disconnects and Photon's receive thread keeps the socket open. One never activated has no
-  `OnDestroy`. So a mod that keeps or copies a networked object, and destroys it itself, removes its view first with
-  `PhotonNetwork.LocalCleanPhotonView`.
+- `PhotonNetwork.LeftRoomCleanup` runs in three places: as a client leaves a room, before its peer disconnects; from
+  `PhotonNetwork.OnClientStateChanged`; and from `PhotonNetwork.set_OfflineMode`. It reads the GameObject of every view
+  PUN holds registered from a network instantiation, and destroys those objects.
+- **A registered view whose object Unity destroyed without its `OnDestroy` makes the cleanup throw.** On a disconnect
+  the peer then never disconnects, and Photon's receive thread keeps the socket open. An object that was never
+  activated has no `OnDestroy`. So a mod that keeps or copies a networked object, and destroys it itself, first removes
+  its view with `PhotonNetwork.LocalCleanPhotonView`.
 
 ## Raising an event
 

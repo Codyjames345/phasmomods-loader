@@ -506,22 +506,31 @@ inline constexpr pm::sdk::EntryDesc ShaderProperty_Lit_Cull{
 
 }  // namespace pm::map
 
-// The game API for rendering (sdk/api/game_api.h). Every member is called on Unity's main thread. One
-// that did not resolve in the running game build logs "<key> is not available in this game build" once
-// and returns its type's default (0, false, null, all zero) without touching the game. Every object
-// they return is a managed reference: keep it across frames only in a pm::api::Held.
+/// @file
+/// @brief The game API for rendering (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (0, false, null, all zero) without
+/// touching the game. Every object they return is a managed reference: keep it across frames only in a
+/// pm::api::Held.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{
 
 /// Four floats, as Unity's Color: red, green, blue and alpha, above 1 for an HDR colour.
 struct Color {
-  float r, g, b, a;
+  float r;  ///< red, 0 to 1 (above 1 for HDR)
+  float g;  ///< green, 0 to 1 (above 1 for HDR)
+  float b;  ///< blue, 0 to 1 (above 1 for HDR)
+  float a;  ///< alpha, 0 (clear) to 1 (opaque)
 };
 
 /// Four bytes, as Unity's Color32: red, green, blue and alpha, as an RGBA32 texture stores them.
 struct Color32 {
-  uint8_t r, g, b, a;
+  uint8_t r;  ///< red, 0 to 255
+  uint8_t g;  ///< green, 0 to 255
+  uint8_t b;  ///< blue, 0 to 255
+  uint8_t a;  ///< alpha, 0 (clear) to 255 (opaque)
 };
 
 /// A renderer. `renderer` below is one.
@@ -686,20 +695,20 @@ struct Shader {
 /// The Candle Flame shader's properties, for Material's by-id functions: TintColour.id(). Check
 /// available() first. Unresolved: 0.
 struct CandleFlame {
-  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_CandleFlame_TintColour> TintColour{};
-  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_CandleFlame_CandleSprite> CandleSprite{};
+  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_CandleFlame_TintColour> TintColour{};  ///< The TintColour property: TintColour.id()
+  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_CandleFlame_CandleSprite> CandleSprite{};  ///< The CandleSprite property: CandleSprite.id()
 };
 
 /// The Lantern Flame shader graph's properties: Color2.id(). Check available() first. Unresolved: 0.
 struct LanternFlame {
-  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_LanternFlame_Color2> Color2{};
-  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_LanternFlame_Color1> Color1{};
+  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_LanternFlame_Color2> Color2{};  ///< The Color2 property: Color2.id()
+  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_LanternFlame_Color1> Color1{};  ///< The Color1 property: Color1.id()
 };
 
 /// The Candle Melt shader's properties (candle wax): EmissionColor.id(). Check available() first.
 /// Unresolved: 0.
 struct CandleMelt {
-  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_CandleMelt_EmissionColor> EmissionColor{};
+  static constexpr pm::api::ShaderProperty<pm::map::ShaderProperty_CandleMelt_EmissionColor> EmissionColor{};  ///< The EmissionColor property: EmissionColor.id()
 };
 
 /// A texture. `texture` below is one.

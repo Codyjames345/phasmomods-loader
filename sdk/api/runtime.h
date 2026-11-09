@@ -1,19 +1,24 @@
 #pragma once
 
-// The runtime services of the game API: managed strings, arrays and lists, and the alive check of
-// Unity objects. They go through the host contract's runtime services (core/mod_api.h, version
-// 2.1), so a mod never needs the runtime's object layouts; only the host knows them. Type objects,
-// object creation, instance checks and virtual calls are members of the wrappers in game_api.h
-// (Type::type_object, make, make_array and is; Method::virtual_call), and GC holds are held.h.
-//
-// Threading: Unity's main thread, like the rest of the game API. Before pm::api::bind every service
-// answers as for a null object (empty, 0, null or false).
-//
-// Lifetime: a managed string, array or list a mod reads here is the runtime's memory. Never keep a
-// raw pointer to one, or a view over it (Array, RefArray, List), across frames: keep the object in a
-// pm::api::Held and make the view again when it is needed. An element reference from Array and the
-// array behind a List are valid only until the next managed call: a List replaces its backing array
-// when it grows, so take items() again after any game call, and never store either.
+/// @file
+/// @brief The runtime services of the game API: managed strings, arrays and lists, and the alive
+/// check of Unity objects.
+///
+/// They go through the host contract's runtime services (core/mod_api.h, version 2.1), so a mod
+/// never needs the runtime's object layouts; only the host knows them. Type objects, object creation,
+/// instance checks and virtual calls are members of the wrappers in game_api.h (Type::type_object,
+/// make, make_array and is; Method::virtual_call), and GC holds are held.h.
+///
+/// **Threading:** Unity's main thread, like the rest of the game API. Before pm::api::bind every
+/// service answers as for a null object (empty, 0, null or false).
+///
+/// **Lifetime:** a managed string, array or list a mod reads here is the runtime's memory. Never keep
+/// a raw pointer to one, or a view over it (Array, RefArray, List), across frames: keep the object in
+/// a pm::api::Held and make the view again when it is needed. An element reference from Array and the
+/// array behind a List are valid only until the next managed call: a List replaces its backing array
+/// when it grows, so take items() again after any game call, and never store either.
+/// @ingroup runtime
+/// @since Contract 2.1
 
 #include <cstddef>
 #include <cstdint>
@@ -50,19 +55,28 @@ size_t dictionary_int_entries(const void* dict, PmIntEntry* out, size_t max);
 
 /// The UTF-8 text of the managed string `str` (System.String); a surrogate pair becomes one
 /// character and an unpaired surrogate U+FFFD. Empty for a null `str` and before bind.
+/// @param str A System.String, or null.
+/// @return Its text.
 std::string to_utf8(const void* str);
 
 /// Whether the managed string `str` reads exactly as `text`, with no allocation, for what runs on every RPC. False for a null
 /// `str`, before bind, and for a `text` of 64 bytes or more.
+/// @param str A System.String, or null.
+/// @param text The UTF-8 text to compare with, under 64 bytes.
+/// @return True when they read the same.
 bool string_is(const void* str, std::string_view text);
 
 /// A new managed string holding the UTF-8 text `text`, or null before bind. Nothing else refers to
 /// it yet: keep it in a pm::api::Held past the current frame.
+/// @param text UTF-8 text.
+/// @return The new System.String, or null.
 void* make_string(std::string_view text);
 
 /// UnityEngine.Object's implicit bool: false for null, for a destroyed engine object (whose managed
 /// wrapper still exists) and before bind. Check it before using an engine object kept from an
 /// earlier frame.
+/// @param unityObject A UnityEngine.Object (a GameObject, a Component), or null.
+/// @return True for a live engine object.
 bool alive(const void* unityObject);
 
 /// A view over a managed array of value elements (T[], with T a primitive or a struct copied whole),
@@ -74,10 +88,16 @@ template <class T>
 struct Array {
   static_assert(std::is_trivially_copyable_v<T>, "an array element is read and written as plain bytes");
   static_assert(!std::is_pointer_v<T>, "an array of managed references is a RefArray");
-  void* raw;
+  void* raw;  ///< the managed array (T[]); null allowed
 
+  /// The array's length.
+  /// @return The number of elements, or 0 for null and for an object that is not an array.
   size_t size() const { return detail::array_length(raw); }
 
+  /// Element `i`, in place.
+  /// @param i The index, below size().
+  /// @return A reference to the element, valid until the next managed call; at or past size(), a
+  ///   zeroed scratch element (logged once per process).
   T& operator[](size_t i) const {
     if (i < size())
       if (void* data = detail::array_data(raw)) return static_cast<T*>(data)[i];
@@ -96,11 +116,18 @@ struct Array {
 /// process, and for an array the runtime cannot size. Valid only until the next managed call. A null
 /// `raw` has size 0.
 struct ValueArray {
-  void* raw;
+  void* raw;  ///< the managed array; null allowed
 
+  /// The array's length.
+  /// @return The number of elements, or 0 for null and for an array the runtime cannot size.
   size_t size() const { return stride() ? detail::array_length(raw) : 0; }
+  /// The bytes one element takes, read from the runtime.
+  /// @return The element's size, or 0 for null and for an object that is not an array.
   size_t stride() const { return detail::array_element_size(raw); }
 
+  /// Element `i`, in place.
+  /// @param i The index, below size().
+  /// @return The element's address, valid until the next managed call, or null at or past size().
   void* at(size_t i) const {
     if (i < size())
       if (char* data = static_cast<char*>(detail::array_data(raw))) return data + i * stride();
@@ -130,6 +157,9 @@ inline size_t dictionary_entries(const void* dict, PmIntEntry* out, size_t max) 
 /// The number of items in a managed System.Collections.Generic List, HashSet, Dictionary, Queue or
 /// Stack, through the collection's own Count (the host contract's collection_count); 0 for null, before
 /// bind and for any other object (logged once by the host).
+/// @param collection The managed collection, or null.
+/// @return Its item count, or 0.
+/// @since Contract 2.2
 inline size_t count(const void* collection) { return detail::collection_count(collection); }
 
 /// A view over a managed array of references (object[], GameObject[] and the like), valid for the
@@ -137,10 +167,15 @@ inline size_t count(const void* collection) { return detail::collection_count(co
 /// stores one through the GC write barrier (nothing past the end, logged once per process). A null
 /// `raw` has size 0.
 struct RefArray {
-  void* raw;
+  void* raw;  ///< the managed array of references; null allowed
 
+  /// The array's length.
+  /// @return The number of elements, or 0 for null and for an object that is not an array.
   size_t size() const { return detail::array_length(raw); }
 
+  /// Element `i`.
+  /// @param i The index, below size().
+  /// @return The reference, valid this frame, or null at or past size().
   void* operator[](size_t i) const {
     if (i < size())
       if (void* data = detail::array_data(raw)) return static_cast<void* const*>(data)[i];
@@ -148,6 +183,9 @@ struct RefArray {
     return nullptr;
   }
 
+  /// Stores `value` as element `i`, through the GC write barrier.
+  /// @param i The index, below size(); at or past it nothing is stored (logged once per process).
+  /// @param value The managed reference to store; null allowed.
   void set(size_t i, void* value) const {
     void* const data = i < size() ? detail::array_data(raw) : nullptr;
     if (!data) {
@@ -167,12 +205,19 @@ struct RefArray {
 /// items() again after any game call and never store it. A null `raw`, or an object that is not a
 /// List (logged once by the host), has size 0.
 struct List {
-  void* raw;
+  void* raw;  ///< the managed List; null allowed
 
+  /// The List's count.
+  /// @return How many items it holds, or 0.
   size_t size() const { return detail::list_count(raw); }
 
+  /// The array behind the List, whose length may exceed size().
+  /// @return The backing array, valid until the next managed call, or null.
   void* items() const { return detail::list_items(raw); }
 
+  /// Item `i`.
+  /// @param i The index, below size().
+  /// @return The reference, valid this frame, or null at or past size().
   void* operator[](size_t i) const {
     if (i < size()) return RefArray{items()}[i];
     detail::report_out_of_range();
@@ -180,6 +225,8 @@ struct List {
   }
 
   /// Whether the List holds `item` (the same reference), as its Contains finds a reference.
+  /// @param item The reference to look for; null allowed.
+  /// @return True when an item is that reference.
   bool contains(const void* item) const {
     for (size_t i = 0, n = size(); i < n; ++i)
       if (RefArray{items()}[i] == item) return true;
@@ -189,16 +236,24 @@ struct List {
   /// Adds the reference `item` at its end through the List's own Add, as the game's code does (the
   /// host contract's list_add): the List may replace its backing array, so take items() again after
   /// it. False, touching nothing, before bind, for a null `raw` or an object that is not a List.
+  /// @param item The reference to add; null allowed.
+  /// @return True when it was added.
+  /// @since Contract 2.2
   bool add(void* item) const { return detail::list_add(raw, item); }
 
   /// Removes item i through the List's own RemoveAt, as the game's code does (the host contract's
   /// list_remove_at); take items() again after it. False, touching nothing, before bind, for a null
   /// `raw`, an object that is not a List or an index at or past size().
+  /// @param i The index, below size().
+  /// @return True when the item was removed.
+  /// @since Contract 2.2
   bool remove_at(size_t i) const {
     return i < size() && detail::list_remove_at(raw, static_cast<int32_t>(i));
   }
 
   /// A List of structs' backing array, as a ValueArray (indexes below size() only).
+  /// @return The view, valid until the next managed call.
+  /// @since Contract 2.2
   ValueArray values() const { return ValueArray{items()}; }
 };
 

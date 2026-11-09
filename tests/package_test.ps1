@@ -152,6 +152,12 @@ try {
     if (Compare-Object $expectedPrefix @($arguments[0..4]) -SyncWindow 0) { throw "vpk did not receive the pack command, id and version: $arguments" }
     $mainExe = $arguments[[array]::IndexOf($arguments, '--mainExe') + 1]
     if ($mainExe -ne 'PhasmoMods Loader.exe') { throw "vpk received the wrong main executable: $mainExe" }
+    # The title names the Start menu shortcut and the installed-apps entry; without it they read the id, with no space.
+    $title = if ($arguments -contains '--packTitle') { $arguments[[array]::IndexOf($arguments, '--packTitle') + 1] } else { '' }
+    if ($title -ne 'PhasmoMods Loader') { throw "vpk received the wrong title: $title" }
+    # Setup.exe and the installed-apps entry take the launcher's own icon.
+    $icon = if ($arguments -contains '--icon') { $arguments[[array]::IndexOf($arguments, '--icon') + 1] } else { '' }
+    if ($icon -ne (Join-Path $fixture 'tools/launcher.ico')) { throw "vpk received the wrong icon: $icon" }
 
     # pack stages exactly the payload, and nothing from a stale dist/PhasmoMods
     $staged = @(Get-Content -LiteralPath (Join-Path $fixture 'vpk-content.txt') | Sort-Object)

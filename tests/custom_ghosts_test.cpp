@@ -15,6 +15,7 @@
 #include "apparition_rule.h"
 #include "contract.h"
 #include "draugr_rule.h"
+#include "drag_rule.h"
 #include "echo_rule.h"
 #include "goryo_way.h"
 #include "fake_game.h"
@@ -296,6 +297,60 @@ void the_asterion_batters_doors() {
   DoorTrack ended;
   ended.step(true, 1.0f, true, true, 0.1f);
   CHECK(ended.step(false, 1.0f, true, true, 0.1f) == DoorAction::None && !ended.battering());
+}
+
+void the_asterion_bursts_both_leaves_of_a_double_door() {
+  // Door.otherDoor names a double door's other leaf (Door.GhostOpenDoorEvent pushes it too). One leaf may
+  // name the other without the reverse, so a leaf's partner is the one it names or one that names it.
+  int a = 0, b = 0, c = 0, d = 0;
+  const std::vector<const void*> doors{&a, &b, &c, &d};
+  const std::vector<const void*> others{&b, nullptr, nullptr, &c};  // a names b and d names c; b and c name nobody
+  const std::vector<const void*> nobody{nullptr, nullptr, nullptr, nullptr};
+  CHECK(door_partner(doors, others, nobody, 0) == 1);   // a: the leaf it names
+  CHECK(door_partner(doors, others, nobody, 1) == 0);   // b: names nobody, but a names it
+  CHECK(door_partner(doors, others, nobody, 2) == 3);   // c: d names it
+  CHECK(door_partner(doors, others, nobody, 3) == 2);
+  // The kitchen's double door keeps its partner in the second field (Door.pairedDoor), the first left empty.
+  const std::vector<const void*> paired{&b, &a, nullptr, nullptr};
+  CHECK(door_partner(doors, nobody, paired, 0) == 1 && door_partner(doors, nobody, paired, 1) == 0);
+  CHECK(door_partner(doors, nobody, paired, 2) == -1);
+  const std::vector<const void*> single{&a}, none{nullptr};
+  CHECK(door_partner(single, none, none, 0) == -1);   // a single door
+  const std::vector<const void*> gone{&a, &b}, othersGone{&c, nullptr}, twoNone{nullptr, nullptr};  // names a leaf not tracked
+  CHECK(door_partner(gone, othersGone, twoNone, 0) == -1 && door_partner(gone, othersGone, twoNone, 1) == -1);
+  // Battering one leaf bursts it; its partner is jammed open with it and never battered again.
+  DoorTrack partner;
+  partner.jam();
+  CHECK(partner.state == DoorTrack::State::Jammed && !partner.battering());
+  CHECK(partner.step(true, 0.5f, true, true, 0.1f) == DoorAction::None);
+}
+
+void the_asterion_swings_a_broken_door_open() {
+  // A broken leaf swings from where it stands to its open angle (HingeDoor.openAngle) over kAsterionSwing
+  // seconds, the short way round as Mathf.LerpAngle turns, then is locked there.
+  CHECK(std::fabs(swing_angle(0, 90, 0) - 0) < 0.001f);
+  CHECK(std::fabs(swing_angle(0, 90, kAsterionSwing / 2) - 45) < 0.001f);
+  CHECK(std::fabs(swing_angle(0, 90, kAsterionSwing) - 90) < 0.001f);
+  CHECK(std::fabs(swing_angle(0, 90, kAsterionSwing * 3) - 90) < 0.001f);  // never past the open angle
+  CHECK(std::fabs(swing_angle(0, 90, -1) - 0) < 0.001f);                   // nor before it starts
+  // Across 0 and 360 it takes the short way: from 350 to 80 is 90 degrees forward, not 270 back.
+  const float mid = swing_angle(350, 80, kAsterionSwing / 2);
+  CHECK(std::fabs(delta_angle(mid, 35)) < 0.001f);
+  CHECK(kAsterionSwing > 0 && kAsterionSwing < 1);  // a fast swing, as the user asked
+  // It is locked the moment it is fully open, with no gap in which a player could move it (the user,
+  // 2026-11-07); the lock itself stops the leaf and hushes its creak (lock_open).
+  CHECK(!asterion_locks(kAsterionSwing - 0.01f));
+  CHECK(asterion_locks(kAsterionSwing));
+  // The host names the broken leaves to every client by their PhotonView's ViewID.
+  const std::vector<uint8_t> two = net_msg::doors({1001, 1002});
+  std::vector<uint32_t> ids;
+  const std::vector<uint32_t> named{1001, 1002};
+  CHECK(net_msg::read_doors(two.data(), two.size(), ids) && ids == named);
+  CHECK(!net_msg::read_doors(two.data(), two.size() - 1, ids));  // cut short
+  const std::vector<uint8_t> none = net_msg::doors({});
+  CHECK(!net_msg::read_doors(none.data(), none.size(), ids));    // no door is no message
+  const std::vector<uint8_t> anger = net_msg::anger(true);
+  CHECK(!net_msg::read_doors(anger.data(), anger.size(), ids));  // another kind
 }
 
 void the_lithobolia_aims_true() {
@@ -780,6 +835,22 @@ void the_tempest_strikes_with_the_weather() {
   CHECK(tempest_speed(kGameBase, false) < kGameBase && tempest_speed(kGameBase, true) > 2 * kGameBase);
 }
 
+void the_tempest_follows_a_weather_wish() {
+  // A Monkey Paw weather wish sets LevelValues' weather at once (RandomWeather.TransitionWeatherProfile), and
+  // the game's storm reads it again at each of its strikes, so the Tempest reads it again too.
+  // Weather types of build 25811160: clear 0, rain 2, heavy rain 3, dead 8 (passed in, as from the game).
+  SkyWatch watch;
+  CHECK(watch.sky == Sky::Clear);
+  CHECK(watch.see(0, 2, 3, 8) && watch.sky == Sky::Clear);       // the first reading is news, for the log
+  CHECK(!watch.see(0, 2, 3, 8) && watch.sky == Sky::Clear);      // the same weather again is not
+  CHECK(watch.see(3, 2, 3, 8) && watch.sky == Sky::HeavyRain);   // a wish for a storm: it strikes often now
+  CHECK(tempest_next_strike(watch.sky, 1) == 6);
+  CHECK(!watch.see(-1, 2, 3, 8) && watch.sky == Sky::HeavyRain);  // unread: the last known weather stands
+  CHECK(!watch.see(8, 2, 3, 8) && watch.sky == Sky::HeavyRain);   // the dead players' profile is never the contract's
+  CHECK(watch.see(2, 2, 3, 8) && watch.sky == Sky::Rain);         // another wish
+  CHECK(watch.see(4, 2, 3, 8) && watch.sky == Sky::Clear);        // snow strikes as rarely as a clear night
+}
+
 void the_tempest_opens_each_hunt_with_a_strike() {
   StrikeClock clock;
   CHECK(!tempest_strike_now(clock, false, 1000, 5000));  // no hunt, no strike
@@ -874,6 +945,115 @@ void the_dullahan_charges_straight_and_stalls_at_corners() {
   CHECK(dullahan_speed(kGameBase, 90) < kGameBase * 0.5f);
   CHECK(dullahan_speed(kGameBase, 30) > dullahan_speed(kGameBase, 60));
   CHECK(dullahan_speed(kGameBase, 0) < brownie_speed(kGameBase, false));          // the user's ceiling (spec)
+}
+
+void the_draugr_drags_a_thing_by_a_corner() {
+  using drag::Point;
+  // The ghost holds the thing by the top corner of its box nearest the way it goes.
+  const Point c = drag::grab_corner({0, 0.5f, 0}, {0.2f, 0.1f, 0.3f}, {1, 0, 0});
+  CHECK(std::fabs(c.x - 0.2f) < 1e-5f && std::fabs(c.y - 0.6f) < 1e-5f);
+  const Point back = drag::grab_corner({0, 0.5f, 0}, {0.2f, 0.1f, 0.3f}, {-1, 0, -1});
+  CHECK(back.x < 0 && back.z < 0);
+  // A spring pulls the held corner toward where the ghost's hand is, damped by the corner's own motion.
+  const Point still = drag::pull({0, 0, 0}, {0, 0, 0}, {0, 0, 0});
+  CHECK(still.x == 0 && still.y == 0 && still.z == 0);
+  const Point toward = drag::pull({0, 0, 0}, {0.5f, 0, 0}, {0, 0, 0});
+  CHECK(toward.x > 0 && toward.y == 0 && toward.z == 0);
+  const Point damped = drag::pull({0, 0, 0}, {0, 0, 0}, {2, 0, 0});
+  CHECK(damped.x < 0);  // moving with nothing to reach: slowed down
+  const Point far = drag::pull({0, 0, 0}, {100, 0, 0}, {0, 0, 0});
+  CHECK(std::fabs(far.x - drag::kMaxPull) < 1e-3f);  // never a violent yank
+  // The hand moves on at the ghost's pace only while the thing keeps up, and waits when it snags.
+  CHECK(std::fabs(drag::advance(1, 10, 0.2f, 1.7f, 0.5f) - 1.85f) < 1e-4f);
+  CHECK(drag::advance(1, 10, drag::kLead + 0.1f, 1.7f, 0.5f) == 1);
+  CHECK(drag::advance(9.9f, 10, 0.1f, 1.7f, 1) == 10);  // never past the route's end
+  // It has arrived once the hand is at the end and the thing lies near its spot.
+  CHECK(drag::arrived(10, 10, {0.2f, 1, 0}, {0, 1, 0}) && !drag::arrived(9, 10, {0, 1, 0}, {0, 1, 0}));
+  CHECK(!drag::arrived(10, 10, {1, 1, 0}, {0, 1, 0}));
+  // While it moves, every client knocks it gently on a steady rhythm with its own gentle impact clips.
+  drag::Knocks k;
+  CHECK(!k.due(0, 1.0f));                           // the first knock waits a beat
+  CHECK(k.due(drag::kKnockMs, 1.0f));
+  CHECK(!k.due(drag::kKnockMs + 10, 1.0f));
+  CHECK(!k.due(drag::kKnockMs * 3, 0.0f));          // standing still: no knock
+  CHECK(drag::knock_speed(1.7f, 2.0f) == 1.7f);     // below the prop's cutoff: as fast as it moves
+  CHECK(drag::knock_speed(3.0f, 2.0f) < 2.0f);      // never past it, so the clip is a gentle one
+  // The host names the dragged thing, and when the drag ends, to every client.
+  const std::vector<uint8_t> on = net_msg::drag(4242, true), off = net_msg::drag(4242, false);
+  uint32_t id = 0;
+  bool dragging = false;
+  CHECK(net_msg::read_drag(on.data(), on.size(), id, dragging) && id == 4242 && dragging);
+  CHECK(net_msg::read_drag(off.data(), off.size(), id, dragging) && !dragging);
+  CHECK(!net_msg::read_drag(on.data(), on.size() - 1, id, dragging));
+}
+
+void the_draugr_drags_a_thing_back_along_the_floor() {
+  using drag::Point;
+  // A route from the thing, along the navigation mesh's corners at the thing's height above the floor, to
+  // the spot it came from. The thing lies 0.4 m above the mesh where it starts.
+  const Point start{0, 0.4f, 0}, home{4, 1.2f, 3};
+  const std::vector<Point> corners{{0, 0, 0}, {4, 0, 0}, {4, 0, 3}};
+  const drag::Route r = drag::route(start, corners, home, 0.4f);
+  CHECK(r.points.size() == 5);
+  CHECK(std::fabs(r.points[2].x - 4) < 1e-4f && std::fabs(r.points[2].y - 0.4f) < 1e-4f);  // a corner, lifted
+  CHECK(std::fabs(r.length - (4 + 3 + 0.8f)) < 1e-3f);  // along the floor, then up onto its spot
+  // Walking it: halfway along the first leg, round the corner, and set down exactly on its spot at the end.
+  const Point a = drag::along(r, 2);
+  CHECK(std::fabs(a.x - 2) < 1e-4f && std::fabs(a.y - 0.4f) < 1e-4f && std::fabs(a.z) < 1e-4f);
+  const Point b = drag::along(r, 5);
+  CHECK(std::fabs(b.x - 4) < 1e-4f && std::fabs(b.z - 1) < 1e-4f);
+  const Point end = drag::along(r, 100);
+  CHECK(end.x == home.x && end.y == home.y && end.z == home.z);
+  CHECK(drag::along(r, -1).x == start.x);
+  // With no path over the mesh it goes straight to its spot.
+  const drag::Route straight = drag::route(start, {}, home, 0.4f);
+  CHECK(straight.points.size() == 2 && std::fabs(straight.length - std::sqrt(16.0f + 0.64f + 9.0f)) < 1e-3f);
+  // A thing below the mesh's height (a negative lift) rides on the floor, never under it.
+  const drag::Route low = drag::route(start, corners, home, -0.3f);
+  CHECK(std::fabs(low.points[1].y) < 1e-4f);
+}
+
+void the_draugr_leaves_a_thing_beside_the_table_it_lay_on() {
+  using drag::Point;
+  // The thing lay on a table over the floor's last corner. The ghost drags it along the floor and leaves it
+  // beside the table, where nothing is overhead: never lifted (the user, 2026-11-07: carried up it glided
+  // through the air), and never under the table (live, 2026-11-07: there it jiggled against the top).
+  const Point start{0, 0.3f, 0};
+  const std::vector<Point> corners{{0, 0, 0}, {4, 0, 0}, {4, 0, 3}};
+  auto table = [](Point floor) { return floor.z < 2.0f; };  // the table covers z from 2 on
+  const drag::Route r = drag::route_beside(start, corners, 0.3f, table);
+  const Point& end = r.points.back();
+  CHECK(end.z < 2.0f && end.z > 1.4f && std::fabs(end.x - 4) < 1e-4f && std::fabs(end.y - 0.3f) < 1e-4f);
+  for (const Point& p : r.points) CHECK(std::fabs(p.y - 0.3f) < 1e-4f);  // along the floor all the way
+  float length = 0;
+  for (size_t i = 1; i < r.points.size(); ++i) length += drag::distance(r.points[i - 1], r.points[i]);
+  CHECK(std::fabs(r.length - length) < 1e-3f);
+  // Nothing overhead at the floor's end: it goes all the way. Nowhere clear near the end: all the way too.
+  const drag::Route open = drag::route_beside(start, corners, 0.3f, [](Point) { return true; });
+  CHECK(std::fabs(open.points.back().z - 3) < 1e-4f && open.points.size() == 4);
+  const drag::Route shut = drag::route_beside(start, corners, 0.3f, [](Point) { return false; });
+  CHECK(std::fabs(shut.points.back().z - 3) < 1e-4f);
+  // Snagged (the hand waiting on it), the ghost tugs the held corner upward a little to free it, and eases
+  // off once it comes again (live, 2026-11-07: a thing caught on a rug's edge).
+  float lifted = 0;
+  lifted = drag::tug(lifted, true, 0.5f);
+  CHECK(std::fabs(lifted - drag::kTugRate * 0.5f) < 1e-5f);
+  lifted = drag::tug(lifted, true, 10);
+  CHECK(lifted == drag::kMaxTug);
+  CHECK(drag::tug(lifted, false, 10) == 0);
+  // A thing that makes no headway for kSnagMs is let go where it lies.
+  drag::Headway h;
+  CHECK(!h.stuck(0, 1000) && !h.stuck(1, 2000));
+  CHECK(!h.stuck(1, 2000 + drag::kSnagMs - 1) && h.stuck(1, 2000 + drag::kSnagMs));
+  CHECK(!h.stuck(1.5f, 99000));  // moving on again
+}
+
+void a_draugr_thing_leaves_its_room_at_the_rooms_colliders() {
+  // The game has no room for a prop; a player is in a room while inside one of its trigger colliders
+  // (LevelRoom.OnTriggerEnter, LevelRoomTrigger.OnTriggerEnter), the colliders LevelRoom.roomColliders holds.
+  // A thing has left the Draugr's room once it is outside them, with no margin: a 1 m margin kept things
+  // just past a doorway "in" the room on the first test sheet, so it never angered.
+  CHECK(draugr::kLeftRoomMargin == 0.0f);
 }
 
 void the_draugr_crawls_far_from_its_room() {
@@ -2344,6 +2524,8 @@ int main() {
   the_hydra_grows_heads();
   the_flame_ghost_messages_round_trip();
   the_asterion_batters_doors();
+  the_asterion_swings_a_broken_door_open();
+  the_asterion_bursts_both_leaves_of_a_double_door();
   the_lithobolia_aims_true();
   the_lithobolia_only_throws_at_people();
   the_ghost_sees_a_player_through_their_sight_parts();
@@ -2367,9 +2549,14 @@ int main() {
   the_lethe_makes_them_forget();
   the_lethe_forgets_the_player_it_lost();
   the_tempest_strikes_with_the_weather();
+  the_tempest_follows_a_weather_wish();
   the_tempest_opens_each_hunt_with_a_strike();
   the_mesmer_shows_each_their_own();
   the_dullahan_charges_straight_and_stalls_at_corners();
+  a_draugr_thing_leaves_its_room_at_the_rooms_colliders();
+  the_draugr_drags_a_thing_back_along_the_floor();
+  the_draugr_drags_a_thing_by_a_corner();
+  the_draugr_leaves_a_thing_beside_the_table_it_lay_on();
   the_draugr_crawls_far_from_its_room();
   draugr_skips_long_roam_like_goryo();
   draugr_goryo_type_restored_when_picker_throws();

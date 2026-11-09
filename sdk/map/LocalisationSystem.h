@@ -109,17 +109,20 @@ inline constexpr pm::sdk::EntryDesc GameController_GetAveragePlayerInsanity{
     .key = "GameController.GetAveragePlayerInsanity", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "GameController", .name = "GetAveragePlayerInsanity"};
 
+// Found only for that fact.
 /// Ends a hunt's effects on this client. The hunt state's exit (GhostHuntState.Exit) calls it when the
-/// hunt was on. Found only for that fact. Decompiled.
+/// hunt was on. Decompiled.
 inline constexpr pm::sdk::EntryDesc GameController_ResetHuntEffects{
     .key = "GameController.ResetHuntEffects", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "GameController", .name = "ResetHuntEffects"};
 
 }  // namespace pm::map
 
-// The game API for LocalisationSystem (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this
-// game build" once and returns its type's default (null) without touching the game.
+/// @file
+/// @brief The game API for LocalisationSystem (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (null) without touching the game.
 namespace phasmo {
 /// @addtogroup journal
 /// @{

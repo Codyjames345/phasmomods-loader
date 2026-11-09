@@ -23,3 +23,15 @@ looks for five seconds, at the cost of an event charge. The game's own `GhostEve
 particle cloud, so every client bakes that investigator's body into a still figure that moves and
 turns with the ghost. There is no version for the game's own AI ghosts yet; this idea would bring
 the event to normal contracts without a ghost player.
+
+## A ghost that reacts to how close the investigators are
+
+A custom ghost that changes behaviour depending on how close the investigators are to determining
+its type. This includes circled evidence, media, and the ghost type circled.
+
+Notes: recorded 2026-11-08; how it changes and what counts as "close" are for the user to decide.
+The SDK already maps the three signals: the journal's evidence buttons and their sync
+(`JournalController.evidenceButtons`, `sdk/map/JournalController.h`), each player's ghost guess and its
+sync (the guess entries in the same header), and the journal's media (`Journal_PhotoPage.photos`,
+`.sounds` and `.videos`, `sdk/systems/media.md`). Every player's journal is on every client
+(`sdk/systems/journal.md`), so the ghost could read all players' choices, not only the host's.

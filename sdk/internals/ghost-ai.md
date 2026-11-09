@@ -76,6 +76,89 @@ Update drill (2026-10-23): renaming the cooldown field and moving the agent in a
 every entry resolved, reporting the agent's new offset and the cooldown as renamed from its old name.
 A stale obfuscated name never decides.
 
+## How the hunt's entries are found
+
+Moved here from [Ghost AI](../systems/ghost-ai.md), which says what each entry does. The hunt state
+(`sdk/map/GhostHuntState.h`) is a class whose name and members are all obfuscated. It is found by its
+field types: a GhostAI, a NavMeshAgent, a ClosetZone, the ghost's type and two lists of players.
+
+### Its speed
+
+| Key | Kind | Found by |
+| --- | --- | --- |
+| `GhostHuntState` | type | shape: `fieldTypes` |
+| `GhostHuntState.ghost` | field, `@GhostAI` | shape |
+| `GhostHuntState.RefreshBase` | method, `void()` | shape, `Calls GameController.GetAveragePlayerInsanity`, `Called` |
+| `GhostHuntState.UpdateSpeed` | method, `void()` | shape, `Calls GhostAI.DayanPlayerChecks`, `Called` |
+| `GhostHuntState.baseSpeed` | field, float | shape, `Stores RefreshBase` |
+| `GhostHuntState.sightSpeedUp` | field, float | shape, `Stores UpdateSpeed` |
+| `GameController.GetAveragePlayerInsanity`, `GhostAI.DayanPlayerChecks` | methods | name |
+
+The obfuscator left uncalled decoys of both methods: near-copies that store other constants (the
+refresh's decoy writes bases in the hundreds) and that nothing calls. On build 25811160 two `void()`
+methods call `GetAveragePlayerInsanity` and four call `DayanPlayerChecks`; only one of each is called
+by the class's other methods, so each method entry adds the `Called` fact ([mapping](mapping.md)). Without it
+both are `AMBIGUOUS`; without the reader's epilogue rule (a register restored from the stack in an
+epilogue still holds `this`) `sightSpeedUp` is `AMBIGUOUS`, since `UpdateSpeed` writes it through `rbx`
+and restores `rbx` with a `mov` through `r11`.
+
+The hunt follows players through four Player fields. `GhostHuntState.target` is the class's one
+internal one (the field's `access`). `GhostHuntState.searchTarget` is the one private Player field
+`UpdateSpeed` reads (`Loads UpdateSpeed`, `access` private). `UpdateSpeed`'s other Player reads go
+through the GhostAI and the LevelController it reaches through its own fields; the resolver does not
+count them, since neither type can be a hunt state ([mapping](mapping.md), facts).
+
+### Its senses, target and kill
+
+Each method has same-shape look-alikes in the class (the obfuscator's copies), so each is found by what
+its own code compares or calls, and several are found through another (the resolver orders them by
+their dependencies):
+
+| Key | Kind | Found by |
+| --- | --- | --- |
+| `GhostHuntState.Sees` | `bool(Player, bool)`, the sight test | `Compares GhostType.Deogen` (its look-alike compares another number) |
+| `GhostHuntState.Hears` | `bool(Player)`, the voice test | `Calls PlayerAudio.IsTalkingLoudly` |
+| `GhostHuntState.SensesGear` | `bool(Player)`, the electronics test | `Compares GhostType.Deogen`, `Calls Object.op_Implicit` |
+| `GhostHuntState.Listen` | `bool()`: sends the hunt to a player it hears or senses | `Calls Hears` (its only caller) |
+| `GhostHuntState.SetCloset` | `void(ClosetZone)` | `CalledBy Listen` (six look-alikes differ only in the flags they store) |
+| `GhostHuntState.SetTarget` | `void(Player)` | `Calls SetCloset` (its look-alikes call a look-alike of SetCloset) |
+| `GhostHuntState.Started` | `bool()`, the gate Execute runs first | `Calls GhostAI.ChangeState`, `Calls GhostAI.Appear` |
+| `GhostHuntState.Exit` | `void()`, the hunt's end | `Calls GameController.ResetHuntEffects`, `Calls SetCloset` |
+| `GhostHuntState.ctor` | constructor | name |
+| `lastPlayer` | private Player | `Stores Listen`, `Loads UpdateSpeed` negated |
+| `seen`, `killed` | the two List<Player> | `seen`: `Loads Exit`; `killed`: `Loads Sees`, `Loads Exit` negated |
+| `searchCloset` | the one ClosetZone | shape |
+| `startDelay` | float | `Stores Started` |
+| `killReach`, `slowKillReach` | float | `StoresConst ctor` 1.1 and 1.5 |
+
+The SetTarget and SetCloset pair looked circular (each is singled out by the other): the voice test
+breaks the circle, since its one caller, Listen, calls SetCloset and none of its look-alikes. Some
+facts look elsewhere than the obvious method because the reader proves `this` only for a register that
+holds it throughout a method: SetTarget reuses `rbx` for LevelStats after its stores, and the voice test
+reads `LevelRoom.floor` through a Player, which a negated fact on it cannot rule out.
+
+The may-go-for test cannot be singled out: its look-alike `GhostHuntState.TargetAllows` shares its one
+caller, compares with the same numbers and calls all it calls. `TargetAllows` also has a second caller,
+`GhostHuntState.Listen`, whose own eligibility test it is; a negated call fact could use that, but the
+resolver refuses those.
+
+The idle state (`GhostIdleState.h`) is found by its field types with a FrameSkipFilter. Its
+`HuntInsanity` is found by `Compares GhostType.Thaye` and `Calls GameController.GetAveragePlayerInsanity`
+(it has nineteen look-alikes), and `insanity` by `Stores HuntInsanity`.
+
+### The hold on hunts
+
+Only the compiler-generated coroutine that `GhostAI.StopGhostFromHunting` makes writes
+`GhostAI.huntsHeldOff`, and such classes are never shape candidates, so the entry is found through its
+readers: FireSource's count of the Onryo's blow-outs reads it beside isHunting (a cross-type fact), and
+ChangeState reads isHunting but never the hold (a negated one).
+
+### The sensors
+
+The LOSSensor's settings are a dozen obfuscated bools, ints, floats and curves that only its TestSignal
+reads, so no code fact tells them apart. `Type::copy_settings` copies them all from the game's metadata
+instead.
+
 ## The wander and the favourite room (why the Goryo keeps its room)
 
 Read from decompiles of build 25811160 (2026-10-30). The members a mod reads are mapped; the bullets below name the
@@ -106,7 +189,7 @@ alive means it searches.
   standing in its favourite room it rolls RandomRangeInt(0, 100) against a difficulty setting
   (90, 80 or 70) and, past it, sets a new random radius: a roam away from its room. That roll is skipped
   for a ghost whose behaviour type (`GhostInfo.behaviourType`) is 14, the Goryo, so the Goryo's wander
-  radius stays 3 and its exit always returns before the room change. Types 6 and 4 have branches of
+  radius stays 3 and its exit always returns before the room change. The Mare (6) and the Banshee (4) have branches of
   their own there. There is no trait flag: the tests read the behaviour type.
 - **The Goryo's other wander branches.** The same type test appears in the picker's destination check
   (a Goryo's sampled point is taken without the path test the others get), in the per-frame step (a
@@ -117,8 +200,8 @@ alive means it searches.
   goes to its destination when the floors differ by one and to state 0 otherwise, and a Goryo goes to
   state 0. None of them is on the room change.
 - **Only the roll differs inside the picker.** The picker's destination check (the second type test)
-  is reached only when the radius is not 3. A ghost whose type reads 14 throughout the picker never
-  changes the radius there (it skips the type 6 and 4 branches and the roll), so for it that check is
+  is reached only when the radius is not 3. A ghost whose type reads 14 (the Goryo) throughout the picker never
+  changes the radius there (it skips the Mare's (6) and the Banshee's (4) branches and the roll), so for it that check is
   never reached: answering 14 inside the picker alone would change the long-roam roll and nothing else.
 - **The entries.** The wander class (fields GhostAI, NavMeshAgent, a float, an int, three bools and a
   Vector3) is `GhostWanderState` (`sdk/map/GhostWanderState.h`). Its field list is exact
@@ -139,7 +222,7 @@ alive means it searches.
     (two containers) and runs its async setup. That setup's
     `AsyncVoidMethodBuilder.Start` calls the state machine's MoveNext at once, and
     MoveNext only sets its state to -2 and calls SetResult. It reads no GhostInfo and sends nothing.
-  - `LevelRoom.AreRoomLightsOn` (the type 6 branch only) reads the room's light switches
+  - `LevelRoom.AreRoomLightsOn` (the Mare's (6) branch only) reads the room's light switches
     (`LightSwitch.get_isOn`).
   - A path-length helper (radius not 3 only) reads the path's corners.
   - The runtime's own metadata init, class init and null-reference throw.

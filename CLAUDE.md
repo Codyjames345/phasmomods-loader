@@ -4,13 +4,68 @@ These are the user's standing rules and decisions, gathered from earlier session
 reviewers and planners. When a rule here and a plan disagree, ask the user. Dates are when the user decided. Decisions marked
 "don't re-ask" are settled.
 
-Where things live:
-- The work in progress: `docs/superpowers/plans/` and `docs/superpowers/specs/`. Stage 2b's ledger is
-  `.superpowers/sdd/stage2b/progress.md` (gitignored, force-added on the cloud branch). Read the ledger's last entries before
-  starting, and append to it as you go, so the next agent can pick up after a usage limit.
-- How implementers and reviewers work: `.superpowers/sdd/implementer-rules.md` and `reviewer-rules.md`.
-- Game facts: `sdk/map/*.h` entry notes and `sdk/systems/*.md`. Raw numbers live only in gitignored `re/dump/`.
-- Problems not fixed yet: `FINDINGS.md`. Ideas not scheduled: `docs/mod-ideas.md`.
+## Where to find things
+
+Most questions about the game are already answered in the repo. Look there before you reverse engineer anything. When
+you do have to reverse engineer, add what you find to the docs (see "Reverse engineering reaches the SDK" below).
+
+**Order to look in, for "what does the game do?":**
+1. `sdk/systems/<area>.md`: one overview page per game system (table below).
+2. `sdk/map/<Class>.h`: one header per game class. The `///` note on each entry is the authority on what that member
+   does. `sdk/map/all.h` lists every entry.
+3. `docs/<mod>.md` and `docs/superpowers/specs/`: what our mods change. This is not vanilla behaviour.
+4. `sdk/internals/<area>.md`: how each fact was read. `sdk/internals/mapping.md` covers entries, the resolver, facts,
+   confidence and game builds, and `sdk/internals/reverse-engineering.md` covers the tools and the pitfalls.
+5. Only then reverse engineer (`re/README.md`). The raw dump in `re/dump/` is gitignored, so it may not exist.
+
+**Questions about one ghost type** ("which ghost hunts after three candles go out?", "what is special about the
+Deogen?"): start at `sdk/systems/vanilla-ghosts.md`, which lists every mapped rule of each vanilla type with its map keys.
+
+**How to search.** Notes name a ghost type with its number in brackets, "the Onryo (16)", and decompiles give the
+number alone, often in hex (`0x10`). So grep the name and the number. To turn a number into a name, use
+`audited_ghost_types()` in `sdk/fake/fake_game.cpp`: an entry's index is its `GhostType` value for the audited build.
+Evidence numbers are in the `EvidenceType` note in `sdk/map/GhostTypes.h`. Obfuscated classes are described by what they
+do, not by name, so also grep for words about the mechanic ("blow-out", "smudge", "sanity drain").
+
+| Question about | Overview | Map headers (`sdk/map/`) |
+|---|---|---|
+| What each vanilla ghost type does differently | `sdk/systems/vanilla-ghosts.md` | the keys it cites |
+| Ghost AI: states, how a hunt starts, hunt speed, targets, kills, interactions, events | `sdk/systems/ghost-ai.md` | `GhostAI.h`, `GhostHuntState.h`, `GhostWanderState.h`, `GhostIdleState.h`, `GhostSenses.h`, `Sensor.h`, `Footstep.h` |
+| Ghost types, the type roll, the Mimic, type numbers | `sdk/systems/ghost-types.md` | `GhostTypes.h`, `GhostInfo.h`, `GhostController.h`, `GhostCollection.h` |
+| Evidence | `sdk/systems/evidence.md` | `EvidenceController.h`, `GhostTypes.h` |
+| Flames, candles, lighters, blow-outs | `sdk/systems/flames.md` | `FireSource.h`, `Candle.h` |
+| Players, death, revival, sanity | `sdk/systems/players.md` | `Player.h`, `PlayerSanity.h` |
+| Equipment and cursed possessions, item by item | `sdk/guides/equipment.md`, "Item by item" | `Equipment.h`, `CursedItems.h` |
+| Doors: finding, moving, opening and locking them | `sdk/systems/doors.md` | `Door.h`, `UnityWorld.h` |
+| Routes through the level, the NavMesh | `sdk/systems/navigation.md` | `UnityWorld.h`, `GhostAI.h` |
+| Rooms, lights, hiding places, props | none | `LevelRoom.h`, `LevelController.h`, `LightSwitch.h`, `ClosetZone.h`, `Props.h`, `MapController.h` |
+| Contract start and end, results, payout | `sdk/systems/contract.md` | `GameController.h`, `LevelStats.h`, `Rewards.h` |
+| Difficulty and presets | `sdk/systems/difficulty.md` | `Difficulty.h` |
+| Journal | `sdk/systems/journal.md` | `JournalController.h`, `LocalisationSystem.h` |
+| Menus, lobby board, UI widgets | `sdk/systems/menus.md` | `MainMenu.h`, `MainManager.h`, `ServerManager.h`, `Doozy.h`, `UnityUI.h`, `UnityEvents.h` |
+| Photon: rooms, views, RPC checks | `sdk/systems/photon.md` | `Photon.h` |
+| Voice chat | `sdk/systems/voice.md` | `PlayerVoice.h` |
+| Weather and lightning | `sdk/systems/weather.md` | `Weather.h` |
+| Cameras, photos, video, screens | `sdk/systems/media.md` | `Camera.h`, `UnityRendering.h` |
+| Scene paths, layers, Animator parameters | `sdk/systems/scene.md` | `Scene.h`, `Animator.h`, `LayerMask.h` |
+| Steam achievements | `sdk/systems/achievements.md` | `Steam.h` |
+| Unity's world queries, physics, NavMesh, input | none | `UnityWorld.h`, `UnityPlayer.h`, `Transform.h`, `Input.h` |
+
+**Our mods:** a mod's design is in `docs/<mod>.md` (`ghost-tells.md`, `custom-ghosts.md`, `spectral-flame.md`, and
+`design.md` for Playable Ghost). Its code is in `mods/<mod>/`, one `<ghost>.cpp` and `<ghost>_rule.h` per ghost. Per-ghost
+decisions are in `docs/superpowers/specs/`. The SDK's author guides are in `sdk/guides/`, and a complete example mod is
+in `sdk/examples/example_ghost/`.
+
+**The code:** `sdk/api/` is the game API that mods call. `core/` holds the shared helpers and the host contract
+(`core/mod_api.h`). `host/` is the loader (`ModHost.dll`). `sdk/fake/` is the fake game the offline tests run against.
+`tests/` holds one `<area>_test.cpp` per area. Build with `.\build.ps1` and test with `.\validate.ps1`.
+
+**Work in progress:** plans and specs are in `docs/superpowers/plans/` and `docs/superpowers/specs/`. Stage 2b's ledger
+is `.superpowers/sdd/stage2b/progress.md`. It is gitignored, force-added on the `development` branch, and checked out in
+`.claude/worktrees/stage2b`. Read the ledger's last entries before you start, and append to it as you go, so the next
+agent can pick up after a usage limit. How implementers and reviewers work is in `.superpowers/sdd/implementer-rules.md`
+and `reviewer-rules.md`. Problems not fixed yet are in `FINDINGS.md`. Ideas not scheduled yet are in
+`docs/mod-ideas.md`.
 
 ## What AI may and may not make (AI_POLICY.md)
 

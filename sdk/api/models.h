@@ -140,18 +140,18 @@ bool cloth_available(std::string* why = nullptr);
 void* lit_material_of(void* gameObject);
 
 /**
- * @brief A mesh for add_cloth, in the space of the GameObject that will hold it. Every span but `triangles` has one
- *        element per vertex.
- */
-/**
  * Which of ClothMesh::bones carry a vertex, and how much: up to four, as Unity's BoneWeight holds them, heaviest first,
  * their weights adding up to 1. The game's quality settings may skin with fewer; then the heaviest count.
  */
 struct ClothWeight {
-  int32_t bone[4] = {0, 0, 0, 0};
-  float weight[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+  int32_t bone[4] = {0, 0, 0, 0};             ///< Indices into ClothMesh::bones, heaviest first.
+  float weight[4] = {1.0f, 0.0f, 0.0f, 0.0f};  ///< Each bone's share, 0 to 1, adding up to 1.
 };
 
+/**
+ * @brief A mesh for add_cloth, in the space of the GameObject that will hold it. Every span but `triangles` has one
+ *        element per vertex.
+ */
 struct ClothMesh {
   std::span<const phasmo::Vector3> vertices;  ///< Each vertex's position, metres.
   std::span<const phasmo::Vector3> normals;   ///< Each vertex's normal, of length 1.

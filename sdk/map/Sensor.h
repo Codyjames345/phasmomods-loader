@@ -90,8 +90,9 @@ inline constexpr pm::sdk::EntryDesc BaseVolumeSensor_signalFilter{.key = "BaseVo
 
 inline constexpr const char* DetectionMode_values[] = {"Colliders", "RigidBodies", "Either"};
 
+// Found by its values.
 /// What a volume sensor detects (name obfuscated, value names real): Colliders, RigidBodies, Either.
-/// Found by its values. Inferred: from the class dump.
+/// Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc DetectionMode{.key = "DetectionMode",
                                                   .assembly = "Micosmo.SensorToolkit", .ns = "",
                                                   .values = DetectionMode_values};
@@ -105,8 +106,9 @@ inline constexpr pm::sdk::EntryDesc BaseVolumeSensor_detectionMode{.key = "BaseV
 
 inline constexpr const char* RangeShape_values[] = {"Sphere", "Box", "Capsule"};
 
+// Found by its values.
 /// The shape of a range sensor, an enum nested in RangeSensor (name obfuscated, value names real):
-/// Sphere, Box, Capsule. Found by its values. Inferred: from the class dump.
+/// Sphere, Box, Capsule. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc RangeShape{.key = "RangeShape", .owner = "RangeSensor",
                                                .values = RangeShape_values};
 
@@ -135,7 +137,8 @@ inline constexpr pm::sdk::EntryDesc PulseRoutine{.key = "PulseRoutine", .name = 
 
 inline constexpr const char* PulseMode_values[] = {"Manual", "FixedInterval", "EachFrame"};
 
-/// The pulse modes, nested in PulseRoutine. Found by its values. Inferred: from the class dump.
+// Found by its values.
+/// The pulse modes, nested in PulseRoutine. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc PulseMode{.key = "PulseMode", .owner = "PulseRoutine",
                                               .values = PulseMode_values};
 
@@ -208,7 +211,7 @@ inline constexpr pm::sdk::EntryDesc LOSSensor_window{.key = "LOSSensor.window", 
 
 /// The game's signal processor that passes a signal by the ghost's hunting (Assembly-CSharp, global
 /// namespace). Its Process passes a signal while GhostAI.isHunting equals its requirement, or
-/// always for a ghost of type 18 when its allowRaijuSkip is set. It holds settings only.
+/// always for the Raiju (18) when its allowRaijuSkip is set. It holds settings only.
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostHuntingProcessor{.key = "GhostHuntingProcessor",
                                                           .confidence = pm::sdk::Confidence::Decompiled,
@@ -221,14 +224,14 @@ inline constexpr pm::sdk::EntryDesc GhostHuntingProcessor_requirement{.key = "Gh
                                                                       .owner = "GhostHuntingProcessor",
                                                                       .name = "ghostHuntingRequirement", .type = "bool"};
 
-/// Whether a type 18 ghost's signals always pass. Inferred: from its name.
+/// Whether the Raiju's (18) signals always pass. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc GhostHuntingProcessor_allowRaijuSkip{
     .key = "GhostHuntingProcessor.allowRaijuSkip", .kind = pm::sdk::Kind::Field, .owner = "GhostHuntingProcessor",
     .name = "allowRaijuSkip", .type = "bool"};
 
 /// The game's signal processor for players (Assembly-CSharp, global namespace). It declares no fields. Its Process
 /// takes the sight part on the signal's GameObject and passes the signal when the part's Player is not marked dead
-/// (Player.isDead) and that player's room is not outside the map (RoomKind.outsideMap); for a ghost of type 28 it
+/// (Player.isDead) and that player's room is not outside the map (RoomKind.outsideMap); for the Kormos (28) it
 /// then also needs the part within a fixed distance of the sensor it is given, and fails it when a flag reached
 /// through one of the player's fields is set. Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerProcessor{.key = "PlayerProcessor", .confidence = pm::sdk::Confidence::Decompiled,
@@ -257,9 +260,11 @@ inline constexpr pm::sdk::EntryDesc Sensor_GetDetectedComponents{
 
 }  // namespace pm::map
 
-// The game API for SensorToolkit's sensors (sdk/api/game_api.h). Every member is called on Unity's main
-// thread. One that did not resolve in the running game build logs "<key> is not available in this game
-// build" once and returns its type's default (null, false) without touching the game.
+/// @file
+/// @brief The game API for SensorToolkit's sensors (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default (null, false) without touching the game.
 namespace phasmo {
 /// @addtogroup ghost
 /// @{
@@ -346,7 +351,7 @@ struct GhostHuntingProcessor {
   static constexpr pm::api::Type<pm::map::GhostHuntingProcessor> type{};
   /// Whether it passes signals in a hunt: requirement.get(processor). Unresolved: false.
   static constexpr pm::api::Field<pm::map::GhostHuntingProcessor_requirement, bool> requirement{};
-  /// Whether a type 18 ghost's signals always pass: allowRaijuSkip.get(processor). Unresolved: false.
+  /// Whether the Raiju's (18) signals always pass: allowRaijuSkip.get(processor). Unresolved: false.
   static constexpr pm::api::Field<pm::map::GhostHuntingProcessor_allowRaijuSkip, bool> allowRaijuSkip{};
 };
 

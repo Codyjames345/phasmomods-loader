@@ -299,10 +299,12 @@ inline constexpr pm::sdk::EntryDesc Layer_IgnoreRaycast{.key = "Layer.IgnoreRayc
 
 }  // namespace pm::map
 
-// The game API for the scene facts (sdk/api/game_api.h). Every member is called on Unity's main thread
-// while the game plays. One that did not resolve logs "<key> is not available in this game build"
-// once; a path missing in the running scene is logged once per scene load. Either way the lookup
-// answers null or -1 and touches nothing.
+/// @file
+/// @brief The game API for the scene facts (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread while the game plays. One that did not resolve logs "<key> is not
+/// available in this game build" once; a path missing in the running scene is logged once per scene load. Either
+/// way the lookup answers null or -1 and touches nothing.
 namespace phasmo {
 /// @addtogroup runtime
 /// @{
@@ -361,11 +363,15 @@ struct Journal {
   static constexpr pm::api::SceneObject<pm::map::Scene_JournalContentsGhostRow> ContentsGhostRow{};
   /// The Spirit's page. Null when it is not there.
   static constexpr pm::api::SceneObject<pm::map::Scene_JournalGhostPage> GhostPage{};
-  /// That page's title, description and three evidence texts. Null when not there.
+  /// That page's title text. Null when it is not there.
   static constexpr pm::api::SceneObject<pm::map::Scene_JournalGhostPageTitle> GhostPageTitle{};
+  /// That page's description text. Null when it is not there.
   static constexpr pm::api::SceneObject<pm::map::Scene_JournalGhostPageDescription> GhostPageDescription{};
+  /// That page's first evidence text. Null when it is not there.
   static constexpr pm::api::SceneObject<pm::map::Scene_JournalGhostPageEvidence1> GhostPageEvidence1{};
+  /// That page's second evidence text. Null when it is not there.
   static constexpr pm::api::SceneObject<pm::map::Scene_JournalGhostPageEvidence2> GhostPageEvidence2{};
+  /// That page's third evidence text. Null when it is not there.
   static constexpr pm::api::SceneObject<pm::map::Scene_JournalGhostPageEvidence3> GhostPageEvidence3{};
   /// The evidence page's rows. Null when it is not there.
   static constexpr pm::api::SceneObject<pm::map::Scene_JournalEvidenceRows> EvidenceRows{};
@@ -381,14 +387,14 @@ struct Layers {
   static constexpr pm::api::Layer<pm::map::Layer_UI> UI{};
   /// The ground a living player stands on (Layer_Default's note in the map). Unresolved: -1.
   static constexpr pm::api::Layer<pm::map::Layer_Default> Default{};
-  static constexpr pm::api::Layer<pm::map::Layer_Floor> Floor{};
-  static constexpr pm::api::Layer<pm::map::Layer_DefaultNoNavigation> DefaultNoNavigation{};
-  static constexpr pm::api::Layer<pm::map::Layer_StaticProps> StaticProps{};
+  static constexpr pm::api::Layer<pm::map::Layer_Floor> Floor{};  ///< the game's Floor layer, part of that ground. Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_DefaultNoNavigation> DefaultNoNavigation{};  ///< the game's DefaultNoNavigation layer, part of that ground. Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_StaticProps> StaticProps{};  ///< the game's StaticProps layer, part of that ground. Unresolved: -1.
   /// What a body bumps into (Layer_DefaultProps's note in the map). Unresolved: -1.
   static constexpr pm::api::Layer<pm::map::Layer_DefaultProps> DefaultProps{};
-  static constexpr pm::api::Layer<pm::map::Layer_Cabinets> Cabinets{};
-  static constexpr pm::api::Layer<pm::map::Layer_Wall> Wall{};
-  static constexpr pm::api::Layer<pm::map::Layer_Door> Door{};
+  static constexpr pm::api::Layer<pm::map::Layer_Cabinets> Cabinets{};  ///< the game's Cabinets layer. Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_Wall> Wall{};  ///< the game's Wall layer. Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_Door> Door{};  ///< the game's Door layer. Unresolved: -1.
   /// The LaserGhost layer: LaserGhost.index(), -1 when it did not resolve.
   static constexpr pm::api::Layer<pm::map::Layer_LaserGhost> LaserGhost{};
   /// The Ignore Raycast layer, which collides with nothing of the game's: IgnoreRaycast.index(), -1 when it did not

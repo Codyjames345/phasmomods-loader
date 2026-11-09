@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <exception>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <utility>
 
@@ -79,13 +80,20 @@ class VelopackBackend : public Backend {
     return result;
   }
 
-  bool download(const std::string& version, std::wstring& error) override {
+  bool download(const std::string& version, const std::function<void(int)>& progress, std::wstring& error) override {
     try {
       if (!manager_ || !update_ || update_->TargetFullRelease.Version != version) {
         error = pm::text::widen(pm::i18n::text("updater.not-found"));
         return false;
       }
-      manager_->DownloadUpdates(*update_);
+      // Velopack calls back from inside its C library with 0 to 100, so nothing may be thrown back into it.
+      const auto report = [](void* user, size_t percent) {
+        try {
+          (*static_cast<const std::function<void(int)>*>(user))(static_cast<int>(percent > 100 ? 100 : percent));
+        } catch (...) {
+        }
+      };
+      manager_->DownloadUpdates(*update_, report, const_cast<std::function<void(int)>*>(&progress));
       return true;
     } catch (const std::exception& failure) {
       error = reason(failure);
@@ -95,8 +103,8 @@ class VelopackBackend : public Backend {
     return false;
   }
 
-  /** Starts Velopack's updater, which waits for this program to exit, applies, and restarts it when asked. */
-  bool apply(const std::vector<std::wstring>& arguments, bool restart, std::wstring& error) override {
+  /** Starts Velopack's updater, which waits for this program to exit, applies, and restarts it. */
+  bool apply(const std::vector<std::wstring>& arguments, std::wstring& error) override {
     try {
       if (!manager_ || !update_) {
         error = pm::text::widen(pm::i18n::text("updater.not-downloaded"));
@@ -104,7 +112,7 @@ class VelopackBackend : public Backend {
       }
       std::vector<std::string> restartArguments;
       for (const std::wstring& argument : arguments) restartArguments.push_back(text::narrow(argument));
-      manager_->WaitExitThenApplyUpdates(*update_, false, restart, restartArguments);
+      manager_->WaitExitThenApplyUpdates(*update_, false, true, restartArguments);
       return true;
     } catch (const std::exception& failure) {
       error = reason(failure);

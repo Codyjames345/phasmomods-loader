@@ -24,9 +24,10 @@ inline constexpr pm::sdk::EntryDesc ObjectiveValues_moneyReward{.key = "Objectiv
 
 inline constexpr const char* Objective_fieldTypes[] = {"@ObjectiveValues", "string", "int"};
 
-/// One of the contract's objectives (Assembly-CSharp, global namespace; its name is obfuscated, so it is
-/// found by its fields): the ObjectiveValues it is, its text and its progress. LevelValues keeps the main
-/// objective, a list of the side objectives and one more. Decompiled.
+// Its name is obfuscated, so it is found by its fields.
+/// One of the contract's objectives (Assembly-CSharp, global namespace): the ObjectiveValues it is, its
+/// text and its progress. LevelValues keeps the main objective, a list of the side objectives and one more.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc Objective{.key = "Objective", .confidence = pm::sdk::Confidence::Decompiled,
                                               .assembly = "Assembly-CSharp", .ns = "",
                                               .fieldTypes = Objective_fieldTypes};
@@ -55,10 +56,11 @@ inline constexpr pm::sdk::EntryDesc SingleplayerProfile_AddXPAndFunds{
 
 }  // namespace pm::map
 
-// The game API for the contract's rewards (sdk/api/game_api.h).
-// Every member is called on Unity's main thread. One that did not resolve in the running game
-// build logs "<key> is not available in this game build" once and returns its type's default
-// without touching the game.
+/// @file
+/// @brief The game API for the contract's rewards (sdk/api/game_api.h).
+///
+/// Every member is called on Unity's main thread. One that did not resolve in the running game build logs "<key> is
+/// not available in this game build" once and returns its type's default without touching the game.
 namespace phasmo {
 /// @addtogroup lobby
 /// @{

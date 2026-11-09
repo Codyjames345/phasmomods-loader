@@ -25,24 +25,6 @@ reports an entry whose problem is already gone.
   > cleanup that removes copies belonging to processes that are no longer running, never one a live game still has loaded, and
   > test it, including a copy that is locked and a game still running from an earlier launch. Read CLAUDE.md first.
 
-## 33. The API reference check fails with about 390 warnings
-
-  sdk/Doxyfile:47
-
-  `tools/docs.ps1` fails on any warning (WARN_AS_ERROR), but `validate.ps1` runs it only when PM_DOXYGEN is set, and until
-  2026-11-04 no machine that ran validation had set it. So this check had never passed. Running Doxygen 1.9.8 and 1.18.0 over
-  the same sources gave 392 and 389 messages. Under 1.18.0 they are: 297 undocumented members, 56 undocumented compounds (the
-  `core/mod_api.h` structs and `sdk/map/Equipment.h` among them), 18 about parameters or returns, and 18 unresolved references
-  (Markdown links to `sdk/internals`, which the Doxyfile excludes, and one to `README.md`). The rule that every public declaration
-  is documented as an interface is therefore not yet met. Found while moving the pin during the Squatter work.
-
-  Prompt:
-  > PhasmoMods Loader's `tools/docs.ps1` runs Doxygen 1.18.0 over the SDK with warnings as errors, and fails with about 390
-  > warnings (build\docs\warnings.txt, with PM_DOXYGEN set to doxygen.exe). Read CLAUDE.md's rule that every public declaration is
-  > documented as an interface. Document what is undocumented, from what the code and map entries prove and without addresses or
-  > obfuscated names. Decide how `sdk/systems` and `sdk/guides` should link to the excluded `sdk/internals` so those references
-  > resolve. Never weaken WARN_AS_ERROR or the undocumented warnings to make the check pass. Finish with the check passing.
-
 ## 32. A community mod has only the install folder to live in, which an update may replace
 
   tools/launcher.cpp:525
@@ -215,6 +197,30 @@ reports an entry whose problem is already gone.
   CreateDoorSlamNoise as the bang; DisableOrEnableDoor(false) keeps a jammed door open; the leaf
   Rigidbody's worldCenterOfMass is the middle of the leaf (a door is in its way when its heading
   crosses the hinge-to-middle line, asterion_rule.h door_ahead).
+    Live, 2026-11-03 (user's first test sheet): the bangs and the 3 s are right, but the door stays shut
+    after "asterion: a door is broken open" (logged 4 times), so the ghost passes through it as any ghost
+    does; and of a double door only one leaf is battered. Decompiled 2026-11-05: GhostForceDoor (3 args)
+    starts its push only while Door+0x180 (Door.forceRoutine) is null, and the push switches the door
+    back on as it ends, undoing a jam sent with it (fixed: DoorJam sends the jam after the push). It
+    always pushes with physics, while GhostOpenDoorAnimated picks the physics push only for a door with
+    useForceInsteadOfAnimations (Door+0xC8) set, else the animated move. Why the leaf stays shut is not
+    known yet: each burst now logs whether a push was already running, the door's physics flag and
+    kinematic state, and how far the leaf has turned 1 s and 3 s later. Open: which leaves make a double
+    door (Door+0xF8 and +0x100 hold Doors; Door.Convert copies both; the hunt's own push skips a door
+    whose +0xF8 is set and whose +0x21 is set).
+    Second run, 2026-11-06: a single door burst 90 degrees open; a double door's leaf did not turn
+    though its push ran (not kinematic after). Door+0xF8 is the other leaf (Door.otherDoor: the field
+    Door.GhostOpenDoorEvent reads to push both); both leaves now burst together, each logged by name.
+    Third run, 2026-11-06: physics pushes left 3 of 4 shut leaves unturned. User's ruling: no pushes;
+    each client swings the broken leaves to HingeDoor.openAngle over 0.3 s and leaves them in the game's
+    locked state (Door.locked, the body frozen, Door.CheckOcclusionPortal), the host naming them by ViewID
+    (net_msg::kDoors). Not yet seen in the game.
+    Fourth run, 2026-11-07: the swing and padlock worked, but the kitchen's double door broke one leaf at
+    a time and a locked door still opened to a grab. Scene files: that door links its leaves through
+    Door+0x100 (now Door.pairedDoor), not +0xF8. Decompiled: a grab on a locked interior door (kind None)
+    runs Door.AttemptToUnlockDoor, which unlocks it unless the game holds it; a broken door now also
+    becomes DoorKind.PermanentLock, so a grab rattles it. Risk, not seen: hunts push and ghost events pick
+    doors of every kind but the front door's, so a ghost event may still swing a locked-open door.
   - Lithobolia: the throwing state is 6; ownership taken over before the aimed launch; the hit
   message and PlayerSanity.ChangeSanity(+5) on the hit player's client. No throw with nobody in
   sight (the game's sensor, GhostAI+0xA0, via Sensor.IsDetected); hunt throws (Prop.TryThrow from

@@ -21,6 +21,10 @@ reads 0, which is clear.
 - **The Monkey Paw's weather wish** changes the weather mid-contract through `RandomWeather`'s profile transition, which
   sets the weather at once; its visuals and sound are skipped on a client whose local player is dead. That method is not
   mapped yet.
+- **Read the weather each time you need it.** The transition writes the wished profile into `LevelValues.weather` before
+  it checks for a dead player, and the paw's weather handler has no master check, so the field changes on the host too.
+  The game's storm reads it again at each strike, so a wish for heavy rain starts the storm. A mod that reads the weather
+  once per contract misses the wish (the Tempest did, until 2026-11-05).
 
 A mod that changes the weather mid-contract makes a change no vanilla ghost makes, which identifies it at once (the user's
 reason for the Tempest never changing the weather).
@@ -28,7 +32,8 @@ reason for the Tempest never changing the weather).
 ## Lightning
 
 - **The storm's strikes.** `LightningController`'s update on the master sends `LightningController.PlayLightningNetworked`
-  to every client every 0 to 30 seconds while the weather is heavy rain. The strike plays from `RandomWeather.instance`'s
+  to every client every 0 to 30 seconds while the weather is heavy rain, reading `LevelValues.weather` again each time its
+  timer runs out. The strike plays from `RandomWeather.instance`'s
   `RandomWeather.effects`, whose `AzureEffectsController.thunderSettingsList` holds the strikes (a prefab, a clip and a
   position each).
 - **Never send the storm's strike yourself.** A client whose weather is not heavy rain refuses it, and a refused RPC counts
