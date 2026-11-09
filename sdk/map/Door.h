@@ -449,6 +449,25 @@ inline constexpr pm::sdk::EntryDesc HingeDoor_OpenDoor{.key = "HingeDoor.OpenDoo
                                                        .owner = "HingeDoor", .name = "OpenDoor",
                                                        .params = HingeDoor_OpenDoor_params};
 
+/// Whether the ghost moves this door by force, its leaf's physics, rather than by its animated turn: the ghost's door
+/// move (Door.GhostOpenDoorAnimated) pushes it with Door.GhostForceDoor when set, and turns it with the animated move
+/// otherwise. The animated turn sets the leaf's other two angles to 0, so a door set this way comes off its hinges
+/// under HingeDoor.SwingDoor. Decompiled.
+inline constexpr pm::sdk::EntryDesc Door_useForceInsteadOfAnimations{
+    .key = "Door.useForceInsteadOfAnimations", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Door", .name = "useForceInsteadOfAnimations"};
+
+inline constexpr pm::sdk::Fact HingeDoor_openAngleReversed_facts[] = {
+    {.is = pm::sdk::Fact::Is::Loads, .method = "HingeDoor.Awake"}};
+
+/// Whether Awake turns the open angle (HingeDoor.openAngle) to the other side of shut from the one its push takes:
+/// HingeDoor.OpenDoor's push leaves this out, so on a door with it set, opening pushes the leaf against its shut stop,
+/// and a push to shut (its first argument set) opens it instead. HingeDoor's public bool that Awake reads. Decompiled.
+inline constexpr pm::sdk::EntryDesc HingeDoor_openAngleReversed{
+    .key = "HingeDoor.openAngleReversed", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "HingeDoor", .type = "bool", .facts = HingeDoor_openAngleReversed_facts,
+    .access = pm::sdk::Visibility::Public};
+
 inline constexpr pm::sdk::Fact HingeDoor_openAngle_facts[] = {
     {.is = pm::sdk::Fact::Is::Stores, .method = "HingeDoor.Awake"}};
 
@@ -523,6 +542,9 @@ struct Door {
   static constexpr pm::api::Type<pm::map::Door> type{};
   /// The leaf's Rigidbody: body.get(door). Unresolved: null.
   static constexpr pm::api::Field<pm::map::Door_body, void*> body{};
+  /// Whether the ghost moves it by force rather than by its animated turn: useForceInsteadOfAnimations.get(door).
+  /// Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Door_useForceInsteadOfAnimations, bool> useForceInsteadOfAnimations{};
   /// The leaf's closed angle in degrees: closedAngle.get(door). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Door_closedAngle, float> closedAngle{};
   /// GhostForceDoor(door, open, strength, skipRattle). A mod may hook it. Unresolved: does nothing.
@@ -633,6 +655,8 @@ struct HingeDoor {
   /// OpenDoor(door, close, strength, buffered): swings it with its leaf's physics, open or shut, with no ghost's trace,
   /// on the view's owner (strength -1 for the game's random push). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::HingeDoor_OpenDoor, void(void*, bool, float, bool)> OpenDoor{};
+  /// Whether its open angle lies the other way from its push: openAngleReversed.get(door). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::HingeDoor_openAngleReversed, bool> openAngleReversed{};
   /// The leaf's open angle in degrees: openAngle.get(door). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::HingeDoor_openAngle, float> openAngle{};
   /// SwingDoor(door, close, seconds, fraction, buffered): turns the leaf toward its open angle (or shut) with no ghost's

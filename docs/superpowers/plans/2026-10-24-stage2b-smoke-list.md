@@ -1170,3 +1170,8 @@ Clumsy moves from the way ahead (user 2026-11-09) and the closet fix.
 - [ ] Through a doorway or a narrow gap it weaves through side-on; past furniture beside it, it ducks past side-on, stepping away from the furniture.
 - [ ] A few metres behind a player straight ahead, it dive-rolls at them now and then (not every few seconds).
 - [ ] A sprinting player still barely outruns it in open rooms; note whether it now feels too slow or too fast.
+
+The user's test of 2026-11-09: kicking the wall beside a closet, doors off their hinges.
+
+- [ ] At a closet it stands squarely in front of the doors, turns to face them, and its kick lands on the doors, not the wall beside them; the knock plays. Try a closet whose doors sit near a corner.
+- [ ] Every door it opens stays on its hinges, and it opens each door once: the host's `mods.log` has one `squatter: a door swung open` or `squatter: a door pushed open` per door. Note any door that comes off or opens again.

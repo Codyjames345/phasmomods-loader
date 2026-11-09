@@ -148,6 +148,12 @@ sound and leaves no EMF reading, `LevelStats` count or fingerprint: the ghost's 
 turn. It moves the leaf only on the view's owner, so take the view first. Its caller in the game was not traced (it is
 reached through its virtual slot). Custom Ghosts' Squatter uses `SwingDoor`.
 
+**But not on a door the game moves by force.** The turn sets the leaf's other two angles to 0, so a door whose leaf is
+built turned on another axis comes off its hinges. The ghost's own door move (`Door.GhostOpenDoorAnimated`) pushes a
+door whose `Door.useForceInsteadOfAnimations` is set with `Door.GhostForceDoor`, and turns the rest. Open such a door
+with `HingeDoor.OpenDoor`'s physics push toward its open side: `OpenDoor(true, ...)` when `HingeDoor.openAngleReversed`
+is set, `OpenDoor(false, ...)` otherwise (the next paragraph says why).
+
 **Don't open a door with `HingeDoor.OpenDoor`'s physics push.** `OpenDoor` frees the leaf's Rigidbody and pushes it about
 its hinge with `Rigidbody.AddRelativeTorque`, by 0.05 times `Random.Range(1, 5)` (or the strength given, when above 0).
 Its side comes from `isDoorRotationBackwards` and whether the hinge joint's low angular limit is 0, but leaves out the

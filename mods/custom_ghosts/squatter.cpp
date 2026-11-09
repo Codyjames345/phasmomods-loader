@@ -282,6 +282,56 @@ Surroundings surroundings(void* agent, Point at, const Seen* target, bool mayDiv
   return s;
 }
 
+// The middle of a door's collider box: the door itself, whichever way it is built. None for no door or no collider.
+std::optional<phasmo::Vector3> door_middle(void* d) {
+  if (!d || !api::alive(d)) return std::nullopt;
+  void* collider = phasmo::Component::GetComponentInChildren(phasmo::Component::get_transform(d),
+                                                             phasmo::Collider::type.type_object(), false);
+  if (!collider) return std::nullopt;
+  return phasmo::Collider::get_bounds(collider).center;
+}
+
+// Where the Squatter stands to kick a closet's door, and the door's middle it faces (user, 2026-11-09: it kicked the
+// wall beside the door): a little way out in front of the middle of its doors, out being from the closet's own zone
+// toward its doors, taken onto the navigation mesh within 1 m. The closet's spot (closet_spot) when its doors or the
+// mesh there cannot be read.
+struct KickSpot {
+  Point stand, face;
+};
+std::optional<KickSpot> kick_spot(void* closet, Point from) {
+  constexpr float kStandOut = 0.75f;  // metres out from the doors' middle: a kick's reach, a starting value
+  if (!closet) return std::nullopt;
+  int n = 0;
+  phasmo::Vector3 mid{};
+  for (void* d : {phasmo::ClosetZone::leftClosetDoor.get(closet), phasmo::ClosetZone::rightClosetDoor.get(closet)})
+    if (const std::optional<phasmo::Vector3> m = door_middle(d)) {
+      mid = {mid.x + m->x, mid.y + m->y, mid.z + m->z};
+      ++n;
+    }
+  if (n == 0) {
+    const std::optional<Point> spot = closet_spot(closet);
+    return spot ? std::optional<KickSpot>({*spot, *spot}) : std::nullopt;
+  }
+  mid = {mid.x / n, mid.y / n, mid.z / n};
+  const phasmo::Vector3 inside = game::position(phasmo::Component::get_transform(closet));
+  float ox = mid.x - inside.x, oz = mid.z - inside.z;
+  if (std::hypot(ox, oz) < 0.1f) ox = from.x - mid.x, oz = from.z - mid.z;  // a zone at its doors: out toward it
+  const float out = std::hypot(ox, oz);
+  if (out <= 0.0f) return std::nullopt;
+  const phasmo::Vector3 want{mid.x + ox / out * kStandOut, from.y, mid.z + oz / out * kStandOut};
+  phasmo::NavMeshHit hit{};
+  if (!phasmo::NavMesh::SamplePosition(&want, &hit, 1.0f, 1)) return std::nullopt;
+  return KickSpot{point(hit.position), point(mid)};
+}
+
+// Turns the master's ghost to face `p` on the flat, for a kick or a wait at a door; every client's figure follows its
+// heading (play's turn on the spot).
+void face_toward(void* ghost, Point at, Point p) {
+  const float yaw = std::atan2(p.x - at.x, p.z - at.z);
+  const phasmo::Quaternion turn{0, std::sin(yaw / 2), 0, std::cos(yaw / 2)};
+  if (void* t = phasmo::Component::get_transform(ghost)) phasmo::Transform::set_rotation(t, &turn);
+}
+
 // The box of the hiding place the difficulty closed (BlockedZone.blocked) that `p` lies in, by the zone's own trigger
 // collider; none when it lies in none.
 std::optional<phasmo::Bounds> closed_hiding_place_at(Point p) {
@@ -579,8 +629,10 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       break;
     }
     case Phase::AtHidingPlace: {
-      const std::optional<Point> spot = target ? closet_spot(target->closet) : std::nullopt;
+      const std::optional<KickSpot> kickAt = target ? kick_spot(target->closet, ghostAt) : std::nullopt;
+      const std::optional<Point> spot = kickAt ? std::optional<Point>(kickAt->stand) : std::nullopt;
       const bool there = spot && std::hypot(spot->x - ghostAt.x, spot->z - ghostAt.z) < kStandReach;
+      if (there) face_toward(ghost, ghostAt, kickAt->face);  // squarely at the doors, so the kick lands on them
       c.out.move = Move::Run;
       speed = there ? 0.0f : move_speed(c.sprint, Move::Run);
       to = there ? std::optional<Point>(ghostAt) : spot;

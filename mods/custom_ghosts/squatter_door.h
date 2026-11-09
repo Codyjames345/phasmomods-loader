@@ -91,6 +91,9 @@ inline constexpr uint64_t kOpenWaitMs = 2000;
 // How far a door's leaf must stand from shut for the Squatter to pass, in degrees: a narrower gap it opens rather than
 // walks through (user, 2026-11-09: it never passes through doors). A starting value, judged with the user in game.
 inline constexpr float kPassDegrees = 70.0f;
+// The push a door the game moves by force is opened with (HingeDoor.OpenDoor): the strength that opened doors in the
+// user's test of 2026-11-09, well over the game's own 0.05 times 1 to 5, so the leaf swings wide. A starting value.
+inline constexpr float kPushStrength = 5.0f;
 // How long the leaf takes to swing open, in seconds (HingeDoor.SwingDoor). A starting value, judged with the user in
 // game against the opening-door clips.
 inline constexpr float kSwingSeconds = 1.0f;

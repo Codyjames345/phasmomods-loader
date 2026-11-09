@@ -1677,6 +1677,8 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &HingeDoor_LevelControllerOpenDoor,
     &HingeDoor_OpenDoor,
     &HingeDoor_openAngle,
+    &HingeDoor_openAngleReversed,
+    &Door_useForceInsteadOfAnimations,
     &HingeDoor_SwingDoor,
     &Door_SetDoorAndOcclusionOpen,
     &Door_closed,

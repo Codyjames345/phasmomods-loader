@@ -59,10 +59,18 @@ void forget_old_level() {
 }
 
 /**
- * Swings `d` all the way open with the game's own HingeDoor.SwingDoor, over kSwingSeconds, its RPC unbuffered. The
- * door's view, this client's, carries the swing to every other client.
+ * Opens `d` as the game's ghost moves it: by its animated turn all the way to its open angle (HingeDoor.SwingDoor, over
+ * kSwingSeconds), or, for a door the game moves by force (Door.useForceInsteadOfAnimations), whose animated turn would
+ * take it off its hinges, by its leaf's physics (HingeDoor.OpenDoor), pushed toward its open side: the push to shut on
+ * a door whose open angle lies the other way (HingeDoor.openAngleReversed). Its RPC unbuffered; the door's view, this
+ * client's, carries it to every other client.
  */
 void open_now(void* d) {
+  if (phasmo::Door::useForceInsteadOfAnimations.get(d)) {
+    phasmo::HingeDoor::OpenDoor(d, phasmo::HingeDoor::openAngleReversed.get(d), kPushStrength, false);
+    PM_LOG("squatter: a door pushed open");
+    return;
+  }
   phasmo::HingeDoor::SwingDoor(d, false, kSwingSeconds, 1.0f, false);
   PM_LOG("squatter: a door swung open");
 }

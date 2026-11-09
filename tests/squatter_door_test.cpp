@@ -51,6 +51,7 @@ constexpr int32_t kDoorGrabbable = 0x08, kDoorLocked = 0x09;  // Door.grabbable 
 constexpr int32_t kDoorKind = 0x0C, kDoorInteract = 0x10, kDoorView = 0x18;  // the quiet opener's
 constexpr int32_t kDoorAxis = 0x20, kDoorShutAngle = 0x24;  // HingeDoor.hingeAxis and Door.closedAngle
 constexpr int32_t kDoorBody = 0x28, kDoorOpenAngle = 0x30;  // Door.body (none here) and HingeDoor.openAngle
+constexpr int32_t kDoorForce = 0x34, kDoorReversed = 0x35;  // Door.useForceInsteadOfAnimations, HingeDoor.openAngleReversed
 constexpr int32_t kAxisX = 1, kAxisY = 2, kAxisZ = 4;  // made-up as the game's Axis flags read: the code reads them
 std::map<void*, phasmo::Vector3> g_euler;  // each door leaf's Transform.localEulerAngles
 constexpr int32_t kInteractInUse = 0x08, kViewMine = 0x08;  // PhotonObjectInteract.inUse, PhotonView.IsMine
@@ -151,12 +152,17 @@ struct OpenCall {
 };
 std::vector<OpenCall> g_opens;     // HingeDoor.SwingDoor's calls
 std::vector<void*> g_viewsAsked;   // PhotonView.RequestOwnership's calls
-int g_pushes = 0;                  // HingeDoor.OpenDoor's calls: the physics push, which must never open a door
+int g_pushes = 0;                  // HingeDoor.OpenDoor's calls: the physics push
+std::vector<OpenCall> g_pushed;    // and what each pushed: its door, its shut flag and its strength (in seconds)
 void fake_swing(void* d, bool close, float seconds, float fraction, bool buffered, const void*) {
   g_calls.push_back("SwingDoor");
   g_opens.push_back({d, close, seconds, fraction, buffered});
 }
-void fake_push(void*, bool, float, bool, const void*) { ++g_pushes; }
+void fake_push(void* d, bool close, float strength, bool buffered, const void*) {
+  ++g_pushes;
+  g_calls.push_back("OpenDoor");
+  g_pushed.push_back({d, close, strength, 0.0f, buffered});
+}
 bool fake_is_mine(void* view, const void*) { return view && at<bool>(*static_cast<Obj*>(view), kViewMine); }
 void fake_request_ownership(void* view, const void*) {
   g_calls.push_back("RequestOwnership");
@@ -313,6 +319,8 @@ void start(bool master = true, bool friendly = false) {
   fake::method(map::Transform_get_localEulerAngles, reinterpret_cast<void*>(&fake_euler));
   fake::field(map::Door_body, kDoorBody);
   fake::field(map::HingeDoor_openAngle, kDoorOpenAngle);
+  fake::field(map::Door_useForceInsteadOfAnimations, kDoorForce);
+  fake::field(map::HingeDoor_openAngleReversed, kDoorReversed);
   fake::type(map::Collider, &g_colliderClass);
   fake::method(map::Component_GetComponentInChildren, reinterpret_cast<void*>(&fake_no_child));
   fake::method(map::Collider_get_bounds, reinterpret_cast<void*>(&fake_bounds));
@@ -328,6 +336,7 @@ void start(bool master = true, bool friendly = false) {
   fake::method(map::PhotonView_RequestOwnership, reinterpret_cast<void*>(&fake_request_ownership));
   g_opens.clear();
   g_pushes = 0;
+  g_pushed.clear();
   g_viewsAsked.clear();
   // What the room's other gates read (core/room_gates.h), which the binding needs though nothing here calls them.
   for (const pm::sdk::EntryDesc* gate :
@@ -844,6 +853,25 @@ void a_door_too_narrow_to_pass_is_opened() {
 // Which way a leaf swings as it opens, so the Squatter pulls a door that comes toward it and pushes one that goes away
 // (user, 2026-11-09: it pulled a door that swings away). The leaf turns about its own position toward its open angle
 // (HingeDoor.openAngle), the shorter way round, whatever axis it hinges on and however its parent is turned.
+// A door the game moves by force (Door.useForceInsteadOfAnimations) is pushed open with its leaf's physics, never turned
+// by the animated swing, which sets the leaf's other angles to 0 and takes such a door off its hinges (user, 2026-11-09:
+// doors came off their hinges and opened again and again). The push goes to the door's open side: the push to shut on a
+// door whose open angle Awake turns the other way (HingeDoor.openAngleReversed).
+void a_door_moved_by_force_is_pushed_to_its_open_side() {
+  start();
+  plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
+  at<bool>(g_kitchen, kDoorForce) = true;
+  CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Opened);
+  CHECK(g_opens.empty() && g_pushed.size() == 1 && g_pushed[0].door == &g_kitchen && !g_pushed[0].close &&
+        g_pushed[0].seconds == door::kPushStrength && !g_pushed[0].buffered);
+  start();
+  plain_door(g_kitchen, g_kitchenUse, g_kitchenView);
+  at<bool>(g_kitchen, kDoorForce) = true;
+  at<bool>(g_kitchen, kDoorReversed) = true;
+  CHECK(door::open_quietly(&g_kitchen, 1000) == door::Opening::Opened);
+  CHECK(g_opens.empty() && g_pushed.size() == 1 && g_pushed[0].close);
+}
+
 void a_leaf_swings_toward_its_open_angle() {
   CHECK(door::delta_angle(0, 90) == 90.0f && door::delta_angle(0, 270) == -90.0f && door::delta_angle(350, 10) == 20.0f);
   // A leaf hinged at the origin on y, reaching out along +x, shut at 0. A turn of +y carries +x toward -z.
@@ -1051,6 +1079,7 @@ int main() {
   a_relock_is_rate_limited();
   only_the_master_relocks_its_held_exits();
   a_leaf_swings_toward_its_open_angle();
+  a_door_moved_by_force_is_pushed_to_its_open_side();
   a_shut_door_opens_quietly_on_the_master();
   every_client_sees_the_open_because_the_master_owns_the_view_first();
   an_open_whose_view_never_comes_is_given_up();
