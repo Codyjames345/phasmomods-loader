@@ -6,6 +6,7 @@
 #include <map>
 #include <numbers>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <span>
 
@@ -442,15 +443,16 @@ struct Pick {
 };
 
 /**
- * The move the way ahead calls for, the user's choice of 2026-11-09: a dive roll at a close target; a jump down a drop
- * or over a knee-high prop (it lands into a roll); a trip over an ankle-high prop; a weave sideways through a doorway
+ * The move the way ahead calls for, the user's choice of 2026-11-09: a jump down a drop or over a knee-high prop (it
+ * lands into a roll); a trip over an ankle-high prop; a dive roll at a close target; a weave sideways through a doorway
  * or gap; a duck past furniture beside it, stepping away from it (Duck_A goes left, Duck_B right). Run when nothing
- * calls for one.
+ * calls for one. What lies at its feet comes first: with clutter between it and its target it trips or jumps rather
+ * than diving through it (user, 2026-11-09: it rolled where it should have tripped).
  */
 inline Pick move_for(const Surroundings& s) {
-  if (s.diveAt) return {Move::Roll, 0};  // Sprinting Forward Roll
   if (s.dropAhead || s.kneeProp) return {Move::Parkour, 0};
   if (s.ankleProp) return {Move::Stumble, 0};
+  if (s.diveAt) return {Move::Roll, 0};  // Sprinting Forward Roll
   if (s.gap) return {Move::Weave, 0};
   if (s.furniture != 0) return {Move::Duck, static_cast<uint8_t>(s.furniture > 0 ? 0 : 1)};
   return {};
@@ -468,12 +470,30 @@ inline bool stood_up(uint64_t since, uint64_t now) {
 
 /** What in `s` calls a clumsy move, in move_for's order, for the log; null when nothing does. */
 inline const char* clumsy_reason(const Surroundings& s) {
-  if (s.diveAt) return "dive at the target";
   if (s.dropAhead || s.kneeProp) return "drop or knee-high prop";
   if (s.ankleProp) return "ankle-high prop";
+  if (s.diveAt) return "dive at the target";
   if (s.gap) return "gap";
   if (s.furniture != 0) return "furniture beside";
   return nullptr;
+}
+
+/** Every condition of `s` that holds, comma separated, for the log beside the one that won (clumsy_reason). */
+inline std::string sensed_list(const Surroundings& s) {
+  std::string out;
+  const auto add = [&](bool on, const char* name) {
+    if (!on) return;
+    if (!out.empty()) out += ", ";
+    out += name;
+  };
+  add(s.dropAhead, "drop");
+  add(s.kneeProp, "knee");
+  add(s.ankleProp, "ankle");
+  add(s.diveAt, "dive");
+  add(s.gap, "gap");
+  add(s.furniture > 0, "furniture right");
+  add(s.furniture < 0, "furniture left");
+  return out;
 }
 
 /**
