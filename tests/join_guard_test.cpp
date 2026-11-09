@@ -1014,7 +1014,7 @@ void start_waits_for_an_unverified_player() {
   CHECK(!a.go && a.listUnread && a.waiting.empty());
   CHECK(joinguard::start_wait_notice({}, {}, true).find("Player list is updating") != std::string::npos);
   const std::string text = joinguard::start_wait_notice({"Alice", "Bob"}, {}, false);
-  CHECK(text == "Waiting for Alice and Bob. The loader is still checking their mods, please try again in a moment.");
+  CHECK(text == "Waiting for Alice and Bob. PhasmoMods is still checking their mods, please try again in a moment.");
 }
 
 void start_goes_once_everyone_is_verified() {
@@ -1107,7 +1107,7 @@ void wait_ends_when_the_player_is_removed_or_leaves() {
   a = secondGuard.start_answer(lobby(5, 5, {3, 5}, 0), second);
   CHECK(!a.go && a.stuck == std::vector<int>{3} && a.notFirstActor);
   CHECK(joinguard::start_wait_notice({}, {"Mallory"}, false, true) ==
-        "The loader can't verify Mallory. Ask them to leave, or start a new lobby.");
+        "PhasmoMods can't verify Mallory. Ask them to leave, or start a new lobby.");
   CHECK(!a.go && secondGuard.start_answer(lobby(3, 3, {3, 5}, 0), second).notFirstActor == false);
 }
 
