@@ -52,7 +52,8 @@ add_custom_command(TARGET gamecheck POST_BUILD COMMAND gamecheck --map-digest "$
 
 # A mod's side of the host contract (core/mod_api.h) and the game API it calls (sdk/api, sdk/map).
 add_library(pmmod STATIC core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/api/assets.cpp
-  sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/keybinds.cpp sdk/api/player_anim.cpp)
+  sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/keybinds.cpp sdk/api/player_anim.cpp
+  sdk/api/third_person.cpp)
 target_include_directories(pmmod PUBLIC sdk/api sdk/map)
 target_link_libraries(pmmod PUBLIC pmcore)
 pm_options(pmmod)
@@ -346,6 +347,10 @@ target_include_directories(keybinds_test BEFORE PRIVATE sdk/api sdk/map sdk/fake
 pm_test(player_anim sdk/api/player_anim.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(player_anim_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# The third-person view and the shown body (sdk/api/third_person.h).
+pm_test(third_person sdk/api/third_person.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(third_person_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(models sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(models_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
