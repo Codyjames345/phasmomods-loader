@@ -125,6 +125,8 @@ struct State {
   // place, taken as the kick starts: by the time the foot lands it may have lost interest and looks at nobody.
   uint64_t slamAt = 0;
   api::Held slamCloset;
+  // The lines waiting to be said here, one at a time (VoiceQueue).
+  VoiceQueue voice;
   // When this client's figure began a trip, until it has stood up from it (stood_up): its facing holds while it is down.
   std::optional<uint64_t> tripSince;
   uint32_t tripVariant = 0;  // which of the two trips it is down from
@@ -1177,18 +1179,24 @@ void play(void* ghost) {
     g.local = State::Local::Turning;
     g.localUntil = t + static_cast<uint64_t>(seconds_of(clip) * 1000.0f);
   }
-  if (c.line && s.lineSet >= 0 && s.lineIndex >= 0) {
-    const Lines set = static_cast<Lines>(s.lineSet);
+  // A line the master said waits its turn here, so no two play over each other (VoiceQueue).
+  if (c.line && s.lineSet >= 0 && s.lineIndex >= 0) g.voice.push({static_cast<Lines>(s.lineSet), s.lineIndex}, t);
+  if (const std::optional<QueuedLine> line = g.voice.next(t)) {
+    const Lines set = line->set;
+    g.voice.playing(t, static_cast<uint64_t>(voice::seconds(set, line->index) * 1000.0f));
     if (set == Lines::Door) {  // at the exit nearest this client's player, loud enough to carry through the door
       std::vector<Point> exits;
       for (void* d : door::exits())
         if (const std::optional<phasmo::Vector3> m = door_middle(d)) exits.push_back(point(*m));
       void* me = game::local_player();
-      const int i = nearest_point(exits, me ? at_of(me) : at_of(ghost));
-      voice::play_index(set, s.lineIndex, vector(i >= 0 ? exits[static_cast<size_t>(i)] : at_of(ghost)),
+      const Point listener = me ? at_of(me) : at_of(ghost);
+      const int i = nearest_point(exits, listener);
+      // From just behind the door, its far side from this client's player, muffled as the game muffles a sound there.
+      voice::play_index(set, line->index,
+                        vector(i >= 0 ? behind_door(exits[static_cast<size_t>(i)], listener) : at_of(ghost)),
                         kDoorLineFullVolume);
     } else {  // from its head, moving with it as it runs (user, 2026-11-09: the lines stayed where they began)
-      voice::play_index(set, s.lineIndex, vector(at_of(ghost)), kVoiceFullVolume, figure::head(), kVoiceRange);
+      voice::play_index(set, line->index, vector(at_of(ghost)), kVoiceFullVolume, figure::head(), kVoiceRange);
     }
   }
   // A footstep each stride it moves, on this client, from its own view of the ghost's movement.
@@ -1230,6 +1238,7 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     g.lastMove.reset();
     g.slamAt = 0;
     g.slamCloset = nullptr;
+    g.voice.reset();
     g.tripSince.reset();
     forget_channel();
     figure::destroy();

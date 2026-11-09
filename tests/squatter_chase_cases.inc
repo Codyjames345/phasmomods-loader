@@ -544,3 +544,44 @@ void its_feet_meet_what_it_trips_over() {
   // Its other lines carry only a little way; the door lines carry further (a_door_line_is_said_at_the_nearest_exit).
   CHECK(kVoiceFullVolume > 0.0f && kVoiceFullVolume < kVoiceRange && kVoiceRange < 15.0f);
 }
+
+// One line at a time (user, 2026-11-09: the door lines played over each other): a line waits until the one playing has
+// finished, at most kVoiceQueueMax wait, and one that has waited kVoiceWaitMs is dropped, so the voice never runs behind
+// what is happening.
+void voice_lines_never_talk_over_each_other() {
+  CHECK(kVoiceQueueMax >= 1 && kVoiceQueueMax <= 3 && kVoiceWaitMs > 0);
+  VoiceQueue q;
+  CHECK(!q.next(0));
+  q.push({Lines::Door, 1}, 0);
+  const std::optional<QueuedLine> first = q.next(0);
+  CHECK(first && first->set == Lines::Door && first->index == 1);
+  q.playing(0, 2000);           // a 2 s line
+  q.push({Lines::Door, 2}, 100);
+  CHECK(!q.next(1999));         // waits for the line playing
+  const std::optional<QueuedLine> second = q.next(2000);
+  CHECK(second && second->index == 2);
+  q.playing(2000, 1000);
+  // A burst: only kVoiceQueueMax wait, the newest kept.
+  for (int i = 0; i < 5; ++i) q.push({Lines::Door, 10 + i}, 2100);
+  CHECK(q.waiting() == static_cast<size_t>(kVoiceQueueMax));
+  const std::optional<QueuedLine> after = q.next(3000);
+  CHECK(after && after->index == 10 + 5 - kVoiceQueueMax);
+  // One that waited too long is dropped, not played late.
+  VoiceQueue late;
+  late.push({Lines::Chase, 0}, 0);
+  late.playing(0, 10000);
+  late.push({Lines::Chase, 1}, 100);
+  CHECK(!late.next(100 + kVoiceWaitMs + 1) && late.waiting() == 0);
+  late.reset();
+  CHECK(!late.next(0) && late.waiting() == 0);
+}
+
+// A door line is said from just behind the door, its far side from the listener: inside, to a player shut outside.
+void a_door_line_comes_from_behind_the_door() {
+  const Point door{0, 1, 0};
+  const Point behind = behind_door(door, {0, 0, -3});  // the listener south of it
+  CHECK(std::abs(behind.z - kBehindDoor) < 1e-5f && std::abs(behind.x) < 1e-5f && behind.y == 1.0f);
+  const Point same = behind_door(door, door);  // a listener on the door: the door itself
+  CHECK(same.x == 0.0f && same.z == 0.0f);
+  CHECK(kBehindDoor > 0.0f && kBehindDoor < 2.0f);
+}

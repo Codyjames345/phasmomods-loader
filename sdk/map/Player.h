@@ -777,6 +777,18 @@ inline constexpr pm::sdk::EntryDesc SoundController_GetPlayersAudioGroup{
     .key = "SoundController.GetPlayersAudioGroup", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "SoundController", .name = "GetPlayersAudioGroup"};
 
+inline constexpr const char* SoundController_GetFloorAudioSnapshot_params[] = {"Vector3"};
+
+/// The mixer group a sound at a point plays through, the group Noise.PlaySound gives a noise that changes its mixer
+/// on play (Noise.changeMixerOnPlay), so the game's mixer muffles it as the place it plays from calls for: the group of
+/// an audio group override covering the point, else the exterior group on a level flagged outside the map, else the
+/// group of the floor (FloorMixer) whose bounds hold the point, else the first floor's, with an error logged. Despite
+/// its name it returns an AudioMixerGroup. Decompiled.
+inline constexpr pm::sdk::EntryDesc SoundController_GetFloorAudioSnapshot{
+    .key = "SoundController.GetFloorAudioSnapshot", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "SoundController", .name = "GetFloorAudioSnapshot",
+    .params = SoundController_GetFloorAudioSnapshot_params};
+
 /// The level's SoundController: the class's one static field of its own type. Door.PlayDoorSlamNoise reads its
 /// shared slam clips through it. Decompiled.
 inline constexpr pm::sdk::EntryDesc SoundController_instance{
@@ -1070,6 +1082,10 @@ struct SoundController {
   static constexpr pm::api::Type<pm::map::SoundController> type{};
   /// The level's one: instance.get(). Null outside a level. Unresolved: null.
   static constexpr pm::api::StaticField<pm::map::SoundController_instance, void*> instance{};
+  /// GetFloorAudioSnapshot(sounds, &position): the AudioMixerGroup a sound at `position` plays through, as the game's
+  /// noises take theirs. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::SoundController_GetFloorAudioSnapshot, void*(void*, const Vector3*)>
+      GetFloorAudioSnapshot{};
   /// The shared door slam clips, an AudioClip[]: doorSlamClips.get(sounds). Unresolved: null.
   static constexpr pm::api::Field<pm::map::SoundController_doorSlamClips, void*> doorSlamClips{};
 };

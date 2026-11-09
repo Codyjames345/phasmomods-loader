@@ -58,6 +58,10 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   (`targetActivity`, `navMeshObstacle`, `Update`). Clearing `targetActivity` switches the obstacle that keeps ghost
   routes out of the closet off.
 - **Layers:** `Layer.Item`, the equipment players carry, place and drop.
+- **Sounds as the game plays them:** `SoundController.GetFloorAudioSnapshot`, the mixer group a sound at a point plays
+  through (what `Noise.PlaySound` gives a noise with `Noise.changeMixerOnPlay`), and `AudioSource.set_outputAudioMixerGroup`,
+  so a mod's sound is muffled on another floor or from outdoors as the game's are; `AudioSource.set_rolloffMode` with
+  `AudioRolloffMode.Linear` for a sound that falls to silence; `Physics.CheckBox`.
 - **Costumes:** `hide_renderers` takes the names of the parts to keep drawing; [scene](systems/scene.md) names each
   renderer of the investigator's body.
 

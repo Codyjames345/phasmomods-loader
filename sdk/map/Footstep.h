@@ -87,6 +87,14 @@ inline constexpr pm::sdk::EntryDesc Noise_SetVolume{.key = "Noise.SetVolume", .k
                                                     .owner = "Noise", .name = "SetVolume", .type = "void",
                                                     .params = Noise_float};
 
+/// Whether the noise takes its mixer group from where it plays each time it plays: Noise.PlaySound then routes its
+/// AudioSource through SoundController.GetFloorAudioSnapshot of the noise's position, so the game's mixer muffles it as
+/// that place calls for (another floor, outdoors). Decompiled.
+inline constexpr pm::sdk::EntryDesc Noise_changeMixerOnPlay{.key = "Noise.changeMixerOnPlay",
+                                                            .kind = pm::sdk::Kind::Field,
+                                                            .confidence = pm::sdk::Confidence::Decompiled,
+                                                            .owner = "Noise", .name = "changeMixerOnPlay"};
+
 // PlaySound reads the volume when it is given -1, and no other public float of Noise.
 inline constexpr pm::sdk::Fact Noise_volume_facts[] = {{.is = pm::sdk::Fact::Is::Loads, .method = "Noise.PlaySound"}};
 
