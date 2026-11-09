@@ -274,6 +274,15 @@ Landing landing();
  */
 void rise(const char* state, phasmo::Vector3 at, float yaw, float blendSeconds);
 
+/** `root` and everything under it, each before what hangs from it, `children(node)` giving a node's own children. */
+template <class T, class Children>
+std::vector<T> all_under(T root, Children children) {
+  std::vector<T> out{root};
+  for (size_t i = 0; i < out.size(); ++i)
+    for (const T& c : children(out[i])) out.push_back(c);
+  return out;
+}
+
 /** Whether a call of Final IK's IKExecutionOrder.LateUpdate on `instance` is for the figure's own `own`: both set and
  * the same. Every model with an IKExecutionOrder runs it. */
 inline bool is_own_ik(const void* instance, const void* own) { return instance && instance == own; }

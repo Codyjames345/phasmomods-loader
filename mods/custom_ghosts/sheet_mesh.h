@@ -4,10 +4,8 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
-#include <map>
 #include <numbers>
 #include <span>
-#include <utility>
 #include <vector>
 
 // The Squatter's bedsheet as a mesh for Unity's Cloth, kept free of game calls so it can be tested offline. A plain
@@ -286,59 +284,6 @@ inline SheetMesh make_sheet(const SheetShape& s) {
       m.triangles.insert(m.triangles.end(), {a, c, b, b, c, d});
     }
   return m;
-}
-
-// The sheet's thickness (user, 2026-11-10: it should look like a thick bedsheet): the cloth is one surface, so a shell
-// beside it draws its inner layer this far in and a strip along each open edge, where thickness shows. A starting value,
-// judged with the user in game; real cotton is thinner, but this is what reads as a sheet at a glance.
-inline constexpr float kSheetThickness = 0.015f;
-
-/** The edges only one triangle has (the open borders: a hem, a hole), each as (a, b) in its triangle's order. */
-inline std::vector<std::pair<int32_t, int32_t>> border_edges(std::span<const int32_t> triangles) {
-  std::map<std::pair<int32_t, int32_t>, int> uses;
-  const auto key = [](int32_t a, int32_t b) { return a < b ? std::pair{a, b} : std::pair{b, a}; };
-  for (size_t t = 0; t + 2 < triangles.size(); t += 3)
-    for (int e = 0; e < 3; ++e) ++uses[key(triangles[t + e], triangles[t + (e + 1) % 3])];
-  std::vector<std::pair<int32_t, int32_t>> out;
-  for (size_t t = 0; t + 2 < triangles.size(); t += 3)
-    for (int e = 0; e < 3; ++e) {
-      const int32_t a = triangles[t + e], b = triangles[t + (e + 1) % 3];
-      if (uses[key(a, b)] == 1) out.emplace_back(a, b);
-    }
-  return out;
-}
-
-/**
- * The shell's triangles over 2n points (point i of the outer layer, n + i of the inner): the inner layer, turned to face
- * the other way, and two triangles per border edge joining the layers along it. No outer-layer triangle: the cloth draws
- * that surface itself.
- */
-inline std::vector<int32_t> shell_triangles(size_t n, std::span<const int32_t> triangles,
-                                            std::span<const std::pair<int32_t, int32_t>> borders) {
-  const auto in = [n](int32_t i) { return static_cast<int32_t>(n) + i; };
-  std::vector<int32_t> out;
-  out.reserve(triangles.size() + 6 * borders.size());
-  for (size_t t = 0; t + 2 < triangles.size(); t += 3)
-    out.insert(out.end(), {in(triangles[t]), in(triangles[t + 2]), in(triangles[t + 1])});
-  for (const auto& [a, b] : borders) out.insert(out.end(), {a, in(a), b, b, in(a), in(b)});
-  return out;
-}
-
-/**
- * The shell's points and normals (2n each) from the cloth's `outer` points and their outward `normals` (n each): the
- * outer layer as given, the inner moved in by `thickness` and facing in. Spans of other lengths leave the output alone.
- */
-inline void shell_points(std::span<const Vec3> outer, std::span<const Vec3> normals, float thickness, std::span<Vec3> points,
-                         std::span<Vec3> shellNormals) {
-  const size_t n = outer.size();
-  if (normals.size() != n || points.size() != 2 * n || shellNormals.size() != 2 * n) return;
-  for (size_t i = 0; i < n; ++i) {
-    const Vec3 p = outer[i], d = normals[i];
-    points[i] = p;
-    points[n + i] = {p.x - d.x * thickness, p.y - d.y * thickness, p.z - d.z * thickness};
-    shellNormals[i] = d;
-    shellNormals[n + i] = {-d.x, -d.y, -d.z};
-  }
 }
 
 }  // namespace pm::custom::sheet
