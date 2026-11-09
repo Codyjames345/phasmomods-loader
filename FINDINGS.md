@@ -8,7 +8,22 @@ An entry is deleted in the change that fixes it. `/fix` takes a number or a few 
 a heading and does both halves; `/finding` writes a new entry; `harness-findings verify`
 reports an entry whose problem is already gone.
 
-<!-- next: 33 -->
+<!-- next: 35 -->
+
+## 34. Old per-process copies of the host and mods are never removed
+
+  tools/inject.cpp:176
+
+  `copy_native` makes a fresh copy of the host and of each chosen mod (its DLL, manifest, string table and, since the Squatter
+  work, its `assets/` folder) in `%LOCALAPPDATA%\PhasmoMods\bin` on every launch, named per process. Nothing deletes copies from
+  earlier launches: the only removal in the launcher is the tidy-up after a failed asset copy. So the folder grows with every
+  launch, faster now that mods can ship assets such as animation bundles and recordings. Found during the Squatter's Task 4b.
+
+  Prompt:
+  > PhasmoMods Loader's launcher (tools/inject.cpp, copy_native) copies the host and each mod's DLL, manifest, string table and
+  > assets folder into %LOCALAPPDATA%\PhasmoMods\bin on every launch, under per-process names, and never removes old copies. Add a
+  > cleanup that removes copies belonging to processes that are no longer running, never one a live game still has loaded, and
+  > test it, including a copy that is locked and a game still running from an earlier launch. Read CLAUDE.md first.
 
 ## 32. A community mod has only the install folder to live in, which an update may replace
 

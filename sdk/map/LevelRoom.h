@@ -59,11 +59,34 @@ inline constexpr pm::sdk::EntryDesc RoomKind{.key = "RoomKind", .confidence = pm
 
 // The test's look-alikes test otherwise: one passes only a room of kind 0, and another tests the room of the
 // ghost's own player, not the candidate's, and passes when that room is of this kind.
-/// A room outside the map (the truck). The hunt's test of whom it may go for (a GhostHuntState
-/// method) never goes for a player whose room is of this kind. Decompiled.
+/// The room beyond the map's exits: on every map of build 25811160 exactly one room is of this kind,
+/// LevelController.outsideRoom, named Outside or Exterior (scene read). A player whose room is of this
+/// kind is out of the investigation: PlayerSanity.Update counts that time apart and drains no sanity
+/// for it, and the hunt's test of whom it may go for (a GhostHuntState method) never goes for them. Decompiled.
 inline constexpr pm::sdk::EntryDesc RoomKind_outsideMap{.key = "RoomKind.outsideMap", .kind = pm::sdk::Kind::EnumValue,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "RoomKind", .name = "outsideMap"};
+
+/// A room indoors. Most of every map's rooms are of this kind, but not all indoor rooms: Grafton
+/// Farmhouse marks most of its rooms exteriorRoom (scene read, build 25811160). Optional. Inferred: from
+/// the value's name and the scenes.
+inline constexpr pm::sdk::EntryDesc RoomKind_insideRoom{.key = "RoomKind.insideRoom", .kind = pm::sdk::Kind::EnumValue,
+                                                        .flags = pm::sdk::kOptional, .owner = "RoomKind",
+                                                        .name = "insideRoom"};
+
+/// An open area within the map's exits: Sunny Meadows' courtyard and the campsites' fires, pitches and
+/// entrance (scene read, build 25811160). Optional. Inferred: from the value's name and the scenes.
+inline constexpr pm::sdk::EntryDesc RoomKind_exterior{.key = "RoomKind.exterior", .kind = pm::sdk::Kind::EnumValue,
+                                                      .flags = pm::sdk::kOptional, .owner = "RoomKind",
+                                                      .name = "exterior"};
+
+/// A room within the map's exits marked as outdoors or apart: tents, toilet blocks, Bleasdale's garden
+/// and side path, Point Hope's balcony, and most of Grafton Farmhouse (scene read, build 25811160).
+/// Optional. Inferred: from the value's name and the scenes.
+inline constexpr pm::sdk::EntryDesc RoomKind_exteriorRoom{.key = "RoomKind.exteriorRoom",
+                                                          .kind = pm::sdk::Kind::EnumValue,
+                                                          .flags = pm::sdk::kOptional, .owner = "RoomKind",
+                                                          .name = "exteriorRoom"};
 
 inline constexpr const char* FloorType_values[] = {"basement", "firstFloor", "secondFloor"};
 
@@ -87,6 +110,21 @@ inline constexpr pm::sdk::EntryDesc LevelRoom_floor{.key = "LevelRoom.floor", .k
 /// The room's name, as the map shows it: LevelRoom's one string field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc LevelRoom_name{.key = "LevelRoom.name", .kind = pm::sdk::Kind::Field,
                                                    .owner = "LevelRoom", .type = "string"};
+
+inline constexpr const char* LevelRoom_OnTriggerEnter_params[] = {"Collider"};
+
+/// Unity's trigger message for the room's colliders, on every client. When a player's camera collider
+/// (tagged MainCamera, under a root tagged Player) enters, it sets that player's Player.currentRoom to
+/// this room, and for the local player also LevelController's own room field; GameController hears of
+/// the move. When the ghost's room collider (tagged GhostRoomCollider) enters another room not of kind
+/// RoomKind.outsideMap, it calls LevelController.SyncCurrentGhostRoom with it, and during a hunt
+/// (GhostAI.isHunting) starts the room's light switches blinking. A mod hooks it to see a player change
+/// rooms. Decompiled.
+inline constexpr pm::sdk::EntryDesc LevelRoom_OnTriggerEnter{.key = "LevelRoom.OnTriggerEnter",
+                                                             .kind = pm::sdk::Kind::Method,
+                                                             .confidence = pm::sdk::Confidence::Decompiled,
+                                                             .owner = "LevelRoom", .name = "OnTriggerEnter",
+                                                             .params = LevelRoom_OnTriggerEnter_params};
 
 /// The room's kind, a RoomKind number: LevelRoom's one field of that type. Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelRoom_kind{.key = "LevelRoom.kind", .kind = pm::sdk::Kind::Field,
@@ -204,9 +242,17 @@ namespace FloorType {
 inline constexpr pm::api::EnumValue<pm::map::FloorType_basement> basement{};
 }  // namespace FloorType
 
+/// What kind of room a LevelRoom is: a player whose room is outsideMap is beyond the map's exits.
 namespace RoomKind {
-/// outsideMap(): a room outside the map, such as the truck. Unresolved: 0.
+/// outsideMap(): the room beyond the map's exits (LevelController.outsideRoom). Unresolved: 0, which is
+/// insideRoom's number, so check the type's use::resolved() before comparing.
 inline constexpr pm::api::EnumValue<pm::map::RoomKind_outsideMap> outsideMap{};
+/// insideRoom(): a room indoors. Optional. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::RoomKind_insideRoom> insideRoom{};
+/// exterior(): an open area within the map's exits. Optional. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::RoomKind_exterior> exterior{};
+/// exteriorRoom(): a room within the map's exits marked as outdoors or apart. Optional. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::RoomKind_exteriorRoom> exteriorRoom{};
 }  // namespace RoomKind
 
 /// Unity's collider. `collider` below is one.

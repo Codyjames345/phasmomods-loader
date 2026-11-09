@@ -35,7 +35,7 @@ ids (players, light switches, doors, incense, flames, the hunt state and Unity's
 Spectral Flame reaches the game only through the game API and the content functions, over the flames, candles, rooms, sanity, Photon
 and Unity rendering entries (`FireSource.h`, `Candle.h`, `Equipment.h`, `LevelRoom.h`,
 `PlayerSanity.h`, `Photon.h`, `UnityRendering.h`; [flames](systems/flames.md)). Custom Ghosts registers
-its fifteen ghosts and their rules through the content functions alone (`mods/custom_ghosts/registration.h`);
+its sixteen ghosts and their rules through the content functions alone (`mods/custom_ghosts/registration.h`);
 its ghosts' behaviour rules (`apparition`, `asterion`, `behaviour` with `hunt`, `bogeyman`, `brownie`, `echo`,
 `gremlin`, `hydra`, `kikimora`, `lethe`, `lithobolia`, `mesmer`, `restraint`, `sound` and `tempest`, with
 `sensor_copy` for the Hydra's and the Lithobolia's copies of the ghost's sensors) reach the game only through
@@ -53,7 +53,8 @@ Does not exist yet. These arrive with stage 2, when every bundled mod is on the 
   [the contract](systems/contract.md) (its start, both ends, every way out) and
   [Photon](systems/photon.md) (rooms, views and the cleanup, and the game's RPC checks),
   [the menus](systems/menus.md) (how a menu button is clicked, and how a copy of one keeps working),
-  [weather and lightning](systems/weather.md), [doors](systems/doors.md) (finding, opening and locking them),
+  [weather and lightning](systems/weather.md), [doors, exits and keys](systems/doors.md) (finding, opening and
+  locking doors, every map's exits, and who is out of the map),
   [navigation](systems/navigation.md) (routes over the level's navigation mesh), [voice chat](systems/voice.md),
   [photos, video and screens](systems/media.md) and
   [Steam achievements](systems/achievements.md) (how the game unlocks one).
@@ -64,7 +65,11 @@ whole mods: [adding a ghost](guides/adding-a-ghost.md) builds `sdk/examples/exam
 [adding evidence](guides/adding-evidence.md) follows Spectral Flame; [tells for vanilla
 ghosts](guides/tells-for-vanilla-ghosts.md) follows Ghost Tells; [the Mimic and your
 ghost](guides/mimic-and-your-ghost.md) and [lobbies, saves and players](guides/lobbies-saves-and-players.md)
-say what the loader guarantees; and [equipment](guides/equipment.md) describes the game's equipment system. Everything below
+say what the loader guarantees; [a mod's own files](guides/mod-files.md) says where a mod puts data files
+(an `assets` folder beside its DLL, copied for each launch and read-only, found with `pm::api::assets_folder()`, and a mod
+whose files cannot be copied is off); [custom animation](guides/custom-animation.md) shows a figure of a mod's own
+(an AssetBundle of clips, a script-free copy of the investigator's body and Unity Cloth, with the helpers in
+`sdk/api/bundles.h` and `sdk/api/models.h`); and [equipment](guides/equipment.md) describes the game's equipment system. Everything below
 describes what is in the code now.
 
 ## Making a mod
@@ -487,9 +492,9 @@ that requires one whose hook could not be made stays off, and the log names the 
 false for that reason alone while a mod runs.
 It replaces return-address checks, which break when several mods chain detours on one function.
 
-### The host contract, version 2.2
+### The host contract, version 2.3
 
-`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.2 today).
+`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.3 today).
 `pm_api_compatible(host, mod)` accepts a mod of the same major and a minor no newer than the host's.
 Within a major, `PmHostApi` and every published struct only grow at the end; a new major refuses
 older mods. Version 2.0 added these members, after the services of version 1:
@@ -557,8 +562,16 @@ it keeps the answer in between. Playable Ghost shows it on its player's HUD.
   0, or 0 (logged with the id and why) for a call outside `pmmod_start`, a repeated or malformed id,
   text without English or over the limits (64 tells, 64 languages, 64 KB a text), or an evidence that
   is neither vanilla nor a content id. A custom evidence a ghost gives may come from any mod that
-  starts, before or after it: once every mod has started the host settles the content, and drops (and
-  logs) a ghost whose evidence nobody registered. A mod that fails to start takes its content with it.
+  starts, before or after it: once every mod has started the host settles the content, and drops a
+  ghost whose evidence nobody registered. Since 2.3 the mod that registered it stays off for that start, logged
+  and on its Mods panel row, and the others start again without it. A mod that fails to start takes its
+  content with it.
+  Since 2.3 the host also refuses every ghost and evidence while custom content is off on this client (the
+  game's enums unreadable, or a game entry or hook its content needs missing), and keeps off any mod whose
+  `pmmod_start` registered something it refused, whatever `pmmod_start` returned: it stops the mod, removes
+  its hooks and content, and logs why. The same holds for every host call that fails during `pmmod_start`:
+  a hook that cannot be made or switched on, a game entry that cannot be hooked, a service name already
+  taken. A mod need not check what such a call returned: no mod runs with part of itself missing.
 - `content_type(ghostId)`, `content_ghost_id(type)` and `content_evidence(evidenceId)`: a mod names
   content by its stable id, `"<mod id>.<name>"` (`phasmomods.custom-ghosts.draugr`), and never chooses a
   number. A name holds no dot, so the id splits at its last dot (`core/mod_ids.h`). Nothing here fixes the
@@ -596,7 +609,7 @@ puts each custom ghost into the game as a ghost type (`host/content_types.h`, fo
 [ghost types](systems/ghost-types.md)): a GhostData in the contract's GhostCollection in its
 alphabetical place, its name for the game's name key, the custom type as its identity and the game's
 "no type" as its AI's behaviour type on every client, and the custom types after the game's own in the
-Mimic's copy list. Whether a contract has them is decided once, when it loads: content active then
+Mimic's copy list (not one marked `PM_GHOST_NO_MIMIC_COPY`). Whether a contract has them is decided once, when it loads: content active then
 puts them in, and the decision holds until the contract ends (content going pending or off in between
 changes nothing, and the contract's custom rules keep running). They leave at the contract's end and
 when the mods stop, only the types this client's content numbers; a removal the game's List refused is
@@ -608,6 +621,11 @@ game's enums give the first custom ghost and evidence, so two clients whose game
 enums never agree; an enum value whose name would give another value's id (a future `Orbs` beside
 `GhostOrb`'s `orbs`) gets no id, logged; and the host logs the enum ranges it read
 (`content: GhostType 0..30, EvidenceType 0..7`).
+
+A ghost may give no evidence at all: its three slots empty, null or `""`. Its GhostData then holds the game's own
+"no evidence" in each, the game's pick gives only that, and the journal's filter lists it until any evidence is found
+([evidence](systems/evidence.md#a-ghost-that-gives-no-evidence)). Version 2.3 added `PM_GHOST_NO_MIMIC_COPY`, a bit
+of `PmGhostDef.flags`: a ghost with it is never on the Mimic's copy list, so a Mimic never copies it.
 
 - `ghost_rules(ghostId, rules)`, from `pmmod_start` only: attaches a `PmGhostRules` (`start`, `tick`,
   `stop`, `huntSpeed`, `heldBack`, each optional) to a custom ghost's id or a vanilla one

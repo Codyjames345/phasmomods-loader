@@ -1,11 +1,13 @@
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
 #include <limits>
 #include <string>
 
 #include "LevelController.h"
 #include "Photon.h"
 #include "apparition.h"
+#include "assets.h"
 #include "asterion.h"
 #include "behaviour.h"
 #include "bogeyman.h"
@@ -30,6 +32,9 @@
 #include "restraint.h"
 #include "runtime.h"
 #include "sound.h"
+#include "squatter.h"
+#include "squatter_figure.h"
+#include "squatter_voice.h"
 #include "tempest.h"
 
 // The custom ghosts (ghosts.h) as a mod of the suite (core/mod_api.h). Each is a custom ghost of the
@@ -88,6 +93,7 @@ void frame(int type) {
   lethe::tick(haunting, type);        // and forgets with the Lethe
   tempest::tick(haunting, type);      // and sees the Tempest's storm
   mesmer::tick(haunting, type);       // and sees the Mesmer as no one else does
+  squatter::tick(haunting, type, steered);  // and keeps the Squatter's phase, its channel and the exits' hold
 }
 
 // The rules of one custom ghost (PmGhostRules). `user` is its Type.
@@ -164,8 +170,10 @@ void* target(int type, std::span<const void* const> excluded) {
 
 bool held_back(int type, int32_t kind) {
   try {
-    return (kind == restraint::kInteract || kind == restraint::kEvent || kind == restraint::kAbility) &&
-           restraint::held_back(type, static_cast<restraint::Kind>(kind));
+    // The Squatter's rules answer every kind, hunts and the fuse box among them; the others' only the first three.
+    const bool answered = kind == restraint::kInteract || kind == restraint::kEvent || kind == restraint::kAbility ||
+                          (type == kSquatter && (kind == restraint::kHunt || kind == restraint::kFuseBox));
+    return answered && restraint::held_back(type, static_cast<restraint::Kind>(kind));
   } catch (...) {
     return false;  // nothing thrown may reach another mod
   }
@@ -216,6 +224,9 @@ void receive(int sender, const uint8_t* data, size_t size) {
     case net_msg::kDrag: behaviour::receive(sender, data, size); break;
     case net_msg::kSeen: brownie::receive(sender, data, size); break;
     case net_msg::kDoors: asterion::receive(sender, data, size); break;
+    case net_msg::kSquatter:
+    case net_msg::kSquatterTry:
+    case net_msg::kSquatterSprint: squatter::receive(sender, data, size); break;
     case 0: echo::receive(sender, data, size); break;
     default: break;
   }
@@ -223,6 +234,21 @@ void receive(int sender, const uint8_t* data, size_t size) {
 
 bool start(const PmHostApi* api) {
   if (!pm::mod::bind(api, &kInfo)) return false;
+  // The Squatter's recordings are in the mod's own files (sdk/api/assets.h). Without their folder the mod does not start,
+  // before it has changed anything; a mod with an error is off.
+  const std::filesystem::path assets = pm::api::assets_folder();
+  const std::filesystem::path voice_folder = assets / "squatter" / "voice";
+  std::error_code voice_error;
+  if (assets.empty() || !std::filesystem::is_directory(voice_folder, voice_error)) {
+    PM_LOG("CustomGhosts inactive: the Squatter's voice folder (squatter/voice in the mod's assets) is missing");
+    return false;
+  }
+  // Its figure's clips are in its AssetBundle, which must load with every state the figure plays (squatter_figure.h).
+  std::string why;
+  if (!squatter::figure::load(assets, why)) {
+    PM_LOG("CustomGhosts inactive: the Squatter's figure cannot load: %s", why.c_str());
+    return false;
+  }
   content::GhostDef callbacks;
   callbacks.useAbility = [](void* user) { return use_ability(type_of_user(user)); };
   callbacks.hudState = [](void* user) { return hud_state(type_of_user(user)); };
@@ -249,21 +275,27 @@ bool start(const PmHostApi* api) {
   rules.huntSpeed = &rules_hunt_speed;
   if (!register_content(callbacks, rules)) {
     PM_LOG("CustomGhosts inactive: the host refused its ghosts or their rules");
+    squatter::figure::unload();
     return false;
   }
   if (!(pm::game::resolve() && behaviour::resolve() && kikimora::resolve() && echo::resolve() && sound::resolve() &&
         apparition::resolve() && hydra::resolve() && asterion::resolve() && lithobolia::resolve() &&
         gremlin::resolve() && bogeyman::resolve() && brownie::resolve() && lethe::resolve() && tempest::resolve() &&
-        mesmer::resolve())) {
+        mesmer::resolve() && squatter::resolve())) {
     PM_LOG("CustomGhosts inactive: game binding resolution failed");
+    squatter::figure::unload();
     return false;
   }
   if (!(behaviour::create_hooks() && echo::create_hooks() && restraint::create_hooks() && lethe::create_hooks() &&
-        mesmer::create_hooks() && brownie::create_hooks() && tempest::create_hooks() && pm::hooks::enable_all())) {
+        mesmer::create_hooks() && brownie::create_hooks() && tempest::create_hooks() && squatter::create_hooks() &&
+        pm::hooks::enable_all())) {
     PM_LOG("CustomGhosts inactive: hook installation failed");
+    squatter::figure::unload();
     return false;
   }
   pm::net::set_handler(&receive);
+  // An empty set is no error, and a recording that cannot be read keeps its slot silent (squatter_voice.h).
+  squatter::voice::load(voice_folder);
   return true;
 }
 
@@ -293,6 +325,8 @@ extern "C" __declspec(dllexport) void pmmod_stop() {
     pm::custom::tempest::reset();
     pm::custom::mesmer::reset();
     pm::custom::kikimora::reset();
+    pm::custom::squatter::reset();
+    pm::custom::squatter::figure::unload();
     pm::custom::behaviour::teardown();
   });
 }

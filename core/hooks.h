@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include <atomic>
 #include <cstddef>
 
@@ -51,6 +53,9 @@ bool site_patched(const void* site);
 // hooks, all of them, when the mods are restarted. Site patches count as hooks in both.
 void begin_group();
 void rollback_group();
+// Host only: the first hook that could not be made or switched on since begin_group (its log line, without "hooks: "),
+// or empty. The host keeps a mod with one off, whatever its start answered (host/mods.cpp).
+std::string group_failure();
 size_t mark();
 void rollback_to(size_t mark);
 // Host only: writes back every site patch still in place, newest first, as a rollback does (a write

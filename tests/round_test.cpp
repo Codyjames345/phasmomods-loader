@@ -129,7 +129,16 @@ void spawn_body(void* self, const void*) {
   fake::spawn_running(false);
   fake::set_inside(map::GhostController_Spawn, 0);
 }
-int32_t pick_type_body(void*, const void*) { return nativeType; }
+std::vector<int> rolls;  // the native roll's draws in order, before it falls back to nativeType
+int32_t pick_type_body(void*, const void*) {
+  if (rolls.empty()) return nativeType;
+  const int r = rolls.front();
+  rolls.erase(rolls.begin());
+  return r;
+}
+// The content layer's flags of a type: kNotPlayable carries PM_GHOST_NOT_PLAYABLE (a made-up custom type).
+constexpr int kNotPlayable = 30;
+uint32_t test_flags_of(int32_t type) { return type == kNotPlayable ? PM_GHOST_NOT_PLAYABLE : 0u; }
 void change_room_body(void*, void* to, const void*) {
   ++changes;
   lastChangedTo = to;
@@ -181,6 +190,8 @@ pm::session::Session reset() {
   capturing = *fake::host();
   fakeHookBody = capturing.hook_body;
   capturing.hook_body = &capture_hook_body;
+  capturing.content_flags_of = &test_flags_of;
+  rolls.clear();
   detours.clear();
   std::string missing;
   CHECK(pm::api::bind(&capturing, missing));
@@ -410,6 +421,52 @@ void a_type_no_longer_allowed_leaves_the_native_roll() {
   CHECK(favourite_room_object() == &room1);
 }
 
+// A ghost no player plays (PM_GHOST_NOT_PLAYABLE, user 2026-11-07, the Squatter) is never offered to the ghost player,
+// never chosen at random for them and never kept from a pick; another custom type still is.
+void a_ghost_no_player_plays_is_never_theirs() {
+  auto s = reset();
+  pm::round::tick(s);
+  fake::dictionary(&dictionary, {{kWraith, 10}, {kNotPlayable, 50}, {31, 5}});
+  call_spawn();
+  CHECK((s.pick_offer().types == std::vector<uint8_t>{kWraith, 31}));
+  // Chosen anyway (an old or forged pick): not kept, since it was never offered; the native roll comes, drawn again
+  // past it.
+  pm::session::Choice choice;
+  choice.type = kNotPlayable;
+  choice.room = 1;
+  s.send_pick(choice);
+  rolls = {kNotPlayable, kNotPlayable, kWraith};
+  pm::round::tick(s);
+  clockMs += pm::round::kPickMs;
+  pm::round::tick(s);
+  CHECK(spawnSends == 1);
+  CHECK(controller_type() == kWraith);
+  // Unchosen: the native roll, drawn again past it.
+  s = reset();
+  pm::round::tick(s);
+  fake::dictionary(&dictionary, {{kWraith, 10}, {kNotPlayable, 50}, {31, 5}});
+  call_spawn();
+  rolls = {kNotPlayable, 31};
+  clockMs += pm::round::kPickMs;
+  pm::round::tick(s);
+  CHECK(spawnSends == 1 && controller_type() == 31);
+}
+
+// Outside a ghost-player round the roll stands, whatever it gives.
+void without_a_ghost_player_the_roll_stands() {
+  give_entries();
+  capturing = *fake::host();
+  fakeHookBody = capturing.hook_body;
+  capturing.hook_body = &capture_hook_body;
+  capturing.content_flags_of = &test_flags_of;
+  detours.clear();
+  std::string missing;
+  CHECK(pm::api::bind(&capturing, missing));
+  CHECK(pm::round::create_hooks());
+  rolls = {kNotPlayable};
+  CHECK(call_pick_type(&dictionary) == kNotPlayable);
+}
+
 // A spawn that returns before its type roll has run natively already: nothing is offered or held, and
 // later calls run as they are.
 void a_probe_without_a_roll_holds_nothing() {
@@ -486,6 +543,8 @@ int main() {
   a_client_not_the_master_spawns_natively();
   an_expired_pick_leaves_the_native_rolls();
   a_type_no_longer_allowed_leaves_the_native_roll();
+  a_ghost_no_player_plays_is_never_theirs();
+  without_a_ghost_player_the_roll_stands();
   a_probe_without_a_roll_holds_nothing();
   a_throwing_resume_lets_nothing_through_afterwards();
   pm::round::teardown();

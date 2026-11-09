@@ -3,7 +3,7 @@
   "name": "Custom Ghosts",
   "author": "PhasmoMods",
   "version": "1.0.0",
-  "description": "Fifteen new ghost types, twelve of them carrying Spectral Flame (needs Spectral Flame)",
+  "description": "Sixteen new ghost types, twelve of them carrying Spectral Flame (needs Spectral Flame)",
   "dll": "CustomGhosts.dll",
   "website": "",
   "recordsVoice": true,

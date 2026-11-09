@@ -197,4 +197,9 @@ uint32_t flags() {
   return h ? h->content_flags() : 0;
 }
 
+uint32_t flags_of(int32_t type) {
+  const PmHostApi* h = detail::host();
+  return h ? h->content_flags_of(type) : 0;
+}
+
 }  // namespace pm::api::content

@@ -291,7 +291,9 @@ inline constexpr pm::sdk::Fact LevelValues_eventsBlocked_facts[] = {
     {.is = pm::sdk::Fact::Is::Loads, .method = "GhostActivity.GhostAbility"}};
 
 /// While set, GhostActivity.GhostAbility does not change the ghost to
-/// randomEvent on its last path, where it would otherwise. Decompiled.
+/// randomEvent on its last path, where it would otherwise, and a ghost's push of a door (Door.GhostForceDoor)
+/// plays no rattle or door sound and leaves no EMF reading, though it still counts in LevelStats.doorsMoved.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelValues_eventsBlocked{
     .key = "LevelValues.eventsBlocked", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LevelValues", .type = "bool", .facts = LevelValues_eventsBlocked_facts};
@@ -332,6 +334,20 @@ inline constexpr pm::sdk::EntryDesc Difficulty_loseItemsOnDeath{
     .key = "Difficulty.loseItemsOnDeath", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "Difficulty", .name = "loseItemsOnDeath", .type = "bool"};
 
+/// Whether players may sprint: 0 off, 1 on, 2 infinite (its tooltip). With 0, LocalPCPlayer.UpdatePlayerSpeed
+/// gives the walk speed in a contract and PCStamina.OutOfBreath does nothing (unless LocalPlayer.isDead is set).
+/// In a contract the stamina's update (PlayerStamina's) works only while it is 1, so with 2 a player never tires.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_sprinting{
+    .key = "Difficulty.sprinting", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "Difficulty", .name = "sprinting", .type = "int"};
+
+/// The contract's player speed factor: LocalPlayer.Start copies it into the rig's LocalPlayer.speedMultiplier
+/// in a contract, which multiplies the walk and the sprint speed. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_playerSpeed{
+    .key = "Difficulty.playerSpeed", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "Difficulty", .name = "playerSpeed", .type = "float"};
+
 /// System.Enum (mscorlib). Inferred: the .NET class.
 inline constexpr pm::sdk::EntryDesc SystemEnum{.key = "Enum", .name = "Enum", .assembly = "mscorlib", .ns = "System"};
 
@@ -353,6 +369,26 @@ inline constexpr pm::sdk::EntryDesc Difficulty_actualWeather{.key = "Difficulty.
                                                              .confidence = pm::sdk::Confidence::Decompiled,
                                                              .owner = "Difficulty", .name = "actualWeather"};
 
+/// The contract's hunt settings (Assembly-CSharp, global namespace), a MonoBehaviourPun with one static instance.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc DifficultySettings{.key = "DifficultySettings",
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .name = "DifficultySettings", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// Adds its int to the hunt's duration, once a contract: unless a flag of the settings is set, it sends an RPC to every
+/// client, whose body adds the int to an int field of the settings and sets the flag. The music box's break, the
+/// voodoo doll's hunt, the Death card and a monkey paw wish call it with 20 just before their forced hunt. That the field
+/// is the hunt's length is its name's word; its unit was not traced. Decompiled.
+inline constexpr pm::sdk::EntryDesc DifficultySettings_AddHuntDuration{
+    .key = "DifficultySettings.AddHuntDuration", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "DifficultySettings", .name = "AddHuntDuration"};
+
+/// Puts the hunt's grace period back: copies a private int field of the settings into the public one beside it. The
+/// cursed possessions that force a hunt set that public field to 1 before the change and call this after it.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc DifficultySettings_ResetHuntGracePeriod{
+    .key = "DifficultySettings.ResetHuntGracePeriod", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "DifficultySettings", .name = "ResetHuntGracePeriod"};
 
 }  // namespace pm::map
 
@@ -379,6 +415,10 @@ struct Difficulty {
   static constexpr pm::api::Field<pm::map::Difficulty_evidenceGiven, int32_t> evidenceGiven{};
   /// Whether its ghost is friendly (hunts lock no doors): friendlyGhost.get(d). Unresolved: false.
   static constexpr pm::api::Field<pm::map::Difficulty_friendlyGhost, bool> friendlyGhost{};
+  /// Whether players may sprint, 0 off, 1 on, 2 infinite: sprinting.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_sprinting, int32_t> sprinting{};
+  /// The players' speed factor: playerSpeed.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_playerSpeed, float> playerSpeed{};
   /// What it multiplies a contract's reward by: GetRewardMultiplier(d). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::Difficulty_GetRewardMultiplier, float(void*)> GetRewardMultiplier{};
 };
@@ -454,6 +494,18 @@ struct LevelValues {
   /// Whether the contract ended the game's own way: completed.get(values); a mod's own end of the
   /// contract writes it as ExitLevel.Exit does. Unresolved: false, writes nothing.
   static constexpr pm::api::Field<pm::map::LevelValues_completed, bool> completed{};
+};
+
+/// The contract's hunt settings. `settings` below is the DifficultySettings.
+struct DifficultySettings {
+  /// The DifficultySettings type: klass(), is(obj), type_object(), make() and make_array(n). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::DifficultySettings> type{};
+  /// AddHuntDuration(settings, amount): adds `amount` to the hunt's duration on every client, once a contract; it
+  /// sends an RPC (sdk/systems/photon.md). A mod hooks it, never calls it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::DifficultySettings_AddHuntDuration, void(void*, int32_t)> AddHuntDuration{};
+  /// ResetHuntGracePeriod(settings): the hunt's grace period goes back to its own value, on this client. Unresolved:
+  /// does nothing.
+  static constexpr pm::api::Method<pm::map::DifficultySettings_ResetHuntGracePeriod, void(void*)> ResetHuntGracePeriod{};
 };
 
 /// System.Enum. `boxed` below is a boxed enum value.

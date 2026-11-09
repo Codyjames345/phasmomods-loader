@@ -25,9 +25,9 @@ function Remove-Temporary([string]$Path) {
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 New-Item -ItemType Directory -Path $stage | Out-Null
 try {
+    try { Assert-PayloadSources $Root $payload } catch { throw "Cannot stage dist\PhasmoMods: $($_.Exception.Message)" }
     foreach ($file in $payload) {
         $source = Join-Path $Root $file.Source
-        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Cannot stage dist\PhasmoMods: $($file.Source) is missing." }
         $destination = Join-Path $stage $file.Name
         New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
         Copy-Item -LiteralPath $source -Destination $destination

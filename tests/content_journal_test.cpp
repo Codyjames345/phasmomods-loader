@@ -1167,6 +1167,37 @@ void unknown_evidence_text_is_hidden() {
   CHECK(p->children[4]->active && !p->children[5]->active && p->children[6]->active);
 }
 
+// A ghost that gives no evidence (the Squatter's spec, "Technical unknowns" 6): its GhostData holds the game's "no
+// evidence" in all three slots, so its page names no evidence (its three evidence lines hidden), and the game's own
+// filter (SetGhostTypes, sdk/systems/evidence.md) lists it while nothing is found, keeps it when evidence is only
+// ruled out (none of its three is that evidence), and crosses it out once any evidence is found (no found evidence
+// is one of its three).
+void no_evidence_ghost_stays_until_evidence_is_marked() {
+  start();
+  World w;
+  content::GhostDef quiet = ghost("a.quiet", "Quiet");
+  quiet.evidence = {"", "", ""};
+  runs({quiet, ghost("a.lethe", "Lethe")});
+  w.contract();
+  const int32_t q = content::type_of("a.quiet"), lethe = content::type_of("a.lethe");
+  const auto listed = [](int32_t type) {
+    return std::find(g_engine.left.begin(), g_engine.left.end(), type) != g_engine.left.end();
+  };
+  Node* page = w.child_named(w.book, "Quiet");
+  CHECK(page && !page->children[4]->active && !page->children[5]->active && !page->children[6]->active);
+  CHECK(listed(q) && listed(lethe));  // nothing marked: the contract's own filter keeps both
+  g_engine.ruledOut = {1};             // EMF ruled out: the Lethe gives it, the quiet ghost does not
+  set_ghost_types(w.journal, nullptr);
+  CHECK(listed(q) && !listed(lethe));
+  g_engine.ruledOut.clear();
+  set_ghost_types(w.journal, nullptr);
+  CHECK(listed(q) && listed(lethe));
+  mark_found(w.journal, w.vanillaRows[0]);  // EMF found
+  CHECK(!listed(q) && listed(lethe));
+  mark_found(w.journal, w.vanillaRows[2]);  // and the Spirit Box, which the Lethe lacks
+  CHECK(!listed(q) && !listed(lethe));
+}
+
 std::vector<std::pair<std::string, int32_t>> pages_by_id(const std::vector<content::GhostDef>& ghosts) {
   start();
   World w;
@@ -2136,6 +2167,7 @@ int main() {
   extended_journal_refreshes_lines_on_reentry();
   evidence_button_filters_ghosts();
   evidence_without_a_ghost_gets_no_button();
+  no_evidence_ghost_stays_until_evidence_is_marked();
   spectral_flame_row_comes_with_custom_ghosts();
   evidence_key_form_comes_from_the_game();
   a_page_key_without_its_name_says_nothing_of_the_form();

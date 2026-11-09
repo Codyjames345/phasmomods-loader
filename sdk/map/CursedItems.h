@@ -1,8 +1,9 @@
 #pragma once
 
-// The cursed possessions and the summoning circle: each one's networked use, the RPC every client runs
-// when an investigator uses it. Their names are real. Notes read from decompiled code are from build
-// 25811160.
+// The cursed possessions, the summoning circle and the jackalope (a seasonal item): each one's networked use, the RPC every
+// client runs when an investigator uses it, and the methods by which each starts the ghost's hunt or calls it
+// (sdk/systems/ghost-ai.md, "Every route to a state change"). Their names are real. Notes read from decompiled code are
+// from build 25811160.
 
 #include "Equipment.h"
 #include "entry.h"
@@ -101,6 +102,21 @@ inline constexpr pm::sdk::EntryDesc MonkeyPaw_ReviveWish{
     .owner = "MonkeyPaw", .type = "void", .params = MonkeyPaw_ReviveWish_params,
     .facts = MonkeyPaw_ReviveWish_facts};
 
+// Of the paw's void methods that take a Player, only this wish unlocks a door (Door.UnlockDoor).
+inline constexpr pm::sdk::Fact MonkeyPaw_OpenExitsWish_facts[] = {
+    {.is = pm::sdk::Fact::Is::Calls, .method = "Door.UnlockDoor"}};
+
+/// The wish that opens every exit for good, given the wisher's Photon player; the wish's coroutine runs it on
+/// every client, once, on its own once-only flag. For each door of LevelController.huntingDoors it clears the
+/// door's timed-lock flag (Door.LockDoorForTime's), on the master calls Door.UnlockDoor(true) (the unlock's
+/// click for everyone), on the client that owns the door's PhotonView calls Door.ToggleDoorLock(true) (the
+/// door back on, Door.grabbable set on every client), and calls Door.ForceToggleHuntCollider(false). It
+/// checks no hunt and sets no timer. Name obfuscated. Decompiled.
+inline constexpr pm::sdk::EntryDesc MonkeyPaw_OpenExitsWish{
+    .key = "MonkeyPaw.OpenExitsWish", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "MonkeyPaw", .type = "void", .params = MonkeyPaw_ReviveWish_params,
+    .facts = MonkeyPaw_OpenExitsWish_facts};
+
 inline constexpr const char* TarotCards_HighPriestess_params[] = {"PhotonMessageInfo"};
 
 /// The High Priestess card, an RPC: it first checks that the sender owns the cards' view, with the report on
@@ -117,6 +133,51 @@ inline constexpr pm::sdk::EntryDesc TarotCards_HighPriestess{
 /// Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc SummoningCircle{.key = "SummoningCircle", .name = "SummoningCircle",
                                                     .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The mirror breaks: while the ghost is not hunting, on the master, it counts the break in LevelStats, then a hunt,
+/// forced (GhostAI.ChangeState). It sets a field of DifficultySettings before the change and calls another of its
+/// methods after it. Protected and
+/// virtual. A mod hooks it; refusing the change in GhostAI.ChangeState leaves the rest of it to run. Decompiled.
+inline constexpr pm::sdk::EntryDesc HauntedMirror_BreakItem{
+    .key = "HauntedMirror.BreakItem", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "HauntedMirror", .name = "BreakItem"};
+
+/// The board breaks: on the master, while the ghost is not hunting, a hunt, forced (GhostAI.ChangeState), between
+/// the same two DifficultySettings steps as HauntedMirror.BreakItem's. Private. A mod hooks it. Decompiled.
+inline constexpr pm::sdk::EntryDesc OuijaBoard_BreakBoard{
+    .key = "OuijaBoard.BreakBoard", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "OuijaBoard", .name = "BreakBoard"};
+
+/// The box breaks: when its bool is true and the ghost is not hunting, on the master,
+/// DifficultySettings.AddHuntDuration(20), then a hunt, forced (GhostAI.ChangeState). Private. A mod hooks it. Decompiled.
+inline constexpr pm::sdk::EntryDesc MusicBox_BreakMusicBox{
+    .key = "MusicBox.BreakMusicBox", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "MusicBox", .name = "BreakMusicBox"};
+
+/// An RPC: after its check of the sender and while a flag of the box is set, the ghost is called to the box,
+/// GhostAI.ChangeState to GhostState.musicBox with the box as the change's object, not forced. Never call it or send it (sdk/systems/photon.md); a mod hooks it. Decompiled.
+inline constexpr pm::sdk::EntryDesc MusicBox_EnterMusicBoxState{
+    .key = "MusicBox.EnterMusicBoxState", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "MusicBox", .name = "EnterMusicBoxState"};
+
+/// An RPC: the doll's hunt. While the doll has uses left, a flag of it is set, the ghost is not hunting and the
+/// sender passes its check, it spends a use, then on the master DifficultySettings.AddHuntDuration(20) and a hunt,
+/// forced (GhostAI.ChangeState). Never call it or send it (sdk/systems/photon.md); a mod hooks it. Decompiled.
+inline constexpr pm::sdk::EntryDesc VoodooDoll_StartHunt{
+    .key = "VoodooDoll.StartHunt", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "VoodooDoll", .name = "StartHunt"};
+
+/// The jackalope, a seasonal item (Assembly-CSharp, global namespace), a MonoBehaviourPun. Decompiled.
+inline constexpr pm::sdk::EntryDesc Jackalope{.key = "Jackalope", .confidence = pm::sdk::Confidence::Decompiled,
+                                              .name = "Jackalope", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// An RPC, its int an actor number: the jackalope turns to that player and plays its sound; then on the master it
+/// clears GhostAI.postHuntCooldown, sets another bool of the GhostAI, and starts a hunt, not forced
+/// (GhostAI.ChangeState). Refusing the change leaves those two writes made. Never call it or send it
+/// (sdk/systems/photon.md); a mod hooks it. Decompiled.
+inline constexpr pm::sdk::EntryDesc Jackalope_TriggerHunt{
+    .key = "Jackalope.TriggerHunt", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "Jackalope", .name = "TriggerHunt"};
 
 /// The Hanged Man's kill, given the card's user, this client's Photon player. On the master it kills them
 /// (Player.BeginDeathSequence, through Network.GetPlayerFromPhotonPlayer); elsewhere it asks the master by RPC. Decompiled.
@@ -141,12 +202,16 @@ struct OuijaBoard {
   /// does nothing.
   static constexpr pm::api::Method<pm::map::OuijaBoard_PlayMessageSequence, void(void*, void*, void*)>
       PlayMessageSequence{};
+  /// BreakBoard(board): the board breaks and, on the master, the ghost hunts. A mod hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::OuijaBoard_BreakBoard, void(void*)> BreakBoard{};
 };
 
 /// The haunted mirror.
 struct HauntedMirror {
   /// UseNetworked(mirror, on, &info). A mod hooks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::HauntedMirror_UseNetworked, void(void*, bool, void*)> UseNetworked{};
+  /// BreakItem(mirror): the mirror breaks and, on the master, the ghost hunts. A mod hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::HauntedMirror_BreakItem, void(void*)> BreakItem{};
 };
 
 /// The music box. `box` below is one.
@@ -155,6 +220,12 @@ struct MusicBox {
   static constexpr pm::api::Method<pm::map::MusicBox_UseNetworked, void(void*, bool, void*)> UseNetworked{};
   /// Its tween, a DOTween Sequence, or null: tween.get(box). Unresolved: null.
   static constexpr pm::api::Field<pm::map::MusicBox_tween, void*> tween{};
+  /// BreakMusicBox(box, flag): the box breaks and, on the master, the ghost hunts. A mod hooks it. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::MusicBox_BreakMusicBox, void(void*, bool)> BreakMusicBox{};
+  /// EnterMusicBoxState(box, &info), an RPC: the ghost is called to the box. A mod hooks it; never calls it.
+  /// Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::MusicBox_EnterMusicBoxState, void(void*, void*)> EnterMusicBoxState{};
 };
 
 /// The tarot cards.
@@ -170,6 +241,8 @@ struct TarotCards {
 struct VoodooDoll {
   /// NetworkedUse(doll, pin, &info). A mod hooks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::VoodooDoll_NetworkedUse, void(void*, int32_t, void*)> NetworkedUse{};
+  /// StartHunt(doll, &info), an RPC: the doll's hunt. A mod hooks it; never calls it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::VoodooDoll_StartHunt, void(void*, void*)> StartHunt{};
 };
 
 /// The monkey paw.
@@ -181,6 +254,18 @@ struct MonkeyPaw {
   /// ReviveWish(paw, wisher): the revive wish, `wisher` a Photon player. A mod hooks it. Unresolved: does
   /// nothing.
   static constexpr pm::api::Method<pm::map::MonkeyPaw_ReviveWish, void(void*, void*)> ReviveWish{};
+  /// OpenExitsWish(paw, wisher): the wish that opens every exit, `wisher` a Photon player. A mod hooks it.
+  /// Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::MonkeyPaw_OpenExitsWish, void(void*, void*)> OpenExitsWish{};
+};
+
+/// The jackalope, a seasonal item.
+struct Jackalope {
+  /// The type: klass(), is(obj), type_object(), make() and make_array(n). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::Jackalope> type{};
+  /// TriggerHunt(jackalope, actor, &info), an RPC: the jackalope's hunt. A mod hooks it; never calls it. Unresolved:
+  /// does nothing.
+  static constexpr pm::api::Method<pm::map::Jackalope_TriggerHunt, void(void*, int32_t, void*)> TriggerHunt{};
 };
 
 /// A summoning circle.

@@ -32,6 +32,7 @@
   "launcher.another-copy-loading-wait": "Another copy of PhasmoMods Loader is loading this game. Wait for it to finish.",
   "launcher.another-copy-starting-phasmophobia": "Another copy of PhasmoMods Loader is starting Phasmophobia. Wait for it to finish.",
   "launcher.mod-dll-unreadable": "Mod DLL could not be read or copied. Reinstall this mod.",
+  "launcher.mod-assets-unreadable": "PM_TEXT_TODO",  // PM_TEXT_TODO
   "launcher.mod-missing-dll": "Mod is missing its DLL. Reinstall this mod.",
   "launcher.mod-repeats-id": "Mod repeats the id of another mod.",
   "launcher.attach": "&Attach to game",

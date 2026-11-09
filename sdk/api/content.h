@@ -85,7 +85,7 @@ struct GhostDef {
   Text weakness;     ///< its journal page's weakness, with English
   std::vector<Text> tells;  ///< its tells, one journal line each, at most 64 (PmGhostDef::tells)
   /// Its three evidence: vanilla ids ("emf", "spirit_box", "ultraviolet", "orbs", "writing", "freezing",
-  /// "dots") or custom evidence ids; "" for an empty slot (PmGhostDef::evidence).
+  /// "dots") or custom evidence ids; "" for an empty slot, and all three may be (PmGhostDef::evidence).
   std::array<std::string, 3> evidence;
   Text abilityName;         ///< its ability's name for a player who controls it; both empty: no ability
   Text abilityDescription;  ///< its ability's description; both empty: no ability
@@ -102,7 +102,12 @@ struct GhostDef {
   /// How it changes the look of the evidence `evidenceId` (for example "green"), or null for the
   /// evidence's own look (PmGhostDef::evidenceLook).
   const char* (*evidenceLook)(const char* evidenceId, void* user) = nullptr;
-  /// PM_GHOST_* bits: PM_GHOST_KEEPS_LAST_EVIDENCE, PM_GHOST_BLIND_IN_HUNTS.
+  /// What sets it apart in the game's own rules, PM_GHOST_* bits ORed together (core/mod_api.h): 0 for none.
+  /// PM_GHOST_KEEPS_LAST_EVIDENCE: a difficulty never withholds its third evidence. PM_GHOST_BLIND_IN_HUNTS: a player
+  /// controlling it sees only its playerView while it hunts. PM_GHOST_NO_MIMIC_COPY (since 2.3): a Mimic never copies
+  /// it; the host leaves it off the Mimic's copy list. PM_GHOST_NOT_PLAYABLE (since 2.3): no player ever plays it; a
+  /// mod that lets a player be the ghost (Playable Ghost) reads it with flags_of and never offers, rolls or keeps it
+  /// for them. Read once, when it is registered.
   uint32_t flags = 0;
   /// Its one target, to which the host holds each of its hunts as the game holds its Banshee's, for its AI
   /// and a player controlling it alike: never dead nor one of the `excludedCount` players at `excluded` (null
@@ -172,9 +177,11 @@ struct GhostRules {
 
 /// Registers the ghost `def`, from pmmod_start only. Returns its handle, greater than 0, or 0 when the
 /// host refused it (outside pmmod_start, a repeated or malformed id, text without English or over the
-/// limits in core/mod_api.h; the log says which) and before bind. A custom evidence it gives may be
+/// limits in core/mod_api.h, or custom content off on this client; the log says which) and before bind. The host keeps
+/// off a mod whose start registered anything it refused, whatever the start returns, so checking the handle is
+/// optional (since 2.3). A custom evidence it gives may be
 /// registered by any mod that starts, before or after it; once every mod has started, a ghost whose
-/// evidence nobody registered is dropped (logged).
+/// evidence nobody registered is dropped, and the mod that registered it stays off for that start (logged).
 /// @param def The ghost. The host copies it; `user` and the callbacks must stay valid while the mod runs.
 /// @return Its handle, greater than 0, or 0 when refused.
 /// @pre Main thread, from pmmod_start.
@@ -187,7 +194,8 @@ struct GhostRules {
 /// if (pm::api::content::register_ghost(def) <= 0) return false;
 /// @endcode
 int32_t register_ghost(const GhostDef& def);
-/// Registers the evidence `def` likewise, from pmmod_start only.
+/// Registers the evidence `def` likewise, from pmmod_start only. As for register_ghost, the host keeps off a mod whose
+/// start registered anything it refused, so checking the handle is optional.
 /// @param def The evidence; the host copies it.
 /// @return Its handle, greater than 0, or 0 when refused (logged) and before bind.
 /// @pre Main thread, from pmmod_start.
@@ -326,5 +334,13 @@ bool roll_taken();
 /// The ghost's flags (GhostDef::flags, PM_GHOST_* bits): PM_GHOST_BLIND_IN_HUNTS, say.
 /// @return The bits, or 0.
 uint32_t flags();
+/// The flags (GhostDef::flags, PM_GHOST_* bits) of the custom ghost whose game value is `type` (a GhostType number),
+/// while content is active or a contract holds it; 0 for a vanilla type, an unknown one and while no content is
+/// active. A mod that lets a player be the ghost asks it for PM_GHOST_NOT_PLAYABLE before it offers or keeps a type.
+/// Read-only, main thread.
+/// @param type A GhostType number, the game's or a custom ghost's.
+/// @return The bits, or 0.
+/// @since Contract 2.3
+uint32_t flags_of(int32_t type);
 
 }  // namespace pm::api::content

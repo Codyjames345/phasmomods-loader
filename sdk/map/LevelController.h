@@ -122,17 +122,28 @@ inline constexpr pm::sdk::EntryDesc LevelController_fireSources{
     .key = "LevelController.fireSources", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LevelController", .type = "List<@FireSource>"};
 
-/// Locks the level's hunt doors as a hunt starts: its own list (huntingDoors) and the map
-/// variations' (mapVariations). Decompiled.
+/// Locks the level's exits as a hunt starts, on the master (the hunt state calls it right after it sends
+/// GhostAI.Hunting): Door.HuntingCloseDoor on every door of its own list (huntingDoors), then on a map
+/// variation's doors (mapVariations) when the ghost's room is one of the variation's rooms and a player
+/// is in one of them. Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelController_LockHuntingDoors{
     .key = "LevelController.LockHuntingDoors", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "LevelController", .name = "LockHuntingDoors"};
+
+/// Opens the exits again as a hunt ends: Door.ToggleDoorLock(true, true) on every door of huntingDoors
+/// and of every variation's huntingDoorsToLock. GameController.ResetHuntEffects calls it, and that runs
+/// only when a hunt was on. Decompiled.
+inline constexpr pm::sdk::EntryDesc LevelController_UnlockHuntingDoors{
+    .key = "LevelController.UnlockHuntingDoors", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LevelController", .name = "UnlockHuntingDoors"};
 
 // Of the class's two Door[] fields, LockHuntingDoors reads only this one.
 inline constexpr pm::sdk::Fact LevelController_huntingDoors_facts[] = {
     {.is = pm::sdk::Fact::Is::Loads, .method = "LevelController.LockHuntingDoors"}};
 
-/// The doors a hunt locks, a Door[]: LockHuntingDoors and UnlockHuntingDoors walk it. Decompiled.
+/// The doors a hunt locks, a Door[]: the map's exits. LockHuntingDoors and UnlockHuntingDoors walk it.
+/// On every map of build 25811160 it holds exactly the map's DoorKind.Main doors, and every variation's
+/// huntingDoorsToLock is a part of it (scene read; sdk/systems/doors.md lists them). Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelController_huntingDoors{
     .key = "LevelController.huntingDoors", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LevelController", .type = "@Door[]", .facts = LevelController_huntingDoors_facts};
@@ -165,8 +176,51 @@ inline constexpr pm::sdk::Fact LevelController_outsideRoom_facts[] = {
     {.is = pm::sdk::Fact::Is::Loads, .method = "LevelController.Awake"},
     {.is = pm::sdk::Fact::Is::Stores, .method = "LevelController.SyncCurrentGhostRoomNetworked", .negate = true}};
 
+/// A hiding place a difficulty may close (Assembly-CSharp, global namespace), a MonoBehaviour with a trigger collider
+/// over the place: closets, lockers and walk-in rooms such as a pantry. Decompiled.
+inline constexpr pm::sdk::EntryDesc BlockedZone{.key = "BlockedZone", .confidence = pm::sdk::Confidence::Decompiled,
+                                                .name = "BlockedZone", .assembly = "Assembly-CSharp", .ns = ""};
+
+inline constexpr const char* BlockedZone_BlockZone_params[] = {"int", "int"};
+
+/// Closes the hiding place: it sets BlockedZone.blocked and switches on the clutter that fills it, so players cannot
+/// get in. LevelController's closet-blocking RPC, which the master sends for the difficulty's amount of hiding places,
+/// calls it on every client for the zone at its index in LevelController.blockedZones. Decompiled.
+inline constexpr pm::sdk::EntryDesc BlockedZone_BlockZone{
+    .key = "BlockedZone.BlockZone", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "BlockedZone", .name = "BlockZone", .params = BlockedZone_BlockZone_params};
+
+/// Whether the zone picks its blocker at random: a serialized setting of the prefab. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc BlockedZone_randomBlocker{.key = "BlockedZone.randomBlocker",
+                                                              .kind = pm::sdk::Kind::Field, .owner = "BlockedZone",
+                                                              .name = "randomBlocker"};
+
+/// Whether the zone picks its cover at random: a serialized setting of the prefab. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc BlockedZone_randomCover{.key = "BlockedZone.randomCover",
+                                                            .kind = pm::sdk::Kind::Field, .owner = "BlockedZone",
+                                                            .name = "randomCover"};
+
+// The class's third bool, beside the two settings above. BlockZone's store of 1 to it goes through a register the
+// reader does not prove holds this, so the settings tell it apart instead.
+inline constexpr pm::sdk::Fact BlockedZone_blocked_facts[] = {
+    {.is = pm::sdk::Fact::Is::IsNot, .method = "BlockedZone.randomBlocker"},
+    {.is = pm::sdk::Fact::Is::IsNot, .method = "BlockedZone.randomCover"}};
+
+/// Whether the hiding place is closed: BlockedZone.BlockZone sets it. Decompiled.
+inline constexpr pm::sdk::EntryDesc BlockedZone_blocked{.key = "BlockedZone.blocked", .kind = pm::sdk::Kind::Field,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .owner = "BlockedZone", .type = "bool",
+                                                        .facts = BlockedZone_blocked_facts};
+
+/// The level's hiding places a difficulty may close, a BlockedZone[]: LevelController's one array of them, which its
+/// closet-blocking RPC indexes. Decompiled.
+inline constexpr pm::sdk::EntryDesc LevelController_blockedZones{
+    .key = "LevelController.blockedZones", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LevelController", .type = "@BlockedZone[]"};
+
 /// The level's outdoors, a LevelRoom, or null on a level without one: the room IsPointInOutsideRoom
-/// tests a point against. Decompiled.
+/// tests a point against. On every map of build 25811160 it is the map's one room of kind
+/// RoomKind.outsideMap, named Outside or Exterior (scene read). Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelController_outsideRoom{
     .key = "LevelController.outsideRoom", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LevelController", .type = "@LevelRoom", .facts = LevelController_outsideRoom_facts};
@@ -213,6 +267,17 @@ struct SetupPhaseController {
   static constexpr pm::api::StaticField<pm::map::SetupPhaseController_instance, void*> instance{};
 };
 
+/// A hiding place a difficulty may close. `zone` below is one.
+struct BlockedZone {
+  /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::BlockedZone> type{};
+  /// Whether it is closed: blocked.get(zone). Unresolved: reads false.
+  static constexpr pm::api::Field<pm::map::BlockedZone_blocked, bool> blocked{};
+  /// BlockZone(zone, a, b): closes it on this client, as the master's RPC does on every client. A mod usually hooks it.
+  /// Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::BlockedZone_BlockZone, void(void*, int32_t, int32_t)> BlockZone{};
+};
+
 /// The controller of a contract's level.
 struct LevelController {
   /// The LevelController type: klass(), is(obj), type_object(), make() and make_array(n). Unresolved:
@@ -242,6 +307,9 @@ struct LevelController {
   static constexpr pm::api::Field<pm::map::LevelController_mapVariations, void*> mapVariations{};
   /// The level's outdoors, a LevelRoom: outsideRoom.get(level), or null. Unresolved: null.
   static constexpr pm::api::Field<pm::map::LevelController_outsideRoom, void*> outsideRoom{};
+  /// Its hiding places a difficulty may close, a BlockedZone[] read as a pm::api::RefArray: blockedZones.get(level).
+  /// Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LevelController_blockedZones, void*> blockedZones{};
   /// Whether `point` lies outdoors: IsPointInOutsideRoom(level, &point). It throws, as the game's code
   /// does, when outsideRoom or its roomColliders are null, so check both first. Unresolved: false.
   static constexpr pm::api::Method<pm::map::LevelController_IsPointInOutsideRoom, bool(void*, const Vector3*)>

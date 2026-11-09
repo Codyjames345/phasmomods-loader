@@ -69,6 +69,7 @@ void* allocate(size_t bytes, void* klass) {
 }
 
 std::map<const void*, size_t> g_elementBytes;  // each fake array's element size, as the runtime would say
+std::map<std::string, size_t> g_typeElementBytes;  // element_size(): an array_new of that type's elements
 
 void* new_array(void* klass, size_t elementBytes, size_t length) {
   void* arr = allocate(kArrayData + elementBytes * length, klass);
@@ -198,7 +199,9 @@ size_t string_utf8(const void* str, char* out, size_t size) {
 }
 
 void* array_new(const char* elementTypeKey, size_t length) {
-  return class_for(elementTypeKey) ? new_array(&g_arrayClass, kElementBytes, length) : nullptr;
+  if (!class_for(elementTypeKey)) return nullptr;
+  const auto sized = g_typeElementBytes.find(elementTypeKey);
+  return new_array(&g_arrayClass, sized != g_typeElementBytes.end() ? sized->second : kElementBytes, length);
 }
 
 int32_t list_count(const void* list) {
@@ -421,6 +424,11 @@ uint32_t content_flags() {
   const content::Ghost* g = g_acting->acting_ghost();
   return g ? g->flags : 0u;
 }
+uint32_t content_flags_of(int32_t type) {
+  const char* id = g_content.id_of(type);
+  const content::Ghost* g = id ? g_content.ghost(id) : nullptr;
+  return g ? g->flags : 0u;
+}
 
 // The rest of the contract does nothing.
 void log(const char*) {}
@@ -518,8 +526,8 @@ uint32_t fields_of_type(const char* typeKey, const void* obj, const char* fieldT
   return count;
 }
 
-// Positional: a member added to PmHostApi after show_message fails this until it is given here too.
-static_assert(offsetof(PmHostApi, show_message) + sizeof(PmHostApi::show_message) == sizeof(PmHostApi),
+// Positional: a member added to PmHostApi after content_flags_of fails this until it is given here too.
+static_assert(offsetof(PmHostApi, content_flags_of) + sizeof(PmHostApi::content_flags_of) == sizeof(PmHostApi),
               "kHost lists every PmHostApi member");
 const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_hook, &enable_hooks, &send,
                       &set_receiver, &peer_has_mod, &register_service, &service, &mod_game_entry, &hook_entry,
@@ -534,7 +542,8 @@ const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_ho
                       &content_player_view, &content_target, &content_flags,
                       &room_agrees, &collection_count, &array_element_size, &host_list_remove_at,
                       &content_player_move, &content_interaction_lost, &content_roll_taken, &steer_agent,
-                      &abandon_ghost_spawn, &dictionary_int_entries, &mod_started, &show_message};
+                      &abandon_ghost_spawn, &dictionary_int_entries, &mod_started, &show_message,
+                      &content_flags_of};
 
 }  // namespace
 
@@ -549,6 +558,7 @@ void reset() {
   g_barrierWrites = 0;
   g_memory.clear();
   g_elementBytes.clear();
+  g_typeElementBytes.clear();
   g_parents.clear();
   g_overrides.clear();
   g_declared.clear();
@@ -615,6 +625,8 @@ void override_method(const sdk::EntryDesc& d, void* klass, void* fn) {
 }
 
 void* array(size_t elementSize, size_t length) { return new_array(&g_arrayClass, elementSize, length); }
+
+void element_size(const sdk::EntryDesc& d, size_t bytes) { g_typeElementBytes[d.key] = bytes; }
 
 void* collection(int32_t count) {
   auto* c = static_cast<FakeCollection*>(allocate(sizeof(FakeCollection), &g_collectionClass));

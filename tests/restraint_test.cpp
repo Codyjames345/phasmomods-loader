@@ -40,6 +40,8 @@ using namespace pm::custom;
 
 constexpr int kNoGhost = 24;  // GhostType.None in build 25811160
 constexpr int kIdle = 0, kHunting = 2, kLight = 3, kThrowing = 6, kRandomEvent = 14, kAppear = 13;
+// The states the Squatter may still go into, numbered apart from the others above.
+constexpr int kWander = 1, kFavouriteRoom = 20;
 
 // A fake managed object: its class pointer first, as a real one's.
 struct Obj {
@@ -52,6 +54,7 @@ Obj g_ghost, g_activity, g_gameDoor, g_closetDoor, g_prop, g_target, g_stateA, g
 int g_state = kIdle;
 void* g_stateObject = &g_stateA;
 bool g_master = true;
+bool g_steering = false;  // whether the mod steers the Squatter's agent (squatter.h steering)
 
 // What each hook's game body and each stubbed rule saw.
 int g_interactBodies = 0, g_pulseBodies = 0, g_throwBodies = 0, g_changeBodies = 0;
@@ -133,6 +136,9 @@ void start(int type, bool steered) {
   fake::value(map::GhostState_randomEvent, kRandomEvent);
   fake::value(map::GhostState_appear, kAppear);
   fake::value(map::GhostState_throwing, kThrowing);
+  fake::value(map::GhostState_idle, kIdle);
+  fake::value(map::GhostState_wander, kWander);
+  fake::value(map::GhostState_favouriteRoom, kFavouriteRoom);
   fake::method(map::GhostActivity_TryInteract, reinterpret_cast<void*>(&fake_try_interact));
   fake::method(map::GhostActivity_NormalInteraction, reinterpret_cast<void*>(&fake_normal_interaction));
   fake::method(map::GhostActivity_GetDoorToOpen, reinterpret_cast<void*>(&fake_get_door));
@@ -384,6 +390,81 @@ void the_lithobolias_hunt_throw_is_aimed() {
   });
 }
 
+// The Squatter attempts nothing, its AI and a player steering it alike (the Squatter's spec, "There is no paranormal
+// activity"): no interaction from its roll, no pulse of its interaction sensor (a voodoo pin's forced one included),
+// and no state change but idling, wandering and going to its favourite room, forced or not, so no event, ability,
+// interaction, cursed pull or hunt begins (sdk/systems/ghost-ai.md, "Every route to a state change"). A forced hunt on
+// a friendly ghost's difficulty, which the game would turn into idling, never reaches the game's change at all, so
+// no hunt state is made and nobody can be killed. A player who takes the roll changes nothing. Its rules hold back
+// every kind a player may ask (PmGhostDef.heldBack). Another ghost is left alone.
+void the_squatter_starts_no_interaction_event_or_hunt() {
+  for_ai_and_player(kSquatter, [] {
+    try_interact(&g_activity);
+    normal_interaction(&g_activity, false);
+    normal_interaction(&g_activity, true);  // the voodoo doll's pin
+    CHECK(g_interactBodies == 0 && g_pulseBodies == 0);
+    for (const int state : {kHunting, kRandomEvent, kAppear, kLight, kThrowing, 15, 19, 21, 22, 23, 42, -1})
+      for (const bool forced : {false, true}) change_state(&g_ghost, state, &g_prop, forced);
+    CHECK(g_changeBodies == 0 && g_huntBegins == 0 && g_tempestEvents == 0 && g_state == kIdle);
+    // A forced hunt on a friendly ghost's difficulty, as a cursed possession or the Death card makes one.
+    g_turnsToIdle = true;
+    change_state(&g_ghost, kHunting, nullptr, true);
+    CHECK(g_changeBodies == 0 && g_lastChange == -1 && g_huntBegins == 0 && g_state == kIdle);
+    g_turnsToIdle = false;
+    // Idling, wandering and its favourite room stay the game's.
+    change_state(&g_ghost, kWander);
+    change_state(&g_ghost, kFavouriteRoom, nullptr, true);
+    change_state(&g_ghost, kIdle);
+    CHECK(g_changeBodies == 3 && g_state == kIdle);
+    // A player taking the roll is refused alike.
+    fake::roll_taken(true);
+    try_interact(&g_activity);
+    change_state(&g_ghost, kRandomEvent);
+    CHECK(g_interactBodies == 0 && g_changeBodies == 3);
+    fake::roll_taken(false);
+    for (const restraint::Kind kind : {restraint::kInteract, restraint::kEvent, restraint::kHunt, restraint::kAbility,
+                                       restraint::kFuseBox})
+      CHECK(restraint::held_back(kSquatter, kind));
+    // Another ghost's activity and another ghost's change are the game's.
+    Obj other;
+    try_interact(&other);
+    normal_interaction(&other, true);
+    change_state(&other, kHunting);
+    CHECK(g_interactBodies == 1 && g_pulseBodies == 1 && g_changeBodies == 4);
+  });
+  for_ai_and_player(kGremlin, [] {
+    try_interact(&g_activity);
+    change_state(&g_ghost, kHunting, nullptr, true);
+    CHECK(g_interactBodies == 1 && g_changeBodies == 1);
+    CHECK(!restraint::held_back(kGremlin, restraint::kHunt) && !restraint::held_back(kGremlin, restraint::kFuseBox));
+  });
+}
+
+// While the mod steers the Squatter's agent (squatter.h steering), its wandering and its favourite room would take
+// the agent back, so only idling passes, forced or not, whoever asks; once it stops steering both are the game's
+// again. Another ghost is left alone either way.
+void the_steered_squatter_only_idles() {
+  for_ai_and_player(kSquatter, [] {
+    g_steering = true;
+    for (const bool forced : {false, true}) {
+      change_state(&g_ghost, kWander, nullptr, forced);
+      change_state(&g_ghost, kFavouriteRoom, nullptr, forced);
+      change_state(&g_ghost, kHunting, nullptr, forced);
+    }
+    CHECK(g_changeBodies == 0);
+    change_state(&g_ghost, kIdle);
+    CHECK(g_changeBodies == 1 && g_lastChange == kIdle);
+    Obj other;
+    change_state(&other, kWander);
+    CHECK(g_changeBodies == 2);
+    g_steering = false;
+    change_state(&g_ghost, kWander);
+    change_state(&g_ghost, kFavouriteRoom);
+    CHECK(g_changeBodies == 4 && g_lastChange == kFavouriteRoom);
+  });
+  g_steering = false;
+}
+
 }  // namespace
 
 // What restraint.cpp calls of the game.
@@ -438,6 +519,9 @@ bool intercept_hunt_throw(void*, void*) {
 namespace tempest {
 void event_begins() { ++g_tempestEvents; }
 }  // namespace tempest
+namespace squatter {
+bool steering() { return g_steering; }
+}  // namespace squatter
 }  // namespace pm::custom
 
 int main() {
@@ -449,6 +533,8 @@ int main() {
   a_roll_a_player_takes_goes_straight_on();
   a_dormant_echo_loses_three_in_four();
   the_lithobolias_hunt_throw_is_aimed();
+  the_squatter_starts_no_interaction_event_or_hunt();
+  the_steered_squatter_only_idles();
   restraint::tick(nullptr, 0);  // what it holds goes back before the fake's own storage does
   std::printf(g_failures ? "%d check(s) failed\n" : "all restraint tests passed\n", g_failures);
   return g_failures ? 1 : 0;

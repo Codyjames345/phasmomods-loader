@@ -9,6 +9,7 @@
 // Animator onto a copy), lists them with get_parameters and reads each one's name and type.
 
 #include "entry.h"
+#include "Transform.h"
 #include "game_api.h"
 
 namespace pm::map {
@@ -137,6 +138,191 @@ inline constexpr pm::sdk::EntryDesc Animator_SetBool{.key = "Animator.SetBool", 
                                                      .owner = "Animator", .name = "SetBool",
                                                      .params = Animator_SetBool_params};
 
+// Playing a mod's own animation on a model (sdk/api/models.h, sdk/guides/custom-animation.md): a controller loaded from
+// an AssetBundle (UnityAssets.h) replaces the model's, and the mod plays its states by name.
+
+/// Unity's animator controller as the runtime holds it (UnityEngine.AnimationModule), the asset type an AssetBundle's
+/// controller loads as. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc RuntimeAnimatorController{
+    .key = "RuntimeAnimatorController", .name = "RuntimeAnimatorController",
+    .assembly = "UnityEngine.AnimationModule", .ns = "UnityEngine"};
+
+inline constexpr const char* Animator_RuntimeAnimatorController[] = {"RuntimeAnimatorController"};
+inline constexpr const char* Animator_Play_params[] = {"int", "int", "float"};
+inline constexpr const char* Animator_HumanBodyBones[] = {"HumanBodyBones"};
+inline constexpr const char* Animator_bool[] = {"bool"};
+inline constexpr const char* Animator_AnimatorCullingMode[] = {"AnimatorCullingMode"};
+inline constexpr const char* Animator_HasState_params[] = {"int", "int"};
+
+/// Replaces the Animator's controller, which starts at its default state. Inferred: Unity's documented property
+/// setter; the Squatter's engine test set a bundle's controller with it in game (2026-11-05).
+inline constexpr pm::sdk::EntryDesc Animator_set_runtimeAnimatorController{
+    .key = "Animator.set_runtimeAnimatorController", .kind = pm::sdk::Kind::Method, .owner = "Animator",
+    .name = "set_runtimeAnimatorController", .params = Animator_RuntimeAnimatorController};
+
+/// Plays a state now: Play(stateNameHash, layer, normalizedTime), the hash Animator.StringToHash of the state's name,
+/// the layer -1 for the first that has it, the time 0 to 1 into the state. Inferred: Unity's documented API; the
+/// Squatter's engine test played its states with it in game (2026-11-05).
+inline constexpr pm::sdk::EntryDesc Animator_Play{.key = "Animator.Play(int,int,float)", .kind = pm::sdk::Kind::Method,
+                                                  .owner = "Animator", .name = "Play",
+                                                  .params = Animator_Play_params};
+
+/// Whether the Animator's controller has a state, by its hash, on a layer: the engine function of
+/// Animator.HasState(layerIndex, stateID). The answer is only good while the Animator is initialised (active, with a
+/// controller). Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_HasState{.key = "Animator.HasState", .kind = pm::sdk::Kind::Icall,
+                                                      .name = "UnityEngine.Animator::HasState",
+                                                      .params = Animator_HasState_params};
+
+/// Whether the Animator is initialised: active, with a controller it has bound. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_get_isInitialized{.key = "Animator.get_isInitialized",
+                                                               .kind = pm::sdk::Kind::Icall,
+                                                               .name = "UnityEngine.Animator::get_isInitialized"};
+
+/// Rebinds the Animator to its model and controller: the engine function of Animator.Rebind(writeDefaultValues),
+/// whose managed method this build keeps private. An active Animator binds when it gets a controller; this binds one
+/// that did not. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_Rebind{.key = "Animator.Rebind", .kind = pm::sdk::Kind::Icall,
+                                                    .name = "UnityEngine.Animator::Rebind", .params = Animator_bool};
+
+inline constexpr const char* Animator_CrossFade_params[] = {"int", "float", "int", "float", "float"};
+
+/// How far the Animator's clips turned the model's root over its last update (root motion): a turn-on-the-spot clip's
+/// own turn, when its root rotation is not baked into the pose. Only worked out while the Animator applies root motion
+/// (Animator.set_applyRootMotion): with it off it reads no turn (the Squatter's test of 2026-11-09). Inferred: Unity's
+/// documented property getter.
+inline constexpr pm::sdk::EntryDesc Animator_get_deltaRotation{.key = "Animator.get_deltaRotation",
+                                                               .kind = pm::sdk::Kind::Method, .owner = "Animator",
+                                                               .name = "get_deltaRotation"};
+
+/// How far the Animator's clips moved the model's root over its last update, metres in the world (root motion): what
+/// Apply Root Motion adds to the model's position. Only worked out while the Animator applies root motion
+/// (Animator.set_applyRootMotion): with it off a roll read no step and rolled in place (the Squatter's test of
+/// 2026-11-09). To move something else by it, turn it on and put the model back where you want it each frame.
+/// Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc Animator_get_deltaPosition{.key = "Animator.get_deltaPosition",
+                                                               .kind = pm::sdk::Kind::Method, .owner = "Animator",
+                                                               .name = "get_deltaPosition"};
+
+/// Blends from the state playing into another: the engine function of Animator.CrossFade(stateHashName,
+/// normalizedTransitionDuration, layer, normalizedTimeOffset, normalizedTransitionTime), the hash Animator.StringToHash of
+/// the state's name, the blend's length as a fraction of the playing state's length, the layer, where to start in the
+/// new state (0 to 1), and how far into the blend to begin (0). This build keeps only the hash overload's engine
+/// function; the fixed-time CrossFadeInFixedTime is stripped. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_CrossFade{.key = "Animator.CrossFade", .kind = pm::sdk::Kind::Icall,
+                                                       .name = "UnityEngine.Animator::CrossFade",
+                                                       .params = Animator_CrossFade_params};
+
+/// Steps the Animator by a time in seconds now, outside the game's own update: the engine function of
+/// Animator.Update(deltaTime). With 0 it poses the model in the state it plays, without moving the state on, as
+/// Unity's documentation shows for sampling a pose. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_Update{.key = "Animator.Update", .kind = pm::sdk::Kind::Icall,
+                                                    .name = "UnityEngine.Animator::Update", .params = Animator_float};
+
+/// The Transform of a humanoid bone of a humanoid Animator's model, or null when the avatar does not map it. Inferred:
+/// Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Animator_GetBoneTransform{
+    .key = "Animator.GetBoneTransform", .kind = pm::sdk::Kind::Method, .owner = "Animator",
+    .name = "GetBoneTransform", .params = Animator_HumanBodyBones};
+
+/// Whether the clips' root motion moves the model's Transform. A mod that moves the model itself turns it off.
+/// Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Animator_set_applyRootMotion{
+    .key = "Animator.set_applyRootMotion", .kind = pm::sdk::Kind::Method, .owner = "Animator",
+    .name = "set_applyRootMotion", .params = Animator_bool};
+
+/// When the Animator stops animating a model no camera sees. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Animator_set_cullingMode{
+    .key = "Animator.set_cullingMode", .kind = pm::sdk::Kind::Method, .owner = "Animator", .name = "set_cullingMode",
+    .params = Animator_AnimatorCullingMode};
+
+/// Unity's culling modes of an Animator (UnityEngine.AnimationModule). Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc AnimatorCullingMode{.key = "AnimatorCullingMode", .name = "AnimatorCullingMode",
+                                                        .assembly = "UnityEngine.AnimationModule",
+                                                        .ns = "UnityEngine"};
+
+/// The Animator keeps animating while no camera sees the model, so cloth on it keeps moving. Inferred: Unity's
+/// documented API.
+inline constexpr pm::sdk::EntryDesc AnimatorCullingMode_AlwaysAnimate{
+    .key = "AnimatorCullingMode.AlwaysAnimate", .kind = pm::sdk::Kind::EnumValue, .owner = "AnimatorCullingMode",
+    .name = "AlwaysAnimate"};
+
+/// Unity's humanoid bones (UnityEngine.AnimationModule), for Animator.GetBoneTransform. The investigator's body maps
+/// every one of these (its avatar leaves only the eyes unmapped, read from the asset files). Inferred: Unity's
+/// documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones{.key = "HumanBodyBones", .name = "HumanBodyBones",
+                                                   .assembly = "UnityEngine.AnimationModule", .ns = "UnityEngine"};
+/// The hips, the root of a humanoid skeleton. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_Hips{.key = "HumanBodyBones.Hips", .kind = pm::sdk::Kind::EnumValue,
+                                                        .owner = "HumanBodyBones", .name = "Hips"};
+/// The spine's lowest bone. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_Spine{.key = "HumanBodyBones.Spine",
+                                                         .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+                                                         .name = "Spine"};
+/// The chest. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_Chest{.key = "HumanBodyBones.Chest",
+                                                         .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+                                                         .name = "Chest"};
+/// The head, at the top of the neck. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_Head{.key = "HumanBodyBones.Head", .kind = pm::sdk::Kind::EnumValue,
+                                                        .owner = "HumanBodyBones", .name = "Head"};
+/// The left upper arm. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftUpperArm{
+    .key = "HumanBodyBones.LeftUpperArm", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "LeftUpperArm"};
+/// The right upper arm. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightUpperArm{
+    .key = "HumanBodyBones.RightUpperArm", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "RightUpperArm"};
+/// The neck. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_Neck{
+    .key = "HumanBodyBones.Neck", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "Neck"};
+/// The left shoulder. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftShoulder{
+    .key = "HumanBodyBones.LeftShoulder", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "LeftShoulder"};
+/// The right shoulder. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightShoulder{
+    .key = "HumanBodyBones.RightShoulder", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "RightShoulder"};
+/// The left forearm. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftLowerArm{
+    .key = "HumanBodyBones.LeftLowerArm", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "LeftLowerArm"};
+/// The right forearm. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightLowerArm{
+    .key = "HumanBodyBones.RightLowerArm", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "RightLowerArm"};
+/// The left thigh. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftUpperLeg{
+    .key = "HumanBodyBones.LeftUpperLeg", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "LeftUpperLeg"};
+/// The right thigh. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightUpperLeg{
+    .key = "HumanBodyBones.RightUpperLeg", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "RightUpperLeg"};
+/// The left shin. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftLowerLeg{
+    .key = "HumanBodyBones.LeftLowerLeg", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "LeftLowerLeg"};
+/// The right shin. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightLowerLeg{
+    .key = "HumanBodyBones.RightLowerLeg", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones",
+    .name = "RightLowerLeg"};
+/// The left hand. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftHand{
+    .key = "HumanBodyBones.LeftHand", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones", .name = "LeftHand"};
+/// The right hand. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightHand{
+    .key = "HumanBodyBones.RightHand", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones", .name = "RightHand"};
+/// The left foot. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_LeftFoot{
+    .key = "HumanBodyBones.LeftFoot", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones", .name = "LeftFoot"};
+/// The right foot. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc HumanBodyBones_RightFoot{
+    .key = "HumanBodyBones.RightFoot", .kind = pm::sdk::Kind::EnumValue, .owner = "HumanBodyBones", .name = "RightFoot"};
+
 }  // namespace pm::map
 
 /// @file
@@ -175,7 +361,88 @@ struct Animator {
   static constexpr pm::api::Icall<pm::map::Animator_GetIntegerID, int32_t(void*, int32_t)> GetIntegerID{};
   /// SetBool(animator, name, value), with name a managed string. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Animator_SetBool, void(void*, void*, bool)> SetBool{};
+  /// set_runtimeAnimatorController(animator, controller). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Animator_set_runtimeAnimatorController, void(void*, void*)>
+      set_runtimeAnimatorController{};
+  /// Play(animator, stateHash, layer, normalizedTime). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Animator_Play, void(void*, int32_t, int32_t, float)> Play{};
+  /// HasState(animator, layer, stateHash). Unresolved: false.
+  static constexpr pm::api::Icall<pm::map::Animator_HasState, bool(void*, int32_t, int32_t)> HasState{};
+  /// Rebind(animator, writeDefaultValues). Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Animator_Rebind, void(void*, bool)> Rebind{};
+  /// CrossFade(animator, stateHash, blend, layer, startAt, blendStartAt): blend is a fraction of the playing state's
+  /// length. Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Animator_CrossFade, void(void*, int32_t, float, int32_t, float, float)>
+      CrossFade{};
+  /// get_deltaRotation(animator): how far its clips turned the root last update (root motion). Unresolved: zero.
+  static constexpr pm::api::Method<pm::map::Animator_get_deltaRotation, Quaternion(void*)> get_deltaRotation{};
+  /// get_deltaPosition(animator): how far its clips moved the root last update (root motion). Unresolved: zero.
+  static constexpr pm::api::Method<pm::map::Animator_get_deltaPosition, Vector3(void*)> get_deltaPosition{};
+  /// Update(animator, seconds): steps it now; 0 poses the model in its state. Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Animator_Update, void(void*, float)> Update{};
+  /// get_isInitialized(animator). Unresolved: false.
+  static constexpr pm::api::Icall<pm::map::Animator_get_isInitialized, bool(void*)> get_isInitialized{};
+  /// GetBoneTransform(animator, bone), a HumanBodyBones number. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Animator_GetBoneTransform, void*(void*, int32_t)> GetBoneTransform{};
+  /// set_applyRootMotion(animator, on). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Animator_set_applyRootMotion, void(void*, bool)> set_applyRootMotion{};
+  /// set_cullingMode(animator, mode), an AnimatorCullingMode number. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Animator_set_cullingMode, void(void*, int32_t)> set_cullingMode{};
 };
+
+/// An animator controller asset.
+struct RuntimeAnimatorController {
+  /// The type: type_object() for AssetBundle.LoadAsset_Internal. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::RuntimeAnimatorController> type{};
+};
+
+/// When an Animator stops animating an unseen model.
+namespace AnimatorCullingMode {
+/// AlwaysAnimate(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::AnimatorCullingMode_AlwaysAnimate> AlwaysAnimate{};
+}  // namespace AnimatorCullingMode
+
+/// Humanoid bones, for Animator::GetBoneTransform. Required entries, so a mod that uses one runs only where it resolved.
+namespace HumanBodyBones {
+/// Hips(): the hips.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Hips> Hips{};
+/// Spine(): the spine's lowest bone.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Spine> Spine{};
+/// Chest(): the chest.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Chest> Chest{};
+/// Head(): the head.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Head> Head{};
+/// LeftUpperArm(): the left upper arm.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftUpperArm> LeftUpperArm{};
+/// RightUpperArm(): the right upper arm.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightUpperArm> RightUpperArm{};
+/// The neck: Neck(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_Neck> Neck{};
+/// The left shoulder: LeftShoulder(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftShoulder> LeftShoulder{};
+/// The right shoulder: RightShoulder(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightShoulder> RightShoulder{};
+/// The left forearm: LeftLowerArm(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftLowerArm> LeftLowerArm{};
+/// The right forearm: RightLowerArm(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightLowerArm> RightLowerArm{};
+/// The left thigh: LeftUpperLeg(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftUpperLeg> LeftUpperLeg{};
+/// The right thigh: RightUpperLeg(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightUpperLeg> RightUpperLeg{};
+/// The left shin: LeftLowerLeg(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftLowerLeg> LeftLowerLeg{};
+/// The right shin: RightLowerLeg(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightLowerLeg> RightLowerLeg{};
+/// The left hand: LeftHand(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftHand> LeftHand{};
+/// The right hand: RightHand(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightHand> RightHand{};
+/// The left foot: LeftFoot(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_LeftFoot> LeftFoot{};
+/// The right foot: RightFoot(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightFoot> RightFoot{};
+}  // namespace HumanBodyBones
 
 /// One parameter of an Animator's controller. `parameter` below is one.
 struct AnimatorControllerParameter {

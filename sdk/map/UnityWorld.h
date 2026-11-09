@@ -227,6 +227,11 @@ inline constexpr pm::sdk::EntryDesc NavMeshAgent_set_speed{.key = "NavMeshAgent.
                                                            .owner = "NavMeshAgent", .name = "set_speed",
                                                            .params = NavMeshAgent_float};
 
+/// Sets how fast the agent may gain speed, in metres a second each second. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc NavMeshAgent_set_acceleration{
+    .key = "NavMeshAgent.set_acceleration", .kind = pm::sdk::Kind::Method, .owner = "NavMeshAgent",
+    .name = "set_acceleration", .params = NavMeshAgent_float};
+
 inline constexpr const char* DOTween_IsTweening_params[] = {"object", "bool"};
 
 /// DOTween's static API (the DOTween assembly, namespace DG.Tweening), the tween library the game
@@ -384,6 +389,8 @@ struct NavMeshAgent {
   static constexpr pm::api::Method<pm::map::NavMeshAgent_Warp, bool(void*, const Vector3*)> Warp{};
   /// set_speed(agent, metresPerSecond). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::NavMeshAgent_set_speed, void(void*, float)> set_speed{};
+  /// set_acceleration(agent, metresPerSecondSquared). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_set_acceleration, void(void*, float)> set_acceleration{};
   /// get_desiredVelocity_Injected(agent, &out): the velocity it wants into `out`. Unresolved: does
   /// nothing.
   static constexpr pm::api::Icall<pm::map::NavMeshAgent_get_desiredVelocity_Injected, void(void*, Vector3*)>

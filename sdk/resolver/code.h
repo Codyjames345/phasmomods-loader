@@ -84,9 +84,11 @@ CodeFacts read_code(std::span<const uint8_t> fn, uint64_t rva);
 // leaves the stack as it found it), `code` being the bytes from there on: its instructions up to the
 // ret or the jmp rel32 that ends it, that jump's target being its one call target. Complete only when
 // it reaches that end with every instruction decoded and straight-line: a branch, a call, an indirect
-// call or jump, or a breakpoint before the end leaves it incomplete. Only callTargets, starts, complete and
-// returns are given. It is stricter than read_code on returns, on purpose: only a ret counts, so a leaf that ends in a
-// jump, which it cannot follow, says false, and a caller asking whether code comes back fails closed on it.
+// call or jump, or a breakpoint before the end leaves it incomplete. Only callTargets, starts, complete,
+// returns and accesses are given; an access's base holds `this` when it is rcx and nothing before it wrote
+// rcx, and is global when its last write loaded a fixed address. It is stricter than read_code on returns,
+// on purpose: only a ret counts, so a leaf that ends in a jump, which it cannot follow, says false, and a
+// caller asking whether code comes back fails closed on it.
 CodeFacts read_leaf(std::span<const uint8_t> code, uint64_t rva);
 
 }  // namespace pm::sdk

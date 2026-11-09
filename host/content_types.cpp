@@ -235,7 +235,8 @@ std::map<int32_t, ContentTypes::HeldGhost> ContentTypes::active_ghosts() const {
     const char* id = registry_.id_of(type);
     const content::Ghost* g = id ? registry_.ghost(id) : nullptr;
     if (!g) continue;
-    HeldGhost h{g->id, g->name, {}, (g->flags & PM_GHOST_KEEPS_LAST_EVIDENCE) != 0};
+    HeldGhost h{g->id, g->name, {}, (g->flags & PM_GHOST_KEEPS_LAST_EVIDENCE) != 0,
+                (g->flags & PM_GHOST_NO_MIMIC_COPY) != 0};
     bool known = true;
     for (size_t i = 0; i < 3; ++i) {
       h.evidence[i] = g->evidence[i].empty() ? registry_.game_enums().noEvidence : registry_.evidence_of(g->evidence[i]);
@@ -595,6 +596,7 @@ void ContentTypes::add_to_mimic_list(void* controller) {
   for (size_t i = 0; i < l.size(); ++i) there.push_back(items[i]);
   for (const auto& [type, h] : held_) {
     if (std::find(there.begin(), there.end(), type) != there.end()) continue;
+    if (h.noMimicCopy) continue;  // never copied (PM_GHOST_NO_MIMIC_COPY)
     if (lists_.addValue(list, type)) {
       addLogged_ = false;  // a later refusal is news again
       continue;

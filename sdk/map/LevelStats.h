@@ -43,6 +43,21 @@ inline constexpr pm::sdk::EntryDesc LevelStats_averageFPS{
     .key = "LevelStats.averageFPS", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LevelStats", .name = "averageFPS", .type = "float"};
 
+/// How many doors the ghost moved: a ghost's push of a door (Door.GhostForceDoor, Door.CheckDoorDuringHunt) adds
+/// one before the leaf moves. The results' statistics show it on a line of its own as they open, and add it into
+/// amountOfGhostInteractions. Decompiled.
+inline constexpr pm::sdk::EntryDesc LevelStats_doorsMoved{
+    .key = "LevelStats.doorsMoved", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LevelStats", .name = "doorsMoved", .type = "int"};
+
+/// The ghost's interactions in all, as the results show them: as they open, the results' statistics set it to
+/// the sum of LevelStats' itemsThrown, objectsUsed, doorsMoved, lightsSwitched and fuseboxToggles, then show it.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc LevelStats_amountOfGhostInteractions{
+    .key = "LevelStats.amountOfGhostInteractions", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LevelStats", .name = "amountOfGhostInteractions",
+    .type = "int"};
+
 }  // namespace pm::map
 
 /// @file

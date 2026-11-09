@@ -128,6 +128,22 @@ void volunteer_and_assignment_reach_everyone() {
   CHECK(!r.at(3).local_is_ghost());
 }
 
+// While the lobby's difficulty forces a ghost no player plays (user, 2026-11-08: the Squatter), the master draws
+// nobody, so the volunteer joins the contract as an investigator; once it no longer does, the draw comes back.
+void a_forced_ghost_no_player_plays_draws_nobody() {
+  Room r(3);
+  r.at(2).set_volunteer(true);
+  r.settle();
+  CHECK(r.at(1).ghost_actor() == 2);
+  r.at(1).set_ghost_allowed(false);
+  r.settle();
+  for (int a : r.actors) CHECK(r.at(a).ghost_actor() == kNobody);
+  CHECK(!r.at(2).local_is_ghost());
+  r.at(1).set_ghost_allowed(true);
+  r.settle();
+  for (int a : r.actors) CHECK(r.at(a).ghost_actor() == 2);
+}
+
 void only_the_master_assigns() {
   Room r(3);
   r.at(3).set_volunteer(true);
@@ -779,6 +795,7 @@ int main() {
   a_stopped_session_starts_clean_in_the_same_room();
   the_ghost_is_named_by_what_it_is();
   volunteer_and_assignment_reach_everyone();
+  a_forced_ghost_no_player_plays_draws_nobody();
   only_the_master_assigns();
   host_receives_only_the_ghosts_fresh_ordered_input();
   ghost_leaving_clears_the_role();

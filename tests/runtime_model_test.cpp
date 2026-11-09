@@ -372,6 +372,19 @@ void bad_module_or_missing_assembly_fails() {
   CHECK(!load_runtime(partial, game.module.base(), kCSharp, model));
 }
 
+// An assembly named as optional that the runtime has not loaded is left out of the model; a required one still fails it.
+void a_missing_optional_assembly_is_left_out() {
+  Game game;
+  GameModel model;
+  const std::vector<std::string> named{"Assembly-CSharp", "NoSuchAssembly"};
+  const std::vector<std::string> optional{"NoSuchAssembly"};
+  CHECK(load_runtime(fake_api(), game.module.base(), named, model, {}, optional));
+  CHECK(find(model, "GhostAI") >= 0);
+  for (const ModelType& t : model.types) CHECK(t.assembly == "Assembly-CSharp");
+  GameModel again;
+  CHECK(!load_runtime(fake_api(), game.module.base(), named, again, {}, std::vector<std::string>{"Assembly-CSharp"}));
+}
+
 // The same class, written once as the runtime serves it and once as Cpp2IL dumps it
 // (tests/fixtures/parity), gives the same model.
 struct Probe {
@@ -647,6 +660,7 @@ int main() {
   pointer_outside_module_gets_zero_rva();
   types_are_canonical();
   bad_module_or_missing_assembly_fails();
+  a_missing_optional_assembly_is_left_out();
   runtime_matches_dump();
   return g_failures ? 1 : 0;
 }

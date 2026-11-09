@@ -13,7 +13,8 @@
 // - a custom ghost's identity is its custom type and its AI's behaviour type the game's "no type",
 //   set in GhostAI.Init and after GhostInfo.SyncValuesNetworked on every client, and the host's
 //   GhostInfo.SyncValues sends the custom type, as docs/custom-ghosts.md describes;
-// - the Mimic's copy list, as the game built it, gets the custom types after it; a copy of one is
+// - the Mimic's copy list, as the game built it, gets the custom types after it, but not one marked
+//   PM_GHOST_NO_MIMIC_COPY; a copy of one is
 //   recorded as the acting-as type and the behaviour type set back to "no type"
 //   (sdk/runtime/content_acting.h);
 // - a running rule's hunt speed is written into the hunt state, the base and the line-of-sight
@@ -119,6 +120,7 @@ class ContentTypes {
     content::Text name;
     int32_t evidence[3];
     bool keepsLastEvidence = false;  // PM_GHOST_KEEPS_LAST_EVIDENCE
+    bool noMimicCopy = false;        // PM_GHOST_NO_MIMIC_COPY
   };
   /// The contract's custom ghosts by type; empty when it has none or before it is decided.
   const std::map<int32_t, HeldGhost>& held() const { return held_; }
@@ -148,7 +150,8 @@ class ContentTypes {
   void after_sync_send(void* traits, int32_t behaviour) const;
   /// GhostInfo.SyncValuesNetworked, after: a custom identity's behaviour type becomes "no type".
   void after_sync_values(void* info) const;
-  /// GhostController.BuildMimicCopies, after: the contract's custom types join the list the game built.
+  /// GhostController.BuildMimicCopies, after: the contract's custom types join the list the game built, but those
+  /// marked PM_GHOST_NO_MIMIC_COPY.
   void after_build_mimic_copies(void* controller);
   /// GhostController.MimicCopy, after (on the master): the copy is the acting-as type, and a custom
   /// one's behaviour type becomes "no type".

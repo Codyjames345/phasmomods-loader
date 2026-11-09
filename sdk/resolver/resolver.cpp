@@ -846,8 +846,11 @@ class Resolver {
     const bool ownersThis = method.type == fieldOwner && rcx_is_this(method.type, method.member);
     bool throughThis = false;
     for (const uint64_t body : bodies(method)) {
-      if (!readable(body)) return unreadable(fact.method);
-      const CodeFacts& code = *code_at(body);
+      // A function the exception table lists, or a leaf it does not (a constructor that stores its
+      // defaults and tail-jumps to its base, say), read in full either way.
+      const CodeFacts* read = readable(body) ? code_at(body) : leaf_at(body);
+      if (!read || !read->complete) return unreadable(fact.method);
+      const CodeFacts& code = *read;
       if (fact.is == Fact::Is::CalledBy) {
         const uint64_t rva = type.methods[c.member].rva;
         yes = yes || std::find(code.callTargets.begin(), code.callTargets.end(), rva) != code.callTargets.end();
@@ -1268,6 +1271,27 @@ std::vector<std::string> assemblies_of(std::span<const EntryDesc* const> entries
     if (e->assembly && e->kind != Kind::NativeSite) out.emplace_back(e->assembly);
   std::sort(out.begin(), out.end());
   out.erase(std::unique(out.begin(), out.end()), out.end());
+  return out;
+}
+
+std::vector<std::string> optional_assemblies_of(std::span<const EntryDesc* const> entries) {
+  std::set<std::string> optional, required;
+  for (const EntryDesc* e : entries) {
+    if (!e->assembly || e->kind == Kind::NativeSite) continue;
+    (e->kind == Kind::Type && (e->flags & kOptional) ? optional : required).insert(e->assembly);
+  }
+  std::vector<std::string> out;
+  for (const std::string& a : optional)
+    if (!required.contains(a)) out.push_back(a);
+  return out;
+}
+
+std::vector<std::string> present_assemblies(std::span<const EntryDesc* const> entries,
+                                            const std::function<bool(const std::string&)>& present) {
+  const std::vector<std::string> optional = optional_assemblies_of(entries);
+  std::vector<std::string> out;
+  for (std::string& a : assemblies_of(entries))
+    if (!std::binary_search(optional.begin(), optional.end(), a) || present(a)) out.push_back(std::move(a));
   return out;
 }
 

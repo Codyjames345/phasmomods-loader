@@ -313,7 +313,9 @@ void Session::draw_ghost() {
   // A ghost player this client did not draw was inherited with the master role: not a fresh draw.
   if (ghost_ > 0 && drawnAmong_.empty()) drawnAmong_ = current;
   const bool newcomer = std::any_of(current.begin(), current.end(), [&](int a) { return !contains(drawnAmong_, a); });
-  if (ghost_ > 0 && stays(ghost_) && !newcomer) {
+  if (!ghostAllowed_) {
+    next = kNobody;  // the difficulty forces a ghost no player plays: no ghost player this contract
+  } else if (ghost_ > 0 && stays(ghost_) && !newcomer) {
     next = ghost_;
   } else {
     drawnAmong_ = current;

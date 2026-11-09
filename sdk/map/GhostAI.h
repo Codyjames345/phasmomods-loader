@@ -135,6 +135,14 @@ inline constexpr pm::sdk::EntryDesc GhostAI_Awake{.key = "GhostAI.Awake", .kind 
                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostAI",
                                                   .name = "Awake"};
 
+/// Unity's Update, every frame. On the master it runs the ghost's state machine (unless a flag of Network,
+/// not traced, is set) and once a second records where the ghost stands while its agent moves; while
+/// isHunting is set it also makes the model blink on a timer. Outside a hunt it does nothing else to the
+/// agent (sdk/systems/ghost-ai.md, "Moving the ghost outside a hunt"). Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostAI_Update{.key = "GhostAI.Update", .kind = pm::sdk::Kind::Method,
+                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostAI",
+                                                   .name = "Update"};
+
 // Awake stores four floats of the ghost: three are the constant 1, this one the agent's speed it has
 // just set (NavMeshAgent.get_speed after set_speed(1.7)).
 inline constexpr pm::sdk::Fact GhostAI_baseSpeed_facts[] = {
@@ -512,6 +520,27 @@ inline constexpr pm::sdk::EntryDesc GhostInteraction_CreateThrowingEMF{
     .key = "GhostInteraction.CreateThrowingEMF", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostInteraction", .name = "CreateThrowingEMF"};
 
+inline constexpr const char* GhostInteraction_CreateInteractionEMF_params[] = {"Vector3", "Quaternion", "int",
+                                                                                 "@EMFType"};
+
+/// Leaves an EMF reading at a point, facing a rotation, through GhostInteraction's own EMF spawn: the overload
+/// of (position, rotation, a number, the reading's EMFType). Door.CreateDoorNoise calls it on the contract ghost's
+/// GhostInteraction with the door's PhotonView number and the door-moved type. Its two other overloads (a
+/// position alone, an object's PhotonObjectInteract) are not mapped. Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostInteraction_CreateInteractionEMF{
+    .key = "GhostInteraction.CreateInteractionEMF", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostInteraction", .name = "CreateInteractionEMF",
+    .params = GhostInteraction_CreateInteractionEMF_params};
+
+inline constexpr const char* GhostInteraction_Vector3[] = {"Vector3"};
+
+/// Leaves an EMF reading at a point in the world through GhostInteraction's own EMF spawn: the hunt state's
+/// start calls it on GhostAI.interaction at the ghost's position, on the master. Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostInteraction_CreateAppearedEMF{
+    .key = "GhostInteraction.CreateAppearedEMF", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostInteraction", .name = "CreateAppearedEMF",
+    .params = GhostInteraction_Vector3};
+
 /// An EMF reader's reading (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from its
 /// name.
 inline constexpr pm::sdk::EntryDesc EMF{.key = "EMF", .name = "EMF", .assembly = "Assembly-CSharp", .ns = ""};
@@ -555,6 +584,14 @@ inline constexpr pm::sdk::EntryDesc GhostActivity_nearElectronics{
 inline constexpr pm::sdk::EntryDesc GhostActivity_electronicsSensor{
     .key = "GhostActivity.electronicsSensor", .kind = pm::sdk::Kind::Field, .owner = "GhostActivity",
     .name = "electronicsSensor"};
+
+/// Pulses the electronics sensor (GhostActivity.electronicsSensor) through its virtual PulseAll, so that
+/// GhostActivity.nearElectronics is fresh. The hunt's start (after it sends GhostAI.Hunting and locks the
+/// exits) and the hunt's speed update run it on the master, and so do helpers of the idle state outside
+/// hunts. Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostActivity_UpdateElectronics{
+    .key = "GhostActivity.UpdateElectronics", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostActivity", .name = "UpdateElectronics"};
 
 inline constexpr const char* GhostActivity_bool[] = {"bool"};
 // GhostActivity's private bool(bool) methods roll its interactions. Two that are called compare the
@@ -861,6 +898,9 @@ struct GhostActivity {
   static constexpr pm::api::Field<pm::map::GhostActivity_nearElectronics, bool> nearElectronics{};
   /// The Raiju's electronics sensor, a RangeSensor: electronicsSensor.get(activity). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GhostActivity_electronicsSensor, void*> electronicsSensor{};
+  /// UpdateElectronics(activity): pulses the electronics sensor, as a hunt's start and the idle state do. A mod
+  /// usually hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::GhostActivity_UpdateElectronics, void(void*)> UpdateElectronics{};
   /// One interaction attempt of the ghost's own: TryInteract(activity). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::GhostActivity_TryInteract, void(void*)> TryInteract{};
   /// One pulse of its interaction sensor: NormalInteraction(activity, force). A mod usually hooks it.

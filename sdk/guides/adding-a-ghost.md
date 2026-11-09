@@ -100,7 +100,8 @@ inline pm::api::content::GhostDef definition() {
 `GhostDef` has more members, each optional and each documented in `sdk/api/content.h`:
 
 - tells, the lines on its journal page;
-- `flags` (`PM_GHOST_KEEPS_LAST_EVIDENCE`, `PM_GHOST_BLIND_IN_HUNTS`);
+- `flags` (`PM_GHOST_KEEPS_LAST_EVIDENCE`, `PM_GHOST_BLIND_IN_HUNTS`, `PM_GHOST_NO_MIMIC_COPY` for a ghost a Mimic
+  never copies, and `PM_GHOST_NOT_PLAYABLE` for one no player ever plays);
 - a single `target` for its hunts;
 - the evidence's look (`evidenceLook`);
 - the members a player who controls the ghost uses: an ability, a HUD line, a limit on steering.
@@ -108,7 +109,7 @@ inline pm::api::content::GhostDef definition() {
 ### ghost.h: the rules
 
 A ghost's behaviour comes from rules attached to its id. The host runs a type's rules while the contract's ghost acts as
-that type, on the main thread ([README, "Which rules run"](../README.md#the-host-contract-version-22)):
+that type, on the main thread ([README, "Which rules run"](../README.md#the-host-contract-version-23)):
 
 | Rule | When the host calls it |
 | --- | --- |

@@ -124,7 +124,7 @@ size_t g_mark = 0;
 int g_content = 0;
 std::vector<std::string> g_order;
 bool g_runningWhileWithdrawing = false, g_stoppedBeforeCleanup = false;
-void begin_mod() {
+void begin_mod(const std::string& = {}) {
   CHECK(pm::hooks::create(reinterpret_cast<void*>(&target_answer), reinterpret_cast<void*>(&detour_target),
                           reinterpret_cast<void**>(&g_target_original), "target"));
   CHECK(pm::hooks::enable_all());
@@ -176,10 +176,140 @@ void suspend_and_resume_in_a_room(const fs::path& data) {
   CHECK(target_answer(1) == 2);
 }
 
+// The host refused content the mod registered during its start (a ghost while custom content is off, say): the host keeps
+// the mod off itself, whatever its pmmod_start answered, so no mod has to check what its registrations returned. Its
+// hooks and content from that start come out, and the log says why.
+std::string g_refusal;
+bool g_endedStarted = true;
+void refused_content_keeps_the_mod_off(const fs::path& data) {
+  pm::log::set_sink(&capture, "");
+  g_mark = pm::hooks::mark();
+  pm::mods::set_installed(data, fake_install(PM_FAKE_MOD));
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  g_resolved = {"Camera", "GhostAI.UnAppear"};
+  pm::mods::Group group;
+  group.begin = &begin_mod;
+  group.refusal = [] { return g_refusal; };
+  group.end = [](bool started) {
+    g_endedStarted = started;
+    if (!started) g_content = 0;
+  };
+  g_refusal = "the ghost \"a.b\" is refused: custom content is off: its hooks on the game could not be made";
+  g_content = 0;
+  g_lines.clear();
+  pm::mods::start(&api, {"fake-mod"}, group);
+  CHECK(pm::mods::started_ids().empty() && !pm::mods::started("fake-mod"));
+  CHECK(!g_endedStarted && g_content == 0 && target_answer(1) == 2);
+  CHECK(logged("mods: fake-mod stays off: the host refused its content (the ghost \"a.b\" is refused: custom content is off"));
+  CHECK(pm::mods::off_reason("fake-mod") == "It did not start. mods.log says why");
+
+  g_refusal.clear();  // nothing refused: it starts
+  pm::mods::start(&api, {"fake-mod"}, group);
+  CHECK(pm::mods::started("fake-mod") && g_endedStarted && target_answer(1) == 102);
+  pm::mods::stop_all();
+  pm::hooks::rollback_to(g_mark);
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// Any failure of the host's during a mod's start keeps it off, whatever its pmmod_start answered: a hook that could not be
+// made, and a host call that failed (here mod_started, standing in for one), each logged with why.
+bool g_failCall = false;
+bool failing_mod_started(const char*) {
+  if (g_failCall) pm::mods::start_error("the service a.b is already registered");
+  return false;
+}
+void host_failures_in_a_start_keep_the_mod_off(const fs::path& data) {
+  pm::log::set_sink(&capture, "");
+  g_mark = pm::hooks::mark();
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  api.mod_started = &failing_mod_started;
+  g_resolved = {"Camera", "GhostAI.UnAppear"};
+
+  // A hook made in the start (the group's begin stands in for the mod) has no target.
+  pm::mods::set_installed(data, fake_install(PM_FAKE_MOD));
+  pm::mods::Group group;
+  group.begin = [](const std::string& id) {
+    CHECK(id == "fake-mod");
+    CHECK(!pm::hooks::create(nullptr, reinterpret_cast<void*>(&detour_target), nullptr, "lost"));
+  };
+  g_lines.clear();
+  pm::mods::start(&api, {"fake-mod"}, group);
+  CHECK(!pm::mods::started("fake-mod"));
+  CHECK(logged("mods: fake-mod stays off: a hook could not be made (lost has no target)"));
+  CHECK(pm::mods::off_reason("fake-mod") == "It did not start. mods.log says why");
+  pm::mods::start(&api, {"fake-mod"});  // a start with no failure, after one: it starts
+  CHECK(pm::mods::started("fake-mod"));
+  pm::mods::stop_all();
+
+  // A host call that failed during the start, of a mod that asks the host whether another mod runs.
+  pm::mods::set_installed(data, {{{PM_FAKE_MOD_OPTIONAL, fake_manifest("fake-optional")}}, {}});
+  g_failCall = true;
+  g_lines.clear();
+  pm::mods::start(&api, {"fake-optional"});
+  CHECK(!pm::mods::started("fake-optional"));
+  CHECK(logged("mods: fake-optional stays off: a call to the host failed (the service a.b is already registered)"));
+  g_failCall = false;
+  pm::mods::start_error("outside a start");  // counts for nothing
+  pm::mods::start(&api, {"fake-optional"});
+  CHECK(pm::mods::started("fake-optional"));
+  pm::mods::stop_all();
+  pm::hooks::rollback_to(g_mark);
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// Content the host drops once every mod has started keeps its owner off: the mods start again without it, and again while
+// that drops more (a ghost whose evidence came from the mod just left off), until nothing is dropped.
+void dropped_content_keeps_its_owner_off(const fs::path& data) {
+  pm::log::set_sink(&capture, "");
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  api.mod_started = &pm::mods::started;  // fake-optional asks it as it starts
+  g_resolved = {"Camera", "GhostAI.UnAppear"};
+  pm::mods::set_installed(data, {{{PM_FAKE_MOD_OPTIONAL, fake_manifest("fake-optional")}, {PM_FAKE_MOD, fake_manifest()}}, {}});
+  const std::vector<std::string> both{"fake-mod", "fake-optional"};
+  pm::mods::start(&api, both);
+  CHECK(pm::mods::started("fake-mod") && pm::mods::started("fake-optional"));
+  int round = 0;
+  std::vector<std::vector<std::string>> restarted;
+  g_lines.clear();
+  pm::mods::settle(
+      both,
+      [&]() -> std::vector<pm::mods::Dropped> {
+        ++round;
+        if (round == 1)  // one owned by nobody, one by a mod not running: neither is anyone's to keep off
+          return {{"fake-mod", "the ghost \"fake-mod.a\" is dropped: no mod that started registered its evidence \"x.e\""},
+                  {"", "rules on \"x.g\" are dropped: no mod that started registered that ghost"},
+                  {"nobody", "the ghost \"nobody.n\" is dropped"}};
+        if (round == 2) return {{"fake-optional", "the ghost \"fake-optional.b\" is dropped: its evidence went with fake-mod"}};
+        return {};
+      },
+      [&](const std::vector<std::string>& ids) {
+        restarted.push_back(ids);
+        pm::mods::restart(&api, ids, {}, {});
+      });
+  CHECK(round == 3 && restarted.size() == 2);
+  CHECK(restarted.size() == 2 && restarted[0] == std::vector<std::string>{"fake-optional"} && restarted[1].empty());
+  CHECK(!pm::mods::started("fake-mod") && !pm::mods::started("fake-optional"));
+  CHECK(logged("mods: fake-mod stays off: the host dropped its content (the ghost \"fake-mod.a\" is dropped"));
+  CHECK(logged("mods: fake-optional stays off: the host dropped its content (the ghost \"fake-optional.b\""));
+  CHECK(!logged("mods: nobody stays off"));
+  CHECK(pm::mods::off_reason("fake-mod") == "It did not start. mods.log says why" &&
+        pm::mods::off_reason("fake-optional") == "It did not start. mods.log says why");
+  pm::mods::start(&api, both);  // a later start tries them again
+  CHECK(pm::mods::started("fake-mod") && pm::mods::off_reason("fake-mod").empty());
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
 // A mod built against an older minor version of contract 2 (`minor`, from `dll`) loads and starts in
-// the 2.2 host: the contract only grew at the end.
+// the 2.3 host: the contract only grew at the end.
 void older_minor_still_loads(const fs::path& data, const char* dll, uint32_t minor) {
-  CHECK(PMMOD_API_VERSION == ((2u << 16) | 2u));
+  CHECK(PMMOD_API_VERSION == ((2u << 16) | 3u));
   pm::log::set_sink(&capture, "");
   g_lines.clear();
   pm::mods::set_installed(data, fake_install(dll));
@@ -199,6 +329,9 @@ void mod_built_for_2_0_still_loads(const fs::path& data) { older_minor_still_loa
 
 // Contract 2.2 added the content functions at the end; a 2.1 mod never reaches them.
 void mod_built_for_2_1_still_loads(const fs::path& data) { older_minor_still_loads(data, PM_FAKE_MOD_2_1, 1); }
+
+// Contract 2.3 added PM_GHOST_NO_MIMIC_COPY; a 2.2 mod (the released contract) still loads.
+void mod_built_for_2_2_still_loads(const fs::path& data) { older_minor_still_loads(data, PM_FAKE_MOD_2_2, 2); }
 
 // A mod exporting the new names loads and logs nothing about them.
 void loads_mod_with_new_exports(const fs::path& data) {
@@ -954,8 +1087,12 @@ int main() {
 
   mod_with_unresolved_requirement_stays_off(data);
   suspend_and_resume_in_a_room(data);
+  refused_content_keeps_the_mod_off(data);
+  host_failures_in_a_start_keep_the_mod_off(data);
+  dropped_content_keeps_its_owner_off(data);
   mod_built_for_2_0_still_loads(data);
   mod_built_for_2_1_still_loads(data);
+  mod_built_for_2_2_still_loads(data);
   loads_mod_with_new_exports(data);
   loads_mod_with_old_exports_and_logs_once(data);
   manifest_id_must_match_dll(data);

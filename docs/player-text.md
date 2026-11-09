@@ -5,14 +5,14 @@ Everything a player reads lives in string tables, never in the code (the author'
 
 | Table | Entries | `PM_TEXT_AI` | `PM_TEXT_TODO` |
 | --- | --- | --- | --- |
-| `i18n/default.json` | 238 | 0 | 0 |
-| `mods/custom_ghosts/i18n/default.json` | 74 | 6 | 0 |
+| `i18n/default.json` | 239 | 0 | 1 |
+| `mods/custom_ghosts/i18n/default.json` | 78 | 9 | 0 |
 | `mods/ghost_tells/i18n/default.json` | 6 | 0 | 0 |
-| `mods/playable_ghost/i18n/default.json` | 140 | 140 | 0 |
+| `mods/playable_ghost/i18n/default.json` | 142 | 140 | 2 |
 | `mods/spectral_flame/i18n/default.json` | 2 | 0 | 0 |
 
-- **`PM_TEXT_AI`** marks an entry AI wrote before the AI policy (`AI_POLICY.md`). It stays until the author rewrites it;
-  then the mark comes off.
+- **`PM_TEXT_AI`** marks an entry AI wrote: before the AI policy (`AI_POLICY.md`), or as a draft the author asked for (the
+  Squatter's journal page, 2026-11-09). It stays until the author rewrites it; then the mark comes off.
 - **`PM_TEXT_TODO`** marks a placeholder waiting for the author's words. The game shows it as written until then.
 - **`{{token}}`** is a value the code fills in, such as a player's name or a number. Keep each token a text names, or the
   value is lost; `tests/text_table_test.cpp` checks every key the code asks for exists with the tokens it gives, and that no

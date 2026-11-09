@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <functional>
 #include <string_view>
 #include <unordered_map>
@@ -63,12 +64,14 @@ class Builder {
   Builder(const RuntimeApi& api, std::span<const uint8_t> module, const std::function<bool()>& proceed)
       : api_(api), module_(module), proceed_(proceed) {}
 
-  // Every class of every named image, before any member, so members can name any of them.
-  bool add_types(std::span<const std::string> assemblies) {
+  // Every class of every named image, before any member, so members can name any of them. An optional
+  // image that is not loaded is left out; a required one fails the model.
+  bool add_types(std::span<const std::string> assemblies, std::span<const std::string> optional) {
     size_t count = 0;
     void** loaded = api_.domain_get_assemblies(api_.domain_get(), &count);
     for (const std::string& assembly : assemblies) {
       void* image = find_image(loaded, count, assembly + ".dll");
+      if (!image && std::find(optional.begin(), optional.end(), assembly) != optional.end()) continue;
       if (!image) return false;
       const size_t classes = api_.image_get_class_count(image);
       for (size_t i = 0; i < classes; ++i) {
@@ -249,11 +252,11 @@ std::span<const uint8_t> loaded_module(uintptr_t base) {
 }
 
 bool load_runtime(const RuntimeApi& api, uintptr_t gameAssemblyBase, std::span<const std::string> assemblies,
-                  GameModel& out, const std::function<bool()>& proceed) {
+                  GameModel& out, const std::function<bool()>& proceed, std::span<const std::string> optional) {
   const std::span<const uint8_t> module = loaded_module(gameAssemblyBase);
   if (module.empty() || !complete(api)) return false;
   Builder builder(api, module, proceed);
-  if (!builder.add_types(assemblies) || !builder.add_members()) return false;
+  if (!builder.add_types(assemblies, optional) || !builder.add_members()) return false;
   out = builder.take();
   return true;
 }

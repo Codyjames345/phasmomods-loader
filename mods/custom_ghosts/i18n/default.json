@@ -1,8 +1,8 @@
 // Custom Ghosts' player-facing text: each ghost's journal page and ability (the author's own), and the HUD lines of a player
 // controlling one.
-// Each text marked PM_TEXT_AI was written by AI before the AI policy (AI_POLICY.md); the author replaces it and
-// takes the mark off; one marked PM_TEXT_TODO is a placeholder waiting for the author's words. A {{token}} is a
-// value the code fills in. Keep one entry per line.
+// Each text marked PM_TEXT_AI was written by AI, before the AI policy (AI_POLICY.md) or as a draft the author asked
+// for; the author replaces it and takes the mark off; one marked PM_TEXT_TODO is a placeholder waiting for the
+// author's words. A {{token}} is a value the code fills in. Keep one entry per line.
 {
   "ghost.asterion.description": "The Minotaur of the labyrinth, by its own name. A battering brute that makes a maze of any house, doors only slow it, and it never closes one.",
   "ghost.asterion.name": "Asterion",
@@ -68,6 +68,10 @@
   "ghost.mesmer.name": "Mesmer",
   "ghost.mesmer.strength": "Each player sees a Mesmer differently, and the truck's sanity monitor shows the team saner than they are.",
   "ghost.mesmer.weakness": "A Mesmer cannot fool a camera: video, photos and the D.O.T.S. projector show it as it is.",
+  "ghost.squatter.description": "Not a ghost at all, but a person living in the house, wearing a bedsheet and pretending to be one. It wants you off its property, and it says so, loudly.",  // PM_TEXT_AI
+  "ghost.squatter.name": "Squatter",
+  "ghost.squatter.strength": "Once it has seen you, a Squatter chases at just under a sprint, and it does not stop until everyone is out of the house. Then it locks the door behind you.",  // PM_TEXT_AI
+  "ghost.squatter.weakness": "A Squatter is clumsy and trips over what lies in its way. It cannot open a closed hiding place, and soon gives up kicking at one.",  // PM_TEXT_AI
   "ghost.tempest.description": "A storm spirit of the old weather lore. It moves with the lightning, and the wilder the night, the more often it strikes.",
   "ghost.tempest.name": "Tempest",
   "ghost.tempest.strength": "In a hunt a Tempest cannot be seen, except when lightning strikes; then it is very fast.",

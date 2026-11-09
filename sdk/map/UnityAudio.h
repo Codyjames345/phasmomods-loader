@@ -152,6 +152,8 @@ namespace phasmo {
 
 /// Unity's audio listener: one volume for everything this client hears.
 struct AudioListener {
+  /// The type: type_object() for GameObject.GetComponents. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::AudioListener> type{};
   /// get_volume(). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::AudioListener_get_volume, float()> get_volume{};
   /// set_volume(volume). Unresolved: does nothing.

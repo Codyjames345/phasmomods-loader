@@ -82,10 +82,13 @@ struct RuntimeApi {
 // - A method's rva is its code's distance from gameAssemblyBase when the code lies inside the module
 //   the headers at that base describe, and 0 otherwise (no code, or shared code elsewhere).
 // It fails when the headers at gameAssemblyBase are not a PE32+ image's, an export is missing, or a
-// named assembly is not loaded, and as soon as `proceed`, asked before each type, says no. It reads the
-// runtime's metadata and makes no managed object. On failure `out` is left as it was.
+// named assembly is not loaded, and as soon as `proceed`, asked before each type, says no. A named assembly
+// also in `optional` (optional_assemblies_of) that is not loaded is left out instead, so its types are
+// not in the model. It reads the runtime's metadata and makes no managed object. On failure `out` is left
+// as it was.
 bool load_runtime(const RuntimeApi& api, uintptr_t gameAssemblyBase, std::span<const std::string> assemblies,
-                  GameModel& out, const std::function<bool()>& proceed = {});
+                  GameModel& out, const std::function<bool()>& proceed = {},
+                  std::span<const std::string> optional = {});
 
 // The loaded module at base, from its first byte to SizeOfImage, read from its PE32+ headers. Empty
 // when the headers are not a PE32+ image's.

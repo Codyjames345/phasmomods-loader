@@ -114,6 +114,7 @@ bool api_create_hook(void* target, void* detour, void** original, const char* na
     return hooks::create(target, detour, original, name);
   } catch (...) {
     PM_LOG("suite: exception while creating hook %s", name ? name : "?");
+    mods::start_error("creating the hook " + std::string(name ? name : "?") + " threw");
     return false;
   }
 }
@@ -122,6 +123,7 @@ bool api_enable_hooks() {
     return hooks::enable_all();
   } catch (...) {
     PM_LOG("suite: exception while enabling hooks");
+    mods::start_error("switching its hooks on threw");
     return false;
   }
 }
@@ -172,10 +174,13 @@ bool api_mod_started(const char* id) {
 }
 void api_register_service(const char* name, const void* table) {
   try {
-    if (name && !g_services.publish(name, table))
+    if (name && !g_services.publish(name, table)) {
       PM_LOG("suite: service %s is already registered; the first table stays", name);
+      mods::start_error("the service " + std::string(name) + " is already registered");
+    }
   } catch (...) {
     PM_LOG("suite: could not register service %s", name ? name : "?");
+    mods::start_error("the service " + std::string(name ? name : "?") + " could not be registered");
   }
 }
 const void* api_service(const char* name) {
@@ -203,11 +208,15 @@ bool api_hook_entry(const char* key, void* detour, void** original, const char* 
     const PmGameEntry* e = method_entry(key);
     if (!e) {
       PM_LOG("suite: game entry %s is unknown, unresolved or not a method; nothing hooked", key ? key : "?");
+      mods::start_error("the game entry " + std::string(key ? key : "?") + " is unknown, unresolved or not a method");
       return false;
     }
-    return entry_hooks::hook(e->code, {e->twins, e->twinCount}, detour, original, name ? name : key, allTwins);
+    const bool hooked = entry_hooks::hook(e->code, {e->twins, e->twinCount}, detour, original, name ? name : key, allTwins);
+    if (!hooked) mods::start_error("the game entry " + std::string(key) + " could not be hooked");
+    return hooked;
   } catch (...) {
     PM_LOG("suite: exception while hooking game entry %s", key ? key : "?");
+    mods::start_error("hooking the game entry " + std::string(key ? key : "?") + " threw");
     return false;
   }
 }
@@ -216,11 +225,15 @@ bool api_hook_body(const char* key, uint32_t bodyIndex, void* detour, void** ori
     const PmGameEntry* e = method_entry(key);
     if (!e) {
       PM_LOG("suite: game entry %s is unknown, unresolved or not a method; nothing hooked", key ? key : "?");
+      mods::start_error("the game entry " + std::string(key ? key : "?") + " is unknown, unresolved or not a method");
       return false;
     }
-    return entry_hooks::hook_body(e->code, {e->twins, e->twinCount}, bodyIndex, detour, original, name ? name : key);
+    const bool hooked = entry_hooks::hook_body(e->code, {e->twins, e->twinCount}, bodyIndex, detour, original, name ? name : key);
+    if (!hooked) mods::start_error("body " + std::to_string(bodyIndex) + " of the game entry " + std::string(key) + " could not be hooked");
+    return hooked;
   } catch (...) {
     PM_LOG("suite: exception while hooking game entry %s", key ? key : "?");
+    mods::start_error("hooking the game entry " + std::string(key ? key : "?") + " threw");
     return false;
   }
 }
@@ -321,6 +334,13 @@ uint32_t api_content_player_view(float* xyz, uint32_t max) {
 uint32_t api_content_flags() {
   return host::contained("content", "asking the ghost's flags", uint32_t{0}, [&] {
     const content::Ghost* g = g_acting.acting_ghost();
+    return g ? g->flags : 0u;
+  });
+}
+uint32_t api_content_flags_of(int32_t type) {
+  return host::contained("content", "asking a ghost type's flags", uint32_t{0}, [&] {
+    const char* id = g_content.id_of(type);
+    const content::Ghost* g = id ? g_content.ghost(id) : nullptr;
     return g ? g->flags : 0u;
   });
 }
@@ -557,7 +577,8 @@ bool install_required_hooks() {
   return false;
 }
 
-// Custom content's own hooks on the game; without them content stays off and the mods run.
+// Custom content's own hooks on the game. Without them content stays off: a mod that registers a ghost or an evidence
+// is then refused and stays off (host/mods.h, Group::refusal), and the mods that register none run.
 void install_content_hooks() {
   if (!g_contentCanHook) return;
   if (!g_types.create_hooks() || !g_journal.create_hooks() || !g_localised.create_hook() || !g_difficulty.create_hooks() ||
@@ -579,12 +600,25 @@ bool install_session_hooks() {
 }
 
 mods::Group content_group() {
-  return {[] { g_content.begin_group(); }, [](bool started) { g_content.end_group(started); }, &context::tracking_failed};
+  return {[](const std::string& id) { g_content.begin_group(id); }, [](bool started) { g_content.end_group(started); },
+          &context::tracking_failed, [] { return g_content.refused_in_group(); }};
 }
 
 // What every start of the mods owes the rest of the host, once they have started.
-void mods_started() {
-  g_content.commit();  // every mod has started: its content may name evidence from any of them
+void restart_mods_once(const std::vector<std::string>& ids);
+
+// Every mod has started: its content may name evidence from any of them, so only now can the registry settle it. A mod
+// whose content it drops stays off for this start, and the mods start again without it (and so without those that require
+// it), until nothing more is dropped: each round leaves one mod or more off, so it ends.
+void mods_started(const std::vector<std::string>& ids) {
+  mods::settle(
+      ids,
+      [] {
+        std::vector<mods::Dropped> dropped;
+        for (content::Registry::Dropped& d : g_content.commit()) dropped.push_back({std::move(d.owner), std::move(d.why)});
+        return dropped;
+      },
+      &restart_mods_once);
   g_presence.set_local(mods::started_builds());
   std::vector<content::ModBuild> builds;
   for (const presence::Mod& m : mods::started_builds()) builds.push_back({m.id, m.build});
@@ -593,7 +627,7 @@ void mods_started() {
 
 void start_mods(const std::vector<std::string>& ids) {
   mods::start(&g_api, ids, content_group());
-  mods_started();
+  mods_started(ids);
 }
 
 // Takes custom content out of the game and stops the rules, before the mods that gave them stop: the
@@ -614,6 +648,12 @@ void withdraw_content() {
 // running mod stops, newest first; every hook the mods made goes, newest first, so detours chained on one function unwind
 // in order; their receivers and services go with them; then those mods start afresh.
 void run_mods(const std::vector<std::string>& ids) {
+  restart_mods_once(ids);
+  mods_started(ids);
+}
+
+// One restart of the mods with `ids`, as run_mods describes, with no settling of their content.
+void restart_mods_once(const std::vector<std::string>& ids) {
   mods::Restart steps;
   steps.withdraw = &withdraw_content;  // the rules stop while their mods still run
   steps.stopped = [] {
@@ -626,7 +666,6 @@ void run_mods(const std::vector<std::string>& ids) {
     g_content.clear();
   };
   mods::restart(&g_api, ids, content_group(), steps);
-  mods_started();
 }
 
 // The Mods panel's Apply: never in a room.
@@ -778,7 +817,7 @@ bool start(void* gameAssembly, void* unityPlayer, const build::Hashes& game) {
     return false;
   }
   // Positional: a member added to PmHostApi after show_message fails this until it is given here too.
-  static_assert(offsetof(PmHostApi, show_message) + sizeof(PmHostApi::show_message) == sizeof(PmHostApi),
+  static_assert(offsetof(PmHostApi, content_flags_of) + sizeof(PmHostApi::content_flags_of) == sizeof(PmHostApi),
                 "g_api lists every PmHostApi member");
   g_api = {PMMOD_API_VERSION, gameAssembly, unityPlayer, g_dataDirectory.c_str(),
            &api_log, &api_create_hook, &api_enable_hooks, &api_send, &api_set_receiver,
@@ -797,7 +836,8 @@ bool start(void* gameAssembly, void* unityPlayer, const build::Hashes& game) {
            &api_content_player_view, &api_content_target, &api_content_flags,
            &api_room_agrees, &api_collection_count, &api_array_element_size, &api_list_remove_at,
            &api_content_player_move, &api_content_interaction_lost, &api_content_roll_taken, &api_steer_agent,
-           &api_abandon_ghost_spawn, &api_dictionary_int_entries, &api_mod_started, &api_show_message};
+           &api_abandon_ghost_spawn, &api_dictionary_int_entries, &api_mod_started, &api_show_message,
+           &api_content_flags_of};
   // The host's own game side of content reaches the game through the map, like a mod: the game API
   // bound to the host's contract. Without every entry it needs, custom content stays off.
   std::string unbound;

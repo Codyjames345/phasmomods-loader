@@ -913,3 +913,219 @@ Tasks 12a to 12d and 12c's rounds. The ghost player is one of two or more client
   - [ ] Close the window (Alt+F4) as the ghost player, stepped out: the cleanup line, then an exit.
   - [ ] Lobby, investigator and the volunteer: Quit from the main menu or the lobby; an exit within a few seconds and `net: Photon's room cleanup finished`.
   - [ ] Play without mods: quit from the lobby and from a contract; no `net: Photon's room cleanup` line and no `context:` line.
+
+## Squatter
+
+The figure (Task 5). Before the test, build `squatter.bundle` (sdk/guides/custom-animation.md) with every state of `squatter_figure.h`'s table and put it in the staged `mods/custom-ghosts/assets/` folder by hand: the release payload gains it only in Task 11, so without it Custom Ghosts does not start.
+
+- Start
+  - [ ] With the bundle: Custom Ghosts starts, and `mods.log` has no `CustomGhosts inactive` line.
+  - [ ] Without the bundle, and with a bundle whose controller lacks one state: Custom Ghosts is off, its log line names the file or the missing state, and the other mods run.
+- The figure, in a private contract with the Squatter forced in a Custom difficulty
+  - [ ] A figure stands where the ghost is: the investigator's body under a white sheet, lit like the room, not black. Look at it from all sides and from below: the sheet shows from inside too.
+  - [ ] The sheet drapes over the head and shoulders and hangs, with two eye holes in front of the eyes, side by side, with sheet between them. Judge the look: shape, length, stiffness, hole size.
+  - [ ] The sheet follows the figure as the ghost wanders and turns, and settles when it stops; nothing flies off or spins.
+  - [ ] No `the Squatter's figure could not be built` line; if there is one, report its reason.
+  - [ ] Each clip plays: Run, Duck_A, Duck_B, Weave_A, Weave_B, Roll_A, Roll_B, Parkour_A, Parkour_B, Stumble, Sit, GetUp, Kick, Bang, Bump, OpenDoorOutwards, OpenDoorInwards (checkable once Task 7 drives the moves; until then only the controller's default state plays). Travelling clips stay in place and do not snap back each loop.
+  - [ ] All clients see the same figure in the same place, facing the same way.
+  - [ ] Walking into the figure, shining a torch at it and throwing an item at it: nothing collides with its sheet spheres.
+  - [ ] Leave the contract and start another: the old figure is gone, a new one appears, and the log shows no error.
+
+The way out (Task 6). The lock is the game's hunt lock (`Door.HuntingCloseDoor`) on every exit (sdk/systems/doors.md). The
+chase that calls it comes in Task 7, so these are checkable once Task 7 is in; a private contract with the Squatter
+forced in a Custom difficulty, two players where it says so.
+
+- Each kind of map, the doors locking once every living player is out
+  - [ ] A house with one exit (Tanglewood, Edgefield, Ridgeview or Willow Street): run out of the front door; it swings shut and locks, `mods.log` has `squatter: 1 exit(s) held`, and no refused-RPC or exception line follows.
+  - [ ] A map with several exits: Brownstone High School (6), Nell's Diner (3) or Bleasdale Farmhouse (2). Every exit shuts and locks at once, not only the one used, and the log names the count the doors page gives.
+  - [ ] A map without a house: Camp Woodwind or Maple Lodge Campsite. Both leaves of the campsite's gate shut and lock once everyone is past it; a player at a campfire or in a tent still counts as inside (the gate stays open).
+  - [ ] A map with variations: Prison or Point Hope. Every exit locks, including on a smaller variation.
+  - [ ] With two players, one still inside (or hiding where it never looks): the exits stay open until that player is out too. A dead player inside does not keep them open.
+  - [ ] As a client, not the host: the exits lock for you too, and your log has no refused-RPC line.
+- The locked exits
+  - [ ] Grabbing a locked exit does not open it, on the host and on a client.
+  - [ ] The lock's click as it locks, and the rattle on a try, come only when the host owns the exit's view: a player who grabbed that exit last owns it, and then nobody hears the click and only that player's tries rattle (`sdk/systems/doors.md`, "When a player owns the exit"). Their absence there is not a failure; note who opened the exit last.
+  - [ ] With the host owning the exit (nobody but the host opened it) and without the house key picked up, trying a locked exit plays the game's locked rattle, each time.
+  - [ ] Having picked up the house key, try a locked exit: report whether it plays the unlock click, and check it still cannot be grabbed open (the code says it stays shut; `sdk/systems/doors.md`, "Locking the exits outside a hunt").
+  - [ ] After the exits have locked, make each Monkey Paw wish that reaches them (`sdk/systems/doors.md`, "The Monkey Paw"), and check every exit stays shut and locked on the host and on a client, with `squatter: a Monkey Paw wish ...` in `mods.log`:
+    - [ ] the 6 s wish (it also asks for the summoning circle, which the Squatter refuses): no unlock, and the exits stay shut after 6 s;
+    - [ ] the 120 s wish: the fuse box still breaks, and the exits stay shut through and after the 120 s;
+    - [ ] the trap wish (the ghost sent to its room): its room's doors and yours are timed as the game does, but an exit among them stays shut;
+    - [ ] the wish that opens every exit (`MonkeyPaw.OpenExitsWish`): no unlock click, and every exit stays shut for the rest of the contract.
+  - [ ] Before the exits lock (a player still inside), each of those wishes does what the game does to the doors.
+  - [ ] Each try at a locked exit, by the host or a client, reaches the mod (once Task 7 plays a line for it, each try plays one); a try at an ordinary door plays nothing.
+  - [ ] On a friendly ghost's difficulty nothing locks, and the log has no lock line.
+  - [ ] Leave and start another contract on the same map: its exits start as the map's own (locked until the key is used), not still switched off.
+
+The mod channel and the exits' hold (Task 7b). Squatter messages go on Custom Ghosts' channel (`mods/custom_ghosts/squatter_net.h`); most of what they carry shows only once Task 7c's chase uses it. A private contract with the Squatter forced in a Custom difficulty, two players (one the host) unless it says otherwise.
+
+- The exits' hold follows the host's lock
+  - [ ] As the client, when the host's lock shuts the exits: your `mods.log` has `squatter: N exit(s) held` as they swing shut, with no refused-RPC or exception line, and your count matches the map's exits.
+  - [ ] As the client, make a Monkey Paw wish on the exits as soon as they lock (the 6 s wish, then the one that opens every exit): every exit stays shut for both players.
+  - [ ] On a contract with another ghost (not the Squatter) that hunts: after the hunt, a Monkey Paw wish on the exits does what the game does; nothing in the log says the exits are held.
+- Tries and sprint reach the host
+  - [ ] As the client, try a locked exit once by the interact key and once by grabbing: each press reaches the host once (once 7c plays a line for it, one line per press, never two).
+  - [ ] As the client, run out of breath while chased: the host's Squatter taunts you (needs 7c). On a Custom difficulty with sprinting off, the taunt plays without running.
+  - [ ] As the client, take a Monkey Paw wish that changes your speed: the Squatter's pace follows your new speed (needs 7c).
+  - [ ] With a VR player as the client: running out of breath reaches the host as on PC (VR's stamina clears the same flag).
+- Host migration
+  - [ ] The host leaves mid-chase: the new host's Squatter carries on chasing, with no restart in its room.
+  - [ ] The host leaves after the exits have locked: they stay locked, with no second lock click and no refused-RPC line, and later tries still get a line.
+- Doors on maps other than Grafton
+  - [ ] On Brownstone High School or Nell's Diner, the Squatter's agent passes doors as on Grafton: only Grafton's doors were checked for a NavMeshObstacle (`sdk/systems/doors.md`, "A ghost walking through"); report a door it stops at.
+
+Restraint while steering and the host's re-lock (Task 7c1). A private contract with the Squatter forced in a Custom difficulty, two players (one the host) unless it says otherwise.
+
+- The door push: not built. `Door.GhostForceDoor` leaves a door-moved EMF reading, the ghost's door sound, a count in the results' "doors moved" and ghost interactions and, for an Ultraviolet ghost, fingerprints (`sdk/systems/doors.md`, "A ghost's force"). The user chose the quiet opener instead (below).
+- The quiet opener (`squatter_door.h` `open_quietly`; the chase calls it from Task 7c2, so these wait on 7c2)
+  - [ ] When the Squatter reaches a shut door on the chase, the door swings open part of the way for both players at the same angle, and the host's `mods.log` has `squatter: a door swung open` once per door. Test once with a door the host grabbed last and once with a door the client grabbed last (the host takes the client's door's view first, so that one opens a moment later).
+  - [ ] No EMF reading appears at an opened door (hold an EMF reader at it), no ghost door sound or rattle plays, and the results screen's "doors moved" and ghost interactions do not count it.
+  - [ ] The opened door creaks and closes normally when a player then pushes it shut, and either player can grab it.
+  - [ ] A door the client is holding when the Squatter reaches it stays in the client's hand: the Squatter does not open it.
+  - [ ] The exits never open this way: with an exit shut and unlocked before the lock, the Squatter passes it without opening it, and after the lock the exits stay locked.
+  - [ ] A late or failed takeover (a laggy client owning the door) gives up after about two seconds: the door stays shut, and nothing in the log says it opened.
+- Steering
+  - [ ] On a friendly ghost's difficulty the Squatter mopes where it starts: it never wanders off or walks to its favourite room, and the log has no exception line.
+  - [ ] On a normal difficulty, while it lurks, it moves about as a ghost does, by its own idling, wandering and favourite room, walking while it moves and standing while it stops.
+- The host's re-lock
+  - [ ] As the client, make the Monkey Paw wish that opens every exit at the moment the exits lock (or the 6 s wish just before): if an exit reopens, the host's `mods.log` has `squatter: 1 reopened exit(s) locked again` and the exit shuts and locks again within about two seconds, for both players. Repeat a few times; a wish that lands after the lock leaves the exits shut with no re-lock line.
+  - [ ] After the lock, on an exit nobody grabbed but the host (so the host's lock clicked), a player holding the house key tries it: it unlocks with the game's click, then the host locks it again (a second click), and it never opens. On an exit the client grabbed last, the key does nothing new and the host's log has no re-lock line.
+  - [ ] With the exits locked and nobody wishing, the host's log has no re-lock line, also when the client was the last to grab an exit before the lock.
+
+The chase (Task 7c2). A private contract with the Squatter forced in a Custom difficulty, two players (one the host) unless it says otherwise. The voice folders must hold recordings for lines to play.
+
+- Lurking
+  - [ ] It keeps around its ghost room as a ghost does, saying lurk lines every few seconds, and both players hear the same line at the same time from where it is.
+  - [ ] Nothing it does before it sees someone is paranormal: no interaction, event, hunt or EMF.
+  - [ ] Walking into its sight starts the chase: it gets up, then runs at the nearest player, saying chase lines. Talking near it on its floor without being seen does not start it.
+- No hunt
+  - [ ] During the chase no light flickers, no electronics interfere, no hunt sound plays, and no door locks before everyone is out (7a could not trace the flicker code; report any flicker).
+- The chase
+  - [ ] A player sprinting away barely outruns it; a walking player is caught up with. Tune `kSprintMargin` and the move multipliers with the user.
+  - [ ] Its run is broken by ducks, weaves, rolls, parkour and stumbles, the roll a burst forward and the stumble a stop, and both players see the same move at the same moment.
+  - [ ] It bumps into things every so often, and when it stalls against something: it plays the bump clip and stops briefly.
+  - [ ] It goes for the nearest player when two are inside, and switches when the other comes nearer.
+  - [ ] A player whose sprint runs out hears a tired line, at most once every twenty seconds; with sprinting off in the Custom difficulty, the chased player hears it as the chase turns to them. Its speed is the same either way.
+  - [ ] As the client, being chased gives the same pace as the host being chased (the client's sprint reaches the host).
+- Losing track and searching
+  - [ ] Breaking line of sight and staying quiet loses it after about four seconds: it searches around the last place it saw you, saying search lines, slower than its chase.
+  - [ ] Talking loudly near it on its floor, or being seen again, starts the chase again.
+- Hiding
+  - [ ] Running into a closet or locker in its sight: it goes to stand outside, says hiding lines and kicks the door over and over. The door never opens and the player is never caught there.
+  - [ ] Hiding unseen: it searches and never finds you (unless you talk loudly).
+  - [ ] Stepping out: it chases at once.
+- Doors on the way: the quiet opener entries above (Task 7c1), now live.
+  - [ ] The opening-door clip plays as it opens one, outwards or inwards by the side it stands on, and it stops briefly.
+- Out of the house
+  - [ ] It never follows a player past an exit. Once every living player is out, the exits lock, and it stands inside.
+  - [ ] Each try at a locked exit gets a door line, once per try.
+  - [ ] One player out and one inside: the exits stay unlocked and it keeps after the one inside.
+- Host migration
+  - [ ] The host leaving mid-chase: the new host's Squatter carries on chasing, no line or clip replays, and after the lock nothing locks twice.
+- Sight
+  - [ ] A Lithobolia contract still throws at players it sees outside hunts (its sight copies are now shared, `ghost_sight.h`).
+
+
+The kick (Task 8). A private contract with the Squatter forced in a Custom difficulty, two players (one the host) unless it says otherwise.
+
+- [ ] Caught within about a metre in the chase, the victim is kicked: the Squatter plays the kick, a catch line plays for both players, and the victim dies with the game's own snapped-neck death (no ghost choke, no ghost model). Note what the victim's camera does, and what the other player sees of the body.
+- [ ] The victim is dead for the game: the truck's sanity monitor shows "?", and a Monkey Paw revive brings them back.
+- [ ] Both players caught one after the other: each is kicked once, and with everyone dead the contract ends as vanilla.
+- [ ] As the client being caught: the same kick and death, and the host's `mods.log` has no exception line.
+- [ ] On a friendly ghost's difficulty nothing is ever kicked (Task 9 checks the rest of friendly mode).
+
+Friendly mode (Task 9). A private contract with the Squatter forced in a Custom difficulty with the friendly ghost on, two players (one the host) unless it says otherwise.
+
+- [ ] It starts seated in the ghost room, saying mope lines every few seconds, and stays there until it sees someone.
+- [ ] On first sight it gets up, says one excited line, then follows the nearest player around inside at a walking pace, stopping a step from them and saying friendly lines.
+- [ ] It opens shut doors on the way quietly, as in the chase, and bumps into things now and then.
+- [ ] It never follows anyone outside: leaving the house, it waits inside. No exit ever locks, and nobody is ever kicked or killed.
+- [ ] Hiding in a closet in its sight: it waits at the door and talks, and never bangs.
+- [ ] Losing it: it goes to where it last saw you and waits there.
+
+Not playable (Task 10). A private contract with Custom Ghosts and Playable Ghost, a ghost player chosen in the lobby.
+
+- [ ] The ghost player's journal pick never lists the Squatter, and its type is never the Squatter however many contracts are started without choosing.
+- [ ] Without a ghost player, a Random contract can still be the Squatter.
+- [ ] With the Custom difficulty's Ghost Type set to the Squatter and a volunteer ticked: nobody is drawn as the ghost (the tape no longer says "You are the ghost"), each volunteer sees the game's popup once (its text is still PM_TEXT_TODO), and the contract starts with every player an investigator and the Squatter played by its AI. Setting Ghost Type back draws a ghost player again.
+
+Footsteps (user, 2026-11-09). With recordings in `assets/squatter/voice/steps/`.
+
+- [ ] While it runs, searches or follows, both players hear a step about every stride from where it is, and none while it sits, bangs or stands still.
+- [ ] No UV footprint appears where it ran, the sound sensor reads its steps only as any sound, and the results screen's ghost distance does not grow.
+
+The user's test of 2026-11-09 and its fixes.
+
+- [ ] Willow Street with Custom hiding places set to none, the ghost room the pantry: lurking, the Squatter wanders out of the closed pantry as a ghost does; on a friendly difficulty it walks to the closest place outside the pantry and sits there. Either way players can reach it.
+- [ ] Its sheet never shows through the floor from the room below, standing, sitting (friendly) or after a roll.
+- [ ] At a shut door on the chase it stops once, the door swings open for both players (the host's `mods.log` has `squatter: a door swung open` once for that door), and it goes through; nothing repeats.
+- [ ] It searches and follows at a walk (the Crouched Walking clip), and stands rather than running on the spot whenever it holds still.
+
+- [ ] At a shut door the Squatter opens it once and goes through: the host's `mods.log` has one `squatter: a door swung open` for it, not one a second, and it never cycles between the door clip and its run.
+- [ ] The sheet covers the body through runs, rolls and sitting: no leg, arm or shoulder shows through it, and it stays on rather than sliding off to one side.
+
+- [ ] The sheet hangs from the head over the whole body like a costume bedsheet, keeps that shape running, rolling and sitting, sways at the hem, and never slides off to one side.
+
+- [ ] It never walks through a door, chasing or lurking: at a shut or ajar door it walks into, it stops, plays the opening-door clip, the door swings wide for both players, and it goes through once the gap fits. A door it only passes beside is left alone.
+
+
+The user's test of 2026-11-09 (sheet, doors, roll, blending) and its fixes.
+
+- [ ] A door that swings away from the Squatter: it plays the push clip (Open Door Outwards) and the door swings all the way open, away from it, for both players. A door that swings toward it: it plays the pull clip (Opening Door Inwards) and the door swings toward it. Either way it goes through once, with one `squatter: a door swung open` in the host's `mods.log`.
+- [ ] A door it opened stays open (it does not drift shut), a player can still grab and close it, and the opened door makes no ghost door sound, EMF reading or fingerprint.
+- [ ] The sheet reaches the floor all round when it stands, a little wider than its arms, with a round hem resting on the floor; the head and hair never show through the top, and the eye holes stay over the eyes.
+- [ ] Running, crouch-walking, rolling and falling, the sheet moves with the arms and legs: no arm, hand, shoulder or leg comes out of it. Note where it stretches or tears.
+- [ ] A roll, a fall (Stumble) and the jump-and-land (Parkour) play to their end before the run takes over.
+- [ ] Every change of clip blends over a quarter second instead of snapping: run into roll, roll into run, walk into stand, stand into the door clip, the get-up and the kick.
+
+The user's new clips of 2026-11-09 (pacing, upright walking, root motion) and the stop after a fall.
+
+- [ ] Chasing, its legs keep pace with the ground: no feet sliding or running on the spot, a jog at slower speeds blending into a run at faster ones.
+- [ ] Lurking, following and walking to a seat it walks upright (Walking); searching it creeps (Crouched Walking); both keep pace with the ground.
+- [ ] A roll travels as far as the clip shows and the Squatter ends up where the clip leaves it, with no slide or snap back; the same for the trip (Soccer Trip) and the landing.
+- [ ] After a trip, a bump, a kick or a door clip it stops where it stands and never slides along the floor.
+- [ ] The sheet sits close round the body, not ballooned out, and still reaches the floor.
+
+Head and hand IK (Final IK, user 2026-11-09).
+
+- [ ] Chasing, waiting at a hiding place, following or excited, the Squatter's head (its eye holes) turns toward the player it is after and follows them; lurking, searching and moping it looks ahead. The turn blends in and out, never snaps, and never twists the neck past a natural turn.
+- [ ] Opening a door, the hand nearer the handle reaches for the door's far edge at handle height and stays on it as the leaf swings, then lets go. Note which hand, and whether it reaches through the leaf or short of it.
+- [ ] Both players see the same head turn (toward the same player) and the same hand on the same door.
+- [ ] Nothing else changes: walking, running, rolls and sitting look as before when it is not looking or reaching.
+
+The user's test of 2026-11-09 (arms through the sheet, hovering after a jump, rolling in place) and turning.
+
+- [ ] No arm, hand or any part of the body ever shows through the sheet, from any side, reaching for a door included; through the eye holes only the inside of the sheet shows.
+- [ ] A hand reaching for a door pushes the sheet out toward the handle rather than vanishing into it.
+- [ ] The jump-and-land plays through into the landing: it never hangs in the air.
+- [ ] A roll carries the Squatter forward as far as the clip shows (Sprinting Forward Roll about 5.5 m, Stand To Roll about 4 m): it never rolls on the spot.
+- [ ] Standing, once it needs to face well away (over about 60 degrees) it turns on the spot with the Left Turn or Right Turn clip, or turns round with Walking Turn 180, and ends facing the new way without a snap; small turns while standing are left alone.
+- [ ] Moving, it turns smoothly toward where it goes, never snapping round.
+- [ ] Setting off from standing into a walk, it plays Start Walking for about a second, then walks.
+
+Full-body IK and grounding (user 2026-11-09).
+
+- [ ] On stairs and slopes the Squatter's hips drop to the lower foot and the sheet's hem follows the steps, rather than the body floating level or sinking into them.
+- [ ] Reaching for a door handle, its shoulder and body lean into the reach, not the arm alone.
+- [ ] Standing, walking and running on a flat floor look as before: no crouch, lean or twitch the IK adds.
+- [ ] The host's `mods.log` has no line saying the Squatter's figure could not be built (ik).
+
+Clumsy moves from the way ahead (user 2026-11-09) and the closet fix.
+
+- [ ] Hidden in a closet, the Squatter comes to stand at its door, kicks it and the knock plays, over and over; it never runs or rolls into the wall beside it. The same at a wardrobe and a locker.
+- [ ] In an open room with nothing in its way it runs without ducking, weaving, rolling, jumping or tripping, and it never jumps or hangs in the air there.
+- [ ] Chasing down a staircase it jumps at the top and rolls on down; over a knee-high prop in its way it jumps and rolls; over an ankle-high one it trips.
+- [ ] Through a doorway or a narrow gap it weaves through side-on; past furniture beside it, it ducks past side-on, stepping away from the furniture.
+- [ ] A few metres behind a player straight ahead, it dive-rolls at them now and then (not every few seconds).
+- [ ] A sprinting player still barely outruns it in open rooms; note whether it now feels too slow or too fast.
+
+The user's test of 2026-11-09: kicking the wall beside a closet, doors off their hinges.
+
+- [ ] At a closet it stands squarely in front of the doors, turns to face them, and its kick lands on the doors, not the wall beside them; the knock plays. Try a closet whose doors sit near a corner.
+- [ ] Every door it opens stays on its hinges, and it opens each door once: the host's `mods.log` has one `squatter: a door swung open` or `squatter: a door pushed open` per door. Note any door that comes off or opens again.
+
+Footsteps from the players' own sounds (user 2026-11-09).
+
+- [ ] The Squatter's steps sound like a player's on the same floor: carpet, wood, concrete, tiles (vinyl), stairs, grass and gravel outside; running steps while it chases, walking steps while it lurks, searches or follows.
+- [ ] Every player hears its steps from where it is, and nothing changes when they stand on another surface themselves.
+- [ ] Its steps never make a ghost react as if a player made them, and no UV footprint appears.

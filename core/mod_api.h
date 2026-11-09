@@ -31,7 +31,7 @@ extern "C" {
 /// The host contract's minor version this header describes. Within a major version a host runs mods
 /// built for its own minor version or an older one.
 /// @since Contract 2.0
-#define PMMOD_API_MINOR 2u
+#define PMMOD_API_MINOR 3u
 /// Major in the high 16 bits, minor in the low 16. Version 1 (the first contract) had no minor.
 /// @since Contract 2.0
 #define PMMOD_API_VERSION ((PMMOD_API_MAJOR << 16) | PMMOD_API_MINOR)
@@ -139,7 +139,10 @@ typedef struct PmGhostDef {
   uint32_t tellCount;      ///< how many `tells` holds
   /// The evidence it gives: a vanilla evidence id ("emf" "spirit_box" "ultraviolet" "orbs" "writing"
   /// "freezing" "dots", and for evidence a game update adds, its EvidenceType name in lower case), or the
-  /// id of a custom evidence any started mod registers. Null or "" is an empty slot; no evidence twice.
+  /// id of a custom evidence any started mod registers. Null or "" is an empty slot; no evidence twice. All
+  /// three may be empty, for a ghost that gives none: its GhostData then holds the game's own "no evidence"
+  /// (EvidenceType.None) in each slot, the game's pick gives only that, and the journal's filter crosses it out
+  /// once any evidence is found (sdk/systems/evidence.md, "A ghost that gives no evidence").
   const char* evidence[3];
   /// Its ability's name, for a player who controls it. With abilityDescription's count 0 too: no ability;
   /// otherwise both with English.
@@ -199,6 +202,15 @@ typedef struct PmGhostDef {
 /// PmGhostDef.flags: blind in a hunt, as its own hunt rules have it: a player controlling it sees nothing
 /// of the house while it hunts but its playerView, as Playable Ghost darkens a hunting Kormos's view.
 #define PM_GHOST_BLIND_IN_HUNTS 2u
+/// PmGhostDef.flags, added in version 2.3: never on the Mimic's copy list, so a Mimic never copies it, whether it may
+/// be rolled or not. The host leaves it out when it adds the contract's custom ghosts to the list the game built
+/// (GhostController.BuildMimicCopies); the game's own types and every other custom ghost are added as before. A
+/// host of version 2.2 does not know the bit and adds the ghost like any other.
+#define PM_GHOST_NO_MIMIC_COPY 4u
+/// PmGhostDef.flags, added in version 2.3: no player ever plays it. A mod that lets a player be the ghost (Playable
+/// Ghost) never offers it, never rolls it for a contract with a ghost player and never keeps it from a pick; it asks
+/// content_flags_of. Its AI haunts as usual in every other contract. The host itself does nothing with the bit.
+#define PM_GHOST_NOT_PLAYABLE 8u
 
 /// A custom evidence, registered with PmHostApi::evidence_register (sdk/api/content.h wraps it as
 /// pm::api::content::EvidenceDef). The host copies it when it is registered. It begins with its own
@@ -269,7 +281,10 @@ struct PmHostApi {
   void (*log)(const char* line);
   /// A MinHook detour through the host's single MinHook instance, not yet enabled. A target that is
   /// already hooked (by the host or another mod) is chained: the newest detour runs first and its
-  /// `original` reaches the previous one.
+  /// `original` reaches the previous one. Since 2.3 a hook that cannot be made or switched on during a mod's
+  /// pmmod_start keeps that mod off, whatever pmmod_start returns, as every host call that fails then does
+  /// (hook_entry, hook_body, enable_hooks, register_service): the host stops the mod, removes its hooks and
+  /// content, and logs why.
   /// @since Contract 1.0
   bool (*create_hook)(void* target, void* detour, void** original, const char* name);
   /// enable every hook created so far
@@ -291,8 +306,8 @@ struct PmHostApi {
   bool (*peer_has_mod)(int32_t actor, const char* modId);
   /// Named tables of C function pointers that cooperating mods publish for each other. A table must
   /// stay valid for the process lifetime. A name is published once: registering a name already
-  /// registered is refused (logged) and the first table stays. service returns null for a name
-  /// nobody registered.
+  /// registered is refused (logged) and the first table stays; during a mod's pmmod_start that keeps the mod
+  /// off (since 2.3). service returns null for a name nobody registered.
   /// @since Contract 1.0
   void (*register_service)(const char* name, const void* table);
   /// The table a cooperating mod published under `name` with register_service, or null when nobody
@@ -478,8 +493,9 @@ struct PmHostApi {
   /// @name Content
   /// Added in version 2.2: content (sdk/api/content.h). Main thread. A mod registers content only from
   /// its pmmod_start; registration only records a definition. Once every mod has started the host
-  /// settles the content (a ghost whose custom evidence no started mod registered is dropped, logged)
-  /// and puts it into the game. Mods never choose a number: the host numbers custom ghost types from
+  /// settles the content and puts it into the game. A ghost whose custom evidence no started mod registered is
+  /// dropped, and so are rules on a custom ghost no started mod registered; since 2.3 the mod that registered either
+  /// stays off for that start, logged, and the mods start again without it, so nothing is dropped from a mod that runs. Mods never choose a number: the host numbers custom ghost types from
   /// one past the game's largest ghost type, and custom evidence from one past its largest evidence
   /// (both read from the game at startup: 31 and 8 in the audited build), each in byte order of its id,
   /// over the content the room's host has. Content is active only in a private room, on the host, or on a client
@@ -490,7 +506,9 @@ struct PmHostApi {
   /// client holds the same content and reaches the same numbers. Content also stays off when the game's
   /// ghost type and evidence enums cannot be read (logged at startup). Vanilla ghost types and evidence
   /// answer whenever those enums were read. The content goes when the mods stop or restart, and a
-  /// mod's own content when its pmmod_start fails.
+  /// mod's own content when its pmmod_start fails. The host keeps off a mod whose pmmod_start registered anything it
+  /// refused, whatever pmmod_start returns: it stops the mod, removes its hooks and content, and logs why, so a mod
+  /// need not check what a registration returned (since 2.3).
   /// @since Contract 2.2
   /// @{
 
@@ -498,12 +516,14 @@ struct PmHostApi {
   /// outside pmmod_start, a null `def`, a `size` smaller than version 2.2's, an id that is missing, has
   /// no '.', is longer than 255 bytes, begins with "vanilla." or is already registered, text without
   /// English (or with a null or repeated language, more than 64 languages, or a text over 64 KB), more
-  /// than 64 tells, or an evidence that is neither vanilla nor "<mod id>.<name>", or is listed twice.
-  /// The log names the ghost and why.
+  /// than 64 tells, or an evidence that is neither vanilla nor "<mod id>.<name>", or is listed twice, and
+  /// (since 2.3) any ghost while custom content is off on this client: the game's enums unreadable, or a game
+  /// entry or hook the host's content needs missing. The log names the ghost and why, and the mod stays off.
   /// @since Contract 2.2
   int32_t (*ghost_register)(const PmGhostDef* def);
   /// Records the evidence `def` like ghost_register: its handle, or 0 (logged) for a call outside
-  /// pmmod_start, a null `def`, a short `size`, a bad or repeated id, or text refused as above.
+  /// pmmod_start, a null `def`, a short `size`, a bad or repeated id, text refused as above, or (since 2.3)
+  /// custom content off on this client; then the mod stays off.
   /// @since Contract 2.2
   int32_t (*evidence_register)(const PmEvidenceDef* def);
   /// The game type number of the ghost `ghostId` while content is active, and while a contract that
@@ -551,7 +571,7 @@ struct PmHostApi {
   /// a handle greater than 0, or 0 when refused (logged with the id and why): a call outside
   /// pmmod_start, a null id or `rules`, a `size` smaller than version 2.2's, an id that is neither
   /// "<mod id>.<name>" nor a vanilla id of the game's enums. Rules on a custom id that no started mod
-  /// registered are dropped once every mod has started (logged). A custom ghost's rules run in a
+  /// registered are dropped once every mod has started, and (since 2.3) the mod that attached them stays off, logged. A custom ghost's rules run in a
   /// contract that loaded while content was active, for the whole contract; a vanilla type's whenever
   /// the contract's ghost acts as it. No rules run outside a private room, nor while this client's mods do
   /// not match the host's list (sdk/runtime/mod_agreement.h). That answer holds from the contract's load until it ends, so a
@@ -785,6 +805,11 @@ struct PmHostApi {
   /// Main thread.
   /// @since Contract 2.2
   void (*show_message)(const char* title, const char* body);
+  /// Added in version 2.3, after show_message: the flags (PmGhostDef.flags, PM_GHOST_* bits) of the custom ghost whose
+  /// game value is `type`, while content is active or a contract holds it; 0 for a vanilla type, an unknown one and
+  /// while no content is active. Read-only. Main thread.
+  /// @since Contract 2.3
+  uint32_t (*content_flags_of)(int32_t type);
   /// @}
 };
 

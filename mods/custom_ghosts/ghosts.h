@@ -36,7 +36,9 @@ inline constexpr const char* kSpectralFlame = "phasmomods.spectral-flame.flame";
 enum Type : int {
   kEcho = 1, kDullahan, kKikimora, kDraugr, kBlackShuck,
   // The flame ghosts: they carry Spectral Flame (docs/superpowers/specs/2026-10-20-flame-ghosts-design.md).
-  kLithobolia, kGremlin, kBrownie, kBogeyman, kLethe, kMesmer, kKnell, kAsterion, kTempest, kHydra
+  kLithobolia, kGremlin, kBrownie, kBogeyman, kLethe, kMesmer, kKnell, kAsterion, kTempest, kHydra,
+  // A person in a bedsheet, not a ghost: no evidence, no activity (docs/superpowers/specs/2026-11-04-squatter-design.md).
+  kSquatter
 };
 
 struct Ghost {
@@ -55,6 +57,10 @@ struct Ghost {
   // Blind in a hunt (the content layer's PM_GHOST_BLIND_IN_HUNTS): a player controlling it sees only its
   // player view (the Black Shuck's scent) while it hunts.
   bool blindInHunts = false;
+  // Never on the Mimic's copy list (the content layer's PM_GHOST_NO_MIMIC_COPY): a Mimic never copies it.
+  bool noMimicCopy = false;
+  // Never played by a player (the content layer's PM_GHOST_NOT_PLAYABLE): Playable Ghost never offers or rolls it.
+  bool notPlayable = false;
 };
 
 inline constexpr Ghost kGhosts[] = {
@@ -102,7 +108,13 @@ inline constexpr Ghost kGhosts[] = {
      nullptr, nullptr},
     {kHydra, "Hydra", {kOrbs, kDots, kSpectralFlame},
      i18n::key("ghost.hydra.description"), i18n::key("ghost.hydra.strength"), i18n::key("ghost.hydra.weakness"),
-     nullptr, nullptr, "green"}
+     nullptr, nullptr, "green"},
+    // No evidence at all: it is told apart by sight and sound, being visible and talking (the spec's "Rules this
+    // ghost breaks on purpose"). Its interactions, events and hunts are refused in restraint.cpp. A Mimic never
+    // copies it (user, 2026-11-06), and no player ever plays it, a gag its AI plays (user, 2026-11-07).
+    {kSquatter, "Squatter", {nullptr, nullptr, nullptr},
+     i18n::key("ghost.squatter.description"), i18n::key("ghost.squatter.strength"), i18n::key("ghost.squatter.weakness"),
+     nullptr, nullptr, nullptr, false, false, true, true}
 
 };
 constexpr int kGhostCount = static_cast<int>(sizeof kGhosts / sizeof kGhosts[0]);
@@ -132,6 +144,7 @@ inline const char* title_key(const Ghost& g) {
     case kAsterion: return i18n::key("ghost.asterion.name");
     case kTempest: return i18n::key("ghost.tempest.name");
     case kHydra: return i18n::key("ghost.hydra.name");
+    case kSquatter: return i18n::key("ghost.squatter.name");
   }
   return "";
 }

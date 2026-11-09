@@ -45,6 +45,12 @@ Code entry or a native site `pattern`, `within` and `patternOffset`, and for a s
 `path` and `component`. A map header ends with its `phasmo::` wrappers; add one for each
 entry a mod may use (an export gets none).
 
+The model is read from every assembly a Type entry names, and a build that lacks a required one
+cannot be resolved at all, for every mod. An assembly that only `kOptional` Type entries name is
+optional: a build without it is read without it, and those entries stay unresolved. Give a type in a
+Unity module the game might stop shipping `kOptional` (Cloth's module is one, `sdk/map/UnityCloth.h`),
+and have the mod that needs it check `available()` at its start and fail with a logged reason.
+
 ## How the resolver finds an entry
 
 Strategies, most robust first. It accepts an entry only when exactly one candidate survives every
@@ -107,7 +113,10 @@ check the entry declares.
      object), and one through a register loaded from fields of `this` (straight-line code, up to three
      loads deep) whose last type and the owner are of unrelated families: neither among the other's
      possible ancestors, read from the base lists (each base name standing for every model type of that
-     name) and known only when every base names a model type.
+     name) and known only when every base names a model type. The fact method may also be a leaf the
+     exception table does not list, a constructor that stores its defaults and tail-jumps to its base
+     (`LocalPlayer.ctor`): it is read as straight-line code up to its ret or tail jump, with rcx
+     holding `this` until an instruction writes it, and one that branches cannot decide.
    - `StoresConst`: it stores the constant `value` there with an immediate `mov`.
    - `Called` names no method: the candidate method is called (or jumped to) directly from another
      method of its own type. The obfuscator's decoys, near-copies with other constants, are never
@@ -376,7 +385,8 @@ The system overviews: [ghost AI](../systems/ghost-ai.md), [ghost types and the M
 [scene and asset facts](../systems/scene.md), [the journal](../systems/journal.md), [the custom
 difficulty](../systems/difficulty.md), [evidence](../systems/evidence.md), [flames](../systems/flames.md),
 [players: death and revival](../systems/players.md),
-[the contract](../systems/contract.md), [Photon and refused RPCs](../systems/photon.md). An
+[the contract](../systems/contract.md), [Photon and refused RPCs](../systems/photon.md), [doors, exits and
+keys](../systems/doors.md). An
 overview cites map keys, never addresses or offsets: the map entries are the only source of a value,
 and `tools/gamecheck.ps1` prints them for the build in hand.
 

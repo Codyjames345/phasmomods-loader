@@ -51,7 +51,8 @@ pm_options(gamecheck)
 add_custom_command(TARGET gamecheck POST_BUILD COMMAND gamecheck --map-digest "${CMAKE_BINARY_DIR}/map-digest.txt")
 
 # A mod's side of the host contract (core/mod_api.h) and the game API it calls (sdk/api, sdk/map).
-add_library(pmmod STATIC core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp)
+add_library(pmmod STATIC core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/api/assets.cpp
+  sdk/api/bundles.cpp sdk/api/models.cpp)
 target_include_directories(pmmod PUBLIC sdk/api sdk/map)
 target_link_libraries(pmmod PUBLIC pmcore)
 pm_options(pmmod)
@@ -152,10 +153,15 @@ add_library(CustomGhosts SHARED
   mods/custom_ghosts/echo.cpp
   mods/custom_ghosts/restraint.cpp
   mods/custom_ghosts/sound.cpp
+  mods/custom_ghosts/squatter.cpp
+  mods/custom_ghosts/squatter_voice.cpp
+  mods/custom_ghosts/squatter_figure.cpp
+  mods/custom_ghosts/squatter_door.cpp
   mods/custom_ghosts/apparition.cpp
   mods/custom_ghosts/hydra.cpp
   mods/custom_ghosts/sensor_copy.cpp
   mods/custom_ghosts/asterion.cpp
+  mods/custom_ghosts/ghost_sight.cpp
   mods/custom_ghosts/lithobolia.cpp
   mods/custom_ghosts/gremlin.cpp
   mods/custom_ghosts/bogeyman.cpp
@@ -253,6 +259,7 @@ target_include_directories(startup_test PRIVATE sdk/map)
 pm_test(build_check)
 target_link_libraries(build_check_test PRIVATE bcrypt)
 pm_test(inject)
+pm_test(assets sdk/api/assets.cpp)
 target_compile_definitions(inject_test PRIVATE UNICODE _UNICODE)
 pm_test(update tools/update.cpp tools/launcher.cpp host/mod_deps.cpp)
 target_link_libraries(update_test PRIVATE pmloader user32 shell32)
@@ -304,12 +311,28 @@ pm_test(mods_panel host/mod_deps.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sd
   sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp)
 target_include_directories(mods_panel_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(custom_ghosts sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp
-  sdk/runtime/content_acting.cpp mods/custom_ghosts/gremlin.cpp mods/custom_ghosts/hunt.cpp
-  mods/custom_ghosts/sensor_copy.cpp)
+  sdk/runtime/content_acting.cpp mods/custom_ghosts/gremlin.cpp mods/custom_ghosts/hunt.cpp mods/custom_ghosts/squatter.cpp
+  mods/custom_ghosts/squatter_figure.cpp mods/custom_ghosts/squatter_door.cpp mods/custom_ghosts/sensor_copy.cpp
+  mods/custom_ghosts/ghost_sight.cpp mods/custom_ghosts/squatter_voice.cpp mods/custom_ghosts/sound.cpp)
 target_compile_definitions(custom_ghosts_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(custom_ghosts_test PRIVATE pmmod)
 # Before the mods' folders, as for content_difficulty_test below.
 target_include_directories(custom_ghosts_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+pm_test(squatter mods/custom_ghosts/squatter_voice.cpp mods/custom_ghosts/sound.cpp mods/custom_ghosts/squatter_figure.cpp
+  sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/game_api.cpp
+  sdk/api/runtime.cpp sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp
+  sdk/runtime/content_acting.cpp core/log.cpp)
+target_compile_definitions(squatter_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+# Before the mods' folders, as for content_difficulty_test below.
+target_include_directories(squatter_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+pm_test(squatter_door mods/custom_ghosts/squatter_door.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp
+  sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp
+  core/log.cpp)
+# Before the mods' folders, as for content_difficulty_test below.
+target_include_directories(squatter_door_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+pm_test(models sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(models_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(brownie mods/custom_ghosts/brownie.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_compile_definitions(brownie_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
@@ -345,7 +368,7 @@ target_include_directories(senses_test BEFORE PRIVATE sdk/api sdk/map sdk/fake s
 pm_test(loadout mods/playable_ghost/session.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(loadout_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
-pm_test(round mods/playable_ghost/round.cpp mods/playable_ghost/session.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp
+pm_test(round mods/playable_ghost/round.cpp mods/playable_ghost/session.cpp sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp
   sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp
   core/log.cpp)
 target_include_directories(round_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
@@ -440,6 +463,11 @@ add_library(pm_fake_mod_2_1 SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_2_1 PRIVATE pmmod)
 target_compile_definitions(pm_fake_mod_2_1 PRIVATE "PM_FAKE_MOD_API_VERSION=((2u << 16) | 1u)")
 pm_options(pm_fake_mod_2_1)
+# And against host contract 2.2, the released minor before PM_GHOST_NO_MIMIC_COPY.
+add_library(pm_fake_mod_2_2 SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_2_2 PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_2_2 PRIVATE "PM_FAKE_MOD_API_VERSION=((2u << 16) | 2u)")
+pm_options(pm_fake_mod_2_2)
 # And as built against the first contract (version 1, no minor), for gamecheck's version check.
 add_library(pm_fake_mod_1 SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_1 PRIVATE pmmod)
@@ -486,12 +514,13 @@ target_include_directories(mods_test PRIVATE third_party/minhook/src/hde)
 target_link_libraries(mods_test PRIVATE minhook bcrypt)
 target_compile_definitions(mods_test PRIVATE PM_FAKE_MOD="$<TARGET_FILE:pm_fake_mod>"
   PM_FAKE_MOD_2_0="$<TARGET_FILE:pm_fake_mod_2_0>" PM_FAKE_MOD_2_1="$<TARGET_FILE:pm_fake_mod_2_1>"
+  PM_FAKE_MOD_2_2="$<TARGET_FILE:pm_fake_mod_2_2>"
   PM_FAKE_MOD_OPTIONAL="$<TARGET_FILE:pm_fake_mod_optional>" PM_FAKE_MOD_VOICE="$<TARGET_FILE:pm_fake_mod_voice>"
   PM_FAKE_MOD_PLAIN="$<TARGET_FILE:pm_fake_mod_plain>" PM_FAKE_MOD_SAME_CHANNEL="$<TARGET_FILE:pm_fake_mod_same_channel>"
   PM_FAKE_MOD_THROWS="$<TARGET_FILE:pm_fake_mod_throws>" PM_FAKE_MOD_THROWS_REQUIRES="$<TARGET_FILE:pm_fake_mod_throws_requires>"
   PM_FAKE_MOD_1="$<TARGET_FILE:pm_fake_mod_1>" PM_FAKE_MOD_OLD_EXPORTS="$<TARGET_FILE:pm_fake_mod_old_exports>"
   PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-add_dependencies(mods_test pm_fake_mod pm_fake_mod_1 pm_fake_mod_2_0 pm_fake_mod_2_1 pm_fake_mod_optional pm_fake_mod_voice
+add_dependencies(mods_test pm_fake_mod pm_fake_mod_1 pm_fake_mod_2_0 pm_fake_mod_2_1 pm_fake_mod_2_2 pm_fake_mod_optional pm_fake_mod_voice
   pm_fake_mod_plain pm_fake_mod_same_channel pm_fake_mod_throws pm_fake_mod_throws_requires pm_fake_mod_old_exports)
 pm_test(mod_glue core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)

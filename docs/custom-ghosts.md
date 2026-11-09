@@ -3,7 +3,7 @@
 Status: in development. The code is the authority on what is implemented; `FINDINGS.md` lists what
 has not run in the game yet.
 
-Fifteen new ghost types, a separate mod of the suite (`mods/custom_ghosts`). The mod registers each
+Sixteen new ghost types, a separate mod of the suite (`mods/custom_ghosts`). The mod registers each
 through the SDK's content layer (`sdk/api/content.h`, `mods/custom_ghosts/registration.h`) under the id
 `phasmomods.custom-ghosts.<name in lower case, spaces as _>` (`phasmomods.custom-ghosts.black_shuck`), with its English
 journal text, its evidence and its ability, and attaches its rules to that id. The host does the rest
@@ -37,6 +37,7 @@ Difficulty is how readily the ghost gives itself away when its evidence is withh
 | Asterion | Easy | Ghost Writing, D.O.T.S., Spectral Flame | A closed door never stops it for good: it batters it down, and the door stays broken open; it never closes a door | Battering a door down takes it 3 s, and it can be heard far away |
 | Tempest | Easy | Spirit Box, Ultraviolet, Spectral Flame | In a hunt it cannot be seen except when lightning strikes: for 1.5 s after each strike it shows in full and runs at 3.83 m/s (2.25 times the game's base speed). Every hunt opens with a strike; more follow every 3 to 6 s in heavy rain (the game's own storm lightning counts too), every 6 to 10 s in rain and every 9 to 14 s in any other weather | In the dark between strikes it crawls at 1.02 m/s and never speeds up on sight of its prey. It never changes the weather; outside hunts, lightning flashes as each of its events begins |
 | Hydra | Medium | Ghost Orbs, D.O.T.S., Spectral Flame | Each smudge in a hunt grows a false head (at most three) that walks and flickers as it does, and throws objects as the hunting ghost does: on the hunt's own throw timer and roll, each head picks from the objects its own copy of the ghost's interaction sensor detects around it, then uses the game's test and Prop.TryThrow (with its EMF); no object is thrown twice in one tick. Its Spectral Flame burns green where another ghost's turns blue: pale green at the false-positive limit even when the evidence is withheld, deep green when it is given | The false heads are harmless and silent (they throw, but never kill and make no footsteps) |
+| Squatter | (the author's call) | None: no evidence and no paranormal activity at all; it is told apart by sight and sound, being visible and talking ([design](superpowers/specs/2026-11-04-squatter-design.md)) | Not a hunt: once it sees a player it chases them at just under their sprint until every living player is out of the house, kicks whoever it reaches, then locks the exits. It knows a player is in a closet or locker it saw them enter: it kicks a shut one, and opens one that stands ajar and walks in | Clumsy: it trips over props, jumps drops and dive-rolls at its target, each stopping it a moment. It never opens a shut hiding place and gives up kicking at one after 10 s; it never passes through a door, opening each first |
 
 Each has a combination of three evidence types that no other ghost, vanilla or custom, shares. The
 Echo, Dullahan and Black Shuck use three of the five combinations of the game's seven evidence types

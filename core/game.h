@@ -142,6 +142,8 @@ void each_running_camera(CameraScan& scan, uint64_t now, const std::function<boo
 
 // First non-trigger collider hit along the ray, as its Transform, or null.
 void* raycast(Vector3 origin, Vector3 direction, float maxDistance);
+/** The same ray on the layers of `layerMask` only (a bit per layer), as a game script's own mask casts it. */
+void* raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask);
 bool is_child_of(void* transform, void* parent);
 // What the ghost could interact with at hitTransform ("Door", "Light switch", ...), or null.
 const char* interactable_label(void* hitTransform);

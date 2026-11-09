@@ -15,7 +15,6 @@ namespace pm::map {
 inline constexpr const char* UnityUI_Vector2[] = {"Vector2"};
 inline constexpr const char* UnityUI_int[] = {"int"};
 inline constexpr const char* UnityUI_float[] = {"float"};
-inline constexpr const char* UnityUI_Constraint[] = {"@GridConstraint"};
 
 /// Unity's grid layout (UnityEngine.UI), a Behaviour: it places its active children in cells of one
 /// size, row by row, in their sibling order. Inferred: Unity's documented API.
@@ -42,10 +41,12 @@ inline constexpr pm::sdk::EntryDesc GridLayoutGroup_get_constraint{
     .key = "GridLayoutGroup.get_constraint", .kind = pm::sdk::Kind::Method, .owner = "GridLayoutGroup",
     .name = "get_constraint"};
 
-/// Sets how the grid's columns are counted. Inferred: Unity's documented property setter.
+/// Sets how the grid's columns are counted, a GridConstraint. Matched by name alone, its one overload: the model names
+/// its parameter's type only "Constraint", which Final IK's own Constraint class shares. Inferred: Unity's documented
+/// property setter.
 inline constexpr pm::sdk::EntryDesc GridLayoutGroup_set_constraint{
     .key = "GridLayoutGroup.set_constraint", .kind = pm::sdk::Kind::Method, .owner = "GridLayoutGroup",
-    .name = "set_constraint", .params = UnityUI_Constraint};
+    .name = "set_constraint"};
 
 /// The fixed number of columns (or rows) the constraint keeps. Inferred: Unity's documented property
 /// getter.

@@ -23,3 +23,13 @@
 /playtest/
 
 /.vscode
+# A mod's AssetBundles hold third-party animation (Mixamo) that may not be redistributed raw: never committed.
+*.bundle
+
+# Audacity projects: the recordings they make are exported as WAV into the mods' assets; the projects stay local.
+*.aup4
+*.aup3
+
+# Mixamo's raw downloads (FBX, packs), which may not be redistributed: the bundle built from them is pinned instead
+# (tools/payload.psd1), and the downloads are kept in the private assets repository.
+/.mixamo/

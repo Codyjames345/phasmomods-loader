@@ -109,6 +109,47 @@ are mapped by name: `GhostState.light` to `.ignite`, and `.summoningCircle` and 
 possession's pull. So a mod that sorts the changes reads their numbers from the running game, as Ghost
 Tells' gate does (`gate_rule.h`).
 
+## Every route to a state change
+
+Read from the direct callers of `GhostAI.ChangeState`, `GhostAI.Hunting`, `GhostActivity.TryInteract` and
+`GhostActivity.NormalInteraction` in build 25811160, and from the decompiled named callers. Most callers of
+`ChangeState` are `GhostActivity` and classes with obfuscated names, the ghost's states among them; the rest are these (`ChangeState` itself acts only while a flag of the ghost's PhotonView is set, above):
+
+| Caller | Change |
+| --- | --- |
+| `HauntedMirror.BreakItem`, `OuijaBoard.BreakBoard` | a hunt, forced, while the ghost is not hunting |
+| `MusicBox.BreakMusicBox`, `VoodooDoll.StartHunt` | a hunt, forced, after `DifficultySettings.AddHuntDuration(20)` (20 added to the hunt's duration, once a contract) |
+| `TarotCards.ChangeState` | the card's state, forced: a hunt (after `DifficultySettings.AddHuntDuration(20)`), an event or the favourite room; only those three, and only while the ghost is not hunting |
+| `MusicBox.EnterMusicBoxState` | `GhostState.musicBox`, with the box as the change's object, not forced |
+| `SummoningCircle`, through methods with obfuscated names | `GhostState.summoningCircle`, not forced, and a forced hunt; look-alikes among them pass numbers no state has |
+| `MonkeyPaw`, handlers with obfuscated names and a wish's coroutine (`MonkeyPaw.MakeWishNetworked`) | a forced hunt (one handler after `DifficultySettings.AddHuntDuration(20)`, while the ghost is not hunting), the favourite room, an interaction, or the summoning circle's pull; which handler is which wish was not traced |
+| `Jackalope.TriggerHunt` (a seasonal item) | a hunt, not forced, after clearing `GhostAI.postHuntCooldown` and setting another bool of the GhostAI |
+| `PhraseListenerController.NetworkedReaction` | the fuse box, not forced (a phrase a player says) |
+| `SaltSpot.SyncSalt` | `GhostState.salt` (the ghost stepped in salt) |
+| a coroutine of `GameController`; `GhostAI.EventPick` and another method of `GhostAI`; a `GhostAI` coroutine | the favourite room; idling; a hunt, forced as its caller says |
+
+Every forced hunt above from a cursed possession (the mirror, the board, the box, the doll, the Death card and the paw's
+hunt) sets the hunt's grace period, a field of `DifficultySettings`, to 1 just before the change and puts it back with
+`DifficultySettings.ResetHuntGracePeriod` just after it; the box, the doll, the card and the paw also call
+`DifficultySettings.AddHuntDuration(20)` first, which adds 20 to the hunt's duration once a contract, on every client by
+RPC. Neither waits on the change, so both run whether it is refused or not.
+
+`GhostAI.Hunting`, the RPC that starts a hunt on every client, has no direct caller: it is sent by name, so a hunt
+reaches it only through a state the change made. A voodoo doll's pin (`VoodooDoll.NetworkedUse`, through
+`VoodooDollPin`'s handlers) jumps straight into `GhostActivity.NormalInteraction` with its force flag, not through
+`TryInteract`; `NormalInteraction`'s other callers are `TryInteract` and `GhostActivity`'s own helpers, which the idle
+state calls. Each of the 173 direct callers of `GhostAI.Appear` lies in a class with an obfuscated name; which of them
+are state objects was not traced.
+
+So a ghost that must start no interaction, event or hunt, whatever asks, refuses at `GhostAI.ChangeState` before the
+game's code runs, forced or not, and at `GhostActivity.TryInteract` and `GhostActivity.NormalInteraction`. A refusal
+there returns to the caller, whose own code goes on: what the item does to a player (sanity, the card's own effect, the
+box's song, the board's breaking) stays the game's, as none of that waits on the change. Refusing before the game's
+change also means a forced hunt on a friendly ghost's difficulty never reaches the game's own turn of it into idling.
+Custom Ghosts' Squatter does this (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet`): it lets only
+idling, wandering and the favourite room through, and only idling while the mod steers its agent ("Moving the ghost
+outside a hunt" below).
+
 ## The ghost's sensors and throws
 
 Two SensorToolkit sensors (`Sensor.h`) find what the ghost may act on:
@@ -155,6 +196,78 @@ These entries are the host's own (`pm::map::kSteeringEntries`), and no mod names
 steers can change without a mod rebuild. They are the map's most fragile ([mapping the game](../internals/mapping.md), "native site"). A game build
 that changes the code they pin leaves them unresolved: the host logs which at startup, the offline check prints them
 on its `HOST steering` line, steering reports unavailable, and a mod that needs it stays off.
+
+## Moving the ghost outside a hunt
+
+Read from decompiled code and the scene files of build 25811160. A mod that moves the ghost itself, a chase that must
+not read as a hunt for one, has two routes: a hunt with its effects taken away, or a quiet state with the mod at the
+wheel. The second is the clean one.
+
+**What a hunt turns on.** The hunt state's start, on the master, sends `GhostAI.Hunting` to every client by name, then
+calls `LevelController.LockHuntingDoors` ([doors](doors.md), "How a hunt locks the exits"),
+`GhostInteraction.CreateAppearedEMF` at the ghost's position (an EMF reading where it appears) and
+`GhostActivity.UpdateElectronics`. On each client `Hunting`'s start sets `GhostAI.isHunting`, plays the hunt's sound
+through the ghost's GhostAudio noise, counts the hunt in LevelStats and invokes one of GameController's events; its end
+stops the sound, hides the model and invokes another. While `isHunting` is set, `GhostAI.Update` makes the model blink
+on a timer and the Kormos's hearing pulses. On a friendly ghost's difficulty `Hunting` refuses with a report on the
+sender. A hunt without those effects would need a hook on each of them whose only job is to undo the mod's own hunt.
+Which code flickers the lights and upsets the electronics in a hunt was not traced; every path to a hunt effect found
+starts at the hunt's start or reads `isHunting`, and the quiet route reaches neither.
+
+**The quiet route.** The ghost stays in `GhostState.idle` and the mod drives `GhostAI.agent` on the master:
+
+- `GhostAI.Update` runs the state machine there every frame and once a second records where the agent has moved;
+  nothing else in it touches the agent outside a hunt.
+- The idle state holds no agent (its constructor takes only the GhostAI). Its entry sets the agent's speed to
+  `GhostAI.baseSpeed`; no idle method sets a destination, stops, resets or warps the agent. Its roll asks
+  `GhostAI.ChangeState` for wandering, the favourite room, the fuse box, events, abilities and hunts, and
+  `GhostActivity.TryInteract` for interactions, so a mod refuses there whatever it does not want.
+- Wandering (`GhostWanderState`) sets destinations and resets paths, and the favourite room's state sets the
+  destination, so either would take the agent back: a mod that steers keeps the ghost out of both while it steers.
+- Only the summoning circle's and the salt's state stop an agent (`isStopped`), besides the game's player-shaped
+  event's own agent.
+- Outside the states the ghost's agent is changed by `GhostAI.Awake` (speed 1.7), the incense's coroutine (one
+  destination, where the ghost stands), `GhostController.WarpGhostToFavouriteRoom` (the truck's first use) and the
+  ghost's own teleports. `GameController.ResetHuntEffects` sets an agent's speed at a hunt's end, and Monkey Paw wishes
+  and the summoning circle warp one; whose agent those are was not traced.
+
+The ghost's object carries a PhotonTransformView, so where the master's agent takes it shows on every client. Its agent
+(the scene's settings) has acceleration 5 metres a second each second, angular speed 1000, stopping distance 0, radius
+0.15 and height 1.9, with auto-braking and off-mesh link traversal off. A mod steers it with
+`NavMeshAgent.SetDestination`, `set_speed` and `set_acceleration`, and reads `get_remainingDistance`, `CalculatePath`
+and `get_velocity`; `NavMeshAgent::steer` (above) turns it for a frame instead.
+
+**Doors on the way.** No door leaf carries a NavMeshObstacle (read on Grafton, 64 doors), and the Ghost layer does not
+collide with the Door layer in the game's physics settings. So the agent's path runs through a doorway whatever the
+door's state, the ghost passes through a shut leaf, and the leaf does not move. A player opens a door by grabbing it on
+their own client (`DragRigidbodyUse.FixedUpdate`, [doors](doors.md), "Grabbing a door open"); a ghost moves one only by
+its force (`Door.GhostForceDoor`, `Door.CheckDoorDuringHunt`), which is a ghost interaction with a ghost's traces: an
+EMF reading, the door's ghost sound, a count in the results and, for a ghost with Ultraviolet, fingerprints
+([doors](doors.md), "A ghost's force"). A mod-driven ghost can instead swing a shut door with its own physics,
+`HingeDoor.OpenDoor(false, -1, false)`, which leaves no trace, once the master owns the
+door's view ([doors](doors.md), "Opening a door quietly"). `LevelController.currentGhostRoom` names the room the ghost is in on every client, and
+`LevelRoom.doors` that room's doors.
+
+**Sight.** `GhostAI.vision` detects nobody outside hunts. Custom Ghosts' Lithobolia sees through copies of the vision's
+two sensors that it pulses itself (`mods/custom_ghosts/sensor_copy.h`, "The ghost's sensors and throws" above): a player
+is seen when the copy detects any of their `Player.losTargets`.
+
+**Hearing.** The hunt hears by voice and by electronics (`GhostHuntState.Listen`, through `Hears` and `SensesGear`).
+The voice rule (`GhostHuntState.Hears`): the player's body within 9 m of the ghost's head, 2.5 m for the Yokai, any
+distance and floor for a player a Monkey Paw wish marks (`Player.wished`), always for the Deogen; on the floor of the
+ghost's room otherwise; not outdoors; and `PlayerAudio.IsTalkingLoudly(0.1)` of `Player.audio`. A mod mirrors it with
+those members. `IsTalkingLoudly` clears the loudness it answers true for, and its only other asker is the idle state's
+check for talking in a room. Footsteps are heard only by the Kormos's hunt: `GhostHearing` pulses only while the ghost
+hunts.
+
+**Hiding places.** A closet's trigger keeps `ClosetZone.occupants` and each occupant's `Player.closet` on each client
+its physics runs on, and the hunt, on the master, reads `Player.closet`. The hunt's closet search learns a closet only
+from the player it goes for: `GhostHuntState.SetTarget` (a player its sight found) and `GhostHuntState.Listen` (one it
+heard or sensed) give `SetCloset` that player's closet. It then goes to the closet (`ClosetZone.navSpot`) and runs
+`ClosetZone.CheckCloset`, which moves the closet's doors as a hunting ghost does, and kills whoever hides there.
+`ClosetZone.standOutsideEntrancePoint` is where a ghost stands outside the entrance without going in, and
+`ClosetZone.leftClosetDoor` and `rightClosetDoor` are its doors. A `HidingSpot` (under a bed, behind a curtain) has no
+part in the search: `SetCloset` and `Player.closet` take a ClosetZone only.
 
 ## A player and its AI: the rules and the exceptions
 
@@ -214,6 +327,8 @@ investigator's body itself instead (`mods/playable_ghost/form.h`).
 It ends with the `GhostController.CreateGhost` RPC. That runs at once on this client, inside the spawn, and hands
 a copy of the traits, the room's index among them, to `GhostAI.Init`. `PickType` has no other caller the game
 runs.
+
+The weights come from `GhostCollection.GetDefaultWeightedGhostList`, which gives every GhostData in the contract's collection a weight of 1 (custom ghosts the host put there included). The spawn then takes the Deogen out on one condition and two other types out in one game mode (neither traced further), and lays a dictionary of overrides from elsewhere over the weights of the types it names, before `PickType` draws. `PickType` adds up the positive weights only, so a type of weight 0 is never drawn while another type has weight. After the roll a Custom difficulty's ghost type replaces the rolled one unless it is "no type".
 
 A mod that holds the setup back runs the spawn inside a `try`, and from its hook of `PickType` asks `phasmo::GhostController::abandon_spawn`: the host unwinds the spawn before it writes or sends anything, and `pm::api::dictionary_entries` reads the weights. `pm::api::inside<phasmo::GhostController::Spawn>` says a roll is the spawn's.
 

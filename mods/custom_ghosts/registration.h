@@ -20,8 +20,8 @@ inline const char* evidence_look(const char* evidenceId, void* user) {
   return g && evidenceId && std::strcmp(evidenceId, kSpectralFlame) == 0 ? g->flameLook : nullptr;
 }
 
-/** The definition of `g`: its id, English text and evidence, its ability's text when it has one, `user`
- *  its Type, and the callbacks of `callbacks` (useAbility only for a ghost with an ability), with
+/** The definition of `g`: its id, English text and evidence (null an empty slot), its ability's text when it has
+ *  one, `user` its Type, and the callbacks of `callbacks` (useAbility only for a ghost with an ability), with
  *  evidence_look for its evidence's look. */
 inline pm::api::content::GhostDef definition(const Ghost& g, const pm::api::content::GhostDef& callbacks) {
   pm::api::content::GhostDef def;
@@ -31,7 +31,7 @@ inline pm::api::content::GhostDef definition(const Ghost& g, const pm::api::cont
   def.description = pm::api::content::Text("en", i18n::text(g.description));
   def.strength = pm::api::content::Text("en", i18n::text(g.strength));
   def.weakness = pm::api::content::Text("en", i18n::text(g.weakness));
-  for (int i = 0; i < 3; ++i) def.evidence[i] = g.evidence[i];
+  for (int i = 0; i < 3; ++i) def.evidence[i] = g.evidence[i] ? g.evidence[i] : "";  // null: an empty slot
   if (g.ability) {
     def.abilityName = pm::api::content::Text("en", i18n::text(g.ability));
     def.abilityDescription = pm::api::content::Text("en", i18n::text(g.abilityDescription));
@@ -48,6 +48,8 @@ inline pm::api::content::GhostDef definition(const Ghost& g, const pm::api::cont
   def.evidenceLook = &evidence_look;
   if (g.keepsLastEvidence) def.flags |= PM_GHOST_KEEPS_LAST_EVIDENCE;
   if (g.blindInHunts) def.flags |= PM_GHOST_BLIND_IN_HUNTS;
+  if (g.noMimicCopy) def.flags |= PM_GHOST_NO_MIMIC_COPY;
+  if (g.notPlayable) def.flags |= PM_GHOST_NOT_PLAYABLE;
   return def;
 }
 

@@ -249,6 +249,58 @@ inline constexpr pm::sdk::EntryDesc Layer_LaserGhost{.key = "Layer.LaserGhost", 
 /// layer, and the layer the journal's canvas leaves the PlayerView layer for.
 inline constexpr pm::sdk::EntryDesc Layer_UI{.key = "Layer.UI", .kind = pm::sdk::Kind::Layer, .name = "UI"};
 
+// The ground a living player stands on: of the layers the game's physics matrix lets a living player (AlivePlayer)
+// collide with, those a floor, a stair or a prop is on rather than a wall, a door, a camera or an invisible wall.
+// Decompiled: the layer names and the physics matrix read from the asset files.
+
+/// Unity's Default layer. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_Default{.key = "Layer.Default", .kind = pm::sdk::Kind::Layer,
+                                                  .confidence = pm::sdk::Confidence::Decompiled, .name = "Default"};
+/// The game's Floor layer. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_Floor{.key = "Layer.Floor", .kind = pm::sdk::Kind::Layer,
+                                                .confidence = pm::sdk::Confidence::Decompiled, .name = "Floor"};
+/// The game's DefaultNoNavigation layer. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_DefaultNoNavigation{.key = "Layer.DefaultNoNavigation",
+                                                              .kind = pm::sdk::Kind::Layer,
+                                                              .confidence = pm::sdk::Confidence::Decompiled,
+                                                              .name = "DefaultNoNavigation"};
+/// The game's StaticProps layer. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_StaticProps{.key = "Layer.StaticProps", .kind = pm::sdk::Kind::Layer,
+                                                      .confidence = pm::sdk::Confidence::Decompiled,
+                                                      .name = "StaticProps"};
+
+// What a body bumps into: the furniture layers (DefaultProps, Cabinets) and the walls and doors (Wall, Door), of the
+// layers the game's physics matrix lets a living player collide with. Decompiled: the layer names and the physics
+// matrix read from the asset files.
+
+/// The game's DefaultProps layer: props a player collides with. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_DefaultProps{.key = "Layer.DefaultProps", .kind = pm::sdk::Kind::Layer,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .name = "DefaultProps"};
+/// The game's Item layer: the equipment players carry, place and drop (on Willow Street the thermometer, tripod,
+/// crucifix and photo camera bodies, among 252 objects). Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_Item{.key = "Layer.Item", .kind = pm::sdk::Kind::Layer,
+                                               .confidence = pm::sdk::Confidence::Decompiled, .name = "Item"};
+/// The game's Cabinets layer. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_Cabinets{.key = "Layer.Cabinets", .kind = pm::sdk::Kind::Layer,
+                                                   .confidence = pm::sdk::Confidence::Decompiled, .name = "Cabinets"};
+/// The game's Wall layer. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_Wall{.key = "Layer.Wall", .kind = pm::sdk::Kind::Layer,
+                                               .confidence = pm::sdk::Confidence::Decompiled, .name = "Wall"};
+/// The game's Door layer. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_Door{.key = "Layer.Door", .kind = pm::sdk::Kind::Layer,
+                                               .confidence = pm::sdk::Confidence::Decompiled, .name = "Door"};
+
+/// Unity's built-in Ignore Raycast layer. The game's physics matrix lets it collide only with a layer the game leaves
+/// unnamed, so no body or character controller of the game's bumps into a collider on it; Cloth still collides with
+/// the colliders it is given, whatever their layer, so a mod puts a cloth's colliders here (sdk/api/models.h). The
+/// matrix does not govern queries: Unity's default ray mask leaves this layer out, but a ray or overlap query of the
+/// game's with a mask that includes it (all layers, say) can still hit such a collider, and the game's own masks have
+/// not been audited. Decompiled: the layer's name and the physics matrix read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_IgnoreRaycast{.key = "Layer.IgnoreRaycast", .kind = pm::sdk::Kind::Layer,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .name = "Ignore Raycast"};
+
 }  // namespace pm::map
 
 /// @file
@@ -337,8 +389,23 @@ struct Layers {
   static constexpr pm::api::Layer<pm::map::Layer_PlayerView> PlayerView{};
   /// Unity's UI layer, where the closed journal's canvas sits: UI.index(), -1 when it did not resolve.
   static constexpr pm::api::Layer<pm::map::Layer_UI> UI{};
+  /// The ground a living player stands on (Layer_Default's note in the map). Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_Default> Default{};
+  static constexpr pm::api::Layer<pm::map::Layer_Floor> Floor{};  ///< the game's Floor layer, part of that ground. Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_DefaultNoNavigation> DefaultNoNavigation{};  ///< the game's DefaultNoNavigation layer, part of that ground. Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_StaticProps> StaticProps{};  ///< the game's StaticProps layer, part of that ground. Unresolved: -1.
+  /// What a body bumps into (Layer_DefaultProps's note in the map). Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_DefaultProps> DefaultProps{};
+  static constexpr pm::api::Layer<pm::map::Layer_Cabinets> Cabinets{};  ///< the game's Cabinets layer. Unresolved: -1.
+  /// The equipment players carry, place and drop (Layer_Item's note in the map). Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_Item> Item{};
+  static constexpr pm::api::Layer<pm::map::Layer_Wall> Wall{};  ///< the game's Wall layer. Unresolved: -1.
+  static constexpr pm::api::Layer<pm::map::Layer_Door> Door{};  ///< the game's Door layer. Unresolved: -1.
   /// The LaserGhost layer: LaserGhost.index(), -1 when it did not resolve.
   static constexpr pm::api::Layer<pm::map::Layer_LaserGhost> LaserGhost{};
+  /// The Ignore Raycast layer, which collides with nothing of the game's: IgnoreRaycast.index(), -1 when it did not
+  /// resolve.
+  static constexpr pm::api::Layer<pm::map::Layer_IgnoreRaycast> IgnoreRaycast{};
 };
 
 /// @}

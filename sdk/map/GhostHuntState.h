@@ -127,7 +127,11 @@ inline constexpr pm::sdk::Fact GhostHuntState_Hears_facts[] = {
     {.is = pm::sdk::Fact::Is::Calls, .method = "PlayerAudio.IsTalkingLoudly"}};
 
 /// The hunt's voice test: whether a player it has not killed, within its hearing, is talking loudly
-/// (PlayerAudio.IsTalkingLoudly). Listen sends the hunt to such a player. Decompiled.
+/// (PlayerAudio.IsTalkingLoudly with 0.1, on the player's Player.audio). Its hearing: always true for the
+/// Deogen; otherwise the player's body (Player.body) within 9 m of the ghost's head (GhostAI.head), 2.5 m for
+/// the Yokai and 1000 m for a player Player.wished marks, on the floor of the ghost's room
+/// (LevelController.currentGhostRoom's LevelRoom.floor against the player's room's) unless wished, and the
+/// player's room not RoomKind.outsideMap. Listen sends the hunt to such a player. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostHuntState_Hears{
     .key = "GhostHuntState.Hears", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "GhostHuntState", .type = "bool", .params = GhostHuntState_Player,

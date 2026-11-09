@@ -21,6 +21,8 @@
 #include "kikimora.h"
 #include "lithobolia.h"
 #include "runtime.h"
+#include "squatter.h"
+#include "squatter_rule.h"
 #include "tempest.h"
 
 namespace pm::custom::restraint {
@@ -46,8 +48,20 @@ bool skip(Kind kind) {
   return held_back(g_type, kind);
 }
 
+/**
+ * The Squatter refuses the change to `state` (squatter_rule.h keeps_quiet), by the running game's numbers, and only
+ * idling while the mod steers its agent (squatter.h steering).
+ */
+bool squatter_refuses(int32_t state) {
+  namespace GhostState = phasmo::GhostState;
+  return squatter::keeps_quiet({GhostState::idle(), GhostState::wander(), GhostState::favouriteRoom()}, state,
+                               squatter::steering());
+}
+
 void detour_try_interact(api::Original<GhostActivity::TryInteract> original, void* activity) {
   const bool own = g_ghost && activity == game::ghost_activity(g_ghost);
+  // The Squatter interacts with nothing, whoever steers it: no roll is granted or tried.
+  if (own && g_type == kSquatter) return;
   // A roll a player takes is granted to them (Playable Ghost): nothing is attempted yet, whichever hook runs
   // first. Their attempt comes later (detour_normal_interaction below).
   if (own && api::content::roll_taken()) return original(activity);
@@ -70,6 +84,9 @@ void detour_try_interact(api::Original<GhostActivity::TryInteract> original, voi
 // its room, by the same repeat its AI's roll makes (echo.h repeat), once in reach; otherwise, and for a
 // forced pulse (the voodoo doll's), the game's own.
 void detour_normal_interaction(api::Original<GhostActivity::NormalInteraction> original, void* activity, bool force) {
+  // No pulse of the Squatter's sensor: not its AI's, a player's aimed one, nor a voodoo pin's forced one, which
+  // jumps straight here (sdk/systems/ghost-ai.md, "Every route to a state change").
+  if (g_ghost && g_type == kSquatter && activity == game::ghost_activity(g_ghost)) return;
   const bool own = g_ghost && g_type == kEcho && activity == game::ghost_activity(g_ghost);
   if (echo_tries_repeat(own, game::is_master(), force)) {
     struct Repeating {  // cleared however the repeat ends, a managed exception from the game's call included
@@ -120,6 +137,10 @@ void detour_change_state(api::Original<GhostAI::ChangeState> original, void* ai,
                          bool flag) {
   const int event = phasmo::GhostState::randomEvent();
   const bool own = ai && ai == g_ghost;
+  // The Squatter's refusal comes first, forced or not and whatever asks: its AI, a player, a cursed possession, a
+  // tarot card, a phrase. On a friendly ghost's difficulty a forced hunt never reaches the game's change either, so
+  // the difficulty is never asked to turn it into idling and no kill can follow.
+  if (own && g_type == kSquatter && squatter_refuses(state)) return;
   // A roll a player takes only grants them the event: nothing begins yet, whichever hook runs first. Their chosen
   // event comes through here as the AI's does.
   const bool attempt = own && !api::content::roll_taken();
@@ -182,6 +203,7 @@ void tick(void* ghost, int type) {
 
 bool held_back(int type, Kind kind) {
   if (!g_ghost || type != g_type) return false;
+  if (type == kSquatter) return true;  // every kind: it attempts nothing
   if (type == kEcho) return kind == kAbility && echo::dormant_now();
   if (type == kKikimora) return kind == kInteract && kikimora::in_lit_room(g_ghost);
   if (type == kBrownie) return brownie::watched();  // never in view of an investigator or a camera

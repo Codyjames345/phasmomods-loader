@@ -15,6 +15,26 @@ A kill sets the dying flag first. `Player.BeginDeathSequence` sends the death st
 server, and the death animation to the view's owner. The animation refuses a victim already marked dead, unless
 the High Priestess's flag is set (below).
 
+## Killing a player
+
+A kill takes a kind of death, `DeathType`: `HangedMan` or `SnappedNeck`. The victim's body plays that kind's death
+animation (the player's character keeps one override controller per kind) and the body left behind lies as that
+kind. The game's own kills, all on the master:
+
+| Caller | Kind | What it checks first |
+| --- | --- | --- |
+| A hunt's kill (the hunt state's kill attempt) | `SnappedNeck` | its target tests; it also adds the victim to its killed list and lengthens the hunt |
+| `MonkeyPaw.ReviveWish` | `SnappedNeck` | the wisher is neither dead (`Player.isDead`) nor dying (the bool after it, unmapped) |
+| `TarotCards.HangedMan` | `HangedMan` | the card's own tests |
+
+A hunt's choke is the ghost's model during its kill; `Player.BeginDeathSequence` itself plays only the victim's
+side. So a mod that kills outside a hunt calls `Player.BeginDeathSequence(player, DeathType.SnappedNeck)` on the
+master, as these callers do, and shows its own killer. It must not call it on a friendly ghost's difficulty or for a
+player marked dead: the animation refuses both, with a report on the sender (`sdk/systems/photon.md`, "The game's
+checks on an RPC"). The dying flag is not mapped, since no fact tells it from the bools beside it, so a mod kills
+each player at most once and reads `Player.isDead`. Custom Ghosts' Squatter kicks this way
+(`mods/custom_ghosts/squatter.h`, `kick`).
+
 ## Who reads it
 
 Most rules walk `Network.playerSpots` and read each spot's Player. 2344 methods reach `Network`: every caller of
@@ -136,6 +156,42 @@ client's own load wait is over (`mods/playable_ghost/outlist.h`). Because of the
   runs for them.
 - puts the spot back in the list's sort order while still in a room, and lets it go once out of one
   (`Network.OnLeftRoom` empties the list as the client leaves a room).
+
+## Speed and stamina
+
+Read from decompiled code of build 25811160. A player's speed is worked out on that player's own client, by its rig
+(`LocalPlayer`, `Network.localRig`; `LocalPCPlayer` on PC). The rig holds a walking speed (`LocalPlayer.walkSpeed`) and a
+sprinting speed (`LocalPlayer.sprintSpeed`), serialized floats its prefab sets, and a multiplier
+(`LocalPlayer.speedMultiplier`), which `LocalPlayer.Start` copies from the contract's `Difficulty.playerSpeed`.
+`LocalPCPlayer.UpdatePlayerSpeed` gives the controller the sprint speed while three things hold, and the walk speed
+otherwise:
+
+- the sprint input is held;
+- sprinting is allowed: `Difficulty.sprinting` is not 0 (0 off, 1 on, 2 infinite), or no contract is running;
+- the stamina may sprint (`PlayerStamina.canSprint`, of the rig's `LocalPlayer.stamina`).
+
+It then multiplies that speed by the multiplier, except in a contract while the rig's player is dead
+(`LocalPlayer.isDead`, which `LocalPlayer.CompleteLocalPlayerDeath` sets and the rig's revive clears). On VR the
+stamina's own update (`VRStamina.Update`), on the branch a flag of `VRStamina` picks (not traced), gives the VR movement
+the sprint or the walk speed and, in a contract, the same multiplier with the same exception; outside a contract it
+applies no multiplier, where the PC does. The other branch, and where VR's movement reads the sprint gate, were not
+traced.
+
+So in a contract the speed a living PC player would sprint at, whether sprinting is on or not, is `sprintSpeed` times
+`speedMultiplier` of that player's rig, and a dead one's is `sprintSpeed` alone; a VR player's is the same on the
+traced branch above.
+`LocalPCPlayer.SetPlayerSpeedMultiplier` changes the multiplier on that client only (a Monkey Paw wish calls it), so
+another client knows the multiplier only through the difficulty, unless the player's own client says. Custom Ghosts'
+Squatter has each client tell the master its own player's sprint this way (`mods/custom_ghosts/squatter_net.h`).
+
+The stamina drains in a contract only while `Difficulty.sprinting` is 1, so with 2 nobody tires. When it runs out on
+PC, `PCStamina.OutOfBreath` clears `canSprint` and plays the out-of-breath sound: in a room by an RPC to every
+client, which checks that the player's own client sent it, and alone through `NetworkedStamina.ForceOutOfBreatheLocal`.
+With sprinting off it does nothing unless `LocalPlayer.isDead` is set. On VR the stamina's out-of-breath step (a
+`VRStamina` method that also plays the out-of-breath sound) clears `canSprint` the same way. `canSprint` itself is
+never sent: only the player's own client holds it. What every client does get is the player's `NetworkedStamina`
+(`Player.stamina`): the player's client sends whether it walks and whether it sprints in the view's serialization, and
+`moving` follows them, so another client sees a sprint stop but not why.
 
 ## How this was read
 

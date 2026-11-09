@@ -1564,6 +1564,43 @@ void called_fact_drops_uncalled_decoys() {
   }
 }
 
+// A field fact reads a leaf function the exception table does not list, straight-line code up to a ret
+// or a tail jump, as it reads a listed one: a constructor that stores its defaults and jumps to its base
+// tells two floats apart by the constants it stores through `this`. The offsets are made up, not any
+// game type's.
+void field_fact_reads_a_leaf() {
+  constexpr EntryDesc rig{.key = "Rig", .name = "Rig", .assembly = "Assembly-CSharp", .ns = ""};
+  constexpr EntryDesc ctor{.key = "Rig.ctor", .kind = Kind::Method, .owner = "Rig", .name = ".ctor"};
+  static constexpr Fact walk[] = {{.is = Fact::Is::StoresConst, .method = "Rig.ctor", .value = 0x3FCCCCCD}};
+  static constexpr Fact sprint[] = {{.is = Fact::Is::StoresConst, .method = "Rig.ctor", .value = 0x40400000}};
+  const auto run = [&](std::vector<uint8_t> body, std::span<const Fact> facts) {
+    ModelBuilder m;
+    Code code;
+    const int t = m.type("Assembly-CSharp", "", "Rig");
+    m.field(t, "a", "float", 0x24);
+    m.field(t, "b", "float", 0x28);
+    m.field(t, "c", "float", 0x2C);
+    m.method(t, ".ctor", "void", {}, 0x1400);
+    code.b.code(0x1400, std::move(body));
+    const EntryDesc field{.key = "Rig.speed", .kind = Kind::Field, .owner = "Rig", .type = "float", .facts = facts};
+    const Resolution r = code.run({&rig, &ctor, &field}, m.build());
+    const Result* f = r.find("Rig.speed");
+    return f ? std::pair{f->status, f->offset} : std::pair{Status::Missing, int32_t{-1}};
+  };
+  // mov dword [rcx+0x24], 1.6f; mov dword [rcx+0x28], 3.0f; jmp out
+  const std::vector<uint8_t> stores{0xC7, 0x81, 0x24, 0x00, 0x00, 0x00, 0xCD, 0xCC, 0xCC, 0x3F,
+                                    0xC7, 0x81, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x40};
+  const std::vector<uint8_t> tailJump = rel(0x1400 + stores.size(), {0xE9}, 0x9000);
+  CHECK((run(join({stores, tailJump}), walk) == std::pair{Status::Resolved, int32_t{0x24}}));
+  CHECK((run(join({stores, tailJump}), sprint) == std::pair{Status::Resolved, int32_t{0x28}}));
+  CHECK(run(join({stores, kRet}), walk).first == Status::Resolved);
+  // A leaf that branches cannot be read in full: the fact cannot decide, so nothing is picked.
+  CHECK(run(join({stores, {0xEB, 0x00}, kRet}), walk).first == Status::Ambiguous);
+  // Stores through rcx after the leaf wrote it are not through `this`: the fact cannot decide by them.
+  const std::vector<uint8_t> reloaded{0x48, 0x8B, 0x49, 0x18};  // mov rcx, [rcx+0x18]
+  CHECK(run(join({reloaded, stores, kRet}), walk).first == Status::Ambiguous);
+}
+
 // None found decides only when every other method of the type was read in full: one the reader
 // cannot account for, listed or a leaf that branches, may hide the call.
 void called_fact_fails_closed() {
@@ -2333,6 +2370,25 @@ void assemblies_named_once_sorted() {
   CHECK((assemblies_of(entries) == std::vector<std::string>{"Assembly-CSharp", "UnityEngine.CoreModule"}));
 }
 
+// An assembly only optional type entries name may be absent from a build: the model leaves it out and those entries
+// stay unresolved, where a required assembly that is absent fails the whole model.
+void optional_assemblies_are_those_only_optional_types_name() {
+  constexpr EntryDesc kCloth{.key = "Cloth", .flags = kOptional, .name = "Cloth", .assembly = "UnityEngine.ClothModule"};
+  constexpr EntryDesc kRare{.key = "Rare", .flags = kOptional, .name = "Rare", .assembly = "UnityEngine.CoreModule"};
+  constexpr EntryDesc kCamera{.key = "Camera", .name = "Camera", .assembly = "UnityEngine.CoreModule"};
+  const EntryDesc* entries[] = {&kGhostAI, &kCloth, &kRare, &kCamera, &kCloth};
+  CHECK((optional_assemblies_of(entries) == std::vector<std::string>{"UnityEngine.ClothModule"}));
+  const EntryDesc* required[] = {&kGhostAI, &kCamera};
+  CHECK(optional_assemblies_of(required).empty());
+  // The ones to read: every assembly named, less an optional one that is absent.
+  const std::vector<std::string> all = assemblies_of(entries);
+  CHECK((all == std::vector<std::string>{"Assembly-CSharp", "UnityEngine.ClothModule", "UnityEngine.CoreModule"}));
+  const auto none = [](const std::string&) { return false; };
+  const auto every = [](const std::string&) { return true; };
+  CHECK((present_assemblies(entries, none) == std::vector<std::string>{"Assembly-CSharp", "UnityEngine.CoreModule"}));
+  CHECK(present_assemblies(entries, every) == all);
+}
+
 }  // namespace
 
 int main() {
@@ -2387,6 +2443,7 @@ int main() {
   calls_and_called_by_include_twins();
   negated_call_facts_are_refused();
   called_fact_drops_uncalled_decoys();
+  field_fact_reads_a_leaf();
   called_fact_fails_closed();
   called_fact_must_fit();
   epilogue_restore_keeps_this();
@@ -2405,6 +2462,7 @@ int main() {
   pattern_inside_method();
   pattern_needs_readable_code();
   assemblies_named_once_sorted();
+  optional_assemblies_are_those_only_optional_types_name();
   static_field_by_shape();
   icall_resolves_by_name();
   icall_without_runtime_is_checked_at_startup();

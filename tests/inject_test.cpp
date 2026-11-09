@@ -149,6 +149,32 @@ namespace {
 std::string event(const char* message, DWORD pid = 42) {
   return "12:00:00.000 [pid=" + std::to_string(pid) + " tid=7] " + message + "\n";
 }
+/** The per-process asset folders (*.assets) the launcher has made in bin. */
+std::vector<std::wstring> assets_copies(const std::wstring& directory) {
+  std::vector<std::wstring> found;
+  WIN32_FIND_DATAW entry{};
+  HANDLE search = FindFirstFileW((directory + L"\\bin\\*.assets").c_str(), &entry);
+  if (search == INVALID_HANDLE_VALUE) return found;
+  do { found.push_back(directory + L"\\bin\\" + entry.cFileName); } while (FindNextFileW(search, &entry));
+  FindClose(search);
+  return found;
+}
+/** Write a small file. */
+void write_text(const std::wstring& path, const char* text) {
+  FILE* f = nullptr;
+  CHECK(_wfopen_s(&f, path.c_str(), L"wb") == 0);
+  if (f) { fputs(text, f); fclose(f); }
+}
+/** A file's whole content, empty when it cannot be read. */
+std::string read_text(const std::wstring& path) {
+  FILE* f = nullptr;
+  std::string content;
+  if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return content;
+  char buffer[1024]; size_t n;
+  while ((n = fread(buffer, 1, sizeof buffer, f)) > 0) content.append(buffer, n);
+  fclose(f);
+  return content;
+}
 /** Reset every external failure mode and supply a relocated system module. */
 void reset() {
   allocationFails = writeFails = shortWrite = threadFails = exitTarget = wrongMappedPath = false;
@@ -226,6 +252,58 @@ int main() {
     CHECK(std::strstr(text, "?Missing") == nullptr);
     CHECK(std::strstr(text, "\\bin\\Example-42-") != nullptr);
     CHECK(std::strstr(text, "\\bin\\Missing-42-") == nullptr);
+  }
+  // A mod with no assets folder copies as before: no assets folder appears beside its copy.
+  CHECK(assets_copies(directory).empty());
+  // A mod's assets folder is copied beside its DLL copy as <copy>.assets, every file, nested folders kept.
+  {
+    const std::wstring assets = std::wstring(root) + L"\\assets";
+    CHECK(CreateDirectoryW(assets.c_str(), nullptr));
+    CHECK(CreateDirectoryW((assets + L"\\squatter").c_str(), nullptr));
+    CHECK(CreateDirectoryW((assets + L"\\squatter\\voice").c_str(), nullptr));
+    write_text(assets + L"\\top.txt", "top");
+    write_text(assets + L"\\squatter\\voice\\line.wav", "wave");
+    write_text(assets + L"\\squatter\\.gitkeep", "");
+    reset(); CHECK(pm::loader::load(42, source.c_str(), {mod}).outcome == Outcome::active);
+    const auto copies = assets_copies(directory);
+    CHECK(copies.size() == 1);
+    if (!copies.empty()) {
+      CHECK(read_text(copies[0] + L"\\top.txt") == "top");
+      CHECK(read_text(copies[0] + L"\\squatter\\voice\\line.wav") == "wave");
+      CHECK(GetFileAttributesW((copies[0] + L"\\squatter\\.gitkeep").c_str()) != INVALID_FILE_ATTRIBUTES);
+      // It is named after the DLL copy, as the manifest and the string table are, and the session lists that copy.
+      const std::wstring name = copies[0].substr(copies[0].rfind(L'\\') + 1);
+      const std::string stem = pm::text::narrow(name.substr(0, name.size() - 7));
+      CHECK(read_text(directory + L"\\bin\\session-42.txt").find(stem + ".dll\n") != std::string::npos);
+    }
+    // A file that cannot be copied leaves that mod off with a reason, as a failed DLL copy does; the others still start.
+    const std::wstring held = assets + L"\\squatter\\voice\\line.wav";
+    const size_t before = assets_copies(directory).size();
+    HANDLE lock = CreateFileW(held.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    CHECK(lock != INVALID_HANDLE_VALUE);
+    reset(); CHECK(pm::loader::load(42, source.c_str(), {mod}).outcome == Outcome::active);
+    CloseHandle(lock);
+    const std::string refused = read_text(directory + L"\\bin\\session-42.txt");
+    CHECK(refused.find("\\bin\\Example-42-") == std::string::npos);  // not listed to run
+    CHECK(refused.find(pm::i18n::text("launcher.mod-assets-unreadable")) != std::string::npos);
+    CHECK(assets_copies(directory).size() == before);  // the failed copy leaves nothing behind
+    // A junction inside the folder is never followed out of it: the mod is off.
+    const std::wstring outside = std::wstring(root) + L"\\outside";
+    CHECK(CreateDirectoryW(outside.c_str(), nullptr));
+    write_text(outside + L"\\secret.txt", "secret");
+    const std::wstring shell = L"cmd /c mklink /J \"" + assets + L"\\link\" \"" + outside + L"\" >nul";
+    if (_wsystem(shell.c_str()) == 0) {
+      reset(); CHECK(pm::loader::load(42, source.c_str(), {mod}).outcome == Outcome::active);
+      const std::string linked = read_text(directory + L"\\bin\\session-42.txt");
+      CHECK(linked.find("\\bin\\Example-42-") == std::string::npos);
+      CHECK(linked.find(pm::i18n::text("launcher.mod-assets-unreadable")) != std::string::npos);
+      for (const auto& copy : assets_copies(directory)) CHECK(GetFileAttributesW((copy + L"\\link\\secret.txt").c_str()) == INVALID_FILE_ATTRIBUTES);
+      RemoveDirectoryW((assets + L"\\link").c_str());  // removes the junction, not its target
+    } else {
+      std::printf("FAIL: the junction could not be made, so the escape check did not run\n");
+      ++failures;
+    }
+    CHECK(GetFileAttributesW((outside + L"\\secret.txt").c_str()) != INVALID_FILE_ATTRIBUTES);
   }
   reset(); CHECK(pm::loader::load(42, nullptr).outcome == Outcome::file_error);
   CHECK(threadStarts == 0);

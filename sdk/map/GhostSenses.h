@@ -10,10 +10,13 @@
 
 namespace pm::map {
 
-/// The ghost's hearing (Assembly-CSharp, global namespace), a MonoBehaviour on the ghost. Inferred: from
-/// the class dump.
-inline constexpr pm::sdk::EntryDesc GhostHearing{.key = "GhostHearing", .name = "GhostHearing",
-                                                 .assembly = "Assembly-CSharp", .ns = ""};
+/// The ghost's hearing of footsteps (Assembly-CSharp, global namespace), a MonoBehaviour on the ghost
+/// (GhostAI.hearing): a LOSSensor that detects players' footstep noises, each within its own distance for a
+/// crouch, a walk and a sprint. Its pulsing runs only while the ghost hunts and is not smudged (it stops once
+/// GhostAI.isHunting is clear), and only the Kormos's hunt starts it, so no other ghost hears footsteps.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostHearing{.key = "GhostHearing", .confidence = pm::sdk::Confidence::Decompiled,
+                                                 .name = "GhostHearing", .assembly = "Assembly-CSharp", .ns = ""};
 
 inline constexpr const char* HeardNoise_fieldTypes[] = {"PlayerNoise", "float"};
 
@@ -70,10 +73,14 @@ inline constexpr pm::sdk::EntryDesc PlayerLOSTarget_player{.key = "PlayerLOSTarg
                                                            .kind = pm::sdk::Kind::Field, .owner = "PlayerLOSTarget",
                                                            .type = "Player"};
 
-/// A player's stamina and movement, sent to every client (Assembly-CSharp, global namespace). Inferred:
-/// from the class dump.
-inline constexpr pm::sdk::EntryDesc NetworkedStamina{.key = "NetworkedStamina", .name = "NetworkedStamina",
-                                                     .assembly = "Assembly-CSharp", .ns = ""};
+/// A player's stamina and movement, sent to every client (Assembly-CSharp, global namespace): the player's own
+/// client writes whether it walks and whether it sprints (PCStamina's update on PC, on a change) and sends both
+/// in the view's serialization; every other client stores them and sets `moving` while either is set. Whether
+/// the player may sprint (PlayerStamina.canSprint) is not sent. Decompiled.
+inline constexpr pm::sdk::EntryDesc NetworkedStamina{.key = "NetworkedStamina",
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .name = "NetworkedStamina", .assembly = "Assembly-CSharp",
+                                                     .ns = ""};
 
 // The class's two sync methods, NetworkSyncSprint and NetworkSyncWalk, store their argument in the sprint
 // and walk bools and set moving while either is set, clearing it when neither is; but they are leaves the
@@ -87,6 +94,14 @@ inline constexpr pm::sdk::Fact NetworkedStamina_moving_facts[] = {
 inline constexpr pm::sdk::EntryDesc NetworkedStamina_moving{
     .key = "NetworkedStamina.moving", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "NetworkedStamina", .type = "bool", .facts = NetworkedStamina_moving_facts};
+
+/// Plays the player's out-of-breath sound on this client only, as the RPC that sends it to every client does
+/// on each: the PC stamina calls it when its player runs out of stamina outside a room (in a room it sends
+/// the RPC), and so do a Monkey Paw wish, Player.FinishPlayerRevive and the VR stamina. It sends nothing.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc NetworkedStamina_ForceOutOfBreatheLocal{
+    .key = "NetworkedStamina.ForceOutOfBreatheLocal", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "NetworkedStamina", .name = "ForceOutOfBreatheLocal"};
 
 }  // namespace pm::map
 

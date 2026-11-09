@@ -63,6 +63,13 @@ std::mutex g_mutex;
 std::map<void*, void*> g_head;
 std::vector<Created> g_created;  // in creation order
 size_t g_groupStart = 0;         // hooks from here on belong to the open group
+std::string g_groupFailure;      // the first hook since begin_group that could not be made or switched on
+
+// Logs a hook's failure and keeps the first of the open group for group_failure. Under g_mutex.
+void failed(const std::string& line) {
+  PM_LOG("hooks: %s", line.c_str());
+  if (g_groupFailure.empty()) g_groupFailure = line;
+}
 
 // The relays: `jmp [rip+0]` and the detour's address, 16 bytes each, in executable blocks of the
 // host's own. A detour may run on several targets (hook_entry's all-twins hook does that), so
@@ -421,18 +428,24 @@ bool init() {
 
 bool create(void* target, void* detour, void** original, const char* name) {
   if (!target || !detour) {
-    PM_LOG("hooks: %s has no %s", name, target ? "detour" : "target");
+    std::lock_guard lock(g_mutex);
+    failed(std::string(name ? name : "a hook") + " has no " + (target ? "detour" : "target"));
     return false;
   }
   std::lock_guard lock(g_mutex);
-  if (repeated(target, detour, name)) return false;
+  if (repeated(target, detour, name)) {
+    if (g_groupFailure.empty()) g_groupFailure = std::string(name ? name : "a hook") + " is already hooked with this detour";
+    return false;
+  }
   if (in_site_patch(target)) {
     PM_LOG("hooks: %s at %p is inside a site patch; nothing hooked", name, target);
+    if (g_groupFailure.empty()) g_groupFailure = std::string(name ? name : "a hook") + " is inside a site patch";
     return false;
   }
   void* relay = write_relay(target, detour);
   if (!relay) {
     PM_LOG("hooks: create %s at %p failed: no memory near it for its relay", name, target);
+    if (g_groupFailure.empty()) g_groupFailure = "create " + std::string(name ? name : "a hook") + " failed: no memory near it for its relay";
     return false;
   }
   void* earlier = head(target);
@@ -440,6 +453,7 @@ bool create(void* target, void* detour, void** original, const char* name) {
   MH_STATUS s = MH_CreateHook(at, relay, original);
   if (s != MH_OK) {
     PM_LOG("hooks: create %s at %p failed: %s", name, at, MH_StatusToString(s));
+    if (g_groupFailure.empty()) g_groupFailure = "create " + std::string(name ? name : "a hook") + " failed: " + MH_StatusToString(s);
     return false;
   }
   take_relay();
@@ -535,12 +549,15 @@ bool enable_all() {
   bool queued = false;
   for (size_t i = g_groupStart; i < g_created.size(); ++i) {
     if (g_created[i].enabled || g_created[i].siteBytes) continue;  // a site patch is live as written
-    if (MH_QueueEnableHook(g_created[i].at) != MH_OK) return false;
+    if (MH_STATUS q = MH_QueueEnableHook(g_created[i].at); q != MH_OK) {
+      failed(std::string("enable failed: ") + MH_StatusToString(q));
+      return false;
+    }
     queued = true;
   }
   MH_STATUS s = queued ? MH_ApplyQueued() : MH_OK;
   if (s != MH_OK) {
-    PM_LOG("hooks: enable failed: %s", MH_StatusToString(s));
+    failed(std::string("enable failed: ") + MH_StatusToString(s));
     return false;
   }
   for (size_t i = g_groupStart; i < g_created.size(); ++i)
@@ -551,6 +568,12 @@ bool enable_all() {
 void begin_group() {
   std::lock_guard lock(g_mutex);
   g_groupStart = g_created.size();
+  g_groupFailure.clear();
+}
+
+std::string group_failure() {
+  std::lock_guard lock(g_mutex);
+  return g_groupFailure;
 }
 
 namespace {

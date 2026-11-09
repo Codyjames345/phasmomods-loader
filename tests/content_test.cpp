@@ -495,22 +495,25 @@ void game_enums_read_from_the_model() {
 }
 
 // When the game's enums cannot be read, content never activates, vanilla ids do not answer, the log says
-// why, and this client tells the others it has nothing they can agree on.
+// why, and a custom ghost is refused, so its mod stays off and this client has no content to tell the others of.
 void unreadable_enums_keep_content_off() {
   start();
   fake::game_enums({}, fake::audited_evidence(), fake::kAuditedNoGhost, fake::kAuditedNoEvidence);
   CHECK(logged("custom content stays off: the game's GhostType enum has no values"));
-  CHECK(content::register_ghost(ghost("brownies.brownie")) > 0);
+  CHECK(content::register_ghost(ghost("brownies.brownie")) == 0);  // refused: its mod stays off (host/mods.h)
+  CHECK(logged("the ghost \"brownies.brownie\" is refused: custom content is off: the game's GhostType enum has no values"));
   fake::commit_content();
   room(1, {1}, {});
   CHECK(!content::active() && fake::content_state() == State::Off);
   CHECK(content::type_of("brownies.brownie") == -1 && content::id_of(6).empty() && content::evidence_of("emf") == -1);
-  // Its peer hears an empty manifest and turns off too.
+  // It registered nothing, so it says nothing, as a host with no content: its peer waits, then turns off too.
   Peer other{1};
   other.runs({}, {ghost("brownies.brownie")});
   other.registry.observe(1, {1, 2}, 0, 2);
   fake::room(2, {1, 2}, 0, 2);
-  for (const std::vector<uint8_t>& m : fake::host_messages()) other.registry.receive(2, m.data(), m.size());
+  CHECK(fake::host_messages().empty());
+  CHECK(other.registry.state() == State::Pending);
+  other.registry.observe(1, {1, 2}, registry::kGraceMs, 2);
   CHECK(other.registry.state() == State::Off);
 }
 
@@ -1708,6 +1711,94 @@ void custom_ghost_keeps_none_on_zero_evidence() {
   CHECK(phasmo::GhostController::behaviourType.get(w.world.controller) == w.hydra);
 }
 
+// A ghost that gives no evidence (the Squatter's spec, docs/superpowers/specs/2026-11-04-squatter-design.md,
+// "Technical unknowns" 6). Three empty slots register, null or "" alike. Its GhostData holds the game's own "no
+// evidence" (EvidenceType.None) in each, and the game's pick and sync then give only that value on every difficulty:
+// GetEvidenceList hands the pick all three slots, and SyncValues sends as many as the difficulty gives, so a list of
+// that length must reach it (sdk/systems/evidence.md, "A ghost that gives no evidence"). No evidence a player can
+// find is ever given.
+void a_ghost_may_give_no_evidence() {
+  start();
+  // The C definition with three null slots, as a mod built on core/mod_api.h alone gives it.
+  registry::Registry r = fresh();
+  r.begin_group();
+  content::GhostDef quiet = named("a.quiet", "Quiet");
+  quiet.evidence = {"", "", ""};
+  PmGhostDef raw = quiet.c_def();
+  for (const char*& e : raw.evidence) e = nullptr;
+  CHECK(r.add_ghost(&raw) > 0);
+  r.end_group(true);
+  r.commit();
+  const registry::Ghost* held = r.registered("a.quiet");
+  CHECK(held && held->evidence[0].empty() && held->evidence[1].empty() && held->evidence[2].empty());
+
+  // Through the content wrapper, beside a ghost that gives evidence, on the faked game.
+  start();
+  g_world = nullptr;
+  GameWorld world;
+  g_world = &world;
+  namespace map = pm::map;
+  int difficultyClass = 0;
+  fake::type(map::Difficulty, &difficultyClass);
+  fake::field(map::Difficulty_evidenceGiven, 0x4C);
+  fake::field(map::GhostController_givenEvidence, 0x30);
+  fake::field(map::GhostInfo_givenEvidence, 0x30);
+  std::string missing;
+  api::bind(fake::host(), missing);
+  CHECK(content::register_ghost(quiet) > 0);
+  CHECK(content::register_ghost(named("a.lethe", "Lethe")) > 0);
+  fake::commit_content();
+  room(1, {1}, {});
+  pm::host::ContentTypes types{fake::content_registry(), fake::acting(), fake_lists()};
+  types.tick(fake::content_state(), true, true);
+  const int32_t type = content::type_of("a.quiet"), none = fake::kAuditedNoEvidence;
+  void* data = world.entry_of(type);
+  CHECK(type > 0 && data);
+  if (!data) return;
+  CHECK(phasmo::GhostData::evidence1.get(data) == none && phasmo::GhostData::evidence2.get(data) == none &&
+        phasmo::GhostData::evidence3.get(data) == none);
+  CHECK(types.held().count(type) && types.held().at(type).evidence[0] == none);
+  for (int32_t given = 0; given <= 3; ++given)
+    for (int32_t roll = 0; roll < 3; ++roll) {
+      const std::vector<int32_t> rolls(3, roll);
+      const std::vector<int32_t> sent = game_pick_and_sync(world, type, given, rolls);
+      CHECK(sent.size() == static_cast<size_t>(given));
+      CHECK(std::all_of(sent.begin(), sent.end(), [&](int32_t e) { return e == none; }));
+    }
+  // The other ghost still gives its own.
+  CHECK((game_pick_and_sync(world, content::type_of("a.lethe"), 3, {}) == std::vector<int32_t>{1, 4, 6}));
+}
+
+// The Mimic's copy list gets the contract's custom ghosts after the game's own, but never one an author registered with
+// PM_GHOST_NO_MIMIC_COPY in its GhostDef's flags; one without the flag is added as before.
+void the_mimic_leaves_out_what_it_may_not_copy() {
+  start();
+  GameWorld world;
+  g_world = &world;
+  content::GhostDef never = named("a.lethe", "Lethe");
+  never.flags = PM_GHOST_NO_MIMIC_COPY;
+  CHECK(content::register_ghost(named("a.asterion", "Asterion")) > 0);
+  CHECK(content::register_ghost(never) > 0);
+  CHECK(content::register_ghost(named("a.zephyr", "Zephyr")) > 0);
+  fake::commit_content();
+  room(1, {1}, {});
+  CHECK(fake::content_registry().registered("a.lethe")->flags == PM_GHOST_NO_MIMIC_COPY &&
+        fake::content_registry().registered("a.zephyr")->flags == 0);
+  pm::host::ContentTypes types{fake::content_registry(), fake::acting(), fake_lists()};
+  types.tick(fake::content_state(), true, true);
+  std::vector<int32_t> built;  // as the game builds it: every type but None
+  for (int32_t t = 0; t <= 30; ++t)
+    if (t != 24) built.push_back(t);
+  void* list = fake::value_list(built);
+  phasmo::GhostController::mimicCopies.set(world.controller, list);
+  types.after_build_mimic_copies(world.controller);
+  std::vector<int32_t> expected = built;
+  expected.insert(expected.end(), {31, 33});  // the Asterion and the Zephyr, never the Lethe
+  CHECK(fake::list_values(list) == expected);
+  types.tick(fake::content_state(), true, true);  // each frame's top-up leaves it out too
+  CHECK(fake::list_values(list) == expected);
+}
+
 // The evidence priority through the host's own detours (detour_pick_evidence, detour_evidence_list), as
 // the game calls them: a test host captures each detour the host hooks (as tests/hooks_test.cpp's does),
 // and a fake of the game's pick (0x22AFCB0) calls GetEvidenceList through its captured detour.
@@ -2013,6 +2104,54 @@ void missing_entries_withhold_content() {
   CHECK(logged("custom content stays off: these game entries did not resolve"));
 }
 
+// What commit drops it names with the mod that registered it, for the host to keep that mod off (host/mods.h, settle).
+void commit_names_what_it_drops() {
+  g_lines.clear();
+  pm::log::set_sink(&capture, "");
+  registry::Registry r = fresh();
+  const content::GhostDef hydra = ghost("ghosts.hydra", "flames.flame");  // nobody registers flames.flame
+  r.begin_group("ghosts");
+  CHECK(r.add_ghost(&hydra.c_def()) > 0);
+  r.end_group(true);
+  PmGhostRules rules{};
+  rules.size = sizeof rules;
+  r.begin_group("rulers");
+  CHECK(r.add_rules("ghosts.hydra", &rules) > 0 && r.add_rules("vanilla.mare", &rules) > 0);
+  r.end_group(true);
+  const std::vector<registry::Registry::Dropped> dropped = r.commit();
+  CHECK(dropped.size() == 2);
+  CHECK(dropped.size() == 2 && dropped[0].owner == "ghosts" &&
+        dropped[0].why == "the ghost \"ghosts.hydra\" is dropped: no mod that started registered its evidence \"flames.flame\"");
+  CHECK(dropped.size() == 2 && dropped[1].owner == "rulers" &&
+        dropped[1].why == "rules on \"ghosts.hydra\" are dropped: no mod that started registered that ghost");
+  CHECK(logged("content: the ghost \"ghosts.hydra\" is dropped"));
+}
+
+// Content the host has switched off before the mods start is refused at registration, so a mod whose ghost or evidence
+// could never come into play fails its own start and is off, with the reason logged, instead of running without it.
+// Rules and journal lines on the game's own ghosts are not content the host puts into the game, so they still register.
+void content_switched_off_refuses_custom_registrations() {
+  start();
+  fake::content_registry().withhold("its hooks on the game could not be made");
+  CHECK(content::register_ghost(ghost("brownies.brownie")) == 0);
+  CHECK(logged("the ghost \"brownies.brownie\" is refused: custom content is off: its hooks on the game could not be made"));
+  CHECK(content::register_evidence(evidence("flames.flame")) == 0);
+  CHECK(logged("the evidence \"flames.flame\" is refused: custom content is off: its hooks on the game could not be made"));
+  CHECK(content::attach_rules("vanilla.mare", {}) > 0);
+  CHECK(content::add_journal_lines("vanilla.mare", {content::Text("en", "Tells: dark.")}) > 0);
+
+  // The game's enums unreadable: the same.
+  g_lines.clear();
+  registry::Registry r;
+  r.refuse("the game's GhostType enum could not be read");
+  r.begin_group();
+  const content::GhostDef hydra = ghost("ghosts.hydra");
+  const content::EvidenceDef flame = evidence("flames.flame");
+  CHECK(r.add_ghost(&hydra.c_def()) == 0 && r.add_evidence(&flame.c_def()) == 0);
+  CHECK(logged("the ghost \"ghosts.hydra\" is refused: custom content is off: the game's GhostType enum could not be read"));
+  r.end_group(false);
+}
+
 }  // namespace
 
 int main() {
@@ -2071,12 +2210,16 @@ int main() {
   custom_ghost_keeps_last_evidence_when_one_withheld();
   custom_ghost_keeps_last_evidence_when_two_withheld();
   custom_ghost_keeps_none_on_zero_evidence();
+  a_ghost_may_give_no_evidence();
+  the_mimic_leaves_out_what_it_may_not_copy();
   evidence_priority_runs_through_the_host_detours();
   evidence_priority_restored_when_pick_throws();
   evidence_look_answers_ghost_choice();
   controlled_ghost_answers_through_its_definition();
   contract_numbers_answer_while_content_is_off();
   missing_entries_withhold_content();
+  content_switched_off_refuses_custom_registrations();
+  commit_names_what_it_drops();
   agreement::a_host_without_a_mod_gets_nothing_run();
   agreement::the_hosts_mods_here_run();
   agreement::a_peer_leaving_changes_nothing_mid_contract();

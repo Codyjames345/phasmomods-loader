@@ -21,6 +21,10 @@
 #include "fake_game.h"
 #include "game_api.h"
 #include "ghosts.h"
+#include "Difficulty.h"
+#include "Door.h"
+#include "LevelController.h"
+#include "Photon.h"
 #include "Equipment.h"
 #include "GhostHuntState.h"
 #include "LevelRoom.h"
@@ -29,8 +33,11 @@
 #include "gremlin_rule.h"
 #include "hunt.h"
 #include "registration.h"
+#include "runtime.h"
 #include "Sensor.h"
 #include "sensor_copy.h"
+#include "squatter.h"
+#include "squatter_door.h"
 #include "asterion_rule.h"
 #include "bogeyman_rule.h"
 #include "hud_line.h"
@@ -88,8 +95,17 @@ void every_custom_ghost_is_identifiable() {
   auto taken = vanilla_evidence();
   CHECK(taken.size() == 30);
   std::set<int> types;
+  int evidenced = 0;  // the ghosts told apart by their evidence
   for (const Ghost& g : kGhosts) {
     CHECK(g.type > 0 && types.insert(g.type).second);
+    // The Squatter gives no evidence and is identified by sight and sound instead: it is visible and it talks
+    // (docs/superpowers/specs/2026-11-04-squatter-design.md, "Rules this ghost breaks on purpose"). Its page and
+    // text are checked as every other ghost's.
+    if (g.type == kSquatter) {
+      for (const char* key : {title_key(g), g.description, g.strength, g.weakness}) CHECK(pm::i18n::table().has(key));
+      continue;
+    }
+    ++evidenced;
     std::set<int> e;
     for (const char* id : g.evidence) e.insert(evidence_number(id));
     CHECK(e.size() == 3 && !e.count(0));  // three different evidence types, each one the content layer knows
@@ -99,7 +115,24 @@ void every_custom_ghost_is_identifiable() {
     for (const char* key : {title_key(g), g.description, g.strength, g.weakness}) CHECK(pm::i18n::table().has(key));
     if (g.ability) CHECK(pm::i18n::table().has(g.ability) && pm::i18n::table().has(g.abilityDescription));
   }
-  CHECK(taken.size() == 30 + static_cast<size_t>(kGhostCount));  // every ghost has a combination of its own
+  CHECK(evidenced == kGhostCount - 1);                        // every ghost but the Squatter
+  CHECK(taken.size() == 30 + static_cast<size_t>(evidenced));  // each has a combination of its own
+}
+
+// The Squatter (ghosts.h): its id, the user's name for it, no evidence at all (every slot empty, as the content layer
+// takes it), no ability, and a page whose text waits for the user's words (PM_TEXT_TODO).
+void the_squatter_gives_nothing() {
+  const Ghost* g = find(kSquatter);
+  CHECK(g != nullptr);
+  if (!g) return;
+  CHECK(id_of(*g) == "phasmomods.custom-ghosts.squatter" && find_id("phasmomods.custom-ghosts.squatter") == g);
+  CHECK(pm::i18n::text(title_key(*g)) == "Squatter");
+  for (const char* e : g->evidence) CHECK(e == nullptr);
+  CHECK(!g->ability && !g->abilityDescription && !g->flameLook && !g->keepsLastEvidence && !g->blindInHunts);
+  const pm::api::content::GhostDef def = definition(*g, {});
+  for (const std::string& e : def.evidence) CHECK(e.empty());
+  CHECK(def.abilityName.empty() && def.abilityDescription.empty() &&
+        def.flags == (PM_GHOST_NO_MIMIC_COPY | PM_GHOST_NOT_PLAYABLE));
 }
 
 // Each ghost's content id is its name in lower case, spaces as _, after the mod's prefix.
@@ -882,7 +915,7 @@ void the_mesmer_shows_each_their_own() {
 }
 
 void the_flame_ghosts_are_the_designed_ones() {
-  CHECK(kGhostCount == 15);
+  CHECK(kGhostCount == 16);  // the five first, the ten flame ghosts and the Squatter
   const int types[] = {kLithobolia, kGremlin, kBrownie, kBogeyman, kLethe, kMesmer, kKnell, kAsterion, kTempest, kHydra};
   for (int type : types) CHECK(find(type) != nullptr);
   const auto evidence_is = [](int type, const char* a, const char* b) {
@@ -2040,7 +2073,7 @@ void every_ghost_is_registered_by_its_id() {
     if (!def) continue;
     CHECK(def->name == english(title_key(g)) && def->description == english(g.description) &&
           def->strength == english(g.strength) && def->weakness == english(g.weakness) && def->tells.empty());
-    for (int i = 0; i < 3; ++i) CHECK(def->evidence[i] == g.evidence[i]);
+    for (int i = 0; i < 3; ++i) CHECK(def->evidence[i] == (g.evidence[i] ? g.evidence[i] : ""));
     CHECK(reinterpret_cast<intptr_t>(def->user) == g.type);
     CHECK(def->hudState == &hud && def->heldBack == &held && def->playerView == &view && def->evidenceLook &&
           def->target == &target && def->hudLine == &line);
@@ -2098,9 +2131,29 @@ void black_shuck_declares_itself_blind_in_hunts() {
   }
 }
 
+// A Mimic never copies the Squatter (user, 2026-11-06): it is registered with PM_GHOST_NO_MIMIC_COPY, and no other
+// ghost of the mod is.
+void only_the_squatter_is_never_copied() {
+  start();
+  register_flame();
+  CHECK(register_all());
+  fake::commit_content();
+  fake::room(1, {1});
+  for (const Ghost& g : kGhosts) {
+    const pm::content::Ghost* def = fake::content_registry().registered(id_of(g));
+    CHECK(def != nullptr);
+    if (def) CHECK(((def->flags & PM_GHOST_NO_MIMIC_COPY) != 0) == (g.type == kSquatter));
+    // Nor does a player ever play it (user, 2026-11-07), as the content layer tells Playable Ghost.
+    if (def) CHECK(((def->flags & PM_GHOST_NOT_PLAYABLE) != 0) == (g.type == kSquatter));
+    const int32_t type = pm::api::content::type_of(id_of(g));
+    CHECK(((pm::api::content::flags_of(type) & PM_GHOST_NOT_PLAYABLE) != 0) == (g.type == kSquatter));
+  }
+  CHECK(pm::api::content::flags_of(3) == 0);  // a vanilla type has none
+}
+
 // Without Spectral Flame's evidence, every ghost that gives it is dropped once every mod has started:
-// only the Echo, the Dullahan and the Black Shuck stay.
-void without_spectral_flame_only_three_stay() {
+// only the Echo, the Dullahan, the Black Shuck and the Squatter stay.
+void without_spectral_flame_only_four_stay() {
   start();
   CHECK(register_all());
   fake::commit_content();
@@ -2111,7 +2164,318 @@ void without_spectral_flame_only_three_stay() {
     CHECK(registered == !gives(g, kSpectralFlame));
     kept += registered;
   }
-  CHECK(kept == 3);
+  CHECK(kept == 4);
+}
+
+// The Squatter begins each contract lurking in its room, or moping on a friendly ghost's difficulty
+// (squatter_rule.h first_phase), on the first frame it haunts with the difficulty read; it holds no phase before
+// that or while it does not haunt.
+void the_squatter_begins_lurking_or_moping() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty;
+  void* valuesStatic = &values;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  Obj ghost;
+  squatter::reset();
+  CHECK(!squatter::phase());
+  // Until the difficulty can be read the Squatter holds no phase, rather than one guessed for the whole contract.
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(!squatter::phase());
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, true);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Moping);
+  squatter::tick(nullptr, 0, false);  // the contract ends
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, false);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Lurking);
+  squatter::tick(nullptr, 0, false);  // the contract ends
+  CHECK(!squatter::phase());
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, true);
+  squatter::tick(&ghost, kSquatter, true);  // a player steering it begins the same way
+  CHECK(squatter::phase() == squatter::Phase::Moping);
+  squatter::tick(&ghost, kEcho, false);  // another ghost haunts
+  CHECK(!squatter::phase());
+  squatter::reset();
+}
+
+int g_exitsClosed = 0;  // Door.HuntingCloseDoor calls
+void fake_hunting_close(void*, const void*) { ++g_exitsClosed; }
+bool fake_master(const void*) { return true; }
+
+bool g_isMaster = false;
+bool fake_is_master(const void*) { return g_isMaster; }
+bool fake_in_room(const void*) { return true; }
+struct PhotonPlayerObj {
+  void* klass = nullptr;
+  int32_t actor = 0;
+} g_masterClient{nullptr, 1};
+void* fake_master_client(const void*) { return &g_masterClient; }
+int32_t fake_actor(void* p, const void*) { return static_cast<PhotonPlayerObj*>(p)->actor; }
+
+// Through the mod's own channel handler: on a client that is not the master the Squatter's phase follows the master's
+// Shown, and nobody else's; a malformed Shown changes nothing; once this client becomes the master it goes on from the
+// last Shown it followed (a host migration).
+void the_squatter_follows_the_masters_shown() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty, ghost;
+  void* valuesStatic = &values;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_is_master));
+  fake::method(map::PhotonNetwork_get_InRoom, reinterpret_cast<void*>(&fake_in_room));
+  fake::method(map::PhotonNetwork_get_MasterClient, reinterpret_cast<void*>(&fake_master_client));
+  fake::method(map::PhotonPlayer_get_ActorNumber, reinterpret_cast<void*>(&fake_actor));
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  g_isMaster = false;
+  squatter::reset();
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Lurking);
+  squatter::Shown chasing;
+  chasing.phase = squatter::Phase::Chasing;
+  const std::vector<uint8_t> word = squatter::shown_message(chasing);
+  squatter::receive(2, word.data(), word.size());  // not the master's
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Lurking && !squatter::shown());
+  squatter::receive(1, word.data(), word.size() - 1);  // the master's, but short
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Lurking);
+  squatter::receive(1, word.data(), word.size());
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Chasing && squatter::shown() == chasing);
+  g_isMaster = true;  // the master leaves and this client takes over
+  chasing.lineCue = 9;  // where the old master's cues stood
+  chasing.actCue = 4;
+  const std::vector<uint8_t> cued = squatter::shown_message(chasing);
+  g_isMaster = false;
+  squatter::receive(1, cued.data(), cued.size());
+  squatter::tick(&ghost, kSquatter, false);
+  g_isMaster = true;
+  squatter::tick(&ghost, kSquatter, false);
+  // It goes on from the last Shown: still chasing, its cues where the old master left them (no line to say offline).
+  CHECK(squatter::phase() == squatter::Phase::Chasing);
+  CHECK(squatter::shown() && squatter::shown()->phase == squatter::Phase::Chasing &&
+        squatter::shown()->lineCue == 9 && squatter::shown()->actCue == 4);
+  squatter::tick(nullptr, 0, false);  // the contract ends: what the channel brought goes with it
+  CHECK(!squatter::phase() && !squatter::shown());
+  squatter::reset();
+  g_isMaster = false;
+}
+
+std::vector<int32_t> g_stateChanges;  // the states GhostAI.ChangeState was asked for
+void fake_change_state(void*, int32_t state, void*, bool, const void*) { g_stateChanges.push_back(state); }
+
+std::vector<std::pair<void*, int32_t>> g_kills;  // the victims and death types Player.BeginDeathSequence was given
+void fake_begin_death(void* player, int32_t type, const void*) { g_kills.emplace_back(player, type); }
+
+// The Squatter's kick kills with the game's own call as a hunt's kill makes it: once per player, on the master only,
+// never on a friendly ghost's difficulty (or one it cannot read) and never a player marked dead, whose kill the game's
+// animation would refuse with a report on the sender.
+void the_squatters_kick_kills_once_and_never_wrongly() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty, victim, other, dead;
+  constexpr int32_t kSnappedNeck = 6;  // a made-up number: the code reads DeathType.SnappedNeck's from the map
+  void* valuesStatic = &values;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  fake::field(map::Player_isDead, 0x20);
+  fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_is_master));
+  fake::method(map::Player_BeginDeathSequence, reinterpret_cast<void*>(&fake_begin_death));
+  fake::value(map::DeathType_SnappedNeck, kSnappedNeck);
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  g_kills.clear();
+  g_isMaster = true;
+  squatter::reset();
+  // Unreadable difficulty: no kill.
+  CHECK(!squatter::kick(&victim, 3) && g_kills.empty());
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  // kick_calls_the_kill_once
+  CHECK(squatter::kick(&victim, 3));
+  CHECK(g_kills.size() == 1 && g_kills[0].first == &victim && g_kills[0].second == kSnappedNeck);
+  CHECK(!squatter::kick(&victim, 3) && g_kills.size() == 1);
+  // kick_never_kills_a_dead_player
+  phasmo::Player::isDead.set(&dead, true);
+  CHECK(!squatter::kick(&dead, 4) && g_kills.size() == 1);
+  CHECK(!squatter::kick(nullptr, 5) && g_kills.size() == 1);
+  // Another client never kills.
+  g_isMaster = false;
+  CHECK(!squatter::kick(&other, 6) && g_kills.size() == 1);
+  g_isMaster = true;
+  // kick_never_kills_on_a_friendly_difficulty
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, true);
+  CHECK(!squatter::kick(&other, 6) && g_kills.size() == 1);
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, false);
+  CHECK(squatter::kick(&other, 6) && g_kills.size() == 2);
+  // A new contract forgets whom it kicked.
+  squatter::reset();
+  CHECK(squatter::kick(&victim, 3) && g_kills.size() == 3);
+  squatter::reset();
+  g_isMaster = false;
+}
+
+// As the mod begins steering the Squatter's agent the master idles it once (GhostAI.ChangeState to GhostState.idle),
+// leaving wandering or the favourite room, whose states would take the agent back; it does not again while it steers,
+// nor on another client, where the master's ghost is not its own. Lurking steers too: the spec keeps it in its room.
+void the_master_idles_the_squatter_once_as_steering_begins() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty, ghost;
+  constexpr int32_t kIdle = 7;  // a made-up number: the code reads GhostState.idle's from the map
+  void* valuesStatic = &values;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_is_master));
+  fake::method(map::GhostAI_ChangeState, reinterpret_cast<void*>(&fake_change_state));
+  fake::method(map::Player_BeginDeathSequence, reinterpret_cast<void*>(&fake_begin_death));
+  fake::method(map::Door_HuntingCloseDoor, reinterpret_cast<void*>(&fake_hunting_close));
+  fake::value(map::GhostState_idle, kIdle);
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  g_stateChanges.clear();
+  g_kills.clear();
+  g_exitsClosed = 0;
+  // Lurking: the ghost's own states move it, as any ghost's do, so nothing changes its state.
+  g_isMaster = true;
+  squatter::reset();
+  squatter::tick(&ghost, kSquatter, false);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Lurking && g_stateChanges.empty());
+  // Moping on a friendly ghost's difficulty: the mod holds it seated, so the master idles it once.
+  squatter::tick(nullptr, 0, false);
+  g_stateChanges.clear();
+  phasmo::Difficulty::friendlyGhost.set(&difficulty, true);
+  squatter::tick(&ghost, kSquatter, false);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Moping && g_stateChanges == std::vector<int32_t>{kIdle});
+  // No friendly frame reaches the kill or the hunt's door close.
+  for (int i = 0; i < 20; ++i) squatter::tick(&ghost, kSquatter, false);
+  CHECK(g_kills.empty() && g_exitsClosed == 0);
+  // Another client never changes the master's ghost.
+  squatter::tick(nullptr, 0, false);
+  g_stateChanges.clear();
+  g_isMaster = false;
+  squatter::tick(&ghost, kSquatter, false);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::phase() == squatter::Phase::Moping && g_stateChanges.empty());
+  // A client that becomes the master while it steers idles the ghost once, as its own now.
+  g_isMaster = true;
+  squatter::tick(&ghost, kSquatter, false);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(g_stateChanges == std::vector<int32_t>{kIdle});
+  squatter::reset();
+  g_isMaster = false;
+}
+
+// The exits' lock belongs to the map, not to the ghost: a tick without the ghost mid-contract keeps it, so the master
+// never calls Door.HuntingCloseDoor twice for one map; the next map's LevelController starts unlocked.
+void the_squatters_lock_survives_a_tick_without_it() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty, level, nextLevel, door, ghost;
+  void* valuesStatic = &values;
+  void* levelStatic = &level;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  fake::static_field(map::LevelController_instance, &levelStatic, sizeof levelStatic, true);
+  fake::field(map::LevelController_huntingDoors, 0x10);
+  fake::field(map::LevelController_mapVariations, 0x18);
+  fake::method(map::Door_HuntingCloseDoor, reinterpret_cast<void*>(&fake_hunting_close));
+  fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_master));
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  for (Obj* l : {&level, &nextLevel}) {
+    void* exits = fake::array(sizeof(void*), 1);
+    pm::api::RefArray{exits}.set(0, &door);
+    phasmo::LevelController::huntingDoors.set(l, exits);
+    phasmo::LevelController::mapVariations.set(l, fake::array(sizeof(void*), 0));
+  }
+  g_exitsClosed = 0;
+  squatter::reset();
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::door::lock_all() && g_exitsClosed == 1);
+  squatter::tick(nullptr, 0, false);  // a frame without the ghost
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::door::locked() && squatter::door::lock_all() && g_exitsClosed == 1);
+  levelStatic = &nextLevel;  // the next contract
+  CHECK(!squatter::door::locked() && squatter::door::lock_all() && g_exitsClosed == 2);
+  squatter::reset();
+}
+
+// The master's tick locks again a held exit that a raced Monkey Paw wish switched back on (squatter_door.h relock),
+// through the game's own Door.HuntingCloseDoor; another client's tick never does.
+void the_masters_tick_relocks_a_reopened_exit() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty, level, door, ghost;
+  void* valuesStatic = &values;
+  void* levelStatic = &level;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  fake::static_field(map::LevelController_instance, &levelStatic, sizeof levelStatic, true);
+  fake::field(map::LevelController_huntingDoors, 0x10);
+  fake::field(map::LevelController_mapVariations, 0x18);
+  fake::field(map::Door_grabbable, 0x10);
+  fake::field(map::Door_locked, 0x11);
+  fake::method(map::Door_HuntingCloseDoor, reinterpret_cast<void*>(&fake_hunting_close));
+  fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_is_master));
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  void* exits = fake::array(sizeof(void*), 1);
+  pm::api::RefArray{exits}.set(0, &door);
+  phasmo::LevelController::huntingDoors.set(&level, exits);
+  phasmo::LevelController::mapVariations.set(&level, fake::array(sizeof(void*), 0));
+  g_exitsClosed = 0;
+  g_isMaster = true;
+  squatter::reset();
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(squatter::door::lock_all() && g_exitsClosed == 1);
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(g_exitsClosed == 1);  // shut and switched off: nothing to do
+  phasmo::Door::grabbable.set(&door, true);  // a raced wish switched it back on
+  g_isMaster = false;
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(g_exitsClosed == 1);
+  g_isMaster = true;
+  squatter::tick(&ghost, kSquatter, false);
+  CHECK(g_exitsClosed == 2);
+  squatter::reset();
+  g_isMaster = false;
 }
 
 // The rules run for the ghost the contract's ghost acts as, with its Type, and the Hydra's look for
@@ -2150,6 +2514,7 @@ int main() {
   the_echo_remembers_the_last_phrase();
   voices_survive_the_trip();
   every_custom_ghost_is_identifiable();
+  the_squatter_gives_nothing();
   every_ghost_has_its_id();
   every_page_tells_its_story();
   the_held_ghosts_say_who_they_hunt();
@@ -2239,9 +2604,16 @@ int main() {
   player_shuck_prey_is_the_trail_it_walks();
   player_bogeyman_reaches_a_hiding_place();
   wiring::every_ghost_is_registered_by_its_id();
-  wiring::without_spectral_flame_only_three_stay();
+  wiring::without_spectral_flame_only_four_stay();
+  wiring::the_squatter_begins_lurking_or_moping();
+  wiring::the_squatters_lock_survives_a_tick_without_it();
+  wiring::the_masters_tick_relocks_a_reopened_exit();
+  wiring::the_squatter_follows_the_masters_shown();
+  wiring::the_master_idles_the_squatter_once_as_steering_begins();
+  wiring::the_squatters_kick_kills_once_and_never_wrongly();
   wiring::draugr_declares_freezing_priority();
   wiring::black_shuck_declares_itself_blind_in_hunts();
+  wiring::only_the_squatter_is_never_copied();
   wiring::the_rules_and_the_look_follow_the_ghost();
   pm::fake::reset();
   return g_failures ? 1 : 0;

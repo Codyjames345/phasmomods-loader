@@ -25,6 +25,8 @@
 #include "held.h"
 #include "log.h"
 #include "notice.h"
+#include "content.h"
+#include "mod_api.h"
 #include "runtime.h"
 #include "text_table.h"
 
@@ -99,6 +101,13 @@ unsigned seconds_left(uint64_t deadline, uint64_t now) {
   return deadline > now ? static_cast<unsigned>((deadline - now + 999) / 1000) : 0;
 }
 
+// Whether a player may play `type`: not a ghost its author marks PM_GHOST_NOT_PLAYABLE (the content layer's flags; a
+// vanilla type has none). Custom Ghosts' Squatter is one, a gag its AI plays (user, 2026-11-07).
+bool playable(int type) { return (api::content::flags_of(type) & PM_GHOST_NOT_PLAYABLE) == 0; }
+
+// How many more draws of the native roll a ghost-player round takes to get past a type no player plays.
+constexpr int kRedraws = 32;
+
 // The ghost types the native weighted roll can produce from this dictionary: those with a positive
 // weight, or every key when no weight is positive (the roll's own fallback).
 std::vector<uint8_t> allowed_types(void* dict) {
@@ -115,7 +124,7 @@ std::vector<uint8_t> allowed_types(void* dict) {
 }
 
 int32_t detour_pick_type(api::Original<GhostController::PickType> original, void* dict) {
-  const int32_t rolled = original(dict);  // always consume the native draw
+  int32_t rolled = original(dict);  // always consume the native draw
   if (!api::inside<GhostController::Spawn>() || !dict) return rolled;
   if (g_probing) {
     g_probeTypes = allowed_types(dict);
@@ -124,8 +133,19 @@ int32_t detour_pick_type(api::Original<GhostController::PickType> original, void
   }
   if (g_forcedType >= 0) {
     const std::vector<uint8_t> allowed = allowed_types(dict);
-    if (std::find(allowed.begin(), allowed.end(), g_forcedType) != allowed.end()) return g_forcedType;
-    PM_LOG("round: chosen type %d is no longer allowed natively; native roll %d stands", g_forcedType, rolled);
+    if (!playable(g_forcedType))
+      PM_LOG("round: chosen type %d is one no player plays; native roll %d stands", g_forcedType, rolled);
+    else if (std::find(allowed.begin(), allowed.end(), g_forcedType) != allowed.end())
+      return g_forcedType;
+    else
+      PM_LOG("round: chosen type %d is no longer allowed natively; native roll %d stands", g_forcedType, rolled);
+  }
+  // A ghost player never gets a type no player plays: the native roll is drawn again past it, keeping its weights.
+  if (ghost_player_round() && !playable(rolled)) {
+    const int32_t first = rolled;
+    for (int i = 0; i < kRedraws && !playable(rolled); ++i) rolled = original(dict);
+    if (!playable(rolled))
+      PM_LOG("round: the native roll gives only types no player plays (%d); it stands", first);
   }
   return rolled;
 }
@@ -158,6 +178,7 @@ std::vector<uint8_t> probe(void* controller) {
 
 void start_picking(void* controller) {
   std::vector<uint8_t> types = probe(controller);
+  std::erase_if(types, [](uint8_t t) { return !playable(t); });  // never offered (PM_GHOST_NOT_PLAYABLE)
   if (types.empty()) {
     PM_LOG("round: native spawn finished without a type roll; nothing to pick");
     g_phase = Phase::Spawned;
@@ -330,6 +351,9 @@ void tick(session::Session& s) {
   g_session = &s;
   const uint64_t now = g_clock();
   s.set_contract(game::level_controller() != nullptr);  // every client, so a new master knows a contract runs
+  // No ghost player while the lobby's difficulty forces a ghost no player plays (user, 2026-11-08): the AI plays it.
+  const int forced = forced_type_override();
+  s.set_ghost_allowed(forced < 0 || playable(forced));
   if (!game::level_controller()) {
     if (s.in_round()) s.end_round();
     if (g_phase != Phase::Idle) reset_round();

@@ -20,6 +20,10 @@ enum Kind : uint8_t {
   kSeen = 9,    // host to all: whether anyone looks at the Brownie, seen:u8 (0 or 1)
   kDoors = 10,  // host to all: the Asterion breaks these doors open, count:u8 then ViewID:u32 each
   kDrag = 11,   // host to all: the Draugr drags a thing, or stops, ViewID:u32 then dragging:u8 (0 or 1)
+  // The Squatter's (squatter_net.h, which reads and writes their bodies):
+  kSquatter = 12,       // master to all: what every client shows, a squatter::Shown
+  kSquatterTry = 13,    // a client to the master: its player tried a locked exit, no body
+  kSquatterSprint = 14, // a client to the master: its player's sprint, canSprint:u8 (0 or 1) then speed:f32
 };
 
 inline std::vector<uint8_t> header(Kind kind) { return {'C', 'G', 'F', kind}; }

@@ -116,9 +116,21 @@ int32_t index_of(const Map& m, std::string_view id) {
 
 }  // namespace
 
-void Registry::begin_group() {
+void Registry::begin_group(std::string owner) {
   groupStart_ = nextHandle_;
+  groupOwner_ = std::move(owner);
   open_ = true;
+  groupRefusal_.clear();
+}
+
+void Registry::refused(const std::string& line) {
+  PM_LOG("content: %s", line.c_str());
+  if (open_ && groupRefusal_.empty()) groupRefusal_ = line;
+}
+
+std::string Registry::off_reason() const {
+  const std::string& why = refused_.empty() ? withheld_ : refused_;
+  return why.empty() ? std::string() : "custom content is off: " + why;
 }
 
 void Registry::end_group(bool started) {
@@ -131,25 +143,31 @@ void Registry::end_group(bool started) {
   if (erased) changed();
 }
 
-void Registry::commit() {
+std::vector<Registry::Dropped> Registry::commit() {
   open_ = false;
+  std::vector<Dropped> dropped;
+  auto drop = [&](const std::string& owner, std::string why) {
+    PM_LOG("content: %s", why.c_str());
+    dropped.push_back({owner, std::move(why)});
+  };
   // Without the game's enums no evidence can be judged, and content stays off anyway.
   if (enums_.read()) std::erase_if(ghosts_, [&](const auto& entry) {
     for (const std::string& e : entry.second.evidence)
       if (!e.empty() && enums_.evidence_value(e) < 0 && !evidence_.count(e)) {
-        PM_LOG("content: the ghost \"%s\" is dropped: no mod that started registered its evidence \"%s\"",
-               entry.first.c_str(), e.c_str());
+        drop(entry.second.owner,
+             "the ghost \"" + entry.first + "\" is dropped: no mod that started registered its evidence \"" + e + "\"");
         return true;
       }
     return false;
   });
   std::erase_if(rules_, [&](const Rules& r) {
     if (r.id.substr(0, kVanillaPrefix.size()) == kVanillaPrefix || ghosts_.count(r.id)) return false;
-    PM_LOG("content: rules on \"%s\" are dropped: no mod that started registered that ghost", r.id.c_str());
+    drop(r.owner, "rules on \"" + r.id + "\" are dropped: no mod that started registered that ghost");
     return true;
   });
   committed_ = true;
   changed();
+  return dropped;
 }
 
 void Registry::clear() {
@@ -209,12 +227,14 @@ bool Registry::open(const char* what, const char* id) const {
 
 int32_t Registry::add_ghost(const PmGhostDef* def) {
   if (!def || def->size < kGhostDefSize) {
-    PM_LOG("content: a ghost is refused: %s", def ? "its definition is smaller than contract 2.2's" : "it has no definition");
+    refused(std::string("a ghost is refused: ") + (def ? "its definition is smaller than contract 2.2's" : "it has no definition"));
     return 0;
   }
   const PmGhostDef d = copy_def(def);
   if (!open("ghost", d.id)) return 0;
-  std::string why = bad_id(d.id);
+  // A ghost the host cannot put into the game is refused, so its mod stays off rather than run without it.
+  std::string why = off_reason();
+  if (why.empty()) why = bad_id(d.id);
   Ghost g;
   if (why.empty() && ghosts_.count(std::string_view(d.id))) why = "it is already registered";
   if (why.empty() && d.tellCount > kMaxTells) why = "it has more than 64 tells";
@@ -241,7 +261,7 @@ int32_t Registry::add_ghost(const PmGhostDef* def) {
     }
   }
   if (!why.empty()) {
-    PM_LOG("content: the ghost \"%s\" is refused: %s", d.id ? d.id : "", why.c_str());
+    refused("the ghost \"" + std::string(d.id ? d.id : "") + "\" is refused: " + why);
     return 0;
   }
   g.id = d.id;
@@ -267,6 +287,7 @@ int32_t Registry::add_ghost(const PmGhostDef* def) {
   h.number(g.flags);  // its evidence pick depends on them
   g.hash = h.value;
   g.handle = nextHandle_++;
+  g.owner = groupOwner_;
   const int32_t handle = g.handle;
   ghosts_.emplace(g.id, std::move(g));
   return handle;
@@ -274,19 +295,20 @@ int32_t Registry::add_ghost(const PmGhostDef* def) {
 
 int32_t Registry::add_evidence(const PmEvidenceDef* def) {
   if (!def || def->size < kEvidenceDefSize) {
-    PM_LOG("content: an evidence is refused: %s",
-           def ? "its definition is smaller than contract 2.2's" : "it has no definition");
+    refused(std::string("an evidence is refused: ") +
+            (def ? "its definition is smaller than contract 2.2's" : "it has no definition"));
     return 0;
   }
   const PmEvidenceDef d = copy_def(def);
   if (!open("evidence", d.id)) return 0;
-  std::string why = bad_id(d.id);
+  std::string why = off_reason();
+  if (why.empty()) why = bad_id(d.id);
   Evidence e;
   if (why.empty() && evidence_.count(std::string_view(d.id))) why = "it is already registered";
   if (why.empty() && copy_text(d.name, true, "its name", e.name, why))
     copy_text(d.journalLine, true, "its journal line", e.journalLine, why);
   if (!why.empty()) {
-    PM_LOG("content: the evidence \"%s\" is refused: %s", d.id ? d.id : "", why.c_str());
+    refused("the evidence \"" + std::string(d.id ? d.id : "") + "\" is refused: " + why);
     return 0;
   }
   e.id = d.id;
@@ -303,8 +325,8 @@ int32_t Registry::add_evidence(const PmEvidenceDef* def) {
 
 int32_t Registry::add_rules(const char* id, const PmGhostRules* rules) {
   if (!rules || rules->size < kRulesSize) {
-    PM_LOG("content: rules on \"%s\" are refused: %s", id ? id : "",
-           rules ? "their definition is smaller than contract 2.2's" : "they have no definition");
+    refused("rules on \"" + std::string(id ? id : "") + "\" are refused: " +
+            (rules ? "their definition is smaller than contract 2.2's" : "they have no definition"));
     return 0;
   }
   if (!open_) {
@@ -317,11 +339,12 @@ int32_t Registry::add_rules(const char* id, const PmGhostRules* rules) {
     why = enums_.read() && enums_.ghost_type(id) < 0 ? "the game has no such ghost type" : "";
   else why = bad_id(id);
   if (!why.empty()) {
-    PM_LOG("content: rules on \"%s\" are refused: %s", id ? id : "", why.c_str());
+    refused("rules on \"" + std::string(id ? id : "") + "\" are refused: " + why);
     return 0;
   }
   Rules r;
   r.handle = nextHandle_++;
+  r.owner = groupOwner_;
   r.id = id;
   r.rules = copy_def(rules);
   rules_.push_back(std::move(r));
@@ -343,7 +366,7 @@ int32_t Registry::add_lines(const char* id, const PmTextSet* lines, uint32_t cou
   Lines l;
   for (uint32_t i = 0; why.empty() && i < count; ++i) copy_text(lines[i], true, "a line", l.lines.emplace_back(), why);
   if (!why.empty()) {
-    PM_LOG("content: journal lines for \"%s\" are refused: %s", id ? id : "", why.c_str());
+    refused("journal lines for \"" + std::string(id ? id : "") + "\" are refused: " + why);
     return 0;
   }
   l.handle = nextHandle_++;

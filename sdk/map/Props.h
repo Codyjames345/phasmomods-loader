@@ -55,6 +55,62 @@ inline constexpr pm::sdk::EntryDesc PhotonObjectInteract_FreezeRigidbody{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "PhotonObjectInteract", .name = "FreezeRigidbody",
     .params = PhotonObjectInteract_FreezeRigidbody_params};
 
+/// Unity's Start for it: among its set-up it reads `grabbable`. Found for that fact. Decompiled.
+inline constexpr pm::sdk::EntryDesc PhotonObjectInteract_Start{.key = "PhotonObjectInteract.Start",
+                                                               .kind = pm::sdk::Kind::Method,
+                                                               .confidence = pm::sdk::Confidence::Decompiled,
+                                                               .owner = "PhotonObjectInteract", .name = "Start"};
+
+/// Unity's Reset for it (the editor's defaults): among two other bools it sets `grabbable`. Found for that
+/// fact. Decompiled.
+inline constexpr pm::sdk::EntryDesc PhotonObjectInteract_Reset{.key = "PhotonObjectInteract.Reset",
+                                                               .kind = pm::sdk::Kind::Method,
+                                                               .confidence = pm::sdk::Confidence::Decompiled,
+                                                               .owner = "PhotonObjectInteract", .name = "Reset"};
+
+// Of the class's bools Start reads three and Reset stores three; this one is the only bool in both.
+inline constexpr pm::sdk::Fact PhotonObjectInteract_grabbable_facts[] = {
+    {.is = pm::sdk::Fact::Is::Loads, .method = "PhotonObjectInteract.Start"},
+    {.is = pm::sdk::Fact::Is::Stores, .method = "PhotonObjectInteract.Reset"}};
+
+/// Whether a VR player may take it, on this client: VRGrabbable.IsSelectableBy refuses its object while
+/// this is clear, and never reads Door.locked. For a door, Door.ForceDropDoorNetworked sets it with
+/// Door.grabbable on every client, so a hunt's lock (Door.HuntingCloseDoor), ToggleDoorLock(false) and a
+/// ghost's force (Door.GhostForceDoor, while it runs) clear it; the PC grab reads Door.grabbable instead.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc PhotonObjectInteract_grabbable{
+    .key = "PhotonObjectInteract.grabbable", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PhotonObjectInteract", .type = "bool",
+    .facts = PhotonObjectInteract_grabbable_facts,
+    .access = pm::sdk::Visibility::Public};
+
+// Of the class's bools Door.NetworkedUngrabbedDoor stores only this one, through the door's interact.
+inline constexpr pm::sdk::Fact PhotonObjectInteract_inUse_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "Door.NetworkedUngrabbedDoor"}};
+
+/// Whether something is using it now, on this client. For a door: Door.NetworkedGrabbedDoor sets it on every
+/// client as a player grabs the door and Door.NetworkedUngrabbedDoor clears it as it is let go; a ghost's force
+/// (Door.GhostForceDoor) sets it while its leaf moves, and refuses to start on a door that has it set. Decompiled.
+inline constexpr pm::sdk::EntryDesc PhotonObjectInteract_inUse{
+    .key = "PhotonObjectInteract.inUse", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "PhotonObjectInteract", .type = "bool", .facts = PhotonObjectInteract_inUse_facts,
+    .access = pm::sdk::Visibility::Public};
+
+/// The VR player's hold on an object (Assembly-CSharp, global namespace), an XR interactable. Decompiled.
+inline constexpr pm::sdk::EntryDesc VRGrabbable{.key = "VRGrabbable", .confidence = pm::sdk::Confidence::Decompiled,
+                                                .name = "VRGrabbable", .assembly = "Assembly-CSharp", .ns = ""};
+
+inline constexpr const char* VRGrabbable_IsSelectableBy_params[] = {"IXRSelectInteractor"};
+
+/// Whether a VR hand may take the object: the XR toolkit's own test first, then false while its
+/// PhotonObjectInteract's `grabbable` is clear, and further tests of ownership, the local player and line
+/// of sight. It never reads Door.locked, so a locked door holds for a VR player only through that flag.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc VRGrabbable_IsSelectableBy{
+    .key = "VRGrabbable.IsSelectableBy", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "VRGrabbable", .name = "IsSelectableBy",
+    .params = VRGrabbable_IsSelectableBy_params};
+
 /// A throwable thing (Assembly-CSharp, global namespace), the base class of Equipment. Decompiled.
 inline constexpr pm::sdk::EntryDesc Prop{.key = "Prop", .confidence = pm::sdk::Confidence::Decompiled, .name = "Prop",
                                          .assembly = "Assembly-CSharp", .ns = ""};
@@ -171,6 +227,19 @@ struct PhotonObjectInteract {
   /// FreezeRigidbody(interact, freeze, networked). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PhotonObjectInteract_FreezeRigidbody, void(void*, bool, bool)>
       FreezeRigidbody{};
+  /// Whether a VR player may take it: grabbable.get(interact). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_grabbable, bool> grabbable{};
+  /// Whether a player's hand or a ghost's force is using it now: inUse.get(interact). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_inUse, bool> inUse{};
+};
+
+/// The VR player's hold on an object. `grabbable` below is the VRGrabbable.
+struct VRGrabbable {
+  /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::VRGrabbable> type{};
+  /// IsSelectableBy(grabbable, interactor): whether a VR hand may take it. A mod hooks it. Unresolved:
+  /// false.
+  static constexpr pm::api::Method<pm::map::VRGrabbable_IsSelectableBy, bool(void*, void*)> IsSelectableBy{};
 };
 
 /// A throwable. `prop` below is one.

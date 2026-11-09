@@ -1,15 +1,57 @@
-# Doors
+# Doors, exits and keys
 
-What a mod author needs to find, move, open and lock the level's doors. The entries are in `sdk/map/Door.h` and
-`sdk/map/UnityWorld.h`; their `///` notes are the authority. Facts were read from decompiled code of Steam build
-25811160, and the ones marked live were seen in the game.
+How to find a door and turn its leaf, which doors are a map's way out, how the game locks and opens them, who may send
+each of their RPCs, how a player's try at a locked door reaches code, and how to tell that a player is out of the map. The
+entries are in `sdk/map/Door.h`, `LevelController.h`, `LevelRoom.h`, `Player.h` and `UnityWorld.h`; their `///` notes are
+the authority. Code facts were read from decompiled code of Steam build 25811160 (`re/decomp.mjs <key>`); scene facts from copies of that build's map scenes with
+the pinned UnityPy. This page names map keys, never addresses.
+
+## The exits
+
+A map's exits are `LevelController.huntingDoors`, the doors a hunt locks. On every map of build 25811160 that list holds
+exactly the map's `DoorKind.Main` doors, and every map variation's `SmallMapVariation.huntingDoorsToLock` is a part of it,
+so reading `huntingDoors` together with the variations' lists, without repeats, gives every exit. Read them at run time:
+the counts below are one build's.
+
+| Map | Exits (`DoorKind.Main`) |
+| --- | --- |
+| Tanglewood, Edgefield, Ridgeview and Willow Street, Grafton Farmhouse, Sunny Meadows, Prison, Point Hope | 1: the front door |
+| Bleasdale Farmhouse | 2 |
+| Nell's Diner | 3: the two leaves of the front door and the fire exit |
+| Brownstone High School | 6: the two leaves of the main door and four outside doors |
+| Camp Woodwind, Maple Lodge Campsite | 2: the two leaves of the campsite's gate |
+
+**Maps without a house.** The two campsites have no house: their way out is the campsite's gate, whose two leaves are
+`DoorKind.Main` doors in `huntingDoors`, as a house's front door is. Maple Lodge's cabin door is a `DoorKind.Secondary`
+door inside the map, not an exit.
+
+**Map variations.** Brownstone High School, Sunny Meadows, Prison and Point Hope have variations
+(`LevelController.mapVariations`). `LevelController.LockHuntingDoors` locks a variation's own doors only when the ghost's
+room is one of its rooms (`SmallMapVariation.huntingRooms`) and a player is in one of them. On Brownstone a variation also
+lists exits to switch off for its smaller map.
+
+**Every exit starts the contract locked** in the scene (`Door.locked`), and so do the `DoorKind.PermanentLock` and
+`DoorKind.Secondary` doors.
+
+## Inside or out
+
+`Player.currentRoom` is the last room whose trigger the player's camera collider entered (`LevelRoom.OnTriggerEnter`
+sets it; the hunt reads it on the master for every player). Every map has exactly one room of kind `RoomKind.outsideMap`, `LevelController.outsideRoom`,
+named Outside or Exterior: the outdoors beyond the exits. Every other room is within the exits, whatever its kind:
+`RoomKind.insideRoom`, `RoomKind.exterior` (Sunny Meadows' courtyard, the campsites' fires and pitches) or
+`RoomKind.exteriorRoom` (tents, Bleasdale's garden, most of Grafton Farmhouse).
+
+The game itself draws the line there. `PlayerSanity.Update` counts a player's time in an `outsideMap` room apart and
+drains no sanity for it, and the hunt never goes for a player in one (`GhostHuntState`, sdk/systems/ghost-ai.md). So a
+living player (`Player.isDead` clear) is in the map exactly when their room is not of kind `RoomKind.outsideMap`. A
+player with no room yet has not entered any trigger, and a count that meets one cannot be trusted.
 
 ## Finding a door
 
 - Every swinging door is a `HingeDoor`, which is a `Door`. Find them with `Object.FindObjectsOfType` on
   `HingeDoor.type`. `LevelRoom.doors` holds a room's doors.
-- `Door.kind` says what kind it is: `DoorKind.Main` is the front door, which the ghost's own door choice never
-  picks.
+- `Door.kind` says what kind it is. `DoorKind.Main` is an exit (above), which the ghost's own door choice
+  (`GhostActivity.GetDoorToOpen`) never picks.
 - `Door.view` is the door's `PhotonView`. Its `PhotonView.get_ViewID` names the same door on every client, so
   send that number when you tell other clients about a door.
 - A double door's leaves name each other in one of two fields, `Door.otherDoor` or `Door.pairedDoor`; the level
@@ -24,57 +66,44 @@ What a mod author needs to find, move, open and lock the level's doors. The entr
   `Transform.get_localEulerAngles` on that axis: x for `Axis.X`, z for `Axis.Z`, else y.
 - `Door.closedAngle` is its angle when shut and `HingeDoor.openAngle` its angle when fully open, both in degrees
   on that axis. `HingeDoor.Awake` sets the open angle from the hinge's limit, so read it once the door is awake.
+- `Door.closed` is not the leaf's state (see "Opening a door quietly"): whether the leaf is shut is
+  `HingeDoor.Update`'s snap test, its angle within 7 degrees of `Door.closedAngle`.
 - To turn a leaf yourself, make its body kinematic (`Rigidbody.set_isKinematic`), set the angle on the hinge's
   axis with `Transform.set_localEulerAngles`, and keep the other two angles as they were. This moves the leaf on
   your client only. Do it on every client, or tell them with your mod's own message.
 
-## How the game moves doors
+## The lock and the house key
 
-- **`Door.GhostForceDoor`** pushes a leaf open or shut with physics. It does nothing while `Door.forceRoutine` is
-  set, and stores its push there until the push ends. The push switches the door off for players, waits until
-  nobody holds it and this client owns it, pushes, waits, then switches the door back on. Anything you switch off
-  while it runs is switched on again at its end. Live (2026-11-06): on a shut door the push often leaves the leaf
-  where it is; three of four shut doors did not turn.
-- **`Door.GhostOpenDoorEvent`** is a ghost event's push. When its first argument is true it pushes the double
-  door's other leaf too, one time in three.
-- **`HingeDoor.LevelControllerOpenDoor`** sets a leaf straight to a random amount open, on the calling client.
-- **`Door.useForceInsteadOfAnimations`** says how the ghost's ordinary door moves (`GhostOpenDoorAnimated`) work
-  on this door: with physics when set, else with an animation. `Door.GhostForceDoor` always uses physics.
+`Door.locked` is each client's copy of the lock. `Door.SyncLockState`, an RPC to every client, stores it: it freezes the
+leaf's Rigidbody while locked and, for a `DoorKind.Main` door, calls `SetupPhaseController.UnlockMainDoor` (which does
+nothing once the main door is open) and switches the door's hunt collider off.
 
-## Switching a door off for players
+- `Door.LockDoor(force)` locks a door: with `force`, or when the leaf is already nearly shut, it sets the leaf to its
+  closed angle once and sends `NetworkedSyncCloseDoor`; it marks the door locked; on the master it also sends
+  `SyncLockState(true)` and the lock's click (`Door.NetworkedPlayLockSound`). An open door it is not forced to shut stays
+  unlocked.
+- `Door.UnlockDoor(sound)` sends `SyncLockState(false)` to every client, and the unlock's click when `sound` is set.
 
-- `Door.DisableOrEnableDoor` switches a door on or off for players on every client. Switched off, it drops out of
-  any hand and can't be grabbed. It doesn't hold the leaf still.
-- `Door.ToggleDoorLock` switches the door on or off for players (grabbing, colliders and the hunt collider) and
-  unlocks a locked door. It never locks one.
+Keys open locked doors. Every map has a `Key` object named as its main or house key, and some a car, garage, cabin
+or cabinet key too. A player who
+picks one up runs `Key.GrabbedKey` on their own client, which adds the key's `KeyInfo` to that client's local player's
+`Player.keys`. `KeyInfo.keyType` is the `DoorKind` it opens.
 
-## A player's grab
+## Locking a door yourself
 
-- A player's grab on a door runs `Door.GrabbedDoor` on their client. An unlocked door is grabbed on every client.
-- A locked door isn't grabbed. The grab runs `Door.AttemptToUnlockDoor` instead: outside a hunt, a key the player
-  holds of the door's kind (`Door.kind`) unlocks it; then an ordinary interior door (`DoorKind` None) is
-  unlocked (`Door.UnlockDoor`, on every client), and any other kind rattles. So a locked interior door opens to
-  the first grab. A `DoorKind.PermanentLock` door never does.
-
-## Locking a door
-
-- `Door.locked` is the door's locked flag on each client. While it is set, the crosshair shows the padlock on the
-  door (`PCPropGrab.Update`).
-- The game's lock is `Door.SyncLockState`, an RPC every client runs. It sets `Door.locked` and freezes the leaf's
-  body where it stands (every position and rotation constraint), then calls `Door.CheckOcclusionPortal`.
 - **Never send or call `Door.SyncLockState`** ([Photon](photon.md), "The game's checks on an RPC").
-- **`HingeDoor.LockDoor`** is the game's own way to lock. It locks a shut door only: with `force` true, or when the
-  leaf is nearly shut, it snaps the leaf shut first. An open door, unforced, stays unlocked. The game never locks
-  an open door.
+- `HingeDoor.LockDoor` is a hinged door's own lock, the same steps as `Door.LockDoor` above: it locks a shut door
+  only, with `force` true or when the leaf is nearly shut snapping the leaf shut first. An open door, unforced,
+  stays unlocked. The game never locks an open door.
 - To leave a door locked where it stands, open or shut, set on every client what `Door.SyncLockState` sets:
   `Door.locked` true, the body's constraints `Rigidbody.kFreezeAll` (`Rigidbody.set_constraints`), then
-  `Door.CheckOcclusionPortal`. An interior door locked this way still opens to a player's first grab (above), so
-  to keep it locked set its `Door.kind` to `DoorKind.PermanentLock` as well: a grab then rattles it. Custom Ghosts'
-  Asterion does all of this for a door it breaks open, after swinging the leaf to `HingeDoor.openAngle`, with the
-  host naming the door to each client by its ViewID.
+  `Door.CheckOcclusionPortal`. An interior door locked this way still opens to a player's first try ("A player's try
+  at a locked door", step 2), so to keep it locked set its `Door.kind` to `DoorKind.PermanentLock` as well: a try
+  then rattles it. Custom Ghosts' Asterion does all of this for a door it breaks open, after swinging the leaf to
+  `HingeDoor.openAngle`, with the host naming the door to each client by its ViewID.
 - The door code tests a door's kind only for None and Main. A locked door of any other kind is still pushed by a
-  hunt that passes through it, and still picked by ghost events (`GhostActivity.GetDoorToOpen` skips only the front
-  door); not seen in the game yet.
+  hunt that passes through it, and still picked by ghost events (`GhostActivity.GetDoorToOpen` skips only the
+  exits); not seen in the game yet.
 - Stop a leaf you moved when you lock it. A hinge door sets the volume of its creak (`Door.loopSource`)
   from how fast its leaf turns, and only while it is unlocked, so a leaf locked while still turning creaks on
   at that volume (seen in the game, 2026-11-07). As you lock it, zero its body's velocities and set the creak's
@@ -82,3 +111,280 @@ What a mod author needs to find, move, open and lock the level's doors. The entr
   Custom Ghosts' Asterion locks its broken doors this way, with no gap in which a player could move them.
 - `Door.CheckOcclusionPortal` updates whether the camera sees through the doorway. Call it after you open, shut
   or lock a door yourself.
+
+## A player's try at a locked door
+
+The interact input (`DragRigidbodyUse.OnInteract`) casts a ray from the player's camera and, for a collider tagged Door,
+calls `Door.AttemptToUnlockDoor` on that door, on the trying player's own client. A mod that hooks
+`Door.AttemptToUnlockDoor` sees every try, on the client of the player who made it. `Door.GrabbedDoor` runs the same steps
+for a locked door, but the PC player's grab never calls it for one (below).
+
+On an unlocked door the try does nothing. On a locked one:
+
+1. Outside a hunt (`GhostAI.isHunting` clear), a key in the local player's `Player.keys` whose `KeyInfo.keyType` is the
+   door's kind unlocks it (`Door.UnlockDoor(true)`, with the unlock's click for everyone).
+2. Otherwise a `DoorKind.None` door unlocks, unless `Door.LockDoorForTime` holds it.
+3. Any other door gets the locked sound: `Door.NetworkedPlayLockSound` to every client in a room (the clip is played on
+   the trying player's client alone offline). That RPC plays a clip only for a `DoorKind.Main` door, so the locked sound is
+   the exits' alone.
+
+So during a hunt a locked exit refuses even a key holder and rattles, and outside one the house key opens it.
+
+## Grabbing a door open
+
+Holding the interact input grabs. Each physics step `DragRigidbodyUse.FixedUpdate` casts the same ray and, for a door,
+refuses it, holding nothing, when it is locked (`Door.locked`) or not grabbable (`Door.grabbable`), and refuses a locked
+`DoorKind.Main` door during a hunt. Otherwise it calls `Door.GrabbedDoor` (which sends `Door.NetworkedGrabbedDoor` to every
+client), asks for the door's PhotonView (`PhotonView.RequestOwnership`), frees the leaf's Rigidbody and drives it after the
+player's aim. So a door can be swung open on a client only while both its lock and its grab switch allow it there.
+
+`Door.grabbable` is set on every client by `Door.ForceDropDoorNetworked`, the RPC `Door.DisableOrEnableDoor` sends to
+every client, and the hunt's lock clears it on every client as well (below). Unlocking leaves it alone: `Door.UnlockDoor`
+and `Door.SyncLockState` touch only `Door.locked`, so a switched-off door stays shut when its lock clears. Two calls switch
+it back on: `Door.ToggleDoorLock(true)`, and the end of a ghost's force (below).
+
+**A VR player's grab** is gated by `VRGrabbable.IsSelectableBy`, which refuses an object while its
+`PhotonObjectInteract.grabbable` is clear and never reads `Door.locked`. `Door.ForceDropDoorNetworked` sets that flag with
+`Door.grabbable` on every client, so the same calls switch both off and on, and a locked exit holds for a VR player
+through that flag alone.
+
+**A ghost's force.** `Door.GhostForceDoor` (both overloads) starts one coroutine. It sends
+`Door.ForceDropDoorNetworked(true, true)` to every client as it starts and `Door.ForceDropDoorNetworked(false, true)` as it
+ends, which sets `Door.grabbable` and `PhotonObjectInteract.grabbable` again on every client whatever `Door.locked` or the
+door's kind. Its callers: ghost states and the hunt state, directly or through Door's GhostOpenDoorAnimated (the door
+state, `GhostState.door`, uses it), `ClosetZone` for its closet doors, and the training rooms. So a ghost that forces a
+switched-off exit leaves it grabbable.
+
+The force is a ghost interaction, with a ghost's traces. Both overloads mark it as the ghost's and as one that gives
+fingerprints (so does `Door.CheckDoorDuringHunt`, the hunt's push), so before the leaf moves the door's ghost-use step
+runs, unless the door's `PhotonObjectInteract` is off or already in use:
+
+- on the master, a try for fingerprints (`Fingerprint.AttemptToSpawnFingerprints`), which leaves none unless the ghost
+  gives Ultraviolet;
+- unless `LevelValues.eventsBlocked` is set, most times the door's rattle (by RPC to every client; the
+  three-argument overload's last flag skips it), then `Door.CreateDoorNoise`: the ghost's door sound by RPC, and an EMF
+  reading of the door-moved type at the door (`GhostInteraction.CreateInteractionEMF` on the contract ghost's);
+- either way, one more in `LevelStats.doorsMoved`, which the results show and add into the ghost's interactions
+  (`LevelStats.amountOfGhostInteractions`).
+
+So the force cannot move a door without leaving paranormal activity behind.
+
+**The ghost's other pushes.** `Door.GhostForceDoor` does nothing while `Door.forceRoutine` is set, and keeps its
+push there until the push ends. `Door.GhostOpenDoorEvent` is a ghost event's push: it starts without checking
+`Door.forceRoutine`, clears it as it ends, and when its first argument is true pushes the double door's other leaf
+too, one time in three. Live (2026-11-06): on a shut door the force often leaves the leaf where it is; three of four
+shut doors did not turn.
+
+For Custom Ghosts' Squatter the force's callers above are closed off: its restraint refuses every change of state but
+idling, wandering and its favourite room (only idling while the mod steers it), whose states call neither method, and
+refuses its interactions (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet`). For another mod's ghost
+they are open.
+
+**Who owns an exit's PhotonView.** Every exit's view is set to `OwnershipOption.Takeover` in the map's scene
+(`PhotonView.OwnershipTransfer`, scene read on all 13 maps), and the grab asks for the view each time a player grabs a
+door in a room. So in practice an exit's owner is the last player who grabbed it, often not the master. Before anyone has,
+it is the master's, as Photon gives a scene's views to the master.
+
+**A ghost walking through.** On Grafton Farmhouse, the one map checked, no door leaf carries a NavMeshObstacle (its 64
+doors, the leaves and their children), and in the game's physics settings the Ghost layer does not collide with the
+Door layer. So there the ghost's agent walks through a shut door and leaves the leaf where it is ([ghost AI](ghost-ai.md),
+"Moving the ghost outside a hunt"); the other maps' doors were not checked. Only the grab above, a ghost's force and
+the game's quiet opener (below) move a leaf.
+
+## Opening a door quietly
+
+**Mid-contract, open a door with `HingeDoor.SwingDoor(false, seconds, 1, false)`.** `SwingDoor` turns the leaf
+(`Door.body`'s Transform) with a DOTween rotation from where it stands to the door's open angle (`HingeDoor.openAngle`),
+the shorter way round, over the seconds given; the third argument is how much of the way (1: all of it), and the first
+turns it to `Door.closedAngle` instead. It makes the leaf kinematic while it turns and frees it at the end, when the game
+lets the door go as a player's release does (`Door.UnGrabbedDoor`). Then it checks the door's occlusion portal and tells
+every client by an RPC that takes no `PhotonMessageInfo`, buffered when its last argument is true. It makes no Noise
+sound and leaves no EMF reading, `LevelStats` count or fingerprint: the ghost's own door move does those around its
+turn. It moves the leaf only on the view's owner, so take the view first. Its caller in the game was not traced (it is
+reached through its virtual slot). Custom Ghosts' Squatter uses `SwingDoor`.
+
+**But not on a door the game moves by force.** The turn sets the leaf's other two angles to 0, so a door whose leaf is
+built turned on another axis comes off its hinges. The ghost's own door move (`Door.GhostOpenDoorAnimated`) pushes a
+door whose `Door.useForceInsteadOfAnimations` is set with `Door.GhostForceDoor`, and turns the rest. Open such a door
+with `HingeDoor.OpenDoor`'s physics push toward its open side: `OpenDoor(true, ...)` when `HingeDoor.openAngleReversed`
+is set, `OpenDoor(false, ...)` otherwise (the next paragraph says why).
+
+**Don't open a door with `HingeDoor.OpenDoor`'s physics push.** `OpenDoor` frees the leaf's Rigidbody and pushes it about
+its hinge with `Rigidbody.AddRelativeTorque`, by 0.05 times `Random.Range(1, 5)` (or the strength given, when above 0).
+Its side comes from `isDoorRotationBackwards` and whether the hinge joint's low angular limit is 0, but leaves out the
+flag `HingeDoor.Awake` also applies to the open angle, so on a door with that flag set the push drives the leaf against
+its shut stop (the Squatter's test of 2026-11-09: a door that swings away stayed shut). The game calls `OpenDoor` only
+to shut a door, and then sets the shut rotation outright. The contract-start opener below sets the angle outright too,
+and mid-contract that did not hold: in the user's test of 2026-11-09 a door it opened seven times in seven seconds, from
+the master owning its view, never moved; why was not found.
+
+Which way a leaf swings as it opens: turn its middle (its collider's box) a little about its own position, toward
+`HingeDoor.openAngle` from the angle it stands at on `HingeDoor.hingeAxis`, and see which side it moves to.
+
+The contract-start opener:
+
+`HingeDoor.LevelControllerOpenDoor` opens a door part of the way and leaves no ghost's trace. The game calls it in one
+place: a coroutine `LevelController.Start` begins on the master, which waits for the contract's ghost and then opens some
+random doors. The difficulty and the map's size set how many. It takes only doors that are:
+
+- of kind `DoorKind.None`;
+- reading shut (`Door.closed`);
+- fitted with a `PhotonObjectInteract`.
+
+**What it does**, on the client that calls it:
+
+1. It sets the leaf's Rigidbody's mass and gravity and makes it kinematic.
+2. It turns the leaf to a random angle between a tenth and most of the way from shut to its hinge's open limit. Its
+   bool swaps which end that fraction counts from, and its float is unused. So the door opens one way only, its hinge's,
+   by an amount the caller cannot choose.
+3. It starts `Door.ResetRigidbody`, whose wait calls `Door.UnGrabbedDoor(false)` three seconds later, unless a player
+   grabbed the door meanwhile. That sends `Door.NetworkedUngrabbedDoor` to every client: it clears
+   `PhotonObjectInteract.inUse` and puts the view's syncing back to its usual rate.
+4. It makes the Rigidbody free again.
+5. It sends `Door.SetDoorAndOcclusionOpen` to every client, buffered (and runs it directly offline). On every client
+   that opens the door's OcclusionPortal and clears `Door.closed`.
+
+It calls no noise, no EMF reading, no `LevelStats` count and no fingerprint try, and it leaves `Door.locked`,
+`Door.grabbable` and the door's kind alone. Neither RPC takes a `PhotonMessageInfo`, so neither checks its sender.
+
+**Who sees it.** The angle is not in either RPC. It reaches other clients through the door's own view (`Door.view`). In
+the map scene read (Grafton Farmhouse), every door's PhotonView is a Takeover view observing the leaf's
+PhotonTransformView, which sends the leaf's position and rotation. On every client but the view's owner, the transform
+view moves the leaf to the owner's angle each frame. So:
+
+- called on the view's owner, the door opens on every client;
+- called anywhere else, the leaf is pulled back to the owner's angle the next frame, and nobody else sees it open.
+
+A scene door's view starts the master's, which is why the game's own call at the contract's start reaches everyone. Later
+a door's view is often a player's: the grab asks for it (above). To open a door mid-contract, take its view first:
+`PhotonView.RequestOwnership`, then wait until `PhotonView.get_IsMine` reads true, as the ghost's own door step does
+before it moves a leaf. Taking the view also makes a player who holds that door let it go (`Door`'s controller-change
+callback), so leave alone a door whose `PhotonObjectInteract.inUse` is set.
+
+For Custom Ghosts' Squatter, `mods/custom_ghosts/squatter_door.h` `open_quietly` does exactly this on the master. It
+opens only a hinged door the game's own opener would take (kind None, shut, with an interact) that is unlocked,
+grabbable, not in use and not an exit. It never opens an exit, so the exits' hold and the master's re-lock are
+unaffected.
+
+## How a hunt locks the exits
+
+1. As a hunt starts, the hunt state on the master sends `GhostAI.Hunting` and calls `LevelController.LockHuntingDoors`.
+2. It calls `Door.HuntingCloseDoor` on every exit (and on a variation's, as above). On a friendly ghost's difficulty
+   (`Difficulty.friendlyGhost`) that does nothing. Otherwise it switches the door off for players through
+   `Door.DisableOrEnableDoor(false)`, whose RPC drops the door from the local hand holding it and clears `Door.grabbable`
+   and `PhotonObjectInteract.grabbable`, and sends `Door.HuntingCloseDoorNetworked` to every client.
+3. That RPC's body, on every client, clears `Door.grabbable` and `PhotonObjectInteract.grabbable`, drops the door
+   from the local hand, switches the door's hunt collider on, and on the client that owns the door's PhotonView starts a
+   coroutine. For a door that is open and unlocked, the coroutine switches the door's collider off and moves the leaf
+   through the door's own `OpenDoor`; then it waits, sets the leaf to its closed angle once, switches the collider on,
+   calls `Door.LockDoor(true)` and makes the leaf kinematic.
+4. `Door.LockDoor(true)` runs on that owner. It sends `NetworkedSyncCloseDoor` to every client, which makes the leaf
+   kinematic and marks it shut everywhere, and marks the door locked there. Only if the owner is the master does it send
+   `SyncLockState(true)` and the lock's click, so only then is `Door.locked` set on every client.
+
+**When a player owns the exit.** If a player other than the master owns the exit's view, the lock's click does not play,
+and `Door.locked` is set on that player's client alone. The exit still cannot be swung open on any client:
+`Door.grabbable` is clear everywhere, from both RPCs above, and the grab refuses it. Only the owner's tries meet a locked
+door and so rattle (or, holding the key, unlock it); on every other client a try finds it unlocked and makes no sound.
+
+As the hunt ends, `GameController.ResetHuntEffects` (whose two callers run it only when a hunt was on) calls
+`LevelController.UnlockHuntingDoors`, which calls `Door.ToggleDoorLock(true, true)` on the same doors: they switch back
+on and unlock. Otherwise only a ghost's force (above) and the Monkey Paw (below) switch them back on.
+
+## The Monkey Paw
+
+`Door.LockDoorForTime(seconds, takeOwnership)` is the Monkey Paw's timed lock. Its coroutine, with `takeOwnership`, first
+requests the door's PhotonView and waits until this client owns it. It calls `Door.ToggleDoorLock(false)`, which clears
+`Door.locked` at the start of the window and switches the door off; the close coroutine then shuts and re-locks it on its
+owner. After `seconds` it calls `Door.ToggleDoorLock(true)`, which switches the door back on and unlocks it, with no sound,
+whoever locked it. A `DoorKind.Main` door is skipped at the start, and left at the end, while the ghost hunts
+(`GhostAI.isHunting`), so that hunt's end (`LevelController.UnlockHuntingDoors`) opens it.
+
+Four wishes (`MonkeyPaw.MakeWishNetworked`) reach the exits, three of them through it:
+
+- One, in its coroutine on the master, first calls `GhostAI.ChangeState` to `GhostState.summoningCircle` when the ghost is
+  not hunting, then `LockDoorForTime(6, true)` on every exit (`LevelController.huntingDoors`).
+- One, on the master, calls `LockDoorForTime(120, true)` on every exit, after `GhostAI.RemoveInteractionBlock(120)` and
+  breaking the fuse box (`FuseBox.BreakFuseBox`).
+- One times the doors of the ghost's favourite room, and of the room the wishing player is in, with `LockDoorForTime`,
+  after sending the ghost to its favourite room, then on the master starts `GhostAI.TrapWish`. An exit among those rooms'
+  doors (`LevelRoom.doors`) is timed with them.
+- One, `MonkeyPaw.OpenExitsWish`, opens every exit for good. For each door of `LevelController.huntingDoors` it clears
+  the timed-lock flag, calls `Door.UnlockDoor(true)` on the master (the unlock's click), `Door.ToggleDoorLock(true)` on the
+  client that owns the door's PhotonView (the door back on, `Door.grabbable` set on every client), and
+  `Door.ForceToggleHuntCollider(false)`. It checks no hunt and sets no timer.
+
+Whatever locked the exits before, the three timed wishes reopen them when their windows end, and the fourth opens them at
+once and for the rest of the contract.
+
+With Custom Ghosts' Squatter haunting, its restraint refuses every change of state but idling, wandering and its
+favourite room, whoever asks (`mods/custom_ghosts/restraint.cpp`, `squatter_rule.h` `keeps_quiet`), so the first wish's
+`GhostState.summoningCircle` never begins and brings no hunt.
+
+**Once the Squatter has locked the exits, no wish opens them** (the user's rule, 2026-11-08). Custom Ghosts refuses, on
+every client that runs it, only the call that would undo the lock on an exit it holds (`squatter_door.h` `holds`):
+`Door.LockDoorForTime` (the timed wishes and the rooms wish, so neither the lock's clearing at a window's start nor the
+reopening at its end happens), `Door.ToggleDoorLock` either way, and, inside `MonkeyPaw.OpenExitsWish`, `Door.UnlockDoor`
+and `Door.ForceToggleHuntCollider`. These are plain methods, not RPC bodies, and a refused call sends nothing, so once
+every client holds the exits every client keeps the same door. Every client holds them exactly when the master locked
+them, from the master's word alone: the master as it calls `Door.HuntingCloseDoor`, and every other client in the same
+call that brings that lock to it (`Door.HuntingCloseDoorNetworked`, watched after the game's own body has run and only
+when the game's checks take it), never from its own count of the players inside. So no Monkey Paw call on a client can
+fall between the lock reaching it and its hold. A wish that runs on another client before the master's lock has reached
+it is still the game's own there, as any wish before the lock is, and its unlock races the lock: that client's
+`Door.ToggleDoorLock` (a timed window's start or end, or the open-exits wish on the exit's owner) and
+`Door.UnlockDoor` send `Door.SyncLockState(false)`, which the game takes from anyone, and switch the exit back on for
+every client, and those messages can reach every client, the master included, after the lock. So the master watches
+the exits it holds and answers: an exit that reads grabbable again (`Door.grabbable`), or unlocked again after the
+master read it locked, gets the game's own `Door.HuntingCloseDoor` once more, never on a friendly ghost's difficulty
+and at most once every two seconds an exit (`squatter_door.h` `relock`). An exit another player's client owns keeps
+the game's lock on that client alone (above), so the master reads it unlocked from the start; that is not a reopening
+and is left alone. The house key's unlock outside a hunt, on an exit the master read locked, reads as unlocked again
+too, and the master locks that exit again the same way. The rest of each wish stays the game's: the summoning circle's
+ask, the interaction block, the fuse box, the ghost sent to its room, the trap wish, and the timing of
+every door that is not a held exit. Before the lock every wish is the game's own. The house key's unlock
+(`Door.AttemptToUnlockDoor`) is not a wish: nothing refuses it, though the master may then lock the exit again as above.
+
+**At the contract's end** the doors go with the map's scene; the next contract loads the scene afresh, with every exit
+locked as above. Nothing carries over.
+
+## Who may send what
+
+| RPC | The check on the receiving side |
+| --- | --- |
+| `Door.HuntingCloseDoorNetworked` | refuses a sender that is not the room's first actor, and refuses outright on a friendly ghost's difficulty |
+| `Door.SyncLockState` | refuses a lock (true) from a sender that is not the room's first actor; takes an unlock from anyone |
+| `Door.PlayDoorSlamNoise` | refuses a sender that is not the room's first actor |
+| `Door.NetworkedPlayLockSound`, `NetworkedSyncCloseDoor`, the unlock's click, `SyncHasBeenUnlocked`, and the RPCs of `Door.DisableOrEnableDoor` and of the door's collider switch | none: they take no sender |
+
+A refusal can harm an account ([Photon](photon.md), "The game's checks on an RPC"), so lock exits only as the game does:
+call `Door.HuntingCloseDoor` on the master, never on a friendly ghost's difficulty, and let it send what it sends.
+`Door.HuntingCloseDoor` checks `Difficulty.friendlyGhost` before it sends anything, and `Door.LockDoor` sends
+`SyncLockState` only from the master. Never call `Door.HuntingCloseDoorNetworked`, `Door.SyncLockState` or
+`Door.NetworkedPlayLockSound` yourself: they are RPC bodies.
+
+## A door's slam sound
+
+`Door.CreateDoorSlamNoise` sends the door's `Door.PlayDoorSlamNoise` RPC to every client and does nothing else; its Door
+argument is never read. The RPC's body checks that its sender is the room's first actor, then picks one clip at random
+from the door's own slam clips (`Door.slamClips`), or from the game's shared ones (`SoundController.doorSlamClips`, on
+`SoundController.instance`) when the door has none, and plays it through the door's Noise (`Door.noise`,
+`Noise.PlaySound`) at a volume of 0.15, a constant in its code. Read from decompiled code, 2026-11-09.
+
+Call `CreateDoorSlamNoise` only on the room's first actor. To play the slam on one client, with no message, do what the
+RPC's body does: pick the clip as it picks it and play it through `Noise.PlaySound` on the door's Noise. Custom Ghosts'
+Squatter does this on every client as its kick lands on a hiding place's door (`mods/custom_ghosts/squatter.cpp`).
+
+## Locking the exits outside a hunt
+
+A mod that locks the exits with `Door.HuntingCloseDoor` while no hunt is on gets the hunt's lock: the doors shut, switch
+off for players and lock. One thing differs from a hunt, because `GhostAI.isHunting` is clear: a player holding the house
+key who tries an exit unlocks it (step 1 above), with the unlock's click for everyone. `Door.locked` is clear from then on
+and later tries make no sound, but the door stays shut: `Door.grabbable` stays clear on every client, and the grab refuses
+it ("Grabbing a door open"). This was read from the code, not yet seen in a game. A Monkey Paw wish on the exits, or
+another ghost's force on one, reopens them.
+
+Custom Ghosts' Squatter locks every exit this way, on the master, once no living player is left in the map, and answers
+each try with a line of its own (`mods/custom_ghosts/squatter_door.h`). Every other client holds the exits once that lock
+reaches it, and the master locks an exit again when a raced wish or the house key unlocks it or switches it back on
+("The Monkey Paw" above).

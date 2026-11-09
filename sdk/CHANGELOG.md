@@ -6,10 +6,29 @@ a host runs a mod built for the same major version and a minor no newer than its
 major version `PmHostApi` and every published struct only grow at the end, and every content struct begins with its
 `size`, so a mod built for an older minor keeps loading.
 
-## [Unreleased]
+## [2.3] - Unreleased
 
 ### Added
 
+- **Figures of a mod's own.** Helpers in the mod's own code (the host contract does not change): `load_bundle`,
+  `load_controller`, `load_bundle_asset`, `bundle_asset_names` and `unload_bundle` (`sdk/api/bundles.h`) load an
+  AssetBundle from the mod's assets folder; `copy_investigator_body`, `use_controller`, `play_state`,
+  `controller_has_states`, `two_sided_material`, `lit_material_of`, `add_cloth` and `destroy_cloth`
+  (`sdk/api/models.h`) copy the investigator's body without the game's scripts, play a controller's states on it and
+  drape Unity Cloth on a mesh the mod builds ([custom animation](guides/custom-animation.md)). The map gains the
+  entries behind them: Cloth, the Mesh and SkinnedMeshRenderer setters, `Material(Shader)`, the Lit shader's base
+  colour and culling, the investigator's body, Resources and AssetBundle loading, and Animator states and bones.
+- **Optional assemblies.** A build may lack an assembly that only `kOptional` Type entries name; those entries then
+  stay unresolved instead of the whole map failing. The Cloth entries are such.
+- **The fake game sizes arrays of a struct.** `pm::fake::element_size` sets the element size `array_new` gives a type.
+- **A ghost the Mimic never copies.** `PM_GHOST_NO_MIMIC_COPY`, a new bit of `PmGhostDef.flags` (`GhostDef::flags`):
+  the host leaves the ghost off the Mimic's copy list for good.
+- **A ghost no player plays.** `PM_GHOST_NOT_PLAYABLE`, a new bit of `PmGhostDef.flags`, and `content::flags_of(type)`
+  (`PmHostApi.content_flags_of`, added at the end) to read any type's flags. Playable Ghost never offers such a ghost
+  to its ghost player, draws the type roll again past it in a contract with one, and never keeps it from a pick.
+- **A ghost with no evidence.** Every evidence slot of a `PmGhostDef` may be empty; the game then gives only its own
+  "no evidence" for it ([evidence](systems/evidence.md#a-ghost-that-gives-no-evidence)). Allowed since 2.2, now stated
+  and tested.
 - **Doors** ([doors](systems/doors.md)): `Door.locked` (the padlock), `Door.view`, `Door.otherDoor` (a double
   door's other leaf), `Door.forceRoutine`, `Door.useForceInsteadOfAnimations`, `Door.CheckOcclusionPortal`,
   `Door.GhostOpenDoorEvent`, `Door.SyncLockState` (documented, never to be sent), `HingeDoor.openAngle`,
@@ -32,11 +51,35 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   check. [Ghost AI](systems/ghost-ai.md) has a new section, "How a hunt starts".
 - **Equipment, item by item:** a table of what the map holds for each item and cursed possession
   ([equipment](guides/equipment.md)).
+- **A door's slam sound** ([doors](systems/doors.md#a-doors-slam-sound)): `Door.slamClips`, `Door.noise`,
+  `Door.PlayDoorSlamNoise` (documented, never to be sent), `SoundController.instance` and
+  `SoundController.doorSlamClips`, and a `Noise.PlaySound` wrapper, so a mod can play a door's slam on one client.
+- **A closet's inside on the ghost's routes:** `ClosetZone.internalAreaObstacle` and `DynamicNavMeshObstacle`
+  (`targetActivity`, `navMeshObstacle`, `Update`). Clearing `targetActivity` switches the obstacle that keeps ghost
+  routes out of the closet off.
+- **Layers:** `Layer.Item`, the equipment players carry, place and drop.
+- **Costumes:** `hide_renderers` takes the names of the parts to keep drawing; [scene](systems/scene.md) names each
+  renderer of the investigator's body.
 
 ### Changed
 
+- `Door.CreateDoorSlamNoise` is decompiled: it only sends `Door.PlayDoorSlamNoise`, whose body accepts the room's first
+  actor alone, so no other client may call it. Its Door argument is never read.
+
+- **No mod runs with part of itself missing.** The host keeps off a mod whose `pmmod_start` met any failure of the
+  host's, whatever `pmmod_start` returned: a registration it refused (`ghost_register`, `evidence_register`,
+  `ghost_rules`, `journal_lines`), a hook that could not be made or switched on (`create_hook`, `hook_entry`,
+  `hook_body`, `enable_hooks`), or a service name already taken (`register_service`). It stops the mod, removes its
+  hooks and content, and logs why, so a mod need not check what those calls returned. Once every mod has started, a
+  mod whose ghost or rules the host drops (an evidence or a ghost no started mod registered) stays off for that start
+  too, and the others start again without it, until nothing is dropped.
+  While custom content is off on a client (the game's enums unreadable, or a game entry or hook the host's content needs
+  missing) every ghost and evidence is refused, so Custom Ghosts and Spectral Flame are off there instead of running with
+  nothing in the game. Rules and journal lines on the game's own ghosts still register.
 - `Door.ToggleDoorLock`, `Door.GhostForceDoor` and `Door.DisableOrEnableDoor` are decompiled. `Door.ToggleDoorLock`
-  switches a door on or off for players and unlocks a locked door; it never locks one, as its earlier note said.
+  switches a door on or off for players and unlocks a locked door at once; switched off, it also starts the hunt's close
+  coroutine on the door's owner, which shuts and locks the door again as it ends. Its earlier note, read from the name
+  alone, said that `false` locks the door.
 - **Mapping the game moved** from this README to [its own page](internals/mapping.md), with its sections (an entry, the
   resolver, confidence, commands, game builds, adding an entry, moving code onto the SDK).
 - **Entry notes name ghost types:** "the Onryo (16)", where a note gave only the number. Notes say what a member does,
