@@ -925,7 +925,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
             c.fallAt = t + static_cast<uint64_t>(kFooting[pick.variant % std::size(kFooting)] * 1000.0f);
             c.fallCause = FallCause::Trip;
           } else if (pick.move == Move::Parkour && dropAhead) {
-            c.fallAt = t + static_cast<uint64_t>(seconds_of(state_for(pick.move, pick.variant)) * 1000.0f);
+            c.fallAt = t + static_cast<uint64_t>(kJumpTakeOffSeconds * 1000.0f);  // the take-off ends; no roll
             c.fallCause = FallCause::Drop;
           }
           if (const std::optional<Lines> line = line_for_move(pick.move)) say(*line, t);  // a trip's line as it falls

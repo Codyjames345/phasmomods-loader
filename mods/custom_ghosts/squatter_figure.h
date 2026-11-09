@@ -40,6 +40,9 @@ inline constexpr const char* kDuckStates[] = {"Duck_A", "Duck_B"};
 inline constexpr const char* kWeaveStates[] = {"Weave_A", "Weave_B"};
 inline constexpr const char* kRollStates[] = {"Roll_A", "Roll_B"};
 inline constexpr const char* kParkourStates[] = {"Parkour_A"};  // jumping up, which runs on into a forward roll
+// The take-off alone, Jumping Up's own length in seconds as the bundle's build reads it, before the bundle runs it on into
+// Roll_A: where a jump down a drop lands and falls.
+inline constexpr float kJumpTakeOffSeconds = 0.2333f;
 // A trip from a run, one of two at random (user, 2026-11-09): Soccer Trip, or Tripping.
 inline constexpr const char* kStumbleStates[] = {"Stumble", "Trip"};
 // Clips each client plays of its own around the master's moves: turning on the spot, and setting off from standing.
