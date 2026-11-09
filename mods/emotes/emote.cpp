@@ -116,9 +116,11 @@ struct State {
   std::vector<api::Held> endActions;
   api::Held look;
   api::Held controlsOf;  // the rig the actions were read from
-  api::Held pcLook, propGrab, heldItem, head;
+  api::Held pcLook, propGrab, hand, head;
+  std::vector<api::Held> movedItems;  // items put in the hand from the camera's slot while the view is outside
   bool lookOff = false;
   ULONGLONG lastTick = 0;
+  ULONGLONG startTick = 0;  // the mod's start: its clock counts from here, so a float keeps its precision
   bool loggedRoot = false;
 };
 State g;
@@ -336,6 +338,21 @@ void* component_in_rig(void* type) {
   return rig && type ? phasmo::Component::GetComponentInChildren(rig, type, true) : nullptr;
 }
 
+// While the view is outside: an item in the camera's slot (the one held, or one switched to mid-dance) goes in the hand.
+void hold_items_in_hand() {
+  if (!g.propGrab || !game::alive(g.propGrab) || !g.hand || !game::alive(g.hand)) return;
+  void* item = phasmo::PCPropGrab::GetItemInCameraSlot(g.propGrab);
+  if (!item || !game::alive(item)) return;
+  void* t = game::transform_of(item);
+  if (game::parent(t) == g.hand.get()) return;
+  game::set_parent(t, g.hand, false);
+  game::set_local_position(t, {0.0f, 0.0f, 0.0f});
+  game::set_local_rotation(t, {0.0f, 0.0f, 0.0f, 1.0f});
+  for (const api::Held& m : g.movedItems)
+    if (m.get() == item) return;
+  g.movedItems.emplace_back(item);
+}
+
 void begin_local_body(void* player, bool vr) {
   if (vr) {
     api::view::show_own_body(true);
@@ -343,25 +360,16 @@ void begin_local_body(void* player, bool vr) {
     g.head = animator ? phasmo::Animator::GetBoneTransform(animator, phasmo::HumanBodyBones::Head()) : nullptr;
     return;
   }
-  if (!api::view::in_third_person()) api::view::begin_third_person();
+  api::view::begin_third_person();  // or out again, when a new emote starts while it eases back in
   if (void* look = component_in_rig(phasmo::PCLook::type.type_object())) {
     g.pcLook = look;
     game::set_enabled(look, false);  // the spine and head follow the dance, not the camera
   }
   // The held item hangs in front of the camera on the player's own client: in the hand while the view is outside.
-  if (void* grab = component_in_rig(phasmo::PCPropGrab::type.type_object())) {
-    g.propGrab = grab;
-    void* item = phasmo::PCPropGrab::GetItemInCameraSlot(grab);
-    void* anims = phasmo::Player::characterAnimations.get(player);
-    void* hand = anims ? phasmo::PlayerCharacterAnimations::parentingTargetRightHand.get(anims) : nullptr;
-    if (item && hand && game::alive(item) && !g.heldItem) {
-      void* t = game::transform_of(item);
-      game::set_parent(t, hand, false);
-      game::set_local_position(t, {0.0f, 0.0f, 0.0f});
-      game::set_local_rotation(t, {0.0f, 0.0f, 0.0f, 1.0f});
-      g.heldItem = item;
-    }
-  }
+  g.propGrab = component_in_rig(phasmo::PCPropGrab::type.type_object());
+  void* anims = phasmo::Player::characterAnimations.get(player);
+  g.hand = anims ? phasmo::PlayerCharacterAnimations::parentingTargetRightHand.get(anims) : nullptr;
+  hold_items_in_hand();
 }
 
 void end_local_body() {
@@ -369,9 +377,14 @@ void end_local_body() {
   api::view::show_own_body(false);
   if (g.pcLook && game::alive(g.pcLook)) game::set_enabled(g.pcLook, true);
   g.pcLook = nullptr;
-  if (g.heldItem && game::alive(g.heldItem) && g.propGrab && game::alive(g.propGrab))
-    phasmo::PCPropGrab::ParentItemOnLocalPlayer(g.propGrab, g.heldItem);  // back in the camera's slot, as the game had it
-  g.heldItem = nullptr;
+  // Back in the camera's slot, as the game had them: each item still in the hand. One the game moved since (dropped, or
+  // put away by a switch) is left where the game put it.
+  for (api::Held& item : g.movedItems)
+    if (item && game::alive(item) && g.hand && game::alive(g.hand) && g.propGrab && game::alive(g.propGrab) &&
+        game::parent(game::transform_of(item)) == g.hand.get())
+      phasmo::PCPropGrab::ParentItemOnLocalPlayer(g.propGrab, item);
+  g.movedItems.clear();
+  g.hand = nullptr;
   g.propGrab = nullptr;
   if (g.head && game::alive(g.head)) game::set_local_scale(g.head, {1.0f, 1.0f, 1.0f});
   g.head = nullptr;
@@ -538,7 +551,7 @@ bool start() {
   }
   g.local.emplace(g.a.table);
   g.remote.emplace(g.a.table);
-  g.lastTick = GetTickCount64();
+  g.lastTick = g.startTick = GetTickCount64();
   return true;
 }
 
@@ -546,7 +559,7 @@ void tick() {
   const ULONGLONG nowMs = GetTickCount64();
   const float dt = std::min(0.1f, static_cast<float>(nowMs - g.lastTick) / 1000.0f);
   g.lastTick = nowMs;
-  const float now = static_cast<float>(nowMs / 10) / 100.0f;
+  const float now = static_cast<float>(nowMs - g.startTick) / 1000.0f;
   keys::tick_keys();
   api::anim::tick_player_anims(dt);
   api::view::tick_third_person(dt);
@@ -579,6 +592,7 @@ void tick() {
     set_look(true);
   }
   apply_local(g.local->tick(f), player, vr);
+  if (g.local->active() && !vr) hold_items_in_hand();
   // In VR the head stays hidden while it would sit over the view.
   if (g.head && game::alive(g.head)) {
     void* cam = game::local_camera();

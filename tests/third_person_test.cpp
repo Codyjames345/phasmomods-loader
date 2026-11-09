@@ -248,6 +248,24 @@ void the_ease_ends_where_it_started() {
   CHECK(cam && std::find(g_destroyed.begin(), g_destroyed.end(), static_cast<void*>(cam)) != g_destroyed.end());
 }
 
+void a_new_start_while_easing_back_turns_out_again() {
+  give();
+  view::begin_third_person();
+  view::tick_third_person(view::kEaseSeconds);
+  Obj* cam = our_camera();
+  view::end_third_person();
+  view::tick_third_person(view::kEaseSeconds / 2);  // half way back in
+  const float halfWay = cam ? -at<phasmo::Vector3>(cam, kPos).z : 0.0f;
+  CHECK(view::begin_third_person());  // a new emote: out again from where it is
+  view::tick_third_person(0.016f);
+  CHECK(cam && -at<phasmo::Vector3>(cam, kPos).z >= halfWay - 1e-3f);
+  view::tick_third_person(view::kEaseSeconds);
+  CHECK(view::in_third_person());
+  CHECK(cam && near(at<phasmo::Vector3>(cam, kPos).z, -view::kOrbitDistance, 1e-3f));
+  CHECK(!at<bool>(&g_camera, kEnabled));
+  view::stop_third_person();
+}
+
 void a_lost_camera_ends_the_view_at_once() {
   give();
   view::begin_third_person();
@@ -276,6 +294,7 @@ int main() {
   the_ease_is_smooth_and_bounded();
   the_view_copies_the_camera_and_draws_the_body();
   the_ease_ends_where_it_started();
+  a_new_start_while_easing_back_turns_out_again();
   a_lost_camera_ends_the_view_at_once();
   the_body_shows_on_the_players_camera();
   std::printf("%s\n", g_failures ? "third_person tests FAILED" : "third_person tests passed");

@@ -67,6 +67,11 @@ void finish() {
 }  // namespace
 
 bool begin_third_person() {
+  if (g.phase == Phase::Back) {  // easing back in: out again from where it is
+    g.t = kEaseSeconds - g.t;
+    g.phase = Phase::Out;
+    return true;
+  }
   if (g.phase != Phase::Off) return false;
   void* playerCam = local_camera();
   if (!playerCam) return false;

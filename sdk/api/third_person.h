@@ -21,9 +21,10 @@
 
 namespace pm::api::view {
 
-/// Starts the third-person view of the local player, easing out from the head.
-/// @return False with no local player or camera, when the view is already on, or where the camera entries did not
-///   resolve (logged).
+/// Starts the third-person view of the local player, easing out from the head; while it eases back in, it turns out
+/// again from where it is.
+/// @return False with no local player or camera, when the view is already on or easing out, or where the camera
+///   entries did not resolve (logged).
 bool begin_third_person();
 
 /// Eases the view back into the head; when it arrives, the player's own camera is on again and the mod's camera gone.
