@@ -627,8 +627,9 @@ void* door_to_open(Point ghostAt, Point velocity) {
 
 // The master knocks its Squatter over (user, 2026-11-10): every client's figure falls as the Shown's Fall arrives, pushed
 // along `yaw` as `cause` pushes.
-void fall(FallCause cause, float yaw) {
+void fall(FallCause cause, float yaw, uint64_t t) {
   Chase& c = g.chase;
+  if (const std::optional<Lines> line = line_for_fall(cause)) say(*line, t);
   c.out.move = Move::Fall;
   c.out.fallCause = cause;
   c.out.fallYaw = yaw_byte(yaw);
@@ -1071,7 +1072,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     // A hard stall, trying to run at kBumpFallPace or more, knocks it over backwards; a softer one plays the bump.
     if (!paused && !down && c.stuck.update(pace, speed, t)) {
       if (knocks_over(FallCause::Bump, speed) && may_fall(c.out.move, c.out.act, down))
-        fall(FallCause::Bump, wrap_angle(std::atan2(v.x, v.z) + std::numbers::pi_v<float>));
+        fall(FallCause::Bump, wrap_angle(std::atan2(v.x, v.z) + std::numbers::pi_v<float>), t);
       else
         act(Act::Bump, kBumpPauseMs, t);
     }
@@ -1085,11 +1086,11 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     const float heading = g.facing.value_or(0.0f);
     const Point chest{ghostAt.x, ghostAt.y + kChestHeight, ghostAt.z};
     if (c.fallAt && t >= c.fallAt && (c.out.move == Move::Stumble || c.out.move == Move::Parkour)) {
-      fall(c.fallCause, heading);
+      fall(c.fallCause, heading, t);
     } else if (const std::optional<Point> swing = door_knock(chest, knockDt)) {
-      fall(FallCause::Door, std::atan2(swing->x, swing->z));
+      fall(FallCause::Door, std::atan2(swing->x, swing->z), t);
     } else if (const std::optional<Point> flying = thrown_knock(chest, knockDt)) {
-      fall(FallCause::Thrown, std::atan2(flying->x, flying->z));
+      fall(FallCause::Thrown, std::atan2(flying->x, flying->z), t);
     }
   }
   if (down || c.out.move == Move::Fall) speed = 0.0f;  // the ragdoll has it: the agent waits where it fell
