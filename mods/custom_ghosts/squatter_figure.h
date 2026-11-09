@@ -48,8 +48,8 @@ inline constexpr const char* kTurnRightState = "TurnRight";
 inline constexpr const char* kTurnAroundState = "Turn180";
 inline constexpr const char* kStartWalkState = "StartWalk";
 inline constexpr const char* kLocalStates[] = {kTurnLeftState, kTurnRightState, kTurnAroundState, kStartWalkState};
-// The user's Standing Up clip, which the bundle runs the trip (Stumble) on into, from where it lies face down as the
-// trip lands to standing (user, 2026-11-09: getting up from the trip was too quick). Nothing plays it by name.
+// The user's Standing Up clip, the get-up from lying face down after a fall (user, 2026-11-09: getting up from the trip
+// was too quick).
 inline constexpr const char* kStandUpState = "StandUp";
 // The trip's own clip length in seconds, before the get-up.
 inline constexpr float kTripSeconds = 1.6000f;
@@ -61,9 +61,6 @@ inline constexpr float kStandUpTurnDegrees = 119.0f;
 // degrees to begin lying as Tripping lands (the bundle's build says how). Tripping lasts kTrippingSeconds.
 inline constexpr const char* kTripGetUpState = "TripGetUp";
 inline constexpr float kTrippingSeconds = 2.1000f;
-// How far round from its root each trip's get-up stands it (kStumbleStates' order): Standing Up stands facing its own
-// turn; Getting Up ends 7 degrees short of its clip's forward, so its -143 turn stands it at -150.
-inline constexpr float kRiseTurnDegrees[] = {kStandUpTurnDegrees, -150.0f};
 
 /** The states a move may play, one or two. */
 inline std::span<const char* const> states_of(Move m) {
@@ -77,6 +74,7 @@ inline std::span<const char* const> states_of(Move m) {
     case Move::Walk: return kWalkStates;
     case Move::Stand: return kStandStates;
     case Move::Sneak: return kSneakStates;
+    case Move::Fall: return kStandStates;  // a fall plays no clip: its ragdoll falls
   }
   return kRunStates;
 }

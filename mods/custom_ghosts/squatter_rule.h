@@ -24,7 +24,14 @@ enum class Phase : uint8_t {
 
 // Walk and Stand are the user's walking and standing clips (2026-11-09): it walks to search, follow and find a
 // seat, and stands still rather than running on the spot. Neither is in the chase's cycle.
-enum class Move : uint8_t { Run, Duck, Weave, Roll, Parkour, Stumble, Walk, Stand, Sneak };
+// Fall, the ragdoll's fall (2026-11-10), comes last so the moves before it keep their numbers on the wire.
+enum class Move : uint8_t { Run, Duck, Weave, Roll, Parkour, Stumble, Walk, Stand, Sneak, Fall };
+
+/** What knocked the Squatter over (user, 2026-11-10): a trip, a hard bump, a drop, a door swinging into it, or an object
+ * a player threw. */
+enum class FallCause : uint8_t { Trip, Bump, Drop, Door, Thrown };
+/** How many FallCause values there are: a byte at or above it is none (read_shown). */
+inline constexpr int kFallCauseValues = static_cast<int>(FallCause::Thrown) + 1;
 
 /** Which set of recorded lines the Squatter speaks from; the mod holds the recordings. */
 // Trip, the user's lines as it trips (2026-11-09), comes last so the sets before it keep their numbers on the wire.
@@ -175,6 +182,7 @@ inline float move_speed(float sprintSpeed, Move m) {
     case Move::Walk: scale = 0.6f; break;
     case Move::Stand: scale = 0.0f; break;
     case Move::Sneak: scale = 0.6f; break;
+    case Move::Fall: scale = 0.0f; break;  // its ragdoll has it
   }
   return sprintSpeed * kSprintMargin * scale;
 }

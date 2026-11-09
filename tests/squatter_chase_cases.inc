@@ -645,3 +645,44 @@ void it_gets_up_where_it_lies() {
   const RootPose standing = get_up_root({0, 0, 0}, {0, 1, 0}, GetUp::FaceDown);
   CHECK(std::isfinite(standing.yaw));
 }
+
+// What knocks it over: a trip and a drop always; a bump, a door's swing and a thrown object only from their speed up.
+void what_knocks_it_over() {
+  CHECK(knocks_over(FallCause::Trip, 0.0f) && knocks_over(FallCause::Drop, 0.0f));
+  const std::pair<FallCause, float> paced[] = {
+      {FallCause::Bump, kBumpFallPace}, {FallCause::Door, kDoorKnockSpeed}, {FallCause::Thrown, kThrownKnockSpeed}};
+  for (const auto& [cause, speed] : paced) {
+    CHECK(!knocks_over(cause, speed - 0.01f));
+    CHECK(knocks_over(cause, speed));
+    CHECK(knocks_over(cause, speed + 0.01f));
+    CHECK(!knocks_over(cause, std::numeric_limits<float>::quiet_NaN()));
+  }
+  CHECK(kBumpFallPace > 0.0f && kDoorKnockReach > 0.0f && kThrownReach > 0.0f);
+  // Each cause pushes it its own way and no harder than the ragdoll's cap; a trip and a drop only carry its run.
+  for (int cause = 0; cause < kFallCauseValues; ++cause) CHECK(kFallPush[cause] >= 0.0f && kFallPush[cause] <= 6.0f);
+  CHECK(kFallPush[static_cast<int>(FallCause::Trip)] == 0.0f && kFallPush[static_cast<int>(FallCause::Drop)] == 0.0f);
+  const Point push = fall_push(FallCause::Door, 0.0f);  // heading +z
+  CHECK(std::abs(push.z - kFallPush[static_cast<int>(FallCause::Door)]) < 1e-5f && std::abs(push.x) < 1e-5f);
+}
+
+// A knock never lands while it is down, mid-act or already falling: no fall stacks on another or restarts it
+// (Review Focus 2).
+void a_fall_never_stacks() {
+  CHECK(may_fall(Move::Run, -1, false));
+  CHECK(may_fall(Move::Stumble, -1, false));  // a trip's own fall comes mid-clip
+  CHECK(!may_fall(Move::Run, -1, true));       // down
+  CHECK(!may_fall(Move::Fall, -1, false));     // already falling
+  CHECK(!may_fall(Move::Run, static_cast<int8_t>(Act::Kick), false));
+  CHECK(!may_fall(Move::Run, static_cast<int8_t>(Act::OpenDoorInwards), false));
+  CHECK(!may_fall(Move::Run, static_cast<int8_t>(Act::Bang), false));
+}
+
+// A door's leaf meets the body at the point of its hinge-to-edge line nearest the chest, on the flat.
+void a_leaf_meets_the_body_at_its_nearest_point() {
+  const Point hinge{0, 0, 0}, edge{1, 2, 0};
+  const Point mid = nearest_on_flat(hinge, edge, {0.4f, 1.2f, 0.5f});
+  CHECK(std::abs(mid.x - 0.4f) < 1e-6f && mid.z == 0.0f && mid.y == 1.2f);
+  CHECK(nearest_on_flat(hinge, edge, {-3, 0, 1}).x == 0.0f);  // past the hinge: the hinge
+  CHECK(nearest_on_flat(hinge, edge, {5, 0, -1}).x == 1.0f);  // past the edge: the edge
+  CHECK(nearest_on_flat(hinge, hinge, {5, 0, 5}).x == 0.0f);  // no length: the hinge
+}

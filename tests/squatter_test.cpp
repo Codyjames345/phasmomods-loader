@@ -835,27 +835,15 @@ void sheet_hangs_from_the_crown() {
 }
 
 // The figure's state table (squatter_figure.h): the names the bundle's controller must have, exactly.
-// A trip ends lying face down, so the bundle runs it on into the user's Standing Up clip (user, 2026-11-09: getting up
-// was too quick): the Stumble state holds the trip and the get-up together, and once it stands each client turns the
-// figure's root by the angle the get-up was imported at, snapping to the standing idle, so the body itself never turns.
-// A trip picks one of two at random (user, 2026-11-09): Soccer Trip then Standing Up, or Tripping then Getting Up. Each
-// state holds its trip and its get-up together, and each get-up stands it turned its own way from its root, which the
-// client takes up as it stands.
+// A trip picks one of two at random (user, 2026-11-09): Soccer Trip or Tripping. Each loses its footing partway
+// through its own clip (kFooting), where its ragdoll takes over; the get-ups play from where the body lands.
 void a_trip_gets_up_with_the_users_clip() {
   CHECK(states_of(Move::Stumble).size() == 2);
   CHECK(std::abs(seconds_of("Stumble") - (kTripSeconds + seconds_of(kStandUpState))) < 1e-4f);
   CHECK(std::abs(seconds_of("Trip") - (kTrippingSeconds + seconds_of(kTripGetUpState))) < 1e-4f);
-  for (uint32_t v = 0; v < 2; ++v) {
-    const char* state = state_for(Move::Stumble, v);
-    CHECK(move_hold_seconds(Move::Stumble, seconds_of(state)) == seconds_of(state));
-    CHECK(!stood_up(1000, 1000 + static_cast<uint64_t>(seconds_of(state) * 1000.0f) - 1, v));
-    CHECK(stood_up(1000, 1000 + static_cast<uint64_t>(seconds_of(state) * 1000.0f), v));
-  }
+  CHECK(kFooting[0] > 0.0f && kFooting[0] < kTripSeconds);
+  CHECK(kFooting[1] > 0.0f && kFooting[1] < kTrippingSeconds);
   CHECK(seconds_of(kStandUpState) > 1.0f && seconds_of(kTripGetUpState) > 1.0f);  // get-ups, not pops
-  const float deg = std::numbers::pi_v<float> / 180.0f;
-  CHECK(std::abs(risen_facing(0.0f, 0) - kRiseTurnDegrees[0] * deg) < 1e-5f);
-  CHECK(std::abs(risen_facing(170.0f * deg, 1) - wrap_angle((170.0f + kRiseTurnDegrees[1]) * deg)) < 1e-5f);
-  CHECK(kRiseTurnDegrees[0] == kStandUpTurnDegrees);
 }
 
 void every_move_and_act_has_its_states() {
@@ -925,6 +913,30 @@ void shown_round_trips() {
 
 // A Shown is taken only whole, in range and from the master: a short or long message, a value no client knows, and one
 // any other player sent are dropped, and the last good one is kept.
+// A fall goes to every client in the Shown: the move, which way it is pushed and what knocked it over. A cause no
+// client knows is dropped; a heading survives its byte to within half a step.
+void a_fall_is_shared() {
+  for (int cause = 0; cause < kFallCauseValues; ++cause) {
+    Shown s;
+    s.phase = Phase::Chasing;
+    s.move = Move::Fall;
+    s.fallYaw = 77;
+    s.fallCause = static_cast<FallCause>(cause);
+    const std::vector<uint8_t> bytes = shown_message(s);
+    Shown back;
+    CHECK(read_shown(bytes.data(), bytes.size(), back) && back == s);
+  }
+  Shown s;
+  s.move = Move::Fall;
+  std::vector<uint8_t> bytes = shown_message(s);
+  bytes.back() = static_cast<uint8_t>(kFallCauseValues);  // the cause is the last byte
+  Shown out;
+  CHECK(!read_shown(bytes.data(), bytes.size(), out));
+  const float step = 2.0f * std::numbers::pi_v<float> / 256.0f;
+  for (float yaw = -3.1f; yaw < 3.1f; yaw += 0.05f)
+    CHECK(std::abs(wrap_angle(byte_yaw(yaw_byte(yaw)) - yaw)) <= step / 2 + 1e-4f);
+}
+
 void bad_shown_is_dropped() {
   Shown s;
   s.phase = Phase::Chasing;
@@ -1288,6 +1300,9 @@ int main() {
   a_fall_settles_then_gets_up();
   the_get_up_follows_how_it_landed();
   it_gets_up_where_it_lies();
+  what_knocks_it_over();
+  a_fall_never_stacks();
+  a_leaf_meets_the_body_at_its_nearest_point();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();
@@ -1321,6 +1336,7 @@ int main() {
   lines_match_the_phase();
   picks_never_repeat_and_handle_nothing();
   shown_round_trips();
+  a_fall_is_shared();
   bad_shown_is_dropped();
   one_try_is_sent_per_input();
   a_non_masters_try_reaches_the_master();

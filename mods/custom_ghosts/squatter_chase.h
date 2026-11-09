@@ -459,15 +459,61 @@ inline Pick move_for(const Surroundings& s) {
   return {};
 }
 
-/** The figure's facing once it has stood up from trip `variant` facing `facing`: turned by that get-up's own angle. */
-inline float risen_facing(float facing, uint32_t variant) {
-  constexpr size_t n = sizeof kRiseTurnDegrees / sizeof kRiseTurnDegrees[0];
-  return wrap_angle(facing + kRiseTurnDegrees[variant % n] * std::numbers::pi_v<float> / 180.0f);
+// What knocks it over (user, 2026-11-10: every trip, a hard bump, landing from a drop, a door swinging into it, a thrown
+// object). Every value is a starting value, judged with the user in game.
+/** The pace, metres a second, it must be trying to run at for a stall against a wall or furniture to knock it over. */
+inline constexpr float kBumpFallPace = 2.5f;
+/** How fast, metres a second, a door's leaf must swing toward it, within kDoorKnockReach metres, to knock it over. */
+inline constexpr float kDoorKnockSpeed = 1.5f, kDoorKnockReach = 0.6f;
+/** How fast, metres a second, a prop or item must be moving, within kThrownReach metres of its chest, to knock it over. */
+inline constexpr float kThrownKnockSpeed = 4.0f, kThrownReach = 0.6f;
+/** Seconds into each trip clip (kStumbleStates' order) where the body loses its footing: the hips fall below 0.6 m, read
+ * from the clips with the bundle's probe. The ragdoll takes it from there. */
+inline constexpr float kFooting[] = {0.45f, 0.95f};
+/** How hard each cause (FallCause's order) pushes the falling body, metres a second, on top of its own run. */
+inline constexpr float kFallPush[] = {0.0f, 1.5f, 0.0f, 2.5f, 2.0f};
+
+/** Whether `cause` at `speed` (metres a second: the pace for a bump, the swing or flight toward it otherwise) knocks it
+ * over. A trip and a drop always do. */
+inline bool knocks_over(FallCause cause, float speed) {
+  switch (cause) {
+    case FallCause::Trip:
+    case FallCause::Drop: return true;
+    case FallCause::Bump: return speed >= kBumpFallPace;
+    case FallCause::Door: return speed >= kDoorKnockSpeed;
+    case FallCause::Thrown: return speed >= kThrownKnockSpeed;
+  }
+  return false;
 }
 
-/** Whether trip `variant`, whose clip began at `since`, has stood up by `now`: the trip and its get-up have played. */
-inline bool stood_up(uint64_t since, uint64_t now, uint32_t variant) {
-  return now >= since && now - since >= static_cast<uint64_t>(seconds_of(state_for(Move::Stumble, variant)) * 1000.0f);
+/** Whether a knock may land now: never while it is `down` (falling or getting up), mid-act, or already falling, so no
+ * fall stacks on another or restarts it (Review Focus 2). */
+inline bool may_fall(Move current, int8_t act, bool down) { return !down && act < 0 && current != Move::Fall; }
+
+/** The point of the segment from `a` to `b` nearest `p` on the flat, at `p`'s height: where a door's leaf, hinge to
+ * edge, comes nearest the body. */
+inline Point nearest_on_flat(Point a, Point b, Point p) {
+  const float dx = b.x - a.x, dz = b.z - a.z, length = dx * dx + dz * dz;
+  const float u = length > 1e-8f ? std::clamp(((p.x - a.x) * dx + (p.z - a.z) * dz) / length, 0.0f, 1.0f) : 0.0f;
+  return {a.x + dx * u, p.y, a.z + dz * u};
+}
+
+/** A heading, radians clockwise from +z, in one byte of the Shown. */
+inline uint8_t yaw_byte(float radians) {
+  constexpr float turn = 2.0f * std::numbers::pi_v<float>;
+  const float share = (wrap_angle(radians) + std::numbers::pi_v<float>) / turn;
+  return static_cast<uint8_t>(static_cast<int>(std::lround(share * 256.0f)) & 0xFF);
+}
+
+/** The heading a byte of the Shown holds (yaw_byte). */
+inline float byte_yaw(uint8_t b) {
+  return wrap_angle(static_cast<float>(b) / 256.0f * 2.0f * std::numbers::pi_v<float> - std::numbers::pi_v<float>);
+}
+
+/** The push `cause` gives the falling body along heading `yaw`, metres a second on the flat. */
+inline Point fall_push(FallCause cause, float yaw) {
+  const float speed = kFallPush[static_cast<int>(cause) % kFallCauseValues];
+  return {std::sin(yaw) * speed, 0.0f, std::cos(yaw) * speed};
 }
 
 /** What in `s` calls a clumsy move, in move_for's order, for the log; null when nothing does. */
