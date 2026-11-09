@@ -264,3 +264,18 @@ No behaviour is assumed. Each item ends as map entries or notes in `sdk/systems/
 - The order of the work, and the split between SDK and mod.
 - How the wheel is drawn, within the user's design.
 - What the smoke list asks the user to check in game.
+
+## Decisions after approval (2026-11-10)
+
+- **The songs' loops** (user): a looping emote's song loops with exactly its animation's length, except where the
+  author says otherwise. Floss's and Take The L's songs loop on their own: the songs mark no loop point, so they were
+  measured from the tracks: Floss every 16.692 s from its start, Take The L every 12.631 s from its start. The song is
+  timed from the clip's own clock, so the two never drift.
+- **The assets** (user): the eight emotes are the folders the author supplied, matched to the package's clips by name;
+  their names under the wheel are the author's song titles; they sit clockwise from the top in alphabetical order
+  (Claude's call).
+- **Every clip loops** (Claude's call): the package sets Loop Time on none of the eight, but each is a dance with a
+  two-minute song that repeats until the player moves.
+- **The keys' defaults** (Claude's call, by the user's "unless that key is taken" rule): the game binds B (the
+  walkie-talkie) and D-pad down (the torch), so the defaults fall back to X and D-pad up; the left X button in VR is
+  unbound. All rebindable in the game's keybinds menu.

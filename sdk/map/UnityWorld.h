@@ -321,6 +321,12 @@ inline constexpr pm::sdk::EntryDesc RaycastHit_get_transform{.key = "RaycastHit.
                                                              .kind = pm::sdk::Kind::Method, .owner = "RaycastHit",
                                                              .name = "get_transform"};
 
+/// How far along the ray the hit lies, in metres. An instance method of the struct: it takes the struct's address.
+/// Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc RaycastHit_get_distance{.key = "RaycastHit.get_distance",
+                                                            .kind = pm::sdk::Kind::Method, .owner = "RaycastHit",
+                                                            .name = "get_distance"};
+
 inline constexpr const char* Physics_RaycastHit_params[] = {"Ray", "out RaycastHit", "float", "int",
                                                             "QueryTriggerInteraction"};
 
@@ -507,6 +513,8 @@ struct RaycastHit {
   static constexpr pm::api::Type<pm::map::RaycastHit> type{};
   /// get_transform(hit): the Transform of what it hit. Unresolved: null.
   static constexpr pm::api::Method<pm::map::RaycastHit_get_transform, void*(void*)> get_transform{};
+  /// get_distance(hit): metres along the ray. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::RaycastHit_get_distance, float(void*)> get_distance{};
 };
 
 /// @}

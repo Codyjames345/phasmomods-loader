@@ -190,6 +190,21 @@
         @{ Name = 'mods/ghost-tells/GhostTells.dll'; Source = 'build/GhostTells.dll' }
         @{ Name = 'mods/ghost-tells/manifest.json'; Source = 'mods/ghost_tells/manifest.json' }
         @{ Name = 'mods/ghost-tells/i18n/default.json'; Source = 'mods/ghost_tells/i18n/default.json' }
+        @{ Name = 'mods/emotes/Emotes.dll'; Source = 'build/Emotes.dll' }
+        @{ Name = 'mods/emotes/manifest.json'; Source = 'mods/emotes/manifest.json' }
+        @{ Name = 'mods/emotes/i18n/default.json'; Source = 'mods/emotes/i18n/default.json' }
+        # The Emotes bundle (its eight clips, songs and icons; mods/emotes/emote_assets.h). Gitignored like the Squatter's: built
+        # in the private assets repository's unity/emotes-bundle and placed by CI from there. Sha256 pins the build.
+        @{ Name = 'mods/emotes/assets/emotes.bundle'; Source = 'mods/emotes/assets/emotes.bundle'; Sha256 = 'E67E268EA233EE78DE69962DAA4EEDE273EF7603AD81E2BB9A8A136AD234C813' }
+        # Each song's loudness, measured from the same MP3 by tools/emote_loudness.mjs, for the ghost's hearing.
+        @{ Name = 'mods/emotes/assets/disco_fever/loudness.txt'; Source = 'mods/emotes/assets/disco_fever/loudness.txt' }
+        @{ Name = 'mods/emotes/assets/electro_swing/loudness.txt'; Source = 'mods/emotes/assets/electro_swing/loudness.txt' }
+        @{ Name = 'mods/emotes/assets/floss/loudness.txt'; Source = 'mods/emotes/assets/floss/loudness.txt' }
+        @{ Name = 'mods/emotes/assets/groove_jam/loudness.txt'; Source = 'mods/emotes/assets/groove_jam/loudness.txt' }
+        @{ Name = 'mods/emotes/assets/orange_justice/loudness.txt'; Source = 'mods/emotes/assets/orange_justice/loudness.txt' }
+        @{ Name = 'mods/emotes/assets/scenario/loudness.txt'; Source = 'mods/emotes/assets/scenario/loudness.txt' }
+        @{ Name = 'mods/emotes/assets/smooth_moves/loudness.txt'; Source = 'mods/emotes/assets/smooth_moves/loudness.txt' }
+        @{ Name = 'mods/emotes/assets/take_the_l/loudness.txt'; Source = 'mods/emotes/assets/take_the_l/loudness.txt' }
     )
     Records = @{ Name = 'builds'; Source = 'sdk/builds' }
 }

@@ -69,7 +69,9 @@ say what the loader guarantees; [a mod's own files](guides/mod-files.md) says wh
 (an `assets` folder beside its DLL, copied for each launch and read-only, found with `pm::api::assets_folder()`, and a mod
 whose files cannot be copied is off); [custom animation](guides/custom-animation.md) shows a figure of a mod's own
 (an AssetBundle of clips, a script-free copy of the investigator's body and Unity Cloth, with the helpers in
-`sdk/api/bundles.h` and `sdk/api/models.h`); and [equipment](guides/equipment.md) describes the game's equipment system. Everything below
+`sdk/api/bundles.h` and `sdk/api/models.h`); [emotes](guides/emotes.md) covers a key in the game's keybinds menu, a clip on
+a player's own body, a third-person view, a sound the ghost hears as talking and a screen blur; and
+[equipment](guides/equipment.md) describes the game's equipment system. Everything below
 describes what is in the code now.
 
 ## Making a mod

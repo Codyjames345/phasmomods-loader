@@ -256,6 +256,11 @@ inline constexpr pm::sdk::EntryDesc RenderMode_ScreenSpaceOverlay{
     .key = "RenderMode.ScreenSpaceOverlay", .kind = pm::sdk::Kind::EnumValue, .owner = "RenderMode",
     .name = "ScreenSpaceOverlay"};
 
+/// A canvas drawn as a flat object in the world, as a VR menu is. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc RenderMode_WorldSpace{.key = "RenderMode.WorldSpace",
+                                                          .kind = pm::sdk::Kind::EnumValue, .owner = "RenderMode",
+                                                          .name = "WorldSpace"};
+
 /// Sets how the canvas is drawn, a RenderMode. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc Canvas_set_renderMode{.key = "Canvas.set_renderMode", .kind = pm::sdk::Kind::Method,
                                                           .owner = "Canvas", .name = "set_renderMode"};
@@ -635,6 +640,7 @@ struct ToggleEvent {
 /// How a Canvas is drawn. Unresolved: 0.
 namespace RenderMode {
 inline constexpr pm::api::EnumValue<pm::map::RenderMode_ScreenSpaceOverlay> ScreenSpaceOverlay{};  ///< ScreenSpaceOverlay(): the value's number in this game build
+inline constexpr pm::api::EnumValue<pm::map::RenderMode_WorldSpace> WorldSpace{};  ///< WorldSpace(): the value's number in this game build
 }  // namespace RenderMode
 
 /// Scales a canvas to the screen. `scaler` below is the CanvasScaler.

@@ -76,6 +76,24 @@ While Playable Ghost holds the ghost player's spot out, each investigator after 
 A mark or vote that reached a client before it took the spot out stays where it landed. The user accepted this for now
 and judges it in the first in-game test (2026-11-01). It is not final.
 
+## The body, the voice's loudness and the input actions (2026-11-10)
+
+Read for the Emotes mod ([players](../systems/players.md#the-body), [voice](../systems/voice.md#how-loud-a-player-talks),
+[menus](../systems/menus.md#key-bindings), [media](../systems/media.md#a-camera-of-a-mods-own-and-screen-effects)).
+
+- `PlayerAudio.IsTalkingLoudly`, `PlayerAudio.Update` and `PlayerAudio.GetPlayerVoiceAudioSource` were decompiled. The
+  0.4 taken from the Vivox energy is a float literal in the game's read-only data, read from a copy of the binary.
+  `PlayerAudio.loudness` is found as PlayerAudio's one public float.
+- `Player.SetPlayerModelLayer`, `NetworkedPropGrab.GrabPropRPC`, `PCPropGrab.ParentItemOnLocalPlayer` and the camera
+  slot's enabler were decompiled. `Player.animator`, `Player.renderers` and `Player.characterAnimations` are found as
+  Player's one field of each type.
+- The input actions and their bindings are not in code: they are serialized in `resources.assets`. Their names, ids and
+  default paths were read as the length-prefixed strings around the action names; the XR Interaction actions' paths were
+  counted across the game's data files. Nothing there is a map entry: a mod reads the actions at run time by name.
+- The Playables, `Camera.CopyFrom`, `AnimationClip.get_length` and `Motion.get_isLooping` are icalls whose exact names
+  were read from `GameAssembly.dll`'s strings; they are checked at startup only. `VolumeParameter<float>.set_value` and
+  `VolumeParameter<DepthOfFieldMode>.set_value` are inflated, also checked at startup only.
+
 ## Not covered
 
 - A Player held in another object's field (a hunt's lists, a ghost's target, `LevelRoom.GetPlayersInRoom`, the truck's

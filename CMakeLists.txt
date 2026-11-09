@@ -52,7 +52,8 @@ add_custom_command(TARGET gamecheck POST_BUILD COMMAND gamecheck --map-digest "$
 
 # A mod's side of the host contract (core/mod_api.h) and the game API it calls (sdk/api, sdk/map).
 add_library(pmmod STATIC core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/api/assets.cpp
-  sdk/api/bundles.cpp sdk/api/models.cpp)
+  sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/keybinds.cpp sdk/api/player_anim.cpp
+  sdk/api/third_person.cpp sdk/api/talk_loudness.cpp sdk/api/screen_effects.cpp)
 target_include_directories(pmmod PUBLIC sdk/api sdk/map)
 target_link_libraries(pmmod PUBLIC pmcore)
 pm_options(pmmod)
@@ -208,6 +209,13 @@ target_include_directories(GhostTells BEFORE PRIVATE sdk/api sdk/map)
 target_link_libraries(GhostTells PRIVATE pmmod)
 pm_options(GhostTells)
 
+# Emotes: an eight-dance wheel on a rebindable key (docs/superpowers/specs/2026-11-10-emotes-design.md).
+add_library(Emotes SHARED mods/emotes/mod.cpp mods/emotes/wheel.cpp mods/emotes/emote.cpp)
+target_include_directories(Emotes PRIVATE mods/emotes mods/custom_ghosts)
+target_include_directories(Emotes BEFORE PRIVATE sdk/api sdk/map)
+target_link_libraries(Emotes PRIVATE pmmod)
+pm_options(Emotes)
+
 add_executable(pminject tools/inject.cpp)
 target_include_directories(pminject PRIVATE tools core)
 pm_options(pminject)
@@ -338,6 +346,33 @@ pm_test(squatter_ragdoll mods/custom_ghosts/squatter_ragdoll.cpp sdk/api/game_ap
   core/log.cpp)
 # Before the mods' folders, as for content_difficulty_test below.
 target_include_directories(squatter_ragdoll_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# A mod's rebindable keys (sdk/api/keybinds.h).
+pm_test(keybinds sdk/api/keybinds.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(keybinds_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# The Emotes mod's rules, message and emotes' table (mods/emotes/emote_rule.h, emote_net.h, emote_assets.h).
+pm_test(emotes)
+target_include_directories(emotes_test PRIVATE mods/emotes)
+pm_test(emotes_play)
+target_include_directories(emotes_play_test PRIVATE mods/emotes)
+pm_test(emotes_wheel)
+target_include_directories(emotes_wheel_test PRIVATE mods/emotes)
+# Playing a clip on a player's own body (sdk/api/player_anim.h).
+pm_test(player_anim sdk/api/player_anim.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(player_anim_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# The third-person view and the shown body (sdk/api/third_person.h).
+pm_test(third_person sdk/api/third_person.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(third_person_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# A sound counted as a player talking (sdk/api/talk_loudness.h).
+pm_test(talk_loudness sdk/api/talk_loudness.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(talk_loudness_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# A screen blur and vignette of a mod's own (sdk/api/screen_effects.h).
+pm_test(screen_effects sdk/api/screen_effects.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(screen_effects_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(models sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(models_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)

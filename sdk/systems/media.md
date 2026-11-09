@@ -34,6 +34,21 @@ full screen, stay on that viewer's own client, so no other client can tell exact
 - **The truck's CCTV screen** in the lobby only ever shows its screensaver.
 - The lobby is walkable, and its truck sits to the side.
 
+## A camera of a mod's own, and screen effects
+
+The game renders with the Universal Render Pipeline. A camera a mod makes renders as the player's does when it copies the
+player's camera (`Camera.CopyFrom` with `LocalPlayer.camera`) and its URP settings
+(`UniversalAdditionalCameraData.get_renderPostProcessing` and `get_volumeLayerMask`, set on the copy's own data). While
+it draws, the player's camera can be switched off (`Behaviour.set_enabled`): its transform, its AudioListener and the
+held item's slot stay where they are, and so do the game's raycasts from it. A HUD canvas drawn by the player's camera
+hides with it; overlay canvases do not. `sdk/api/third_person.h` does this.
+
+A blur or vignette of a mod's own is a URP volume: a GameObject on a layer the camera's volume mask holds, with a
+`Volume` (`Volume.m_IsGlobal`, `Volume.priority`, `Volume.weight`) whose `Volume.sharedProfile` is a new `VolumeProfile`
+(`ScriptableObject.CreateInstance`) holding a `DepthOfField` in Gaussian mode and a `Vignette` (`VolumeProfile.Add`),
+their values set through `VolumeParameter<float>.set_value` and `VolumeParameter<DepthOfFieldMode>.set_value`.
+`sdk/api/screen_effects.h` does this. The game has no blur of its own for its menus.
+
 ## Engine features the game does not use
 
 - `VideoPlayer` and `AsyncGPUReadback` have no managed methods left in this build (they were stripped). The engine

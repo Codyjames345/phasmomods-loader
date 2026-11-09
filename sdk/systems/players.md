@@ -193,6 +193,44 @@ never sent: only the player's own client holds it. What every client does get is
 (`Player.stamina`): the player's client sends whether it walks and whether it sprints in the view's serialization, and
 `moving` follows them, so another client sees a sprint stop but not why.
 
+## The body
+
+What a mod needs to animate an investigator's own body, as the Emotes mod does (`sdk/api/player_anim.h`,
+`sdk/api/third_person.h`). Read from the class dump and decompiled code of Steam build E300EDA9.
+
+- **Its Animator** is `Player.animator`, on every client. The game drives it with its own controller, swaps override
+  controllers for the held item (`Player.characterAnimations`, a `PlayerCharacterAnimations`), syncs its parameters
+  with a PhotonAnimatorView and bends the hands and arms with Animation Rigging (a RigBuilder, whose graph runs at
+  sorting order 1000). Unity's Playables are all in the build (`sdk/map/Playables.h`): a second graph with an animation
+  output on the same Animator, at a higher sorting order and a weight from 0 to 1, plays a clip over all of that and
+  gives the body back untouched when it is destroyed.
+- **How the local player hides its own body.** `Player.renderers` lists the body's renderers. `Player.SetPlayerModelLayer`
+  moves each one's GameObject between two named layers, and the local camera leaves the hidden one out. A camera of a
+  mod's own that adds those renderers' layers to its culling mask shows the body without touching them.
+- **Where the held item hangs.** On other clients it hangs from the body's hand anchors
+  (`PlayerCharacterAnimations.parentingTargetRightHand` and `parentingTargetLeftHand`). On the player's own PC client it
+  hangs in a slot in front of the camera: `PCPropGrab.GetItemInCameraSlot` gives it, and
+  `PCPropGrab.ParentItemOnLocalPlayer` puts it back there at the item's own offset. `NetworkedPropGrab.GrabPropRPC`
+  switches the item's sync component off and freezes its Rigidbody while it is held, so moving it on the holder's own
+  client sends nothing.
+- **How the body turns.** On PC the game's MouseLook turns the player's root by the mouse's sideways movement and the
+  head camera (`LocalPlayer.camera`) by its up and down movement; `PCLook`, in LateUpdate, then bends the spine and head
+  toward where the camera looks. The body's facing reaches other clients with the root's rotation.
+- **VR.** A VR player's investigator is a `VRPlayer`. Its `VRPlayer.leftHandIK` and `VRPlayer.rightHandIK` are the IK
+  targets that follow the controllers.
+
+### What the player does, by input action
+
+The game's input actions (`PCControls.actions`, the `InputActionAsset` of `LocalPCPlayer.controls`) are named, with their
+default keyboard and gamepad bindings: Pickup (E, west button), Secondary Use (F, left trigger), Primary Use (right mouse
+button, south button), HoldPrimaryUse (held Primary Use), Interact (left mouse button, right trigger), Drop (G, east
+button), Crouch (C, right stick press), Run, Move, Look, InventorySwap (Q, north button), InventorySwapScroll (the
+scroll wheel), InventorySlot1 to 4 (1 to 4), Torch and Hat Use (T, D-pad down), InspectWatch (H, D-pad left), Journal
+(J, select), LocalPushToTalk (V, left shoulder), GlobalPushToTalk (B, right shoulder), Pause, and the menu actions UIUp,
+UIDown, UILeft, UIRight (the arrow keys and the D-pad) and UISelect and UIShoulder ones. A mod reads one by its name
+(`InputActionMap.m_Actions`, `InputAction.m_Name`) and asks `InputAction.WasPressedThisFrame`, so the player's own
+rebinding counts. `PCPropGrab` holds the handlers behind the item actions.
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/players.md).

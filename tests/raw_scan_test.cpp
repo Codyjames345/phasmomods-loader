@@ -719,6 +719,10 @@ void no_obfuscated_name_in_the_docs(const fs::path& root) {
 void no_unapproved_canvas(const fs::path& root) {
   static const std::set<std::string> kWaiting{"core/notice.cpp", "mods/playable_ghost/hud.cpp", "mods/playable_ghost/panorama.cpp",
                                               "mods/playable_ghost/perceive_view.cpp", "mods/playable_ghost/picker.cpp"};
+  // Canvases the author designed and asked for (the design names each): not windows waiting for a design.
+  static const std::set<std::string> kAuthorDesigned{
+      "mods/emotes/wheel.cpp",  // the emote wheel (docs/superpowers/specs/2026-11-10-emotes-design.md, "The wheel")
+  };
   static const std::regex call(R"(\bcreate_canvas\s*\()");
   std::set<std::string> found;
   for (const char* folder : {"core", "host", "mods"})
@@ -735,13 +739,18 @@ void no_unapproved_canvas(const fs::path& root) {
       }
     }
   for (const std::string& file : found)
-    if (!kWaiting.count(file)) {
+    if (!kWaiting.count(file) && !kAuthorDesigned.count(file)) {
       std::printf("FAIL %s draws a window of its own; use the game's UI, or ask the author first\n", file.c_str());
       ++g_failures;
     }
   for (const std::string& file : kWaiting)
     if (!found.count(file)) {
       std::printf("FAIL %s no longer draws a canvas: take it off kWaiting and FINDINGS.md 31\n", file.c_str());
+      ++g_failures;
+    }
+  for (const std::string& file : kAuthorDesigned)
+    if (!found.count(file)) {
+      std::printf("FAIL %s no longer draws a canvas: take it off kAuthorDesigned\n", file.c_str());
       ++g_failures;
     }
 }

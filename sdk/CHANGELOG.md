@@ -10,6 +10,15 @@ major version `PmHostApi` and every published struct only grow at the end, and e
 
 ### Added
 
+- **Emotes and keys of your own** ([guide](guides/emotes.md)). Helpers in the mod's own code (the host contract does not
+  change): a rebindable key with a row in the game's keybinds menu (`sdk/api/keybinds.h`, `binding_rule.h`); a clip
+  played on a player's own body and handed back (`sdk/api/player_anim.h`); an eased third-person view of the local
+  player and their body shown to them (`sdk/api/third_person.h`, `orbit_rule.h`); a sound counted as the player talking
+  (`sdk/api/talk_loudness.h`); and a screen blur and vignette (`sdk/api/screen_effects.h`). `core/ui.h` gains a
+  world-space canvas and textures drawn from pixels. The map gains the entries behind them: the player's Animator,
+  renderers, hand anchors, voice loudness and VR hands; the held item's camera slot; Unity's Playables, the Input
+  System's action building, overrides and keybinds rows, the gamepad's stick; `Camera.CopyFrom`; and URP's camera data,
+  volumes, vignette and depth of field.
 - **Figures of a mod's own.** Helpers in the mod's own code (the host contract does not change): `load_bundle`,
   `load_controller`, `load_bundle_asset`, `bundle_asset_names` and `unload_bundle` (`sdk/api/bundles.h`) load an
   AssetBundle from the mod's assets folder; `copy_investigator_body`, `use_controller`, `play_state`,
