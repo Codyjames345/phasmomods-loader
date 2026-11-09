@@ -16,6 +16,7 @@
 /// @since Contract 2.3
 
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace pm::api::talk {
@@ -29,7 +30,7 @@ inline constexpr float kEnergyOffset = 0.4f;
 inline constexpr float kRefreshSeconds = 1.0f;
 /// The energy, 0 to 1, a sound of RMS amplitude 1 counts as, scaled down evenly: a starting value, judged with the user
 /// in game, since a Vivox voice's energy is not a plain RMS.
-inline constexpr float kEnergyPerRms = 3.0f;
+inline constexpr float kEnergyPerRms = 4.0f;
 /// The length of one window of an Envelope, in seconds.
 inline constexpr float kWindowSeconds = 0.1f;
 
@@ -48,6 +49,22 @@ struct Envelope {
   /// @return The window's loudness; past the end, or with no windows, silence (-kEnergyOffset).
   float at(float seconds) const;
 };
+
+/// A sound's loudness in the game's scale from its RMS amplitude, as loudness_of measures samples.
+/// @param rms The RMS amplitude, 0 to 1.
+/// @return From -0.4 to 0.6.
+float loudness_of_rms(float rms);
+
+/// An Envelope from RMS amplitudes measured beforehand, one per kWindowSeconds window (a mod measures a long song once,
+/// at build time, rather than holding its samples).
+/// @param rms The windows' RMS amplitudes, in order.
+/// @return Its envelope.
+Envelope envelope_of_rms(std::span<const float> rms);
+
+/// The RMS amplitudes in a text of one number a line; a line that is no number is passed over.
+/// @param text The text.
+/// @return The numbers, in order.
+std::vector<float> parse_rms(std::string_view text);
 
 /// Measures a sound's Envelope.
 /// @param samples Mono samples from -1 to 1.

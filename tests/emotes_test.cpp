@@ -124,6 +124,32 @@ void a_looping_song_restarts_with_its_clip() {
   CHECK(one_shot_done(2.0, length));
 }
 
+void a_song_loops_at_its_own_points() {
+  // No loop points given: the song's loop is the clip's (start 0, the clip's length).
+  const SongLoop clipLoop{0.0f, 2.0f};
+  CHECK(song_position(1.5, clipLoop) == 1.5);
+  CHECK(std::fabs(song_position(2.5, clipLoop) - 0.5) < 1e-9);
+  CHECK(song_jumped(1.9, 2.1, clipLoop));
+  CHECK(!song_jumped(2.1, 2.5, clipLoop));
+  // Its own points: an intro of 1 s, then a 4 s loop from 1 s to 5 s, whatever the clip's length.
+  const SongLoop own{1.0f, 4.0f};
+  CHECK(song_position(3.0, own) == 3.0);             // still in the first pass
+  CHECK(std::fabs(song_position(5.5, own) - 1.5) < 1e-9);  // back to the loop point, half a second on
+  CHECK(std::fabs(song_position(9.5, own) - 1.5) < 1e-9);
+  CHECK(song_jumped(4.9, 5.1, own));
+  CHECK(!song_jumped(5.1, 8.9, own));
+  CHECK(song_jumped(8.9, 9.1, own));
+  // No loop at all (length 0): the song plays on from the clip's start.
+  CHECK(song_position(50.0, SongLoop{0.0f, 0.0f}) == 50.0);
+  CHECK(!song_jumped(1.0, 99.0, SongLoop{0.0f, 0.0f}));
+  // An emote's loop: its own points when given, else its clip's length.
+  EmoteAsset e = kEmotes[0];
+  CHECK(song_loop_of(e, 9.0f).start == 0.0f && song_loop_of(e, 9.0f).length == 9.0f);
+  e.songLoopStart = 2.0f;
+  e.songLoopSeconds = 3.0f;
+  CHECK(song_loop_of(e, 9.0f).start == 2.0f && song_loop_of(e, 9.0f).length == 3.0f);
+}
+
 // ---- The message ----
 
 void messages_round_trip() {
@@ -206,6 +232,7 @@ int main() {
   the_body_follows_past_ninety();
   only_a_move_past_half_a_metre_ends_it();
   a_looping_song_restarts_with_its_clip();
+  a_song_loops_at_its_own_points();
   messages_round_trip();
   bad_messages_are_dropped();
   the_dead_dance_for_the_dead();

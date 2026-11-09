@@ -17,6 +17,10 @@ struct EmoteAsset {
   const char* folder;   ///< its folder under mods/emotes/assets, and the stem of its song's and icon's bundle names
   const char* clip;     ///< its AnimationClip's name in the animation package
   const char* nameKey;  ///< the key of its name under the wheel
+  /// Where its song loops back to, in seconds, and how long its loop is; a length of 0 loops the song with its clip
+  /// (the author's rule, 2026-11-10). The songs mark no loop of their own, so every emote waits for the author's points.
+  float songLoopStart = 0.0f;
+  float songLoopSeconds = 0.0f;
 };
 
 inline constexpr EmoteAsset kEmotes[kSegments] = {
@@ -29,6 +33,14 @@ inline constexpr EmoteAsset kEmotes[kSegments] = {
     {"smooth_moves", "SmoothMoves", pm::i18n::key("emotes.name.6")},
     {"take_the_l", "TakeTheL", pm::i18n::key("emotes.name.7")},
 };
+
+/// An emote's song loop: its own points when the author gave them, else its clip's length from the song's start.
+/// @param e The emote.
+/// @param clipSeconds Its clip's length.
+inline SongLoop song_loop_of(const EmoteAsset& e, float clipSeconds) {
+  if (e.songLoopSeconds > 0.0f) return {e.songLoopStart, e.songLoopSeconds};
+  return {0.0f, clipSeconds};
+}
 
 /// The key of the label of the mod's key in the game's keybinds menu.
 inline constexpr const char* kKeyLabel = pm::i18n::key("emotes.key-label");

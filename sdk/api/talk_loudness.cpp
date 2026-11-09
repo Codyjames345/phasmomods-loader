@@ -2,18 +2,41 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <string>
 
 #include "Player.h"
 #include "runtime.h"
 
 namespace pm::api::talk {
 
+float loudness_of_rms(float rms) { return std::clamp(rms * kEnergyPerRms, 0.0f, 1.0f) - kEnergyOffset; }
+
 float loudness_of(std::span<const float> samples) {
   if (samples.empty()) return -kEnergyOffset;
   double sum = 0.0;
   for (const float s : samples) sum += static_cast<double>(s) * s;
-  const float rms = static_cast<float>(std::sqrt(sum / static_cast<double>(samples.size())));
-  return std::clamp(rms * kEnergyPerRms, 0.0f, 1.0f) - kEnergyOffset;
+  return loudness_of_rms(static_cast<float>(std::sqrt(sum / static_cast<double>(samples.size()))));
+}
+
+Envelope envelope_of_rms(std::span<const float> rms) {
+  Envelope env;
+  env.windows.reserve(rms.size());
+  for (const float r : rms) env.windows.push_back(loudness_of_rms(r));
+  return env;
+}
+
+std::vector<float> parse_rms(std::string_view text) {
+  std::vector<float> out;
+  while (!text.empty()) {
+    const size_t nl = text.find('\n');
+    std::string line(text.substr(0, nl));
+    text = nl == std::string_view::npos ? std::string_view{} : text.substr(nl + 1);
+    char* end = nullptr;
+    const float v = std::strtof(line.c_str(), &end);
+    if (end != line.c_str() && std::isfinite(v)) out.push_back(v);
+  }
+  return out;
 }
 
 float Envelope::at(float seconds) const {

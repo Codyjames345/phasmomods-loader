@@ -110,6 +110,29 @@ inline bool loop_restarted(double before, double now, float clipSeconds) {
   return std::floor(now / clipSeconds) > std::floor(before / clipSeconds);
 }
 
+/// Where a song loops: from `start` seconds for `length` seconds, after playing once from its own start. A length of 0
+/// or less is no loop: the song plays on.
+struct SongLoop {
+  float start = 0.0f;
+  float length = 0.0f;
+};
+
+/// Where in its song an emote is, from the clip's own time (the song is timed by the clip, so the two never drift): the
+/// song plays from its start until the end of its loop, then repeats the loop.
+/// @param clipTime The clip's time, seconds since the emote began.
+/// @param loop The song's loop.
+/// @return Seconds into the song.
+inline double song_position(double clipTime, SongLoop loop) {
+  const double end = static_cast<double>(loop.start) + loop.length;
+  if (loop.length <= 0.0f || clipTime < end) return clipTime;
+  return loop.start + std::fmod(clipTime - loop.start, static_cast<double>(loop.length));
+}
+
+/// Whether the song went back to its loop point between two frames, so it must be put there again.
+inline bool song_jumped(double before, double now, SongLoop loop) {
+  return now > before && before >= 0.0 && song_position(now, loop) < song_position(before, loop);
+}
+
 /// Whether a one-shot emote has played to its end.
 /// @param time The clip's time, seconds.
 /// @param clipSeconds Its length.

@@ -45,6 +45,22 @@ void a_loud_sound_is_talking() {
   CHECK(talk::loudness_of(sine(1.0f, 4800)) >= -0.4f);
 }
 
+void an_envelope_reads_from_measured_rms() {
+  // One RMS a window, as tools/emote_loudness.mjs writes them: the same scale as measuring the samples.
+  CHECK(std::fabs(talk::loudness_of_rms(0.0f) - talk::loudness_of({})) < 1e-6f);
+  const std::vector<float> loud = sine(1.0f, 4800);
+  double sum = 0;
+  for (float s : loud) sum += s * s;
+  const float rms = static_cast<float>(std::sqrt(sum / loud.size()));
+  CHECK(std::fabs(talk::loudness_of_rms(rms) - talk::loudness_of(loud)) < 1e-5f);
+  const std::vector<float> windows{0.0f, 0.0f, 0.5f};
+  const talk::Envelope env = talk::envelope_of_rms(windows);
+  CHECK(env.windows.size() == 3);
+  CHECK(env.at(0.05f) < talk::kTalkingLoudly);
+  CHECK(env.at(0.25f) > talk::kTalkingLoudly);
+  CHECK(talk::parse_rms("0.1\n0.25\r\nnot\n\n0.5\n").size() == 3);
+}
+
 void the_envelope_follows_the_clip() {
   // Half a second of silence, then half a second loud, at 1000 samples a second.
   std::vector<float> clip(1000, 0.0f);
@@ -122,6 +138,7 @@ int main() {
   silence_is_not_talking();
   a_loud_sound_is_talking();
   the_envelope_follows_the_clip();
+  an_envelope_reads_from_measured_rms();
   the_ghost_hears_the_sound_as_talking();
   added_loudness_never_lowers_a_voice();
   the_raise_keeps_the_games_pace();
