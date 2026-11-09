@@ -115,10 +115,14 @@ The user's (2026-11-10):
 3. **The right controller picks by pointing** at a segment; the pointed-at segment turns blue and shows its name.
    **Pressing the right trigger plays it.**
 4. Pressing the left button again, with nothing played, closes the wheel **(Claude's call)**.
-5. **The view stays first person in VR (Claude's call).** Moving a VR player's view away from their head causes motion
-   sickness, and the headset, not the mouse, places a VR camera. So a VR player dances without seeing themselves, and
-   the body-facing rule below uses the headset's turn in place of the camera's. Moving more than 0.5 m, in room scale
-   or by stick, ends the emote as it does on screen. **The user should confirm or replace this.**
+5. **A VR player's view never changes** (user, 2026-11-10): no third person, and the view does not follow the
+   dancing body's head, because emotes with a lot of movement, such as breakdancing, could cause nausea. The headset
+   alone places the view, as always.
+6. **A VR player's own body renders during the emote** (user, 2026-11-10), so they can see themselves dance by looking
+   at it, including any part the game hides from its own VR view. It is hidden again when the emote ends. If the
+   body's head would sit over the view and block it, the head stays hidden **(Claude's call)**.
+7. The body-facing rule below uses the headset's turn in place of the camera's **(Claude's call)**. Moving more than
+   0.5 m, in room scale or by stick, ends the emote as it does on screen.
 
 ## When a player may emote
 
@@ -168,7 +172,11 @@ decides the end and tells the others, who blend out too.
 
 ## The camera
 
-- **Starting** eases the camera from first person out to a third-person view behind the body. The distance, height and
+This section is for keyboard and mouse and gamepad. VR keeps its own view (see "In VR").
+
+- **Starting** zooms the camera straight back from first person to a third-person view behind the body, with the
+  character still facing away from the camera (user, 2026-11-10): the camera keeps looking the way the player looked,
+  and the body does not turn to face it. The distance, height and
   ease time are starting values judged with the user in game **(builder's call)**. The camera does not pass through
   walls: it comes in closer where a wall is behind the player **(Claude's call)**.
 - **The mouse turns the camera freely** during the emote.
