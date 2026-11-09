@@ -13,11 +13,7 @@ if ($version -notmatch '^\d+\.\d+\.\d+(-dev\.\d+)?$') { throw "VERSION must be M
 & (Join-Path $root 'tools/check_build_record.ps1') -Root $root
 . (Join-Path $root 'tools/payload_files.ps1')
 $payload = Get-PayloadFiles $root
-foreach ($file in $payload) {
-    if (-not (Test-Path -LiteralPath (Join-Path $root $file.Source) -PathType Leaf)) {
-        throw "The release is missing $($file.Source). Build and validate the project before packaging."
-    }
-}
+try { Assert-PayloadSources $root $payload } catch { throw "$($_.Exception.Message) Build and validate the project before packaging." }
 $dist = Join-Path $root 'dist'
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 $stage = Join-Path $dist ('.pack-' + [guid]::NewGuid().ToString('N'))

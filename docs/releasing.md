@@ -45,14 +45,21 @@ git push
 
 The Squatter's AssetBundle (`mods/custom_ghosts/assets/squatter.bundle`) holds Mixamo's clips, which may not go in this public
 repository, so it is gitignored. Every build still ships it (`tools/payload.psd1`), and staging fails without it.
+Its entry there pins the build the code needs by its SHA-256: a stage, a package and CI each refuse any other build, so
+no branch ever ships a bundle its code was not made with.
 
-- **Locally,** build the bundle in Unity (`sdk/guides/custom-animation.md`) and copy it to that path.
-- **On GitHub,** each job fetches it from the private repository `phasmomods-private`, which holds `squatter.bundle` at its
-  root. Set up once, under this repository's Settings, Secrets and variables, Actions:
+- **Locally,** build the bundle in Unity (`sdk/guides/custom-animation.md`) and copy it to that path, or place the pinned
+  one from a clone of the private repository with `.\tools\place_assets.ps1 -Assets <clone>`.
+- **On GitHub,** each job fetches the private repository `phasmomods-private` and places the pinned build with
+  `tools/place_assets.ps1`. The repository keeps every published build at `pinned/<SHA-256>/squatter.bundle`, never
+  replaced, so each branch finds its own. Set up once, under this repository's Settings, Secrets and variables, Actions:
   - the variable `ASSETS_REPOSITORY`: the private repository, as `owner/name`;
   - the secret `ASSETS_DEPLOY_KEY`: the private half of an SSH key whose public half is a read-only deploy key of the
     private repository, so the build can read that one repository and nothing else.
-- **A new bundle** is a commit to the private repository; the next build takes it.
+- **A new bundle:** after copying it into place, run `.\tools\publish_assets.ps1 -Private <clone>` (or set
+  `PM_PRIVATE_ASSETS` to the clone). It pushes the build to the private repository under its hash, then moves the pin in
+  `tools/payload.psd1`; commit that with the code that needs the new bundle. Until the pin moves, the local stage refuses
+  the new bundle, so it cannot be forgotten.
 - **Pull requests from forks** get no secrets, so their checks fail at the fetch. A maintainer reviews them and runs the build.
 
 ## How development builds work

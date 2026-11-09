@@ -1,11 +1,18 @@
 # Helpers shared by the packaging tests (package_test.ps1, stage_test.ps1). Dot-source this file.
 
-<# Give every payload source in tools/payload.psd1 a synthetic file naming itself, under $Fixture. #>
+<# Give every payload source in tools/payload.psd1 a synthetic file naming itself, under $Fixture, and pin each pinned one
+   (an entry with a Sha256) in the fixture's own tools/payload.psd1 to its synthetic file, so the fixture stages. #>
 function Write-PayloadSources([string]$Fixture, $Payload) {
+    $payloadFile = Join-Path $Fixture 'tools/payload.psd1'
     foreach ($file in $Payload) {
         $source = Join-Path $Fixture $file.Source
         New-Item -ItemType Directory -Force -Path (Split-Path $source -Parent) | Out-Null
         Set-Content -LiteralPath $source -Value "fixture $($file.Source)"
+        if ($file.Sha256 -and (Test-Path -LiteralPath $payloadFile)) {
+            $hash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+            $text = [IO.File]::ReadAllText($payloadFile).Replace("Sha256 = '$($file.Sha256)'", "Sha256 = '$hash'")
+            [IO.File]::WriteAllText($payloadFile, $text)
+        }
     }
 }
 

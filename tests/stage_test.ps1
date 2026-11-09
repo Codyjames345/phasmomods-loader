@@ -74,6 +74,12 @@ try {
     Remove-Item -LiteralPath (Join-Path $fixture 'mods/custom_ghosts/assets/squatter.bundle')
     Assert-StageFailure $fixture 'squatter.bundle is missing'
 
+    # The bundle is pinned (tools/payload.psd1's Sha256): a rebuilt or fetched build the pin does not name never stages, so
+    # a branch never ships a bundle its code was not made with.
+    $fixture = New-StageFixture 'unpinned Squatter bundle'
+    Set-Content -LiteralPath (Join-Path $fixture 'mods/custom_ghosts/assets/squatter.bundle') -Value 'another build'
+    Assert-StageFailure $fixture 'squatter.bundle is not the build tools/payload.psd1 pins'
+
     $fixture = New-StageFixture 'launcher holds a file'
     foreach ($name in @('a-first.txt', 'z-last.txt')) {  # a deletion that stops at the held file would take one of these
         Set-Content -LiteralPath (Join-Path $fixture "dist/PhasmoMods/$name") -Value 'previous'

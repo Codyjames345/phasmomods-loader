@@ -14,4 +14,5 @@ if ($LASTEXITCODE -ne 0) { throw 'The offline game check failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'The API reference failed.' }
 & (Join-Path $PSScriptRoot 'tests/package_test.ps1')
 & (Join-Path $PSScriptRoot 'tests/stage_test.ps1')
+& (Join-Path $PSScriptRoot 'tests/pinned_assets_test.ps1')
 & (Join-Path $PSScriptRoot 'tests/release_test.ps1')

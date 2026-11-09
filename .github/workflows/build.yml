@@ -28,7 +28,8 @@ jobs:
       # The Squatter's AssetBundle holds Mixamo's clips, which may not be in this public repository: it comes from the
       # private assets repository (the ASSETS_REPOSITORY variable, owner/name) with a read-only deploy key of that
       # repository (the ASSETS_DEPLOY_KEY secret). Without them the build fails at its stage, as it must: Custom Ghosts
-      # does not start without the bundle (tools/payload.psd1).
+      # does not start without the bundle (tools/payload.psd1). The build placed is the one tools/payload.psd1 pins
+      # (tools/place_assets.ps1): a pin whose build was never published fails here rather than shipping another.
       - name: Fetch the private assets
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,7 +40,7 @@ jobs:
       - name: Place the Squatter's bundle
         shell: pwsh
         run: |
-          Copy-Item -LiteralPath private-assets/squatter.bundle -Destination mods/custom_ghosts/assets/squatter.bundle
+          ./tools/place_assets.ps1 -Assets private-assets
           Remove-Item -LiteralPath private-assets -Recurse -Force
       # The API reference is built with the Doxygen tools/docs.ps1 pins, from Doxygen's own download, checked against
       # its hash before it runs.
@@ -78,7 +79,8 @@ jobs:
       # The Squatter's AssetBundle holds Mixamo's clips, which may not be in this public repository: it comes from the
       # private assets repository (the ASSETS_REPOSITORY variable, owner/name) with a read-only deploy key of that
       # repository (the ASSETS_DEPLOY_KEY secret). Without them the build fails at its stage, as it must: Custom Ghosts
-      # does not start without the bundle (tools/payload.psd1).
+      # does not start without the bundle (tools/payload.psd1). The build placed is the one tools/payload.psd1 pins
+      # (tools/place_assets.ps1): a pin whose build was never published fails here rather than shipping another.
       - name: Fetch the private assets
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,7 +91,7 @@ jobs:
       - name: Place the Squatter's bundle
         shell: pwsh
         run: |
-          Copy-Item -LiteralPath private-assets/squatter.bundle -Destination mods/custom_ghosts/assets/squatter.bundle
+          ./tools/place_assets.ps1 -Assets private-assets
           Remove-Item -LiteralPath private-assets -Recurse -Force
       - name: Restore vpk
         shell: pwsh
@@ -157,7 +159,8 @@ jobs:
       # The Squatter's AssetBundle holds Mixamo's clips, which may not be in this public repository: it comes from the
       # private assets repository (the ASSETS_REPOSITORY variable, owner/name) with a read-only deploy key of that
       # repository (the ASSETS_DEPLOY_KEY secret). Without them the build fails at its stage, as it must: Custom Ghosts
-      # does not start without the bundle (tools/payload.psd1).
+      # does not start without the bundle (tools/payload.psd1). The build placed is the one tools/payload.psd1 pins
+      # (tools/place_assets.ps1): a pin whose build was never published fails here rather than shipping another.
       - name: Fetch the private assets
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -168,7 +171,7 @@ jobs:
       - name: Place the Squatter's bundle
         shell: pwsh
         run: |
-          Copy-Item -LiteralPath private-assets/squatter.bundle -Destination mods/custom_ghosts/assets/squatter.bundle
+          ./tools/place_assets.ps1 -Assets private-assets
           Remove-Item -LiteralPath private-assets -Recurse -Force
       - name: Check the tag is on main
         shell: pwsh

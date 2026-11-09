@@ -23,8 +23,10 @@
         @{ Name = 'mods/custom-ghosts/i18n/default.json'; Source = 'mods/custom_ghosts/i18n/default.json' }
         # The Squatter's AssetBundle (its figure's clips; squatter_figure.h). Gitignored, since its Mixamo clips may not go in
         # the public repo: a local build has it from the user's Unity build, and CI fetches it from the private assets
-        # repository (.github/workflows/build.yml). Custom Ghosts does not start without it, so a stage or release fails.
-        @{ Name = 'mods/custom-ghosts/assets/squatter.bundle'; Source = 'mods/custom_ghosts/assets/squatter.bundle' }
+        # repository (.github/workflows/build.yml, tools/place_assets.ps1). Custom Ghosts does not start without it, so a
+        # stage or release fails. Sha256 pins the build this code needs: a stage, a package and CI each refuse any other.
+        # tools/publish_assets.ps1 publishes a rebuilt one and moves the pin.
+        @{ Name = 'mods/custom-ghosts/assets/squatter.bundle'; Source = 'mods/custom_ghosts/assets/squatter.bundle'; Sha256 = 'AC43FA558A9174F7C5E661BCEB704C6477709669766C5475371289F1913D1C42' }
         # The Squatter's voice folders (sdk/api/assets.h): the launcher copies each mod's assets folder beside its DLL copy,
         # and the mod does not start without these. A recording added to a folder is listed here too.
         @{ Name = 'mods/custom-ghosts/assets/squatter/voice/lurk/.gitkeep'; Source = 'mods/custom_ghosts/assets/squatter/voice/lurk/.gitkeep' }
