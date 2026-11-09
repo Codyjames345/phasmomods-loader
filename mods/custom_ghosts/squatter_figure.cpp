@@ -30,17 +30,10 @@ constexpr const char* kController = "assets/squatter.controller";
 // How the sheet sits and moves: starting values, judged with the user in game.
 constexpr float kHeadCentreAboveBone = 0.09f;  // the head sphere's centre above the head bone, metres
 // A heavier, stiffer cloth than Unity's defaults, as a bedsheet is (user, 2026-11-09: thicker and stiffer): it bends
-// less and its motion dies away sooner. Starting values, judged with the user in game.
-// A bedsheet's cloth (user, 2026-11-10: thicker and heavier): as stiff to bend as Unity allows, answering the body's
-// run and turns less than Unity's own (0.5 and 1), so it hangs and sways like heavier fabric, and pressed by the body in
-// smooth bulges (virtual particles). Starting values, judged with the user in game.
-const api::ClothSettings kCloth = [] {
-  api::ClothSettings c{true, 1.0f, 1.0f, 0.4f};
-  c.worldVelocityScale = 0.25f;
-  c.worldAccelerationScale = 0.5f;
-  c.virtualParticles = true;
-  return c;
-}();
+// less and its motion dies away sooner. The stiffest bending with damped world motion (2026-11-10) was too stiff and
+// creased like paper, so the cloth is back to these, Unity's own for the rest. Starting values, judged with the user
+// in game.
+const api::ClothSettings kCloth{true, 0.5f, 1.0f, 0.4f};
 // The sheet material's smoothness: matte (user, 2026-11-10).
 constexpr float kSheetSmoothness = 0.0f;
 // The spheres the sheet rests on besides the head, about the body's own size there with no padding, so it drapes over the
@@ -176,9 +169,12 @@ bool check() {
 
 void* bone(int32_t which) { return phasmo::Animator::GetBoneTransform(g.animator, which); }
 
-// How much wider than the shoulders' spheres the sheet hangs at the shoulders, and how far past the feet its hem reaches:
-// none, so it drapes on the body and ends at the floor (user, 2026-11-10: no padding).
-constexpr float kSheetClearance = 0.0f;
+// How far out past the upper arms the sheet is cut to hang at the shoulders, the width it had before its spheres lost
+// their padding (2026-11-10), and at least as far out past the head: tied to the spheres, the sheet was cut tight to
+// the body and clung to it. The spheres stay
+// the body's size, so the sheet may fall in against the body where gravity takes it. How far past the feet its hem
+// reaches: none, so it ends at the floor. Starting values, judged with the user in game.
+constexpr float kSheetOutPastArm = 0.12f, kSheetOutPastHead = 0.02f;
 constexpr float kHemOnFloor = 0.0f;
 
 // The bones the sheet follows, each as a line to the next joint along it (sheet::Segment), and the Transform that
@@ -214,7 +210,7 @@ bool build_sheet() {
     const phasmo::Vector3 at = phasmo::Transform::get_position(t);
     reach = std::max(reach, std::hypot(at.x - crown.x, at.z - crown.z));
   }
-  shape.shoulderRadius = std::max(shape.headRadius + kSheetClearance, reach + kArm + kSheetClearance);
+  shape.shoulderRadius = std::max(shape.headRadius + kSheetOutPastHead, reach + kSheetOutPastArm);
   void* upperArm = bone(B::LeftUpperArm());
   shape.shoulderDrop = std::max(0.05f, crown.y - shape.headRadius - phasmo::Transform::get_position(upperArm).y);
   shape.side = 2.0f * (sheet::reach_distance(shape, crown.y - feet.y) + kHemOnFloor);
