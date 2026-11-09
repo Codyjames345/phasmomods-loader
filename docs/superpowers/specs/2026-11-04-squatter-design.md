@@ -39,7 +39,9 @@ well it works.
    hides there alone until they step out, so they have a chance to get away (user, 2026-11-09). A hiding place whose door
    is not shut (by the game's own snap test) hides nobody: it never passes through a door, so it walks to the doors, opens
    the door that stands ajar with the opening-door clip, and walks in once the gap lets it through to kill them; a door
-   already open that far it walks straight through (user, 2026-11-09). It never opens a shut door, and kicks when the only
+   already open that far it walks straight through (user, 2026-11-09). It heads for the closet's own spot
+   (`ClosetZone.navSpot` on the mesh), where the game's hunt goes, and has them once it stands there, as the hunt's closet
+   search kills whoever hides there. It never opens a shut door, and kicks when the only
    door ajar is one it may not open. When they
    step out it goes straight back to chasing them. It knows
    because it saw them go in, or found them while searching the way the game's own closet search does **(builder's call)**. Someone

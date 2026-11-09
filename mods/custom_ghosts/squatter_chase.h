@@ -530,6 +530,21 @@ inline bool within_kick(Point ghost, Point target) {
   return d <= kKickReach;  // false for a distance that is not a number
 }
 
+/** Whether the Squatter at `ghost` stands at `spot`: within kStandReach on the flat, on the same floor (kDoorRise). */
+inline bool at_spot(Point ghost, std::optional<Point> spot) {
+  return spot && std::hypot(spot->x - ghost.x, spot->z - ghost.z) < kStandReach &&
+         std::fabs(spot->y - ghost.y) <= kDoorRise;
+}
+
+/**
+ * Whether the Squatter at `ghost` reaches a player at `hider` in a hiding place it has a way into: at the closet's spot
+ * (`spot`, ClosetZone.navSpot on the mesh), where the game's hunt goes and its closet search kills whoever hides there
+ * (sdk/systems/ghost-ai.md, "Hiding places"), or within the kick's reach of them (within_kick).
+ */
+inline bool reaches_hider(Point ghost, Point hider, std::optional<Point> spot) {
+  return at_spot(ghost, spot) || within_kick(ghost, hider);
+}
+
 /** Where a search centres: where it last sensed its target, else where it stands, so it never just stands still. */
 inline Point search_origin(std::optional<Point> lastAt, Point ghost) { return lastAt ? *lastAt : ghost; }
 

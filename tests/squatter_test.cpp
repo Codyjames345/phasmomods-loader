@@ -1238,6 +1238,7 @@ int main() {
   the_way_ahead_picks_its_clumsy_move();
   a_clumsy_move_waits_until_it_faces_its_way();
   a_kick_at_a_hiding_place_sounds_its_door();
+  it_reaches_a_hider_at_the_closets_spot();
   a_door_is_reached_within_reach();
   the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();

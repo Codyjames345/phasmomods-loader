@@ -24,6 +24,7 @@
 #include "UnityWorld.h"
 #include "game.h"
 #include "game_api.h"
+#include "log.h"
 #include "ghost_sight.h"
 #include "ghosts.h"
 #include "net.h"
@@ -67,6 +68,7 @@ struct Chase {
   uint64_t passDeadline = 0;
   std::optional<float> lurkSpeed;                    // the ghost's own agent speed, while a door pauses its lurk
   api::Held openAtHand;  // a hiding place's door it stands at to open this frame (hold_at_doors)
+  uint64_t nextHideLog = 0;  // when it next logs what it decides at a hiding place
   float steeredSpeed = 0.0f;                         // the speed steer last set (stops_dead)
   float sprint = 0.0f;                       // the sprint speed it last chased at (chase_sprint)
   uint64_t moveUntil = 0;                    // when it next looks at the way ahead (a clumsy move's clip, or kSenseMs)
@@ -663,26 +665,42 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       const Move m = c.out.move;
       speed = moves_by_clip(m) ? 0.0f : move_speed(c.sprint, m);  // a roll or a trip carries it by its clip
       to = targetSensed ? std::optional<Point>(target->at) : c.tracker.last_at();
-      // A hiding place's door stands ajar: it walks to the doors and opens it with the opening clip (hold_at_doors),
-      // and walks in once it lets it through, never through the door itself.
-      if (way.entry.how == WayIn::Open && target) {
-        const std::optional<KickSpot> at = kick_spot(target->closet, ghostAt);
-        const bool there = at && std::hypot(at->stand.x - ghostAt.x, at->stand.z - ghostAt.z) < kStandReach;
-        if (there) {
-          if (const std::optional<phasmo::Vector3> mid = door_middle(way.door.get()))
-            face_toward(ghost, ghostAt, point(*mid));
-          speed = 0.0f;
-          to = ghostAt;
-          c.openAtHand = way.door.get();
-        } else if (at) {
-          to = at->stand;
+      // A player in a hiding place it has a way into: it heads for the closet's spot (ClosetZone.navSpot on the mesh),
+      // where the game's hunt goes, opening a door that stands ajar with the opening clip as it reaches it or the spot
+      // (hold_at_doors), never walking through it; at the spot it has them, as the hunt's closet search does.
+      bool hiderReached = false;
+      if (c.hidingKnown && target && way.entry.how != WayIn::Kick) {
+        const std::optional<Point> spot = closet_spot(target->closet);
+        if (way.entry.how == WayIn::Open) {
+          const std::optional<phasmo::Vector3> mid = door_middle(way.door.get());
+          const bool atDoor = mid && std::hypot(mid->x - ghostAt.x, mid->z - ghostAt.z) <= kDoorReach;
+          if (at_spot(ghostAt, spot) || atDoor || !spot) {
+            if (mid) face_toward(ghost, ghostAt, point(*mid));
+            speed = 0.0f;
+            to = ghostAt;
+            c.openAtHand = way.door.get();
+          } else {
+            to = spot;
+          }
+        } else {
+          hiderReached = reaches_hider(ghostAt, target->at, spot);
+          to = spot ? spot : std::optional<Point>(target->at);
+        }
+        if (t >= c.nextHideLog) {  // what it decides at a hiding place, for the user's tests (once a second)
+          c.nextHideLog = t + 1000;
+          PM_LOG("squatter: hiding place way=%d ghost=(%.2f,%.2f,%.2f) spot=%s(%.2f,%.2f,%.2f) to=(%.2f,%.2f,%.2f) "
+                 "left=%.2f pending=%d",
+                 static_cast<int>(way.entry.how), ghostAt.x, ghostAt.y, ghostAt.z, spot ? "" : "none ",
+                 spot ? spot->x : 0.0f, spot ? spot->y : 0.0f, spot ? spot->z : 0.0f, to ? to->x : 0.0f,
+                 to ? to->y : 0.0f, to ? to->z : 0.0f, agent ? phasmo::NavMeshAgent::get_remainingDistance(agent) : -1.0f,
+                 agent ? static_cast<int>(phasmo::NavMeshAgent::get_pathPending(agent)) : -1);
         }
       }
       // The catch: a kick to the face, a line, and the game's own kill (kick).
       if (target && !paused &&
           // may_kick's distance is given as 0 or past reach: within_kick measures it in three dimensions.
-          may_kick(next, friendlyGhost, target->living, within_kick(ghostAt, target->at) ? 0.0f : kKickReach + 1.0f,
-                   kKickReach) &&
+          may_kick(next, friendlyGhost, target->living,
+                   hiderReached || within_kick(ghostAt, target->at) ? 0.0f : kKickReach + 1.0f, kKickReach) &&
           shown && kick(target->player, target->id)) {
         act(Act::Kick, kKickMs, t);
         say(Lines::Catch, t);

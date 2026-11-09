@@ -426,3 +426,18 @@ void a_kick_at_a_hiding_place_sounds_its_door() {
   CHECK(kSlamVolume == 0.15f);
   CHECK(kSlamDelayMs > 0 && kSlamDelayMs < kBangGapMs);
 }
+
+// It reaches a player in a hiding place it has a way into as the game's hunt does: once it stands at the closet's spot
+// (ClosetZone.navSpot on the mesh), where the hunt's closet search kills whoever hides there, or within its kick's
+// reach of them; never from another floor.
+void it_reaches_a_hider_at_the_closets_spot() {
+  const Point spot{0, 0, 0}, hider{0, 0, 2.0f};
+  CHECK(at_spot({0.5f, 0, 0}, spot));
+  CHECK(!at_spot({kStandReach + 0.1f, 0, 0}, spot));
+  CHECK(!at_spot({0, kDoorRise + 0.5f, 0}, spot));  // another floor
+  CHECK(!at_spot({0, 0, 0}, std::nullopt));
+  CHECK(reaches_hider({0.5f, 0, 0}, hider, spot));                  // at the spot, 2 m from them
+  CHECK(!reaches_hider({0, 0, -3.0f}, hider, spot));                // on its way
+  CHECK(reaches_hider({0, 0, 1.2f}, hider, std::nullopt));         // within the kick
+  CHECK(!reaches_hider({0, 0, -3.0f}, hider, std::nullopt));
+}
