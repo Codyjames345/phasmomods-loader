@@ -686,3 +686,33 @@ void a_leaf_meets_the_body_at_its_nearest_point() {
   CHECK(nearest_on_flat(hinge, edge, {5, 0, -1}).x == 1.0f);  // past the edge: the edge
   CHECK(nearest_on_flat(hinge, hinge, {5, 0, 5}).x == 0.0f);  // no length: the hinge
 }
+
+// A clip that carries the body is bent to land where the world needs it (motion warping): each frame's step turns toward
+// the target and stretches or shrinks so the clip's remaining travel reaches it, within limits; with no travel left the
+// step plays as recorded.
+void a_move_lands_where_the_world_needs_it() {
+  const Point ahead = warp_step({0, 0, 0.1f}, 2.0f, {2.0f, 0, 0});  // the target due +x, as far as the clip has left
+  CHECK(std::abs(ahead.x - 0.1f) < 1e-5f && std::abs(ahead.z) < 1e-5f);
+  const Point farther = warp_step({0, 0, 0.1f}, 2.0f, {0, 0, 2.6f});  // 1.3 times the travel left: stretched
+  CHECK(std::abs(farther.z - 0.13f) < 1e-5f);
+  const Point nearer = warp_step({0, 0, 0.1f}, 2.0f, {0, 0, 1.6f});  // 0.8 times: shrunk
+  CHECK(std::abs(nearer.z - 0.08f) < 1e-5f);
+  CHECK(std::abs(warp_step({0, 0, 0.1f}, 2.0f, {0, 0, 10.0f}).z - 0.1f * kWarpMaxScale) < 1e-5f);  // clamped
+  CHECK(std::abs(warp_step({0, 0, 0.1f}, 2.0f, {0, 0, 0.1f}).z - 0.1f * kWarpMinScale) < 1e-5f);
+  const Point asIs = warp_step({0.03f, 0, 0.1f}, 0.0f, {5, 0, 0});  // no travel left
+  CHECK(asIs.x == 0.03f && asIs.z == 0.1f);
+  const Point noWay = warp_step({0.03f, 0, 0.1f}, 2.0f, {0, 0, 0});  // on the target already
+  CHECK(noWay.x == 0.03f && noWay.z == 0.1f);
+  CHECK(kWarpMinScale == 0.5f && kWarpMaxScale == 1.5f);
+}
+
+// Every clip that carries the body has its travel, as the bundle's build measured it, but the trips (their ragdoll
+// takes them) and the jump (its landing is a drop's or a prop's far side, as recorded).
+void the_clips_travel_as_built() {
+  for (const StateTravel& t : kClipTravel) CHECK(t.metres > 0.0f && seconds_of(t.state) > 0.0f);
+  for (const Move m : kAllMoves) {
+    if (!moves_by_clip(m) || m == Move::Stumble || m == Move::Parkour) continue;
+    for (const char* s : states_of(m)) CHECK(travel_of(s) > 0.0f);
+  }
+  CHECK(std::abs(travel_of("Roll_A") - 5.52f) < 1e-4f && travel_of("Run") == 0.0f && travel_of(nullptr) == 0.0f);
+}

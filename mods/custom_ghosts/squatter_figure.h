@@ -142,6 +142,25 @@ inline float play_rate(Move m, float speed) {
   return std::clamp(speed / own, kMinPlayRate, kMaxPlayRate);
 }
 
+/** How far a state's clip carries the body on its own (root motion), metres. */
+struct StateTravel {
+  const char* state;
+  float metres;
+};
+
+// How far each clip that carries the body travels, as the bundle's build reads the user's clips (its average speed
+// times its length): what a warped move's remaining travel is measured against. The trips are left out (their ragdoll
+// takes them), and the jump (it lands as recorded).
+inline constexpr StateTravel kClipTravel[] = {{"Duck_A", 1.28f},  {"Duck_B", 1.18f}, {"Weave_A", 1.28f},
+                                              {"Weave_B", 1.28f}, {"Roll_A", 5.52f}, {"Roll_B", 4.31f}};
+
+/** How far `state`'s clip carries the body, metres; 0 for a state the table does not name. */
+inline float travel_of(const char* state) {
+  for (const StateTravel& t : kClipTravel)
+    if (state && std::string_view(t.state) == state) return t.metres;
+  return 0.0f;
+}
+
 /** How long `state`'s clip lasts in seconds; 0 for a state the table does not name. */
 inline float seconds_of(const char* state) {
   for (const StateClip& c : kStateClips)

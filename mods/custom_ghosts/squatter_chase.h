@@ -498,6 +498,26 @@ inline Point nearest_on_flat(Point a, Point b, Point p) {
   return {a.x + dx * u, p.y, a.z + dz * u};
 }
 
+/** How far a warped move may stretch or shrink its clip's travel to land on its target: starting values, judged with
+ * the user in game. */
+inline constexpr float kWarpMinScale = 0.5f, kWarpMaxScale = 1.5f;
+/** How far, metres, a warped move's landing may be from the navigation mesh and still be taken onto it, and how far each
+ * frame's carried step may be. */
+inline constexpr float kWarpSample = 0.5f, kCarrySample = 0.1f;
+
+/**
+ * One frame's step of a clip that carries the body (`step`, metres on the flat), bent so the move lands on its target
+ * (motion warping, as Unreal's skew warp does): turned toward `toTarget` (from the body to the target) and scaled by how
+ * far that is against the clip's travel still to come (`clipLeft`, metres), within kWarpMinScale..kWarpMaxScale. With
+ * no travel left, or on the target already, the step as recorded.
+ */
+inline Point warp_step(Point step, float clipLeft, Point toTarget) {
+  const float length = std::hypot(step.x, step.z), to = std::hypot(toTarget.x, toTarget.z);
+  if (!(clipLeft > 0.0f) || !(to > 1e-4f) || !(length > 0.0f)) return step;
+  const float scale = std::clamp(to / clipLeft, kWarpMinScale, kWarpMaxScale);
+  return {toTarget.x / to * length * scale, step.y, toTarget.z / to * length * scale};
+}
+
 /** A heading, radians clockwise from +z, in one byte of the Shown. */
 inline uint8_t yaw_byte(float radians) {
   constexpr float turn = 2.0f * std::numbers::pi_v<float>;

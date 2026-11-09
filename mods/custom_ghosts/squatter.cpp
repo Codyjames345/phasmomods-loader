@@ -91,6 +91,10 @@ struct Chase {
   // A trip loses its footing, and a jump down a drop lands, at fallAt: it falls then, for fallCause. 0 for none.
   uint64_t fallAt = 0;
   FallCause fallCause = FallCause::Trip;
+  // Where the clumsy move playing should land (motion warping: a dive short of its target, a duck or a weave along its
+  // way), on the navigation mesh, and how much of its clip's travel is still to come. None plays as recorded.
+  std::optional<Point> warpTo;
+  float clipLeft = 0.0f;
   // The door leaves near it last frame (their pivot and turn) and the props and items near its chest (their place),
   // with when, so how fast each moves is read on this client whoever moves it.
   struct LeafWas {
@@ -898,6 +902,23 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
           c.moveUntil = t + static_cast<uint64_t>(hold * 1000.0f);
           c.nextClumsy = c.moveUntil + kClumsyGapMs;
           if (pick.move == Move::Roll) c.nextDive = t + kDiveGapMs;
+          // Where it should land: a dive just short of the player it dives at, a duck or a weave as far along its way as
+          // its clip goes; each on the navigation mesh, or none.
+          c.warpTo.reset();
+          c.clipLeft = travel_of(state_for(pick.move, pick.variant));
+          std::optional<Point> land;
+          const float vLength = std::hypot(v.x, v.z);
+          if (pick.move == Move::Roll && target) {
+            const float dx = target->at.x - ghostAt.x, dz = target->at.z - ghostAt.z, d = std::hypot(dx, dz);
+            if (d > kKickReach) land = Point{target->at.x - dx / d * kKickReach, ghostAt.y, target->at.z - dz / d * kKickReach};
+          } else if ((pick.move == Move::Duck || pick.move == Move::Weave) && vLength > kStillPace) {
+            land = Point{ghostAt.x + v.x / vLength * c.clipLeft, ghostAt.y, ghostAt.z + v.z / vLength * c.clipLeft};
+          }
+          if (land && c.clipLeft > 0.0f) {
+            phasmo::Vector3 want = vector(*land);
+            phasmo::NavMeshHit hit{};
+            if (phasmo::NavMesh::SamplePosition(&want, &hit, kWarpSample, -1)) c.warpTo = point(hit.position);
+          }
           // A trip falls as it loses its footing, partway through its clip; a jump down a drop as it lands.
           c.fallAt = 0;
           if (pick.move == Move::Stumble) {
@@ -1080,13 +1101,21 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       const Point agentAt = point(phasmo::Transform::get_position(phasmo::Component::get_transform(agent)));
       if (c.carryFrom) c.carryAgent += std::hypot(agentAt.x - c.carryFrom->x, agentAt.z - c.carryFrom->z);
       if (step.x != 0.0f || step.z != 0.0f) {
+        // Bent toward where the move should land (warp_step), then taken onto the navigation mesh; a step whose point
+        // is off the mesh holds where it is rather than carry the ghost off it.
+        Point move = point(step);
+        if (c.warpTo) move = warp_step(move, c.clipLeft, {c.warpTo->x - agentAt.x, 0.0f, c.warpTo->z - agentAt.z});
+        c.clipLeft = std::max(0.0f, c.clipLeft - std::hypot(step.x, step.z));
         phasmo::Vector3 there = vector(agentAt);
-        there.x += step.x;
-        there.z += step.z;
-        c.carryClip += std::hypot(step.x, step.z);
+        there.x += move.x;
+        there.z += move.z;
+        c.carryClip += std::hypot(move.x, move.z);
         phasmo::NavMeshHit onMesh{};
-        if (!phasmo::NavMesh::SamplePosition(&there, &onMesh, 0.1f, -1)) ++c.carryOff;
-        phasmo::NavMeshAgent::Warp(agent, &there);
+        if (phasmo::NavMesh::SamplePosition(&there, &onMesh, kCarrySample, -1)) {
+          phasmo::NavMeshAgent::Warp(agent, &onMesh.position);
+        } else {
+          ++c.carryOff;
+        }
         c.nextSteer = 0;
       }
       c.carryFrom = agentAt;
@@ -1101,6 +1130,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     } else {
       c.carryFrom.reset();
       c.nextCarryLog = 0;
+      c.warpTo.reset();
     }
   }
 

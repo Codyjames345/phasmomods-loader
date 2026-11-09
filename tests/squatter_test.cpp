@@ -1303,6 +1303,8 @@ int main() {
   what_knocks_it_over();
   a_fall_never_stacks();
   a_leaf_meets_the_body_at_its_nearest_point();
+  a_move_lands_where_the_world_needs_it();
+  the_clips_travel_as_built();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();
