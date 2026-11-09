@@ -565,6 +565,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &SmallMapVariation_huntingDoorsToLock,
     &Physics,
     &Physics_Raycast,
+    &Physics_CheckBox,
     &QueryTriggerInteraction,
     &QueryTriggerInteraction_Ignore,
     &NavMesh,

@@ -115,6 +115,12 @@ try {
     $places = [regex]::Matches($workflow, 'tools/place_assets\.ps1 -Assets private-assets').Count
     if (-not $fetches -or $fetches -ne $places) { throw "The workflow fetches the private assets $fetches time(s) but places them by pin $places." }
     if ($workflow -match 'private-assets/[^ ]*\.bundle') { throw 'The workflow copies a bundle without its pin.' }
+    # Each names its branch, so it never looks the default one up, and fetches only the pinned builds.
+    foreach ($needed in 'ref: main', 'sparse-checkout: /pinned/', 'filter: blob:none') {
+        if ([regex]::Matches($workflow, [regex]::Escape($needed)).Count -ne $fetches) {
+            throw "Not every fetch of the private assets has '$needed'."
+        }
+    }
 
     Write-Output 'Pinned asset tests passed: each build is published under its hash, never replaced, and CI places only the pinned one.'
 } finally {

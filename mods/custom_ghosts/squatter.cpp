@@ -296,11 +296,7 @@ Surroundings surroundings(void* agent, Point at, const Seen* target, bool mayDiv
   };
   const bool chest = sweep(kChestHeight, solid);
   const bool knee = sweep(kKneeHeight, furniture);
-  s.kneeProp = knee && !chest;
-  // Underfoot, dropped equipment trips it as furniture does; it reads just above the floor, where shoes and equipment
-  // lie, as well as at the ankle.
-  const int32_t underfoot = furniture | mask_of({L::Item.index()});
-  s.ankleProp = !knee && (sweep(kUnderfootHeight, underfoot) || sweep(kAnkleHeight, underfoot));
+  s.kneeProp = knee && !chest;  // what it trips over is not read here: its feet meet it (feet_meet_clutter)
   const phasmo::Vector3 down{0, -1, 0};
   const phasmo::Vector3 there{at.x + ahead.x * kDropAhead, at.y + kDropDepth, at.z + ahead.z * kDropAhead};
   s.dropAhead = ground && !ray_hits(there, down, 2.0f * kDropDepth, ground);
@@ -318,6 +314,22 @@ Surroundings surroundings(void* agent, Point at, const Seen* target, bool mayDiv
                cosine >= std::cos(kDiveConeDegrees * std::numbers::pi_v<float> / 180.0f);
   }
   return s;
+}
+
+// Whether the Squatter's feet meet loose clutter as it runs at `at`: anything of the house's loose props (DefaultProps)
+// or the players' equipment (Item) inside the box its feet sweep (foot_box), turned to the way its agent moves
+// (Physics.CheckBox, triggers aside). Fixed furniture is left out: it carves the navigation mesh, so the route goes
+// round it. False while it barely moves.
+bool feet_meet_clutter(void* agent, Point at) {
+  const phasmo::Vector3 v = agent ? phasmo::NavMeshAgent::get_velocity(agent) : phasmo::Vector3{};
+  if (std::hypot(v.x, v.z) < kStillPace) return false;
+  using L = phasmo::Layers;
+  const int32_t clutter = mask_of({L::DefaultProps.index(), L::Item.index()});
+  if (!clutter) return false;
+  const FootBox box = foot_box(at, std::atan2(v.x, v.z));
+  const phasmo::Vector3 centre = vector(box.centre), half = vector(box.half);
+  const phasmo::Quaternion turn{0, std::sin(box.yaw / 2), 0, std::cos(box.yaw / 2)};
+  return phasmo::Physics::CheckBox(&centre, &half, &turn, clutter, phasmo::QueryTriggerInteraction::Ignore());
 }
 
 // The middle of a door's collider box: the door itself, whichever way it is built. None for no door or no collider.
@@ -705,6 +717,10 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     case Phase::Chasing: {
       // It runs, and reads the way ahead every kSenseMs: a clumsy move plays where the way calls for one (move_for), for
       // its whole clip, and the next waits kClumsyGapMs after it.
+      // Its feet meet clutter: it trips there and then, every frame it runs, not waiting for its next read of the way.
+      const bool midMove = plays_once(c.out.move) && t < c.moveUntil;
+      const bool feet = !midMove && !paused && t >= c.nextClumsy && feet_meet_clutter(agent, ghostAt);
+      if (feet) c.moveUntil = t;
       if (t >= c.moveUntil) {
         Pick pick;
         // A clumsy move carries its figure the way the figure faces, so it waits until this client's figure, the
@@ -712,10 +728,13 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
         const phasmo::Vector3 v = agent ? phasmo::NavMeshAgent::get_velocity(agent) : phasmo::Vector3{};
         const bool facesAhead =
             g.facing && g.local != State::Local::Turning && faces_ahead(*g.facing, std::atan2(v.x, v.z));
-        if (t >= c.nextClumsy && !paused && facesAhead) {
-          // Never a dive at a player in a hiding place: it would roll through the door.
-          const Surroundings around =
-              surroundings(agent, ghostAt, targetSensed && !c.hidingKnown ? target : nullptr, t >= c.nextDive);
+        if (t >= c.nextClumsy && !paused && (facesAhead || feet)) {
+          // Never a dive at a player in a hiding place: it would roll through the door. The rays ahead (a jump, a dive,
+          // a gap) need it facing its way; a trip does not.
+          Surroundings around = facesAhead ? surroundings(agent, ghostAt, targetSensed && !c.hidingKnown ? target : nullptr,
+                                                          t >= c.nextDive)
+                                           : Surroundings{};
+          around.ankleProp = feet;
           pick = move_for(around);
           if (const char* why = clumsy_reason(around))
             PM_LOG("squatter: a clumsy move (%s; it read: %s)", why, sensed_list(around).c_str());

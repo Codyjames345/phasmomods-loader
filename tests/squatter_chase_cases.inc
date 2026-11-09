@@ -496,10 +496,7 @@ void the_pace_keeps_the_distance_of_a_frame_with_no_time() {
 // tripped; a ray down its middle missed what its feet met). The rays are spread evenly, symmetric about its line.
 void the_way_ahead_is_read_across_its_width() {
   CHECK(kSweepRays >= 3 && kSweepRays % 2 == 1);  // one down the middle
-  // What lies on a floor is low (a shoe about 0.1 m, equipment lying flat a few centimetres), so the trip reads just
-  // above the floor as well as at the ankle (user, 2026-11-09: it still never tripped).
-  CHECK(kUnderfootHeight > 0.0f && kUnderfootHeight <= 0.05f && kUnderfootHeight < kAnkleHeight);
-  CHECK(kAnkleHeight < kKneeHeight && kKneeHeight < kChestHeight);
+  CHECK(kKneeHeight < kChestHeight);
   CHECK(std::abs(sweep_offset(0) + kSweepHalfWidth) < 1e-6f);
   CHECK(std::abs(sweep_offset(kSweepRays - 1) - kSweepHalfWidth) < 1e-6f);
   CHECK(std::abs(sweep_offset(kSweepRays / 2)) < 1e-6f);
@@ -510,7 +507,7 @@ void the_way_ahead_is_read_across_its_width() {
   s.furniture = 1;
   CHECK(std::string(clumsy_reason(s)) == "furniture beside");
   s.ankleProp = true;
-  CHECK(std::string(clumsy_reason(s)) == "ankle-high prop" && move_for(s).move == Move::Stumble);
+  CHECK(std::string(clumsy_reason(s)) == "its feet met clutter" && move_for(s).move == Move::Stumble);
   s.kneeProp = true;
   CHECK(std::string(clumsy_reason(s)) == "drop or knee-high prop" && move_for(s).move == Move::Parkour);
   s.diveAt = true;  // at its feet first
@@ -521,6 +518,25 @@ void the_way_ahead_is_read_across_its_width() {
   // The log lists every condition it read, not only the one that won.
   s.ankleProp = true;
   s.furniture = -1;
-  CHECK(sensed_list(s) == "ankle, dive, furniture left");
+  CHECK(sensed_list(s) == "feet, dive, furniture left");
   CHECK(sensed_list(Surroundings{}).empty());
+}
+
+// It trips when its feet meet clutter, as a body does, not when a ray ahead finds some (user, 2026-11-09: it never
+// tripped, and was not to be bandaged): a box around its feet, as wide as its stance, from just above the floor to its
+// shins, reaching a stride ahead and a little behind, turned to the way it moves.
+void its_feet_meet_what_it_trips_over() {
+  constexpr float pi = std::numbers::pi_v<float>;
+  const FootBox north = foot_box({1, 0, 2}, 0.0f);  // heading +z
+  CHECK(std::abs(north.half.x - kFootHalfWidth) < 1e-6f);
+  CHECK(std::abs(north.half.z - (kFootAhead + kFootBehind) / 2) < 1e-6f);
+  CHECK(std::abs(north.centre.x - 1.0f) < 1e-5f);
+  CHECK(std::abs(north.centre.z - (2.0f + (kFootAhead - kFootBehind) / 2)) < 1e-5f);  // more ahead than behind
+  CHECK(std::abs(north.centre.y - (kFootFloorGap + kFootHeight) / 2) < 1e-5f);        // floor gap to shin height
+  CHECK(std::abs(north.half.y - (kFootHeight - kFootFloorGap) / 2) < 1e-5f);
+  const FootBox east = foot_box({0, 0, 0}, pi / 2);  // heading +x
+  CHECK(std::abs(east.centre.x - (kFootAhead - kFootBehind) / 2) < 1e-5f && std::abs(east.centre.z) < 1e-5f);
+  CHECK(std::abs(east.yaw - pi / 2) < 1e-6f);
+  // Low enough for a shoe (about 0.1 m) and equipment lying flat, clear of the floor itself.
+  CHECK(kFootFloorGap > 0.0f && kFootFloorGap < 0.03f && kFootHeight >= 0.15f && kFootHeight < kKneeHeight);
 }
