@@ -90,6 +90,8 @@ struct Chase {
   uint64_t nextClumsy = 0, nextDive = 0;     // no clumsy move before the first, no dive before the second
   // A trip loses its footing, and a jump down a drop lands, at fallAt: it falls then, for fallCause. 0 for none.
   uint64_t fallAt = 0;
+  // Stood up from a fall, it turns to the player it is after until then (rise_turn_done), standing; 0 when not.
+  uint64_t riseTurnUntil = 0;
   FallCause fallCause = FallCause::Trip;
   // Where the clumsy move playing should land (motion warping: a dive short of its target, a duck or a weave along its
   // way), on the navigation mesh, and how much of its clip's travel is still to come. None plays as recorded.
@@ -748,10 +750,11 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   // Down (its own figure falling or getting up, this master's or, for a new master mid-fall, its own): it holds still
   // and picks nothing until it stands. Once it stands, or had no ragdoll to fall with, the chase goes on.
   const bool down = g.fall.phase() != FallPhase::Up;
-  if (!down && c.out.move == Move::Fall) {
-    c.out.move = Move::Run;
-    c.moveUntil = 0;
-    c.nextClumsy = t + kClumsyGapMs;
+  if (!down && c.out.move == Move::Fall) {  // stood up: it turns to its player with its turn clips, then runs on
+    c.out.move = Move::Stand;
+    c.riseTurnUntil = t + kRiseTurnMs;
+    c.moveUntil = c.riseTurnUntil;
+    c.nextClumsy = t + kRiseTurnMs + kClumsyGapMs;
   }
   const std::vector<Seen> players = read_players();
   sense(ghost, players, t);
@@ -1090,6 +1093,26 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     }
   }
   if (down || c.out.move == Move::Fall) speed = 0.0f;  // the ragdoll has it: the agent waits where it fell
+  // Stood up from a fall, it stands and turns to the player it is after with its turn clips (user, 2026-11-10: it
+  // snapped into its run): the ghost faces them, so every client's figure turns there as it turns standing, and once
+  // the master's own figure faces them, or kRiseTurnMs has passed, it runs on.
+  if (c.riseTurnUntil && !down) {
+    const std::optional<Point> aim = target ? std::optional<Point>(target->at) : c.tracker.last_at();
+    const float toward = aim ? std::atan2(aim->x - ghostAt.x, aim->z - ghostAt.z) : 0.0f;
+    if (!aim || rise_turn_done(t, c.riseTurnUntil, g.facing.value_or(toward), toward,
+                               g.local == State::Local::Turning)) {
+      c.riseTurnUntil = 0;
+      c.out.move = Move::Run;
+      c.moveUntil = 0;
+    } else {
+      speed = 0.0f;
+      c.out.move = Move::Stand;
+      if (void* gt = game::transform_of(ghost)) {
+        const phasmo::Quaternion face{0, std::sin(toward / 2), 0, std::cos(toward / 2)};
+        phasmo::Transform::set_rotation(gt, &face);
+      }
+    }
+  }
   if (t < c.pauseUntil) speed = 0.0f;
   // Only a phase the mod steers sets the agent: while it lurks the ghost's own states do.
   if (steers(next)) {

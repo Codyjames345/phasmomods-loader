@@ -90,26 +90,35 @@ float seconds() {
   return std::chrono::duration<float>(std::chrono::steady_clock::now() - start).count();
 }
 
-// The humanoid bones the figure's pose is kept for: every one the map has.
-constexpr size_t kPoseBones = 19;
-std::array<int32_t, kPoseBones> pose_bones() {
-  namespace B = phasmo::HumanBodyBones;
-  return {B::Hips(),          B::Spine(),        B::Chest(),        B::Neck(),          B::Head(),
-          B::LeftShoulder(),  B::RightShoulder(), B::LeftUpperArm(), B::RightUpperArm(), B::LeftLowerArm(),
-          B::RightLowerArm(), B::LeftHand(),     B::RightHand(),    B::LeftUpperLeg(),  B::RightUpperLeg(),
-          B::LeftLowerLeg(),  B::RightLowerLeg(), B::LeftFoot(),     B::RightFoot()};
-}
+// The bones the figure's pose is kept for between clips: every Transform under its hips, the hips with them, as the body
+// stands when built (every_bone_under_the_hips_blends: the rig has bones between the humanoid ones that would otherwise
+// jump and carry the head, the arms and the sheet with them). Taken before the sheet and its spheres hang their own
+// objects on the bones.
+std::vector<api::Held> g_poseBones;
 
 void* bone(int32_t which);
 
-// Each pose bone's rotation against its parent now; identity for one the model lacks.
-std::array<phasmo::Quaternion, kPoseBones> read_pose() {
-  std::array<phasmo::Quaternion, kPoseBones> pose;
-  const auto bones = pose_bones();
-  for (size_t i = 0; i < kPoseBones; ++i) {
-    void* b = bone(bones[i]);
-    pose[i] = b ? phasmo::Transform::get_localRotation(b) : phasmo::Quaternion{0, 0, 0, 1};
-  }
+void take_pose_bones() {
+  g_poseBones.clear();
+  void* hips = bone(phasmo::HumanBodyBones::Hips());
+  if (!hips) return;
+  const std::vector<void*> all = all_under(hips, [](void* t) {
+    std::vector<void*> kids;
+    const int32_t n = phasmo::Transform::get_childCount(t);
+    for (int32_t i = 0; i < n; ++i)
+      if (void* c = phasmo::Transform::GetChild(t, i)) kids.push_back(c);
+    return kids;
+  });
+  g_poseBones.reserve(all.size());
+  for (void* t : all) g_poseBones.emplace_back(t);
+}
+
+// Each pose bone's rotation against its parent now; identity for one gone.
+std::vector<phasmo::Quaternion> read_pose() {
+  std::vector<phasmo::Quaternion> pose;
+  pose.reserve(g_poseBones.size());
+  for (const api::Held& b : g_poseBones)
+    pose.push_back(api::alive(b) ? phasmo::Transform::get_localRotation(b) : phasmo::Quaternion{0, 0, 0, 1});
   return pose;
 }
 
@@ -131,10 +140,9 @@ void inertialize() {
     }
   }
   if (!g_inertia.active(now)) return;
-  const auto bones = pose_bones();
-  for (size_t i = 0; i < kPoseBones; ++i) {
-    void* b = bone(bones[i]);
-    if (!b) continue;
+  for (size_t i = 0; i < g_poseBones.size(); ++i) {
+    void* b = g_poseBones[i];
+    if (!api::alive(b)) continue;
     const phasmo::Quaternion shown = qmul(g_inertia.offset(i, now), phasmo::Transform::get_localRotation(b));
     phasmo::Transform::set_localRotation(b, &shown);
   }
@@ -156,6 +164,7 @@ void clear() {
   if (api::alive(g.material)) phasmo::Object::Destroy(g.material, 0.0f);
   if (api::alive(g.root)) phasmo::Object::Destroy(g.root, 0.0f);
   g = Figure{};
+  g_poseBones.clear();
   forget_inertia();
 }
 
@@ -477,6 +486,7 @@ void create(phasmo::Vector3 at) {
     g.playing = kStandStates[0];
     api::pose_now(g.animator);
   }
+  take_pose_bones();
   // What the sheet covers is never drawn, as games hide what a costume covers, so no arm or hand ever shows through it
   // (user, 2026-11-09); its bones still shape the sheet. The head still draws, since it is a person under a bedsheet
   // (user, 2026-11-09). The sheet, added next, draws.

@@ -1326,6 +1326,8 @@ int main() {
   it_stands_facing_the_way_its_body_faces();
   the_standing_roll_hands_back_to_the_run();
   its_voice_is_pitched_down();
+  every_bone_under_the_hips_blends();
+  it_turns_with_its_clips_before_running_on();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();

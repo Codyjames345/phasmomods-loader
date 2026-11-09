@@ -801,3 +801,30 @@ void its_voice_is_pitched_down() {
   CHECK(voice::played_seconds(2.0f, 1.0f) == 2.0f);
   CHECK(voice::played_seconds(2.0f, 0.0f) == 2.0f && voice::played_seconds(-1.0f, 0.9f) == 0.0f);
 }
+
+// The whole skeleton blends between clips, not only the humanoid bones: the investigator's rig has bones between them
+// (Spine02 above the chest, a second neck twist) that would jump to the new clip's pose and carry the head, the arms and
+// the sheet hung from the head with them (user, 2026-11-10: the sheet teleported as the clips changed).
+void every_bone_under_the_hips_blends() {
+  // A small tree: 0 has 1 and 2, 1 has 3, 3 has 4.
+  const std::vector<std::vector<int>> children = {{1, 2}, {3}, {}, {4}, {}};
+  const std::vector<int> all = figure::all_under(0, [&](int n) { return children[static_cast<size_t>(n)]; });
+  CHECK(all.size() == 5);
+  std::set<int> seen(all.begin(), all.end());
+  CHECK(seen.size() == 5 && all[0] == 0);
+  const auto at = [&](int n) { return std::find(all.begin(), all.end(), n) - all.begin(); };
+  CHECK(at(1) < at(3) && at(3) < at(4));  // each before what hangs from it
+  CHECK(figure::all_under(-1, [&](int) { return std::vector<int>{}; }).size() == 1);
+}
+
+// Standing up after a fall it turns to the player it is after with its turn clips before it runs: done once its
+// figure faces within kFaceAheadDegrees of them and no turn clip plays, or at the latest kRiseTurnMs after it stood.
+void it_turns_with_its_clips_before_running_on() {
+  constexpr float kDeg = std::numbers::pi_v<float> / 180.0f;
+  CHECK(!rise_turn_done(1000, 1000 + kRiseTurnMs, 0.0f, 90 * kDeg, false));  // facing away: keep turning
+  CHECK(!rise_turn_done(1000, 1000 + kRiseTurnMs, 89 * kDeg, 90 * kDeg, true));  // a turn clip still plays
+  CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, 89 * kDeg, 90 * kDeg, false));
+  CHECK(rise_turn_done(1000 + kRiseTurnMs, 1000 + kRiseTurnMs, 0.0f, 180 * kDeg, true));  // waited long enough
+  CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, 179 * kDeg, -179 * kDeg, false));         // across the wrap
+  CHECK(kRiseTurnMs >= 1000 && kRiseTurnMs <= 4000);
+}

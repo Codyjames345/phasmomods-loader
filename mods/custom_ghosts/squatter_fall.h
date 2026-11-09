@@ -105,6 +105,18 @@ inline float body_heading(phasmo::Quaternion rotation) {
   return std::atan2(f.x, f.z);
 }
 
+/** The longest it turns on the spot to the player it is after once it has stood up from a fall, milliseconds, before it
+ * runs on whichever way it faces (a starting value, judged with the user in game). */
+inline constexpr uint64_t kRiseTurnMs = 2500;
+
+/**
+ * Whether its turn after getting up is done at `now` (it stood up to turn until `until`): its figure faces `facing`,
+ * within kFaceAheadDegrees of the way to the player, `toTarget`, and no turn clip plays (`turning`), or time is up.
+ */
+inline bool rise_turn_done(uint64_t now, uint64_t until, float facing, float toTarget, bool turning) {
+  return now >= until || (!turning && faces_ahead(facing, toTarget));
+}
+
 /** Where and which way the figure's root stands as it gets up. */
 struct RootPose {
   Point at;   ///< at the hips, which the caller puts on the floor
