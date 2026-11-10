@@ -572,7 +572,13 @@ std::optional<int> wheel_input(void* player, bool vr) {
       if (const int s = segment_for(stick.x, stick.y, kStickDeadZone); s >= 0) pickNow = s;
     }
   }
-  const std::optional<int> played = wheel_step(g.wheelIn, key.held, key.released, interrupted, pickNow);
+  // A right click closes it with nothing played, and the emote dancing now goes on (the user, 2026-11-10).
+  bool rightClick = false;
+  if (wasOpen)
+    if (void* mouse = phasmo::Mouse::get_current())
+      if (void* right = phasmo::Mouse::get_rightButton(mouse))
+        rightClick = phasmo::ButtonControl::get_wasPressedThisFrame(right);
+  const std::optional<int> played = wheel_step(g.wheelIn, key.held, key.released, interrupted, pickNow, rightClick);
   if (g.wheelIn.open && !wasOpen) {
     g.mouseX = g.mouseY = 0.0f;
     if (!wheel::open_screen()) {

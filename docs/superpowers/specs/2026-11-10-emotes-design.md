@@ -91,6 +91,8 @@ no `PM_UI_TODO`.
 5. **The wheel can be opened during an emote.** The emote keeps playing; only releasing the key on a segment replaces
    it **(Claude's call)**.
 6. The wheel does not open while the game's pause menu, journal, or any text field has the keyboard **(Claude's call)**.
+7. **A right click closes the wheel with nothing played,** and an emote already playing goes on (the user, 2026-11-10).
+   The wheel stays shut until its key is let go and pressed again.
 
 ### On a gamepad
 

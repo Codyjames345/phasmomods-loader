@@ -365,6 +365,54 @@ std::wstring describe(const Result& result) {
   return text;
 }
 
+/** The outcome's name as the code spells it, for the log. */
+const wchar_t* outcome_name(Outcome outcome) {
+  switch (outcome) {
+    case Outcome::ready: return L"ready";
+    case Outcome::active: return L"active";
+    case Outcome::already_loaded: return L"already_loaded";
+    case Outcome::no_process: return L"no_process";
+    case Outcome::ambiguous_process: return L"ambiguous_process";
+    case Outcome::invalid_target: return L"invalid_target";
+    case Outcome::wrong_architecture: return L"wrong_architecture";
+    case Outcome::process_error: return L"process_error";
+    case Outcome::file_error: return L"file_error";
+    case Outcome::allocation_failed: return L"allocation_failed";
+    case Outcome::write_failed: return L"write_failed";
+    case Outcome::thread_failed: return L"thread_failed";
+    case Outcome::indeterminate: return L"indeterminate";
+    case Outcome::not_mapped: return L"not_mapped";
+    case Outcome::inactive: return L"inactive";
+    case Outcome::activation_timeout: return L"activation_timeout";
+    case Outcome::game_exited: return L"game_exited";
+    case Outcome::log_error: return L"log_error";
+  }
+  return L"unknown";
+}
+
+std::wstring result_line(const Result& result, std::wstring_view how) {
+  // Each line break, \r\n or alone, becomes one space.
+  const auto one_line = [](const std::wstring& text) {
+    std::wstring out;
+    for (size_t i = 0; i < text.size(); ++i) {
+      if (text[i] == L'\r' && i + 1 < text.size() && text[i + 1] == L'\n') ++i;
+      out += (text[i] == L'\r' || text[i] == L'\n') ? L' ' : text[i];
+    }
+    while (!out.empty() && out.back() == L' ') out.pop_back();
+    return out;
+  };
+  std::wstring line = std::wstring(how) + L" " + outcome_name(result.outcome);
+  if (!result.detail.empty()) line += L": " + one_line(result.detail);
+  if (result.error) {
+    wchar_t words[512] = {};
+    const DWORD n = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, result.error, 0, words,
+                                   static_cast<DWORD>(std::size(words)), nullptr);
+    line += L" (Windows error " + std::to_wstring(result.error) + (n ? L": " + one_line({words, n}) : L"") + L")";
+  }
+  if (!result.logPath.empty()) line += L" log " + result.logPath;
+  return line;
+}
+
 #ifndef PM_LAUNCHER_TEST
 constexpr wchar_t kName[] = L"PhasmoMods Loader";      // the message boxes' title
 constexpr wchar_t kTitle[] = L"PhasmoMods Loader " PM_WIDEN(PM_SUITE_VERSION);  // the window's title
@@ -374,7 +422,7 @@ constexpr std::chrono::seconds kDownloadStall{30};     // a download with no pro
 constexpr int kDevelopmentBox = 105;                   // the checkbox that takes development builds
 constexpr int kUpdateNow = 1001, kRemindLater = 1002, kIgnore = 1003;  // the update popup's buttons
 
-/** Add a timestamped line to launcher_log(), for what `--steam` mode cannot show in a window. */
+/** Add a timestamped line to launcher_log(): what `--steam` mode cannot show in a window, and how every load ended. */
 void append_log(const std::wstring& message) {
   const fs::path file = launcher_log();
   if (file.empty() || message.empty()) return;
@@ -733,6 +781,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wParam, LPARAM lP
         return 0;
       }
       state->attached = state->attached || state->result.outcome == Outcome::active;
+      append_log(result_line(state->result, L"attach"));  // the window's text goes when it closes; the log keeps the cause
       set_controls(state, true);
       SetWindowTextW(state->status, describe(state->result).c_str());
       if (state->closing) DestroyWindow(window);
@@ -866,6 +915,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
       result = pm::launcher::launch_steam({values.begin() + 2, values.end()}, package);
     } else result = pm::launcher::failure(pm::loader::Outcome::invalid_target,
       pm::text::widen(pm::i18n::text("launcher.open-without-arguments-copy")));
+    pm::launcher::append_log(pm::launcher::result_line(result, steam ? L"steam" : L"start"));
     if (result.outcome == pm::loader::Outcome::active) return 0;
     MessageBoxW(nullptr, pm::launcher::describe(result).c_str(), pm::launcher::kName, MB_OK | MB_ICONWARNING);
   } catch (...) {

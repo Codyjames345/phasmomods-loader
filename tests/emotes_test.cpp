@@ -77,6 +77,30 @@ void an_interrupted_wheel_plays_nothing() {
   CHECK(!w.open);
 }
 
+// A right click with the wheel up closes it with nothing played (the user, 2026-11-10). Nothing played means the emote
+// already dancing goes on: only a pick reaches the session. The wheel's key is still held after the click, and the wheel
+// stays shut until the key goes up and down again.
+void a_right_click_closes_the_wheel_with_nothing_played() {
+  WheelInput w;
+  wheel_step(w, true, false, false, -1);
+  wheel_step(w, true, false, false, 4);
+  CHECK(!wheel_step(w, true, false, false, 4, true).has_value());  // right click, the key still held, a segment picked
+  CHECK(!w.open);
+  CHECK(!wheel_step(w, true, false, false, 4).has_value());  // still held: it does not open again
+  CHECK(!w.open);
+  CHECK(!wheel_step(w, false, true, false, 4).has_value());  // let go: nothing played
+  CHECK(!w.open);
+  CHECK(!wheel_step(w, true, false, false, -1).has_value());  // pressed again: it opens as before
+  CHECK(w.open);
+  const auto played = wheel_step(w, false, true, false, 6);
+  CHECK(played.has_value() && *played == 6);
+  // A right click with the wheel shut does nothing to it.
+  CHECK(!wheel_step(w, false, false, false, -1, true).has_value());
+  CHECK(!w.open);
+  CHECK(!wheel_step(w, true, false, false, -1).has_value());
+  CHECK(w.open);
+}
+
 // ---- The body's facing (the user's examples) ----
 
 void the_body_follows_past_ninety() {
@@ -250,6 +274,7 @@ int main() {
   release_plays_the_pick();
   release_with_nothing_picked_plays_nothing();
   an_interrupted_wheel_plays_nothing();
+  a_right_click_closes_the_wheel_with_nothing_played();
   the_body_follows_past_ninety();
   only_a_move_past_half_a_metre_ends_it();
   a_looping_song_restarts_with_its_clip();

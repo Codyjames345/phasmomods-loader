@@ -416,6 +416,33 @@ void launcher_log_is_in_data_directory() {
   SetEnvironmentVariableW(L"LOCALAPPDATA", length && length < saved.size() ? saved.data() : nullptr);
 }
 
+/** Each result the launcher logs names its outcome, what the player was shown, and the Windows error behind it with Windows'
+ *  own words for it, on one line (the user, 2026-11-10: the loader logs the cause of its error). */
+void result_line_names_the_cause() {
+  using pm::loader::Outcome;
+  const pm::loader::Result failed{Outcome::process_error, ERROR_BAD_LENGTH, L"Windows could not inspect the game's modules.",
+                                  L"C:\\logs\\mods.log"};
+  const std::wstring line = pm::launcher::result_line(failed, L"attach");
+  CHECK(line.find(L"attach") == 0);
+  CHECK(line.find(L"process_error") != std::wstring::npos);
+  CHECK(line.find(L"Windows could not inspect the game's modules.") != std::wstring::npos);
+  CHECK(line.find(L"Windows error 24") != std::wstring::npos);
+  wchar_t words[512] = {};
+  const DWORD n = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, ERROR_BAD_LENGTH, 0, words,
+                                 512, nullptr);
+  std::wstring windows(words, n);
+  while (!windows.empty() && (windows.back() == L'\n' || windows.back() == L'\r' || windows.back() == L' ')) windows.pop_back();
+  CHECK(!windows.empty() && line.find(windows) != std::wstring::npos);
+  CHECK(line.find(L"C:\\logs\\mods.log") != std::wstring::npos);
+  CHECK(line.find_first_of(L"\r\n") == std::wstring::npos);  // one line in the log
+  // A load that worked says so, with no Windows error.
+  const std::wstring ok = pm::launcher::result_line({Outcome::active, 0, L"Loaded.", {}}, L"steam");
+  CHECK(ok.find(L"steam active") == 0 && ok.find(L"Windows error") == std::wstring::npos);
+  // A detail of several lines stays on one.
+  CHECK(pm::launcher::result_line({Outcome::log_error, 0, L"one\r\ntwo", {}}, L"attach").find_first_of(L"\r\n") ==
+        std::wstring::npos);
+}
+
 /** Exercise argument preservation and conservative startup detection without a game. */
 int main() {
   {  // the loader's shipped text (core/text_table.h), so the messages read as players see them
@@ -438,6 +465,7 @@ int main() {
   version_matches_version_file();
   launch_option_quotes_spaced_name();
   launcher_log_is_in_data_directory();
+  result_line_names_the_cause();
   CHECK(DeleteFileW(fixturePath.c_str()));
   return failures ? 1 : 0;
 }

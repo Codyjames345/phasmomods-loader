@@ -1422,6 +1422,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &Mouse,
     &Mouse_get_current,
     &Mouse_get_leftButton,
+    &Mouse_get_rightButton,
     &Pointer,
     &Pointer_get_delta,
     &Pointer_get_position,

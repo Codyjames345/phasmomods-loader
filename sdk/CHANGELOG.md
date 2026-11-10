@@ -29,6 +29,8 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   list out with exactly one line between every pair of visible rows, the mod's and the game's alike: doubled dividers are
   put away, a line is copied in where rows touch, and `line_divider` takes the line to copy from another journal menu's
   list when one is loaded, since the audio page's own dividers draw as double rules.
+- **The mouse's right button.** `Mouse.get_rightButton` (`sdk/map/Input.h`), read as it is, whatever the game's
+  keybinds put on it; the Emotes wheel closes on a right click.
 - **The start of a kill.** `Player.NotifyOfDeathStart` (`sdk/map/Player.h`), the RPC every client gets when a kill
   begins: it marks the player dying, turns their collider off and wakes their ragdoll, a second or two before
   `Player.isDead` is set. A mod hooks it to let go of a body the game is taking back for its death animation, and never

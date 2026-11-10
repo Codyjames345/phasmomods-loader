@@ -104,9 +104,9 @@ Lines space_out(void* list, void* line) {
   for (auto it = before.rbegin(); it != before.rend(); ++it) {
     void* copy = line ? phasmo::Object::Instantiate(line, list, false) : nullptr;
     if (!copy) continue;
-    void* row = *it;
+    void* row = *it;  // a GameObject, as seq holds them
     phasmo::Transform::SetSiblingIndex(phasmo::GameObject::get_transform(copy),
-                                       phasmo::Transform::GetSiblingIndex(phasmo::Component::get_transform(row)));
+                                       phasmo::Transform::GetSiblingIndex(phasmo::GameObject::get_transform(row)));
     out.added += taken_height(copy, list);
     out.made.emplace_back(copy);
   }

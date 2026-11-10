@@ -327,3 +327,49 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
 - Smoke additions: 21 now reads: the whole audio page has one line between every pair of rows, the game's rows included
   (no band between master volume and microphone, a line between the voice bar and the voice input mode, one line before
   the Emotes heading).
+
+## In-game fix 10 (user, 2026-11-10, run 12)
+- The user: "on the last launch I got an injection error, and the second attempt said PhasmoMods already injected. The
+  game then crashed on the main menu." Then: right clicking with the wheel up should close it with nothing played and
+  without stopping the emote playing; check whether the own and other players' song volumes need to differ; and the loader
+  should log the cause of its error.
+- Crash, read: mods.log ended at "settings: phasmomods.emotes.volume has its row on the audio page", and the line after
+  `space_out` ("lines the audio page with ...") never came. Player.log's stack had the Emotes DLL's tick calling into
+  UnityPlayer; the frames, disassembled in the shipped Emotes.dll (same hash as build\Emotes.dll), are tick_settings,
+  ensure_rows and `rows::space_out`, at its last loop's `Component.get_transform(row)` right after the line's
+  Instantiate. `seq` holds GameObjects, so a GameObject went to a Component getter and Unity read the wrong native
+  object. It only runs where two of the page's rows touch, the case fix 9 added, so this was its first in-game run.
+- Crash fix: `GameObject.get_transform(row)` (sdk/api/menu_rows.cpp). settings_test's fake now has a GameObject apart
+  from each Transform, as the game does, and counts every GameObject handed to a Component or Transform call and every
+  component handed to a GameObject call; each test checks the count is 0 (red before the fix: the count failed in all three tests and the
+  copied line sat in the wrong place; green after). No other mix-up showed in settings or menu_rows.
+- Injection error, read: mods.log has one "ModHost loading" (20:10:50.964) and "ModHost active" 5 s later, so the
+  first attempt did load the host and the launcher reported a failure anyway; the retry then found it loaded. The game was
+  about a second old (Steam's autocloud stamp 20:10:49). The launcher kept no record, so the exact message is not known.
+  The likeliest step: after LoadLibraryW the launcher takes a module snapshot to confirm the copy is mapped, and Windows
+  refuses CreateToolhelp32Snapshot with ERROR_BAD_LENGTH while the target is still loading modules; its documentation
+  says to take it again, and list_modules did not. Unproven: the new log line will name it if it happens again.
+- Fixes: list_modules takes the snapshot again on ERROR_BAD_LENGTH for up to 5 s (inject_test: 3 refusals then a
+  load; refusals for ever end as the process_error they were, with the error kept). Every load's end goes to
+  launcher.log, from Attach and from the Steam launch: how (attach, steam or start), the outcome's name, the detail the
+  player saw, the Windows error with Windows' own words for it, and the mod log's path, on one line
+  (`result_line`, launcher_test).
+- Right click: `wheel_step` takes `cancelled` (the right button went down this frame, read only while the wheel is up):
+  the wheel shuts with nothing played and stays shut until its key goes up and down again (`WheelInput.waitRelease`),
+  since the key is still held after the click. Nothing reaches the session, so the emote dancing goes on, and the game's
+  end actions are not read while the wheel is up, so the click does not end it either (emotes_test). New entry
+  `Mouse.get_rightButton` (sdk/map/Input.h, all.h, CHANGELOG). Not changed, a question for the user: right mouse is the
+  game's Primary Use by default (sdk/systems/players.md), so the click also uses the held item, as a left click with the
+  wheel up already does Interact. The mod only switches Look off while the wheel is up.
+- Volumes, answered not changed: the dancer's song sits at their own voice's place, at their own listener, so they hear
+  it at its full volume with no fall; everyone else hears it through the voice's rolloff curve, which the SDK does not
+  give in numbers. Two values are not needed for anything to work: they only set how loud the dancer hears it against
+  how loud those near them do. One value means the dancer hears it as loud as someone standing on top of them; which
+  value to keep (0.125 or 0.0625 at 100%) is the user's call.
+- validate.ps1: 92/92 and every script test; API reference no warnings. gamecheck -IfConfigured -Expect: 1858 entries,
+  0 missing (`OK Mouse.get_rightButton`); the build ledger's map hash updated.
+- PM_TEXT_TODO still open for the user: emotes.volume-label (the slider's name on the audio page).
+- Smoke additions: 24. The audio page opens without a crash and shows one line between every pair of rows (21 again).
+  25. Right click with the wheel up: it shuts, nothing plays, an emote already playing goes on; holding the key after the
+  click does not reopen it; let go and press again and it opens. 26. Attach right after starting the game loads without
+  an error; launcher.log gets a line for every Attach.
