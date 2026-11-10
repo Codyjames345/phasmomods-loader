@@ -11,10 +11,14 @@ features. What is left open is only the RE spikes the plan already names.
 One mod, `mods/dev-menu/`, id `phasmomods.dev-menu`, built on the SDK like the bundled mods, and
 gated behind the developer flag below. It opens on the key left of the 1 (the `~` key, the usual
 dev-menu key per the user; the binding sits on that physical position, so non-US layouts get the
-same key) and only in single player (`PhotonNetwork.get_OfflineMode`, already mapped). While the menu is open the game runs at
+same key). It is not restricted to single player (the user, 2026-11-10, second round): it opens in
+any private room too, so real multiplayer paths can be tested; it never opens in a public lobby,
+which the loader's own rules already cover. While the menu is open offline the game runs at
 timeScale 0, so the contract freezes and the menu stays responsive (Unity still runs `Update` at
-dt 0; the menu's own polling keeps working). Everything it changes is local to this client: it sends
-nothing, syncs nothing, and never invokes an RPC body or sends an RPC by name.
+dt 0; the menu's own polling keeps working); in a room, opening the menu does not pause (Row
+scope). The menu itself puts nothing new on the network: rows call the game's own methods, and what
+a real game action sends, the game sends; the menu never invokes an RPC body or sends an RPC by
+name.
 
 Its purpose is debugging the mods: every feature exists so a single contract can answer a question
 about a ghost, a tell, a rule, or a piece of UI without restarting the contract or hand-modifying
@@ -29,8 +33,8 @@ Goals:
 
 Non-goals:
 
-- any effect in a multiplayer or public lobby (the menu refuses to open outside single player, and
-  the loader's own rules already switch mods off in a public room);
+- any effect in a public lobby (the loader's rules already switch every mod off there); in a
+  private room the menu works, but every row is scoped to what that client may decide (Row scope);
 - sending or forging network values, bypassing an RPC's sender checks, or anything near the
   anti-cheat;
 - changing which mods a lobby runs (the host owns that, unchanged);
@@ -48,9 +52,34 @@ launcher.ini settings):
   it is invisible in the launcher, the Mods panel and every lobby list, exactly as if it were not
   installed. Friends of a developer never need it and never see it.
 - Flag on (the developer's box): the mod appears, is chosen like any mod, and follows every existing
-  lobby rule while chosen - including being required of everyone in that lobby. A developer who
-  wants a clean multiplayer lobby turns the flag off first. The menu itself still refuses to open
-  outside single player (SDK: a loader-side setting and offer gate).
+  lobby rule while chosen - including being required of everyone in that lobby (SDK: a loader-side
+  setting and offer gate). One consequence worth seeing: for the dev menu to be in a room's list,
+  every player there chose it with their own flag on, so any multiplayer dev test is one everyone
+  in that room opted into. A developer who wants a normal lobby with friends turns the flag off
+  first, and the room then never sees the menu.
+
+### Row scope in a real room
+
+Removing the single player gate is a gate change, not a licence: in a room the game decides state
+on particular clients, and calling a guarded method from the wrong client gets the RPC refused,
+which counts against the sender's account (systems/photon.md, "The game's checks on an RPC"). So
+every row carries a scope, checked before it is ever called:
+
+- **local**: reads, the HUD, ESP, dummy visuals, the local player's own sanity/speed/teleport.
+  Works on any client.
+- **master**: every write of ghost state, forced hunts and ends, room changes, events, abilities,
+  type changes, and the kill-decision hooks (the hunt's kill is decided on the master; a client
+  refusing its own death would refuse a network RPC, which we never do). Greyed with the reason on
+  a client that is not the master/first actor, exactly as the game gates them.
+- **offline-only**: timeScale and the menu-open pause. Freezing one client's game loop inside a
+  live room fights the room rather than the contract; pausing stays what you asked for in single
+  player, and timeScale rows are absent in a room.
+- The dummy matters to the room only while it lives on the master's machine, since the ghost's
+  senses run over the master's scene: multiplayer ghost tests mean the developer hosts.
+
+In a room a master row goes through the game's own path and syncs as the game would (a forced hunt
+carries the real `Hunting` RPC to every client), which is exactly the multiplayer behaviour the
+menu exists to test.
 
 How each entry below is tagged:
 
@@ -65,7 +94,8 @@ How each entry below is tagged:
 ## The menu at a glance
 
 ```
-~ Dev menu  (single player only; game paused at timeScale 0 while open)
+~ Dev menu  (never in a public lobby; offline, game paused at timeScale 0 while open;
+              in a private room, rows are scoped local / master / offline-only)
 |
 +- Difficulty   every custom difficulty option, live, mid-contract
 +- Contract     weather, setup phase, objectives, payout, ending
@@ -141,8 +171,9 @@ Observe (this is half the debug value, so it lives at the top of the section):
 Hunts:
 
 - Force a hunt now: `GhostAI.ChangeState(hunting, ..., force)` on this client while it is the
-  master (map; offline it is). Refusals and their reason show on the row (friendly ghost, events
-  blocked, a hunt already on)
+  master (master row; map; offline it is). In a room this is the real thing being tested: the
+  game's own `Hunting` RPC carries the hunt to every client. Refusals and their reason show on the
+  row (friendly ghost, events blocked, a hunt already on)
 - End the hunt: ChangeState back (map); set the hunt's length: RE (the hunt clock fields need
   notes)
 - Clear the cooldown / un-hold hunts: `postHuntCooldown = 0`, `huntsHeldOff = false` (map)
@@ -185,16 +216,18 @@ Attempts (each is the game's own path; tarot's `forced` is the precedent):
 
 Type and evidence:
 
-- Change the ghost type during the contract: the user's condition (2026-11-10): the Mimic's path
-  is acceptable only if it gives a 1:1 test of every ghost - the target type's own evidence set and
-  tells, not the Mimic's copies. The game changes a live ghost's type only for the Mimic
-  (`AttemptGhostTypeStateChange`, map), and `CreateGhost` hands traits to `GhostAI.Init` at spawn.
-  The first step is an RE spike: does the native switch re-roll `givenEvidence`, re-arm the type's
-  rules and re-show the right tells (Ghost Tells gates on the live type, and Custom Ghosts' rules
-  on its traits)? If yes, the row is the Mimic's own switches with a dev-set copy list
-  (`BuildMimicCopies`, map). If no, the plan extends into a true re-type (re-hand traits through the
-  spawn path, rules re-armed, evidence re-picked), behind a confirmation on the row, until the 1:1
-  bar is met. A row that cannot meet the bar does not ship as a half-measure.
+- Change the ghost type during the contract: the user's ruling (2026-11-10, second round): the
+  Mimic does not mimic evidence in vanilla, so the proper route is a re-spawn with the new type.
+  The row is therefore the game's own spawn path run again on the master: roll nothing, take the
+  chosen type, re-hand its traits through `CreateGhost`/`GhostAI.Init` (map), re-pick evidence for
+  it (`PickEvidence`, map), let the content rules re-arm against the new traits, and keep the
+  current favourite room unless the row says otherwise - behind a confirmation on the row. The
+  Mimic's native switches (`AttemptGhostTypeStateChange`, `mimicCopies`, map) stay as their own
+  row for testing the Mimic itself. The 1:1 bar still rules: if the re-spawn cannot deliver the
+  target type's evidence, tells and rules exactly as a contract that rolled it would, the row does
+  not ship as a half-measure, and the RE spike (does re-handing traits re-init everything the
+  content side armed at spawn?) runs before it is built. Master row in a room: the master re-spawns
+  and the game's own sync carries it.
 - Evidence under test: `GhostController.givenEvidence` (map) - read now, and a dev override for
   journal and Spectral Flame tests that never syncs or saves (a contract is fully modded and
   closed, and offline there is nobody to sync to anyway)
@@ -211,8 +244,9 @@ Type flags (the AI's own dials, for reproducing a type's behaviour on demand):
 
 Vitals:
 
-- God mode: a hook that refuses `GhostHuntState.Kill` for the local player (hook; local only, the
-  kill's network body is never touched)
+- God mode: a hook that refuses `GhostHuntState.Kill` (hook). Offline it shields the local player;
+  in a room it is a master row, because the kill decision is the master's - a client refusing its
+  own death would be refusing a network RPC, which never happens
 - Sanity: set (`PlayerSanity.SetInsanity`, map), read average (map), freeze drain (hook over
   `PlayerSanity.Update`, hook)
 - Stamina: set / refill (`Player.stamina`, map)
@@ -345,7 +379,14 @@ for dev mode only; the default "leave achievements alone" rule stands for normal
   read and cited (never invent behaviour); the protection group is not enabled until the RE pass
   lists every write site.
 - Steam achievements: the mapped Steam entries (systems/achievements.md) go no-op for the session's
-  unlocks.
+  unlocks. (Normal play keeps the standing rule of leaving Steam entirely alone; this is dev-mode
+  only, at the user's ask.)
+- In a room the dev session is the master's: its start is announced on the mod's one channel (only
+  players whose mod lists match hear it, and a room holding the dev menu is one where every player
+  opted into the flag), and every client then runs its own suppression group for that contract. A
+  dev contract pays and costs nobody in the room anything: the user's "all player progress must
+  remain unaffected" read across the whole lobby, and it keeps Kinetic's no-inflated-currency
+  condition safe by construction.
 - Cheats that touch economy are display-only: the payout row shows a number; it never writes the
   wallet (the wallet is a saved value anyway, and that path stays closed).
 - Live smoke check (the user runs it): finish a dev session at a high tier with cheats on; money,
@@ -405,15 +446,25 @@ In rough order of how much of the menu waits on each:
 2. Public releases include it, opt-in as above.
 3. AI-written placeholder labels are allowed, marked `PM_TEXT_AI`.
 4. Open key: the usual dev-menu key, the one left of the 1, bound at that physical position.
-5. Mimic-path type change is fine only at the 1:1 bar: the target ghost's own evidence and tells;
-   if the native switch cannot do that, the re-type is deepened until it can, or the row does not
-   ship (see section 3).
+5. Type change: the Mimic does not mimic evidence in vanilla (the user), so the proper route is
+   the game's own re-spawn with the chosen type; the 1:1 bar for evidence, tells and rules stands,
+   and the Mimic's switches stay as their own row (see section 3).
 6. ScrollRect entries; no vanilla-UI dressing for the menu itself.
 7. New rule: no dev-mode action may touch progress - XP, money, equipment, stats, apocalypse,
    daily and weekly quests, Steam achievements (see Progression protection).
 8. New feature to weigh: a controllable dummy investigator for multiplayer-only tests, scoped
    honestly as a local game-shaped body the ghost's senses accept, never a forged networked
-   player (see section 4).
+   player (see section 4). The user: as close as a local-only version can get.
+
+Second round (the user, same day):
+
+9. The single player restriction is removed: the menu opens in private rooms so real multiplayer
+   paths can be tested, never in a public lobby. The concerns that answer is: rows scoped
+   local/master/offline-only so no client ever triggers an RPC refusal (those can harm an account);
+   no pause or timeScale inside a room; god mode and ghost writes are master rows; ghost tests with
+   the dummy mean the developer hosts. All in Row scope above.
+10. Progression suppression applies lobby-wide for a dev contract (the master announces the session
+    on the mod channel; every client in the room opted in by holding the flag).
 
 ## Tests
 
@@ -422,9 +473,12 @@ In rough order of how much of the menu waits on each:
   offline test.
 - `validate.ps1` and (for the value-moving rows) `tools/gamecheck.ps1 -IfConfigured -Expect` as
   usual.
-- Live: the smoke list gains the menu's own run (open in SP, pause holds, each cheat class once,
-  refusals show their reason), run by the user with the standing ban-risk note; nothing in the menu
-  runs in a real room, and the gate itself is smoke-checked in a private lobby.
+- Live: the smoke list gains the menu's own run (open in single player, pause holds, each cheat
+  class once, refusals show their reason), run by the user with the standing ban-risk note; and a
+  private-room run with friends (developer flag on for everyone there): master rows grey with the
+  reason on non-masters, a forced hunt rides the game's own RPC to every client, the dummy on the
+  host is found by the hunt, and opening the menu does not pause the room. The public-lobby gate is
+  smoke-checked there too.
 - Live, new: with the developer flag off, the mod is absent from the launcher, the Mods panel and
   the lobby list; after a high-tier dev session with cheats on, money, XP, level, kept equipment,
   stats, apocalypse, quests and achievements read identical before and after; the dummy is found
