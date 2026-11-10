@@ -2,13 +2,16 @@
 
 Date: 2026-11-10. Branch: `feature/dev-menu` (from `development` at 6ef3dad).
 This is the content plan: what the menu holds and what each entry can rest on. It is not yet the
-build plan; that comes after the user approves this list and answers the questions at the end.
+build plan. The user answered the plan's six questions on 2026-11-10 (recorded under Decisions at
+the end) and added two standing requirements: protected progress, and testable multiplayer-only
+features. What is left open is only the RE spikes the plan already names.
 
 ## What it is
 
-One mod, `mods/dev-menu/`, id `phasmomods.dev-menu`, built on the SDK like the bundled mods. It
-opens on the backtick key (`~` on the US layout) and only in single player
-(`PhotonNetwork.get_OfflineMode`, already mapped). While the menu is open the game runs at
+One mod, `mods/dev-menu/`, id `phasmomods.dev-menu`, built on the SDK like the bundled mods, and
+gated behind the developer flag below. It opens on the key left of the 1 (the `~` key, the usual
+dev-menu key per the user; the binding sits on that physical position, so non-US layouts get the
+same key) and only in single player (`PhotonNetwork.get_OfflineMode`, already mapped). While the menu is open the game runs at
 timeScale 0, so the contract freezes and the menu stays responsive (Unity still runs `Update` at
 dt 0; the menu's own polling keeps working). Everything it changes is local to this client: it sends
 nothing, syncs nothing, and never invokes an RPC body or sends an RPC by name.
@@ -31,7 +34,23 @@ Non-goals:
 - sending or forging network values, bypassing an RPC's sender checks, or anything near the
   anti-cheat;
 - changing which mods a lobby runs (the host owns that, unchanged);
-- maps and contracts you cannot rebuild in place (a map change means a new lobby, not a menu item).
+- maps and contracts you cannot rebuild in place (a map change means a new lobby, not a menu item);
+- any touch to player progress (see Progression protection below).
+
+### The developer flag
+
+The user's call (2026-11-10): the menu ships in public releases, but players never see it; a
+developer opts in. Following SMAPI's `DevelopmentMode` config convention (and the loader's own
+launcher.ini settings):
+
+- A loader setting, `developer=1` in launcher.ini (the file that already holds the mod choices).
+- Flag off (every player's default): the mod is not offered, listed, loaded or synced anywhere;
+  it is invisible in the launcher, the Mods panel and every lobby list, exactly as if it were not
+  installed. Friends of a developer never need it and never see it.
+- Flag on (the developer's box): the mod appears, is chosen like any mod, and follows every existing
+  lobby rule while chosen - including being required of everyone in that lobby. A developer who
+  wants a clean multiplayer lobby turns the flag off first. The menu itself still refuses to open
+  outside single player (SDK: a loader-side setting and offer gate).
 
 How each entry below is tagged:
 
@@ -52,7 +71,7 @@ How each entry below is tagged:
 +- Contract     weather, setup phase, objectives, payout, ending
 +- Ghost        observe | hunts | room and movement | speed and senses
 |              attempts (event, interact, ability, throw) | type and evidence | type flags
-+- Player       vitals | movement
++- Player       vitals | movement | dummy investigator
 +- Equipment    loadout and shop | durability and consumables | cursed possessions
 +- Game         time | debug HUD | ESP | the ghost's sensors
 +- Loader       mod states | content | journal tests | per-mod tests
@@ -166,11 +185,16 @@ Attempts (each is the game's own path; tarot's `forced` is the precedent):
 
 Type and evidence:
 
-- Change the ghost type during the contract: marked experimental. The game changes a live ghost's
-  type only for the Mimic (`AttemptGhostTypeStateChange`, map), and `CreateGhost` hands traits to
-  `GhostAI.Init` at spawn. v1 offers the Mimic's own switches (`mimicCopies`, `mimicNext`,
-  `MimicCopy`, map) plus a forced type through the game's next native switch; a true re-type
-  (resend traits, rules re-armed) is RE, behind a confirmation on the row
+- Change the ghost type during the contract: the user's condition (2026-11-10): the Mimic's path
+  is acceptable only if it gives a 1:1 test of every ghost - the target type's own evidence set and
+  tells, not the Mimic's copies. The game changes a live ghost's type only for the Mimic
+  (`AttemptGhostTypeStateChange`, map), and `CreateGhost` hands traits to `GhostAI.Init` at spawn.
+  The first step is an RE spike: does the native switch re-roll `givenEvidence`, re-arm the type's
+  rules and re-show the right tells (Ghost Tells gates on the live type, and Custom Ghosts' rules
+  on its traits)? If yes, the row is the Mimic's own switches with a dev-set copy list
+  (`BuildMimicCopies`, map). If no, the plan extends into a true re-type (re-hand traits through the
+  spawn path, rules re-armed, evidence re-picked), behind a confirmation on the row, until the 1:1
+  bar is met. A row that cannot meet the bar does not ship as a half-measure.
 - Evidence under test: `GhostController.givenEvidence` (map) - read now, and a dev override for
   journal and Spectral Flame tests that never syncs or saves (a contract is fully modded and
   closed, and offline there is nobody to sync to anyway)
@@ -203,6 +227,31 @@ Movement:
 - Noclip / fly: needs the character controller entries (not mapped): RE
 - Teleport (to a room, a player, the truck): `Player.body` transform write (`Transform.set_position`,
   map) plus how the controller re-seats: verify (a fake-game test first, then the smoke list)
+
+Dummy investigator (the user's ask, 2026-11-10: test multiplayer-only features - Banshee and
+Bogeyman targeting, networked animations and emotes - in single player):
+
+- Honest limit first: a dummy cannot be a true networked player. The room's players come from the
+  Photon server (`PhotonNetwork.get_PlayerList`, `Network.playerSpots`), and fabricating a client
+  would mean forging network identities, which the plan will not do. What the menu can do is put a
+  game-shaped investigator body in the level that the ghost's own senses find.
+- The dummy: the game's own player prefab instantiated locally, moved by teleport or steer, posed,
+  and carrying the sense signals the hunt reads: `PlayerLOSTarget`, `PlayerNoise` (map,
+  GhostSenses.h), so `Sees`, `Hears` and the electronics test act on it, and it can be walked into
+  closets to drive the Bogeyman's closet search (`GhostHuntState.SetCloset` plus real
+  `ClosetZone`s, map). Playable Ghost's parked body (`mods/playable_ghost/body.cpp`) is the working
+  precedent that a local player-shaped body lives safely in a contract.
+- Banshee (Moroi) targeting: the game sets `GhostAI.bansheeTarget` from a real `Player` component;
+  whether the local dummy can carry one safely is an RE spike (the parked body again is the
+  precedent to test against). Until proven, the row reads the target instead of setting it.
+- What the dummy never is: not in the player list, so player-slot UI (sanity bars, journal marks,
+  Ready), the idle state's average-sanity roll over real players, and actor-keyed peer messages
+  (the Emotes session keys by Photon actor) do not treat it as a player. Networked emote and
+  animation *messages* need a real second client; that test stays what it is today: friends
+  joining the development pre-release. The dummy does carry the animation half: a clip driven on
+  its body for filming and timing tests.
+- All of it behind one spike: if the dummy proves to disturb any game system, the group ships
+  signals-only (no body) or not at all; it is the plan's riskiest feature next to the re-type.
 
 ## 5. Equipment
 
@@ -280,21 +329,51 @@ Per-mod tests (only where a game-side entry exists; v1):
 Out of scope (loader rules, stated so nobody re-litigates them here): enabling or disabling mods
 from inside a contract, changing the lobby's mod list, downloading mods, idle'ing anyone's mods.
 
+## Progression protection (the user's rule, 2026-11-10)
+
+While a dev session is on (a contract the developer menu is enabled for), nothing the contract
+earns or changes may reach the player's progress: XP, money, kept equipment, stats, the apocalypse,
+daily and weekly quests, and Steam achievements. This is the user explicitly raising achievements
+for dev mode only; the default "leave achievements alone" rule stands for normal play.
+
+- Mapped sites to suppress while a dev session is on: `ExitLevel.CheckMissions` and
+  `ExitLevel.CheckChallenges` (map); the reward screen's saving of the money total and
+  `SingleplayerProfile.AddXPAndFunds` (map, Rewards.h and GameController.h); the death-equipment
+  branch (`InventoryManager.ResetAllEquipment` vs `ReturnItemstoInventory`, the save behind it).
+- Unmapped sites to find by RE before the group ships: where stats save, where daily/weekly quests
+  progress, and the apocalypse counter. The plan does not claim coverage of these until each is
+  read and cited (never invent behaviour); the protection group is not enabled until the RE pass
+  lists every write site.
+- Steam achievements: the mapped Steam entries (systems/achievements.md) go no-op for the session's
+  unlocks.
+- Cheats that touch economy are display-only: the payout row shows a number; it never writes the
+  wallet (the wallet is a saved value anyway, and that path stays closed).
+- Live smoke check (the user runs it): finish a dev session at a high tier with cheats on; money,
+  XP, level, quests, apocalypse and achievements read identical before and after. Offline tests
+  pin every suppression hook.
+
 ## Reverse engineering and SDK work the plan leans on
 
 In rough order of how much of the menu waits on each:
 
 1. The remaining `Difficulty` fields (notes for each; the field scan then feeds the rows) - RE
-2. `Time.set_timeScale`, keyboard polling (the map has `Mouse` but no `Keyboard`), Unity `Slider`
-   and `ScrollRect` - SDK small, one-line entries
+2. `Time.set_timeScale`, keyboard polling (the map has `Mouse` but no `Keyboard`; poll the physical
+   key left of 1), Unity `Slider` and `ScrollRect` (the user's call: plain scroll views, no vanilla
+   widget dressing for the menu) - SDK small, one-line entries
 3. Mid-contract weather transition (`RandomWeather.TransitionWeatherProfile`) - RE
 4. Movement speed and the character controller (player cheats) - RE
 5. Equipment durability/battery decrements and the whole shop flow (StoreItem, prices, purchase),
    saved money - RE
 6. NavMeshAgent warp (ghost teleport) - SDK small
 7. Objective complete/fail path; the hunt clock - RE
-8. Mid-contract type change beyond the Mimic's switches - RE, and only if it proves safe
-9. A mod-status read query on the host contract - SDK (grows at the end)
+8. The re-type spike: does the Mimic's native switch deliver the target type's evidence and tells
+   (the user's 1:1 bar); if not, the true re-type path - RE, gated
+9. The dummy investigator spike: how much of a local player-shaped body the game's systems accept
+   (PG's parked body as the precedent) - RE spike
+10. Every progress write site a dev session must not reach: stats, daily/weekly quests, apocalypse
+    - RE before the protection group ships
+11. The developer flag: loader setting and offer gate - SDK
+12. A mod-status read query on the host contract - SDK (grows at the end)
 
 ## Rules this design leans on
 
@@ -308,31 +387,33 @@ In rough order of how much of the menu waits on each:
 - Dynamic over hard-coded: field scans, the offered ghost collection, `WeatherType` names, room
   lists - all read at runtime.
 - Text: every label the menu shows goes in the mod's `i18n/default.json` like any other text
-  (the text-table rule), with the wording question below.
+  (the text-table rule). The user allowed AI-written placeholders (2026-11-10), each marked
+  `PM_TEXT_AI` for later replacement, and `text_table_test` checks the table against the code.
+- Progression protection is not a convenience: while a dev session is on, the suppression group
+  must be on with it, or the session does not start (fail closed, like every loader decision).
+- The developer flag keeps the menu out of every player's way: with it off the mod does not exist
+  in the launcher, the Mods panel, any lobby list or the loader's loading order.
 - No addresses in the menu's code, comments or UI: map keys everywhere.
 - A game build the entries do not resolve on leaves the affected rows absent or greyed with the
   reason, never a guess.
 
-## Open questions for the user
+## Decisions (the user, 2026-11-10)
 
-1. Standing of the mod in a lobby. Recommendation: an ordinary mod on the host's list, inert
-   outside single player; a friend joining a dev's multiplayer lobby installs the DLL like any mod.
-   Alternative: a flag that keeps a dev-only mod off the lobby list (new rule, weakens "the host's
-   list is the lobby's list", needs the user's explicit call). Alternative: dev builds only, never
-   in a release.
-2. Whether the dev menu ships in public releases at all, or only in the user's dev install / a
-   separate debug download.
-3. Menu wording. Labels are text the user reads in-game. Options: every string as a
-   `PM_TEXT_TODO` row for the user to write (honest to the policy but heavy for ~70 labels), or the
-   user ruling that a developer tool's technical labels (map keys, `timeScale`, ghost names from
-   the game) are not player-facing and may be written as-is. A middle choice: keep bare technical
-   terms verbatim, mark every sentence-like label `PM_TEXT_TODO`.
-4. The `~` key on non-US layouts: fixed backtick, or configurable in the launcher/mod settings?
-5. How far to take "change ghost type during a contract" if the re-type path proves unsafe: keep
-   only the Mimic's own switches and a forced type at the next native switch, or allow an
-   experimental respawn behind a confirmation.
-6. Scrollable lists: add the Unity `Slider`/`ScrollRect` map entries, or page the lists with game
-   buttons?
+1. Visibility: ships public, hidden by default behind a developer flag (`developer=1` in
+   launcher.ini, following SMAPI's DevelopmentMode convention); flag off means the mod is
+   invisible to players and to every lobby list.
+2. Public releases include it, opt-in as above.
+3. AI-written placeholder labels are allowed, marked `PM_TEXT_AI`.
+4. Open key: the usual dev-menu key, the one left of the 1, bound at that physical position.
+5. Mimic-path type change is fine only at the 1:1 bar: the target ghost's own evidence and tells;
+   if the native switch cannot do that, the re-type is deepened until it can, or the row does not
+   ship (see section 3).
+6. ScrollRect entries; no vanilla-UI dressing for the menu itself.
+7. New rule: no dev-mode action may touch progress - XP, money, equipment, stats, apocalypse,
+   daily and weekly quests, Steam achievements (see Progression protection).
+8. New feature to weigh: a controllable dummy investigator for multiplayer-only tests, scoped
+   honestly as a local game-shaped body the ghost's senses accept, never a forged networked
+   player (see section 4).
 
 ## Tests
 
@@ -344,3 +425,7 @@ In rough order of how much of the menu waits on each:
 - Live: the smoke list gains the menu's own run (open in SP, pause holds, each cheat class once,
   refusals show their reason), run by the user with the standing ban-risk note; nothing in the menu
   runs in a real room, and the gate itself is smoke-checked in a private lobby.
+- Live, new: with the developer flag off, the mod is absent from the launcher, the Mods panel and
+  the lobby list; after a high-tier dev session with cheats on, money, XP, level, kept equipment,
+  stats, apocalypse, quests and achievements read identical before and after; the dummy is found
+  by the hunt's senses and seen by ESP, while the player-list UI and networked messages ignore it.
