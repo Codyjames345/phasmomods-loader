@@ -11,14 +11,12 @@ features. What is left open is only the RE spikes the plan already names.
 One mod, `mods/dev-menu/`, id `phasmomods.dev-menu`, built on the SDK like the bundled mods, and
 gated behind the developer flag below. It opens on the key left of the 1 (the `~` key, the usual
 dev-menu key per the user; the binding sits on that physical position, so non-US layouts get the
-same key). It is not restricted to single player (the user, 2026-11-10, second round): it opens in
-any private room too, so real multiplayer paths can be tested; it never opens in a public lobby,
-which the loader's own rules already cover. While the menu is open offline the game runs at
-timeScale 0, so the contract freezes and the menu stays responsive (Unity still runs `Update` at
-dt 0; the menu's own polling keeps working); in a room, opening the menu does not pause (Row
-scope). The menu itself puts nothing new on the network: rows call the game's own methods, and what
-a real game action sends, the game sends; the menu never invokes an RPC body or sends an RPC by
-name.
+same key) and only when the game runs offline, in its own single player mode
+(`PhotonNetwork.get_OfflineMode`, already mapped) - the user's final call, a sandbox (third round,
+below). While the menu is open the game runs at timeScale 0, so the contract freezes and the menu
+stays responsive (Unity still runs `Update` at dt 0; the menu's own polling keeps working). The
+menu puts nothing on a network there is not on: offline, every game path it calls is the game's own
+single player path.
 
 Its purpose is debugging the mods: every feature exists so a single contract can answer a question
 about a ghost, a tell, a rule, or a piece of UI without restarting the contract or hand-modifying
@@ -29,12 +27,14 @@ Goals:
 - all custom difficulty options, changeable mid-contract;
 - direct control of the ghost, the player, equipment and the contract for testing;
 - read-outs (debug HUD, ESP) that show what the game and the mods currently believe;
+- a sandbox: offline only, pausable at will, no other players, and nothing the session does ever
+  reaches a room or a save;
 - a loader page that shows mod states and content, since that is where mod bugs first show.
 
 Non-goals:
 
-- any effect in a public lobby (the loader's rules already switch every mod off there); in a
-  private room the menu works, but every row is scoped to what that client may decide (Row scope);
+- any effect in any room, public or private (the menu only opens offline; the loader's rules
+  already switch every mod off in a public room);
 - sending or forging network values, bypassing an RPC's sender checks, or anything near the
   anti-cheat;
 - changing which mods a lobby runs (the host owns that, unchanged);
@@ -53,33 +53,30 @@ launcher.ini settings):
   installed. Friends of a developer never need it and never see it.
 - Flag on (the developer's box): the mod appears, is chosen like any mod, and follows every existing
   lobby rule while chosen - including being required of everyone in that lobby (SDK: a loader-side
-  setting and offer gate). One consequence worth seeing: for the dev menu to be in a room's list,
-  every player there chose it with their own flag on, so any multiplayer dev test is one everyone
-  in that room opted into. A developer who wants a normal lobby with friends turns the flag off
-  first, and the room then never sees the menu.
+  setting and offer gate). One consequence worth seeing: the mod still rides the lobby's list
+  rules, so a developer hosting friends with the flag on needs them to install it too (even
+  though the menu never opens in a room) - or turns the flag off before inviting. A normal lobby
+  never sees the menu at all.
 
-### Row scope in a real room
+### Sandbox rules (the user's final call, 2026-11-10, third round)
 
-Removing the single player gate is a gate change, not a licence: in a room the game decides state
-on particular clients, and calling a guarded method from the wrong client gets the RPC refused,
-which counts against the sender's account (systems/photon.md, "The game's checks on an RPC"). So
-every row carries a scope, checked before it is ever called:
+Dev mode is single player only and fully sandboxed. This replaces the second round's private-room
+scope: the menu only opens while PUN runs offline, which is the game's own single player state.
 
-- **local**: reads, the HUD, ESP, dummy visuals, the local player's own sanity/speed/teleport.
-  Works on any client.
-- **master**: every write of ghost state, forced hunts and ends, room changes, events, abilities,
-  type changes, and the kill-decision hooks (the hunt's kill is decided on the master; a client
-  refusing its own death would refuse a network RPC, which we never do). Greyed with the reason on
-  a client that is not the master/first actor, exactly as the game gates them.
-- **offline-only**: timeScale and the menu-open pause. Freezing one client's game loop inside a
-  live room fights the room rather than the contract; pausing stays what you asked for in single
-  player, and timeScale rows are absent in a room.
-- The dummy matters to the room only while it lives on the master's machine, since the ghost's
-  senses run over the master's scene: multiplayer ghost tests mean the developer hosts.
-
-In a room a master row goes through the game's own path and syncs as the game would (a forced hunt
-carries the real `Hunting` RPC to every client), which is exactly the multiplayer behaviour the
-menu exists to test.
+- No room exists, so nothing is listed anywhere, nobody can join, and no RPC can be refused: the
+  game's sender checks let everyone through outside a room or offline (systems/photon.md), so the
+  refusal risk that row scoping existed for cannot arise. No special networking work is needed to
+  "disable" it: single player already runs with PUN offline. The menu never connects, never creates
+  a room, and simply will not open inside one (SDK: the same offline gate).
+- Pause-while-open and the timeScale rows are fully live, since freezing the contract is freezing
+  the whole sandbox.
+- The offline game is still the master and first actor, so every row - ghost writes, forced hunts,
+  events, re-type, god mode, dummy - uses the game's own single player path exactly as a vanilla
+  contract does. The discipline holds regardless: call the game's own method, never an RPC body or
+  an RPC by name.
+- A mod loaded in a real lobby (the list rules still apply while the flag is on and the mod is
+  chosen) shows nothing there: the menu never opens in a room. True multiplayer testing of the
+  mods themselves stays what it is today: friends joining a development pre-release.
 
 How each entry below is tagged:
 
@@ -94,8 +91,7 @@ How each entry below is tagged:
 ## The menu at a glance
 
 ```
-~ Dev menu  (never in a public lobby; offline, game paused at timeScale 0 while open;
-              in a private room, rows are scoped local / master / offline-only)
+~ Dev menu  (single player / offline only; game paused at timeScale 0 while open)
 |
 +- Difficulty   every custom difficulty option, live, mid-contract
 +- Contract     weather, setup phase, objectives, payout, ending
@@ -170,10 +166,9 @@ Observe (this is half the debug value, so it lives at the top of the section):
 
 Hunts:
 
-- Force a hunt now: `GhostAI.ChangeState(hunting, ..., force)` on this client while it is the
-  master (master row; map; offline it is). In a room this is the real thing being tested: the
-  game's own `Hunting` RPC carries the hunt to every client. Refusals and their reason show on the
-  row (friendly ghost, events blocked, a hunt already on)
+- Force a hunt now: `GhostAI.ChangeState(hunting, ..., force)` on this client, which offline is the
+  master (map). Refusals and their reason show on the row (friendly ghost, events blocked, a hunt
+  already on)
 - End the hunt: ChangeState back (map); set the hunt's length: RE (the hunt clock fields need
   notes)
 - Clear the cooldown / un-hold hunts: `postHuntCooldown = 0`, `huntsHeldOff = false` (map)
@@ -226,8 +221,7 @@ Type and evidence:
   row for testing the Mimic itself. The 1:1 bar still rules: if the re-spawn cannot deliver the
   target type's evidence, tells and rules exactly as a contract that rolled it would, the row does
   not ship as a half-measure, and the RE spike (does re-handing traits re-init everything the
-  content side armed at spawn?) runs before it is built. Master row in a room: the master re-spawns
-  and the game's own sync carries it.
+  content side armed at spawn?) runs before it is built.
 - Evidence under test: `GhostController.givenEvidence` (map) - read now, and a dev override for
   journal and Spectral Flame tests that never syncs or saves (a contract is fully modded and
   closed, and offline there is nobody to sync to anyway)
@@ -244,9 +238,8 @@ Type flags (the AI's own dials, for reproducing a type's behaviour on demand):
 
 Vitals:
 
-- God mode: a hook that refuses `GhostHuntState.Kill` (hook). Offline it shields the local player;
-  in a room it is a master row, because the kill decision is the master's - a client refusing its
-  own death would be refusing a network RPC, which never happens
+- God mode: a hook that refuses `GhostHuntState.Kill` for the local player (hook; the kill's
+  network body is never touched; offline the kill decision is this client's anyway)
 - Sanity: set (`PlayerSanity.SetInsanity`, map), read average (map), freeze drain (hook over
   `PlayerSanity.Update`, hook)
 - Stamina: set / refill (`Player.stamina`, map)
@@ -381,12 +374,10 @@ for dev mode only; the default "leave achievements alone" rule stands for normal
 - Steam achievements: the mapped Steam entries (systems/achievements.md) go no-op for the session's
   unlocks. (Normal play keeps the standing rule of leaving Steam entirely alone; this is dev-mode
   only, at the user's ask.)
-- In a room the dev session is the master's: its start is announced on the mod's one channel (only
-  players whose mod lists match hear it, and a room holding the dev menu is one where every player
-  opted into the flag), and every client then runs its own suppression group for that contract. A
-  dev contract pays and costs nobody in the room anything: the user's "all player progress must
-  remain unaffected" read across the whole lobby, and it keeps Kinetic's no-inflated-currency
-  condition safe by construction.
+- The sandbox makes this whole group local: a dev session runs only offline, involves no other
+  player, and never reaches a room. The user's "all player progress must remain unaffected" is
+  therefore this client's protection, and the no-inflated-currency condition for lobbies is safe by
+  construction since no dev session is ever in a lobby.
 - Cheats that touch economy are display-only: the payout row shows a number; it never writes the
   wallet (the wallet is a saved value anyway, and that path stays closed).
 - Live smoke check (the user runs it): finish a dev session at a high tier with cheats on; money,
@@ -456,15 +447,20 @@ In rough order of how much of the menu waits on each:
    honestly as a local game-shaped body the ghost's senses accept, never a forged networked
    player (see section 4). The user: as close as a local-only version can get.
 
-Second round (the user, same day):
+Second round (the user, same day, items 9-10 superseded by the third round):
 
-9. The single player restriction is removed: the menu opens in private rooms so real multiplayer
-   paths can be tested, never in a public lobby. The concerns that answer is: rows scoped
-   local/master/offline-only so no client ever triggers an RPC refusal (those can harm an account);
-   no pause or timeScale inside a room; god mode and ghost writes are master rows; ghost tests with
-   the dummy mean the developer hosts. All in Row scope above.
-10. Progression suppression applies lobby-wide for a dev contract (the master announces the session
-    on the mod channel; every client in the room opted in by holding the flag).
+9. (Superseded.) The single player restriction was briefly lifted for private-room testing; the
+   row-scope design it produced is kept in git history only.
+10. (Superseded.) Lobby-wide progression suppression went with it.
+
+Third round (the user, same day, final):
+
+11. Dev mode is single player only and fully sandboxed: the menu opens only while PUN runs offline
+    (the game's own single player state). No room exists, so nothing lists, nobody joins, and no
+    RPC refusal is possible; pause and timeScale are fully live; progression suppression is local;
+    "disabling networking" needs no work because single player already runs with PUN offline - the
+    menu just refuses to open in a room. True multiplayer testing of the mods themselves stays
+    with friends on a development pre-release, outside dev mode. See Sandbox rules.
 
 ## Tests
 
@@ -474,11 +470,10 @@ Second round (the user, same day):
 - `validate.ps1` and (for the value-moving rows) `tools/gamecheck.ps1 -IfConfigured -Expect` as
   usual.
 - Live: the smoke list gains the menu's own run (open in single player, pause holds, each cheat
-  class once, refusals show their reason), run by the user with the standing ban-risk note; and a
-  private-room run with friends (developer flag on for everyone there): master rows grey with the
-  reason on non-masters, a forced hunt rides the game's own RPC to every client, the dummy on the
-  host is found by the hunt, and opening the menu does not pause the room. The public-lobby gate is
-  smoke-checked there too.
+  class once, refusals show their reason), run by the user with the standing ban-risk note; and the
+  room gate: in a private room with friends where the mod is loaded per the list rules, the menu
+  never opens (it stays inert), and single player works normally again after leaving. The
+  public-lobby gate is smoke-checked there too.
 - Live, new: with the developer flag off, the mod is absent from the launcher, the Mods panel and
   the lobby list; after a high-tier dev session with cheats on, money, XP, level, kept equipment,
   stats, apocalypse, quests and achievements read identical before and after; the dummy is found
