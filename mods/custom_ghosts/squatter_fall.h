@@ -74,29 +74,43 @@ class FallState {
   std::optional<uint64_t> still_;  // since when its bodies have been slow
 };
 
-/** How much further, metres, each point of the sheet but those the head carries may move from where the body carries it
- * while the body falls: enough for the hem to drop to the floor from a body on its side (a starting value). */
-inline constexpr float kFallSlack = 2.0f;
+/** How far the root may move, metres, in one frame and still be walking (root_jumped). A starting value: it sits above
+ * the furthest the Squatter's fastest clip carries it in a frame at twenty frames a second, and far below the
+ * NavMesh warps and get-up placements that move it by metres. */
+inline constexpr float kFrameJumpMetres = 0.5f;
 
 /**
- * How much of kFallSlack the sheet has (0 to 1): all of it while the body falls, shrinking smoothly to none over the
- * get-up (`riseShare` of it gone, 0 to 1), none standing. The sheet is let go at once but drawn back gradually, so it
- * never snaps to the body.
+ * Whether the figure's root moved `metres` this frame: far enough that it jumped rather than stepped, so the sheet's
+ * anchor went under it. Unity's answer for a cloth whose transform is moved a long way is to clear the motion it has
+ * accumulated right after moving it (Cloth.ClearTransformMotion), which is what the figure then does; left to itself
+ * the cloth is dragged after the body and arrives stretched across the room.
  */
-inline float sheet_slack(FallPhase phase, float riseShare) {
-  if (phase == FallPhase::Falling) return 1.0f;
-  if (phase == FallPhase::Up) return 0.0f;
-  const float u = std::clamp(riseShare, 0.0f, 1.0f);
-  return 1.0f - u * u * (3.0f - 2.0f * u);
-}
+inline bool root_jumped(float metres) { return metres >= kFrameJumpMetres; }
 
-/** `slack` brought to the nearest quarter, 0 to 1: the steps it reaches the cloth in, since each change re-sends every
- * point's constraint to the cloth (user, 2026-11-10: sent every few frames, getting up lagged badly). */
-inline float slack_step(float slack) { return std::round(std::clamp(slack, 0.0f, 1.0f) * 4.0f) / 4.0f; }
+/**
+ * How long after a get-up's clip its frames are still timed, seconds (figure::fall_watch). The frame the user feels as a
+ * spike lands once the body stands again, which is after the get-up's clip, and the window of 2026-11-10 closed with the
+ * clip: it logged no slow frame across three falls while the spike was reported anyway. A starting value.
+ */
+inline constexpr float kFallWatchTailSeconds = 1.5f;
 
-/** How far a point the sheet lets move `base` metres from the body may move with `slack` of kFallSlack; a pinned point
- * (base 0) stays pinned. */
-inline float slack_distance(float base, float slack) { return base > 0.0f ? base + slack * kFallSlack : 0.0f; }
+/**
+ * Whether to time this frame of the Squatter: while its body is under physics, or before `until` (the figure's clock)
+ * for the get-up that followed it. `until` of 0 is a body that has never been down, so a standing Squatter's frames are
+ * nobody's business.
+ */
+inline bool fall_watch(bool falling, float now, float until) { return falling || (until > 0.0f && now < until); }
+
+/**
+ * A clip change the user may see as two animations not meshing: one that leaves a bone `degrees` further round, or a
+ * joint `metres` further along, than it stood. The figure logs the worst of a change with both state names, so a later
+ * test names the pairs that need a different neighbour or a longer smoothing. Both values sit well under a whole pose
+ * difference: none of the 2026-11-10 run's changes reached 60 degrees, so the run asked about the wrong changes, and
+ * inertialization already smooths everything it is given.
+ */
+inline constexpr float kPoseTurnWarnDegrees = 30.0f, kPoseShiftWarnMetres = 0.05f;
+
+inline bool pose_jumps(float degrees, float metres) { return degrees >= kPoseTurnWarnDegrees || metres >= kPoseShiftWarnMetres; }
 
 /** How it gets up: from lying face down (Standing Up) or face up (Getting Up). */
 enum class GetUp { FaceDown, FaceUp };
@@ -135,11 +149,14 @@ inline float body_heading(phasmo::Quaternion rotation) {
 inline constexpr uint64_t kRiseTurnMs = 2500;
 
 /**
- * Whether its turn after getting up is done at `now` (it stood up to turn until `until`): its figure faces `facing`,
- * within kFaceAheadDegrees of the way to the player, `toTarget`, and no turn clip plays (`turning`), or time is up.
+ * Whether its turn after getting up is done at `now` (it stood up to turn until `until`): no turn clip plays
+ * (`turning`) and none would start from here (turn_for plays one only kTurnStartDegrees off or further), or time is up.
+ * Waiting for the figure to face within kFaceAheadDegrees instead left it standing with nothing playing between those
+ * two angles, frozen for the whole kRiseTurnMs (user, 2026-11-10: getting up after a trip left it still); once no clip
+ * is left to play, its run's own turning finishes lining up on the way.
  */
 inline bool rise_turn_done(uint64_t now, uint64_t until, float facing, float toTarget, bool turning) {
-  return now >= until || (!turning && faces_ahead(facing, toTarget));
+  return now >= until || (!turning && turn_for(wrap_angle(toTarget - facing)) == Turn::None);
 }
 
 /** Where and which way the figure's root stands as it gets up. */

@@ -95,6 +95,13 @@ inline constexpr pm::sdk::EntryDesc Cloth_get_normals{.key = "Cloth.get_normals"
                                                       .flags = pm::sdk::kOptional,
                                                       .name = "UnityEngine.Cloth::get_normals"};
 
+/// Forgets the motion the cloth has accumulated from its GameObject moving through the world. Unity's own answer to
+/// moving a cloth's transform a long way in one frame (a teleport, a warp): call it right after moving the transform,
+/// and the cloth goes with it instead of being dragged after it. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Cloth_ClearTransformMotion{
+    .key = "Cloth.ClearTransformMotion", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kOptional,
+    .name = "UnityEngine.Cloth::ClearTransformMotion"};
+
 /// Unity's capsule collider (UnityEngine.PhysicsModule), a Collider: what a Cloth collides with. Inferred: Unity's
 /// documented API.
 inline constexpr pm::sdk::EntryDesc CapsuleCollider{.key = "CapsuleCollider", .name = "CapsuleCollider",
@@ -161,6 +168,10 @@ struct Cloth {
       set_worldAccelerationScale{};
   /// set_useVirtualParticles(cloth, 0 or 1). Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::Cloth_set_useVirtualParticles, void(void*, float)> set_useVirtualParticles{};
+  /// ClearTransformMotion(cloth): forgets the motion the cloth has accumulated from its GameObject moving through the
+  /// world. Call it right after moving that GameObject a long way in one frame (a teleport, a warp), so the cloth goes
+  /// with it instead of being dragged after it. Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Cloth_ClearTransformMotion, void(void*)> ClearTransformMotion{};
   /// get_vertices(cloth): its simulated points, a new Vector3[]. Unresolved: null.
   static constexpr pm::api::Icall<pm::map::Cloth_get_vertices, void*(void*)> get_vertices{};
   /// get_normals(cloth): its simulated normals, a new Vector3[]. Unresolved: null.

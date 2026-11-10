@@ -249,11 +249,22 @@ struct ClothSettings {
   std::optional<bool> virtualParticles;
 };
 
-/** A sphere the cloth rests on and cannot pass through, following a bone. */
+/**
+ * A body the cloth rests on and cannot pass through, following a bone: a sphere, or a capsule running along a limb
+ * when `length` is set. Unity's CapsuleCollider backs both (one as tall as its diameter is a sphere), and Cloth collides
+ * only with the colliders it is given, so a limb covered by one capsule is cheaper and smoother than the same limb
+ * covered by a line of spheres.
+ */
 struct ClothSphere {
   void* bone;              ///< A Transform (Animator.GetBoneTransform); a null one fails add_cloth.
   float radius;            ///< Metres.
-  phasmo::Vector3 offset;  ///< From the bone, in world space when add_cloth is called.
+  phasmo::Vector3 offset;  ///< From the bone, in world space when add_cloth is called; the collider's centre.
+  /// With `length`: which way the capsule runs, in world space when add_cloth is called (its own length is what matters,
+  /// not its size). Ignored for a sphere.
+  phasmo::Vector3 direction{0, 0, 0};
+  /// The capsule's length along `direction`, metres: 0 for a sphere. A length below the diameter is raised to it, which
+  /// is Unity's sphere, since a CapsuleCollider is never shorter than its own diameter.
+  float length = 0.0f;
 };
 
 /** What add_cloth made, for destroy_cloth. */
@@ -266,7 +277,7 @@ struct ClothParts {
 /**
  * @brief Makes `gameObject` draw `mesh` with `material` and simulate it as Unity Cloth: a new Mesh, a
  *        SkinnedMeshRenderer that carries every vertex with the GameObject itself, then a Cloth with `settings`, the
- *        mesh's coefficients and a sphere collider per `spheres` entry.
+ *        mesh's coefficients and a collider per `spheres` entry: a sphere, or a capsule where an entry gives a length.
  * @param gameObject An active GameObject with no renderer, usually parented to a bone so the pinned vertices follow it.
  * @param spheres Each becomes a GameObject on the Ignore Raycast layer (Layer.IgnoreRaycast), parented to its bone. The
  *        game's physics matrix lets that layer collide with nothing the game names, so no body bumps into a sphere;

@@ -817,15 +817,22 @@ void every_bone_under_the_hips_blends() {
   CHECK(figure::all_under(-1, [&](int) { return std::vector<int>{}; }).size() == 1);
 }
 
-// Standing up after a fall it turns to the player it is after with its turn clips before it runs: done once its
-// figure faces within kFaceAheadDegrees of them and no turn clip plays, or at the latest kRiseTurnMs after it stood.
+// Standing up after a fall it turns to the player it is after with its turn clips before it runs: done once no turn clip
+// plays and none would start (its figure is within its turn clips' start angle of them), or at the latest kRiseTurnMs
+// after it stood.
 void it_turns_with_its_clips_before_running_on() {
   constexpr float kDeg = std::numbers::pi_v<float> / 180.0f;
-  CHECK(!rise_turn_done(1000, 1000 + kRiseTurnMs, 0.0f, 90 * kDeg, false));  // facing away: keep turning
+  CHECK(!rise_turn_done(1000, 1000 + kRiseTurnMs, 0.0f, 90 * kDeg, false));  // facing away: a turn clip plays
   CHECK(!rise_turn_done(1000, 1000 + kRiseTurnMs, 89 * kDeg, 90 * kDeg, true));  // a turn clip still plays
   CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, 89 * kDeg, 90 * kDeg, false));
   CHECK(rise_turn_done(1000 + kRiseTurnMs, 1000 + kRiseTurnMs, 0.0f, 180 * kDeg, true));  // waited long enough
   CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, 179 * kDeg, -179 * kDeg, false));         // across the wrap
+  // Past its turn clips' start angle and short of facing them no clip plays, and it stood frozen there for the whole
+  // kRiseTurnMs (user, 2026-11-10: getting up after a trip left it still). The run's own turning finishes the alignment.
+  CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, 45 * kDeg, 90 * kDeg, false));
+  CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, kFaceAheadDegrees * kDeg, 0.0f, false));
+  CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, 0.0f, (kTurnStartDegrees - 1.0f) * kDeg, false));  // just short
+  CHECK(!rise_turn_done(1000, 1000 + kRiseTurnMs, 0.0f, kTurnStartDegrees * kDeg, false));          // at it
   CHECK(kRiseTurnMs >= 1000 && kRiseTurnMs <= 4000);
 }
 
@@ -838,36 +845,42 @@ void every_fall_says_its_line() {
   CHECK(line_for_move(Move::Stumble) == std::optional<Lines>(Lines::Trip));
 }
 
-// While its body falls the sheet is let go of its standing shape so it drops onto the floor rather than holding its cone
-// out in the air (user, 2026-11-10: something kept the sheet floating); as it gets up, the slack shrinks back over the
-// get-up, never at once, so the sheet is drawn back to the body rather than snapped. A point the head carries stays put.
-void the_sheet_falls_with_the_body() {
-  CHECK(sheet_slack(FallPhase::Falling, 0.0f) == 1.0f);
-  CHECK(sheet_slack(FallPhase::Up, 0.5f) == 0.0f);
-  CHECK(sheet_slack(FallPhase::GettingUp, 0.0f) == 1.0f && sheet_slack(FallPhase::GettingUp, 1.0f) == 0.0f);
-  float last = 1.0f;
-  for (float u = 0.0f; u <= 1.0f; u += 0.05f) {  // shrinks smoothly, only ever down
-    const float now = sheet_slack(FallPhase::GettingUp, u);
-    CHECK(now <= last + 1e-6f && now >= 0.0f);
-    last = now;
-  }
-  CHECK(slack_distance(0.0f, 1.0f) == 0.0f);                          // pinned at the head: never let go
-  CHECK(std::abs(slack_distance(0.12f, 1.0f) - (0.12f + kFallSlack)) < 1e-6f);
-  CHECK(slack_distance(0.12f, 0.0f) == 0.12f);                        // standing: as the sheet was made
-  CHECK(kFallSlack >= 1.0f);  // enough for a hem to reach the floor from a body lying on its side
+
+// A root that jumps further than any clip can carry it in a frame is a warp, not a step: the cloth's anchor moved under
+// it, so what the cloth accumulated is cleared (Unity's ClearTransformMotion) instead of being flung across the room.
+void a_root_jump_is_a_warp_not_a_step() {
+  CHECK(!root_jumped(0.0f));
+  CHECK(!root_jumped(kFrameJumpMetres - 0.01f));
+  CHECK(root_jumped(kFrameJumpMetres));
+  // Its furthest-travelling clip, at twenty frames a second, is still a step: the threshold sits above the fastest the
+  // body ever moves itself, so a warp is the only thing that clears the cloth's motion.
+  float fastest = 0.0f;
+  for (const StateTravel& t : kClipTravel) fastest = std::max(fastest, t.metres / seconds_of(t.state));
+  CHECK(fastest / 20.0f < kFrameJumpMetres);
 }
 
-// The sheet's slack reaches the cloth in quarter steps, not every frame (user, 2026-11-10: getting up lagged badly while
-// the constraints were re-sent every few frames): a whole get-up sends at most four times.
-void the_sheet_slack_moves_in_steps() {
-  CHECK(slack_step(1.0f) == 1.0f && slack_step(0.0f) == 0.0f);
-  CHECK(slack_step(0.9f) == 1.0f && slack_step(0.8f) == 0.75f && slack_step(0.6f) == 0.5f);
-  CHECK(slack_step(0.1f) == 0.0f && slack_step(0.13f) == 0.25f);
-  CHECK(slack_step(1.5f) == 1.0f && slack_step(-0.2f) == 0.0f);
-  std::set<float> sent;
-  for (int i = 0; i <= 270; ++i) {  // a 4.5 s get-up at 60 frames a second
-    const float s = slack_step(sheet_slack(FallPhase::GettingUp, static_cast<float>(i) / 270.0f));
-    sent.insert(s);
-  }
-  CHECK(sent.size() <= 5);  // 1, 0.75, 0.5, 0.25 and 0: four changes
+// A trip's frames are timed from the knock-over to a moment after the get-up clip ends. The window that closed with the
+// clip logged no slow frame at all across the three falls of the 2026-11-10 run, and the user's spike is the frame just
+// after it, so the get-up's length is not where the watching stops.
+void the_frames_of_a_trip_are_timed_past_the_get_up() {
+  CHECK(fall_watch(true, 0.0f, 0.0f));           // under physics, no get-up timed yet
+  CHECK(fall_watch(false, 0.5f, 3.0f));          // a get-up still being watched
+  CHECK(fall_watch(false, 2.99f, 3.0f));
+  CHECK(!fall_watch(false, 3.0f, 3.0f));         // the moment after is the last one
+  CHECK(!fall_watch(false, 1.0f, 0.0f));         // never down: nothing to watch
+  CHECK(fall_watch(true, 9.0f, 3.0f));           // physics is always worth timing
+  CHECK(kFallWatchTailSeconds >= 0.5f && kFallWatchTailSeconds <= 3.0f);
 }
+
+// What a clip change leaves to smooth, by turn and by place, is what the user sees as two clips that do not mesh. None
+// of the 2026-11-10 run's changes reached 60 degrees, so that threshold asked the wrong question; this one asks about
+// the changes a player can see, and counts a joint moving as well as a joint turning.
+void a_clip_change_is_a_jump_by_turn_or_by_place() {
+  CHECK(!pose_jumps(0.0f, 0.0f));
+  CHECK(!pose_jumps(kPoseTurnWarnDegrees - 0.01f, kPoseShiftWarnMetres - 0.01f));
+  CHECK(pose_jumps(kPoseTurnWarnDegrees, 0.0f));
+  CHECK(pose_jumps(0.0f, kPoseShiftWarnMetres));
+  CHECK(kPoseTurnWarnDegrees >= 5.0f && kPoseTurnWarnDegrees <= 45.0f);  // a snap a player sees, not a pose difference
+  CHECK(kPoseShiftWarnMetres >= 0.01f && kPoseShiftWarnMetres <= 0.1f);
+}
+

@@ -152,6 +152,17 @@ with; a ray or overlap query of the game's whose mask includes that layer can st
 - **Use a material of your own.** `two_sided_material(lit_material_of(copy), colour)` makes one on the body's lit
   shader with your colour, drawn on both sides, which a sheet seen from inside needs. Taking a colour from a borrowed
   texture rendered black in the engine test.
+- **When the GameObject jumps, tell the cloth.** Moving it a long way in one frame (a warp, a teleport, a body placed
+  where it landed) drags the cloth after it and it arrives stretched across the room. Call
+  `phasmo::Cloth::ClearTransformMotion(cloth)` right after the move; `Cloth.ClearTransformMotion` is what Unity's own
+  documentation says to do. The Squatter does it for every move of its root over `kFrameJumpMetres`
+  (`mods/custom_ghosts/squatter_fall.h`).
+- **Give a worn cloth a little room, and it survives its body being a ragdoll.** Points carried at ragdoll speed take
+  whatever room they are given, so a vertex with a metre of it lets the cloth spread across the room. A few centimetres
+  keeps it on the body through a fall with no special case: the Squatter's sheet has `kHemSway` (0.12 m) at the hem and
+  nothing over the head, and that is all the freedom it ever gets. Pinning every vertex instead (`Cloth.set_coefficients`
+  with a maxDistance of 0 for every one) for the length of a fall holds it too, but reads as the cloth frozen against the
+  body, and the user reported one large frame as it let go again, so the Squatter stopped doing it.
 - **Cloth is optional in the map.** Its Unity module could leave a later game build, so call
   `pm::api::cloth_available(&why)` and `pm::api::material_available(&why)` at your start and fail it, with `why` in
   the log, if either is false.
