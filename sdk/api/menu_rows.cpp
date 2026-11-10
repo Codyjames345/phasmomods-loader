@@ -1,5 +1,6 @@
 #include "menu_rows.h"
 
+#include "Input.h"
 #include "JournalController.h"
 #include "Player.h"
 #include "Transform.h"
@@ -46,6 +47,24 @@ void* divider_beside(void* row) {
     if (sibling && !has_name(sibling)) return phasmo::Component::get_gameObject(sibling);
   }
   return nullptr;
+}
+
+void* line_divider(void* row, bool* fromOtherPage) {
+  void* t = transform_of(row);
+  void* own = t ? phasmo::Transform::get_parent(t) : nullptr;
+  // Another menu's line: the keybinds page's rows are `RebindActionUI`s, and the game puts a thin line between them.
+  void* type = phasmo::RebindActionUI::type.type_object();
+  const RefArray found{type ? phasmo::Object::FindAllOfType(type, true) : nullptr};
+  for (size_t i = 0; i < found.size(); ++i) {
+    void* list = found[i] ? journal_list(found[i]) : nullptr;
+    if (!list || list == own) continue;
+    if (void* line = divider_beside(found[i])) {
+      if (fromOtherPage) *fromOtherPage = true;
+      return line;
+    }
+  }
+  if (fromOtherPage) *fromOtherPage = false;
+  return divider_beside(row);
 }
 
 void* name_text(void* row) {

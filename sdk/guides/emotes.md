@@ -29,7 +29,9 @@ How the game's actions and the menu work: [menus](../systems/menus.md#key-bindin
 `sdk/api/settings.h`. Declare a slider with `begin_settings(modId, pm::mod::shown_name(), file)` and `add_slider(Slider)`
 in `pmmod_start`, call `tick_settings()` every frame, and read it with `value(id)`. Its row is a copy of the master
 volume's, under your mod's heading on the journal's audio page. Its value counts on the page's Apply and is saved to your
-file; leaving the page without Apply puts the slider back. The Emotes mod's volume is one.
+file; leaving the page without Apply puts the slider back. The rows sit one line apart, the line copied from the keybinds
+page when one is loaded, since the audio page's own dividers draw as double rules
+([menus](../systems/menus.md#the-audio-page)). The Emotes mod's volume is one.
 
 ## A clip on a player's own body
 
@@ -38,7 +40,9 @@ file; leaving the page without Apply puts the slider back. The Emotes mod's volu
 `stop_on_player(player, blendOut)` gives the body back exactly as it was. A second clip blends in over the first.
 `clip_time(player)` is the clip's own time, which a song can follow. Call `tick_player_anims(dt)` every frame. Humanoid
 clips play on the investigator whatever skeleton they were made for. Each client plays what you tell it through your
-channel. How the body is animated: [players](../systems/players.md#the-body).
+channel. A kill takes the body: hook `Player.NotifyOfDeathStart` and call `stop_on_player(player, 0.0f)` there, or your
+clip plays over the game's death animation and hides it
+([players](../systems/players.md#the-mark)). How the body is animated: [players](../systems/players.md#the-body).
 
 ## A third-person view, and the player's own body shown
 

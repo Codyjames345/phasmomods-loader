@@ -249,3 +249,47 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
 - PM_TEXT_TODO for the user: emotes.volume-label (the slider's name on the audio page).
 - Wheel: kDiscBlack {0, 0, 0, 0.75} (a starting value for "slightly transparent").
 - validate.ps1 and every script test; gamecheck -Expect: 1856 entries, 0 missing.
+
+## In-game fix 8 (user, 2026-11-10, run 10)
+- The user's report, with a screenshot of the audio page: why is the volume different for my emotes and other players';
+  the lines on the audio page got messed up ("the double lines are the problem. Each row should have one line between
+  them", "The keybind page looks perfect, look at how the emotes mod does that"); the default volume is still too loud
+  ("The current 50% should be 100%"); the emote name should use the game's font; "I got killed while emoting and the
+  death animation didn't play. Death should cancel emoting and return to first person", and "emoting should not be
+  possible while the death animation is playing either". Worked in the `feature/emotes` worktree; not merged.
+- Own against others' volume (the answer, and what changed): the song plays at the dancer's own voice's place (the local
+  tap), where it feels no fall with distance, so the dancer's own is set by half again and another player's falls off
+  with distance. The user wants the whole thing quieter, so both are halved: kSongVolume 0.5 -> 0.25, kOwnSongVolume
+  0.25 -> 0.125 - what played at the slider's half is what its 100% plays now.
+- Audio page lines: the page's own dividers draw as double rules, so two of them beside each other read as one thick
+  band. `rows::line_divider` (sdk/api/menu_rows.h) takes a line from another journal menu's list (a `RebindActionUI`
+  row's sibling) when one is loaded, and falls back to the page's own when none is; settings.cpp logs which it used.
+  settings_test puts a keybinds page in the fake scene (g_kbList, g_kbRow, g_kbLine 4 high): the mod's lines are copies
+  of that one and the content grows by the 4s; with `g_keybinds = false` the page's own 6-high divider is copied (the new
+  third test; the divider choice is what separates them).
+- Emote name font: `core/ui.cpp` copied the font from `Object.FindObjectOfType(TextMeshProUGUI, false)`, which is
+  whichever active text the scene happens to hold first, so the name came out in another font. It now prefers the first
+  TextMeshProUGUI under `Network.localRig` (includeInactive): the journal, HUD and prompt texts, all in the game's UI
+  font, and falls back to the scene search. No offline harness for core/ui.cpp, as before: checked in game.
+- Death, decompiled (build 25811160): `Player.BeginDeathSequence` sends `Player.NotifyOfDeathStart` to every client
+  through the server (RpcTarget.AllViaServer) and `Player.StartDeathAnimation` to the view's owner only;
+  `NotifyOfDeathStart` sets the dying bool, turns that player's collider off and wakes their ragdoll. The dying bool's
+  dump name is obfuscated (all four bools 0x28-0x2B are), so it stays unmapped and the RPC is how a mod sees a kill
+  begin. `Player.isDead` comes only at the death's completion, a second or two later, which is why the mod kept its clip
+  at weight while the game's death animation played under it (the mod's Playables output sits above the Animator).
+- Death fix: new entry and wrapper `Player.NotifyOfDeathStart` (sdk/map/Player.h, all.h), hooked in emote.cpp
+  (`detour_death_start`, after the game's own body): for the local dancer the emote ends at once (clip at weight 0, song
+  off, model turned back, third person stopped, not eased) and the wheel is shut; another player's dance is released the
+  same way (`release_body`). The actors whose kill has begun sit in `State.dying`, which feeds `LocalFrame.dying` and
+  `RemoteFrame.dying` and is cleared when `isDead` is seen or the player is gone. `LocalSession::pick` refuses while
+  dying; `LocalOut.atOnce` and `RemoteOut.atOnce` mark a stop that leaves nothing blending; the dying count as down for
+  `shows_to`, so the living do not see a start from a dying player. A player whose death is over may dance again (the
+  design's rule, unchanged). Cost if wrong: a dance still over a death, or a view stuck outside (smoke 20).
+- validate.ps1: 92/92 and every script test; API reference no warnings. gamecheck -Expect: 1857 entries, 0 missing
+  (`OK Player.NotifyOfDeathStart`).
+- PM_TEXT_TODO still open for the user: emotes.volume-label (the slider's name on the audio page).
+- Smoke additions: 20. Killed mid-dance: the death animation plays, the view is first person at once, the wheel is gone,
+  and nothing can be picked while the body falls; afterwards a dead player can dance and only the dead see it. 21. The
+  audio page: one line between the mod's rows, as on the keybinds page, and the same when the audio page is opened with
+  no other journal menu seen yet. 22. The emote's name is in the game's own font. 23. At 100% the dancer's own song and
+  another player's sit at the level the user wants.

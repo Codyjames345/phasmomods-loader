@@ -138,7 +138,14 @@ void ensure_rows() {
   const int32_t sliderAt = phasmo::Transform::GetSiblingIndex(sliderT), numberAt = phasmo::Transform::GetSiblingIndex(numberT);
   void* templObject = phasmo::Component::get_gameObject(templ);
   remove_rows();
-  void* divider = rows::divider_beside(templ);
+  // One line between the rows, as on the keybinds page (the user, 2026-11-10): the audio page's own dividers are double
+  // rules between its groups, too heavy between the mod's rows.
+  bool fromOther = false;
+  void* divider = rows::line_divider(templ, &fromOther);
+  PM_LOG("settings: %s divides its rows with %s", g.owner.c_str(),
+         !divider ? "nothing: no line was found to copy"
+                  : fromOther ? "a line taken from another journal menu"
+                              : "the audio page's own divider");
   float added = 0.0f;
   const auto add = [&](void* original) -> void* {
     void* copy = original ? phasmo::Object::Instantiate(original, list, false) : nullptr;

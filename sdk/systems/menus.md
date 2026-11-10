@@ -102,6 +102,12 @@ reads the slider into the audio settings and sets the mixer, so a change counts 
 the listeners the prefab put on its event (`XRSlider.m_OnValueChanged`), so a copy needs a new `SliderEvent` of its own.
 `sdk/api/settings.h` puts a mod's sliders there, under a heading with the mod's name.
 
+The two journal lists divide their rows differently, as the game shows them (the user's screenshots, 2026-11-10): the
+audio page's dividers draw as double rules, and two of them beside each other read as one thick band, while the keybinds
+page's rows sit one line apart. `rows::line_divider` therefore copies a line from another journal menu's list when one is
+loaded, so a mod's rows on the audio page sit one line apart like the keybinds page's (the user's ruling), and falls back
+to the page's own divider when no other list is loaded.
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/menus.md).

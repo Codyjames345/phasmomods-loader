@@ -28,7 +28,9 @@ using EmoteTable = std::array<EmoteInfo, kSegments>;
 /// This client's investigator this frame, as the glue reads it.
 struct LocalFrame {
   bool present = false;     ///< a local investigator in the game's player list (Playable Ghost's ghost player has none)
-  bool dead = false;        ///< Player.isDead
+  bool dead = false;        ///< Player.isDead: the death is over and the body lies
+  bool dying = false;       ///< the death has begun (Player.NotifyOfDeathStart) and is not marked dead yet: the game's
+                            ///< death animation has the body, so nothing of ours may be over it (the user, 2026-11-10)
   Point pos{};              ///< where it stands
   float viewYaw = 0.0f;     ///< the view's yaw: the head camera's on screen, the headset's in VR
   bool endAction = false;   ///< a game action that ends an emote was pressed this frame
@@ -40,6 +42,7 @@ struct LocalFrame {
 struct LocalOut {
   int start = -1;                 ///< play this emote: its clip, its song from the start, the view (cuts in over any)
   bool stop = false;              ///< end the emote: clip out, song off, view back
+  bool atOnce = false;            ///< this stop leaves nothing blending: the game's own animation has the body (death)
   std::optional<float> bodyYaw;   ///< the visible body's yaw now
   std::vector<EmoteMsg> send;     ///< messages to every other client, in order
 };
@@ -49,15 +52,16 @@ class LocalSession {
  public:
   explicit LocalSession(const EmoteTable& table) : table_(table) {}
 
-  /// The wheel played `emote`: start it, or cut it in over the one dancing.
+  /// The wheel played `emote`: start it, or cut it in over the one dancing. Nothing while the game's death animation
+  /// has the body (the user, 2026-11-10): an investigator beginning to die does not dance.
   LocalOut pick(int emote, const LocalFrame& f) {
     LocalOut o;
-    if (!f.present || emote < 0 || emote >= kSegments) return o;
+    if (!f.present || f.dying || emote < 0 || emote >= kSegments) return o;
     active_ = true;
     emote_ = emote;
     start_ = lastPos_ = f.pos;
     yaw_ = sentYaw_ = f.viewYaw;
-    wasDead_ = f.dead;
+    wasDown_ = f.dead || f.dying;
     o.start = emote;
     o.bodyYaw = yaw_;
     o.send.push_back(EmoteMsg{Kind::Start, static_cast<uint8_t>(emote), f.pos.x, f.pos.y, f.pos.z, yaw_});
@@ -69,11 +73,14 @@ class LocalSession {
     LocalOut o;
     if (!active_) return o;
     const EmoteInfo& info = table_[static_cast<size_t>(emote_)];
-    const bool died = f.dead && !wasDead_;
-    wasDead_ = f.dead;
+    // The death, or its beginning: the game's animation has the body from the first, so the emote is over then, not
+    // when the mark comes a second or two later.
+    const bool down = f.dead || f.dying;
+    const bool died = down && !wasDown_;
+    wasDown_ = down;
     const bool playedOut = f.clipTime >= 0.0 && !info.loops && one_shot_done(f.clipTime, info.clipSeconds);
     if (!f.present || died || f.endAction || moved_too_far(start_, f.pos) || playedOut) {
-      end(o);
+      end(o, died);  // a death takes the body at once: nothing of ours blends over the game's animation
       return o;
     }
     // Walking within the half metre turns the body to the way it goes (the user's ruling), so it does not drift
@@ -104,14 +111,15 @@ class LocalSession {
   const EmoteInfo& info() const { return table_[static_cast<size_t>(emote_ < 0 ? 0 : emote_)]; }
 
  private:
-  void end(LocalOut& o) {
+  void end(LocalOut& o, bool atOnce = false) {
     o.stop = true;
+    o.atOnce = atOnce;
     o.send.push_back(EmoteMsg{Kind::End, static_cast<uint8_t>(emote_), 0, 0, 0, yaw_});
     active_ = false;
   }
 
   EmoteTable table_;
-  bool active_ = false, wasDead_ = false;
+  bool active_ = false, wasDown_ = false;
   int emote_ = -1;
   Point start_{}, lastPos_{};
   float yaw_ = 0.0f, sentYaw_ = 0.0f;
@@ -121,7 +129,9 @@ class LocalSession {
 struct RemoteFrame {
   int actor = 0;            ///< their Photon actor number
   bool present = false;     ///< their investigator is in the player list
-  bool dead = false;        ///< Player.isDead
+  bool dead = false;        ///< Player.isDead: their death is over
+  bool dying = false;       ///< their death has begun (Player.NotifyOfDeathStart) and is not over: their body is the
+                            ///< game's, so their dance comes off at once (2026-11-10)
   double clipTime = -1.0;   ///< their emote clip's time on their body here, -1 when none plays
 };
 
@@ -132,6 +142,7 @@ struct RemoteOut {
   int actor = 0;
   int emote = -1;
   float yaw = 0.0f;
+  bool atOnce = false;  ///< this Stop leaves nothing blending: the game's own animation has the body (their death)
 };
 
 /// Everyone else's side: one dance per peer, as their messages say.
@@ -139,13 +150,14 @@ class RemoteSessions {
  public:
   explicit RemoteSessions(const EmoteTable& table) : table_(table) {}
 
-  /// A message from `actor` (the sender the loader gives, never the payload's word).
-  std::vector<RemoteOut> receive(int actor, const EmoteMsg& m, bool senderDead, bool localDead) {
+  /// A message from `actor` (the sender the loader gives, never the payload's word), with whether that player and this
+  /// client's investigator are down (dead, or dying with the game's death animation on the body).
+  std::vector<RemoteOut> receive(int actor, const EmoteMsg& m, bool senderDown, bool receiverDown) {
     std::vector<RemoteOut> out;
     auto it = peers_.find(actor);
     switch (m.kind) {
       case Kind::Start:
-        if (!shows_to(senderDead, localDead)) return out;
+        if (!shows_to(senderDown, receiverDown)) return out;
         peers_[actor] = Peer{m.emote};
         out.push_back({RemoteOut::Start, actor, m.emote, m.yaw});
         out.push_back({RemoteOut::Yaw, actor, m.emote, m.yaw});
@@ -163,8 +175,9 @@ class RemoteSessions {
     return out;
   }
 
-  /// One frame: the end of a peer gone, dead to the living, or played out.
-  std::vector<RemoteOut> tick(const std::vector<RemoteFrame>& frames, bool localDead) {
+  /// One frame: the end of a peer gone, down (dead to the living, or dying), or played out. A peer whose death has
+  /// begun comes off at once, so their body is the game's death animation and not the dance.
+  std::vector<RemoteOut> tick(const std::vector<RemoteFrame>& frames, bool receiverDown) {
     std::vector<RemoteOut> out;
     for (auto it = peers_.begin(); it != peers_.end();) {
       const RemoteFrame* f = nullptr;
@@ -172,8 +185,11 @@ class RemoteSessions {
         if (r.actor == it->first) f = &r;
       const EmoteInfo& info = table_[it->second.emote];
       const bool playedOut = f && f->clipTime >= 0.0 && !info.loops && one_shot_done(f->clipTime, info.clipSeconds);
-      if (!f || !f->present || !shows_to(f->dead, localDead) || playedOut) {
-        out.push_back({RemoteOut::Stop, it->first, it->second.emote, 0.0f});
+      const bool down = f && (f->dead || f->dying);
+      if (!f || !f->present || !shows_to(down, receiverDown) || playedOut) {
+        RemoteOut stop{RemoteOut::Stop, it->first, it->second.emote, 0.0f};
+        stop.atOnce = down;
+        out.push_back(stop);
         it = peers_.erase(it);
         continue;
       }

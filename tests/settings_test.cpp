@@ -62,11 +62,15 @@ struct Node {
   bool autoSize = true;
 };
 Obj g_rowClass, g_textClass, g_sliderClass, g_dividerClass, g_localiserClass, g_eventClass, g_pageClass, g_groupClass,
-    g_otherClass;
+    g_otherClass, g_rebindClass, g_lineClass;
 std::map<void*, Node> g_nodes;
 std::vector<Obj*> g_made;
 std::vector<void*> g_destroyed, g_copies;
 Obj g_net, g_player, g_content, g_list, g_group, g_page, g_row, g_title, g_number, g_slider, g_divider, g_gameEvent;
+// The keybinds page beside the audio one: its rows are RebindActionUIs with a thin line between them, which is the line
+// a mod's rows copy (the user, 2026-11-10: the audio page's own dividers are double rules, too heavy between rows).
+Obj g_kbList, g_kbRow, g_kbLine;
+bool g_keybinds = true;  // whether the keybinds page is loaded in this fake scene
 phasmo::Vector2 g_contentSize{1700.0f, 1200.0f};
 
 Obj* make(void* klass) {
@@ -131,13 +135,18 @@ void* fake_get_component(void* t, void* type, void*) {
     return static_cast<Obj*>(t)->klass == &g_textClass ? t : nullptr;
   }
   if (type == phasmo::XRSlider::type.type_object()) return static_cast<Obj*>(t)->klass == &g_sliderClass ? t : nullptr;
-  if (type == phasmo::HorizontalOrVerticalLayoutGroup::type.type_object()) return t == &g_list ? &g_group : nullptr;
+  if (type == phasmo::HorizontalOrVerticalLayoutGroup::type.type_object())
+    return (t == &g_list || t == &g_kbList) ? &g_group : nullptr;
   return nullptr;
 }
 void* fake_find_all(void* type, bool, void*) {
-  void* arr = fake::array(sizeof(void*), type == phasmo::GameMyAudioManager::type.type_object() ? 1 : 0);
-  if (type == phasmo::GameMyAudioManager::type.type_object())
+  const bool audio = type == phasmo::GameMyAudioManager::type.type_object();
+  const bool rebind = type == phasmo::RebindActionUI::type.type_object();
+  void* arr = fake::array(sizeof(void*), audio || (rebind && g_keybinds) ? 1 : 0);
+  if (audio)
     *static_cast<void**>(pm::api::ValueArray{arr}.at(0)) = &g_page;
+  else if (rebind && g_keybinds)
+    *static_cast<void**>(pm::api::ValueArray{arr}.at(0)) = &g_kbRow;
   return arr;
 }
 void fake_destroy(void* o, float) { g_destroyed.push_back(o); }
@@ -190,6 +199,7 @@ void give() {
   fake::type(map::TextMeshProUGUI, &g_textClass);
   fake::type(map::HorizontalOrVerticalLayoutGroup, &g_groupClass);
   fake::type(map::GameObject, &g_otherClass);
+  fake::type(map::RebindActionUI, &g_rebindClass);
   fake::field(map::GameMyAudioManager_masterVolumeSlider, kPageSlider);
   fake::field(map::GameMyAudioManager_masterVolumeValueText, kPageNumber);
   fake::field(map::XRSlider_m_OnValueChanged, kSliderEvent);
@@ -254,6 +264,18 @@ void give() {
   at<void*>(&g_slider, kSliderEvent) = &g_gameEvent;
   at<void*>(&g_page, kPageSlider) = &g_slider;
   at<void*>(&g_page, kPageNumber) = &g_number;
+  // The keybinds page in the same journal: its list holds a RebindActionUI row and the thin line beside it, with no name
+  // of their own to read.
+  if (g_keybinds) {
+    g_kbList.klass = &g_otherClass;
+    g_kbRow.klass = &g_rebindClass;
+    g_kbLine.klass = &g_lineClass;
+    place(&g_kbList, &g_player);
+    place(&g_kbRow, &g_kbList);
+    place(&g_kbLine, &g_kbList);
+    g_nodes[&g_kbRow].height = 45.0f;
+    g_nodes[&g_kbLine].height = 4.0f;
+  }
 }
 
 std::filesystem::path temp_file(const char* name) {
@@ -280,10 +302,14 @@ void a_slider_sits_under_the_mods_heading() {
   CHECK(settings::add_slider(volume));
   CHECK(!settings::add_slider(volume));  // one id once
   settings::tick_settings();
-  // A divider, the heading, a divider, the row: each at the end of the list.
+  // A line, the heading, a line, the row: each at the end of the list.
   CHECK(g_copies.size() == 4);
   const auto& kids = g_nodes[&g_list].kids;
   CHECK(kids.size() == 6 && kids[2] == g_copies[0] && kids[5] == g_copies[3]);
+  // The lines between the mod's rows are copies of the keybinds page's, one line to a line, not of the audio page's
+  // double rule (the user, 2026-11-10).
+  CHECK(g_copies[0] && g_copies[2] && static_cast<Obj*>(g_copies[0])->klass == &g_lineClass &&
+        static_cast<Obj*>(g_copies[2])->klass == &g_lineClass);
   void* heading = copy_named("<b>Test Mod</b>");
   CHECK(heading != nullptr);
   if (heading) {
@@ -297,8 +323,9 @@ void a_slider_sits_under_the_mods_heading() {
   void* slider = kid(row, 2);
   CHECK(at<void*>(slider, kSliderEvent) && at<void*>(slider, kSliderEvent) != &g_gameEvent);  // an event of its own
   CHECK(g_nodes[slider].value == 1.0f && g_nodes[kid(row, 1)].text == "100%");
-  // The list's content grows by what was added and its spacing.
-  CHECK(std::fabs(g_contentSize.y - (1200.0f + 6 + 100 + 6 + 100 + 4 * 15.5f)) < 1e-3f);
+  // The list's content grows by what was added and its spacing: the keybinds page's lines are 4 high, against the audio
+  // page's 6.
+  CHECK(std::fabs(g_contentSize.y - (1200.0f + 4 + 100 + 4 + 100 + 4 * 15.5f)) < 1e-3f);
   // The game's own row is untouched.
   CHECK(g_nodes[&g_title].text == "Master Volume" && g_nodes[&g_slider].value == 1.0f);
   // The number follows the slider as it is dragged.
@@ -308,6 +335,24 @@ void a_slider_sits_under_the_mods_heading() {
   settings::clear_settings();
   CHECK(std::fabs(g_contentSize.y - 1200.0f) < 1e-3f);
   CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), row) != g_destroyed.end());
+}
+
+// With no other journal menu loaded, the rows copy the audio page's own divider, as they did before the keybinds page's
+// line was chosen (the fallback has to keep working when a player opens the audio page on its own).
+void a_row_copies_the_pages_own_line_without_a_keybinds_page() {
+  g_keybinds = false;
+  give();
+  settings::begin_settings("test.mod", "Test Mod", temp_file("pm_settings_own_line.txt"));
+  settings::Slider volume;
+  volume.id = "volume";
+  volume.label = "Volume";
+  CHECK(settings::add_slider(volume));
+  settings::tick_settings();
+  CHECK(g_copies.size() == 4);
+  CHECK(g_copies[0] && static_cast<Obj*>(g_copies[0])->klass == &g_otherClass);  // the audio page's own
+  CHECK(std::fabs(g_contentSize.y - (1200.0f + 6 + 100 + 6 + 100 + 4 * 15.5f)) < 1e-3f);
+  settings::clear_settings();
+  g_keybinds = true;
 }
 
 void a_value_counts_once_applied() {
@@ -351,6 +396,7 @@ void a_value_counts_once_applied() {
 
 int main() {
   a_slider_sits_under_the_mods_heading();
+  a_row_copies_the_pages_own_line_without_a_keybinds_page();
   a_value_counts_once_applied();
   std::printf("%s\n", g_failures ? "settings tests FAILED" : "settings tests passed");
   return g_failures ? 1 : 0;

@@ -8,7 +8,8 @@
 /// each a name text with a TextLocaliserUI and the row's controls, with a divider (an image with no name text) between
 /// rows, in a scroll content sized to the game's rows. A mod's section goes at the end of a list: a divider, a heading
 /// with the mod's name, then a divider before each of its rows, each a copy of a game row; the scroll content grows by
-/// what was added.
+/// what was added. Where the page's own dividers are heavier than the lines between its rows, line_divider takes a
+/// divider from another menu's list, so a mod's rows sit one line apart like the keybinds page's.
 ///
 /// Main thread. Local only.
 /// @ingroup runtime
@@ -35,6 +36,15 @@ void* journal_list(void* row);
 /// @param row A component or Transform of the row's root.
 /// @return The divider's GameObject, or null.
 void* divider_beside(void* row);
+
+/// A divider to copy between a mod's rows, one line to a line: the keybinds page's rows sit one line apart, which is how
+/// the player wants a mod's rows on the audio page too (the user, 2026-11-10: the audio page's own dividers are double
+/// rules between its groups). So it comes from another journal menu's list when one is loaded, and from beside `row`
+/// when none is.
+/// @param row A component or Transform of a row of the list to divide.
+/// @param fromOtherPage Set to whether it came from another list, for the log; may be null.
+/// @return The divider's GameObject, or null.
+void* line_divider(void* row, bool* fromOtherPage = nullptr);
 
 /// A row's name text: the TextMeshProUGUI of its first TextLocaliserUI.
 /// @param row A component or Transform of the row's root.

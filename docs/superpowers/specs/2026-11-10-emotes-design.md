@@ -135,7 +135,10 @@ anything or nothing.
   mirrors the game's own rule for a dead player's voice (`VoiceVolume.Update`, `VoiceVolume.deathMultiplier`, in
   `sdk/systems/voice.md`), which the builder confirms and reuses rather than restating.
 - **The Playable Ghost's player** has no body in the contract, so the wheel does not open for them **(Claude's call)**.
-- **Dying** ends an emote; the game's death takes over the body **(Claude's call)**.
+- **Dying** ends an emote and no emote starts: from the kill's first frame the game's death animation has the body, so
+  the dance leaves with nothing left blending and the wheel is taken away (the user, 2026-11-10, after being killed
+  mid-dance with no death animation at all). The game's mark of the death, `Player.isDead`, only comes when the death
+  completes, so the mod watches `Player.NotifyOfDeathStart` instead. A player whose death is over may emote again.
 
 ## Playing an emote
 
@@ -279,3 +282,22 @@ No behaviour is assumed. Each item ends as map entries or notes in `sdk/systems/
 - **The keys' defaults** (Claude's call, by the user's "unless that key is taken" rule): the game binds B (the
   walkie-talkie) and D-pad down (the torch), so the defaults fall back to X and D-pad up; the left X button in VR is
   unbound. All rebindable in the game's keybinds menu.
+
+## Decisions after the first playtests (2026-11-10)
+
+The user played the mod in game and gave these.
+
+- **The volume again** (user): still too loud at the slider's default, so what the slider's 100% plays is halved from
+  what it played in the playtest build. The dancer's own hearing of their song stays set by half again, because the song
+  plays at their own voice's place, where it feels no fall with distance; that is also why the dancer's song and another
+  player's song sound different in loudness at the same slider.
+- **One line between the rows** (user): "the double lines are the problem. Each row should have one line between them",
+  and "the keybind page looks perfect". A mod's rows on the audio page therefore copy their divider from the keybinds
+  page's list, and only fall back to the audio page's own divider when no other journal menu is loaded.
+- **The emote's name in the game's font** (user): the name text copies its font from a text under this client's own
+  player rig (the journal, the HUD), not from whichever text the scene happens to hold.
+- **Death ends the dance at the kill's start** (user): "I got killed while emoting and the death animation didn't play.
+  Death should cancel emoting and return to first person", and "emoting should not be possible while the death animation
+  is playing either". The mod hooks the game's notice of a kill beginning, `Player.NotifyOfDeathStart`, which every
+  client gets; from there the body is the game's, the clip is off with nothing blending, the view goes back inside at
+  once and the wheel is shut.
