@@ -677,6 +677,19 @@ inline constexpr pm::sdk::EntryDesc PlayerCharacter_headRenderersToTurnOff{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "PlayerCharacter", .name = "headRenderersToTurnOff",
     .type = "Renderer[]"};
 
+inline constexpr const char* PlayerCharacter_ChangeHeadObjectsShadowCastingModeShadowsOnly_params[] = {"bool"};
+
+/// Sets every renderer of PlayerCharacter.headRenderersToTurnOff to shadows only (true) or drawn (false), whatever each
+/// had. The game calls it on Network.localPlayer's character, the client's own head: the photo camera's networked
+/// AddPhotoToJournal coroutine shows the head for the photo's render and hides it after, on every client the photo
+/// reaches, and CameraFocusUI's Focus and UnFocus switch it too. So a mod that draws its own player's head (a
+/// third-person view) finds it hidden again mid-way, and draws it again each frame. Decompiled.
+inline constexpr pm::sdk::EntryDesc PlayerCharacter_ChangeHeadObjectsShadowCastingModeShadowsOnly{
+    .key = "PlayerCharacter.ChangeHeadObjectsShadowCastingModeShadowsOnly", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PlayerCharacter",
+    .name = "ChangeHeadObjectsShadowCastingModeShadowsOnly",
+    .params = PlayerCharacter_ChangeHeadObjectsShadowCastingModeShadowsOnly_params};
+
 /// The player's cosmetics (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerCosmetics{.key = "PlayerCosmetics",
                                                     .confidence = pm::sdk::Confidence::Decompiled,
@@ -1229,6 +1242,11 @@ struct PlayerCharacter {
   static constexpr pm::api::Type<pm::map::PlayerCharacter> type{};
   /// The head's Renderer[]: headRenderersToTurnOff.get(character). Unresolved: null.
   static constexpr pm::api::Field<pm::map::PlayerCharacter_headRenderersToTurnOff, void*> headRenderersToTurnOff{};
+  /// ChangeHeadObjectsShadowCastingModeShadowsOnly(character, shadowsOnly): the head shadows only (true) or drawn
+  /// (false), every head renderer (map note: what calls it). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::PlayerCharacter_ChangeHeadObjectsShadowCastingModeShadowsOnly,
+                                   void(void*, bool)>
+      ChangeHeadObjectsShadowCastingModeShadowsOnly{};
 };
 
 /// The voice recognition's phrase handler. `listener` below is the PhraseListenerController.

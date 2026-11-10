@@ -1326,6 +1326,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &PlayerCharacter,
     &PlayerCharacter_SetPlayerBodyType,
     &PlayerCharacter_headRenderersToTurnOff,
+    &PlayerCharacter_ChangeHeadObjectsShadowCastingModeShadowsOnly,
     &PlayerCosmetics,
     &PlayerCosmetics_SetPlayerCosmeticsNetworked,
     &ServerManager_SetPlayerInformation,

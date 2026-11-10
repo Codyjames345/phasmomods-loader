@@ -124,6 +124,21 @@ void show_head() {
   }
 }
 
+// Draws the head again where the game hid it while the view is outside, keeping the game's latest mode to give back.
+// The game sets the local head's renderers to shadows only whenever a photo reaches this client
+// (HandCamera.AddPhotoToJournal, a PunRPC coroutine, shows Network.localPlayer's head for the photo's render, then hides
+// it) and on CameraFocusUI.Focus and UnFocus, so the head would vanish mid-view (the user, 2026-11-10).
+void keep_head() {
+  const int32_t on = static_cast<int32_t>(phasmo::ShadowCastingMode::On());
+  for (auto& [r, mode] : g.head) {
+    if (!r || !alive(r)) continue;
+    const int32_t now = phasmo::Renderer::get_shadowCastingMode(r);
+    if (now == on) continue;
+    mode = now;
+    phasmo::Renderer::set_shadowCastingMode(r, on);
+  }
+}
+
 void restore_head() {
   for (auto& [r, mode] : g.head)
     if (r && alive(r)) phasmo::Renderer::set_shadowCastingMode(r, mode);
@@ -232,6 +247,7 @@ void tick_third_person(float dt) {
     finish();
     return;
   }
+  keep_head();
   g.t += dt;
   float amount = 1.0f;  // how far out, 0 at the head and 1 at the full distance
   if (g.phase == Phase::Out) {

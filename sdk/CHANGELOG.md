@@ -29,6 +29,9 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   list out with exactly one line between every pair of visible rows, the mod's and the game's alike: the list's own
   dividers are put away, a line is copied in between every pair of rows, and `line_divider` takes the line to copy from another journal menu's
   list when one is loaded, since the audio page's own dividers draw as double rules.
+- **The head the game hides.** `PlayerCharacter.ChangeHeadObjectsShadowCastingModeShadowsOnly`, which the photo camera
+  and the focus UI call on the client's own player; the third-person view now draws the head again each frame, so a
+  photo taken by anyone no longer leaves the dancer headless ([players](systems/players.md)).
 - **The start of a kill.** `Player.NotifyOfDeathStart` (`sdk/map/Player.h`), the RPC every client gets when a kill
   begins: it marks the player dying, turns their collider off and wakes their ragdoll, a second or two before
   `Player.isDead` is set. A mod hooks it to let go of a body the game is taking back for its death animation, and never

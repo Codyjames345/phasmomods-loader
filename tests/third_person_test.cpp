@@ -313,6 +313,25 @@ void the_view_says_how_long_until_it_is_out() {
   view::stop_third_person();
 }
 
+// The game hides the local head again whenever a photo reaches this client (HandCamera.AddPhotoToJournal, a PunRPC
+// coroutine, shows Network.localPlayer's head for the photo's render and then sets every head renderer to shadows only),
+// and on CameraFocusUI.Focus and UnFocus. The view draws the head again on its next tick, and when it ends gives back
+// the mode the game last set (the user, 2026-11-10: the head vanished in third person when another player took a photo).
+void the_head_stays_drawn_when_the_game_hides_it() {
+  give();
+  view::begin_third_person();
+  view::tick_third_person(view::kEaseSeconds);
+  CHECK(at<int32_t>(&g_hair, kShadow) == kShadowOn);
+  at<int32_t>(&g_hair, kShadow) = kShadowsOnly;  // a photo's render reached this client
+  view::tick_third_person(0.016f);
+  CHECK(at<int32_t>(&g_hair, kShadow) == kShadowOn);  // drawn again
+  at<int32_t>(&g_hair, kShadow) = 2;  // the game set another mode meanwhile
+  view::tick_third_person(0.016f);
+  CHECK(at<int32_t>(&g_hair, kShadow) == kShadowOn);
+  view::stop_third_person();
+  CHECK(at<int32_t>(&g_hair, kShadow) == 2);  // the game's latest mode given back, not the one at the start
+}
+
 void what_the_game_moved_meanwhile_keeps_its_layer() {
   give();
   view::begin_third_person();
@@ -391,6 +410,7 @@ int main() {
   the_ease_is_smooth_and_bounded();
   the_view_copies_the_camera_and_draws_the_body();
   the_ease_ends_where_it_started();
+  the_head_stays_drawn_when_the_game_hides_it();
   what_the_game_moved_meanwhile_keeps_its_layer();
   the_view_says_how_long_until_it_is_out();
   a_new_start_while_easing_back_turns_out_again();

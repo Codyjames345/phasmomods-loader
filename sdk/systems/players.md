@@ -222,7 +222,11 @@ What a mod needs to animate an investigator's own body, as the Emotes mod does (
 - **How the local player hides its own head.** `PlayerCharacter.headRenderersToTurnOff` lists the head's renderers
   (hair, eyes, teeth and the head's cosmetics). On the player's own client the game draws them as shadows only
   (`Renderer.set_shadowCastingMode`), and has methods of `PlayerCharacter` to switch them back and to move them to
-  another layer. A view from outside draws them (`ShadowCastingMode.On`) and gives each its mode back after.
+  another layer. A view from outside draws them (`ShadowCastingMode.On`) and gives each its mode back after. The game
+  hides them again whenever it likes: `PlayerCharacter.ChangeHeadObjectsShadowCastingModeShadowsOnly` sets every head
+  renderer at once, and the photo camera's networked `AddPhotoToJournal` coroutine calls it on the client's own player
+  for every photo that reaches the client (drawn for the photo's render, shadows only after), as do `CameraFocusUI`'s
+  `Focus` and `UnFocus`. So a view draws the head again each frame (`sdk/api/third_person.h` does).
 - **How the local player hides its own body.** `Player.renderers` lists the body's renderers. `Player.SetPlayerModelLayer`
   moves each one's GameObject between two named layers, and the local camera leaves the hidden one out. A camera of a
   mod's own that adds those renderers' layers to its culling mask shows the body without touching them.
