@@ -80,9 +80,8 @@ Lines space_out(void* list, void* line) {
     if (!phasmo::GameObject::get_activeSelf(go)) continue;
     seq.emplace_back(go, has_name(child) || phasmo::Transform::get_childCount(child) > 0);
   }
-  // The list's own dividers are put away and `line` goes between every pair of rows instead: the audio page's dividers
-  // draw as double rules, one of them doubled again where a row it hides sits between two (the user, 2026-11-10).
-  // With no line to copy, a run of dividers between two rows keeps its first, so the rows stay divided. One at either
+  // The list's own dividers are put away and `line` goes between every pair of rows instead, one line to a line as on
+  // the keybinds page (the user, 2026-11-10). With no line to copy, a run of dividers between two rows keeps its first, so the rows stay divided. One at either
   // end of the list has no pair of rows to divide.
   for (size_t i = 0; i < seq.size();) {
     if (seq[i].second) {
@@ -122,8 +121,13 @@ Lines space_out(void* list, void* line) {
 }
 
 void lines_back(Lines& lines) {
+  // Switched off first: Object.Destroy takes them out only when the frame ends, and a list laid out again in this frame
+  // must not count them.
   for (Held& h : lines.made)
-    if (h && alive(h)) phasmo::Object::Destroy(h, 0.0f);
+    if (h && alive(h)) {
+      phasmo::GameObject::SetActive(h.get(), false);
+      phasmo::Object::Destroy(h, 0.0f);
+    }
   lines.made.clear();
   for (Held& h : lines.hidden)
     if (h && alive(h)) phasmo::GameObject::SetActive(h.get(), true);

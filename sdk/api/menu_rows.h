@@ -59,9 +59,8 @@ struct Lines {
 /// double lines are the problem. Each row should have one line between them"). A row is a child with a name text or
 /// children of its own, a divider a child with neither; a switched-off child is neither, since the layout gives it no
 /// room. It switches the list's own dividers off and puts a copy of `line` before every row but the first, which is what
-/// the audio page needs: its dividers draw as double rules, it hides a row between two of them, leaving two side by
-/// side, and it groups two of its rows with no divider between them at all (the user, 2026-11-10: "still a double line
-/// below Voice Input Mode", the page's own divider before a mod's heading). The copies are switched on, so `line` may be
+/// the audio page needs: it hides a row between two of its dividers, leaving two side by side, and it groups two of its
+/// rows with no divider between them at all. The copies are switched on, so `line` may be
 /// one of the list's own dividers. With no `line`, a run of dividers between two rows keeps its first and the rest go,
 /// so the rows stay divided. Dividers at either end of the list go either way. Nothing moves in the list except the
 /// copies.

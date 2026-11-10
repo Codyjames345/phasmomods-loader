@@ -103,8 +103,8 @@ the listeners the prefab put on its event (`XRSlider.m_OnValueChanged`), so a co
 `sdk/api/settings.h` puts a mod's sliders there, under a heading with the mod's name.
 
 The two journal lists divide their rows differently, as the game shows them (the user's screenshots, 2026-11-10). The
-keybinds page's rows sit one thin line apart. The audio page's dividers draw as double rules, and its list holds its
-rows and dividers alternating, but not evenly: it switches a row off when it does not apply (the speaker mode row when
+keybinds page's rows sit one thin line apart. The audio page's list holds its rows and dividers alternating, but not
+evenly: it switches a row off when it does not apply (the speaker mode row when
 there is one output device), which leaves two of its dividers side by side reading as one thick band, and it groups two
 of its rows ("Current Microphone Input" and "Voice Input Mode") with no divider between them at all. `rows::space_out`
 lays a whole list out with exactly one line between every pair of rows the player can see: it puts the list's own

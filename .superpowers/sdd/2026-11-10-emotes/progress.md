@@ -416,3 +416,20 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
   the same with the audio page opened before any other journal menu (then the lines are the page's own). 28. The wheel's
   neutral zone and cap feel right: a long flick then a short move back lets go of the pick. 29. Every song, the dancer's
   own and others', at the level the user wants; the slider reads "Music".
+
+## In-game fix 12 (user, 2026-11-10, run 14)
+- The user's screenshot: three lines between Voice Input Mode and the Emotes heading ("now it's a triple line, it should
+  just be one"), then "be sure not to overcomplicate this, the keybinds page works fine".
+- Cause: `page_shape` counted the mod's own heading and rows as the game's children, so it never matched the shape saved
+  before they were added, and the page was laid out again at every search (each 60 ticks). Each re-layout destroyed the
+  old heading, rows and lines with Object.Destroy, which takes them out only when the frame ends, so the new space_out saw
+  the old heading and row as live rows and put lines before them; those lines outlived them. Old rule: two lines left
+  (run 13's "double line"); new rule: three. So the "double rule" reading of fix 11 was wrong: unproven, and taken out of
+  menu_rows.h/.cpp, systems/menus.md and the test. The keybinds page lays itself out once, which is why it never showed.
+- Fix, at the cause and no more: `page_shape` leaves out ours (heading, rows, copied lines), so the page is laid out
+  once and again only when the game changes it; and what remove_rows and lines_back destroy is switched off first, so a
+  layout in the same frame never counts it. settings_test `the_page_stays_as_laid_out`: 120 ticks lay nothing out
+  again; the game's row switched on lays it out once more with one line between every pair; clearing gives the game's
+  page back exactly (red before, green after).
+- validate.ps1: 92/92 and every script test; API reference no warnings. No map change.
+- Smoke 27 stands: one thin line between every pair of rows on the audio page, after it has been open a while too.

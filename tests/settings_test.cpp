@@ -394,9 +394,8 @@ void a_slider_sits_under_the_mods_heading() {
   // The heading and the row, then one line between every pair of rows the player sees: four in all.
   CHECK(g_copies.size() == 6);
   CHECK(g_nodes[&g_list].kids.size() == 13);  // the page's 7, the heading and the row, and the 4 lines
-  // The page's own dividers draw as double rules (the user's screenshots, 2026-11-10: still a double line below the
-  // last of the game's rows), so every one between two rows is put away, the doubled pair around the switched-off row
-  // and the single ones alike, and the one line goes between every pair of rows instead.
+  // Every one of the page's own dividers between two rows is put away, the doubled pair around the switched-off row and
+  // the single ones alike, and the one line goes between every pair of rows instead, as on the keybinds page.
   CHECK(!g_nodes[&g_divider].active && !g_nodes[&g_divider2].active && !g_nodes[&g_divider3].active);
   CHECK(visible_list() == "RLRLRLRLR");
   // The lines copied in are the keybinds page's, one line to a line, not the audio page's 6-high divider.
@@ -455,6 +454,36 @@ void a_row_copies_the_pages_own_line_without_a_keybinds_page() {
   g_keybinds = true;
 }
 
+// The page keeps its one line between rows as the frames go by (the user's screenshot, 2026-11-10: three lines below
+// Voice Input Mode). The mod's own rows are not the game's change: the page is laid out once and left. When the game
+// does change it (switching a row on), it is laid out again, and what the last layout made, though destroyed, is still
+// in the list until the frame ends, as Unity's Object.Destroy leaves it (the fake never takes it out): it must count for
+// nothing.
+void the_page_stays_as_laid_out() {
+  give();
+  settings::begin_settings("test.mod", "Test Mod", temp_file("pm_settings_stays.txt"));
+  settings::Slider volume;
+  volume.id = "volume";
+  volume.label = "Volume";
+  CHECK(settings::add_slider(volume));
+  settings::tick_settings();
+  CHECK(visible_list() == "RLRLRLRLR");
+  const size_t copies = g_copies.size();
+  for (int i = 0; i < 120; ++i) settings::tick_settings();  // two searches of the page
+  CHECK(g_copies.size() == copies);  // nothing laid out again
+  CHECK(visible_list() == "RLRLRLRLR");
+  // The game switches its speaker mode row on: laid out again, one line between every pair of rows still.
+  g_nodes[&g_offRow].active = true;
+  for (int i = 0; i < 60; ++i) settings::tick_settings();
+  CHECK(g_copies.size() > copies);
+  CHECK(visible_list() == "RLRLRLRLRLR");
+  for (int i = 0; i < 120; ++i) settings::tick_settings();
+  CHECK(visible_list() == "RLRLRLRLRLR");
+  settings::clear_settings();
+  CHECK(visible_list() == "RDRDRRD");  // the game's own page, as it was with the row on
+  CHECK(g_wrongObject == 0);
+}
+
 void a_value_counts_once_applied() {
   give();
   const auto file = temp_file("pm_settings_saved.txt");
@@ -498,6 +527,7 @@ void a_value_counts_once_applied() {
 int main() {
   a_slider_sits_under_the_mods_heading();
   a_row_copies_the_pages_own_line_without_a_keybinds_page();
+  the_page_stays_as_laid_out();
   a_value_counts_once_applied();
   std::printf("%s\n", g_failures ? "settings tests FAILED" : "settings tests passed");
   return g_failures ? 1 : 0;

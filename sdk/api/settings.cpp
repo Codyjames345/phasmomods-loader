@@ -105,17 +105,24 @@ std::string shown(const Row& r, float v) {
   return std::to_string(percent) + (g.percentSign ? "%" : "");
 }
 
-// The page's own shape: one character per child of the list that is ours not to touch, whether the game has it
-// switched on. Our own copies are left out, and the dividers we switched off count as the game left them, so this
-// changes only when the game changes the page (a row it hides or shows).
+// Whether `go` is one of ours on the page: the heading, a row, or a line space_out copied in.
+bool ours(void* go) {
+  const auto is = [&](const Held& h) { return h.get() == go; };
+  return std::any_of(g.lines.made.begin(), g.lines.made.end(), is) || std::any_of(g.extras.begin(), g.extras.end(), is) ||
+         std::any_of(g.rows.begin(), g.rows.end(), [&](const Row& r) { return r.row.get() == go; });
+}
+
+// The page's own shape: one character per child of the list that is the game's, whether the game has it switched on.
+// Our own heading, rows and lines are left out, and the dividers we switched off count as the game left them, so this
+// changes only when the game changes the page (a row it hides or shows). Counting ours made it differ every time, and the
+// page was laid out again every search (the user's screenshot, 2026-11-10: three lines below Voice Input Mode).
 std::string page_shape(void* list) {
   std::string out;
   const int32_t count = phasmo::Transform::get_childCount(list);
   for (int32_t i = 0; i < count; ++i) {
     void* child = phasmo::Transform::GetChild(list, i);
     void* go = child ? phasmo::Component::get_gameObject(child) : nullptr;
-    if (!go || std::any_of(g.lines.made.begin(), g.lines.made.end(), [&](const Held& h) { return h.get() == go; }))
-      continue;
+    if (!go || ours(go)) continue;
     const bool oursOff =
       std::any_of(g.lines.hidden.begin(), g.lines.hidden.end(), [&](const Held& h) { return h.get() == go; });
     out += (oursOff || phasmo::GameObject::get_activeSelf(go)) ? '1' : '0';
@@ -123,16 +130,24 @@ std::string page_shape(void* list) {
   return out;
 }
 
+// Our rows and heading go. Object.Destroy takes them out only when the frame ends, so each is switched off first: the
+// page is laid out again in this same frame, and a row still on there would get a line of its own that outlives it.
 void remove_rows() {
   rows::lines_back(g.lines);
   for (Row& r : g.rows) {
-    if (r.row && alive(r.row)) phasmo::Object::Destroy(r.row, 0.0f);
+    if (r.row && alive(r.row)) {
+      phasmo::GameObject::SetActive(r.row, false);
+      phasmo::Object::Destroy(r.row, 0.0f);
+    }
     r.row = nullptr;
     r.slider = nullptr;
     r.number = nullptr;
   }
   for (Held& h : g.extras)
-    if (h && alive(h)) phasmo::Object::Destroy(h, 0.0f);
+    if (h && alive(h)) {
+      phasmo::GameObject::SetActive(h, false);
+      phasmo::Object::Destroy(h, 0.0f);
+    }
   g.extras.clear();
   for (const rows::Grown& grown : g.grown) rows::shrink(grown);
   g.grown.clear();
