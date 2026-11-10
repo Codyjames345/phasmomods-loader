@@ -8,8 +8,9 @@
 /// (Player.animator) at a sorting order above the game's own and above Animation Rigging's (1000), so the clip wins
 /// where its weight is 1, over the rig's aims too (the head and arms turned toward the camera), and the game's
 /// animation shows through as the weight falls. What the rig places from the body's pose rather than animates (the
-/// journal at the waist, JournalRigController.constraintParent) keeps the game's pose; a mod that wants it on the
-/// dancing body places it again each frame from the mod's tick, which runs after the animation (the Emotes mod does). A new clip blends in over the one
+/// journal's hanger, JournalRigController.constraintParent) keeps the game's pose; a mod that wants the journal on the
+/// dancing body moves the journal itself each frame from the mod's tick, which runs after the animation (the game moves
+/// it back to its hanger every Update, so nothing stays; the Emotes mod does this). A new clip blends in over the one
 /// playing; when it is in fully, the old graph is destroyed. Stopping blends the weight to 0 and destroys the graphs,
 /// so the Animator is the game's alone again, exactly as before. Humanoid clips retarget onto the investigator's body
 /// (sdk/guides/custom-animation.md). The game's side is in sdk/systems/players.md, "The body".

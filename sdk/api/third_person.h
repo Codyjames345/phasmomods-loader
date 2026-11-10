@@ -43,6 +43,12 @@ void tick_third_person(float dt);
 /// @return True from begin_third_person until it has eased back.
 bool in_third_person();
 
+/// While the view is on, draws `object` and what is under it as other players see it: each GameObject on the
+/// first-person layer (PlayerView) moves to AlivePlayer until the view ends, as the body's own did. For something a mod
+/// puts on the body while the view is on, such as a held item moved to the hand. Nothing while the view is off.
+/// @param object A Component or GameObject (null or destroyed: nothing).
+void draw_as_seen(void* object);
+
 /// How long a begin_third_person now would take to have the view fully out: kEaseSeconds while it is off, what is left
 /// of the ease while it eases out, 0 while it is out, and while it eases back the time it would take to turn out again
 /// from where it is.

@@ -2,7 +2,7 @@
 
 // What the Emotes mod decides each frame, free of game calls (docs/superpowers/specs/2026-11-10-emotes-design.md): on
 // the emoter's client, an emote's start, its end (a move past half a metre, a listed action, death, a one-shot played
-// out, the investigator gone), its song's restarts at its loop, the body's facing and what to tell the others; on every
+// out, the investigator gone), the body's facing and what to tell the others; on every
 // other client, each peer's dance as their messages say, the dead's rule, and the end of a peer who is gone. The mod's
 // glue (emote.cpp) reads the frame from the game and carries the decisions out.
 
@@ -33,13 +33,13 @@ struct LocalFrame {
   float viewYaw = 0.0f;     ///< the view's yaw: the head camera's on screen, the headset's in VR
   bool endAction = false;   ///< a game action that ends an emote was pressed this frame
   double clipTime = -1.0;   ///< the emote clip's own time on its body, -1 when none plays
+  float dt = 0.0f;          ///< seconds since the last frame; 0 turns the body at once
 };
 
 /// What the glue does for this client's investigator this frame.
 struct LocalOut {
   int start = -1;                 ///< play this emote: its clip, its song from the start, the view (cuts in over any)
   bool stop = false;              ///< end the emote: clip out, song off, view back
-  bool restartSong = false;       ///< put the song back to its loop point
   std::optional<float> bodyYaw;   ///< the visible body's yaw now
   std::vector<EmoteMsg> send;     ///< messages to every other client, in order
 };
@@ -55,9 +55,8 @@ class LocalSession {
     if (!f.present || emote < 0 || emote >= kSegments) return o;
     active_ = true;
     emote_ = emote;
-    start_ = f.pos;
+    start_ = lastPos_ = f.pos;
     yaw_ = sentYaw_ = f.viewYaw;
-    prevClip_ = -1.0;
     wasDead_ = f.dead;
     o.start = emote;
     o.bodyYaw = yaw_;
@@ -65,7 +64,7 @@ class LocalSession {
     return o;
   }
 
-  /// One frame of the emote: whether it ends, its song, its facing.
+  /// One frame of the emote: whether it ends, and its facing.
   LocalOut tick(const LocalFrame& f) {
     LocalOut o;
     if (!active_) return o;
@@ -77,11 +76,13 @@ class LocalSession {
       end(o);
       return o;
     }
-    if (f.clipTime >= 0.0) {
-      o.restartSong = song_jumped(prevClip_, f.clipTime, info.song);
-      prevClip_ = f.clipTime;
-    }
-    yaw_ = body_yaw(yaw_, f.viewYaw);
+    // Walking within the half metre turns the body to the way it goes (the user's ruling), so it does not drift
+    // sideways or backwards; otherwise it keeps the view within its arc. Either way it turns at a rate.
+    const float dx = f.pos.x - lastPos_.x, dz = f.pos.z - lastPos_.z;
+    lastPos_ = f.pos;
+    const bool walking = f.dt > 0.0f && std::hypot(dx, dz) / f.dt >= kWalkingSpeed;
+    const float target = walking ? std::atan2(dx, dz) * 57.29577951f : body_yaw(yaw_, f.viewYaw);
+    yaw_ = f.dt > 0.0f ? turn_toward(yaw_, target, kTurnDegreesPerSecond * f.dt) : target;
     o.bodyYaw = yaw_;
     if (std::fabs(wrap_degrees(yaw_ - sentYaw_)) >= kFacingSendDegrees) {
       sentYaw_ = yaw_;
@@ -112,9 +113,8 @@ class LocalSession {
   EmoteTable table_;
   bool active_ = false, wasDead_ = false;
   int emote_ = -1;
-  Point start_{};
+  Point start_{}, lastPos_{};
   float yaw_ = 0.0f, sentYaw_ = 0.0f;
-  double prevClip_ = -1.0;
 };
 
 /// A peer's investigator this frame, as the glue reads it.
@@ -127,7 +127,7 @@ struct RemoteFrame {
 
 /// What the glue does for a peer.
 struct RemoteOut {
-  enum What { Start, Stop, RestartSong, Yaw };
+  enum What { Start, Stop, Yaw };
   What what = Start;
   int actor = 0;
   int emote = -1;
@@ -146,7 +146,7 @@ class RemoteSessions {
     switch (m.kind) {
       case Kind::Start:
         if (!shows_to(senderDead, localDead)) return out;
-        peers_[actor] = Peer{m.emote, -1.0};
+        peers_[actor] = Peer{m.emote};
         out.push_back({RemoteOut::Start, actor, m.emote, m.yaw});
         out.push_back({RemoteOut::Yaw, actor, m.emote, m.yaw});
         break;
@@ -163,7 +163,7 @@ class RemoteSessions {
     return out;
   }
 
-  /// One frame: each dancing peer's song restarts, and the end of a peer gone, dead to the living, or played out.
+  /// One frame: the end of a peer gone, dead to the living, or played out.
   std::vector<RemoteOut> tick(const std::vector<RemoteFrame>& frames, bool localDead) {
     std::vector<RemoteOut> out;
     for (auto it = peers_.begin(); it != peers_.end();) {
@@ -176,11 +176,6 @@ class RemoteSessions {
         out.push_back({RemoteOut::Stop, it->first, it->second.emote, 0.0f});
         it = peers_.erase(it);
         continue;
-      }
-      if (f->clipTime >= 0.0) {
-        if (song_jumped(it->second.prevClip, f->clipTime, info.song))
-          out.push_back({RemoteOut::RestartSong, it->first, it->second.emote, 0.0f});
-        it->second.prevClip = f->clipTime;
       }
       ++it;
     }
@@ -199,7 +194,6 @@ class RemoteSessions {
  private:
   struct Peer {
     int emote;
-    double prevClip;
   };
   EmoteTable table_;
   std::map<int, Peer> peers_;

@@ -19,7 +19,9 @@ struct EmoteAsset {
   const char* nameKey;  ///< the key of its name under the wheel
   /// Where its song loops back to, in seconds, and how long its loop is; a length of 0 loops the song with its clip
   /// (the author's rule, 2026-11-10). The songs mark no loop of their own: from the author's rough points, each was
-  /// measured where the waveform repeats its start (normalised cross-correlation at 22.05 kHz, given with each).
+  /// measured where the waveform repeats its start (normalised cross-correlation, given with each), and the bundle holds
+  /// each song cut to its loop, sample for sample, which the game loops itself (the private repository's
+  /// unity/emotes-bundle/cut_loops.ps1 has the sample counts). These seconds time the song's loudness for the ghost.
   float songLoopStart = 0.0f;
   float songLoopSeconds = 0.0f;
 };
@@ -40,9 +42,9 @@ inline constexpr EmoteAsset kEmotes[kSegments] = {
     {"scenario", "Scenario", pm::i18n::key("emotes.name.5"), 0.0f, 32.542f},
     // Every 19.200 s (the author: about 19.1 s; correlation 1.000).
     {"smooth_moves", "SmoothMoves", pm::i18n::key("emotes.name.6"), 0.0f, 19.2f},
-    // Its song loops every 12.631 s (eight bars) from its start, not with its 0.833 s clip (the author, 2026-11-10;
-    // measured on the loudness envelope, correlation 0.89 at 1 ms: the track varies a little from pass to pass).
-    {"take_the_l", "TakeTheL", pm::i18n::key("emotes.name.7"), 0.0f, 12.631f},
+    // Its song loops every 12.632 s (eight bars) from its start, not with its 0.833 s clip (the author, 2026-11-10;
+    // measured on the waveform at 48 kHz, correlation 0.9998).
+    {"take_the_l", "TakeTheL", pm::i18n::key("emotes.name.7"), 0.0f, 12.632f},
 };
 
 /// An emote's song loop: its own points when the author gave them, else its clip's length from the song's start.
@@ -67,7 +69,7 @@ inline std::string clip_path(const EmoteAsset& e) {
 }
 
 /// Where an emote's song is in the bundle.
-inline std::string song_path(const EmoteAsset& e) { return std::string("assets/emotes/songs/") + e.folder + ".mp3"; }
+inline std::string song_path(const EmoteAsset& e) { return std::string("assets/emotes/loops/") + e.folder + ".wav"; }
 
 /// Where an emote's icon is in the bundle.
 inline std::string icon_path(const EmoteAsset& e) { return std::string("assets/emotes/icons/") + e.folder + ".png"; }

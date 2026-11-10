@@ -62,6 +62,21 @@ inline float body_yaw(float bodyYaw, float viewYaw) {
   return wrap_degrees(bodyYaw);
 }
 
+/// How fast the player must move along the floor for the body to turn to the way it goes, in metres a second: slower is a
+/// sway, not walking. A starting value, judged in game.
+inline constexpr float kWalkingSpeed = 0.5f;
+/// How fast the body turns, in degrees a second: to the way it walks, or to keep the view within its arc. A starting
+/// value, judged in game.
+inline constexpr float kTurnDegreesPerSecond = 540.0f;
+
+/// `from` turned toward `to` by at most `maxStep` degrees, the short way round.
+/// @return The new yaw, in (-180, 180].
+inline float turn_toward(float from, float to, float maxStep) {
+  const float diff = wrap_degrees(to - from);
+  if (std::fabs(diff) <= maxStep) return wrap_degrees(to);
+  return wrap_degrees(from + (diff > 0.0f ? maxStep : -maxStep));
+}
+
 /// Whether the player moved far enough from where the emote started to end it: more than kCancelDistance along the
 /// floor. A climb or a drop alone is no move.
 inline bool moved_too_far(Point start, Point now) {
@@ -150,8 +165,9 @@ struct SongLoop {
   float length = 0.0f;
 };
 
-/// Where in its song an emote is, from the clip's own time (the song is timed by the clip, so the two never drift): the
-/// song plays from its start until the end of its loop, then repeats the loop.
+/// Where in its song an emote is, from the clip's own time (the clip and its song start together): the song plays from its
+/// start until the end of its loop, then repeats the loop. The song itself loops in the game (AudioSource.loop, on a song
+/// cut to its loop); this is for its loudness.
 /// @param clipTime The clip's time, seconds since the emote began.
 /// @param loop The song's loop.
 /// @return Seconds into the song.
@@ -159,11 +175,6 @@ inline double song_position(double clipTime, SongLoop loop) {
   const double end = static_cast<double>(loop.start) + loop.length;
   if (loop.length <= 0.0f || clipTime < end) return clipTime;
   return loop.start + std::fmod(clipTime - loop.start, static_cast<double>(loop.length));
-}
-
-/// Whether the song went back to its loop point between two frames, so it must be put there again.
-inline bool song_jumped(double before, double now, SongLoop loop) {
-  return now > before && before >= 0.0 && song_position(now, loop) < song_position(before, loop);
 }
 
 /// Whether a one-shot emote has played to its end.

@@ -117,6 +117,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &NetworkedStamina_moving,
     &Camera_WorldToScreenPoint,
     &AudioSource_set_mute,
+    &AudioSource_set_loop,
     &Image,
     &Canvas,
     &Canvas_get_scaleFactor,

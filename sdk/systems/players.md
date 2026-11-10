@@ -207,7 +207,9 @@ What a mod needs to animate an investigator's own body, as the Emotes mod does (
   turns the head toward where the camera looks, and aiming rigs (equipment, torch, watch, lantern, the journal's
   hands) turn the arms. Over it, what the rig places rather than animates keeps the game's pose: the journal hangs from
   the rig's `JournalParent` (`JournalRigController.constraintParent`), which `Journal Parent Rig` puts between a socket
-  on the waist bone and one in the right hand. The belt (`Belt`, with its equipment points) is a child of the first
+  on the waist bone, one in the right hand and a target in front of the face. The journal's controller moves the book to
+  that hanger every Update, and saves and restores the hanger's local position as the book opens and closes, so move the
+  book itself (after the animation, from a mod's tick), never the hanger. The belt (`Belt`, with its equipment points) is a child of the first
   spine bone and follows the clip.
 - **How the local player hides its own head.** `PlayerCharacter.headRenderersToTurnOff` lists the head's renderers
   (hair, eyes, teeth and the head's cosmetics). On the player's own client the game draws them as shadows only

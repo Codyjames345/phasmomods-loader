@@ -129,19 +129,13 @@ void a_song_loops_at_its_own_points() {
   const SongLoop clipLoop{0.0f, 2.0f};
   CHECK(song_position(1.5, clipLoop) == 1.5);
   CHECK(std::fabs(song_position(2.5, clipLoop) - 0.5) < 1e-9);
-  CHECK(song_jumped(1.9, 2.1, clipLoop));
-  CHECK(!song_jumped(2.1, 2.5, clipLoop));
   // Its own points: an intro of 1 s, then a 4 s loop from 1 s to 5 s, whatever the clip's length.
   const SongLoop own{1.0f, 4.0f};
   CHECK(song_position(3.0, own) == 3.0);             // still in the first pass
   CHECK(std::fabs(song_position(5.5, own) - 1.5) < 1e-9);  // back to the loop point, half a second on
   CHECK(std::fabs(song_position(9.5, own) - 1.5) < 1e-9);
-  CHECK(song_jumped(4.9, 5.1, own));
-  CHECK(!song_jumped(5.1, 8.9, own));
-  CHECK(song_jumped(8.9, 9.1, own));
   // No loop at all (length 0): the song plays on from the clip's start.
   CHECK(song_position(50.0, SongLoop{0.0f, 0.0f}) == 50.0);
-  CHECK(!song_jumped(1.0, 99.0, SongLoop{0.0f, 0.0f}));
   // An emote's loop: its own points when given, else its clip's length.
   EmoteAsset e = kEmotes[0];
   e.songLoopStart = e.songLoopSeconds = 0.0f;  // none given
@@ -214,7 +208,7 @@ void every_slot_has_its_names() {
     keys.insert(e.nameKey);
     CHECK(clip_path(e).starts_with("assets/emotes/clips/") && clip_path(e).ends_with(".anim"));
     CHECK(clip_path(e).find_first_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ") == std::string::npos);  // bundle paths are lower case
-    CHECK(song_path(e) == std::string("assets/emotes/songs/") + e.folder + ".mp3");
+    CHECK(song_path(e) == std::string("assets/emotes/loops/") + e.folder + ".wav");  // cut to its loop (cut_loops.ps1)
     CHECK(icon_path(e) == std::string("assets/emotes/icons/") + e.folder + ".png");
     CHECK(loudness_path(e) == std::string(e.folder) + "/loudness.txt");
   }
@@ -223,7 +217,7 @@ void every_slot_has_its_names() {
   CHECK(clip_path(kEmotes[7]) == "assets/emotes/clips/takethel.anim");
   // The two songs whose loop is not their clip's (the author, 2026-11-10), measured from the tracks: both from 0 s.
   CHECK(kEmotes[2].songLoopStart == 0.0f && std::fabs(kEmotes[2].songLoopSeconds - 16.692f) < 1e-4f);  // Floss
-  CHECK(kEmotes[7].songLoopStart == 0.0f && std::fabs(kEmotes[7].songLoopSeconds - 12.631f) < 1e-4f);  // Take The L
+  CHECK(kEmotes[7].songLoopStart == 0.0f && std::fabs(kEmotes[7].songLoopSeconds - 12.632f) < 1e-4f);  // Take The L
   // The rest, from the author's rough points (2026-11-10), measured on the waveform as Floss was.
   const float measured[] = {8.542f, 16.0f, 0, 15.118f, 18.935f, 32.542f, 19.2f};
   for (int i : {0, 1, 3, 4, 5, 6})
