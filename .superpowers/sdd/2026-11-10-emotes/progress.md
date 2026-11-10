@@ -433,3 +433,17 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
   page back exactly (red before, green after).
 - validate.ps1: 92/92 and every script test; API reference no warnings. No map change.
 - Smoke 27 stands: one thin line between every pair of rows on the audio page, after it has been open a while too.
+
+## In-game report 13 (user, 2026-11-10): another player's journal at their face
+- The user's screenshot, a lobby: another player dancing, their journal hangs in front of their face (by the right
+  shoulder) instead of on the hip; "they can't see this issue on their screen".
+- Read: the dancer's own client and everyone else's run the same path (apply_local and apply_remote both call
+  begin_facing, which holds the journal; apply_facings moves it for every dancer). This client's mods.log has no line for
+  another player's dance, so where the remote path differs is not known: no journal held for that body, a wrong place
+  recorded at the start, or something moving the book after the mod's tick on other clients. Not guessed at.
+- Logged, nothing else changed: for every dancer, the journal at the dance's start (found or not, open or not, its height
+  above the feet and its place from the waist bone), and half a second in, where the game had the book that frame, how
+  far from where it hangs, and where it was moved, or why it was not.
+- validate.ps1: 92/92 and every script test. No map change.
+- Smoke 30: two players, one dances; the watcher sends mods.log (the lines "actor N (another player's)" and "actor N
+  mid-dance"), and the dancer theirs.

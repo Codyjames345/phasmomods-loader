@@ -101,6 +101,12 @@ struct Facing {
   // closes, so a change there stays (the journal came back in front of the face, the sixth run).
   api::Held journal, waist, book;
   Pose onWaist{};
+  // For the log: whose body this is, how long it has danced, and whether the journal's place mid-dance was logged (the
+  // user, 2026-11-10: another player's journal shows in front of their face while they dance, though not on their own
+  // screen; logged to see why before anything changes).
+  int actor = -1;
+  float age = 0.0f;
+  bool reported = false;
 };
 
 // One dancer's song.
@@ -251,23 +257,51 @@ void hold_journal(Facing& f, void* player) {
   void* journal = rig && game::alive(rig) ? game::transform_of(rig) : nullptr;
   void* animator = animator_of(player);
   void* waist = animator ? phasmo::Animator::GetBoneTransform(animator, phasmo::HumanBodyBones::Spine()) : nullptr;
-  if (!journal || !waist || phasmo::JournalController::open.get(book)) return;
+  const bool open = book && game::alive(book) && phasmo::JournalController::open.get(book);
+  const char* whose = f.actor == game::local_actor() ? "this client's" : "another player's";
+  if (!journal || !waist) {
+    PM_LOG("Emotes: actor %d (%s): the journal is not held while dancing: book %s, rig %s, waist bone %s", f.actor, whose,
+           book ? "found" : "none", rig ? "found" : "none", waist ? "found" : "none");
+    return;
+  }
+  const Pose w = pose_of(waist), j = pose_of(journal), rel = relative_to(w, j);
+  const float feet = f.root && game::alive(f.root) ? game::position(f.root.get()).y : 0.0f;
+  PM_LOG("Emotes: actor %d (%s): the journal at the dance's start is %.2f m above the feet, (%.2f, %.2f, %.2f) from %s%s",
+         f.actor, whose, j.p.y - feet, rel.p.x, rel.p.y, rel.p.z, api::to_utf8(phasmo::Object::get_name(waist)).c_str(),
+         open ? "; open, so left to the game" : "");
+  if (open) return;
   f.journal = journal;
   f.waist = waist;
   f.book = book;
-  f.onWaist = relative_to(pose_of(waist), pose_of(journal));
-  static bool logged = false;
-  if (!logged) PM_LOG("Emotes: the journal hangs from %s while dancing", api::to_utf8(phasmo::Object::get_name(waist)).c_str());
-  logged = true;
+  f.onWaist = rel;
 }
 
 // Puts the journal back where it hangs on the dancing waist. The mod's tick runs after the frame's animation, so this
 // is the pose that renders; the game moves it to its hanger again in its next Update (JournalRigController.Update), so
-// nothing stays. Not while the journal is open: the game holds it then.
-void keep_journal(const Facing& f) {
-  if (!f.journal || !game::alive(f.journal) || !f.waist || !game::alive(f.waist)) return;
-  if (!f.book || !game::alive(f.book) || phasmo::JournalController::open.get(f.book)) return;
+// nothing stays. Not while the journal is open: the game holds it then. Half a second into a dance it logs where the
+// game had put the book that frame and where it goes, once.
+void keep_journal(Facing& f, float dt) {
+  f.age += dt;
+  const bool report = !f.reported && f.easeBack < 0.0f && f.age >= 0.5f;
+  if (report) f.reported = true;
+  const char* skip = !f.journal || !game::alive(f.journal) ? "no journal held"
+                     : !f.waist || !game::alive(f.waist)   ? "the waist bone is gone"
+                     : !f.book || !game::alive(f.book)     ? "the book is gone"
+                     : phasmo::JournalController::open.get(f.book) ? "the journal is open"
+                                                                   : nullptr;
+  if (skip) {
+    if (report) PM_LOG("Emotes: actor %d mid-dance: the journal is not moved (%s)", f.actor, skip);
+    return;
+  }
   const Pose at = placed_on(pose_of(f.waist), f.onWaist);
+  if (report) {
+    const Pose before = pose_of(f.journal);
+    const float feet = f.root && game::alive(f.root) ? game::position(f.root.get()).y : 0.0f;
+    const float off = std::sqrt((before.p.x - at.p.x) * (before.p.x - at.p.x) + (before.p.y - at.p.y) * (before.p.y - at.p.y) +
+                                (before.p.z - at.p.z) * (before.p.z - at.p.z));
+    PM_LOG("Emotes: actor %d mid-dance: the game had the journal %.2f m above the feet, %.2f m from where it hangs; "
+           "moved to %.2f m above the feet", f.actor, before.p.y - feet, off, at.p.y - feet);
+  }
   game::set_position(f.journal, {at.p.x, at.p.y, at.p.z});
   game::set_rotation(f.journal, {at.q.x, at.q.y, at.q.z, at.q.w});
 }
@@ -293,6 +327,7 @@ void begin_facing(int actor, void* player, float yaw) {
   f.root = root;
   f.original = game::local_rotation(model);
   f.bodyYaw = yaw;
+  f.actor = actor;
   hold_journal(f, player);
   g.facings[actor] = std::move(f);
 }
@@ -322,7 +357,7 @@ void apply_facings(float dt) {
       f.offset = wrap_degrees(f.bodyYaw - yaw_of(f.root));
     }
     game::set_local_rotation(f.model, mul(yaw_quat(f.offset), f.original));
-    keep_journal(f);
+    keep_journal(f, dt);
     ++it;
   }
 }
