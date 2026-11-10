@@ -459,13 +459,15 @@ void detour_ik_late_update(api::Original<phasmo::IKExecutionOrder::LateUpdate> o
     g_lastPass = now;
     // The frame the engine just took, and what the Squatter was doing in it: the only way to see the lag the user
     // reports after a get-up, since nothing else in the mod runs once a frame.
-    if ((g.falling || g.riseClip >= 0.0f) && dt * 1000.0f > kFrameWarnMs && seconds() - g_frameWarnAt >= 1.0f) {
-      g_frameWarnAt = seconds();
-      ++g_slowFrames;
-      PM_LOG("squatter: a %.0f ms frame while its body %s (sheet blend %.2f, %d sheet points, %d colliders, %d slow "
-             "frames this fall)",
-             dt * 1000.0f, g.falling ? "is falling" : "is getting up", g.blend,
-             static_cast<int>(g.coefficients.size()), static_cast<int>(g.cloth.colliders.size()), g_slowFrames);
+    if ((g.falling || g.riseClip >= 0.0f) && dt * 1000.0f > kFrameWarnMs) {
+      ++g_slowFrames;  // every slow frame counts, even though the line is held to one a second
+      if (seconds() - g_frameWarnAt >= 1.0f) {
+        g_frameWarnAt = seconds();
+        PM_LOG("squatter: a %.0f ms frame while its body %s (sheet blend %.2f, %d sheet points, %d colliders, %d slow "
+               "frames this fall)",
+               dt * 1000.0f, g.falling ? "is falling" : "is getting up", g.blend,
+               static_cast<int>(g.coefficients.size()), static_cast<int>(g.cloth.colliders.size()), g_slowFrames);
+      }
     }
     if (!g.falling) inertialize();
     if (g_after) g_after(dt);
