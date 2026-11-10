@@ -90,6 +90,10 @@ inline float sheet_slack(FallPhase phase, float riseShare) {
   return 1.0f - u * u * (3.0f - 2.0f * u);
 }
 
+/** `slack` brought to the nearest quarter, 0 to 1: the steps it reaches the cloth in, since each change re-sends every
+ * point's constraint to the cloth (user, 2026-11-10: sent every few frames, getting up lagged badly). */
+inline float slack_step(float slack) { return std::round(std::clamp(slack, 0.0f, 1.0f) * 4.0f) / 4.0f; }
+
 /** How far a point the sheet lets move `base` metres from the body may move with `slack` of kFallSlack; a pinned point
  * (base 0) stays pinned. */
 inline float slack_distance(float base, float slack) { return base > 0.0f ? base + slack * kFallSlack : 0.0f; }

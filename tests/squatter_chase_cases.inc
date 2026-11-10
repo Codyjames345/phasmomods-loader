@@ -856,3 +856,18 @@ void the_sheet_falls_with_the_body() {
   CHECK(slack_distance(0.12f, 0.0f) == 0.12f);                        // standing: as the sheet was made
   CHECK(kFallSlack >= 1.0f);  // enough for a hem to reach the floor from a body lying on its side
 }
+
+// The sheet's slack reaches the cloth in quarter steps, not every frame (user, 2026-11-10: getting up lagged badly while
+// the constraints were re-sent every few frames): a whole get-up sends at most four times.
+void the_sheet_slack_moves_in_steps() {
+  CHECK(slack_step(1.0f) == 1.0f && slack_step(0.0f) == 0.0f);
+  CHECK(slack_step(0.9f) == 1.0f && slack_step(0.8f) == 0.75f && slack_step(0.6f) == 0.5f);
+  CHECK(slack_step(0.1f) == 0.0f && slack_step(0.13f) == 0.25f);
+  CHECK(slack_step(1.5f) == 1.0f && slack_step(-0.2f) == 0.0f);
+  std::set<float> sent;
+  for (int i = 0; i <= 270; ++i) {  // a 4.5 s get-up at 60 frames a second
+    const float s = slack_step(sheet_slack(FallPhase::GettingUp, static_cast<float>(i) / 270.0f));
+    sent.insert(s);
+  }
+  CHECK(sent.size() <= 5);  // 1, 0.75, 0.5, 0.25 and 0: four changes
+}
