@@ -178,11 +178,6 @@ inline constexpr pm::sdk::EntryDesc Mouse_get_current{.key = "Mouse.get_current"
 inline constexpr pm::sdk::EntryDesc Mouse_get_leftButton{.key = "Mouse.get_leftButton", .kind = pm::sdk::Kind::Method,
                                                          .owner = "Mouse", .name = "get_leftButton"};
 
-/// The mouse's right button, a ButtonControl, read as it is, whatever the game's keybinds put on it (the Emotes wheel
-/// closes on a right click). Inferred: the Input System's documented property getter.
-inline constexpr pm::sdk::EntryDesc Mouse_get_rightButton{.key = "Mouse.get_rightButton", .kind = pm::sdk::Kind::Method,
-                                                          .owner = "Mouse", .name = "get_rightButton"};
-
 /// A pointer device (Unity.InputSystem), the mouse's base class. Inferred: the Input System's documented
 /// API.
 inline constexpr pm::sdk::EntryDesc Pointer{.key = "Pointer", .name = "Pointer", .assembly = "Unity.InputSystem",
@@ -657,8 +652,6 @@ struct Mouse {
   static constexpr pm::api::Method<pm::map::Mouse_get_current, void*()> get_current{};
   /// get_leftButton(mouse): its left button, a ButtonControl. Unresolved: null.
   static constexpr pm::api::Method<pm::map::Mouse_get_leftButton, void*(void*)> get_leftButton{};
-  /// get_rightButton(mouse): its right button, a ButtonControl. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Mouse_get_rightButton, void*(void*)> get_rightButton{};
 };
 
 /// A pointer device, the mouse's base. `pointer` below is the Pointer.

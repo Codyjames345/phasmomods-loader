@@ -23,7 +23,7 @@ bool near(float a, float b) { return std::fabs(a - b) < 1e-3f; }
 // ---- The wheel ----
 
 void the_wheel_picks_by_direction() {
-  const float far = 100.0f;
+  const float far = 300.0f;
   CHECK(segment_for(0, far, kPickDeadZone) == 0);      // up
   CHECK(segment_for(far, far, kPickDeadZone) == 1);    // up-right
   CHECK(segment_for(far, 0, kPickDeadZone) == 2);      // right
@@ -32,6 +32,10 @@ void the_wheel_picks_by_direction() {
   CHECK(segment_for(-far, far, kPickDeadZone) == 7);   // up-left
   CHECK(segment_for(5, 5, kPickDeadZone) == -1);       // inside the dead zone
   CHECK(segment_for(0, 0, kPickDeadZone) == -1);
+  // The neutral zone in the middle is large, so a pick is easy to let go of by moving back toward the centre (the user,
+  // 2026-11-10): a move of 100 counts picks nothing.
+  CHECK(segment_for(100.0f, 0.0f, kPickDeadZone) == -1);
+  CHECK(segment_for(-70.0f, 70.0f, kPickDeadZone) == -1);
   // The boundary between up and up-right, at 22.5 degrees, picks the clockwise one.
   const float b = 22.5f / 57.29577951f;
   CHECK(segment_for(far * std::sin(b), far * std::cos(b), kPickDeadZone) == 1);
@@ -75,30 +79,6 @@ void an_interrupted_wheel_plays_nothing() {
   wheel_step(w, true, false, false, 1);
   CHECK(!wheel_step(w, false, false, false, 1).has_value());
   CHECK(!w.open);
-}
-
-// A right click with the wheel up closes it with nothing played (the user, 2026-11-10). Nothing played means the emote
-// already dancing goes on: only a pick reaches the session. The wheel's key is still held after the click, and the wheel
-// stays shut until the key goes up and down again.
-void a_right_click_closes_the_wheel_with_nothing_played() {
-  WheelInput w;
-  wheel_step(w, true, false, false, -1);
-  wheel_step(w, true, false, false, 4);
-  CHECK(!wheel_step(w, true, false, false, 4, true).has_value());  // right click, the key still held, a segment picked
-  CHECK(!w.open);
-  CHECK(!wheel_step(w, true, false, false, 4).has_value());  // still held: it does not open again
-  CHECK(!w.open);
-  CHECK(!wheel_step(w, false, true, false, 4).has_value());  // let go: nothing played
-  CHECK(!w.open);
-  CHECK(!wheel_step(w, true, false, false, -1).has_value());  // pressed again: it opens as before
-  CHECK(w.open);
-  const auto played = wheel_step(w, false, true, false, 6);
-  CHECK(played.has_value() && *played == 6);
-  // A right click with the wheel shut does nothing to it.
-  CHECK(!wheel_step(w, false, false, false, -1, true).has_value());
-  CHECK(!w.open);
-  CHECK(!wheel_step(w, true, false, false, -1).has_value());
-  CHECK(w.open);
 }
 
 // ---- The body's facing (the user's examples) ----
@@ -274,7 +254,6 @@ int main() {
   release_plays_the_pick();
   release_with_nothing_picked_plays_nothing();
   an_interrupted_wheel_plays_nothing();
-  a_right_click_closes_the_wheel_with_nothing_played();
   the_body_follows_past_ninety();
   only_a_move_past_half_a_metre_ends_it();
   a_looping_song_restarts_with_its_clip();

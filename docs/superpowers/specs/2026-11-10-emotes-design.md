@@ -84,15 +84,14 @@ no `PM_UI_TODO`.
    (see "The SDK's part").
 2. **The mouse picks by direction.** Moving the mouse up picks the top segment, and so on round the disc. The pick
    follows the mouse's movement since the wheel opened, not the cursor's position on screen **(Claude's call)**.
-   Until the mouse has moved past a small dead zone, nothing is picked. The dead zone's size is a starting value
+   Until the mouse has moved past a large dead zone in the middle, nothing is picked, so moving back toward the centre
+   lets go of a pick easily (the user, 2026-11-10: it was small). The dead zone's size is a starting value
    judged with the user in game **(builder's call)**.
 3. **While the wheel is open the mouse does not turn the camera** **(Claude's call)**.
 4. **Releasing the key plays the picked emote.** Releasing it with nothing picked plays nothing and closes the wheel.
 5. **The wheel can be opened during an emote.** The emote keeps playing; only releasing the key on a segment replaces
    it **(Claude's call)**.
 6. The wheel does not open while the game's pause menu, journal, or any text field has the keyboard **(Claude's call)**.
-7. **A right click closes the wheel with nothing played,** and an emote already playing goes on (the user, 2026-11-10).
-   The wheel stays shut until its key is let go and pressed again.
 
 ### On a gamepad
 

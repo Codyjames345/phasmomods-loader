@@ -373,3 +373,20 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
   25. Right click with the wheel up: it shuts, nothing plays, an emote already playing goes on; holding the key after the
   click does not reopen it; let go and press again and it opens. 26. Attach right after starting the game loads without
   an error; launcher.log gets a line for every Attach.
+
+## In-game fix 10, revised (user, 2026-11-10)
+- The user: "change it so the 'neutral zone' is large in the middle so an emote can be unselected easier. Revert the
+  right click to close, and keep the use/interact function".
+- Right click reverted whole: `wheel_step`'s `cancelled` and `WheelInput.waitRelease`, the mod's read of the right
+  button, its emotes_test, the `Mouse.get_rightButton` entry (Input.h, all.h, CHANGELOG), the design's point 7 and the
+  build ledger's map hash are as they were at 1649ae0. The game's Primary Use and Interact stay live while the wheel is
+  up, as before: the mod switches only Look off. Smoke 25 is withdrawn.
+- Neutral zone: kPickDeadZone 40 -> 120 mouse counts (a starting value, judged in game); the design's dead zone now reads
+  large. emotes_test: a 100-count move and a 99-count diagonal pick nothing (red at 40, green at 120); the direction
+  checks move out to 300. The accumulated movement still has no limit, so after a long flick the way back to the centre
+  is as long as the flick less 120; a limit on it is a question for the user, not done.
+- Volumes: unchanged, still the user's call (0.125 or 0.0625 at 100%).
+- validate.ps1: 92/92 and every script test; API reference no warnings. gamecheck -IfConfigured -Expect: 1857 entries,
+  0 missing; the build ledger matches what is committed.
+- Smoke 25 now: with the wheel up, moving the mouse back toward the centre lets go of a pick (nothing highlighted), and
+  releasing the key there plays nothing; a short move still reaches a segment comfortably.

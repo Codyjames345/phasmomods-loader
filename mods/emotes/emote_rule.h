@@ -13,8 +13,9 @@ namespace pm::emotes {
 /// The wheel's segments, the first straight up and the rest clockwise.
 inline constexpr int kSegments = 8;
 /// How far the mouse must move from where it was when the wheel opened before a segment is picked, in the pointer's
-/// pixels. A starting value.
-inline constexpr float kPickDeadZone = 40.0f;
+/// pixels: a large neutral zone in the middle, so a pick is easy to let go of by moving back toward the centre (the
+/// user, 2026-11-10; it was 40). A starting value.
+inline constexpr float kPickDeadZone = 120.0f;
 /// How far a stick must be pushed before a segment is picked, 0 to 1. A starting value.
 inline constexpr float kStickDeadZone = 0.5f;
 /// How far the player may move from where an emote started before it ends, in metres along the floor (the user's).
@@ -118,39 +119,25 @@ inline Pose placed_on(const Pose& parent, const Pose& local) {
 
 /// The wheel as its key drives it.
 struct WheelInput {
-  bool open = false;         ///< the key is held and the wheel shows
-  int picked = -1;           ///< the segment picked now, or -1
-  bool waitRelease = false;  ///< closed by a right click with the key still held: shut until the key goes up
+  bool open = false;  ///< the key is held and the wheel shows
+  int picked = -1;    ///< the segment picked now, or -1
 };
 
 /// One frame of the wheel's key: it opens while the key is held, follows the pick, and on release plays what is
-/// picked. Something that takes the keyboard (a menu, the pause screen, death) closes it with nothing played. A right
-/// click closes it with nothing played too (the user, 2026-11-10), and it stays shut until the key is let go and pressed
-/// again. Nothing played leaves an emote already dancing as it is.
+/// picked. Something that takes the keyboard (a menu, the pause screen, death) closes it with nothing played.
 /// @param w The wheel's state, changed here.
 /// @param held The key is held this frame.
 /// @param released The key went up this frame.
 /// @param interrupted Something closed the wheel this frame.
 /// @param pickNow The segment picked this frame, or -1 (segment_for).
-/// @param cancelled The right mouse button went down this frame.
 /// @return The segment to play when the key is released on one; nothing otherwise.
-inline std::optional<int> wheel_step(WheelInput& w, bool held, bool released, bool interrupted, int pickNow,
-                                     bool cancelled = false) {
+inline std::optional<int> wheel_step(WheelInput& w, bool held, bool released, bool interrupted, int pickNow) {
   if (interrupted) {
     w = WheelInput{};
     return std::nullopt;
   }
   if (!w.open) {
-    if (w.waitRelease) {
-      if (!held || released) w.waitRelease = false;
-      return std::nullopt;
-    }
     if (held && !released) w = WheelInput{true, -1};
-    return std::nullopt;
-  }
-  if (cancelled) {
-    w = WheelInput{};
-    w.waitRelease = held && !released;
     return std::nullopt;
   }
   w.picked = pickNow >= 0 && pickNow < kSegments ? pickNow : -1;
