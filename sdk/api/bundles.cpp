@@ -4,6 +4,7 @@
 
 #include "Animator.h"
 #include "UnityAssets.h"
+#include "UnityObject.h"
 #include "runtime.h"
 
 namespace pm::api {
@@ -27,7 +28,11 @@ void* load_bundle(const std::filesystem::path& file, std::string* why) {
 void* load_bundle_asset(void* bundle, const char* name, void* typeObject) {
   if (!bundle || !name || !typeObject) return nullptr;
   void* managedName = make_string(name);
-  return managedName ? phasmo::AssetBundle::LoadAsset(bundle, managedName, typeObject) : nullptr;
+  void* asset = managedName ? phasmo::AssetBundle::LoadAsset(bundle, managedName, typeObject) : nullptr;
+  // An asset a mod loads is in no scene, so a scene load's unload of unused assets would destroy it (mods start at the
+  // menu, before any lobby): keep it, as Unity's own HideFlags.DontUnloadUnusedAsset is for.
+  if (asset) phasmo::Object::set_hideFlags(asset, phasmo::HideFlags::DontUnloadUnusedAsset());
+  return asset;
 }
 
 void* load_controller(void* bundle, const char* name) {

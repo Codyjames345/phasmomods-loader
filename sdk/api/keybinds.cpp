@@ -7,6 +7,7 @@
 #include <system_error>
 
 #include "Input.h"
+#include "JournalController.h"
 #include "Player.h"
 #include "Transform.h"
 #include "UnityObject.h"
@@ -110,11 +111,13 @@ struct Key {
 
 struct State {
   std::string owner;
+  std::string title;  // the heading over the mod's rows; none when empty
   std::filesystem::path file;
   std::vector<Key> keys;
   Held asset, map;
   bool ready = false;
   std::string lastSaved;  // the text last written or read, so a frame without a change writes nothing
+  std::vector<Held> headings;  // the GameObjects of the mod's headings in the keybinds menu, one per list
   int rowTicks = 0;
   std::string lastSeen;        // what the last search of the keybinds menu found, for its log line
   bool loggedWaiting = false;  // the wait for the game's bindings was logged
@@ -254,41 +257,91 @@ bool row_device(void* row, Device& out) {
   return false;
 }
 
-// A copy of `templ` (a game row) for a key's action on one device, beside it in the menu.
-void* make_row(void* templ, Key& k, size_t d) {
+// A copy of `templ`'s GameObject at the end of its list (Instantiate puts it last), and the copy's RebindActionUI; null
+// both, logged with `what`, when the row cannot be copied.
+void* copy_row(void* templ, const char* what, void*& copyObject) {
+  copyObject = nullptr;
   void* object = phasmo::Component::get_gameObject(templ);
   void* transform = phasmo::Component::get_transform(templ);
   void* parent = transform ? phasmo::Transform::get_parent(transform) : nullptr;
   if (!object || !parent) {
-    PM_LOG("keys: %s.%s gets no row: the menu's row has no parent", g.owner.c_str(), k.desc.id.c_str());
+    PM_LOG("keys: %s gets no %s: the menu's row has no parent", g.owner.c_str(), what);
     return nullptr;
   }
-  void* copyObject = phasmo::Object::Instantiate(object, parent, false);
+  copyObject = phasmo::Object::Instantiate(object, parent, false);
   if (!copyObject) {
-    PM_LOG("keys: %s.%s gets no row: the menu's row could not be copied", g.owner.c_str(), k.desc.id.c_str());
+    PM_LOG("keys: %s gets no %s: the menu's row could not be copied", g.owner.c_str(), what);
     return nullptr;
   }
   void* copyTransform = phasmo::GameObject::get_transform(copyObject);
   void* copy = copyTransform ? phasmo::Component::GetComponent(copyTransform, phasmo::RebindActionUI::type.type_object())
                              : nullptr;
   if (!copy) {
-    PM_LOG("keys: %s.%s gets no row: its copy has no RebindActionUI", g.owner.c_str(), k.desc.id.c_str());
+    PM_LOG("keys: %s gets no %s: its copy has no RebindActionUI", g.owner.c_str(), what);
     phasmo::Object::Destroy(copyObject, 0.0f);
-    return nullptr;
+    copyObject = nullptr;
   }
-  phasmo::Transform::SetSiblingIndex(copyTransform,
-                                     phasmo::Transform::GetSiblingIndex(transform) + 1);
+  return copy;
+}
+
+// Writes `text` on a copied row's label. The label's TextLocaliserUI goes first: it writes the game's words for its key
+// whenever it wakes, and a copy made while the menu is hidden wakes only when the player opens it, after this.
+void label_row(void* row, const std::string& text) {
+  void* label = phasmo::RebindActionUI::m_ActionLabel.get(row);
+  if (!label) return;
+  if (void* localiser = phasmo::Component::GetComponent(label, phasmo::TextLocaliserUI::type.type_object()))
+    phasmo::Object::DestroyImmediate(localiser, false);
+  phasmo::TMP_Text::set_text(label, make_string(text));
+}
+
+// A heading over the mod's rows at the end of `templ`'s list: a copy of the row showing only its label, with the
+// mod's name. Its RebindActionUI goes, so nothing rebinds through it and no search takes it for a game row.
+void* make_heading(void* templ) {
+  void* copyObject = nullptr;
+  void* copy = copy_row(templ, "heading", copyObject);
+  if (!copy) return nullptr;
+  label_row(copy, g.title);
+  void* label = phasmo::RebindActionUI::m_ActionLabel.get(copy);
+  void* labelTransform = label ? phasmo::Component::get_transform(label) : nullptr;
+  void* root = phasmo::GameObject::get_transform(copyObject);
+  const int32_t children = root ? phasmo::Transform::get_childCount(root) : 0;
+  for (int32_t i = 0; i < children; ++i) {
+    void* child = phasmo::Transform::GetChild(root, i);
+    if (child && !(labelTransform && phasmo::Transform::IsChildOf(labelTransform, child)))
+      phasmo::GameObject::SetActive(phasmo::Component::get_gameObject(child), false);
+  }
+  phasmo::Object::DestroyImmediate(copy, false);
+  return copyObject;
+}
+
+// A copy of `templ` (a game row) for a key's action on one device, at the end of its list.
+void* make_row(void* templ, Key& k, size_t d) {
+  void* copyObject = nullptr;
+  const std::string what = "row for " + k.desc.id;
+  void* copy = copy_row(templ, what.c_str(), copyObject);
+  if (!copy) return nullptr;
   void* binding = binding_at(k.binding[d]);
   void* id = binding ? phasmo::InputBinding::m_Id.get(binding) : nullptr;
   phasmo::RebindActionUI::set_bindingId(copy, id);
   phasmo::RebindActionUI::set_actionReference(copy, phasmo::InputActionReference::Create(k.actions[d]));
-  if (void* label = phasmo::RebindActionUI::m_ActionLabel.get(copy))
-    phasmo::TMP_Text::set_text(label, make_string(k.desc.label));
+  label_row(copy, k.desc.label);
   // Off and on, so the row shows the new binding as it does when the menu opens.
   const bool on = phasmo::GameObject::get_activeSelf(copyObject);
   phasmo::GameObject::SetActive(copyObject, false);
   phasmo::GameObject::SetActive(copyObject, on);
   return copy;
+}
+
+// Takes the mod's headings and rows out of the menu.
+void remove_rows() {
+  for (Key& k : g.keys)
+    for (Held& r : k.rows) {
+      if (r && alive(r)) phasmo::Object::Destroy(phasmo::Component::get_gameObject(r), 0.0f);
+      r = nullptr;
+    }
+  for (Held& h : g.headings)
+    if (h && alive(h)) phasmo::Object::Destroy(h, 0.0f);
+  g.headings.clear();
 }
 
 void ensure_rows() {
@@ -314,20 +367,46 @@ void ensure_rows() {
            rows.size(), templ[0] ? "yes" : "no", templ[1] ? "yes" : "no");
     g.lastSeen = seen;
   }
-  for (Key& k : g.keys)
+  // Only a row the menu can now take: one with no row of its device to copy waits for one.
+  bool canMake = false;
+  for (const Key& k : g.keys)
     for (size_t d = 0; d < kDevices; ++d)
-      if (k.actions[d] && templ[d] && (!k.rows[d] || !alive(k.rows[d]))) {
-        k.rows[d] = make_row(templ[d], k, d);
-        if (k.rows[d])
-          PM_LOG("keys: %s.%s has its row in the keybinds menu (device %zu)", g.owner.c_str(), k.desc.id.c_str(), d);
-      }
+      if (k.actions[d] && templ[d] && (!k.rows[d] || !alive(k.rows[d]))) canMake = true;
+  if (!canMake) return;
+  // Made afresh together, so each list ends with the mod's heading and then its rows in the order the keys were added,
+  // whatever part of them the menu lost.
+  remove_rows();
+  std::vector<void*> lists;  // each list's parent, in device order
+  const auto list_of = [&](size_t d) -> void* {
+    void* t = templ[d] ? phasmo::Component::get_transform(templ[d]) : nullptr;
+    return t ? phasmo::Transform::get_parent(t) : nullptr;
+  };
+  for (size_t d = 0; d < kDevices; ++d)
+    if (void* parent = list_of(d); parent && std::find(lists.begin(), lists.end(), parent) == lists.end())
+      lists.push_back(parent);
+  for (void* list : lists) {
+    if (!g.title.empty())
+      for (size_t d = 0; d < kDevices; ++d)
+        if (list_of(d) == list) {
+          if (void* h = make_heading(templ[d])) g.headings.push_back(h);
+          break;
+        }
+    for (Key& k : g.keys)
+      for (size_t d = 0; d < kDevices; ++d)
+        if (k.actions[d] && list_of(d) == list) {
+          k.rows[d] = make_row(templ[d], k, d);
+          if (k.rows[d])
+            PM_LOG("keys: %s.%s has its row in the keybinds menu (device %zu)", g.owner.c_str(), k.desc.id.c_str(), d);
+        }
+  }
 }
 
 }  // namespace
 
-void begin_keys(std::string_view owner, std::filesystem::path file) {
+void begin_keys(std::string_view owner, std::string_view title, std::filesystem::path file) {
   clear_keys();
   g.owner = owner;
+  g.title = title;
   g.file = std::move(file);
 }
 
@@ -394,9 +473,8 @@ std::string bound_path(std::string_view id, Device device) {
 }
 
 void clear_keys() {
+  remove_rows();
   for (Key& k : g.keys) {
-    for (Held& r : k.rows)
-      if (r && alive(r)) phasmo::Object::Destroy(phasmo::Component::get_gameObject(r), 0.0f);
     for (Held& a : k.actions)
       if (a) phasmo::InputAction::Disable(a);
   }

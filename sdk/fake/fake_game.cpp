@@ -462,6 +462,12 @@ int32_t dictionary_int_entries(const void* dict, PmIntEntry* out, int32_t max) {
 // The host contract's mod_started: the mods a test says run on this client (fake_game.h).
 std::set<std::string, std::less<>> g_startedMods;
 bool mod_started(const char* modId) { return modId && g_startedMods.count(std::string_view(modId)); }
+// The host contract's mod_name: the names a test gives its mods (fake_game.h).
+std::map<std::string, std::string, std::less<>> g_modNames;
+const char* mod_name(const char* modId) {
+  const auto it = modId ? g_modNames.find(std::string_view(modId)) : g_modNames.end();
+  return it == g_modNames.end() ? nullptr : it->second.c_str();
+}
 // The host contract's show_message: every message asked for, in order (fake_game.h).
 std::vector<std::pair<std::string, std::string>> g_messages;
 void show_message(const char* title, const char* body) {
@@ -526,8 +532,8 @@ uint32_t fields_of_type(const char* typeKey, const void* obj, const char* fieldT
   return count;
 }
 
-// Positional: a member added to PmHostApi after content_flags_of fails this until it is given here too.
-static_assert(offsetof(PmHostApi, content_flags_of) + sizeof(PmHostApi::content_flags_of) == sizeof(PmHostApi),
+// Positional: a member added to PmHostApi after mod_name fails this until it is given here too.
+static_assert(offsetof(PmHostApi, mod_name) + sizeof(PmHostApi::mod_name) == sizeof(PmHostApi),
               "kHost lists every PmHostApi member");
 const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_hook, &enable_hooks, &send,
                       &set_receiver, &peer_has_mod, &register_service, &service, &mod_game_entry, &hook_entry,
@@ -543,7 +549,7 @@ const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_ho
                       &room_agrees, &collection_count, &array_element_size, &host_list_remove_at,
                       &content_player_move, &content_interaction_lost, &content_roll_taken, &steer_agent,
                       &abandon_ghost_spawn, &dictionary_int_entries, &mod_started, &show_message,
-                      &content_flags_of};
+                      &content_flags_of, &mod_name};
 
 }  // namespace
 
@@ -577,6 +583,7 @@ void reset() {
   g_insideDepths.clear();
   g_dictionaries.clear();
   g_startedMods.clear();
+  g_modNames.clear();
   g_messages.clear();
   g_inSpawn = false;
   g_abandons = 0;
@@ -710,6 +717,7 @@ void spawn_running(bool running) { g_inSpawn = running; }
 int spawn_abandons() { return g_abandons; }
 void dictionary(const void* dict, std::vector<PmIntEntry> entries) { g_dictionaries[dict] = std::move(entries); }
 void started_mods(std::vector<std::string> ids) { g_startedMods = {ids.begin(), ids.end()}; }
+void mod_names(std::map<std::string, std::string> names) { g_modNames = {names.begin(), names.end()}; }
 const std::vector<std::pair<std::string, std::string>>& messages() { return g_messages; }
 
 bool list_remove_at(void* list, int32_t index) {

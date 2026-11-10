@@ -36,6 +36,9 @@ void* load_bundle(const std::filesystem::path& file, std::string* why = nullptr)
  * @return The asset, a managed object (keep it in a Held past this frame), or null when the bundle has no such asset
  *         of that type, or a null argument.
  * @pre Main thread. The same asset loaded twice is the same object.
+ * @note The asset is kept from Unity's unload of unused assets (HideFlags.DontUnloadUnusedAsset): it is in no scene, so a
+ *       scene load would otherwise destroy it before it is used. Destroy it yourself, or unload the bundle with its
+ *       objects, when it is no longer needed.
  * @since Contract 2.3 (a helper in the mod's own code)
  */
 void* load_bundle_asset(void* bundle, const char* name, void* typeObject);

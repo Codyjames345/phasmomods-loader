@@ -114,6 +114,11 @@ bool peer_has(int actor, const char* id) { return g_host && g_host->peer_has_mod
 
 bool mod_started(const char* id) { return g_host && g_host->mod_started(id); }
 
+std::string shown_name() {
+  const char* name = g_host && g_info ? g_host->mod_name(g_info->id) : nullptr;
+  return name && *name ? std::string(name) : std::string(g_info ? g_info->name : "");
+}
+
 void show_message(const std::string& title, const std::string& body) {
   if (g_host) g_host->show_message(title.c_str(), body.c_str());
 }

@@ -196,7 +196,9 @@ void* texture_from_rgba(int width, int height, const uint8_t* rgba, size_t bytes
   }
   std::copy_n(rgba, bytes, reinterpret_cast<uint8_t*>(&texels[0]));
   phasmo::Texture2D::SetPixels32(texture, pixels, 0);
-  phasmo::Texture2D::Apply(texture, false, true);
+  // The texture has a mip chain (Texture2D.ctor): its smaller levels are written from level 0 here, or a texture drawn
+  // smaller than its size shows the engine's grey fill of a new texture instead (the Emotes wheel's grey squares).
+  phasmo::Texture2D::Apply(texture, true, true);
   return texture;
 }
 

@@ -55,6 +55,8 @@ void a_wall_pulls_the_camera_in() {
 }
 
 void the_ease_is_smooth_and_bounded() {
+  // The user's ruling after the first in-game run (2026-11-10): half the first 0.6 s, out and back alike.
+  CHECK(near(view::kEaseSeconds, 0.3f));
   CHECK(view::ease(0.0f) == 0.0f && view::ease(1.0f) == 1.0f);
   CHECK(view::ease(-1.0f) == 0.0f && view::ease(2.0f) == 1.0f);
   CHECK(near(view::ease(0.5f), 0.5f));

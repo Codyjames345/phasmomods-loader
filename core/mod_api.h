@@ -810,6 +810,11 @@ struct PmHostApi {
   /// while no content is active. Read-only. Main thread.
   /// @since Contract 2.3
   uint32_t (*content_flags_of)(int32_t type);
+  /// Added in version 2.3, after content_flags_of: the name the manifest of the installed mod `modId` gives it (UTF-8),
+  /// the name the Mods panel shows the player, for a heading of the mod's own in a game menu. Null for null and for a mod
+  /// not installed. The text lasts until the mods next start afresh: copy it to keep it. Main thread.
+  /// @since Contract 2.3
+  const char* (*mod_name)(const char* modId);
   /// @}
 };
 

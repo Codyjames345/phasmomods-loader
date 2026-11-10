@@ -159,7 +159,7 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
 
 ## Smoke list (the user's in-game test)
 1. The Mods panel lists Emotes; it starts (log: "Emotes: <clip> ... looping, song loop ...") for all eight.
-2. Keybinds menu: an Emotes row under keyboard and one under controller, labelled (PM_TEXT_TODO until the author writes it); rebind, restart, the rebinding holds.
+2. Keybinds menu, from the main menu on: at the end of the keyboard list and of the controller list, a heading "Emotes" (only its label shows) and under it a row "Emote wheel"; rebind, restart, the rebinding holds.
 3. Keyboard: hold X: the wheel (grey disc, gaps, icons), blur and vignette behind; the camera does not turn; mouse up picks the top (blue, name below); release plays; release at rest plays nothing; Esc/journal while held closes it.
 4. Gamepad: hold D-pad up, right stick picks, release plays.
 5. VR: left X opens the wheel over the left hand facing you; right controller points, trigger plays; X again closes; view never moves; your body shows; the head does not block the view.
@@ -181,3 +181,15 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
 - validate.ps1 91/91 and every script test; gamecheck -Expect 1827 entries, 0 missing (55 startup-only, down from 57). Commit 0f10393. A first stage attempt hit a passing "access denied" on dist (nothing was open, the user said); the retry went through.
 - In-game run 2 (11:16): Emotes started, but no keybinds row and no wheel on B. The key chose X (B is the game's walkie), and nothing logged the key's readiness or the menu search; added log lines (commit 0c65fc8) to see where it stops.
 - In-game run 3 (13:40): the new logs showed the key waiting forever, and mods.log showed Unity's "Cannot add, remove, or change elements of InputActionAsset while one or more of its actions are enabled" every frame from 13:40:52: make_actions enabled each action before adding the next. Fixed (all added, then overrides and Enable), keybinds_test red (fake now counts adds while enabled) then green; ctest 91/91. Commit 049d679.
+
+## In-game fix 2 (user, 2026-11-10, run 4 at 13:44)
+- The user's report: the wheel shows grey squares; the row reads "Forward Movement"; no dance and no song after a pick; the camera eases too slowly (halve it); mod keys should sit under a heading per mod; the key should show from the main menu.
+- Cause of the missing dance, song and icons: mods start at the main menu (log 13:44:33, the lobby at 13:44:50), and a scene load's unload of unused assets destroys any asset in no scene. load_bundle_asset now marks what it loads HideFlags.DontUnloadUnusedAsset (models_test red, then green). Same lesson as squatter_voice.cpp.
+- Cause of the grey squares: texture_from_rgba applied level 0 only, and Texture2D(w, h) has a mip chain, so a texture drawn smaller than its 512 texels showed the engine's grey fill of a new texture. Now Apply(true, true). core/ui.cpp has no offline harness: checked in game (smoke 3).
+- Cause of "Forward Movement": decompiled RebindActionUI.set_actionReference and OnEnable; neither writes the label. The label's TextLocaliserUI writes its key's words when it wakes; a copy made under the hidden settings page wakes when the player opens it, after our label. The SDK now DestroyImmediates the copy's localiser before labelling. Ruling: destroy, not disable: Unity runs Awake on a disabled component - cost if wrong: none (the precedent in lobby.cpp disables one that has already woken).
+- Heading per mod (user): begin_keys takes a title; each list ends with a heading (a row copy, its RebindActionUI destroyed, every child but the label's hidden, label = the mod's name) and then the mod's rows. The title is the manifest's name through a new PmHostApi.mod_name at the end of 2.3 (unreleased; main is on 2.2), pm::mod::shown_name. Rows are no longer placed beside the copied row. Ruling: the heading's name is the manifest's, the name the Mods panel already shows players, rather than a new string - cost if wrong: one table entry.
+- Main menu (user: "mods aren't loaded until a lobby is created"): the log of run 4 shows Emotes started at 13:44:33 at the menu and its rows were made at 13:44:47, before the lobby at 13:44:50; the row read "Forward Movement" and looked like the game's own. No loader change; the label fix and the heading make it visible. Told the user.
+- Ease: kEaseSeconds 0.6 -> 0.3, out and back (user; third_person_test red, then green).
+- Key label: "Emote wheel", the user's words (no mark).
+- Diagnostics: the wheel's open line gives icons and segments alive; each start gives clip loaded/gone, playing on the body or not, song loaded/gone and its source.
+- validate.ps1: 91/91 and every script test; API reference no warnings. (A first run hit the passing "access denied" on dist again; the rerun went through.)

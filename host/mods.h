@@ -125,6 +125,9 @@ std::string off_reason(const std::string& id);
 // Whether the mod `id` runs on this client now: the host contract's mod_started. False for null and for an id no
 // installed mod has.
 bool started(const char* id);
+// The name the manifest of the installed mod `id` gives it, the Mods panel's: the host contract's mod_name. Null for null
+// and for an id no installed mod has. It lasts until the mods are listed afresh.
+const char* name_of(const char* id);
 void tick_all();
 void stop_all();  // in reverse start order, so a mod stops before those it depends on; their hooks stay until the host removes them
 

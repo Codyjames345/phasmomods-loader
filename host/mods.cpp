@@ -373,6 +373,12 @@ bool started(const char* id) {
   return m && m->started;
 }
 
+const char* name_of(const char* id) {
+  if (!id) return nullptr;
+  const Mod* m = find_mod(id);
+  return m ? m->manifest.name.c_str() : nullptr;
+}
+
 void start_error(const std::string& why) {
   if (g_starting && g_startError.empty()) g_startError = why;
 }

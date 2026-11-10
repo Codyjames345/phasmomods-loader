@@ -6,7 +6,7 @@ linked below.
 
 ## A key in the game's keybinds menu
 
-`sdk/api/keybinds.h`. Declare a key with `begin_keys(modId, file)` and `add_key(ModKey)` in `pmmod_start`, call
+`sdk/api/keybinds.h`. Declare a key with `begin_keys(modId, pm::mod::shown_name(), file)` and `add_key(ModKey)` in `pmmod_start`, call
 `tick_keys()` every frame, and read it with `key_state(id)`.
 
 - A `ModKey` has a default path per device (keyboard, gamepad, VR, in Input System syntax: `"<Keyboard>/x"`,
@@ -14,7 +14,8 @@ linked below.
   already binds falls back to the first free one; the game's menu-navigation actions (named `UI...`) do not count as
   taken. VR defaults are not checked against the game.
 - The keyboard and gamepad bindings each get a row in the game's keybinds menu, labelled with your text, and the game's
-  own rebinding runs on it. A player's rebinding is saved to the file you name and read back next time.
+  own rebinding runs on it. Your rows sit at the end of each list, under a heading with your mod's name (the manifest's,
+  which `shown_name` reads from the host). A player's rebinding is saved to the file you name and read back next time.
 - The key is ready (`keys_ready`) once the game's bindings can be read: the keybinds menu or a local player is loaded.
 
 How the game's actions and the menu work: [menus](../systems/menus.md#key-bindings).

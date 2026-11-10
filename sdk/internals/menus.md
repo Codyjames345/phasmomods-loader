@@ -80,3 +80,11 @@ target is the copied button stops with the copy.
 The host makes such a delegate for its own code through the runtime services (`host/runtime_services.h`): the runtime's
 own constructor, with a method the host describes to the runtime as an instance method of no arguments whose code is
 the host's. It is the host's alone; the host contract does not offer it to mods.
+
+## A keybinds row's label (2026-11-10)
+
+`RebindActionUI.set_actionReference` and the row's enabling were decompiled for the Emotes mod's key. Both read the
+action's binding and write only the text showing the binding, and
+raise the row's update event; neither writes `RebindActionUI.m_ActionLabel`. The first in-game run showed a copied row
+labelled with the copied row's words ("Forward Movement"), which is the label's `TextLocaliserUI` writing its key's text
+when the copy woke. The SDK takes the localiser off a copy's label (`sdk/api/keybinds.cpp`).

@@ -15,8 +15,9 @@ namespace pm::api::view {
 inline constexpr float kOrbitDistance = 2.2f;
 /// How far above the head's height the camera sits at full distance, in metres. A starting value, judged in game.
 inline constexpr float kOrbitHeight = 0.25f;
-/// How long the camera takes to ease out, and back, in seconds. A starting value, judged in game.
-inline constexpr float kEaseSeconds = 0.6f;
+/// How long the camera takes to ease out, and back, in seconds: half the first 0.6, judged with the user in game
+/// (2026-11-10).
+inline constexpr float kEaseSeconds = 0.3f;
 /// How far short of a wall the camera stops, in metres. A starting value, judged in game.
 inline constexpr float kWallMargin = 0.2f;
 

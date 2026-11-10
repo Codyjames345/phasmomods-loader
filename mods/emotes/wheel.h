@@ -35,6 +35,9 @@ void close();
 
 /// Whether the wheel shows.
 bool is_open();
+// How many of the bundle's icons and of the drawn segment textures are still alive, for the log.
+int icons_alive();
+int segments_alive();
 
 /// Frees the wheel's objects and textures (the mod stopping).
 void unload();

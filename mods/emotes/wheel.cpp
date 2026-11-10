@@ -173,6 +173,18 @@ void close() {
 
 bool is_open() { return g.canvas && game::alive(g.canvas); }
 
+int icons_alive() {
+  int n = 0;
+  for (const api::Held& t : g.icons) n += t && game::alive(t) ? 1 : 0;
+  return n;
+}
+
+int segments_alive() {
+  int n = 0;
+  for (const api::Held& t : g.segments) n += t && game::alive(t) ? 1 : 0;
+  return n;
+}
+
 void unload() {
   close();
   for (api::Held& t : g.segments)
