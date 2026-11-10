@@ -627,6 +627,26 @@ sh::Vec2 centroid(const sh::SheetMesh& m, size_t triangle) {
   return c;
 }
 
+// Unity's cloth simulates a particle per point and, with virtual particles, one per triangle, so the sheet's grid is
+// kept inside a point budget even for the widest shape the figure cuts it (a tall body's drop to the floor): the cost of
+// the cloth a client runs is what that grid is paid in (user, 2026-11-10: getting up lagged badly).
+void the_sheet_stays_inside_its_point_budget() {
+  sh::SheetShape wide;
+  wide.shoulderRadius = 0.42f;
+  wide.side = 4.4f;  // as wide as the figure makes it, for a tall body
+  const sh::SheetMesh m = sh::make_sheet(wide);
+  CHECK(m.vertices.size() <= 6000);
+  CHECK(m.triangles.size() <= 2 * m.vertices.size() * 3);
+  // And the grid is no finer than it says: fine only within fineHalf of the centre, where the eyes are cut, and no step
+  // wider than coarseSpacing beyond it.
+  const std::vector<float> ax = sh::sheet_axis(wide);
+  for (size_t i = 1; i < ax.size(); ++i) {
+    const float step = ax[i] - ax[i - 1];
+    const bool fine = std::fabs(ax[i]) <= wide.fineHalf + 1e-4f && std::fabs(ax[i - 1]) <= wide.fineHalf + 1e-4f;
+    CHECK(step <= (fine ? wide.fineSpacing : wide.coarseSpacing) + 1e-4f);
+  }
+}
+
 void sheet_is_closed_grid_with_eye_holes() {
   const sh::SheetShape shape;
   const sh::SheetMesh m = sh::make_sheet(shape);
@@ -1332,6 +1352,7 @@ int main() {
   the_sheet_follows_the_body_through_a_fall();
   a_root_jump_is_a_warp_not_a_step();
   the_sheet_blend_moves_in_steps();
+  the_sheet_stays_inside_its_point_budget();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();
