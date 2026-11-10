@@ -202,8 +202,15 @@ What a mod needs to animate an investigator's own body, as the Emotes mod does (
   controllers for the held item (`Player.characterAnimations`, a `PlayerCharacterAnimations`), syncs its parameters
   with a PhotonAnimatorView and bends the hands and arms with Animation Rigging (a RigBuilder, whose graph runs at
   sorting order 1000). Unity's Playables are all in the build (`sdk/map/Playables.h`): a second graph with an animation
-  output on the same Animator, at a higher sorting order and a weight from 0 to 1, plays a clip over all of that and
-  gives the body back untouched when it is destroyed.
+  output on the same Animator, at a sorting order between the controller's and the rig's and a weight from 0 to 1,
+  plays a clip over the controller and gives the body back untouched when it is destroyed. The rig still runs over
+  it: the journal hangs from the waist through a constraint of the rig (`Journal Parent Rig`, between a socket on the
+  waist bone and one in the right hand), and the belt (`Belt`, with its equipment points) is a child of the first spine
+  bone. A clip over the rig would leave the journal where the rig put it from the game's own pose.
+- **How the local player hides its own head.** `PlayerCharacter.headRenderersToTurnOff` lists the head's renderers
+  (hair, eyes, teeth and the head's cosmetics). On the player's own client the game draws them as shadows only
+  (`Renderer.set_shadowCastingMode`), and has methods of `PlayerCharacter` to switch them back and to move them to
+  another layer. A view from outside draws them (`ShadowCastingMode.On`) and gives each its mode back after.
 - **How the local player hides its own body.** `Player.renderers` lists the body's renderers. `Player.SetPlayerModelLayer`
   moves each one's GameObject between two named layers, and the local camera leaves the hidden one out. A camera of a
   mod's own that adds those renderers' layers to its culling mask shows the body without touching them.

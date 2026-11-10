@@ -15,6 +15,7 @@
 #include "Animator.h"
 #include "Camera.h"
 #include "Input.h"
+#include "JournalController.h"
 #include "Playables.h"
 #include "Player.h"
 #include "Transform.h"
@@ -191,6 +192,12 @@ void read_actions() {
       if (name == kLookAction) g.look = actions[i];
     }
   }
+}
+
+// Whether the player's own journal is open (JournalController.open): opening it ends an emote (the user's ruling).
+bool journal_open(void* player) {
+  void* journal = player ? phasmo::Player::journal.get(player) : nullptr;
+  return journal && game::alive(journal) && phasmo::JournalController::open.get(journal);
 }
 
 bool end_action_pressed(bool vr) {
@@ -392,6 +399,7 @@ void end_local_body() {
 
 void apply_local(const LocalOut& o, void* player, bool vr) {
   const int me = game::local_actor();
+  if (o.viewOut && player) begin_local_body(player, vr);  // the dance starts once the view is out (emote_session.h)
   if (o.start >= 0) {
     void* clip = g.a.clips[o.start];
     const bool played = api::anim::play_on_player(player, clip, kBlendIn);
@@ -489,7 +497,7 @@ std::optional<int> wheel_input(void* player, bool vr) {
 }
 
 void end_everything_local() {
-  if (g.local && g.local->active()) {
+  if (g.local && (g.local->active() || g.local->waiting())) {
     void* player = g.localPlayer.get();
     apply_local(g.local->end_now(), player && game::alive(player) ? player : nullptr, false);
   }
@@ -596,17 +604,24 @@ void tick() {
     f.pos = {p.x, p.y, p.z};
     f.viewYaw = api::view::view_yaw();
     f.clipTime = api::anim::clip_time(player);
-    f.endAction = end_action_pressed(vr) && g.local->active() && !wheel::is_open();
+    f.dt = dt;
+    const bool dancing = g.local->active() || g.local->waiting();
+    f.endAction = dancing && ((end_action_pressed(vr) && !wheel::is_open()) || journal_open(player));
   }
   if (present && keys::keys_ready()) {
-    if (const std::optional<int> played = wheel_input(player, vr)) apply_local(g.local->pick(*played, f), player, vr);
+    if (const std::optional<int> played = wheel_input(player, vr)) {
+      // On screen the dance waits for the view to be out, so its song does not start at the camera (the user's
+      // ruling); VR's view never moves.
+      const float wait = vr ? 0.0f : api::view::seconds_until_out();
+      apply_local(g.local->pick(*played, f, wait), player, vr);
+    }
   } else if (wheel::is_open()) {
     wheel::close();
     g.wheelIn = WheelInput{};
     set_look(true);
   }
   apply_local(g.local->tick(f), player, vr);
-  if (g.local->active() && !vr) hold_items_in_hand();
+  if ((g.local->active() || g.local->waiting()) && !vr) hold_items_in_hand();
   // In VR the head stays hidden while it would sit over the view.
   if (g.head && game::alive(g.head)) {
     void* cam = game::local_camera();

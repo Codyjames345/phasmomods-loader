@@ -21,13 +21,13 @@ struct Layer {
   float weight = 0.0f;
   float target = 1.0f;
   float rate = 0.0f;  // weight per second; 0 is at once
+  int order = 0;      // its output's sorting order
 };
 
 struct Body {
   Held player;
   Held animator;
   std::vector<Layer> layers;  // oldest first; the last is the newest, over the others
-  int nextOrder = kSortingOrder;
 };
 
 std::vector<Body> g_bodies;
@@ -65,7 +65,7 @@ bool play_on_player(void* player, void* clip, float blendIn) {
   }
   Body* body = find(player);
   if (!body) {
-    g_bodies.push_back(Body{player, animator, {}, kSortingOrder});
+    g_bodies.push_back(Body{player, animator, {}});
     body = &g_bodies.back();
   }
   // At most two clips: a third ends the older of the two at once.
@@ -83,7 +83,10 @@ bool play_on_player(void* player, void* clip, float blendIn) {
   }
   phasmo::AnimationPlayables::SetApplyFootIK(&l.clip, true);
   phasmo::AnimationPlayables::SetTarget(&l.output, animator);
-  phasmo::AnimationPlayables::SetSortingOrder(&l.output, body->nextOrder++);
+  // Over the clip still on the body, if any; a lone clip is at kSortingOrder (tick_player_anims), so at most two
+  // above it.
+  l.order = body->layers.empty() ? kSortingOrder : body->layers.back().order + 1;
+  phasmo::AnimationPlayables::SetSortingOrder(&l.output, l.order);
   phasmo::PlayableOutputHandle::SetSourcePlayable(&l.output, &l.clip, 0);
   l.target = 1.0f;
   l.rate = blendIn > 0.0f ? 1.0f / blendIn : 0.0f;
@@ -137,6 +140,11 @@ void tick_player_anims(float dt) {
         destroy(b.layers.front());
         b.layers.erase(b.layers.begin());
       }
+    // A lone clip goes back to the first order, so the next one over it never climbs toward the rig's.
+    if (b.layers.size() == 1 && b.layers.front().order != kSortingOrder) {
+      b.layers.front().order = kSortingOrder;
+      phasmo::AnimationPlayables::SetSortingOrder(&b.layers.front().output, kSortingOrder);
+    }
     if (!b.layers.empty() && std::all_of(b.layers.begin(), b.layers.end(),
                                          [](const Layer& l) { return l.target == 0.0f && l.weight <= 0.0f; }))
       end_body(b);

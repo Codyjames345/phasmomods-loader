@@ -5,8 +5,10 @@
 /// the body back: what an emote does.
 ///
 /// Each clip plays in a Playables graph of its own whose animation output targets the body's Animator
-/// (Player.animator) at a sorting order above the game's own and above Animation Rigging's (1000), so the clip wins
-/// where its weight is 1 and the game's animation shows through as the weight falls. A new clip blends in over the one
+/// (Player.animator) at a sorting order above the game's own and below Animation Rigging's (1000), as the game's own
+/// animations are: the clip wins over the game's controller where its weight is 1, and the game's animation shows
+/// through as the weight falls. The rig then runs over the clip, so what it places (the journal at the waist, the hand
+/// on a held item, the torch's aim) follows the dancing body. A new clip blends in over the one
 /// playing; when it is in fully, the old graph is destroyed. Stopping blends the weight to 0 and destroys the graphs,
 /// so the Animator is the game's alone again, exactly as before. Humanoid clips retarget onto the investigator's body
 /// (sdk/guides/custom-animation.md). The game's side is in sdk/systems/players.md, "The body".
@@ -18,9 +20,9 @@
 
 namespace pm::api::anim {
 
-/// The sorting order of the first clip's output: above the game's Animator (0) and Animation Rigging's RigBuilder
-/// (1000). Each later clip on a body takes the next order, so it lies over the one before.
-inline constexpr int kSortingOrder = 2000;
+/// The sorting order of a clip's output: above the game's Animator (0) and below Animation Rigging's RigBuilder
+/// (1000). A clip blending in over another takes the next order; a lone clip is set back to this one.
+inline constexpr int kSortingOrder = 500;
 
 /// Plays a clip on a player's body, blending it in from the pose the body has now. A clip already playing on that body
 /// stays under the new one until the new one is in fully, then is ended; a third clip asked for while two blend ends

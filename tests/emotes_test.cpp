@@ -144,6 +144,7 @@ void a_song_loops_at_its_own_points() {
   CHECK(!song_jumped(1.0, 99.0, SongLoop{0.0f, 0.0f}));
   // An emote's loop: its own points when given, else its clip's length.
   EmoteAsset e = kEmotes[0];
+  e.songLoopStart = e.songLoopSeconds = 0.0f;  // none given
   CHECK(song_loop_of(e, 9.0f).start == 0.0f && song_loop_of(e, 9.0f).length == 9.0f);
   e.songLoopStart = 2.0f;
   e.songLoopSeconds = 3.0f;
@@ -223,7 +224,10 @@ void every_slot_has_its_names() {
   // The two songs whose loop is not their clip's (the author, 2026-11-10), measured from the tracks: both from 0 s.
   CHECK(kEmotes[2].songLoopStart == 0.0f && std::fabs(kEmotes[2].songLoopSeconds - 16.692f) < 1e-4f);  // Floss
   CHECK(kEmotes[7].songLoopStart == 0.0f && std::fabs(kEmotes[7].songLoopSeconds - 12.631f) < 1e-4f);  // Take The L
-  for (int i : {0, 1, 3, 4, 5, 6}) CHECK(kEmotes[i].songLoopSeconds == 0.0f);  // the rest loop with their clips
+  // The rest, from the author's rough points (2026-11-10), measured on the waveform as Floss was.
+  const float measured[] = {8.542f, 16.0f, 0, 15.118f, 18.935f, 32.542f, 19.2f};
+  for (int i : {0, 1, 3, 4, 5, 6})
+    CHECK(kEmotes[i].songLoopStart == 0.0f && std::fabs(kEmotes[i].songLoopSeconds - measured[i]) < 1e-4f);
 }
 
 }  // namespace

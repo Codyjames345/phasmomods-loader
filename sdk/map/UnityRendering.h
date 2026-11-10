@@ -45,6 +45,25 @@ inline constexpr pm::sdk::EntryDesc Renderer_set_enabled{.key = "Renderer.set_en
                                                          .owner = "Renderer", .name = "set_enabled",
                                                          .params = UnityRendering_bool};
 
+/// How a renderer takes part in shadows (UnityEngine.Rendering, UnityEngine.CoreModule). The game draws the local
+/// player's own head as shadows only (PlayerCharacter.headRenderersToTurnOff). Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc ShadowCastingMode{.key = "ShadowCastingMode", .name = "ShadowCastingMode",
+                                                      .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine.Rendering"};
+
+/// Drawn, and casting shadows. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc ShadowCastingMode_On{.key = "ShadowCastingMode.On", .kind = pm::sdk::Kind::EnumValue,
+                                                         .owner = "ShadowCastingMode", .name = "On"};
+
+/// The renderer's ShadowCastingMode. Decompiled: PlayerCharacter's head methods call its setter.
+inline constexpr pm::sdk::EntryDesc Renderer_get_shadowCastingMode{
+    .key = "Renderer.get_shadowCastingMode", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Renderer", .name = "get_shadowCastingMode"};
+
+/// Sets the renderer's ShadowCastingMode. Decompiled: PlayerCharacter's head methods call it.
+inline constexpr pm::sdk::EntryDesc Renderer_set_shadowCastingMode{
+    .key = "Renderer.set_shadowCastingMode", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "Renderer", .name = "set_shadowCastingMode"};
+
 /// Unity's light component (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Light{.key = "Light", .name = "Light", .assembly = "UnityEngine.CoreModule",
                                           .ns = "UnityEngine"};
@@ -579,7 +598,17 @@ struct Renderer {
   static constexpr pm::api::Method<pm::map::Renderer_get_sharedMaterials, void*(void*)> get_sharedMaterials{};
   /// set_sharedMaterials(renderer, materials), a Material[]. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Renderer_set_sharedMaterials, void(void*, void*)> set_sharedMaterials{};
+  /// get_shadowCastingMode(renderer), a ShadowCastingMode. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::Renderer_get_shadowCastingMode, int32_t(void*)> get_shadowCastingMode{};
+  /// set_shadowCastingMode(renderer, mode), a ShadowCastingMode. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Renderer_set_shadowCastingMode, void(void*, int32_t)>
+      set_shadowCastingMode{};
 };
+
+/// How a renderer takes part in shadows. Unresolved: 0.
+namespace ShadowCastingMode {
+inline constexpr pm::api::EnumValue<pm::map::ShadowCastingMode_On> On{};  ///< On(): the value's number in this game build
+}  // namespace ShadowCastingMode
 
 /// A light. `light` below is the Light.
 struct Light {
