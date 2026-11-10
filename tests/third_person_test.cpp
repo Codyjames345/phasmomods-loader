@@ -88,6 +88,16 @@ constexpr int32_t kShadowsOnly = 3, kShadowOn = 1;
 
 Obj g_net, g_rig, g_player, g_camera, g_gameData, g_bodyA, g_bodyB, g_cameraClass, g_dataClass, g_goClass, g_hitClass;
 Obj g_character, g_characterClass, g_hair;  // the body's PlayerCharacter and its one head renderer
+// The body's model (its Animator's object) with the watch's face on PlayerView (11) and a belt on layer 4 under it, and
+// an item put in the hand, on PlayerView.
+Obj g_model, g_watch, g_belt, g_item;
+constexpr int32_t kPlayerAnimator = 0x10;
+std::vector<void*> children_of(void* t) {
+  if (t == &g_model) return {&g_watch, &g_belt};
+  return {};
+}
+int32_t fake_child_count(void* t, void*) { return static_cast<int32_t>(children_of(t).size()); }
+void* fake_get_child(void* t, int32_t i, void*) { return children_of(t).at(static_cast<size_t>(i)); }
 int32_t g_rayMask = 0;                      // the layer mask the last wall check was given
 std::vector<Obj*> g_made;
 std::vector<void*> g_destroyed;
@@ -187,10 +197,14 @@ void give() {
   fake::method(map::Behaviour_get_enabled, reinterpret_cast<void*>(&fake_get_enabled));
   fake::method(map::GameObject_get_layer, reinterpret_cast<void*>(&fake_layer));
   fake::method(map::GameObject_set_layer, reinterpret_cast<void*>(&fake_set_layer));
+  fake::method(map::Transform_get_childCount, reinterpret_cast<void*>(&fake_child_count));
+  fake::method(map::Transform_GetChild, reinterpret_cast<void*>(&fake_get_child));
+  fake::field(map::Player_animator, kPlayerAnimator);
   // The game's layers as far as AlivePlayer (10), the layer other players' bodies are drawn on.
   fake::layer_names({"Default", "TransparentFX", "Ignore Raycast", "", "Water", "UI", "EMF", "UV", "Item", "Ghost",
-                     "AlivePlayer"});
+                     "AlivePlayer", "PlayerView"});
   fake::layer(map::Layer_AlivePlayer);
+  fake::layer(map::Layer_PlayerView);
   fake::method(map::Physics_RaycastHit, reinterpret_cast<void*>(&fake_raycast));
   fake::method(map::RaycastHit_get_distance, reinterpret_cast<void*>(&fake_hit_distance));
   fake::value(map::QueryTriggerInteraction_Ignore, 1);
@@ -222,6 +236,11 @@ void give() {
   void* head = fake::array(sizeof(void*), 1);
   static_cast<void**>(pm::api::ValueArray{head}.at(0))[0] = &g_hair;
   at<void*>(&g_character, kHeadRenderers) = head;
+  at<void*>(&g_player, kPlayerAnimator) = &g_model;
+  at<int32_t>(&g_model, kLayer) = 4;
+  at<int32_t>(&g_watch, kLayer) = 11;
+  at<int32_t>(&g_belt, kLayer) = 4;
+  at<int32_t>(&g_item, kLayer) = 11;
 }
 
 Obj* our_camera() {
@@ -241,6 +260,11 @@ void the_view_copies_the_camera_and_draws_the_body() {
   // the local body in its first-person passes, over everything (the limbs over the head of the fifth run).
   CHECK(at<int32_t>(&g_bodyA, kLayer) == 10 && at<int32_t>(&g_bodyB, kLayer) == 10 && at<int32_t>(&g_hair, kLayer) == 10);
   CHECK(at<int32_t>(cam, kMask) == (0x0F | 0x400));  // AlivePlayer drawn
+  // What the game hangs on the body on PlayerView (the watch's face) is drawn as others see it too; the rest stays.
+  CHECK(at<int32_t>(&g_watch, kLayer) == 10 && at<int32_t>(&g_belt, kLayer) == 4);
+  // An item a mod puts in the hand while the view is on, likewise.
+  view::draw_as_seen(&g_item);
+  CHECK(at<int32_t>(&g_item, kLayer) == 10);
   CHECK(at<int32_t>(&g_hair, kShadow) == kShadowOn);  // the head drawn, not shadows only
   CHECK(at<int32_t>(&g_camera, kMask) == 0x0F);           // the player's camera untouched
   CHECK(!at<bool>(&g_camera, kEnabled));                  // and off while the view is on
@@ -272,6 +296,7 @@ void the_view_copies_the_camera_and_draws_the_body() {
   CHECK(near(view::view_yaw(), 90.0f, 1e-2f));
   view::stop_third_person();
   CHECK(at<bool>(&g_camera, kEnabled));  // stopped at once: the player's camera on again
+  CHECK(at<int32_t>(&g_item, kLayer) == 11 && at<int32_t>(&g_watch, kLayer) == 11);  // back as the game had them
 }
 
 void the_view_says_how_long_until_it_is_out() {
@@ -286,6 +311,16 @@ void the_view_says_how_long_until_it_is_out() {
   view::tick_third_person(view::kEaseSeconds / 4);  // a quarter of the way back
   CHECK(near(view::seconds_until_out(), view::kEaseSeconds / 4, 1e-3f));
   view::stop_third_person();
+}
+
+void what_the_game_moved_meanwhile_keeps_its_layer() {
+  give();
+  view::begin_third_person();
+  view::draw_as_seen(&g_item);
+  at<int32_t>(&g_item, kLayer) = 8;  // the item dropped mid-dance: the game put it on Item
+  view::stop_third_person();
+  CHECK(at<int32_t>(&g_item, kLayer) == 8);
+  CHECK(at<int32_t>(&g_watch, kLayer) == 11);
 }
 
 void the_ease_ends_where_it_started() {
@@ -305,6 +340,7 @@ void the_ease_ends_where_it_started() {
   CHECK(cam && std::find(g_destroyed.begin(), g_destroyed.end(), static_cast<void*>(cam)) != g_destroyed.end());
   CHECK(at<int32_t>(&g_hair, kShadow) == kShadowsOnly);  // the head as the game had it
   CHECK(at<int32_t>(&g_bodyA, kLayer) == 4 && at<int32_t>(&g_bodyB, kLayer) == 5 && at<int32_t>(&g_hair, kLayer) == 6);
+  CHECK(at<int32_t>(&g_watch, kLayer) == 11);
 }
 
 void a_new_start_while_easing_back_turns_out_again() {
@@ -355,6 +391,7 @@ int main() {
   the_ease_is_smooth_and_bounded();
   the_view_copies_the_camera_and_draws_the_body();
   the_ease_ends_where_it_started();
+  what_the_game_moved_meanwhile_keeps_its_layer();
   the_view_says_how_long_until_it_is_out();
   a_new_start_while_easing_back_turns_out_again();
   a_lost_camera_ends_the_view_at_once();

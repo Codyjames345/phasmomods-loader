@@ -86,9 +86,28 @@ void move_to_alive(void* renderers, State::Moved& moved) {
   }
 }
 
+// Moves each GameObject under `transform` (itself included) on PlayerView, the first-person layer, to AlivePlayer: what
+// the game hangs on the body there (the watch's face and its canvas) would draw over the body from outside.
+void move_view_layer(void* transform, State::Moved& moved, int depth = 0) {
+  const int32_t from = phasmo::Layers::PlayerView.index(), to = phasmo::Layers::AlivePlayer.index();
+  if (!transform || from < 0 || to < 0 || depth > 32) return;
+  if (void* go = phasmo::Component::get_gameObject(transform); go && phasmo::GameObject::get_layer(go) == from &&
+                                                               std::none_of(moved.begin(), moved.end(), [&](const auto& m) {
+                                                                 return m.first.get() == go;
+                                                               })) {
+    moved.emplace_back(go, from);
+    phasmo::GameObject::set_layer(go, to);
+  }
+  const int32_t count = phasmo::Transform::get_childCount(transform);
+  for (int32_t i = 0; i < count; ++i) move_view_layer(phasmo::Transform::GetChild(transform, i), moved, depth + 1);
+}
+
+// Gives each moved GameObject its layer back, where it still has the one it was given: one the game moved since (an
+// item dropped mid-dance) keeps the game's layer.
 void restore_layers(State::Moved& moved) {
+  const int32_t given = phasmo::Layers::AlivePlayer.index();
   for (auto& [go, layer] : moved)
-    if (go && alive(go)) phasmo::GameObject::set_layer(go, layer);
+    if (go && alive(go) && phasmo::GameObject::get_layer(go) == given) phasmo::GameObject::set_layer(go, layer);
   moved.clear();
 }
 
@@ -177,6 +196,8 @@ bool begin_third_person() {
   void* player = local_player();
   move_to_alive(player ? phasmo::Player::renderers.get(player) : nullptr, g.viewMoved);
   move_to_alive(head_renderers(), g.viewMoved);
+  void* animator = player ? phasmo::Player::animator.get(player) : nullptr;
+  move_view_layer(animator && alive(animator) ? phasmo::Component::get_transform(animator) : nullptr, g.viewMoved);
   show_head();
   void* dataType = phasmo::UniversalAdditionalCameraData::type.type_object();
   void* playerData = dataType ? phasmo::Component::GetComponent(playerCam, dataType) : nullptr;
@@ -245,6 +266,13 @@ void tick_third_person(float dt) {
 }
 
 bool in_third_person() { return g.phase != Phase::Off; }
+
+void draw_as_seen(void* object) {
+  if (g.phase == Phase::Off || !object || !alive(object)) return;
+  void* t = phasmo::GameObject::type.is(object) ? phasmo::GameObject::get_transform(object)
+                                                : phasmo::Component::get_transform(object);
+  move_view_layer(t, g.viewMoved);
+}
 
 float seconds_until_out() {
   switch (g.phase) {

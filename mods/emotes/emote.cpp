@@ -90,9 +90,11 @@ struct Facing {
   float bodyYaw = 0.0f;
   float easeBack = -1.0f;  // seconds left easing back to `original` after the emote, -1 while dancing
   float offset = 0.0f;     // the yaw the model is turned by under its root, degrees
-  // The journal's hanger (JournalRigController.constraintParent), which Animation Rigging places from the body's pose;
-  // the dance plays over the rig, so it is kept where it hung on the waist bone when the dance began.
-  api::Held journal, waist;
+  // The journal (its JournalRigController's object), which the game moves each Update to its hanger, placed by Animation
+  // Rigging from the body's pose: the dance plays over the rig, so it is kept where it hung on the waist bone when the
+  // dance began. Never the hanger itself: the game saves and restores the hanger's place as the journal opens and
+  // closes, so a change there stays (the journal came back in front of the face, the sixth run).
+  api::Held journal, waist, book;
   Pose onWaist{};
 };
 
@@ -233,26 +235,29 @@ Pose pose_of(void* t) {
   return {{p.x, p.y, p.z}, {q.x, q.y, q.z, q.w}};
 }
 
-// The journal's hanger and the waist bone it hangs from, with where it hangs now, as the game's pose has it.
+// The journal and the waist bone it hangs from, with where it hangs now, as the game's pose has it.
 void hold_journal(Facing& f, void* player) {
-  void* journal = phasmo::Player::journal.get(player);
-  void* rig = journal && game::alive(journal) ? phasmo::JournalController::rig.get(journal) : nullptr;
-  void* hanger = rig && game::alive(rig) ? phasmo::JournalRigController::constraintParent.get(rig) : nullptr;
+  void* book = phasmo::Player::journal.get(player);
+  void* rig = book && game::alive(book) ? phasmo::JournalController::rig.get(book) : nullptr;
+  void* journal = rig && game::alive(rig) ? game::transform_of(rig) : nullptr;
   void* animator = animator_of(player);
   void* waist = animator ? phasmo::Animator::GetBoneTransform(animator, phasmo::HumanBodyBones::Spine()) : nullptr;
-  if (!hanger || !game::alive(hanger) || !waist) return;
-  f.journal = hanger;
+  if (!journal || !waist || phasmo::JournalController::open.get(book)) return;
+  f.journal = journal;
   f.waist = waist;
-  f.onWaist = relative_to(pose_of(waist), pose_of(hanger));
+  f.book = book;
+  f.onWaist = relative_to(pose_of(waist), pose_of(journal));
   static bool logged = false;
   if (!logged) PM_LOG("Emotes: the journal hangs from %s while dancing", api::to_utf8(phasmo::Object::get_name(waist)).c_str());
   logged = true;
 }
 
 // Puts the journal back where it hangs on the dancing waist. The mod's tick runs after the frame's animation, so this
-// is the pose that renders; the rig places it from the game's pose again next frame.
+// is the pose that renders; the game moves it to its hanger again in its next Update (JournalRigController.Update), so
+// nothing stays. Not while the journal is open: the game holds it then.
 void keep_journal(const Facing& f) {
   if (!f.journal || !game::alive(f.journal) || !f.waist || !game::alive(f.waist)) return;
+  if (!f.book || !game::alive(f.book) || phasmo::JournalController::open.get(f.book)) return;
   const Pose at = placed_on(pose_of(f.waist), f.onWaist);
   game::set_position(f.journal, {at.p.x, at.p.y, at.p.z});
   game::set_rotation(f.journal, {at.q.x, at.q.y, at.q.z, at.q.w});
@@ -340,6 +345,8 @@ void start_song(int actor, void* player, int emote) {
     return;
   }
   phasmo::AudioSource::set_clip(source, clip);
+  // The song in the bundle is cut to its loop, so the engine loops it sample for sample (emote_assets.h).
+  phasmo::AudioSource::set_loop(source, true);
   phasmo::AudioSource::set_spatialBlend(source, 1.0f);
   phasmo::AudioSource::set_volume(source, actor == game::local_actor() ? kOwnSongVolume : kSongVolume);
   // It falls off with distance as the player's own voice does (the voice's AudioSource).
@@ -359,13 +366,6 @@ void start_song(int actor, void* player, int emote) {
       phasmo::AudioSource::set_outputAudioMixerGroup(source, group);
   phasmo::AudioSource::Play(source, 0);
   g.songs[actor].source = source;
-}
-
-void restart_song(int actor) {
-  auto it = g.songs.find(actor);
-  if (it == g.songs.end() || !it->second.source || !game::alive(it->second.source)) return;
-  phasmo::AudioSource::Stop(it->second.source, true);
-  phasmo::AudioSource::Play(it->second.source, 0);  // every loop starts at 0 (emote_assets.h)
 }
 
 // ---- This client's own investigator ----
@@ -394,6 +394,7 @@ void hold_items_in_hand() {
   game::set_parent(t, g.hand, false);
   game::set_local_position(t, {0.0f, 0.0f, 0.0f});
   game::set_local_rotation(t, {0.0f, 0.0f, 0.0f, 1.0f});
+  api::view::draw_as_seen(item);  // the camera slot's first-person layer would draw it over the body
   for (const api::Held& m : g.movedItems)
     if (m.get() == item) return;
   g.movedItems.emplace_back(item);
@@ -458,7 +459,6 @@ void apply_local(const LocalOut& o, void* player, bool vr) {
     end_local_body();
     end_facing(me);
   }
-  if (o.restartSong) restart_song(me);
   if (o.bodyYaw && !o.stop) {
     auto it = g.facings.find(me);
     if (it != g.facings.end()) it->second.bodyYaw = *o.bodyYaw;
@@ -562,9 +562,6 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
         stop_song(o.actor);
         end_facing(o.actor);
         break;
-      case RemoteOut::RestartSong:
-        restart_song(o.actor);
-        break;
       case RemoteOut::Yaw: {
         auto it = g.facings.find(o.actor);
         if (it != g.facings.end()) it->second.bodyYaw = o.yaw;
@@ -642,6 +639,7 @@ void tick() {
     f.pos = {p.x, p.y, p.z};
     f.viewYaw = api::view::view_yaw();
     f.clipTime = api::anim::clip_time(player);
+    f.dt = dt;
     const bool dancing = g.local->active();
     f.endAction = dancing && ((end_action_pressed(vr) && !wheel::is_open()) || journal_open(player));
   }

@@ -90,21 +90,14 @@ void a_one_shot_ends_by_itself() {
   CHECK(s.tick(here(3.0)).stop);
 }
 
-void a_loop_keeps_going_and_its_song_restarts() {
+// The song loops itself in the game (cut to its loop, AudioSource.loop): the session never restarts it, which cut it
+// mid-wave a frame late (the sixth in-game run).
+void a_loop_keeps_going() {
   LocalSession s(table());
   s.pick(0, here());
-  CHECK(!s.tick(here(1.9)).restartSong);
-  const LocalOut o = s.tick(here(2.05));
-  CHECK(!o.stop && o.restartSong);  // the clip looped: so does the song
-  CHECK(!s.tick(here(3.0)).restartSong);
+  CHECK(!s.tick(here(1.9)).stop);
+  CHECK(!s.tick(here(2.05)).stop);  // the clip looped
   CHECK(!s.tick(here(30.0)).stop && s.active());
-}
-
-void a_song_with_its_own_loop_restarts_at_its_own_point() {
-  LocalSession s(table());
-  s.pick(2, here());
-  for (double t = 0.1; t < 16.6; t += 0.1) CHECK(!s.tick(here(t)).restartSong);  // the clip loops ten times
-  CHECK(s.tick(here(16.75)).restartSong);
 }
 
 void a_new_pick_cuts_in() {
@@ -114,8 +107,6 @@ void a_new_pick_cuts_in() {
   const LocalOut o = s.pick(3, here(0.6));
   CHECK(o.start == 3 && !o.stop);  // one clip and one song: the new one replaces the old, no stop between
   CHECK(o.send.size() == 1 && o.send[0].kind == Kind::Start && o.send[0].emote == 3);
-  // The song restart counts from the new clip's own time.
-  CHECK(!s.tick(here(0.1)).restartSong);
 }
 
 void death_ends_the_emote_first() {
@@ -147,6 +138,41 @@ void the_body_turns_and_is_shared() {
   f.viewYaw = 130.0f;
   o = s.tick(f);
   CHECK(has(o.send, Kind::Facing));
+}
+
+// The user's ruling (2026-11-10): walking within the half metre turns the body smoothly to the way it goes, so it does
+// not drift sideways or backwards.
+void walking_turns_the_body_to_the_way_it_goes() {
+  LocalSession s(table());
+  s.pick(0, here());  // looking along +z, the body with it
+  LocalFrame f = here(0.5);
+  f.dt = 0.1f;
+  f.pos.x += 0.1f;  // walking right at 1 m/s
+  LocalOut o = s.tick(f);
+  const float step = kTurnDegreesPerSecond * 0.1f;
+  CHECK(o.bodyYaw && std::fabs(*o.bodyYaw - step) < 1e-3f);  // turning, not at once
+  f.pos.x += 0.1f;
+  o = s.tick(f);
+  CHECK(o.bodyYaw && std::fabs(*o.bodyYaw - std::min(90.0f, 2 * step)) < 1e-3f);
+  for (int i = 0; i < 5; ++i) o = s.tick(f);  // standing: it keeps the way it went (within ninety of the view)
+  CHECK(o.bodyYaw && std::fabs(*o.bodyYaw - 90.0f) < 1e-3f && s.active());
+  // Walking back (toward the view) turns it round, the short way.
+  LocalSession back(table());
+  back.pick(0, here());
+  LocalFrame b = here(0.5);
+  b.dt = 0.1f;
+  for (int i = 0; i < 3; ++i) {
+    b.pos.z -= 0.1f;
+    o = back.tick(b);
+  }
+  CHECK(o.bodyYaw && std::fabs(std::fabs(wrap_degrees(*o.bodyYaw)) - std::min(180.0f, 3 * step)) < 1e-3f);
+  // Too slow to be walking (a sway of the body): the view's rule holds.
+  LocalSession sway(table());
+  sway.pick(0, here());
+  LocalFrame w = here(0.5);
+  w.dt = 0.1f;
+  w.pos.x += 0.01f;  // 0.1 m/s
+  CHECK(sway.tick(w).bodyYaw.value_or(-1.0f) == 0.0f);
 }
 
 void a_lost_investigator_ends_it() {
@@ -200,11 +226,8 @@ void a_vanished_emoter_is_cleaned_up() {
   CHECK(did(r.tick({}, false), RemoteOut::Stop, 6));
 }
 
-void a_peers_song_loops_with_its_clip() {
+void a_peers_one_shot_ends_here_too() {
   RemoteSessions r(table());
-  r.receive(2, EmoteMsg{Kind::Start, 0, 0, 0, 0, 0}, false, false);
-  CHECK(!did(r.tick({RemoteFrame{2, true, false, 1.9}}, false), RemoteOut::RestartSong, 2));
-  CHECK(did(r.tick({RemoteFrame{2, true, false, 2.05}}, false), RemoteOut::RestartSong, 2));
   // A one-shot peer's clip that played out ends for this client too.
   r.receive(8, EmoteMsg{Kind::Start, 5, 0, 0, 0, 0}, false, false);
   CHECK(did(r.tick({RemoteFrame{8, true, false, 3.1}}, false), RemoteOut::Stop, 8));
@@ -218,16 +241,16 @@ int main() {
   each_listed_action_ends_it();
   switching_items_does_not();
   a_one_shot_ends_by_itself();
-  a_loop_keeps_going_and_its_song_restarts();
-  a_song_with_its_own_loop_restarts_at_its_own_point();
+  a_loop_keeps_going();
   a_new_pick_cuts_in();
   death_ends_the_emote_first();
   the_body_turns_and_is_shared();
+  walking_turns_the_body_to_the_way_it_goes();
   a_lost_investigator_ends_it();
   a_peer_dances_where_told();
   the_living_never_see_the_dead_dance();
   a_vanished_emoter_is_cleaned_up();
-  a_peers_song_loops_with_its_clip();
+  a_peers_one_shot_ends_here_too();
   std::printf("%s\n", g_failures ? "emotes_play tests FAILED" : "emotes_play tests passed");
   return g_failures ? 1 : 0;
 }

@@ -634,8 +634,10 @@ inline constexpr pm::sdk::EntryDesc JournalRigController_animator{
     .owner = "JournalRigController", .type = "Animator"};
 
 /// The Transform the book hangs from while it is not in its animation: the body's JournalParent, which Animation
-/// Rigging's Journal Parent Rig places between a socket on the waist bone (JournalBeltSocket) and one in the right hand.
-/// Read from the class dump and the PCPlayer prefab.
+/// Rigging's Journal Parent Rig places between a socket on the waist bone (JournalBeltSocket), one in the right hand and
+/// a target in front of the face. The rig's Update moves the book (its own object) to its follow target each frame,
+/// this one while the book is closed. SaveJournalLastPosition keeps this Transform's local position as the book opens and
+/// SetJournalPosition puts it back as it closes, so a change to it stays. Decompiled.
 inline constexpr pm::sdk::EntryDesc JournalRigController_constraintParent{
     .key = "JournalRigController.constraintParent", .kind = pm::sdk::Kind::Field,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "JournalRigController", .name = "constraintParent",

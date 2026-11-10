@@ -38,6 +38,12 @@ inline constexpr pm::sdk::EntryDesc AudioSource_set_mute{.key = "AudioSource.set
                                                          .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
                                                          .name = "set_mute", .params = UnityAudio_bool};
 
+/// Sets whether the source loops its clip. The engine loops it sample for sample, so a clip cut to its loop repeats
+/// without a seam. Inferred: Unity's documented property setter (in the class dump).
+inline constexpr pm::sdk::EntryDesc AudioSource_set_loop{.key = "AudioSource.set_loop",
+                                                         .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
+                                                         .name = "set_loop", .params = UnityAudio_bool};
+
 /// Sets the source's volume, 0 to 1. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc AudioSource_set_volume{.key = "AudioSource.set_volume",
                                                            .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
@@ -256,6 +262,8 @@ struct AudioSource {
   static constexpr pm::api::Method<pm::map::AudioSource_set_spatialBlend, void(void*, float)> set_spatialBlend{};
   /// set_mute(source, muted). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::AudioSource_set_mute, void(void*, bool)> set_mute{};
+  /// set_loop(source, loops). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::AudioSource_set_loop, void(void*, bool)> set_loop{};
   /// set_volume(source, volume). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::AudioSource_set_volume, void(void*, float)> set_volume{};
   /// set_minDistance(source, metres). Unresolved: does nothing.
