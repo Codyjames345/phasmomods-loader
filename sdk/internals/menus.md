@@ -88,3 +88,9 @@ action's binding and write only the text showing the binding, and
 raise the row's update event; neither writes `RebindActionUI.m_ActionLabel`. The first in-game run showed a copied row
 labelled with the copied row's words ("Forward Movement"), which is the label's `TextLocaliserUI` writing its key's text
 when the copy woke. The SDK takes the localiser off a copy's label (`sdk/api/keybinds.cpp`).
+
+The menu's place and layout were read from `resources.assets` with UnityPy (the `PCPlayer` prefab's hierarchy and its
+RectTransforms; the layout group's spacing from its raw serialized fields, its type tree being stripped). The main menu's
+scene (`level2`) holds no `RebindActionUI`; the maps' (the prison's `level11`, the training map's `level3`) hold only the
+whiteboards'. The fourth in-game run showed why that matters: the row was made, at the end of a list whose `Content` it
+did not grow, and could not be scrolled to.

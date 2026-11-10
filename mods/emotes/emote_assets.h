@@ -18,21 +18,28 @@ struct EmoteAsset {
   const char* clip;     ///< its AnimationClip's name in the animation package
   const char* nameKey;  ///< the key of its name under the wheel
   /// Where its song loops back to, in seconds, and how long its loop is; a length of 0 loops the song with its clip
-  /// (the author's rule, 2026-11-10). The songs mark no loop of their own: the two that differ were measured.
+  /// (the author's rule, 2026-11-10). The songs mark no loop of their own: from the author's rough points, each was
+  /// measured where the waveform repeats its start (normalised cross-correlation at 22.05 kHz, given with each).
   float songLoopStart = 0.0f;
   float songLoopSeconds = 0.0f;
 };
 
 inline constexpr EmoteAsset kEmotes[kSegments] = {
-    {"disco_fever", "DiscoFever", pm::i18n::key("emotes.name.0")},
-    {"electro_swing", "ElectroSwing", pm::i18n::key("emotes.name.1")},
+    // Its song loops every 8.542 s from its start (the author: about 8.2 s; correlation 0.999).
+    {"disco_fever", "DiscoFever", pm::i18n::key("emotes.name.0"), 0.0f, 8.542f},
+    // Every 16.000 s (the author: about 15.8 s; correlation 0.9996).
+    {"electro_swing", "ElectroSwing", pm::i18n::key("emotes.name.1"), 0.0f, 16.0f},
     // Its song loops every 16.692 s from its start, not with its 1.633 s clip (the author, 2026-11-10; measured: the
     // track repeats sample for sample, correlation 0.9994).
     {"floss", "Floss", pm::i18n::key("emotes.name.2"), 0.0f, 16.692f},
-    {"groove_jam", "GrooveJam", pm::i18n::key("emotes.name.3")},
-    {"orange_justice", "OrangeJustice", pm::i18n::key("emotes.name.4")},
-    {"scenario", "Scenario", pm::i18n::key("emotes.name.5")},
-    {"smooth_moves", "SmoothMoves", pm::i18n::key("emotes.name.6")},
+    // Every 15.118 s (the author: about 15 s; correlation 0.994).
+    {"groove_jam", "GrooveJam", pm::i18n::key("emotes.name.3"), 0.0f, 15.118f},
+    // Every 18.935 s (the author: about 19 s; correlation 0.996).
+    {"orange_justice", "OrangeJustice", pm::i18n::key("emotes.name.4"), 0.0f, 18.935f},
+    // Every 32.542 s (the author: about 32.5 s; correlation 0.983).
+    {"scenario", "Scenario", pm::i18n::key("emotes.name.5"), 0.0f, 32.542f},
+    // Every 19.200 s (the author: about 19.1 s; correlation 1.000).
+    {"smooth_moves", "SmoothMoves", pm::i18n::key("emotes.name.6"), 0.0f, 19.2f},
     // Its song loops every 12.631 s (eight bars) from its start, not with its 0.833 s clip (the author, 2026-11-10;
     // measured on the loudness envelope, correlation 0.89 at 1 ms: the track varies a little from pass to pass).
     {"take_the_l", "TakeTheL", pm::i18n::key("emotes.name.7"), 0.0f, 12.631f},

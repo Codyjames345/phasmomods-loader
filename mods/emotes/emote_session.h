@@ -33,10 +33,12 @@ struct LocalFrame {
   float viewYaw = 0.0f;     ///< the view's yaw: the head camera's on screen, the headset's in VR
   bool endAction = false;   ///< a game action that ends an emote was pressed this frame
   double clipTime = -1.0;   ///< the emote clip's own time on its body, -1 when none plays
+  float dt = 0.0f;          ///< seconds since the last frame
 };
 
 /// What the glue does for this client's investigator this frame.
 struct LocalOut {
+  bool viewOut = false;           ///< take the view out now: a picked emote starts once it is out
   int start = -1;                 ///< play this emote: its clip, its song from the start, the view (cuts in over any)
   bool stop = false;              ///< end the emote: clip out, song off, view back
   bool restartSong = false;       ///< put the song back to its loop point
@@ -49,10 +51,20 @@ class LocalSession {
  public:
   explicit LocalSession(const EmoteTable& table) : table_(table) {}
 
-  /// The wheel played `emote`: start it, or cut it in over the one dancing.
-  LocalOut pick(int emote, const LocalFrame& f) {
+  /// The wheel played `emote`: start it, or cut it in over the one dancing. With `waitSeconds` above 0 (the view's
+  /// time to ease out), the view goes out now and the emote starts that much later, so its song never starts at the
+  /// camera; what would end a dance ends the wait.
+  LocalOut pick(int emote, const LocalFrame& f, float waitSeconds = 0.0f) {
     LocalOut o;
     if (!f.present || emote < 0 || emote >= kSegments) return o;
+    if (waitSeconds > 0.0f) {
+      pending_ = emote;
+      waitLeft_ = waitSeconds;
+      pendingPos_ = f.pos;
+      o.viewOut = true;
+      return o;
+    }
+    pending_ = -1;
     active_ = true;
     emote_ = emote;
     start_ = f.pos;
@@ -68,6 +80,19 @@ class LocalSession {
   /// One frame of the emote: whether it ends, its song, its facing.
   LocalOut tick(const LocalFrame& f) {
     LocalOut o;
+    if (pending_ >= 0) {
+      if (!f.present || f.dead || f.endAction || moved_too_far(pendingPos_, f.pos)) {
+        pending_ = -1;
+        if (!active_) {  // only the view to bring back: nothing was played or sent
+          o.stop = true;
+          return o;
+        }
+      } else if ((waitLeft_ -= f.dt) <= 0.0f) {
+        const int emote = pending_;
+        pending_ = -1;
+        return pick(emote, f);
+      }
+    }
     if (!active_) return o;
     const EmoteInfo& info = table_[static_cast<size_t>(emote_)];
     const bool died = f.dead && !wasDead_;
@@ -93,11 +118,15 @@ class LocalSession {
   /// Ends the emote now, from outside (the mod stopping): what to undo and send.
   LocalOut end_now() {
     LocalOut o;
+    if (pending_ >= 0 && !active_) o.stop = true;
+    pending_ = -1;
     if (active_) end(o);
     return o;
   }
 
   bool active() const { return active_; }
+  /// A picked emote waits for the view to be out.
+  bool waiting() const { return pending_ >= 0; }
   int emote() const { return active_ ? emote_ : -1; }
   float yaw() const { return yaw_; }
   const EmoteInfo& info() const { return table_[static_cast<size_t>(emote_ < 0 ? 0 : emote_)]; }
@@ -112,6 +141,9 @@ class LocalSession {
   EmoteTable table_;
   bool active_ = false, wasDead_ = false;
   int emote_ = -1;
+  int pending_ = -1;  // the picked emote waiting for the view, -1 for none
+  float waitLeft_ = 0.0f;
+  Point pendingPos_{};
   Point start_{};
   float yaw_ = 0.0f, sentYaw_ = 0.0f;
   double prevClip_ = -1.0;

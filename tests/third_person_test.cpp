@@ -15,6 +15,7 @@
 #include "Transform.h"
 #include "UnityObject.h"
 #include "UnityPostProcessing.h"
+#include "UnityRendering.h"
 #include "UnityWorld.h"
 #include "check.h"
 #include "fake_game.h"
@@ -80,10 +81,13 @@ T& at(void* o, int32_t offset) {
 }
 // The fake's own layout: a component, its GameObject and its Transform are one fake object.
 constexpr int32_t kPos = 0x10, kFwd = 0x1C, kEnabled = 0x28, kMask = 0x2C, kLayer = 0x30, kPost = 0x34,
-                  kVolMask = 0x38, kCopied = 0x40;
-constexpr int32_t kNetRig = 0x08, kNetPlayer = 0x48, kRigCamera = 0x08, kPlayerRenderers = 0x08;
+                  kVolMask = 0x38, kCopied = 0x40, kShadow = 0x44;
+constexpr int32_t kNetRig = 0x08, kNetPlayer = 0x48, kRigCamera = 0x08, kPlayerRenderers = 0x08, kHeadRenderers = 0x08;
+constexpr int32_t kShadowsOnly = 3, kShadowOn = 1;
 
 Obj g_net, g_rig, g_player, g_camera, g_gameData, g_bodyA, g_bodyB, g_cameraClass, g_dataClass, g_goClass, g_hitClass;
+Obj g_character, g_characterClass, g_hair;  // the body's PlayerCharacter and its one head renderer
+int32_t g_rayMask = 0;                      // the layer mask the last wall check was given
 std::vector<Obj*> g_made;
 std::vector<void*> g_destroyed;
 float g_wallAt = 1000.0f;  // metres behind the head a wall lies
@@ -121,12 +125,18 @@ void fake_set_mask(void* c, int32_t m, void*) { at<int32_t>(c, kMask) = m; }
 void fake_set_enabled(void* b, bool on, void*) { at<bool>(b, kEnabled) = on; }
 bool fake_get_enabled(void* b, void*) { return at<bool>(b, kEnabled); }
 int32_t fake_layer(void* go, void*) { return at<int32_t>(go, kLayer); }
-bool fake_raycast(const phasmo::Ray*, void* hit, float maxDistance, int32_t, int32_t, void*) {
+bool fake_raycast(const phasmo::Ray*, void* hit, float maxDistance, int32_t mask, int32_t, void*) {
+  g_rayMask = mask;
   if (g_wallAt > maxDistance) return false;
   *static_cast<float*>(hit) = g_wallAt;
   return true;
 }
 float fake_hit_distance(void* hit, void*) { return *static_cast<float*>(hit); }
+void* fake_in_children(void* c, void* type, bool, void*) {
+  return c == &g_player && type == phasmo::PlayerCharacter::type.type_object() ? &g_character : nullptr;
+}
+int32_t fake_get_shadow(void* r, void*) { return at<int32_t>(r, kShadow); }
+void fake_set_shadow(void* r, int32_t mode, void*) { at<int32_t>(r, kShadow) = mode; }
 void fake_destroy(void* o, float) {
   g_destroyed.push_back(o);
   fake::destroy(o);
@@ -142,6 +152,12 @@ void give() {
   fake::type(map::UniversalAdditionalCameraData, &g_dataClass);
   fake::type(map::GameObject, &g_goClass);
   fake::type(map::RaycastHit, &g_hitClass);
+  fake::type(map::PlayerCharacter, &g_characterClass);
+  fake::field(map::PlayerCharacter_headRenderersToTurnOff, kHeadRenderers);
+  fake::method(map::Component_GetComponentInChildren, reinterpret_cast<void*>(&fake_in_children));
+  fake::method(map::Renderer_get_shadowCastingMode, reinterpret_cast<void*>(&fake_get_shadow));
+  fake::method(map::Renderer_set_shadowCastingMode, reinterpret_cast<void*>(&fake_set_shadow));
+  fake::value(map::ShadowCastingMode_On, kShadowOn);
   fake::method(map::Network_get_Instance, reinterpret_cast<void*>(&fake_network));
   fake::field(map::Network_localRig, kNetRig);
   fake::field(map::Network_localPlayer, kNetPlayer);
@@ -189,6 +205,16 @@ void give() {
   static_cast<void**>(pm::api::ValueArray{renderers}.at(0))[0] = &g_bodyA;
   static_cast<void**>(pm::api::ValueArray{renderers}.at(1))[0] = &g_bodyB;
   at<void*>(&g_player, kPlayerRenderers) = renderers;
+  // The player's own colliders (its root's capsule, the head that follows the camera) are on layer 10; the local rig's
+  // on 11. The head's one renderer, on layer 6, draws as shadows only on the player's own client, as the game sets it.
+  at<int32_t>(&g_player, kLayer) = 10;
+  at<int32_t>(&g_rig, kLayer) = 11;
+  g_character.klass = &g_characterClass;
+  at<int32_t>(&g_hair, kLayer) = 6;
+  at<int32_t>(&g_hair, kShadow) = kShadowsOnly;
+  void* head = fake::array(sizeof(void*), 1);
+  static_cast<void**>(pm::api::ValueArray{head}.at(0))[0] = &g_hair;
+  at<void*>(&g_character, kHeadRenderers) = head;
 }
 
 Obj* our_camera() {
@@ -204,7 +230,8 @@ void the_view_copies_the_camera_and_draws_the_body() {
   Obj* cam = our_camera();
   CHECK(cam && at<bool>(cam, kCopied));
   if (!cam) return;
-  CHECK(at<int32_t>(cam, kMask) == (0x0F | 0x10 | 0x20));  // the body's layers added
+  CHECK(at<int32_t>(cam, kMask) == (0x0F | 0x10 | 0x20 | 0x40));  // the body's and the head's layers added
+  CHECK(at<int32_t>(&g_hair, kShadow) == kShadowOn);               // the head drawn, not shadows only
   CHECK(at<int32_t>(&g_camera, kMask) == 0x0F);           // the player's camera untouched
   CHECK(!at<bool>(&g_camera, kEnabled));                  // and off while the view is on
   // The URP settings copied onto the view's own data.
@@ -219,6 +246,10 @@ void the_view_copies_the_camera_and_draws_the_body() {
   view::tick_third_person(view::kEaseSeconds);
   CHECK(near(at<phasmo::Vector3>(cam, kPos).z, -view::kOrbitDistance, 1e-3f));
   CHECK(near(at<phasmo::Vector3>(cam, kPos).y, 1.6f + view::kOrbitHeight, 1e-3f));
+  // The wall check leaves out the player's own colliders and rig: walking forward leaves the head's colliders, which
+  // follow the camera a frame late, just behind it, where the check looks.
+  CHECK((g_rayMask & (1 << 10)) == 0 && (g_rayMask & (1 << 11)) == 0);
+  CHECK((g_rayMask & 1) != 0);  // a wall on Default still counts
   // A wall a metre behind pulls it in.
   g_wallAt = 1.0f;
   view::tick_third_person(0.016f);
@@ -231,6 +262,20 @@ void the_view_copies_the_camera_and_draws_the_body() {
   CHECK(near(view::view_yaw(), 90.0f, 1e-2f));
   view::stop_third_person();
   CHECK(at<bool>(&g_camera, kEnabled));  // stopped at once: the player's camera on again
+}
+
+void the_view_says_how_long_until_it_is_out() {
+  give();
+  CHECK(near(view::seconds_until_out(), view::kEaseSeconds));  // off: the whole ease
+  view::begin_third_person();
+  view::tick_third_person(view::kEaseSeconds / 3);
+  CHECK(near(view::seconds_until_out(), view::kEaseSeconds * 2 / 3, 1e-3f));
+  view::tick_third_person(view::kEaseSeconds);
+  CHECK(view::seconds_until_out() == 0.0f);  // out
+  view::end_third_person();
+  view::tick_third_person(view::kEaseSeconds / 4);  // a quarter of the way back
+  CHECK(near(view::seconds_until_out(), view::kEaseSeconds / 4, 1e-3f));
+  view::stop_third_person();
 }
 
 void the_ease_ends_where_it_started() {
@@ -248,6 +293,7 @@ void the_ease_ends_where_it_started() {
   CHECK(at<bool>(&g_camera, kEnabled));  // the player's camera on again
   CHECK(at<int32_t>(&g_camera, kMask) == 0x0F);
   CHECK(cam && std::find(g_destroyed.begin(), g_destroyed.end(), static_cast<void*>(cam)) != g_destroyed.end());
+  CHECK(at<int32_t>(&g_hair, kShadow) == kShadowsOnly);  // the head as the game had it
 }
 
 void a_new_start_while_easing_back_turns_out_again() {
@@ -296,6 +342,7 @@ int main() {
   the_ease_is_smooth_and_bounded();
   the_view_copies_the_camera_and_draws_the_body();
   the_ease_ends_where_it_started();
+  the_view_says_how_long_until_it_is_out();
   a_new_start_while_easing_back_turns_out_again();
   a_lost_camera_ends_the_view_at_once();
   the_body_shows_on_the_players_camera();

@@ -117,7 +117,12 @@ struct State {
   Held asset, map;
   bool ready = false;
   std::string lastSaved;  // the text last written or read, so a frame without a change writes nothing
-  std::vector<Held> headings;  // the GameObjects of the mod's headings in the keybinds menu, one per list
+  std::vector<Held> extras;  // the GameObjects of the mod's headings and dividers in the keybinds menu
+  struct Grown {
+    Held rect;       // the RectTransform made taller for the mod's rows: a list's Content
+    float by = 0.0f;
+  };
+  std::vector<Grown> grown;
   int rowTicks = 0;
   std::string lastSeen;        // what the last search of the keybinds menu found, for its log line
   bool loggedWaiting = false;  // the wait for the game's bindings was logged
@@ -257,6 +262,56 @@ bool row_device(void* row, Device& out) {
   return false;
 }
 
+// The keybinds menu's list a row sits in: its parent, laid out by a HorizontalOrVerticalLayoutGroup, under the local
+// player's own PCPlayer when there is one (the menu is in each player's journal). Null for anything else: the training
+// whiteboards' rows sit on no layout, and another player's journal holds a menu too.
+void* menu_list(void* row) {
+  void* t = phasmo::Component::get_transform(row);
+  void* list = t ? phasmo::Transform::get_parent(t) : nullptr;
+  void* groupType = phasmo::HorizontalOrVerticalLayoutGroup::type.type_object();
+  if (!list || !groupType || !phasmo::Component::GetComponent(list, groupType)) return nullptr;
+  void* net = phasmo::Network::get_Instance();
+  void* player = net ? phasmo::Network::localPlayer.get(net) : nullptr;
+  void* playerTransform = player && alive(player) ? phasmo::Component::get_transform(player) : nullptr;
+  if (playerTransform && !phasmo::Transform::IsChildOf(t, playerTransform)) return nullptr;
+  return list;
+}
+
+// A divider beside `row` in its list (a sibling with no RebindActionUI: the game's lists put one between rows), or null.
+void* divider_beside(void* row) {
+  void* t = phasmo::Component::get_transform(row);
+  void* list = t ? phasmo::Transform::get_parent(t) : nullptr;
+  if (!list) return nullptr;
+  const int32_t at = phasmo::Transform::GetSiblingIndex(t), count = phasmo::Transform::get_childCount(list);
+  void* rowType = phasmo::RebindActionUI::type.type_object();
+  for (const int32_t i : {at - 1, at + 1}) {
+    if (i < 0 || i >= count) continue;
+    void* sibling = phasmo::Transform::GetChild(list, i);
+    if (sibling && !phasmo::Component::GetComponent(sibling, rowType)) return phasmo::Component::get_gameObject(sibling);
+  }
+  return nullptr;
+}
+
+// The height a child takes in its list: its own and the layout's spacing before it.
+float taken_height(void* object, float spacing) {
+  void* t = object ? phasmo::GameObject::get_transform(object) : nullptr;
+  return t ? phasmo::RectTransform::get_rect(t).height + spacing : 0.0f;
+}
+
+// Makes the list's scroll content taller by `by`, so the scroll reaches what was added at its end: the list itself, or
+// its parent when the list is stretched to its parent's height (the game's Layout in its Content, whose height is
+// fixed to the game's own rows).
+void grow_list(void* list, float by) {
+  if (by <= 0.0f) return;
+  const phasmo::Vector2 lo = phasmo::RectTransform::get_anchorMin(list), hi = phasmo::RectTransform::get_anchorMax(list);
+  void* target = lo.y != hi.y ? phasmo::Transform::get_parent(list) : list;
+  if (!target) return;
+  phasmo::Vector2 size = phasmo::RectTransform::get_sizeDelta(target);
+  size.y += by;
+  phasmo::RectTransform::set_sizeDelta(target, size);
+  g.grown.push_back({target, by});
+}
+
 // A copy of `templ`'s GameObject at the end of its list (Instantiate puts it last), and the copy's RebindActionUI; null
 // both, logged with `what`, when the row cannot be copied.
 void* copy_row(void* templ, const char* what, void*& copyObject) {
@@ -332,16 +387,23 @@ void* make_row(void* templ, Key& k, size_t d) {
   return copy;
 }
 
-// Takes the mod's headings and rows out of the menu.
+// Takes the mod's headings, dividers and rows out of the menu, and its lists back to their height.
 void remove_rows() {
   for (Key& k : g.keys)
     for (Held& r : k.rows) {
       if (r && alive(r)) phasmo::Object::Destroy(phasmo::Component::get_gameObject(r), 0.0f);
       r = nullptr;
     }
-  for (Held& h : g.headings)
+  for (Held& h : g.extras)
     if (h && alive(h)) phasmo::Object::Destroy(h, 0.0f);
-  g.headings.clear();
+  g.extras.clear();
+  for (State::Grown& grown : g.grown)
+    if (grown.rect && alive(grown.rect)) {
+      phasmo::Vector2 size = phasmo::RectTransform::get_sizeDelta(grown.rect);
+      size.y -= grown.by;
+      phasmo::RectTransform::set_sizeDelta(grown.rect, size);
+    }
+  g.grown.clear();
 }
 
 void ensure_rows() {
@@ -358,7 +420,7 @@ void ensure_rows() {
   std::array<void*, kDevices> templ{};
   for (size_t i = 0; i < rows.size(); ++i) {
     Device d{};
-    if (rows[i] && row_device(rows[i], d)) templ[static_cast<size_t>(d)] = rows[i];
+    if (rows[i] && menu_list(rows[i]) && row_device(rows[i], d)) templ[static_cast<size_t>(d)] = rows[i];
   }
   // What the search found, logged when it changes (the keybinds menu loads with some scenes and not others).
   const std::string seen = std::to_string(rows.size()) + (templ[0] ? " k" : " -") + (templ[1] ? "g" : "-");
@@ -385,19 +447,37 @@ void ensure_rows() {
     if (void* parent = list_of(d); parent && std::find(lists.begin(), lists.end(), parent) == lists.end())
       lists.push_back(parent);
   for (void* list : lists) {
-    if (!g.title.empty())
-      for (size_t d = 0; d < kDevices; ++d)
-        if (list_of(d) == list) {
-          if (void* h = make_heading(templ[d])) g.headings.push_back(h);
-          break;
-        }
+    void* first = nullptr;  // a row of this list, for the heading and the divider
+    for (size_t d = 0; d < kDevices && !first; ++d)
+      if (list_of(d) == list) first = templ[d];
+    void* group = phasmo::Component::GetComponent(list, phasmo::HorizontalOrVerticalLayoutGroup::type.type_object());
+    const float spacing = group ? phasmo::HorizontalOrVerticalLayoutGroup::get_spacing(group) : 0.0f;
+    void* divider = divider_beside(first);
+    float added = 0.0f;
+    // A divider before each thing added, as the game's list puts one between rows.
+    const auto add_divider = [&] {
+      void* copy = divider ? phasmo::Object::Instantiate(divider, list, false) : nullptr;
+      if (!copy) return;
+      g.extras.push_back(copy);
+      added += taken_height(copy, spacing);
+    };
+    if (!g.title.empty()) {
+      add_divider();
+      if (void* h = make_heading(first)) {
+        g.extras.push_back(h);
+        added += taken_height(h, spacing);
+      }
+    }
     for (Key& k : g.keys)
       for (size_t d = 0; d < kDevices; ++d)
         if (k.actions[d] && list_of(d) == list) {
+          add_divider();
           k.rows[d] = make_row(templ[d], k, d);
-          if (k.rows[d])
-            PM_LOG("keys: %s.%s has its row in the keybinds menu (device %zu)", g.owner.c_str(), k.desc.id.c_str(), d);
+          if (!k.rows[d]) continue;
+          added += taken_height(phasmo::Component::get_gameObject(k.rows[d]), spacing);
+          PM_LOG("keys: %s.%s has its row in the keybinds menu (device %zu)", g.owner.c_str(), k.desc.id.c_str(), d);
         }
+    grow_list(list, added);
   }
 }
 

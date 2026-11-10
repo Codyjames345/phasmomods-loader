@@ -1,12 +1,16 @@
 #include "third_person.h"
 
+#include <algorithm>
 #include <cmath>
+#include <utility>
+#include <vector>
 
 #include "Camera.h"
 #include "Player.h"
 #include "Transform.h"
 #include "UnityObject.h"
 #include "UnityPostProcessing.h"
+#include "UnityRendering.h"
 #include "UnityWorld.h"
 #include "held.h"
 #include "log.h"
@@ -25,6 +29,7 @@ struct State {
   Held camera;  // the view's own Camera; its GameObject goes with it
   Held shownOn;  // the camera show_own_body added the body's layers to
   int32_t shownMask = 0;
+  std::vector<std::pair<Held, int32_t>> head;  // the head's renderers the view draws, each with the mode it had
 };
 State g;
 
@@ -35,11 +40,65 @@ void* local_camera() {
   return cam && alive(cam) ? cam : nullptr;
 }
 
-// The layers of the local player's body's renderers, as a mask.
-int32_t body_layers() {
+void* local_player() {
   void* net = phasmo::Network::get_Instance();
   void* player = net ? phasmo::Network::localPlayer.get(net) : nullptr;
-  if (!player || !alive(player)) return 0;
+  return player && alive(player) ? player : nullptr;
+}
+
+int32_t layer_bit(void* component) {
+  void* go = component && alive(component) ? phasmo::Component::get_gameObject(component) : nullptr;
+  const int32_t layer = go ? phasmo::GameObject::get_layer(go) : -1;
+  return layer >= 0 && layer < 32 ? 1 << layer : 0;
+}
+
+// The head's renderers (PlayerCharacter.headRenderersToTurnOff), which the game draws as shadows only on the player's
+// own client.
+void* head_renderers() {
+  void* player = local_player();
+  void* type = phasmo::PlayerCharacter::type.type_object();
+  void* character = player && type ? phasmo::Component::GetComponentInChildren(player, type, true) : nullptr;
+  return character ? phasmo::PlayerCharacter::headRenderersToTurnOff.get(character) : nullptr;
+}
+
+int32_t head_layers() {
+  const RefArray renderers{head_renderers()};
+  int32_t mask = 0;
+  for (size_t i = 0; i < renderers.size(); ++i) mask |= layer_bit(renderers[i]);
+  return mask;
+}
+
+// Draws the head while the view is outside, keeping each renderer's mode to give back.
+void show_head() {
+  if (!g.head.empty()) return;
+  const RefArray renderers{head_renderers()};
+  const int32_t on = static_cast<int32_t>(phasmo::ShadowCastingMode::On());
+  for (size_t i = 0; i < renderers.size(); ++i) {
+    void* r = renderers[i];
+    if (!r || !alive(r)) continue;
+    g.head.emplace_back(r, phasmo::Renderer::get_shadowCastingMode(r));
+    phasmo::Renderer::set_shadowCastingMode(r, on);
+  }
+}
+
+void restore_head() {
+  for (auto& [r, mode] : g.head)
+    if (r && alive(r)) phasmo::Renderer::set_shadowCastingMode(r, mode);
+  g.head.clear();
+}
+
+// The layers of the local player's own colliders and rig: the wall check passes through them. The head's colliders
+// follow the camera a frame late, so walking forward leaves them just behind it, where the check looks.
+int32_t own_layers() {
+  void* net = phasmo::Network::get_Instance();
+  void* rig = net ? phasmo::Network::localRig.get(net) : nullptr;
+  return layer_bit(local_player()) | layer_bit(rig);
+}
+
+// The layers of the local player's body's renderers, as a mask.
+int32_t body_layers() {
+  void* player = local_player();
+  if (!player) return 0;
   const RefArray renderers{phasmo::Player::renderers.get(player)};
   int32_t mask = 0;
   for (size_t i = 0; i < renderers.size(); ++i) {
@@ -58,6 +117,7 @@ void finish() {
     if (go) phasmo::Object::Destroy(go, 0.0f);
   }
   if (g.playerCamera && alive(g.playerCamera)) phasmo::Behaviour::set_enabled(g.playerCamera, true);
+  restore_head();
   g.camera = nullptr;
   g.playerCamera = nullptr;
   g.phase = Phase::Off;
@@ -88,7 +148,8 @@ bool begin_third_person() {
     return false;
   }
   phasmo::Camera::CopyFrom(cam, playerCam);
-  phasmo::Camera::set_cullingMask(cam, phasmo::Camera::get_cullingMask(cam) | body_layers());
+  phasmo::Camera::set_cullingMask(cam, phasmo::Camera::get_cullingMask(cam) | body_layers() | head_layers());
+  show_head();
   void* dataType = phasmo::UniversalAdditionalCameraData::type.type_object();
   void* playerData = dataType ? phasmo::Component::GetComponent(playerCam, dataType) : nullptr;
   if (playerData) {
@@ -144,7 +205,7 @@ void tick_third_person(float dt) {
   const phasmo::Ray ray{{head.x, head.y, head.z}, {-forward.x, -forward.y, -forward.z}};
   pm::api::ValueArray hits{phasmo::RaycastHit::type.make_array(1)};
   void* hit = hits.size() ? hits.at(0) : nullptr;
-  const int32_t notPlayer = ~body_layers();
+  const int32_t notPlayer = ~(body_layers() | own_layers());
   if (hit && phasmo::Physics::RaycastHit(&ray, hit, distance + kWallMargin, notPlayer,
                                          static_cast<int32_t>(phasmo::QueryTriggerInteraction::Ignore())))
     distance = pulled_in(distance, phasmo::RaycastHit::get_distance(hit));
@@ -156,6 +217,20 @@ void tick_third_person(float dt) {
 }
 
 bool in_third_person() { return g.phase != Phase::Off; }
+
+float seconds_until_out() {
+  switch (g.phase) {
+    case Phase::Off:
+      return kEaseSeconds;
+    case Phase::Out:
+      return std::max(0.0f, kEaseSeconds - g.t);
+    case Phase::On:
+      return 0.0f;
+    case Phase::Back:
+      return std::min(kEaseSeconds, g.t);  // begin_third_person turns it out again from kEaseSeconds - t
+  }
+  return kEaseSeconds;
+}
 
 float view_yaw() {
   void* cam = local_camera();

@@ -30,7 +30,7 @@ inline constexpr float kVignette = 0.35f;  ///< the vignette behind the wheel, 0
 
 inline constexpr float kVrDiscMetres = 0.24f;    ///< the VR wheel's width across, in metres
 inline constexpr float kVrAboveHand = 0.12f;     ///< how far above the left hand the VR wheel floats, in metres
-inline constexpr int kTextureSize = 512;         ///< the drawn segments' and centre's texture size, in texels
+inline constexpr int kTextureSize = 1024;        ///< the drawn segments' and centre's texture size, in texels: as large as the disc on a large screen, so the edges stay sharp
 inline constexpr int kSortingOrder = 30000;      ///< the overlay canvas's order: over the game's HUD
 
 }  // namespace pm::emotes::style

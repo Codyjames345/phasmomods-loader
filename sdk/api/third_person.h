@@ -9,8 +9,10 @@
 /// off: the player's camera keeps its place, its AudioListener, the held item's slot and the game's raycasts from it.
 /// Each frame the view sits straight back from the player's head camera along its look, eased out over
 /// orbit_rule.h's kEaseSeconds to kOrbitDistance, pulled in short of a wall; the mouse goes on turning the head camera
-/// as the game does, so it turns the view. end_third_person eases it back into the head and then gives the player
-/// their camera again. show_own_body shows the body on the player's own camera instead (VR, whose view never moves).
+/// as the game does, so it turns the view. The wall check passes through the local player's own colliders and rig (their
+/// layers), which follow the camera a frame late. The head, which the game draws as shadows only on the player's own
+/// client (PlayerCharacter.headRenderersToTurnOff), is drawn while the view is on and given back its mode after.
+/// end_third_person eases it back into the head and then gives the player their camera again. show_own_body shows the body on the player's own camera instead (VR, whose view never moves).
 /// The game's side is in sdk/systems/media.md, "A camera of a mod's own, and screen effects".
 ///
 /// Main thread. Local only. Call tick_third_person every frame.
@@ -39,6 +41,12 @@ void tick_third_person(float dt);
 /// Whether the view is on, or easing back.
 /// @return True from begin_third_person until it has eased back.
 bool in_third_person();
+
+/// How long a begin_third_person now would take to have the view fully out: kEaseSeconds while it is off, what is left
+/// of the ease while it eases out, 0 while it is out, and while it eases back the time it would take to turn out again
+/// from where it is.
+/// @return Seconds, 0 to kEaseSeconds.
+float seconds_until_out();
 
 /// The yaw the view looks along, in degrees about the up axis (0 along +z, 90 along +x): the player's head camera's.
 /// @return The yaw, or 0 with no local camera.

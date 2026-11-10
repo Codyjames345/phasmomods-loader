@@ -75,6 +75,16 @@ itself never writes the label: neither `RebindActionUI.set_actionReference` nor 
 refresh the binding's text. So a copied row keeps a new label only once its localiser is gone. A copy made while the
 menu is hidden wakes when the player opens it.
 
+**Where the menu is.** The keybinds menu is part of each player's journal, not of a scene: the `PCPlayer` prefab holds it
+under `NetworkedJournal/Journal_anim/Journal2.0Canvas/Content/Pause Menu/3 Options/Controls Settings`, with one list for
+the keyboard and mouse (`PC/_Keyboard and mouse`) and one for a controller (`PC/_Controller`). The menu scene spawns the
+local player at its start (see [the lobby's journal](journal.md#the-lobbys-journal)), so the menu is there from the main
+menu on; every other player's journal holds a copy too. Each list is a scroll view whose `Layout` (a
+`HorizontalOrVerticalLayoutGroup`, spacing 15.5) stretches to fill a `Content` of fixed height, sized to the game's own
+rows: rows 100 high alternate with dividers, small images with no `RebindActionUI`. A row added at the end lies past the
+scroll's reach until the `Content` grows by its height and the spacing. The training whiteboards in each map show
+bindings with `RebindActionUI` too, on rows with no layout: a search for rows finds them as well.
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/menus.md).

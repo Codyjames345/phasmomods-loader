@@ -656,6 +656,14 @@ inline constexpr pm::sdk::EntryDesc PlayerCharacter_SetPlayerBodyType{
     .key = "PlayerCharacter.SetPlayerBodyType", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "PlayerCharacter", .name = "SetPlayerBodyType"};
 
+/// The head's renderers (hair, eyes, teeth and the head's cosmetics), a Renderer[]. The game draws them as shadows
+/// only on the player's own client, so the head does not fill the view: PlayerCharacter's methods that change the
+/// head's shadow casting and its layer walk this list. Decompiled.
+inline constexpr pm::sdk::EntryDesc PlayerCharacter_headRenderersToTurnOff{
+    .key = "PlayerCharacter.headRenderersToTurnOff", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PlayerCharacter", .name = "headRenderersToTurnOff",
+    .type = "Renderer[]"};
+
 /// The player's cosmetics (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerCosmetics{.key = "PlayerCosmetics",
                                                     .confidence = pm::sdk::Confidence::Decompiled,
@@ -1192,6 +1200,10 @@ struct PlayerCharacter {
   /// this client's own player (map note). A mod hooks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PlayerCharacter_SetPlayerBodyType, void(void*, int32_t)>
       SetPlayerBodyType{};
+  /// The type: type_object() for Component.GetComponentInChildren. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::PlayerCharacter> type{};
+  /// The head's Renderer[]: headRenderersToTurnOff.get(character). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::PlayerCharacter_headRenderersToTurnOff, void*> headRenderersToTurnOff{};
 };
 
 /// The voice recognition's phrase handler. `listener` below is the PhraseListenerController.

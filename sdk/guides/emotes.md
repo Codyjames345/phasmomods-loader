@@ -15,7 +15,8 @@ linked below.
   taken. VR defaults are not checked against the game.
 - The keyboard and gamepad bindings each get a row in the game's keybinds menu, labelled with your text, and the game's
   own rebinding runs on it. Your rows sit at the end of each list, under a heading with your mod's name (the manifest's,
-  which `shown_name` reads from the host). A player's rebinding is saved to the file you name and read back next time.
+  which `shown_name` reads from the host), with the list's own dividers between them; the list's scroll grows to reach
+  them. Rows are copied only from the local player's own keybinds menu, never from a map's training whiteboards. A player's rebinding is saved to the file you name and read back next time.
 - The key is ready (`keys_ready`) once the game's bindings can be read: the keybinds menu or a local player is loaded.
 
 How the game's actions and the menu work: [menus](../systems/menus.md#key-bindings).

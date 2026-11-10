@@ -4,6 +4,7 @@
 // sdk/systems/menus.md, "Key bindings". Run: build\keybinds_test.exe
 #include <atomic>
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <cstdint>
 #include <cstdio>
@@ -371,6 +372,13 @@ void a_rebinding_is_saved_and_read_back() {
 // under test can tell, except through these fields.
 constexpr int32_t kPartParent = 0x20, kPartSibling = 0x28, kPartActive = 0x2C;  // the fake's own
 Obj g_list, g_gameRow, g_gameLabel, g_localiserClass;
+// The menu's list (Layout: laid out, stretched in its Content) under the local player's PCPlayer, with a divider
+// before the game's row; a training whiteboard's row elsewhere, on no layout.
+Obj g_content, g_playerRoot, g_divider, g_layoutGroup, g_layoutClass, g_board, g_boardRow;
+constexpr int32_t kPartHeight = 0x30;  // the fake's own: a RectTransform's height
+constexpr int32_t kNetLocalPlayer = 0x10;
+constexpr float kSpacing = 15.5f;
+phasmo::Vector2 g_contentSize{1736.0f, 2575.0f};
 std::vector<void*> g_copies;  // what Object.Instantiate made
 std::vector<void*> g_destroyed;
 std::vector<void*> g_destroyedNow;          // what Object.DestroyImmediate took
@@ -402,8 +410,18 @@ void* fake_get_component(void* t, void* type, void*) {
     const auto it = g_localiserOf.find(t);
     return it == g_localiserOf.end() ? nullptr : it->second;
   }
-  return t;  // the copy is its own RebindActionUI
+  if (type == phasmo::HorizontalOrVerticalLayoutGroup::type.type_object()) return t == &g_list ? &g_layoutGroup : nullptr;
+  // A row (or a copy of one) is its own RebindActionUI; a divider has none.
+  return static_cast<Obj*>(t)->klass == &g_rowClass ? t : nullptr;
 }
+phasmo::Rect fake_rect(void* t, void*) { return {0.0f, 0.0f, 1642.0f, at<float>(t, kPartHeight)}; }
+phasmo::Vector2 fake_anchor_min(void* t, void*) { return t == &g_list ? phasmo::Vector2{0, 0} : phasmo::Vector2{0.5f, 0.5f}; }
+phasmo::Vector2 fake_anchor_max(void* t, void*) { return t == &g_list ? phasmo::Vector2{1, 1} : phasmo::Vector2{0.5f, 0.5f}; }
+phasmo::Vector2 fake_get_size(void* t, void*) { return t == &g_content ? g_contentSize : phasmo::Vector2{0, 0}; }
+void fake_set_size(void* t, phasmo::Vector2 v, void*) {
+  if (t == &g_content) g_contentSize = v;
+}
+float fake_spacing(void* group, void*) { return group == &g_layoutGroup ? kSpacing : 0.0f; }
 int32_t fake_child_count(void* t, void*) { return static_cast<int32_t>(g_kids[t].size()); }
 void* fake_get_child(void* t, int32_t i, void*) { return g_kids[t].at(static_cast<size_t>(i)); }
 bool fake_is_child_of(void* t, void* parent, void*) {
@@ -432,7 +450,16 @@ void a_mod_key_gets_a_row_beside_the_games() {
   g_destroyedNow.clear();
   g_kids.clear();
   g_localiserOf.clear();
+  g_copies.clear();
   fake::type(map::TextLocaliserUI, &g_localiserClass);
+  fake::type(map::HorizontalOrVerticalLayoutGroup, &g_layoutClass);
+  fake::method(map::HorizontalOrVerticalLayoutGroup_get_spacing, reinterpret_cast<void*>(&fake_spacing));
+  fake::method(map::RectTransform_get_rect, reinterpret_cast<void*>(&fake_rect));
+  fake::method(map::RectTransform_get_anchorMin, reinterpret_cast<void*>(&fake_anchor_min));
+  fake::method(map::RectTransform_get_anchorMax, reinterpret_cast<void*>(&fake_anchor_max));
+  fake::method(map::RectTransform_get_sizeDelta, reinterpret_cast<void*>(&fake_get_size));
+  fake::method(map::RectTransform_set_sizeDelta, reinterpret_cast<void*>(&fake_set_size));
+  fake::field(map::Network_localPlayer, kNetLocalPlayer);
   fake::method(map::Transform_get_childCount, reinterpret_cast<void*>(&fake_child_count));
   fake::method(map::Transform_GetChild, reinterpret_cast<void*>(&fake_get_child));
   fake::method(map::Transform_IsChildOf, reinterpret_cast<void*>(&fake_is_child_of));
@@ -460,20 +487,37 @@ void a_mod_key_gets_a_row_beside_the_games() {
   at<void*>(&g_gameRow, kRowBindingId) = pm::api::make_string("game-1");
   at<void*>(&g_gameRow, kRowLabel) = &g_gameLabel;
   at<void*>(&g_gameRow, kPartParent) = &g_list;
-  at<int32_t>(&g_gameRow, kPartSibling) = 4;
+  at<int32_t>(&g_gameRow, kPartSibling) = 1;
   at<bool>(&g_gameRow, kPartActive) = true;
-  g_rows = {&g_gameRow};
+  at<float>(&g_gameRow, kPartHeight) = 100.0f;
+  g_divider.klass = &g_textClass;
+  at<void*>(&g_divider, kPartParent) = &g_list;
+  at<bool>(&g_divider, kPartActive) = true;
+  at<float>(&g_divider, kPartHeight) = 6.0f;
+  g_kids[&g_list] = {&g_divider, &g_gameRow};
+  at<void*>(&g_list, kPartParent) = &g_content;
+  at<void*>(&g_content, kPartParent) = &g_playerRoot;
+  at<void*>(&g_net, kNetLocalPlayer) = &g_playerRoot;
+  g_contentSize = {1736.0f, 2575.0f};
+  // A whiteboard's row for the same binding, found after the menu's: it is never copied from.
+  std::memcpy(g_boardRow.bytes, g_gameRow.bytes, sizeof g_boardRow.bytes);
+  g_boardRow.klass = &g_rowClass;
+  at<void*>(&g_boardRow, kPartParent) = &g_board;
+  g_rows = {&g_gameRow, &g_boardRow};
   keys::begin_keys("test.mod", "Test Mod", temp_file("pm_keys_row.txt"));
   keys::add_key(emote_key());
   keys::tick_keys();
-  // Two copies in the gamepad's list (no keyboard row is loaded to copy), each at its end as Instantiate puts it: the
-  // mod's heading, then a row for the key's gamepad action.
-  CHECK(g_copies.size() == 2);
-  if (g_copies.size() != 2) return;
-  void* heading = g_copies[0];
-  void* copy = g_copies[1];
-  CHECK(at<void*>(heading, kPartParent) == &g_list && at<void*>(copy, kPartParent) == &g_list);
-  CHECK(at<int32_t>(copy, kPartSibling) == 4);  // not moved beside the game's row
+  // Four copies in the gamepad's list (no keyboard row is loaded to copy), each at its end as Instantiate puts it, in
+  // the list's own pattern: a divider, the mod's heading, a divider, a row for the key's gamepad action.
+  CHECK(g_copies.size() == 4);
+  if (g_copies.size() != 4) return;
+  void* heading = g_copies[1];
+  void* copy = g_copies[3];
+  CHECK(static_cast<Obj*>(g_copies[0])->klass == &g_textClass && static_cast<Obj*>(g_copies[2])->klass == &g_textClass);
+  for (void* c : g_copies) CHECK(at<void*>(c, kPartParent) == &g_list);  // the menu's list, not the whiteboard
+  CHECK(at<int32_t>(copy, kPartSibling) == 1);  // not moved beside the game's row
+  // The list's Content grows by what was added, its spacing with each, so the scroll reaches the new rows.
+  CHECK(std::fabs(g_contentSize.y - (2575.0f + 6 + 100 + 6 + 100 + 4 * kSpacing)) < 1e-3f);
   // The heading: the mod's name on its label, its row's own rebinding gone, its buttons hidden, its label shown.
   void* headingLabel = at<void*>(heading, kRowLabel);
   CHECK(g_texts[headingLabel] == "Test Mod");
@@ -492,11 +536,13 @@ void a_mod_key_gets_a_row_beside_the_games() {
   CHECK(at<bool>(g_kids[copy][1], kPartActive));  // a row keeps its buttons
   // A later tick, with the copies still there, makes no more.
   for (int i = 0; i < 120; ++i) keys::tick_keys();
-  CHECK(g_copies.size() == 2);
+  CHECK(g_copies.size() == 4);
   // Clearing the keys takes the heading and the row out of the menu.
   keys::clear_keys();
   CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), copy) != g_destroyed.end());
   CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), heading) != g_destroyed.end());
+  CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), g_copies[0]) != g_destroyed.end());  // the dividers too
+  CHECK(std::fabs(g_contentSize.y - 2575.0f) < 1e-3f);  // and the Content back to its size
 }
 
 }  // namespace
