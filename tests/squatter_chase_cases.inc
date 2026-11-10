@@ -845,36 +845,39 @@ void every_fall_says_its_line() {
   CHECK(line_for_move(Move::Stumble) == std::optional<Lines>(Lines::Trip));
 }
 
-// While its body falls the sheet is let go of its standing shape so it drops onto the floor rather than holding its cone
-// out in the air (user, 2026-11-10: something kept the sheet floating); as it gets up, the slack shrinks back over the
-// get-up, never at once, so the sheet is drawn back to the body rather than snapped. A point the head carries stays put.
-void the_sheet_falls_with_the_body() {
-  CHECK(sheet_slack(FallPhase::Falling, 0.0f) == 1.0f);
-  CHECK(sheet_slack(FallPhase::Up, 0.5f) == 0.0f);
-  CHECK(sheet_slack(FallPhase::GettingUp, 0.0f) == 1.0f && sheet_slack(FallPhase::GettingUp, 1.0f) == 0.0f);
-  float last = 1.0f;
-  for (float u = 0.0f; u <= 1.0f; u += 0.05f) {  // shrinks smoothly, only ever down
-    const float now = sheet_slack(FallPhase::GettingUp, u);
-    CHECK(now <= last + 1e-6f && now >= 0.0f);
+// Through a fall the sheet is worn rather than loose: its points are pinned to the body while it falls and gets up, so
+// the ragdoll cannot whip them across a room (user, 2026-11-10: the sheet spread everywhere, and getting up lagged), and
+// its own sway eases back over kClothEaseSeconds once it stands again (every cloth guide stops the simulation before a
+// ragdoll and fades it back in after).
+void the_sheet_follows_the_body_through_a_fall() {
+  CHECK(cloth_blend(-1.0f, 4.5f) == 0.0f);    // still falling under physics
+  CHECK(cloth_blend(0.0f, 4.5f) == 0.0f);     // the get-up's first frame
+  CHECK(cloth_blend(4.5f, 4.5f) == 0.0f);     // its last
+  CHECK(cloth_blend(4.5f + kClothEaseSeconds, 4.5f) == 1.0f);
+  CHECK(cloth_blend(1e9f, 0.0f) == 1.0f);     // a get-up clip of no length: free at once
+  float last = 0.0f;
+  for (int i = 0; i <= 20; ++i) {  // eases back, smoothly and only ever up
+    const float u = static_cast<float>(i) / 20.0f;
+    const float now = cloth_blend(4.5f + u * kClothEaseSeconds, 4.5f);
+    CHECK(now >= last - 1e-6f && now <= 1.0f);
     last = now;
   }
-  CHECK(slack_distance(0.0f, 1.0f) == 0.0f);                          // pinned at the head: never let go
-  CHECK(std::abs(slack_distance(0.12f, 1.0f) - (0.12f + kFallSlack)) < 1e-6f);
-  CHECK(slack_distance(0.12f, 0.0f) == 0.12f);                        // standing: as the sheet was made
-  CHECK(kFallSlack >= 1.0f);  // enough for a hem to reach the floor from a body lying on its side
+  CHECK(last == 1.0f);
+  CHECK(kClothEaseSeconds >= 0.2f && kClothEaseSeconds <= 1.0f);  // the fade the cloth guides use
+  CHECK(blend_distance(0.0f, 1.0f) == 0.0f);                      // pinned at the head: never let go
+  CHECK(blend_distance(0.12f, 0.0f) == 0.0f);                     // falling: pinned to the body
+  CHECK(std::abs(blend_distance(0.12f, 1.0f) - 0.12f) < 1e-6f);   // standing: as the sheet was made
+  CHECK(std::abs(blend_distance(0.12f, 0.5f) - 0.06f) < 1e-6f);
 }
 
-// The sheet's slack reaches the cloth in quarter steps, not every frame (user, 2026-11-10: getting up lagged badly while
-// the constraints were re-sent every few frames): a whole get-up sends at most four times.
-void the_sheet_slack_moves_in_steps() {
-  CHECK(slack_step(1.0f) == 1.0f && slack_step(0.0f) == 0.0f);
-  CHECK(slack_step(0.9f) == 1.0f && slack_step(0.8f) == 0.75f && slack_step(0.6f) == 0.5f);
-  CHECK(slack_step(0.1f) == 0.0f && slack_step(0.13f) == 0.25f);
-  CHECK(slack_step(1.5f) == 1.0f && slack_step(-0.2f) == 0.0f);
+// The blend reaches the cloth in eighth steps, not every frame: each change hands the cloth every point's constraint.
+void the_sheet_blend_moves_in_steps() {
+  CHECK(blend_step(0.0f) == 0.0f && blend_step(1.0f) == 1.0f);
+  CHECK(blend_step(0.05f) == 0.0f && blend_step(0.07f) == 0.125f);
+  CHECK(blend_step(0.5f) == 0.5f && blend_step(1.5f) == 1.0f && blend_step(-0.2f) == 0.0f);
   std::set<float> sent;
-  for (int i = 0; i <= 270; ++i) {  // a 4.5 s get-up at 60 frames a second
-    const float s = slack_step(sheet_slack(FallPhase::GettingUp, static_cast<float>(i) / 270.0f));
-    sent.insert(s);
+  for (int i = 0; i <= 540; ++i) {  // a 4.5 s get-up and its ease, at 60 frames a second
+    sent.insert(blend_step(cloth_blend(static_cast<float>(i) / 60.0f, 4.5f)));
   }
-  CHECK(sent.size() <= 5);  // 1, 0.75, 0.5, 0.25 and 0: four changes
+  CHECK(sent.size() <= 9);  // 0 held through the get-up, then the ease in eighths
 }

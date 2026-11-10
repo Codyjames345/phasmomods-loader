@@ -1329,8 +1329,8 @@ int main() {
   every_bone_under_the_hips_blends();
   it_turns_with_its_clips_before_running_on();
   every_fall_says_its_line();
-  the_sheet_falls_with_the_body();
-  the_sheet_slack_moves_in_steps();
+  the_sheet_follows_the_body_through_a_fall();
+  the_sheet_blend_moves_in_steps();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();

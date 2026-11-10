@@ -74,29 +74,39 @@ class FallState {
   std::optional<uint64_t> still_;  // since when its bodies have been slow
 };
 
-/** How much further, metres, each point of the sheet but those the head carries may move from where the body carries it
- * while the body falls: enough for the hem to drop to the floor from a body on its side (a starting value). */
-inline constexpr float kFallSlack = 2.0f;
+/**
+ * How far, seconds, the sheet takes back its own sway once it stands again, after its get-up's clip has played. A
+ * cloth let go of a pinned body all at once snaps back to it, so the sway comes back as a fade instead (Unreal's cloth
+ * blend weight and MagicaCloth's stabilizing time after a reset both fade in over a fraction of a second). A starting
+ * value, judged with the user in game.
+ */
+inline constexpr float kClothEaseSeconds = 0.5f;
 
 /**
- * How much of kFallSlack the sheet has (0 to 1): all of it while the body falls, shrinking smoothly to none over the
- * get-up (`riseShare` of it gone, 0 to 1), none standing. The sheet is let go at once but drawn back gradually, so it
- * never snaps to the body.
+ * How far the sheet's points may move from where the body carries them, as a share (0 to 1) of the limits the sheet was
+ * made with (figure::set_cloth_blend): none while its body falls and gets up, so the sheet is worn and follows the body
+ * exactly, and all of it `kClothEaseSeconds` after its get-up's clip has played.
+ *
+ * A cloth left free through a ragdoll is the one thing every cloth guide warns against: the falling body carries its
+ * points at the ragdoll's speed, they take whatever freedom they are given, and the sheet spreads across the room and
+ * blows up (Unity's Cloth manual, and the ragdoll guides that stop cloth before a fall and fade it back in after).
+ * `sinceRise` is seconds since the get-up began, and `clipSeconds` is that clip's length: negative `sinceRise` is a
+ * body still falling.
  */
-inline float sheet_slack(FallPhase phase, float riseShare) {
-  if (phase == FallPhase::Falling) return 1.0f;
-  if (phase == FallPhase::Up) return 0.0f;
-  const float u = std::clamp(riseShare, 0.0f, 1.0f);
-  return 1.0f - u * u * (3.0f - 2.0f * u);
+inline float cloth_blend(float sinceRise, float clipSeconds) {
+  const float free = sinceRise - clipSeconds;
+  if (free <= 0.0f) return 0.0f;
+  const float u = std::min(1.0f, free / kClothEaseSeconds);
+  return u * u * (3.0f - 2.0f * u);
 }
 
-/** `slack` brought to the nearest quarter, 0 to 1: the steps it reaches the cloth in, since each change re-sends every
- * point's constraint to the cloth (user, 2026-11-10: sent every few frames, getting up lagged badly). */
-inline float slack_step(float slack) { return std::round(std::clamp(slack, 0.0f, 1.0f) * 4.0f) / 4.0f; }
+/** How far a point that may move `base` metres from the body may move at `blend`: 0 pins it to the body, 1 leaves the
+ * sheet as it was made. A point the head carries (base 0) stays pinned whatever the blend. */
+inline float blend_distance(float base, float blend) { return base * std::clamp(blend, 0.0f, 1.0f); }
 
-/** How far a point the sheet lets move `base` metres from the body may move with `slack` of kFallSlack; a pinned point
- * (base 0) stays pinned. */
-inline float slack_distance(float base, float slack) { return base > 0.0f ? base + slack * kFallSlack : 0.0f; }
+/** `blend` brought to the nearest eighth, 0 to 1: the steps it reaches the cloth in, since each change re-sends every
+ * point's constraint to the cloth. A whole get-up and its ease send a handful of times, never once a frame. */
+inline float blend_step(float blend) { return std::round(std::clamp(blend, 0.0f, 1.0f) * 8.0f) / 8.0f; }
 
 /** How it gets up: from lying face down (Standing Up) or face up (Getting Up). */
 enum class GetUp { FaceDown, FaceUp };
