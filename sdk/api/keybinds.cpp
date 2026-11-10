@@ -369,7 +369,8 @@ void* make_heading(void* templ) {
   void* copyObject = nullptr;
   void* copy = copy_row(templ, "heading", copyObject);
   if (!copy) return nullptr;
-  void* label = label_row(copy, g.title);  // found once: its localiser, by which it is found, goes
+  // Bold and a quarter larger than a row's name (the user's ruling, 2026-11-10), by TextMeshPro's rich text tags.
+  void* label = label_row(copy, "<b><size=125%>" + g.title + "</size></b>");  // found once: its localiser goes
   void* labelTransform = label ? phasmo::Component::get_transform(label) : nullptr;
   void* root = phasmo::GameObject::get_transform(copyObject);
   const int32_t children = root ? phasmo::Transform::get_childCount(root) : 0;

@@ -88,8 +88,9 @@ bool load(void* bundle) {
   }
   const float inner = style::kRingInner / style::kDiscRadius;
   for (int i = 0; i < kSegments; ++i) {
-    const layout::Span s = layout::segment_span(i, style::kGapDegrees);
-    g.segments[i] = drawn(layout::sector_rgba(style::kTextureSize, inner, 1.0f, s.fromDeg, s.toDeg));
+    const layout::Span s = layout::segment_span(i);
+    g.segments[i] = drawn(layout::sector_rgba(style::kTextureSize, inner, 1.0f, s.fromDeg, s.toDeg,
+                                              style::kGapWidth / style::kDiscRadius));
     if (!g.segments[i]) return false;
   }
   g.centre = drawn(layout::circle_rgba(style::kTextureSize, 1.0f));

@@ -29,28 +29,51 @@ uint8_t alpha_polar(const std::vector<uint8_t>& rgba, int size, float degrees, f
   return alpha_at(rgba, size, x, y);
 }
 
-void the_wheel_shows_eight_segments_with_gaps() {
+// The alpha at a point given from the texture's centre in texels, x right and y up.
+uint8_t alpha_point(const std::vector<uint8_t>& rgba, int size, float x, float y) {
+  const int tx = static_cast<int>(std::floor(size / 2.0f + x)), ty = static_cast<int>(std::floor(size / 2.0f + y));
+  return alpha_at(rgba, size, tx, ty);
+}
+
+// The user's ruling (2026-11-10): the gaps between the eight segments are even, by circles and angles. Each segment is
+// the ring between two circles less a band of the same width along each boundary ray, so a gap is as wide at the rim as
+// at the centre circle, and the same between every pair.
+void the_wheel_shows_eight_segments_with_even_gaps() {
+  const int n = 512;
+  const float half = n / 2.0f, inner = 0.35f, gap = 0.05f;  // gap: its full width, a fraction of the half-size
+  const float gapTexels = gap * half;
   for (int i = 0; i < kSegments; ++i) {
-    const layout::Span s = layout::segment_span(i, style::kGapDegrees);
-    CHECK(near(s.toDeg - s.fromDeg, 45.0f - style::kGapDegrees));
-    CHECK(near((s.fromDeg + s.toDeg) / 2.0f, i * 45.0f));  // centred on its direction, the first straight up
+    const layout::Span s = layout::segment_span(i);
+    CHECK(near(s.toDeg - s.fromDeg, 45.0f) && near((s.fromDeg + s.toDeg) / 2.0f, i * 45.0f));
+    const std::vector<uint8_t> tex = layout::sector_rgba(n, inner, 1.0f, s.fromDeg, s.toDeg, gap);
+    CHECK(tex.size() == static_cast<size_t>(n * n * 4));
+    for (const float edgeDeg : {s.fromDeg, s.toDeg}) {
+      const float a = edgeDeg / 57.29577951f;
+      const float inward = edgeDeg == s.fromDeg ? 1.0f : -1.0f;  // toward the segment from this boundary
+      // Along the boundary ray (0 up, clockwise) and across it, toward the segment.
+      const float ux = std::sin(a), uy = std::cos(a), nx = std::cos(a) * inward, ny = -std::sin(a) * inward;
+      for (const float rFrac : {inner + 0.08f, (inner + 1.0f) / 2.0f, 0.92f}) {
+        const float r = rFrac * half;
+        const auto at = [&](float across) { return alpha_point(tex, n, ux * r + nx * across, uy * r + ny * across); };
+        CHECK(at(0.0f) == 0);                          // on the boundary: the gap
+        CHECK(at(gapTexels / 2.0f - 1.5f) == 0);       // still in the gap
+        CHECK(at(gapTexels / 2.0f + 1.5f) == 255);     // just past it, solid: the same width at every radius
+      }
+    }
+    // Inside the ring only: the centre circle's place and past the rim are clear; the middle of its span solid.
+    const float mid = i * 45.0f / 57.29577951f;
+    CHECK(alpha_point(tex, n, std::sin(mid) * half * (inner - 0.03f), std::cos(mid) * half * (inner - 0.03f)) == 0);
+    CHECK(alpha_point(tex, n, std::sin(mid) * half * 0.7f, std::cos(mid) * half * 0.7f) == 255);
+    CHECK(alpha_at(tex, n, 0, 0) == 0);
   }
-  // Neighbours leave the gap between them.
-  CHECK(near(layout::segment_span(1, 2.0f).fromDeg - layout::segment_span(0, 2.0f).toDeg, 2.0f));
-  // The drawn segment: solid inside its span and ring, clear outside, and clear in the gap.
-  const int n = 128;
-  const layout::Span s0 = layout::segment_span(0, 10.0f);
-  const std::vector<uint8_t> tex = layout::sector_rgba(n, 0.4f, 0.95f, s0.fromDeg, s0.toDeg);
-  CHECK(tex.size() == static_cast<size_t>(n * n * 4));
-  CHECK(alpha_polar(tex, n, 0.0f, 0.7f) == 255);    // in the middle of its span
-  CHECK(alpha_polar(tex, n, 30.0f, 0.7f) == 0);     // in the next segment's direction
-  CHECK(alpha_polar(tex, n, 21.0f, 0.7f) == 0);     // in the gap (span ends at 17.5)
-  CHECK(alpha_polar(tex, n, 0.0f, 0.2f) == 0);      // inside the ring: the centre circle's place
-  CHECK(alpha_at(tex, n, 0, 0) == 0);               // a corner
-  CHECK(tex[(n / 2 + (n / 2 - 20) * n) * 4] == 255);  // white, tinted by the image's colour
-  // The centre circle.
+  // White, tinted by the image's colour.
+  const std::vector<uint8_t> tex = layout::sector_rgba(n, inner, 1.0f, -22.5f, 22.5f, gap);
+  CHECK(tex[(static_cast<size_t>(n / 2 + n / 3) * n + n / 2) * 4] == 255);
+  // The centre circle: a disc.
   const std::vector<uint8_t> circle = layout::circle_rgba(n, 0.9f);
   CHECK(alpha_at(circle, n, n / 2, n / 2) == 255);
+  CHECK(alpha_point(circle, n, 0.85f * half * 0.7071f, 0.85f * half * 0.7071f) == 255);
+  CHECK(alpha_point(circle, n, 0.95f * half * 0.7071f, 0.95f * half * 0.7071f) == 0);
   CHECK(alpha_at(circle, n, 0, 0) == 0);
 }
 
@@ -95,7 +118,7 @@ void the_vr_pointer_finds_the_disc() {
 }  // namespace
 
 int main() {
-  the_wheel_shows_eight_segments_with_gaps();
+  the_wheel_shows_eight_segments_with_even_gaps();
   the_icons_sit_in_their_segments();
   the_pick_turns_blue();
   the_vr_pointer_finds_the_disc();

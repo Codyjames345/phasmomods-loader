@@ -1194,6 +1194,14 @@ struct PlayerCosmetics {
   static constexpr pm::api::Field<pm::map::PlayerCosmetics_playerAnimator, void*> playerAnimator{};
 };
 
+/// This client's own journal input. `input` below is the LocalJournalController.
+struct LocalJournalController {
+  /// OpenCloseJournal(input, flag): the journal key's open or close, through JournalController.OpenCloseJournal. A mod
+  /// hooks it to act before the journal opens. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::LocalJournalController_OpenCloseJournal, void(void*, bool)>
+      OpenCloseJournal{};
+};
+
 /// The player's character model. `character` below is the PlayerCharacter.
 struct PlayerCharacter {
   /// SetPlayerBodyType(character, position): takes a body type from the player at that position, or with -1 from

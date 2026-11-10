@@ -29,6 +29,7 @@
 #include "emote_session.h"
 #include "game.h"
 #include "held.h"
+#include "hooks.h"
 #include "keybinds.h"
 #include "log.h"
 #include "mod_glue.h"
@@ -534,6 +535,32 @@ std::optional<int> wheel_input(void* player, bool vr) {
   return played;
 }
 
+// The journal key, while dancing: the emote ends at once, before the game opens the journal, so the game's opening runs
+// on the body as it expects it (the held item back in its camera slot, the clip off, the view home). Ending it a frame
+// later, from the tick, left the journal in front of the face after it closed (the seventh in-game run).
+void end_at_once() {
+  if (!g.local || !g.local->active()) return;
+  void* player = g.localPlayer.get();
+  if (player && !game::alive(player)) player = nullptr;
+  const int me = game::local_actor();
+  const LocalOut o = g.local->end_now();
+  PM_LOG("Emotes: the journal opens: the emote ends at once");
+  api::anim::stop_on_player(player, 0.0f);
+  stop_song(me);
+  end_local_body();
+  api::view::stop_third_person();
+  if (auto it = g.facings.find(me); it != g.facings.end()) {
+    if (it->second.model && game::alive(it->second.model)) game::set_local_rotation(it->second.model, it->second.original);
+    g.facings.erase(it);
+  }
+  send(o.send);
+}
+
+void detour_journal(api::Original<phasmo::LocalJournalController::OpenCloseJournal> original, void* input, bool flag) {
+  end_at_once();
+  original(input, flag);
+}
+
 void end_everything_local() {
   if (g.local && g.local->active()) {
     void* player = g.localPlayer.get();
@@ -608,6 +635,11 @@ bool start() {
   }
   g.local.emplace(g.a.table);
   g.remote.emplace(g.a.table);
+  if (!api::hook<phasmo::LocalJournalController::OpenCloseJournal>(&detour_journal, "Emotes: the journal key") ||
+      !pm::hooks::enable_all()) {
+    PM_LOG("Emotes inactive: the journal key could not be hooked");
+    return false;
+  }
   g.lastTick = g.startTick = GetTickCount64();
   return true;
 }
