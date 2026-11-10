@@ -317,6 +317,16 @@ void old_bundled_ids_migrate_once() {
   fs::remove_all(root, error);
 }
 
+// A game entry's key, shown in the Mods panel: its angle brackets (a generic instance's, VolumeParameter<float>) as the
+// look-alike single quotation marks, which the panel's rich text does not read as a tag; anything else unsafe stays so.
+void an_entry_key_is_shown_safely() {
+  const std::string shown = shown_key("VolumeParameter<float>.set_value");
+  CHECK(shown == "VolumeParameter\xE2\x80\xB9" "float\xE2\x80\xBA.set_value");
+  CHECK(display_safe(shown, 128));
+  CHECK(shown_key("GhostAI.UnAppear") == "GhostAI.UnAppear");
+  CHECK(!display_safe(shown_key("a\nb"), 128));
+}
+
 // Text from another player's client: drawn in the game's menus, so only what the manifest would allow.
 void display_text_is_safe() {
   CHECK(display_safe("Ghost Tells", 64));
@@ -415,6 +425,7 @@ int main() {
   content_id_splits_at_the_last_dot();
   old_bundled_ids_migrate_once();
   display_text_is_safe();
+  an_entry_key_is_shown_safely();
   bundled_manifests_are_valid();
   schema_agrees_with_the_parser();
   std::printf(g_failures ? "%d check(s) failed\n" : "all mod manifest tests passed\n", g_failures);

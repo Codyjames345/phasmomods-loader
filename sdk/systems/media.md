@@ -46,7 +46,10 @@ hides with it; overlay canvases do not. `sdk/api/third_person.h` does this.
 A blur or vignette of a mod's own is a URP volume: a GameObject on a layer the camera's volume mask holds, with a
 `Volume` (`Volume.m_IsGlobal`, `Volume.priority`, `Volume.weight`) whose `Volume.sharedProfile` is a new `VolumeProfile`
 (`ScriptableObject.CreateInstance`) holding a `DepthOfField` in Gaussian mode and a `Vignette` (`VolumeProfile.Add`),
-their values set through `VolumeParameter<float>.set_value` and `VolumeParameter<DepthOfFieldMode>.set_value`.
+their values set by running each parameter's own constructor on it again (`ClampedFloatParameter.ctor` with its
+`ClampedFloatParameter.min` and `max`, `MinFloatParameter.ctor`, `DepthOfFieldModeParameter.ctor`). The generic setter,
+`VolumeParameter<T>.set_value`, has no code in this build for a float or a depth-of-field mode (the running game finds
+none for either instance), so a mod that needed it would stay off.
 `sdk/api/screen_effects.h` does this. The game has no blur of its own for its menus.
 
 ## Engine features the game does not use

@@ -15,9 +15,6 @@ inline constexpr const char* PostProcessing_bool[] = {"bool"};
 inline constexpr const char* PostProcessing_LayerMask[] = {"LayerMask"};
 inline constexpr const char* PostProcessing_Type[] = {"Type"};
 inline constexpr const char* PostProcessing_Type_bool[] = {"Type", "bool"};
-inline constexpr const char* PostProcessing_T[] = {"T"};
-inline constexpr const char* PostProcessing_Single[] = {"@Single"};
-inline constexpr const char* PostProcessing_DepthOfFieldMode[] = {"@DepthOfFieldMode"};
 
 /// URP's settings of one camera (Unity.RenderPipelines.Universal.Runtime), a component beside the Camera. Inferred:
 /// URP's documented API.
@@ -87,21 +84,55 @@ inline constexpr pm::sdk::EntryDesc VolumeProfile_Add{.key = "VolumeProfile.Add"
                                                       .owner = "VolumeProfile", .name = "Add",
                                                       .params = PostProcessing_Type_bool};
 
-// The name alone is shared with the non-generic VolumeParameter, its base; only this one holds a value of its parameter.
-inline constexpr const char* VolumeParameterT_fieldTypes[] = {"T"};
+// A parameter's value. VolumeParameter<T>.set_value has no code in this build for float or DepthOfFieldMode (the
+// running game reported both instances without code, 2026-11-10), so a
+// mod sets a value with the parameter's own constructor, run again on the parameter in place: the constructor stores
+// the value, the range and the override and nothing else, and the profile keeps the same object.
 
-/// The generic definition VolumeParameter<T> (Unity.RenderPipelines.Core.Runtime), a volume parameter's value holder.
-/// Inferred: the pipeline's documented API.
-inline constexpr pm::sdk::EntryDesc VolumeParameter_1{.key = "VolumeParameter`1", .name = "VolumeParameter",
+inline constexpr const char* PostProcessing_ClampedFloat_ctor[] = {"float", "float", "float", "bool"};
+inline constexpr const char* PostProcessing_MinFloat_ctor[] = {"float", "float", "bool"};
+inline constexpr const char* PostProcessing_DepthOfFieldMode_ctor[] = {"@DepthOfFieldMode", "bool"};
+
+/// A float parameter held to a range (Unity.RenderPipelines.Core.Runtime): the vignette's intensity and smoothness, the
+/// blur's radius. Inferred: the pipeline's documented API.
+inline constexpr pm::sdk::EntryDesc ClampedFloatParameter{.key = "ClampedFloatParameter",
+                                                          .name = "ClampedFloatParameter",
+                                                          .assembly = "Unity.RenderPipelines.Core.Runtime",
+                                                          .ns = "UnityEngine.Rendering"};
+
+/// ClampedFloatParameter(value, min, max, overrideState): the value held to min..max. It stores the value, min, max and
+/// the override and nothing else (its base sets the value and calls set_overrideState). Decompiled.
+inline constexpr pm::sdk::EntryDesc ClampedFloatParameter_ctor{
+    .key = "ClampedFloatParameter.ctor", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "ClampedFloatParameter",
+    .name = ".ctor", .params = PostProcessing_ClampedFloat_ctor};
+
+/// The parameter's lowest value. Inferred: the pipeline's documented API.
+inline constexpr pm::sdk::EntryDesc ClampedFloatParameter_min{.key = "ClampedFloatParameter.min",
+                                                              .kind = pm::sdk::Kind::Field,
+                                                              .owner = "ClampedFloatParameter", .name = "min"};
+
+/// The parameter's highest value. Inferred: the pipeline's documented API.
+inline constexpr pm::sdk::EntryDesc ClampedFloatParameter_max{.key = "ClampedFloatParameter.max",
+                                                              .kind = pm::sdk::Kind::Field,
+                                                              .owner = "ClampedFloatParameter", .name = "max"};
+
+/// A float parameter with a lowest value (Unity.RenderPipelines.Core.Runtime): the blur's start and end. Inferred: the
+/// pipeline's documented API.
+inline constexpr pm::sdk::EntryDesc MinFloatParameter{.key = "MinFloatParameter", .name = "MinFloatParameter",
                                                       .assembly = "Unity.RenderPipelines.Core.Runtime",
-                                                      .ns = "UnityEngine.Rendering",
-                                                      .fieldTypes = VolumeParameterT_fieldTypes};
+                                                      .ns = "UnityEngine.Rendering"};
 
-/// Sets a float parameter's value (ClampedFloatParameter, MinFloatParameter): VolumeParameter<float>.set_value.
-/// Checked at startup only: the instance's code is the runtime's. Inferred: the pipeline's documented API.
-inline constexpr pm::sdk::EntryDesc VolumeParameter_float_set_value{
-    .key = "VolumeParameter<float>.set_value", .kind = pm::sdk::Kind::Inflated, .owner = "VolumeParameter`1",
-    .name = "set_value", .params = PostProcessing_T, .typeArgs = PostProcessing_Single};
+/// MinFloatParameter(value, min, overrideState): it stores the value, min and the override and nothing else. Decompiled.
+inline constexpr pm::sdk::EntryDesc MinFloatParameter_ctor{.key = "MinFloatParameter.ctor",
+                                                           .kind = pm::sdk::Kind::Method,
+                                                           .confidence = pm::sdk::Confidence::Decompiled,
+                                                           .owner = "MinFloatParameter",
+                                                           .name = ".ctor", .params = PostProcessing_MinFloat_ctor};
+
+/// The parameter's lowest value. Inferred: the pipeline's documented API.
+inline constexpr pm::sdk::EntryDesc MinFloatParameter_min{.key = "MinFloatParameter.min", .kind = pm::sdk::Kind::Field,
+                                                          .owner = "MinFloatParameter", .name = "min"};
 
 /// URP's depth-of-field modes (Unity.RenderPipelines.Universal.Runtime). Inferred: URP's documented API.
 inline constexpr pm::sdk::EntryDesc DepthOfFieldMode{.key = "DepthOfFieldMode", .name = "DepthOfFieldMode",
@@ -113,12 +144,17 @@ inline constexpr pm::sdk::EntryDesc DepthOfFieldMode_Gaussian{.key = "DepthOfFie
                                                               .kind = pm::sdk::Kind::EnumValue,
                                                               .owner = "DepthOfFieldMode", .name = "Gaussian"};
 
-/// Sets the depth-of-field mode parameter's value: VolumeParameter<DepthOfFieldMode>.set_value. Checked at startup
-/// only. Inferred: the pipeline's documented API.
-inline constexpr pm::sdk::EntryDesc VolumeParameter_DepthOfFieldMode_set_value{
-    .key = "VolumeParameter<DepthOfFieldMode>.set_value", .kind = pm::sdk::Kind::Inflated,
-    .owner = "VolumeParameter`1", .name = "set_value", .params = PostProcessing_T,
-    .typeArgs = PostProcessing_DepthOfFieldMode};
+/// URP's depth-of-field mode parameter (Unity.RenderPipelines.Universal.Runtime). Inferred: URP's documented API.
+inline constexpr pm::sdk::EntryDesc DepthOfFieldModeParameter{.key = "DepthOfFieldModeParameter",
+                                                              .name = "DepthOfFieldModeParameter",
+                                                              .assembly = "Unity.RenderPipelines.Universal.Runtime",
+                                                              .ns = "UnityEngine.Rendering.Universal"};
+
+/// DepthOfFieldModeParameter(value, overrideState): it stores the mode and the override and nothing else. Decompiled.
+inline constexpr pm::sdk::EntryDesc DepthOfFieldModeParameter_ctor{
+    .key = "DepthOfFieldModeParameter.ctor", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "DepthOfFieldModeParameter",
+    .name = ".ctor", .params = PostProcessing_DepthOfFieldMode_ctor};
 
 /// URP's vignette effect, a VolumeComponent. Inferred: URP's documented API.
 inline constexpr pm::sdk::EntryDesc Vignette{.key = "Vignette", .name = "Vignette",
@@ -213,13 +249,28 @@ struct VolumeProfile {
   static constexpr pm::api::Method<pm::map::VolumeProfile_Add, void*(void*, void*, bool)> Add{};
 };
 
-/// Volume parameters' value setters.
-struct VolumeParameter {
-  /// SetFloat(parameter, value): a float parameter's value. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::VolumeParameter_float_set_value, void(void*, float)> SetFloat{};
-  /// SetDepthOfFieldMode(parameter, mode): a DepthOfFieldMode number. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::VolumeParameter_DepthOfFieldMode_set_value, void(void*, int32_t)>
-      SetDepthOfFieldMode{};
+/// A float parameter held to a range. Set a value by running its constructor on it again (the map's note says why).
+struct ClampedFloatParameter {
+  /// ctor(parameter, value, min, max, overrideState). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ClampedFloatParameter_ctor, void(void*, float, float, float, bool)> ctor{};
+  /// Its lowest value: min.get(parameter). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::ClampedFloatParameter_min, float> min{};
+  /// Its highest value: max.get(parameter). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::ClampedFloatParameter_max, float> max{};
+};
+
+/// A float parameter with a lowest value.
+struct MinFloatParameter {
+  /// ctor(parameter, value, min, overrideState). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::MinFloatParameter_ctor, void(void*, float, float, bool)> ctor{};
+  /// Its lowest value: min.get(parameter). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::MinFloatParameter_min, float> min{};
+};
+
+/// URP's depth-of-field mode parameter.
+struct DepthOfFieldModeParameter {
+  /// ctor(parameter, mode, overrideState): mode a DepthOfFieldMode number. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::DepthOfFieldModeParameter_ctor, void(void*, int32_t, bool)> ctor{};
 };
 
 /// URP's depth-of-field modes.

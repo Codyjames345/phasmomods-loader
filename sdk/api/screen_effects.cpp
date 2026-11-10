@@ -35,6 +35,22 @@ void* local_camera() {
 }
 
 // The lowest layer the camera takes volumes from; 0 (Default) when it says none.
+// A parameter's value, set by running its own constructor on it again with its own range and the override on: the
+// generic VolumeParameter<T>.set_value has no code in this game build (sdk/map/UnityPostProcessing.h).
+void set_clamped(void* param, float value) {
+  if (!param) return;
+  const float lo = phasmo::ClampedFloatParameter::min.get(param), hi = phasmo::ClampedFloatParameter::max.get(param);
+  phasmo::ClampedFloatParameter::ctor(param, std::clamp(value, lo, std::max(lo, hi)), lo, hi, true);
+}
+void set_min(void* param, float value) {
+  if (!param) return;
+  const float lo = phasmo::MinFloatParameter::min.get(param);
+  phasmo::MinFloatParameter::ctor(param, std::max(value, lo), lo, true);
+}
+void set_mode(void* param, int32_t mode) {
+  if (param) phasmo::DepthOfFieldModeParameter::ctor(param, mode, true);
+}
+
 int32_t volume_layer(void* camera) {
   void* dataType = phasmo::UniversalAdditionalCameraData::type.type_object();
   void* data = dataType ? phasmo::Component::GetComponent(camera, dataType) : nullptr;
@@ -45,7 +61,7 @@ int32_t volume_layer(void* camera) {
 }
 
 bool make_volume(void* camera) {
-  if (!phasmo::VolumeProfile::Add.available() || !phasmo::VolumeParameter::SetFloat.available()) {
+  if (!phasmo::VolumeProfile::Add.available() || !phasmo::ClampedFloatParameter::ctor.available()) {
     PM_LOG("fx: the URP volume entries did not resolve in this game build: no blur or vignette");
     return false;
   }
@@ -66,11 +82,10 @@ bool make_volume(void* camera) {
   phasmo::Volume::priority.set(volume, kPriority);
   phasmo::Volume::weight.set(volume, 1.0f);
   phasmo::Volume::sharedProfile.set(volume, profile);
-  phasmo::VolumeParameter::SetDepthOfFieldMode(phasmo::DepthOfField::mode.get(dof),
-                                               static_cast<int32_t>(phasmo::DepthOfFieldMode::Gaussian()));
-  phasmo::VolumeParameter::SetFloat(phasmo::DepthOfField::gaussianStart.get(dof), kBlurStart);
-  phasmo::VolumeParameter::SetFloat(phasmo::DepthOfField::gaussianEnd.get(dof), kBlurEnd);
-  phasmo::VolumeParameter::SetFloat(phasmo::Vignette::smoothness.get(vignette), kVignetteSmoothness);
+  set_mode(phasmo::DepthOfField::mode.get(dof), static_cast<int32_t>(phasmo::DepthOfFieldMode::Gaussian()));
+  set_min(phasmo::DepthOfField::gaussianStart.get(dof), kBlurStart);
+  set_min(phasmo::DepthOfField::gaussianEnd.get(dof), kBlurEnd);
+  set_clamped(phasmo::Vignette::smoothness.get(vignette), kVignetteSmoothness);
   g.volume = volume;
   g.dof = dof;
   g.vignette = vignette;
@@ -91,10 +106,10 @@ bool set_screen_effects(float blur, float vignette) {
     if (!camera || !make_volume(camera)) return false;
   }
   // No blur at all is the Gaussian off: its radius at the low end and a start beyond reach.
-  phasmo::VolumeParameter::SetFloat(phasmo::DepthOfField::gaussianMaxRadius.get(g.dof),
+  set_clamped(phasmo::DepthOfField::gaussianMaxRadius.get(g.dof),
                                     kRadiusLow + (kRadiusHigh - kRadiusLow) * blur);
-  phasmo::VolumeParameter::SetFloat(phasmo::DepthOfField::gaussianStart.get(g.dof), blur > 0.0f ? kBlurStart : 1000.0f);
-  phasmo::VolumeParameter::SetFloat(phasmo::Vignette::intensity.get(g.vignette), vignette);
+  set_min(phasmo::DepthOfField::gaussianStart.get(g.dof), blur > 0.0f ? kBlurStart : 1000.0f);
+  set_clamped(phasmo::Vignette::intensity.get(g.vignette), vignette);
   return true;
 }
 

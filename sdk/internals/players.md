@@ -92,7 +92,10 @@ Read for the Emotes mod ([players](../systems/players.md#the-body), [voice](../s
   counted across the game's data files. Nothing there is a map entry: a mod reads the actions at run time by name.
 - The Playables, `Camera.CopyFrom`, `AnimationClip.get_length` and `Motion.get_isLooping` are icalls whose exact names
   were read from `GameAssembly.dll`'s strings; they are checked at startup only. `VolumeParameter<float>.set_value` and
-  `VolumeParameter<DepthOfFieldMode>.set_value` are inflated, also checked at startup only.
+  `VolumeParameter<DepthOfFieldMode>.set_value` were mapped first, as inflated entries checked at startup only: the
+  offline check cannot tell whether a generic instance has code, and the running game found that neither does
+  (2026-11-10), so Emotes stayed off. The parameters' own constructors replace them. An inflated entry's instance
+  may have no code at all; prefer a non-generic member.
 
 ## Not covered
 

@@ -103,6 +103,23 @@ inline bool display_safe(std::string_view text, size_t maxBytes) {
   return true;
 }
 
+// A game entry's key as the Mods panel can show it: a generic instance's angle brackets (VolumeParameter<float>) as the
+// look-alike single quotation marks U+2039 and U+203A, which the panel's rich text does not read as a tag. The result
+// still needs display_safe: only the brackets are changed.
+inline std::string shown_key(std::string_view key) {
+  std::string out;
+  out.reserve(key.size() + 8);
+  for (const char c : key) {
+    if (c == '<')
+      out += "\xE2\x80\xB9";
+    else if (c == '>')
+      out += "\xE2\x80\xBA";
+    else
+      out += c;
+  }
+  return out;
+}
+
 struct ContentId {
   std::string_view mod, name;
 };
