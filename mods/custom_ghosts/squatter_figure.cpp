@@ -636,8 +636,9 @@ bool falling() { return check() && g.falling; }
 
 void set_sheet_slack(float slack) {
   if (!check() || !api::alive(g.cloth.cloth) || g.coefficients.empty()) return;
-  slack = std::clamp(slack, 0.0f, 1.0f);
-  if (std::fabs(slack - g.slack) < 0.01f && !(slack == 0.0f && g.slack != 0.0f)) return;
+  slack = slack_step(slack);  // a few steps, never every frame: each send hands the cloth every point's constraint
+  if (slack == g.slack) return;
+  const auto began = std::chrono::steady_clock::now();
   void* arr = pm::api::Type<pm::map::Vector2>{}.make_array(g.coefficients.size());
   if (!arr || api::ValueArray{arr}.stride() != sizeof(phasmo::Vector2)) return;
   const api::Array<phasmo::Vector2> out{arr};
@@ -645,6 +646,8 @@ void set_sheet_slack(float slack) {
     out[i] = {slack_distance(g.coefficients[i].x, slack), g.coefficients[i].y};
   phasmo::Cloth::set_coefficients(g.cloth.cloth, arr);
   g.slack = slack;
+  const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count();
+  PM_LOG("squatter: the sheet's slack is now %.2f (sent in %.2f ms)", slack, ms);
 }
 
 std::optional<phasmo::Quaternion> body_rotation() {
