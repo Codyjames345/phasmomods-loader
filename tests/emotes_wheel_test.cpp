@@ -96,9 +96,9 @@ void the_pick_turns_blue() {
     if (i == 3)
       CHECK(c.b == style::kPickedBlue.b && c.r == style::kPickedBlue.r);
     else
-      CHECK(c.r == style::kDiscGrey.r && c.b == style::kDiscGrey.b);
+      CHECK(c.r == style::kDiscBlack.r && c.b == style::kDiscBlack.b);
   }
-  CHECK(layout::segment_colour(0, -1).r == style::kDiscGrey.r);  // nothing picked: all grey
+  CHECK(layout::segment_colour(0, -1).r == style::kDiscBlack.r);  // nothing picked: all the disc's black
 }
 
 void the_vr_pointer_finds_the_disc() {

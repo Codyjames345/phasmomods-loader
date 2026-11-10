@@ -19,6 +19,12 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   renderers, hand anchors, voice loudness and VR hands; the held item's camera slot; Unity's Playables, the Input
   System's action building, overrides and keybinds rows, the gamepad's stick; `Camera.CopyFrom`; and URP's camera data,
   volumes, vignette and depth of field.
+- **Settings on the audio page.** `sdk/api/settings.h`: a mod's sliders on the journal's audio page, copies of the
+  master volume's row under the mod's heading, counting on the page's Apply as the game's do and saved to the mod's
+  file. `sdk/api/menu_rows.h` holds what the keybinds and settings rows share. Mod keys (`keybinds.h`) now follow the
+  keybinds page's Apply, Reset and closing as the game's keys do. The map gains the pages' buttons
+  (`ControlsManager.*`, `GameMyAudioManager.*`), the game's slider (`XRSlider`, `SliderEvent`) and
+  `InputActionRebindingExtensions.RemoveAllBindingOverrides`.
 - **A mod's own name.** `PmHostApi.mod_name` (added at the end) gives the name an installed mod's manifest gives it,
   the one the Mods panel shows, and `pm::mod::shown_name()` gives the running mod its own. Its keys' section in the
   keybinds menu is headed with it.

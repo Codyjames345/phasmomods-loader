@@ -24,6 +24,13 @@ linked below.
 
 How the game's actions and the menu work: [menus](../systems/menus.md#key-bindings).
 
+## A setting on the audio page
+
+`sdk/api/settings.h`. Declare a slider with `begin_settings(modId, pm::mod::shown_name(), file)` and `add_slider(Slider)`
+in `pmmod_start`, call `tick_settings()` every frame, and read it with `value(id)`. Its row is a copy of the master
+volume's, under your mod's heading on the journal's audio page. Its value counts on the page's Apply and is saved to your
+file; leaving the page without Apply puts the slider back. The Emotes mod's volume is one.
+
 ## A clip on a player's own body
 
 `sdk/api/player_anim.h`. `play_on_player(player, clip, blendIn)` plays an `AnimationClip` (from your bundle,

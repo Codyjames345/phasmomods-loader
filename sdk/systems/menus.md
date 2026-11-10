@@ -92,6 +92,16 @@ rows: rows 100 high alternate with dividers, small images with no `RebindActionU
 scroll's reach until the `Content` grows by its height and the spacing. The training whiteboards in each map show
 bindings with `RebindActionUI` too, on rows with no layout: a search for rows finds them as well.
 
+## The audio page
+
+The journal's audio page (`GameMyAudioManager`, in each player's journal like the keybinds page) is a list of the same
+kind: rows with a localised name, dividers between them, a scroll content sized to the rows. The master volume's row
+holds its name, its number (`GameMyAudioManager.masterVolumeValueText`) and its slider
+(`GameMyAudioManager.masterVolumeSlider`, an `XRSlider`, the game's own slider class). `GameMyAudioManager.ApplyButton`
+reads the slider into the audio settings and sets the mixer, so a change counts on Apply. A copy of the slider keeps
+the listeners the prefab put on its event (`XRSlider.m_OnValueChanged`), so a copy needs a new `SliderEvent` of its own.
+`sdk/api/settings.h` puts a mod's sliders there, under a heading with the mod's name.
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/menus.md).
