@@ -817,15 +817,22 @@ void every_bone_under_the_hips_blends() {
   CHECK(figure::all_under(-1, [&](int) { return std::vector<int>{}; }).size() == 1);
 }
 
-// Standing up after a fall it turns to the player it is after with its turn clips before it runs: done once its
-// figure faces within kFaceAheadDegrees of them and no turn clip plays, or at the latest kRiseTurnMs after it stood.
+// Standing up after a fall it turns to the player it is after with its turn clips before it runs: done once no turn clip
+// plays and none would start (its figure is within its turn clips' start angle of them), or at the latest kRiseTurnMs
+// after it stood.
 void it_turns_with_its_clips_before_running_on() {
   constexpr float kDeg = std::numbers::pi_v<float> / 180.0f;
-  CHECK(!rise_turn_done(1000, 1000 + kRiseTurnMs, 0.0f, 90 * kDeg, false));  // facing away: keep turning
+  CHECK(!rise_turn_done(1000, 1000 + kRiseTurnMs, 0.0f, 90 * kDeg, false));  // facing away: a turn clip plays
   CHECK(!rise_turn_done(1000, 1000 + kRiseTurnMs, 89 * kDeg, 90 * kDeg, true));  // a turn clip still plays
   CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, 89 * kDeg, 90 * kDeg, false));
   CHECK(rise_turn_done(1000 + kRiseTurnMs, 1000 + kRiseTurnMs, 0.0f, 180 * kDeg, true));  // waited long enough
   CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, 179 * kDeg, -179 * kDeg, false));         // across the wrap
+  // Past its turn clips' start angle and short of facing them no clip plays, and it stood frozen there for the whole
+  // kRiseTurnMs (user, 2026-11-10: getting up after a trip left it still). The run's own turning finishes the alignment.
+  CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, 45 * kDeg, 90 * kDeg, false));
+  CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, kFaceAheadDegrees * kDeg, 0.0f, false));
+  CHECK(rise_turn_done(1000, 1000 + kRiseTurnMs, 0.0f, (kTurnStartDegrees - 1.0f) * kDeg, false));  // just short
+  CHECK(!rise_turn_done(1000, 1000 + kRiseTurnMs, 0.0f, kTurnStartDegrees * kDeg, false));          // at it
   CHECK(kRiseTurnMs >= 1000 && kRiseTurnMs <= 4000);
 }
 

@@ -135,11 +135,14 @@ inline float body_heading(phasmo::Quaternion rotation) {
 inline constexpr uint64_t kRiseTurnMs = 2500;
 
 /**
- * Whether its turn after getting up is done at `now` (it stood up to turn until `until`): its figure faces `facing`,
- * within kFaceAheadDegrees of the way to the player, `toTarget`, and no turn clip plays (`turning`), or time is up.
+ * Whether its turn after getting up is done at `now` (it stood up to turn until `until`): no turn clip plays
+ * (`turning`) and none would start from here (turn_for plays one only kTurnStartDegrees off or further), or time is up.
+ * Waiting for the figure to face within kFaceAheadDegrees instead left it standing with nothing playing between those
+ * two angles, frozen for the whole kRiseTurnMs (user, 2026-11-10: getting up after a trip left it still); once no clip
+ * is left to play, its run's own turning finishes lining up on the way.
  */
 inline bool rise_turn_done(uint64_t now, uint64_t until, float facing, float toTarget, bool turning) {
-  return now >= until || (!turning && faces_ahead(facing, toTarget));
+  return now >= until || (!turning && turn_for(wrap_angle(toTarget - facing)) == Turn::None);
 }
 
 /** Where and which way the figure's root stands as it gets up. */
