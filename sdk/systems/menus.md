@@ -70,7 +70,12 @@ shows the action's name. The game saves its own actions' overrides as a JSON lis
 (`sdk/api/keybinds.h`) is a copy of a row pointed at a standalone action of the mod's own (`InputAction.ctor`,
 `InputActionReference.Create`), whose rebinding the SDK saves in the mod's data folder.
 
-A row's label carries a `TextLocaliserUI`, which writes the game's words for its key whenever it wakes. `RebindActionUI`
+The game's rows leave `RebindActionUI.m_ActionLabel` empty: a row's name is a child text of its own, `ActionNameText`
+(its first `TextLocaliserUI`), wired to nothing. Its other children are `TriggerRebindButton`, whose click runs the row's
+own `StartInteractiveRebind`, and `ResetToDefaultButton`. Unity refuses to rebind an action while it is enabled ("Cannot
+rebind action ... while it is enabled"); the game's own actions are off while the menu is open, so a mod's must be too.
+
+A row's name text carries a `TextLocaliserUI`, which writes the game's words for its key whenever it wakes. `RebindActionUI`
 itself never writes the label: neither `RebindActionUI.set_actionReference` nor its own enabling touches it; both only
 refresh the binding's text. So a copied row keeps a new label only once its localiser is gone. A copy made while the
 menu is hidden wakes when the player opens it.

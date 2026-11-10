@@ -126,9 +126,9 @@ void a_clip_blends_in_and_hands_back() {
   CHECK(live.size() == 1);
   if (live.size() != 1) return;
   CHECK(live[0]->playing && live[0]->clip == &g_clipA && live[0]->footIK);
-  // Above the game's own Animator (0) and under Animation Rigging (1000), as the game's own animations are, so the
-  // rig's constraints (the journal at the waist, the belt's items) follow the dancing body.
-  CHECK(live[0]->order >= anim::kSortingOrder && live[0]->order > 0 && live[0]->order < 1000);
+  // Above the game's own Animator (0) and above Animation Rigging (1000): under the rig, its aims bent the dance
+  // toward the camera (the head, the arms holding items; the fifth in-game run).
+  CHECK(live[0]->order >= anim::kSortingOrder && live[0]->order > 1000);
   CHECK(live[0]->weight == 0.0f);
   CHECK(anim::playing_on(&g_player));
   anim::tick_player_anims(0.2f);
@@ -159,12 +159,12 @@ void a_second_play_replaces_the_first() {
   anim::tick_player_anims(0.3f);
   live = live_on(&g_animator);
   CHECK(live.size() == 1 && live[0]->clip == &g_clipB && live[0]->weight == 1.0f);
-  // However many dances follow one another, every output stays under the rig, the newest over the one before.
+  // However many dances follow one another, the orders stay bounded, the newest over the one before.
   for (int i = 0; i < 1200; ++i) {
     anim::play_on_player(&g_player, i % 2 ? &g_clipA : &g_clipB, 0.2f);
     auto now = live_on(&g_animator);
     if (now.size() == 2) CHECK(now[1]->order > now[0]->order);
-    for (const auto* l : now) CHECK(l->order < 1000);
+    for (const auto* l : now) CHECK(l->order > 1000 && l->order <= anim::kSortingOrder + 2);
     anim::tick_player_anims(0.3f);
   }
   // A third, mid-blend: never more than two graphs at once.

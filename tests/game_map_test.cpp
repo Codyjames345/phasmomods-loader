@@ -521,7 +521,7 @@ void scene_facts_resolve_at_activation() {
   const PmGameEntry* tint = pm::gamemap::entry("ShaderProperty.CandleFlame.TintColour");
   CHECK(tint && tint->kind == PM_ENTRY_SHADER_PROPERTY && tint->value == 100 + 11);  // "_TintColour"
   CHECK(pm::gamemap::mod_entry("ShaderProperty.CandleFlame.TintColour") == tint);
-  CHECK(logged("game map: 1/14 layers and 8/8 shader properties resolved on the main thread"));
+  CHECK(logged("game map: 1/15 layers and 8/8 shader properties resolved on the main thread"));
   int root = 0;
   CHECK(pm::gamemap::scene_find("Scene.JournalBookContent", &root) == nullptr);  // the engine finds nothing
   CHECK(pm::gamemap::scene_find("Layer.PlayerView", &root) == nullptr);          // not a Scene entry
@@ -537,7 +537,7 @@ void scene_facts_resolve_at_activation() {
   CHECK(count_logged("game map: Layer.PlayerView: no layer is named PlayerView") == 1);
   CHECK(pm::gamemap::entry("ShaderProperty.CandleFlame.TintColour") == nullptr);
   CHECK(pm::gamemap::result("ShaderProperty.CandleFlame.TintColour")->detail == "Shader.PropertyToID unresolved");
-  CHECK(logged("game map: 0/14 layers and 0/8 shader properties resolved on the main thread"));
+  CHECK(logged("game map: 0/15 layers and 0/8 shader properties resolved on the main thread"));
 }
 
 // An optional AnimatorParam entry for the dependency test: the map has none yet.

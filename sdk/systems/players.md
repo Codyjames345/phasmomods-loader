@@ -202,11 +202,13 @@ What a mod needs to animate an investigator's own body, as the Emotes mod does (
   controllers for the held item (`Player.characterAnimations`, a `PlayerCharacterAnimations`), syncs its parameters
   with a PhotonAnimatorView and bends the hands and arms with Animation Rigging (a RigBuilder, whose graph runs at
   sorting order 1000). Unity's Playables are all in the build (`sdk/map/Playables.h`): a second graph with an animation
-  output on the same Animator, at a sorting order between the controller's and the rig's and a weight from 0 to 1,
-  plays a clip over the controller and gives the body back untouched when it is destroyed. The rig still runs over
-  it: the journal hangs from the waist through a constraint of the rig (`Journal Parent Rig`, between a socket on the
-  waist bone and one in the right hand), and the belt (`Belt`, with its equipment points) is a child of the first spine
-  bone. A clip over the rig would leave the journal where the rig put it from the game's own pose.
+  output on the same Animator, at a higher sorting order and a weight from 0 to 1, plays a clip over all of that and
+  gives the body back untouched when it is destroyed. Under the rig, the clip would be bent by its aims: `Head Rig`
+  turns the head toward where the camera looks, and aiming rigs (equipment, torch, watch, lantern, the journal's
+  hands) turn the arms. Over it, what the rig places rather than animates keeps the game's pose: the journal hangs from
+  the rig's `JournalParent` (`JournalRigController.constraintParent`), which `Journal Parent Rig` puts between a socket
+  on the waist bone and one in the right hand. The belt (`Belt`, with its equipment points) is a child of the first
+  spine bone and follows the clip.
 - **How the local player hides its own head.** `PlayerCharacter.headRenderersToTurnOff` lists the head's renderers
   (hair, eyes, teeth and the head's cosmetics). On the player's own client the game draws them as shadows only
   (`Renderer.set_shadowCastingMode`), and has methods of `PlayerCharacter` to switch them back and to move them to

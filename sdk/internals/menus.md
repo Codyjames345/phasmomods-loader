@@ -92,5 +92,7 @@ when the copy woke. The SDK takes the localiser off a copy's label (`sdk/api/key
 The menu's place and layout were read from `resources.assets` with UnityPy (the `PCPlayer` prefab's hierarchy and its
 RectTransforms; the layout group's spacing from its raw serialized fields, its type tree being stripped). The main menu's
 scene (`level2`) holds no `RebindActionUI`; the maps' (the prison's `level11`, the training map's `level3`) hold only the
-whiteboards'. The fourth in-game run showed why that matters: the row was made, at the end of a list whose `Content` it
+whiteboards'. The row's object references were read from its serialized bytes (the PPtrs that resolve in the file):
+`m_ActionLabel` is null, `m_BindingText` is `TriggerRebindButton/ActionBindingText`, and the rebind button's persistent
+call names `StartInteractiveRebind` on the row. The rebinding error was in the game's own log of the fifth run. The fourth in-game run showed why the list's size matters: the row was made, at the end of a list whose `Content` it
 did not grow, and could not be scrolled to.

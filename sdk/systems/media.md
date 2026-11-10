@@ -43,6 +43,13 @@ it draws, the player's camera can be switched off (`Behaviour.set_enabled`): its
 held item's slot stay where they are, and so do the game's raycasts from it. A HUD canvas drawn by the player's camera
 hides with it; overlay canvases do not. `sdk/api/third_person.h` does this.
 
+The local player's own body is not drawn as other players' are. The game's renderer has `RenderObjects` passes ("Render
+Player HUD" and "Render Player HUD UI", each Front and Back) that draw the `PlayerView` layer (`Layer.PlayerView`)
+with their own depth test and field of view, over the world: the first-person view. A camera that shows the body from
+outside moves its renderers to `AlivePlayer` (`Layer.AlivePlayer`, the layer the PCPlayer prefab gives the body), so
+it draws with depth as anyone else's, and moves them back after. The head is drawn as shadows only on the player's own
+client ([players](players.md#the-body)).
+
 A blur or vignette of a mod's own is a URP volume: a GameObject on a layer the camera's volume mask holds, with a
 `Volume` (`Volume.m_IsGlobal`, `Volume.priority`, `Volume.weight`) whose `Volume.sharedProfile` is a new `VolumeProfile`
 (`ScriptableObject.CreateInstance`) holding a `DepthOfField` in Gaussian mode and a `Vignette` (`VolumeProfile.Add`),

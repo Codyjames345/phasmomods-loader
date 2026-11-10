@@ -15,6 +15,7 @@
 #include "Transform.h"
 #include "UnityObject.h"
 #include "UnityPostProcessing.h"
+#include "Scene.h"
 #include "UnityRendering.h"
 #include "UnityWorld.h"
 #include "check.h"
@@ -125,6 +126,7 @@ void fake_set_mask(void* c, int32_t m, void*) { at<int32_t>(c, kMask) = m; }
 void fake_set_enabled(void* b, bool on, void*) { at<bool>(b, kEnabled) = on; }
 bool fake_get_enabled(void* b, void*) { return at<bool>(b, kEnabled); }
 int32_t fake_layer(void* go, void*) { return at<int32_t>(go, kLayer); }
+void fake_set_layer(void* go, int32_t layer, void*) { at<int32_t>(go, kLayer) = layer; }
 bool fake_raycast(const phasmo::Ray*, void* hit, float maxDistance, int32_t mask, int32_t, void*) {
   g_rayMask = mask;
   if (g_wallAt > maxDistance) return false;
@@ -184,6 +186,11 @@ void give() {
   fake::method(map::Behaviour_set_enabled, reinterpret_cast<void*>(&fake_set_enabled));
   fake::method(map::Behaviour_get_enabled, reinterpret_cast<void*>(&fake_get_enabled));
   fake::method(map::GameObject_get_layer, reinterpret_cast<void*>(&fake_layer));
+  fake::method(map::GameObject_set_layer, reinterpret_cast<void*>(&fake_set_layer));
+  // The game's layers as far as AlivePlayer (10), the layer other players' bodies are drawn on.
+  fake::layer_names({"Default", "TransparentFX", "Ignore Raycast", "", "Water", "UI", "EMF", "UV", "Item", "Ghost",
+                     "AlivePlayer"});
+  fake::layer(map::Layer_AlivePlayer);
   fake::method(map::Physics_RaycastHit, reinterpret_cast<void*>(&fake_raycast));
   fake::method(map::RaycastHit_get_distance, reinterpret_cast<void*>(&fake_hit_distance));
   fake::value(map::QueryTriggerInteraction_Ignore, 1);
@@ -230,8 +237,11 @@ void the_view_copies_the_camera_and_draws_the_body() {
   Obj* cam = our_camera();
   CHECK(cam && at<bool>(cam, kCopied));
   if (!cam) return;
-  CHECK(at<int32_t>(cam, kMask) == (0x0F | 0x10 | 0x20 | 0x40));  // the body's and the head's layers added
-  CHECK(at<int32_t>(&g_hair, kShadow) == kShadowOn);               // the head drawn, not shadows only
+  // The body and the head drawn as other players' are, on AlivePlayer: on their own layers the game's renderer draws
+  // the local body in its first-person passes, over everything (the limbs over the head of the fifth run).
+  CHECK(at<int32_t>(&g_bodyA, kLayer) == 10 && at<int32_t>(&g_bodyB, kLayer) == 10 && at<int32_t>(&g_hair, kLayer) == 10);
+  CHECK(at<int32_t>(cam, kMask) == (0x0F | 0x400));  // AlivePlayer drawn
+  CHECK(at<int32_t>(&g_hair, kShadow) == kShadowOn);  // the head drawn, not shadows only
   CHECK(at<int32_t>(&g_camera, kMask) == 0x0F);           // the player's camera untouched
   CHECK(!at<bool>(&g_camera, kEnabled));                  // and off while the view is on
   // The URP settings copied onto the view's own data.
@@ -294,6 +304,7 @@ void the_ease_ends_where_it_started() {
   CHECK(at<int32_t>(&g_camera, kMask) == 0x0F);
   CHECK(cam && std::find(g_destroyed.begin(), g_destroyed.end(), static_cast<void*>(cam)) != g_destroyed.end());
   CHECK(at<int32_t>(&g_hair, kShadow) == kShadowsOnly);  // the head as the game had it
+  CHECK(at<int32_t>(&g_bodyA, kLayer) == 4 && at<int32_t>(&g_bodyB, kLayer) == 5 && at<int32_t>(&g_hair, kLayer) == 6);
 }
 
 void a_new_start_while_easing_back_turns_out_again() {
@@ -325,13 +336,15 @@ void a_lost_camera_ends_the_view_at_once() {
 void the_body_shows_on_the_players_camera() {
   give();
   view::show_own_body(true);
-  CHECK(at<int32_t>(&g_camera, kMask) == (0x0F | 0x10 | 0x20));
+  CHECK(at<int32_t>(&g_bodyA, kLayer) == 10 && at<int32_t>(&g_bodyB, kLayer) == 10);  // as others see it
+  CHECK(at<int32_t>(&g_camera, kMask) == (0x0F | 0x400));
   view::show_own_body(true);  // twice is once
   view::show_own_body(false);
+  CHECK(at<int32_t>(&g_bodyA, kLayer) == 4 && at<int32_t>(&g_bodyB, kLayer) == 5);
   CHECK(at<int32_t>(&g_camera, kMask) == 0x0F);
   view::show_own_body(true);
   view::stop_third_person();
-  CHECK(at<int32_t>(&g_camera, kMask) == 0x0F);
+  CHECK(at<int32_t>(&g_bodyA, kLayer) == 4 && at<int32_t>(&g_camera, kMask) == 0x0F);
 }
 
 }  // namespace

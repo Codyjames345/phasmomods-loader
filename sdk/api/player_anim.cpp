@@ -140,7 +140,7 @@ void tick_player_anims(float dt) {
         destroy(b.layers.front());
         b.layers.erase(b.layers.begin());
       }
-    // A lone clip goes back to the first order, so the next one over it never climbs toward the rig's.
+    // A lone clip goes back to the first order, so the orders never climb.
     if (b.layers.size() == 1 && b.layers.front().order != kSortingOrder) {
       b.layers.front().order = kSortingOrder;
       phasmo::AnimationPlayables::SetSortingOrder(&b.layers.front().output, kSortingOrder);

@@ -376,6 +376,9 @@ Obj g_list, g_gameRow, g_gameLabel, g_localiserClass;
 // before the game's row; a training whiteboard's row elsewhere, on no layout.
 Obj g_content, g_playerRoot, g_divider, g_layoutGroup, g_layoutClass, g_board, g_boardRow;
 constexpr int32_t kPartHeight = 0x30;  // the fake's own: a RectTransform's height
+constexpr int32_t kPartLabel = 0x38;   // the fake's own: the row's name text (ActionNameText), not m_ActionLabel
+bool g_menuShown = false;              // whether the keybinds menu is on screen (GameObject.activeInHierarchy)
+int g_disables = 0;                    // InputAction.Disable calls
 constexpr int32_t kNetLocalPlayer = 0x10;
 constexpr float kSpacing = 15.5f;
 phasmo::Vector2 g_contentSize{1736.0f, 2575.0f};
@@ -399,13 +402,25 @@ void* fake_instantiate(void* original, void* parent, bool, void*) {
   at<void*>(buttons, kPartParent) = c;
   at<void*>(label, kPartParent) = holder;
   at<bool>(holder, kPartActive) = at<bool>(buttons, kPartActive) = true;
-  at<void*>(c, kRowLabel) = label;
+  at<void*>(c, kPartLabel) = label;  // the game's row leaves m_ActionLabel empty (read from the PCPlayer prefab)
   g_kids[c] = {holder, buttons};
   g_localiserOf[label] = make_obj(&g_localiserClass);
   g_copies.push_back(c);
   return c;
 }
+void* fake_in_children(void* t, void* type, bool, void*) {
+  if (type != phasmo::TextLocaliserUI::type.type_object()) return nullptr;
+  const auto it = g_localiserOf.find(at<void*>(t, kPartLabel));
+  return it == g_localiserOf.end() ? nullptr : it->second;
+}
+bool fake_in_hierarchy(void*, void*) { return g_menuShown; }
+void fake_disable(void*, void*) { ++g_disables; }
 void* fake_get_component(void* t, void* type, void*) {
+  if (type == phasmo::TextMeshProUGUI::type.type_object()) {  // the localiser's own text
+    for (auto& [label, localiser] : g_localiserOf)
+      if (localiser == t) return label;
+    return nullptr;
+  }
   if (type == phasmo::TextLocaliserUI::type.type_object()) {
     const auto it = g_localiserOf.find(t);
     return it == g_localiserOf.end() ? nullptr : it->second;
@@ -453,6 +468,12 @@ void a_mod_key_gets_a_row_beside_the_games() {
   g_copies.clear();
   fake::type(map::TextLocaliserUI, &g_localiserClass);
   fake::type(map::HorizontalOrVerticalLayoutGroup, &g_layoutClass);
+  fake::type(map::TextMeshProUGUI, &g_textClass);
+  fake::method(map::Component_GetComponentInChildren, reinterpret_cast<void*>(&fake_in_children));
+  fake::method(map::GameObject_get_activeInHierarchy, reinterpret_cast<void*>(&fake_in_hierarchy));
+  fake::method(map::InputAction_Disable, reinterpret_cast<void*>(&fake_disable));
+  g_menuShown = false;
+  g_disables = 0;
   fake::method(map::HorizontalOrVerticalLayoutGroup_get_spacing, reinterpret_cast<void*>(&fake_spacing));
   fake::method(map::RectTransform_get_rect, reinterpret_cast<void*>(&fake_rect));
   fake::method(map::RectTransform_get_anchorMin, reinterpret_cast<void*>(&fake_anchor_min));
@@ -485,7 +506,7 @@ void a_mod_key_gets_a_row_beside_the_games() {
   at<void*>(gameRef, kRefAction) = gameAction;
   at<void*>(&g_gameRow, kRowAction) = gameRef;
   at<void*>(&g_gameRow, kRowBindingId) = pm::api::make_string("game-1");
-  at<void*>(&g_gameRow, kRowLabel) = &g_gameLabel;
+  at<void*>(&g_gameRow, kRowLabel) = nullptr;  // as the game's rows: the name is ActionNameText, wired to nothing
   at<void*>(&g_gameRow, kPartParent) = &g_list;
   at<int32_t>(&g_gameRow, kPartSibling) = 1;
   at<bool>(&g_gameRow, kPartActive) = true;
@@ -519,21 +540,32 @@ void a_mod_key_gets_a_row_beside_the_games() {
   // The list's Content grows by what was added, its spacing with each, so the scroll reaches the new rows.
   CHECK(std::fabs(g_contentSize.y - (2575.0f + 6 + 100 + 6 + 100 + 4 * kSpacing)) < 1e-3f);
   // The heading: the mod's name on its label, its row's own rebinding gone, its buttons hidden, its label shown.
-  void* headingLabel = at<void*>(heading, kRowLabel);
+  void* headingLabel = at<void*>(heading, kPartLabel);
   CHECK(g_texts[headingLabel] == "Test Mod");
   CHECK(std::find(g_destroyedNow.begin(), g_destroyedNow.end(), heading) != g_destroyedNow.end());
   CHECK(at<bool>(g_kids[heading][0], kPartActive) && !at<bool>(g_kids[heading][1], kPartActive));
   // Every copy's localiser is taken off, or it would write the game's words back when the menu wakes it.
-  CHECK(!g_localiserOf[headingLabel] && !g_localiserOf[at<void*>(copy, kRowLabel)]);
+  CHECK(!g_localiserOf[headingLabel] && !g_localiserOf[at<void*>(copy, kPartLabel)]);
   void* ref = at<void*>(copy, kRowAction);
   CHECK(ref && ref != gameRef);
   void* action = ref ? at<void*>(ref, kRefAction) : nullptr;
   CHECK(action && at<void*>(action, kActionMap) != &g_gameMap);  // the mod's own action
   CHECK(pm::api::to_utf8(at<void*>(copy, kRowBindingId)) == "id-emote.1");
-  CHECK(g_texts[at<void*>(copy, kRowLabel)] == "Emote");
+  CHECK(g_texts[at<void*>(copy, kPartLabel)] == "Emote");
   CHECK(g_texts.count(&g_gameLabel) == 0);  // the game's row is untouched
   CHECK(at<bool>(copy, kPartActive));
   CHECK(at<bool>(g_kids[copy][1], kPartActive));  // a row keeps its buttons
+  // While the menu is on screen the key's actions are off: Unity refuses to rebind an enabled action ("Cannot rebind
+  // action ... while it is enabled", the game's log of the fifth run), and the player is in the menu, not playing.
+  g_menuShown = true;
+  keys::tick_keys();
+  CHECK(g_disables == 3);  // the keyboard's, the gamepad's and VR's
+  keys::tick_keys();
+  CHECK(g_disables == 3);  // once
+  const int enabledBefore = g_enabledActions;
+  g_menuShown = false;
+  keys::tick_keys();
+  CHECK(g_enabledActions == enabledBefore + 3);  // on again with the menu closed
   // A later tick, with the copies still there, makes no more.
   for (int i = 0; i < 120; ++i) keys::tick_keys();
   CHECK(g_copies.size() == 4);

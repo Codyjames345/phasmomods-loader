@@ -237,6 +237,14 @@ inline constexpr pm::sdk::EntryDesc Layer_PlayerView{.key = "Layer.PlayerView", 
                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                      .name = "PlayerView"};
 
+/// The layer an investigator's body is drawn on as other players see it: the PCPlayer prefab's body and head renderers
+/// are on it. On the player's own client the game moves them off it (Player.SetPlayerModelLayer), the body to
+/// PlayerView, which the game's renderer draws in its "Render Player HUD" passes over the world, with their own depth and
+/// field of view. Decompiled: read from the asset files.
+inline constexpr pm::sdk::EntryDesc Layer_AlivePlayer{.key = "Layer.AlivePlayer", .kind = pm::sdk::Kind::Layer,
+                                                      .confidence = pm::sdk::Confidence::Decompiled,
+                                                      .name = "AlivePlayer"};
+
 /// A layer named LaserGhost in the tag manager. Ghost Tells' Goryo puts its camera-only figure on it,
 /// as the approved design names it the camera-only render layer
 /// (docs/superpowers/specs/2026-10-21-ghost-tells-design.md). Inferred: from the layer's name and that
@@ -395,6 +403,8 @@ struct Layers {
   static constexpr pm::api::Layer<pm::map::Layer_PlayerView> PlayerView{};
   /// Unity's UI layer, where the closed journal's canvas sits: UI.index(), -1 when it did not resolve.
   static constexpr pm::api::Layer<pm::map::Layer_UI> UI{};
+  /// The layer bodies are drawn on as other players see them: AlivePlayer.index(), -1 when it did not resolve.
+  static constexpr pm::api::Layer<pm::map::Layer_AlivePlayer> AlivePlayer{};
   /// The ground a living player stands on (Layer_Default's note in the map). Unresolved: -1.
   static constexpr pm::api::Layer<pm::map::Layer_Default> Default{};
   static constexpr pm::api::Layer<pm::map::Layer_Floor> Floor{};  ///< the game's Floor layer, part of that ground. Unresolved: -1.

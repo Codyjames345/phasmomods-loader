@@ -8,6 +8,7 @@
 #include "Camera.h"
 #include "Player.h"
 #include "Transform.h"
+#include "Scene.h"
 #include "UnityObject.h"
 #include "UnityPostProcessing.h"
 #include "UnityRendering.h"
@@ -27,9 +28,11 @@ struct State {
   float t = 0.0f;  // seconds into the ease (out or back)
   Held playerCamera;
   Held camera;  // the view's own Camera; its GameObject goes with it
-  Held shownOn;  // the camera show_own_body added the body's layers to
+  Held shownOn;  // the camera show_own_body added AlivePlayer to
   int32_t shownMask = 0;
   std::vector<std::pair<Held, int32_t>> head;  // the head's renderers the view draws, each with the mode it had
+  using Moved = std::vector<std::pair<Held, int32_t>>;  // GameObjects moved to AlivePlayer, each with its layer
+  Moved viewMoved, shownMoved;
 };
 State g;
 
@@ -61,11 +64,32 @@ void* head_renderers() {
   return character ? phasmo::PlayerCharacter::headRenderersToTurnOff.get(character) : nullptr;
 }
 
-int32_t head_layers() {
-  const RefArray renderers{head_renderers()};
-  int32_t mask = 0;
-  for (size_t i = 0; i < renderers.size(); ++i) mask |= layer_bit(renderers[i]);
-  return mask;
+// The layer other players' bodies are drawn on (the PCPlayer prefab's), as a mask; 0 when it did not resolve.
+int32_t alive_bit() {
+  const int32_t layer = phasmo::Layers::AlivePlayer.index();
+  return layer >= 0 && layer < 32 ? 1 << layer : 0;
+}
+
+// Puts each renderer of `renderers` (a Renderer[]) on AlivePlayer, keeping its layer in `moved`. On the player's own
+// client the game puts the body on PlayerView, which its renderer draws in its first-person passes over everything, with
+// their own depth and field of view; on AlivePlayer it draws as another player's does.
+void move_to_alive(void* renderers, State::Moved& moved) {
+  const int32_t layer = phasmo::Layers::AlivePlayer.index();
+  if (layer < 0) return;
+  const RefArray list{renderers};
+  for (size_t i = 0; i < list.size(); ++i) {
+    void* go = list[i] && alive(list[i]) ? phasmo::Component::get_gameObject(list[i]) : nullptr;
+    if (!go) continue;
+    if (std::any_of(moved.begin(), moved.end(), [&](const auto& m) { return m.first.get() == go; })) continue;
+    moved.emplace_back(go, phasmo::GameObject::get_layer(go));
+    phasmo::GameObject::set_layer(go, layer);
+  }
+}
+
+void restore_layers(State::Moved& moved) {
+  for (auto& [go, layer] : moved)
+    if (go && alive(go)) phasmo::GameObject::set_layer(go, layer);
+  moved.clear();
 }
 
 // Draws the head while the view is outside, keeping each renderer's mode to give back.
@@ -118,6 +142,7 @@ void finish() {
   }
   if (g.playerCamera && alive(g.playerCamera)) phasmo::Behaviour::set_enabled(g.playerCamera, true);
   restore_head();
+  restore_layers(g.viewMoved);
   g.camera = nullptr;
   g.playerCamera = nullptr;
   g.phase = Phase::Off;
@@ -148,7 +173,10 @@ bool begin_third_person() {
     return false;
   }
   phasmo::Camera::CopyFrom(cam, playerCam);
-  phasmo::Camera::set_cullingMask(cam, phasmo::Camera::get_cullingMask(cam) | body_layers() | head_layers());
+  phasmo::Camera::set_cullingMask(cam, phasmo::Camera::get_cullingMask(cam) | alive_bit());
+  void* player = local_player();
+  move_to_alive(player ? phasmo::Player::renderers.get(player) : nullptr, g.viewMoved);
+  move_to_alive(head_renderers(), g.viewMoved);
   show_head();
   void* dataType = phasmo::UniversalAdditionalCameraData::type.type_object();
   void* playerData = dataType ? phasmo::Component::GetComponent(playerCam, dataType) : nullptr;
@@ -246,11 +274,14 @@ void show_own_body(bool on) {
     void* cam = local_camera();
     if (!cam) return;
     g.shownMask = phasmo::Camera::get_cullingMask(cam);
-    phasmo::Camera::set_cullingMask(cam, g.shownMask | body_layers());
+    phasmo::Camera::set_cullingMask(cam, g.shownMask | alive_bit());
+    void* player = local_player();
+    move_to_alive(player ? phasmo::Player::renderers.get(player) : nullptr, g.shownMoved);
     g.shownOn = cam;
     return;
   }
   if (g.shownOn && alive(g.shownOn)) phasmo::Camera::set_cullingMask(g.shownOn, g.shownMask);
+  restore_layers(g.shownMoved);
   g.shownOn = nullptr;
 }
 
