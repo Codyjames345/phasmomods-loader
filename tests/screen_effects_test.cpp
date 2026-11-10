@@ -41,6 +41,7 @@ T& at(void* o, int32_t offset) {
 constexpr int32_t kNetRig = 0x08, kRigCamera = 0x08, kVolMask = 0x10, kLayer = 0x14;
 constexpr int32_t kGlobal = 0x18, kPriority = 0x1C, kWeight = 0x20, kProfile = 0x28;
 constexpr int32_t kP1 = 0x30, kP2 = 0x38, kP3 = 0x40, kP4 = 0x48;  // a fake component's parameters
+constexpr int32_t kMin = 0x10, kMax = 0x14;  // ClampedFloatParameter.min and max, MinFloatParameter.min
 
 Obj g_net, g_rig, g_camera, g_cameraData, g_goClass, g_volumeClass, g_profileClass, g_vignetteClass, g_dofClass,
     g_dataClass;
@@ -64,11 +65,31 @@ void* fake_add(void*, void* type, bool overrides, void*) {
   CHECK(overrides);
   Obj* c = make(type == phasmo::Vignette::type.type_object() ? static_cast<void*>(&g_vignetteClass)
                                                              : static_cast<void*>(&g_dofClass));
-  for (int32_t off : {kP1, kP2, kP3, kP4}) at<void*>(c, off) = make(nullptr);
+  for (int32_t off : {kP1, kP2, kP3, kP4}) {
+    Obj* p = make(nullptr);
+    // Each parameter's own range, as URP declares them: the vignette's 0 to 1, the blur radius's 0.5 to 1.5.
+    at<float>(p, kMin) = off == kP4 ? 0.5f : (off == kP2 ? 0.01f : 0.0f);
+    at<float>(p, kMax) = off == kP4 ? 1.5f : 1.0f;
+    at<void*>(c, off) = p;
+  }
   return c;
 }
-void fake_set_float(void* p, float v, void*) { g_floats[p] = v; }
-void fake_set_mode(void* p, int32_t v, void*) { g_modes[p] = v; }
+std::map<void*, std::pair<float, float>> g_ranges;  // the range each constructor was run with
+bool g_overrideOff = false;                          // a constructor run without its override
+void fake_clamped_ctor(void* p, float v, float lo, float hi, bool over, void*) {
+  g_floats[p] = v;
+  g_ranges[p] = {lo, hi};
+  g_overrideOff |= !over;
+}
+void fake_min_ctor(void* p, float v, float lo, bool over, void*) {
+  g_floats[p] = v;
+  g_ranges[p] = {lo, 0.0f};
+  g_overrideOff |= !over;
+}
+void fake_mode_ctor(void* p, int32_t v, bool over, void*) {
+  g_modes[p] = v;
+  g_overrideOff |= !over;
+}
 void* fake_get_component(void*, void*, void*) { return &g_cameraData; }
 int32_t fake_vol_mask(void* d, void*) { return at<int32_t>(d, kVolMask); }
 int32_t g_layerSet = -1;
@@ -86,6 +107,8 @@ void give() {
   g_destroyed.clear();
   g_floats.clear();
   g_modes.clear();
+  g_ranges.clear();
+  g_overrideOff = false;
   g_layerSet = -1;
   fake::type(map::GameObject, &g_goClass);
   fake::type(map::Volume, &g_volumeClass);
@@ -104,8 +127,12 @@ void give() {
   fake::method(map::Component_get_gameObject, reinterpret_cast<void*>(&fake_self));
   fake::method(map::ScriptableObject_CreateInstance, reinterpret_cast<void*>(&fake_create_instance));
   fake::method(map::VolumeProfile_Add, reinterpret_cast<void*>(&fake_add));
-  fake::method(map::VolumeParameter_float_set_value, reinterpret_cast<void*>(&fake_set_float));
-  fake::method(map::VolumeParameter_DepthOfFieldMode_set_value, reinterpret_cast<void*>(&fake_set_mode));
+  fake::method(map::ClampedFloatParameter_ctor, reinterpret_cast<void*>(&fake_clamped_ctor));
+  fake::method(map::MinFloatParameter_ctor, reinterpret_cast<void*>(&fake_min_ctor));
+  fake::method(map::DepthOfFieldModeParameter_ctor, reinterpret_cast<void*>(&fake_mode_ctor));
+  fake::field(map::ClampedFloatParameter_min, kMin);
+  fake::field(map::ClampedFloatParameter_max, kMax);
+  fake::field(map::MinFloatParameter_min, kMin);
   fake::value(map::DepthOfFieldMode_Gaussian, 1);
   fake::field(map::Volume_m_IsGlobal, kGlobal);
   fake::field(map::Volume_priority, kPriority);
@@ -148,6 +175,11 @@ void effects_come_and_go() {
   CHECK(g_modes[at<void*>(dof, kP1)] == 1);  // Gaussian
   const float radius = g_floats[at<void*>(dof, kP4)];
   CHECK(radius >= 0.5f && radius <= 1.5f);
+  // Each value set by the parameter's own constructor, run on it with the range read from it, overriding.
+  CHECK(g_ranges[at<void*>(dof, kP4)] == std::make_pair(0.5f, 1.5f));
+  CHECK(g_ranges[at<void*>(vignette, kP1)] == std::make_pair(0.0f, 1.0f));
+  CHECK(g_ranges[at<void*>(vignette, kP2)] == std::make_pair(0.01f, 1.0f));
+  CHECK(!g_overrideOff);
   // A change sets the values again on the same volume.
   CHECK(fx::set_screen_effects(1.0f, 0.2f));
   CHECK(only(&g_volumeClass) == volume);

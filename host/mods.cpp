@@ -76,9 +76,11 @@ std::string joined(const std::vector<std::string>& keys) {
   return text;
 }
 
-/** A Mods panel row's reason for missing entries: the first by its key, since a row has room for little. The key is the mod's own text. */
+/** A Mods panel row's reason for missing entries: the first by its key, since a row has room for little. The key is the
+ *  mod's own text, shown with a generic instance's angle brackets as look-alikes (modid::shown_key). */
 std::string lacking_row(const std::vector<std::string>& keys) {
-  const std::string first = modid::display_safe(keys[0], modid::kMaxNameBytes) ? keys[0] : i18n::text("mods.a-game-entry");
+  const std::string shown = modid::shown_key(keys[0]);
+  const std::string first = modid::display_safe(shown, modid::kMaxNameBytes) ? shown : i18n::text("mods.a-game-entry");
   return keys.size() > 1 ? i18n::text("mods.lacks-entries", {{"entry", first}, {"count", std::to_string(keys.size() - 1)}})
                          : i18n::text("mods.lacks-entry", {{"entry", first}});
 }

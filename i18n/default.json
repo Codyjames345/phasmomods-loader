@@ -1,6 +1,6 @@
 // PhasmoMods Loader's player-facing text: the host's popups and the Mods panel, and the launcher's window.
 // A {{token}} is a placeholder the code fills in. Keep one entry per line. One marked PM_TEXT_TODO is a placeholder
-// waiting for the author's words.
+// waiting for the author's words; one marked PM_TEXT_AI is a draft the author asked AI for, until the author rewrites it.
 {
   "consent.account": "<b>Your account is at risk.</b> Phasmophobia's anti-cheat may detect and report your modified game to Kinetic Games, which can result in a ban. I cannot guarantee a mod or game update won't change how the anti-cheat works. To protect your account, mods only run in private lobbies. Do not attempt to bypass this restriction.",
   "consent.agree": "I agree",
@@ -184,14 +184,14 @@
   "manifest.unreadable-json": "manifest.json could not be read.",
   "manifest.vanilla-author": "id uses the author \"vanilla\", which is reserved for the game's own content.",
   "manifest.website-not-text": "website is not text.",
-  "mods.a-game-entry": "a game entry",
+  "mods.a-game-entry": "a part of the game",  // PM_TEXT_AI
   "mods.channel-taken": "Repeats the network channel of a mod already loaded",
   "mods.dll-unloadable": "DLL could not be loaded",
   "mods.id-mismatch": "manifest and DLL disagree on the mod id",
   "mods.id-repeated": "Repeats the id of another mod.",
   "mods.info-threw": "DLL failed when performing handshake. Check %LOCALAPPDATA%\\PhasmoMods\\mods.log for details.",
-  "mods.lacks-entries": "This game build lacks {{entry}} and {{count}} more",
-  "mods.lacks-entry": "This game build lacks {{entry}}",
+  "mods.lacks-entries": "Needs {{entry}} and {{count}} more, which this game version lacks",  // PM_TEXT_AI
+  "mods.lacks-entry": "Needs {{entry}}, which this game version lacks",  // PM_TEXT_AI
   "mods.not-a-mod": "DLL is not a valid mod for PhasmoMods Loader",
   "mods.other-version": "Mod was built for another version of the PhasmoMods Loader.",
   "mods.requires-threw": "DLL failed when querying dependencies. Check %LOCALAPPDATA%\\PhasmoMods\\mods.log for details.",

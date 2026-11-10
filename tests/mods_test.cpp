@@ -89,12 +89,12 @@ void mod_with_unresolved_requirement_stays_off(const fs::path& data) {
         pm::mods::installed()[0].entries == (std::vector<std::string>{"Camera", "GhostAI.UnAppear"}));
   CHECK(pm::mods::started_ids().empty());
   CHECK(logged("mods: fake-mod stays off: it needs game entries this game build lacks (GhostAI.UnAppear)"));
-  CHECK(pm::mods::off_reason("fake-mod") == "This game build lacks GhostAI.UnAppear");
+  CHECK(pm::mods::off_reason("fake-mod") == "Needs GhostAI.UnAppear, which this game version lacks");
   g_resolved = {};
   g_lines.clear();
   pm::mods::start(&api, {"fake-mod"});
   CHECK(logged("mods: fake-mod stays off: it needs game entries this game build lacks (Camera, GhostAI.UnAppear)"));
-  CHECK(pm::mods::off_reason("fake-mod") == "This game build lacks Camera and 1 more");
+  CHECK(pm::mods::off_reason("fake-mod") == "Needs Camera and 1 more, which this game version lacks");
 
   // Every entry resolved, but one is a method whose calls the host could not track: the mod stays off.
   g_resolved = {"Camera", "GhostAI.UnAppear"};
@@ -588,10 +588,10 @@ void unresolved_mod_stays_off_and_is_named(const fs::path& data, const fs::path&
   g_resolved = {"Camera"};
   pm::mods::start(&api, {"fake-mod", "fake-optional", "fake-plain"});
   CHECK(pm::mods::started_ids() == std::vector<std::string>{"fake-plain"});
-  CHECK(pm::mods::off_reason("fake-mod") == "This game build lacks GhostAI.UnAppear");
+  CHECK(pm::mods::off_reason("fake-mod") == "Needs GhostAI.UnAppear, which this game version lacks");
   CHECK(logged("mods: fake-mod stays off: it needs game entries this game build lacks (GhostAI.UnAppear)"));
   CHECK(pm::mods::off_reason("fake-optional") == "Depends on Spectral Flame, which contains an error. Please check mods.log.");
-  CHECK(logged("mods: fake-optional stays off: it needs Spectral Flame, which stays off: This game build lacks GhostAI.UnAppear"));
+  CHECK(logged("mods: fake-optional stays off: it needs Spectral Flame, which stays off: Needs GhostAI.UnAppear, which this game version lacks"));
   CHECK(pm::mods::off_reason("fake-plain").empty());
   CHECK(!mapped(dependent));  // it never reached its DLL
   pm::mods::stop_all();
