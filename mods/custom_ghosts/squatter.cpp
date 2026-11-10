@@ -1388,8 +1388,6 @@ void play(void* ghost) {
     }
   }
   const bool down = g.fall.phase() != FallPhase::Up;
-  // The sheet follows the body through the fall and takes its sway back by itself once it stands (figure::rise,
-  // squatter_fall.h cloth_blend).
   if (c.act && s.act >= 0 && !down) figure::play_act(static_cast<Act>(s.act));
   // A fall hands the body to its ragdoll, pushed the way the master says; a move the master sends while the figure is
   // still down waits until it stands.

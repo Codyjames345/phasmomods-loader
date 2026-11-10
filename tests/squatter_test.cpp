@@ -1349,9 +1349,9 @@ int main() {
   every_bone_under_the_hips_blends();
   it_turns_with_its_clips_before_running_on();
   every_fall_says_its_line();
-  the_sheet_follows_the_body_through_a_fall();
   a_root_jump_is_a_warp_not_a_step();
-  the_sheet_blend_moves_in_steps();
+  the_frames_of_a_trip_are_timed_past_the_get_up();
+  a_clip_change_is_a_jump_by_turn_or_by_place();
   the_sheet_stays_inside_its_point_budget();
   sheet_is_closed_grid_with_eye_holes();
   sheet_pins_only_the_top();

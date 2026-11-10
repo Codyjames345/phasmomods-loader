@@ -845,30 +845,6 @@ void every_fall_says_its_line() {
   CHECK(line_for_move(Move::Stumble) == std::optional<Lines>(Lines::Trip));
 }
 
-// Through a fall the sheet is worn rather than loose: its points are pinned to the body while it falls and gets up, so
-// the ragdoll cannot whip them across a room (user, 2026-11-10: the sheet spread everywhere, and getting up lagged), and
-// its own sway eases back over kClothEaseSeconds once it stands again (every cloth guide stops the simulation before a
-// ragdoll and fades it back in after).
-void the_sheet_follows_the_body_through_a_fall() {
-  CHECK(cloth_blend(-1.0f, 4.5f) == 0.0f);    // still falling under physics
-  CHECK(cloth_blend(0.0f, 4.5f) == 0.0f);     // the get-up's first frame
-  CHECK(cloth_blend(4.5f, 4.5f) == 0.0f);     // its last
-  CHECK(cloth_blend(4.5f + kClothEaseSeconds, 4.5f) == 1.0f);
-  CHECK(cloth_blend(1e9f, 0.0f) == 1.0f);     // a get-up clip of no length: free at once
-  float last = 0.0f;
-  for (int i = 0; i <= 20; ++i) {  // eases back, smoothly and only ever up
-    const float u = static_cast<float>(i) / 20.0f;
-    const float now = cloth_blend(4.5f + u * kClothEaseSeconds, 4.5f);
-    CHECK(now >= last - 1e-6f && now <= 1.0f);
-    last = now;
-  }
-  CHECK(last == 1.0f);
-  CHECK(kClothEaseSeconds >= 0.2f && kClothEaseSeconds <= 1.0f);  // the fade the cloth guides use
-  CHECK(blend_distance(0.0f, 1.0f) == 0.0f);                      // pinned at the head: never let go
-  CHECK(blend_distance(0.12f, 0.0f) == 0.0f);                     // falling: pinned to the body
-  CHECK(std::abs(blend_distance(0.12f, 1.0f) - 0.12f) < 1e-6f);   // standing: as the sheet was made
-  CHECK(std::abs(blend_distance(0.12f, 0.5f) - 0.06f) < 1e-6f);
-}
 
 // A root that jumps further than any clip can carry it in a frame is a warp, not a step: the cloth's anchor moved under
 // it, so what the cloth accumulated is cleared (Unity's ClearTransformMotion) instead of being flung across the room.
@@ -883,14 +859,28 @@ void a_root_jump_is_a_warp_not_a_step() {
   CHECK(fastest / 20.0f < kFrameJumpMetres);
 }
 
-// The blend reaches the cloth in eighth steps, not every frame: each change hands the cloth every point's constraint.
-void the_sheet_blend_moves_in_steps() {
-  CHECK(blend_step(0.0f) == 0.0f && blend_step(1.0f) == 1.0f);
-  CHECK(blend_step(0.05f) == 0.0f && blend_step(0.07f) == 0.125f);
-  CHECK(blend_step(0.5f) == 0.5f && blend_step(1.5f) == 1.0f && blend_step(-0.2f) == 0.0f);
-  std::set<float> sent;
-  for (int i = 0; i <= 540; ++i) {  // a 4.5 s get-up and its ease, at 60 frames a second
-    sent.insert(blend_step(cloth_blend(static_cast<float>(i) / 60.0f, 4.5f)));
-  }
-  CHECK(sent.size() <= 9);  // 0 held through the get-up, then the ease in eighths
+// A trip's frames are timed from the knock-over to a moment after the get-up clip ends. The window that closed with the
+// clip logged no slow frame at all across the three falls of the 2026-11-10 run, and the user's spike is the frame just
+// after it, so the get-up's length is not where the watching stops.
+void the_frames_of_a_trip_are_timed_past_the_get_up() {
+  CHECK(fall_watch(true, 0.0f, 0.0f));           // under physics, no get-up timed yet
+  CHECK(fall_watch(false, 0.5f, 3.0f));          // a get-up still being watched
+  CHECK(fall_watch(false, 2.99f, 3.0f));
+  CHECK(!fall_watch(false, 3.0f, 3.0f));         // the moment after is the last one
+  CHECK(!fall_watch(false, 1.0f, 0.0f));         // never down: nothing to watch
+  CHECK(fall_watch(true, 9.0f, 3.0f));           // physics is always worth timing
+  CHECK(kFallWatchTailSeconds >= 0.5f && kFallWatchTailSeconds <= 3.0f);
 }
+
+// What a clip change leaves to smooth, by turn and by place, is what the user sees as two clips that do not mesh. None
+// of the 2026-11-10 run's changes reached 60 degrees, so that threshold asked the wrong question; this one asks about
+// the changes a player can see, and counts a joint moving as well as a joint turning.
+void a_clip_change_is_a_jump_by_turn_or_by_place() {
+  CHECK(!pose_jumps(0.0f, 0.0f));
+  CHECK(!pose_jumps(kPoseTurnWarnDegrees - 0.01f, kPoseShiftWarnMetres - 0.01f));
+  CHECK(pose_jumps(kPoseTurnWarnDegrees, 0.0f));
+  CHECK(pose_jumps(0.0f, kPoseShiftWarnMetres));
+  CHECK(kPoseTurnWarnDegrees >= 5.0f && kPoseTurnWarnDegrees <= 45.0f);  // a snap a player sees, not a pose difference
+  CHECK(kPoseShiftWarnMetres >= 0.01f && kPoseShiftWarnMetres <= 0.1f);
+}
+

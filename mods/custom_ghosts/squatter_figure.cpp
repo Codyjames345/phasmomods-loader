@@ -70,19 +70,18 @@ struct Figure {
   api::Held fullBody, lookAt;      // Final IK: the body's FullBodyBipedIK, and the head's LookAtIK
   api::Held order;                 // Final IK's IKExecutionOrder, whose LateUpdate is the pass after the animation
   bool falling = false;            // its ragdoll has it, not its Animator or its IK
-  std::vector<phasmo::Vector2> coefficients;  // the sheet's own constraints, as built, which the blend scales
-  float blend = 1.0f;      // the blend last sent to the cloth
-  float riseAt = 0.0f;     // when its last get-up began, on the figure's clock
-  float riseClip = -1.0f;  // that get-up clip's length, seconds; negative for none running
+  int sheetPoints = 0;       // its sheet's points, which is what a slow frame is paid in (the log says it)
+  float watchedUntil = 0.0f;  // time the frames of the last trip run out, on the figure's clock; 0 for none running
   phasmo::Quaternion fallChest{0, 0, 0, 1};  // the chest's rotation as the fall began
   phasmo::Vector3 fallFront{0, 0, 1};        // the body's front as the fall began
 } g;
 
 AfterAnimation g_after = nullptr;
 std::chrono::steady_clock::time_point g_lastPass{};  // when the pass after the animation last ran; zero before the first
-// A frame slower than this, milliseconds, while the body is down is the lag the user reports after a get-up, and this
-// pass, once a frame, is the only place it can be seen: it is logged with what the sheet was doing, no more than once a
-// second (2026-11-10).
+// A frame slower than this, milliseconds, while a trip is being watched is the lag the user reports after a get-up, and
+// this pass, once a frame, is the only place it can be seen: it is logged with what the sheet was made of, no more than
+// once a second (2026-11-10). The window is squatter_fall.h's fall_watch, which runs past the get-up's clip: the window
+// that closed with the clip logged no slow frame across three falls, and the spike was reported anyway.
 constexpr float kFrameWarnMs = 33.0f;
 float g_frameWarnAt = 0.0f;  // when the last of those was logged, on the figure's clock
 int g_slowFrames = 0;        // how many this fall has had
@@ -155,26 +154,40 @@ void inertialize() {
   }
 }
 
-// A clip change that leaves a bone further than this from where it stood is the kind the user sees as two animations not
-// meshing (2026-11-10). What is left to smooth over is logged with the pair of states, no more than once a second, so a
-// later test can name the clips that need a better blend or a different neighbour.
-constexpr float kPoseJumpWarnDegrees = 60.0f;
-float g_poseWarnAt = 0.0f;  // when the last of those was logged, on the figure's clock
+// Each pose bone's place against its parent now; zero for one gone. Read with the rotations at a change of clip, since
+// a joint that moves is as visible as one that turns.
+std::vector<phasmo::Vector3> read_places() {
+  std::vector<phasmo::Vector3> places;
+  places.reserve(g_poseBones.size());
+  for (const api::Held& b : g_poseBones)
+    places.push_back(api::alive(b) ? phasmo::Transform::get_localPosition(b) : phasmo::Vector3{});
+  return places;
+}
 
-// The furthest any bone is left from where it stood by the change from `was` to `state`, degrees, logged when that is
-// more than kPoseJumpWarnDegrees.
-void warn_pose_jump(const char* was, const char* state) {
+float g_poseWarnAt = 0.0f;  // when the last clip change was logged, on the figure's clock
+
+// The worst a clip change from `was` to `state` is: how far round any bone is left (degrees) and how far any joint is
+// left along (metres), from what inertialization still has to smooth and from the places either side of the change.
+// Logged with both state names when either is a jump (squatter_fall.h pose_jumps), no more than once a second, so a
+// later test can name the clips that need a better neighbour or a longer smoothing (2026-11-10).
+void warn_pose_jump(const char* was, const char* state, const std::vector<phasmo::Vector3>& from,
+                    const std::vector<phasmo::Vector3>& to) {
   const float now = seconds();
-  float worst = 0.0f;
+  float worstTurn = 0.0f, worstShift = 0.0f;
   for (size_t i = 0; i < g_poseBones.size(); ++i) {
     const phasmo::Quaternion q = g_inertia.offset(i, now);
     const float angle = 2.0f * std::acos(std::min(1.0f, std::fabs(q.w)));
-    if (!(angle <= worst)) worst = angle;
+    if (!(angle <= worstTurn)) worstTurn = angle;
+    if (i >= from.size() || i >= to.size()) continue;
+    const float dx = from[i].x - to[i].x, dy = from[i].y - to[i].y, dz = from[i].z - to[i].z;
+    const float metres = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (!(metres <= worstShift)) worstShift = metres;
   }
-  const float degrees = worst * 180.0f / std::numbers::pi_v<float>;
-  if (degrees <= kPoseJumpWarnDegrees || now - g_poseWarnAt < 1.0f) return;
+  const float degrees = worstTurn * 180.0f / std::numbers::pi_v<float>;
+  if (!pose_jumps(degrees, worstShift) || now - g_poseWarnAt < 1.0f) return;
   g_poseWarnAt = now;
-  PM_LOG("squatter: %.0f degrees left to smooth between its %s and %s clips", degrees, was ? was : "(nothing)", state);
+  PM_LOG("squatter: %.0f degrees and %.0f cm left to smooth between its %s and %s clips", degrees, worstShift * 100.0f,
+         was ? was : "(nothing)", state);
 }
 
 // How much of the look the spine takes, against the head's whole turn, and how far past straight ahead it eases off:
@@ -277,7 +290,7 @@ bool build_sheet() {
     uv.push_back({m.uv[i].x, m.uv[i].y});
     coefficients.push_back({m.coefficients[i].maxDistance, m.coefficients[i].collisionSphereDistance});
   }
-  g.coefficients = coefficients;
+  g.sheetPoints = static_cast<int>(m.vertices.size());
   // Skinned to the whole body as worn clothing is in games (sheet::weight_by_nearness): each point follows the bones
   // nearest it, so the sheet goes with the arms and legs, and the cloth only sways about that (kHemSway). The cap over
   // the head follows the head alone, so the eye holes stay over the eyes.
@@ -441,15 +454,6 @@ void clear_cloth_motion() {
   if (api::alive(g.cloth.cloth)) phasmo::Cloth::ClearTransformMotion(g.cloth.cloth);
 }
 
-// After a get-up the sheet's own sway comes back by itself (cloth_blend): none through the fall and the get-up, then
-// eased in over kClothEaseSeconds, until it is standing free again.
-void ease_sheet() {
-  if (g.riseClip < 0.0f) return;
-  const float blend = cloth_blend(seconds() - g.riseAt, g.riseClip);
-  set_cloth_blend(blend);
-  if (blend >= 1.0f) g.riseClip = -1.0f;
-}
-
 // Final IK's LateUpdate, for every model that has an IKExecutionOrder: on the figure's own, the pass after the
 // animation runs first, so the IK bends the pose the pass leaves.
 void detour_ik_late_update(api::Original<phasmo::IKExecutionOrder::LateUpdate> original, void* order) {
@@ -457,21 +461,19 @@ void detour_ik_late_update(api::Original<phasmo::IKExecutionOrder::LateUpdate> o
     const auto now = std::chrono::steady_clock::now();
     const float dt = g_lastPass == decltype(g_lastPass){} ? 0.0f : std::chrono::duration<float>(now - g_lastPass).count();
     g_lastPass = now;
-    // The frame the engine just took, and what the Squatter was doing in it: the only way to see the lag the user
-    // reports after a get-up, since nothing else in the mod runs once a frame.
-    if ((g.falling || g.riseClip >= 0.0f) && dt * 1000.0f > kFrameWarnMs) {
+    // The frame the engine just took, and what the sheet is made of: the only way to see the lag the user reports after
+    // a get-up, since nothing else in the mod runs once a frame.
+    if (fall_watch(g.falling, seconds(), g.watchedUntil) && dt * 1000.0f > kFrameWarnMs) {
       ++g_slowFrames;  // every slow frame counts, even though the line is held to one a second
       if (seconds() - g_frameWarnAt >= 1.0f) {
         g_frameWarnAt = seconds();
-        PM_LOG("squatter: a %.0f ms frame while its body %s (sheet blend %.2f, %d sheet points, %d colliders, %d slow "
-               "frames this fall)",
-               dt * 1000.0f, g.falling ? "is falling" : "is getting up", g.blend,
-               static_cast<int>(g.coefficients.size()), static_cast<int>(g.cloth.colliders.size()), g_slowFrames);
+        PM_LOG("squatter: a %.0f ms frame while its body %s (%d sheet points, %d colliders, %d slow frames this trip)",
+               dt * 1000.0f, g.falling ? "is falling" : "has just got up", g.sheetPoints,
+               static_cast<int>(g.cloth.colliders.size()), g_slowFrames);
       }
     }
     if (!g.falling) inertialize();
     if (g_after) g_after(dt);
-    ease_sheet();
     if (!ik_runs(order, g.order, g.falling)) return;  // physics has the body: no IK bends it
   }
   original(order);
@@ -579,12 +581,14 @@ void blend_to(const char* state) {
   if (!check()) return;
   const char* was = g.playing;
   const auto from = read_pose();
+  const auto fromAt = read_places();
   if (!api::play_state(g.animator, state)) return;
   api::pose_now(g.animator);
   g.playing = state;
   const auto to = read_pose();
+  const auto toAt = read_places();
   g_inertia.begin(from, to, seconds());
-  warn_pose_jump(was, state);
+  warn_pose_jump(was, state, fromAt, toAt);
 }
 
 void play(Move m, uint32_t variant) { blend_to(state_for(m, variant)); }
@@ -661,10 +665,11 @@ bool fall(phasmo::Vector3 velocity) {
   g.fallChest = chest ? phasmo::Transform::get_rotation(chest) : facing;
   g.fallFront = qrot(facing, {0, 0, 1});
   g_slowFrames = 0;
-  // The sheet is worn through the fall: every point pinned to the body, so the ragdoll cannot carry it across the room
-  // (squatter_fall.h cloth_blend).
-  g.riseClip = -1.0f;
-  set_cloth_blend(0.0f);
+  g.watchedUntil = 0.0f;
+  // The sheet keeps its own sway through the fall. It cannot spread: every point is limited to kHemSway from where the
+  // body carries it, and the ragdoll's colliders go with the bones. What spread it did take was the 2 m of extra
+  // freedom the old slack gave every point, and that went in the same round (user, 2026-11-10: pinning every point
+  // instead left the sheet frozen against the body until the get-up finished, and one huge frame as it let go).
   phasmo::Behaviour::set_enabled(g.animator, false);  // it would set the bones over physics every frame
   ragdoll::set_physical(true, velocity);
   g.falling = true;
@@ -672,19 +677,6 @@ bool fall(phasmo::Vector3 velocity) {
 }
 
 bool falling() { return check() && g.falling; }
-
-void set_cloth_blend(float blend) {
-  if (!check() || !api::alive(g.cloth.cloth) || g.coefficients.empty()) return;
-  blend = blend_step(blend);  // a few steps, never every frame: each send hands the cloth every point's constraint
-  if (blend == g.blend) return;
-  void* arr = pm::api::Type<pm::map::Vector2>{}.make_array(g.coefficients.size());
-  if (!arr || api::ValueArray{arr}.stride() != sizeof(phasmo::Vector2)) return;
-  const api::Array<phasmo::Vector2> out{arr};
-  for (size_t i = 0; i < g.coefficients.size(); ++i)
-    out[i] = {blend_distance(g.coefficients[i].x, blend), g.coefficients[i].y};
-  phasmo::Cloth::set_coefficients(g.cloth.cloth, arr);
-  g.blend = blend;
-}
 
 std::optional<phasmo::Quaternion> body_rotation() {
   if (!check()) return std::nullopt;
@@ -740,10 +732,9 @@ void rise(const char* state, phasmo::Vector3 at, float yaw, float blendSeconds) 
   const phasmo::Quaternion hipsTurn = hips ? phasmo::Transform::get_rotation(hips) : phasmo::Quaternion{0, 0, 0, 1};
   ragdoll::set_physical(false, {});
   g.falling = false;
-  // The sheet stays pinned through the get-up, and its sway comes back over kClothEaseSeconds once the clip has played
-  // (ease_sheet).
-  g.riseAt = seconds();
-  g.riseClip = std::max(0.0f, seconds_of(state));
+  // Its frames are timed through this clip and for kFallWatchTailSeconds after it, which is where the frame the user
+  // feels as a spike sits (squatter_fall.h fall_watch).
+  g.watchedUntil = seconds() + std::max(0.0f, seconds_of(state)) + kFallWatchTailSeconds;
   // The root moves under the body, which stays where it lies.
   place(at, yaw);
   if (hips) {
@@ -752,15 +743,18 @@ void rise(const char* state, phasmo::Vector3 at, float yaw, float blendSeconds) 
   }
   clear_cloth_motion();  // the root went under the body, which stayed where it lay: the sheet goes with the body
   const auto from = read_pose();
+  const auto fromAt = read_places();
   const phasmo::Vector3 hipsFrom = hips ? phasmo::Transform::get_localPosition(hips) : phasmo::Vector3{};
   phasmo::Behaviour::set_enabled(g.animator, true);
   if (!api::play_state(g.animator, state)) return forget_inertia();
   api::pose_now(g.animator);
   g.playing = state;
   const auto to = read_pose();
+  const auto toAt = read_places();
   const phasmo::Vector3 hipsTo = hips ? phasmo::Transform::get_localPosition(hips) : phasmo::Vector3{};
   const float now = seconds();
   g_inertia.begin(from, to, now, blendSeconds);
+  warn_pose_jump("lying", state, fromAt, toAt);
   g_hipsOffset = {hipsFrom.x - hipsTo.x, hipsFrom.y - hipsTo.y, hipsFrom.z - hipsTo.z};
   g_hipsSince = now;
   g_hipsSeconds = blendSeconds;

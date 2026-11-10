@@ -246,13 +246,6 @@ void turn_root(float yaw);
 /** Where its feet are in the world this frame (the foot bones), into `left` and `right`; false when it is not built. */
 bool feet(phasmo::Vector3& left, phasmo::Vector3& right);
 
-/**
- * Lets the sheet's points move `blend` (0 to 1) of the way their own limits allow (squatter_fall.h cloth_blend,
- * blend_distance): 0 pins every point to the body, so a ragdoll or a get-up cannot whip the sheet about, and 1 leaves
- * the sheet as it was made. Sent to the cloth only when it changes, in steps (blend_step).
- */
-void set_cloth_blend(float blend);
-
 /** Where a fallen body lies, in the world: its hips, its head, and its chest's front (a unit vector). */
 struct Landing {
   phasmo::Vector3 hips, head, front;

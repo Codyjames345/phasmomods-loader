@@ -74,40 +74,6 @@ class FallState {
   std::optional<uint64_t> still_;  // since when its bodies have been slow
 };
 
-/**
- * How far, seconds, the sheet takes back its own sway once it stands again, after its get-up's clip has played. A
- * cloth let go of a pinned body all at once snaps back to it, so the sway comes back as a fade instead (Unreal's cloth
- * blend weight and MagicaCloth's stabilizing time after a reset both fade in over a fraction of a second). A starting
- * value, judged with the user in game.
- */
-inline constexpr float kClothEaseSeconds = 0.5f;
-
-/**
- * How far the sheet's points may move from where the body carries them, as a share (0 to 1) of the limits the sheet was
- * made with (figure::set_cloth_blend): none while its body falls and gets up, so the sheet is worn and follows the body
- * exactly, and all of it `kClothEaseSeconds` after its get-up's clip has played.
- *
- * A cloth left free through a ragdoll is the one thing every cloth guide warns against: the falling body carries its
- * points at the ragdoll's speed, they take whatever freedom they are given, and the sheet spreads across the room and
- * blows up (Unity's Cloth manual, and the ragdoll guides that stop cloth before a fall and fade it back in after).
- * `sinceRise` is seconds since the get-up began, and `clipSeconds` is that clip's length: negative `sinceRise` is a
- * body still falling.
- */
-inline float cloth_blend(float sinceRise, float clipSeconds) {
-  const float free = sinceRise - clipSeconds;
-  if (free <= 0.0f) return 0.0f;
-  const float u = std::min(1.0f, free / kClothEaseSeconds);
-  return u * u * (3.0f - 2.0f * u);
-}
-
-/** How far a point that may move `base` metres from the body may move at `blend`: 0 pins it to the body, 1 leaves the
- * sheet as it was made. A point the head carries (base 0) stays pinned whatever the blend. */
-inline float blend_distance(float base, float blend) { return base * std::clamp(blend, 0.0f, 1.0f); }
-
-/** `blend` brought to the nearest eighth, 0 to 1: the steps it reaches the cloth in, since each change re-sends every
- * point's constraint to the cloth. A whole get-up and its ease send a handful of times, never once a frame. */
-inline float blend_step(float blend) { return std::round(std::clamp(blend, 0.0f, 1.0f) * 8.0f) / 8.0f; }
-
 /** How far the root may move, metres, in one frame and still be walking (root_jumped). A starting value: it sits above
  * the furthest the Squatter's fastest clip carries it in a frame at twenty frames a second, and far below the
  * NavMesh warps and get-up placements that move it by metres. */
@@ -120,6 +86,31 @@ inline constexpr float kFrameJumpMetres = 0.5f;
  * the cloth is dragged after the body and arrives stretched across the room.
  */
 inline bool root_jumped(float metres) { return metres >= kFrameJumpMetres; }
+
+/**
+ * How long after a get-up's clip its frames are still timed, seconds (figure::fall_watch). The frame the user feels as a
+ * spike lands once the body stands again, which is after the get-up's clip, and the window of 2026-11-10 closed with the
+ * clip: it logged no slow frame across three falls while the spike was reported anyway. A starting value.
+ */
+inline constexpr float kFallWatchTailSeconds = 1.5f;
+
+/**
+ * Whether to time this frame of the Squatter: while its body is under physics, or before `until` (the figure's clock)
+ * for the get-up that followed it. `until` of 0 is a body that has never been down, so a standing Squatter's frames are
+ * nobody's business.
+ */
+inline bool fall_watch(bool falling, float now, float until) { return falling || (until > 0.0f && now < until); }
+
+/**
+ * A clip change the user may see as two animations not meshing: one that leaves a bone `degrees` further round, or a
+ * joint `metres` further along, than it stood. The figure logs the worst of a change with both state names, so a later
+ * test names the pairs that need a different neighbour or a longer smoothing. Both values sit well under a whole pose
+ * difference: none of the 2026-11-10 run's changes reached 60 degrees, so the run asked about the wrong changes, and
+ * inertialization already smooths everything it is given.
+ */
+inline constexpr float kPoseTurnWarnDegrees = 30.0f, kPoseShiftWarnMetres = 0.05f;
+
+inline bool pose_jumps(float degrees, float metres) { return degrees >= kPoseTurnWarnDegrees || metres >= kPoseShiftWarnMetres; }
 
 /** How it gets up: from lying face down (Standing Up) or face up (Getting Up). */
 enum class GetUp { FaceDown, FaceUp };
