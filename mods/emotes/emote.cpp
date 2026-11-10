@@ -393,12 +393,14 @@ void end_local_body() {
 void apply_local(const LocalOut& o, void* player, bool vr) {
   const int me = game::local_actor();
   if (o.start >= 0) {
+    PM_LOG("Emotes: %s starts (%s)", kEmotes[o.start].clip, vr ? "VR" : "screen");
     api::anim::play_on_player(player, g.a.clips[o.start], kBlendIn);
     start_song(me, player, o.start);
     begin_local_body(player, vr);
     begin_facing(me, player, o.bodyYaw.value_or(0.0f));
   }
   if (o.stop) {
+    PM_LOG("Emotes: the emote ends");
     api::anim::stop_on_player(player, kBlendOut);
     stop_song(me);
     end_local_body();
@@ -427,6 +429,7 @@ std::optional<int> wheel_input(void* player, bool vr) {
       if (key.pressed) {
         void* left = phasmo::VRPlayer::leftHandIK.get(player);
         g.vrWheel = wheel::open_vr(left);
+        PM_LOG(g.vrWheel ? "Emotes: the VR wheel opens" : "Emotes: the VR wheel could not be built");
       }
       return std::nullopt;
     }
@@ -463,8 +466,13 @@ std::optional<int> wheel_input(void* player, bool vr) {
   const std::optional<int> played = wheel_step(g.wheelIn, key.held, key.released, interrupted, pickNow);
   if (g.wheelIn.open && !wasOpen) {
     g.mouseX = g.mouseY = 0.0f;
-    if (!wheel::open_screen()) g.wheelIn = WheelInput{};
-    else set_look(false);
+    if (!wheel::open_screen()) {
+      PM_LOG("Emotes: the wheel could not be built on screen");
+      g.wheelIn = WheelInput{};
+    } else {
+      PM_LOG("Emotes: the wheel opens");
+      set_look(false);
+    }
   }
   if (g.wheelIn.open) wheel::show_pick(g.wheelIn.picked);
   if (!g.wheelIn.open && wasOpen) {

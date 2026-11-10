@@ -116,6 +116,8 @@ struct State {
   bool ready = false;
   std::string lastSaved;  // the text last written or read, so a frame without a change writes nothing
   int rowTicks = 0;
+  std::string lastSeen;        // what the last search of the keybinds menu found, for its log line
+  bool loggedWaiting = false;  // the wait for the game's bindings was logged
 };
 State g;
 
@@ -251,13 +253,20 @@ void* make_row(void* templ, Key& k, size_t d) {
   void* object = phasmo::Component::get_gameObject(templ);
   void* transform = phasmo::Component::get_transform(templ);
   void* parent = transform ? phasmo::Transform::get_parent(transform) : nullptr;
-  if (!object || !parent) return nullptr;
+  if (!object || !parent) {
+    PM_LOG("keys: %s.%s gets no row: the menu's row has no parent", g.owner.c_str(), k.desc.id.c_str());
+    return nullptr;
+  }
   void* copyObject = phasmo::Object::Instantiate(object, parent, false);
-  if (!copyObject) return nullptr;
+  if (!copyObject) {
+    PM_LOG("keys: %s.%s gets no row: the menu's row could not be copied", g.owner.c_str(), k.desc.id.c_str());
+    return nullptr;
+  }
   void* copyTransform = phasmo::GameObject::get_transform(copyObject);
   void* copy = copyTransform ? phasmo::Component::GetComponent(copyTransform, phasmo::RebindActionUI::type.type_object())
                              : nullptr;
   if (!copy) {
+    PM_LOG("keys: %s.%s gets no row: its copy has no RebindActionUI", g.owner.c_str(), k.desc.id.c_str());
     phasmo::Object::Destroy(copyObject, 0.0f);
     return nullptr;
   }
@@ -292,9 +301,20 @@ void ensure_rows() {
     Device d{};
     if (rows[i] && row_device(rows[i], d)) templ[static_cast<size_t>(d)] = rows[i];
   }
+  // What the search found, logged when it changes (the keybinds menu loads with some scenes and not others).
+  const std::string seen = std::to_string(rows.size()) + (templ[0] ? " k" : " -") + (templ[1] ? "g" : "-");
+  if (seen != g.lastSeen) {
+    PM_LOG("keys: %s finds %zu keybinds rows (a keyboard row to copy: %s, a gamepad row: %s)", g.owner.c_str(),
+           rows.size(), templ[0] ? "yes" : "no", templ[1] ? "yes" : "no");
+    g.lastSeen = seen;
+  }
   for (Key& k : g.keys)
     for (size_t d = 0; d < kDevices; ++d)
-      if (k.actions[d] && templ[d] && (!k.rows[d] || !alive(k.rows[d]))) k.rows[d] = make_row(templ[d], k, d);
+      if (k.actions[d] && templ[d] && (!k.rows[d] || !alive(k.rows[d]))) {
+        k.rows[d] = make_row(templ[d], k, d);
+        if (k.rows[d])
+          PM_LOG("keys: %s.%s has its row in the keybinds menu (device %zu)", g.owner.c_str(), k.desc.id.c_str(), d);
+      }
 }
 
 }  // namespace
@@ -317,13 +337,23 @@ void tick_keys() {
   if (g.keys.empty()) return;
   if (!g.ready) {
     const std::vector<std::string> game = game_bindings();
-    if (game.empty()) return;
+    if (game.empty()) {
+      if (!g.loggedWaiting) PM_LOG("keys: %s waits for the game's bindings (no player controls or keybinds menu yet)",
+                                   g.owner.c_str());
+      g.loggedWaiting = true;
+      return;
+    }
     if (!make_actions(game)) {
       PM_LOG("keys: %s cannot make its input actions in this game build", g.owner.c_str());
       g.keys.clear();
       return;
     }
     g.ready = true;
+    for (const Key& k : g.keys)
+      for (size_t d = 0; d < kDevices; ++d)
+        if (k.actions[d])
+          PM_LOG("keys: %s.%s is on %s (device %zu; the game has %zu bindings)", g.owner.c_str(), k.desc.id.c_str(),
+                 effective_path(k, d).c_str(), d, game.size());
     g.lastSaved = format_saved(parse_saved(read_file(g.file)));
     g.rowTicks = kRowSearchTicks - 1;  // look for the menu at once
   }
