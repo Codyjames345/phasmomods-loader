@@ -870,6 +870,19 @@ void the_sheet_follows_the_body_through_a_fall() {
   CHECK(std::abs(blend_distance(0.12f, 0.5f) - 0.06f) < 1e-6f);
 }
 
+// A root that jumps further than any clip can carry it in a frame is a warp, not a step: the cloth's anchor moved under
+// it, so what the cloth accumulated is cleared (Unity's ClearTransformMotion) instead of being flung across the room.
+void a_root_jump_is_a_warp_not_a_step() {
+  CHECK(!root_jumped(0.0f));
+  CHECK(!root_jumped(kFrameJumpMetres - 0.01f));
+  CHECK(root_jumped(kFrameJumpMetres));
+  // Its furthest-travelling clip, at twenty frames a second, is still a step: the threshold sits above the fastest the
+  // body ever moves itself, so a warp is the only thing that clears the cloth's motion.
+  float fastest = 0.0f;
+  for (const StateTravel& t : kClipTravel) fastest = std::max(fastest, t.metres / seconds_of(t.state));
+  CHECK(fastest / 20.0f < kFrameJumpMetres);
+}
+
 // The blend reaches the cloth in eighth steps, not every frame: each change hands the cloth every point's constraint.
 void the_sheet_blend_moves_in_steps() {
   CHECK(blend_step(0.0f) == 0.0f && blend_step(1.0f) == 1.0f);

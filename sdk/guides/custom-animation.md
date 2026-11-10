@@ -152,6 +152,15 @@ with; a ray or overlap query of the game's whose mask includes that layer can st
 - **Use a material of your own.** `two_sided_material(lit_material_of(copy), colour)` makes one on the body's lit
   shader with your colour, drawn on both sides, which a sheet seen from inside needs. Taking a colour from a borrowed
   texture rendered black in the engine test.
+- **When the GameObject jumps, tell the cloth.** Moving it a long way in one frame (a warp, a teleport, a body placed
+  where it landed) drags the cloth after it and it arrives stretched across the room. Call
+  `phasmo::Cloth::ClearTransformMotion(cloth)` right after the move; `Cloth.ClearTransformMotion` is what Unity's own
+  documentation says to do. The Squatter does it for every move of its root over `kFrameJumpMetres`
+  (`mods/custom_ghosts/squatter_fall.h`).
+- **A cloth worn by a body is not free while that body is a ragdoll.** Give its vertices no room of their own
+  (`Cloth.set_coefficients` with a maxDistance of 0 for every one) before physics takes the body, and bring their room
+  back over a fraction of a second afterwards: free points carried at ragdoll speed take whatever freedom they have and
+  blow up. The Squatter's `cloth_blend` does exactly that.
 - **Cloth is optional in the map.** Its Unity module could leave a later game build, so call
   `pm::api::cloth_available(&why)` and `pm::api::material_available(&why)` at your start and fail it, with `why` in
   the log, if either is false.

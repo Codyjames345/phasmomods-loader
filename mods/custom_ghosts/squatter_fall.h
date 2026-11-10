@@ -108,6 +108,19 @@ inline float blend_distance(float base, float blend) { return base * std::clamp(
  * point's constraint to the cloth. A whole get-up and its ease send a handful of times, never once a frame. */
 inline float blend_step(float blend) { return std::round(std::clamp(blend, 0.0f, 1.0f) * 8.0f) / 8.0f; }
 
+/** How far the root may move, metres, in one frame and still be walking (root_jumped). A starting value: it sits above
+ * the furthest the Squatter's fastest clip carries it in a frame at twenty frames a second, and far below the
+ * NavMesh warps and get-up placements that move it by metres. */
+inline constexpr float kFrameJumpMetres = 0.5f;
+
+/**
+ * Whether the figure's root moved `metres` this frame: far enough that it jumped rather than stepped, so the sheet's
+ * anchor went under it. Unity's answer for a cloth whose transform is moved a long way is to clear the motion it has
+ * accumulated right after moving it (Cloth.ClearTransformMotion), which is what the figure then does; left to itself
+ * the cloth is dragged after the body and arrives stretched across the room.
+ */
+inline bool root_jumped(float metres) { return metres >= kFrameJumpMetres; }
+
 /** How it gets up: from lying face down (Standing Up) or face up (Getting Up). */
 enum class GetUp { FaceDown, FaceUp };
 

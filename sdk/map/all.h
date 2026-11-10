@@ -1630,6 +1630,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &Cloth_set_useVirtualParticles,
     &Cloth_get_vertices,
     &Cloth_get_normals,
+    &Cloth_ClearTransformMotion,
     &CapsuleCollider,
     &CapsuleCollider_set_radius,
     &CapsuleCollider_set_height,

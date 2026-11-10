@@ -403,6 +403,13 @@ bool build_ik() {
   return true;
 }
 
+// The sheet hangs from its anchor, so when the root is moved a long way in one frame what the cloth had accumulated
+// from where it was is forgotten (squatter_fall.h root_jumped): the sheet comes with the body instead of being dragged
+// across the room after it (Unity's Cloth.ClearTransformMotion, its own answer to moving a cloth's transform).
+void clear_cloth_motion() {
+  if (api::alive(g.cloth.cloth)) phasmo::Cloth::ClearTransformMotion(g.cloth.cloth);
+}
+
 // After a get-up the sheet's own sway comes back by itself (cloth_blend): none through the fall and the get-up, then
 // eased in over kClothEaseSeconds, until it is standing free again.
 void ease_sheet() {
@@ -515,9 +522,12 @@ void destroy() {
 void place(phasmo::Vector3 at, float yaw) {
   if (!check()) return;
   void* t = phasmo::GameObject::get_transform(g.root);
+  const phasmo::Vector3 was = phasmo::Transform::get_position(t);
   const phasmo::Quaternion turn{0, std::sin(yaw / 2), 0, std::cos(yaw / 2)};
   phasmo::Transform::set_position(t, &at);
   phasmo::Transform::set_rotation(t, &turn);
+  const float dx = at.x - was.x, dy = at.y - was.y, dz = at.z - was.z;
+  if (root_jumped(std::sqrt(dx * dx + dy * dy + dz * dz))) clear_cloth_motion();
 }
 
 // Changes to `state` by inertialization (user, 2026-11-09: no pose snaps or floats between clips): the state plays at
@@ -649,6 +659,7 @@ void turn_root(float yaw) {
     phasmo::Transform::set_position(hips, &hipsAt);
     phasmo::Transform::set_rotation(hips, &hipsTurn);
   }
+  clear_cloth_motion();  // the root turned under a body that stayed put: the sheet turns with it, not after it
 }
 
 bool feet(phasmo::Vector3& left, phasmo::Vector3& right) {
@@ -693,6 +704,7 @@ void rise(const char* state, phasmo::Vector3 at, float yaw, float blendSeconds) 
     phasmo::Transform::set_position(hips, &hipsAt);
     phasmo::Transform::set_rotation(hips, &hipsTurn);
   }
+  clear_cloth_motion();  // the root went under the body, which stayed where it lay: the sheet goes with the body
   const auto from = read_pose();
   const phasmo::Vector3 hipsFrom = hips ? phasmo::Transform::get_localPosition(hips) : phasmo::Vector3{};
   phasmo::Behaviour::set_enabled(g.animator, true);

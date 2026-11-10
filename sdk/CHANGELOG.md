@@ -20,6 +20,10 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   colour and culling, the investigator's body, Resources and AssetBundle loading, and Animator states and bones.
 - **Optional assemblies.** A build may lack an assembly that only `kOptional` Type entries name; those entries then
   stay unresolved instead of the whole map failing. The Cloth entries are such.
+- **Cloth after a teleport.** The map gains `Cloth.ClearTransformMotion` (`phasmo::Cloth::ClearTransformMotion`): it
+  forgets the motion a cloth has accumulated from its GameObject moving through the world, so calling it right after
+  moving that GameObject a long way in one frame (a warp, a teleport, a body set down where it landed) carries the
+  cloth with it instead of dragging it.
 - **The fake game sizes arrays of a struct.** `pm::fake::element_size` sets the element size `array_new` gives a type.
 - **A ghost the Mimic never copies.** `PM_GHOST_NO_MIMIC_COPY`, a new bit of `PmGhostDef.flags` (`GhostDef::flags`):
   the host leaves the ghost off the Mimic's copy list for good.
