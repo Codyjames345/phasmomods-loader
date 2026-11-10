@@ -54,50 +54,6 @@ void a_pick_starts_and_tells_everyone() {
   CHECK(none.pick(1, gone).start == -1 && !none.active());
 }
 
-// The user's ruling (2026-11-10): the dance and its song wait for the view to be out, so the song does not start at
-// the camera.
-void a_pick_waits_for_the_view() {
-  LocalSession s(table());
-  LocalFrame f = here(-1.0);
-  LocalOut o = s.pick(3, f, 0.3f);
-  CHECK(o.viewOut && o.start == -1 && o.send.empty());  // the view goes out; nothing plays or is sent yet
-  CHECK(s.waiting() && !s.active());
-  f.dt = 0.2f;
-  o = s.tick(f);
-  CHECK(o.start == -1 && o.send.empty() && !o.stop);
-  f.dt = 0.15f;
-  o = s.tick(f);  // 0.35 s: the view is out
-  CHECK(o.start == 3 && has(o.send, Kind::Start));
-  CHECK(s.active() && !s.waiting());
-  // With the view already out, a pick plays at once.
-  o = s.pick(5, here(), 0.0f);
-  CHECK(o.start == 5 && !o.viewOut);
-}
-
-void what_ends_a_dance_also_ends_the_wait() {
-  LocalSession s(table());
-  s.pick(1, here(-1.0), 0.3f);
-  LocalFrame f = here(-1.0);
-  f.dt = 0.1f;
-  f.endAction = true;  // or the journal opening
-  LocalOut o = s.tick(f);
-  CHECK(o.stop && o.send.empty());  // the view comes back; nobody was told of a dance
-  CHECK(!s.waiting() && !s.active());
-  f.endAction = false;
-  f.dt = 1.0f;
-  CHECK(s.tick(f).start == -1);  // and it never starts
-  // Moving past half a metre during the wait ends it the same way.
-  s.pick(1, here(-1.0), 0.3f);
-  f = here(-1.0);
-  f.dt = 0.1f;
-  f.pos.x += 0.6f;
-  CHECK(s.tick(f).stop && !s.waiting());
-  // The mod stopping ends it too.
-  s.pick(1, here(-1.0), 0.3f);
-  o = s.end_now();
-  CHECK(o.stop && o.send.empty() && !s.waiting());
-}
-
 void moving_ends_the_emote() {
   LocalSession s(table());
   s.pick(0, here());
@@ -257,8 +213,6 @@ void a_peers_song_loops_with_its_clip() {
 }  // namespace
 
 int main() {
-  a_pick_waits_for_the_view();
-  what_ends_a_dance_also_ends_the_wait();
   a_pick_starts_and_tells_everyone();
   moving_ends_the_emote();
   each_listed_action_ends_it();

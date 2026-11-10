@@ -68,6 +68,39 @@ inline bool moved_too_far(Point start, Point now) {
   return std::hypot(now.x - start.x, now.z - start.z) > kCancelDistance;
 }
 
+/// A rotation (a unit quaternion, x y z w, as Unity's).
+struct Quat {
+  float x, y, z, w;
+};
+
+/// A place and a turn: a Transform's world pose, or one relative to another.
+struct Pose {
+  Point p;
+  Quat q;
+};
+
+inline Quat mul(Quat a, Quat b) {
+  return {a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+          a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z};
+}
+inline Quat inverse(Quat q) { return {-q.x, -q.y, -q.z, q.w}; }
+inline Point rotate(Quat q, Point v) {
+  const Quat r = mul(mul(q, Quat{v.x, v.y, v.z, 0.0f}), inverse(q));
+  return {r.x, r.y, r.z};
+}
+
+/// Where `child` sits in `parent`'s frame.
+inline Pose relative_to(const Pose& parent, const Pose& child) {
+  const Quat back = inverse(parent.q);
+  return {rotate(back, {child.p.x - parent.p.x, child.p.y - parent.p.y, child.p.z - parent.p.z}), mul(back, child.q)};
+}
+
+/// The world pose of `local`, a pose in `parent`'s frame.
+inline Pose placed_on(const Pose& parent, const Pose& local) {
+  const Point d = rotate(parent.q, local.p);
+  return {{parent.p.x + d.x, parent.p.y + d.y, parent.p.z + d.z}, mul(parent.q, local.q)};
+}
+
 /// The wheel as its key drives it.
 struct WheelInput {
   bool open = false;  ///< the key is held and the wheel shows

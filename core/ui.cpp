@@ -186,7 +186,12 @@ void* texture_from_rgba(int width, int height, const uint8_t* rgba, size_t bytes
     return nullptr;
   void* texture = phasmo::Texture2D::type.make();
   if (!texture) return nullptr;
-  phasmo::Texture2D::ctor(texture, width, height);
+  // One level, no mip chain: the player's texture quality setting drops a texture's top mip levels, which made the
+  // Emotes wheel's shapes blocky; and a texture with levels left unwritten shows the engine's grey fill.
+  if (phasmo::Texture2D::ctor_format.available() && phasmo::TextureFormat::RGBA32() != 0)
+    phasmo::Texture2D::ctor_format(texture, width, height, static_cast<int32_t>(phasmo::TextureFormat::RGBA32()), false);
+  else
+    phasmo::Texture2D::ctor(texture, width, height);
   phasmo::Object::set_hideFlags(texture, phasmo::HideFlags::DontUnloadUnusedAsset());
   void* pixels = phasmo::Texture2D::GetPixels32(texture, 0);
   const api::Array<phasmo::Color32> texels{pixels};
@@ -196,8 +201,7 @@ void* texture_from_rgba(int width, int height, const uint8_t* rgba, size_t bytes
   }
   std::copy_n(rgba, bytes, reinterpret_cast<uint8_t*>(&texels[0]));
   phasmo::Texture2D::SetPixels32(texture, pixels, 0);
-  // The texture has a mip chain (Texture2D.ctor): its smaller levels are written from level 0 here, or a texture drawn
-  // smaller than its size shows the engine's grey fill of a new texture instead (the Emotes wheel's grey squares).
+  // Its levels written from level 0, should the fallback constructor have given it a chain.
   phasmo::Texture2D::Apply(texture, true, true);
   return texture;
 }

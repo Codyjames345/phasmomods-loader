@@ -633,6 +633,14 @@ inline constexpr pm::sdk::EntryDesc JournalRigController_animator{
     .key = "JournalRigController.animator", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "JournalRigController", .type = "Animator"};
 
+/// The Transform the book hangs from while it is not in its animation: the body's JournalParent, which Animation
+/// Rigging's Journal Parent Rig places between a socket on the waist bone (JournalBeltSocket) and one in the right hand.
+/// Read from the class dump and the PCPlayer prefab.
+inline constexpr pm::sdk::EntryDesc JournalRigController_constraintParent{
+    .key = "JournalRigController.constraintParent", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "JournalRigController", .name = "constraintParent",
+    .type = "Transform"};
+
 /// The book's 3D tabs, a GameObject[]: OpenCloseJournalNetworked puts each on the open or closed layer.
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc JournalRigController_allTabsObjects{
@@ -821,6 +829,8 @@ struct JournalRigController {
   static constexpr pm::api::Type<pm::map::JournalRigController> type{};
   /// The book's Animator: animator.get(rig). Unresolved: null.
   static constexpr pm::api::Field<pm::map::JournalRigController_animator, void*> animator{};
+  /// The Transform the book hangs from: constraintParent.get(rig). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::JournalRigController_constraintParent, void*> constraintParent{};
   /// The book's 3D tabs, a GameObject[]: allTabsObjects.get(rig). Unresolved: null.
   static constexpr pm::api::Field<pm::map::JournalRigController_allTabsObjects, void*> allTabsObjects{};
   /// Whether it holds the book open: opened.get(rig), .set(rig, open). Unresolved: false, writes nothing.

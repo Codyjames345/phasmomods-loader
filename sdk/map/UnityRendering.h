@@ -307,6 +307,25 @@ inline constexpr pm::sdk::EntryDesc Texture2D_ctor{.key = "Texture2D.ctor", .kin
                                                    .flags = pm::sdk::kOptional, .owner = "Texture2D", .name = ".ctor",
                                                    .params = UnityRendering_int_int};
 
+inline constexpr const char* Texture2D_ctor_format_params[] = {"int", "int", "@TextureFormat", "bool"};
+
+/// The constructor Texture2D(width, height, format, mipChain): with mipChain false the texture has one level, which
+/// the player's texture quality setting (it drops a texture's top mip levels) leaves alone. Run it on an object the
+/// Texture2D type made. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Texture2D_ctor_format{.key = "Texture2D.ctor(format)", .kind = pm::sdk::Kind::Method,
+                                                          .flags = pm::sdk::kOptional, .owner = "Texture2D",
+                                                          .name = ".ctor", .params = Texture2D_ctor_format_params};
+
+/// A texture's pixel format (UnityEngine.CoreModule). Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc TextureFormat{.key = "TextureFormat", .flags = pm::sdk::kOptional,
+                                                  .name = "TextureFormat", .assembly = "UnityEngine.CoreModule",
+                                                  .ns = "UnityEngine"};
+
+/// Eight bits each of red, green, blue and alpha. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc TextureFormat_RGBA32{.key = "TextureFormat.RGBA32", .kind = pm::sdk::Kind::EnumValue,
+                                                         .flags = pm::sdk::kOptional, .owner = "TextureFormat",
+                                                         .name = "RGBA32"};
+
 inline constexpr const char* Texture2D_ReadPixels_params[] = {"Rect", "int", "int"};
 
 /// Copies a rectangle of the active RenderTexture into the texture at a corner. Inferred: Unity's
@@ -798,6 +817,9 @@ struct Texture2D {
   static constexpr pm::api::Type<pm::map::Texture2D> type{};
   /// ctor(texture, width, height). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Texture2D_ctor, void(void*, int32_t, int32_t)> ctor{};
+  /// ctor_format(texture, width, height, format, mipChain): format a TextureFormat. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Texture2D_ctor_format, void(void*, int32_t, int32_t, int32_t, bool)>
+      ctor_format{};
   /// ReadPixels(texture, &rect, x, y): the Rect passed by address, which the callee may change, so pass
   /// a copy. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Texture2D_ReadPixels, void(void*, Rect*, int32_t, int32_t)>
@@ -809,6 +831,11 @@ struct Texture2D {
   /// Apply(texture, updateMipmaps, makeNoLongerReadable). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Texture2D_Apply, void(void*, bool, bool)> Apply{};
 };
+
+/// A texture's pixel format. Unresolved: 0.
+namespace TextureFormat {
+inline constexpr pm::api::EnumValue<pm::map::TextureFormat_RGBA32> RGBA32{};  ///< RGBA32(): the value's number in this game build
+}  // namespace TextureFormat
 
 /// The pixel formats of a render texture.
 namespace RenderTextureFormat {

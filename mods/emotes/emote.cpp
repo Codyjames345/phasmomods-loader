@@ -51,6 +51,7 @@ namespace talk = api::talk;
 constexpr float kBlendIn = 0.25f;       // seconds the dance takes to blend in
 constexpr float kBlendOut = 0.35f;      // and out, the body's facing with it
 constexpr float kSongVolume = 0.8f;     // the song's volume, 0 to 1, before its fall with distance
+constexpr float kOwnSongVolume = 0.4f;  // the dancer's own hearing of it, at their own voice's place (no fall)
 constexpr float kHeadClearance = 0.3f;  // in VR, the head stays hidden while this close to the headset, in metres
 
 // The key's id and its defaults (the user's: B, D-pad down, a free left-controller button; each falls back when the
@@ -89,6 +90,10 @@ struct Facing {
   float bodyYaw = 0.0f;
   float easeBack = -1.0f;  // seconds left easing back to `original` after the emote, -1 while dancing
   float offset = 0.0f;     // the yaw the model is turned by under its root, degrees
+  // The journal's hanger (JournalRigController.constraintParent), which Animation Rigging places from the body's pose;
+  // the dance plays over the rig, so it is kept where it hung on the waist bone when the dance began.
+  api::Held journal, waist;
+  Pose onWaist{};
 };
 
 // One dancer's song.
@@ -222,6 +227,37 @@ void set_look(bool on) {
 
 void* animator_of(void* player) { return player ? phasmo::Player::animator.get(player) : nullptr; }
 
+Pose pose_of(void* t) {
+  const Vector3 p = game::position(t);
+  const Quaternion q = game::rotation(t);
+  return {{p.x, p.y, p.z}, {q.x, q.y, q.z, q.w}};
+}
+
+// The journal's hanger and the waist bone it hangs from, with where it hangs now, as the game's pose has it.
+void hold_journal(Facing& f, void* player) {
+  void* journal = phasmo::Player::journal.get(player);
+  void* rig = journal && game::alive(journal) ? phasmo::JournalController::rig.get(journal) : nullptr;
+  void* hanger = rig && game::alive(rig) ? phasmo::JournalRigController::constraintParent.get(rig) : nullptr;
+  void* animator = animator_of(player);
+  void* waist = animator ? phasmo::Animator::GetBoneTransform(animator, phasmo::HumanBodyBones::Spine()) : nullptr;
+  if (!hanger || !game::alive(hanger) || !waist) return;
+  f.journal = hanger;
+  f.waist = waist;
+  f.onWaist = relative_to(pose_of(waist), pose_of(hanger));
+  static bool logged = false;
+  if (!logged) PM_LOG("Emotes: the journal hangs from %s while dancing", api::to_utf8(phasmo::Object::get_name(waist)).c_str());
+  logged = true;
+}
+
+// Puts the journal back where it hangs on the dancing waist. The mod's tick runs after the frame's animation, so this
+// is the pose that renders; the rig places it from the game's pose again next frame.
+void keep_journal(const Facing& f) {
+  if (!f.journal || !game::alive(f.journal) || !f.waist || !game::alive(f.waist)) return;
+  const Pose at = placed_on(pose_of(f.waist), f.onWaist);
+  game::set_position(f.journal, {at.p.x, at.p.y, at.p.z});
+  game::set_rotation(f.journal, {at.q.x, at.q.y, at.q.z, at.q.w});
+}
+
 void begin_facing(int actor, void* player, float yaw) {
   void* animator = animator_of(player);
   void* model = animator ? game::transform_of(animator) : nullptr;
@@ -243,6 +279,7 @@ void begin_facing(int actor, void* player, float yaw) {
   f.root = root;
   f.original = game::local_rotation(model);
   f.bodyYaw = yaw;
+  hold_journal(f, player);
   g.facings[actor] = std::move(f);
 }
 
@@ -271,6 +308,7 @@ void apply_facings(float dt) {
       f.offset = wrap_degrees(f.bodyYaw - yaw_of(f.root));
     }
     game::set_local_rotation(f.model, mul(yaw_quat(f.offset), f.original));
+    keep_journal(f);
     ++it;
   }
 }
@@ -286,9 +324,12 @@ void start_song(int actor, void* player, int emote) {
   stop_song(actor);
   void* clip = g.a.songs[emote];
   if (!clip || !player) return;
-  void* animator = animator_of(player);
-  void* head = animator ? phasmo::Animator::GetBoneTransform(animator, phasmo::HumanBodyBones::Head()) : nullptr;
-  void* parent = head ? head : game::transform_of(player);
+  // From where the player's voice plays (PlayerAudio's voice source, which follows the head camera, not the dancing
+  // head): a head bone carried it round the dancer's own listener, panning and swelling, and loud at the start.
+  void* audio = phasmo::Player::audio.get(player);
+  void* voice = audio ? phasmo::PlayerAudio::GetPlayerVoiceAudioSource(audio) : nullptr;
+  if (voice && !game::alive(voice)) voice = nullptr;
+  void* parent = voice ? game::transform_of(voice) : game::transform_of(player);
   void* go = game::new_game_object("pm emote song");
   if (!go || !parent) return;
   phasmo::Transform::SetParent(game::object_transform(go), parent, false);
@@ -300,11 +341,9 @@ void start_song(int actor, void* player, int emote) {
   }
   phasmo::AudioSource::set_clip(source, clip);
   phasmo::AudioSource::set_spatialBlend(source, 1.0f);
-  phasmo::AudioSource::set_volume(source, kSongVolume);
+  phasmo::AudioSource::set_volume(source, actor == game::local_actor() ? kOwnSongVolume : kSongVolume);
   // It falls off with distance as the player's own voice does (the voice's AudioSource).
-  void* audio = phasmo::Player::audio.get(player);
-  void* voice = audio ? phasmo::PlayerAudio::GetPlayerVoiceAudioSource(audio) : nullptr;
-  if (voice && game::alive(voice)) {
+  if (voice) {
     const int32_t rolloff = phasmo::AudioSourceCurveType::CustomRolloff();
     if (void* curve = phasmo::AudioSource::GetCustomCurve(voice, rolloff))
       phasmo::AudioSource::SetCustomCurve(source, rolloff, curve);
@@ -399,7 +438,6 @@ void end_local_body() {
 
 void apply_local(const LocalOut& o, void* player, bool vr) {
   const int me = game::local_actor();
-  if (o.viewOut && player) begin_local_body(player, vr);  // the dance starts once the view is out (emote_session.h)
   if (o.start >= 0) {
     void* clip = g.a.clips[o.start];
     const bool played = api::anim::play_on_player(player, clip, kBlendIn);
@@ -497,7 +535,7 @@ std::optional<int> wheel_input(void* player, bool vr) {
 }
 
 void end_everything_local() {
-  if (g.local && (g.local->active() || g.local->waiting())) {
+  if (g.local && g.local->active()) {
     void* player = g.localPlayer.get();
     apply_local(g.local->end_now(), player && game::alive(player) ? player : nullptr, false);
   }
@@ -604,24 +642,18 @@ void tick() {
     f.pos = {p.x, p.y, p.z};
     f.viewYaw = api::view::view_yaw();
     f.clipTime = api::anim::clip_time(player);
-    f.dt = dt;
-    const bool dancing = g.local->active() || g.local->waiting();
+    const bool dancing = g.local->active();
     f.endAction = dancing && ((end_action_pressed(vr) && !wheel::is_open()) || journal_open(player));
   }
   if (present && keys::keys_ready()) {
-    if (const std::optional<int> played = wheel_input(player, vr)) {
-      // On screen the dance waits for the view to be out, so its song does not start at the camera (the user's
-      // ruling); VR's view never moves.
-      const float wait = vr ? 0.0f : api::view::seconds_until_out();
-      apply_local(g.local->pick(*played, f, wait), player, vr);
-    }
+    if (const std::optional<int> played = wheel_input(player, vr)) apply_local(g.local->pick(*played, f), player, vr);
   } else if (wheel::is_open()) {
     wheel::close();
     g.wheelIn = WheelInput{};
     set_look(true);
   }
   apply_local(g.local->tick(f), player, vr);
-  if ((g.local->active() || g.local->waiting()) && !vr) hold_items_in_hand();
+  if (g.local->active() && !vr) hold_items_in_hand();
   // In VR the head stays hidden while it would sit over the view.
   if (g.head && game::alive(g.head)) {
     void* cam = game::local_camera();

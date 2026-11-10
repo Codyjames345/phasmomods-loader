@@ -232,7 +232,26 @@ void every_slot_has_its_names() {
 
 }  // namespace
 
+// The journal hangs from the rig's JournalParent, placed from the game's pose; the dance plays over the rig, so the mod
+// keeps it where it was on the waist bone when the dance began.
+void the_journal_keeps_its_place_on_the_waist() {
+  const float h = 0.70710678f;
+  const Pose waist{{0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}};
+  const Pose journal{{0.2f, 0.9f, 0.1f}, {0.0f, h, 0.0f, h}};  // turned 90 degrees about up
+  const Pose held = relative_to(waist, journal);
+  // The waist moves up 10 cm and turns 90 degrees about up: the journal moves and turns with it.
+  const Pose danced{{0.0f, 1.1f, 0.0f}, {0.0f, h, 0.0f, h}};
+  const Pose now = placed_on(danced, held);
+  const auto near = [](float a, float b) { return std::fabs(a - b) < 1e-4f; };
+  CHECK(near(now.p.x, 0.1f) && near(now.p.y, 1.0f) && near(now.p.z, -0.2f));  // (0.2, -0.1, 0.1) turned, then raised
+  CHECK(near(std::fabs(now.q.y), 1.0f) && near(now.q.w, 0.0f));               // 180 degrees about up in all
+  // Unmoved, it stays put.
+  const Pose same = placed_on(waist, held);
+  CHECK(near(same.p.x, 0.2f) && near(same.p.y, 0.9f) && near(same.p.z, 0.1f));
+}
+
 int main() {
+  the_journal_keeps_its_place_on_the_waist();
   the_wheel_picks_by_direction();
   release_plays_the_pick();
   release_with_nothing_picked_plays_nothing();

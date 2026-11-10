@@ -107,6 +107,7 @@ struct Key {
   std::array<int32_t, kDevices> binding{};  // each action's binding's index in the map's bindings
   std::array<std::string, kDevices> chosen;  // the default chosen on each device
   std::array<Held, kDevices> rows;           // this key's rows in the keybinds menu (keyboard and gamepad)
+  bool parked = false;                       // its actions are off while its row is on screen
 };
 
 struct State {
@@ -339,14 +340,27 @@ void* copy_row(void* templ, const char* what, void*& copyObject) {
   return copy;
 }
 
+// A row's name text: RebindActionUI.m_ActionLabel where a row sets it. The game's rows leave it empty and show their
+// name in a child text with a TextLocaliserUI of its own (ActionNameText), the row's first.
+void* label_of(void* row) {
+  if (void* label = phasmo::RebindActionUI::m_ActionLabel.get(row)) return label;
+  void* localiser = phasmo::Component::GetComponentInChildren(row, phasmo::TextLocaliserUI::type.type_object(), true);
+  return localiser ? phasmo::Component::GetComponent(localiser, phasmo::TextMeshProUGUI::type.type_object()) : nullptr;
+}
+
 // Writes `text` on a copied row's label. The label's TextLocaliserUI goes first: it writes the game's words for its key
 // whenever it wakes, and a copy made while the menu is hidden wakes only when the player opens it, after this.
-void label_row(void* row, const std::string& text) {
-  void* label = phasmo::RebindActionUI::m_ActionLabel.get(row);
-  if (!label) return;
+// Returns the label, or null when the row has none.
+void* label_row(void* row, const std::string& text) {
+  void* label = label_of(row);
+  if (!label) {
+    PM_LOG("keys: %s finds no name text on its copy of a row; it keeps the game's words", g.owner.c_str());
+    return nullptr;
+  }
   if (void* localiser = phasmo::Component::GetComponent(label, phasmo::TextLocaliserUI::type.type_object()))
     phasmo::Object::DestroyImmediate(localiser, false);
   phasmo::TMP_Text::set_text(label, make_string(text));
+  return label;
 }
 
 // A heading over the mod's rows at the end of `templ`'s list: a copy of the row showing only its label, with the
@@ -355,8 +369,7 @@ void* make_heading(void* templ) {
   void* copyObject = nullptr;
   void* copy = copy_row(templ, "heading", copyObject);
   if (!copy) return nullptr;
-  label_row(copy, g.title);
-  void* label = phasmo::RebindActionUI::m_ActionLabel.get(copy);
+  void* label = label_row(copy, g.title);  // found once: its localiser, by which it is found, goes
   void* labelTransform = label ? phasmo::Component::get_transform(label) : nullptr;
   void* root = phasmo::GameObject::get_transform(copyObject);
   const int32_t children = root ? phasmo::Transform::get_childCount(root) : 0;
@@ -404,6 +417,26 @@ void remove_rows() {
       phasmo::RectTransform::set_sizeDelta(grown.rect, size);
     }
   g.grown.clear();
+}
+
+// A key's actions are off while one of its rows is on screen: Unity refuses to rebind an enabled action ("Cannot rebind
+// action ... while it is enabled"), and while the menu is open the player is not playing.
+void park_while_shown() {
+  for (Key& k : g.keys) {
+    bool shown = false;
+    for (const Held& r : k.rows)
+      if (r && alive(r))
+        if (void* go = phasmo::Component::get_gameObject(r)) shown |= phasmo::GameObject::get_activeInHierarchy(go);
+    if (shown == k.parked) continue;
+    k.parked = shown;
+    for (const Held& a : k.actions) {
+      if (!a) continue;
+      if (shown)
+        phasmo::InputAction::Disable(a);
+      else
+        phasmo::InputAction::Enable(a);
+    }
+  }
 }
 
 void ensure_rows() {
@@ -524,6 +557,7 @@ void tick_keys() {
   }
   save_changes();
   ensure_rows();
+  park_while_shown();
 }
 
 bool keys_ready() { return g.ready; }

@@ -5,8 +5,9 @@
 /// camera does.
 ///
 /// begin_third_person makes a camera of the mod's own, copied from the player's (LocalPlayer.camera, with its URP
-/// post-processing and volume mask) with the body's layers added to what it draws, and switches the player's camera
-/// off: the player's camera keeps its place, its AudioListener, the held item's slot and the game's raycasts from it.
+/// post-processing and volume mask), moves the body's and the head's renderers to the layer other players' bodies are
+/// drawn on (Layers::AlivePlayer: on their own layer the game draws the local body in first-person passes over
+/// everything) until the view ends, and switches the player's camera off: the player's camera keeps its place, its AudioListener, the held item's slot and the game's raycasts from it.
 /// Each frame the view sits straight back from the player's head camera along its look, eased out over
 /// orbit_rule.h's kEaseSeconds to kOrbitDistance, pulled in short of a wall; the mouse goes on turning the head camera
 /// as the game does, so it turns the view. The wall check passes through the local player's own colliders and rig (their
@@ -52,8 +53,8 @@ float seconds_until_out();
 /// @return The yaw, or 0 with no local camera.
 float view_yaw();
 
-/// Shows the local player's whole body on their own camera (on) or hides it again as the game had it (off), by adding
-/// the body's renderers' layers to the camera's culling mask and restoring it. For VR, whose view stays the headset's.
+/// Shows the local player's whole body on their own camera (on) or hides it again as the game had it (off), by moving
+/// the body's renderers to the layer other players' bodies are drawn on (Layers::AlivePlayer) and back. For VR, whose view stays the headset's.
 /// @param on True to show.
 void show_own_body(bool on);
 
