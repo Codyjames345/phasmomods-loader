@@ -1,4 +1,4 @@
 # A game build the offline check passed. tools/gamecheck.ps1 writes this file.
 gameassembly=e300eda993f2479922628f1b44f59e60c156c240f5a07c7289c4bd0fe4b790c8
 unityplayer=cd106e0f8a54c36ee741494ea2c557752890055220a825ce49b0fdf87d50c496
-map=0dd54708f908be6e
+map=ca2d24d638a54882

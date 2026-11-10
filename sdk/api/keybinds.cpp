@@ -98,6 +98,9 @@ std::vector<SavedBinding> parse_saved(std::string_view text) {
 
 namespace {
 
+// The heading's size against a row's name (the user's ruling, 2026-11-10: bigger and bold).
+constexpr float kHeadingScale = 1.25f;
+
 // How often the keybinds menu is searched for, in ticks: a search goes through every loaded object.
 constexpr int kRowSearchTicks = 60;
 
@@ -125,6 +128,7 @@ struct State {
   };
   std::vector<Grown> grown;
   int rowTicks = 0;
+  bool followsPage = false;    // the keybinds page's Apply, Reset and closing are hooked (store_on_apply)
   std::string lastSeen;        // what the last search of the keybinds menu found, for its log line
   bool loggedWaiting = false;  // the wait for the game's bindings was logged
 };
@@ -179,6 +183,18 @@ std::string effective_path(const Key& k, size_t d) {
   return k.chosen[d];
 }
 
+// Puts each saved rebinding on its key's action.
+void apply_saved(const std::vector<SavedBinding>& saved) {
+  for (Key& k : g.keys)
+    for (size_t d = 0; d < kDevices; ++d) {
+      if (!k.actions[d]) continue;
+      for (const SavedBinding& s : saved)
+        if (s.key == k.desc.id && s.device == static_cast<Device>(d))
+          phasmo::InputActionRebindingExtensions::ApplyBindingOverride(k.actions[d], make_string(s.path), nullptr,
+                                                                       nullptr);
+    }
+}
+
 bool make_actions(const std::vector<std::string>& game) {
   void* assetType = phasmo::InputActionAsset::type.type_object();
   void* asset = assetType ? phasmo::ScriptableObject::CreateInstance(assetType) : nullptr;
@@ -212,19 +228,14 @@ bool make_actions(const std::vector<std::string>& game) {
   }
   // Only once every action is in the asset: Unity refuses to change an asset while one of its actions is enabled
   // ("Cannot add, remove, or change elements of InputActionAsset ... while one or more of its actions are enabled").
+  apply_saved(saved);
   for (Key& k : g.keys)
-    for (size_t d = 0; d < kDevices; ++d) {
-      if (!k.actions[d]) continue;
-      for (const SavedBinding& s : saved)
-        if (s.key == k.desc.id && s.device == static_cast<Device>(d))
-          phasmo::InputActionRebindingExtensions::ApplyBindingOverride(k.actions[d], make_string(s.path), nullptr,
-                                                                       nullptr);
-      phasmo::InputAction::Enable(k.actions[d]);
-    }
+    for (size_t d = 0; d < kDevices; ++d)
+      if (k.actions[d]) phasmo::InputAction::Enable(k.actions[d]);
   return true;
 }
 
-// Saves the players' rebindings when they changed since the last save.
+// Saves the players' rebindings when they changed since the last save: as the keybinds page's Apply stores the game's.
 void save_changes() {
   std::vector<SavedBinding> now;
   for (const Key& k : g.keys)
@@ -244,6 +255,24 @@ void save_changes() {
   }
   out << text;
   g.lastSaved = text;
+}
+
+// The keybinds page decides when a rebinding counts, as it does for the game's own keys (sdk/map/Input.h,
+// ControlsManager): Apply stores, Reset takes every override off unstored, and leaving the page loads the stored ones
+// back, dropping what was not applied.
+void detour_apply(Original<phasmo::ControlsManager::ApplyButton> original, void* page) {
+  original(page);
+  if (g.ready) save_changes();
+}
+void detour_reset(Original<phasmo::ControlsManager::ResetButton> original, void* page) {
+  original(page);
+  if (g.ready && g.asset && alive(g.asset)) phasmo::InputActionRebindingExtensions::RemoveAllBindingOverrides(g.asset);
+}
+void detour_closed(Original<phasmo::ControlsManager::OnDisable> original, void* page) {
+  original(page);
+  if (!g.ready || !g.asset || !alive(g.asset)) return;
+  phasmo::InputActionRebindingExtensions::RemoveAllBindingOverrides(g.asset);
+  apply_saved(parse_saved(read_file(g.file)));
 }
 
 // The device of a keybinds row, by the path of the binding it rebinds; false for one of this mod's own rows or one
@@ -369,8 +398,19 @@ void* make_heading(void* templ) {
   void* copyObject = nullptr;
   void* copy = copy_row(templ, "heading", copyObject);
   if (!copy) return nullptr;
-  // Bold and a quarter larger than a row's name (the user's ruling, 2026-11-10), by TextMeshPro's rich text tags.
-  void* label = label_row(copy, "<b><size=125%>" + g.title + "</size></b>");  // found once: its localiser goes
+  // Bold and a quarter larger than a row's name (the user's ruling, 2026-11-10). The game's name text sizes itself to
+  // fit its row, which undid a size tag and much of the bold, so the heading has a fixed size instead.
+  void* label = label_row(copy, "<b>" + g.title + "</b>");  // found once: its localiser goes
+  if (label) {
+    const float now = phasmo::TMP_Text::get_fontSize(label), most = phasmo::TMP_Text::get_fontSizeMax(label);
+    const float base = most > 0.0f && (now <= 0.0f || most < now) ? most : now;
+    if (base > 0.0f) {
+      phasmo::TMP_Text::set_enableAutoSizing(label, false);
+      phasmo::TMP_Text::set_fontSize(label, base * kHeadingScale);
+    }
+    PM_LOG("keys: %s's heading at %.1f (a row's name: %.1f, at most %.1f)", g.owner.c_str(), base * kHeadingScale, now,
+           most);
+  }
   void* labelTransform = label ? phasmo::Component::get_transform(label) : nullptr;
   void* root = phasmo::GameObject::get_transform(copyObject);
   const int32_t children = root ? phasmo::Transform::get_childCount(root) : 0;
@@ -521,6 +561,12 @@ void begin_keys(std::string_view owner, std::string_view title, std::filesystem:
   clear_keys();
   g.owner = owner;
   g.title = title;
+  g.followsPage = hook<phasmo::ControlsManager::ApplyButton>(&detour_apply, "keys: the keybinds page's Apply") &&
+                  hook<phasmo::ControlsManager::ResetButton>(&detour_reset, "keys: the keybinds page's Reset") &&
+                  hook<phasmo::ControlsManager::OnDisable>(&detour_closed, "keys: the keybinds page closing");
+  if (!g.followsPage)
+    PM_LOG("keys: %s cannot follow the keybinds page's Apply in this game build: a rebinding is saved at once",
+           g.owner.c_str());
   g.file = std::move(file);
 }
 
@@ -556,7 +602,7 @@ void tick_keys() {
     g.lastSaved = format_saved(parse_saved(read_file(g.file)));
     g.rowTicks = kRowSearchTicks - 1;  // look for the menu at once
   }
-  save_changes();
+  if (!g.followsPage) save_changes();
   ensure_rows();
   park_while_shown();
 }

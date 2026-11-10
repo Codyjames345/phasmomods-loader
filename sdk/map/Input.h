@@ -279,6 +279,40 @@ inline constexpr pm::sdk::EntryDesc InputActionRebindingExtensions_ApplyBindingO
     .flags = pm::sdk::kStatic, .owner = "InputActionRebindingExtensions", .name = "ApplyBindingOverride",
     .params = InputActionRebindingExtensions_ApplyBindingOverride_params};
 
+inline constexpr const char* InputActionRebindingExtensions_RemoveAllBindingOverrides_params[] = {
+    "IInputActionCollection2"};
+
+/// RemoveAllBindingOverrides(actions): takes every override off the bindings of an action collection (an
+/// InputActionAsset or map). Static. ControlsManager.ResetButton runs it on the game's controls. Decompiled.
+inline constexpr pm::sdk::EntryDesc InputActionRebindingExtensions_RemoveAllBindingOverrides{
+    .key = "InputActionRebindingExtensions.RemoveAllBindingOverrides", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kStatic,
+    .owner = "InputActionRebindingExtensions", .name = "RemoveAllBindingOverrides",
+    .params = InputActionRebindingExtensions_RemoveAllBindingOverrides_params};
+
+/// The keybinds menu's page (Assembly-CSharp, global namespace), a MonoBehaviour of each player's journal. Its buttons
+/// decide when a rebinding counts: ApplyButton stores the game's overrides (PCControls.StoreControlOverrides),
+/// ResetButton takes them all off without storing, and leaving the page (its OnDisable) loads the stored ones back
+/// (PCControls.LoadControlOverrides), so a change not applied is dropped. Decompiled.
+inline constexpr pm::sdk::EntryDesc ControlsManager{.key = "ControlsManager",
+                                                    .confidence = pm::sdk::Confidence::Decompiled,
+                                                    .name = "ControlsManager", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The page's Apply: stores the game's binding overrides. A mod hooks it to store its own. Decompiled.
+inline constexpr pm::sdk::EntryDesc ControlsManager_ApplyButton{
+    .key = "ControlsManager.ApplyButton", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "ControlsManager", .name = "ApplyButton"};
+
+/// The page's Reset: takes every override off the game's controls, unstored until Apply. Decompiled.
+inline constexpr pm::sdk::EntryDesc ControlsManager_ResetButton{
+    .key = "ControlsManager.ResetButton", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "ControlsManager", .name = "ResetButton"};
+
+/// The page leaving the screen: loads the stored overrides back, dropping what was not applied. Decompiled.
+inline constexpr pm::sdk::EntryDesc ControlsManager_OnDisable{
+    .key = "ControlsManager.OnDisable", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "ControlsManager", .name = "OnDisable"};
+
 /// A reference to an action, as a ScriptableObject a component can hold. Inferred: the Input System's documented API.
 inline constexpr pm::sdk::EntryDesc InputActionReference{.key = "InputActionReference", .name = "InputActionReference",
                                                         .assembly = "Unity.InputSystem",
@@ -417,6 +451,20 @@ struct InputActionRebindingExtensions {
   static constexpr pm::api::Method<pm::map::InputActionRebindingExtensions_ApplyBindingOverride,
                                    void(void*, void*, void*, void*)>
       ApplyBindingOverride{};
+  /// RemoveAllBindingOverrides(actions): every override off an InputActionAsset's or map's bindings. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::InputActionRebindingExtensions_RemoveAllBindingOverrides, void(void*)>
+      RemoveAllBindingOverrides{};
+};
+
+/// The keybinds menu's page. `page` below is the ControlsManager.
+struct ControlsManager {
+  /// ApplyButton(page): stores the game's overrides. A mod hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ControlsManager_ApplyButton, void(void*)> ApplyButton{};
+  /// ResetButton(page): every override off the game's controls, unstored. A mod hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ControlsManager_ResetButton, void(void*)> ResetButton{};
+  /// OnDisable(page): the stored overrides loaded back. A mod hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ControlsManager_OnDisable, void(void*)> OnDisable{};
 };
 
 /// Building a mod's own actions.

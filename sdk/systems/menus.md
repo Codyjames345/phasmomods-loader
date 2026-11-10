@@ -72,7 +72,9 @@ shows the action's name. The game saves its own actions' overrides as a JSON lis
 
 The game's rows leave `RebindActionUI.m_ActionLabel` empty: a row's name is a child text of its own, `ActionNameText`
 (its first `TextLocaliserUI`), wired to nothing. Its other children are `TriggerRebindButton`, whose click runs the row's
-own `StartInteractiveRebind`, and `ResetToDefaultButton`. Unity refuses to rebind an action while it is enabled ("Cannot
+own `StartInteractiveRebind`, and `ResetToDefaultButton`. The page (`ControlsManager`) decides when a rebinding counts:
+`ControlsManager.ApplyButton` stores the overrides, `ControlsManager.ResetButton` takes every override off without
+storing, and its `ControlsManager.OnDisable` loads the stored ones back, so leaving without Apply drops a change. Unity refuses to rebind an action while it is enabled ("Cannot
 rebind action ... while it is enabled"); the game's own actions are off while the menu is open, so a mod's must be too.
 
 A row's name text carries a `TextLocaliserUI`, which writes the game's words for its key whenever it wakes. `RebindActionUI`

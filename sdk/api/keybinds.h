@@ -11,7 +11,10 @@
 /// of the game's rows (RebindActionUI) pointed at the mod's action, labelled with the mod's own text, so the game's own
 /// rebinding runs on it. Each list the rows go in ends with the mod's own section: a heading with the mod's name, bold and
 /// a quarter larger (a copy of a row showing only its label), then its rows in the order the keys were added. A copy's label loses the game's
-/// TextLocaliserUI, which would write the copied row's words back over it. A player's rebinding is saved to the file the mod names and read back at the next start.
+/// TextLocaliserUI, which would write the copied row's words back over it. A player's rebinding is kept as the game keeps its own
+/// (ControlsManager): the keybinds page's Apply saves it to the file the mod names, its Reset takes it off unsaved, and
+/// leaving the page without Apply drops it; it is read back at the next start. begin_keys hooks the page for that, so
+/// enable the mod's hooks after it, as for any hook; where the hooks cannot be made, a rebinding is saved at once.
 /// The game's side is in sdk/systems/menus.md, "Key bindings".
 ///
 /// Main thread. Local only: nothing is sent. Call begin_keys and add_key from pmmod_start, tick_keys every frame, and
