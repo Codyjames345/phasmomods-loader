@@ -1,10 +1,9 @@
 // Emotes' player-facing text: the label of its key in the game's keybinds menu, of its volume slider on the audio page,
 // and each emote's name under the wheel
-// (the author's own song titles). One marked PM_TEXT_TODO is a placeholder waiting for the author's words. A {{token}} is
-// a value the code fills in. Keep one entry per line.
+// (the author's own song titles). A {{token}} is a value the code fills in. Keep one entry per line.
 {
   "emotes.key-label": "Emote wheel",
-  "emotes.volume-label": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "emotes.volume-label": "Music",
   "emotes.name.0": "Disco Fever",
   "emotes.name.1": "Electro Swing",
   "emotes.name.2": "Floss",

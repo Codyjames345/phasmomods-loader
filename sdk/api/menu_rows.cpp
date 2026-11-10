@@ -80,8 +80,10 @@ Lines space_out(void* list, void* line) {
     if (!phasmo::GameObject::get_activeSelf(go)) continue;
     seq.emplace_back(go, has_name(child) || phasmo::Transform::get_childCount(child) > 0);
   }
-  // A run of dividers between two rows keeps its first: the audio page hides a row between two of them, and both show as
-  // lines side by side (the user, 2026-11-10). One at either end of the list has no pair of rows to divide.
+  // The list's own dividers are put away and `line` goes between every pair of rows instead: the audio page's dividers
+  // draw as double rules, one of them doubled again where a row it hides sits between two (the user, 2026-11-10).
+  // With no line to copy, a run of dividers between two rows keeps its first, so the rows stay divided. One at either
+  // end of the list has no pair of rows to divide.
   for (size_t i = 0; i < seq.size();) {
     if (seq[i].second) {
       ++i;
@@ -90,20 +92,26 @@ Lines space_out(void* list, void* line) {
     size_t j = i;
     while (j < seq.size() && !seq[j].second) ++j;
     const bool between = i > 0 && seq[i - 1].second && j < seq.size() && seq[j].second;
-    for (size_t k = i + (between ? 1 : 0); k < j; ++k) {
+    for (size_t k = i + (between && !line ? 1 : 0); k < j; ++k) {
       out.added -= taken_height(seq[k].first, list);
       phasmo::GameObject::SetActive(seq[k].first, false);
       out.hidden.emplace_back(seq[k].first);
     }
     i = j;
   }
-  // Rows that touch have no line between them. The copies go in last first, so the places still hold.
+  if (!line) return out;
+  // A line before every row but the first. The copies go in last first, so the places still hold.
   std::vector<void*> before;
-  for (size_t i = 1; i < seq.size(); ++i)
-    if (seq[i].second && seq[i - 1].second) before.push_back(seq[i].first);
+  bool first = true;
+  for (const auto& [go, row] : seq) {
+    if (!row) continue;
+    if (!first) before.push_back(go);
+    first = false;
+  }
   for (auto it = before.rbegin(); it != before.rend(); ++it) {
-    void* copy = line ? phasmo::Object::Instantiate(line, list, false) : nullptr;
+    void* copy = phasmo::Object::Instantiate(line, list, false);
     if (!copy) continue;
+    phasmo::GameObject::SetActive(copy, true);  // `line` may be one of the dividers just put away
     void* row = *it;  // a GameObject, as seq holds them
     phasmo::Transform::SetSiblingIndex(phasmo::GameObject::get_transform(copy),
                                        phasmo::Transform::GetSiblingIndex(phasmo::GameObject::get_transform(row)));

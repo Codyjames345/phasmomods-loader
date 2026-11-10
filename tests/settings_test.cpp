@@ -367,6 +367,19 @@ void* copy_named(const std::string& name) {
 }
 void* kid(void* row, size_t i) { return g_nodes[row].kids.at(i); }
 
+// What the player sees down the list, switched-off children left out: R a row, L a line the SDK copied in, D one of the
+// page's own dividers.
+std::string visible_list() {
+  std::string out;
+  for (void* k : g_nodes[&g_list].kids) {
+    if (!g_nodes[k].active) continue;
+    const bool copied = std::find(g_copies.begin(), g_copies.end(), k) != g_copies.end();
+    const bool row = !g_nodes[k].kids.empty();
+    out += row ? 'R' : copied ? 'L' : 'D';
+  }
+  return out;
+}
+
 void a_slider_sits_under_the_mods_heading() {
   give();
   settings::begin_settings("test.mod", "Test Mod", temp_file("pm_settings_row.txt"));
@@ -378,16 +391,16 @@ void a_slider_sits_under_the_mods_heading() {
   settings::tick_settings();
   // Every call got the object it is the game's call for: a GameObject where it takes one, a component elsewhere.
   CHECK(g_wrongObject == 0);
-  // The heading and the row, then a line where the page's own rows touched and one before the mod's row.
-  CHECK(g_copies.size() == 4);
-  const auto& kids = g_nodes[&g_list].kids;
-  CHECK(kids.size() == 11);
-  // The page doubled its dividers around a row it has switched off: one of the pair is put away, and its single ones
-  // stay. Where its rows touch with no divider at all, one is copied in (the user, 2026-11-10).
-  CHECK(!g_nodes[&g_divider2].active && g_nodes[&g_divider].active && g_nodes[&g_divider3].active);
-  CHECK(kids[5] == g_copies[3] && kids[9] == g_copies[2]);
+  // The heading and the row, then one line between every pair of rows the player sees: four in all.
+  CHECK(g_copies.size() == 6);
+  CHECK(g_nodes[&g_list].kids.size() == 13);  // the page's 7, the heading and the row, and the 4 lines
+  // The page's own dividers draw as double rules (the user's screenshots, 2026-11-10: still a double line below the
+  // last of the game's rows), so every one between two rows is put away, the doubled pair around the switched-off row
+  // and the single ones alike, and the one line goes between every pair of rows instead.
+  CHECK(!g_nodes[&g_divider].active && !g_nodes[&g_divider2].active && !g_nodes[&g_divider3].active);
+  CHECK(visible_list() == "RLRLRLRLR");
   // The lines copied in are the keybinds page's, one line to a line, not the audio page's 6-high divider.
-  CHECK(static_cast<Obj*>(g_copies[2])->klass == &g_lineClass && static_cast<Obj*>(g_copies[3])->klass == &g_lineClass);
+  for (size_t i = 2; i < g_copies.size(); ++i) CHECK(static_cast<Obj*>(g_copies[i])->klass == &g_lineClass);
   void* heading = copy_named("<b>Test Mod</b>");
   CHECK(heading != nullptr);
   if (heading) {
@@ -401,9 +414,9 @@ void a_slider_sits_under_the_mods_heading() {
   void* slider = kid(row, 2);
   CHECK(at<void*>(slider, kSliderEvent) && at<void*>(slider, kSliderEvent) != &g_gameEvent);  // an event of its own
   CHECK(g_nodes[slider].value == 1.0f && g_nodes[kid(row, 1)].text == "100%");
-  // The list's content grows by the two rows and the two lines copied in, less the divider put away, each with its
-  // spacing.
-  CHECK(std::fabs(g_contentSize.y - (1200.0f + 2 * (100.0f + 15.5f) + 2 * (4.0f + 15.5f) - (6.0f + 15.5f))) < 1e-3f);
+  // The list's content grows by the two rows and the four lines copied in, less the three dividers put away, each with
+  // its spacing.
+  CHECK(std::fabs(g_contentSize.y - (1200.0f + 2 * (100.0f + 15.5f) + 4 * (4.0f + 15.5f) - 3 * (6.0f + 15.5f))) < 1e-3f);
   // The game's own row is untouched.
   CHECK(g_nodes[&g_title].text == "Master Volume" && g_nodes[&g_slider].value == 1.0f);
   // The number follows the slider as it is dragged.
@@ -413,10 +426,10 @@ void a_slider_sits_under_the_mods_heading() {
   settings::clear_settings();
   CHECK(std::fabs(g_contentSize.y - 1200.0f) < 1e-3f);
   CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), row) != g_destroyed.end());
-  // The page is the game's again: the divider that was put away is on and the copied lines are gone.
-  CHECK(g_nodes[&g_divider2].active);
-  CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), g_copies[2]) != g_destroyed.end());
-  CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), g_copies[3]) != g_destroyed.end());
+  // The page is the game's again: the dividers that were put away are on and the copied lines are gone.
+  CHECK(g_nodes[&g_divider].active && g_nodes[&g_divider2].active && g_nodes[&g_divider3].active);
+  for (size_t i = 2; i < g_copies.size(); ++i)
+    CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), g_copies[i]) != g_destroyed.end());
   CHECK(g_wrongObject == 0);
 }
 
@@ -431,11 +444,12 @@ void a_row_copies_the_pages_own_line_without_a_keybinds_page() {
   volume.label = "Volume";
   CHECK(settings::add_slider(volume));
   settings::tick_settings();
-  // The heading, the row, and two lines: with no keybinds page loaded the lines are copies of the audio page's own
-  // divider, which is still one line to a line once space_out has put the doubled one away.
-  CHECK(g_copies.size() == 4);
-  CHECK(static_cast<Obj*>(g_copies[2])->klass == &g_otherClass && static_cast<Obj*>(g_copies[3])->klass == &g_otherClass);
-  CHECK(std::fabs(g_contentSize.y - (1200.0f + 2 * (100.0f + 15.5f) + 2 * (6.0f + 15.5f) - (6.0f + 15.5f))) < 1e-3f);
+  // The heading, the row, and four lines: with no keybinds page loaded the lines are copies of the audio page's own
+  // divider, one between every pair of rows. The divider copied is itself put away, and its copies still show.
+  CHECK(g_copies.size() == 6);
+  for (size_t i = 2; i < g_copies.size(); ++i) CHECK(static_cast<Obj*>(g_copies[i])->klass == &g_otherClass);
+  CHECK(visible_list() == "RLRLRLRLR");
+  CHECK(std::fabs(g_contentSize.y - (1200.0f + 2 * (100.0f + 15.5f) + 4 * (6.0f + 15.5f) - 3 * (6.0f + 15.5f))) < 1e-3f);
   settings::clear_settings();
   CHECK(g_wrongObject == 0);
   g_keybinds = true;

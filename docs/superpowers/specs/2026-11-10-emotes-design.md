@@ -289,9 +289,13 @@ No behaviour is assumed. Each item ends as map entries or notes in `sdk/systems/
 The user played the mod in game and gave these.
 
 - **The volume again** (user, twice on 2026-11-10): still too loud at the slider's default, so what the slider's 100%
-  plays was halved, and halved again after the next run. The dancer's own hearing of their song stays set by half again,
-  because the song plays at their own voice's place, where it feels no fall with distance; that is also why the dancer's
-  song and another player's song sound different in loudness at the same slider (the user asked).
+  plays was halved, and halved again after the next run. Then (user, 2026-11-10): every song plays at 0.05 at the
+  slider's 100%, the dancer's own and everyone else's alike, with no difference between them. The dancer hears their own
+  song with no fall with distance, since it plays at their own voice's place; others hear it fall as a voice does.
+- **The wheel's neutral zone** (user, twice on 2026-11-10): the dead zone in the middle is large, so a pick is easy to let
+  go of, and the mouse's movement since the wheel opened is capped, so the way back to the middle is short after any
+  flick. Both sizes are starting values, judged in game.
+- **The slider's name** (user, 2026-11-10): "Music".
 - **One line between the rows** (user): "the double lines are the problem. Each row should have one line between them",
   and "the keybind page looks perfect". The first fix copied the keybinds page's thin line between the mod's rows only;
   the user's next screenshot still showed doubled lines where the audio page's own dividers flank a row it switches off,

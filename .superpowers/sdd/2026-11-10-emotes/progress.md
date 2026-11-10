@@ -390,3 +390,29 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
   0 missing; the build ledger matches what is committed.
 - Smoke 25 now: with the wheel up, moving the mouse back toward the centre lets go of a pick (nothing highlighted), and
   releasing the key there plays nothing; a short move still reaches a segment comfortably.
+
+## In-game fix 11 (user, 2026-11-10, run 13)
+- The user, with a screenshot of the audio page's end: "still a double line below 'voice input mode'"; "yes put a cap on
+  the mouse distance"; "make all emotes play at 0.05, make no distinction between own player and other players"; "the
+  deadzone is still too small"; and "fill the emote volume slider TODO text with 'Music'".
+- Double line, read from the screenshot: the single line above Voice Input Mode is a copied keybinds line (the voice bar
+  and the voice input mode row touch); the double one below it is the page's own last divider, which space_out kept
+  because it stood alone between two rows. The page's dividers draw as double rules, so keeping one is not one line.
+- Fix: with a line to copy, `rows::space_out` now puts every one of the list's own dividers away and copies the line in
+  before every row but the first, switching each copy on (the fallback line is one of the page's own dividers, put away
+  just before it is copied). With no line it keeps the first of a run between two rows, as before. menu_rows.h, the
+  guide, systems/menus.md and the CHANGELOG say so. settings_test: the visible list reads row, line, row, line ... with
+  every line a copy and no game divider showing, for the keybinds line and for the page's own (red before, green after;
+  my first child count, 15, was wrong: the fake page has 7 children, so 13).
+- Wheel: kPickDeadZone 120 -> 240, and the mouse's movement since the wheel opened is capped at kPickReach 360
+  (`add_capped`, emote_rule.h): past it the movement is brought back along its own direction, so after any flick the way
+  back to neutral is 120. Starting values. emotes_test `the_mouse_reach_is_capped`, and 200 counts now pick nothing.
+- Volume: one kSongVolume 0.05 for every song, the dancer's own included; kOwnSongVolume is gone. The design spec says so.
+- Text: emotes.volume-label is "Music" (the user's word); the Emotes table has no PM_TEXT_TODO left (docs/player-text.md).
+  The manifest's description is still PM_TEXT_TODO for the user.
+- validate.ps1: 92/92 and every script test; API reference no warnings. gamecheck -IfConfigured -Expect: 1857 entries,
+  0 missing; no map change.
+- Smoke additions: 27. The audio page has one thin line between every pair of rows, the game's included, none double, and
+  the same with the audio page opened before any other journal menu (then the lines are the page's own). 28. The wheel's
+  neutral zone and cap feel right: a long flick then a short move back lets go of the pick. 29. Every song, the dancer's
+  own and others', at the level the user wants; the slider reads "Music".

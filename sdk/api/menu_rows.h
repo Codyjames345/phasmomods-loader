@@ -8,8 +8,8 @@
 /// each a name text with a TextLocaliserUI and the row's controls, with a divider (an image with no name text) between
 /// rows, in a scroll content sized to the game's rows. A mod's section goes at the end of a list: a heading with the
 /// mod's name, then its rows, each a copy of a game row; the scroll content grows by what was added. space_out then
-/// lays the whole list out with exactly one line between every pair of visible rows (the user, 2026-11-10), copying in
-/// line dividers where rows touch and putting away doubled ones; where the page's own dividers are heavier than the
+/// lays the whole list out with exactly one line between every pair of visible rows (the user, 2026-11-10), the list's
+/// own dividers put away and a copied line between each pair; where the page's own dividers are heavier than the
 /// keybinds page's lines, line_divider takes a line from another menu's list to copy.
 ///
 /// Main thread. Local only.
@@ -58,12 +58,15 @@ struct Lines {
 /// Lays a list out with exactly one line between every pair of rows the player can see (the user, 2026-11-10: "the
 /// double lines are the problem. Each row should have one line between them"). A row is a child with a name text or
 /// children of its own, a divider a child with neither; a switched-off child is neither, since the layout gives it no
-/// room. Of a run of dividers between two rows it keeps the first and switches the rest off, which is what the audio
-/// page needs: it hides a row between two of its dividers, leaving two lines side by side, and it groups two of its rows
-/// with no divider between them at all. Two rows that touch get a copy of `line` between them, as does a mod's own row
-/// after a heading. Nothing moves in the list except the copies.
+/// room. It switches the list's own dividers off and puts a copy of `line` before every row but the first, which is what
+/// the audio page needs: its dividers draw as double rules, it hides a row between two of them, leaving two side by
+/// side, and it groups two of its rows with no divider between them at all (the user, 2026-11-10: "still a double line
+/// below Voice Input Mode", the page's own divider before a mod's heading). The copies are switched on, so `line` may be
+/// one of the list's own dividers. With no `line`, a run of dividers between two rows keeps its first and the rest go,
+/// so the rows stay divided. Dividers at either end of the list go either way. Nothing moves in the list except the
+/// copies.
 /// @param list The list (journal_list).
-/// @param line A divider to copy (line_divider, or one of the list's own).
+/// @param line A divider to copy (line_divider, or one of the list's own); null keeps one of the list's own instead.
 /// @return What was copied and switched off, and the height the change adds; give it back with lines_back.
 Lines space_out(void* list, void* line);
 

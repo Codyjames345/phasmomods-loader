@@ -53,11 +53,9 @@ namespace talk = api::talk;
 // Starting values, judged with the user in game.
 constexpr float kBlendIn = 0.25f;       // seconds the dance takes to blend in
 constexpr float kBlendOut = 0.35f;      // and out, the body's facing with it
-// The songs' volumes at the player's Emotes volume of 100%. The user's ruling, 2026-11-10 (twice): still too loud, so
-// what these played at half the slider is what the slider's 100% plays now. Starting values, judged in game.
-constexpr float kSongVolume = 0.125f;     // a song's volume, 0 to 1, before its fall with distance
-constexpr float kOwnSongVolume = 0.0625f;  // the dancer's own hearing of it: their song plays at their own voice's place,
-                                           // where it feels no fall with distance, so it is set by half again
+// Every song's volume at the player's Emotes volume of 100%, 0 to 1, before its fall with distance: the dancer's own and
+// everyone else's alike (the user's ruling, 2026-11-10).
+constexpr float kSongVolume = 0.05f;
 constexpr const char* kVolumeSetting = "volume";
 constexpr float kHeadClearance = 0.3f;  // in VR, the head stays hidden while this close to the headset, in metres
 
@@ -337,15 +335,13 @@ void stop_song(int actor) {
 }
 
 // A song's volume on this client: the player's Emotes volume setting (the audio page) of its base.
-float song_volume(int actor) {
-  return (actor == game::local_actor() ? kOwnSongVolume : kSongVolume) * api::settings::value(kVolumeSetting);
-}
+float song_volume() { return kSongVolume * api::settings::value(kVolumeSetting); }
 
 // Each song follows the setting as the player applies it.
 void follow_volume() {
   for (auto& [actor, s] : g.songs)
-    if (s.source && game::alive(s.source) && s.volume != song_volume(actor)) {
-      s.volume = song_volume(actor);
+    if (s.source && game::alive(s.source) && s.volume != song_volume()) {
+      s.volume = song_volume();
       phasmo::AudioSource::set_volume(s.source, s.volume);
     }
 }
@@ -373,7 +369,7 @@ void start_song(int actor, void* player, int emote) {
   // The song in the bundle is cut to its loop, so the engine loops it sample for sample (emote_assets.h).
   phasmo::AudioSource::set_loop(source, true);
   phasmo::AudioSource::set_spatialBlend(source, 1.0f);
-  phasmo::AudioSource::set_volume(source, song_volume(actor));
+  phasmo::AudioSource::set_volume(source, song_volume());
   // It falls off with distance as the player's own voice does (the voice's AudioSource).
   if (voice) {
     const int32_t rolloff = phasmo::AudioSourceCurveType::CustomRolloff();
@@ -391,7 +387,7 @@ void start_song(int actor, void* player, int emote) {
       phasmo::AudioSource::set_outputAudioMixerGroup(source, group);
   phasmo::AudioSource::Play(source, 0);
   g.songs[actor].source = source;
-  g.songs[actor].volume = song_volume(actor);
+  g.songs[actor].volume = song_volume();
 }
 
 // ---- This client's own investigator ----
@@ -562,10 +558,7 @@ std::optional<int> wheel_input(void* player, bool vr) {
   int pickNow = -1;
   if (wasOpen) {
     float dx = 0.0f, dy = 0.0f;
-    if (game::mouse_delta(dx, dy)) {
-      g.mouseX += dx;
-      g.mouseY += dy;
-    }
+    if (game::mouse_delta(dx, dy)) add_capped(g.mouseX, g.mouseY, dx, dy);
     pickNow = segment_for(g.mouseX, g.mouseY, kPickDeadZone);
     if (void* pad = phasmo::Gamepad::get_current()) {
       const phasmo::Vector2 stick = phasmo::Vector2Control::ReadValue(phasmo::Gamepad::get_rightStick(pad));
