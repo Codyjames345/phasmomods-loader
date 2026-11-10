@@ -470,6 +470,9 @@ struct LoadingController {
 
 /// The pause menu's buttons. `menu` below is the PauseMenuController. A mod hooks them.
 struct PauseMenuController {
+  /// The PauseMenuController type: klass(), is(obj) and type_object() (for Object.FindObjectOfType).
+  /// Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::PauseMenuController> type{};
   /// Leave(menu): the game's own leave. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PauseMenuController_Leave, void(void*)> Leave{};
   /// Quit(menu): the game's own quit. Unresolved: does nothing.

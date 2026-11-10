@@ -216,6 +216,14 @@ target_include_directories(Emotes BEFORE PRIVATE sdk/api sdk/map)
 target_link_libraries(Emotes PRIVATE pmmod)
 pm_options(Emotes)
 
+# Dev Menu: the single player sandbox, developerOnly so players never see it
+# (docs/superpowers/specs/2026-11-10-dev-menu-content-plan.md).
+add_library(DevMenu SHARED mods/dev_menu/mod.cpp mods/dev_menu/actions.cpp mods/dev_menu/menu.cpp)
+target_include_directories(DevMenu PRIVATE mods/dev_menu)
+target_include_directories(DevMenu BEFORE PRIVATE sdk/api sdk/map)
+target_link_libraries(DevMenu PRIVATE pmmod)
+pm_options(DevMenu)
+
 add_executable(pminject tools/inject.cpp)
 target_include_directories(pminject PRIVATE tools core)
 pm_options(pminject)
@@ -261,6 +269,8 @@ pm_test(ghostbook mods/playable_ghost/ghostbook.cpp)
 pm_test(room_pick)
 pm_test(exit_route)
 pm_test(tether)
+pm_test(dev_menu)
+target_include_directories(dev_menu_test PRIVATE mods/dev_menu)
 pm_test(startup)
 target_include_directories(startup_test PRIVATE third_party/minhook/include sdk/api sdk/resolver sdk/runtime)
 target_compile_definitions(startup_test PRIVATE PM_HOST PM_SUITE_VERSION="${PM_SUITE_VERSION}")

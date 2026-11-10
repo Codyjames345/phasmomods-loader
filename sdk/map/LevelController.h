@@ -263,6 +263,9 @@ struct FuseBox {
 struct SetupPhaseController {
   /// Whether the main door has been unlocked: mainDoorOpen.get(setup). Unresolved: false.
   static constexpr pm::api::Field<pm::map::SetupPhaseController_mainDoorOpen, bool> mainDoorOpen{};
+  /// UnlockMainDoor(setup): unlocks the truck's main door, as the end of the setup phase does.
+  /// Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::SetupPhaseController_UnlockMainDoor, void(void*)> UnlockMainDoor{};
   /// The contract's setup phase, or null: instance.get(). Check it with pm::api::alive. Unresolved: null.
   static constexpr pm::api::StaticField<pm::map::SetupPhaseController_instance, void*> instance{};
 };

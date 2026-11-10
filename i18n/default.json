@@ -175,6 +175,7 @@
   "manifest.old-bundled-id": "id is the old id of a bundled mod, which now means that mod.",
   "manifest.old-vanilla": "id is \"vanilla\", which is reserved for the game's own content.",
   "manifest.records-voice": "'recordsVoice' field is not true or false.",
+  "manifest.developer-only": "'developerOnly' field is not true or false.", // PM_TEXT_AI
   "manifest.reserved-author": "Author is PhasmoMods, which is reserved for bundled mods.",
   "manifest.reserved-id": "id uses the author \"phasmomods\", which is reserved for bundled mods.",
   "manifest.too-deep": "manifest.json nests deeper than {{levels}} levels.",

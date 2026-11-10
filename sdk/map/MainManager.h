@@ -184,6 +184,15 @@ struct InventoryManager {
       RemoveMyEquipmentFromLobby{};
 };
 
+/// One item type's saved stock. `info` below is the EquipmentInfo.
+struct EquipmentInfo {
+  /// RemoveAmountOwned(info, amount): takes an amount off the saved stock of the item's current tier,
+  /// kept between 0 and 1000, and saves it; a negative amount adds. A mod hooks it to refuse a
+  /// decrement. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::EquipmentInfo_RemoveAmountOwned, void(void*, int32_t)>
+      RemoveAmountOwned{};
+};
+
 /// The player's saved loadouts. `loadouts` below is the LoadoutManager.
 struct LoadoutManager {
   /// CheckEquipped(loadouts): equips the saved loadout again. Unresolved: does nothing.

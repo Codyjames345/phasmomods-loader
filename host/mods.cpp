@@ -201,6 +201,9 @@ modlist::Place place_beside(const fs::path& hostFolder, const fs::path& bin) {
 Installed find(const fs::path& dataDirectory, const fs::path& hostFolder, unsigned long pid) {
   Installed installed;
   std::error_code error;
+  // A developer's launcher.ini line is what shows developerOnly mods; the host gates them too, so a
+  // session file written while the flag was on still drops them if it was turned off since.
+  const bool developer = modlist::parse_developer(read_file(dataDirectory / L"launcher.ini"));
   // Only the launcher's own copy of the host, in bin, runs what the launcher listed for this process.
   // Read once, so a later process reusing the id never picks up a stale list.
   const fs::path bin = dataDirectory / L"bin";
@@ -212,8 +215,9 @@ Installed find(const fs::path& dataDirectory, const fs::path& hostFolder, unsign
       fs::path dll = widen(p);
       modlist::Manifest m;
       std::string why;
-      if (modlist::read_copy(dll, m, why) == modlist::Reading::Readable) installed.found.push_back({dll, std::move(m)});
-      else refuse(installed.refused, copy_name(dll), why);
+      const modlist::Reading reading = modlist::read_copy(dll, m, why, developer);
+      if (reading == modlist::Reading::Readable) installed.found.push_back({dll, std::move(m)});
+      else if (reading == modlist::Reading::Refused) refuse(installed.refused, copy_name(dll), why);
     }
     for (modlist::Refused& r : modlist::parse_session_refused(list)) refuse(installed.refused, std::move(r.name), std::move(r.why));
     installed.buildRecords = widen(modlist::parse_session_builds(list));
@@ -234,7 +238,7 @@ Installed find(const fs::path& dataDirectory, const fs::path& hostFolder, unsign
   for (const fs::path& folder : folders) {
     modlist::Manifest m;
     std::string why;
-    const modlist::Reading reading = modlist::read_folder(folder, m, why, place);
+    const modlist::Reading reading = modlist::read_folder(folder, m, why, place, developer);
     if (reading == modlist::Reading::Refused) refuse(installed.refused, text::narrow(folder.filename().wstring()), why);
     if (reading != modlist::Reading::Readable) continue;
     fs::path dll = folder / widen(m.dll);

@@ -108,7 +108,8 @@ void requires_is_parsed() {
 
 // A mod folder holding `manifest` (manifest.json) or `ini` (mod.ini), under a fresh folder for this process, read from
 // `place`.
-Reading read_mod(const std::string& manifest, const std::string& ini, Place place, Manifest& m, std::string& why) {
+Reading read_mod(const std::string& manifest, const std::string& ini, Place place, Manifest& m, std::string& why,
+                 bool developer = false) {
   namespace fs = std::filesystem;
   const fs::path folder = fs::temp_directory_path() / (L"pg-reserved-" + std::to_wstring(GetCurrentProcessId())) / "mod";
   std::error_code error;
@@ -116,7 +117,7 @@ Reading read_mod(const std::string& manifest, const std::string& ini, Place plac
   fs::create_directories(folder, error);
   if (!manifest.empty()) std::ofstream(folder / "manifest.json", std::ios::binary) << manifest;
   if (!ini.empty()) std::ofstream(folder / "mod.ini", std::ios::binary) << ini;
-  const Reading reading = read_folder(folder, m, why, place);
+  const Reading reading = read_folder(folder, m, why, place, developer);
   fs::remove_all(folder.parent_path(), error);
   return reading;
 }
@@ -166,6 +167,30 @@ void bundled_mod_may_use_the_reserved_author() {
   CHECK(read_mod("{", "", Place::Elsewhere, m, why) == Reading::Refused && why.find("not valid JSON") != std::string::npos);
 }
 
+void the_developer_flag_shows_developer_mods_and_hides_them() {
+  CHECK(!parse_developer(""));
+  CHECK(!parse_developer("enabled=a.b\n"));              // no line at all: off
+  CHECK(!parse_developer("developer=0\n"));
+  CHECK(!parse_developer("developer=maybe\n"));          // anything but 1 or true is off
+  CHECK(parse_developer("developer=1\n"));
+  CHECK(parse_developer("developer=true\n"));
+  CHECK(!parse_developer("# developer=1\n"));            // a comment is not the line
+  CHECK(parse_developer("developer=0\ndeveloper=1\n"));  // the last line wins
+  CHECK(!parse_developer("developerx=1\n"));             // not a prefix match
+  // A developerOnly mod nobody asked for reads as no mod at all: not refused, no reason, nothing kept.
+  const std::string dev = R"({"id":"someone.tool","name":"N","author":"Someone","version":"1.0.0","description":"D","dll":"x.dll","developerOnly":true})";
+  Manifest m;
+  std::string why;
+  CHECK(read_mod(dev, "", Place::Elsewhere, m, why) == Reading::None);
+  CHECK(m.id.empty() && why.empty());
+  CHECK(read_mod(dev, "", Place::Elsewhere, m, why, true) == Reading::Readable);
+  CHECK(m.id == "someone.tool" && m.developerOnly);
+  // A plain mod is unaffected by the flag, and an old-format mod cannot be developer-only.
+  CHECK(read_mod(json("someone.tells", "Someone"), "", Place::Elsewhere, m, why) == Reading::Readable && !m.developerOnly);
+  CHECK(read_mod("", "id=tool\nname=T\ndll=x.dll\n", Place::Elsewhere, m, why, true) == Reading::Readable &&
+        !m.developerOnly);
+}
+
 void reads_the_session_file() {
   const auto paths = parse_session("C:\\a\\one.dll\r\n\r\nC:\\b c\\two.dll\n");
   CHECK(paths == (std::vector<std::string>{"C:\\a\\one.dll", "C:\\b c\\two.dll"}));
@@ -193,5 +218,6 @@ int main() {
   third_party_mod_cannot_claim_the_reserved_id_author();
   third_party_mod_cannot_claim_the_reserved_author_name();
   bundled_mod_may_use_the_reserved_author();
+  the_developer_flag_shows_developer_mods_and_hides_them();
   return g_failures ? 1 : 0;
 }

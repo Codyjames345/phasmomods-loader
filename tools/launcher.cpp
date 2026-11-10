@@ -98,6 +98,8 @@ Result failure(Outcome outcome, const std::wstring& detail, DWORD error = 0) {
 using text::read_file;
 using text::widen;
 
+fs::path selection_file();  // defined below, beside the launcher's other data files
+
 std::vector<ModEntry> discover_mods(const std::vector<ModsFolder>& roots, std::wstring& problems,
                                     std::vector<modlist::Refused>& refused) {
   std::vector<ModEntry> mods;
@@ -116,10 +118,12 @@ std::vector<ModEntry> discover_mods(const std::vector<ModsFolder>& roots, std::w
     std::sort(here.begin(), here.end());
     for (fs::path& dir : here) folders.emplace_back(std::move(dir), root.place);
   }
+  // A developer's launcher.ini line is what shows developerOnly mods; nobody else sees them at all.
+  const bool developer = modlist::parse_developer(pm::text::read_file(selection_file()));
   for (const auto& [dir, place] : folders) {
     ModEntry m;
     std::string why;
-    const modlist::Reading reading = modlist::read_folder(dir, m.manifest, why, place);
+    const modlist::Reading reading = modlist::read_folder(dir, m.manifest, why, place, developer);
     if (reading == modlist::Reading::Refused) refuse(dir, why);
     if (reading != modlist::Reading::Readable) continue;
     m.dll = (dir / widen(m.manifest.dll)).wstring();

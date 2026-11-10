@@ -199,6 +199,10 @@ and `sdk/manifest.schema.json` lets an editor check it (point `"$schema"` at it)
   notice then adds a "Voices are recorded." paragraph that names the mod. The player agrees before your DLL loads, so
   this is what they agreed to: a DLL that sets `PM_MOD_RECORDS_VOICE` when its manifest does not say `true` stays off,
   with a reason on its row. An old-format `mod.ini` cannot say it, so such a mod that records voice needs a `manifest.json`.
+- `developerOnly`: optional, `true` when the mod is a tool for mod authors rather than for players. Players never see it:
+  with the developer setting off (the default in launcher.ini), the launcher, the Mods panel, the loading order and every
+  lobby list treat it as not installed. A developer puts `developer=1` in launcher.ini to make it appear; it is then chosen
+  like any mod and follows every lobby rule while chosen.
 - A field the loader does not know is named once in the log and ignored, so a later loader can add fields.
 
 An old-format `mod.ini` may not use the id `vanilla`, or a bundled mod's old flat id (`custom-ghosts` and the

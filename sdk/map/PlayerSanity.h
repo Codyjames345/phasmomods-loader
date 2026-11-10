@@ -91,6 +91,9 @@ struct PlayerSanity {
   static constexpr pm::api::Method<pm::map::PlayerSanity_CandleIsOn, bool(void*, void*)> CandleIsOn{};
   /// ChangeSanity(sanity, amount): a positive amount is sanity lost. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PlayerSanity_ChangeSanity, void(void*, float)> ChangeSanity{};
+  /// SetInsanity(sanity, percent): sets the insanity to a number of percent, 0 to 100. Outside a room
+  /// nothing is sent. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::PlayerSanity_SetInsanity, void(void*, int32_t)> SetInsanity{};
   /// The insanity, 0 to 100: insanity.get(sanity), insanity.set(sanity, value). Unresolved: 0, writes
   /// nothing.
   static constexpr pm::api::Field<pm::map::PlayerSanity_insanity, float> insanity{};

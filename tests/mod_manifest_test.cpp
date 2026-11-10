@@ -115,6 +115,18 @@ void manifest_says_whether_it_records_voice() {
   }
 }
 
+void manifest_says_whether_it_is_for_developers() {
+  Manifest m;
+  std::string why;
+  CHECK(parse_manifest_json(minimal(), m, why) && !m.developerOnly);
+  CHECK(parse_manifest_json(minimal(R"(,"developerOnly":true)"), m, why) && m.developerOnly && m.unknownFields.empty());
+  CHECK(parse_manifest_json(minimal(R"(,"developerOnly":false)"), m, why) && !m.developerOnly);
+  for (const char* bad : {R"(,"developerOnly":"yes")", R"(,"developerOnly":1)", R"(,"developerOnly":null)"}) {
+    CHECK(!parse_manifest_json(minimal(bad), m, why));
+    CHECK(why == "'developerOnly' field is not true or false.");
+  }
+}
+
 void manifest_rejects_bad_id() {
   for (const char* id : {"noauthor", "two.dots.here", "Upper.mod", "author.Mod", ".mod", "author.", "a b.c", "a_b.c", "",
                          "vanilla.mod", "a.b\\u0000c"}) {
@@ -370,7 +382,8 @@ void bundled_manifests_are_valid() {
                            Bundled{"ghost_tells", "phasmomods.ghost-tells", "Ghost Tells", "GhostTells.dll"},
                            Bundled{"playable_ghost", "phasmomods.playable-ghost", "Playable Ghost", "PlayableGhost.dll"},
                            Bundled{"spectral_flame", "phasmomods.spectral-flame", "Spectral Flame", "SpectralFlame.dll"},
-                           Bundled{"emotes", "phasmomods.emotes", "Emotes", "Emotes.dll"}}) {
+                           Bundled{"emotes", "phasmomods.emotes", "Emotes", "Emotes.dll"},
+                           Bundled{"dev_menu", "phasmomods.dev-menu", "Dev Menu", "DevMenu.dll"}}) {
     Manifest m;
     std::string why;
     CHECK(parse_manifest_json(read_source(std::string("mods/") + b.folder + "/manifest.json"), m, why));
@@ -415,6 +428,7 @@ void schema_agrees_with_the_parser() {
 int main() {
   use_text({"i18n/default.json"});
   manifest_says_whether_it_records_voice();
+  manifest_says_whether_it_is_for_developers();
   manifest_reads_every_field();
   manifest_rejects_bad_id();
   old_bundled_ids_in_a_manifest_mean_the_mod();

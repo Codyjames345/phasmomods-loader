@@ -637,6 +637,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &Time,
     &Time_get_frameCount,
     &Time_get_timeScale,
+    &Time_set_timeScale,
     &Transform_set_position,
     &Transform_set_rotation,
     &Transform_SetParent,

@@ -63,6 +63,8 @@ struct ModsFolder {
  * and `refused` the same for the host's Mods panel. A broken one is left out, and never stops the others.
  * A mod that repeats an id found before it is refused; one outside the install folder that claims the
  * project's author is refused before that (modlist::read_folder), so it never takes the real mod's id.
+ * A mod whose manifest says `developerOnly` is left out unless launcher.ini says developer=1: players
+ * never see a mod author's tools (modlist::parse_developer).
  */
 std::vector<ModEntry> discover_mods(const std::vector<ModsFolder>& folders, std::wstring& problems,
                                     std::vector<modlist::Refused>& refused);

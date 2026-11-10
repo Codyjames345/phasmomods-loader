@@ -413,8 +413,12 @@ struct Difficulty {
   static constexpr pm::api::Field<pm::map::Difficulty_ghostTypeOverride, int32_t> ghostTypeOverride{};
   /// How many evidence the ghost gives: evidenceGiven.get(d). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Difficulty_evidenceGiven, int32_t> evidenceGiven{};
-  /// Whether its ghost is friendly (hunts lock no doors): friendlyGhost.get(d). Unresolved: false.
+  /// Whether its ghost is friendly (hunts lock no doors): friendlyGhost.get(d), .set(d, v). Unresolved:
+  /// false, writes nothing.
   static constexpr pm::api::Field<pm::map::Difficulty_friendlyGhost, bool> friendlyGhost{};
+  /// Whether players keep what they hold when they die: loseItemsOnDeath.get(d), .set(d, v). Read at
+  /// the reward screen. Unresolved: false, writes nothing.
+  static constexpr pm::api::Field<pm::map::Difficulty_loseItemsOnDeath, bool> loseItemsOnDeath{};
   /// Whether players may sprint, 0 off, 1 on, 2 infinite: sprinting.get(d). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Difficulty_sprinting, int32_t> sprinting{};
   /// The players' speed factor: playerSpeed.get(d). Unresolved: 0.
