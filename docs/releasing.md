@@ -74,3 +74,23 @@ no branch ever ships a bundle its code was not made with.
 - **Only three stay on GitHub.** Velopack's GitHub source reads only the newest ten releases and filters them afterwards, so ten
   development builds would hide the latest release from every player. The job deletes older ones (`tools/dev_releases.ps1`).
 - **Testing the switch without GitHub:** `PM_UPDATE_SOURCE` names a folder to update from instead, for either channel.
+
+## The compile cache
+
+Almost all of a CI run is compiling: from nothing, 521 compiles of 200 source files took about 15 minutes, since each test
+target compiles the SDK's files again. The validate and development jobs compile through [ccache](https://ccache.dev), so a
+compile whose inputs it has seen before (the source, every header it includes, the flags) comes from its store instead.
+`actions/cache` keeps the store between runs, keyed by the commit and restored from the latest one. On this machine a build from
+nothing hit 58% from the repeats alone, and the same build again took 11 seconds instead of 149.
+
+- **How:** the job downloads the pinned ccache release, checks its hash, and names it in `PM_CCACHE`; `build.ps1` hands it to
+  CMake as `CMAKE_C_COMPILER_LAUNCHER` and `CMAKE_CXX_COMPILER_LAUNCHER`. Each run's log ends the build with its hit counts.
+- **Local builds don't use it.** A cache hit replays the `/showIncludes` header list of the compile that stored it, so with
+  several worktrees sharing one store Ninja could learn another checkout's headers and miss a rebuild. A CI runner starts with
+  no Ninja state, so this cannot bite there.
+- **Releases don't use it.** The release job compiles from source alone, so what every player installs owes nothing to an
+  earlier run.
+- **What still misses:** a development build's number reaches the compiler through `PM_SUITE_VERSION`, so the launcher, the
+  host and three tests (47 compiles) compile again on every development push.
+- **Moving to a newer ccache:** change the version and hash in both jobs together; `tests/dev_release_test.ps1` checks they
+  match.

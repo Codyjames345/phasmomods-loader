@@ -56,4 +56,23 @@ Assert-That ($releaseJob -match 'package\.ps1') 'the release job packs through p
 Assert-That ($releaseJob.IndexOf('package.ps1') -lt $releaseJob.IndexOf('vpk upload')) 'a release is validated and packed before anything is uploaded'
 Write-Host 'The workflow keeps development builds apart from releases.'
 
+# The compile cache: the validate and development jobs compile through ccache, kept between runs, so an unchanged file is
+# not compiled again. The release job compiles everything from source, so what every player installs owes nothing to an
+# earlier run. Each ccache download is the pinned release, checked against its hash before it runs, and build.ps1 hands
+# it to CMake only when PM_CCACHE names it, so a local build compiles directly.
+$validateJob = [regex]::Match($workflow, "(?s)  validate:.*?(?=\n  publish-development:)").Value
+foreach ($job in @{ 'validate' = $validateJob; 'development' = $developmentJob }.GetEnumerator()) {
+    Assert-That ($job.Value -match 'uses: actions/cache@[0-9a-f]{40} ') "the $($job.Key) job keeps the compile cache, by a pinned action"
+    Assert-That ($job.Value -match 'PM_CCACHE=') "the $($job.Key) job compiles through ccache"
+    $buildAt = [Math]::Max($job.Value.IndexOf('run: .\validate.ps1'), $job.Value.IndexOf('run: .\package.ps1'))
+    Assert-That ($buildAt -gt $job.Value.IndexOf('PM_CCACHE=')) "the $($job.Key) job has ccache before it builds"
+}
+Assert-That ($releaseJob -notmatch 'actions/cache@' -and $releaseJob -notmatch 'PM_CCACHE') 'the release job compiles from source alone'
+$downloads = [regex]::Matches($workflow, 'ccache-4\.14\.2-windows-x86_64\.zip').Count
+$checks = [regex]::Matches($workflow, "6993CE645E53192CEC592EE23186200B574AC4C59097ECDE8D9CFD681B47AE84").Count
+Assert-That ($downloads -eq 2 -and $checks -eq 2) 'each ccache download is checked against the pinned hash'
+$build = Get-Content -LiteralPath (Join-Path $project 'build.ps1') -Raw
+Assert-That ($build -match 'CMAKE_CXX_COMPILER_LAUNCHER=\$launcher' -and $build -match '\$env:PM_CCACHE') 'build.ps1 compiles through ccache only when PM_CCACHE names it'
+Write-Host 'CI compiles through a kept cache, and a release from source alone.'
+
 Write-Host 'Development build tests passed.'

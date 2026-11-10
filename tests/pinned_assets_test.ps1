@@ -116,7 +116,8 @@ try {
     if (-not $fetches -or $fetches -ne $places) { throw "The workflow fetches the private assets $fetches time(s) but places them by pin $places." }
     if ($workflow -match 'private-assets/[^ ]*\.bundle') { throw 'The workflow copies a bundle without its pin.' }
     # Each names its branch, so it never looks the default one up, and fetches only the pinned builds.
-    foreach ($needed in 'ref: main', 'sparse-checkout: /pinned/', 'filter: blob:none') {
+    # And each gives up after five minutes: a fetch that hung (2026-11-09 and 2026-11-10) held the run for hours.
+    foreach ($needed in 'ref: main', 'sparse-checkout: /pinned/', 'filter: blob:none', 'timeout-minutes: 5') {
         if ([regex]::Matches($workflow, [regex]::Escape($needed)).Count -ne $fetches) {
             throw "Not every fetch of the private assets has '$needed'."
         }

@@ -32,6 +32,8 @@ jobs:
       # (tools/place_assets.ps1): a pin whose build was never published fails here rather than shipping another.
       - name: Fetch the private assets
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # A fetch that hangs gives up here instead of holding the run for hours (2026-11-09 and 2026-11-10).
+        timeout-minutes: 5
         with:
           repository: ${{ vars.ASSETS_REPOSITORY }}
           ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
@@ -63,11 +65,41 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'doxygen'
           Expand-Archive -LiteralPath $zip -DestinationPath $dir
           "PM_DOXYGEN=$(Join-Path $dir 'doxygen.exe')" | Add-Content -LiteralPath $env:GITHUB_ENV
+      # Compiles go through ccache, its store kept between runs, so a file compiled before with the same inputs comes
+      # from the store rather than the compiler: a build from nothing compiled 521 files for 15 minutes, most of them
+      # unchanged since the last push. ccache is the pinned release, checked against its hash before it runs, and
+      # build.ps1 hands it to CMake as the compiler launcher. The release job leaves it out.
+      - name: Restore the compile cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-
+      - name: Get ccache
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'ccache.zip'
+          Invoke-WebRequest -Uri 'https://github.com/ccache/ccache/releases/download/v4.14.2/ccache-4.14.2-windows-x86_64.zip' -OutFile $zip
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
+          if ($hash -ne '6993CE645E53192CEC592EE23186200B574AC4C59097ECDE8D9CFD681B47AE84') {
+            throw "The ccache download's hash is $hash, not the pinned one."
+          }
+          $dir = Join-Path $env:RUNNER_TEMP 'ccache-tool'
+          Expand-Archive -LiteralPath $zip -DestinationPath $dir
+          $exe = Join-Path $dir 'ccache-4.14.2-windows-x86_64\ccache.exe'
+          $env:CCACHE_DIR = Join-Path $env:RUNNER_TEMP 'ccache'
+          "PM_CCACHE=$exe", "CCACHE_DIR=$env:CCACHE_DIR", "CCACHE_BASEDIR=$env:GITHUB_WORKSPACE", 'CCACHE_MAXSIZE=1G' |
+            Add-Content -LiteralPath $env:GITHUB_ENV
+          & $exe --zero-stats
       # build.ps1 finds Visual Studio with vswhere and loads its developer environment, which supplies
       # CMake and Ninja.
       - name: Validate
         shell: pwsh
         run: .\validate.ps1
+      - name: Show the compile cache's hits
+        if: always()
+        shell: pwsh
+        run: '& $env:PM_CCACHE --show-stats'
 
   publish-development:
     name: Publish the development build
@@ -90,6 +122,8 @@ jobs:
       # (tools/place_assets.ps1): a pin whose build was never published fails here rather than shipping another.
       - name: Fetch the private assets
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # A fetch that hangs gives up here instead of holding the run for hours (2026-11-09 and 2026-11-10).
+        timeout-minutes: 5
         with:
           repository: ${{ vars.ASSETS_REPOSITORY }}
           ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
@@ -134,9 +168,36 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'doxygen'
           Expand-Archive -LiteralPath $zip -DestinationPath $dir
           "PM_DOXYGEN=$(Join-Path $dir 'doxygen.exe')" | Add-Content -LiteralPath $env:GITHUB_ENV
+      # Compiles go through ccache, kept between runs, as in the validate job.
+      - name: Restore the compile cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-
+      - name: Get ccache
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'ccache.zip'
+          Invoke-WebRequest -Uri 'https://github.com/ccache/ccache/releases/download/v4.14.2/ccache-4.14.2-windows-x86_64.zip' -OutFile $zip
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
+          if ($hash -ne '6993CE645E53192CEC592EE23186200B574AC4C59097ECDE8D9CFD681B47AE84') {
+            throw "The ccache download's hash is $hash, not the pinned one."
+          }
+          $dir = Join-Path $env:RUNNER_TEMP 'ccache-tool'
+          Expand-Archive -LiteralPath $zip -DestinationPath $dir
+          $exe = Join-Path $dir 'ccache-4.14.2-windows-x86_64\ccache.exe'
+          $env:CCACHE_DIR = Join-Path $env:RUNNER_TEMP 'ccache'
+          "PM_CCACHE=$exe", "CCACHE_DIR=$env:CCACHE_DIR", "CCACHE_BASEDIR=$env:GITHUB_WORKSPACE", 'CCACHE_MAXSIZE=1G' |
+            Add-Content -LiteralPath $env:GITHUB_ENV
+          & $exe --zero-stats
       - name: Pack the build
         shell: pwsh
         run: .\package.ps1 -Channel dev
+      - name: Show the compile cache's hits
+        if: always()
+        shell: pwsh
+        run: '& $env:PM_CCACHE --show-stats'
       - name: Publish the build
         shell: pwsh
         env:
@@ -177,6 +238,8 @@ jobs:
       # (tools/place_assets.ps1): a pin whose build was never published fails here rather than shipping another.
       - name: Fetch the private assets
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # A fetch that hangs gives up here instead of holding the run for hours (2026-11-09 and 2026-11-10).
+        timeout-minutes: 5
         with:
           repository: ${{ vars.ASSETS_REPOSITORY }}
           ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
@@ -235,6 +298,8 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'doxygen'
           Expand-Archive -LiteralPath $zip -DestinationPath $dir
           "PM_DOXYGEN=$(Join-Path $dir 'doxygen.exe')" | Add-Content -LiteralPath $env:GITHUB_ENV
+      # This job compiles without the compile cache the other jobs keep, so what every player installs is compiled
+      # from source alone and owes nothing to an earlier run.
       # package.ps1 validates again, then packs into dist/releases, which it replaces whole. Updates
       # are therefore full packages, not deltas: a delta needs the previous release beside the new
       # pack, and the script packs into an empty folder.
