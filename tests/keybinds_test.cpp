@@ -145,7 +145,11 @@ void* fake_add_map(void* asset, void*, void*) {
   (void)asset;
   return m;
 }
+// Unity refuses to change an asset while one of its actions is enabled ("Cannot add, remove, or change elements of
+// InputActionAsset ... while one or more of its actions are enabled"): the fake counts such an add instead of throwing.
+int g_enabledActions = 0, g_addsWhileEnabled = 0;
 void* fake_add_action(void* map, void* name, int32_t, void* path, void*, void*, void*, void*, void*) {
+  if (g_enabledActions > 0) ++g_addsWhileEnabled;
   Obj* a = make_obj(&g_actionClass);
   at<void*>(a, kActionMap) = map;
   at<int32_t>(a, kActionIndex) = static_cast<int32_t>(pm::api::ValueArray{at<void*>(map, kMapBindings)}.size());
@@ -159,7 +163,7 @@ void* fake_add_action(void* map, void* name, int32_t, void* path, void*, void*, 
   at<void*>(map, kMapBindings) = grown;
   return a;
 }
-void fake_enable(void*, void*) {}
+void fake_enable(void*, void*) { ++g_enabledActions; }
 void fake_apply_override(void* action, void* path, void*, void*, void*) {
   g_overrides.emplace_back(action, pm::api::to_utf8(path));
   // As the Input System does: the binding's override path is set.
@@ -191,6 +195,7 @@ void give_entries() {
   for (Obj* o : g_made) delete o;
   g_made.clear();
   g_overrides.clear();
+  g_enabledActions = g_addsWhileEnabled = 0;
   g_texts.clear();
   g_rows.clear();
   fake::type(map::InputActionAsset, &g_assetClass);
@@ -267,6 +272,8 @@ void a_key_takes_the_defaults_the_game_leaves_free() {
   CHECK(!keys::keys_ready());
   keys::tick_keys();
   CHECK(keys::keys_ready());
+  // Every action is added before any is enabled, as Unity requires of an asset.
+  CHECK(g_enabledActions > 0 && g_addsWhileEnabled == 0);
   // B and D-pad down are the game's (walkie push to talk; torch), so the fallbacks are taken: X, and D-pad right
   // because D-pad up is the game's too.
   CHECK(keys::bound_path("emote", Device::Keyboard) == "<Keyboard>/x");

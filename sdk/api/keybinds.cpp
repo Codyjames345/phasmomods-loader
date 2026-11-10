@@ -198,14 +198,20 @@ bool make_actions(const std::vector<std::string>& game) {
       void* action = phasmo::InputActionSetupExtensions::AddAction(map, make_string(name), button,
                                                                    make_string(k.chosen[d]), nullptr, nullptr,
                                                                    nullptr, nullptr);
-      if (!action) continue;
-      k.actions[d] = action;
-      for (const SavedBinding& s : saved)
-        if (s.key == k.desc.id && s.device == static_cast<Device>(d))
-          phasmo::InputActionRebindingExtensions::ApplyBindingOverride(action, make_string(s.path), nullptr, nullptr);
-      phasmo::InputAction::Enable(action);
+      if (action) k.actions[d] = action;
     }
   }
+  // Only once every action is in the asset: Unity refuses to change an asset while one of its actions is enabled
+  // ("Cannot add, remove, or change elements of InputActionAsset ... while one or more of its actions are enabled").
+  for (Key& k : g.keys)
+    for (size_t d = 0; d < kDevices; ++d) {
+      if (!k.actions[d]) continue;
+      for (const SavedBinding& s : saved)
+        if (s.key == k.desc.id && s.device == static_cast<Device>(d))
+          phasmo::InputActionRebindingExtensions::ApplyBindingOverride(k.actions[d], make_string(s.path), nullptr,
+                                                                       nullptr);
+      phasmo::InputAction::Enable(k.actions[d]);
+    }
   return true;
 }
 
