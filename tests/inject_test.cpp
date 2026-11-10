@@ -16,6 +16,7 @@ bool exitTarget = false, mapDll = true, wrongTarget = false, wrongArchitecture =
 bool denyOpen = false, truncateLog = false, snapshotFails = false, exitAfterThread = false;
 DWORD threadWait = WAIT_OBJECT_0, processCount = 1;
 int frees = 0, closes = 0, allocations = 0, threadStarts = 0, moduleIndex = 0;
+int badLengthSnapshots = 0;  // module snapshots that fail with ERROR_BAD_LENGTH, as Windows does while the target loads modules
 ULONGLONG elapsed = 0;
 std::wstring fakeLogPath, copiedPath;
 std::string emitted, delayed;
@@ -45,8 +46,13 @@ BOOL WINAPI architecture(HANDLE, USHORT* machine, USHORT* native) {
   *native = IMAGE_FILE_MACHINE_AMD64; return TRUE;
 }
 /** Expose only synthetic process and module inventories. */
-HANDLE WINAPI create_snapshot(DWORD, DWORD) {
+HANDLE WINAPI create_snapshot(DWORD flags, DWORD) {
   if (snapshotFails) { SetLastError(ERROR_ACCESS_DENIED); return INVALID_HANDLE_VALUE; }
+  if ((flags & TH32CS_SNAPMODULE) && badLengthSnapshots > 0) {
+    --badLengthSnapshots;
+    SetLastError(ERROR_BAD_LENGTH);
+    return INVALID_HANDLE_VALUE;
+  }
   moduleIndex = 0; return fakeSnapshot;
 }
 /** Return a configured number of candidate games. */
@@ -180,7 +186,7 @@ void reset() {
   allocationFails = writeFails = shortWrite = threadFails = exitTarget = wrongMappedPath = false;
   wrongTarget = wrongArchitecture = denyOpen = truncateLog = snapshotFails = exitAfterThread = false;
   mapDll = true; threadWait = WAIT_OBJECT_0; processCount = 1;
-  frees = closes = allocations = threadStarts = 0; elapsed += 100000;
+  frees = closes = allocations = threadStarts = 0; elapsed += 100000; badLengthSnapshots = 0;
   emitted = event("ModHost loading") + event("ModHost active"); delayed.clear();
   fakeModules.clear();
   HMODULE owner = nullptr;
@@ -332,6 +338,15 @@ int main() {
   reset(); write_log(std::string(4096, 'x')); truncateLog = true; CHECK(run().outcome == Outcome::log_error);
   reset(); write_log("stale partial line"); CHECK(run().outcome == Outcome::activation_timeout);
   reset(); write_log(std::string(32, 'x')); truncateLog = true; CHECK(run().outcome == Outcome::log_error);
+  // A module snapshot taken while the game is still loading modules fails with ERROR_BAD_LENGTH, and Windows' documentation
+  // for CreateToolhelp32Snapshot says to take it again. A game just started is such a target: the load goes ahead.
+  reset(); badLengthSnapshots = 3; CHECK(run().outcome == Outcome::active); CHECK(threadStarts == 1);
+  // It is taken again for a while, not for ever: a snapshot that never comes is the error it always was.
+  reset(); badLengthSnapshots = 1 << 30; {
+    const auto result = run();
+    CHECK(result.outcome == Outcome::process_error && result.error == ERROR_BAD_LENGTH);
+    CHECK(threadStarts == 0);
+  }
   reset(); DWORD pid = 0; CHECK(pm::loader::find_game(pid).outcome == Outcome::ready && pid == 42);
   processCount = 0; CHECK(pm::loader::find_game(pid).outcome == Outcome::no_process && pid == 0);
   processCount = 2; CHECK(pm::loader::find_game(pid).outcome == Outcome::ambiguous_process && pid == 0);

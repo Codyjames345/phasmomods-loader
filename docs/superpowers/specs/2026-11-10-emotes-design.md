@@ -84,7 +84,8 @@ no `PM_UI_TODO`.
    (see "The SDK's part").
 2. **The mouse picks by direction.** Moving the mouse up picks the top segment, and so on round the disc. The pick
    follows the mouse's movement since the wheel opened, not the cursor's position on screen **(Claude's call)**.
-   Until the mouse has moved past a small dead zone, nothing is picked. The dead zone's size is a starting value
+   Until the mouse has moved past a large dead zone in the middle, nothing is picked, so moving back toward the centre
+   lets go of a pick easily (the user, 2026-11-10: it was small). The dead zone's size is a starting value
    judged with the user in game **(builder's call)**.
 3. **While the wheel is open the mouse does not turn the camera** **(Claude's call)**.
 4. **Releasing the key plays the picked emote.** Releasing it with nothing picked plays nothing and closes the wheel.
@@ -135,7 +136,10 @@ anything or nothing.
   mirrors the game's own rule for a dead player's voice (`VoiceVolume.Update`, `VoiceVolume.deathMultiplier`, in
   `sdk/systems/voice.md`), which the builder confirms and reuses rather than restating.
 - **The Playable Ghost's player** has no body in the contract, so the wheel does not open for them **(Claude's call)**.
-- **Dying** ends an emote; the game's death takes over the body **(Claude's call)**.
+- **Dying** ends an emote and no emote starts: from the kill's first frame the game's death animation has the body, so
+  the dance leaves with nothing left blending and the wheel is taken away (the user, 2026-11-10, after being killed
+  mid-dance with no death animation at all). The game's mark of the death, `Player.isDead`, only comes when the death
+  completes, so the mod watches `Player.NotifyOfDeathStart` instead. A player whose death is over may emote again.
 
 ## Playing an emote
 
@@ -279,3 +283,28 @@ No behaviour is assumed. Each item ends as map entries or notes in `sdk/systems/
 - **The keys' defaults** (Claude's call, by the user's "unless that key is taken" rule): the game binds B (the
   walkie-talkie) and D-pad down (the torch), so the defaults fall back to X and D-pad up; the left X button in VR is
   unbound. All rebindable in the game's keybinds menu.
+
+## Decisions after the first playtests (2026-11-10)
+
+The user played the mod in game and gave these.
+
+- **The volume again** (user, twice on 2026-11-10): still too loud at the slider's default, so what the slider's 100%
+  plays was halved, and halved again after the next run. Then (user, 2026-11-10): every song plays at 0.05 at the
+  slider's 100%, the dancer's own and everyone else's alike, with no difference between them. The dancer hears their own
+  song with no fall with distance, since it plays at their own voice's place; others hear it fall as a voice does.
+- **The wheel's neutral zone** (user, twice on 2026-11-10): the dead zone in the middle is large, so a pick is easy to let
+  go of, and the mouse's movement since the wheel opened is capped, so the way back to the middle is short after any
+  flick. Both sizes are starting values, judged in game.
+- **The slider's name** (user, 2026-11-10): "Music".
+- **One line between the rows** (user): "the double lines are the problem. Each row should have one line between them",
+  and "the keybind page looks perfect". The first fix copied the keybinds page's thin line between the mod's rows only;
+  the user's next screenshot still showed doubled lines where the audio page's own dividers flank a row it switches off,
+  and a missing line where the game groups two of its rows with no divider at all. So the SDK lays out the whole page:
+  exactly one line between every pair of visible rows, the game's rows included, put away again when the mod's rows go.
+- **The emote's name in the game's font** (user): the name text copies its font from a text under this client's own
+  player rig (the journal, the HUD), not from whichever text the scene happens to hold.
+- **Death ends the dance at the kill's start** (user): "I got killed while emoting and the death animation didn't play.
+  Death should cancel emoting and return to first person", and "emoting should not be possible while the death animation
+  is playing either". The mod hooks the game's notice of a kill beginning, `Player.NotifyOfDeathStart`, which every
+  client gets; from there the body is the game's, the clip is off with nothing blending, the view goes back inside at
+  once and the wheel is shut.

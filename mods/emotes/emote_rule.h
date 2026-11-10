@@ -13,8 +13,13 @@ namespace pm::emotes {
 /// The wheel's segments, the first straight up and the rest clockwise.
 inline constexpr int kSegments = 8;
 /// How far the mouse must move from where it was when the wheel opened before a segment is picked, in the pointer's
-/// pixels. A starting value.
-inline constexpr float kPickDeadZone = 40.0f;
+/// pixels: a large neutral zone in the middle, so a pick is easy to let go of by moving back toward the centre (the
+/// user, 2026-11-10, twice; it was 40, then 120). A starting value.
+inline constexpr float kPickDeadZone = 240.0f;
+/// How far from the centre the mouse's movement is held, in the same pixels (the user, 2026-11-10): past it the movement
+/// stops growing, so after any flick the way back to the neutral zone is only kPickReach - kPickDeadZone. A starting
+/// value.
+inline constexpr float kPickReach = 360.0f;
 /// How far a stick must be pushed before a segment is picked, 0 to 1. A starting value.
 inline constexpr float kStickDeadZone = 0.5f;
 /// How far the player may move from where an emote started before it ends, in metres along the floor (the user's).
@@ -39,6 +44,20 @@ inline int segment_for(float dx, float dy, float deadZone) {
   if (degrees < 0.0f) degrees += 360.0f;
   const float width = 360.0f / kSegments;
   return static_cast<int>(std::floor((degrees + width / 2.0f) / width)) % kSegments;
+}
+
+/// Adds a mouse movement to the movement since the wheel opened, held within kPickReach of the centre: a point past it
+/// is brought back along its own direction, so the pick it points at stays the same.
+/// @param x,y The movement so far, changed here (right and up positive).
+/// @param dx,dy This frame's movement.
+inline void add_capped(float& x, float& y, float dx, float dy) {
+  x += dx;
+  y += dy;
+  const float length = std::hypot(x, y);
+  if (length > kPickReach) {
+    x *= kPickReach / length;
+    y *= kPickReach / length;
+  }
 }
 
 /// An angle in degrees brought into (-180, 180].

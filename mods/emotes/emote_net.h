@@ -59,7 +59,8 @@ inline std::optional<EmoteMsg> unpack(std::span<const uint8_t> data) {
 }
 
 /// Whether a client sees and hears an emote (the user's rule, as the game's for a dead player's voice): a living
-/// emoter's by everyone, a dead emoter's only by the dead.
-inline bool shows_to(bool senderDead, bool receiverDead) { return !senderDead || receiverDead; }
+/// emoter's by everyone, an emoter who is down by the down only. Down covers a death that has begun as well as one the
+/// game has marked: the dying investigator's body is the game's, not the dance's (2026-11-10).
+inline bool shows_to(bool senderDown, bool receiverDown) { return !senderDown || receiverDown; }
 
 }  // namespace pm::emotes

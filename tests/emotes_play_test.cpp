@@ -113,13 +113,26 @@ void death_ends_the_emote_first() {
   LocalSession s(table());
   s.pick(0, here());
   LocalFrame f = here(0.5);
-  f.dead = true;
+  f.dying = true;  // the kill has begun: the game's death animation has the body from this frame
   const LocalOut o = s.tick(f);
-  CHECK(o.stop && has(o.send, Kind::End));
-  // A dead player may emote; their own later death is no death.
+  CHECK(o.stop && o.atOnce && has(o.send, Kind::End));
+  // Nothing is picked while the death animation plays (the user, 2026-11-10).
+  LocalSession falling(table());
+  CHECK(falling.pick(1, f).start == -1 && !falling.active());
+  // A player whose death is over may dance: they are only down to the living. Their own mark is no fresh death.
+  LocalFrame down = here(0.5);
+  down.dead = true;
   LocalSession ghost(table());
-  ghost.pick(1, f);
-  CHECK(!ghost.tick(f).stop);
+  ghost.pick(1, down);
+  CHECK(!ghost.tick(down).stop);
+  // The game's mark of the death arriving with no start seen (on a build whose entry did not resolve) ends the dance
+  // too, and at once: the game has that body either way.
+  LocalSession late(table());
+  late.pick(0, here());
+  LocalFrame over = here(0.5);
+  over.dead = true;
+  const LocalOut fallback = late.tick(over);
+  CHECK(fallback.stop && fallback.atOnce);
 }
 
 void the_body_turns_and_is_shared() {
@@ -212,14 +225,25 @@ void the_living_never_see_the_dead_dance() {
   // A living emoter who dies mid-dance stops for the living.
   RemoteSessions live(table());
   live.receive(4, EmoteMsg{Kind::Start, 1, 0, 0, 0, 0}, false, false);
-  const auto out = live.tick({RemoteFrame{4, true, true, 0.5}}, false);
+  const auto out = live.tick({RemoteFrame{4, true, true, false, 0.5}}, false);
   CHECK(did(out, RemoteOut::Stop, 4) && !live.dancing(4));
+  // A peer whose death has begun, before the game marks it, comes off at once: their body is the game's death
+  // animation, not the dance (the user, 2026-11-10).
+  RemoteSessions fall(table());
+  fall.receive(6, EmoteMsg{Kind::Start, 1, 0, 0, 0, 0}, false, false);
+  const auto down = fall.tick({RemoteFrame{6, true, false, true, 0.5}}, false);
+  CHECK(did(down, RemoteOut::Stop, 6) && !fall.dancing(6));
+  for (const RemoteOut& o : down)
+    if (o.what == RemoteOut::Stop) CHECK(o.atOnce);
+  // The dying are down to the living as the dead are: a start from one is passed over.
+  RemoteSessions late(table());
+  CHECK(late.receive(7, EmoteMsg{Kind::Start, 1, 0, 0, 0, 0}, true, false).empty() && !late.dancing(7));
 }
 
 void a_vanished_emoter_is_cleaned_up() {
   RemoteSessions r(table());
   r.receive(5, EmoteMsg{Kind::Start, 0, 0, 0, 0, 0}, false, false);
-  const auto out = r.tick({RemoteFrame{5, false, false, -1.0}}, false);  // left the room, or the scene changed
+  const auto out = r.tick({RemoteFrame{5, false, false, false, -1.0}}, false);  // left the room, or the scene changed
   CHECK(did(out, RemoteOut::Stop, 5) && !r.dancing(5));
   // One not in the frame at all is gone too.
   r.receive(6, EmoteMsg{Kind::Start, 0, 0, 0, 0, 0}, false, false);
@@ -230,7 +254,7 @@ void a_peers_one_shot_ends_here_too() {
   RemoteSessions r(table());
   // A one-shot peer's clip that played out ends for this client too.
   r.receive(8, EmoteMsg{Kind::Start, 5, 0, 0, 0, 0}, false, false);
-  CHECK(did(r.tick({RemoteFrame{8, true, false, 3.1}}, false), RemoteOut::Stop, 8));
+  CHECK(did(r.tick({RemoteFrame{8, true, false, false, 3.1}}, false), RemoteOut::Stop, 8));
 }
 
 }  // namespace

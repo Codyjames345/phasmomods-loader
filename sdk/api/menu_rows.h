@@ -6,15 +6,18 @@
 ///
 /// The menus are each player's journal's (sdk/systems/menus.md, "Where the menu is"). A list is a layout group, its rows
 /// each a name text with a TextLocaliserUI and the row's controls, with a divider (an image with no name text) between
-/// rows, in a scroll content sized to the game's rows. A mod's section goes at the end of a list: a divider, a heading
-/// with the mod's name, then a divider before each of its rows, each a copy of a game row; the scroll content grows by
-/// what was added.
+/// rows, in a scroll content sized to the game's rows. A mod's section goes at the end of a list: a heading with the
+/// mod's name, then its rows, each a copy of a game row; the scroll content grows by what was added. space_out then
+/// lays the whole list out with exactly one line between every pair of visible rows (the user, 2026-11-10), the list's
+/// own dividers put away and a copied line between each pair; where the page's own dividers are heavier than the
+/// keybinds page's lines, line_divider takes a line from another menu's list to copy.
 ///
 /// Main thread. Local only.
 /// @ingroup runtime
 /// @since Contract 2.3
 
 #include <string>
+#include <vector>
 
 #include "held.h"
 
@@ -35,6 +38,40 @@ void* journal_list(void* row);
 /// @param row A component or Transform of the row's root.
 /// @return The divider's GameObject, or null.
 void* divider_beside(void* row);
+
+/// A divider to copy between a mod's rows, one line to a line: the keybinds page's rows sit one line apart, which is how
+/// the player wants a mod's rows on the audio page too (the user, 2026-11-10: the audio page's own dividers are double
+/// rules between its groups). So it comes from another journal menu's list when one is loaded, and from beside `row`
+/// when none is.
+/// @param row A component or Transform of a row of the list to divide.
+/// @param fromOtherPage Set to whether it came from another list, for the log; may be null.
+/// @return The divider's GameObject, or null.
+void* line_divider(void* row, bool* fromOtherPage = nullptr);
+
+/// What space_out changed in a list, to give back with lines_back.
+struct Lines {
+  std::vector<Held> made;  ///< dividers it copied into the list
+  std::vector<Held> hidden;  ///< the list's own dividers it switched off
+  float added = 0.0f;      ///< the height the change adds, spacing counted (taken_height units)
+};
+
+/// Lays a list out with exactly one line between every pair of rows the player can see (the user, 2026-11-10: "the
+/// double lines are the problem. Each row should have one line between them"). A row is a child with a name text or
+/// children of its own, a divider a child with neither; a switched-off child is neither, since the layout gives it no
+/// room. It switches the list's own dividers off and puts a copy of `line` before every row but the first, which is what
+/// the audio page needs: it hides a row between two of its dividers, leaving two side by side, and it groups two of its
+/// rows with no divider between them at all. The copies are switched on, so `line` may be
+/// one of the list's own dividers. With no `line`, a run of dividers between two rows keeps its first and the rest go,
+/// so the rows stay divided. Dividers at either end of the list go either way. Nothing moves in the list except the
+/// copies.
+/// @param list The list (journal_list).
+/// @param line A divider to copy (line_divider, or one of the list's own); null keeps one of the list's own instead.
+/// @return What was copied and switched off, and the height the change adds; give it back with lines_back.
+Lines space_out(void* list, void* line);
+
+/// Destroys the copies and switches back on the dividers space_out switched off, leaving the list as it was.
+/// @param lines What space_out returned; emptied.
+void lines_back(Lines& lines);
 
 /// A row's name text: the TextMeshProUGUI of its first TextLocaliserUI.
 /// @param row A component or Transform of the row's root.

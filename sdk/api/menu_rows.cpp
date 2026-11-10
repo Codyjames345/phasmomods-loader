@@ -1,5 +1,6 @@
 #include "menu_rows.h"
 
+#include "Input.h"
 #include "JournalController.h"
 #include "Player.h"
 #include "Transform.h"
@@ -46,6 +47,91 @@ void* divider_beside(void* row) {
     if (sibling && !has_name(sibling)) return phasmo::Component::get_gameObject(sibling);
   }
   return nullptr;
+}
+
+void* line_divider(void* row, bool* fromOtherPage) {
+  void* t = transform_of(row);
+  void* own = t ? phasmo::Transform::get_parent(t) : nullptr;
+  // Another menu's line: the keybinds page's rows are `RebindActionUI`s, and the game puts a thin line between them.
+  void* type = phasmo::RebindActionUI::type.type_object();
+  const RefArray found{type ? phasmo::Object::FindAllOfType(type, true) : nullptr};
+  for (size_t i = 0; i < found.size(); ++i) {
+    void* list = found[i] ? journal_list(found[i]) : nullptr;
+    if (!list || list == own) continue;
+    if (void* line = divider_beside(found[i])) {
+      if (fromOtherPage) *fromOtherPage = true;
+      return line;
+    }
+  }
+  if (fromOtherPage) *fromOtherPage = false;
+  return divider_beside(row);
+}
+
+Lines space_out(void* list, void* line) {
+  Lines out;
+  if (!list) return out;
+  // What the layout sees, in its own order. A switched-off child takes no room, so it divides nothing and needs no line.
+  std::vector<std::pair<void*, bool>> seq;  // each child, and whether it is a row rather than a divider
+  const int32_t count = phasmo::Transform::get_childCount(list);
+  for (int32_t i = 0; i < count; ++i) {
+    void* child = phasmo::Transform::GetChild(list, i);
+    if (!child) continue;
+    void* go = phasmo::Component::get_gameObject(child);
+    if (!phasmo::GameObject::get_activeSelf(go)) continue;
+    seq.emplace_back(go, has_name(child) || phasmo::Transform::get_childCount(child) > 0);
+  }
+  // The list's own dividers are put away and `line` goes between every pair of rows instead, one line to a line as on
+  // the keybinds page (the user, 2026-11-10). With no line to copy, a run of dividers between two rows keeps its first, so the rows stay divided. One at either
+  // end of the list has no pair of rows to divide.
+  for (size_t i = 0; i < seq.size();) {
+    if (seq[i].second) {
+      ++i;
+      continue;
+    }
+    size_t j = i;
+    while (j < seq.size() && !seq[j].second) ++j;
+    const bool between = i > 0 && seq[i - 1].second && j < seq.size() && seq[j].second;
+    for (size_t k = i + (between && !line ? 1 : 0); k < j; ++k) {
+      out.added -= taken_height(seq[k].first, list);
+      phasmo::GameObject::SetActive(seq[k].first, false);
+      out.hidden.emplace_back(seq[k].first);
+    }
+    i = j;
+  }
+  if (!line) return out;
+  // A line before every row but the first. The copies go in last first, so the places still hold.
+  std::vector<void*> before;
+  bool first = true;
+  for (const auto& [go, row] : seq) {
+    if (!row) continue;
+    if (!first) before.push_back(go);
+    first = false;
+  }
+  for (auto it = before.rbegin(); it != before.rend(); ++it) {
+    void* copy = phasmo::Object::Instantiate(line, list, false);
+    if (!copy) continue;
+    phasmo::GameObject::SetActive(copy, true);  // `line` may be one of the dividers just put away
+    void* row = *it;  // a GameObject, as seq holds them
+    phasmo::Transform::SetSiblingIndex(phasmo::GameObject::get_transform(copy),
+                                       phasmo::Transform::GetSiblingIndex(phasmo::GameObject::get_transform(row)));
+    out.added += taken_height(copy, list);
+    out.made.emplace_back(copy);
+  }
+  return out;
+}
+
+void lines_back(Lines& lines) {
+  // Switched off first: Object.Destroy takes them out only when the frame ends, and a list laid out again in this frame
+  // must not count them.
+  for (Held& h : lines.made)
+    if (h && alive(h)) {
+      phasmo::GameObject::SetActive(h.get(), false);
+      phasmo::Object::Destroy(h, 0.0f);
+    }
+  lines.made.clear();
+  for (Held& h : lines.hidden)
+    if (h && alive(h)) phasmo::GameObject::SetActive(h.get(), true);
+  lines.hidden.clear();
 }
 
 void* name_text(void* row) {

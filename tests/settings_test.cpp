@@ -62,11 +62,23 @@ struct Node {
   bool autoSize = true;
 };
 Obj g_rowClass, g_textClass, g_sliderClass, g_dividerClass, g_localiserClass, g_eventClass, g_pageClass, g_groupClass,
-    g_otherClass;
+    g_otherClass, g_rebindClass, g_lineClass, g_gameObjectClass;
 std::map<void*, Node> g_nodes;
+// Each Transform's GameObject is an object of its own, as in the game: a GameObject handed to a Component or Transform
+// call, or a component handed to a GameObject call, reads the wrong native object in the game and crashes (the audio
+// page's lines, 2026-11-10: Component.get_transform given a GameObject). The fake counts each such call.
+std::map<void*, void*> g_gameObjectOf, g_transformOf;  // a Transform's GameObject, and a GameObject's Transform
+int g_wrongObject = 0;
 std::vector<Obj*> g_made;
 std::vector<void*> g_destroyed, g_copies;
 Obj g_net, g_player, g_content, g_list, g_group, g_page, g_row, g_title, g_number, g_slider, g_divider, g_gameEvent;
+// The rest of the audio page, as the game lays it out (sdk/systems/menus.md): its dividers double up around a row it
+// switches off, and it groups two rows with no divider between them (the user's screenshot, 2026-11-10).
+Obj g_offRow, g_offName, g_divider2, g_row2, g_row2Name, g_row3, g_row3Name, g_divider3;
+// The keybinds page beside the audio one: its rows are RebindActionUIs with a thin line between them, which is the line
+// a mod's rows copy (the user, 2026-11-10: the audio page's own dividers are double rules, too heavy between rows).
+Obj g_kbList, g_kbRow, g_kbLine;
+bool g_keybinds = true;  // whether the keybinds page is loaded in this fake scene
 phasmo::Vector2 g_contentSize{1700.0f, 1200.0f};
 
 Obj* make(void* klass) {
@@ -80,19 +92,54 @@ void place(void* child, void* parent) {
 }
 void* name_localiser(void* t);
 
-void* fake_self(void* o, void*) { return o; }
+bool is_game_object(void* o) { return g_transformOf.count(o) != 0; }
+// `o` as a component or Transform: a GameObject here is the game's crash, counted.
+void* component(void* o) {
+  if (is_game_object(o)) ++g_wrongObject;
+  return o;
+}
+// `o` as a GameObject: its Transform, where the fake keeps its state. A component here is counted.
+void* transform_of_game_object(void* o) {
+  if (!is_game_object(o)) {
+    ++g_wrongObject;
+    return o;
+  }
+  return g_transformOf[o];
+}
+void* game_object_of(void* t) {
+  void*& go = g_gameObjectOf[t];
+  if (!go) {
+    go = make(&g_gameObjectClass);
+    g_transformOf[go] = t;
+  }
+  return go;
+}
+
+void* fake_component_transform(void* c, void*) { return component(c); }
+void* fake_component_game_object(void* c, void*) { return game_object_of(component(c)); }
+void* fake_game_object_transform(void* go, void*) { return transform_of_game_object(go); }
 void* fake_network(void*) { return &g_net; }
-void* fake_parent(void* t, void*) { return g_nodes[t].parent; }
-int32_t fake_child_count(void* t, void*) { return static_cast<int32_t>(g_nodes[t].kids.size()); }
-void* fake_get_child(void* t, int32_t i, void*) { return g_nodes[t].kids.at(static_cast<size_t>(i)); }
+void* fake_parent(void* t, void*) { return g_nodes[component(t)].parent; }
+int32_t fake_child_count(void* t, void*) { return static_cast<int32_t>(g_nodes[component(t)].kids.size()); }
+void* fake_get_child(void* t, int32_t i, void*) { return g_nodes[component(t)].kids.at(static_cast<size_t>(i)); }
 int32_t fake_sibling(void* t, void*) {
-  const auto& kids = g_nodes[g_nodes[t].parent].kids;
+  const auto& kids = g_nodes[g_nodes[component(t)].parent].kids;
   for (size_t i = 0; i < kids.size(); ++i)
     if (kids[i] == t) return static_cast<int32_t>(i);
   return -1;
 }
+bool fake_active_self(void* o, void*) { return g_nodes[transform_of_game_object(o)].active; }
+void fake_set_sibling(void* t, int32_t i, void*) {
+  auto& kids = g_nodes[g_nodes[component(t)].parent].kids;
+  const auto at = std::find(kids.begin(), kids.end(), t);
+  if (at == kids.end()) return;
+  void* moved = *at;
+  kids.erase(at);
+  kids.insert(kids.begin() + std::min<size_t>(static_cast<size_t>(i), kids.size()), moved);
+}
 bool fake_is_child_of(void* t, void* parent, void*) {
-  for (void* at_ = t; at_; at_ = g_nodes[at_].parent)
+  component(parent);
+  for (void* at_ = component(t); at_; at_ = g_nodes[at_].parent)
     if (at_ == parent) return true;
   return false;
 }
@@ -109,10 +156,13 @@ void* copy_tree(void* original, void* parent) {
   for (void* kid : g_nodes[original].kids) copy_tree(kid, c);
   return c;
 }
+// A copy of a GameObject is a GameObject, a copy of a component the copy's same component. The test keeps each copy's
+// Transform.
 void* fake_instantiate(void* original, void* parent, bool, void*) {
-  void* c = copy_tree(original, parent);
+  const bool whole = is_game_object(original);
+  void* c = copy_tree(whole ? g_transformOf[original] : original, component(parent));
   g_copies.push_back(c);
-  return c;
+  return whole ? game_object_of(c) : c;
 }
 void* name_localiser(void* t) {
   if (g_nodes[t].localiser) return g_nodes[t].localiser;
@@ -121,9 +171,10 @@ void* name_localiser(void* t) {
   return nullptr;
 }
 void* fake_in_children(void* t, void* type, bool, void*) {
-  return type == phasmo::TextLocaliserUI::type.type_object() ? name_localiser(t) : nullptr;
+  return type == phasmo::TextLocaliserUI::type.type_object() ? name_localiser(component(t)) : nullptr;
 }
 void* fake_get_component(void* t, void* type, void*) {
+  component(t);
   if (type == phasmo::TextLocaliserUI::type.type_object()) return g_nodes[t].localiser;
   if (type == phasmo::TextMeshProUGUI::type.type_object()) {
     for (auto& [obj, node] : g_nodes)
@@ -131,21 +182,26 @@ void* fake_get_component(void* t, void* type, void*) {
     return static_cast<Obj*>(t)->klass == &g_textClass ? t : nullptr;
   }
   if (type == phasmo::XRSlider::type.type_object()) return static_cast<Obj*>(t)->klass == &g_sliderClass ? t : nullptr;
-  if (type == phasmo::HorizontalOrVerticalLayoutGroup::type.type_object()) return t == &g_list ? &g_group : nullptr;
+  if (type == phasmo::HorizontalOrVerticalLayoutGroup::type.type_object())
+    return (t == &g_list || t == &g_kbList) ? &g_group : nullptr;
   return nullptr;
 }
 void* fake_find_all(void* type, bool, void*) {
-  void* arr = fake::array(sizeof(void*), type == phasmo::GameMyAudioManager::type.type_object() ? 1 : 0);
-  if (type == phasmo::GameMyAudioManager::type.type_object())
+  const bool audio = type == phasmo::GameMyAudioManager::type.type_object();
+  const bool rebind = type == phasmo::RebindActionUI::type.type_object();
+  void* arr = fake::array(sizeof(void*), audio || (rebind && g_keybinds) ? 1 : 0);
+  if (audio)
     *static_cast<void**>(pm::api::ValueArray{arr}.at(0)) = &g_page;
+  else if (rebind && g_keybinds)
+    *static_cast<void**>(pm::api::ValueArray{arr}.at(0)) = &g_kbRow;
   return arr;
 }
-void fake_destroy(void* o, float) { g_destroyed.push_back(o); }
+void fake_destroy(void* o, float) { g_destroyed.push_back(is_game_object(o) ? g_transformOf[o] : o); }
 void fake_destroy_now(void* o, bool) {
   for (auto& [obj, node] : g_nodes)
     if (node.localiser == o) node.localiser = nullptr;
 }
-void fake_set_active(void* o, bool on, void*) { g_nodes[o].active = on; }
+void fake_set_active(void* o, bool on, void*) { g_nodes[transform_of_game_object(o)].active = on; }
 void fake_set_text(void* t, void* s, void*) { g_nodes[t].text = pm::api::to_utf8(s); }
 void* fake_get_text(void* t, void*) { return pm::api::make_string(g_nodes[t].text); }
 float fake_font_size(void* t, void*) { return g_nodes[t].fontSize; }
@@ -157,7 +213,7 @@ void fake_set_value(void* s, float v, void*) { g_nodes[s].value = std::clamp(v, 
 void fake_set_min(void* s, float v, void*) { g_nodes[s].min = v; }
 void fake_set_max(void* s, float v, void*) { g_nodes[s].max = v; }
 void fake_event_ctor(void*, void*) {}
-phasmo::Rect fake_rect(void* t, void*) { return {0.0f, 0.0f, 1600.0f, g_nodes[t].height}; }
+phasmo::Rect fake_rect(void* t, void*) { return {0.0f, 0.0f, 1600.0f, g_nodes[component(t)].height}; }
 phasmo::Vector2 fake_anchor_min(void* t, void*) { return t == &g_list ? phasmo::Vector2{0, 0} : phasmo::Vector2{0.5f, 0.5f}; }
 phasmo::Vector2 fake_anchor_max(void* t, void*) { return t == &g_list ? phasmo::Vector2{1, 1} : phasmo::Vector2{0.5f, 0.5f}; }
 phasmo::Vector2 fake_get_size(void* t, void*) { return t == &g_content ? g_contentSize : phasmo::Vector2{0, 0}; }
@@ -182,6 +238,9 @@ void give() {
   g_nodes.clear();
   g_destroyed.clear();
   g_copies.clear();
+  g_gameObjectOf.clear();
+  g_transformOf.clear();
+  g_wrongObject = 0;
   g_contentSize = {1700.0f, 1200.0f};
   fake::type(map::GameMyAudioManager, &g_pageClass);
   fake::type(map::XRSlider, &g_sliderClass);
@@ -189,19 +248,22 @@ void give() {
   fake::type(map::TextLocaliserUI, &g_localiserClass);
   fake::type(map::TextMeshProUGUI, &g_textClass);
   fake::type(map::HorizontalOrVerticalLayoutGroup, &g_groupClass);
-  fake::type(map::GameObject, &g_otherClass);
+  fake::type(map::GameObject, &g_gameObjectClass);
+  fake::type(map::RebindActionUI, &g_rebindClass);
   fake::field(map::GameMyAudioManager_masterVolumeSlider, kPageSlider);
   fake::field(map::GameMyAudioManager_masterVolumeValueText, kPageNumber);
   fake::field(map::XRSlider_m_OnValueChanged, kSliderEvent);
   fake::field(map::Network_localPlayer, kNetLocalPlayer);
   fake::method(map::Network_get_Instance, reinterpret_cast<void*>(&fake_network));
-  fake::method(map::Component_get_transform, reinterpret_cast<void*>(&fake_self));
-  fake::method(map::Component_get_gameObject, reinterpret_cast<void*>(&fake_self));
-  fake::method(map::GameObject_get_transform, reinterpret_cast<void*>(&fake_self));
+  fake::method(map::Component_get_transform, reinterpret_cast<void*>(&fake_component_transform));
+  fake::method(map::Component_get_gameObject, reinterpret_cast<void*>(&fake_component_game_object));
+  fake::method(map::GameObject_get_transform, reinterpret_cast<void*>(&fake_game_object_transform));
   fake::method(map::Transform_get_parent, reinterpret_cast<void*>(&fake_parent));
   fake::method(map::Transform_get_childCount, reinterpret_cast<void*>(&fake_child_count));
   fake::method(map::Transform_GetChild, reinterpret_cast<void*>(&fake_get_child));
   fake::method(map::Transform_GetSiblingIndex, reinterpret_cast<void*>(&fake_sibling));
+  fake::method(map::Transform_SetSiblingIndex, reinterpret_cast<void*>(&fake_set_sibling));
+  fake::method(map::GameObject_get_activeSelf, reinterpret_cast<void*>(&fake_active_self));
   fake::method(map::Transform_IsChildOf, reinterpret_cast<void*>(&fake_is_child_of));
   fake::method(map::UnityObject_Instantiate, reinterpret_cast<void*>(&fake_instantiate));
   fake::method(map::Component_GetComponent, reinterpret_cast<void*>(&fake_get_component));
@@ -242,11 +304,33 @@ void give() {
   place(&g_list, &g_content);
   place(&g_row, &g_list);
   place(&g_divider, &g_list);
+  place(&g_offRow, &g_list);
+  place(&g_divider2, &g_list);
+  place(&g_row2, &g_list);
+  place(&g_row3, &g_list);
+  place(&g_divider3, &g_list);
   place(&g_title, &g_row);
   place(&g_number, &g_row);
   place(&g_slider, &g_row);
+  place(&g_offName, &g_offRow);
+  place(&g_row2Name, &g_row2);
+  place(&g_row3Name, &g_row3);
   g_nodes[&g_row].height = 100.0f;
   g_nodes[&g_divider].height = 6.0f;
+  // The rest of the page: a row the game has switched off between two of its dividers, and two rows with no divider
+  // between them.
+  for (Obj* o : {&g_offRow, &g_divider2, &g_row2, &g_row3, &g_divider3, &g_offName, &g_row2Name, &g_row3Name})
+    o->klass = &g_otherClass;
+  g_offName.klass = g_row2Name.klass = g_row3Name.klass = &g_textClass;
+  g_nodes[&g_offRow].active = false;
+  g_nodes[&g_offRow].height = 100.0f;
+  g_nodes[&g_divider2].height = 6.0f;
+  g_nodes[&g_divider3].height = 6.0f;
+  g_nodes[&g_row2].height = 100.0f;
+  g_nodes[&g_row3].height = 100.0f;
+  g_nodes[&g_offName].localiser = make(&g_localiserClass);
+  g_nodes[&g_row2Name].localiser = make(&g_localiserClass);
+  g_nodes[&g_row3Name].localiser = make(&g_localiserClass);
   g_nodes[&g_title].localiser = make(&g_localiserClass);
   g_nodes[&g_title].text = "Master Volume";
   g_nodes[&g_number].text = "100%";
@@ -254,6 +338,18 @@ void give() {
   at<void*>(&g_slider, kSliderEvent) = &g_gameEvent;
   at<void*>(&g_page, kPageSlider) = &g_slider;
   at<void*>(&g_page, kPageNumber) = &g_number;
+  // The keybinds page in the same journal: its list holds a RebindActionUI row and the thin line beside it, with no name
+  // of their own to read.
+  if (g_keybinds) {
+    g_kbList.klass = &g_otherClass;
+    g_kbRow.klass = &g_rebindClass;
+    g_kbLine.klass = &g_lineClass;
+    place(&g_kbList, &g_player);
+    place(&g_kbRow, &g_kbList);
+    place(&g_kbLine, &g_kbList);
+    g_nodes[&g_kbRow].height = 45.0f;
+    g_nodes[&g_kbLine].height = 4.0f;
+  }
 }
 
 std::filesystem::path temp_file(const char* name) {
@@ -271,6 +367,19 @@ void* copy_named(const std::string& name) {
 }
 void* kid(void* row, size_t i) { return g_nodes[row].kids.at(i); }
 
+// What the player sees down the list, switched-off children left out: R a row, L a line the SDK copied in, D one of the
+// page's own dividers.
+std::string visible_list() {
+  std::string out;
+  for (void* k : g_nodes[&g_list].kids) {
+    if (!g_nodes[k].active) continue;
+    const bool copied = std::find(g_copies.begin(), g_copies.end(), k) != g_copies.end();
+    const bool row = !g_nodes[k].kids.empty();
+    out += row ? 'R' : copied ? 'L' : 'D';
+  }
+  return out;
+}
+
 void a_slider_sits_under_the_mods_heading() {
   give();
   settings::begin_settings("test.mod", "Test Mod", temp_file("pm_settings_row.txt"));
@@ -280,10 +389,17 @@ void a_slider_sits_under_the_mods_heading() {
   CHECK(settings::add_slider(volume));
   CHECK(!settings::add_slider(volume));  // one id once
   settings::tick_settings();
-  // A divider, the heading, a divider, the row: each at the end of the list.
-  CHECK(g_copies.size() == 4);
-  const auto& kids = g_nodes[&g_list].kids;
-  CHECK(kids.size() == 6 && kids[2] == g_copies[0] && kids[5] == g_copies[3]);
+  // Every call got the object it is the game's call for: a GameObject where it takes one, a component elsewhere.
+  CHECK(g_wrongObject == 0);
+  // The heading and the row, then one line between every pair of rows the player sees: four in all.
+  CHECK(g_copies.size() == 6);
+  CHECK(g_nodes[&g_list].kids.size() == 13);  // the page's 7, the heading and the row, and the 4 lines
+  // Every one of the page's own dividers between two rows is put away, the doubled pair around the switched-off row and
+  // the single ones alike, and the one line goes between every pair of rows instead, as on the keybinds page.
+  CHECK(!g_nodes[&g_divider].active && !g_nodes[&g_divider2].active && !g_nodes[&g_divider3].active);
+  CHECK(visible_list() == "RLRLRLRLR");
+  // The lines copied in are the keybinds page's, one line to a line, not the audio page's 6-high divider.
+  for (size_t i = 2; i < g_copies.size(); ++i) CHECK(static_cast<Obj*>(g_copies[i])->klass == &g_lineClass);
   void* heading = copy_named("<b>Test Mod</b>");
   CHECK(heading != nullptr);
   if (heading) {
@@ -297,8 +413,9 @@ void a_slider_sits_under_the_mods_heading() {
   void* slider = kid(row, 2);
   CHECK(at<void*>(slider, kSliderEvent) && at<void*>(slider, kSliderEvent) != &g_gameEvent);  // an event of its own
   CHECK(g_nodes[slider].value == 1.0f && g_nodes[kid(row, 1)].text == "100%");
-  // The list's content grows by what was added and its spacing.
-  CHECK(std::fabs(g_contentSize.y - (1200.0f + 6 + 100 + 6 + 100 + 4 * 15.5f)) < 1e-3f);
+  // The list's content grows by the two rows and the four lines copied in, less the three dividers put away, each with
+  // its spacing.
+  CHECK(std::fabs(g_contentSize.y - (1200.0f + 2 * (100.0f + 15.5f) + 4 * (4.0f + 15.5f) - 3 * (6.0f + 15.5f))) < 1e-3f);
   // The game's own row is untouched.
   CHECK(g_nodes[&g_title].text == "Master Volume" && g_nodes[&g_slider].value == 1.0f);
   // The number follows the slider as it is dragged.
@@ -308,6 +425,63 @@ void a_slider_sits_under_the_mods_heading() {
   settings::clear_settings();
   CHECK(std::fabs(g_contentSize.y - 1200.0f) < 1e-3f);
   CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), row) != g_destroyed.end());
+  // The page is the game's again: the dividers that were put away are on and the copied lines are gone.
+  CHECK(g_nodes[&g_divider].active && g_nodes[&g_divider2].active && g_nodes[&g_divider3].active);
+  for (size_t i = 2; i < g_copies.size(); ++i)
+    CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), g_copies[i]) != g_destroyed.end());
+  CHECK(g_wrongObject == 0);
+}
+
+// With no other journal menu loaded, the rows copy the audio page's own divider, as they did before the keybinds page's
+// line was chosen (the fallback has to keep working when a player opens the audio page on its own).
+void a_row_copies_the_pages_own_line_without_a_keybinds_page() {
+  g_keybinds = false;
+  give();
+  settings::begin_settings("test.mod", "Test Mod", temp_file("pm_settings_own_line.txt"));
+  settings::Slider volume;
+  volume.id = "volume";
+  volume.label = "Volume";
+  CHECK(settings::add_slider(volume));
+  settings::tick_settings();
+  // The heading, the row, and four lines: with no keybinds page loaded the lines are copies of the audio page's own
+  // divider, one between every pair of rows. The divider copied is itself put away, and its copies still show.
+  CHECK(g_copies.size() == 6);
+  for (size_t i = 2; i < g_copies.size(); ++i) CHECK(static_cast<Obj*>(g_copies[i])->klass == &g_otherClass);
+  CHECK(visible_list() == "RLRLRLRLR");
+  CHECK(std::fabs(g_contentSize.y - (1200.0f + 2 * (100.0f + 15.5f) + 4 * (6.0f + 15.5f) - 3 * (6.0f + 15.5f))) < 1e-3f);
+  settings::clear_settings();
+  CHECK(g_wrongObject == 0);
+  g_keybinds = true;
+}
+
+// The page keeps its one line between rows as the frames go by (the user's screenshot, 2026-11-10: three lines below
+// Voice Input Mode). The mod's own rows are not the game's change: the page is laid out once and left. When the game
+// does change it (switching a row on), it is laid out again, and what the last layout made, though destroyed, is still
+// in the list until the frame ends, as Unity's Object.Destroy leaves it (the fake never takes it out): it must count for
+// nothing.
+void the_page_stays_as_laid_out() {
+  give();
+  settings::begin_settings("test.mod", "Test Mod", temp_file("pm_settings_stays.txt"));
+  settings::Slider volume;
+  volume.id = "volume";
+  volume.label = "Volume";
+  CHECK(settings::add_slider(volume));
+  settings::tick_settings();
+  CHECK(visible_list() == "RLRLRLRLR");
+  const size_t copies = g_copies.size();
+  for (int i = 0; i < 120; ++i) settings::tick_settings();  // two searches of the page
+  CHECK(g_copies.size() == copies);  // nothing laid out again
+  CHECK(visible_list() == "RLRLRLRLR");
+  // The game switches its speaker mode row on: laid out again, one line between every pair of rows still.
+  g_nodes[&g_offRow].active = true;
+  for (int i = 0; i < 60; ++i) settings::tick_settings();
+  CHECK(g_copies.size() > copies);
+  CHECK(visible_list() == "RLRLRLRLRLR");
+  for (int i = 0; i < 120; ++i) settings::tick_settings();
+  CHECK(visible_list() == "RLRLRLRLRLR");
+  settings::clear_settings();
+  CHECK(visible_list() == "RDRDRRD");  // the game's own page, as it was with the row on
+  CHECK(g_wrongObject == 0);
 }
 
 void a_value_counts_once_applied() {
@@ -345,12 +519,15 @@ void a_value_counts_once_applied() {
   CHECK(again && std::fabs(g_nodes[kid(again, 2)].value - 0.3f) < 1e-4f && g_nodes[kid(again, 1)].text == "30%");
   CHECK(settings::value("other") == 0.0f);
   settings::clear_settings();
+  CHECK(g_wrongObject == 0);
 }
 
 }  // namespace
 
 int main() {
   a_slider_sits_under_the_mods_heading();
+  a_row_copies_the_pages_own_line_without_a_keybinds_page();
+  the_page_stays_as_laid_out();
   a_value_counts_once_applied();
   std::printf("%s\n", g_failures ? "settings tests FAILED" : "settings tests passed");
   return g_failures ? 1 : 0;

@@ -4,6 +4,7 @@
 #include <string_view>
 #include <vector>
 
+#include "inject.h"
 #include "mod_list.h"
 
 namespace pm::launcher {
@@ -70,8 +71,12 @@ std::vector<std::string> session_lines(const std::vector<modlist::Refused>& refu
 /** The ids ticked in the saved selection; every mod when nothing has been saved yet. */
 std::vector<std::string> saved_selection(const std::filesystem::path& launcherIni, const std::vector<ModEntry>& mods);
 bool save_selection(const std::filesystem::path& launcherIni, const std::vector<std::string>& ids);
-/** %LOCALAPPDATA%\PhasmoMods\launcher.log, where `--steam` records update results; empty when the folder is unavailable. */
+/** %LOCALAPPDATA%\PhasmoMods\launcher.log, where `--steam` records update results and every load records how it ended; empty
+ *  when the folder is unavailable. */
 std::filesystem::path launcher_log();
+/** One launcher.log line for how a load ended: `how` (attach or steam), the outcome's name, the detail the player was shown,
+ *  the Windows error with Windows' own words for it when there is one, and the mod log's path. Never more than one line. */
+std::wstring result_line(const loader::Result& result, std::wstring_view how);
 /** Every installed mod's DLL, in the order they were found: the host loads those the player's choice starts, once the player agreed. */
 std::vector<std::wstring> all_dlls(const std::vector<ModEntry>& mods);
 }

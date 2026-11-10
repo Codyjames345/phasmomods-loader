@@ -249,3 +249,187 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
 - PM_TEXT_TODO for the user: emotes.volume-label (the slider's name on the audio page).
 - Wheel: kDiscBlack {0, 0, 0, 0.75} (a starting value for "slightly transparent").
 - validate.ps1 and every script test; gamecheck -Expect: 1856 entries, 0 missing.
+
+## In-game fix 8 (user, 2026-11-10, run 10)
+- The user's report, with a screenshot of the audio page: why is the volume different for my emotes and other players';
+  the lines on the audio page got messed up ("the double lines are the problem. Each row should have one line between
+  them", "The keybind page looks perfect, look at how the emotes mod does that"); the default volume is still too loud
+  ("The current 50% should be 100%"); the emote name should use the game's font; "I got killed while emoting and the
+  death animation didn't play. Death should cancel emoting and return to first person", and "emoting should not be
+  possible while the death animation is playing either". Worked in the `feature/emotes` worktree; not merged.
+- Own against others' volume (the answer, and what changed): the song plays at the dancer's own voice's place (the local
+  tap), where it feels no fall with distance, so the dancer's own is set by half again and another player's falls off
+  with distance. The user wants the whole thing quieter, so both are halved: kSongVolume 0.5 -> 0.25, kOwnSongVolume
+  0.25 -> 0.125 - what played at the slider's half is what its 100% plays now.
+- Audio page lines: the page's own dividers draw as double rules, so two of them beside each other read as one thick
+  band. `rows::line_divider` (sdk/api/menu_rows.h) takes a line from another journal menu's list (a `RebindActionUI`
+  row's sibling) when one is loaded, and falls back to the page's own when none is; settings.cpp logs which it used.
+  settings_test puts a keybinds page in the fake scene (g_kbList, g_kbRow, g_kbLine 4 high): the mod's lines are copies
+  of that one and the content grows by the 4s; with `g_keybinds = false` the page's own 6-high divider is copied (the new
+  third test; the divider choice is what separates them).
+- Emote name font: `core/ui.cpp` copied the font from `Object.FindObjectOfType(TextMeshProUGUI, false)`, which is
+  whichever active text the scene happens to hold first, so the name came out in another font. It now prefers the first
+  TextMeshProUGUI under `Network.localRig` (includeInactive): the journal, HUD and prompt texts, all in the game's UI
+  font, and falls back to the scene search. No offline harness for core/ui.cpp, as before: checked in game.
+- Death, decompiled (build 25811160): `Player.BeginDeathSequence` sends `Player.NotifyOfDeathStart` to every client
+  through the server (RpcTarget.AllViaServer) and `Player.StartDeathAnimation` to the view's owner only;
+  `NotifyOfDeathStart` sets the dying bool, turns that player's collider off and wakes their ragdoll. The dying bool's
+  dump name is obfuscated (all four bools 0x28-0x2B are), so it stays unmapped and the RPC is how a mod sees a kill
+  begin. `Player.isDead` comes only at the death's completion, a second or two later, which is why the mod kept its clip
+  at weight while the game's death animation played under it (the mod's Playables output sits above the Animator).
+- Death fix: new entry and wrapper `Player.NotifyOfDeathStart` (sdk/map/Player.h, all.h), hooked in emote.cpp
+  (`detour_death_start`, after the game's own body): for the local dancer the emote ends at once (clip at weight 0, song
+  off, model turned back, third person stopped, not eased) and the wheel is shut; another player's dance is released the
+  same way (`release_body`). The actors whose kill has begun sit in `State.dying`, which feeds `LocalFrame.dying` and
+  `RemoteFrame.dying` and is cleared when `isDead` is seen or the player is gone. `LocalSession::pick` refuses while
+  dying; `LocalOut.atOnce` and `RemoteOut.atOnce` mark a stop that leaves nothing blending; the dying count as down for
+  `shows_to`, so the living do not see a start from a dying player. A player whose death is over may dance again (the
+  design's rule, unchanged). Cost if wrong: a dance still over a death, or a view stuck outside (smoke 20).
+- validate.ps1: 92/92 and every script test; API reference no warnings. gamecheck -Expect: 1857 entries, 0 missing
+  (`OK Player.NotifyOfDeathStart`).
+- PM_TEXT_TODO still open for the user: emotes.volume-label (the slider's name on the audio page).
+- Smoke additions: 20. Killed mid-dance: the death animation plays, the view is first person at once, the wheel is gone,
+  and nothing can be picked while the body falls; afterwards a dead player can dance and only the dead see it. 21. The
+  audio page: one line between the mod's rows, as on the keybinds page, and the same when the audio page is opened with
+  no other journal menu seen yet. 22. The emote's name is in the game's own font. 23. At 100% the dancer's own song and
+  another player's sit at the level the user wants.
+
+## In-game fix 9 (user, 2026-11-10, run 11)
+- The user's second screenshot: "very close but there's still double lines between 'master volume' and 'microphone', and
+  'voice input mode' and 'emotes'. There is no line between 'current microphone input' and 'voice input mode' when there
+  should be one". Mid-round: "emote volume is still too loud. Halve the current volume", and again why the player's own
+  emote and other players' differ in volume (answer unchanged: the song plays at the dancer's own voice's place, at the
+  listener on their client, so it feels no fall with distance and is set by half again).
+- Cause, read from the prefab (UnityPy over `resources.assets`, the `PCPlayer` journal; facts in sdk/systems/menus.md and
+  sdk/internals/menus.md): the audio page's list is not rows alternating evenly with dividers. The divider after the
+  master volume and the one before the microphone have the speaker mode row between them, saved off when there is one
+  output device, so those two dividers sit side by side; the voice bar ("Current Microphone Input") and the voice input
+  mode row touch with no divider between them in the prefab at all; and the mod's own heading followed the page's last
+  divider with the divider the mod itself put in. Copying a nicer line was not enough: the page itself is uneven.
+- Fix: `rows::space_out(list, line)` and `rows::lines_back` (sdk/api/menu_rows.h): one line between every pair of rows
+  the player can see, the game's rows included. A child with a name text or children is a row, one with neither a
+  divider, a switched-off child neither; of a run of dividers between two rows it keeps the first and switches the rest
+  off (undoable), and where two rows touch it copies `line` in (still the keybinds page's thin line when one is loaded).
+  settings.cpp calls it after its rows, keeps the `Lines` and a shape string of the page's own children, and re-lays the
+  page out when the game switches a row of its own on or off; remove_rows gives everything back.
+- Volume halved again: kSongVolume 0.25 -> 0.125, kOwnSongVolume 0.125 -> 0.0625 (starting values; the user has now
+  asked for the halving twice in one day).
+- settings_test: the fake page now has the real page's shape (a row switched off between two dividers, two rows touching,
+  a divider at the end), with fake `GameObject.get_activeSelf` and `Transform.SetSiblingIndex`. It checks the doubled
+  divider is put away, one line copied between the touching game rows and one before the mod's row, the copies are the
+  keybinds line (4 high) or, with no keybinds page, the page's own (6), the content grows by both and shrinks back, and
+  clear_settings switches the page's divider on again (red, then green; the copies' places were off by one in my first
+  expectations and the test said so).
+- validate.ps1: 92/92 and every script test; API reference no warnings. gamecheck -IfConfigured -Expect: everything OK,
+  the map hash unchanged (the build ledger e300eda993f24799-cd106e0f8a54c36e.txt matches what is committed). No new game
+  entries this round: space_out uses Transform.SetSiblingIndex and GameObject.get_activeSelf, both already mapped.
+- PM_TEXT_TODO still open for the user: emotes.volume-label (the slider's name on the audio page).
+- Smoke additions: 21 now reads: the whole audio page has one line between every pair of rows, the game's rows included
+  (no band between master volume and microphone, a line between the voice bar and the voice input mode, one line before
+  the Emotes heading).
+
+## In-game fix 10 (user, 2026-11-10, run 12)
+- The user: "on the last launch I got an injection error, and the second attempt said PhasmoMods already injected. The
+  game then crashed on the main menu." Then: right clicking with the wheel up should close it with nothing played and
+  without stopping the emote playing; check whether the own and other players' song volumes need to differ; and the loader
+  should log the cause of its error.
+- Crash, read: mods.log ended at "settings: phasmomods.emotes.volume has its row on the audio page", and the line after
+  `space_out` ("lines the audio page with ...") never came. Player.log's stack had the Emotes DLL's tick calling into
+  UnityPlayer; the frames, disassembled in the shipped Emotes.dll (same hash as build\Emotes.dll), are tick_settings,
+  ensure_rows and `rows::space_out`, at its last loop's `Component.get_transform(row)` right after the line's
+  Instantiate. `seq` holds GameObjects, so a GameObject went to a Component getter and Unity read the wrong native
+  object. It only runs where two of the page's rows touch, the case fix 9 added, so this was its first in-game run.
+- Crash fix: `GameObject.get_transform(row)` (sdk/api/menu_rows.cpp). settings_test's fake now has a GameObject apart
+  from each Transform, as the game does, and counts every GameObject handed to a Component or Transform call and every
+  component handed to a GameObject call; each test checks the count is 0 (red before the fix: the count failed in all three tests and the
+  copied line sat in the wrong place; green after). No other mix-up showed in settings or menu_rows.
+- Injection error, read: mods.log has one "ModHost loading" (20:10:50.964) and "ModHost active" 5 s later, so the
+  first attempt did load the host and the launcher reported a failure anyway; the retry then found it loaded. The game was
+  about a second old (Steam's autocloud stamp 20:10:49). The launcher kept no record, so the exact message is not known.
+  The likeliest step: after LoadLibraryW the launcher takes a module snapshot to confirm the copy is mapped, and Windows
+  refuses CreateToolhelp32Snapshot with ERROR_BAD_LENGTH while the target is still loading modules; its documentation
+  says to take it again, and list_modules did not. Unproven: the new log line will name it if it happens again.
+- Fixes: list_modules takes the snapshot again on ERROR_BAD_LENGTH for up to 5 s (inject_test: 3 refusals then a
+  load; refusals for ever end as the process_error they were, with the error kept). Every load's end goes to
+  launcher.log, from Attach and from the Steam launch: how (attach, steam or start), the outcome's name, the detail the
+  player saw, the Windows error with Windows' own words for it, and the mod log's path, on one line
+  (`result_line`, launcher_test).
+- Right click: `wheel_step` takes `cancelled` (the right button went down this frame, read only while the wheel is up):
+  the wheel shuts with nothing played and stays shut until its key goes up and down again (`WheelInput.waitRelease`),
+  since the key is still held after the click. Nothing reaches the session, so the emote dancing goes on, and the game's
+  end actions are not read while the wheel is up, so the click does not end it either (emotes_test). New entry
+  `Mouse.get_rightButton` (sdk/map/Input.h, all.h, CHANGELOG). Not changed, a question for the user: right mouse is the
+  game's Primary Use by default (sdk/systems/players.md), so the click also uses the held item, as a left click with the
+  wheel up already does Interact. The mod only switches Look off while the wheel is up.
+- Volumes, answered not changed: the dancer's song sits at their own voice's place, at their own listener, so they hear
+  it at its full volume with no fall; everyone else hears it through the voice's rolloff curve, which the SDK does not
+  give in numbers. Two values are not needed for anything to work: they only set how loud the dancer hears it against
+  how loud those near them do. One value means the dancer hears it as loud as someone standing on top of them; which
+  value to keep (0.125 or 0.0625 at 100%) is the user's call.
+- validate.ps1: 92/92 and every script test; API reference no warnings. gamecheck -IfConfigured -Expect: 1858 entries,
+  0 missing (`OK Mouse.get_rightButton`); the build ledger's map hash updated.
+- PM_TEXT_TODO still open for the user: emotes.volume-label (the slider's name on the audio page).
+- Smoke additions: 24. The audio page opens without a crash and shows one line between every pair of rows (21 again).
+  25. Right click with the wheel up: it shuts, nothing plays, an emote already playing goes on; holding the key after the
+  click does not reopen it; let go and press again and it opens. 26. Attach right after starting the game loads without
+  an error; launcher.log gets a line for every Attach.
+
+## In-game fix 10, revised (user, 2026-11-10)
+- The user: "change it so the 'neutral zone' is large in the middle so an emote can be unselected easier. Revert the
+  right click to close, and keep the use/interact function".
+- Right click reverted whole: `wheel_step`'s `cancelled` and `WheelInput.waitRelease`, the mod's read of the right
+  button, its emotes_test, the `Mouse.get_rightButton` entry (Input.h, all.h, CHANGELOG), the design's point 7 and the
+  build ledger's map hash are as they were at 1649ae0. The game's Primary Use and Interact stay live while the wheel is
+  up, as before: the mod switches only Look off. Smoke 25 is withdrawn.
+- Neutral zone: kPickDeadZone 40 -> 120 mouse counts (a starting value, judged in game); the design's dead zone now reads
+  large. emotes_test: a 100-count move and a 99-count diagonal pick nothing (red at 40, green at 120); the direction
+  checks move out to 300. The accumulated movement still has no limit, so after a long flick the way back to the centre
+  is as long as the flick less 120; a limit on it is a question for the user, not done.
+- Volumes: unchanged, still the user's call (0.125 or 0.0625 at 100%).
+- validate.ps1: 92/92 and every script test; API reference no warnings. gamecheck -IfConfigured -Expect: 1857 entries,
+  0 missing; the build ledger matches what is committed.
+- Smoke 25 now: with the wheel up, moving the mouse back toward the centre lets go of a pick (nothing highlighted), and
+  releasing the key there plays nothing; a short move still reaches a segment comfortably.
+
+## In-game fix 11 (user, 2026-11-10, run 13)
+- The user, with a screenshot of the audio page's end: "still a double line below 'voice input mode'"; "yes put a cap on
+  the mouse distance"; "make all emotes play at 0.05, make no distinction between own player and other players"; "the
+  deadzone is still too small"; and "fill the emote volume slider TODO text with 'Music'".
+- Double line, read from the screenshot: the single line above Voice Input Mode is a copied keybinds line (the voice bar
+  and the voice input mode row touch); the double one below it is the page's own last divider, which space_out kept
+  because it stood alone between two rows. The page's dividers draw as double rules, so keeping one is not one line.
+- Fix: with a line to copy, `rows::space_out` now puts every one of the list's own dividers away and copies the line in
+  before every row but the first, switching each copy on (the fallback line is one of the page's own dividers, put away
+  just before it is copied). With no line it keeps the first of a run between two rows, as before. menu_rows.h, the
+  guide, systems/menus.md and the CHANGELOG say so. settings_test: the visible list reads row, line, row, line ... with
+  every line a copy and no game divider showing, for the keybinds line and for the page's own (red before, green after;
+  my first child count, 15, was wrong: the fake page has 7 children, so 13).
+- Wheel: kPickDeadZone 120 -> 240, and the mouse's movement since the wheel opened is capped at kPickReach 360
+  (`add_capped`, emote_rule.h): past it the movement is brought back along its own direction, so after any flick the way
+  back to neutral is 120. Starting values. emotes_test `the_mouse_reach_is_capped`, and 200 counts now pick nothing.
+- Volume: one kSongVolume 0.05 for every song, the dancer's own included; kOwnSongVolume is gone. The design spec says so.
+- Text: emotes.volume-label is "Music" (the user's word); the Emotes table has no PM_TEXT_TODO left (docs/player-text.md).
+  The manifest's description is still PM_TEXT_TODO for the user.
+- validate.ps1: 92/92 and every script test; API reference no warnings. gamecheck -IfConfigured -Expect: 1857 entries,
+  0 missing; no map change.
+- Smoke additions: 27. The audio page has one thin line between every pair of rows, the game's included, none double, and
+  the same with the audio page opened before any other journal menu (then the lines are the page's own). 28. The wheel's
+  neutral zone and cap feel right: a long flick then a short move back lets go of the pick. 29. Every song, the dancer's
+  own and others', at the level the user wants; the slider reads "Music".
+
+## In-game fix 12 (user, 2026-11-10, run 14)
+- The user's screenshot: three lines between Voice Input Mode and the Emotes heading ("now it's a triple line, it should
+  just be one"), then "be sure not to overcomplicate this, the keybinds page works fine".
+- Cause: `page_shape` counted the mod's own heading and rows as the game's children, so it never matched the shape saved
+  before they were added, and the page was laid out again at every search (each 60 ticks). Each re-layout destroyed the
+  old heading, rows and lines with Object.Destroy, which takes them out only when the frame ends, so the new space_out saw
+  the old heading and row as live rows and put lines before them; those lines outlived them. Old rule: two lines left
+  (run 13's "double line"); new rule: three. So the "double rule" reading of fix 11 was wrong: unproven, and taken out of
+  menu_rows.h/.cpp, systems/menus.md and the test. The keybinds page lays itself out once, which is why it never showed.
+- Fix, at the cause and no more: `page_shape` leaves out ours (heading, rows, copied lines), so the page is laid out
+  once and again only when the game changes it; and what remove_rows and lines_back destroy is switched off first, so a
+  layout in the same frame never counts it. settings_test `the_page_stays_as_laid_out`: 120 ticks lay nothing out
+  again; the game's row switched on lays it out once more with one line between every pair; clearing gives the game's
+  page back exactly (red before, green after).
+- validate.ps1: 92/92 and every script test; API reference no warnings. No map change.
+- Smoke 27 stands: one thin line between every pair of rows on the audio page, after it has been open a while too.

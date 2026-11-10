@@ -518,6 +518,19 @@ inline constexpr pm::sdk::EntryDesc Player_CompleteDeathSequenceNetworked{
     .key = "Player.CompleteDeathSequenceNetworked", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "Player", .name = "CompleteDeathSequenceNetworked"};
 
+inline constexpr const char* Player_NotifyOfDeathStart_params[] = {"PhotonMessageInfo"};
+
+/// The start of a kill, by RPC to every client (Player.BeginDeathSequence sends it, through the server). On every
+/// client it marks the player dying, turns that player's own collider off and switches on the object that holds their
+/// ragdoll; the death animation is separate, sent to the view's owner alone. The dying mark is a bool the map cannot
+/// name, its dump name being obfuscated and shuffled every build, so this is how a mod sees a death begin: a little
+/// before `Player.isDead`, which only the death's completion sets. The body first refuses a sender that may not send it
+/// and a victim already marked dead. `info` is the message's PhotonMessageInfo, which the RPC system fills. Hook it to
+/// watch a death begin; never call it, which would be sending the killer's RPC. Decompiled.
+inline constexpr pm::sdk::EntryDesc Player_NotifyOfDeathStart{
+    .key = "Player.NotifyOfDeathStart", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "Player", .name = "NotifyOfDeathStart", .params = Player_NotifyOfDeathStart_params};
+
 inline constexpr const char* Network_AddPlayerSpot_params[] = {"PlayerSpot"};
 
 /// Adds a player's PlayerSpot to Network.playerSpots. Before it appends the spot it gives the spot's equipment
@@ -1105,6 +1118,10 @@ struct Player {
   /// does nothing.
   static constexpr pm::api::Method<pm::map::Player_ToggleFreezePlayerMovement, void(void*, bool)>
       ToggleFreezePlayerMovement{};
+  /// NotifyOfDeathStart(player, info): the start of a kill, which the killer's client sends to every client. `info`
+  /// is the message's PhotonMessageInfo, which the RPC system fills. A mod hooks it to see a death begin, before
+  /// isDead is set; it never calls it (map note). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Player_NotifyOfDeathStart, void(void*, void*)> NotifyOfDeathStart{};
 };
 
 /// The local player on PC.

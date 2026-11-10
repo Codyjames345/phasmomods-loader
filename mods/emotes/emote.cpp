@@ -9,6 +9,7 @@
 #include <iterator>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -52,10 +53,9 @@ namespace talk = api::talk;
 // Starting values, judged with the user in game.
 constexpr float kBlendIn = 0.25f;       // seconds the dance takes to blend in
 constexpr float kBlendOut = 0.35f;      // and out, the body's facing with it
-// The songs' volumes at the player's Emotes volume of 100% (the user: too loud at 0.8 and 0.4, 2026-11-10). Starting
-// values, judged in game.
-constexpr float kSongVolume = 0.5f;      // a song's volume, 0 to 1, before its fall with distance
-constexpr float kOwnSongVolume = 0.25f;  // the dancer's own hearing of it, at their own voice's place (no fall)
+// Every song's volume at the player's Emotes volume of 100%, 0 to 1, before its fall with distance: the dancer's own and
+// everyone else's alike (the user's ruling, 2026-11-10).
+constexpr float kSongVolume = 0.05f;
 constexpr const char* kVolumeSetting = "volume";
 constexpr float kHeadClearance = 0.3f;  // in VR, the head stays hidden while this close to the headset, in metres
 
@@ -125,6 +125,9 @@ struct State {
   float mouseX = 0.0f, mouseY = 0.0f;  // the mouse's movement since the wheel opened
   bool vrWheel = false;
   std::map<int, Facing> facings;  // by actor; this client's own under its own actor
+  // The players whose death has begun and is not over: from the game's notice of a kill to its mark of the death
+  // (Player.isDead). Their body is the game's death animation, so nothing of ours goes over it (the user, 2026-11-10).
+  std::set<int> dying;
   std::map<int, Song> songs;
   std::map<int, talk::Pace> paces;
   std::vector<api::Held> endActions;
@@ -332,15 +335,13 @@ void stop_song(int actor) {
 }
 
 // A song's volume on this client: the player's Emotes volume setting (the audio page) of its base.
-float song_volume(int actor) {
-  return (actor == game::local_actor() ? kOwnSongVolume : kSongVolume) * api::settings::value(kVolumeSetting);
-}
+float song_volume() { return kSongVolume * api::settings::value(kVolumeSetting); }
 
 // Each song follows the setting as the player applies it.
 void follow_volume() {
   for (auto& [actor, s] : g.songs)
-    if (s.source && game::alive(s.source) && s.volume != song_volume(actor)) {
-      s.volume = song_volume(actor);
+    if (s.source && game::alive(s.source) && s.volume != song_volume()) {
+      s.volume = song_volume();
       phasmo::AudioSource::set_volume(s.source, s.volume);
     }
 }
@@ -368,7 +369,7 @@ void start_song(int actor, void* player, int emote) {
   // The song in the bundle is cut to its loop, so the engine loops it sample for sample (emote_assets.h).
   phasmo::AudioSource::set_loop(source, true);
   phasmo::AudioSource::set_spatialBlend(source, 1.0f);
-  phasmo::AudioSource::set_volume(source, song_volume(actor));
+  phasmo::AudioSource::set_volume(source, song_volume());
   // It falls off with distance as the player's own voice does (the voice's AudioSource).
   if (voice) {
     const int32_t rolloff = phasmo::AudioSourceCurveType::CustomRolloff();
@@ -386,7 +387,7 @@ void start_song(int actor, void* player, int emote) {
       phasmo::AudioSource::set_outputAudioMixerGroup(source, group);
   phasmo::AudioSource::Play(source, 0);
   g.songs[actor].source = source;
-  g.songs[actor].volume = song_volume(actor);
+  g.songs[actor].volume = song_volume();
 }
 
 // ---- This client's own investigator ----
@@ -396,6 +397,29 @@ void send(const std::vector<EmoteMsg>& msgs) {
     const std::vector<uint8_t> bytes = pack(m);
     net::send(bytes.data(), bytes.size(), net::To::Others, true);
   }
+}
+
+// The actor a networked Player belongs to, 0 for none: the game pairs them through its player spots (Network.playerSpots),
+// as core/players.h does the other way round.
+int actor_of(void* player) {
+  void* net = player ? game::network() : nullptr;
+  const api::List spots{net ? phasmo::Network::playerSpots.get(net) : nullptr};
+  for (size_t i = 0; i < spots.size(); ++i)
+    if (void* spot = spots[i]; spot && phasmo::PlayerSpot::player.get(spot) == player)
+      return game::actor_number(phasmo::PlayerSpot::photonPlayer.get(spot));
+  return 0;
+}
+
+// A dancer whose death has begun, let go of at once: their clip off with nothing blending, their song off, their body
+// turned back as it was. The game's death animation has the body from the first frame of the kill, so a dance blending
+// out over it hides the death (the user, 2026-11-10).
+void release_body(int actor, void* player) {
+  if (player && game::alive(player)) api::anim::stop_on_player(player, 0.0f);
+  stop_song(actor);
+  auto it = g.facings.find(actor);
+  if (it == g.facings.end()) return;
+  if (it->second.model && game::alive(it->second.model)) game::set_local_rotation(it->second.model, it->second.original);
+  g.facings.erase(it);
 }
 
 bool is_vr(void* player) { return player && phasmo::VRPlayer::type.is(player); }
@@ -474,11 +498,19 @@ void apply_local(const LocalOut& o, void* player, bool vr) {
     begin_facing(me, player, o.bodyYaw.value_or(0.0f));
   }
   if (o.stop) {
-    PM_LOG("Emotes: the emote ends");
-    api::anim::stop_on_player(player, kBlendOut);
-    stop_song(me);
-    end_local_body();
-    end_facing(me);
+    PM_LOG(o.atOnce ? "Emotes: the emote ends at once" : "Emotes: the emote ends");
+    if (o.atOnce) {
+      // The game has an animation of its own for this body (a death): nothing of ours is left blending, and the view
+      // goes home instead of easing back (the user, 2026-11-10).
+      release_body(me, player);
+      end_local_body();
+      api::view::stop_third_person();
+    } else {
+      api::anim::stop_on_player(player, kBlendOut);
+      stop_song(me);
+      end_local_body();
+      end_facing(me);
+    }
   }
   if (o.bodyYaw && !o.stop) {
     auto it = g.facings.find(me);
@@ -526,10 +558,7 @@ std::optional<int> wheel_input(void* player, bool vr) {
   int pickNow = -1;
   if (wasOpen) {
     float dx = 0.0f, dy = 0.0f;
-    if (game::mouse_delta(dx, dy)) {
-      g.mouseX += dx;
-      g.mouseY += dy;
-    }
+    if (game::mouse_delta(dx, dy)) add_capped(g.mouseX, g.mouseY, dx, dy);
     pickNow = segment_for(g.mouseX, g.mouseY, kPickDeadZone);
     if (void* pad = phasmo::Gamepad::get_current()) {
       const phasmo::Vector2 stick = phasmo::Vector2Control::ReadValue(phasmo::Gamepad::get_rightStick(pad));
@@ -555,30 +584,50 @@ std::optional<int> wheel_input(void* player, bool vr) {
   return played;
 }
 
-// The journal key, while dancing: the emote ends at once, before the game opens the journal, so the game's opening runs
-// on the body as it expects it (the held item back in its camera slot, the clip off, the view home). Ending it a frame
-// later, from the tick, left the journal in front of the face after it closed (the seventh in-game run).
-void end_at_once() {
+// Ends this client's emote at once, with nothing left blending: the game's animation takes the body back from its very
+// first frame. Both times this is needed the game has an animation of its own to show (the user's ruling,
+// 2026-11-10): the journal opening, where ending a frame later left the book in front of the face (the seventh in-game
+// run), and death, where the clip still blending out lay over the death animation and hid it (the eighth).
+void end_at_once(const char* why) {
   if (!g.local || !g.local->active()) return;
   void* player = g.localPlayer.get();
   if (player && !game::alive(player)) player = nullptr;
-  const int me = game::local_actor();
   const LocalOut o = g.local->end_now();
-  PM_LOG("Emotes: the journal opens: the emote ends at once");
-  api::anim::stop_on_player(player, 0.0f);
-  stop_song(me);
+  PM_LOG("Emotes: %s: the emote ends at once", why);
+  release_body(game::local_actor(), player);
   end_local_body();
   api::view::stop_third_person();
-  if (auto it = g.facings.find(me); it != g.facings.end()) {
-    if (it->second.model && game::alive(it->second.model)) game::set_local_rotation(it->second.model, it->second.original);
-    g.facings.erase(it);
-  }
   send(o.send);
 }
 
+// The wheel shut, its input cleared and the look back on.
+void close_wheel() {
+  if (!wheel::is_open()) return;
+  wheel::close();
+  g.wheelIn = WheelInput{};
+  set_look(true);
+}
+
 void detour_journal(api::Original<phasmo::LocalJournalController::OpenCloseJournal> original, void* input, bool flag) {
-  end_at_once();
+  end_at_once("the journal opens");
   original(input, flag);
+}
+
+// The start of a kill, which the game sends to every client (Player.NotifyOfDeathStart, sent by
+// Player.BeginDeathSequence through the server). It marks the player dying and wakes their ragdoll; the game's mark of
+// the death, Player.isDead, comes only when the death completes, a second or two later. So a dance has to let go of the
+// body here, or the emote clip plays over the death animation and hides it (the user, 2026-11-10, in the eighth in-game
+// run: killed while emoting, the death animation never showed and the view stayed outside).
+void detour_death_start(api::Original<phasmo::Player::NotifyOfDeathStart> original, void* player, void* info) {
+  original(player, info);  // the game's own first: it marks the dying player and puts their ragdoll in
+  const int actor = actor_of(player);
+  if (actor) g.dying.insert(actor);
+  if (player == g.localPlayer.get()) {
+    end_at_once("the investigator begins to die");
+    close_wheel();  // a death takes the wheel away too: nothing may be picked while the body falls (the user, 2026-11-10)
+  } else {
+    release_body(actor, player);
+  }
 }
 
 void end_everything_local() {
@@ -586,9 +635,7 @@ void end_everything_local() {
     void* player = g.localPlayer.get();
     apply_local(g.local->end_now(), player && game::alive(player) ? player : nullptr, false);
   }
-  if (wheel::is_open()) wheel::close();
-  g.wheelIn = WheelInput{};
-  set_look(true);
+  close_wheel();
 }
 
 // ---- Everyone else ----
@@ -605,6 +652,12 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
         }
         break;
       case RemoteOut::Stop:
+        if (o.atOnce) {
+          // Their death animation is the game's own: their dance comes off at once rather than blending out over it
+          // (the user, 2026-11-10).
+          release_body(o.actor, player);
+          break;
+        }
         if (player) api::anim::stop_on_player(player, kBlendOut);
         stop_song(o.actor);
         end_facing(o.actor);
@@ -663,8 +716,9 @@ bool start() {
   g.local.emplace(g.a.table);
   g.remote.emplace(g.a.table);
   if (!api::hook<phasmo::LocalJournalController::OpenCloseJournal>(&detour_journal, "Emotes: the journal key") ||
+      !api::hook<phasmo::Player::NotifyOfDeathStart>(&detour_death_start, "Emotes: a kill begins") ||
       !pm::hooks::enable_all()) {
-    PM_LOG("Emotes inactive: the journal key could not be hooked");
+    PM_LOG("Emotes inactive: the journal key and the death's start could not be hooked");
     return false;
   }
   g.lastTick = g.startTick = GetTickCount64();
@@ -692,10 +746,20 @@ void tick() {
   }
   read_actions();
   const bool vr = present && is_vr(player);
+  // A death that has completed, or a player gone from the list, leaves the dying set: the game's own rules have that
+  // body from then on, and a player whose death is over may dance again.
+  for (auto it = g.dying.begin(); it != g.dying.end();) {
+    void* p = game::player_of_actor(*it);
+    if (!p || !game::alive(p) || phasmo::Player::isDead.get(p))
+      it = g.dying.erase(it);
+    else
+      ++it;
+  }
   LocalFrame f;
   f.present = present;
   if (present) {
     f.dead = phasmo::Player::isDead.get(player);
+    f.dying = g.dying.count(game::local_actor()) != 0;
     const Vector3 p = game::position(game::transform_of(player));
     f.pos = {p.x, p.y, p.z};
     f.viewYaw = api::view::view_yaw();
@@ -704,12 +768,18 @@ void tick() {
     const bool dancing = g.local->active();
     f.endAction = dancing && ((end_action_pressed(vr) && !wheel::is_open()) || journal_open(player));
   }
-  if (present && keys::keys_ready()) {
+  // The beginning of a death: the game's death animation takes the body back from its first frame, so the emote ends at
+  // once instead of blending out over it, the wheel goes away and nothing is picked while the body falls (the user's
+  // ruling, 2026-11-10, after the eighth in-game run, where the death animation never showed). The kill's own hook does
+  // this the moment the game sends it; this is the same for a build whose entry did not resolve, a frame late.
+  if (present && f.dying) {
+    end_at_once("the investigator begins to die");
+    close_wheel();
+  }
+  if (present && !f.dying && keys::keys_ready()) {
     if (const std::optional<int> played = wheel_input(player, vr)) apply_local(g.local->pick(*played, f), player, vr);
-  } else if (wheel::is_open()) {
-    wheel::close();
-    g.wheelIn = WheelInput{};
-    set_look(true);
+  } else {
+    close_wheel();
   }
   apply_local(g.local->tick(f), player, vr);
   if (g.local->active() && !vr) hold_items_in_hand();
@@ -724,10 +794,10 @@ void tick() {
   std::vector<RemoteFrame> frames;
   for (const auto& [actor, emote] : g.remote->dancers()) {
     void* p = game::player_of_actor(actor);
-    frames.push_back({actor, p && game::alive(p), p && phasmo::Player::isDead.get(p),
+    frames.push_back({actor, p && game::alive(p), p && phasmo::Player::isDead.get(p), g.dying.count(actor) != 0,
                       p ? api::anim::clip_time(p) : -1.0});
   }
-  apply_remote(g.remote->tick(frames, f.dead));
+  apply_remote(g.remote->tick(frames, f.dead || f.dying));
   apply_facings(dt);
 
   // The ghost hears the songs as the dancers talking, on the master, where it runs.
@@ -744,9 +814,9 @@ void receive(int sender, const uint8_t* data, size_t size) {
   void* player = game::player_of_actor(sender);
   if (!player && m->kind == Kind::Start) return;
   void* local = game::local_player();
-  const bool senderDead = player && phasmo::Player::isDead.get(player);
-  const bool localDead = local && phasmo::Player::isDead.get(local);
-  apply_remote(g.remote->receive(sender, *m, senderDead, localDead));
+  const bool senderDown = player && (phasmo::Player::isDead.get(player) || g.dying.count(sender) != 0);
+  const bool localDown = local && (phasmo::Player::isDead.get(local) || g.dying.count(game::local_actor()) != 0);
+  apply_remote(g.remote->receive(sender, *m, senderDown, localDown));
 }
 
 void stop() {

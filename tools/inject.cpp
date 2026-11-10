@@ -40,9 +40,16 @@ bool canonical_path(const wchar_t* path, std::wstring& output) {
   return true;
 }
 
-/** Obtain a complete module snapshot or reject an incomplete inventory. */
+/** Obtain a complete module snapshot or reject an incomplete inventory. While the game is still loading modules (a game
+ *  started moments ago) Windows refuses the snapshot with ERROR_BAD_LENGTH, and its documentation for
+ *  CreateToolhelp32Snapshot says to take it again; this does, for up to five seconds. */
 Result list_modules(DWORD pid, std::vector<MODULEENTRY32W>& modules) {
+  const ULONGLONG started = GetTickCount64();
   Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid));
+  while (snapshot.value == INVALID_HANDLE_VALUE && GetLastError() == ERROR_BAD_LENGTH && GetTickCount64() - started < 5000) {
+    Sleep(50);
+    snapshot.value = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);  // the old one was no handle
+  }
   if (snapshot.value == INVALID_HANDLE_VALUE) return fail(Outcome::process_error, pm::text::widen(pm::i18n::text("launcher.windows-inspect-s-modules")));
   MODULEENTRY32W entry{sizeof entry};
   if (!Module32FirstW(snapshot.value, &entry)) return fail(Outcome::process_error, pm::text::widen(pm::i18n::text("launcher.windows-read-s-modules")));

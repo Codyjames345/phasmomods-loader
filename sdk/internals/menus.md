@@ -96,3 +96,17 @@ whiteboards'. The row's object references were read from its serialized bytes (t
 `m_ActionLabel` is null, `m_BindingText` is `TriggerRebindButton/ActionBindingText`, and the rebind button's persistent
 call names `StartInteractiveRebind` on the row. The rebinding error was in the game's own log of the fifth run. The fourth in-game run showed why the list's size matters: the row was made, at the end of a list whose `Content` it
 did not grow, and could not be scrolled to.
+
+## The audio page's lines (2026-11-10)
+
+The doubled lines the player saw on the audio page were read from the same `PCPlayer` prefab, again with UnityPy. Under
+`Audio Settings/Scroll View/Viewport/Content` the children alternate a row and a divider, but not evenly: the divider
+after the master volume and the one before the microphone have the speaker mode row between them, saved switched off
+when there is one output device, so the two dividers sit side by side; and the voice bar ("Current Microphone Input")
+and the voice input mode row touch, with no divider between them in the prefab at all. A divider is an image with no
+text under it; the rows all have a `TextLocaliserUI` name. That is what `rows::space_out` works from: a child with a
+name or children is a row, one with neither is a line, and a switched-off child is neither, since the layout gives it
+no room. The keybinds page hangs its rows one level deeper, under a single `Layout` child of its `Content`, and its
+dividers (1679 wide, 6 high, named `-` and its clones) are the thin lines the player called perfect. UnityPy notes from
+this pass: a `GameObject`'s switch is `m_IsActive`; a `RectTransform` gives `m_SizeDelta`, not a finished rect; a
+`MonoBehaviour` with a stripped type tree is only recognizable by its raw length and its script PPtr.

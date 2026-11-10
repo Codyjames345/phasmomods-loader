@@ -25,6 +25,14 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   keybinds page's Apply, Reset and closing as the game's keys do. The map gains the pages' buttons
   (`ControlsManager.*`, `GameMyAudioManager.*`), the game's slider (`XRSlider`, `SliderEvent`) and
   `InputActionRebindingExtensions.RemoveAllBindingOverrides`.
+- **One line between rows.** `rows::space_out` and `rows::line_divider` (`sdk/api/menu_rows.h`) lay a journal menu's
+  list out with exactly one line between every pair of visible rows, the mod's and the game's alike: the list's own
+  dividers are put away, a line is copied in between every pair of rows, and `line_divider` takes the line to copy from another journal menu's
+  list when one is loaded, since the audio page's own dividers draw as double rules.
+- **The start of a kill.** `Player.NotifyOfDeathStart` (`sdk/map/Player.h`), the RPC every client gets when a kill
+  begins: it marks the player dying, turns their collider off and wakes their ragdoll, a second or two before
+  `Player.isDead` is set. A mod hooks it to let go of a body the game is taking back for its death animation, and never
+  calls it ([players](systems/players.md#the-mark)).
 - **A mod's own name.** `PmHostApi.mod_name` (added at the end) gives the name an installed mod's manifest gives it,
   the one the Mods panel shows, and `pm::mod::shown_name()` gives the running mod its own. Its keys' section in the
   keybinds menu is headed with it.

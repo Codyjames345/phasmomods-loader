@@ -1276,6 +1276,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &Player_stats,
     &Player_BeginDeathSequence,
     &Player_CompleteDeathSequenceNetworked,
+    &Player_NotifyOfDeathStart,
     &PhotonNetwork_RemoveRPCs,
     &PhotonNetwork_LocalCleanPhotonView,
     &PhotonPlayer_IsLocal,

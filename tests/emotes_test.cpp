@@ -23,7 +23,7 @@ bool near(float a, float b) { return std::fabs(a - b) < 1e-3f; }
 // ---- The wheel ----
 
 void the_wheel_picks_by_direction() {
-  const float far = 100.0f;
+  const float far = 300.0f;
   CHECK(segment_for(0, far, kPickDeadZone) == 0);      // up
   CHECK(segment_for(far, far, kPickDeadZone) == 1);    // up-right
   CHECK(segment_for(far, 0, kPickDeadZone) == 2);      // right
@@ -32,6 +32,10 @@ void the_wheel_picks_by_direction() {
   CHECK(segment_for(-far, far, kPickDeadZone) == 7);   // up-left
   CHECK(segment_for(5, 5, kPickDeadZone) == -1);       // inside the dead zone
   CHECK(segment_for(0, 0, kPickDeadZone) == -1);
+  // The neutral zone in the middle is large, so a pick is easy to let go of by moving back toward the centre (the user,
+  // 2026-11-10, twice): a move of 200 counts picks nothing.
+  CHECK(segment_for(200.0f, 0.0f, kPickDeadZone) == -1);
+  CHECK(segment_for(-140.0f, 140.0f, kPickDeadZone) == -1);
   // The boundary between up and up-right, at 22.5 degrees, picks the clockwise one.
   const float b = 22.5f / 57.29577951f;
   CHECK(segment_for(far * std::sin(b), far * std::cos(b), kPickDeadZone) == 1);
@@ -39,6 +43,28 @@ void the_wheel_picks_by_direction() {
   // A stick's dead zone works the same way.
   CHECK(segment_for(0.6f, 0.0f, kStickDeadZone) == 2);
   CHECK(segment_for(0.3f, 0.0f, kStickDeadZone) == -1);
+}
+
+// The mouse's movement since the wheel opened is held within kPickReach of the centre (the user, 2026-11-10), so after
+// any flick the way back to the neutral zone is only the gap between them.
+void the_mouse_reach_is_capped() {
+  CHECK(kPickReach > kPickDeadZone);
+  float x = 0.0f, y = 0.0f;
+  add_capped(x, y, 5000.0f, 0.0f);  // a long flick right
+  CHECK(near(x, kPickReach) && near(y, 0.0f));
+  CHECK(segment_for(x, y, kPickDeadZone) == 2);
+  // Back left by a little more than the gap: neutral again.
+  add_capped(x, y, -(kPickReach - kPickDeadZone) - 1.0f, 0.0f);
+  CHECK(segment_for(x, y, kPickDeadZone) == -1);
+  // A diagonal flick keeps its direction.
+  x = y = 0.0f;
+  add_capped(x, y, -3000.0f, 3000.0f);
+  CHECK(near(std::hypot(x, y), kPickReach) && near(x, -y));
+  CHECK(segment_for(x, y, kPickDeadZone) == 7);
+  // Inside the cap nothing changes.
+  x = y = 0.0f;
+  add_capped(x, y, 10.0f, -20.0f);
+  CHECK(near(x, 10.0f) && near(y, -20.0f));
 }
 
 void release_plays_the_pick() {
@@ -247,6 +273,7 @@ void the_journal_keeps_its_place_on_the_waist() {
 int main() {
   the_journal_keeps_its_place_on_the_waist();
   the_wheel_picks_by_direction();
+  the_mouse_reach_is_capped();
   release_plays_the_pick();
   release_with_nothing_picked_plays_nothing();
   an_interrupted_wheel_plays_nothing();

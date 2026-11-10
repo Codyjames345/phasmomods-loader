@@ -17,9 +17,22 @@ namespace {
 
 phasmo::Vector2 to_game(Vec2 v) { return {v.x, v.y}; }
 
+// A text the game itself made, to copy its font from. One under this client's own player rig comes first: the journal,
+// the HUD and the interact prompts are built from the game's UI font, and they are there whether or not they are on
+// screen. Which text the rest of the scene happens to hold is not something to depend on: an emote's name came out in
+// another font entirely (the user's report, 2026-11-10).
+void* game_text_sample() {
+  void* type = phasmo::TextMeshProUGUI::type.type_object();
+  if (!type) return nullptr;
+  void* rig = game::local_player_component();
+  if (void* own = rig ? phasmo::Component::GetComponentInChildren(rig, type, true) : nullptr; own && game::alive(own))
+    return own;
+  return phasmo::Object::FindObjectOfType(type, false);
+}
+
 // Copy the game's own UI font and material from a text the game already shows.
 void style_like_game(void* text) {
-  void* sample = phasmo::Object::FindObjectOfType(phasmo::TextMeshProUGUI::type.type_object(), false);
+  void* sample = game_text_sample();
   if (!sample || sample == text || !game::alive(sample)) return;
   if (void* font = phasmo::TMP_Text::get_font(sample)) phasmo::TMP_Text::set_font(text, font);
   if (void* material = phasmo::TMP_Text::get_fontSharedMaterial(sample))

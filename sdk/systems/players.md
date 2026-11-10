@@ -15,6 +15,13 @@ A kill sets the dying flag first. `Player.BeginDeathSequence` sends the death st
 server, and the death animation to the view's owner. The animation refuses a victim already marked dead, unless
 the High Priestess's flag is set (below).
 
+The death's start arrives as `Player.NotifyOfDeathStart`, an RPC on every client that sets the dying flag, turns that
+player's own collider off and switches on their ragdoll object. So a mod sees a kill begin a second or two before
+`Player.isDead` comes, which is when the game's own death animation has the body: Emotes hooks it to let go of a
+dancing investigator there rather than blend its clip out over the death (`mods/emotes/emote.cpp`,
+`detour_death_start`). Hook it, never call it: calling an RPC body is sending the killer's RPC
+(`sdk/systems/photon.md`, "The game's checks on an RPC").
+
 ## Killing a player
 
 A kill takes a kind of death, `DeathType`: `HangedMan` or `SnappedNeck`. The victim's body plays that kind's death
@@ -32,7 +39,8 @@ side. So a mod that kills outside a hunt calls `Player.BeginDeathSequence(player
 master, as these callers do, and shows its own killer. It must not call it on a friendly ghost's difficulty or for a
 player marked dead: the animation refuses both, with a report on the sender (`sdk/systems/photon.md`, "The game's
 checks on an RPC"). The dying flag is not mapped, since no fact tells it from the bools beside it, so a mod kills
-each player at most once and reads `Player.isDead`. Custom Ghosts' Squatter kicks this way
+each player at most once and reads `Player.isDead`; to watch a kill begin rather than finish, hook
+`Player.NotifyOfDeathStart` (above). Custom Ghosts' Squatter kicks this way
 (`mods/custom_ghosts/squatter.h`, `kick`).
 
 ## Who reads it
