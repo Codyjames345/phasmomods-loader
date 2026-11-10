@@ -67,6 +67,61 @@ void* line_divider(void* row, bool* fromOtherPage) {
   return divider_beside(row);
 }
 
+Lines space_out(void* list, void* line) {
+  Lines out;
+  if (!list) return out;
+  // What the layout sees, in its own order. A switched-off child takes no room, so it divides nothing and needs no line.
+  std::vector<std::pair<void*, bool>> seq;  // each child, and whether it is a row rather than a divider
+  const int32_t count = phasmo::Transform::get_childCount(list);
+  for (int32_t i = 0; i < count; ++i) {
+    void* child = phasmo::Transform::GetChild(list, i);
+    if (!child) continue;
+    void* go = phasmo::Component::get_gameObject(child);
+    if (!phasmo::GameObject::get_activeSelf(go)) continue;
+    seq.emplace_back(go, has_name(child) || phasmo::Transform::get_childCount(child) > 0);
+  }
+  // A run of dividers between two rows keeps its first: the audio page hides a row between two of them, and both show as
+  // lines side by side (the user, 2026-11-10). One at either end of the list has no pair of rows to divide.
+  for (size_t i = 0; i < seq.size();) {
+    if (seq[i].second) {
+      ++i;
+      continue;
+    }
+    size_t j = i;
+    while (j < seq.size() && !seq[j].second) ++j;
+    const bool between = i > 0 && seq[i - 1].second && j < seq.size() && seq[j].second;
+    for (size_t k = i + (between ? 1 : 0); k < j; ++k) {
+      out.added -= taken_height(seq[k].first, list);
+      phasmo::GameObject::SetActive(seq[k].first, false);
+      out.hidden.emplace_back(seq[k].first);
+    }
+    i = j;
+  }
+  // Rows that touch have no line between them. The copies go in last first, so the places still hold.
+  std::vector<void*> before;
+  for (size_t i = 1; i < seq.size(); ++i)
+    if (seq[i].second && seq[i - 1].second) before.push_back(seq[i].first);
+  for (auto it = before.rbegin(); it != before.rend(); ++it) {
+    void* copy = line ? phasmo::Object::Instantiate(line, list, false) : nullptr;
+    if (!copy) continue;
+    void* row = *it;
+    phasmo::Transform::SetSiblingIndex(phasmo::GameObject::get_transform(copy),
+                                       phasmo::Transform::GetSiblingIndex(phasmo::Component::get_transform(row)));
+    out.added += taken_height(copy, list);
+    out.made.emplace_back(copy);
+  }
+  return out;
+}
+
+void lines_back(Lines& lines) {
+  for (Held& h : lines.made)
+    if (h && alive(h)) phasmo::Object::Destroy(h, 0.0f);
+  lines.made.clear();
+  for (Held& h : lines.hidden)
+    if (h && alive(h)) phasmo::GameObject::SetActive(h.get(), true);
+  lines.hidden.clear();
+}
+
 void* name_text(void* row) {
   void* t = transform_of(row);
   void* type = phasmo::TextLocaliserUI::type.type_object();

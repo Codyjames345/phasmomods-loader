@@ -38,7 +38,9 @@ struct State {
   std::string owner, title;
   std::filesystem::path file;
   std::vector<Row> rows;
-  std::vector<Held> extras;  // the heading and dividers
+  std::vector<Held> extras;  // the heading
+  rows::Lines lines;         // the list's lines: what space_out copied in and switched off
+  std::string pageState;     // the page's own children and their switches, as it was when the rows were laid out
   std::vector<rows::Grown> grown;
   bool followsPage = false;
   bool percentSign = false;  // the game's master volume number ends in a percent sign
@@ -103,7 +105,26 @@ std::string shown(const Row& r, float v) {
   return std::to_string(percent) + (g.percentSign ? "%" : "");
 }
 
+// The page's own shape: one character per child of the list that is ours not to touch, whether the game has it
+// switched on. Our own copies are left out, and the dividers we switched off count as the game left them, so this
+// changes only when the game changes the page (a row it hides or shows).
+std::string page_shape(void* list) {
+  std::string out;
+  const int32_t count = phasmo::Transform::get_childCount(list);
+  for (int32_t i = 0; i < count; ++i) {
+    void* child = phasmo::Transform::GetChild(list, i);
+    void* go = child ? phasmo::Component::get_gameObject(child) : nullptr;
+    if (!go || std::any_of(g.lines.made.begin(), g.lines.made.end(), [&](const Held& h) { return h.get() == go; }))
+      continue;
+    const bool oursOff =
+      std::any_of(g.lines.hidden.begin(), g.lines.hidden.end(), [&](const Held& h) { return h.get() == go; });
+    out += (oursOff || phasmo::GameObject::get_activeSelf(go)) ? '1' : '0';
+  }
+  return out;
+}
+
 void remove_rows() {
+  rows::lines_back(g.lines);
   for (Row& r : g.rows) {
     if (r.row && alive(r.row)) phasmo::Object::Destroy(r.row, 0.0f);
     r.row = nullptr;
@@ -120,7 +141,6 @@ void remove_rows() {
 void ensure_rows() {
   if (++g.ticks < kSearchTicks) return;
   g.ticks = 0;
-  if (std::all_of(g.rows.begin(), g.rows.end(), [](const Row& r) { return r.slider && alive(r.slider); })) return;
   void* masterSlider = nullptr;
   void* page = audio_page(masterSlider);
   if (!page) return;
@@ -133,6 +153,13 @@ void ensure_rows() {
     PM_LOG("settings: %s finds the audio page but not its master volume row as it expects", g.owner.c_str());
     return;
   }
+  // The rows are already there and the page is the same shape as when they were laid out: nothing to do. The shape is
+  // checked because the game switches its own rows on and off (the speaker mode row when there is one output device),
+  // and the lines between rows have to follow.
+  const std::string shape = page_shape(list);
+  if (!shape.empty() && shape == g.pageState &&
+      std::all_of(g.rows.begin(), g.rows.end(), [](const Row& r) { return r.slider && alive(r.slider); }))
+    return;
   const std::string gameNumber = to_utf8(phasmo::TMP_Text::get_text(number));
   g.percentSign = !gameNumber.empty() && gameNumber.back() == '%';
   const int32_t sliderAt = phasmo::Transform::GetSiblingIndex(sliderT), numberAt = phasmo::Transform::GetSiblingIndex(numberT);
@@ -153,7 +180,6 @@ void ensure_rows() {
     return copy;
   };
   if (!g.title.empty()) {
-    if (void* d = add(divider)) g.extras.push_back(d);
     if (void* h = add(templObject)) {
       g.extras.push_back(h);
       void* root = phasmo::GameObject::get_transform(h);
@@ -163,7 +189,6 @@ void ensure_rows() {
     }
   }
   for (Row& r : g.rows) {
-    if (void* d = add(divider)) g.extras.push_back(d);
     void* copy = add(templObject);
     void* root = copy ? phasmo::GameObject::get_transform(copy) : nullptr;
     void* sliderChild = root ? phasmo::Transform::GetChild(root, sliderAt) : nullptr;
@@ -191,6 +216,14 @@ void ensure_rows() {
     r.number = text;
     PM_LOG("settings: %s.%s has its row on the audio page", g.owner.c_str(), r.desc.id.c_str());
   }
+  // One line between every pair of rows the page shows (the user, 2026-11-10): the page's own dividers double up where it
+  // hides a row between two of them, and it groups two rows with no divider between them at all. This lays out the whole
+  // list, the game's rows as well as ours, so the page reads the same top to bottom.
+  g.lines = rows::space_out(list, divider);
+  added += g.lines.added;
+  g.pageState = shape;
+  PM_LOG("settings: %s lines the audio page with %zu copied and %zu put away", g.owner.c_str(), g.lines.made.size(),
+         g.lines.hidden.size());
   if (rows::Grown grown = rows::grow(list, added); grown.rect) g.grown.push_back(std::move(grown));
 }
 

@@ -293,3 +293,37 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
   audio page: one line between the mod's rows, as on the keybinds page, and the same when the audio page is opened with
   no other journal menu seen yet. 22. The emote's name is in the game's own font. 23. At 100% the dancer's own song and
   another player's sit at the level the user wants.
+
+## In-game fix 9 (user, 2026-11-10, run 11)
+- The user's second screenshot: "very close but there's still double lines between 'master volume' and 'microphone', and
+  'voice input mode' and 'emotes'. There is no line between 'current microphone input' and 'voice input mode' when there
+  should be one". Mid-round: "emote volume is still too loud. Halve the current volume", and again why the player's own
+  emote and other players' differ in volume (answer unchanged: the song plays at the dancer's own voice's place, at the
+  listener on their client, so it feels no fall with distance and is set by half again).
+- Cause, read from the prefab (UnityPy over `resources.assets`, the `PCPlayer` journal; facts in sdk/systems/menus.md and
+  sdk/internals/menus.md): the audio page's list is not rows alternating evenly with dividers. The divider after the
+  master volume and the one before the microphone have the speaker mode row between them, saved off when there is one
+  output device, so those two dividers sit side by side; the voice bar ("Current Microphone Input") and the voice input
+  mode row touch with no divider between them in the prefab at all; and the mod's own heading followed the page's last
+  divider with the divider the mod itself put in. Copying a nicer line was not enough: the page itself is uneven.
+- Fix: `rows::space_out(list, line)` and `rows::lines_back` (sdk/api/menu_rows.h): one line between every pair of rows
+  the player can see, the game's rows included. A child with a name text or children is a row, one with neither a
+  divider, a switched-off child neither; of a run of dividers between two rows it keeps the first and switches the rest
+  off (undoable), and where two rows touch it copies `line` in (still the keybinds page's thin line when one is loaded).
+  settings.cpp calls it after its rows, keeps the `Lines` and a shape string of the page's own children, and re-lays the
+  page out when the game switches a row of its own on or off; remove_rows gives everything back.
+- Volume halved again: kSongVolume 0.25 -> 0.125, kOwnSongVolume 0.125 -> 0.0625 (starting values; the user has now
+  asked for the halving twice in one day).
+- settings_test: the fake page now has the real page's shape (a row switched off between two dividers, two rows touching,
+  a divider at the end), with fake `GameObject.get_activeSelf` and `Transform.SetSiblingIndex`. It checks the doubled
+  divider is put away, one line copied between the touching game rows and one before the mod's row, the copies are the
+  keybinds line (4 high) or, with no keybinds page, the page's own (6), the content grows by both and shrinks back, and
+  clear_settings switches the page's divider on again (red, then green; the copies' places were off by one in my first
+  expectations and the test said so).
+- validate.ps1: 92/92 and every script test; API reference no warnings. gamecheck -IfConfigured -Expect: everything OK,
+  the map hash unchanged (the build ledger e300eda993f24799-cd106e0f8a54c36e.txt matches what is committed). No new game
+  entries this round: space_out uses Transform.SetSiblingIndex and GameObject.get_activeSelf, both already mapped.
+- PM_TEXT_TODO still open for the user: emotes.volume-label (the slider's name on the audio page).
+- Smoke additions: 21 now reads: the whole audio page has one line between every pair of rows, the game's rows included
+  (no band between master volume and microphone, a line between the voice bar and the voice input mode, one line before
+  the Emotes heading).

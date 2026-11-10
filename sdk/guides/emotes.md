@@ -29,8 +29,9 @@ How the game's actions and the menu work: [menus](../systems/menus.md#key-bindin
 `sdk/api/settings.h`. Declare a slider with `begin_settings(modId, pm::mod::shown_name(), file)` and `add_slider(Slider)`
 in `pmmod_start`, call `tick_settings()` every frame, and read it with `value(id)`. Its row is a copy of the master
 volume's, under your mod's heading on the journal's audio page. Its value counts on the page's Apply and is saved to your
-file; leaving the page without Apply puts the slider back. The rows sit one line apart, the line copied from the keybinds
-page when one is loaded, since the audio page's own dividers draw as double rules
+file; leaving the page without Apply puts the slider back. The whole page reads with one line between every pair of rows
+the player can see, yours and the game's alike: the SDK puts the page's doubled dividers away and copies a line in where
+rows touch, the line taken from the keybinds page when one is loaded
 ([menus](../systems/menus.md#the-audio-page)). The Emotes mod's volume is one.
 
 ## A clip on a player's own body

@@ -102,11 +102,14 @@ reads the slider into the audio settings and sets the mixer, so a change counts 
 the listeners the prefab put on its event (`XRSlider.m_OnValueChanged`), so a copy needs a new `SliderEvent` of its own.
 `sdk/api/settings.h` puts a mod's sliders there, under a heading with the mod's name.
 
-The two journal lists divide their rows differently, as the game shows them (the user's screenshots, 2026-11-10): the
-audio page's dividers draw as double rules, and two of them beside each other read as one thick band, while the keybinds
-page's rows sit one line apart. `rows::line_divider` therefore copies a line from another journal menu's list when one is
-loaded, so a mod's rows on the audio page sit one line apart like the keybinds page's (the user's ruling), and falls back
-to the page's own divider when no other list is loaded.
+The two journal lists divide their rows differently, as the game shows them (the user's screenshots, 2026-11-10). The
+keybinds page's rows sit one thin line apart. The audio page's list holds its rows and dividers alternating, but not
+evenly: it switches a row off when it does not apply (the speaker mode row when there is one output device), which leaves
+two of its dividers side by side reading as one thick band, and it groups two of its rows ("Current Microphone Input" and
+"Voice Input Mode") with no divider between them at all. `rows::space_out` lays a whole list out with exactly one line
+between every pair of rows the player can see: it puts away the extra dividers of such a run and copies a line in where
+two rows touch, and gives it all back when the mod's rows go. `rows::line_divider` picks the line to copy: the keybinds
+page's, when one of its lists is loaded, and the page's own divider when none is (the user's ruling).
 
 ## How this was read
 

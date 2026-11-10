@@ -67,6 +67,9 @@ std::map<void*, Node> g_nodes;
 std::vector<Obj*> g_made;
 std::vector<void*> g_destroyed, g_copies;
 Obj g_net, g_player, g_content, g_list, g_group, g_page, g_row, g_title, g_number, g_slider, g_divider, g_gameEvent;
+// The rest of the audio page, as the game lays it out (sdk/systems/menus.md): its dividers double up around a row it
+// switches off, and it groups two rows with no divider between them (the user's screenshot, 2026-11-10).
+Obj g_offRow, g_offName, g_divider2, g_row2, g_row2Name, g_row3, g_row3Name, g_divider3;
 // The keybinds page beside the audio one: its rows are RebindActionUIs with a thin line between them, which is the line
 // a mod's rows copy (the user, 2026-11-10: the audio page's own dividers are double rules, too heavy between rows).
 Obj g_kbList, g_kbRow, g_kbLine;
@@ -94,6 +97,15 @@ int32_t fake_sibling(void* t, void*) {
   for (size_t i = 0; i < kids.size(); ++i)
     if (kids[i] == t) return static_cast<int32_t>(i);
   return -1;
+}
+bool fake_active_self(void* o, void*) { return g_nodes[o].active; }
+void fake_set_sibling(void* t, int32_t i, void*) {
+  auto& kids = g_nodes[g_nodes[t].parent].kids;
+  const auto at = std::find(kids.begin(), kids.end(), t);
+  if (at == kids.end()) return;
+  void* moved = *at;
+  kids.erase(at);
+  kids.insert(kids.begin() + std::min<size_t>(static_cast<size_t>(i), kids.size()), moved);
 }
 bool fake_is_child_of(void* t, void* parent, void*) {
   for (void* at_ = t; at_; at_ = g_nodes[at_].parent)
@@ -212,6 +224,8 @@ void give() {
   fake::method(map::Transform_get_childCount, reinterpret_cast<void*>(&fake_child_count));
   fake::method(map::Transform_GetChild, reinterpret_cast<void*>(&fake_get_child));
   fake::method(map::Transform_GetSiblingIndex, reinterpret_cast<void*>(&fake_sibling));
+  fake::method(map::Transform_SetSiblingIndex, reinterpret_cast<void*>(&fake_set_sibling));
+  fake::method(map::GameObject_get_activeSelf, reinterpret_cast<void*>(&fake_active_self));
   fake::method(map::Transform_IsChildOf, reinterpret_cast<void*>(&fake_is_child_of));
   fake::method(map::UnityObject_Instantiate, reinterpret_cast<void*>(&fake_instantiate));
   fake::method(map::Component_GetComponent, reinterpret_cast<void*>(&fake_get_component));
@@ -252,11 +266,33 @@ void give() {
   place(&g_list, &g_content);
   place(&g_row, &g_list);
   place(&g_divider, &g_list);
+  place(&g_offRow, &g_list);
+  place(&g_divider2, &g_list);
+  place(&g_row2, &g_list);
+  place(&g_row3, &g_list);
+  place(&g_divider3, &g_list);
   place(&g_title, &g_row);
   place(&g_number, &g_row);
   place(&g_slider, &g_row);
+  place(&g_offName, &g_offRow);
+  place(&g_row2Name, &g_row2);
+  place(&g_row3Name, &g_row3);
   g_nodes[&g_row].height = 100.0f;
   g_nodes[&g_divider].height = 6.0f;
+  // The rest of the page: a row the game has switched off between two of its dividers, and two rows with no divider
+  // between them.
+  for (Obj* o : {&g_offRow, &g_divider2, &g_row2, &g_row3, &g_divider3, &g_offName, &g_row2Name, &g_row3Name})
+    o->klass = &g_otherClass;
+  g_offName.klass = g_row2Name.klass = g_row3Name.klass = &g_textClass;
+  g_nodes[&g_offRow].active = false;
+  g_nodes[&g_offRow].height = 100.0f;
+  g_nodes[&g_divider2].height = 6.0f;
+  g_nodes[&g_divider3].height = 6.0f;
+  g_nodes[&g_row2].height = 100.0f;
+  g_nodes[&g_row3].height = 100.0f;
+  g_nodes[&g_offName].localiser = make(&g_localiserClass);
+  g_nodes[&g_row2Name].localiser = make(&g_localiserClass);
+  g_nodes[&g_row3Name].localiser = make(&g_localiserClass);
   g_nodes[&g_title].localiser = make(&g_localiserClass);
   g_nodes[&g_title].text = "Master Volume";
   g_nodes[&g_number].text = "100%";
@@ -302,14 +338,16 @@ void a_slider_sits_under_the_mods_heading() {
   CHECK(settings::add_slider(volume));
   CHECK(!settings::add_slider(volume));  // one id once
   settings::tick_settings();
-  // A line, the heading, a line, the row: each at the end of the list.
+  // The heading and the row, then a line where the page's own rows touched and one before the mod's row.
   CHECK(g_copies.size() == 4);
   const auto& kids = g_nodes[&g_list].kids;
-  CHECK(kids.size() == 6 && kids[2] == g_copies[0] && kids[5] == g_copies[3]);
-  // The lines between the mod's rows are copies of the keybinds page's, one line to a line, not of the audio page's
-  // double rule (the user, 2026-11-10).
-  CHECK(g_copies[0] && g_copies[2] && static_cast<Obj*>(g_copies[0])->klass == &g_lineClass &&
-        static_cast<Obj*>(g_copies[2])->klass == &g_lineClass);
+  CHECK(kids.size() == 11);
+  // The page doubled its dividers around a row it has switched off: one of the pair is put away, and its single ones
+  // stay. Where its rows touch with no divider at all, one is copied in (the user, 2026-11-10).
+  CHECK(!g_nodes[&g_divider2].active && g_nodes[&g_divider].active && g_nodes[&g_divider3].active);
+  CHECK(kids[5] == g_copies[3] && kids[9] == g_copies[2]);
+  // The lines copied in are the keybinds page's, one line to a line, not the audio page's 6-high divider.
+  CHECK(static_cast<Obj*>(g_copies[2])->klass == &g_lineClass && static_cast<Obj*>(g_copies[3])->klass == &g_lineClass);
   void* heading = copy_named("<b>Test Mod</b>");
   CHECK(heading != nullptr);
   if (heading) {
@@ -323,9 +361,9 @@ void a_slider_sits_under_the_mods_heading() {
   void* slider = kid(row, 2);
   CHECK(at<void*>(slider, kSliderEvent) && at<void*>(slider, kSliderEvent) != &g_gameEvent);  // an event of its own
   CHECK(g_nodes[slider].value == 1.0f && g_nodes[kid(row, 1)].text == "100%");
-  // The list's content grows by what was added and its spacing: the keybinds page's lines are 4 high, against the audio
-  // page's 6.
-  CHECK(std::fabs(g_contentSize.y - (1200.0f + 4 + 100 + 4 + 100 + 4 * 15.5f)) < 1e-3f);
+  // The list's content grows by the two rows and the two lines copied in, less the divider put away, each with its
+  // spacing.
+  CHECK(std::fabs(g_contentSize.y - (1200.0f + 2 * (100.0f + 15.5f) + 2 * (4.0f + 15.5f) - (6.0f + 15.5f))) < 1e-3f);
   // The game's own row is untouched.
   CHECK(g_nodes[&g_title].text == "Master Volume" && g_nodes[&g_slider].value == 1.0f);
   // The number follows the slider as it is dragged.
@@ -335,6 +373,10 @@ void a_slider_sits_under_the_mods_heading() {
   settings::clear_settings();
   CHECK(std::fabs(g_contentSize.y - 1200.0f) < 1e-3f);
   CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), row) != g_destroyed.end());
+  // The page is the game's again: the divider that was put away is on and the copied lines are gone.
+  CHECK(g_nodes[&g_divider2].active);
+  CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), g_copies[2]) != g_destroyed.end());
+  CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), g_copies[3]) != g_destroyed.end());
 }
 
 // With no other journal menu loaded, the rows copy the audio page's own divider, as they did before the keybinds page's
@@ -348,9 +390,11 @@ void a_row_copies_the_pages_own_line_without_a_keybinds_page() {
   volume.label = "Volume";
   CHECK(settings::add_slider(volume));
   settings::tick_settings();
+  // The heading, the row, and two lines: with no keybinds page loaded the lines are copies of the audio page's own
+  // divider, which is still one line to a line once space_out has put the doubled one away.
   CHECK(g_copies.size() == 4);
-  CHECK(g_copies[0] && static_cast<Obj*>(g_copies[0])->klass == &g_otherClass);  // the audio page's own
-  CHECK(std::fabs(g_contentSize.y - (1200.0f + 6 + 100 + 6 + 100 + 4 * 15.5f)) < 1e-3f);
+  CHECK(static_cast<Obj*>(g_copies[2])->klass == &g_otherClass && static_cast<Obj*>(g_copies[3])->klass == &g_otherClass);
+  CHECK(std::fabs(g_contentSize.y - (1200.0f + 2 * (100.0f + 15.5f) + 2 * (6.0f + 15.5f) - (6.0f + 15.5f))) < 1e-3f);
   settings::clear_settings();
   g_keybinds = true;
 }

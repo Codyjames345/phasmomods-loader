@@ -53,11 +53,11 @@ namespace talk = api::talk;
 // Starting values, judged with the user in game.
 constexpr float kBlendIn = 0.25f;       // seconds the dance takes to blend in
 constexpr float kBlendOut = 0.35f;      // and out, the body's facing with it
-// The songs' volumes at the player's Emotes volume of 100%. The user's ruling, 2026-11-10: still too loud, so what
-// these played at half the slider is what the slider's 100% plays now. Starting values, judged in game.
-constexpr float kSongVolume = 0.25f;      // a song's volume, 0 to 1, before its fall with distance
-constexpr float kOwnSongVolume = 0.125f;  // the dancer's own hearing of it: their song plays at their own voice's place,
-                                          // where it feels no fall with distance, so it is set by half again
+// The songs' volumes at the player's Emotes volume of 100%. The user's ruling, 2026-11-10 (twice): still too loud, so
+// what these played at half the slider is what the slider's 100% plays now. Starting values, judged in game.
+constexpr float kSongVolume = 0.125f;     // a song's volume, 0 to 1, before its fall with distance
+constexpr float kOwnSongVolume = 0.0625f;  // the dancer's own hearing of it: their song plays at their own voice's place,
+                                           // where it feels no fall with distance, so it is set by half again
 constexpr const char* kVolumeSetting = "volume";
 constexpr float kHeadClearance = 0.3f;  // in VR, the head stays hidden while this close to the headset, in metres
 
