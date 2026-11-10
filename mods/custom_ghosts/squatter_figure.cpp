@@ -34,20 +34,23 @@ constexpr const char* kController = "assets/squatter.controller";
 constexpr float kHeadCentreAboveBone = 0.09f;  // the head sphere's centre above the head bone, metres
 // A heavier, stiffer cloth than Unity's defaults, as a bedsheet is (user, 2026-11-09: thicker and stiffer): it bends
 // less and its motion dies away sooner. The stiffest bending with damped world motion (2026-11-10) was too stiff and
-// creased like paper, so the cloth is back to these, Unity's own for the rest. Starting values, judged with the user
-// in game.
-const api::ClothSettings kCloth{true, 0.5f, 1.0f, 0.4f};
+// creased like paper, so the cloth is back to these, Unity's own for the rest. Unity adds a virtual particle in every
+// triangle of the cloth, which for a sheet of this many triangles is as many particles again to simulate; its colliders
+// are now long capsules rather than a line of spheres, which presses the sheet smoothly by itself, so they are off
+// (user, 2026-11-10: getting up lagged badly). Starting values, judged with the user in game.
+const api::ClothSettings kCloth{true, 0.5f, 1.0f, 0.4f, {}, {}, false};
 // The sheet material's smoothness: matte (user, 2026-11-10).
 constexpr float kSheetSmoothness = 0.0f;
-// The spheres the sheet rests on besides the head, about the body's own size there with no padding, so it drapes over the
-// body as a sheet does (user, 2026-11-10: the padding held it off the body; only the head draws under it, so a limb
-// pressing at it shows only as the sheet's shape): the torso, neck, shoulders, both arms and both legs. Starting
-// values, judged with the user in game.
-constexpr float kChest = 0.16f, kSpine = 0.14f, kHips = 0.15f, kNeck = 0.06f, kShoulder = 0.07f;
+// What the sheet rests on besides the head, about the body's own size there with no padding, so it drapes over the body
+// as a sheet does (user, 2026-11-10: the padding held it off the body; only the head draws under it, so a limb pressing
+// at it shows only as the sheet's shape). Each limb and the torso is one capsule from joint to joint instead of a line of
+// spheres: continuous coverage by a single collider is how cloth worn by a body is set up in games (Unity's cloth
+// capsule colliders, and the poncho tutorial), it leaves no gap for the sheet to sag into between one sphere and the
+// next, and it is a third as many colliders for the cloth to answer to every frame. Spheres are left for the rounded
+// parts that push the sheet out where they go: the head, the shoulders and the hands, a hand reaching for a door's
+// handle among them. Starting values, judged with the user in game.
+constexpr float kTorso = 0.15f, kShoulder = 0.07f, kHand = 0.05f, kPalmAlong = 0.35f;
 constexpr float kArm = 0.055f, kForearm = 0.045f, kThigh = 0.08f, kShin = 0.055f;
-// The forearms and hands push the sheet out where they go, a hand reaching for a door's handle among them: spheres
-// along each forearm, at the wrist and over the hand. Starting values.
-constexpr float kWrist = 0.04f, kHand = 0.05f, kPalmAlong = 0.35f;
 // The investigator body's parts left drawing under the sheet, by their GameObject's name in the PCPlayer prefab
 // (sdk/systems/scene.md): the head alone (CC_Base_Body is the head's mesh alone), its eyes, teeth, tongue and hair. The
 // legs clipped through the sheet, so the trousers and boots are hidden with the jacket, shirt, hands and every cosmetic
@@ -287,6 +290,13 @@ bool build_sheet() {
     const phasmo::Vector3 a = phasmo::Transform::get_position(bone(from)), b = phasmo::Transform::get_position(bone(to));
     return phasmo::Vector3{(b.x - a.x) * share, (b.y - a.y) * share, (b.z - a.z) * share};
   };
+  // A capsule over the limb from one joint to the next: hung on the near joint, its centre halfway along the limb as the
+  // body stands, running along it, so it turns with the limb (api::ClothSphere).
+  const auto limb = [&](int32_t from, int32_t to, float radius) {
+    const phasmo::Vector3 run = along(from, to, 1.0f);
+    const float metres = std::sqrt(run.x * run.x + run.y * run.y + run.z * run.z);
+    return api::ClothSphere{bone(from), radius, {run.x * 0.5f, run.y * 0.5f, run.z * 0.5f}, run, metres};
+  };
   std::vector<api::ClothWeight> weights;
   for (size_t v = 0; v < m.vertices.size(); ++v) {
     api::ClothWeight w;  // the head alone
@@ -302,30 +312,22 @@ bool build_sheet() {
   api::ClothMesh mesh{vertices, normals, uv, m.triangles, coefficients};
   mesh.bones = bones;
   mesh.weights = weights;
-  const phasmo::Vector3 none{};
-  const api::ClothSphere spheres[] = {
+  const api::ClothSphere colliders[] = {
       {head, shape.headRadius, {0, kHeadCentreAboveBone, 0}},
-      {bone(B::Chest()), kChest, none},
-      {bone(B::Spine()), kSpine, none},
-      {bone(B::Hips()), kHips, none},
-      {bone(B::LeftUpperArm()), kArm, none},
-      {bone(B::RightUpperArm()), kArm, none},
-      {bone(B::Neck()), kNeck, none},
-      {bone(B::LeftShoulder()), kShoulder, none},
-      {bone(B::RightShoulder()), kShoulder, none},
-      {bone(B::LeftLowerArm()), kForearm, none},
-      {bone(B::RightLowerArm()), kForearm, none},
-      {bone(B::LeftUpperLeg()), kThigh, none},
-      {bone(B::RightUpperLeg()), kThigh, none},
-      {bone(B::LeftLowerLeg()), kShin, none},
-      {bone(B::RightLowerLeg()), kShin, none},
-      {bone(B::LeftLowerArm()), kWrist, along(B::LeftLowerArm(), B::LeftHand(), 0.5f)},
-      {bone(B::RightLowerArm()), kWrist, along(B::RightLowerArm(), B::RightHand(), 0.5f)},
-      {bone(B::LeftHand()), kWrist, none},
-      {bone(B::RightHand()), kWrist, none},
+      limb(B::Hips(), B::Neck(), kTorso),
+      {bone(B::LeftShoulder()), kShoulder, phasmo::Vector3{}},
+      {bone(B::RightShoulder()), kShoulder, phasmo::Vector3{}},
+      limb(B::LeftUpperArm(), B::LeftLowerArm(), kArm),
+      limb(B::RightUpperArm(), B::RightLowerArm(), kArm),
+      limb(B::LeftLowerArm(), B::LeftHand(), kForearm),
+      limb(B::RightLowerArm(), B::RightHand(), kForearm),
       {bone(B::LeftHand()), kHand, along(B::LeftLowerArm(), B::LeftHand(), kPalmAlong)},
-      {bone(B::RightHand()), kHand, along(B::RightLowerArm(), B::RightHand(), kPalmAlong)}};
-  if (!api::add_cloth(anchor, mesh, material, kCloth, spheres, g.cloth, &why)) return fail("cloth", why), false;
+      {bone(B::RightHand()), kHand, along(B::RightLowerArm(), B::RightHand(), kPalmAlong)},
+      limb(B::LeftUpperLeg(), B::LeftLowerLeg(), kThigh),
+      limb(B::RightUpperLeg(), B::RightLowerLeg(), kThigh),
+      limb(B::LeftLowerLeg(), B::LeftFoot(), kShin),
+      limb(B::RightLowerLeg(), B::RightFoot(), kShin)};
+  if (!api::add_cloth(anchor, mesh, material, kCloth, colliders, g.cloth, &why)) return fail("cloth", why), false;
   return true;
 }
 

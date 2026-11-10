@@ -1,6 +1,7 @@
 #include "models.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "Animator.h"
 #include "Camera.h"
@@ -403,7 +404,29 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
     phasmo::Vector3 there{at.x + s.offset.x, at.y + s.offset.y, at.z + s.offset.z};
     phasmo::Transform::set_position(t, &there);
     phasmo::CapsuleCollider::set_radius(capsule, s.radius);
-    phasmo::CapsuleCollider::set_height(capsule, 0.0f);  // shorter than its diameter: a sphere
+    if (s.length > 0.0f) {
+      // The capsule runs along whichever of the bone's own axes points furthest along the direction it was given, so it
+      // turns with the limb it covers. A CapsuleCollider is never shorter than its own diameter: that is its sphere.
+      const phasmo::Matrix4x4 bone = matrix_of(s.bone);
+      const float dl =
+          std::sqrt(s.direction.x * s.direction.x + s.direction.y * s.direction.y + s.direction.z * s.direction.z);
+      int axis = 1;
+      float best = -1.0f;
+      for (int a = 0; a < 3; ++a) {
+        const float lx = bone.m[a * 4], ly = bone.m[a * 4 + 1], lz = bone.m[a * 4 + 2];
+        const float ll = std::sqrt(lx * lx + ly * ly + lz * lz);
+        const float along = dl > 0.0f && ll > 0.0f
+                                ? std::fabs(lx * s.direction.x + ly * s.direction.y + lz * s.direction.z) / (ll * dl)
+                                : 0.0f;
+        if (along > best) best = along, axis = a;
+      }
+      const phasmo::Vector3 middle{};
+      phasmo::CapsuleCollider::set_direction(capsule, axis);
+      phasmo::CapsuleCollider::set_center(capsule, &middle);
+      phasmo::CapsuleCollider::set_height(capsule, std::max(s.length, 2.0f * s.radius));
+    } else {
+      phasmo::CapsuleCollider::set_height(capsule, 0.0f);  // shorter than its diameter: a sphere
+    }
     capsules.push_back(capsule);
   }
   void* list = phasmo::CapsuleCollider::type.make_array(capsules.size());

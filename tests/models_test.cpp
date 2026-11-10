@@ -375,8 +375,12 @@ void f_world_velocity(void*, float v) { g_clothSettings.emplace_back("worldVeloc
 void f_world_acceleration(void*, float v) { g_clothSettings.emplace_back("worldAcceleration", v); }
 void f_virtual(void*, float v) { g_clothSettings.emplace_back("virtual", v); }
 std::map<void*, float> g_radius, g_height;
+std::map<void*, int32_t> g_axis;
+std::map<void*, Vector3> g_center;
 void f_radius(void* c, float v, const void*) { g_radius[c] = v; }
 void f_height(void* c, float v, const void*) { g_height[c] = v; }
+void f_axis(void* c, int32_t v, const void*) { g_axis[c] = v; }
+void f_center(void* c, const Vector3* v, const void*) { g_center[c] = *v; }
 
 template <class F>
 void m(const pm::sdk::EntryDesc& d, F* fn) {
@@ -420,6 +424,8 @@ void start(bool withCloth = true) {
   g_clothSettings.clear();
   g_radius.clear();
   g_height.clear();
+  g_axis.clear();
+  g_center.clear();
   g_unloaded = nullptr;
   g_events.clear();
   fake::reset();
@@ -529,6 +535,8 @@ void start(bool withCloth = true) {
   m(map::SkinnedMeshRenderer_set_updateWhenOffscreen, &f_updateOffscreen);
   m(map::CapsuleCollider_set_radius, &f_radius);
   m(map::CapsuleCollider_set_height, &f_height);
+  m(map::CapsuleCollider_set_direction, &f_axis);
+  m(map::CapsuleCollider_set_center, &f_center);
   fake::layer_names({"Default", "TransparentFX", "Ignore Raycast"});
   fake::layer(map::Layer_IgnoreRaycast);
   std::string missing;
@@ -824,6 +832,38 @@ void cloth_builds_the_mesh_and_its_colliders() {
   CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), sphereGo) != g_destroyed.end());
 }
 
+// A collider the cloth rests on may run along a limb as a capsule rather than being a line of spheres: one collider of
+// continuous coverage per limb is how games set cloth up on a body, and it is a fraction of the colliders the cloth has
+// to answer to each frame (Unity's cloth capsule colliders).
+void a_cloth_collider_can_run_along_a_limb() {
+  start();
+  const Sheet sheet;
+  void* anchor = go_new("Sheet");
+  void* bone = go_new("UpperArm");
+  node(bone).position = {0, 1.5f, 0};
+  void* material = make_obj(&kMaterial);
+  const api::ClothSphere limb[] = {{&node(bone).transform, 0.055f, {0.0f, -0.14f, 0.0f}, {0.0f, -1.0f, 0.0f}, 0.28f}};
+  api::ClothParts parts;
+  std::string why;
+  CHECK(api::add_cloth(anchor, sheet.mesh(), material, {}, limb, parts, &why));
+  void* go = parts.colliders.empty() ? nullptr : static_cast<void*>(parts.colliders[0]);
+  CHECK(go && node(go).parent == bone);
+  if (go) {
+    CHECK(std::abs(node(go).position.y - 1.36f) < 1e-5f);  // its centre: the bone plus the offset
+    void* capsule = find_in(go, &kCapsule);
+    CHECK(g_radius[capsule] == 0.055f && std::abs(g_height[capsule] - 0.28f) < 1e-5f);
+    CHECK(g_axis[capsule] == 1);  // the bone's axis nearest the direction it was given
+  }
+  // Unity's capsule is its own diameter at the shortest, which is a sphere: a length below it is raised to it.
+  const api::ClothSphere stub[] = {{&node(bone).transform, 0.2f, {}, {0, 1, 0}, 0.1f}};
+  api::ClothParts stump;
+  CHECK(api::add_cloth(go_new("Plain"), sheet.mesh(), material, {}, stub, stump, &why));
+  void* stumpGo = stump.colliders.empty() ? nullptr : static_cast<void*>(stump.colliders[0]);
+  CHECK(stumpGo && std::abs(g_height[find_in(stumpGo, &kCapsule)] - 0.4f) < 1e-5f);
+  api::destroy_cloth(parts);
+  api::destroy_cloth(stump);
+}
+
 bool near(const phasmo::Matrix4x4& a, const phasmo::Matrix4x4& b) {
   for (int i = 0; i < 16; ++i)
     if (std::abs(a.m[i] - b.m[i]) > 1e-4f) return false;
@@ -976,6 +1016,7 @@ int main() {
   a_material_is_made_matte();
   a_costume_hides_only_what_it_covers();
   cloth_builds_the_mesh_and_its_colliders();
+  a_cloth_collider_can_run_along_a_limb();
   a_bind_pose_undoes_the_bone();
   a_cloth_can_hang_heavier();
   cloth_follows_its_bones();
