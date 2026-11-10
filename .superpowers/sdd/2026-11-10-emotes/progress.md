@@ -172,3 +172,10 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
 12. A dead dancer is seen and heard by the dead only.
 13. Root motion: the dance does not move the player (or a dance ends itself by "moving" 0.5 m).
 14. The body's Animator is not on the root (no log line "the body's Animator is on the player's root").
+
+## In-game fix 1 (user, 2026-11-10)
+- The user's run: "This game build lacks a game entry and 1 more". mods.log: VolumeParameter<float>.set_value and VolumeParameter<DepthOfFieldMode>.set_value MISSING ("this game build has no code for the instance"), so Emotes stayed off.
+- Fix: the SDK sets a volume parameter by re-running its own constructor in place (ClampedFloatParameter, MinFloatParameter, DepthOfFieldModeParameter .ctor; decompiled: value, range and override only; range read from the parameter's min/max). Test: screen_effects_test (mutation: override off -> 2 failures).
+- Wording: a key's angle brackets made the panel fall back to "a game entry"; modid::shown_key shows them as U+2039/U+203A (mod_manifest_test an_entry_key_is_shown_safely red->green). At the user's request the reasons are redrafted, marked PM_TEXT_AI: "Needs {{entry}}, which this game version lacks" and "...and {{count}} more, ...", fallback "a part of the game" (mods_test red->green).
+- Ruling: inflated (generic instance) entries are avoided from now on where a non-generic member does the job: the offline check cannot see whether an instance has code - cost if wrong: none.
+- validate.ps1 91/91 and every script test; gamecheck -Expect 1827 entries, 0 missing (55 startup-only, down from 57). Commit 0f10393. A first stage attempt hit a passing "access denied" on dist (nothing was open, the user said); the retry went through.
