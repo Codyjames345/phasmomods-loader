@@ -393,9 +393,15 @@ void end_local_body() {
 void apply_local(const LocalOut& o, void* player, bool vr) {
   const int me = game::local_actor();
   if (o.start >= 0) {
-    PM_LOG("Emotes: %s starts (%s)", kEmotes[o.start].clip, vr ? "VR" : "screen");
-    api::anim::play_on_player(player, g.a.clips[o.start], kBlendIn);
+    void* clip = g.a.clips[o.start];
+    const bool played = api::anim::play_on_player(player, clip, kBlendIn);
     start_song(me, player, o.start);
+    const auto song = g.songs.find(me);
+    void* songClip = g.a.songs[o.start];
+    PM_LOG("Emotes: %s starts (%s): clip %s, %s on the body; song %s, %s", kEmotes[o.start].clip, vr ? "VR" : "screen",
+           clip && game::alive(clip) ? "loaded" : "gone", played ? "playing" : "not playing",
+           songClip && game::alive(songClip) ? "loaded" : "gone",
+           song != g.songs.end() && song->second.source ? "playing" : "no source");
     begin_local_body(player, vr);
     begin_facing(me, player, o.bodyYaw.value_or(0.0f));
   }
@@ -470,7 +476,7 @@ std::optional<int> wheel_input(void* player, bool vr) {
       PM_LOG("Emotes: the wheel could not be built on screen");
       g.wheelIn = WheelInput{};
     } else {
-      PM_LOG("Emotes: the wheel opens");
+      PM_LOG("Emotes: the wheel opens (icons %d of 8, segments %d of 8)", wheel::icons_alive(), wheel::segments_alive());
       set_look(false);
     }
   }
@@ -537,7 +543,7 @@ void raise_loudness(int actor, void* player, int emote, float now) {
 bool start() {
   if (!load_assets()) return false;
   const std::filesystem::path data = std::filesystem::path(mod::host().dataDirectory) / mod::info().id / "keybinds.txt";
-  keys::begin_keys(mod::info().id, data);
+  keys::begin_keys(mod::info().id, mod::shown_name(), data);
   keys::ModKey wheel;
   wheel.id = kWheelKey;
   wheel.label = i18n::text(kKeyLabel);

@@ -14,7 +14,9 @@
 #include <vector>
 
 #include "Input.h"
+#include "JournalController.h"
 #include "Player.h"
+#include "Transform.h"
 #include "UnityObject.h"
 #include "UnityPostProcessing.h"
 #include "UnityUI.h"
@@ -266,7 +268,7 @@ keys::ModKey emote_key() {
 
 void a_key_takes_the_defaults_the_game_leaves_free() {
   give_entries();
-  keys::begin_keys("test.mod", temp_file("pm_keys_free.txt"));
+  keys::begin_keys("test.mod", "Test Mod", temp_file("pm_keys_free.txt"));
   CHECK(keys::add_key(emote_key()));
   CHECK(!keys::add_key(emote_key()));  // one id once
   CHECK(!keys::keys_ready());
@@ -287,7 +289,7 @@ void a_key_takes_the_defaults_the_game_leaves_free() {
 void a_key_waits_for_the_games_bindings() {
   give_entries();
   at<void*>(&g_net, kNetLocalRig) = nullptr;  // no local player and no menu rows yet
-  keys::begin_keys("test.mod", temp_file("pm_keys_wait.txt"));
+  keys::begin_keys("test.mod", "Test Mod", temp_file("pm_keys_wait.txt"));
   keys::add_key(emote_key());
   keys::tick_keys();
   CHECK(!keys::keys_ready());
@@ -300,7 +302,7 @@ void a_key_waits_for_the_games_bindings() {
 
 void the_state_is_any_devices() {
   give_entries();
-  keys::begin_keys("test.mod", temp_file("pm_keys_state.txt"));
+  keys::begin_keys("test.mod", "Test Mod", temp_file("pm_keys_state.txt"));
   keys::add_key(emote_key());
   keys::tick_keys();
   // The actions the key made, in device order.
@@ -334,7 +336,7 @@ void a_rebinding_is_saved_and_read_back() {
     const std::vector<keys::SavedBinding> one{{"emote", Device::Keyboard, "<Keyboard>/n"}};
     out << keys::format_saved(one);
   }
-  keys::begin_keys("test.mod", file);
+  keys::begin_keys("test.mod", "Test Mod", file);
   keys::add_key(emote_key());
   keys::tick_keys();
   CHECK(g_overrides.size() == 1 && g_overrides[0].second == "<Keyboard>/n");
@@ -368,9 +370,12 @@ void a_rebinding_is_saved_and_read_back() {
 // parts in one Obj: the row component, the GameObject and the Transform are the same fake object, as far as the code
 // under test can tell, except through these fields.
 constexpr int32_t kPartParent = 0x20, kPartSibling = 0x28, kPartActive = 0x2C;  // the fake's own
-Obj g_list, g_gameRow, g_gameLabel;
+Obj g_list, g_gameRow, g_gameLabel, g_localiserClass;
 std::vector<void*> g_copies;  // what Object.Instantiate made
 std::vector<void*> g_destroyed;
+std::vector<void*> g_destroyedNow;          // what Object.DestroyImmediate took
+std::map<void*, std::vector<void*>> g_kids;  // each copy's children: its label's holder, then its buttons
+std::map<void*, void*> g_localiserOf;         // each label's TextLocaliserUI
 
 void* fake_self(void* o, void*) { return o; }
 void* fake_parent(void* t, void*) { return at<void*>(t, kPartParent); }
@@ -378,13 +383,38 @@ void* fake_instantiate(void* original, void* parent, bool, void*) {
   Obj* c = make_obj(static_cast<Obj*>(original)->klass);
   std::memcpy(c->bytes, static_cast<Obj*>(original)->bytes, sizeof c->bytes);
   at<void*>(c, kPartParent) = parent;
-  at<void*>(c, kRowLabel) = make_obj(&g_textClass);  // the copy's own label
+  // The copy's own label, in a holder of its own beside the row's buttons, with the game's localiser on it.
+  Obj* holder = make_obj(&g_textClass);
+  Obj* buttons = make_obj(&g_textClass);
+  Obj* label = make_obj(&g_textClass);
+  at<void*>(holder, kPartParent) = c;
+  at<void*>(buttons, kPartParent) = c;
+  at<void*>(label, kPartParent) = holder;
+  at<bool>(holder, kPartActive) = at<bool>(buttons, kPartActive) = true;
+  at<void*>(c, kRowLabel) = label;
+  g_kids[c] = {holder, buttons};
+  g_localiserOf[label] = make_obj(&g_localiserClass);
   g_copies.push_back(c);
   return c;
 }
 void* fake_get_component(void* t, void* type, void*) {
-  (void)type;
+  if (type == phasmo::TextLocaliserUI::type.type_object()) {
+    const auto it = g_localiserOf.find(t);
+    return it == g_localiserOf.end() ? nullptr : it->second;
+  }
   return t;  // the copy is its own RebindActionUI
+}
+int32_t fake_child_count(void* t, void*) { return static_cast<int32_t>(g_kids[t].size()); }
+void* fake_get_child(void* t, int32_t i, void*) { return g_kids[t].at(static_cast<size_t>(i)); }
+bool fake_is_child_of(void* t, void* parent, void*) {
+  for (void* at_ = t; at_; at_ = at<void*>(at_, kPartParent))
+    if (at_ == parent) return true;
+  return false;
+}
+void fake_destroy_now(void* o, bool) {
+  g_destroyedNow.push_back(o);
+  for (auto& [label, localiser] : g_localiserOf)
+    if (localiser == o) localiser = nullptr;
 }
 int32_t fake_get_sibling(void* t, void*) { return at<int32_t>(t, kPartSibling); }
 void fake_set_sibling(void* t, int32_t i, void*) { at<int32_t>(t, kPartSibling) = i; }
@@ -399,6 +429,14 @@ void a_mod_key_gets_a_row_beside_the_games() {
   give_entries();
   g_copies.clear();
   g_destroyed.clear();
+  g_destroyedNow.clear();
+  g_kids.clear();
+  g_localiserOf.clear();
+  fake::type(map::TextLocaliserUI, &g_localiserClass);
+  fake::method(map::Transform_get_childCount, reinterpret_cast<void*>(&fake_child_count));
+  fake::method(map::Transform_GetChild, reinterpret_cast<void*>(&fake_get_child));
+  fake::method(map::Transform_IsChildOf, reinterpret_cast<void*>(&fake_is_child_of));
+  fake::icall(map::UnityObject_DestroyImmediate, reinterpret_cast<void*>(&fake_destroy_now));
   fake::method(map::Component_get_gameObject, reinterpret_cast<void*>(&fake_self));
   fake::method(map::Component_get_transform, reinterpret_cast<void*>(&fake_self));
   fake::method(map::GameObject_get_transform, reinterpret_cast<void*>(&fake_self));
@@ -425,15 +463,24 @@ void a_mod_key_gets_a_row_beside_the_games() {
   at<int32_t>(&g_gameRow, kPartSibling) = 4;
   at<bool>(&g_gameRow, kPartActive) = true;
   g_rows = {&g_gameRow};
-  keys::begin_keys("test.mod", temp_file("pm_keys_row.txt"));
+  keys::begin_keys("test.mod", "Test Mod", temp_file("pm_keys_row.txt"));
   keys::add_key(emote_key());
   keys::tick_keys();
-  // One copy: a gamepad row, for the key's gamepad action (no keyboard row is loaded to copy).
-  CHECK(g_copies.size() == 1);
-  if (g_copies.size() != 1) return;
-  void* copy = g_copies[0];
-  CHECK(at<void*>(copy, kPartParent) == &g_list);
-  CHECK(at<int32_t>(copy, kPartSibling) == 5);
+  // Two copies in the gamepad's list (no keyboard row is loaded to copy), each at its end as Instantiate puts it: the
+  // mod's heading, then a row for the key's gamepad action.
+  CHECK(g_copies.size() == 2);
+  if (g_copies.size() != 2) return;
+  void* heading = g_copies[0];
+  void* copy = g_copies[1];
+  CHECK(at<void*>(heading, kPartParent) == &g_list && at<void*>(copy, kPartParent) == &g_list);
+  CHECK(at<int32_t>(copy, kPartSibling) == 4);  // not moved beside the game's row
+  // The heading: the mod's name on its label, its row's own rebinding gone, its buttons hidden, its label shown.
+  void* headingLabel = at<void*>(heading, kRowLabel);
+  CHECK(g_texts[headingLabel] == "Test Mod");
+  CHECK(std::find(g_destroyedNow.begin(), g_destroyedNow.end(), heading) != g_destroyedNow.end());
+  CHECK(at<bool>(g_kids[heading][0], kPartActive) && !at<bool>(g_kids[heading][1], kPartActive));
+  // Every copy's localiser is taken off, or it would write the game's words back when the menu wakes it.
+  CHECK(!g_localiserOf[headingLabel] && !g_localiserOf[at<void*>(copy, kRowLabel)]);
   void* ref = at<void*>(copy, kRowAction);
   CHECK(ref && ref != gameRef);
   void* action = ref ? at<void*>(ref, kRefAction) : nullptr;
@@ -442,12 +489,14 @@ void a_mod_key_gets_a_row_beside_the_games() {
   CHECK(g_texts[at<void*>(copy, kRowLabel)] == "Emote");
   CHECK(g_texts.count(&g_gameLabel) == 0);  // the game's row is untouched
   CHECK(at<bool>(copy, kPartActive));
-  // A later tick, with the copy still there, makes no second one.
+  CHECK(at<bool>(g_kids[copy][1], kPartActive));  // a row keeps its buttons
+  // A later tick, with the copies still there, makes no more.
   for (int i = 0; i < 120; ++i) keys::tick_keys();
-  CHECK(g_copies.size() == 1);
-  // Clearing the keys takes the row out of the menu.
+  CHECK(g_copies.size() == 2);
+  // Clearing the keys takes the heading and the row out of the menu.
   keys::clear_keys();
   CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), copy) != g_destroyed.end());
+  CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), heading) != g_destroyed.end());
 }
 
 }  // namespace

@@ -306,6 +306,9 @@ void* f_LoadAsset(void* bundle, void* name, void* type) {
              ? g_controller
              : nullptr;
 }
+std::map<void*, int32_t> g_hideFlags;  // Object.set_hideFlags
+void f_set_hideFlags(void* o, int32_t flags, void*) { g_hideFlags[o] = flags; }
+
 void* f_GetAllAssetNames(void*) {
   void* arr = fake::array(sizeof(void*), 1);
   api::RefArray{arr}.set(0, api::make_string("assets/test.controller"));
@@ -493,6 +496,8 @@ void start(bool withCloth = true) {
   ic(map::AssetBundle_LoadFromFile, &f_LoadFromFile);
   ic(map::AssetBundle_LoadAsset, &f_LoadAsset);
   ic(map::AssetBundle_GetAllAssetNames, &f_GetAllAssetNames);
+  m(map::UnityObject_set_hideFlags, &f_set_hideFlags);
+  fake::value(map::HideFlags_DontUnloadUnusedAsset, 32);
   ic(map::AssetBundle_Unload, &f_Unload);
   m(map::Animator_StringToHash, &f_StringToHash);
   m(map::Animator_set_runtimeAnimatorController, &f_set_controller);
@@ -561,6 +566,9 @@ void a_bundle_loads_from_its_file_and_not_without_one() {
 void a_controller_loads_by_its_name() {
   start();
   CHECK(api::load_controller(g_bundle, "assets/test.controller") == g_controller);
+  // Kept from a scene load's unload of unused assets: an asset loaded at the menu is in no scene, and Unity would
+  // destroy it before it is used (the Emotes mod's clips, songs and icons, 2026-11-10).
+  CHECK(g_hideFlags[g_controller] == 32);
   CHECK(!api::load_controller(g_bundle, "assets/other.controller"));
   CHECK(!api::load_controller(nullptr, "assets/test.controller"));
   CHECK(api::bundle_asset_names(g_bundle) == std::vector<std::string>{"assets/test.controller"});

@@ -344,6 +344,11 @@ uint32_t api_content_flags_of(int32_t type) {
     return g ? g->flags : 0u;
   });
 }
+const char* api_mod_name(const char* id) {
+  return host::contained("suite", "asking a mod's name", static_cast<const char*>(nullptr), [&] {
+    return id ? mods::name_of(modid::migrated_id(id).c_str()) : nullptr;  // a bundled mod's old id means that mod
+  });
+}
 bool api_room_agrees() {
   return host::contained("content", "asking whether this client matches the host", false, [&] { return g_agreement.agreed(); });
 }
@@ -816,8 +821,8 @@ bool start(void* gameAssembly, void* unityPlayer, const build::Hashes& game) {
     PM_LOG("suite: the local application-data folder is unavailable; set LOCALAPPDATA and restart the game");
     return false;
   }
-  // Positional: a member added to PmHostApi after show_message fails this until it is given here too.
-  static_assert(offsetof(PmHostApi, content_flags_of) + sizeof(PmHostApi::content_flags_of) == sizeof(PmHostApi),
+  // Positional: a member added to PmHostApi after mod_name fails this until it is given here too.
+  static_assert(offsetof(PmHostApi, mod_name) + sizeof(PmHostApi::mod_name) == sizeof(PmHostApi),
                 "g_api lists every PmHostApi member");
   g_api = {PMMOD_API_VERSION, gameAssembly, unityPlayer, g_dataDirectory.c_str(),
            &api_log, &api_create_hook, &api_enable_hooks, &api_send, &api_set_receiver,
@@ -837,7 +842,7 @@ bool start(void* gameAssembly, void* unityPlayer, const build::Hashes& game) {
            &api_room_agrees, &api_collection_count, &api_array_element_size, &api_list_remove_at,
            &api_content_player_move, &api_content_interaction_lost, &api_content_roll_taken, &api_steer_agent,
            &api_abandon_ghost_spawn, &api_dictionary_int_entries, &api_mod_started, &api_show_message,
-           &api_content_flags_of};
+           &api_content_flags_of, &api_mod_name};
   // The host's own game side of content reaches the game through the map, like a mod: the game API
   // bound to the host's contract. Without every entry it needs, custom content stays off.
   std::string unbound;

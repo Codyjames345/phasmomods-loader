@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -97,6 +98,8 @@ int spawn_abandons();
 void dictionary(const void* dict, std::vector<PmIntEntry> entries);
 /// The mods the host contract's mod_started answers true for, as running on this client; none until this is called.
 void started_mods(std::vector<std::string> ids);
+/// The names the host contract's mod_name gives the mods, by id; none until this is called.
+void mod_names(std::map<std::string, std::string> names);
 /// Every message the host contract's show_message was asked for since the last reset, as (title, body), in order.
 const std::vector<std::pair<std::string, std::string>>& messages();
 /// The native site entry `d` resolves to `code`. As in the host, the contract's game_entry never gives it to a mod:

@@ -19,6 +19,11 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   renderers, hand anchors, voice loudness and VR hands; the held item's camera slot; Unity's Playables, the Input
   System's action building, overrides and keybinds rows, the gamepad's stick; `Camera.CopyFrom`; and URP's camera data,
   volumes, vignette and depth of field.
+- **A mod's own name.** `PmHostApi.mod_name` (added at the end) gives the name an installed mod's manifest gives it,
+  the one the Mods panel shows, and `pm::mod::shown_name()` gives the running mod its own. Its keys' section in the
+  keybinds menu is headed with it.
+- **Assets kept across scenes.** `load_bundle_asset` marks what it loads `HideFlags.DontUnloadUnusedAsset`: an asset
+  loaded at the menu is in no scene, and the next scene load would otherwise destroy it.
 - **Figures of a mod's own.** Helpers in the mod's own code (the host contract does not change): `load_bundle`,
   `load_controller`, `load_bundle_asset`, `bundle_asset_names` and `unload_bundle` (`sdk/api/bundles.h`) load an
   AssetBundle from the mod's assets folder; `copy_investigator_body`, `use_controller`, `play_state`,

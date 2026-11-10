@@ -23,6 +23,9 @@ bool peer_has(int actor, const char* id);
 // Whether the mod `id` has started on this client: for an optional dependency, from pmmod_start onwards (core/mod_api.h
 // mod_started). False before bind.
 bool mod_started(const char* id);
+// This mod's name as the player reads it, its manifest's (core/mod_api.h mod_name), for a heading of its own in a game
+// menu; PmModInfo::name when the host has none for it, and empty before bind.
+std::string shown_name();
 // A one-button message in the game's own popup on the menu's and the lobby's board (core/mod_api.h show_message): one asked
 // for in a contract shows once the lobby is back. Nothing before bind.
 void show_message(const std::string& title, const std::string& body);

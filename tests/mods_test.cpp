@@ -201,6 +201,9 @@ void refused_content_keeps_the_mod_off(const fs::path& data) {
   g_lines.clear();
   pm::mods::start(&api, {"fake-mod"}, group);
   CHECK(pm::mods::started_ids().empty() && !pm::mods::started("fake-mod"));
+  // The manifest's name, the Mods panel's, whether or not the mod runs (the host contract's mod_name).
+  CHECK(pm::mods::name_of("fake-mod") && std::string(pm::mods::name_of("fake-mod")) == "Fake Mod");
+  CHECK(!pm::mods::name_of("not-installed") && !pm::mods::name_of(nullptr));
   CHECK(!g_endedStarted && g_content == 0 && target_answer(1) == 2);
   CHECK(logged("mods: fake-mod stays off: the host refused its content (the ghost \"a.b\" is refused: custom content is off"));
   CHECK(pm::mods::off_reason("fake-mod") == "It did not start. mods.log says why");
