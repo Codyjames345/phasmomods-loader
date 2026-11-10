@@ -643,6 +643,29 @@ inline constexpr pm::sdk::EntryDesc JournalRigController_constraintParent{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "JournalRigController", .name = "constraintParent",
     .type = "Transform"};
 
+/// Stops the book following its hanger: keeps JournalRigController.constraintParent's local position and clears
+/// JournalRigController.followTarget, so the rig's Update moves the book no more until SetJournalPosition. It runs as the
+/// book opens, and on every client in NetworkPCAnimationOverrideController.SetAnimationControllerNetwork (a player's held
+/// item changed) unless that player is in VR; that RPC hooks the book up again only when it finds a held item, so a
+/// change to empty hands leaves the book unhooked on every client. A mod never calls it. Decompiled.
+inline constexpr pm::sdk::EntryDesc JournalRigController_SaveJournalLastPosition{
+    .key = "JournalRigController.SaveJournalLastPosition", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "JournalRigController", .name = "SaveJournalLastPosition"};
+
+// Of the rig's three Transforms, the unnamed one SaveJournalLastPosition clears (constraintParent and animationParent
+// keep their names).
+inline constexpr pm::sdk::Fact JournalRigController_followTarget_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "JournalRigController.SaveJournalLastPosition"}};
+
+/// What the book follows: the rig's Update sets the book's position and rotation to this Transform's each frame, and
+/// does nothing while it is null. SetJournalPosition sets it to JournalRigController.constraintParent;
+/// SaveJournalLastPosition clears it. A mod that moves the book while this is null leaves it there for good, since
+/// nothing moves it back. Decompiled.
+inline constexpr pm::sdk::EntryDesc JournalRigController_followTarget{
+    .key = "JournalRigController.followTarget", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "JournalRigController", .type = "Transform",
+    .facts = JournalRigController_followTarget_facts};
+
 /// The book's 3D tabs, a GameObject[]: OpenCloseJournalNetworked puts each on the open or closed layer.
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc JournalRigController_allTabsObjects{
@@ -833,6 +856,9 @@ struct JournalRigController {
   static constexpr pm::api::Field<pm::map::JournalRigController_animator, void*> animator{};
   /// The Transform the book hangs from: constraintParent.get(rig). Unresolved: null.
   static constexpr pm::api::Field<pm::map::JournalRigController_constraintParent, void*> constraintParent{};
+  /// What the book follows each frame, a Transform, null while unhooked: followTarget.get(rig) (map note). Unresolved:
+  /// null.
+  static constexpr pm::api::Field<pm::map::JournalRigController_followTarget, void*> followTarget{};
   /// The book's 3D tabs, a GameObject[]: allTabsObjects.get(rig). Unresolved: null.
   static constexpr pm::api::Field<pm::map::JournalRigController_allTabsObjects, void*> allTabsObjects{};
   /// Whether it holds the book open: opened.get(rig), .set(rig, open). Unresolved: false, writes nothing.

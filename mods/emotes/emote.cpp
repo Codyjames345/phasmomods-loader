@@ -99,7 +99,7 @@ struct Facing {
   // Rigging from the body's pose: the dance plays over the rig, so it is kept where it hung on the waist bone when the
   // dance began. Never the hanger itself: the game saves and restores the hanger's place as the journal opens and
   // closes, so a change there stays (the journal came back in front of the face, the sixth run).
-  api::Held journal, waist, book;
+  api::Held journal, waist, book, rig;
   Pose onWaist{};
   // For the log: whose body this is, how long it has danced, and whether the journal's place mid-dance was logged (the
   // user, 2026-11-10: another player's journal shows in front of their face while they dance, though not on their own
@@ -141,6 +141,7 @@ struct State {
   api::Held controlsOf;  // the rig the actions were read from
   api::Held pcLook, propGrab, hand, head;
   std::vector<api::Held> movedItems;  // items put in the hand from the camera's slot while the view is outside
+  bool logItemAfterView = false;      // for the log: the held item once the view is back in first person
   bool lookOff = false;
   ULONGLONG lastTick = 0;
   ULONGLONG startTick = 0;  // the mod's start: its clock counts from here, so a float keeps its precision
@@ -266,13 +267,18 @@ void hold_journal(Facing& f, void* player) {
   }
   const Pose w = pose_of(waist), j = pose_of(journal), rel = relative_to(w, j);
   const float feet = f.root && game::alive(f.root) ? game::position(f.root.get()).y : 0.0f;
-  PM_LOG("Emotes: actor %d (%s): the journal at the dance's start is %.2f m above the feet, (%.2f, %.2f, %.2f) from %s%s",
+  void* follow = phasmo::JournalRigController::followTarget.get(rig);
+  const std::string moves = follow && game::alive(follow) ? "moves it to " + api::to_utf8(phasmo::Object::get_name(follow))
+                                                          : std::string("does not move it (no follow target)");
+  PM_LOG("Emotes: actor %d (%s): the journal at the dance's start is %.2f m above the feet, (%.2f, %.2f, %.2f) from %s; "
+         "the game %s%s",
          f.actor, whose, j.p.y - feet, rel.p.x, rel.p.y, rel.p.z, api::to_utf8(phasmo::Object::get_name(waist)).c_str(),
-         open ? "; open, so left to the game" : "");
+         moves.c_str(), open ? "; open, so left to the game" : "");
   if (open) return;
   f.journal = journal;
   f.waist = waist;
   f.book = book;
+  f.rig = rig;
   f.onWaist = rel;
 }
 
@@ -299,8 +305,10 @@ void keep_journal(Facing& f, float dt) {
     const float feet = f.root && game::alive(f.root) ? game::position(f.root.get()).y : 0.0f;
     const float off = std::sqrt((before.p.x - at.p.x) * (before.p.x - at.p.x) + (before.p.y - at.p.y) * (before.p.y - at.p.y) +
                                 (before.p.z - at.p.z) * (before.p.z - at.p.z));
-    PM_LOG("Emotes: actor %d mid-dance: the game had the journal %.2f m above the feet, %.2f m from where it hangs; "
-           "moved to %.2f m above the feet", f.actor, before.p.y - feet, off, at.p.y - feet);
+    void* follow = f.rig && game::alive(f.rig) ? phasmo::JournalRigController::followTarget.get(f.rig) : nullptr;
+    PM_LOG("Emotes: actor %d mid-dance: the game had the journal %.2f m above the feet, %.2f m from where it hangs, %s; "
+           "moved to %.2f m above the feet", f.actor, before.p.y - feet, off,
+           follow ? "following its target" : "with no follow target", at.p.y - feet);
   }
   game::set_position(f.journal, {at.p.x, at.p.y, at.p.z});
   game::set_rotation(f.journal, {at.q.x, at.q.y, at.q.z, at.q.w});
@@ -464,6 +472,23 @@ void* component_in_rig(void* type) {
   return rig && type ? phasmo::Component::GetComponentInChildren(rig, type, true) : nullptr;
 }
 
+// For the log (the user, 2026-11-10: a held item sometimes sits offset in the first-person view after a dance): an
+// item's parent, layer and local place, turn and size, and its size in the world.
+void log_item(const char* when, void* item) {
+  void* t = item && game::alive(item) ? game::transform_of(item) : nullptr;
+  if (!t) return;
+  void* parent = game::parent(t);
+  void* go = game::game_object_of(item);
+  const Vector3 p = phasmo::Transform::get_localPosition(t), s = phasmo::Transform::get_localScale(t),
+                w = phasmo::Transform::get_lossyScale(t);
+  const Quaternion q = phasmo::Transform::get_localRotation(t);
+  PM_LOG("Emotes: %s: %s under %s, layer %d, at (%.3f, %.3f, %.3f), turned (%.3f, %.3f, %.3f, %.3f), local size "
+         "(%.3f, %.3f, %.3f), world size (%.3f, %.3f, %.3f)",
+         when, api::to_utf8(phasmo::Object::get_name(item)).c_str(),
+         parent ? api::to_utf8(phasmo::Object::get_name(parent)).c_str() : "nothing",
+         go ? phasmo::GameObject::get_layer(go) : -1, p.x, p.y, p.z, q.x, q.y, q.z, q.w, s.x, s.y, s.z, w.x, w.y, w.z);
+}
+
 // While the view is outside: an item in the camera's slot (the one held, or one switched to mid-dance) goes in the hand.
 void hold_items_in_hand() {
   if (!g.propGrab || !game::alive(g.propGrab) || !g.hand || !game::alive(g.hand)) return;
@@ -471,10 +496,12 @@ void hold_items_in_hand() {
   if (!item || !game::alive(item)) return;
   void* t = game::transform_of(item);
   if (game::parent(t) == g.hand.get()) return;
+  log_item("into the hand from", item);
   game::set_parent(t, g.hand, false);
   game::set_local_position(t, {0.0f, 0.0f, 0.0f});
   game::set_local_rotation(t, {0.0f, 0.0f, 0.0f, 1.0f});
   api::view::draw_as_seen(item);  // the camera slot's first-person layer would draw it over the body
+  log_item("now in the hand", item);
   for (const api::Held& m : g.movedItems)
     if (m.get() == item) return;
   g.movedItems.emplace_back(item);
@@ -506,10 +533,16 @@ void end_local_body() {
   g.pcLook = nullptr;
   // Back in the camera's slot, as the game had them: each item still in the hand. One the game moved since (dropped, or
   // put away by a switch) is left where the game put it.
-  for (api::Held& item : g.movedItems)
+  for (api::Held& item : g.movedItems) {
     if (item && game::alive(item) && g.hand && game::alive(g.hand) && g.propGrab && game::alive(g.propGrab) &&
-        game::parent(game::transform_of(item)) == g.hand.get())
+        game::parent(game::transform_of(item)) == g.hand.get()) {
       phasmo::PCPropGrab::ParentItemOnLocalPlayer(g.propGrab, item);
+      log_item("back from the hand to", item);
+    } else {
+      log_item("left where the game put it", item);
+    }
+  }
+  g.logItemAfterView = !g.movedItems.empty();
   g.movedItems.clear();
   g.hand = nullptr;
   g.propGrab = nullptr;
@@ -818,6 +851,11 @@ void tick() {
   }
   apply_local(g.local->tick(f), player, vr);
   if (g.local->active() && !vr) hold_items_in_hand();
+  if (g.logItemAfterView && !api::view::in_third_person()) {
+    g.logItemAfterView = false;
+    void* grab = component_in_rig(phasmo::PCPropGrab::type.type_object());
+    log_item("in first person again", grab ? phasmo::PCPropGrab::GetItemInCameraSlot(grab) : nullptr);
+  }
   // In VR the head stays hidden while it would sit over the view.
   if (g.head && game::alive(g.head)) {
     void* cam = game::local_camera();

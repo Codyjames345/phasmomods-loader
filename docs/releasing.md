@@ -90,7 +90,8 @@ nothing hit 58% from the repeats alone, and the same build again took 11 seconds
   no Ninja state, so this cannot bite there.
 - **Releases don't use it.** The release job compiles from source alone, so what every player installs owes nothing to an
   earlier run.
-- **What still misses:** a development build's number reaches the compiler through `PM_SUITE_VERSION`, so the launcher, the
-  host and three tests (47 compiles) compile again on every development push.
+- **What it saved:** the first run with the cache, which filled it, compiled for 11 minutes; the next, a one-file change,
+  missed 7 of 657 compiles and compiled for 2 minutes 20 seconds. A development build's number reaches the compiler
+  through `PM_SUITE_VERSION`, so those targets' files can miss on a development push; in that run it cost little.
 - **Moving to a newer ccache:** change the version and hash in both jobs together; `tests/dev_release_test.ps1` checks they
   match.

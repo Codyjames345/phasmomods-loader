@@ -1147,6 +1147,8 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &JournalRigController,
     &JournalRigController_animator,
     &JournalRigController_constraintParent,
+    &JournalRigController_SaveJournalLastPosition,
+    &JournalRigController_followTarget,
     &JournalRigController_allTabsObjects,
     &JournalRigController_OpenCloseJournalNetworked,
     &JournalRigController_opened,

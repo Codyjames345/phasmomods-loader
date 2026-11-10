@@ -447,3 +447,27 @@ Final: validate.ps1 -> 91/91 and every script test; gamecheck -Expect -Mods -> 1
 - validate.ps1: 92/92 and every script test. No map change.
 - Smoke 30: two players, one dances; the watcher sends mods.log (the lines "actor N (another player's)" and "actor N
   mid-dance"), and the dancer theirs.
+
+## In-game report 14 (user, 2026-11-10): the head in photos, items after a dance
+- Head: in the third-person view the dancer's head vanished when another player took a photo, and at other moments (the
+  user: on their own screen, while dancing). Decompiled: PlayerCharacter.ChangeHeadObjectsShadowCastingModeShadowsOnly
+  sets every head renderer at once; HandCamera.AddPhotoToJournal, a PunRPC coroutine, calls it on Network.localPlayer's
+  character for each photo that reaches the client (drawn for the photo's render, shadows only after), and
+  CameraFocusUI.Focus/UnFocus call it too. The view drew the head once. Fix (24c057a): the view draws it again on each
+  tick and gives back the game's latest mode (third_person_test red, then green). New entry, map note, players.md.
+- Items (the user: their own first-person view, the item offset but following the camera; unsure whether items were
+  switched). Decompiled PCPropGrab.ParentItemOnLocalPlayer: set_parent to the camera slot (keeping the world pose and
+  so the world size), then the item's own local position and turn; it never sets the size. The mod moves the item into
+  the hand keeping its local size, so if the hand and the slot differ in size the item comes back resized; and its layer
+  is given back only when the view finishes. Neither is proven: logged (into the hand, in the hand, back, in first
+  person again: parent, layer, local place, turn and size, world size).
+- Journal: decompiled NetworkPCAnimationOverrideController.SetAnimationControllerNetwork (every client, on a held-item
+  change): unless the player is in VR it calls JournalRigController.SaveJournalLastPosition, which clears the rig's
+  follow target, and sets it again (SetJournalPosition, after a wait) only when its helper finds the player's held item.
+  JournalRigController.Update moves the book to the follow target each frame and does nothing while it is null. So with
+  empty hands no client moves that player's book any more, and the Emotes mod's keep_journal placement stays. New
+  entries JournalRigController.SaveJournalLastPosition and JournalRigController.followTarget (+0x80, by its type and the
+  Stores fact). Logged per dancer: whether the game moves the book (and to what).
+- validate.ps1: 92/92; gamecheck: 1861 entries, 0 missing. releasing.md's cache note corrected (7 of 657 missed).
+- Smoke 31: dance holding an item, then check it in first person; the dancer's mods.log ("into the hand", "back from the
+  hand", "in first person again"). With a friend: the watcher's "actor N" lines say whether the game moves the book.
