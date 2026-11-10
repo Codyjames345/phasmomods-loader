@@ -541,7 +541,7 @@ void a_mod_key_gets_a_row_beside_the_games() {
   CHECK(std::fabs(g_contentSize.y - (2575.0f + 6 + 100 + 6 + 100 + 4 * kSpacing)) < 1e-3f);
   // The heading: the mod's name on its label, its row's own rebinding gone, its buttons hidden, its label shown.
   void* headingLabel = at<void*>(heading, kPartLabel);
-  CHECK(g_texts[headingLabel] == "Test Mod");
+  CHECK(g_texts[headingLabel] == "<b><size=125%>Test Mod</size></b>");  // bold and larger than a row
   CHECK(std::find(g_destroyedNow.begin(), g_destroyedNow.end(), heading) != g_destroyedNow.end());
   CHECK(at<bool>(g_kids[heading][0], kPartActive) && !at<bool>(g_kids[heading][1], kPartActive));
   // Every copy's localiser is taken off, or it would write the game's words back when the menu wakes it.

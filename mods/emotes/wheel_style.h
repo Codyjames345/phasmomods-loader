@@ -19,8 +19,8 @@ inline constexpr Rgba kNameWhite{1.0f, 1.0f, 1.0f, 1.0f};       ///< the picked 
 
 inline constexpr float kDiscRadius = 300.0f;    ///< the disc's outer radius
 inline constexpr float kCentreRadius = 95.0f;   ///< the centre circle's radius
-inline constexpr float kRingInner = 105.0f;     ///< where the segments begin, leaving a gap round the centre circle
-inline constexpr float kGapDegrees = 2.0f;      ///< the thin transparent gap between segments
+inline constexpr float kGapWidth = 8.0f;        ///< the thin transparent gap between segments, as wide all along
+inline constexpr float kRingInner = kCentreRadius + kGapWidth;  ///< where the segments begin: the same gap round the centre circle
 inline constexpr float kIconSize = 110.0f;      ///< an icon's width and height
 inline constexpr float kNameFontSize = 44.0f;   ///< the name's text size
 inline constexpr float kNameBelow = 48.0f;      ///< how far under the disc the name sits

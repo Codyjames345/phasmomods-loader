@@ -195,7 +195,7 @@
         @{ Name = 'mods/emotes/i18n/default.json'; Source = 'mods/emotes/i18n/default.json' }
         # The Emotes bundle (its eight clips, songs and icons; mods/emotes/emote_assets.h). Gitignored like the Squatter's: built
         # in the private assets repository's unity/emotes-bundle and placed by CI from there. Sha256 pins the build.
-        @{ Name = 'mods/emotes/assets/emotes.bundle'; Source = 'mods/emotes/assets/emotes.bundle'; Sha256 = 'EAF32B552652A39B277D6F4FC2C2EA368CBC57A11CCB46C4C55CF76899A05943' }
+        @{ Name = 'mods/emotes/assets/emotes.bundle'; Source = 'mods/emotes/assets/emotes.bundle'; Sha256 = 'B5782284638B90C0AD85BAFF3ADEB0989B86E3CD11602ED6C9F6569972E59042' }
         # Each song's loudness, measured from the same MP3 by tools/emote_loudness.mjs, for the ghost's hearing.
         @{ Name = 'mods/emotes/assets/disco_fever/loudness.txt'; Source = 'mods/emotes/assets/disco_fever/loudness.txt' }
         @{ Name = 'mods/emotes/assets/electro_swing/loudness.txt'; Source = 'mods/emotes/assets/electro_swing/loudness.txt' }

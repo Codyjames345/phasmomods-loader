@@ -22,41 +22,49 @@ struct Vec3 {
   float x, y, z;
 };
 
-/// A segment's span in degrees, 0 straight up and clockwise: its kSegments-th of the circle less the gap, centred on
-/// its direction.
+/// A segment's span in degrees, 0 straight up and clockwise: its kSegments-th of the circle, between the two boundary
+/// rays it shares with its neighbours, centred on its direction. The gaps are cut from it by sector_rgba.
 struct Span {
   float fromDeg, toDeg;
 };
 
-inline Span segment_span(int i, float gapDegrees) {
+inline Span segment_span(int i) {
   const float width = 360.0f / kSegments, centre = i * width;
-  return {centre - width / 2.0f + gapDegrees / 2.0f, centre + width / 2.0f - gapDegrees / 2.0f};
+  return {centre - width / 2.0f, centre + width / 2.0f};
 }
 
 namespace detail {
-// How much of the texel at (x, y) lies in [lo, hi], softened over one texel for a smooth edge.
+// How far `value` lies inside [lo, hi], as a texel's coverage: 0 outside, 1 inside, a one-texel ramp across each edge
+// (`soft` is one texel in `value`'s units), so the edges are smooth.
 inline float edge(float value, float lo, float hi, float soft) {
   return std::clamp(std::min(value - lo, hi - value) / soft + 0.5f, 0.0f, 1.0f);
 }
-inline float angle_of(float dx, float dy) {
-  float deg = std::atan2(dx, dy) * 57.29577951f;  // 0 up, clockwise
-  return deg;
+// Coverage of the half-plane at least `inset` texels on the far side of the ray from the centre at `deg` (0 up,
+// clockwise): `side` +1 for the clockwise side, -1 for the anticlockwise. Its signed distance from the ray's line is
+// the point's component along the ray's normal.
+inline float beyond_ray(float dx, float dy, float deg, float side, float inset) {
+  const float a = deg / 57.29577951f;
+  const float across = (dx * std::cos(a) - dy * std::sin(a)) * side;
+  return std::clamp(across - inset + 0.5f, 0.0f, 1.0f);
 }
 }  // namespace detail
 
-/// A white ring sector on clear: `size` texels square, from `innerFrac` to `outerFrac` of the half-size and from
-/// `fromDeg` to `toDeg` (0 up, clockwise; the span may cross 0), RGBA row by row from the bottom.
-inline std::vector<uint8_t> sector_rgba(int size, float innerFrac, float outerFrac, float fromDeg, float toDeg) {
+/// A white ring segment on clear: `size` texels square, between the circles of `innerFrac` and `outerFrac` of the
+/// half-size, and between the rays at `fromDeg` and `toDeg` (0 up, clockwise; less than 180 apart) less a band of
+/// `gapFrac` of the half-size along each, half of each gap on either side of the ray. The gap is a constant width,
+/// as wide at the rim as at the inner circle, and the same for every segment, whichever way it points. RGBA row by row
+/// from the bottom.
+inline std::vector<uint8_t> sector_rgba(int size, float innerFrac, float outerFrac, float fromDeg, float toDeg,
+                                        float gapFrac) {
   std::vector<uint8_t> out(static_cast<size_t>(size) * size * 4, 0);
-  const float half = size / 2.0f, mid = (fromDeg + toDeg) / 2.0f, halfSpan = (toDeg - fromDeg) / 2.0f;
+  const float half = size / 2.0f, inset = gapFrac * half / 2.0f;
   for (int y = 0; y < size; ++y)
     for (int x = 0; x < size; ++x) {
       const float dx = x + 0.5f - half, dy = y + 0.5f - half;
-      const float r = std::hypot(dx, dy) / half;
-      const float off = wrap_degrees(detail::angle_of(dx, dy) - mid);  // degrees from the span's middle
-      const float arcSoft = 57.29577951f / std::max(std::hypot(dx, dy), 1.0f);  // one texel, in degrees, at this radius
-      const float a = std::min(detail::edge(r, innerFrac, outerFrac, 1.0f / half),
-                               detail::edge(off, -halfSpan, halfSpan, arcSoft));
+      const float r = std::hypot(dx, dy);
+      const float a = std::min({detail::edge(r, innerFrac * half, outerFrac * half, 1.0f),
+                                detail::beyond_ray(dx, dy, fromDeg, 1.0f, inset),
+                                detail::beyond_ray(dx, dy, toDeg, -1.0f, inset)});
       uint8_t* t = &out[(static_cast<size_t>(y) * size + x) * 4];
       t[0] = t[1] = t[2] = 255;
       t[3] = static_cast<uint8_t>(std::lround(a * 255.0f));
@@ -64,9 +72,18 @@ inline std::vector<uint8_t> sector_rgba(int size, float innerFrac, float outerFr
   return out;
 }
 
-/// A white disc on clear, `radiusFrac` of the half-size.
+/// A white disc on clear, `radiusFrac` of the half-size, its edge smoothed over a texel.
 inline std::vector<uint8_t> circle_rgba(int size, float radiusFrac) {
-  return sector_rgba(size, -1.0f, radiusFrac, -360.0f, 360.0f);
+  std::vector<uint8_t> out(static_cast<size_t>(size) * size * 4, 0);
+  const float half = size / 2.0f;
+  for (int y = 0; y < size; ++y)
+    for (int x = 0; x < size; ++x) {
+      const float r = std::hypot(x + 0.5f - half, y + 0.5f - half);
+      uint8_t* t = &out[(static_cast<size_t>(y) * size + x) * 4];
+      t[0] = t[1] = t[2] = 255;
+      t[3] = static_cast<uint8_t>(std::lround(std::clamp(radiusFrac * half - r + 0.5f, 0.0f, 1.0f) * 255.0f));
+    }
+  return out;
 }
 
 /// Where segment `i`'s icon sits, from the disc's centre: half way across its ring, in its direction.

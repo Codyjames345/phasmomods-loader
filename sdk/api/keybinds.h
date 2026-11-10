@@ -9,8 +9,8 @@
 /// local player's controls (LocalPCPlayer.controls) or a row of the keybinds menu, so a key is not ready until one of
 /// those is loaded. The keyboard's and the gamepad's bindings get a row each in the game's keybinds menu: a copy of one
 /// of the game's rows (RebindActionUI) pointed at the mod's action, labelled with the mod's own text, so the game's own
-/// rebinding runs on it. Each list the rows go in ends with the mod's own section: a heading with the mod's name (a copy
-/// of a row showing only its label), then its rows in the order the keys were added. A copy's label loses the game's
+/// rebinding runs on it. Each list the rows go in ends with the mod's own section: a heading with the mod's name, bold and
+/// a quarter larger (a copy of a row showing only its label), then its rows in the order the keys were added. A copy's label loses the game's
 /// TextLocaliserUI, which would write the copied row's words back over it. A player's rebinding is saved to the file the mod names and read back at the next start.
 /// The game's side is in sdk/systems/menus.md, "Key bindings".
 ///
