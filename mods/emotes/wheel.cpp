@@ -46,14 +46,14 @@ bool build(void* canvas) {
   const float d = style::kDiscRadius * 2.0f;
   const ui::Vec2 mid{0.5f, 0.5f};
   if (void* c = ui::create_raw_image(canvas, "pm emote centre", g.centre)) {
-    ui::set_color(c, to_ui(style::kDiscGrey));
+    ui::set_color(c, to_ui(style::kDiscBlack));
     const float cd = style::kCentreRadius * 2.0f;
     ui::place(c, mid, mid, {0, 0}, {cd, cd});
   }
   for (int i = 0; i < kSegments; ++i) {
     void* img = ui::create_raw_image(canvas, "pm emote segment", g.segments[i]);
     if (!img) return false;
-    ui::set_color(img, to_ui(style::kDiscGrey));
+    ui::set_color(img, to_ui(style::kDiscBlack));
     ui::place(img, mid, mid, {0, 0}, {d, d});
     g.images[i] = img;
     if (g.icons[i]) {

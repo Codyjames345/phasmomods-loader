@@ -36,6 +36,7 @@
 #include "net.h"
 #include "player_anim.h"
 #include "players.h"
+#include "settings.h"
 #include "talk_loudness.h"
 #include "text_table.h"
 #include "third_person.h"
@@ -51,8 +52,11 @@ namespace talk = api::talk;
 // Starting values, judged with the user in game.
 constexpr float kBlendIn = 0.25f;       // seconds the dance takes to blend in
 constexpr float kBlendOut = 0.35f;      // and out, the body's facing with it
-constexpr float kSongVolume = 0.8f;     // the song's volume, 0 to 1, before its fall with distance
-constexpr float kOwnSongVolume = 0.4f;  // the dancer's own hearing of it, at their own voice's place (no fall)
+// The songs' volumes at the player's Emotes volume of 100% (the user: too loud at 0.8 and 0.4, 2026-11-10). Starting
+// values, judged in game.
+constexpr float kSongVolume = 0.5f;      // a song's volume, 0 to 1, before its fall with distance
+constexpr float kOwnSongVolume = 0.25f;  // the dancer's own hearing of it, at their own voice's place (no fall)
+constexpr const char* kVolumeSetting = "volume";
 constexpr float kHeadClearance = 0.3f;  // in VR, the head stays hidden while this close to the headset, in metres
 
 // The key's id and its defaults (the user's: B, D-pad down, a free left-controller button; each falls back when the
@@ -102,6 +106,7 @@ struct Facing {
 // One dancer's song.
 struct Song {
   api::Held source;  // its AudioSource; its GameObject goes with it
+  float volume = 0.0f;  // the volume it plays at
 };
 
 struct Assets {
@@ -326,6 +331,20 @@ void stop_song(int actor) {
   g.songs.erase(it);
 }
 
+// A song's volume on this client: the player's Emotes volume setting (the audio page) of its base.
+float song_volume(int actor) {
+  return (actor == game::local_actor() ? kOwnSongVolume : kSongVolume) * api::settings::value(kVolumeSetting);
+}
+
+// Each song follows the setting as the player applies it.
+void follow_volume() {
+  for (auto& [actor, s] : g.songs)
+    if (s.source && game::alive(s.source) && s.volume != song_volume(actor)) {
+      s.volume = song_volume(actor);
+      phasmo::AudioSource::set_volume(s.source, s.volume);
+    }
+}
+
 void start_song(int actor, void* player, int emote) {
   stop_song(actor);
   void* clip = g.a.songs[emote];
@@ -349,7 +368,7 @@ void start_song(int actor, void* player, int emote) {
   // The song in the bundle is cut to its loop, so the engine loops it sample for sample (emote_assets.h).
   phasmo::AudioSource::set_loop(source, true);
   phasmo::AudioSource::set_spatialBlend(source, 1.0f);
-  phasmo::AudioSource::set_volume(source, actor == game::local_actor() ? kOwnSongVolume : kSongVolume);
+  phasmo::AudioSource::set_volume(source, song_volume(actor));
   // It falls off with distance as the player's own voice does (the voice's AudioSource).
   if (voice) {
     const int32_t rolloff = phasmo::AudioSourceCurveType::CustomRolloff();
@@ -367,6 +386,7 @@ void start_song(int actor, void* player, int emote) {
       phasmo::AudioSource::set_outputAudioMixerGroup(source, group);
   phasmo::AudioSource::Play(source, 0);
   g.songs[actor].source = source;
+  g.songs[actor].volume = song_volume(actor);
 }
 
 // ---- This client's own investigator ----
@@ -633,6 +653,13 @@ bool start() {
     k.paths[2] = ends[i];
     keys::add_key(k);
   }
+  // The player's Emotes volume, on the journal's audio page (the user, 2026-11-10).
+  api::settings::begin_settings(mod::info().id, mod::shown_name(),
+                                std::filesystem::path(mod::host().dataDirectory) / mod::info().id / "settings.txt");
+  api::settings::Slider volume;
+  volume.id = kVolumeSetting;
+  volume.label = i18n::text(kVolumeLabel);
+  api::settings::add_slider(volume);
   g.local.emplace(g.a.table);
   g.remote.emplace(g.a.table);
   if (!api::hook<phasmo::LocalJournalController::OpenCloseJournal>(&detour_journal, "Emotes: the journal key") ||
@@ -650,6 +677,8 @@ void tick() {
   g.lastTick = nowMs;
   const float now = static_cast<float>(nowMs - g.startTick) / 1000.0f;
   keys::tick_keys();
+  api::settings::tick_settings();
+  follow_volume();
   api::anim::tick_player_anims(dt);
   api::view::tick_third_person(dt);
 
@@ -734,6 +763,7 @@ void stop() {
     if (s.source && game::alive(s.source)) game::destroy(game::game_object_of(s.source));
   wheel::unload();
   keys::clear_keys();
+  api::settings::clear_settings();
   g = State{};
 }
 

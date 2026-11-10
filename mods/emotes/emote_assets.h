@@ -58,6 +58,9 @@ inline SongLoop song_loop_of(const EmoteAsset& e, float clipSeconds) {
 /// The key of the label of the mod's key in the game's keybinds menu.
 inline constexpr const char* kKeyLabel = pm::i18n::key("emotes.key-label");
 
+/// The key of the label of the mod's volume slider on the journal's audio page.
+inline constexpr const char* kVolumeLabel = pm::i18n::key("emotes.volume-label");
+
 /// The bundle's file name, beside the mod's DLL in its assets folder.
 inline constexpr const char* kBundleFile = "emotes.bundle";
 

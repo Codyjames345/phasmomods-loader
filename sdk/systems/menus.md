@@ -72,7 +72,9 @@ shows the action's name. The game saves its own actions' overrides as a JSON lis
 
 The game's rows leave `RebindActionUI.m_ActionLabel` empty: a row's name is a child text of its own, `ActionNameText`
 (its first `TextLocaliserUI`), wired to nothing. Its other children are `TriggerRebindButton`, whose click runs the row's
-own `StartInteractiveRebind`, and `ResetToDefaultButton`. Unity refuses to rebind an action while it is enabled ("Cannot
+own `StartInteractiveRebind`, and `ResetToDefaultButton`. The page (`ControlsManager`) decides when a rebinding counts:
+`ControlsManager.ApplyButton` stores the overrides, `ControlsManager.ResetButton` takes every override off without
+storing, and its `ControlsManager.OnDisable` loads the stored ones back, so leaving without Apply drops a change. Unity refuses to rebind an action while it is enabled ("Cannot
 rebind action ... while it is enabled"); the game's own actions are off while the menu is open, so a mod's must be too.
 
 A row's name text carries a `TextLocaliserUI`, which writes the game's words for its key whenever it wakes. `RebindActionUI`
@@ -89,6 +91,16 @@ menu on; every other player's journal holds a copy too. Each list is a scroll vi
 rows: rows 100 high alternate with dividers, small images with no `RebindActionUI`. A row added at the end lies past the
 scroll's reach until the `Content` grows by its height and the spacing. The training whiteboards in each map show
 bindings with `RebindActionUI` too, on rows with no layout: a search for rows finds them as well.
+
+## The audio page
+
+The journal's audio page (`GameMyAudioManager`, in each player's journal like the keybinds page) is a list of the same
+kind: rows with a localised name, dividers between them, a scroll content sized to the rows. The master volume's row
+holds its name, its number (`GameMyAudioManager.masterVolumeValueText`) and its slider
+(`GameMyAudioManager.masterVolumeSlider`, an `XRSlider`, the game's own slider class). `GameMyAudioManager.ApplyButton`
+reads the slider into the audio settings and sets the mixer, so a change counts on Apply. A copy of the slider keeps
+the listeners the prefab put on its event (`XRSlider.m_OnValueChanged`), so a copy needs a new `SliderEvent` of its own.
+`sdk/api/settings.h` puts a mod's sliders there, under a heading with the mod's name.
 
 ## How this was read
 

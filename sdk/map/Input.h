@@ -279,6 +279,104 @@ inline constexpr pm::sdk::EntryDesc InputActionRebindingExtensions_ApplyBindingO
     .flags = pm::sdk::kStatic, .owner = "InputActionRebindingExtensions", .name = "ApplyBindingOverride",
     .params = InputActionRebindingExtensions_ApplyBindingOverride_params};
 
+inline constexpr const char* InputActionRebindingExtensions_RemoveAllBindingOverrides_params[] = {
+    "IInputActionCollection2"};
+
+/// RemoveAllBindingOverrides(actions): takes every override off the bindings of an action collection (an
+/// InputActionAsset or map). Static. ControlsManager.ResetButton runs it on the game's controls. Decompiled.
+inline constexpr pm::sdk::EntryDesc InputActionRebindingExtensions_RemoveAllBindingOverrides{
+    .key = "InputActionRebindingExtensions.RemoveAllBindingOverrides", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kStatic,
+    .owner = "InputActionRebindingExtensions", .name = "RemoveAllBindingOverrides",
+    .params = InputActionRebindingExtensions_RemoveAllBindingOverrides_params};
+
+/// The keybinds menu's page (Assembly-CSharp, global namespace), a MonoBehaviour of each player's journal. Its buttons
+/// decide when a rebinding counts: ApplyButton stores the game's overrides (PCControls.StoreControlOverrides),
+/// ResetButton takes them all off without storing, and leaving the page (its OnDisable) loads the stored ones back
+/// (PCControls.LoadControlOverrides), so a change not applied is dropped. Decompiled.
+inline constexpr pm::sdk::EntryDesc ControlsManager{.key = "ControlsManager",
+                                                    .confidence = pm::sdk::Confidence::Decompiled,
+                                                    .name = "ControlsManager", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The page's Apply: stores the game's binding overrides. A mod hooks it to store its own. Decompiled.
+inline constexpr pm::sdk::EntryDesc ControlsManager_ApplyButton{
+    .key = "ControlsManager.ApplyButton", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "ControlsManager", .name = "ApplyButton"};
+
+/// The page's Reset: takes every override off the game's controls, unstored until Apply. Decompiled.
+inline constexpr pm::sdk::EntryDesc ControlsManager_ResetButton{
+    .key = "ControlsManager.ResetButton", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "ControlsManager", .name = "ResetButton"};
+
+/// The page leaving the screen: loads the stored overrides back, dropping what was not applied. Decompiled.
+inline constexpr pm::sdk::EntryDesc ControlsManager_OnDisable{
+    .key = "ControlsManager.OnDisable", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "ControlsManager", .name = "OnDisable"};
+
+// The journal's audio page. Read from the class dump, the PCPlayer prefab and decompiled code.
+
+inline constexpr const char* Input_float[] = {"float"};
+
+/// The game's slider (Assembly-CSharp, UnityEngine.UI): Unity's Slider as the game rewrote it for VR, a Selectable.
+/// The audio page's master volume is one. Decompiled.
+inline constexpr pm::sdk::EntryDesc XRSlider{.key = "XRSlider", .confidence = pm::sdk::Confidence::Decompiled,
+                                             .name = "XRSlider", .assembly = "Assembly-CSharp", .ns = "UnityEngine.UI"};
+/// Its value. Read from the class dump.
+inline constexpr pm::sdk::EntryDesc XRSlider_get_value{.key = "XRSlider.get_value", .kind = pm::sdk::Kind::Method,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .owner = "XRSlider", .name = "get_value"};
+/// Sets its value without raising its change event. Read from the class dump.
+inline constexpr pm::sdk::EntryDesc XRSlider_SetValueWithoutNotify{
+    .key = "XRSlider.SetValueWithoutNotify", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "XRSlider", .name = "SetValueWithoutNotify", .params = Input_float};
+/// Sets the lowest value. Read from the class dump.
+inline constexpr pm::sdk::EntryDesc XRSlider_set_minValue{.key = "XRSlider.set_minValue", .kind = pm::sdk::Kind::Method,
+                                                          .confidence = pm::sdk::Confidence::Decompiled,
+                                                          .owner = "XRSlider", .name = "set_minValue",
+                                                          .params = Input_float};
+/// Sets the highest value. Read from the class dump.
+inline constexpr pm::sdk::EntryDesc XRSlider_set_maxValue{.key = "XRSlider.set_maxValue", .kind = pm::sdk::Kind::Method,
+                                                          .confidence = pm::sdk::Confidence::Decompiled,
+                                                          .owner = "XRSlider", .name = "set_maxValue",
+                                                          .params = Input_float};
+/// Its change event, a SliderEvent whose listeners the prefab wired: a copy of the slider keeps them, so a copy gets
+/// an event of its own. Read from the class dump.
+inline constexpr pm::sdk::EntryDesc XRSlider_m_OnValueChanged{
+    .key = "XRSlider.m_OnValueChanged", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "XRSlider", .name = "m_OnValueChanged"};
+/// The change event's type (a UnityEvent<float>), nested in XRSlider. Read from the class dump.
+inline constexpr pm::sdk::EntryDesc SliderEvent{.key = "SliderEvent", .confidence = pm::sdk::Confidence::Decompiled,
+                                                .owner = "XRSlider", .name = "SliderEvent",
+                                                .assembly = "Assembly-CSharp"};
+/// The event's constructor: no listeners. Read from the class dump.
+inline constexpr pm::sdk::EntryDesc SliderEvent_ctor{.key = "SliderEvent.ctor", .kind = pm::sdk::Kind::Method,
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .owner = "SliderEvent", .name = ".ctor"};
+
+/// The journal's audio page (Assembly-CSharp, global namespace), a MonoBehaviour of each player's journal. Its
+/// ApplyButton reads the master volume slider into the audio settings and sets the mixer: a change counts on Apply.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc GameMyAudioManager{.key = "GameMyAudioManager",
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .name = "GameMyAudioManager", .assembly = "Assembly-CSharp",
+                                                       .ns = ""};
+/// The master volume's slider, an XRSlider in the page's list (its row: a title, a number and the slider). Decompiled.
+inline constexpr pm::sdk::EntryDesc GameMyAudioManager_masterVolumeSlider{
+    .key = "GameMyAudioManager.masterVolumeSlider", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GameMyAudioManager", .name = "masterVolumeSlider"};
+/// The master volume's number, a TextMeshProUGUI in the slider's row. Decompiled.
+inline constexpr pm::sdk::EntryDesc GameMyAudioManager_masterVolumeValueText{
+    .key = "GameMyAudioManager.masterVolumeValueText", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GameMyAudioManager", .name = "masterVolumeValueText"};
+/// The page's Apply: stores the audio settings and sets the mixer. A mod hooks it to store its own. Decompiled.
+inline constexpr pm::sdk::EntryDesc GameMyAudioManager_ApplyButton{
+    .key = "GameMyAudioManager.ApplyButton", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "GameMyAudioManager", .name = "ApplyButton"};
+/// The page leaving the screen. A mod hooks it to put back what was not applied. Read from the class dump.
+inline constexpr pm::sdk::EntryDesc GameMyAudioManager_OnDisable{
+    .key = "GameMyAudioManager.OnDisable", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "GameMyAudioManager", .name = "OnDisable"};
+
 /// A reference to an action, as a ScriptableObject a component can hold. Inferred: the Input System's documented API.
 inline constexpr pm::sdk::EntryDesc InputActionReference{.key = "InputActionReference", .name = "InputActionReference",
                                                         .assembly = "Unity.InputSystem",
@@ -417,6 +515,58 @@ struct InputActionRebindingExtensions {
   static constexpr pm::api::Method<pm::map::InputActionRebindingExtensions_ApplyBindingOverride,
                                    void(void*, void*, void*, void*)>
       ApplyBindingOverride{};
+  /// RemoveAllBindingOverrides(actions): every override off an InputActionAsset's or map's bindings. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::InputActionRebindingExtensions_RemoveAllBindingOverrides, void(void*)>
+      RemoveAllBindingOverrides{};
+};
+
+/// The game's slider. `slider` below is the XRSlider.
+struct XRSlider {
+  /// The type: type_object() for Component.GetComponent. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::XRSlider> type{};
+  /// get_value(slider). Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::XRSlider_get_value, float(void*)> get_value{};
+  /// SetValueWithoutNotify(slider, value). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::XRSlider_SetValueWithoutNotify, void(void*, float)> SetValueWithoutNotify{};
+  /// set_minValue(slider, value). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::XRSlider_set_minValue, void(void*, float)> set_minValue{};
+  /// set_maxValue(slider, value). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::XRSlider_set_maxValue, void(void*, float)> set_maxValue{};
+  /// Its change event, a SliderEvent: m_OnValueChanged.get(slider). Unresolved: null, writes nothing.
+  static constexpr pm::api::Field<pm::map::XRSlider_m_OnValueChanged, void*> m_OnValueChanged{};
+};
+
+/// The slider's change event type.
+struct SliderEvent {
+  /// The type: make() and is(obj). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::SliderEvent> type{};
+  /// ctor(event): runs the constructor of an event made with type.make(). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::SliderEvent_ctor, void(void*)> ctor{};
+};
+
+/// The journal's audio page. `page` below is the GameMyAudioManager.
+struct GameMyAudioManager {
+  /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::GameMyAudioManager> type{};
+  /// The master volume's XRSlider: masterVolumeSlider.get(page). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GameMyAudioManager_masterVolumeSlider, void*> masterVolumeSlider{};
+  /// The master volume's number text: masterVolumeValueText.get(page). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GameMyAudioManager_masterVolumeValueText, void*> masterVolumeValueText{};
+  /// ApplyButton(page): stores the audio settings. A mod hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::GameMyAudioManager_ApplyButton, void(void*)> ApplyButton{};
+  /// OnDisable(page): the page leaving the screen. A mod hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::GameMyAudioManager_OnDisable, void(void*)> OnDisable{};
+};
+
+/// The keybinds menu's page. `page` below is the ControlsManager.
+struct ControlsManager {
+  /// ApplyButton(page): stores the game's overrides. A mod hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ControlsManager_ApplyButton, void(void*)> ApplyButton{};
+  /// ResetButton(page): every override off the game's controls, unstored. A mod hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ControlsManager_ResetButton, void(void*)> ResetButton{};
+  /// OnDisable(page): the stored overrides loaded back. A mod hooks it. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ControlsManager_OnDisable, void(void*)> OnDisable{};
 };
 
 /// Building a mod's own actions.

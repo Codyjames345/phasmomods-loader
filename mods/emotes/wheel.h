@@ -1,6 +1,6 @@
 #pragma once
 
-// The Emotes wheel on screen and in VR (the author's design; wheel_style.h, wheel_layout.h): a grey disc of eight
+// The Emotes wheel on screen and in VR (the author's design; wheel_style.h, wheel_layout.h): a black, slightly see-through disc of eight
 // segments with gaps and a centre circle, each segment's white icon, the picked segment blue and its name in white
 // under the disc. On screen it is an overlay canvas over a slight blur and vignette (sdk/api/screen_effects.h); in VR a
 // world canvas floating over the left hand and turned to the head, without the effects. Main thread.

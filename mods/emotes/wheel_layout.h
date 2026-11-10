@@ -92,8 +92,8 @@ inline Vec2 icon_centre(int i, float innerRadius, float outerRadius) {
   return {std::sin(rad) * r, std::cos(rad) * r};
 }
 
-/// Segment `i`'s colour: blue when it is the one picked, grey otherwise.
-inline style::Rgba segment_colour(int i, int picked) { return i == picked ? style::kPickedBlue : style::kDiscGrey; }
+/// Segment `i`'s colour: blue when it is the one picked, the disc's black otherwise.
+inline style::Rgba segment_colour(int i, int picked) { return i == picked ? style::kPickedBlue : style::kDiscBlack; }
 
 /// Where a ray meets a plane, or nothing when it runs along it or points away.
 inline std::optional<Vec3> ray_plane(Vec3 origin, Vec3 dir, Vec3 point, Vec3 normal) {

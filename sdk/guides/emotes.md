@@ -17,10 +17,19 @@ linked below.
   own rebinding runs on it. Your rows sit at the end of each list, under a heading with your mod's name (the manifest's,
   which `shown_name` reads from the host), with the list's own dividers between them; the list's scroll grows to reach
   them. Rows are copied only from the local player's own keybinds menu, never from a map's training whiteboards. While
-  a row is on screen the key's actions are off, so the game's rebinding can run on them; `key_state` reads nothing then. A player's rebinding is saved to the file you name and read back next time.
+  a row is on screen the key's actions are off, so the game's rebinding can run on them; `key_state` reads nothing then. A rebinding is kept as the game keeps its own:
+  the page's Apply saves it to the file you name, Reset takes it off, and leaving the page without Apply drops it.
+  `begin_keys` hooks the page for this, so enable your hooks after it.
 - The key is ready (`keys_ready`) once the game's bindings can be read: the keybinds menu or a local player is loaded.
 
 How the game's actions and the menu work: [menus](../systems/menus.md#key-bindings).
+
+## A setting on the audio page
+
+`sdk/api/settings.h`. Declare a slider with `begin_settings(modId, pm::mod::shown_name(), file)` and `add_slider(Slider)`
+in `pmmod_start`, call `tick_settings()` every frame, and read it with `value(id)`. Its row is a copy of the master
+volume's, under your mod's heading on the journal's audio page. Its value counts on the page's Apply and is saved to your
+file; leaving the page without Apply puts the slider back. The Emotes mod's volume is one.
 
 ## A clip on a player's own body
 

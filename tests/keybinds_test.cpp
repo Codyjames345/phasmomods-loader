@@ -142,12 +142,21 @@ void* binding_array(const std::vector<std::string>& paths, const std::vector<std
 
 void* fake_create_instance(void*, void*) { return make_obj(&g_assetClass); }
 void fake_set_hide_flags(void*, int32_t, void*) {}
+constexpr int32_t kAssetOwnMap = 0x18;  // the fake's own: the map a mod's asset holds
 void* fake_add_map(void* asset, void*, void*) {
   Obj* m = make_obj(&g_mapClass);
   at<void*>(m, kMapBindings) = fake::array(kBindingSize, 0);
-  (void)asset;
+  at<void*>(asset, kAssetOwnMap) = m;
   return m;
 }
+// RemoveAllBindingOverrides on a mod's asset: every binding of its map loses its override.
+void fake_remove_all(void* asset, void*) {
+  void* map = asset ? at<void*>(asset, kAssetOwnMap) : nullptr;
+  pm::api::ValueArray b{map ? at<void*>(map, kMapBindings) : nullptr};
+  for (size_t i = 0; i < b.size(); ++i) at<void*>(b.at(i), kBindOverride) = nullptr;
+}
+Obj g_page;  // the keybinds page (ControlsManager)
+void fake_page(void*, void*) {}
 // Unity refuses to change an asset while one of its actions is enabled ("Cannot add, remove, or change elements of
 // InputActionAsset ... while one or more of its actions are enabled"): the fake counts such an add instead of throwing.
 int g_enabledActions = 0, g_addsWhileEnabled = 0;
@@ -210,6 +219,10 @@ void give_entries() {
   fake::method(map::InputActionSetupExtensions_AddActionMap, reinterpret_cast<void*>(&fake_add_map));
   fake::method(map::InputActionSetupExtensions_AddAction, reinterpret_cast<void*>(&fake_add_action));
   fake::method(map::InputAction_Enable, reinterpret_cast<void*>(&fake_enable));
+  fake::method(map::InputActionRebindingExtensions_RemoveAllBindingOverrides, reinterpret_cast<void*>(&fake_remove_all));
+  fake::method(map::ControlsManager_ApplyButton, reinterpret_cast<void*>(&fake_page));
+  fake::method(map::ControlsManager_ResetButton, reinterpret_cast<void*>(&fake_page));
+  fake::method(map::ControlsManager_OnDisable, reinterpret_cast<void*>(&fake_page));
   fake::method(map::InputActionRebindingExtensions_ApplyBindingOverride,
                reinterpret_cast<void*>(&fake_apply_override));
   fake::field(map::InputAction_m_ActionMap, kActionMap);
@@ -329,7 +342,34 @@ void the_state_is_any_devices() {
   keys::clear_keys();
 }
 
-void a_rebinding_is_saved_and_read_back() {
+// What the game calls for a method a hook is on: the hook's entry, which runs the detour and then the method.
+template <class W>
+void call_hooked(void* page) {
+  reinterpret_cast<void (*)(void*, const void*)>(pm::api::detail::Bodies<W, pm::api::detail::Hooked<W>>::entry(0))(
+      page, nullptr);
+}
+using WApply = std::remove_cvref_t<decltype(phasmo::ControlsManager::ApplyButton)>;
+using WReset = std::remove_cvref_t<decltype(phasmo::ControlsManager::ResetButton)>;
+using WClosed = std::remove_cvref_t<decltype(phasmo::ControlsManager::OnDisable)>;
+
+std::string override_of(Obj* action) {
+  void* map = at<void*>(action, kActionMap);
+  void* b = pm::api::ValueArray{at<void*>(map, kMapBindings)}.at(static_cast<size_t>(at<int32_t>(action, kActionIndex)));
+  return pm::api::to_utf8(at<void*>(b, kBindOverride));
+}
+void rebind(Obj* action, const char* path) {
+  void* map = at<void*>(action, kActionMap);
+  void* b = pm::api::ValueArray{at<void*>(map, kMapBindings)}.at(static_cast<size_t>(at<int32_t>(action, kActionIndex)));
+  at<void*>(b, kBindOverride) = pm::api::make_string(path);
+}
+std::vector<keys::SavedBinding> saved_in(const std::filesystem::path& file) {
+  std::ifstream in(file, std::ios::binary);
+  return keys::parse_saved(std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()));
+}
+
+// The user's ruling (2026-11-10): a mod's key is kept as the game keeps its own (ControlsManager, decompiled): the
+// page's Apply stores it, its Reset takes every override off unstored, and leaving the page drops what was not applied.
+void a_rebinding_counts_once_applied() {
   give_entries();
   const auto file = temp_file("pm_keys_saved.txt");
   {
@@ -340,21 +380,19 @@ void a_rebinding_is_saved_and_read_back() {
   keys::begin_keys("test.mod", "Test Mod", file);
   keys::add_key(emote_key());
   keys::tick_keys();
-  CHECK(g_overrides.size() == 1 && g_overrides[0].second == "<Keyboard>/n");
+  CHECK(g_overrides.size() == 1 && g_overrides[0].second == "<Keyboard>/n");  // read back at the start
   CHECK(keys::bound_path("emote", Device::Keyboard) == "<Keyboard>/n");
-  // The player rebinds the gamepad's in the menu: the next tick saves it beside the keyboard's.
   std::vector<Obj*> actions;
   for (Obj* o : g_made)
     if (o->klass == &g_actionClass) actions.push_back(o);
-  if (actions.size() == 3) {
-    void* map = at<void*>(actions[1], kActionMap);
-    at<void*>(pm::api::ValueArray{at<void*>(map, kMapBindings)}.at(static_cast<size_t>(at<int32_t>(actions[1], kActionIndex))), kBindOverride) =
-        pm::api::make_string("<Gamepad>/buttonNorth");
-  }
+  CHECK(actions.size() == 3);
+  if (actions.size() != 3) return;
+  // The player rebinds the gamepad's in the menu: nothing is stored until Apply.
+  rebind(actions[1], "<Gamepad>/buttonNorth");
   keys::tick_keys();
-  std::ifstream in(file, std::ios::binary);
-  const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-  const auto saved = keys::parse_saved(text);
+  CHECK(saved_in(file).size() == 1);
+  call_hooked<WApply>(&g_page);
+  auto saved = saved_in(file);
   CHECK(saved.size() == 2);
   bool pad = false, board = false;
   for (const auto& s : saved) {
@@ -362,6 +400,20 @@ void a_rebinding_is_saved_and_read_back() {
     board |= s.device == Device::Keyboard && s.path == "<Keyboard>/n";
   }
   CHECK(pad && board);
+  // Rebound again but the page left without Apply: the change is dropped, the stored one back.
+  rebind(actions[1], "<Gamepad>/buttonWest");
+  call_hooked<WClosed>(&g_page);
+  CHECK(override_of(actions[1]) == "<Gamepad>/buttonNorth" && override_of(actions[0]) == "<Keyboard>/n");
+  // Reset takes every override off, unstored: leaving without Apply brings them back.
+  call_hooked<WReset>(&g_page);
+  CHECK(override_of(actions[0]).empty() && override_of(actions[1]).empty());
+  CHECK(saved_in(file).size() == 2);
+  call_hooked<WClosed>(&g_page);
+  CHECK(override_of(actions[0]) == "<Keyboard>/n");
+  // Reset and Apply: the defaults are what is stored.
+  call_hooked<WReset>(&g_page);
+  call_hooked<WApply>(&g_page);
+  CHECK(saved_in(file).empty());
   keys::clear_keys();
 }
 
@@ -414,6 +466,12 @@ void* fake_in_children(void* t, void* type, bool, void*) {
   return it == g_localiserOf.end() ? nullptr : it->second;
 }
 bool fake_in_hierarchy(void*, void*) { return g_menuShown; }
+std::map<void*, float> g_fontSize;   // TMP_Text.fontSize: a row's name is 40, sized to fit at most 60
+std::map<void*, bool> g_autoSize;    // TMP_Text.enableAutoSizing: on, as the game's
+float fake_get_font_size(void* t, void*) { return g_fontSize.count(t) ? g_fontSize[t] : 40.0f; }
+float fake_get_size_max(void*, void*) { return 60.0f; }
+void fake_set_font_size(void* t, float v, void*) { g_fontSize[t] = v; }
+void fake_set_auto(void* t, bool on, void*) { g_autoSize[t] = on; }
 void fake_disable(void*, void*) { ++g_disables; }
 void* fake_get_component(void* t, void* type, void*) {
   if (type == phasmo::TextMeshProUGUI::type.type_object()) {  // the localiser's own text
@@ -471,6 +529,12 @@ void a_mod_key_gets_a_row_beside_the_games() {
   fake::type(map::TextMeshProUGUI, &g_textClass);
   fake::method(map::Component_GetComponentInChildren, reinterpret_cast<void*>(&fake_in_children));
   fake::method(map::GameObject_get_activeInHierarchy, reinterpret_cast<void*>(&fake_in_hierarchy));
+  fake::method(map::TMP_Text_get_fontSize, reinterpret_cast<void*>(&fake_get_font_size));
+  fake::method(map::TMP_Text_get_fontSizeMax, reinterpret_cast<void*>(&fake_get_size_max));
+  fake::method(map::TMP_Text_set_fontSize, reinterpret_cast<void*>(&fake_set_font_size));
+  fake::method(map::TMP_Text_set_enableAutoSizing, reinterpret_cast<void*>(&fake_set_auto));
+  g_fontSize.clear();
+  g_autoSize.clear();
   fake::method(map::InputAction_Disable, reinterpret_cast<void*>(&fake_disable));
   g_menuShown = false;
   g_disables = 0;
@@ -541,7 +605,9 @@ void a_mod_key_gets_a_row_beside_the_games() {
   CHECK(std::fabs(g_contentSize.y - (2575.0f + 6 + 100 + 6 + 100 + 4 * kSpacing)) < 1e-3f);
   // The heading: the mod's name on its label, its row's own rebinding gone, its buttons hidden, its label shown.
   void* headingLabel = at<void*>(heading, kPartLabel);
-  CHECK(g_texts[headingLabel] == "<b><size=125%>Test Mod</size></b>");  // bold and larger than a row
+  CHECK(g_texts[headingLabel] == "<b>Test Mod</b>");  // bold
+  // A quarter larger than a row's name, at a fixed size: the name text sizes itself to its row, which undid the tags.
+  CHECK(g_autoSize.count(headingLabel) && !g_autoSize[headingLabel] && std::fabs(g_fontSize[headingLabel] - 40.0f * 1.25f) < 1e-3f);
   CHECK(std::find(g_destroyedNow.begin(), g_destroyedNow.end(), heading) != g_destroyedNow.end());
   CHECK(at<bool>(g_kids[heading][0], kPartActive) && !at<bool>(g_kids[heading][1], kPartActive));
   // Every copy's localiser is taken off, or it would write the game's words back when the menu wakes it.
@@ -588,7 +654,7 @@ int main() {
   a_key_takes_the_defaults_the_game_leaves_free();
   a_key_waits_for_the_games_bindings();
   the_state_is_any_devices();
-  a_rebinding_is_saved_and_read_back();
+  a_rebinding_counts_once_applied();
   a_mod_key_gets_a_row_beside_the_games();
   std::printf("%s\n", g_failures ? "keybinds tests FAILED" : "keybinds tests passed");
   return g_failures ? 1 : 0;

@@ -15,6 +15,7 @@
 #include "UnityUI.h"
 #include "held.h"
 #include "log.h"
+#include "menu_rows.h"
 #include "runtime.h"
 
 namespace pm::api::keys {
@@ -119,12 +120,9 @@ struct State {
   bool ready = false;
   std::string lastSaved;  // the text last written or read, so a frame without a change writes nothing
   std::vector<Held> extras;  // the GameObjects of the mod's headings and dividers in the keybinds menu
-  struct Grown {
-    Held rect;       // the RectTransform made taller for the mod's rows: a list's Content
-    float by = 0.0f;
-  };
-  std::vector<Grown> grown;
+  std::vector<rows::Grown> grown;  // the lists' scroll contents made taller for them
   int rowTicks = 0;
+  bool followsPage = false;    // the keybinds page's Apply, Reset and closing are hooked (store_on_apply)
   std::string lastSeen;        // what the last search of the keybinds menu found, for its log line
   bool loggedWaiting = false;  // the wait for the game's bindings was logged
 };
@@ -179,6 +177,18 @@ std::string effective_path(const Key& k, size_t d) {
   return k.chosen[d];
 }
 
+// Puts each saved rebinding on its key's action.
+void apply_saved(const std::vector<SavedBinding>& saved) {
+  for (Key& k : g.keys)
+    for (size_t d = 0; d < kDevices; ++d) {
+      if (!k.actions[d]) continue;
+      for (const SavedBinding& s : saved)
+        if (s.key == k.desc.id && s.device == static_cast<Device>(d))
+          phasmo::InputActionRebindingExtensions::ApplyBindingOverride(k.actions[d], make_string(s.path), nullptr,
+                                                                       nullptr);
+    }
+}
+
 bool make_actions(const std::vector<std::string>& game) {
   void* assetType = phasmo::InputActionAsset::type.type_object();
   void* asset = assetType ? phasmo::ScriptableObject::CreateInstance(assetType) : nullptr;
@@ -212,19 +222,14 @@ bool make_actions(const std::vector<std::string>& game) {
   }
   // Only once every action is in the asset: Unity refuses to change an asset while one of its actions is enabled
   // ("Cannot add, remove, or change elements of InputActionAsset ... while one or more of its actions are enabled").
+  apply_saved(saved);
   for (Key& k : g.keys)
-    for (size_t d = 0; d < kDevices; ++d) {
-      if (!k.actions[d]) continue;
-      for (const SavedBinding& s : saved)
-        if (s.key == k.desc.id && s.device == static_cast<Device>(d))
-          phasmo::InputActionRebindingExtensions::ApplyBindingOverride(k.actions[d], make_string(s.path), nullptr,
-                                                                       nullptr);
-      phasmo::InputAction::Enable(k.actions[d]);
-    }
+    for (size_t d = 0; d < kDevices; ++d)
+      if (k.actions[d]) phasmo::InputAction::Enable(k.actions[d]);
   return true;
 }
 
-// Saves the players' rebindings when they changed since the last save.
+// Saves the players' rebindings when they changed since the last save: as the keybinds page's Apply stores the game's.
 void save_changes() {
   std::vector<SavedBinding> now;
   for (const Key& k : g.keys)
@@ -246,6 +251,24 @@ void save_changes() {
   g.lastSaved = text;
 }
 
+// The keybinds page decides when a rebinding counts, as it does for the game's own keys (sdk/map/Input.h,
+// ControlsManager): Apply stores, Reset takes every override off unstored, and leaving the page loads the stored ones
+// back, dropping what was not applied.
+void detour_apply(Original<phasmo::ControlsManager::ApplyButton> original, void* page) {
+  original(page);
+  if (g.ready) save_changes();
+}
+void detour_reset(Original<phasmo::ControlsManager::ResetButton> original, void* page) {
+  original(page);
+  if (g.ready && g.asset && alive(g.asset)) phasmo::InputActionRebindingExtensions::RemoveAllBindingOverrides(g.asset);
+}
+void detour_closed(Original<phasmo::ControlsManager::OnDisable> original, void* page) {
+  original(page);
+  if (!g.ready || !g.asset || !alive(g.asset)) return;
+  phasmo::InputActionRebindingExtensions::RemoveAllBindingOverrides(g.asset);
+  apply_saved(parse_saved(read_file(g.file)));
+}
+
 // The device of a keybinds row, by the path of the binding it rebinds; false for one of this mod's own rows or one
 // whose binding cannot be read.
 bool row_device(void* row, Device& out) {
@@ -261,56 +284,6 @@ bool row_device(void* row, Device& out) {
       return true;
     }
   return false;
-}
-
-// The keybinds menu's list a row sits in: its parent, laid out by a HorizontalOrVerticalLayoutGroup, under the local
-// player's own PCPlayer when there is one (the menu is in each player's journal). Null for anything else: the training
-// whiteboards' rows sit on no layout, and another player's journal holds a menu too.
-void* menu_list(void* row) {
-  void* t = phasmo::Component::get_transform(row);
-  void* list = t ? phasmo::Transform::get_parent(t) : nullptr;
-  void* groupType = phasmo::HorizontalOrVerticalLayoutGroup::type.type_object();
-  if (!list || !groupType || !phasmo::Component::GetComponent(list, groupType)) return nullptr;
-  void* net = phasmo::Network::get_Instance();
-  void* player = net ? phasmo::Network::localPlayer.get(net) : nullptr;
-  void* playerTransform = player && alive(player) ? phasmo::Component::get_transform(player) : nullptr;
-  if (playerTransform && !phasmo::Transform::IsChildOf(t, playerTransform)) return nullptr;
-  return list;
-}
-
-// A divider beside `row` in its list (a sibling with no RebindActionUI: the game's lists put one between rows), or null.
-void* divider_beside(void* row) {
-  void* t = phasmo::Component::get_transform(row);
-  void* list = t ? phasmo::Transform::get_parent(t) : nullptr;
-  if (!list) return nullptr;
-  const int32_t at = phasmo::Transform::GetSiblingIndex(t), count = phasmo::Transform::get_childCount(list);
-  void* rowType = phasmo::RebindActionUI::type.type_object();
-  for (const int32_t i : {at - 1, at + 1}) {
-    if (i < 0 || i >= count) continue;
-    void* sibling = phasmo::Transform::GetChild(list, i);
-    if (sibling && !phasmo::Component::GetComponent(sibling, rowType)) return phasmo::Component::get_gameObject(sibling);
-  }
-  return nullptr;
-}
-
-// The height a child takes in its list: its own and the layout's spacing before it.
-float taken_height(void* object, float spacing) {
-  void* t = object ? phasmo::GameObject::get_transform(object) : nullptr;
-  return t ? phasmo::RectTransform::get_rect(t).height + spacing : 0.0f;
-}
-
-// Makes the list's scroll content taller by `by`, so the scroll reaches what was added at its end: the list itself, or
-// its parent when the list is stretched to its parent's height (the game's Layout in its Content, whose height is
-// fixed to the game's own rows).
-void grow_list(void* list, float by) {
-  if (by <= 0.0f) return;
-  const phasmo::Vector2 lo = phasmo::RectTransform::get_anchorMin(list), hi = phasmo::RectTransform::get_anchorMax(list);
-  void* target = lo.y != hi.y ? phasmo::Transform::get_parent(list) : list;
-  if (!target) return;
-  phasmo::Vector2 size = phasmo::RectTransform::get_sizeDelta(target);
-  size.y += by;
-  phasmo::RectTransform::set_sizeDelta(target, size);
-  g.grown.push_back({target, by});
 }
 
 // A copy of `templ`'s GameObject at the end of its list (Instantiate puts it last), and the copy's RebindActionUI; null
@@ -344,23 +317,9 @@ void* copy_row(void* templ, const char* what, void*& copyObject) {
 // name in a child text with a TextLocaliserUI of its own (ActionNameText), the row's first.
 void* label_of(void* row) {
   if (void* label = phasmo::RebindActionUI::m_ActionLabel.get(row)) return label;
-  void* localiser = phasmo::Component::GetComponentInChildren(row, phasmo::TextLocaliserUI::type.type_object(), true);
-  return localiser ? phasmo::Component::GetComponent(localiser, phasmo::TextMeshProUGUI::type.type_object()) : nullptr;
-}
-
-// Writes `text` on a copied row's label. The label's TextLocaliserUI goes first: it writes the game's words for its key
-// whenever it wakes, and a copy made while the menu is hidden wakes only when the player opens it, after this.
-// Returns the label, or null when the row has none.
-void* label_row(void* row, const std::string& text) {
-  void* label = label_of(row);
-  if (!label) {
-    PM_LOG("keys: %s finds no name text on its copy of a row; it keeps the game's words", g.owner.c_str());
-    return nullptr;
-  }
-  if (void* localiser = phasmo::Component::GetComponent(label, phasmo::TextLocaliserUI::type.type_object()))
-    phasmo::Object::DestroyImmediate(localiser, false);
-  phasmo::TMP_Text::set_text(label, make_string(text));
-  return label;
+  void* name = rows::name_text(row);
+  if (!name) PM_LOG("keys: %s finds no name text on its copy of a row; it keeps the game's words", g.owner.c_str());
+  return name;
 }
 
 // A heading over the mod's rows at the end of `templ`'s list: a copy of the row showing only its label, with the
@@ -369,16 +328,10 @@ void* make_heading(void* templ) {
   void* copyObject = nullptr;
   void* copy = copy_row(templ, "heading", copyObject);
   if (!copy) return nullptr;
-  // Bold and a quarter larger than a row's name (the user's ruling, 2026-11-10), by TextMeshPro's rich text tags.
-  void* label = label_row(copy, "<b><size=125%>" + g.title + "</size></b>");  // found once: its localiser goes
-  void* labelTransform = label ? phasmo::Component::get_transform(label) : nullptr;
-  void* root = phasmo::GameObject::get_transform(copyObject);
-  const int32_t children = root ? phasmo::Transform::get_childCount(root) : 0;
-  for (int32_t i = 0; i < children; ++i) {
-    void* child = phasmo::Transform::GetChild(root, i);
-    if (child && !(labelTransform && phasmo::Transform::IsChildOf(labelTransform, child)))
-      phasmo::GameObject::SetActive(phasmo::Component::get_gameObject(child), false);
-  }
+  void* label = label_of(copy);  // found once: its localiser, by which it is found, goes
+  const float size = rows::heading(label, g.title);
+  PM_LOG("keys: %s's heading at %.1f", g.owner.c_str(), size);
+  rows::show_only(phasmo::GameObject::get_transform(copyObject), label ? phasmo::Component::get_transform(label) : nullptr);
   phasmo::Object::DestroyImmediate(copy, false);
   return copyObject;
 }
@@ -393,7 +346,7 @@ void* make_row(void* templ, Key& k, size_t d) {
   void* id = binding ? phasmo::InputBinding::m_Id.get(binding) : nullptr;
   phasmo::RebindActionUI::set_bindingId(copy, id);
   phasmo::RebindActionUI::set_actionReference(copy, phasmo::InputActionReference::Create(k.actions[d]));
-  label_row(copy, k.desc.label);
+  rows::label(label_of(copy), k.desc.label);
   // Off and on, so the row shows the new binding as it does when the menu opens.
   const bool on = phasmo::GameObject::get_activeSelf(copyObject);
   phasmo::GameObject::SetActive(copyObject, false);
@@ -411,12 +364,7 @@ void remove_rows() {
   for (Held& h : g.extras)
     if (h && alive(h)) phasmo::Object::Destroy(h, 0.0f);
   g.extras.clear();
-  for (State::Grown& grown : g.grown)
-    if (grown.rect && alive(grown.rect)) {
-      phasmo::Vector2 size = phasmo::RectTransform::get_sizeDelta(grown.rect);
-      size.y -= grown.by;
-      phasmo::RectTransform::set_sizeDelta(grown.rect, size);
-    }
+  for (const rows::Grown& grown : g.grown) rows::shrink(grown);
   g.grown.clear();
 }
 
@@ -450,17 +398,17 @@ void ensure_rows() {
         missing = true;
   if (!missing) return;
   void* rowType = phasmo::RebindActionUI::type.type_object();
-  const RefArray rows{rowType ? phasmo::Object::FindAllOfType(rowType, true) : nullptr};
+  const RefArray found{rowType ? phasmo::Object::FindAllOfType(rowType, true) : nullptr};
   std::array<void*, kDevices> templ{};
-  for (size_t i = 0; i < rows.size(); ++i) {
+  for (size_t i = 0; i < found.size(); ++i) {
     Device d{};
-    if (rows[i] && menu_list(rows[i]) && row_device(rows[i], d)) templ[static_cast<size_t>(d)] = rows[i];
+    if (found[i] && rows::journal_list(found[i]) && row_device(found[i], d)) templ[static_cast<size_t>(d)] = found[i];
   }
   // What the search found, logged when it changes (the keybinds menu loads with some scenes and not others).
-  const std::string seen = std::to_string(rows.size()) + (templ[0] ? " k" : " -") + (templ[1] ? "g" : "-");
+  const std::string seen = std::to_string(found.size()) + (templ[0] ? " k" : " -") + (templ[1] ? "g" : "-");
   if (seen != g.lastSeen) {
     PM_LOG("keys: %s finds %zu keybinds rows (a keyboard row to copy: %s, a gamepad row: %s)", g.owner.c_str(),
-           rows.size(), templ[0] ? "yes" : "no", templ[1] ? "yes" : "no");
+           found.size(), templ[0] ? "yes" : "no", templ[1] ? "yes" : "no");
     g.lastSeen = seen;
   }
   // Only a row the menu can now take: one with no row of its device to copy waits for one.
@@ -484,22 +432,20 @@ void ensure_rows() {
     void* first = nullptr;  // a row of this list, for the heading and the divider
     for (size_t d = 0; d < kDevices && !first; ++d)
       if (list_of(d) == list) first = templ[d];
-    void* group = phasmo::Component::GetComponent(list, phasmo::HorizontalOrVerticalLayoutGroup::type.type_object());
-    const float spacing = group ? phasmo::HorizontalOrVerticalLayoutGroup::get_spacing(group) : 0.0f;
-    void* divider = divider_beside(first);
+    void* divider = rows::divider_beside(first);
     float added = 0.0f;
     // A divider before each thing added, as the game's list puts one between rows.
     const auto add_divider = [&] {
       void* copy = divider ? phasmo::Object::Instantiate(divider, list, false) : nullptr;
       if (!copy) return;
       g.extras.push_back(copy);
-      added += taken_height(copy, spacing);
+      added += rows::taken_height(copy, list);
     };
     if (!g.title.empty()) {
       add_divider();
       if (void* h = make_heading(first)) {
         g.extras.push_back(h);
-        added += taken_height(h, spacing);
+        added += rows::taken_height(h, list);
       }
     }
     for (Key& k : g.keys)
@@ -508,10 +454,10 @@ void ensure_rows() {
           add_divider();
           k.rows[d] = make_row(templ[d], k, d);
           if (!k.rows[d]) continue;
-          added += taken_height(phasmo::Component::get_gameObject(k.rows[d]), spacing);
+          added += rows::taken_height(phasmo::Component::get_gameObject(k.rows[d]), list);
           PM_LOG("keys: %s.%s has its row in the keybinds menu (device %zu)", g.owner.c_str(), k.desc.id.c_str(), d);
         }
-    grow_list(list, added);
+    if (rows::Grown grown = rows::grow(list, added); grown.rect) g.grown.push_back(std::move(grown));
   }
 }
 
@@ -521,6 +467,12 @@ void begin_keys(std::string_view owner, std::string_view title, std::filesystem:
   clear_keys();
   g.owner = owner;
   g.title = title;
+  g.followsPage = hook<phasmo::ControlsManager::ApplyButton>(&detour_apply, "keys: the keybinds page's Apply") &&
+                  hook<phasmo::ControlsManager::ResetButton>(&detour_reset, "keys: the keybinds page's Reset") &&
+                  hook<phasmo::ControlsManager::OnDisable>(&detour_closed, "keys: the keybinds page closing");
+  if (!g.followsPage)
+    PM_LOG("keys: %s cannot follow the keybinds page's Apply in this game build: a rebinding is saved at once",
+           g.owner.c_str());
   g.file = std::move(file);
 }
 
@@ -556,7 +508,7 @@ void tick_keys() {
     g.lastSaved = format_saved(parse_saved(read_file(g.file)));
     g.rowTicks = kRowSearchTicks - 1;  // look for the menu at once
   }
-  save_changes();
+  if (!g.followsPage) save_changes();
   ensure_rows();
   park_while_shown();
 }

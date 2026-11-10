@@ -1,7 +1,7 @@
 #pragma once
 
 // How the Emotes wheel looks: the author's design (docs/superpowers/specs/2026-11-10-emotes-design.md, "The wheel") - a
-// grey disc with a centre circle, eight equal segments with a thin transparent gap between them, white silhouette icons,
+// black, slightly see-through disc (the author changed it from grey, 2026-11-10) with a centre circle, eight equal segments with a thin transparent gap between them, white silhouette icons,
 // the picked segment blue, its name in white under the disc, and a slight blur and vignette behind it. Every number
 // here is a placeholder for the author to set in game: colours, sizes, the gap and the effects' strengths. Sizes are in
 // the overlay canvas's units (1920 by 1080, scaled to the screen).
@@ -12,7 +12,7 @@ struct Rgba {
   float r, g, b, a;
 };
 
-inline constexpr Rgba kDiscGrey{0.32f, 0.32f, 0.32f, 0.85f};   ///< an unpicked segment and the centre circle
+inline constexpr Rgba kDiscBlack{0.0f, 0.0f, 0.0f, 0.75f};  ///< an unpicked segment and the centre circle: black, slightly see-through (the user, 2026-11-10)
 inline constexpr Rgba kPickedBlue{0.15f, 0.45f, 0.95f, 0.92f};  ///< the picked segment
 inline constexpr Rgba kIconWhite{1.0f, 1.0f, 1.0f, 1.0f};       ///< the icons, white silhouettes as supplied
 inline constexpr Rgba kNameWhite{1.0f, 1.0f, 1.0f, 1.0f};       ///< the picked emote's name
