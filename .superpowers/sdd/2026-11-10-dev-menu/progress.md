@@ -116,6 +116,25 @@ The user launches the game; no loader file ever enters the game folder.
   covers EndContract (allowed in a full offline contract; NoContract with none).
 - validate: 93/93, docs clean; gamecheck unchanged (record e300eda993f24799-cd106e0f8a54c36e.txt).
 
+## 2026-11-11: the user's first live try - the launcher ate the developer line
+
+- Symptom: Dev Menu in the launcher's list with the flag on, but absent from the in-game Mods panel,
+  no keybinds row, and the key did nothing; mods.log had no dev-menu lines at all (the gate's
+  Reading::None is silent by design). launcher.ini on disk held only the enabled= line.
+- Cause (our bug, not the game's): modlist::save_choice opens launcher.ini with trunc and rewrites it
+  from scratch, so any save - ticking a mod, or chosen()'s id migration - deleted the hand-edited
+  `developer=1` line between the launcher run that showed the mod and the game run that reads it.
+- Fix: save_choice keeps every line it does not own (developer=, comments); it replaces only the
+  enabled= line and its own header comment, writing one of each. The launcher's parse side already
+  handled CRLF (each_line strips \r), so a Notepad-edited flag parses fine.
+- Test (red first): the_saved_choice_keeps_the_lines_the_launcher_does_not_own - a CRLF ini with a
+  note, an old header, an old enabled line and developer=1; after the save the flag parses on, the
+  note survives, the old enabled line is gone (not shadowed), and the header appears once. Fixture
+  note: write the fixture bytes with ios::binary - a text-mode ofstream turns a literal "\r\n" into
+  "\r\r\n" on disk.
+- validate 93/93; no map entries moved, so no gamecheck record change.
+- For the user: put `developer=1` back in launcher.ini; ticking mods in the launcher now keeps it.
+
 ## Plan rows the v1 cut left out although their map entries exist (for the user to schedule)
 
 - Contract: objective board read-out (LevelValues.mainObjective, Objective.values) and the objective's

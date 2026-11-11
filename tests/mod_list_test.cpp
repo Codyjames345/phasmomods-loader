@@ -88,6 +88,29 @@ void the_first_choice_is_saved_so_later_mods_start_off() {
   fs::remove_all(root, error);
 }
 
+void the_saved_choice_keeps_the_lines_the_launcher_does_not_own() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / (L"pg-choice-dev-" + std::to_wstring(GetCurrentProcessId()));
+  std::error_code error;
+  fs::remove_all(root, error);
+  const fs::path ini = root / "data" / "launcher.ini";
+  fs::create_directories(ini.parent_path(), error);
+  // Written as bytes, like Notepad would leave them: the launcher reads with CRLF lines.
+  std::ofstream(ini, std::ios::binary) << "# My note\r\n# Mods the launcher starts. Written by the launcher.\r\nenabled=old.mod\r\ndeveloper=1\r\n";
+  CHECK(save_choice(ini, {"a", "b"}));
+  const std::string text = pm::text::read_file(ini);
+  bool present = false;
+  CHECK(parse_enabled(text, present) == (std::vector<std::string>{"a", "b"}) && present);
+  CHECK(parse_developer(text));  // the hand-edited developer line survives the launcher's save
+  CHECK(text.find("# My note") != std::string::npos);
+  CHECK(text.find("old.mod") == std::string::npos);  // the old enabled line is gone, not shadowed
+  size_t headers = 0;
+  for (size_t at = text.find("# Mods the launcher starts"); at != std::string::npos; at = text.find("# Mods the launcher starts", at + 1))
+    ++headers;
+  CHECK(headers == 1);  // and the header comment is not doubled
+  fs::remove_all(root, error);
+}
+
 void requires_is_parsed() {
   Manifest m;
   std::string error;
@@ -214,6 +237,7 @@ int main() {
   chooses_the_saved_mods_or_all_of_them();
   a_new_mod_stays_off_after_a_saved_choice();
   the_first_choice_is_saved_so_later_mods_start_off();
+  the_saved_choice_keeps_the_lines_the_launcher_does_not_own();
   reads_the_session_file();
   requires_is_parsed();
   third_party_mod_cannot_claim_the_reserved_id_author();

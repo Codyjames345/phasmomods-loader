@@ -208,7 +208,7 @@ inline Reading read_copy(const std::filesystem::path& dll, Manifest& out, std::s
 
 /** Whether launcher.ini asks for developer mods: a "developer=" line holding 1 or true (any other value,
  *  and no line at all, is off). Every player's default is off; the line is edited by hand, never written
- *  by the launcher. */
+ *  by the launcher, and the launcher keeps it when it saves the mod choice. */
 inline bool parse_developer(std::string_view text) {
   bool developer = false;
   each_line(text, [&](std::string_view line) {
@@ -243,10 +243,16 @@ inline std::vector<std::string> parse_enabled(std::string_view text, bool& prese
   return ids;
 }
 
-inline std::string write_enabled(const std::vector<std::string>& ids) {
-  std::string out = "# Mods the launcher starts. Written by the launcher.\nenabled=";
+inline constexpr const char* kChoiceHeader = "# Mods the launcher starts. Written by the launcher.";
+
+inline std::string enabled_line(const std::vector<std::string>& ids) {
+  std::string out = "enabled=";
   for (size_t i = 0; i < ids.size(); ++i) out += (i ? "," : "") + ids[i];
   return out + "\n";
+}
+
+inline std::string write_enabled(const std::vector<std::string>& ids) {
+  return std::string(kChoiceHeader) + "\n" + enabled_line(ids);
 }
 
 inline bool enabled(const std::vector<std::string>& ids, std::string_view id) {
@@ -272,12 +278,26 @@ inline std::vector<std::string> chosen(std::string_view launcherIni, const std::
   return present ? migrated_ids(ids) : installed;
 }
 
-/** Save `ids` as the choice in the launcher.ini at `file`, creating its folder. */
+/** Save `ids` as the choice in the launcher.ini at `file`, creating its folder. The enabled= line and
+ *  the launcher's own header comment are replaced; every other line already in the file is kept, so a
+ *  hand-edited developer= line or a player's own comment survives the launcher saving. */
 inline bool save_choice(const std::filesystem::path& file, const std::vector<std::string>& ids) {
   std::error_code error;
   std::filesystem::create_directories(file.parent_path(), error);
+  const std::string existing = text::read_file(file);
+  std::string kept;
+  size_t start = 0;
+  while (start <= existing.size()) {
+    size_t end = existing.find('\n', start);
+    if (end == std::string::npos) end = existing.size();
+    std::string_view line = std::string_view(existing).substr(start, end - start);
+    start = end + 1;
+    if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+    if (line.substr(0, 8) == "enabled=" || line == kChoiceHeader) continue;
+    kept += std::string(line) + "\n";
+  }
   std::ofstream out(file, std::ios::binary | std::ios::trunc);
-  out << write_enabled(ids);
+  out << std::string(kChoiceHeader) + "\n" + kept + enabled_line(ids);
   return static_cast<bool>(out);
 }
 
