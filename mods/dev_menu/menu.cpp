@@ -35,7 +35,7 @@ constexpr const char* kWhyKeys[] = {nullptr, i18n::key("dev-menu.why.not-offline
                                     i18n::key("dev-menu.why.no-player"),
                                     i18n::key("dev-menu.why.hunting"), i18n::key("dev-menu.why.not-hunting"),
                                     i18n::key("dev-menu.why.no-rooms"), i18n::key("dev-menu.why.dead"),
-                                    i18n::key("dev-menu.why.alive")};
+                                    i18n::key("dev-menu.why.alive"), i18n::key("dev-menu.why.no-truck")};
 
 // The sections, in the order they show down the left.
 constexpr int kSections = 6;
@@ -159,6 +159,7 @@ std::vector<Row> sectionRows(int section) {
       break;
     case 1:  // Contract
       add(Click, Action::UnlockDoor, 0, i18n::key("dev-menu.unlock-door"), NoValue);
+      add(Click, Action::EndContract, 0, i18n::key("dev-menu.end-contract"), NoValue);
       add(Click, Action::Leave, 0, i18n::key("dev-menu.leave"), NoValue);
       add(Click, Action::Quit, 0, i18n::key("dev-menu.quit"), NoValue);
       add(Read, Action::Info, 0, i18n::key("dev-menu.payout"), NumberPayout);
@@ -362,6 +363,16 @@ void run(const Row& r) {
   Switches& s = actions::switches();
   switch (r.action) {
     case Action::UnlockDoor: actions::unlock_main_door(); break;
+    case Action::EndContract: {
+      // The game's own truck path, refused honestly when the scene has no truck to ask. Its coroutine
+      // waits on the game's clock, so the menu steps out of the way: close() unpauses and the ending runs.
+      if (!actions::end_contract()) {
+        g_refusal = Why::NoTruck;
+        break;
+      }
+      close();
+      break;
+    }
     case Action::Leave:
       close();
       actions::leave();

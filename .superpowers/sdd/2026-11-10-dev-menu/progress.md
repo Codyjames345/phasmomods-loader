@@ -61,7 +61,9 @@ The user launches the game; no loader file ever enters the game folder.
    block-events toggle, each event kind fires unforced.
 7. Player rows: sanity 0/50/100, freeze, die, revive, god mode refuses a hunt's kill.
 8. Equipment row: a used consumable's saved stock stays.
-9. Contract rows: unlock the main door; Leave; Quit. Payout read-out matches the in-game result.
+9. Contract rows: unlock the main door; end the contract (the truck leaves a few seconds after the
+   click and the result screen follows, with the payout the contract earned); Leave; Quit. Payout
+   read-out matches the in-game result. With no contract, the end row shows the no-truck refusal.
 10. Game rows: tick speed 0/0.5/1/2 cycle (also while frozen, and closing keeps the new speed), pause toggle,
     session and single-player read-outs.
 11. Finish a dev-session contract (Leave and a full end): no XP, no money, no stats, no quest progress, no
@@ -88,13 +90,38 @@ The user launches the game; no loader file ever enters the game folder.
   entry's documented semantics; the four hooks are all created before enable_all and the host rolls the
   group back if the mod's start fails.
 
+## 2026-11-11: the end-the-contract row
+
+- RE (`re/out/exit_attempt.c`, `re/out/exit_coroutines.c`): `ExitLevel.StartAttemptExitLevel` is an ordinary
+  public method, not an RPC. It stops the object's coroutines, and when the object's ready bool (serialized
+  in the scene; the editor writes it, no game code does) is set, starts a coroutine that sets
+  `Network.sceneChanging`, RPCs the truck start-up sound through the object's own `PhotonView`, waits a fixed
+  scaled `WaitForSeconds`, then rechecks the bool: set still, it sends the game's own `ExitLevel.Exit` RPC
+  with the game's own sender; cleared meanwhile, it RPCs the stop sound and clears `sceneChanging`.
+  `LiftButton.NetworkedUse` calls the method only with use true and `PhotonNetwork.get_IsMasterClient()`.
+  In the decompile the yield reads as a MeshCombineStudio constructor: the linker folds both float ctors to
+  one address and the name table lists both (pitfall now in sdk/internals/reverse-engineering.md); the yield
+  type global and its use across unrelated coroutines settle it as the game's scaled wait, so a game held at
+  timeScale 0 never finishes leaving.
+- The row is therefore one call: find the scene's `ExitLevel` (cached, at most one search a second, the
+  inactive-object retry like the pause menu's) and call `StartAttemptExitLevel`. Offline this client is the
+  master, so this is exactly the call the game's own lift button makes; the mod never touches an RPC or a
+  PhotonMessageInfo. With no `ExitLevel` in the scene the row refuses (`Why::NoTruck`, reported at the click,
+  not from refuse()). The row closes the menu after starting, since the wait is scaled; the scene change the
+  ending causes is then handled by last round's recover() path.
+- SDK: `ExitLevel_StartAttemptExitLevel` was already a mapped entry; it gained api wrappers (`ExitLevel::type`
+  and `StartAttemptExitLevel`) with full notes, `sdk/systems/contract.md` gained "What
+  ExitLevel.StartAttemptExitLevel does", and the internals page gained the folded-ctor pitfall.
+- i18n: `dev-menu.end-contract` and `dev-menu.why.no-truck` (both PM_TEXT_AI). Tests: the rule table now
+  covers EndContract (allowed in a full offline contract; NoContract with none).
+- validate: 93/93, docs clean; gamecheck unchanged (record e300eda993f24799-cd106e0f8a54c36e.txt).
+
 ## Plan rows the v1 cut left out although their map entries exist (for the user to schedule)
 
 - Contract: objective board read-out (LevelValues.mainObjective, Objective.values) and the objective's
-  moneyReward number. End-contract-now (ExitLevel.Exit) was deliberately skipped in v1: its wrapper needs
-  a PhotonMessageInfo we would have to fabricate, which brushes the RPC rule; PauseMenuController
-  Leave/Quit cover the same ground today. A row through the game's own button press is the alternative -
-  the user's call.
+  moneyReward number. End-contract-now shipped 2026-11-11 through `ExitLevel.StartAttemptExitLevel`
+  (the game's own lift-button starter, so no RPC is touched; see the map entry note and
+  sdk/systems/contract.md).
 - Difficulty: the preset-index row (Difficulty.difficulty, the plan itself marks it verify); the ghost
   speed multiplier field (RE).
 - Ghost: kill-test rows (GhostHuntState.SetTarget, SetCloset, clear GhostAI.smudge), the live

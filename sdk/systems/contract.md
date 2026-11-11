@@ -16,7 +16,8 @@ must do").
 
 ## The two ends
 
-Both are RPCs every client runs, on different objects with their own views. Nothing shown stops both from arriving in one
+Both are RPCs every client runs, on different objects with their own views. Nothing shown stops both from
+arriving in one contract.
 
 | End | Sent when | Who sends |
 | --- | --- | --- |
@@ -24,6 +25,17 @@ Both are RPCs every client runs, on different objects with their own views. Noth
 | `GameController.Exit` | Every player is dead or gone. | The master only: the sending coroutine tests it, about five seconds after the all-dead test. |
 
 Each first checks its sender (see [photon](photon.md)); a refused call does nothing more.
+
+### What `ExitLevel.StartAttemptExitLevel` does
+
+The truck's lift button calls this on the master only, and nothing sends an RPC by name here: the method runs
+`ExitLevel.StopAllCoroutines`, and when the object's ready bool (a value serialized in the scene, which no
+game code writes) is set, starts a coroutine. That coroutine sets `Network.sceneChanging`, plays the truck's
+start-up sound through the object's own `PhotonView`, waits a fixed scaled `WaitForSeconds`, then reads the
+ready bool again: still set, it sends the game's own `ExitLevel.Exit` with the game's own sender; cleared in
+the meantime, it plays the stop sound and clears `Network.sceneChanging` instead. A scene with no ready
+ExitLevel starts nothing at all. Because the wait is scaled, a game held at `Time.timeScale` 0 never finishes
+leaving.
 
 ### When every player is dead or gone
 

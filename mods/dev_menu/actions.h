@@ -83,6 +83,13 @@ void set_frozen(bool value);
 void kill_local();
 void revive_local();
 void unlock_main_door();
+/** Ends the contract the way the game's own lift button does, by calling
+ *  ExitLevel.StartAttemptExitLevel on the scene's ExitLevel (offline this client is the master, so this
+ *  is the same call LiftButton.NetworkedUse makes). The game's coroutine then sends the game's own Exit
+ *  RPC with the game's own sender: the mod never touches an RPC. False, starting nothing, when the scene
+ *  has no ExitLevel (its serialized ready bool is an editor value, so in a truck-less scene the game
+ *  would do nothing either). */
+bool end_contract();
 void leave();
 void quit();
 void set_time_scale(float value);

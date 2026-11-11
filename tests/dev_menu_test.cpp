@@ -61,7 +61,8 @@ void a_full_offline_contract_allows_everything() {
   const Can c{.offline = true, .contract = true, .ghost = true, .difficulty = true, .player = true, .rooms = 4};
   for (const Action a : {Action::ForceHunt, Action::ClearCooldown, Action::Appear, Action::UnAppear,
                          Action::BumpSpeed, Action::ToggleEvents, Action::FireEvent, Action::UnlockDoor,
-                         Action::Leave, Action::Quit, Action::SetFriendly, Action::SetLoseEquipment,
+                         Action::EndContract, Action::Leave, Action::Quit, Action::SetFriendly,
+                         Action::SetLoseEquipment,
                          Action::BumpEvidence, Action::BumpType, Action::SetSanity, Action::ToggleFreeze,
                          Action::KillLocal, Action::SetGodMode, Action::SetKeepConsumables,
                          Action::SetPauseWhenOpen, Action::CycleTimeScale})
@@ -78,6 +79,7 @@ void rows_refuse_for_what_the_contract_lacks() {
   const Can menu{.offline = true};
   CHECK(refuse(Action::ForceHunt, menu) == Why::NoContract);
   CHECK(refuse(Action::UnlockDoor, menu) == Why::NoContract);
+  CHECK(refuse(Action::EndContract, menu) == Why::NoContract);
   CHECK(refuse(Action::Leave, menu) == Why::NoContract);
   CHECK(refuse(Action::SetFriendly, menu) == Why::NoDifficulty);
   CHECK(refuse(Action::SetSanity, menu) == Why::NoPlayer);

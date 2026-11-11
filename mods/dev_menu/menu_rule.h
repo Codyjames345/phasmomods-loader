@@ -69,7 +69,7 @@ inline bool keep_refuses_consume(bool keepConsumables) { return keepConsumables;
 // ---- What the rows may run right now ----
 // A row's click asks this first; the game's own guards still decide, and a game refusal shows its reason.
 enum class Action {
-  UnlockDoor, Leave, Quit,                       // Contract
+  UnlockDoor, EndContract, Leave, Quit,          // Contract
   ForceHunt, EndHunt, ClearCooldown, Appear, UnAppear, ApplyRoom, RandomRoom, PickRoom, BumpSpeed,  // Ghost
   ToggleEvents, FireEvent,                        // Ghost
   SetFriendly, SetLoseEquipment, BumpEvidence, BumpType,  // Difficulty
@@ -79,7 +79,7 @@ enum class Action {
 };
 
 enum class Why {
-  None, NotOffline, NoContract, NoGhost, NoDifficulty, NoPlayer, Hunting, NotHunting, NoRooms, Dead, Alive
+  None, NotOffline, NoContract, NoGhost, NoDifficulty, NoPlayer, Hunting, NotHunting, NoRooms, Dead, Alive, NoTruck
 };
 
 // What the game looks like to the menu right now, read every tick (actions.cpp fills it).
@@ -95,7 +95,8 @@ struct Can {
 };
 
 /** Why running `action` now is refused, or Why::None. Being offline is assumed (the menu shut otherwise)
- *  and kept as a defensive check. */
+ *  and kept as a defensive check. Why::NoTruck is not one of these rules: refuse() never returns it, it
+ *  is what the end-contract action reports when the running scene has no ExitLevel object to ask. */
 inline Why refuse(Action action, const Can& c) {
   if (!c.offline) return Why::NotOffline;
   switch (action) {
@@ -104,6 +105,7 @@ inline Why refuse(Action action, const Can& c) {
     case Action::Leave:
     case Action::Quit:
     case Action::UnlockDoor:
+    case Action::EndContract:
       return c.contract ? Why::None : Why::NoContract;
     case Action::ForceHunt:
     case Action::ClearCooldown:

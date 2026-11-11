@@ -463,6 +463,33 @@ void unlock_main_door() {
   if (setup && game::alive(setup)) SetupPhaseController::UnlockMainDoor(setup);
 }
 
+// The truck's ExitLevel object, for the end-contract row. Found the same careful way as the pause menu
+// (at most one scene search a second; the object may sit switched off).
+void* exit_level() {
+  static uint64_t nextSearch = 0;
+  static api::Held found;
+  const uint64_t now = static_cast<uint64_t>(
+      std::chrono::steady_clock::now().time_since_epoch() / std::chrono::milliseconds(1));
+  if (found && game::alive(found)) return found;
+  if (now < nextSearch) return nullptr;
+  nextSearch = now + 1000;
+  void* type = ExitLevel::type.type_object();
+  if (!type) return nullptr;
+  void* level = Object::FindObjectOfType(type, false);
+  if (!level) level = Object::FindObjectOfType(type, true);
+  found = level;
+  return level;
+}
+
+bool end_contract() {
+  // The game's own master-side starter, the call LiftButton.NetworkedUse makes on the master: its
+  // coroutine sends the game's own Exit RPC with the game's own sender. Nothing here is an RPC.
+  void* level = exit_level();
+  if (!level) return false;
+  ExitLevel::StartAttemptExitLevel(level);
+  return true;
+}
+
 void leave() {
   void* menu = pause_menu();
   if (menu) PauseMenuController::Leave(menu);

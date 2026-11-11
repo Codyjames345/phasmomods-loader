@@ -23,6 +23,7 @@
   "dev-menu.ghost-type-up": "Next type", // PM_TEXT_AI
   "dev-menu.reward": "Reward multiplier", // PM_TEXT_AI
   "dev-menu.unlock-door": "Unlock the main door", // PM_TEXT_AI
+  "dev-menu.end-contract": "End the contract (the truck leaves)", // PM_TEXT_AI
   "dev-menu.leave": "Leave the contract", // PM_TEXT_AI
   "dev-menu.quit": "Quit the game", // PM_TEXT_AI
   "dev-menu.payout": "Bonus payout", // PM_TEXT_AI
@@ -70,5 +71,6 @@
   "dev-menu.why.not-hunting": "the ghost is not hunting", // PM_TEXT_AI
   "dev-menu.why.no-rooms": "the level has no rooms yet", // PM_TEXT_AI
   "dev-menu.why.dead": "you are already dead", // PM_TEXT_AI
-  "dev-menu.why.alive": "you are not dead" // PM_TEXT_AI
+  "dev-menu.why.alive": "you are not dead", // PM_TEXT_AI
+  "dev-menu.why.no-truck": "this level has no truck to leave in" // PM_TEXT_AI
 }

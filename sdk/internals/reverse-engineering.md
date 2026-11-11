@@ -67,6 +67,11 @@ signature) and `re/map-addresses.tsv` (each map key's resolved value). Then:
 - **Which class a type global is.** For kind 1 the index is a type's index, not its definition's: find the definition
   in `global-metadata.dat` whose by-value type index is that number, and read its name. This named the coroutine class a
   `Door` method starts, and the static instances other methods read (`LevelController`, `GameController`).
+- **Two methods folded onto one address.** The linker folds bodies that compile identical, and `re/names.tsv` then lists
+  each original under that one address, so a decompile can name a call after the wrong one. `WaitForSeconds`' float
+  constructor shares an address with `MeshCombineStudio.MeshCombiner/LODSettings`'s, which made `ExitLevel`'s leaving
+  coroutine look like it yielded a LODSettings object. The type global the allocator just before takes is the class the
+  object really is (previous bullet), so read the allocation, not the constructor name.
 - **Virtual calls** show as a call through the object's class at a fixed offset. A class's new virtual methods take
   slots in the order of their metadata tokens, sixteen bytes each, so two known slots fix the rest; a byte search for
   indirect calls at that offset then finds a virtual method's callers, which `re/callers.mjs` cannot.

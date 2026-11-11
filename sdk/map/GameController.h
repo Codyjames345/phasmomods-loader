@@ -194,8 +194,10 @@ inline constexpr pm::sdk::EntryDesc GameController_AmountOfDeadPlayers{
     .key = "GameController.AmountOfDeadPlayers", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "GameController", .name = "AmountOfDeadPlayers"};
 
-/// Starts the truck's leaving: its coroutine sends ExitLevel.Exit, and LiftButton.NetworkedUse starts it only on the master
-/// with the doors closing. Decompiled.
+/// Starts the truck's leaving: its coroutine sets Network.sceneChanging, sends the truck's start-up sound
+/// by RPC, waits a fixed time, and sends ExitLevel.Exit by RPC - or, if the object's serialized ready bool
+/// (an editor value; no code writes it) is clear, sends the stop sound and clears sceneChanging instead.
+/// LiftButton.NetworkedUse starts it only on the master with the doors closing. Decompiled.
 inline constexpr pm::sdk::EntryDesc ExitLevel_StartAttemptExitLevel{
     .key = "ExitLevel.StartAttemptExitLevel", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "ExitLevel", .name = "StartAttemptExitLevel"};
@@ -446,6 +448,17 @@ struct GameController {
 
 /// The truck's exit.
 struct ExitLevel {
+  /// The ExitLevel type: klass(), is(obj) and type_object() (for Object.FindObjectOfType).
+  /// Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::ExitLevel> type{};
+  /// StartAttemptExitLevel(exit): the master's own starter for the truck leaving, what
+  /// LiftButton.NetworkedUse calls on it. StopAllCoroutines first; with the object's serialized ready
+  /// bool set (the editor writes it, no code does), it sets Network.sceneChanging, sends the truck's
+  /// start-up sound by RPC, waits a fixed scaled WaitForSeconds (a game held at timeScale 0 never
+  /// finishes the wait), checks that bool again and sends ExitLevel.Exit by RPC - the game's own path,
+  /// with the game's own sender; with the bool clear it sends the stop sound and clears sceneChanging
+  /// instead. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ExitLevel_StartAttemptExitLevel, void(void*)> StartAttemptExitLevel{};
   /// Exit(exit, &info): the contract's end on every client. A mod hooks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::ExitLevel_Exit, void(void*, void*)> Exit{};
   /// CheckMissions(): the main objective's check at the contract's end. A mod hooks it. Unresolved: does
