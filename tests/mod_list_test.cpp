@@ -177,6 +177,7 @@ void the_developer_flag_shows_developer_mods_and_hides_them() {
   CHECK(!parse_developer("# developer=1\n"));            // a comment is not the line
   CHECK(parse_developer("developer=0\ndeveloper=1\n"));  // the last line wins
   CHECK(!parse_developer("developerx=1\n"));             // not a prefix match
+  CHECK(parse_developer("developer= 1 \n"));             // spaces around the value are no problem
   // A developerOnly mod nobody asked for reads as no mod at all: not refused, no reason, nothing kept.
   const std::string dev = R"({"id":"someone.tool","name":"N","author":"Someone","version":"1.0.0","description":"D","dll":"x.dll","developerOnly":true})";
   Manifest m;

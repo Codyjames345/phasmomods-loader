@@ -101,7 +101,11 @@ void* pause_menu() {
   if (now < nextSearch) return nullptr;
   nextSearch = now + 1000;
   void* type = PauseMenuController::type.type_object();
-  void* menu = type ? Object::FindObjectOfType(type, false) : nullptr;
+  if (!type) return nullptr;
+  // The pause menu's object is usually active behind its closed canvas; if it is switched off, search
+  // again including inactive objects (the game reaches it the same way its own buttons do).
+  void* menu = Object::FindObjectOfType(type, false);
+  if (!menu) menu = Object::FindObjectOfType(type, true);
   found = menu;
   return menu;
 }
@@ -228,16 +232,27 @@ std::string ghost_line() {
   if (GhostAI::huntsHeldOff.get(ai)) line += " [held off]";
   if (GhostAI::canWander.get(ai)) line += " [can wander]";
   if (GhostAI::stayHome.get(ai)) line += " [stay home]";
+  if (GhostAI::speedFlag.get(ai)) line += " [speed flag]";
+  if (api::alive(GhostAI::smudge.get(ai))) line += " [smudged]";
+  if (GhostAI::flamesBlownOut.get(ai)) line += " [flames blown]";
   return line;
 }
 
 std::string ghost_identity() {
   void* c = controller();
   if (!c) return {};
+  // The plan's identity card: the type the contract shows and the behaviour the roll actually gave,
+  // which differ only for a Mimic (GhostController.ghostType and .behaviourType).
   const int32_t type = GhostController::ghostType.get(c);
   std::string out = std::to_string(type);
   const std::string id = api::content::id_of(type);
   if (!id.empty()) out += " " + id;
+  const int32_t behaviour = GhostController::behaviourType.get(c);
+  if (behaviour != type) {
+    out += " behaviour " + std::to_string(behaviour);
+    const std::string bid = api::content::id_of(behaviour);
+    if (!bid.empty()) out += " " + bid;
+  }
   return out;
 }
 

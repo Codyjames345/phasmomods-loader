@@ -312,13 +312,26 @@ bool build() {
   return true;
 }
 
+// Closing hides the whole canvas, rows, nav column and background together: the section switches hide
+// single rows, closing hides everything at once, so nothing of the menu can be left over the game.
 void show(bool on) {
   g_active = on;
-  if (g_title) ui::set_active(g_title, on);
-  if (g_hint) ui::set_active(g_hint, on);
-  if (g_refusalText) ui::set_active(g_refusalText, on);
-  setSectionShown(g_section, on);
+  if (g_canvas) ui::set_active(g_canvas, on);
   refreshNav();
+}
+
+// The canvas died under us (a scene change while the menu was open): put the game back as open() found
+// it and forget the rows; the next open builds fresh ones.
+void recover() {
+  float restore = 0.0f;
+  if (pause_close(g_pause, restore)) actions::set_time_scale(restore);
+  if (g_wasCursorLocked) game::lock_cursor();
+  g_active = false;
+  g_built = false;
+  g_canvas = nullptr;
+  g_rows.clear();
+  g_title = g_hint = g_refusalText = nullptr;
+  g_refusal = Why::None;
 }
 
 // ---- Clicks ----
@@ -440,13 +453,7 @@ bool is_open() { return g_active && g_canvas && game::alive(g_canvas); }
 void open() {
   if (is_open()) return;
   actions::note_session();  // the dev session starts: from here the contract can earn no progress
-  if (g_built && (!g_canvas || !game::alive(g_canvas))) {
-    // A scene change took the canvas away: build fresh rows rather than show dead ones.
-    g_canvas = nullptr;
-    g_built = false;
-    g_rows.clear();
-    g_title = g_hint = g_refusalText = nullptr;
-  }
+  if (g_built && (!g_canvas || !game::alive(g_canvas))) recover();  // a scene change took the canvas away
   if (!g_built && !build()) {
     PM_LOG("dev-menu: the menu canvas could not be made");
     return;
@@ -454,7 +461,8 @@ void open() {
   g_wasCursorLocked = game::cursor_locked();
   show(true);
   game::free_cursor();
-  actions::set_time_scale(pause_open(g_pause, actions::time_scale(), actions::switches().pauseWhenOpen));
+  const float scale = pause_open(g_pause, actions::time_scale(), actions::switches().pauseWhenOpen);
+  if (g_pause.frozen) actions::set_time_scale(scale);
 }
 
 void close() {
@@ -466,7 +474,11 @@ void close() {
 }
 
 void tick() {
-  if (!is_open()) return;
+  if (!g_active) return;
+  if (!g_canvas || !game::alive(g_canvas)) {
+    recover();  // the scene changed under the menu: the game goes back to how open() found it
+    return;
+  }
   refresh();
   float x = 0.0f, y = 0.0f;
   if (!game::mouse_left_pressed() || !game::mouse_position(x, y)) return;
@@ -493,6 +505,10 @@ void tick() {
 }
 
 void destroy() {
+  // pmmod_stop must not leave the game frozen or the cursor loose because the menu was open.
+  float restore = 0.0f;
+  if (pause_close(g_pause, restore)) actions::set_time_scale(restore);
+  if (g_active && g_wasCursorLocked) game::lock_cursor();
   if (g_canvas) ui::destroy(g_canvas);
   g_canvas = nullptr;
   g_built = false;

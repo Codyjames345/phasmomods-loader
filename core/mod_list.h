@@ -214,6 +214,8 @@ inline bool parse_developer(std::string_view text) {
   each_line(text, [&](std::string_view line) {
     if (line.substr(0, 10) != "developer=") return;
     std::string_view value = line.substr(10);
+    while (!value.empty() && value.front() == ' ') value.remove_prefix(1);
+    while (!value.empty() && value.back() == ' ') value.remove_suffix(1);
     developer = value == "1" || value == "true";
   });
   return developer;

@@ -67,3 +67,43 @@ The user launches the game; no loader file ever enters the game folder.
 11. Finish a dev-session contract (Leave and a full end): no XP, no money, no stats, no quest progress, no
     apocalypse movement; a contract started before the menu ever opened still earns normally.
 12. The menu never opens in any room, public or private.
+
+## 2026-11-11: review of the first implementation (fixes committed with it)
+
+- Close left the nav column and background on screen (only the row texts were hidden): close and open now
+  gate the whole canvas with one set_active, and the section switches keep hiding single rows.
+- A scene change while the menu was open could leave the game frozen or the cursor free: menu::tick
+  detects a dead canvas and recovers (restore the saved timeScale, take the cursor back, rebuild next
+  open), and pmmod_stop's destroy does the same before throwing the canvas away.
+- Leave/Quit found the pause menu only among active objects; it now retries the search with inactive
+  objects included (the note says the game's own buttons reach it the same way).
+- The plan's identity card and live-flag line were incomplete: ghost_identity now shows ghostType plus
+  behaviourType when they differ (the Mimic), and ghost_line adds speedFlag, smudge and flamesBlownOut.
+  The speedFlag entry was mapped but had no api wrapper; it has one now (sdk/map/GhostAI.h).
+- parse_developer tolerates spaces around the value; the launcher.ini test covers it.
+- Checked and fine: the key path <Keyboard>/backquote is this repository's own binding name
+  (core/bindings.cpp maps it to VK_OEM_3); no new entry sits on an obfuscated class (Time, Difficulty,
+  LevelValues, SetupPhaseController, EquipmentInfo, PauseMenuController, PlayerSanity are the game's own
+  names, and gamecheck resolves all 1862 with 0 missing); Kill's detour returning false matches the
+  entry's documented semantics; the four hooks are all created before enable_all and the host rolls the
+  group back if the mod's start fails.
+
+## Plan rows the v1 cut left out although their map entries exist (for the user to schedule)
+
+- Contract: objective board read-out (LevelValues.mainObjective, Objective.values) and the objective's
+  moneyReward number. End-contract-now (ExitLevel.Exit) was deliberately skipped in v1: its wrapper needs
+  a PhotonMessageInfo we would have to fabricate, which brushes the RPC rule; PauseMenuController
+  Leave/Quit cover the same ground today. A row through the game's own button press is the alternative -
+  the user's call.
+- Difficulty: the preset-index row (Difficulty.difficulty, the plan itself marks it verify); the ghost
+  speed multiplier field (RE).
+- Ghost: kill-test rows (GhostHuntState.SetTarget, SetCloset, clear GhostAI.smudge), the live
+  baseSpeed x sightSpeedUp product, GhostAI.EventPick roll, forced interaction (GhostActivity.TryInteract,
+  NormalInteraction, GetDoorToOpen, TwinInteraction), the type ability row, the throw row, model show/hide
+  via GhostAI.model renderers, givenEvidence read-out plus the never-synced dev override, and the type-flag
+  dials (SetNewBansheeTarget, thayeStep/thayeThreshold, galluState, dayanState, interactionBoost).
+- Player: stamina set/refill (Player.stamina).
+- Equipment: the loadout reset rows (InventoryEquipment.ResetItem, ReturnCommittedItem,
+  InventoryManager.ReturnItemstoInventory; lobby-side).
+- Sections 6 Debug HUD and ESP, the sensors read-out, and section 7 Loader are whole-feature follow-ups,
+  not oversights of v1.
