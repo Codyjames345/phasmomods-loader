@@ -31,7 +31,7 @@ extern "C" {
 /// The host contract's minor version this header describes. Within a major version a host runs mods
 /// built for its own minor version or an older one.
 /// @since Contract 2.0
-#define PMMOD_API_MINOR 3u
+#define PMMOD_API_MINOR 4u
 /// Major in the high 16 bits, minor in the low 16. Version 1 (the first contract) had no minor.
 /// @since Contract 2.0
 #define PMMOD_API_VERSION ((PMMOD_API_MAJOR << 16) | PMMOD_API_MINOR)
@@ -815,6 +815,15 @@ struct PmHostApi {
   /// not installed. The text lasts until the mods next start afresh: copy it to keep it. Main thread.
   /// @since Contract 2.3
   const char* (*mod_name)(const char* modId);
+  /// Added in version 2.4, after mod_name: a UnityAction (the game's delegate type for a no-argument UI event),
+  /// made the way the game makes its own listeners: bound to `target`, which must be a managed object (a
+  /// UnityEvent skips a listener whose target is a destroyed Unity object; key your own state off the `target`
+  /// the listener is called with), and calling `listener` when invoked. `listener` runs inside the game's
+  /// managed call on the main thread: it must not throw. Null, making nothing, when the game's UnityAction
+  /// constructor or Invoke did not resolve or `target` or `listener` is null. Keep the action alive as long as
+  /// the event should call it; the mod adds it to the event with `phasmo::UnityEvent::AddListener`. Main thread.
+  /// @since Contract 2.4
+  void* (*unity_action_new)(void* target, void (*listener)(void* target));
   /// @}
 };
 

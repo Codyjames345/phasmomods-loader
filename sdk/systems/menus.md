@@ -111,6 +111,21 @@ lays a whole list out with exactly one line between every pair of rows the playe
 dividers away and copies one line in before every row but the first, and gives it all back when the mod's rows go. `rows::line_divider` picks the line to copy: the keybinds
 page's, when one of its lists is loaded, and the page's own divider when none is (the user's ruling).
 
+## Unity's UI input during a contract
+
+Every click, hover and keyboard or gamepad move in any UI, the game's or a mod's, is routed by Unity's one
+`EventSystem` through its one input module (`EventSystem.currentInputModule`). The game keeps that module
+switched off during a contract: `JournalController.OpenCloseJournal`, the journal's own toggle, switches it
+on with `Behaviour.set_enabled` only while the journal shows, and off again when it closes (read from its
+decompile, 2026-11-11). So outside the journal no canvas takes clicks and no menu takes arrow keys: a mod
+that wants its own UI to answer the player has to run that module while its UI is up, and give the state
+back afterwards, exactly as `sdk/api/buttons.h` does. The same journal toggle calls
+`PCCanvas.PausePlayerInPlace` on the local player's HUD (its entry note in `sdk/map/Player.h`): the game's
+way to hold the player still and free the cursor while an overlay is up.
+
+A scene always has an `EventSystem`: the game's `EventSystemChecker`, present where Unity's own may be
+absent, makes one with its input module at scene start when the scene has none (decompiled 2026-11-11).
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/menus.md).

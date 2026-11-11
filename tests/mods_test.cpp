@@ -310,9 +310,9 @@ void dropped_content_keeps_its_owner_off(const fs::path& data) {
 }
 
 // A mod built against an older minor version of contract 2 (`minor`, from `dll`) loads and starts in
-// the 2.3 host: the contract only grew at the end.
+// the 2.4 host: the contract only grew at the end.
 void older_minor_still_loads(const fs::path& data, const char* dll, uint32_t minor) {
-  CHECK(PMMOD_API_VERSION == ((2u << 16) | 3u));
+  CHECK(PMMOD_API_VERSION == ((2u << 16) | 4u));
   pm::log::set_sink(&capture, "");
   g_lines.clear();
   pm::mods::set_installed(data, fake_install(dll));

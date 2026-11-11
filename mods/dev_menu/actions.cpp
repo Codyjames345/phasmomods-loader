@@ -453,6 +453,15 @@ void set_frozen(bool value) {
   g_frozen = value;
 }
 
+void pause_player(bool held) {
+  // The game's own hold for a full-screen overlay, what opening the journal does (PCCanvas's own entry
+  // note): no walking, no looking, crosshair away, cursor free. Nothing at the main menu, where there is
+  // no LocalPCPlayer.
+  void* rig = game::local_player_component();
+  void* hud = rig ? LocalPCPlayer::canvas.get(rig) : nullptr;
+  if (hud) PCCanvas::PausePlayerInPlace(hud, held);
+}
+
 void kill_local() {
   // The documented mod path for a kill outside a hunt (sdk/systems/players.md): the master runs it with
   // the hunt's own death type, offline this client is the master.

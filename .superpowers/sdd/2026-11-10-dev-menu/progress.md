@@ -161,6 +161,72 @@ The user launches the game; no loader file ever enters the game folder.
 - The user also asked about public lobbies still being listed at the main menu: expected. The loader
   rules are about joining - every mod is off in a public room - and never touch the vanilla browser.
 
+## 2026-11-11: third live try - the menu was hand-drawn, so the game's UI never saw it (fixed)
+
+- Symptoms the user reported: the camera kept following the mouse behind the menu; rows could not be
+  selected and had no hover highlight; no keyboard navigation; and closing the menu set the graphics
+  pulsing bright and dark and then a black screen (game still running) - that last one unexplained yet,
+  the next live try watches it (it is not reproducible offline; if it survives the fixes it goes to
+  FINDINGS.md as a game issue with our steps).
+- Cause (all ours): the canvas was painted, not built. The rows were RawImage bars with no Button
+  component, the canvas had no GraphicRaycaster, and the click came from the mod polling the mouse. And
+  the game never knew a menu was up: nothing held the player, so the look stayed live. Reading the game
+  settled the rest (`re/out/evsys.c`): `JournalController.OpenCloseJournal` calls
+  `EventSystem.currentInputModule.set_enabled(journalOpen)` - during a contract the EventSystem's one
+  input module is switched OFF, so no canvas of any kind takes clicks and no menu takes arrow keys
+  until something switches it on; the same toggle calls `PCCanvas.PausePlayerInPlace` (journal, its
+  options page, and `VoiceRecognitionUI.ToggleUI` are that method's only callers).
+- RE facts, recorded in the map notes and sdk/systems/menus.md ("Unity's UI input during a contract"):
+  `FirstPersonController.EnableMovement(on)` writes its bool into the controller's two movement flags
+  and with false also freezes the player's Rigidbody rotation (enabling never unfreezes);
+  `PausePlayerInPlace(paused)` skips when the movement already matches the request, refuses the release
+  when one component of the player holds an unidentified bool, and otherwise cuts walk/look, hides the
+  crosshair, resets item sway, switches the HUD CanvasGroup interactable off/on and follows the game's
+  cursor lock. New map entries: `PCCanvas.PausePlayerInPlace`, `FirstPersonController` and
+  `FirstPersonController.EnableMovement`, `EventSystem.SetSelectedGameObject` (the EventSystem type,
+  `get_current` and `currentInputModule` were already mapped). `EventSystemChecker.Awake` makes an
+  EventSystem with its input module when a scene lacks one.
+- The user chose the full vanilla route for the fix (their answer, 2026-11-11). Contract 2.4 adds
+  `unity_action_new(target, listener)` at the end of PmHostApi: a UnityAction made the way the host's own
+  menu panel makes them (`runtime_services::delegate_new` over the game's UnityAction ctor/Invoke; the
+  listener takes the delegate's target, the instance-method calling convention leaves the hidden
+  MethodInfo unread). `target` must be a managed object; key state off the target it is called with.
+- New `sdk/api/buttons.h` (+ .cpp, pmmod): `attach` (the game's Button on the mod's own Graphic;
+  `Selectable.Awake` takes the same object's Graphic as its target, decompiled, so the game's colour tints
+  work on a component added at runtime), `catch_pointer` (a GraphicRaycaster on the canvas), `on_click`
+  (the host's action added to the button's own onClick; a small table maps the target back to the mod's
+  handler; re-wiring replaces, destroyed buttons are pruned and silent), `forget`, and the input-module
+  trio plus `select` (EventSystem.current / SetSelectedGameObject, so arrow keys and the gamepad start
+  from the menu).
+- The mod: rows are bars carrying real Buttons (bar colour 9% white so the game's own hover/press tints
+  show), the canvas gets a raycaster, open() borrows the input module (remembering its state), calls
+  `actions::pause_player(true)` (the journal's own hold) and selects the section's first row; section
+  clicks re-select; tick re-asserts the module and the hold (closing the journal mid-menu takes both
+  away, and both calls skip a state that already matches); close/recover/destroy give both back; the
+  mouse-polling block is gone. No new player-facing text; no i18n change.
+- Tests: new `buttons` (offline, over the fake: attach idempotence, raycaster, click reaches the handler
+  with its user, re-wire, forget, destroyed button silent and pruned, module read/switch, selection by
+  component/GameObject/clear). The fake host gained `unity_action_new` (records asks, answers a token)
+  with `fake::unity_actions()`. mods_test now pins contract 2.4. Note for test authors: a TU with static
+  `Held`s ending on live handles can crash in static teardown behind the fake (destruction order) -
+  empty the table (forget) before exit; buttons_test does.
+- validate 94/94 (buttons new, mods version line updated), docs clean, package/stage/pinned/release pass.
+  gamecheck on the same record e300eda993f24799-cd106e0f8a54c36e.txt: 1866 entries, 1754 resolved, 0
+  missing, 0 ambiguous; the four new entries all resolve (PausePlayerInPlace, EnableMovement, the type,
+  SetSelectedGameObject).
+
+## Smoke list addenda for the next live try
+
+13. Solo contract, menu open: the camera and crosshair stay still under the menu (the journal's hold),
+    the mouse is free; rows show the game's hover and press look; arrows/gamepad move a selection, Enter
+    or A clicks; closing gives movement, crosshair, cursor lock and the game's HUD back, and the input
+    module goes back to the state open() found.
+14. Open the menu, press J for the journal, close it, then use the menu: it keeps working (the mod
+    re-asserts the input module and the hold next frame).
+15. Watch the graphics on close: the bright/dark pulsing and black screen from the third try must not
+    come back. If it does, the camera hold was not the cause - file it in FINDINGS.md as a game
+    behaviour with our exact steps and retest at the next build.
+
 ## Plan rows the v1 cut left out although their map entries exist (for the user to schedule)
 
 - Contract: objective board read-out (LevelValues.mainObjective, Objective.values) and the objective's

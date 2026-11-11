@@ -1,15 +1,20 @@
 // The dev menu on screen. One overlay canvas over the game's 1920x1080 layout: the six sections down the
-// left, the current section's rows on the right, each row one line of plain text over a click area (the
-// user's call, 2026-11-10: the menu itself needs no vanilla widget dressing). Every value shown is reread
-// from the game every frame; every click goes through menu_rule.h's refuse() before actions.cpp runs it,
-// and a refusal shows its reason on the bottom line rather than working around a game guard.
+// left, the current section's rows on the right, each row a bar carrying the game's own Button component
+// with its line of text over it, so hover, press, selection and arrow-key navigation are all the game's own
+// (the user's live-test ruling, 2026-11-11: hand-polled click areas gave none of that). The canvas gets a
+// GraphicRaycaster, and while the menu is open the game's UI input module runs again (the game keeps it off
+// outside its journal) and the player is held in place as the journal holds them. Every value shown is
+// reread from the game every frame; every click goes through menu_rule.h's refuse() before actions.cpp runs
+// it, and a refusal shows its reason on the bottom line rather than working around a game guard.
 #include "menu.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <string>
 #include <vector>
 
 #include "actions.h"
+#include "buttons.h"
 #include "game.h"
 #include "held.h"
 #include "log.h"
@@ -63,7 +68,7 @@ struct Row {
   int arg = 0;                   // a row's parameter: a delta, a sanity value, a direction
   const char* label = "";        // the row's words, a key in the mod's table
   ValueKind value = NoValue;
-  void* hit = nullptr;           // the invisible click area
+  void* hit = nullptr;           // the row's bar: the GameObject the game's Button sits on
   void* text = nullptr;          // the line itself
 };
 
@@ -75,6 +80,10 @@ int g_roomPick = 0;       // the room picker's cursor index
 int g_eventPick = 0;      // the event picker's cursor index
 Pause g_pause;
 bool g_wasCursorLocked = true;
+// Unity's UI input module, borrowed while the menu is open: the game runs it only while its journal is
+// open, and without it no canvas takes clicks and no menu takes arrow keys.
+void* g_module = nullptr;
+bool g_moduleWas = false;
 Why g_refusal = Why::None;  // the last refused click, shown until a click works
 std::vector<Row> g_rows;
 void* g_title = nullptr;
@@ -215,7 +224,16 @@ const ui::Color kDim{0.65f, 0.65f, 0.65f, 1.0f};
 const ui::Color kSelect{0.98f, 0.85f, 0.37f, 1.0f};
 const ui::Color kRefuse{1.0f, 0.45f, 0.45f, 1.0f};
 const ui::Color kBack{0.0f, 0.0f, 0.0f, 0.72f};
-const ui::Color kHit{0.0f, 0.0f, 0.0f, 0.0f};  // a click area you cannot see
+const ui::Color kHit{1.0f, 1.0f, 1.0f, 0.09f};  // the row's bar: the game's Button brightens it on hover
+
+// A row's index travels to its click handler as the wiring's user pointer.
+void* toUser(size_t i) { return reinterpret_cast<void*>(static_cast<uintptr_t>(i)); }
+size_t fromUser(void* user) { return static_cast<size_t>(reinterpret_cast<uintptr_t>(user)); }
+
+void rowClicked(void* user);
+void selectSectionRow();
+void borrowInput();
+void returnInput();
 
 // The layout, in canvas units about the canvas centre (the emotes wheel's convention).
 constexpr float kTop = 380.0f;      // the first row's line
@@ -248,6 +266,7 @@ bool build() {
   void* canvas = ui::create_canvas("pm dev menu", 30000);
   if (!canvas) return false;
   g_canvas = canvas;
+  api::buttons::catch_pointer(canvas);  // without a GraphicRaycaster the canvas catches no pointer at all
   const ui::Vec2 mid{0.5f, 0.5f};
   if (void* back = ui::create_image(canvas, "pm dev menu back", kBack))
     ui::place(back, mid, mid, {0, 0}, {1920, 1080});
@@ -307,6 +326,14 @@ bool build() {
       ui::place(r.text, mid, {0.0f, 0.5f}, {kRowX, y}, {kRowWide, kPitch});
     }
   }
+  // Every clickable row becomes a game button: the Button on its bar gives the game's own hover, press,
+  // selection and navigation, and the game's onClick carries the click to rowClicked.
+  for (size_t i = 0; i < g_rows.size(); ++i) {
+    Row& r = g_rows[i];
+    if (r.kind == Read || !r.hit) continue;
+    if (!api::buttons::attach(r.hit) || !api::buttons::on_click(r.hit, &rowClicked, toUser(i)))
+      PM_LOG("dev-menu: the row \"%s\" could not be made a button", r.label);
+  }
   // Every section exists; only the current one is shown.
   for (int s = 0; s < kSections; ++s) setSectionShown(s, s == g_section);
   g_built = true;
@@ -326,6 +353,8 @@ void show(bool on) {
 void recover() {
   float restore = 0.0f;
   if (pause_close(g_pause, restore)) actions::set_time_scale(restore);
+  returnInput();
+  actions::pause_player(false);
   if (g_wasCursorLocked) game::lock_cursor();
   g_active = false;
   g_built = false;
@@ -445,6 +474,52 @@ void run(const Row& r) {
   }
 }
 
+// A row's click, from the game's onClick. user is the row's index in g_rows: the button that fired was
+// wired with its own row's index, and rows only go away with the canvas (recover/destroy), when the
+// buttons go too.
+void rowClicked(void* user) {
+  const size_t i = fromUser(user);
+  if (i >= g_rows.size()) return;
+  const Row& r = g_rows[i];
+  if (r.kind == Nav) {
+    if (r.arg != g_section) {
+      setSectionShown(g_section, false);
+      g_section = r.arg;
+      setSectionShown(g_section, true);
+      refreshNav();
+      selectSectionRow();  // arrow keys continue from the section now showing
+    }
+    return;
+  }
+  if (r.kind == Click) run(r);
+}
+
+// The starting point for arrow-key and gamepad navigation: the section's first clickable row.
+void selectSectionRow() {
+  for (Row& r : g_rows)
+    if (r.kind == Click && r.section == g_section && r.hit && api::buttons::select(r.hit)) return;
+  for (Row& r : g_rows)  // a section with no clickable rows: its nav row still takes the selection
+    if (r.kind == Nav && r.arg == g_section && r.hit && api::buttons::select(r.hit)) return;
+}
+
+// Unity's UI input module, on while the menu is open: the game runs it only while its journal is open
+// (JournalController.OpenCloseJournal), and a disabled module routes no clicks and no arrow keys.
+void borrowInput() {
+  g_module = api::buttons::input_module();
+  if (!g_module) {
+    PM_LOG("dev-menu: Unity's UI input module is unavailable; the menu can take no clicks or arrow keys");
+    return;
+  }
+  g_moduleWas = api::buttons::input_on(g_module);
+  api::buttons::input_set(g_module, true);
+}
+
+void returnInput() {
+  if (g_module && game::alive(g_module)) api::buttons::input_set(g_module, g_moduleWas);
+  g_module = nullptr;
+  g_moduleWas = false;
+}
+
 // Reread every shown row's value, and the refusal line.
 void refresh() {
   for (Row& r : g_rows) {
@@ -474,11 +549,16 @@ void open() {
   game::free_cursor();
   const float scale = pause_open(g_pause, actions::time_scale(), actions::switches().pauseWhenOpen);
   if (g_pause.frozen) actions::set_time_scale(scale);
+  actions::pause_player(true);  // the journal's own hold: no walking and no looking behind the menu
+  borrowInput();
+  selectSectionRow();
 }
 
 void close() {
   if (!is_open()) return;
   show(false);
+  returnInput();
+  actions::pause_player(false);
   float restore = 0.0f;
   if (pause_close(g_pause, restore)) actions::set_time_scale(restore);
   if (g_wasCursorLocked) game::lock_cursor();
@@ -491,34 +571,20 @@ void tick() {
     return;
   }
   refresh();
-  float x = 0.0f, y = 0.0f;
-  if (!game::mouse_left_pressed() || !game::mouse_position(x, y)) return;
-  const ui::Vec2 pt{x, y};
-  for (Row& r : g_rows) {
-    if (r.kind != Nav) continue;
-    if (r.hit && ui::contains(r.hit, pt)) {
-      if (r.arg != g_section) {
-        setSectionShown(g_section, false);
-        g_section = r.arg;
-        setSectionShown(g_section, true);
-        refreshNav();
-      }
-      return;
-    }
-  }
-  for (Row& r : g_rows) {
-    if (r.kind != Click || r.section != g_section) continue;
-    if (r.hit && ui::contains(r.hit, pt)) {
-      run(r);
-      return;
-    }
-  }
+  // Re-assert what open() asked the game for: closing the journal mid-menu switches the UI input module
+  // off and releases the player's hold while the menu is still up, and both calls skip a state that
+  // already matches, so an unchanged frame does nothing.
+  if (g_module && !api::buttons::input_on(g_module)) api::buttons::input_set(g_module, true);
+  actions::pause_player(true);
 }
 
 void destroy() {
-  // pmmod_stop must not leave the game frozen or the cursor loose because the menu was open.
+  // pmmod_stop must not leave the game frozen, the cursor loose, the UI input switched or the player
+  // held because the menu was open.
   float restore = 0.0f;
   if (pause_close(g_pause, restore)) actions::set_time_scale(restore);
+  returnInput();
+  actions::pause_player(false);
   if (g_active && g_wasCursorLocked) game::lock_cursor();
   if (g_canvas) ui::destroy(g_canvas);
   g_canvas = nullptr;

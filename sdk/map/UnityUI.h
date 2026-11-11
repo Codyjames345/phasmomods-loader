@@ -232,6 +232,15 @@ inline constexpr pm::sdk::EntryDesc EventSystem_currentInputModule{
     .key = "EventSystem.currentInputModule", .kind = pm::sdk::Kind::Field, .owner = "EventSystem",
     .name = "m_CurrentInputModule"};
 
+inline constexpr const char* EventSystem_GameObject[] = {"GameObject"};
+
+/// SetSelectedGameObject(go): moves the keyboard and gamepad selection to go, so the input module's
+/// navigation starts from it; null clears the selection. Inferred: Unity's documented method.
+inline constexpr pm::sdk::EntryDesc EventSystem_SetSelectedGameObject{
+    .key = "EventSystem.SetSelectedGameObject", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Inferred, .owner = "EventSystem", .name = "SetSelectedGameObject",
+    .params = EventSystem_GameObject};
+
 /// A group of UI objects that can stop taking clicks together (UnityEngine.UIModule, namespace
 /// UnityEngine), a Behaviour. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc CanvasGroup{.key = "CanvasGroup", .name = "CanvasGroup",
@@ -595,6 +604,10 @@ struct EventSystem {
   static constexpr pm::api::Method<pm::map::EventSystem_get_current, void*()> get_current{};
   /// Its input module, a Behaviour: currentInputModule.get(system), or null. Unresolved: null.
   static constexpr pm::api::Field<pm::map::EventSystem_currentInputModule, void*> currentInputModule{};
+  /// SetSelectedGameObject(system, go): moves the keyboard and gamepad selection to go; null clears it.
+  /// Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::EventSystem_SetSelectedGameObject, void(void*, void*)>
+      SetSelectedGameObject{};
 };
 
 /// A group of UI objects. `group` below is the CanvasGroup.

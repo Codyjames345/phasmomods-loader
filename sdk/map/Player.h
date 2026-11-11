@@ -170,6 +170,38 @@ inline constexpr pm::sdk::EntryDesc PCCanvas{.key = "PCCanvas", .name = "PCCanva
 inline constexpr pm::sdk::EntryDesc PCCanvas_crosshair{.key = "PCCanvas.crosshair", .kind = pm::sdk::Kind::Field,
                                                        .owner = "PCCanvas", .type = "@Image"};
 
+inline constexpr const char* PCCanvas_bool[] = {"bool"};
+
+/// PausePlayerInPlace(paused): holds the local player still while a full-screen overlay is up, and lets
+/// them go again when it closes; the game calls it with true from the journal (and the options page opened
+/// from it) and the voice recognition overlay, and with false when those close. Decompiled: with true it
+/// calls FirstPersonController.EnableMovement false (no walking and no looking), hides the HUD's crosshair
+/// object, resets held item sway, switches the game HUD's CanvasGroup interactable off, and releases the
+/// mouse cursor; with false it reverses all of it and locks the cursor again, unless a component of the
+/// player holds a bool that refuses the release (that component was not identified). It skips itself when
+/// the player's movement already matches the request, reading the two flags EnableMovement writes. It
+/// neither moves the player nor touches the game's clock.
+inline constexpr pm::sdk::EntryDesc PCCanvas_PausePlayerInPlace{
+    .key = "PCCanvas.PausePlayerInPlace", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "PCCanvas", .name = "PausePlayerInPlace", .params = PCCanvas_bool};
+
+/// The local player's movement brain (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from
+/// the class dump.
+inline constexpr pm::sdk::EntryDesc FirstPersonController{.key = "FirstPersonController",
+                                                          .name = "FirstPersonController",
+                                                          .assembly = "Assembly-CSharp", .ns = ""};
+
+inline constexpr const char* FirstPersonController_bool[] = {"bool"};
+
+/// EnableMovement(on): the local player's walk-and-look switch. Decompiled: it writes its bool into two
+/// flags of its own, and with false it also freezes the player's Rigidbody rotation; enabling clears the
+/// flags but never unfreezes it. PCCanvas.PausePlayerInPlace reads those two flags to decide whether the
+/// player is already held.
+inline constexpr pm::sdk::EntryDesc FirstPersonController_EnableMovement{
+    .key = "FirstPersonController.EnableMovement", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "FirstPersonController", .name = "EnableMovement",
+    .params = FirstPersonController_bool};
+
 /// The player's journal: Player's one JournalController field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc Player_journal{.key = "Player.journal", .kind = pm::sdk::Kind::Field, .owner = "Player",
                                                    .type = "@JournalController"};
@@ -1160,6 +1192,17 @@ struct PCCanvas {
   static constexpr pm::api::Type<pm::map::PCCanvas> type{};
   /// Its crosshair, an Image: crosshair.get(canvas). Unresolved: null.
   static constexpr pm::api::Field<pm::map::PCCanvas_crosshair, void*> crosshair{};
+  /// PausePlayerInPlace(canvas, paused): holds the local player still while an overlay is up, or lets them
+  /// go again; the game uses it for the journal and the voice overlay. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::PCCanvas_PausePlayerInPlace, void(void*, bool)> PausePlayerInPlace{};
+};
+
+/// The local player's movement brain.
+struct FirstPersonController {
+  /// The type: klass(), is(obj). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::FirstPersonController> type{};
+  /// EnableMovement(fpc, on): the walk-and-look switch. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::FirstPersonController_EnableMovement, void(void*, bool)> EnableMovement{};
 };
 
 /// The body's animation scripts.
