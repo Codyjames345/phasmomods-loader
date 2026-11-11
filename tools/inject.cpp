@@ -2,6 +2,7 @@
 #include "text_table.h"
 #include "mod_assets.h"
 #include "mod_list.h"
+#include "session_sweep.h"
 #include "text_files.h"
 #include "win_handle.h"
 #include <tlhelp32.h>
@@ -246,6 +247,7 @@ Result copy_native(DWORD pid, const wchar_t* host, const std::vector<std::wstrin
   log = directory + L"\\mods.log";
   directory += L"\\bin";
   if (!ensure_directory(directory)) return fail(Outcome::file_error, pm::text::widen(pm::i18n::text("launcher.launcher-cannot-create-native")));
+  sweep_previous_sessions();  // one session's copies outlive no more than its game (tools/session_sweep.h)
   std::vector<std::wstring> modCopies;
   std::vector<std::string> lines = sessionLines;
   for (const auto& mod : mods) {

@@ -1,5 +1,6 @@
 #include "launcher.h"
 #include "inject.h"
+#include "session_sweep.h"
 #include "update.h"
 #include "text_files.h"
 #include "text_table.h"
@@ -327,6 +328,7 @@ Result launch_steam(std::vector<std::wstring> arguments, const Package& package)
   if (result.outcome == Outcome::ready)
     return failure(Outcome::already_loaded, pm::text::widen(pm::i18n::text("launcher.phasmophobia-already-running-close")));
   if (result.outcome != Outcome::no_process) return result;
+  loader::sweep_previous_sessions();  // nothing an earlier session left outlives the process that wrote it (tools/session_sweep.h)
   std::wstring freshPath, logPath;
   auto probe = arguments;
   auto error = configure_log(probe, L"", logPath);

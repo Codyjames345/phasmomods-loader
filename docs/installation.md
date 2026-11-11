@@ -207,3 +207,9 @@ agree, each mod logs its own load and start. Steam wrapper game logs are written
 `%LOCALAPPDATA%\PhasmoMods\logs` unless you supplied an explicit Unity
 `-logFile` argument. Preserve that file when reporting a startup failure. Review
 logs before sharing them; game logs can contain account identifiers.
+
+The loader tidies these folders as it starts: staged copies of the host and mods
+belonging to a game that has closed are removed, and so are logs whose process has
+gone. Once `mods.log` passes 20 MB, the next start moves it to `mods.log.old` and
+opens a fresh one, so when reporting a failure, check both files for the session
+you mean.
