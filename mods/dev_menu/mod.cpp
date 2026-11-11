@@ -57,7 +57,7 @@ void tick() {
       menu::open();
   }
   // Defensive: whatever happens to the room state, the menu never shows outside the single player sandbox.
-  if (menu::is_open() && !actions::offline()) menu::close();
+  if (menu::is_open() && !actions::can_open()) menu::close();
   menu::tick();
 }
 

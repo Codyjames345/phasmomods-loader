@@ -6,12 +6,15 @@
 // *shows* is read from the game every frame (actions.cpp); only these rules decide.
 namespace pm::devmenu {
 
-// ---- The sandbox gate (the user's final call, 2026-11-10, third round) ----
-// The menu opens only while PUN runs offline, which is the game's own single player state: no room exists,
-// nothing is listed, nobody can join, and every action runs the game's single player path exactly as a
-// vanilla contract does. An offline mode the game cannot answer (the entry did not resolve, or a room this
-// client cannot judge) is not offline: the menu stays shut, like every loader gate.
-inline bool may_open(bool offlineMode, bool inRoom) { return offlineMode && !inRoom; }
+// ---- The sandbox gate (the user's final call, 2026-11-10, third round; probes fixed 2026-11-11) ----
+// The menu opens only in the single player sandbox: either PUN runs offline, the game's own single player
+// mode (its connect code calls set_OfflineMode(true) and then joins a room even in that mode, so an
+// in-room state comes with offline mode in a solo contract - re/out/offline.c), or this client is in no
+// room at all: the main menu and lobby browsing (the game is connected to Photon there, so offline mode
+// is false and the old offline-only gate never opened anywhere). An online room, private or public, never
+// opens it. An offline or room state the game cannot answer is not the sandbox: the menu stays shut,
+// like every loader gate.
+inline bool may_open(bool offlineMode, bool inRoom) { return offlineMode || !inRoom; }
 
 // ---- Pause while the menu is open ----
 struct Pause {
@@ -84,7 +87,7 @@ enum class Why {
 
 // What the game looks like to the menu right now, read every tick (actions.cpp fills it).
 struct Can {
-  bool offline = false;      // get_OfflineMode
+  bool sandbox = false;      // the may_open gate holds: single player, or in no room
   bool contract = false;     // a LevelController, so a contract runs
   bool ghost = false;        // the contract has a ghost
   bool difficulty = false;   // LevelValues and its difficulty object
@@ -94,11 +97,11 @@ struct Can {
   int rooms = 0;             // the level's rooms
 };
 
-/** Why running `action` now is refused, or Why::None. Being offline is assumed (the menu shut otherwise)
+/** Why running `action` now is refused, or Why::None. The sandbox gate is assumed (the menu shut otherwise)
  *  and kept as a defensive check. Why::NoTruck is not one of these rules: refuse() never returns it, it
  *  is what the end-contract action reports when the running scene has no ExitLevel object to ask. */
 inline Why refuse(Action action, const Can& c) {
-  if (!c.offline) return Why::NotOffline;
+  if (!c.sandbox) return Why::NotOffline;
   switch (action) {
     case Action::Info:
       return Why::None;

@@ -50,7 +50,7 @@ The user launches the game; no loader file ever enters the game folder.
 1. Flag off: the Mods panel, the launcher list and a friend's lobby never show Dev Menu; the DLL is not loaded.
 2. Flag on (`developer=1` in launcher.ini): the mod loads; the keybinds menu shows its row; rebinding sticks
    through Apply and a restart.
-3. Main menu (the game is offline there too): the menu opens, and every contract, ghost and player row shows
+3. Main menu (Photon connected, no room joined): the menu opens, and every contract, ghost and player row shows
    its refusal ("no contract is running"); the switches and the game-speed row still work.
 4. Single player contract: the key opens the menu over the game; the game freezes (timeScale 0) while open,
    with the cursor free; the toggle closes it and the game runs at its old speed with the cursor back.
@@ -134,6 +134,32 @@ The user launches the game; no loader file ever enters the game folder.
   "\r\r\n" on disk.
 - validate 93/93; no map entries moved, so no gamecheck record change.
 - For the user: put `developer=1` back in launcher.ini; ticking mods in the launcher now keeps it.
+
+## 2026-11-11: second live try - the gate could never open (fixed)
+
+- Symptom: mod loaded, keybinds row present and bound to <Keyboard>/backquote, pressing it did nothing.
+- RE (`re/out/offline.c`, callers of `PhotonNetwork.set_OfflineMode` from `ConnectToServer` and the
+  `Network` connection methods): the game's single player mode calls set_OfflineMode(true) only when
+  neither `get_InLobby()` nor `get_IsConnectedAndReady()` holds, and then joins a room as usual - so in
+  a solo contract `get_OfflineMode` and `get_InRoom` are both true. And the main menu is a connected
+  Photon client (the lobby browser needs the connection; the user saw public lobbies listed), so
+  OfflineMode is false there too. The gate `offline && !inRoom` was therefore false on every screen:
+  the keypress fired and the rule honestly refused, silently.
+- New rule (menu_rule.h may_open): sandbox = offline mode, or no room at all. Solo (offline+room) and
+  the menu screen open; any online room never does. actions::can_open() fails closed when either
+  `get_OfflineMode` or `get_InRoom` is unresolved (`available()`), since the new rule reads two probes.
+  Can.offline renamed Can.sandbox (it is the gate, not the probe); snapshot fills it from can_open();
+  the tick's defensive close now uses can_open() too. The raw "Single player" read-out row still shows
+  the bare offline probe.
+- Facts recorded for authors in sdk/systems/photon.md ("Which screens are rooms, and when offline mode
+  is on"); the v1 smoke item 3 wording ("the game is offline there too") was a disproved assumption,
+  reworded.
+- Tests: the_menu_opens_only_in_the_sandbox covers all four states (the old defensive case
+  may_open(true,true) is now the normal solo case, and may_open(false,false) is the menu screen).
+  validate 93/93; gamecheck unchanged (record e300eda993f24799-cd106e0f8a54c36e.txt), the mod's
+  requires list gained PhotonNetwork.get_InRoom.
+- The user also asked about public lobbies still being listed at the main menu: expected. The loader
+  rules are about joining - every mod is off in a public room - and never touch the vanilla browser.
 
 ## Plan rows the v1 cut left out although their map entries exist (for the user to schedule)
 

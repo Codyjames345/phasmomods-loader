@@ -10,11 +10,11 @@ using namespace pm::devmenu;
 
 namespace {
 
-void the_menu_opens_only_offline() {
-  CHECK(may_open(true, false));
-  CHECK(!may_open(false, false));  // in a room, or judging it impossible: shut
-  CHECK(!may_open(true, true));    // defensive: offline and in a room cannot both hold
-  CHECK(!may_open(false, true));
+void the_menu_opens_only_in_the_sandbox() {
+  CHECK(may_open(true, false));   // offline mode, before its room is joined
+  CHECK(may_open(true, true));    // a single player contract: the game joins a room even offline
+  CHECK(may_open(false, false));  // the main menu: connected to Photon, in no room
+  CHECK(!may_open(false, true));  // an online room, private or public: shut
 }
 
 void opening_the_menu_freezes_and_closing_restores() {
@@ -58,7 +58,7 @@ void the_hooks_answer_the_switches() {
 }
 
 void a_full_offline_contract_allows_everything() {
-  const Can c{.offline = true, .contract = true, .ghost = true, .difficulty = true, .player = true, .rooms = 4};
+  const Can c{.sandbox = true, .contract = true, .ghost = true, .difficulty = true, .player = true, .rooms = 4};
   for (const Action a : {Action::ForceHunt, Action::ClearCooldown, Action::Appear, Action::UnAppear,
                          Action::BumpSpeed, Action::ToggleEvents, Action::FireEvent, Action::UnlockDoor,
                          Action::EndContract, Action::Leave, Action::Quit, Action::SetFriendly,
@@ -72,11 +72,11 @@ void a_full_offline_contract_allows_everything() {
 }
 
 void rows_refuse_for_what_the_contract_lacks() {
-  Can nothing{};  // not even offline: the menu could not be open
+  Can nothing{};  // not even in the sandbox: the menu could not be open
   CHECK(refuse(Action::ForceHunt, nothing) == Why::NotOffline);
 
-  // In the main menu (offline, no contract): only the switches and time work.
-  const Can menu{.offline = true};
+  // In the sandbox with no contract (the main menu): only the switches and time work.
+  const Can menu{.sandbox = true};
   CHECK(refuse(Action::ForceHunt, menu) == Why::NoContract);
   CHECK(refuse(Action::UnlockDoor, menu) == Why::NoContract);
   CHECK(refuse(Action::EndContract, menu) == Why::NoContract);
@@ -87,25 +87,25 @@ void rows_refuse_for_what_the_contract_lacks() {
   CHECK(refuse(Action::SetGodMode, menu) == Why::None);
 
   // A contract with no ghost (the first seconds) still runs the difficulty and player rows.
-  const Can bare{.offline = true, .contract = true, .difficulty = true, .player = true};
+  const Can bare{.sandbox = true, .contract = true, .difficulty = true, .player = true};
   CHECK(refuse(Action::ForceHunt, bare) == Why::NoGhost);
   CHECK(refuse(Action::SetFriendly, bare) == Why::None);
 }
 
 void hunt_and_room_rows_follow_the_hunt() {
-  const Can hunting{.offline = true, .contract = true, .ghost = true, .player = true, .hunting = true, .rooms = 3};
+  const Can hunting{.sandbox = true, .contract = true, .ghost = true, .player = true, .hunting = true, .rooms = 3};
   CHECK(refuse(Action::EndHunt, hunting) == Why::None);
   CHECK(refuse(Action::ApplyRoom, hunting) == Why::Hunting);
   CHECK(refuse(Action::RandomRoom, hunting) == Why::Hunting);
   CHECK(refuse(Action::PickRoom, hunting) == Why::Hunting);
 
-  const Can noRooms{.offline = true, .contract = true, .ghost = true, .rooms = 0};
+  const Can noRooms{.sandbox = true, .contract = true, .ghost = true, .rooms = 0};
   CHECK(refuse(Action::ApplyRoom, noRooms) == Why::NoRooms);
   CHECK(refuse(Action::ForceHunt, noRooms) == Why::None);  // a hunt needs no room list
 }
 
 void death_and_revival_answer_each_other() {
-  const Can dead{.offline = true, .player = true, .dead = true};
+  const Can dead{.sandbox = true, .player = true, .dead = true};
   CHECK(refuse(Action::KillLocal, dead) == Why::Dead);
   CHECK(refuse(Action::ReviveLocal, dead) == Why::None);
   CHECK(refuse(Action::SetSanity, dead) == Why::None);  // sanity can still be set on a corpse
@@ -115,7 +115,7 @@ void death_and_revival_answer_each_other() {
 }  // namespace
 
 int main() {
-  the_menu_opens_only_offline();
+  the_menu_opens_only_in_the_sandbox();
   opening_the_menu_freezes_and_closing_restores();
   pausing_can_be_switched_off();
   the_tick_speed_row_cycles_the_presets();

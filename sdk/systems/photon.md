@@ -17,6 +17,21 @@ decompiled code of Steam build 25811160 (`re/decomp.mjs <key>`), and this page n
 - The room's master changes when the master leaves. `SetMasterClient` is not in this build, and nothing in it
   writes the room's master property.
 
+## Which screens are rooms, and when offline mode is on
+
+A mod that asks "am I in a room?" or "is this single player?" must read both states, because the game's own
+screens do not line up with what the names suggest (read from the decompiled connect code, 2026-11-11):
+
+- **The main menu is a connected Photon client.** The game connects for the lobby browser, so
+  `PhotonNetwork.get_OfflineMode` is false at the main menu while `PhotonNetwork.get_InRoom` is false there.
+- **Single player is offline mode plus a joined room.** The connect code calls `PhotonNetwork.set_OfflineMode`
+  with true when no lobby or ready connection exists, and joins the room as usual afterwards. So a solo
+  contract has `get_OfflineMode` **and** `get_InRoom` both true; no server is involved and RPCs stay local.
+- **A multiplayer room,** public or private, is offline mode false with `get_InRoom` true while in it.
+
+So "offline mode true" means single player, and "offline mode false with no room" means the menu screen; only
+"offline mode false with a room" is a real room.
+
 ## A room holds four players
 
 Kinetic's Photon servers cap a room at four players. Creating one for eight fails with the server's error that the

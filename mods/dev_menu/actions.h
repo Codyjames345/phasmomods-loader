@@ -24,7 +24,8 @@ Switches& switches();
 
 /** This client's offline state: PhotonNetwork.get_OfflineMode; false when it cannot be read (fail closed). */
 bool offline();
-/** Whether the menu may open now: offline, and not in a room. */
+/** Whether the menu may open now: the game's single player mode (offline mode, which the game pairs with a
+ *  joined room), or no room at all (the main menu). False, fail closed, when either probe is unreadable. */
 bool can_open();
 /** The game as the refusal rules want it, read now. */
 Can snapshot();

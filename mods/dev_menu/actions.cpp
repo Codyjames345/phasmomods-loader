@@ -197,11 +197,19 @@ Switches& switches() { return g_switches; }
 
 bool offline() { return phasmo::PhotonNetwork::get_OfflineMode(); }
 
-bool can_open() { return may_open(offline(), game::in_room()); }
+bool can_open() {
+  // Fail closed: with either probe unreadable this client cannot tell the sandbox from a room. The game's
+  // own single player mode is offline mode plus a joined room, and the main menu is a connected Photon
+  // client in no room, so the gate is offline mode or no room (re/out/offline.c).
+  if (!phasmo::PhotonNetwork::get_OfflineMode.available() ||
+      !phasmo::PhotonNetwork::get_InRoom.available())
+    return false;
+  return may_open(offline(), game::in_room());
+}
 
 Can snapshot() {
   Can c;
-  c.offline = offline();
+  c.sandbox = can_open();
   void* level = game::level_controller();
   c.contract = level && game::alive(level);
   c.ghost = c.contract && game::ghost_ai() != nullptr;
