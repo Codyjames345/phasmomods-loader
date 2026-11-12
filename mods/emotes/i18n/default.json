@@ -5,6 +5,7 @@
   "emotes.key-label": "Emote wheel",
   "emotes.volume-label": "Music",
   "emotes.pack-unusable": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "emotes.page": "PM_TEXT_TODO",  // PM_TEXT_TODO: the page number over the wheel, with {{page}} and {{pages}}
   "emotes.name.disco-fever": "Disco Fever",
   "emotes.name.electro-swing": "Electro Swing",
   "emotes.name.floss": "Floss",

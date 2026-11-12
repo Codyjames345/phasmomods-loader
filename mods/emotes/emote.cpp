@@ -21,6 +21,8 @@
 #include "Player.h"
 #include "Transform.h"
 #include "UnityAudio.h"
+#include "UnityObject.h"
+#include "UnityUI.h"
 #include "UnityRendering.h"
 #include "UnityObject.h"
 #include "assets.h"
@@ -38,6 +40,8 @@
 #include "mod_glue.h"
 #include "net.h"
 #include "packs.h"
+#include "paused_actions.h"
+#include "wheel_pages.h"
 #include "player_anim.h"
 #include "players.h"
 #include "settings.h"
@@ -74,6 +78,13 @@ constexpr const char* kVrEndKeys[] = {"vr-left-grip", "vr-right-grip", "vr-left-
 constexpr const char* kEndActions[] = {"Pickup", "Primary Use", "Secondary Use", "HoldPrimaryUse", "Interact", "Drop",
                                        "Crouch"};
 constexpr const char* kLookAction = "Look";
+
+// The controls that turn the wheel's pages (the user's, 2026-11-12): the scroll wheel and the gamepad's shoulder
+// buttons. Every game action bound to one of them is paused while the wheel is open (the item swap on the scroll wheel,
+// push-to-talk on the bumpers, sdk/systems/players.md), found by its binding's path rather than its name.
+bool turns_pages(const std::string& path) {
+  return path.rfind("<Mouse>/scroll", 0) == 0 || path == "<Gamepad>/leftShoulder" || path == "<Gamepad>/rightShoulder";
+}
 
 using phasmo::Quaternion;
 using phasmo::Vector3;
@@ -143,12 +154,16 @@ struct State {
   std::map<int, Song> songs;
   std::map<int, talk::Pace> paces;
   std::vector<api::Held> endActions;
-  api::Held look;
+  std::vector<api::Held> wheelActions;  // what the wheel pauses while open: Look, and every action on a page control
+  PausedActions<api::Held> paused;      // what it did pause, to give back on every close
+  // The game's own glyph widgets for the shoulder buttons (sdk/systems/menus.md, "Input glyphs"): their Images show the
+  // sprite the game picked for the pad in use, and turn clear on keyboard and mouse.
+  api::Held previousGlyph, nextGlyph;
+  int page = 0;  // the page the wheel shows, kept while the mod runs (the user's: the same session only)
   api::Held controlsOf;  // the rig the actions were read from
   api::Held pcLook, propGrab, hand, head;
   std::vector<api::Held> movedItems;  // items put in the hand from the camera's slot while the view is outside
   bool logItemAfterView = false;      // for the log: the held item once the view is back in first person
-  bool lookOff = false;
   ULONGLONG lastTick = 0;
   ULONGLONG startTick = 0;  // the mod's start: its clock counts from here, so a float keeps its precision
   bool loggedRoot = false;
@@ -291,18 +306,63 @@ void read_actions() {
   if (rig == g.controlsOf.get() && rig) return;
   g.controlsOf = rig;
   g.endActions.clear();
-  g.look = nullptr;
+  g.wheelActions.clear();
+  g.previousGlyph = nullptr;
+  g.nextGlyph = nullptr;
+  std::set<std::string> paging;  // the names of the actions bound to a page control
   void* asset = game_actions_asset();
   const api::RefArray maps{asset ? phasmo::InputActionAsset::m_ActionMaps.get(asset) : nullptr};
   for (size_t m = 0; m < maps.size(); ++m) {
+    // The action names bound to a page control in this map, by each binding's path as the player has it.
+    paging.clear();
+    const api::ValueArray bindings{maps[m] ? phasmo::InputActionMap::m_Bindings.get(maps[m]) : nullptr};
+    for (size_t b = 0; b < bindings.size(); ++b) {
+      std::string path = api::to_utf8(phasmo::InputBinding::m_OverridePath.get(bindings.at(b)));
+      if (path.empty()) path = api::to_utf8(phasmo::InputBinding::m_Path.get(bindings.at(b)));
+      if (turns_pages(path)) paging.insert(api::to_utf8(phasmo::InputBinding::m_Action.get(bindings.at(b))));
+    }
     const api::RefArray actions{maps[m] ? phasmo::InputActionMap::m_Actions.get(maps[m]) : nullptr};
     for (size_t i = 0; i < actions.size(); ++i) {
       const std::string name = api::to_utf8(phasmo::InputAction::m_Name.get(actions[i]));
       for (const char* end : kEndActions)
         if (name == end) g.endActions.emplace_back(actions[i]);
-      if (name == kLookAction) g.look = actions[i];
+      if (name == kLookAction || paging.count(name)) g.wheelActions.emplace_back(actions[i]);
     }
   }
+  // The game's glyph widgets for the shoulder buttons, by the bindings of the action each shows.
+  const api::RefArray widgets{phasmo::Object::FindAllOfType(phasmo::GamepadButton::type.type_object(), true)};
+  for (size_t w = 0; w < widgets.size() && (!g.previousGlyph || !g.nextGlyph); ++w) {
+    void* ref = phasmo::GamepadButton::action.get(widgets[w]);
+    void* action = ref ? phasmo::InputActionReference::get_action(ref) : nullptr;
+    void* map = action ? phasmo::InputAction::m_ActionMap.get(action) : nullptr;
+    void* image = phasmo::GamepadButton::image.get(widgets[w]);
+    if (!map || !image) continue;
+    const std::string name = api::to_utf8(phasmo::InputAction::m_Name.get(action));
+    const api::ValueArray bindings{phasmo::InputActionMap::m_Bindings.get(map)};
+    for (size_t b = 0; b < bindings.size(); ++b) {
+      if (api::to_utf8(phasmo::InputBinding::m_Action.get(bindings.at(b))) != name) continue;
+      const std::string path = api::to_utf8(phasmo::InputBinding::m_Path.get(bindings.at(b)));
+      if (path == "<Gamepad>/leftShoulder" && !g.previousGlyph) g.previousGlyph = image;
+      if (path == "<Gamepad>/rightShoulder" && !g.nextGlyph) g.nextGlyph = image;
+    }
+  }
+  PM_LOG("Emotes: the wheel pauses %zu of the game's actions while open; the shoulder glyphs %s", g.wheelActions.size(),
+         g.previousGlyph && g.nextGlyph ? "were found" : "were not found");
+}
+
+// The game's glyph for a shoulder button while the player uses a gamepad, else null: the widget's Image turns clear on
+// keyboard and mouse (sdk/systems/menus.md, "Input glyphs").
+void* glyph_of(const api::Held& image) {
+  if (!image || !game::alive(image)) return nullptr;
+  if (phasmo::Graphic::get_color(image).a <= 0.0f) return nullptr;
+  return phasmo::Image::get_sprite(image);
+}
+
+// Turns the wheel's page by `steps`, wrapping round.
+void turn_page(int steps) {
+  if (!steps) return;
+  g.page = pages::turn(g.page, steps, static_cast<int>(g.a.defs.size()));
+  wheel::set_page(g.page);
 }
 
 // Whether the player's own journal is open (JournalController.open): opening it ends an emote (the user's ruling).
@@ -320,13 +380,19 @@ bool end_action_pressed(bool vr) {
   return false;
 }
 
+// Pauses (false) or gives back (true) the game's actions the open wheel takes over: Look, and every action bound to a page
+// control. Only actions that were on are paused, and exactly those come back.
 void set_look(bool on) {
-  if (!g.look || g.lookOff == !on) return;
-  if (on)
-    phasmo::InputAction::Enable(g.look);
-  else
-    phasmo::InputAction::Disable(g.look);
-  g.lookOff = !on;
+  if (on) {
+    for (const api::Held& a : g.paused.resume())
+      if (a && game::alive(a)) phasmo::InputAction::Enable(a);
+    return;
+  }
+  std::vector<void*> enabled;
+  for (const api::Held& a : g.wheelActions)
+    if (a && game::alive(a) && phasmo::InputAction::get_enabled(a)) enabled.push_back(a.get());
+  for (void* a : enabled) phasmo::InputAction::Disable(a);
+  g.paused.pause(enabled);
 }
 
 // ---- A dancer's body, facing and song ----
@@ -688,6 +754,8 @@ std::optional<int> wheel_input(void* player, bool vr) {
   if (vr) {
     if (!wheel::is_open()) {
       if (key.pressed) {
+        g.page = pages::clamp_page(g.page, static_cast<int>(g.a.defs.size()));
+        wheel::set_page(g.page);
         void* left = phasmo::VRPlayer::leftHandIK.get(player);
         g.vrWheel = wheel::open_vr(left);
         PM_LOG(g.vrWheel ? "Emotes: the VR wheel opens" : "Emotes: the VR wheel could not be built");
@@ -696,8 +764,14 @@ std::optional<int> wheel_input(void* player, bool vr) {
     }
     void* cam = game::local_camera();
     wheel::face(cam ? game::transform_of(cam) : nullptr);
-    const int pointed = wheel::pointed(phasmo::VRPlayer::rightHandIK.get(player));
+    void* right = phasmo::VRPlayer::rightHandIK.get(player);
+    const int pointed = wheel::pointed(right);
     wheel::show_pick(pointed);
+    // A page glyph pointed at turns the page on the trigger (the wheel has no free VR button for it).
+    if (const int glyph = wheel::pointed_glyph(right); glyph != 0 && keys::key_state(kVrPickKey).pressed) {
+      turn_page(glyph);
+      return std::nullopt;
+    }
     if (key.pressed) {  // the button again, nothing played
       wheel::close();
       return std::nullopt;
@@ -719,11 +793,20 @@ std::optional<int> wheel_input(void* player, bool vr) {
     if (void* pad = phasmo::Gamepad::get_current()) {
       const phasmo::Vector2 stick = phasmo::Vector2Control::ReadValue(phasmo::Gamepad::get_rightStick(pad));
       if (const int s = segment_for(stick.x, stick.y, kStickDeadZone); s >= 0) pickNow = s;
+      void* lb = phasmo::Gamepad::get_leftShoulder(pad);
+      void* rb = phasmo::Gamepad::get_rightShoulder(pad);
+      turn_page((rb && phasmo::ButtonControl::get_wasPressedThisFrame(rb) ? 1 : 0) -
+                (lb && phasmo::ButtonControl::get_wasPressedThisFrame(lb) ? 1 : 0));
     }
+    if (void* mouse = phasmo::Mouse::get_current())
+      if (void* scroll = phasmo::Mouse::get_scroll(mouse))
+        turn_page(pages::scroll_step(phasmo::Vector2Control::ReadValue(scroll).y));
   }
   const std::optional<int> played = wheel_step(g.wheelIn, key.held, key.released, interrupted, pickNow);
   if (g.wheelIn.open && !wasOpen) {
     g.mouseX = g.mouseY = 0.0f;
+    g.page = pages::clamp_page(g.page, static_cast<int>(g.a.defs.size()));
+    wheel::set_page(g.page);
     if (!wheel::open_screen()) {
       PM_LOG("Emotes: the wheel could not be built on screen");
       g.wheelIn = WheelInput{};
@@ -733,7 +816,10 @@ std::optional<int> wheel_input(void* player, bool vr) {
       set_look(false);
     }
   }
-  if (g.wheelIn.open) wheel::show_pick(g.wheelIn.picked);
+  if (g.wheelIn.open) {
+    wheel::show_pick(g.wheelIn.picked);
+    wheel::show_glyphs(glyph_of(g.previousGlyph), glyph_of(g.nextGlyph));  // none on keyboard and mouse yet (PM_UI_TODO)
+  }
   if (!g.wheelIn.open && wasOpen) {
     wheel::close();
     set_look(true);
@@ -759,10 +845,10 @@ void end_at_once(const char* why) {
 
 // The wheel shut, its input cleared and the look back on.
 void close_wheel() {
+  set_look(true);  // whatever closed it, even a canvas the scene already took: what was paused comes back
   if (!wheel::is_open()) return;
   wheel::close();
   g.wheelIn = WheelInput{};
-  set_look(true);
 }
 
 void detour_journal(api::Original<phasmo::LocalJournalController::OpenCloseJournal> original, void* input, bool flag) {
@@ -994,6 +1080,7 @@ void stop() {
     if (f.model && game::alive(f.model)) game::set_local_rotation(f.model, f.original);
   for (auto& [actor, s] : g.songs)
     if (s.source && game::alive(s.source)) game::destroy(game::game_object_of(s.source));
+  set_look(true);  // the game's actions the open wheel paused come back before the mod lets go of them
   wheel::unload();
   // The engine loads a bundle once, so each is unloaded here for the mod's next start (the lobby's rules restart mods).
   for (api::Held& b : g.a.bundles)

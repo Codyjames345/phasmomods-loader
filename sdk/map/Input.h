@@ -178,6 +178,11 @@ inline constexpr pm::sdk::EntryDesc Mouse_get_current{.key = "Mouse.get_current"
 inline constexpr pm::sdk::EntryDesc Mouse_get_leftButton{.key = "Mouse.get_leftButton", .kind = pm::sdk::Kind::Method,
                                                          .owner = "Mouse", .name = "get_leftButton"};
 
+/// The mouse's scroll wheel, a DeltaControl (a Vector2Control: y up when scrolled away from the player), read with
+/// InputControl<Vector2>.ReadValue: this frame's scrolling. Inferred: the Input System's documented property getter.
+inline constexpr pm::sdk::EntryDesc Mouse_get_scroll{.key = "Mouse.get_scroll", .kind = pm::sdk::Kind::Method,
+                                                     .owner = "Mouse", .name = "get_scroll"};
+
 /// A pointer device (Unity.InputSystem), the mouse's base class. Inferred: the Input System's documented
 /// API.
 inline constexpr pm::sdk::EntryDesc Pointer{.key = "Pointer", .name = "Pointer", .assembly = "Unity.InputSystem",
@@ -468,6 +473,16 @@ inline constexpr pm::sdk::EntryDesc Gamepad_get_rightStick{.key = "Gamepad.get_r
                                                           .kind = pm::sdk::Kind::Method, .owner = "Gamepad",
                                                           .name = "get_rightStick"};
 
+/// The left shoulder button (LB, L1), a ButtonControl. Inferred: the Input System's documented property getter.
+inline constexpr pm::sdk::EntryDesc Gamepad_get_leftShoulder{.key = "Gamepad.get_leftShoulder",
+                                                            .kind = pm::sdk::Kind::Method, .owner = "Gamepad",
+                                                            .name = "get_leftShoulder"};
+
+/// The right shoulder button (RB, R1), a ButtonControl. Inferred: the Input System's documented property getter.
+inline constexpr pm::sdk::EntryDesc Gamepad_get_rightShoulder{.key = "Gamepad.get_rightShoulder",
+                                                             .kind = pm::sdk::Kind::Method, .owner = "Gamepad",
+                                                             .name = "get_rightShoulder"};
+
 }  // namespace pm::map
 
 /// @file
@@ -642,6 +657,10 @@ struct Gamepad {
   static constexpr pm::api::Method<pm::map::Gamepad_get_current, void*()> get_current{};
   /// get_rightStick(pad): its right stick, a StickControl (read with Vector2Control::ReadValue). Unresolved: null.
   static constexpr pm::api::Method<pm::map::Gamepad_get_rightStick, void*(void*)> get_rightStick{};
+  /// get_leftShoulder(pad): LB, a ButtonControl. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Gamepad_get_leftShoulder, void*(void*)> get_leftShoulder{};
+  /// get_rightShoulder(pad): RB, a ButtonControl. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Gamepad_get_rightShoulder, void*(void*)> get_rightShoulder{};
 };
 
 /// A group of input actions. `map` below is the InputActionMap.
@@ -683,6 +702,8 @@ struct Mouse {
   static constexpr pm::api::Method<pm::map::Mouse_get_current, void*()> get_current{};
   /// get_leftButton(mouse): its left button, a ButtonControl. Unresolved: null.
   static constexpr pm::api::Method<pm::map::Mouse_get_leftButton, void*(void*)> get_leftButton{};
+  /// get_scroll(mouse): its scroll wheel, a Vector2Control (read with Vector2Control::ReadValue). Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Mouse_get_scroll, void*(void*)> get_scroll{};
 };
 
 /// A pointer device, the mouse's base. `pointer` below is the Pointer.

@@ -1,5 +1,6 @@
 // Offline tests for the Emotes wheel's layout (mods/emotes/wheel_layout.h): the shapes drawn as textures, each segment's
-// span with its gap, where each icon sits, the picked segment's colour, and the VR pointer's hit on the disc. The wheel's
+// span with its gap, where each icon sits, the picked segment's colour, the VR pointer's hit on the disc, and the page
+// row's place above the disc with the two page glyphs either side of its text. The wheel's
 // Unity objects themselves are checked in game (the smoke list). The design is
 // docs/superpowers/specs/2026-11-10-emotes-design.md, "The wheel". Run: build\emotes_wheel_test.exe
 #include <cmath>
@@ -115,6 +116,33 @@ void the_vr_pointer_finds_the_disc() {
   CHECK(layout::segment_at({500.0f, 0.0f}, style::kRingInner, style::kDiscRadius) == -1);
 }
 
+void page_row_sits_above_the_disc() {
+  const layout::PageRow row = layout::page_row(style::kDiscRadius, style::kPageAbove, style::kPageTextWidth,
+                                               style::kGlyphSize, style::kGlyphGap);
+  CHECK(near(row.text.y, style::kDiscRadius + style::kPageAbove));
+  CHECK(near(row.text.x, 0.0f));
+}
+
+void glyphs_sit_either_side_of_the_page_text() {
+  const layout::PageRow row = layout::page_row(style::kDiscRadius, style::kPageAbove, style::kPageTextWidth,
+                                               style::kGlyphSize, style::kGlyphGap);
+  CHECK(row.previous.x < -style::kPageTextWidth / 2.0f);  // clear of the text's box on the left
+  CHECK(near(row.next.x, -row.previous.x));               // and mirrored on the right
+  CHECK(near(row.previous.y, row.text.y) && near(row.next.y, row.text.y));  // level with the text
+}
+
+void glyph_at_hits_each_glyph_and_misses_between() {
+  const float half = style::kGlyphSize / 2.0f;
+  const layout::PageRow row = layout::page_row(style::kDiscRadius, style::kPageAbove, style::kPageTextWidth,
+                                               style::kGlyphSize, style::kGlyphGap);
+  CHECK(layout::glyph_at(row.previous, row, style::kGlyphSize) == -1);
+  CHECK(layout::glyph_at(row.next, row, style::kGlyphSize) == 1);
+  CHECK(layout::glyph_at(row.text, row, style::kGlyphSize) == 0);  // the text's centre hits neither glyph
+  CHECK(layout::glyph_at({row.previous.x - half - 0.5f, row.previous.y}, row, style::kGlyphSize) == 0);  // just past
+  CHECK(layout::glyph_at({row.previous.x - half, row.previous.y}, row, style::kGlyphSize) == -1);        // the edge
+  CHECK(layout::glyph_at({row.next.x + half, row.next.y}, row, style::kGlyphSize) == 1);                 // counts
+}
+
 }  // namespace
 
 int main() {
@@ -122,6 +150,9 @@ int main() {
   the_icons_sit_in_their_segments();
   the_pick_turns_blue();
   the_vr_pointer_finds_the_disc();
+  page_row_sits_above_the_disc();
+  glyphs_sit_either_side_of_the_page_text();
+  glyph_at_hits_each_glyph_and_misses_between();
   std::printf("%s\n", g_failures ? "emotes_wheel tests FAILED" : "emotes_wheel tests passed");
   return g_failures ? 1 : 0;
 }

@@ -1,5 +1,6 @@
 #include "wheel.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <string>
@@ -29,6 +30,9 @@ struct State {
   std::array<api::Held, kSegments> images;    // the open wheel's segment images
   std::array<api::Held, kSegments> iconImages;  // the open wheel's icon images, showing the page's icons
   api::Held name;                             // its name text
+  api::Held pageText;                         // the page row: the page number, and a glyph for each page control
+  api::Held previousGlyph, nextGlyph;
+  int pages = 1;
   int page = 0;                               // the page shown: emotes page * kSegments onwards
   bool vr = false;
   bool loaded = false;
@@ -38,6 +42,7 @@ State g;
 
 ui::Color to_ui(style::Rgba c) { return {c.r, c.g, c.b, c.a}; }
 void show_icons();
+void show_page_row(void* previousSprite, void* nextSprite);
 
 void* drawn(const std::vector<uint8_t>& rgba) {
   return ui::texture_from_rgba(style::kTextureSize, style::kTextureSize, rgba.data(), rgba.size());
@@ -65,6 +70,20 @@ bool build(void* canvas) {
     }
   }
   show_icons();
+  // The page row over the disc (the user's design, 2026-11-12): the page number, the previous page's control to its left
+  // and the next page's to its right.
+  const layout::PageRow row =
+      layout::page_row(style::kDiscRadius, style::kPageAbove, style::kPageTextWidth, style::kGlyphSize, style::kGlyphGap);
+  g.pageText = ui::create_text(canvas, "pm emote page", style::kPageFontSize);
+  if (g.pageText) {
+    ui::set_color(g.pageText, to_ui(style::kNameWhite));
+    ui::place(g.pageText, mid, mid, {row.text.x, row.text.y}, {style::kPageTextWidth, style::kPageFontSize * 1.6f});
+  }
+  g.previousGlyph = ui::create_sprite_image(canvas, "pm emote previous page", nullptr);
+  if (g.previousGlyph) ui::place(g.previousGlyph, mid, mid, {row.previous.x, row.previous.y}, {style::kGlyphSize, style::kGlyphSize});
+  g.nextGlyph = ui::create_sprite_image(canvas, "pm emote next page", nullptr);
+  if (g.nextGlyph) ui::place(g.nextGlyph, mid, mid, {row.next.x, row.next.y}, {style::kGlyphSize, style::kGlyphSize});
+  show_page_row(nullptr, nullptr);
   g.name = ui::create_text(canvas, "pm emote name", style::kNameFontSize);
   if (g.name) {
     ui::set_color(g.name, to_ui(style::kNameWhite));
@@ -90,6 +109,25 @@ void show_icons() {
     ui::set_texture(image, tex);
     ui::set_color(image, tex ? to_ui(style::kIconWhite) : ui::Color{0, 0, 0, 0});
   }
+}
+
+// The page row: hidden with one page; otherwise the page number, and each control's glyph where the caller has one
+// (none on keyboard and mouse until the author's glyph arrives).
+void show_page_row(void* previousSprite, void* nextSprite) {
+  const bool many = g.pages > 1;
+  if (g.pageText) {
+    ui::set_active(g.pageText, many);
+    if (many)
+      ui::set_text(g.pageText, i18n::text("emotes.page", {{"page", std::to_string(g.page + 1)},
+                                                           {"pages", std::to_string(g.pages)}}).c_str());
+  }
+  const auto glyph = [&](void* image, void* sprite) {
+    if (!image) return;
+    ui::set_sprite(image, sprite);
+    ui::set_active(image, many && sprite);
+  };
+  glyph(g.previousGlyph, previousSprite);
+  glyph(g.nextGlyph, nextSprite);
 }
 
 void* transform_of_canvas() { return g.canvas ? game::transform_of(g.canvas) : nullptr; }
@@ -166,9 +204,28 @@ void show_pick(int segment) {
 
 void set_page(int page) {
   g.page = page;
+  g.pages = std::max(1, (static_cast<int>(g.names.size()) + kSegments - 1) / kSegments);
   if (!is_open()) return;
   show_icons();
   show_pick(-1);
+}
+
+void show_glyphs(void* previousSprite, void* nextSprite) {
+  if (is_open()) show_page_row(previousSprite, nextSprite);
+}
+
+int pointed_glyph(void* hand) {
+  void* t = transform_of_canvas();
+  if (!g.vr || !t || !hand || !game::alive(hand) || g.pages < 2) return 0;
+  const phasmo::Vector3 o = game::position(hand), f = game::forward(hand);
+  const phasmo::Vector3 c = game::position(t), n = game::forward(t);
+  const auto hit = layout::ray_plane({o.x, o.y, o.z}, {f.x, f.y, f.z}, {c.x, c.y, c.z}, {n.x, n.y, n.z});
+  if (!hit) return 0;
+  const phasmo::Vector3 world{hit->x, hit->y, hit->z};
+  const phasmo::Vector3 local = phasmo::Transform::InverseTransformPoint(t, &world);
+  const layout::PageRow row =
+      layout::page_row(style::kDiscRadius, style::kPageAbove, style::kPageTextWidth, style::kGlyphSize, style::kGlyphGap);
+  return layout::glyph_at({local.x, local.y}, row, style::kGlyphSize);
 }
 
 int emote_at(int segment) { return emote_of(segment); }
@@ -190,6 +247,9 @@ void close() {
   if (!g.vr) api::fx::clear_screen_effects();
   g.canvas = nullptr;
   g.name = nullptr;
+  g.pageText = nullptr;
+  g.previousGlyph = nullptr;
+  g.nextGlyph = nullptr;
   for (api::Held& h : g.images) h = nullptr;
   for (api::Held& h : g.iconImages) h = nullptr;
   g.picked = -1;

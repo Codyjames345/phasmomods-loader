@@ -1,10 +1,15 @@
 // Offline tests for the Emotes wheel's pages (mods/emotes/wheel_pages.h): how many pages of kSegments emotes an emote
 // list needs, turning pages both ways, which emote a page's segment holds, a page kept while the list shrinks, and what
-// a mouse scroll does to the page. Run: build\emotes_pages_test.exe
+// a mouse scroll does to the page. And the input actions the wheel holds paused while it is open
+// (mods/emotes/paused_actions.h): every way the wheel closes gives back exactly the actions it paused.
+// Run: build\emotes_pages_test.exe
+#include <algorithm>
 #include <cstdio>
+#include <vector>
 
 #include "check.h"
 #include "emote_rule.h"
+#include "paused_actions.h"
 #include "wheel_pages.h"
 
 namespace {
@@ -53,6 +58,55 @@ void scroll_down_is_next_page() {
   CHECK(pages::scroll_step(0.0f) == 0);
 }
 
+// The loader hands input actions around as void*, so the fake actions here are local ints, each kept by a plain handle
+// (the mod keeps them with pm::api::Held).
+struct Fake {
+  void* p = nullptr;
+  Fake(void* action) : p(action) {}
+  void* get() const { return p; }
+};
+void paused_actions_come_back_on_every_close() {
+  int look = 0, swap = 0;
+  PausedActions<Fake> held;
+  void* const actions[] = {&look, &swap};
+  held.pause(actions);
+  CHECK(held.paused());
+  const std::vector<Fake> back = held.resume();
+  CHECK(back.size() == 2 && back[0].get() == &look && back[1].get() == &swap);  // each once, in the order paused
+  CHECK(!held.paused());
+}
+
+void a_disabled_action_is_not_reenabled() {
+  int look = 0, bumper = 0;
+  PausedActions<Fake> held;
+  void* const actions[] = {&look};  // the game already had the bumper action off
+  held.pause(actions);
+  const std::vector<Fake> back = held.resume();
+  CHECK(back.size() == 1 && back[0].get() == &look);
+  CHECK(std::none_of(back.begin(), back.end(), [&](const Fake& f) { return f.get() == &bumper; }));  // an action never paused never comes back
+}
+
+void double_pause_is_one_pause() {
+  int look = 0, swap = 0;
+  PausedActions<Fake> held;
+  void* const first[] = {&look};
+  void* const both[] = {&look, &swap};
+  held.pause(first);
+  held.pause(both);  // paused again before the first close gave its actions back
+  const std::vector<Fake> back = held.resume();
+  CHECK(back.size() == 2 && back[0].get() == &look && back[1].get() == &swap);  // look once, not twice
+}
+
+void resume_twice_returns_nothing_the_second_time() {
+  int look = 0, swap = 0;
+  PausedActions<Fake> held;
+  void* const actions[] = {&look, &swap};
+  held.pause(actions);
+  CHECK(held.resume().size() == 2);
+  CHECK(held.resume().empty());  // the set is empty after a resume
+  CHECK(!held.paused());
+}
+
 }  // namespace
 
 int main() {
@@ -61,6 +115,10 @@ int main() {
   emote_at_is_minus_one_past_the_end();
   clamp_page_after_emotes_shrink();
   scroll_down_is_next_page();
+  paused_actions_come_back_on_every_close();
+  a_disabled_action_is_not_reenabled();
+  double_pause_is_one_pause();
+  resume_twice_returns_nothing_the_second_time();
   std::printf("%s\n", g_failures ? "emotes_pages tests FAILED" : "emotes_pages tests passed");
   return g_failures ? 1 : 0;
 }

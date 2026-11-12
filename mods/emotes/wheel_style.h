@@ -25,6 +25,12 @@ inline constexpr float kIconSize = 110.0f;      ///< an icon's width and height
 inline constexpr float kNameFontSize = 44.0f;   ///< the name's text size
 inline constexpr float kNameBelow = 48.0f;      ///< how far under the disc the name sits
 
+inline constexpr float kPageAbove = 40.0f;      ///< how far above the disc's top the page row's centre sits
+inline constexpr float kPageFontSize = 36.0f;   ///< the page text's text size
+inline constexpr float kGlyphSize = 56.0f;      ///< a page glyph's width and height
+inline constexpr float kGlyphGap = 24.0f;       ///< the space between the page text's edge and each glyph
+inline constexpr float kPageTextWidth = 160.0f; ///< the page text's box width
+
 inline constexpr float kBlur = 0.35f;      ///< the blur behind the wheel, 0 to 1 (screen only)
 inline constexpr float kVignette = 0.35f;  ///< the vignette behind the wheel, 0 to 1 (screen only)
 
