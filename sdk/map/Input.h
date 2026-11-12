@@ -395,6 +395,27 @@ inline constexpr pm::sdk::EntryDesc InputActionReference_get_action{.key = "Inpu
                                                                    .owner = "InputActionReference",
                                                                    .name = "get_action"};
 
+/// A game UI widget that shows the gamepad glyph of one input action (Assembly-CSharp, global namespace): the
+/// journal's and pause screen's LB and RB page tabs are ones. It holds two GamepadIcons sets, an Xbox one and a PS5
+/// one (sprites named for their buttons, such as leftShoulder and rightShoulder). When the player's controls change
+/// (PlayerInput's controls-changed event) it shows, for a gamepad scheme, the sprite for the action's gamepad binding
+/// from the PS5 set when the gamepad's name says it is a PlayStation pad or the game runs on a PS5, else from the
+/// Xbox set, on its Image in full colour; for keyboard and mouse it sets that Image's colour to clear, so no glyph
+/// shows. The game has no glyph for the mouse or keyboard. Decompiled.
+inline constexpr pm::sdk::EntryDesc GamepadButton{.key = "GamepadButton", .confidence = pm::sdk::Confidence::Decompiled,
+                                                  .name = "GamepadButton", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The action whose glyph it shows: GamepadButton's one InputActionReference field. Decompiled.
+inline constexpr pm::sdk::EntryDesc GamepadButton_action{.key = "GamepadButton.action", .kind = pm::sdk::Kind::Field,
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "GamepadButton", .type = "InputActionReference"};
+
+/// The Image the glyph shows on: GamepadButton's one Image field. Its sprite is the glyph the game picked for the
+/// current pad; its colour is clear while the player uses keyboard and mouse. Decompiled.
+inline constexpr pm::sdk::EntryDesc GamepadButton_image{.key = "GamepadButton.image", .kind = pm::sdk::Kind::Field,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .owner = "GamepadButton", .type = "Image"};
+
 /// One row of the game's keybinds menu (Assembly-CSharp, global namespace): Unity's rebinding sample. Its button starts
 /// an interactive rebind of the action it references, and it shows the binding's current key. Its fields keep their
 /// real names. Inferred: from the class dump.
@@ -586,6 +607,16 @@ struct InputActionReference {
   static constexpr pm::api::Method<pm::map::InputActionReference_Create, void*(void*)> Create{};
   /// get_action(reference): the InputAction, or null. Unresolved: null.
   static constexpr pm::api::Method<pm::map::InputActionReference_get_action, void*(void*)> get_action{};
+};
+
+/// A widget showing one action's gamepad glyph. `button` below is the GamepadButton.
+struct GamepadButton {
+  /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::GamepadButton> type{};
+  /// The action whose glyph it shows, an InputActionReference: action.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_action, void*> action{};
+  /// The Image it shows the glyph on: image.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_image, void*> image{};
 };
 
 /// A row of the game's keybinds menu.

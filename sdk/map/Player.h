@@ -160,6 +160,34 @@ inline constexpr pm::sdk::EntryDesc LocalPCPlayer_canvas{.key = "LocalPCPlayer.c
                                                          .owner = "LocalPCPlayer",
                                                          .type = "@PCCanvas"};
 
+/// The PC rig's movement controller (Assembly-CSharp, global namespace): it moves the local PC investigator
+/// from the Move input. Decompiled.
+inline constexpr pm::sdk::EntryDesc FirstPersonController{.key = "FirstPersonController",
+                                                          .confidence = pm::sdk::Confidence::Decompiled,
+                                                          .name = "FirstPersonController",
+                                                          .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The rig's movement controller: LocalPCPlayer's one FirstPersonController field. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPCPlayer_firstPersonController{
+    .key = "LocalPCPlayer.firstPersonController", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPCPlayer", .type = "FirstPersonController"};
+
+/// The Move input as the game last read it, a Vector2 (x right, y forward): FirstPersonController's one Vector2
+/// field. FirstPersonController.Move, the Move action's callback, stores the action's value there, scaled down to
+/// length 1 when longer, and zero when the action is cancelled or both axes are inside a small dead zone. So W alone
+/// reads (0, 1) and up on the move stick reads its tilt, with the player's own rebinding applied. Local PC player
+/// only; the VR rig moves without it. Decompiled.
+inline constexpr pm::sdk::EntryDesc FirstPersonController_moveInput{
+    .key = "FirstPersonController.moveInput", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "FirstPersonController", .type = "Vector2"};
+
+/// The Move action's callback (an InputAction.CallbackContext): stores the input in FirstPersonController.moveInput
+/// as described there. Decompiled.
+inline constexpr pm::sdk::EntryDesc FirstPersonController_Move{.key = "FirstPersonController.Move",
+                                                               .kind = pm::sdk::Kind::Method,
+                                                               .confidence = pm::sdk::Confidence::Decompiled,
+                                                               .owner = "FirstPersonController", .name = "Move"};
+
 /// The local player's HUD (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from the
 /// class dump.
 inline constexpr pm::sdk::EntryDesc PCCanvas{.key = "PCCanvas", .name = "PCCanvas", .assembly = "Assembly-CSharp",
@@ -1145,6 +1173,8 @@ struct LocalPCPlayer {
   static constexpr pm::api::Field<pm::map::LocalPCPlayer_canvas, void*> canvas{};
   /// Its PCControls: controls.get(localPlayer). Unresolved: null.
   static constexpr pm::api::Field<pm::map::LocalPCPlayer_controls, void*> controls{};
+  /// Its movement controller: firstPersonController.get(rig). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LocalPCPlayer_firstPersonController, void*> firstPersonController{};
   /// UpdatePlayerSpeed(player): applies its walk or sprint speed. A mod usually hooks it. Unresolved: does
   /// nothing.
   static constexpr pm::api::Method<pm::map::LocalPCPlayer_UpdatePlayerSpeed, void(void*)> UpdatePlayerSpeed{};
@@ -1152,6 +1182,14 @@ struct LocalPCPlayer {
   /// Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::LocalPCPlayer_SetPlayerSpeedMultiplier, void(void*, float)>
       SetPlayerSpeedMultiplier{};
+};
+
+/// The PC rig's movement controller. `rig` below is the FirstPersonController.
+struct FirstPersonController {
+  /// The type: klass(), is(obj). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::FirstPersonController> type{};
+  /// The Move input as the game last read it, two floats: moveInput.get(rig). Unresolved: zero.
+  static constexpr pm::api::Field<pm::map::FirstPersonController_moveInput, Vector2> moveInput{};
 };
 
 /// The local player's HUD.

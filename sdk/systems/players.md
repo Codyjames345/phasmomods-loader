@@ -254,6 +254,12 @@ UIDown, UILeft, UIRight (the arrow keys and the D-pad) and UISelect and UIShould
 (`InputActionMap.m_Actions`, `InputAction.m_Name`) and asks `InputAction.WasPressedThisFrame`, so the player's own
 rebinding counts. `PCPropGrab` holds the handlers behind the item actions.
 
+How far the player pushes Move is `FirstPersonController.moveInput` on the PC rig (`LocalPCPlayer.firstPersonController`):
+the game's own copy of the Move action's value, at most length 1, zero when released, with the player's rebinding
+applied. W alone is (0, 1). The Run action can be held or toggled (the game's sprint mode setting), so whether the
+player is sprinting is read from the speed: the rig moves faster than its walk speed (`LocalPlayer.walkSpeed` times
+`LocalPlayer.speedMultiplier`) only while it sprints (`LocalPCPlayer.UpdatePlayerSpeed`).
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/players.md).

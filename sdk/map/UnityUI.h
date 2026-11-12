@@ -118,6 +118,14 @@ inline constexpr pm::sdk::EntryDesc UIBehaviour_IsActive{.key = "UIBehaviour.IsA
 inline constexpr pm::sdk::EntryDesc Image{.key = "Image", .name = "Image", .assembly = "UnityEngine.UI",
                                           .ns = "UnityEngine.UI"};
 
+/// The Sprite it shows, or null. Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc Image_get_sprite{.key = "Image.get_sprite", .kind = pm::sdk::Kind::Method,
+                                                     .owner = "Image", .name = "get_sprite"};
+
+/// Sets the Sprite it shows, or null. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Image_set_sprite{.key = "Image.set_sprite", .kind = pm::sdk::Kind::Method,
+                                                     .owner = "Image", .name = "set_sprite"};
+
 /// Unity's canvas component (UnityEngine.UIModule), the root a UI is drawn in. Inferred: Unity's
 /// documented API.
 inline constexpr pm::sdk::EntryDesc Canvas{.key = "Canvas", .name = "Canvas", .assembly = "UnityEngine.UIModule",
@@ -552,6 +560,10 @@ struct UIBehaviour {
 struct Image {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Image> type{};
+  /// get_sprite(image): the Sprite, or null. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Image_get_sprite, void*(void*)> get_sprite{};
+  /// set_sprite(image, sprite). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Image_set_sprite, void(void*, void*)> set_sprite{};
 };
 
 /// Unity's canvas component.

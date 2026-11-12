@@ -308,3 +308,24 @@ The user played the mod in game and gave these.
   is playing either". The mod hooks the game's notice of a kill beginning, `Player.NotifyOfDeathStart`, which every
   client gets; from there the body is the game's, the clip is off with nothing blending, the view goes back inside at
   once and the wheel is shut.
+
+## Decisions for the second round (2026-11-12)
+
+The user's, for pages, emote packs, the loop tool and walking emotes. The plan is
+`docs/superpowers/plans/2026-11-12-emotes-pages-packs-walking.md`; it lists the builder's calls beside these. This lifts
+the non-goal "more than eight emotes, pages of emotes".
+
+- **Pages.** The wheel has more than one page, turned with the scroll wheel or the left and right bumpers. It opens on the
+  page last viewed in this session; nothing is saved, so a restart opens on the first page.
+- **Showing the page.** The page number sits at the top of the wheel with a glyph for each page control on either side.
+  The game's own LB and RB glyphs are reused. The game has none for the scroll wheel; the user supplies that glyph
+  (`PM_UI_TODO` until then). The page text's wording is the user's (`PM_TEXT_TODO`).
+- **Other mods add emotes,** each shipping its own bundle and catalogue.
+- **No props or particles.** The dance packages hold body-only humanoid clips.
+- **Walking emotes.** Walking forward plays the emote's moving clip at the game's own walk speed, and stopping goes
+  back. Forward is the player's input: the W key or up on the move stick, forward only, not a diagonal. Sideways or
+  backward past 0.5 m, sprinting, crouching and the usual actions still end it. The camera stays in third person.
+- **Intros.** An emote may play an intro clip and an intro song once before its looping clip and song.
+- **Eight more emotes:** Build Up, Get Griddy, Lavish, Never Gonna, Running Man, Savor The W, Sprinkler and Stride, with
+  the user's icons and songs; Never Gonna uses the second package's start and loop clips and its song. The user's rough
+  song loops: Lavish 28 s, Running Man 15 s, Savor The W 15 s, Sprinkler 22.5 s, Stride 17 s.

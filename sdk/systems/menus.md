@@ -111,6 +111,15 @@ lays a whole list out with exactly one line between every pair of rows the playe
 dividers away and copies one line in before every row but the first, and gives it all back when the mod's rows go. `rows::line_divider` picks the line to copy: the keybinds
 page's, when one of its lists is loaded, and the page's own divider when none is (the user's ruling).
 
+## Input glyphs
+
+The game shows a gamepad button's glyph with a `GamepadButton` widget (the journal's and pause screen's LB and RB tabs
+are ones). It holds an Xbox and a PS5 set of sprites and picks one by the connected pad's name and the platform; its
+`GamepadButton.image` shows the picked sprite for its action (`GamepadButton.action`) in full colour while a gamepad is
+in use, and turns clear for keyboard and mouse. A mod that wants the same glyph reads `Image.get_sprite` of a live
+widget whose action is bound to that button, so the glyph follows the pad the game detected. The game has no glyph for
+a mouse button, the scroll wheel or a key.
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/menus.md).
