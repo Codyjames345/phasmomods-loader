@@ -21,11 +21,12 @@ namespace PhasmoMods.EmoteTools
     public static class EmotePackTool
     {
         /// <summary>
-        /// The most ClipLoop cost a cut may have: at or below this the clip returns to its start
-        /// well enough to cut there, above it the clip is crossfaded to the song loop instead.
-        /// Provisional, tuned against the author's clips (2026-11-13).
+        /// The most a cut's ClipLoop cost may be, as a share of the median cost over all the clip's frames: at or below
+        /// it the clip returns to its start well enough to cut there, above it the clip is crossfaded instead. A share,
+        /// not a fixed cost, because the cost grows with how far a dance's poses move. Measured 2026-11-13: clips made
+        /// to loop come out near 0.07, Disco Fever's, which no frame returns from, at 0.68.
         /// </summary>
-        public const float ClipCutThreshold = 0.05f;
+        public const double ClipCutShare = 0.25;
 
         // ---------------------------------------------------------------- entry points
 
@@ -151,14 +152,12 @@ namespace PhasmoMods.EmoteTools
                     return false;
                 }
                 double songLoop = 0.0;
-                bool haveSongLoop = false;
                 if (!string.IsNullOrEmpty(emote.songSource) && emote.songLoopGuess > 0f)
                 {
                     if (!CutSong(emote, ref text, out songLoop, out why))
                     {
                         return false;
                     }
-                    haveSongLoop = true;
                 }
                 else if (!string.IsNullOrEmpty(emote.song) && emote.songLoopGuess <= 0f)
                 {
@@ -166,25 +165,13 @@ namespace PhasmoMods.EmoteTools
                     {
                         return false;
                     }
-                    haveSongLoop = true;
                 }
                 if (!string.IsNullOrEmpty(emote.clipSource) && emote.clipLoopGuess > 0f)
                 {
-                    double target;
-                    if (haveSongLoop)
-                    {
-                        target = songLoop;
-                    }
-                    else if (emote.songLoop != null && emote.songLoop.seconds > 0f)
-                    {
-                        target = emote.songLoop.seconds;
-                    }
-                    else
-                    {
-                        why = emote.name + " needs a song loop length to crossfade its clip to, and has none";
-                        return false;
-                    }
-                    if (!MakeClip(emote, (float)target, out why))
+                    // A clip that no frame near its guess brings back to its start is crossfaded to the guess: its
+                    // tail past the guess blends into its start (Disco Fever's guess is its song's loop, so the two keep
+                    // in step; a clip guessed at its own length less a fade loops on its own).
+                    if (!MakeClip(emote, emote.clipLoopGuess, out why))
                     {
                         return false;
                     }
@@ -309,8 +296,32 @@ namespace PhasmoMods.EmoteTools
                 }
             }
             LoopResult r = LoopFinder.ClipLoop(frames, fps, emote.clipLoopGuess);
+            // How far each frame is from returning to the start, for judging the cut: the cost at the clip's own end
+            // and the median over every frame, beside the best.
+            List<double> costs = new List<double>();
+            int anywhere = 0;
+            double anywhereCost = double.PositiveInfinity;
+            for (int f = 1; f <= last; f++)
+            {
+                double c = LoopFinder.ClipLoop(frames, fps, f / (double)fps, 0.4 / fps).Score;
+                costs.Add(c);
+                if (f >= fps / 2 && c < anywhereCost)
+                {
+                    anywhereCost = c;
+                    anywhere = f;
+                }
+            }
+            Debug.Log(string.Format(CultureInfo.InvariantCulture, "EMLOOP {0} clip anywhere past half a second: frame {1} ({2:F4})",
+                                    emote.name, anywhere, anywhereCost));
+            costs.Sort();
+            double median = costs.Count > 0 ? costs[costs.Count / 2] : 0.0;
+            double share = median > 0.0 ? r.Score / median : 0.0;
+            Debug.Log(string.Format(CultureInfo.InvariantCulture,
+                "EMLOOP {0} clip costs: best frame {1} of {2} ({3:F4}, {4:F2} of the median {5:F4}), at its end {6:F4}",
+                emote.name, r.At, last, r.Score, share, median,
+                LoopFinder.ClipLoop(frames, fps, last / (double)fps, 0.4 / fps).Score));
             AnimationClip made;
-            if (r.Score <= ClipCutThreshold)
+            if (share <= ClipCutShare)
             {
                 made = CutClip(source, all, r.At, fps);
                 Debug.Log(string.Format("EMLOOP {0} clip {1} ({2:F4})", emote.name, r.At, r.Score));
