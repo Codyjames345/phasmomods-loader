@@ -5,11 +5,23 @@
 // under the disc. On screen it is an overlay canvas over a slight blur and vignette (sdk/api/screen_effects.h); in VR a
 // world canvas floating over the left hand and turned to the head, without the effects. Main thread.
 
+#include <string>
+#include <vector>
+
 namespace pm::emotes::wheel {
 
-/// Keeps the icons from the bundle and draws the segments' and centre's textures. A missing icon leaves its segment
-/// bare (logged). False when the textures cannot be made in this game build.
-bool load(void* bundle);
+/// Keeps every emote's icon and name, in wheel order (catalogue.h wheel_order), and draws the segments' and centre's
+/// textures. A null icon leaves its segment bare. False when the textures cannot be made in this game build.
+/// @param icons Each emote's Texture2D, or null.
+/// @param names Each emote's name as the player reads it.
+bool load(const std::vector<void*>& icons, const std::vector<std::string>& names);
+
+/// Shows page `page`: its emotes are page * kSegments onwards. The open wheel's icons change at once and nothing is
+/// picked; a closed wheel opens on it.
+void set_page(int page);
+
+/// The emote under `segment` of the page shown, or -1 for an empty segment or one out of range.
+int emote_at(int segment);
 
 /// Shows the wheel on screen, nothing picked, with the blur and vignette behind it. False when it cannot be built.
 bool open_screen();

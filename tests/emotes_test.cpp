@@ -5,12 +5,16 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "check.h"
-#include "emote_assets.h"
+#include "catalogue.h"
+#include "text_table.h"
 #include "emote_net.h"
 #include "emote_rule.h"
 
@@ -162,35 +166,70 @@ void a_song_loops_at_its_own_points() {
   CHECK(std::fabs(song_position(9.5, own) - 1.5) < 1e-9);
   // No loop at all (length 0): the song plays on from the clip's start.
   CHECK(song_position(50.0, SongLoop{0.0f, 0.0f}) == 50.0);
-  // An emote's loop: its own points when given, else its clip's length.
-  EmoteAsset e = kEmotes[0];
-  e.songLoopStart = e.songLoopSeconds = 0.0f;  // none given
-  CHECK(song_loop_of(e, 9.0f).start == 0.0f && song_loop_of(e, 9.0f).length == 9.0f);
-  e.songLoopStart = 2.0f;
-  e.songLoopSeconds = 3.0f;
-  CHECK(song_loop_of(e, 9.0f).start == 2.0f && song_loop_of(e, 9.0f).length == 3.0f);
 }
 
 // ---- The message ----
 
 void messages_round_trip() {
-  const EmoteMsg sent{Kind::Start, 7, 1.5f, -2.25f, 3.0f, 135.0f};
+  const EmoteMsg sent{Kind::Start, 1007u, false, 1.5f, -2.25f, 3.0f, 135.0f};
   const std::vector<uint8_t> bytes = pack(sent);
   CHECK(bytes.size() == kMessageBytes && bytes[0] == kMagic);
   const auto got = unpack(bytes);
   CHECK(got.has_value());
   if (got) {
-    CHECK(got->kind == Kind::Start && got->emote == 7);
+    CHECK(got->kind == Kind::Start && got->key == 1007u && !got->moving);
     CHECK(got->x == 1.5f && got->y == -2.25f && got->z == 3.0f && got->yaw == 135.0f);
   }
   for (Kind k : {Kind::Facing, Kind::End}) {
-    const auto again = unpack(pack(EmoteMsg{k, 0, 0, 0, 0, -45.0f}));
+    const auto again = unpack(pack(EmoteMsg{k, 1000u, false, 0, 0, 0, -45.0f}));
     CHECK(again && again->kind == k);
   }
 }
 
+// Every kind comes back whole. The key is a big number whose four bytes are all different, so a key written in the
+// wrong order fails here.
+void pack_unpack_round_trips_every_kind() {
+  CHECK(kMessageBytes == 23);
+  for (const Kind k : {Kind::Start, Kind::Facing, Kind::End, Kind::Move}) {
+    const bool walking = k == Kind::Move;  // the walking flag rides on Move until walking sends it
+    const EmoteMsg sent{k, 4000000000u, walking, 1.0f, 2.0f, 3.0f, 45.0f};
+    const auto got = unpack(pack(sent));
+    CHECK(got.has_value());
+    if (got) {
+      CHECK(got->kind == k && got->key == 4000000000u && got->moving == walking);
+      CHECK(got->x == 1.0f && got->y == 2.0f && got->z == 3.0f && got->yaw == 45.0f);
+    }
+  }
+}
+
+void a_short_or_long_message_is_refused() {
+  std::vector<uint8_t> b = pack(EmoteMsg{Kind::Start, 1003u, false, 0, 0, 0, 0});
+  CHECK(b.size() == kMessageBytes);
+  b.pop_back();
+  CHECK(b.size() == 22 && !unpack(b).has_value());  // short
+  b = pack(EmoteMsg{Kind::Start, 1003u, false, 0, 0, 0, 0});
+  b.push_back(0);
+  CHECK(b.size() == 24 && !unpack(b).has_value());  // long
+}
+
+void a_non_finite_number_is_refused() {
+  EmoteMsg bad{Kind::Start, 1003u, false, 0, 0, 0, 0};
+  bad.x = std::nanf("");
+  CHECK(!unpack(pack(bad)).has_value());
+  bad.x = 0;
+  bad.yaw = INFINITY;
+  CHECK(!unpack(pack(bad)).has_value());
+}
+
+// Only bit 0 of the flags byte means anything (the walking flag); a message claiming another flag is not understood.
+void unknown_flag_bits_are_refused() {
+  std::vector<uint8_t> b = pack(EmoteMsg{Kind::Start, 1003u, false, 0, 0, 0, 0});
+  b[2] = 2;
+  CHECK(!unpack(b).has_value());
+}
+
 void bad_messages_are_dropped() {
-  std::vector<uint8_t> good = pack(EmoteMsg{Kind::Start, 3, 0, 0, 0, 0});
+  const std::vector<uint8_t> good = pack(EmoteMsg{Kind::Start, 1003u, false, 0, 0, 0, 0});
   CHECK(!unpack({}).has_value());
   std::vector<uint8_t> b = good;
   b[0] = 'C';
@@ -198,23 +237,8 @@ void bad_messages_are_dropped() {
   b = good;
   b[1] = 0;
   CHECK(!unpack(b).has_value());
-  b[1] = 4;
-  CHECK(!unpack(b).has_value());  // unknown kinds
-  b = good;
-  b[2] = kSegments;
-  CHECK(!unpack(b).has_value());  // past the wheel
-  b = good;
-  b.pop_back();
-  CHECK(!unpack(b).has_value());  // short
-  b = good;
-  b.push_back(0);
-  CHECK(!unpack(b).has_value());  // long
-  EmoteMsg nan{Kind::Start, 0, 0, 0, 0, 0};
-  nan.x = std::nanf("");
-  CHECK(!unpack(pack(nan)).has_value());
-  nan.x = 0;
-  nan.yaw = INFINITY;
-  CHECK(!unpack(pack(nan)).has_value());
+  b[1] = 5;
+  CHECK(!unpack(b).has_value());  // unknown kinds (4 is now Move)
 }
 
 void the_dead_dance_for_the_dead() {
@@ -226,28 +250,26 @@ void the_dead_dance_for_the_dead() {
 
 // ---- The emotes ----
 
-void every_slot_has_its_names() {
-  std::set<std::string> folders, clips, keys;
-  for (const EmoteAsset& e : kEmotes) {
-    folders.insert(e.folder);
-    clips.insert(e.clip);
-    keys.insert(e.nameKey);
-    CHECK(clip_path(e).starts_with("assets/emotes/clips/") && clip_path(e).ends_with(".anim"));
-    CHECK(clip_path(e).find_first_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ") == std::string::npos);  // bundle paths are lower case
-    CHECK(song_path(e) == std::string("assets/emotes/loops/") + e.folder + ".wav");  // cut to its loop (cut_loops.ps1)
-    CHECK(icon_path(e) == std::string("assets/emotes/icons/") + e.folder + ".png");
-    CHECK(loudness_path(e) == std::string(e.folder) + "/loudness.txt");
-  }
-  CHECK(folders.size() == kSegments && clips.size() == kSegments && keys.size() == kSegments);
-  CHECK(std::string(kEmotes[0].clip) == "DiscoFever" && std::string(kEmotes[7].clip) == "TakeTheL");
-  CHECK(clip_path(kEmotes[7]) == "assets/emotes/clips/takethel.anim");
-  // The two songs whose loop is not their clip's (the author, 2026-11-10), measured from the tracks: both from 0 s.
-  CHECK(kEmotes[2].songLoopStart == 0.0f && std::fabs(kEmotes[2].songLoopSeconds - 16.692f) < 1e-4f);  // Floss
-  CHECK(kEmotes[7].songLoopStart == 0.0f && std::fabs(kEmotes[7].songLoopSeconds - 12.632f) < 1e-4f);  // Take The L
-  // The rest, from the author's rough points (2026-11-10), measured on the waveform as Floss was.
-  const float measured[] = {8.542f, 16.0f, 0, 15.118f, 18.935f, 32.542f, 19.2f};
-  for (int i : {0, 1, 3, 4, 5, 6})
-    CHECK(kEmotes[i].songLoopStart == 0.0f && std::fabs(kEmotes[i].songLoopSeconds - measured[i]) < 1e-4f);
+// The mod's own catalogue (mods/emotes/assets/emotes.json) parses, names each emote's label in the mod's string table, and
+// keeps the eight in the author's order with the songs' measured loops (2026-11-10).
+void the_shipped_catalogue_parses_with_a_label_for_each() {
+  std::ifstream in(std::filesystem::path(PM_TEXT_DIR) / "mods" / "emotes" / "assets" / "emotes.json", std::ios::binary);
+  const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  Catalogue cat;
+  std::string why;
+  CHECK(parse_catalogue(text, "phasmomods.emotes", cat, why));
+  CHECK(cat.warnings.empty());
+  CHECK(cat.bundle == "emotes.bundle");
+  CHECK(cat.emotes.size() == 8);
+  if (cat.emotes.size() != 8) return;
+  pm::i18n::Table table;
+  CHECK(table.load(std::filesystem::path(PM_TEXT_DIR) / "mods" / "emotes" / "i18n" / "default.json", why));
+  for (const EmoteDef& e : cat.emotes) CHECK(table.has(e.label));
+  CHECK(cat.emotes[0].id == "phasmomods.emotes.disco-fever" && cat.emotes[7].id == "phasmomods.emotes.take-the-l");
+  CHECK(bundle_path(cat.emotes[7].clip) == "assets/emotes/clips/takethel.anim");
+  const float measured[] = {8.542f, 16.0f, 16.692f, 15.118f, 18.935f, 32.542f, 19.2f, 12.632f};
+  for (int i = 0; i < 8; ++i)
+    CHECK(cat.emotes[i].songLoop.start == 0.0f && std::fabs(cat.emotes[i].songLoop.length - measured[i]) < 1e-4f);
 }
 
 }  // namespace
@@ -282,9 +304,13 @@ int main() {
   a_looping_song_restarts_with_its_clip();
   a_song_loops_at_its_own_points();
   messages_round_trip();
+  pack_unpack_round_trips_every_kind();
+  a_short_or_long_message_is_refused();
+  a_non_finite_number_is_refused();
+  unknown_flag_bits_are_refused();
   bad_messages_are_dropped();
   the_dead_dance_for_the_dead();
-  every_slot_has_its_names();
+  the_shipped_catalogue_parses_with_a_label_for_each();
   std::printf("%s\n", g_failures ? "emotes tests FAILED" : "emotes tests passed");
   return g_failures ? 1 : 0;
 }

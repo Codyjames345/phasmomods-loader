@@ -6,7 +6,6 @@
 // other client, each peer's dance as their messages say, the dead's rule, and the end of a peer who is gone. The mod's
 // glue (emote.cpp) reads the frame from the game and carries the decisions out.
 
-#include <array>
 #include <cmath>
 #include <map>
 #include <optional>
@@ -17,13 +16,16 @@
 
 namespace pm::emotes {
 
-/// What the session knows of each emote once its clip is loaded.
+/// What the session knows of each emote once its clip is loaded, in the wheel's order (catalogue.h's wheel_order).
 struct EmoteInfo {
   float clipSeconds = 0.0f;  ///< the clip's length
   bool loops = false;        ///< the clip's Loop Time
   SongLoop song;             ///< where its song loops (song_loop_of)
+  uint32_t key = 0;          ///< the emote's catalogue key (catalogue.h's emote_key), what its messages name it by
+  bool hasMove = false;      ///< the emote has a walking variant its pack's file names (moveClip)
 };
-using EmoteTable = std::array<EmoteInfo, kSegments>;
+/// The wheel's emotes: any number, shown kSegments to a page (wheel_pages.h). An emote index is an int into this.
+using EmoteTable = std::vector<EmoteInfo>;
 
 /// This client's investigator this frame, as the glue reads it.
 struct LocalFrame {
@@ -56,7 +58,7 @@ class LocalSession {
   /// has the body (the user, 2026-11-10): an investigator beginning to die does not dance.
   LocalOut pick(int emote, const LocalFrame& f) {
     LocalOut o;
-    if (!f.present || f.dying || emote < 0 || emote >= kSegments) return o;
+    if (!f.present || f.dying || emote < 0 || emote >= static_cast<int>(table_.size())) return o;
     active_ = true;
     emote_ = emote;
     start_ = lastPos_ = f.pos;
@@ -64,7 +66,8 @@ class LocalSession {
     wasDown_ = f.dead || f.dying;
     o.start = emote;
     o.bodyYaw = yaw_;
-    o.send.push_back(EmoteMsg{Kind::Start, static_cast<uint8_t>(emote), f.pos.x, f.pos.y, f.pos.z, yaw_});
+    o.send.push_back(
+        EmoteMsg{Kind::Start, table_[static_cast<size_t>(emote)].key, false, f.pos.x, f.pos.y, f.pos.z, yaw_});
     return o;
   }
 
@@ -93,7 +96,7 @@ class LocalSession {
     o.bodyYaw = yaw_;
     if (std::fabs(wrap_degrees(yaw_ - sentYaw_)) >= kFacingSendDegrees) {
       sentYaw_ = yaw_;
-      o.send.push_back(EmoteMsg{Kind::Facing, static_cast<uint8_t>(emote_), 0, 0, 0, yaw_});
+      o.send.push_back(EmoteMsg{Kind::Facing, table_[static_cast<size_t>(emote_)].key, false, 0, 0, 0, yaw_});
     }
     return o;
   }
@@ -114,7 +117,7 @@ class LocalSession {
   void end(LocalOut& o, bool atOnce = false) {
     o.stop = true;
     o.atOnce = atOnce;
-    o.send.push_back(EmoteMsg{Kind::End, static_cast<uint8_t>(emote_), 0, 0, 0, yaw_});
+    o.send.push_back(EmoteMsg{Kind::End, table_[static_cast<size_t>(emote_)].key, false, 0, 0, 0, yaw_});
     active_ = false;
   }
 
@@ -156,12 +159,17 @@ class RemoteSessions {
     std::vector<RemoteOut> out;
     auto it = peers_.find(actor);
     switch (m.kind) {
-      case Kind::Start:
+      case Kind::Start: {
         if (!shows_to(senderDown, receiverDown)) return out;
-        peers_[actor] = Peer{m.emote};
-        out.push_back({RemoteOut::Start, actor, m.emote, m.yaw});
-        out.push_back({RemoteOut::Yaw, actor, m.emote, m.yaw});
+        // A Start names its emote by key; this client's table gives the index. A key it does not hold (the packs
+        // differ, or the wheel changed) is passed over: no output and no state change.
+        const int index = index_of_key(m.key);
+        if (index < 0) return out;
+        peers_[actor] = Peer{index};
+        out.push_back({RemoteOut::Start, actor, index, m.yaw});
+        out.push_back({RemoteOut::Yaw, actor, index, m.yaw});
         break;
+      }
       case Kind::Facing:
         if (it != peers_.end()) out.push_back({RemoteOut::Yaw, actor, it->second.emote, m.yaw});
         break;
@@ -170,6 +178,9 @@ class RemoteSessions {
           out.push_back({RemoteOut::Stop, actor, it->second.emote, 0.0f});
           peers_.erase(it);
         }
+        break;
+      case Kind::Move:
+        // Walking during an emote: nothing acts on it yet (a later task adds it).
         break;
     }
     return out;
@@ -208,8 +219,15 @@ class RemoteSessions {
   void clear() { peers_.clear(); }
 
  private:
+  /// The index of the emote with this catalogue key, or -1 when the table does not hold it.
+  int index_of_key(uint32_t key) const {
+    for (size_t i = 0; i < table_.size(); ++i)
+      if (table_[i].key == key) return static_cast<int>(i);
+    return -1;
+  }
+
   struct Peer {
-    int emote;
+    int emote;  ///< the index into table_, found by key when the Start arrived
   };
   EmoteTable table_;
   std::map<int, Peer> peers_;

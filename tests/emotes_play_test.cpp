@@ -13,11 +13,22 @@ namespace {
 
 using namespace pm::emotes;
 
+// A table of `n` emotes, each looping after `seconds`, keyed 1000 + index as a pack's ids hash to.
+EmoteTable table_of(int n, bool loops = true, float seconds = 2.0f) {
+  EmoteTable t(static_cast<size_t>(n));
+  for (int i = 0; i < n; ++i) {
+    t[i].clipSeconds = seconds;
+    t[i].loops = loops;
+    t[i].song = SongLoop{0.0f, seconds};
+    t[i].key = static_cast<uint32_t>(1000 + i);
+  }
+  return t;
+}
+
 EmoteTable table() {
-  EmoteTable t{};
-  for (int i = 0; i < kSegments; ++i) t[i] = {2.0f, true, SongLoop{0.0f, 2.0f}};
-  t[5] = {3.0f, false, SongLoop{0.0f, 3.0f}};  // a one-shot
-  t[2] = {1.6f, true, SongLoop{0.0f, 16.7f}};  // a song that loops on its own (Floss)
+  EmoteTable t = table_of(kSegments);
+  t[5] = {3.0f, false, SongLoop{0.0f, 3.0f}, 1005, false};       // a one-shot
+  t[2] = {1.6f, true, SongLoop{0.0f, 16.7f}, 1002, false};       // a song that loops on its own (Floss)
   return t;
 }
 
@@ -39,12 +50,13 @@ bool has(const std::vector<EmoteMsg>& sent, Kind k) {
 // ---- The emoter's client ----
 
 void a_pick_starts_and_tells_everyone() {
-  LocalSession s(table());
+  const EmoteTable t = table();
+  LocalSession s(t);
   LocalFrame f = here(-1.0);
   f.viewYaw = 30.0f;
   const LocalOut o = s.pick(4, f);
   CHECK(o.start == 4 && !o.stop);
-  CHECK(o.send.size() == 1 && o.send[0].kind == Kind::Start && o.send[0].emote == 4);
+  CHECK(o.send.size() == 1 && o.send[0].kind == Kind::Start && o.send[0].key == t[4].key);
   CHECK(o.send.size() == 1 && o.send[0].x == 1.0f && o.send[0].yaw == 30.0f);
   CHECK(s.active() && s.emote() == 4 && s.yaw() == 30.0f);
   // Nothing without a local investigator (the ghost player of Playable Ghost has none).
@@ -106,7 +118,7 @@ void a_new_pick_cuts_in() {
   s.tick(here(0.5));
   const LocalOut o = s.pick(3, here(0.6));
   CHECK(o.start == 3 && !o.stop);  // one clip and one song: the new one replaces the old, no stop between
-  CHECK(o.send.size() == 1 && o.send[0].kind == Kind::Start && o.send[0].emote == 3);
+  CHECK(o.send.size() == 1 && o.send[0].kind == Kind::Start && o.send[0].key == 1003u);
 }
 
 void death_ends_the_emote_first() {
@@ -206,55 +218,85 @@ bool did(const std::vector<RemoteOut>& out, RemoteOut::What w, int actor) {
 
 void a_peer_dances_where_told() {
   RemoteSessions r(table());
-  auto out = r.receive(7, EmoteMsg{Kind::Start, 2, 0, 0, 0, 45.0f}, false, false);
+  auto out = r.receive(7, EmoteMsg{Kind::Start, 1002u, false, 0, 0, 0, 45.0f}, false, false);
   CHECK(did(out, RemoteOut::Start, 7) && did(out, RemoteOut::Yaw, 7));
   CHECK(r.dancing(7));
-  out = r.receive(7, EmoteMsg{Kind::Facing, 0, 0, 0, 0, 90.0f}, false, false);
+  out = r.receive(7, EmoteMsg{Kind::Facing, 1002u, false, 0, 0, 0, 90.0f}, false, false);
   CHECK(did(out, RemoteOut::Yaw, 7) && out.back().yaw == 90.0f);
-  out = r.receive(7, EmoteMsg{Kind::End, 0, 0, 0, 0, 0}, false, false);
+  out = r.receive(7, EmoteMsg{Kind::End, 1002u, false, 0, 0, 0, 0}, false, false);
   CHECK(did(out, RemoteOut::Stop, 7) && !r.dancing(7));
   // A Facing or End for a peer not dancing is passed over.
-  CHECK(r.receive(9, EmoteMsg{Kind::Facing, 0, 0, 0, 0, 10.0f}, false, false).empty());
+  CHECK(r.receive(9, EmoteMsg{Kind::Facing, 1000u, false, 0, 0, 0, 10.0f}, false, false).empty());
 }
 
 void the_living_never_see_the_dead_dance() {
   RemoteSessions r(table());
-  CHECK(r.receive(3, EmoteMsg{Kind::Start, 1, 0, 0, 0, 0}, true, false).empty());  // a dead emoter, a living viewer
+  CHECK(r.receive(3, EmoteMsg{Kind::Start, 1001u, false, 0, 0, 0, 0}, true, false).empty());  // a dead emoter, a living viewer
   CHECK(!r.dancing(3));
-  CHECK(!r.receive(3, EmoteMsg{Kind::Start, 1, 0, 0, 0, 0}, true, true).empty());  // the dead see the dead
+  CHECK(!r.receive(3, EmoteMsg{Kind::Start, 1001u, false, 0, 0, 0, 0}, true, true).empty());  // the dead see the dead
   // A living emoter who dies mid-dance stops for the living.
   RemoteSessions live(table());
-  live.receive(4, EmoteMsg{Kind::Start, 1, 0, 0, 0, 0}, false, false);
+  live.receive(4, EmoteMsg{Kind::Start, 1001u, false, 0, 0, 0, 0}, false, false);
   const auto out = live.tick({RemoteFrame{4, true, true, false, 0.5}}, false);
   CHECK(did(out, RemoteOut::Stop, 4) && !live.dancing(4));
   // A peer whose death has begun, before the game marks it, comes off at once: their body is the game's death
   // animation, not the dance (the user, 2026-11-10).
   RemoteSessions fall(table());
-  fall.receive(6, EmoteMsg{Kind::Start, 1, 0, 0, 0, 0}, false, false);
+  fall.receive(6, EmoteMsg{Kind::Start, 1001u, false, 0, 0, 0, 0}, false, false);
   const auto down = fall.tick({RemoteFrame{6, true, false, true, 0.5}}, false);
   CHECK(did(down, RemoteOut::Stop, 6) && !fall.dancing(6));
   for (const RemoteOut& o : down)
     if (o.what == RemoteOut::Stop) CHECK(o.atOnce);
   // The dying are down to the living as the dead are: a start from one is passed over.
   RemoteSessions late(table());
-  CHECK(late.receive(7, EmoteMsg{Kind::Start, 1, 0, 0, 0, 0}, true, false).empty() && !late.dancing(7));
+  CHECK(late.receive(7, EmoteMsg{Kind::Start, 1001u, false, 0, 0, 0, 0}, true, false).empty() && !late.dancing(7));
 }
 
 void a_vanished_emoter_is_cleaned_up() {
   RemoteSessions r(table());
-  r.receive(5, EmoteMsg{Kind::Start, 0, 0, 0, 0, 0}, false, false);
+  r.receive(5, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
   const auto out = r.tick({RemoteFrame{5, false, false, false, -1.0}}, false);  // left the room, or the scene changed
   CHECK(did(out, RemoteOut::Stop, 5) && !r.dancing(5));
   // One not in the frame at all is gone too.
-  r.receive(6, EmoteMsg{Kind::Start, 0, 0, 0, 0, 0}, false, false);
+  r.receive(6, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
   CHECK(did(r.tick({}, false), RemoteOut::Stop, 6));
 }
 
 void a_peers_one_shot_ends_here_too() {
   RemoteSessions r(table());
   // A one-shot peer's clip that played out ends for this client too.
-  r.receive(8, EmoteMsg{Kind::Start, 5, 0, 0, 0, 0}, false, false);
+  r.receive(8, EmoteMsg{Kind::Start, 1005u, false, 0, 0, 0, 0}, false, false);
   CHECK(did(r.tick({RemoteFrame{8, true, false, false, 3.1}}, false), RemoteOut::Stop, 8));
+}
+
+// A peer naming an emote this client's list does not hold (its packs differ, or the wheel changed mid-contract) is
+// passed over: nothing shows and nothing is remembered.
+void an_unknown_key_from_a_peer_is_ignored() {
+  RemoteSessions r(table());
+  const auto out = r.receive(7, EmoteMsg{Kind::Start, 999999u, false, 0, 0, 0, 45.0f}, false, false);
+  CHECK(out.empty());
+  CHECK(!r.dancing(7));
+  // And a Facing afterwards does nothing either: no peer was made.
+  CHECK(r.receive(7, EmoteMsg{Kind::Facing, 1000u, false, 0, 0, 0, 90.0f}, false, false).empty());
+}
+
+// More emotes than one page: the index goes into the whole table, and a peer matches the message's key to its own
+// table and gets the same index.
+void a_table_of_twenty_emotes_plays_the_last() {
+  const EmoteTable big = table_of(20);
+  LocalSession s(big);
+  LocalFrame f = here(-1.0);
+  const LocalOut o = s.pick(19, f);
+  CHECK(o.start == 19 && o.send.size() == 1 && o.send[0].kind == Kind::Start && o.send[0].key == big[19].key);
+  // Past the end of this table, not past one page of eight.
+  CHECK(s.pick(20, here(-1.0)).start == -1 && s.active() && s.emote() == 19);
+  RemoteSessions r(big);
+  const auto out = r.receive(4, o.send[0], false, false);
+  CHECK(did(out, RemoteOut::Start, 4));
+  bool sawLast = false;
+  for (const auto& [actor, emote] : r.dancers())
+    if (actor == 4 && emote == 19) sawLast = true;
+  CHECK(sawLast);
 }
 
 }  // namespace
@@ -275,6 +317,8 @@ int main() {
   the_living_never_see_the_dead_dance();
   a_vanished_emoter_is_cleaned_up();
   a_peers_one_shot_ends_here_too();
+  an_unknown_key_from_a_peer_is_ignored();
+  a_table_of_twenty_emotes_plays_the_last();
   std::printf("%s\n", g_failures ? "emotes_play tests FAILED" : "emotes_play tests passed");
   return g_failures ? 1 : 0;
 }

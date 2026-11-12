@@ -230,7 +230,7 @@ inline bool parse_catalogue(std::string_view json, std::string_view packId, Cata
         why = where + " repeats the name " + def.name;
         return false;
       }
-      auto badPath = [&](const char* field, const std::string& path, bool good) {
+      auto badPath = [&](const char* field, const std::string& /*path*/, bool good) {
         if (good) return false;
         why = where + " has a " + field + " that is not a project path under Assets/ with its proper ending";
         return true;

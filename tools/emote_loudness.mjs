@@ -1,11 +1,11 @@
 // Measures each Emotes song's loudness for the ghost's hearing (sdk/api/talk_loudness.h): for every folder under
-// mods/emotes/assets with an MP3, it decodes the song to mono with ffmpeg and writes loudness.txt beside it, one RMS
+// mods/emotes/assets with an MP3, it decodes the song to mono with ffmpeg and writes loudness/<name>.txt, one RMS
 // amplitude (0 to 1) per 0.1 s window, which the mod reads with pm::api::talk::parse_rms and envelope_of_rms. Run it
-// after the author changes a song, and commit the loudness.txt files: the songs themselves stay out of git.
+// after the author changes a song, and commit the loudness files: the songs themselves stay out of git.
 //
 // usage: node tools/emote_loudness.mjs [assets folder]   (ffmpeg on PATH, or PM_FFMPEG naming it)
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -40,7 +40,9 @@ for (const name of readdirSync(assets).sort()) {
     for (let i = at; i < end; ++i) sum += samples[i] * samples[i];
     lines.push(Math.sqrt(sum / (end - at)).toFixed(4));
   }
-  writeFileSync(path.join(folder, 'loudness.txt'), lines.join('\n') + '\n');
+  // The catalogue names each emote's loudness file loudness/<name>.txt, its folder's name with hyphens (emotes.json).
+  mkdirSync(path.join(assets, 'loudness'), { recursive: true });
+  writeFileSync(path.join(assets, 'loudness', `${name.replaceAll('_', '-')}.txt`), lines.join('\n') + '\n');
   console.log(`${name}: ${lines.length - 1} windows`);
   ++made;
 }

@@ -365,6 +365,8 @@ pm_test(emotes_play)
 target_include_directories(emotes_play_test PRIVATE mods/emotes)
 pm_test(emotes_wheel)
 target_include_directories(emotes_wheel_test PRIVATE mods/emotes)
+pm_test(emotes_pages)
+target_include_directories(emotes_pages_test PRIVATE mods/emotes)
 pm_test(emotes_catalogue)
 target_include_directories(emotes_catalogue_test PRIVATE mods/emotes)
 # Playing a clip on a player's own body (sdk/api/player_anim.h).

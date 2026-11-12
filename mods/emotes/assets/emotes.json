@@ -1,0 +1,33 @@
+// The Emotes mod's own emotes, in the catalogue format every emote pack uses (mods/emotes/catalogue.h,
+// sdk/guides/emotes.md). Clockwise from the top of the wheel's first page, in this order. Each song loops by itself in the
+// bundle, cut to its loop; songLoop says where, for the ghost's hearing (emote_assets.h has the measurements).
+{
+  "format": 1,
+  "bundle": "emotes.bundle",
+  "emotes": [
+    {"name": "disco-fever", "clip": "Assets/Emotes/Clips/DiscoFever.anim", "song": "Assets/Emotes/Loops/disco_fever.wav",
+     "icon": "Assets/Emotes/Icons/disco_fever.png", "label": "emotes.name.disco-fever", "loudness": "loudness/disco-fever.txt",
+     "songLoop": {"start": 0, "seconds": 8.542}},
+    {"name": "electro-swing", "clip": "Assets/Emotes/Clips/ElectroSwing.anim", "song": "Assets/Emotes/Loops/electro_swing.wav",
+     "icon": "Assets/Emotes/Icons/electro_swing.png", "label": "emotes.name.electro-swing", "loudness": "loudness/electro-swing.txt",
+     "songLoop": {"start": 0, "seconds": 16.0}},
+    {"name": "floss", "clip": "Assets/Emotes/Clips/Floss.anim", "song": "Assets/Emotes/Loops/floss.wav",
+     "icon": "Assets/Emotes/Icons/floss.png", "label": "emotes.name.floss", "loudness": "loudness/floss.txt",
+     "songLoop": {"start": 0, "seconds": 16.692}},
+    {"name": "groove-jam", "clip": "Assets/Emotes/Clips/GrooveJam.anim", "song": "Assets/Emotes/Loops/groove_jam.wav",
+     "icon": "Assets/Emotes/Icons/groove_jam.png", "label": "emotes.name.groove-jam", "loudness": "loudness/groove-jam.txt",
+     "songLoop": {"start": 0, "seconds": 15.118}},
+    {"name": "orange-justice", "clip": "Assets/Emotes/Clips/OrangeJustice.anim", "song": "Assets/Emotes/Loops/orange_justice.wav",
+     "icon": "Assets/Emotes/Icons/orange_justice.png", "label": "emotes.name.orange-justice", "loudness": "loudness/orange-justice.txt",
+     "songLoop": {"start": 0, "seconds": 18.935}},
+    {"name": "scenario", "clip": "Assets/Emotes/Clips/Scenario.anim", "song": "Assets/Emotes/Loops/scenario.wav",
+     "icon": "Assets/Emotes/Icons/scenario.png", "label": "emotes.name.scenario", "loudness": "loudness/scenario.txt",
+     "songLoop": {"start": 0, "seconds": 32.542}},
+    {"name": "smooth-moves", "clip": "Assets/Emotes/Clips/SmoothMoves.anim", "song": "Assets/Emotes/Loops/smooth_moves.wav",
+     "icon": "Assets/Emotes/Icons/smooth_moves.png", "label": "emotes.name.smooth-moves", "loudness": "loudness/smooth-moves.txt",
+     "songLoop": {"start": 0, "seconds": 19.2}},
+    {"name": "take-the-l", "clip": "Assets/Emotes/Clips/TakeTheL.anim", "song": "Assets/Emotes/Loops/take_the_l.wav",
+     "icon": "Assets/Emotes/Icons/take_the_l.png", "label": "emotes.name.take-the-l", "loudness": "loudness/take-the-l.txt",
+     "songLoop": {"start": 0, "seconds": 12.632}}
+  ]
+}

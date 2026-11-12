@@ -21,9 +21,11 @@
 #include "Player.h"
 #include "Transform.h"
 #include "UnityAudio.h"
+#include "UnityRendering.h"
 #include "UnityObject.h"
 #include "assets.h"
 #include "bundles.h"
+#include "catalogue.h"
 #include "emote_assets.h"
 #include "emote_net.h"
 #include "emote_rule.h"
@@ -35,6 +37,7 @@
 #include "log.h"
 #include "mod_glue.h"
 #include "net.h"
+#include "packs.h"
 #include "player_anim.h"
 #include "players.h"
 #include "settings.h"
@@ -115,10 +118,13 @@ struct Song {
   float volume = 0.0f;  // the volume it plays at
 };
 
+// Every emote on the wheel, in wheel order (catalogue.h wheel_order): the mod's own, then each content pack's.
 struct Assets {
-  api::Held bundle;
-  std::array<api::Held, kSegments> clips, songs;
-  std::array<talk::Envelope, kSegments> loudness;
+  std::vector<api::Held> bundles;  // the mod's own bundle and each pack's, unloaded when the mod stops
+  std::vector<EmoteDef> defs;
+  std::vector<api::Held> clips, songs, icons;
+  std::vector<talk::Envelope> loudness;
+  std::vector<std::string> names;  // each emote's name as the player reads it
   EmoteTable table{};
 };
 
@@ -151,42 +157,124 @@ State g;
 
 // ---- Assets ----
 
-bool load_assets() {
+// One catalogue's emotes, loaded from its bundle, before they take their places on the wheel.
+struct Loaded {
+  EmoteDef def;
+  api::Held clip, song, icon;
+  talk::Envelope loudness;
+  std::string name;
+  EmoteInfo info;
+};
+
+std::string read_text(const std::filesystem::path& file) {
+  std::ifstream in(file, std::ios::binary);
+  return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+// Loads the catalogue in `folder` (its emotes.json and bundle) for `packId`, naming each emote with `nameOf`. False, with
+// `why` for the log, when anything the catalogue needs is missing: the caller then leaves the whole catalogue out.
+template <class NameOf>
+bool load_catalogue(const std::filesystem::path& folder, const std::string& packId, NameOf nameOf, Catalogue& cat,
+                    std::vector<Loaded>& out, std::string& why) {
+  if (!parse_catalogue(read_text(folder / "emotes.json"), packId, cat, why)) return false;
+  for (const std::string& w : cat.warnings)
+    PM_LOG("Emotes: %s's emotes.json has a field this mod does not know: %s", packId.c_str(), w.c_str());
+  void* bundle = api::load_bundle(folder / cat.bundle, &why);
+  if (!bundle) {
+    why = cat.bundle + " cannot be loaded (" + why + ")";
+    return false;
+  }
+  g.a.bundles.emplace_back(bundle);
+  for (const EmoteDef& e : cat.emotes) {
+    Loaded l;
+    l.def = e;
+    l.clip = api::load_bundle_asset(bundle, bundle_path(e.clip).c_str(), phasmo::AnimationClip::type.type_object());
+    if (!l.clip) {
+      why = "the bundle has no clip " + e.clip;
+      return false;
+    }
+    l.song = api::load_bundle_asset(bundle, bundle_path(e.song).c_str(), phasmo::AudioClip::type.type_object());
+    if (!l.song) PM_LOG("Emotes: %s has no song %s; it plays silent", packId.c_str(), e.song.c_str());
+    l.icon = api::load_bundle_asset(bundle, bundle_path(e.icon).c_str(), phasmo::Texture2D::type.type_object());
+    if (!l.icon) PM_LOG("Emotes: %s has no icon %s; its segment shows bare", packId.c_str(), e.icon.c_str());
+    std::vector<float> rms = talk::parse_rms(read_text(folder / e.loudness));
+    for (float& r : rms) r *= kSongVolume;  // as loud as it plays
+    l.loudness = talk::envelope_of_rms(rms);
+    if (rms.empty()) PM_LOG("Emotes: no loudness for %s; the ghost does not hear it", e.id.c_str());
+    l.name = nameOf(e.label);
+    const float seconds = api::anim::clip_seconds(l.clip);
+    l.info.clipSeconds = seconds;
+    l.info.loops = api::anim::clip_loops(l.clip);
+    l.info.song = e.songLoop.length > 0.0f ? e.songLoop : SongLoop{0.0f, seconds};
+    l.info.key = e.key;
+    PM_LOG("Emotes: %s, %.3f s, %s, song loop %.3f s from %.3f s", e.id.c_str(), seconds,
+           l.info.loops ? "looping" : "one-shot", l.info.song.length, l.info.song.start);
+    out.push_back(std::move(l));
+  }
+  return true;
+}
+
+// The mod's own catalogue, then each content pack made for it (sdk/api/packs.h). A broken pack is left out and switched
+// off with its reason in the Mods panel; a broken catalogue of the mod's own keeps the mod off.
+bool load_catalogues() {
   const std::filesystem::path folder = api::assets_folder();
   if (folder.empty()) {
     PM_LOG("Emotes inactive: its assets folder is missing");
     return false;
   }
   std::string why;
-  void* bundle = api::load_bundle(folder / kBundleFile, &why);
-  if (!bundle) {
-    PM_LOG("Emotes inactive: %s cannot be loaded (%s)", kBundleFile, why.c_str());
+  Catalogue own;
+  std::vector<Loaded> loaded;
+  if (!load_catalogue(folder, mod::info().id, [](const std::string& key) { return i18n::text(key); }, own, loaded, why)) {
+    PM_LOG("Emotes inactive: its own emotes cannot be loaded (%s)", why.c_str());
     return false;
   }
-  g.a.bundle = bundle;
-  for (int i = 0; i < kSegments; ++i) {
-    const EmoteAsset& e = kEmotes[i];
-    void* clip = api::load_bundle_asset(bundle, clip_path(e).c_str(), phasmo::AnimationClip::type.type_object());
-    void* song = api::load_bundle_asset(bundle, song_path(e).c_str(), phasmo::AudioClip::type.type_object());
-    if (!clip) {
-      PM_LOG("Emotes inactive: the bundle has no clip %s", clip_path(e).c_str());
-      return false;
+  std::vector<Catalogue> packs;
+  for (const api::packs::Pack& p : api::packs::owned()) {
+    i18n::Table table;
+    std::string tableWhy;
+    if (!table.load(p.text, tableWhy))
+      PM_LOG("Emotes: %s has no string table (%s); its emotes show their keys", p.id.c_str(), tableWhy.c_str());
+    Catalogue cat;
+    std::vector<Loaded> mine;
+    const size_t bundlesBefore = g.a.bundles.size();
+    if (!load_catalogue(p.folder, p.id, [&](const std::string& key) { return table.get(key); }, cat, mine, why)) {
+      PM_LOG("Emotes: the pack %s cannot be used (%s)", p.id.c_str(), why.c_str());
+      while (g.a.bundles.size() > bundlesBefore) {
+        api::unload_bundle(g.a.bundles.back(), true);
+        g.a.bundles.pop_back();
+      }
+      api::packs::failed(p.id, i18n::text("emotes.pack-unusable"));
+      continue;
     }
-    if (!song) PM_LOG("Emotes: the bundle has no song %s; its emote plays silent", song_path(e).c_str());
-    g.a.clips[i] = clip;
-    g.a.songs[i] = song;
-    const float seconds = api::anim::clip_seconds(clip);
-    g.a.table[i] = {seconds, api::anim::clip_loops(clip), song_loop_of(e, seconds)};
-    std::ifstream in(folder / loudness_path(e), std::ios::binary);
-    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    std::vector<float> rms = talk::parse_rms(text);
-    for (float& r : rms) r *= kSongVolume;  // as loud as it plays
-    g.a.loudness[i] = talk::envelope_of_rms(rms);
-    if (rms.empty()) PM_LOG("Emotes: no loudness for %s; the ghost does not hear it", e.folder);
-    PM_LOG("Emotes: %s, %.3f s, %s, song loop %.3f s from %.3f s", e.clip, seconds,
-           g.a.table[i].loops ? "looping" : "one-shot", g.a.table[i].song.length, g.a.table[i].song.start);
+    PM_LOG("Emotes: the pack %s adds %zu emotes", p.id.c_str(), mine.size());
+    packs.push_back(std::move(cat));
+    loaded.insert(loaded.end(), std::make_move_iterator(mine.begin()), std::make_move_iterator(mine.end()));
   }
-  return wheel::load(bundle);
+  std::vector<EmoteDef> order;
+  if (!wheel_order(own, packs, order, why)) {
+    // Two emotes share a key: keep the mod's own, and leave every pack out rather than guess which one meant it.
+    PM_LOG("Emotes: the packs' emotes are left out (%s)", why.c_str());
+    for (const Catalogue& c : packs) api::packs::failed(c.packId, i18n::text("emotes.pack-unusable"));
+    wheel_order(own, {}, order, why);
+  }
+  std::vector<void*> icons;
+  for (const EmoteDef& e : order)
+    for (Loaded& l : loaded)
+      if (l.def.key == e.key) {
+        // Each loaded emote takes one place on the wheel, so its held assets move there.
+        icons.push_back(l.icon.get());
+        g.a.defs.push_back(l.def);
+        g.a.clips.push_back(std::move(l.clip));
+        g.a.songs.push_back(std::move(l.song));
+        g.a.icons.push_back(std::move(l.icon));
+        g.a.loudness.push_back(l.loudness);
+        g.a.names.push_back(l.name);
+        g.a.table.push_back(l.info);
+        break;
+      }
+  PM_LOG("Emotes: %zu emotes on the wheel", g.a.defs.size());
+  return wheel::load(icons, g.a.names);
 }
 
 // ---- The game's actions ----
@@ -558,7 +646,7 @@ void apply_local(const LocalOut& o, void* player, bool vr) {
     start_song(me, player, o.start);
     const auto song = g.songs.find(me);
     void* songClip = g.a.songs[o.start];
-    PM_LOG("Emotes: %s starts (%s): clip %s, %s on the body; song %s, %s", kEmotes[o.start].clip, vr ? "VR" : "screen",
+    PM_LOG("Emotes: %s starts (%s): clip %s, %s on the body; song %s, %s", g.a.defs[o.start].id.c_str(), vr ? "VR" : "screen",
            clip && game::alive(clip) ? "loaded" : "gone", played ? "playing" : "not playing",
            songClip && game::alive(songClip) ? "loaded" : "gone",
            song != g.songs.end() && song->second.source ? "playing" : "no source");
@@ -640,7 +728,8 @@ std::optional<int> wheel_input(void* player, bool vr) {
       PM_LOG("Emotes: the wheel could not be built on screen");
       g.wheelIn = WheelInput{};
     } else {
-      PM_LOG("Emotes: the wheel opens (icons %d of 8, segments %d of 8)", wheel::icons_alive(), wheel::segments_alive());
+      PM_LOG("Emotes: the wheel opens (icons %d of %zu, segments %d of %d)", wheel::icons_alive(), g.a.defs.size(),
+             wheel::segments_alive(), kSegments);
       set_look(false);
     }
   }
@@ -752,7 +841,7 @@ void raise_loudness(int actor, void* player, int emote, float now) {
 }  // namespace
 
 bool start() {
-  if (!load_assets()) return false;
+  if (!load_catalogues()) return false;
   const std::filesystem::path data = std::filesystem::path(mod::host().dataDirectory) / mod::info().id / "keybinds.txt";
   keys::begin_keys(mod::info().id, mod::shown_name(), data);
   keys::ModKey wheel;
@@ -845,7 +934,8 @@ void tick() {
     close_wheel();
   }
   if (present && !f.dying && keys::keys_ready()) {
-    if (const std::optional<int> played = wheel_input(player, vr)) apply_local(g.local->pick(*played, f), player, vr);
+    if (const std::optional<int> played = wheel_input(player, vr))
+      if (const int emote = wheel::emote_at(*played); emote >= 0) apply_local(g.local->pick(emote, f), player, vr);
   } else {
     close_wheel();
   }
@@ -905,6 +995,9 @@ void stop() {
   for (auto& [actor, s] : g.songs)
     if (s.source && game::alive(s.source)) game::destroy(game::game_object_of(s.source));
   wheel::unload();
+  // The engine loads a bundle once, so each is unloaded here for the mod's next start (the lobby's rules restart mods).
+  for (api::Held& b : g.a.bundles)
+    if (b && game::alive(b)) api::unload_bundle(b, true);
   keys::clear_keys();
   api::settings::clear_settings();
   g = State{};

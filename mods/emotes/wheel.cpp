@@ -7,8 +7,6 @@
 
 #include "UnityRendering.h"
 #include "Transform.h"
-#include "bundles.h"
-#include "emote_assets.h"
 #include "game.h"
 #include "held.h"
 #include "log.h"
@@ -23,12 +21,15 @@ namespace pm::emotes::wheel {
 namespace {
 
 struct State {
-  std::array<api::Held, kSegments> icons;     // the bundle's icon textures
+  std::vector<api::Held> icons;               // every emote's icon texture, in wheel order (null: none)
+  std::vector<std::string> names;             // every emote's name, in wheel order
   std::array<api::Held, kSegments> segments;  // the drawn segment textures
   api::Held centre;                           // the drawn centre circle
   api::Held canvas;                           // the open wheel's Canvas; its children go with it
   std::array<api::Held, kSegments> images;    // the open wheel's segment images
+  std::array<api::Held, kSegments> iconImages;  // the open wheel's icon images, showing the page's icons
   api::Held name;                             // its name text
+  int page = 0;                               // the page shown: emotes page * kSegments onwards
   bool vr = false;
   bool loaded = false;
   int picked = -1;
@@ -36,6 +37,7 @@ struct State {
 State g;
 
 ui::Color to_ui(style::Rgba c) { return {c.r, c.g, c.b, c.a}; }
+void show_icons();
 
 void* drawn(const std::vector<uint8_t>& rgba) {
   return ui::texture_from_rgba(style::kTextureSize, style::kTextureSize, rgba.data(), rgba.size());
@@ -56,14 +58,13 @@ bool build(void* canvas) {
     ui::set_color(img, to_ui(style::kDiscBlack));
     ui::place(img, mid, mid, {0, 0}, {d, d});
     g.images[i] = img;
-    if (g.icons[i]) {
-      if (void* icon = ui::create_raw_image(canvas, "pm emote icon", g.icons[i])) {
-        ui::set_color(icon, to_ui(style::kIconWhite));
-        const layout::Vec2 at = layout::icon_centre(i, style::kRingInner, style::kDiscRadius);
-        ui::place(icon, mid, mid, {at.x, at.y}, {style::kIconSize, style::kIconSize});
-      }
+    if (void* icon = ui::create_raw_image(canvas, "pm emote icon", nullptr)) {
+      const layout::Vec2 at = layout::icon_centre(i, style::kRingInner, style::kDiscRadius);
+      ui::place(icon, mid, mid, {at.x, at.y}, {style::kIconSize, style::kIconSize});
+      g.iconImages[i] = icon;
     }
   }
+  show_icons();
   g.name = ui::create_text(canvas, "pm emote name", style::kNameFontSize);
   if (g.name) {
     ui::set_color(g.name, to_ui(style::kNameWhite));
@@ -73,19 +74,33 @@ bool build(void* canvas) {
   return true;
 }
 
+// The emote under segment `i` of the page shown, or -1 for an empty segment.
+int emote_of(int i) {
+  const int e = g.page * kSegments + i;
+  return i >= 0 && i < kSegments && e < static_cast<int>(g.names.size()) ? e : -1;
+}
+
+// Puts the page's icons on the open wheel; a segment past the last emote, or one whose icon is missing, shows bare.
+void show_icons() {
+  for (int i = 0; i < kSegments; ++i) {
+    void* image = g.iconImages[i];
+    if (!image) continue;
+    const int e = emote_of(i);
+    void* tex = e >= 0 ? static_cast<void*>(g.icons[e]) : nullptr;
+    ui::set_texture(image, tex);
+    ui::set_color(image, tex ? to_ui(style::kIconWhite) : ui::Color{0, 0, 0, 0});
+  }
+}
+
 void* transform_of_canvas() { return g.canvas ? game::transform_of(g.canvas) : nullptr; }
 
 }  // namespace
 
-bool load(void* bundle) {
+bool load(const std::vector<void*>& icons, const std::vector<std::string>& names) {
   if (g.loaded) return true;
-  for (int i = 0; i < kSegments; ++i) {
-    void* tex = bundle ? api::load_bundle_asset(bundle, icon_path(kEmotes[i]).c_str(),
-                                                phasmo::Texture2D::type.type_object())
-                       : nullptr;
-    if (!tex) PM_LOG("Emotes: no icon %s in the bundle; its segment shows bare", icon_path(kEmotes[i]).c_str());
-    g.icons[i] = tex;
-  }
+  g.icons.assign(icons.begin(), icons.end());
+  g.names = names;
+  g.icons.resize(g.names.size());
   const float inner = style::kRingInner / style::kDiscRadius;
   for (int i = 0; i < kSegments; ++i) {
     const layout::Span s = layout::segment_span(i);
@@ -143,12 +158,20 @@ void face(void* head) {
 
 void show_pick(int segment) {
   if (!is_open()) return;
-  g.picked = segment >= 0 && segment < kSegments ? segment : -1;
+  g.picked = emote_of(segment) >= 0 ? segment : -1;
   for (int i = 0; i < kSegments; ++i)
     if (g.images[i]) ui::set_color(g.images[i], to_ui(layout::segment_colour(i, g.picked)));
-  if (g.name)
-    ui::set_text(g.name, g.picked >= 0 ? i18n::text(kEmotes[g.picked].nameKey).c_str() : "");
+  if (g.name) ui::set_text(g.name, g.picked >= 0 ? g.names[static_cast<size_t>(emote_of(g.picked))].c_str() : "");
 }
+
+void set_page(int page) {
+  g.page = page;
+  if (!is_open()) return;
+  show_icons();
+  show_pick(-1);
+}
+
+int emote_at(int segment) { return emote_of(segment); }
 
 int pointed(void* hand) {
   void* t = transform_of_canvas();
@@ -168,6 +191,7 @@ void close() {
   g.canvas = nullptr;
   g.name = nullptr;
   for (api::Held& h : g.images) h = nullptr;
+  for (api::Held& h : g.iconImages) h = nullptr;
   g.picked = -1;
   g.vr = false;
 }
