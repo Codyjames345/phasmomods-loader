@@ -1,6 +1,8 @@
 // Dev Menu's text: the keybinds row, the menu's rows and read-outs, and the reasons a row refuses. This is
-// a developer tool, but the words are still the game's UI, so every entry here is a PM_TEXT_AI placeholder
-// for the user to rewrite (AI_POLICY.md). A {{token}} is a value the code fills in. Keep one entry per line.
+// a developer tool, but the words are still the game's UI, so every entry here is a placeholder for the user
+// to rewrite (AI_POLICY.md): PM_TEXT_AI where an earlier agent wrote words the user has not replaced, and
+// PM_TEXT_TODO where nobody has written any yet. A {{token}} is a value the code fills in. Keep one entry
+// per line.
 {
   "dev-menu.key-label": "Open dev menu", // PM_TEXT_AI
   "dev-menu.title": "Dev menu", // PM_TEXT_AI
@@ -43,6 +45,7 @@
   "dev-menu.room-random": "Move it to a random room", // PM_TEXT_AI
   "dev-menu.speed-down": "Slower", // PM_TEXT_AI
   "dev-menu.speed-up": "Faster", // PM_TEXT_AI
+  "dev-menu.ghost-blind": "PM_TEXT_TODO",  // PM_TEXT_TODO
   "dev-menu.block-events": "Block ghost events", // PM_TEXT_AI
   "dev-menu.event": "Ghost event", // PM_TEXT_AI
   "dev-menu.event-prev": "Previous event", // PM_TEXT_AI
@@ -56,11 +59,20 @@
   "dev-menu.die": "Kill you", // PM_TEXT_AI
   "dev-menu.revive": "Revive you", // PM_TEXT_AI
   "dev-menu.god-mode": "God mode", // PM_TEXT_AI
+  "dev-menu.player-speed": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "dev-menu.speed-down": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "dev-menu.speed-up": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "dev-menu.speed-reset": "PM_TEXT_TODO",  // PM_TEXT_TODO
   "dev-menu.keep-consumables": "Never lose consumables", // PM_TEXT_AI
   "dev-menu.tick-speed": "Game speed", // PM_TEXT_AI
   "dev-menu.pause-when-open": "Pause while this menu is open", // PM_TEXT_AI
   "dev-menu.session": "Dev session", // PM_TEXT_AI
   "dev-menu.offline-state": "Single player", // PM_TEXT_AI
+  "dev-menu.debug-hud": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "dev-menu.hud.state": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "dev-menu.hud.type": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "dev-menu.hud.speed": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "dev-menu.hud.target": "PM_TEXT_TODO",  // PM_TEXT_TODO
   "dev-menu.refused": "Not now: {{why}}", // PM_TEXT_AI
   "dev-menu.why.not-offline": "the dev menu only runs in single player", // PM_TEXT_AI
   "dev-menu.why.no-contract": "no contract is running", // PM_TEXT_AI

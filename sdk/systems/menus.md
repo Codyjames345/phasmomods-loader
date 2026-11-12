@@ -161,8 +161,28 @@ the listener runs inside the game's managed call, so a mod's handler must not le
 A scene always has an `EventSystem`: the game's `EventSystemChecker`, present where Unity's own may be
 absent, makes one with its input module at scene start when the scene has none (decompiled 2026-11-11).
 
-A scene always has an `EventSystem`: the game's `EventSystemChecker`, present where Unity's own may be
-absent, makes one with its input module at scene start when the scene has none (decompiled 2026-11-11).
+## A list that scrolls
+
+`ScrollRect` (UnityEngine.UI) moves a content RectTransform inside a viewport, keeps it inside the viewport's
+bounds and answers the pointer itself: it is a drag handler and a scroll handler, so a wheel turn or a drag only
+reaches it through the canvas's `GraphicRaycaster` and one graphic inside the viewport whose `raycastTarget` is
+on (`Graphic.set_raycastTarget`). It clips nothing of its own: put a `RectMask2D` on the viewport, not on the
+content, or rows outside the view draw over the rest of the screen.
+
+Unity's editor builds the three objects into the scene; a mod makes them at run time, and a ScrollRect made that
+way holds the free-running mode, because the editor's Reset never runs. So `ScrollRect.movementType` wants
+`ScrollRect.MovementType.Clamped`, or one drag can throw the list out of the menu for good.
+`ScrollRect.content` has to be a child of `ScrollRect.viewport`. Pin the content to the viewport's top edge
+(anchors (0,1) to (1,1), pivot (0.5,1)) and give it a `sizeDelta` height of the whole list, and every row then
+sits at a negative y below that edge: the list can grow and shrink without any row moving.
+`ScrollRect.set_verticalNormalizedPosition` moves it, 1 at the top and 0 at the bottom; the getter updates the
+rect's own bounds first, so it answers correctly even on a view built this frame. `ScrollRect.StopMovement`
+drops a drag's inertia.
+
+Keyboard and gamepad selection moves inside the game, which tells no mod. The event system's
+`get_currentSelectedGameObject` says where it got to, which is how a mod keeps the selected row in view. The
+loader's own helpers do all of this (create_scroll_view, set_scroll_height and scroll_reveal in `core/ui.h`),
+and `pm::ui::scroll_top_needed` is the same arithmetic for a list laid out differently.
 
 ## How this was read
 

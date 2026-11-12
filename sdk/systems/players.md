@@ -189,7 +189,9 @@ So in a contract the speed a living PC player would sprint at, whether sprinting
 `speedMultiplier` of that player's rig, and a dead one's is `sprintSpeed` alone; a VR player's is the same on the
 traced branch above.
 `LocalPCPlayer.SetPlayerSpeedMultiplier` changes the multiplier on that client only (a Monkey Paw wish calls it), so
-another client knows the multiplier only through the difficulty, unless the player's own client says. Custom Ghosts'
+another client knows the multiplier only through the difficulty, unless the player's own client says.
+`LocalPCPlayer.ResetPlayerSpeedMultiplier` puts back the copy the rig kept when its speed was first set (the same
+path ends a wish's speed) and re-applies it, so a mod that changes the multiplier has one game call that undoes it. Custom Ghosts'
 Squatter has each client tell the master its own player's sprint this way (`mods/custom_ghosts/squatter_net.h`).
 
 The stamina drains in a contract only while `Difficulty.sprinting` is 1, so with 2 nobody tires. When it runs out on

@@ -15,10 +15,12 @@
 
 #include "actions.h"
 #include "buttons.h"
+#include "menu_layout.h"
 #include "game.h"
 #include "held.h"
 #include "log.h"
 #include "managed_exception.h"
+#include "UnityObject.h"
 #include "text_table.h"
 #include "ui.h"
 
@@ -32,6 +34,11 @@ namespace i18n = pm::i18n;
 constexpr const char* kTitleKey = i18n::key("dev-menu.title");
 constexpr const char* kHintKey = i18n::key("dev-menu.hint");
 constexpr const char* kOnKey = i18n::key("dev-menu.on");
+// The developer read-out's four labels. Its wording is the user's to write (PM_TEXT_TODO in the table).
+constexpr const char* kHudStateKey = i18n::key("dev-menu.hud.state");
+constexpr const char* kHudTypeKey = i18n::key("dev-menu.hud.type");
+constexpr const char* kHudSpeedKey = i18n::key("dev-menu.hud.speed");
+constexpr const char* kHudTargetKey = i18n::key("dev-menu.hud.target");
 constexpr const char* kOffKey = i18n::key("dev-menu.off");
 constexpr const char* kRefusedKey = i18n::key("dev-menu.refused");
 constexpr const char* kWhyKeys[] = {nullptr, i18n::key("dev-menu.why.not-offline"),
@@ -57,7 +64,7 @@ enum ValueKind {
   NoValue,
   OnFriendly, OnLoseEquipment, CountEvidence, NameType, NumberReward, NumberPayout, LineState, LineIdentity,
   NameRoom, NumberSpeed, PickRoom, OnEvents, PickEvent, NumberSanity, OnFrozen, OnGod, OnKeep, NumberScale,
-  OnPause, OnSession, OnOffline,
+  OnPause, OnSession, OnOffline, NumberMultiplier, OnBlind, OnDebugHud,
 };
 
 enum Kind { Nav, Click, Read };
@@ -69,7 +76,8 @@ struct Row {
   int arg = 0;                   // a row's parameter: a delta, a sanity value, a direction
   const char* label = "";        // the row's words, a key in the mod's table
   ValueKind value = NoValue;
-  void* hit = nullptr;           // the row's bar: the GameObject the game's Button sits on
+  void* hit = nullptr;           // the row's bar: the object the game's Button sits on
+  void* hitGo = nullptr;         // that bar's GameObject, which is what the game's selection moves onto
   void* text = nullptr;          // the line itself
 };
 
@@ -95,6 +103,12 @@ std::vector<Row> g_rows;
 void* g_title = nullptr;
 void* g_hint = nullptr;
 void* g_refusalText = nullptr;
+// The rows' list, on the game's own ScrollRect and clip (the user's original brief asked for a ScrollRect).
+// Its parts are null when the game's classes did not resolve; the menu still works, the rows just do not move.
+ui::ScrollView g_view;
+// The developer read-out's own canvas, which stays up while the menu is closed.
+api::Held g_hudCanvas;
+void* g_hudText = nullptr;
 
 std::string onOff(bool on) { return i18n::text(on ? kOnKey : kOffKey); }
 
@@ -142,6 +156,9 @@ std::string valueText(const Row& r) {
     case OnPause: return onOff(actions::switches().pauseWhenOpen);
     case OnSession: return onOff(actions::session_on());
     case OnOffline: return onOff(actions::offline());
+    case NumberMultiplier: return number(actions::speed_multiplier());
+    case OnBlind: return onOff(actions::ghost_blind());
+    case OnDebugHud: return onOff(actions::switches().debugHud);
   }
   return {};
 }
@@ -197,6 +214,7 @@ std::vector<Row> sectionRows(int section) {
       add(Click, Action::BumpSpeed, -1, i18n::key("dev-menu.speed-down"), NoValue);
       add(Click, Action::BumpSpeed, +1, i18n::key("dev-menu.speed-up"), NoValue);
       add(Click, Action::ToggleEvents, 0, i18n::key("dev-menu.block-events"), OnEvents);
+      add(Click, Action::SetGhostBlind, 0, i18n::key("dev-menu.ghost-blind"), OnBlind);
       add(Read, Action::Info, 0, i18n::key("dev-menu.event"), PickEvent);
       add(Click, Action::FireEvent, -1, i18n::key("dev-menu.event-prev"), NoValue);
       add(Click, Action::FireEvent, +1, i18n::key("dev-menu.event-next"), NoValue);
@@ -211,6 +229,10 @@ std::vector<Row> sectionRows(int section) {
       add(Click, Action::KillLocal, 0, i18n::key("dev-menu.die"), NoValue);
       add(Click, Action::ReviveLocal, 0, i18n::key("dev-menu.revive"), NoValue);
       add(Click, Action::SetGodMode, 0, i18n::key("dev-menu.god-mode"), OnGod);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.player-speed"), NumberMultiplier);
+      add(Click, Action::BumpPlayerSpeed, -1, i18n::key("dev-menu.speed-down"), NoValue);
+      add(Click, Action::BumpPlayerSpeed, +1, i18n::key("dev-menu.speed-up"), NoValue);
+      add(Click, Action::ResetPlayerSpeed, 0, i18n::key("dev-menu.speed-reset"), NoValue);
       break;
     case 4:  // Equipment
       add(Click, Action::SetKeepConsumables, 0, i18n::key("dev-menu.keep-consumables"), OnKeep);
@@ -218,6 +240,7 @@ std::vector<Row> sectionRows(int section) {
     case 5:  // Game
       add(Click, Action::CycleTimeScale, 0, i18n::key("dev-menu.tick-speed"), NumberScale);
       add(Click, Action::SetPauseWhenOpen, 0, i18n::key("dev-menu.pause-when-open"), OnPause);
+      add(Click, Action::SetDebugHud, 0, i18n::key("dev-menu.debug-hud"), OnDebugHud);
       add(Read, Action::Info, 0, i18n::key("dev-menu.session"), OnSession);
       add(Read, Action::Info, 0, i18n::key("dev-menu.offline-state"), OnOffline);
       break;
@@ -242,21 +265,50 @@ void borrowInput();
 void returnInput();
 void releasePlayer();
 void refresh();
+void fitList();
+void followSelection();
+void showDebugHud(bool on);
+void refreshDebugHud();
 
-// The layout, in canvas units about the canvas centre (the emotes wheel's convention).
-constexpr float kTop = 380.0f;      // the first row's line
-constexpr float kPitch = 34.0f;     // line to line
-constexpr float kNavX = -970.0f;    // the section column's left edge
-constexpr float kRowX = -560.0f;    // the rows' left edge
-constexpr float kRowWide = 1460.0f;  // a row's click area width
-
-float rowY(int index) { return kTop - static_cast<float>(index) * kPitch; }
+// The geometry lives in menu_layout.h, where the offline test checks it: the live test of 2026-11-12 found
+// the rows reaching up into the hint line, and a Ghost section too long for the screen, because the layout
+// was a handful of constants nothing was compared against.
+using namespace layout;
 
 void setSectionShown(int section, bool on) {
   for (Row& r : g_rows) {
     if (r.kind == Nav || r.section != section) continue;
     if (r.hit) ui::set_active(r.hit, on);
     if (r.text) ui::set_active(r.text, on);
+  }
+}
+
+// The list's length follows the section showing: another section's rows are switched off and take no room,
+// so the range the player can scroll through is this section's rows and nothing else.
+void fitList() {
+  if (!g_view.content) return;
+  int rows = 0;
+  for (const Row& r : g_rows)
+    if (r.kind != Nav && r.section == g_section) ++rows;
+  ui::set_scroll_height(g_view, listHeight(rows));
+  followSelection();
+}
+
+// Arrow keys and a gamepad move the selection inside the game, which tells the menu nothing, so follow it:
+// the row the selection has reached comes back into the view. A drag leaves the list where the player put it
+// until the selection needs somewhere else.
+void followSelection() {
+  if (!g_view.scroll) return;
+  void* selected = api::buttons::selected();
+  if (!selected) return;
+  int index = 0;
+  for (const Row& r : g_rows) {
+    if (r.kind == Nav || r.section != g_section) continue;
+    if (r.hitGo == selected) {
+      ui::scroll_reveal(g_view, rowTop(index), kPitch);
+      return;
+    }
+    ++index;
   }
 }
 
@@ -281,21 +333,26 @@ bool build() {
   g_title = ui::create_text(canvas, "pm dev menu title", 42.0f);
   if (g_title) {
     ui::set_color(g_title, kText);
-    ui::place(g_title, mid, mid, {0, kTop + 60}, {1500, 54});
+    ui::place(g_title, mid, mid, {0, kTitleY}, {1500, kTitleBox});
     ui::set_text(g_title, i18n::text(kTitleKey).c_str());
   }
   g_hint = ui::create_text(canvas, "pm dev menu hint", 24.0f);
   if (g_hint) {
     ui::set_color(g_hint, kDim);
-    ui::place(g_hint, mid, mid, {0, kTop + 20}, {1500, 30});
+    ui::place(g_hint, mid, mid, {0, kHintY}, {1500, kHintBox});
     ui::set_text(g_hint, i18n::text(kHintKey).c_str());
   }
   g_refusalText = ui::create_text(canvas, "pm dev menu refusal", 26.0f);
   if (g_refusalText) {
     ui::set_color(g_refusalText, kRefuse);
-    ui::place(g_refusalText, mid, mid, {0, -kTop - 60}, {1700, 34});
+    ui::place(g_refusalText, mid, mid, {0, kRefuseY}, {1700, kRefuseBox});
     ui::set_text(g_refusalText, "");
   }
+  // The rows live in a scroll view (the user's own ask in the original brief), so a section longer than the
+  // screen scrolls instead of running out from under the heading. Its height follows the section showing.
+  g_view = ui::create_scroll_view(canvas, "pm dev menu list", {kViewX, kViewY}, {kViewWide, kViewHigh},
+                                  listHeight(sectionRows(g_section).size()));
+  if (!g_view.content) PM_LOG("dev-menu: the game's scroll view could not be made; the rows are placed plainly");
 
   g_rows.clear();
   for (int s = 0; s < kSections; ++s) {
@@ -310,28 +367,40 @@ bool build() {
 
   int navAt = 0;
   std::vector<int> rowAt(kSections, 0);
+  // The rows live under the list's content when the game's scroll view was made, pinned to its top edge so a
+  // scroll moves the whole section together. Without one they sit on the canvas where the list would be.
+  void* listParent = g_view.content ? static_cast<void*>(g_view.content) : canvas;
+  const bool inList = g_view.content != nullptr;
   for (Row& r : g_rows) {
     if (r.kind == Nav) {
-      const float y = rowY(navAt) - 80.0f;
+      const float y = navOffset(navAt);
       ++navAt;
       r.hit = ui::create_image(canvas, "pm dev menu nav", kHit);
-      if (r.hit) ui::place(r.hit, mid, mid, {kNavX + 200, y}, {400, kPitch});
+      if (r.hit) ui::place(r.hit, mid, mid, {kNavX + 200, y}, {400, kNavPitch});
       r.text = ui::create_text(canvas, "pm dev menu nav text", 28.0f);
       if (r.text) {
         ui::set_color(r.text, kDim);
-        ui::place(r.text, mid, {0.0f, 0.5f}, {kNavX, y}, {400, kPitch});
+        ui::place(r.text, mid, {0.0f, 0.5f}, {kNavX, y}, {400, kNavPitch});
       }
       continue;
     }
-    const float y = rowY(rowAt[r.section]++);
+    const int index = rowAt[r.section]++;
+    const ui::Vec2 anchor = inList ? ui::Vec2{0.5f, 1.0f} : mid;
+    const ui::Vec2 where =
+        inList ? ui::Vec2{0.0f, rowOffset(index)} : ui::Vec2{kViewX, listTop() + rowOffset(index)};
     if (r.kind == Click) {
-      r.hit = ui::create_image(canvas, "pm dev menu row", kHit);
-      if (r.hit) ui::place(r.hit, mid, mid, {kRowX + kRowWide / 2, y}, {kRowWide, kPitch});
+      r.hit = ui::create_image(listParent, "pm dev menu row", kHit);
+      if (r.hit) {
+        ui::place(r.hit, anchor, {0.5f, 0.5f}, where, {kViewWide, kPitch});
+        // The game's selection is a GameObject, not the bar's component, so remember the object the bar
+        // made its button on: that is what followSelection() looks for.
+        r.hitGo = phasmo::Component::get_gameObject(r.hit);
+      }
     }
-    r.text = ui::create_text(canvas, "pm dev menu row text", 26.0f);
+    r.text = ui::create_text(listParent, "pm dev menu row text", 26.0f);
     if (r.text) {
       ui::set_color(r.text, r.kind == Read ? kDim : kText);
-      ui::place(r.text, mid, {0.0f, 0.5f}, {kRowX, y}, {kRowWide, kPitch});
+      ui::place(r.text, anchor, {0.5f, 0.5f}, where, {kViewWide, kPitch});
     }
   }
   // Every clickable row becomes a game button: the Button on its bar gives the game's own hover, press,
@@ -344,6 +413,7 @@ bool build() {
   }
   // Every section exists; only the current one is shown.
   for (int s = 0; s < kSections; ++s) setSectionShown(s, s == g_section);
+  fitList();  // the scroll range is the section showing, not every section's rows
   g_built = true;
   return true;
 }
@@ -369,6 +439,7 @@ void recover() {
   g_rows.clear();
   g_readFailed.clear();
   g_title = g_hint = g_refusalText = nullptr;
+  g_view = ui::ScrollView{};  // the canvas died, and the list with it
   g_refusal = Why::None;
   releasePlayer();  // last, as in close()
 }
@@ -458,6 +529,15 @@ void run(const Row& r) {
       break;
     }
     case Action::SetSanity: actions::set_sanity(r.arg); break;
+    case Action::BumpPlayerSpeed: actions::bump_speed_multiplier(r.arg); break;
+    case Action::ResetPlayerSpeed: actions::reset_speed_multiplier(); break;
+    case Action::SetGhostBlind: actions::set_ghost_blind(!actions::ghost_blind()); break;
+    case Action::SetDebugHud: {
+      Switches& d = actions::switches();
+      d.debugHud = !d.debugHud;
+      showDebugHud(d.debugHud);
+      break;
+    }
     case Action::ToggleFreeze: actions::set_frozen(!actions::frozen()); break;
     case Action::KillLocal: actions::kill_local(); break;
     case Action::ReviveLocal: actions::revive_local(); break;
@@ -496,6 +576,7 @@ void rowClicked(void* user) {
       g_section = r.arg;
       setSectionShown(g_section, true);
       refreshNav();
+      fitList();  // the list is as long as the section now showing, and starts at its top
       refresh();  // the section's values now, not a frame late
       selectSectionRow();  // arrow keys continue from the section now showing
     }
@@ -565,6 +646,43 @@ void refresh() {
   }
   if (g_refusalText)
     ui::set_text(g_refusalText, g_refusal == Why::None ? "" : whyText(g_refusal).c_str());
+  followSelection();  // the arrow keys and a gamepad moved the selection inside the game
+}
+
+// ---- The developer read-out (the user's original brief: "debug HUD with ghost speed/target/state") ----
+// The mod's own text on its own small canvas, which stays up while the menu is closed so a developer can
+// watch a hunt while playing it. It is a tool's read-out, not a game screen, and every word of it is a
+// placeholder in the mod's table for the user to write.
+void showDebugHud(bool on) {
+  if (!on) {
+    if (g_hudCanvas && game::alive(g_hudCanvas)) ui::set_active(g_hudCanvas, false);
+    return;
+  }
+  if (!g_hudCanvas || !game::alive(g_hudCanvas)) {
+    g_hudCanvas = ui::create_canvas("pm dev menu hud", 29000);
+    g_hudText = nullptr;
+    if (!g_hudCanvas) {
+      PM_LOG("dev-menu: the debug read-out's canvas could not be made");
+      return;
+    }
+    g_hudText = ui::create_text(g_hudCanvas, "pm dev menu hud text", 22.0f);
+    if (g_hudText) {
+      ui::set_color(g_hudText, kText);
+      ui::set_alignment(g_hudText, ui::Align::TopLeft);
+      ui::place(g_hudText, {0.0f, 0.5f}, {0.0f, 0.5f}, {-930.0f, 440.0f}, {860.0f, 130.0f});
+    }
+  }
+  ui::set_active(g_hudCanvas, true);
+  refreshDebugHud();
+}
+
+void refreshDebugHud() {
+  if (!actions::switches().debugHud || !g_hudText || !game::alive(g_hudText)) return;
+  const std::string line = i18n::text(kHudStateKey) + ": " + actions::ghost_line() + "\n" +
+                           i18n::text(kHudTypeKey) + ": " + actions::ghost_identity() + "\n" +
+                           i18n::text(kHudSpeedKey) + ": " + number(actions::base_speed()) + "\n" +
+                           i18n::text(kHudTargetKey) + ": " + actions::hunt_target_room();
+  ui::set_text(g_hudText, line.c_str());
 }
 
 }  // namespace
@@ -604,6 +722,8 @@ void close() {
 }
 
 void tick() {
+  // The read-out runs on its own: it stays up while the menu is closed, which is when it is worth having.
+  if (actions::switches().debugHud) refreshDebugHud();
   if (!g_active) return;
   if (!g_canvas || !game::alive(g_canvas)) {
     recover();  // the scene changed under the menu: the game goes back to how open() found it
@@ -625,12 +745,16 @@ void destroy() {
   returnInput();
   if (g_active && g_wasCursorLocked) game::lock_cursor();
   if (g_canvas) ui::destroy(g_canvas);
+  if (g_hudCanvas) ui::destroy(g_hudCanvas);
+  g_hudText = nullptr;
+  g_hudCanvas = nullptr;
   g_canvas = nullptr;
   g_built = false;
   g_active = false;
   g_rows.clear();
   g_readFailed.clear();
   g_title = g_hint = g_refusalText = nullptr;
+  g_view = ui::ScrollView{};  // destroyed with the canvas above
   g_refusal = Why::None;
   g_pause = Pause{};
   releasePlayer();  // last: the game's release may throw, and everything above is already put back

@@ -388,6 +388,13 @@ inline constexpr pm::sdk::EntryDesc LocalPCPlayer_SetPlayerSpeedMultiplier{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPCPlayer", .name = "SetPlayerSpeedMultiplier",
     .params = LocalPCPlayer_float};
 
+/// Puts the rig's speed multiplier back to the copy it kept when its speed was first set (LocalPlayer.Start
+/// copies the contract's Difficulty.playerSpeed into the multiplier and keeps that copy) and applies the speed
+/// again, on this client only. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPCPlayer_ResetPlayerSpeedMultiplier{
+    .key = "LocalPCPlayer.ResetPlayerSpeedMultiplier", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPCPlayer", .name = "ResetPlayerSpeedMultiplier"};
+
 // Of the rig's floats the multiplier's setter stores only this one, and the speed update reads it with
 // the two speeds. Both methods are LocalPCPlayer's, so each fact matches the offset through any register.
 inline constexpr pm::sdk::Fact LocalPlayer_speedMultiplier_facts[] = {
@@ -1203,6 +1210,10 @@ struct LocalPCPlayer {
   /// Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::LocalPCPlayer_SetPlayerSpeedMultiplier, void(void*, float)>
       SetPlayerSpeedMultiplier{};
+  /// ResetPlayerSpeedMultiplier(player): puts its speed multiplier back to the copy kept from the contract's
+  /// difficulty and applies the speed again, on this client. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::LocalPCPlayer_ResetPlayerSpeedMultiplier, void(void*)>
+      ResetPlayerSpeedMultiplier{};
 };
 
 /// The local player's HUD.

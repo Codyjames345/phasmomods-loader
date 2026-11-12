@@ -4,6 +4,8 @@
 // (docs/superpowers/specs/2026-11-10-dev-menu-content-plan.md): the sandbox gate, the pause while the menu
 // is open, which actions a row may run right now and what the mod's three hooks refuse. Everything a row
 // *shows* is read from the game every frame (actions.cpp); only these rules decide.
+#include <cmath>
+
 namespace pm::devmenu {
 
 // ---- The sandbox gate (the user's final call, 2026-11-10, third round; probes fixed 2026-11-11) ----
@@ -40,6 +42,18 @@ inline bool pause_close(Pause& p, float& restore) {
   return true;
 }
 
+/** The investigator's speed multiplier the speed row steps to: `steps` quarter-steps from `current`, snapped
+ *  to the nearest quarter, kept between 0.25 and 4. The bounds are the menu's, not the game's: the game puts
+ *  no range on the multiplier (Difficulty.playerSpeed sets it, and a Monkey Paw wish calls the same setter),
+ *  and a multiplier of 0 would leave the row no way back up. */
+inline float next_speed_multiplier(float current, int steps) {
+  const float moved = current + 0.25f * static_cast<float>(steps);
+  float snapped = std::lround(moved * 4.0f) / 4.0f;
+  if (snapped < 0.25f) snapped = 0.25f;
+  if (snapped > 4.0f) snapped = 4.0f;
+  return snapped;
+}
+
 /** The game's timeScale the "tick speed" row cycles to: the next preset above `current`, wrapping to the
  *  first (0 paused, 0.5, 1 real time, 2). A value between presets moves to the next one above it. */
 inline float next_time_scale(float current) {
@@ -58,6 +72,9 @@ struct Switches {
   bool pauseWhenOpen = false;
   bool godMode = false;         // a hunt's kill of the local investigator is refused
   bool keepConsumables = false;  // a saved consumable stock never goes down
+  // The debug read-out stays on screen while the menu is closed: the ghost's state, its type, its speed and
+  // who its hunt is set on (the user's original brief). Off until a developer asks for it.
+  bool debugHud = false;
 };
 
 /** God mode: only the local investigator's kill is refused; a hunt of anybody else (a dummy, another
@@ -78,10 +95,11 @@ inline bool keep_refuses_consume(bool keepConsumables) { return keepConsumables;
 enum class Action {
   UnlockDoor, EndContract, Leave, Quit,          // Contract
   ForceHunt, EndHunt, ClearCooldown, Appear, UnAppear, ApplyRoom, RandomRoom, PickRoom, BumpSpeed,  // Ghost
-  ToggleEvents, FireEvent,                        // Ghost
+  ToggleEvents, FireEvent, SetGhostBlind,         // Ghost
   SetFriendly, SetLoseEquipment, BumpEvidence, BumpType,  // Difficulty
   SetSanity, ToggleFreeze, KillLocal, ReviveLocal,         // Player
-  SetGodMode, SetKeepConsumables, SetPauseWhenOpen, CycleTimeScale,  // switches
+  BumpPlayerSpeed, ResetPlayerSpeed,                     // Player: the game's own speed multiplier
+  SetGodMode, SetKeepConsumables, SetPauseWhenOpen, CycleTimeScale, SetDebugHud,  // switches
   Info,                                          // a read-out: no click
 };
 
@@ -121,6 +139,7 @@ inline Why refuse(Action action, const Can& c) {
     case Action::BumpSpeed:
     case Action::ToggleEvents:
     case Action::FireEvent:
+    case Action::SetGhostBlind:  // asks the ghost's own vision sensor
       if (!c.contract) return Why::NoContract;
       return c.ghost ? Why::None : Why::NoGhost;
     case Action::EndHunt:
@@ -143,6 +162,8 @@ inline Why refuse(Action action, const Can& c) {
     case Action::ToggleFreeze:
     case Action::KillLocal:
     case Action::ReviveLocal:
+    case Action::BumpPlayerSpeed:    // the game's own multiplier, on this client's rig
+    case Action::ResetPlayerSpeed:
       if (!c.player) return Why::NoPlayer;
       if (action == Action::KillLocal) return c.dead ? Why::Dead : Why::None;
       if (action == Action::ReviveLocal) return c.dead ? Why::None : Why::Alive;
@@ -151,6 +172,7 @@ inline Why refuse(Action action, const Can& c) {
     case Action::SetKeepConsumables:
     case Action::SetPauseWhenOpen:
     case Action::CycleTimeScale:
+    case Action::SetDebugHud:  // the mod's own text on its own canvas: it needs nothing from a contract
       return Why::None;
   }
   return Why::None;

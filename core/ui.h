@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "held.h"
+
 // Screen-space UI built from the game's own Unity UI classes (Canvas, TextMeshPro, Image), using
 // the game's own font so mod UI reads as part of the game, through the game API. Main thread only.
 namespace pm::ui {
@@ -45,6 +47,52 @@ void set_auto_size(void* text, float min, float max);
 
 void set_color(void* graphic, Color color);
 Color color(void* graphic);
+
+// A scrollable list on the game's own ScrollRect and RectMask2D, so the list is longer than the space it
+// takes: `viewport` clips and catches the pointer, `content` is what the rows go under, and `scroll` is the
+// game's ScrollRect that moves it. Lay the rows out top-down inside `content` (anchor {0.5, 1}, pivot
+// {0.5, 0.5}, y negative from the top edge), and the game's own pointer handling drags and wheel-scrolls the
+// view. scroll_reveal() brings back on screen whatever the keyboard has reached.
+struct ScrollView {
+  // The three game objects are held, as every object a mod keeps between frames is (held.h).
+  api::Held viewport;           // the clipped area, a child of the canvas
+  api::Held content;            // the whole list, a child of viewport
+  api::Held scroll;             // the ScrollRect component, on viewport
+  float height = 0.0f;          // the viewport's height, in canvas units
+  float contentHeight = 0.0f;   // the content's height, the same units
+};
+
+// A vertical scroll view under `parent` of `size` centred at `position`, its content `contentHeight` tall.
+// Its parts are null when the game's classes did not resolve: a view with no `scroll` still shows its rows,
+// they just cannot move. The view carries a background that catches the pointer, so a drag anywhere in it
+// scrolls, and a clip, so rows outside the view are not drawn over the rest of the menu.
+ScrollView create_scroll_view(void* parent, const char* name, Vec2 position, Vec2 size, float contentHeight);
+
+// Make the content `contentHeight` tall, for a list whose rows come and go; the part showing stays showing.
+void set_scroll_height(ScrollView& view, float contentHeight);
+
+// Scroll no further than it must to show the band that starts `fromTop` canvas units below the content's top
+// edge and is `band` tall. Does nothing when the whole list already fits the view.
+void scroll_reveal(const ScrollView& view, float fromTop, float band);
+
+// The arithmetic scroll_reveal runs, on its own so it can be tested without a game: how far the list has to
+// be scrolled down (0 at the top of the list, contentHeight - viewHeight at the bottom) for the band that
+// starts `bandTop` below the content's top edge and is `bandHeight` tall to be on screen. The content moves
+// only as far as it must (a
+// band already showing leaves it at `currentTop`) and never past either end of what it can travel; with the
+// whole list inside the view the answer is 0.
+inline float scroll_top_needed(float contentHeight, float viewHeight, float currentTop, float bandTop,
+                               float bandHeight) {
+  const float span = contentHeight - viewHeight;
+  if (!(span > 0.0f)) return 0.0f;
+  float top = currentTop;
+  if (bandTop < top)
+    top = bandTop;
+  else if (bandTop + bandHeight > top + viewHeight)
+    top = bandTop + bandHeight - viewHeight;
+  if (top < 0.0f) return 0.0f;
+  return top > span ? span : top;
+}
 
 // Pointer hit tests against a UI element: camera is null on a screen-space overlay canvas, and the
 // camera that renders it on a world-space canvas.

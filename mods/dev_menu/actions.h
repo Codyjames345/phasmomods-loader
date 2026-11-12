@@ -60,6 +60,17 @@ float sanity();
 bool dead();
 bool frozen();
 float time_scale();
+/** The local rig's speed multiplier as the game holds it (LocalPlayer.speedMultiplier: the contract's
+ *  Difficulty.playerSpeed at the start, a Monkey Paw wish later). 0 with no rig. */
+float speed_multiplier();
+/** Whether this client's rig is the PC rig whose speed the game can set. False for a VR rig and off
+ *  contract; the speed rows say so rather than doing nothing quietly. */
+bool speed_settable();
+/** The room the hunt is set on, for the debug read-out; empty with no hunt, no target or an unknown room. */
+std::string hunt_target_room();
+/** Whether the ghost sees nobody now: what its line-of-sight sensor feeds on detects no layer at all. False
+ *  when there is no ghost, no vision sensor, or the layers cannot be read. */
+bool ghost_blind();
 
 // ---- The rows' actions; the click already passed menu_rule.h's refuse() ----
 
@@ -81,6 +92,17 @@ void bump_evidence(int delta);
 void set_forced_type(int value);
 void set_sanity(int percent);
 void set_frozen(bool value);
+/** Steps the local PC rig's speed through the game's own setter (LocalPCPlayer.SetPlayerSpeedMultiplier, the
+ *  call a Monkey Paw wish makes, which also re-applies it to the controller). `steps` is in quarter-steps,
+ *  bounded by menu_rule.h. Nothing for a rig the game will not take it on. */
+void bump_speed_multiplier(int steps);
+/** Gives the rig back the speed multiplier the game kept for it at the start of the contract
+ *  (LocalPCPlayer.ResetPlayerSpeedMultiplier). */
+void reset_speed_multiplier();
+/** Blinds the ghost or gives it its sight back, on its own line-of-sight sensor: the mask that sensor feeds on
+ *  is emptied, or the mask found before emptying is put back. The ghost still hears and smells; only what it
+ *  can see changes. The mod puts the mask back if it stops while the ghost is still sightless. */
+void set_ghost_blind(bool blind);
 /** Holds the local investigator in place while the menu is up, as the game does for its journal: no walking
  *  and no looking, crosshair away, cursor free; false gives all of it back. Asks the game only for a PC rig
  *  that has a HUD and a journal controller (the game's release throws without one), and answers whether it

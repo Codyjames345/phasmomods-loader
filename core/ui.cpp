@@ -172,6 +172,75 @@ Color color(void* graphic) {
   return {c.r, c.g, c.b, c.a};
 }
 
+// A UI object pinned between two corners of its parent, with a size delta on top of that. place() keeps both
+// anchors equal, which is what a laid-out row wants; a stretch needs two different ones, which no helper in
+// the map sets for us.
+void stretch(void* component, Vec2 anchorMin, Vec2 anchorMax, Vec2 pivot, Vec2 position, Vec2 sizeDelta) {
+  void* rt = game::transform_of(component);
+  phasmo::RectTransform::set_anchorMin(rt, to_game(anchorMin));
+  phasmo::RectTransform::set_anchorMax(rt, to_game(anchorMax));
+  phasmo::RectTransform::set_pivot(rt, to_game(pivot));
+  phasmo::RectTransform::set_anchoredPosition(rt, to_game(position));
+  phasmo::RectTransform::set_sizeDelta(rt, to_game(sizeDelta));
+}
+
+// Built the way Unity's own editor builds one: a viewport carrying the game's clip and its ScrollRect, a
+// background inside it that takes the pointer (the ScrollRect scrolls on the pointer, and sees it only
+// through a graphic whose raycastTarget is on), and a content object pinned to the viewport's top edge as
+// tall as the whole list. A row laid out at anchor {0.5, 1} and y = -(index + 0.5) * pitch therefore sits
+// where the list says, whatever the list's height.
+ScrollView create_scroll_view(void* parent, const char* name, Vec2 position, Vec2 size, float contentHeight) {
+  ScrollView view;
+  const std::string base = name && *name ? name : "pm scroll view";
+  view.viewport = child(parent, base.c_str());
+  if (!view.viewport) return view;
+  place(view.viewport, {0.5f, 0.5f}, {0.5f, 0.5f}, position, size);
+  view.height = size.y;
+  view.contentHeight = contentHeight;
+  if (void* back = create_raw_image(view.viewport, (base + " back").c_str(), nullptr)) {
+    stretch(back, {0.0f, 0.0f}, {1.0f, 1.0f}, {0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f});
+    phasmo::Graphic::set_raycastTarget(back, true);
+  }
+  view.content = child(view.viewport, (base + " content").c_str());
+  if (view.content)
+    stretch(view.content, {0.0f, 1.0f}, {1.0f, 1.0f}, {0.5f, 1.0f}, {0.0f, 0.0f}, {0.0f, contentHeight});
+  view.scroll = game::add_component(view.viewport, phasmo::ScrollRect::type.type_object());
+  if (!view.scroll) return view;  // no ScrollRect: the rows still show, they just cannot move
+  game::add_component(view.viewport, phasmo::RectMask2D::type.type_object());
+  if (view.content) phasmo::ScrollRect::content.set(view.scroll, game::transform_of(view.content));
+  phasmo::ScrollRect::viewport.set(view.scroll, game::transform_of(view.viewport));
+  phasmo::ScrollRect::vertical.set(view.scroll, true);
+  phasmo::ScrollRect::horizontal.set(view.scroll, false);
+  // A ScrollRect made at run time holds the free-running mode (Unity's editor-only Reset never runs), which
+  // would let a drag throw the list out of the menu for good.
+  phasmo::ScrollRect::movementType.set(view.scroll, phasmo::ScrollMovementType::Clamped());
+  phasmo::ScrollRect::set_verticalNormalizedPosition(view.scroll, 1.0f);  // lists start at the top
+  return view;
+}
+
+void set_scroll_height(ScrollView& view, float contentHeight) {
+  const float fraction = view.scroll && view.contentHeight > view.height
+                             ? phasmo::ScrollRect::get_verticalNormalizedPosition(view.scroll)
+                             : 1.0f;
+  view.contentHeight = contentHeight;
+  if (!view.content) return;
+  void* rt = game::transform_of(view.content);
+  const phasmo::Vector2 size = phasmo::RectTransform::get_sizeDelta(rt);
+  phasmo::RectTransform::set_sizeDelta(rt, {size.x, contentHeight});
+  // After the new height, so the game clamps the position it is given against the bounds the list now has.
+  if (view.scroll) phasmo::ScrollRect::set_verticalNormalizedPosition(view.scroll, fraction);
+}
+
+void scroll_reveal(const ScrollView& view, float fromTop, float band) {
+  if (!view.scroll || !(view.contentHeight > view.height)) return;
+  const float span = view.contentHeight - view.height;
+  const float current = (1.0f - phasmo::ScrollRect::get_verticalNormalizedPosition(view.scroll)) * span;
+  const float top = scroll_top_needed(view.contentHeight, view.height, current, fromTop, band);
+  if (top == current) return;  // the band is showing already: leave the list where the player put it
+  phasmo::ScrollRect::set_verticalNormalizedPosition(view.scroll, 1.0f - top / span);
+  phasmo::ScrollRect::StopMovement(view.scroll);  // a key press wins over a drag's inertia
+}
+
 }  // namespace pm::ui
 
 namespace pm::ui {

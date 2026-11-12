@@ -145,4 +145,14 @@ bool select(void* gameObjectOrComponent) {
   return true;
 }
 
+// The EventSystem's own selection. The game's arrow-key and gamepad navigation moves it without telling any
+// mod, which is why a scrolling list has to read it back to follow the player.
+void* selected() {
+  if (!phasmo::EventSystem::get_current.available() ||
+      !phasmo::EventSystem::get_currentSelectedGameObject.available())
+    return nullptr;
+  void* system = phasmo::EventSystem::get_current();
+  return system ? phasmo::EventSystem::get_currentSelectedGameObject(system) : nullptr;
+}
+
 }  // namespace pm::api::buttons

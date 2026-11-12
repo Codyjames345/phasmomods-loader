@@ -106,10 +106,12 @@ How each entry below is tagged:
 +- Loader       mod states | content | journal tests | per-mod tests
 ```
 
-Left column: the seven sections. Right pane: the section's groups. Rows are cloned game widgets
-(the Mods panel's `Toggle.1` rows, menus.md) plus TMP text built with the shared `ui::` helpers
-(the Playable Ghost HUD's precedent). Values shown are read from the game every frame, never cached
-in the menu (the dynamic-over-hard-coded rule).
+Left column: the seven sections. Right pane: the section's groups. Rows are real Unity `Button`s
+made at run time, sitting in a `ScrollRect` list (the user's call: no vanilla-UI dressing for this
+menu), with their text built with the shared `ui::` helpers (the Playable Ghost HUD's precedent); the
+list, its mask and its keyboard follow are the loader's own helpers in `core/ui.h`, and the geometry
+lives in `mods/dev_menu/menu_layout.h` so the offline test can check it. Values shown are read from
+the game every frame, never cached in the menu (the dynamic-over-hard-coded rule).
 
 ## 1. Difficulty
 
@@ -194,8 +196,11 @@ Speed and senses:
 
 - Sight assist pin: hold `sightSpeedUp` at 1 or 1.65 through the host's own hook point just before
   `UpdateSpeed` (the hunt-speed rule path, map)
-- Line of sight toggle: force `GhostHuntState.Sees` true or false for the test hunt (hook), with
-  the sensor read-out below so you can see what the game itself decided
+- Line of sight toggle: built 2026-11-12 on the sensor rather than on the hunt's answer. The sight
+  sensor pulses and tests its own input sensor, and what that sensor detects is its layer mask, so
+  the row empties that mask (map: `LOSSensor.get_InputSensor`, `RangeSensor.layers`) and puts the
+  saved mask back on the toggle and on mod stop. Blinding the input sensor leaves the hunt's other
+  senses alone, which is what a test wants.
 
 Attempts (each is the game's own path; tarot's `forced` is the precedent):
 
@@ -252,9 +257,17 @@ Vitals:
 Movement:
 
 - Freeze the player: `Player.ToggleFreezePlayerMovement` (map)
-- Walk / sprint speed: the movement fields on `LocalPCPlayer.controls` (`PCControls`) are not
-  mapped: RE. Until then this row is absent, not stubbed
-- Noclip / fly: needs the character controller entries (not mapped): RE
+- Walk / sprint speed: built 2026-11-12, and not by writing the movement fields. The game already has
+  one multiplier on the rig (`LocalPlayer.speedMultiplier`), and the Monkey Paw's speed wish runs
+  through `LocalPCPlayer.SetPlayerSpeedMultiplier`, with
+  `LocalPCPlayer.ResetPlayerSpeedMultiplier` putting back the copy the rig kept when its speed was
+  first set. The rows step that multiplier in quarters and reset it the same way a wish's end does,
+  so the game's own walk and sprint arithmetic still decides the real speed (the no-caps rule).
+- Noclip / fly: still open (FINDINGS.md 34). The controller's step writes its Rigidbody's position and
+  applies gravity through its own multiplier, but which pass actually stops the player at a wall is
+  unproven, and the pieces that look responsible carry names the game shuffles every update, so their
+  entries have to be found by shape. It also needs the user's answer: through walls while still
+  walking on floors, or free flight.
 - Teleport (to a room, a player, the truck): `Player.body` transform write (`Transform.set_position`,
   map) plus how the controller re-seats: verify (a fake-game test first, then the smoke list)
 
@@ -308,7 +321,10 @@ Time:
 - "Pause while the menu is open": restores the previous timescale on close (same entry). Off by default
   since 2026-11-12, the user's call; the row and the tick speed row stay
 
-Debug HUD (a `ui::` canvas, PG-HUD style; toggles per block):
+Debug HUD (a `ui::` canvas, PG-HUD style; toggles per block). Started 2026-11-12 as one switch
+showing the four ghost lines below (state, identity, hunt base speed, and the hunt target's room,
+named through `Player.currentRoom` and the level's own room list) on its own canvas, which stays up
+with the menu closed; the rest is still to come:
 
 - Ghost: state name, `isHunting`, target and `searchTarget`, live hunt speed with its split
   (`baseSpeed`, `sightSpeedUp`, multipliers), position and current room, `huntsHeldOff` /
@@ -395,9 +411,13 @@ In rough order of how much of the menu waits on each:
 1. The remaining `Difficulty` fields (notes for each; the field scan then feeds the rows) - RE
 2. `Time.set_timeScale`, keyboard polling (the map has `Mouse` but no `Keyboard`; poll the physical
    key left of 1), Unity `Slider` and `ScrollRect` (the user's call: plain scroll views, no vanilla
-   widget dressing for the menu) - SDK small, one-line entries
+   widget dressing for the menu) - SDK small, one-line entries. The `ScrollRect` entries and the
+   loader's scroll helpers went in 2026-11-12, with `RectMask2D` and
+   `EventSystem.get_currentSelectedGameObject`; `Slider` is still unmapped (the menu steps its
+   numbers with +/- rows instead).
 3. Mid-contract weather transition (`RandomWeather.TransitionWeatherProfile`) - RE
-4. Movement speed and the character controller (player cheats) - RE
+4. Movement speed and the character controller (player cheats) - the speed half went in 2026-11-12
+   through the rig's own multiplier; what stops the player at a wall is still RE (FINDINGS.md 34)
 5. Equipment durability/battery decrements and the whole shop flow (StoreItem, prices, purchase),
    saved money - RE
 6. NavMeshAgent warp (ghost teleport) - SDK small

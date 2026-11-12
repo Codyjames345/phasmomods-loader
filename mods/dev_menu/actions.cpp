@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <random>
+#include <type_traits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -26,6 +27,7 @@
 #include "Photon.h"
 #include "Player.h"
 #include "PlayerSanity.h"
+#include "Sensor.h"
 #include "UnityAudio.h"
 #include "UnityObject.h"
 
@@ -39,7 +41,19 @@ using namespace phasmo;
 bool g_session = false;      // the dev session: on once the menu has opened in this run
 bool g_sessionTold = false;  // its log line was written
 Switches g_switches;
+
+// Whether a wrapper's map entry resolved in this game build, for a decision that must not guess at a value
+// the game could not give (the same check the other mods use).
+template <auto& Member>
+bool entry_resolved() {
+  return std::remove_cvref_t<decltype(Member)>::use::resolved();
+}
 bool g_frozen = false;       // our last ToggleFreezePlayerMovement for the local investigator
+// What the ghost's vision feeds on, and the layer mask it had before the menu emptied it: so the menu can
+// give the sight back, and so a mod stop never leaves a contract with a blind ghost.
+api::Held g_visionInput;
+int32_t g_visionLayers = 0;
+bool g_visionEmptied = false;
 
 // ---- The hooks. Their creation is actions::start(): if one cannot be made the mod stays off, so a dev
 // session always has progression suppression (fail closed). ----
@@ -179,8 +193,14 @@ bool start() {
 }
 
 void stop() {
-  // The host takes the mod's hooks down when the mod stops; nothing to do here beyond our own state.
+  // The host takes the mod's hooks down when the mod stops; nothing to do here beyond our own state. The
+  // one thing the menu leaves in the game is an emptied vision mask, and that goes back: a mod must never
+  // stop with the contract's ghost left sightless.
   g_frozen = false;
+  if (g_visionEmptied && g_visionInput && api::alive(g_visionInput) && entry_resolved<RangeSensor::layers>())
+    RangeSensor::layers.set(g_visionInput, g_visionLayers);
+  g_visionEmptied = false;
+  g_visionInput = nullptr;
 }
 
 void note_session() {
@@ -357,6 +377,54 @@ bool frozen() { return g_frozen; }
 
 float time_scale() { return Time::get_timeScale(); }
 
+// The rig the game takes a speed change from: LocalPCPlayer's own methods, so a VR rig (whose stamina applies
+// its speed instead, VRStamina.Update) is not asked.
+void* pc_rig() {
+  void* rig = game::local_player_component();
+  return rig && LocalPCPlayer::type.is(rig) ? rig : nullptr;
+}
+
+float speed_multiplier() {
+  void* rig = game::local_player_component();
+  return rig ? LocalPlayer::speedMultiplier.get(rig) : 0.0f;
+}
+
+bool speed_settable() { return pc_rig() != nullptr && LocalPCPlayer::SetPlayerSpeedMultiplier.available(); }
+
+// The sensor the ghost sees through, at the end its line-of-sight sensor tests: GhostAI.vision is the LOS
+// sensor, and what it tests is its input sensor's signals, so that is the sensor whose layers decide what
+// ever reaches the ghost (Sensor.h). Null, fail closed, when either half is missing.
+void* ghost_vision_input() {
+  void* ai = game::ghost_ai();
+  if (!ai) return nullptr;
+  void* vision = GhostAI::vision.get(ai);
+  if (!vision) return nullptr;
+  return LOSSensor::get_InputSensor(vision);
+}
+
+bool ghost_blind() {
+  if (!entry_resolved<RangeSensor::layers>()) return false;
+  void* input = ghost_vision_input();
+  return input && RangeSensor::layers.get(input) == 0;
+}
+
+std::string hunt_target_room() {
+  void* ai = game::ghost_ai();
+  if (!ai) return {};
+  void* machine = GhostAI::stateMachine.get(ai);
+  if (!machine) return {};
+  void* state = GhostStateMachine::current.get(machine);
+  if (!state || !GhostHuntState::type.is(state)) return {};  // not hunting: no hunt target
+  void* target = GhostHuntState::target.get(state);
+  if (!target) target = GhostHuntState::lastPlayer.get(state);
+  void* room = target ? Player::currentRoom.get(target) : nullptr;
+  if (!room) return {};
+  const api::RefArray rooms = game::level_rooms();
+  for (size_t i = 0; i < rooms.size(); ++i)
+    if (rooms[i] == room) return room_name(static_cast<int>(i));
+  return {};
+}
+
 // ---- The rows' actions ----
 
 void force_hunt() {
@@ -456,6 +524,37 @@ void set_frozen(bool value) {
   if (!player) return;
   Player::ToggleFreezePlayerMovement(player, value);
   g_frozen = value;
+}
+
+void bump_speed_multiplier(int steps) {
+  void* rig = pc_rig();
+  if (!rig) return;
+  // The game's own setter, which stores the multiplier and re-applies it to the controller in one call (the
+  // path a Monkey Paw wish's speed takes).
+  LocalPCPlayer::SetPlayerSpeedMultiplier(rig, next_speed_multiplier(speed_multiplier(), steps));
+}
+
+void reset_speed_multiplier() {
+  void* rig = pc_rig();
+  if (rig) LocalPCPlayer::ResetPlayerSpeedMultiplier(rig);
+}
+
+void set_ghost_blind(bool blind) {
+  void* input = ghost_vision_input();
+  if (!input || !entry_resolved<RangeSensor::layers>()) return;
+  if (blind) {
+    // Remember this contract's mask the first time, and never overwrite it with an emptied one.
+    if (!g_visionInput || g_visionInput != input || !g_visionEmptied) {
+      g_visionInput = input;
+      g_visionLayers = RangeSensor::layers.get(input);
+    }
+    RangeSensor::layers.set(input, 0);
+    g_visionEmptied = true;
+    return;
+  }
+  if (g_visionEmptied && g_visionInput == input && api::alive(g_visionInput))
+    RangeSensor::layers.set(input, g_visionLayers);
+  g_visionEmptied = false;
 }
 
 bool pause_player(bool held) {

@@ -78,4 +78,12 @@ void input_set(void* module, bool on);
 /// @return False when no EventSystem is running or the game's entries did not resolve.
 bool select(void* gameObjectOrComponent);
 
+/// The GameObject the keyboard or gamepad selection is on now: what select() set, or wherever the game's own
+/// arrow-key and stick navigation has moved it. A mod with a scrolling list reads it each frame to follow
+/// the player's selection back into view (the arrow keys move the selection inside the game, which tells the
+/// mod nothing).
+/// @return The selected GameObject; null when no EventSystem is running, nothing is selected, or the game's
+/// entries did not resolve.
+void* selected();
+
 }  // namespace pm::api::buttons

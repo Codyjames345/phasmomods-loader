@@ -1,12 +1,16 @@
-// Offline tests for the dev menu's rules (mods/dev_menu/menu_rule.h): the sandbox gate, the pause while
-// open, the hook refusals and when each row may run. Run: build\dev_menu_test.exe
+// Offline tests for the dev menu's rules (mods/dev_menu/menu_rule.h) and its layout (mods/dev_menu/
+// menu_layout.h): the sandbox gate, the pause while open, the hook refusals, when each row may run, and that
+// the rows and the headings clear each other. Run: build\dev_menu_test.exe
+#include "menu_layout.h"
 #include "menu_rule.h"
+#include "ui.h"
 
 #include <initializer_list>
 
 #include "check.h"
 
 using namespace pm::devmenu;
+using namespace pm::devmenu::layout;
 
 namespace {
 
@@ -47,6 +51,77 @@ void the_menu_does_not_pause_the_clock_by_default() {
   CHECK(pause_open(p, 1.0f, s.pauseWhenOpen) == 1.0f && !p.frozen);
   float restore = 2.0f;
   CHECK(!pause_close(p, restore) && restore == 2.0f);  // closing changes a clock it never touched
+}
+
+// The user's report of 2026-11-12: "the menu UI is placed too high and some text appears over the 'Dev Menu'
+// heading". The rows were laid out from one constant, and nothing checked what that put next to what, so the
+// first row's box reached up into the hint line's box. Every box here has to clear the one above it.
+void the_rows_clear_the_heading_and_the_hint() {
+  CHECK(gap(kTitleY, kTitleBox, kHintY, kHintBox) >= 4.0f);   // the heading and the hint under it
+  CHECK(gap(kHintY, kHintBox, listTop(), 0.0f) >= 4.0f);       // the hint and the list's first row (what the
+                                                               // live test of 2026-11-12 found overlapping)
+  CHECK(gap(kViewY - kViewHigh / 2.0f, 0.0f, kRefuseY, kRefuseBox) >= 4.0f);  // the list and the refusal line
+  CHECK(listTop() - kPitch >= kViewY - kViewHigh / 2.0f);      // a whole row fits at the top of the view
+  CHECK(kViewX + kViewWide / 2.0f <= 960.0f);                  // the list stays on a 1920 wide canvas
+  CHECK(kNavX >= -960.0f);                                     // and so does the section column
+}
+
+// The list scrolls, so its length is not limited by the screen: the last row of a list far longer than the
+// view is still reachable, and a section that already fits is never scrolled out of place.
+void a_long_section_reaches_its_last_row() {
+  const int rows = 60;
+  const float height = listHeight(rows);
+  CHECK(height > kViewHigh);  // a list the view cannot show at once
+  float top = 0.0f;
+  for (int i = 0; i < rows; ++i) top = pm::ui::scroll_top_needed(height, kViewHigh, top, rowTop(i), kPitch);
+  // The last row is on screen: its top is at or below the view's top edge, and its bottom above the bottom.
+  CHECK(rowTop(rows - 1) >= top);
+  CHECK(rowTop(rows - 1) + kPitch <= top + kViewHigh);
+  CHECK(top <= height - kViewHigh);  // never scrolled past the end
+  // A section that fits is left alone, wherever it was.
+  const float fits = listHeight(8);
+  CHECK(pm::ui::scroll_top_needed(fits, kViewHigh, 0.0f, rowTop(7), kPitch) == 0.0f);
+  // Scrolling only moves as far as it must: a row already showing leaves the list where it is.
+  CHECK(pm::ui::scroll_top_needed(height, kViewHigh, 200.0f, rowTop(6), kPitch) == 200.0f);
+}
+
+// The player speed rows step the game's own speed multiplier (LocalPCPlayer.SetPlayerSpeedMultiplier, the
+// call a Monkey Paw wish makes). The step and its bounds are the menu's, not the game's: a developer wants
+// room to run, and a multiplier of 0 would leave the row with no way back up.
+void the_speed_rows_step_within_the_menu_bounds() {
+  CHECK(next_speed_multiplier(1.0f, +1) == 1.25f);
+  CHECK(next_speed_multiplier(1.0f, -1) == 0.75f);
+  CHECK(next_speed_multiplier(1.0f, +4) == 2.0f);
+  CHECK(next_speed_multiplier(0.25f, -1) == 0.25f);  // the floor
+  CHECK(next_speed_multiplier(0.0f, -1) == 0.25f);   // a rig stopped dead still steps up to the floor
+  CHECK(next_speed_multiplier(4.0f, +1) == 4.0f);    // and the ceiling
+  CHECK(next_speed_multiplier(1.6f, +1) == 1.75f);   // an odd value the game left there still steps
+}
+
+void the_new_rows_refuse_for_what_the_game_lacks() {
+  Can c;
+  c.sandbox = true;
+  CHECK(refuse(Action::BumpPlayerSpeed, c) == Why::NoPlayer);
+  CHECK(refuse(Action::ResetPlayerSpeed, c) == Why::NoPlayer);
+  c.player = true;
+  CHECK(refuse(Action::BumpPlayerSpeed, c) == Why::None);
+  CHECK(refuse(Action::ResetPlayerSpeed, c) == Why::None);
+  // Blinding the ghost asks its vision sensor, so it needs a ghost.
+  CHECK(refuse(Action::SetGhostBlind, c) == Why::NoContract);
+  c.contract = true;
+  CHECK(refuse(Action::SetGhostBlind, c) == Why::NoGhost);
+  c.ghost = true;
+  CHECK(refuse(Action::SetGhostBlind, c) == Why::None);
+  // The debug read-out is the mod's own text on its own canvas: it needs nothing from a contract.
+  Can free;
+  free.sandbox = true;  // the sandbox gate still covers it: the menu only opens there
+  CHECK(refuse(Action::SetDebugHud, free) == Why::None);
+  CHECK(refuse(Action::SetDebugHud, Can{}) == Why::NotOffline);
+}
+
+void the_debug_read_out_is_a_switch_like_the_others() {
+  const Switches s;
+  CHECK(!s.debugHud);  // off until a developer asks for it
 }
 
 void the_tick_speed_row_cycles_the_presets() {
@@ -132,6 +207,11 @@ int main() {
   opening_the_menu_freezes_and_closing_restores();
   pausing_can_be_switched_off();
   the_menu_does_not_pause_the_clock_by_default();
+  the_rows_clear_the_heading_and_the_hint();
+  a_long_section_reaches_its_last_row();
+  the_speed_rows_step_within_the_menu_bounds();
+  the_new_rows_refuse_for_what_the_game_lacks();
+  the_debug_read_out_is_a_switch_like_the_others();
   the_tick_speed_row_cycles_the_presets();
   the_hooks_answer_the_switches();
   a_full_offline_contract_allows_everything();

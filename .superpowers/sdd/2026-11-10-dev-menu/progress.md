@@ -338,3 +338,89 @@ map, as it should).
   InventoryManager.ReturnItemstoInventory; lobby-side).
 - Sections 6 Debug HUD and ESP, the sensors read-out, and section 7 Loader are whole-feature follow-ups,
   not oversights of v1.
+
+## 2026-11-12: fifth live try - the rows the brief asked for, and a list that really scrolls
+
+The user's fifth report: "it worked fine until I changed the game speed setting, then the same thing
+happened (flashing colours then black screen). ... many of the options I asked for are missing,
+including noclip and player movement speed ... the menu UI is placed too high and some text appears
+over the 'Dev Menu' heading". They then pointed back at their original feature list (the untracked
+`backup` file) and asked that everything in it be present, plus any extras worth adding.
+
+What landed:
+
+- The menu geometry lives in `mods/dev_menu/menu_layout.h` so the offline test can check it, which is
+  the fix for the placement defect rather than a patch of the numbers. The old numbers let the hint
+  line overlap the first row and put the section column partly off the 1920 canvas (`kNavX` -970 to
+  -950). `the_rows_clear_the_heading_and_the_hint` and `a_long_section_reaches_its_last_row` hold every
+  gap at 4px or more and pin the columns inside the canvas; both ran red against the old layout first,
+  which is the user's defect written as a test.
+- The list is the `ScrollRect` the user asked for. `core/ui.h` gained `create_scroll_view`,
+  `set_scroll_height`, `scroll_reveal` and the pure `scroll_top_needed`: the viewport is stretched, the
+  content is a child of it pinned to the viewport's top edge so rows never move as the list grows, a
+  `RectMask2D` on the viewport stops off-view rows drawing over the heading, `movementType` is set to
+  Clamped because a ScrollRect made at run time holds the free-running mode (the editor's Reset never
+  runs), and a background graphic with `raycastTarget` on is what lets the wheel and a drag reach it at
+  all. `follow_selection()` reads the event system's selection through `api::buttons::selected()` (new,
+  over `EventSystem.get_currentSelectedGameObject`) and scrolls the selected row into view, so
+  arrow-key navigation reaches a row below the frame. `sdk/systems/menus.md` gained "A list that
+  scrolls" for authors.
+- Player movement speed rows use the game's own path, not a controller write:
+  `LocalPCPlayer.SetPlayerSpeedMultiplier` (the Monkey Paw speed wish's route) and
+  `LocalPCPlayer.ResetPlayerSpeedMultiplier` (mapped this round; it copies back what the rig kept when
+  its speed was first set and re-applies it). A quarter per press, snapped to quarters so the read-out
+  stays readable; the 0.25..4 bounds are the menu's own, not the game's, and the note says so. The
+  game's own walk and sprint arithmetic still produces the real speed, so nothing is capped.
+- The ghost's line of sight is now a row, built on the sensor chain: `GhostAI.vision` is a `LOSSensor`
+  that pulses and tests its own input sensor, and what that sensor detects is its `RangeSensor.layers`
+  mask, so emptying the mask blinds the ghost's sight and nothing else. The mask is saved on the way in
+  and put back on the toggle and in `stop()`: a mod must never leave a contract's ghost sightless.
+- The debug HUD row (Game section) is the plan's section 6 opened: one canvas of its own at
+  sortingOrder 29000 that survives the menu closing, showing the ghost's state, identity, hunt base
+  speed, and the hunt target's room named through `Player::currentRoom` and the level's room list. The
+  player, contract and sensor blocks and ESP are still follow-ups.
+
+The clock, again. The user's answer to the fifth try was to keep the rows and find the cause, so
+FINDINGS.md 33 carries what is proven (nothing in the game's own code writes the time scale; only
+middleware does; the auto-exposure pass feeds its adaptation the scaled frame time) and the experiment
+matrix the next live try should walk, one value at a time. FINDINGS.md 34 records why noclip did not
+land: the controller's step writes the Rigidbody's position and hands a recomputed capsule to a pass
+whose job is not yet known, no physics query with a layer mask appears in it, and the two layer-mask
+fields and that pass carry names the game shuffles every update, so their entries have to be resolved by
+shape. It also needs the user's design answer: through walls while still walking on floors, or free
+flight.
+
+Still missing against the brief, in the order the plan puts them: weather mid-contract (the Paw's
+transition path), unlock-everything and the free shop, the forced interaction and the type's ability,
+the difficulty's ghost speed multiplier, ESP, and the dummy networked player (the user's own ordering:
+after the row gaps).
+
+Text for the user: ten new labels are `PM_TEXT_TODO` placeholders and need the user's wording -
+`dev-menu.ghost-blind`, `.player-speed`, `.speed-down`, `.speed-up`, `.speed-reset`, `.debug-hud`,
+`.hud.state`, `.hud.type`, `.hud.speed`, `.hud.target`.
+
+Checks: build clean; `validate.ps1` 100% of 94 tests; docs tests pass with no API reference warnings;
+gamecheck exits 0 with 1881 entries, 1769 resolved and 0 missing, and `ScrollRect.movementType`
+resolves as the nested enum (the entry needs no `.type`: the field is enum-typed, and asking for an int
+was what made gamecheck report it missing).
+
+## Smoke list addenda for the sixth live try (the standing ban-risk warning still applies)
+
+22. The list scrolls: open Ghost (the longest section) and turn the wheel inside the rows. The rows
+    move inside the frame, and nothing ever draws over the "Dev Menu" heading, the hint line or the
+    section column. Drag a row with the left button and let go near an edge: the list stops at the edge
+    instead of flying out of the menu (Clamped).
+23. Arrow keys: hold down past the last row you can see. The list scrolls to keep the selected row in
+    view and Enter still runs it.
+24. Player speed: read the row's multiplier, press + twice, and walk (the stride is faster); press the
+    reset row and the walk comes back to normal on its own, with no contract restart.
+25. Ghost blind: switch it on and force a hunt that would normally see you from the same room; the hunt
+    does not come for you. Switch it off, or stop the mod, and the ghost finds players normally again,
+    including in the hunt that follows.
+26. Debug HUD: switch it on, then close the menu. The read-out stays up and changes during a hunt: the
+    state name, the type, the base speed and the target's room name. Switch it off and it goes.
+27. The clock, one value at a time (the user's choice: keep the rows, find the cause): at the main menu
+    set tick speed 0.5x, then 1x, then 2x, then 0x, then 1x, and at each step say whether the picture is
+    wrong, whether writing 1 back brings it back, and whether the game is still running. Then repeat in
+    a contract and end the contract to see whether a scene change clears it. FINDINGS.md 33 has the
+    matrix and what is already proven.

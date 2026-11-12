@@ -148,11 +148,14 @@ constexpr int32_t kModule = 0x08;
 Obj* g_system = nullptr;
 std::map<void*, bool> g_enabled;
 std::vector<std::pair<void*, void*>> g_selects;
+void* g_selected = nullptr;  // what the fake's EventSystem holds selected now
 void* fake_get_current(void*) { return g_system; }
 void fake_set_selected(void* system, void* gameObject, void*) {
   if (gameObject && !isGameObject(gameObject)) ++g_misuse;
   g_selects.push_back({system, gameObject});
+  g_selected = gameObject;
 }
+void* fake_get_selected(void*, void*) { return g_selected; }
 bool fake_get_enabled(void* module, void*) {
   const auto it = g_enabled.find(module);
   return it != g_enabled.end() && it->second;
@@ -186,6 +189,7 @@ bool bindAll() {
   fake::method(map::UnityEvent_AddListener, reinterpret_cast<void*>(&fake_add_listener));
   fake::method(map::EventSystem_get_current, reinterpret_cast<void*>(&fake_get_current));
   fake::method(map::EventSystem_SetSelectedGameObject, reinterpret_cast<void*>(&fake_set_selected));
+  fake::method(map::EventSystem_get_currentSelectedGameObject, reinterpret_cast<void*>(&fake_get_selected));
   fake::method(map::Behaviour_get_enabled, reinterpret_cast<void*>(&fake_get_enabled));
   fake::method(map::Behaviour_set_enabled, reinterpret_cast<void*>(&fake_set_enabled));
   std::string missing;
@@ -298,6 +302,13 @@ int main() {
   CHECK(g_selects[2].second == canvasObject);
   CHECK(buttons::select(nullptr));
   CHECK(g_selects[3].second == nullptr);
+  // selected() reads the selection back, which is how a scrolling list follows where the player's arrow keys
+  // have moved it (the dev menu needs it: the game's navigation tells no mod).
+  CHECK(buttons::selected() == nullptr);
+  CHECK(buttons::select(button));
+  CHECK(buttons::selected() == rowObject);
+  CHECK(buttons::select(nullptr));
+  CHECK(buttons::selected() == nullptr);
 
   // Every call above went to the kind of object Unity takes it on.
   CHECK(g_misuse == 0);
