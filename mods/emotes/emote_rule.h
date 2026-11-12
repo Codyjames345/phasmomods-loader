@@ -102,6 +102,21 @@ inline bool moved_too_far(Point start, Point now) {
   return std::hypot(now.x - start.x, now.z - start.z) > kCancelDistance;
 }
 
+/// How far the move input must point forward, 0 to 1. A starting value.
+inline constexpr float kForwardInput = 0.5f;
+/// How long the forward input must be let go before a walking emote stands again, in seconds. A starting value.
+inline constexpr float kStopHoldSeconds = 0.2f;
+/// How long the switch to or from a walking clip blends, in seconds. A starting value.
+inline constexpr float kMoveBlendSeconds = 0.25f;
+/// How long the intro clip blends into the loop clip, in seconds. A starting value.
+inline constexpr float kIntroBlendSeconds = 0.1f;
+
+/// Whether this move input is walking forward: the game's move input (x right, y forward, at most length 1), W alone
+/// or the stick pushed roughly up, not a diagonal (the user's ruling, 2026-11-12: forward only).
+inline bool walking_forward(float moveX, float moveY) {
+  return moveY >= kForwardInput && std::fabs(moveX) < kForwardInput;
+}
+
 /// A rotation (a unit quaternion, x y z w, as Unity's).
 struct Quat {
   float x, y, z, w;
@@ -184,16 +199,23 @@ struct SongLoop {
   float length = 0.0f;
 };
 
-/// Where in its song an emote is, from the clip's own time (the clip and its song start together): the song plays from its
-/// start until the end of its loop, then repeats the loop. The song itself loops in the game (AudioSource.loop, on a song
-/// cut to its loop); this is for its loudness.
-/// @param clipTime The clip's time, seconds since the emote began.
-/// @param loop The song's loop.
-/// @return Seconds into the song.
-inline double song_position(double clipTime, SongLoop loop) {
+/// Where in its song an emote is, and which of its two songs that is: an intro song plays first when the emote has
+/// one, then the loop song plays from its own start until the end of its loop and repeats the loop. The songs loop in
+/// the game (AudioSource.loop, on a song cut to its loop); this is for their loudness.
+struct SongAt {
+  bool intro;     ///< still in the intro song
+  double seconds; ///< seconds into whichever song plays now
+};
+
+/// @param elapsed Seconds since the emote began (its own clock, not a clip's time).
+/// @param introSongSeconds The intro song's length; 0 or less means the emote has none.
+/// @param loop The loop song's loop.
+inline SongAt song_position(double elapsed, float introSongSeconds, SongLoop loop) {
+  if (introSongSeconds > 0.0f && elapsed < static_cast<double>(introSongSeconds)) return {true, elapsed};
+  const double t = elapsed - (introSongSeconds > 0.0f ? static_cast<double>(introSongSeconds) : 0.0);
   const double end = static_cast<double>(loop.start) + loop.length;
-  if (loop.length <= 0.0f || clipTime < end) return clipTime;
-  return loop.start + std::fmod(clipTime - loop.start, static_cast<double>(loop.length));
+  if (loop.length <= 0.0f || t < end) return {false, t};
+  return {false, loop.start + std::fmod(t - loop.start, static_cast<double>(loop.length))};
 }
 
 /// Whether a one-shot emote has played to its end.

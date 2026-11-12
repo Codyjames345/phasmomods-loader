@@ -47,6 +47,30 @@ bool has(const std::vector<EmoteMsg>& sent, Kind k) {
   return false;
 }
 
+// A table of one emote with a walking variant (the user's ruling, 2026-11-12: forward only walks).
+EmoteTable walking_table() {
+  EmoteTable t = table_of(1);
+  t[0].hasMove = true;
+  return t;
+}
+
+// A frame: the investigator at (x, z), this move input (x right, y forward) and this dt.
+LocalFrame frame_at(double clip, float x, float z, float moveX = 0.0f, float moveY = 0.0f, float dt = 0.1f) {
+  LocalFrame f = here(clip);
+  f.pos = {x, 0.0f, z};
+  f.moveX = moveX;
+  f.moveY = moveY;
+  f.dt = dt;
+  return f;
+}
+
+// A Move message was sent with this walking flag.
+bool sent_move(const std::vector<EmoteMsg>& sent, bool moving) {
+  for (const EmoteMsg& m : sent)
+    if (m.kind == Kind::Move && m.moving == moving) return true;
+  return false;
+}
+
 // ---- The emoter's client ----
 
 void a_pick_starts_and_tells_everyone() {
@@ -200,6 +224,151 @@ void walking_turns_the_body_to_the_way_it_goes() {
   CHECK(sway.tick(w).bodyYaw.value_or(-1.0f) == 0.0f);
 }
 
+// ---- Walking emotes and intros (the user's ruling, 2026-11-12: W alone walks, a diagonal does not) ----
+
+void w_alone_is_forward() { CHECK(walking_forward(0.0f, 1.0f)); }
+
+void stick_roughly_up_is_forward() { CHECK(walking_forward(0.3f, 0.8f)); }
+
+void a_diagonal_is_not_forward() { CHECK(!walking_forward(0.707f, 0.707f)); }
+
+void backward_and_sideways_are_not_forward() {
+  CHECK(!walking_forward(0.0f, -1.0f));
+  CHECK(!walking_forward(1.0f, 0.0f));
+}
+
+void walking_forward_switches_to_the_moving_clip() {
+  LocalSession s(walking_table());
+  const LocalOut start = s.pick(0, here(-1.0));
+  CHECK(start.phase && *start.phase == Phase::Loop);  // no intro: the loop clip plays at once
+  const LocalOut o = s.tick(frame_at(0.5, 1.0f, 1.0f, 0.0f, 1.0f));
+  CHECK(o.phase && *o.phase == Phase::Moving && s.phase() == Phase::Moving);
+  CHECK(sent_move(o.send, true) && !sent_move(o.send, false));
+  const LocalOut n = s.tick(frame_at(0.6, 1.0f, 1.0f, 0.0f, 1.0f));  // still walking: no second switch
+  CHECK(!n.phase.has_value() && !has(n.send, Kind::Move));
+}
+
+void a_short_stop_does_not_switch_back() {
+  LocalSession s(walking_table());
+  s.pick(0, here(-1.0));
+  s.tick(frame_at(0.5, 1.0f, 1.0f, 0.0f, 1.0f));  // Walking
+  const LocalOut o = s.tick(frame_at(0.6, 1.0f, 1.0f, 0.0f, 0.0f, 0.1f));  // let go for only 0.1 s
+  CHECK(s.phase() == Phase::Moving && !o.phase.has_value() && !has(o.send, Kind::Move));
+}
+
+void a_stop_longer_than_the_hold_switches_back() {
+  LocalSession s(walking_table());
+  s.pick(0, here(-1.0));
+  s.tick(frame_at(0.5, 1.0f, 1.0f, 0.0f, 1.0f));  // Walking
+  const LocalOut o = s.tick(frame_at(0.6, 1.0f, 1.0f, 0.0f, 0.0f, 0.25f));  // let go for 0.25 s
+  CHECK(o.phase && *o.phase == Phase::Loop && s.phase() == Phase::Loop);
+  CHECK(sent_move(o.send, false));
+}
+
+void walking_forward_past_half_a_metre_does_not_end_it() {
+  LocalSession s(walking_table());
+  s.pick(0, here(-1.0));
+  float z = 1.0f;
+  for (int i = 0; i < 12; ++i) {  // 3 m forward, the half-metre start point moving with each step
+    z += 0.25f;
+    CHECK(!s.tick(frame_at(0.5 + 0.25 * i, 1.0f, z, 0.0f, 1.0f, 0.25f)).stop);
+  }
+  CHECK(s.active());
+}
+
+void sideways_after_walking_measures_from_the_stop() {
+  LocalSession s(walking_table());
+  LocalFrame pick = here(-1.0);
+  pick.pos = {0.0f, 0.0f, 0.0f};
+  s.pick(0, pick);
+  s.tick(frame_at(0.5, 0.0f, 1.0f, 0.0f, 1.0f));  // walking forward
+  s.tick(frame_at(0.6, 0.0f, 2.0f, 0.0f, 1.0f));  // to z = 2, still going
+  for (int i = 0; i < 3; ++i) s.tick(frame_at(0.7, 0.0f, 2.0f, 0.0f, 0.0f, 0.1f));  // stop for 0.3 s
+  CHECK(s.phase() == Phase::Loop);
+  CHECK(!s.tick(frame_at(0.8, 0.4f, 2.0f, 1.0f, 0.0f)).stop);  // 0.4 m from the stop: still dancing
+  CHECK(s.tick(frame_at(0.9, 0.6f, 2.0f, 1.0f, 0.0f)).stop);   // 0.6 m from it: over
+  CHECK(!s.active());
+}
+
+void backward_past_half_a_metre_ends_it() {
+  LocalSession s(walking_table());
+  s.pick(0, here(-1.0));
+  LocalFrame f = frame_at(0.5, 1.0f, 0.6f, 0.0f, -1.0f);  // holding S, 0.4 m back
+  CHECK(!s.tick(f).stop);
+  f.pos.z = 0.4f;  // 0.6 m behind the start
+  CHECK(s.tick(f).stop);
+}
+
+void sprinting_ends_a_walking_emote() {
+  LocalSession s(walking_table());
+  s.pick(0, here(-1.0));
+  s.tick(frame_at(0.5, 1.0f, 1.0f, 0.0f, 1.0f));  // Walking
+  LocalFrame f = frame_at(0.6, 1.0f, 1.0f, 0.0f, 1.0f);
+  f.sprinting = true;
+  const LocalOut o = s.tick(f);
+  CHECK(o.stop && has(o.send, Kind::End) && !s.active());
+}
+
+void a_standing_emote_ignores_walking_forward() {
+  LocalSession s(table());  // t[0] has no walking variant
+  const LocalOut start = s.pick(0, here(-1.0));
+  CHECK(start.phase && *start.phase == Phase::Loop);
+  const LocalOut o = s.tick(frame_at(0.5, 1.0f, 1.0f, 0.0f, 1.0f));  // walking means nothing to it
+  CHECK(!o.phase.has_value() && !has(o.send, Kind::Move) && s.phase() == Phase::Loop);
+  CHECK(s.tick(frame_at(0.6, 1.6f, 1.0f, 0.0f, 1.0f)).stop);  // the half-metre rule stands as it was
+}
+
+void song_clock_runs_on_across_a_clip_switch() {
+  LocalSession s(walking_table());
+  s.pick(0, here(-1.0));
+  CHECK(s.elapsed() == 0.0);
+  s.tick(frame_at(0.1, 1.0f, 1.0f, 0.0f, 0.0f, 0.5f));
+  CHECK(std::fabs(s.elapsed() - 0.5) < 1e-6);
+  s.tick(frame_at(0.6, 1.0f, 1.0f, 0.0f, 1.0f, 0.1f));  // switch to the walking clip
+  CHECK(std::fabs(s.elapsed() - 0.6) < 1e-6);
+  s.tick(frame_at(0.7, 1.0f, 1.0f, 0.0f, 0.0f, 0.25f));  // and back
+  CHECK(std::fabs(s.elapsed() - 0.85) < 1e-6);
+}
+
+void an_intro_plays_once_then_loops() {
+  EmoteTable t = table_of(1);
+  t[0].introSeconds = 1.5f;
+  LocalSession s(t);
+  const LocalOut start = s.pick(0, here(-1.0));
+  CHECK(start.phase && *start.phase == Phase::Intro && s.phase() == Phase::Intro);
+  CHECK(!s.tick(frame_at(0.5, 1.0f, 1.0f, 0.0f, 0.0f, 0.7f)).phase.has_value());  // 0.7 s in
+  CHECK(!s.tick(frame_at(0.6, 1.0f, 1.0f, 0.0f, 0.0f, 0.7f)).phase.has_value());  // 1.4 s in
+  const LocalOut o = s.tick(frame_at(0.7, 1.0f, 1.0f, 0.0f, 0.0f, 0.2f));         // 1.6 s in
+  CHECK(o.phase && *o.phase == Phase::Loop && s.phase() == Phase::Loop);
+  CHECK(o.send.empty());  // every client times the intro itself: nothing is sent for it
+}
+
+void walking_forward_during_the_intro_skips_to_moving() {
+  EmoteTable t = table_of(1);
+  t[0].introSeconds = 1.5f;
+  t[0].hasMove = true;
+  LocalSession s(t);
+  const LocalOut start = s.pick(0, here(-1.0));
+  CHECK(start.phase && *start.phase == Phase::Intro);
+  const LocalOut o = s.tick(frame_at(0.5, 1.0f, 1.0f, 0.0f, 1.0f, 0.5f));  // walking 0.5 s into the intro
+  CHECK(o.phase && *o.phase == Phase::Moving && sent_move(o.send, true));
+  CHECK(!s.tick(frame_at(1.0, 1.0f, 1.0f, 0.0f, 1.0f, 0.5f)).phase.has_value());
+  CHECK(!s.tick(frame_at(1.6, 1.0f, 1.0f, 0.0f, 1.0f, 0.6f)).phase.has_value());  // past 1.5 s: the intro stays skipped
+  CHECK(s.phase() == Phase::Moving);
+}
+
+void stopping_after_a_skipped_intro_goes_to_the_loop() {
+  EmoteTable t = table_of(1);
+  t[0].introSeconds = 1.5f;
+  t[0].hasMove = true;
+  LocalSession s(t);
+  s.pick(0, here(-1.0));
+  s.tick(frame_at(0.5, 1.0f, 1.0f, 0.0f, 1.0f, 0.5f));  // Intro straight to Moving
+  const LocalOut o = s.tick(frame_at(0.6, 1.0f, 1.0f, 0.0f, 0.0f, 0.25f));
+  CHECK(o.phase && *o.phase == Phase::Loop);  // never back to the Intro
+  CHECK(s.phase() == Phase::Loop);
+}
+
 void a_lost_investigator_ends_it() {
   LocalSession s(table());
   s.pick(0, here());
@@ -299,6 +468,41 @@ void a_table_of_twenty_emotes_plays_the_last() {
   CHECK(sawLast);
 }
 
+// ---- Walking and intros for peers (2026-11-12) ----
+
+void a_peer_intro_switches_on_their_own_clock() {
+  EmoteTable t = table_of(1);
+  t[0].introSeconds = 1.0f;
+  RemoteSessions r(t);
+  r.receive(7, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+  CHECK(r.elapsed(7) == 0.0);
+  CHECK(r.tick({RemoteFrame{7, true, false, false, 0.4}}, false, 0.6f).empty());  // 0.6 s in: still the intro
+  const auto out = r.tick({RemoteFrame{7, true, false, false, 0.5}}, false, 0.5f);  // 1.1 s in
+  CHECK(out.size() == 1 && out[0].what == RemoteOut::Phase && out[0].phase == Phase::Loop && out[0].actor == 7);
+  CHECK(r.tick({RemoteFrame{7, true, false, false, 0.6}}, false, 0.5f).empty());  // once only
+}
+
+void a_peer_move_message_switches_their_clip() {
+  RemoteSessions r(table_of(1));
+  r.receive(7, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+  auto out = r.receive(7, EmoteMsg{Kind::Move, 1000u, true, 0, 0, 0, 0}, false, false);
+  CHECK(out.size() == 1 && out[0].what == RemoteOut::Phase && out[0].phase == Phase::Moving);
+  out = r.receive(7, EmoteMsg{Kind::Move, 1000u, false, 0, 0, 0, 0}, false, false);
+  CHECK(out.size() == 1 && out[0].what == RemoteOut::Phase && out[0].phase == Phase::Loop);
+  // A Move from a peer not dancing is passed over.
+  CHECK(r.receive(9, EmoteMsg{Kind::Move, 1000u, true, 0, 0, 0, 0}, false, false).empty());
+}
+
+void a_peer_elapsed_follows_dt() {
+  RemoteSessions r(table_of(1));
+  CHECK(r.elapsed(3) == 0.0);  // a peer not dancing
+  r.receive(3, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+  CHECK(r.elapsed(3) == 0.0);
+  r.tick({RemoteFrame{3, true, false, false, 0.1}}, false, 0.25f);
+  r.tick({RemoteFrame{3, true, false, false, 0.2}}, false, 0.25f);
+  CHECK(std::fabs(r.elapsed(3) - 0.5) < 1e-9);
+}
+
 }  // namespace
 
 int main() {
@@ -312,6 +516,22 @@ int main() {
   death_ends_the_emote_first();
   the_body_turns_and_is_shared();
   walking_turns_the_body_to_the_way_it_goes();
+  w_alone_is_forward();
+  stick_roughly_up_is_forward();
+  a_diagonal_is_not_forward();
+  backward_and_sideways_are_not_forward();
+  walking_forward_switches_to_the_moving_clip();
+  a_short_stop_does_not_switch_back();
+  a_stop_longer_than_the_hold_switches_back();
+  walking_forward_past_half_a_metre_does_not_end_it();
+  sideways_after_walking_measures_from_the_stop();
+  backward_past_half_a_metre_ends_it();
+  sprinting_ends_a_walking_emote();
+  a_standing_emote_ignores_walking_forward();
+  song_clock_runs_on_across_a_clip_switch();
+  an_intro_plays_once_then_loops();
+  walking_forward_during_the_intro_skips_to_moving();
+  stopping_after_a_skipped_intro_goes_to_the_loop();
   a_lost_investigator_ends_it();
   a_peer_dances_where_told();
   the_living_never_see_the_dead_dance();
@@ -319,6 +539,9 @@ int main() {
   a_peers_one_shot_ends_here_too();
   an_unknown_key_from_a_peer_is_ignored();
   a_table_of_twenty_emotes_plays_the_last();
+  a_peer_intro_switches_on_their_own_clock();
+  a_peer_move_message_switches_their_clip();
+  a_peer_elapsed_follows_dt();
   std::printf("%s\n", g_failures ? "emotes_play tests FAILED" : "emotes_play tests passed");
   return g_failures ? 1 : 0;
 }

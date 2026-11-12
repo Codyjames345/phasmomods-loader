@@ -64,7 +64,8 @@ constexpr float kBlendOut = 0.35f;      // and out, the body's facing with it
 // everyone else's alike (the user's ruling, 2026-11-10).
 constexpr float kSongVolume = 0.05f;
 constexpr const char* kVolumeSetting = "volume";
-constexpr float kHeadClearance = 0.3f;  // in VR, the head stays hidden while this close to the headset, in metres
+constexpr float kHeadClearance = 0.3f;
+constexpr float kSprintMargin = 1.15f;  // how much faster than its walk speed the rig must move to count as sprinting  // in VR, the head stays hidden while this close to the headset, in metres
 
 // The key's id and its defaults (the user's: B, D-pad down, a free left-controller button; each falls back when the
 // game binds it, keybinds.h), and the VR controllers' buttons the mod reads.
@@ -125,7 +126,8 @@ struct Facing {
 
 // One dancer's song.
 struct Song {
-  api::Held source;  // its AudioSource; its GameObject goes with it
+  api::Held source;  // its looping AudioSource; its GameObject goes with it
+  api::Held intro;   // the intro song's AudioSource, played once before it, or null
   float volume = 0.0f;  // the volume it plays at
 };
 
@@ -134,7 +136,8 @@ struct Assets {
   std::vector<api::Held> bundles;  // the mod's own bundle and each pack's, unloaded when the mod stops
   std::vector<EmoteDef> defs;
   std::vector<api::Held> clips, songs, icons;
-  std::vector<talk::Envelope> loudness;
+  std::vector<api::Held> moveClips, introClips, introSongs;  // null where an emote has none
+  std::vector<talk::Envelope> loudness, introLoudness;
   std::vector<std::string> names;  // each emote's name as the player reads it
   EmoteTable table{};
 };
@@ -159,6 +162,9 @@ struct State {
   // The game's own glyph widgets for the shoulder buttons (sdk/systems/menus.md, "Input glyphs"): their Images show the
   // sprite the game picked for the pad in use, and turn clear on keyboard and mouse.
   api::Held previousGlyph, nextGlyph;
+  std::map<int, void*> playing;  // by actor: the clip playing on that body, so a phase whose clip it already is plays on
+  Point lastPos{};               // this client's investigator last frame, for its speed
+  bool hadPos = false;
   int page = 0;  // the page the wheel shows, kept while the mod runs (the user's: the same session only)
   api::Held controlsOf;  // the rig the actions were read from
   api::Held pcLook, propGrab, hand, head;
@@ -175,8 +181,8 @@ State g;
 // One catalogue's emotes, loaded from its bundle, before they take their places on the wheel.
 struct Loaded {
   EmoteDef def;
-  api::Held clip, song, icon;
-  talk::Envelope loudness;
+  api::Held clip, song, icon, moveClip, introClip, introSong;
+  talk::Envelope loudness, introLoudness;
   std::string name;
   EmoteInfo info;
 };
@@ -184,6 +190,13 @@ struct Loaded {
 std::string read_text(const std::filesystem::path& file) {
   std::ifstream in(file, std::ios::binary);
   return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+// A song's loudness file, measured beforehand, as loud as the song plays.
+talk::Envelope loudness_of(const std::filesystem::path& file) {
+  std::vector<float> rms = talk::parse_rms(read_text(file));
+  for (float& r : rms) r *= kSongVolume;
+  return talk::envelope_of_rms(rms);
 }
 
 // Loads the catalogue in `folder` (its emotes.json and bundle) for `packId`, naming each emote with `nameOf`. False, with
@@ -208,20 +221,35 @@ bool load_catalogue(const std::filesystem::path& folder, const std::string& pack
       why = "the bundle has no clip " + e.clip;
       return false;
     }
+    // A walking or intro clip the catalogue names must be there, as the clip must: the emote would play wrong without it.
+    // A moving clip that is the clip itself (a clip that walks as it is) is the same asset.
+    for (auto [path, held] : {std::pair{&e.moveClip, &l.moveClip}, std::pair{&e.introClip, &l.introClip}}) {
+      if (path->empty()) continue;
+      *held = api::load_bundle_asset(bundle, bundle_path(*path).c_str(), phasmo::AnimationClip::type.type_object());
+      if (!*held) {
+        why = "the bundle has no clip " + *path;
+        return false;
+      }
+    }
+    if (!e.introSong.empty()) {
+      l.introSong = api::load_bundle_asset(bundle, bundle_path(e.introSong).c_str(), phasmo::AudioClip::type.type_object());
+      if (!l.introSong) PM_LOG("Emotes: %s has no intro song %s; its song starts with its loop", packId.c_str(), e.introSong.c_str());
+      l.introLoudness = loudness_of(folder / e.introLoudness);
+    }
     l.song = api::load_bundle_asset(bundle, bundle_path(e.song).c_str(), phasmo::AudioClip::type.type_object());
     if (!l.song) PM_LOG("Emotes: %s has no song %s; it plays silent", packId.c_str(), e.song.c_str());
     l.icon = api::load_bundle_asset(bundle, bundle_path(e.icon).c_str(), phasmo::Texture2D::type.type_object());
     if (!l.icon) PM_LOG("Emotes: %s has no icon %s; its segment shows bare", packId.c_str(), e.icon.c_str());
-    std::vector<float> rms = talk::parse_rms(read_text(folder / e.loudness));
-    for (float& r : rms) r *= kSongVolume;  // as loud as it plays
-    l.loudness = talk::envelope_of_rms(rms);
-    if (rms.empty()) PM_LOG("Emotes: no loudness for %s; the ghost does not hear it", e.id.c_str());
+    l.loudness = loudness_of(folder / e.loudness);
     l.name = nameOf(e.label);
     const float seconds = api::anim::clip_seconds(l.clip);
     l.info.clipSeconds = seconds;
     l.info.loops = api::anim::clip_loops(l.clip);
     l.info.song = e.songLoop.length > 0.0f ? e.songLoop : SongLoop{0.0f, seconds};
     l.info.key = e.key;
+    l.info.hasMove = static_cast<bool>(l.moveClip);
+    l.info.introSeconds = l.introClip ? api::anim::clip_seconds(l.introClip) : 0.0f;
+    l.info.introSongSeconds = l.introSong ? phasmo::AudioClip::get_length(l.introSong) : 0.0f;
     PM_LOG("Emotes: %s, %.3f s, %s, song loop %.3f s from %.3f s", e.id.c_str(), seconds,
            l.info.loops ? "looping" : "one-shot", l.info.song.length, l.info.song.start);
     out.push_back(std::move(l));
@@ -283,7 +311,11 @@ bool load_catalogues() {
         g.a.clips.push_back(std::move(l.clip));
         g.a.songs.push_back(std::move(l.song));
         g.a.icons.push_back(std::move(l.icon));
+        g.a.moveClips.push_back(std::move(l.moveClip));
+        g.a.introClips.push_back(std::move(l.introClip));
+        g.a.introSongs.push_back(std::move(l.introSong));
         g.a.loudness.push_back(l.loudness);
+        g.a.introLoudness.push_back(l.introLoudness);
         g.a.names.push_back(l.name);
         g.a.table.push_back(l.info);
         break;
@@ -527,7 +559,8 @@ void apply_facings(float dt) {
 void stop_song(int actor) {
   auto it = g.songs.find(actor);
   if (it == g.songs.end()) return;
-  if (it->second.source && game::alive(it->second.source)) game::destroy(game::game_object_of(it->second.source));
+  for (const api::Held* s : {&it->second.source, &it->second.intro})
+    if (*s && game::alive(*s)) game::destroy(game::game_object_of(*s));
   g.songs.erase(it);
 }
 
@@ -540,31 +573,24 @@ void follow_volume() {
     if (s.source && game::alive(s.source) && s.volume != song_volume()) {
       s.volume = song_volume();
       phasmo::AudioSource::set_volume(s.source, s.volume);
+      if (s.intro && game::alive(s.intro)) phasmo::AudioSource::set_volume(s.intro, s.volume);
     }
 }
 
-void start_song(int actor, void* player, int emote) {
-  stop_song(actor);
-  void* clip = g.a.songs[emote];
-  if (!clip || !player) return;
-  // From where the player's voice plays (PlayerAudio's voice source, which follows the head camera, not the dancing
-  // head): a head bone carried it round the dancer's own listener, panning and swelling, and loud at the start.
-  void* audio = phasmo::Player::audio.get(player);
-  void* voice = audio ? phasmo::PlayerAudio::GetPlayerVoiceAudioSource(audio) : nullptr;
-  if (voice && !game::alive(voice)) voice = nullptr;
-  void* parent = voice ? game::transform_of(voice) : game::transform_of(player);
+// One of a dancer's song sources, under `parent`, playing `clip` as the player's voice would sound (its fall with distance
+// and the game's mixer group for where the player stands). Null when it cannot be made.
+void* song_source(void* parent, void* voice, void* clip, bool loop) {
   void* go = game::new_game_object("pm emote song");
-  if (!go || !parent) return;
+  if (!go || !parent) return nullptr;
   phasmo::Transform::SetParent(game::object_transform(go), parent, false);
   game::set_local_position(game::object_transform(go), {0.0f, 0.0f, 0.0f});
   void* source = game::add_component(go, phasmo::AudioSource::type.type_object());
   if (!source) {
     game::destroy(go);
-    return;
+    return nullptr;
   }
   phasmo::AudioSource::set_clip(source, clip);
-  // The song in the bundle is cut to its loop, so the engine loops it sample for sample (emote_assets.h).
-  phasmo::AudioSource::set_loop(source, true);
+  phasmo::AudioSource::set_loop(source, loop);
   phasmo::AudioSource::set_spatialBlend(source, 1.0f);
   phasmo::AudioSource::set_volume(source, song_volume());
   // It falls off with distance as the player's own voice does (the voice's AudioSource).
@@ -582,9 +608,40 @@ void start_song(int actor, void* player, int emote) {
   if (sounds && game::alive(sounds))
     if (void* group = phasmo::SoundController::GetFloorAudioSnapshot(sounds, &at))
       phasmo::AudioSource::set_outputAudioMixerGroup(source, group);
-  phasmo::AudioSource::Play(source, 0);
-  g.songs[actor].source = source;
-  g.songs[actor].volume = song_volume();
+  return source;
+}
+
+// The sample rate AudioSource.Play's delay counts in (Unity's documented API: 44.1 kHz whatever the clip's own rate).
+constexpr double kPlayDelayRate = 44100.0;
+
+void start_song(int actor, void* player, int emote) {
+  stop_song(actor);
+  void* clip = g.a.songs[emote];
+  if (!clip || !player) return;
+  // From where the player's voice plays (PlayerAudio's voice source, which follows the head camera, not the dancing
+  // head): a head bone carried it round the dancer's own listener, panning and swelling, and loud at the start.
+  void* audio = phasmo::Player::audio.get(player);
+  void* voice = audio ? phasmo::PlayerAudio::GetPlayerVoiceAudioSource(audio) : nullptr;
+  if (voice && !game::alive(voice)) voice = nullptr;
+  void* parent = voice ? game::transform_of(voice) : game::transform_of(player);
+  // The song in the bundle is cut to its loop, so the engine loops it sample for sample.
+  void* source = song_source(parent, voice, clip, true);
+  if (!source) return;
+  Song& song = g.songs[actor];
+  song.source = source;
+  song.volume = song_volume();
+  // An intro song plays once, and the looping song starts on the sample it ends: both start this frame, the loop with
+  // a delay of the intro's length (AudioSource.PlayScheduled is stripped from this game build).
+  void* intro = g.a.introSongs[emote];
+  void* introSource = intro ? song_source(parent, voice, intro, false) : nullptr;
+  const float introSeconds = g.a.table[emote].introSongSeconds;
+  if (introSource && introSeconds > 0.0f) {
+    song.intro = introSource;
+    phasmo::AudioSource::Play(introSource, 0);
+    phasmo::AudioSource::Play(source, static_cast<uint64_t>(std::llround(introSeconds * kPlayDelayRate)));
+  } else {
+    phasmo::AudioSource::Play(source, 0);
+  }
 }
 
 // ---- This client's own investigator ----
@@ -704,11 +761,29 @@ void end_local_body() {
   g.head = nullptr;
 }
 
+// The clip of an emote's phase: its intro, its looping clip, or its walking clip (any it lacks falls back to the loop).
+void* clip_of(int emote, Phase phase) {
+  if (phase == Phase::Intro && g.a.introClips[emote]) return g.a.introClips[emote];
+  if (phase == Phase::Moving && g.a.moveClips[emote]) return g.a.moveClips[emote];
+  return g.a.clips[emote];
+}
+
+// The phase an emote starts in: its intro when it has one.
+Phase first_phase(int emote) { return g.a.table[emote].introSeconds > 0.0f ? Phase::Intro : Phase::Loop; }
+
+// Plays `clip` on `actor`'s body unless it already plays there (a walking clip that is the clip itself plays on).
+void play_clip(int actor, void* player, void* clip, float blend) {
+  if (!player || !clip || g.playing[actor] == clip) return;
+  api::anim::play_on_player(player, clip, blend);
+  g.playing[actor] = clip;
+}
+
 void apply_local(const LocalOut& o, void* player, bool vr) {
   const int me = game::local_actor();
   if (o.start >= 0) {
-    void* clip = g.a.clips[o.start];
+    void* clip = clip_of(o.start, o.phase.value_or(first_phase(o.start)));
     const bool played = api::anim::play_on_player(player, clip, kBlendIn);
+    g.playing[me] = clip;
     start_song(me, player, o.start);
     const auto song = g.songs.find(me);
     void* songClip = g.a.songs[o.start];
@@ -719,7 +794,14 @@ void apply_local(const LocalOut& o, void* player, bool vr) {
     begin_local_body(player, vr);
     begin_facing(me, player, o.bodyYaw.value_or(0.0f));
   }
+  // A walking emote's walk, a stop, or an intro's end: the phase's clip blends in over the one playing.
+  if (o.phase && o.start < 0 && !o.stop && g.local->active()) {
+    const int emote = g.local->emote();
+    const float blend = *o.phase == Phase::Loop && g.playing[me] == g.a.introClips[emote] ? kIntroBlendSeconds : kMoveBlendSeconds;
+    play_clip(me, player, clip_of(emote, *o.phase), blend);
+  }
   if (o.stop) {
+    g.playing.erase(me);
     PM_LOG(o.atOnce ? "Emotes: the emote ends at once" : "Emotes: the emote ends");
     if (o.atOnce) {
       // The game has an animation of its own for this body (a death): nothing of ours is left blending, and the view
@@ -889,12 +971,18 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
     switch (o.what) {
       case RemoteOut::Start:
         if (player) {
-          api::anim::play_on_player(player, g.a.clips[o.emote], kBlendIn);
+          void* clip = clip_of(o.emote, first_phase(o.emote));
+          api::anim::play_on_player(player, clip, kBlendIn);
+          g.playing[o.actor] = clip;
           start_song(o.actor, player, o.emote);
           begin_facing(o.actor, player, o.yaw);
         }
         break;
+      case RemoteOut::Phase:
+        play_clip(o.actor, player, clip_of(o.emote, o.phase), o.phase == Phase::Loop ? kIntroBlendSeconds : kMoveBlendSeconds);
+        break;
       case RemoteOut::Stop:
+        g.playing.erase(o.actor);
         if (o.atOnce) {
           // Their death animation is the game's own: their dance comes off at once rather than blending out over it
           // (the user, 2026-11-10).
@@ -916,12 +1004,13 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
 
 // ---- The ghost's hearing, on the master ----
 
-void raise_loudness(int actor, void* player, int emote, float now) {
-  if (!player || emote < 0) return;
-  const double t = api::anim::clip_time(player);
-  if (t < 0.0 || !g.paces[actor].due(now)) return;
-  const float at = static_cast<float>(song_position(t, g.a.table[emote].song));
-  talk::add_talk_loudness(player, g.a.loudness[emote].at(at));
+// The song's loudness where it is now, from the emote's own clock (its clips may switch; its song plays on).
+void raise_loudness(int actor, void* player, int emote, double elapsed, float now) {
+  if (!player || emote < 0 || !g.paces[actor].due(now)) return;
+  const EmoteInfo& info = g.a.table[emote];
+  const SongAt at = song_position(elapsed, info.introSongSeconds, info.song);
+  const talk::Envelope& envelope = at.intro ? g.a.introLoudness[emote] : g.a.loudness[emote];
+  talk::add_talk_loudness(player, envelope.at(static_cast<float>(at.seconds)));
 }
 
 }  // namespace
@@ -1008,6 +1097,24 @@ void tick() {
     f.viewYaw = api::view::view_yaw();
     f.clipTime = api::anim::clip_time(player);
     f.dt = dt;
+    // The game's own Move input on the PC rig (FirstPersonController.moveInput): W or the move stick, rebinding applied.
+    // The VR rig moves without it, so a VR walking emote acts as a standing one.
+    void* rig = game::local_player_component();
+    if (!vr && rig && phasmo::LocalPCPlayer::type.is(rig))
+      if (void* mover = phasmo::LocalPCPlayer::firstPersonController.get(rig); mover && game::alive(mover)) {
+        const phasmo::Vector2 move = phasmo::FirstPersonController::moveInput.get(mover);
+        f.moveX = move.x;
+        f.moveY = move.y;
+      }
+    // Sprinting, read from the speed: the rig moves faster than its walk speed only while it sprints
+    // (LocalPCPlayer.UpdatePlayerSpeed), whether the game's sprint mode holds or toggles Run.
+    if (rig && g.hadPos && dt > 0.0f) {
+      const float walk = phasmo::LocalPlayer::walkSpeed.get(rig) * phasmo::LocalPlayer::speedMultiplier.get(rig);
+      const float speed = std::hypot(f.pos.x - g.lastPos.x, f.pos.z - g.lastPos.z) / dt;
+      f.sprinting = walk > 0.0f && speed > walk * kSprintMargin;
+    }
+    g.lastPos = f.pos;
+    g.hadPos = true;
     const bool dancing = g.local->active();
     f.endAction = dancing && ((end_action_pressed(vr) && !wheel::is_open()) || journal_open(player));
   }
@@ -1046,13 +1153,14 @@ void tick() {
     frames.push_back({actor, p && game::alive(p), p && phasmo::Player::isDead.get(p), g.dying.count(actor) != 0,
                       p ? api::anim::clip_time(p) : -1.0});
   }
-  apply_remote(g.remote->tick(frames, f.dead || f.dying));
+  apply_remote(g.remote->tick(frames, f.dead || f.dying, dt));
   apply_facings(dt);
 
   // The ghost hears the songs as the dancers talking, on the master, where it runs.
   if (game::is_master()) {
-    if (g.local->active()) raise_loudness(game::local_actor(), player, g.local->emote(), now);
-    for (const auto& [actor, emote] : g.remote->dancers()) raise_loudness(actor, game::player_of_actor(actor), emote, now);
+    if (g.local->active()) raise_loudness(game::local_actor(), player, g.local->emote(), g.local->elapsed(), now);
+    for (const auto& [actor, emote] : g.remote->dancers())
+      raise_loudness(actor, game::player_of_actor(actor), emote, g.remote->elapsed(actor), now);
   }
 }
 

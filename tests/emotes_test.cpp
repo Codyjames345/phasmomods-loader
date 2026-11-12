@@ -155,17 +155,32 @@ void a_looping_song_restarts_with_its_clip() {
 }
 
 void a_song_loops_at_its_own_points() {
-  // No loop points given: the song's loop is the clip's (start 0, the clip's length).
+  // No loop points given: the song's loop is the clip's (start 0, the clip's length), and no intro song.
   const SongLoop clipLoop{0.0f, 2.0f};
-  CHECK(song_position(1.5, clipLoop) == 1.5);
-  CHECK(std::fabs(song_position(2.5, clipLoop) - 0.5) < 1e-9);
+  CHECK(!song_position(1.5, 0.0f, clipLoop).intro);
+  CHECK(song_position(1.5, 0.0f, clipLoop).seconds == 1.5);
+  CHECK(std::fabs(song_position(2.5, 0.0f, clipLoop).seconds - 0.5) < 1e-9);
   // Its own points: an intro of 1 s, then a 4 s loop from 1 s to 5 s, whatever the clip's length.
   const SongLoop own{1.0f, 4.0f};
-  CHECK(song_position(3.0, own) == 3.0);             // still in the first pass
-  CHECK(std::fabs(song_position(5.5, own) - 1.5) < 1e-9);  // back to the loop point, half a second on
-  CHECK(std::fabs(song_position(9.5, own) - 1.5) < 1e-9);
+  CHECK(song_position(3.0, 0.0f, own).seconds == 3.0);             // still in the first pass
+  CHECK(std::fabs(song_position(5.5, 0.0f, own).seconds - 1.5) < 1e-9);  // back to the loop point, half a second on
+  CHECK(std::fabs(song_position(9.5, 0.0f, own).seconds - 1.5) < 1e-9);
   // No loop at all (length 0): the song plays on from the clip's start.
-  CHECK(song_position(50.0, SongLoop{0.0f, 0.0f}) == 50.0);
+  CHECK(song_position(50.0, 0.0f, SongLoop{0.0f, 0.0f}).seconds == 50.0);
+}
+
+// An emote with an intro song: the clock below counts the whole emote, song intro first, then the loop song.
+void song_at_is_intro_then_loop() {
+  const SongLoop loop{0.0f, 4.0f};
+  const SongAt intro = song_position(1.0, 2.0f, loop);
+  CHECK(intro.intro && std::fabs(intro.seconds - 1.0) < 1e-9);
+  const SongAt back = song_position(7.0, 2.0f, loop);  // 7 - 2 = 5, past the loop's 4 s end: 1 s into the loop
+  CHECK(!back.intro && std::fabs(back.seconds - 1.0) < 1e-9);
+}
+
+void no_intro_song_starts_the_loop_song_at_once() {
+  const SongAt at = song_position(3.0, 0.0f, SongLoop{0.0f, 4.0f});
+  CHECK(!at.intro && at.seconds == 3.0);
 }
 
 // ---- The message ----
@@ -303,6 +318,8 @@ int main() {
   only_a_move_past_half_a_metre_ends_it();
   a_looping_song_restarts_with_its_clip();
   a_song_loops_at_its_own_points();
+  song_at_is_intro_then_loop();
+  no_intro_song_starts_the_loop_song_at_once();
   messages_round_trip();
   pack_unpack_round_trips_every_kind();
   a_short_or_long_message_is_refused();
