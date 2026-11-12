@@ -317,6 +317,38 @@ void the_journal_keeps_its_place_on_the_waist() {
   CHECK(near(same.p.x, 0.2f) && near(same.p.y, 0.9f) && near(same.p.z, 0.1f));
 }
 
+// The frame clock ticks in 15.625 ms steps (GetTickCount64), so a frame's dt reads 0, 15.625 or 31.25 ms whatever the
+// frame took. Feeds `seconds` of frames `frameMs` apart, moving at `speed` m/s along x, with the dt that clock gives.
+bool sprint_after(float frameMs, float speed, float walk, float seconds) {
+  SprintGauge gauge;
+  bool sprinting = false;
+  double lastTick = 0.0;
+  const int frames = static_cast<int>(seconds * 1000.0f / frameMs);
+  for (int i = 0; i <= frames; ++i) {
+    const double t = i * frameMs;
+    const double tick = std::floor(t / 15.625) * 15.625;
+    const float dt = static_cast<float>((tick - lastTick) / 1000.0);
+    lastTick = tick;
+    sprinting = gauge.feed(Point{speed * static_cast<float>(t / 1000.0), 0.0f, 0.0f}, dt, walk);
+    if (sprinting) return true;
+  }
+  return sprinting;
+}
+
+void a_walk_on_a_coarse_clock_is_never_a_sprint() {
+  for (float frameMs : {8.0f, 10.0f, 16.0f, 20.0f, 22.0f, 25.0f, 30.0f, 33.0f})
+    CHECK(!sprint_after(frameMs, 1.6f, 1.6f, 3.0f));
+}
+
+void a_sprint_on_a_coarse_clock_is_read_within_half_a_second() {
+  for (float frameMs : {8.0f, 10.0f, 20.0f, 33.0f}) CHECK(sprint_after(frameMs, 1.6f * 1.5f, 1.6f, 0.5f));
+}
+
+void standing_still_is_no_sprint() {
+  CHECK(!sprint_after(20.0f, 0.0f, 1.6f, 1.0f));
+  CHECK(!sprint_after(20.0f, 3.0f, 0.0f, 1.0f));  // no walk speed read: never a sprint
+}
+
 int main() {
   the_journal_keeps_its_place_on_the_waist();
   the_wheel_picks_by_direction();
@@ -329,6 +361,9 @@ int main() {
   a_looping_song_restarts_with_its_clip();
   a_song_loops_at_its_own_points();
   song_at_is_intro_then_loop();
+  a_walk_on_a_coarse_clock_is_never_a_sprint();
+  a_sprint_on_a_coarse_clock_is_read_within_half_a_second();
+  standing_still_is_no_sprint();
   no_intro_song_starts_the_loop_song_at_once();
   messages_round_trip();
   pack_unpack_round_trips_every_kind();

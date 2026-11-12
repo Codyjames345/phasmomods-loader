@@ -64,8 +64,7 @@ constexpr float kBlendOut = 0.35f;      // and out, the body's facing with it
 // everyone else's alike (the user's ruling, 2026-11-10).
 constexpr float kSongVolume = 0.05f;
 constexpr const char* kVolumeSetting = "volume";
-constexpr float kHeadClearance = 0.3f;
-constexpr float kSprintMargin = 1.15f;  // how much faster than its walk speed the rig must move to count as sprinting  // in VR, the head stays hidden while this close to the headset, in metres
+constexpr float kHeadClearance = 0.3f;  // in VR, the head stays hidden while this close to the headset, in metres
 
 // The key's id and its defaults (the user's: B, D-pad down, a free left-controller button; each falls back when the
 // game binds it, keybinds.h), and the VR controllers' buttons the mod reads.
@@ -164,8 +163,7 @@ struct State {
   // sprite the game picked for the pad in use, and turn clear on keyboard and mouse.
   api::Held previousGlyph, nextGlyph;
   std::map<int, void*> playing;  // by actor: the clip playing on that body, so a phase whose clip it already is plays on
-  Point lastPos{};               // this client's investigator last frame, for its speed
-  bool hadPos = false;
+  SprintGauge sprint;            // this client's investigator's speed, over a window
   int page = 0;  // the page the wheel shows, kept while the mod runs (the user's: the same session only)
   api::Held controlsOf;  // the rig the actions were read from
   api::Held pcLook, propGrab, hand, head;
@@ -1135,15 +1133,14 @@ void tick() {
         f.moveX = move.x;
         f.moveY = move.y;
       }
-    // Sprinting, read from the speed: the rig moves faster than its walk speed only while it sprints
-    // (LocalPCPlayer.UpdatePlayerSpeed), whether the game's sprint mode holds or toggles Run.
-    if (rig && g.hadPos && dt > 0.0f) {
+    // Sprinting, read from the speed over a window (SprintGauge): the rig moves faster than its walk speed only while
+    // it sprints (LocalPCPlayer.UpdatePlayerSpeed), whether the game's sprint mode holds or toggles Run.
+    if (rig) {
       const float walk = phasmo::LocalPlayer::walkSpeed.get(rig) * phasmo::LocalPlayer::speedMultiplier.get(rig);
-      const float speed = std::hypot(f.pos.x - g.lastPos.x, f.pos.z - g.lastPos.z) / dt;
-      f.sprinting = walk > 0.0f && speed > walk * kSprintMargin;
+      f.sprinting = g.sprint.feed(f.pos, dt, walk);
+    } else {
+      g.sprint.reset();
     }
-    g.lastPos = f.pos;
-    g.hadPos = true;
     const bool dancing = g.local->active();
     f.endAction = dancing && ((end_action_pressed(vr) && !wheel::is_open()) || journal_open(player));
   }
