@@ -7,6 +7,7 @@
 #include <string>
 #include "../tools/launcher.h"
 #include "../tools/inject.h"
+#include "../core/pack_files.h"
 
 namespace pm::launcher {
 loader::Result launch_steam(std::vector<std::wstring> arguments, const Package& package);
@@ -300,6 +301,44 @@ void mod_folders() {
   fs::remove_all(root, error);
 }
 
+/** A content pack folder has no DLL: it is listed, known by the stand-in path its folder makes (core/pack_files.h),
+ *  and not refused for the DLL it cannot have. A normal mod still missing its DLL is refused as ever; mod_folders
+ *  above checks that refusal on its own. */
+void a_pack_folder_is_listed_with_its_stand_in() {
+  using namespace pm::launcher;
+  namespace fs = std::filesystem;
+  const fs::path root = fs::path(fixturePath).parent_path() / (L"pgl-packs-" + std::to_wstring(GetCurrentProcessId()));
+  std::error_code error;
+  fs::remove_all(root, error);
+  const auto write = [&](const fs::path& file, const std::string& text) {
+    fs::create_directories(file.parent_path(), error);
+    std::ofstream(file, std::ios::binary) << text;
+  };
+  write(root / "mods" / "EmotePack" / "manifest.json",
+        R"({"id":"someone.emote-pack","name":"Emote Pack","author":"Someone","version":"1.0.0","description":"One",)"
+        R"("contentPackFor":{"id":"me.first"}})");
+  write(root / "mods" / "EmotePack" / "i18n" / "default.json", R"({"emote.one":"One"})");
+  write(root / "mods" / "EmotePack" / "assets" / "one.txt", "one");  // no DLL file, and none expected
+  write(root / "mods" / "a" / "manifest.json",
+        R"({"id":"me.first","name":"N","author":"Me","version":"1.2.3","description":"One","dll":"First.dll"})");
+  write(root / "mods" / "a" / "First.dll", "x");
+  write(root / "mods" / "d" / "manifest.json",
+        R"({"id":"me.nodll","name":"N","author":"Me","version":"1.2.3","description":"One","dll":"Missing.dll"})");
+  std::wstring problems;
+  std::vector<pm::modlist::Refused> refused;
+  const auto mods = discover_mods({{root / "mods", pm::modlist::Place::InstallFolder}}, problems, refused);
+  CHECK(mods.size() == 2);
+  const ModEntry* pack = nullptr;
+  for (const ModEntry& m : mods)
+    if (m.manifest.id == "someone.emote-pack") pack = &m;
+  CHECK(pack && pack->manifest.is_pack() && pack->manifest.contentPackFor == "me.first");
+  CHECK(pack && pack->dll == pm::packfiles::stand_in(root / "mods" / "EmotePack").wstring());
+  CHECK(refused.size() == 1 && refused[0].name == "d");  // the pack is not among the refused
+  CHECK(problems.find(L"in d cannot be used. Mod is missing its DLL") != std::wstring::npos);
+  CHECK(problems.find(L"in EmotePack") == std::wstring::npos);
+  fs::remove_all(root, error);
+}
+
 /**
  * A mod outside the install folder that claims the project's author is refused as it is read, before any id is compared,
  * so the real mod in the install folder runs whichever folder is read first, and the impostor's row says why.
@@ -459,6 +498,7 @@ int main() {
   log_files();
   orchestration();
   mod_folders();
+  a_pack_folder_is_listed_with_its_stand_in();
   real_mod_runs_when_an_impostor_sorts_first();
   startup_wait();
   concurrent_startup();

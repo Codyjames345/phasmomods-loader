@@ -297,6 +297,8 @@ target_compile_definitions(mod_manifest_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOUR
 pm_test(mod_deps host/mod_deps.cpp)
 target_compile_definitions(mod_deps_test PRIVATE PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 pm_test(presence)
+pm_test(pack_files)
+target_link_libraries(pack_files_test PRIVATE bcrypt)
 pm_test(join_guard host/mod_deps.cpp)
 pm_test(start_close)
 pm_test(text_table)

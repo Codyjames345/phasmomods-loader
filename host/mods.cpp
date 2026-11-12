@@ -8,6 +8,7 @@
 
 #include "contained.h"
 #include "file_hash.h"
+#include "pack_files.h"
 #include "hooks.h"
 #include "log.h"
 #include "mod_deps.h"
@@ -119,7 +120,17 @@ bool channel_taken(const Mod& m, uint8_t channel) {
  */
 bool load_dll(Mod& m) {
   if (!m.refusedRow.empty()) return false;
-  if (m.info) return true;
+  if (m.info || !m.build.empty()) return true;
+  // A content pack has no code: nothing loads, and its build is a hash of its copied files (core/pack_files.h).
+  if (m.manifest.is_pack()) {
+    m.build = packfiles::build_of(m.dll);
+    PM_LOG("mods: found %s %s (%s, a content pack for %s, build %s)", m.manifest.id.c_str(), m.manifest.version.c_str(),
+           m.manifest.name.c_str(), m.manifest.contentPackFor.c_str(), m.build.c_str());
+    return true;
+  }
+  // Only a real DLL path ever reaches the loader: never a content pack's stand-in, whatever its manifest claims.
+  if (m.dll.filename().empty() || packfiles::is_stand_in(m.dll))
+    return refuse_loaded(m, i18n::text("mods.not-a-mod"), "it names no DLL");
   HMODULE module = dll::load_mod(m.dll.c_str());
   if (!module) {
     const std::string error = std::to_string(GetLastError());
@@ -237,7 +248,7 @@ Installed find(const fs::path& dataDirectory, const fs::path& hostFolder, unsign
     const modlist::Reading reading = modlist::read_folder(folder, m, why, place);
     if (reading == modlist::Reading::Refused) refuse(installed.refused, text::narrow(folder.filename().wstring()), why);
     if (reading != modlist::Reading::Readable) continue;
-    fs::path dll = folder / widen(m.dll);
+    fs::path dll = m.is_pack() ? packfiles::stand_in(folder) : folder / widen(m.dll);
     installed.found.push_back({std::move(dll), std::move(m)});
   }
   PM_LOG("mods: %zu found beside the host", installed.found.size());
@@ -312,6 +323,12 @@ void start(const PmHostApi* api, const std::vector<std::string>& ids, Group grou
       row = m.refusedRow;
       log = m.refusedLog;
       return false;
+    }
+    if (m.manifest.is_pack()) {  // data only: started once its framework has, which the dependency order guarantees
+      m.started = true;
+      g_startOrder.push_back(id);
+      PM_LOG("mods: %s started (a content pack)", id.c_str());
+      return true;
     }
     if (const std::vector<std::string> lacking = unresolved_entries(api, m); !lacking.empty()) {
       row = lacking_row(lacking);
@@ -406,7 +423,7 @@ void settle(std::vector<std::string> ids, const std::function<std::vector<Droppe
 
 void tick_all() {
   for (Mod& m : g_mods)
-    if (m.started) m.tick();
+    if (m.started && m.tick) m.tick();
 }
 
 void stop_all() {
@@ -414,9 +431,9 @@ void stop_all() {
   for (const std::string& id : moddeps::stop_order(g_startOrder)) {
     Mod* m = find_mod(id);
     if (m && m->started) {
-      m->stop();
+      if (m->stop) m->stop();  // a content pack has no code to stop
       m->started = false;  // at once: a mod stopping after it asks mod_started about it
-      PM_LOG("mods: %s stopped", m->info->id);
+      PM_LOG("mods: %s stopped", m->manifest.id.c_str());
     }
   }
   g_startOrder.clear();
@@ -427,7 +444,7 @@ std::vector<std::string> started_ids() { return g_startOrder; }
 std::vector<presence::Mod> started_builds() {
   std::vector<presence::Mod> builds;
   for (const Mod& m : g_mods)
-    if (m.started) builds.push_back({m.info->id, m.build, m.manifest.name, m.manifest.version});
+    if (m.started) builds.push_back({m.manifest.id, m.build, m.manifest.name, m.manifest.version});
   return builds;
 }
 

@@ -12,6 +12,7 @@
 #include "log.h"
 #include "mod_session.h"
 #include "mods.h"
+#include "pack_files.h"
 #include "quiet_load.h"
 
 #include "check.h"
@@ -438,6 +439,117 @@ void a_dll_that_cannot_run_is_refused_with_a_reason(const fs::path& data, const 
   pm::mods::stop_all();
   pm::mods::start(&api, {"fake-mod"});
   CHECK(pm::mods::off_reason("not-a-dll") == "DLL could not be loaded");  // unticked, the row still says why
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// A content pack (core/pack_files.h) reaches the host as a ".pack" copy with its manifest, string table and
+// assets beside it, which is what its build is read from. The manifest parses as a pack: contentPackFor, no DLL.
+pm::modlist::Manifest pack_manifest(const std::string& id, const std::string& framework) {
+  pm::modlist::Manifest m;
+  m.id = id;
+  m.name = "Fake Pack";
+  m.author = "Someone";
+  m.version = "1.0.0";
+  m.description = "D";
+  m.contentPackFor = framework;  // is_pack(), and the framework as a required dependency, as the parser leaves them
+  m.dependencies = {{framework, "", true}};
+  return m;
+}
+fs::path fake_pack(const fs::path& root, const std::wstring& stem) {
+  const fs::path pack = root / "packs" / (stem + L".pack");
+  write(pack, "");
+  write(pack.parent_path() / (stem + L".json"),
+        R"({"id":"someone.pack","name":"Fake Pack","author":"Someone","version":"1.0.0","description":"D","contentPackFor":{"id":"fake-mod"}})");
+  write(pack.parent_path() / (stem + L".i18n.json"), R"({"clip.one":"One"})");
+  write(pack.parent_path() / (stem + L".assets") / "clip.txt", "one");
+  return pack;
+}
+pm::mods::Installed pack_and_framework(const fs::path& pack) {
+  pm::mods::Installed both = fake_install(PM_FAKE_MOD);
+  both.found.push_back({pack, pack_manifest("someone.pack", "fake-mod")});
+  return both;
+}
+void pack_host_api(PmHostApi& api) {
+  api = PmHostApi{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  g_resolved = {"Camera", "GhostAI.UnAppear"};
+}
+
+// A content pack never loads code: the host starts it after its framework, in the dependency order the
+// manifest gives, counts its build from the pack files beside its ".pack", and gives it no start, tick or
+// stop function.
+void a_pack_starts_after_its_framework_without_code(const fs::path& data, const fs::path& root) {
+  pm::log::set_sink(&capture, "");
+  const fs::path pack = fake_pack(root, L"Pack-42-7-0");
+  pm::mods::set_installed(data, pack_and_framework(pack));
+  PmHostApi api{};
+  pack_host_api(api);
+  pm::mods::start(&api, {"someone.pack", "fake-mod"});  // the dependency plan decides the order, not the choice
+  CHECK(pm::mods::started_ids() == (std::vector<std::string>{"fake-mod", "someone.pack"}));
+  for (const pm::mods::Mod& m : pm::mods::installed()) {
+    if (m.manifest.id == "fake-mod") CHECK(m.start != nullptr);  // the framework does have code
+    if (m.manifest.id == "someone.pack") {
+      CHECK(m.start == nullptr && m.tick == nullptr && m.stop == nullptr);  // the pack has none to call
+      CHECK(m.build == pm::packfiles::build_of(pack));
+    }
+  }
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// A started pack is part of the lobby's presence like any other mod: its id and its build, so a joiner
+// without that exact build is matched out of the room (host/join_guard.h).
+void a_started_pack_is_in_the_presence(const fs::path& data, const fs::path& root) {
+  pm::log::set_sink(&capture, "");
+  const fs::path pack = fake_pack(root, L"InPresence-42-7-0");
+  pm::mods::set_installed(data, pack_and_framework(pack));
+  PmHostApi api{};
+  pack_host_api(api);
+  pm::mods::start(&api, {"fake-mod", "someone.pack"});
+  CHECK(pm::mods::started("someone.pack"));
+  const std::string build = pm::packfiles::build_of(pack);
+  CHECK(!build.empty());
+  bool listed = false;
+  for (const pm::presence::Mod& m : pm::mods::started_builds())
+    if (m.id == "someone.pack") listed = m.build == build;
+  CHECK(listed);
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// Stopping and ticking with a started pack call no code of its own: it has no stop or tick function, and
+// nothing crashes; afterwards it is simply not running.
+void stopping_a_pack_calls_no_code(const fs::path& data, const fs::path& root) {
+  pm::log::set_sink(&capture, "");
+  const fs::path pack = fake_pack(root, L"Stopped-42-7-0");
+  pm::mods::set_installed(data, pack_and_framework(pack));
+  PmHostApi api{};
+  pack_host_api(api);
+  pm::mods::start(&api, {"fake-mod", "someone.pack"});
+  CHECK(pm::mods::started("someone.pack"));
+  pm::mods::tick_all();  // the host's tick skips the pack: there is nothing to tick
+  pm::mods::stop_all();  // it stops without calling a stop function
+  CHECK(!pm::mods::started("fake-mod") && !pm::mods::started("someone.pack"));
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// A ".pack" path is a content pack or nothing: a manifest that is not a pack's, pointing at a stand-in,
+// never has that file loaded as a DLL, whatever bytes it holds. Its row says it was refused, and its code
+// stays unmapped.
+void a_stand_in_without_a_pack_manifest_never_loads(const fs::path& data, const fs::path& root) {
+  pm::log::set_sink(&capture, "");
+  const fs::path standIn = root / "packs" / L"NotAPack-42-7-0.pack";
+  std::error_code error;
+  CHECK(fs::copy_file(PM_FAKE_MOD, standIn, fs::copy_options::overwrite_existing, error));  // a real mod DLL behind a pack name
+  pm::mods::set_installed(data, {{{standIn, fake_manifest()}}, {}});  // fake_manifest: a normal mod's manifest
+  PmHostApi api{};
+  pack_host_api(api);
+  pm::mods::start(&api, {"fake-mod"});
+  CHECK(!pm::mods::started("fake-mod"));  // a ".pack" path is never loaded as a DLL
+  CHECK(GetModuleHandleW(standIn.c_str()) == nullptr);
+  CHECK(!pm::mods::off_reason("fake-mod").empty());  // its row says why
   pm::mods::stop_all();
   pm::log::set_sink(nullptr, nullptr);
 }
@@ -1103,6 +1215,10 @@ int main() {
   a_dll_that_cannot_run_is_refused_with_a_reason(data, root);
   a_repeated_id_is_refused_from_the_manifests(data);
   a_dll_that_throws_when_asked_is_refused(data);
+  a_pack_starts_after_its_framework_without_code(data, root);
+  a_started_pack_is_in_the_presence(data, root);
+  stopping_a_pack_calls_no_code(data, root);
+  a_stand_in_without_a_pack_manifest_never_loads(data, root);
   no_mod_dll_loads_before_agreement(data, root);
   declined_loads_no_mod_dll(data, root);
   unticked_mod_is_not_loaded_until_switched_on(data, root);

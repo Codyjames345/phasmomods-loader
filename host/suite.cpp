@@ -440,7 +440,7 @@ void on_host_message(int32_t sender, const uint8_t* data, size_t size) {
 bool channel_open(uint8_t channel, int32_t sender) {
   return host::contained("suite", "asking whom a mod's channel takes", false, [&] {
     for (const mods::Mod& m : mods::installed())
-      if (m.started && m.info->channel == channel)
+      if (m.started && m.info && m.info->channel == channel)
         return g_agreement.delivers(sender, hostgame::local_actor(), {m.info->id, m.build});
     return false;
   });

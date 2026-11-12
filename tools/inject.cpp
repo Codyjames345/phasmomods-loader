@@ -1,6 +1,7 @@
 #include "inject.h"
 #include "text_table.h"
 #include "mod_assets.h"
+#include "pack_files.h"
 #include "mod_list.h"
 #include "text_files.h"
 #include "win_handle.h"
@@ -28,10 +29,10 @@ const wchar_t* filename(const wchar_t* path) {
   return separator ? separator + 1 : path;
 }
 
-/** Resolve a real file to its normalized DOS path without loading its contents. */
-bool canonical_path(const wchar_t* path, std::wstring& output) {
+/** Resolve a real file, or with `folder` a real folder, to its normalized DOS path without loading its contents. */
+bool canonical_path(const wchar_t* path, std::wstring& output, bool folder = false) {
   Handle file(CreateFileW(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                          nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+                          nullptr, OPEN_EXISTING, folder ? FILE_FLAG_BACKUP_SEMANTICS : FILE_ATTRIBUTE_NORMAL, nullptr));
   if (file.value == INVALID_HANDLE_VALUE) return false;
   std::vector<wchar_t> buffer(32768);
   DWORD size = GetFinalPathNameByHandleW(file.value, buffer.data(), static_cast<DWORD>(buffer.size()), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
@@ -126,6 +127,25 @@ bool fresh_copy(const std::wstring& directory, const wchar_t* source, const std:
   return false;
 }
 
+/** Make an empty file at a name no earlier copy has used, the copy of a content pack's stand-in (core/pack_files.h): its
+ *  manifest, string table and assets are copied beside it as a mod's are beside its DLL's copy. */
+bool fresh_stand_in(const std::wstring& directory, const std::wstring& stem, DWORD pid, std::wstring& copy) {
+  for (unsigned attempt = 0; attempt < 10; ++attempt) {
+    copy = directory + L"\\" + stem + L"-" + std::to_wstring(pid) + L"-" + std::to_wstring(GetTickCount64()) + L"-" + std::to_wstring(attempt) + L".pack";
+    Handle file(CreateFileW(copy.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (file.value != INVALID_HANDLE_VALUE) return true;
+    if (GetLastError() != ERROR_FILE_EXISTS && GetLastError() != ERROR_ALREADY_EXISTS) break;
+  }
+  return false;
+}
+
+/** A copy's path without its extension (".dll" or ".pack"), which its manifest and string table are named after. */
+std::wstring without_extension(const std::wstring& copy) {
+  const size_t dot = copy.rfind(L'.');
+  const size_t slash = copy.find_last_of(L"\\/");
+  return dot == std::wstring::npos || (slash != std::wstring::npos && dot < slash) ? copy : copy.substr(0, dot);
+}
+
 /** The file stem of a path, for naming its copy. */
 std::wstring stem_of(const std::wstring& path) {
   std::wstring name = filename(path.c_str());
@@ -142,14 +162,14 @@ std::wstring folder_of(const std::wstring& file) {
 /** Copy a component's string table (its i18n\default.json, core/text_table.h) to <copy>.i18n.json, where its copy reads it. A
  *  component without one shows its keys, and logs which. */
 void copy_text(const std::wstring& original, const std::wstring& copy) {
-  const std::wstring stem = copy.substr(0, copy.size() - 4);
+  const std::wstring stem = without_extension(copy);
   CopyFileW((folder_of(original) + L"i18n\\default.json").c_str(), (stem + L".i18n.json").c_str(), FALSE);
 }
 
 /** Copy the manifest beside a mod's DLL to <copy>.json, or an old-format mod's mod.ini to <copy>.ini, where the host reads it. */
 void copy_manifest(const std::wstring& dll, const std::wstring& copy) {
   const std::wstring folder = folder_of(dll);
-  const std::wstring stem = copy.substr(0, copy.size() - 4);
+  const std::wstring stem = without_extension(copy);
   // A mod with neither, or one whose copy fails, is refused by the host, with why.
   if (!CopyFileW((folder + L"manifest.json").c_str(), (stem + L".json").c_str(), FALSE))
     CopyFileW((folder + L"mod.ini").c_str(), (stem + L".ini").c_str(), FALSE);
@@ -250,7 +270,9 @@ Result copy_native(DWORD pid, const wchar_t* host, const std::vector<std::wstrin
   std::vector<std::string> lines = sessionLines;
   for (const auto& mod : mods) {
     std::wstring modCopy;
-    if (!fresh_copy(directory, mod.c_str(), stem_of(mod), pid, modCopy)) {
+    // A content pack has no DLL: its copy is an empty stand-in that its files sit beside (core/pack_files.h).
+    const bool pack = pm::packfiles::is_stand_in(mod);
+    if (pack ? !fresh_stand_in(directory, stem_of(mod), pid, modCopy) : !fresh_copy(directory, mod.c_str(), stem_of(mod), pid, modCopy)) {
       lines.push_back(refused_line(mod));  // that mod stays off, and the others still start
       continue;
     }
@@ -408,7 +430,12 @@ Result load(DWORD pid, const wchar_t* hostDllPath, const std::vector<std::wstrin
   std::vector<std::string> lines = sessionLines;
   for (const auto& mod : modDllPaths) {
     std::wstring canonical;
-    if (canonical_path(mod.c_str(), canonical)) mods.push_back(canonical);
+    // A content pack's stand-in names no file (core/pack_files.h): its folder is what must be real.
+    const std::filesystem::path path(mod);
+    if (pm::packfiles::is_stand_in(path)) {
+      if (canonical_path(path.parent_path().c_str(), canonical, true)) mods.push_back(canonical + L"\\" + path.filename().wstring());
+      else lines.push_back(refused_line(mod));
+    } else if (canonical_path(mod.c_str(), canonical)) mods.push_back(canonical);
     else lines.push_back(refused_line(mod));  // that mod stays off, and the others still start
   }
   constexpr DWORD rights = PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ | SYNCHRONIZE;

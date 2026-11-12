@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "../core/pack_files.h"
+
 namespace {
 int failures = 0;
 #define CHECK(value) do { if (!(value)) { std::printf("FAIL line %d: %s\n", __LINE__, #value); ++failures; } } while (0)
@@ -181,6 +183,22 @@ std::string read_text(const std::wstring& path) {
   fclose(f);
   return content;
 }
+/** The entries under bin matching `pattern`, as full paths. */
+std::vector<std::wstring> bin_copies(const std::wstring& directory, const std::wstring& pattern) {
+  std::vector<std::wstring> found;
+  WIN32_FIND_DATAW entry{};
+  HANDLE search = FindFirstFileW((directory + L"\\bin\\" + pattern).c_str(), &entry);
+  if (search == INVALID_HANDLE_VALUE) return found;
+  do { found.push_back(directory + L"\\bin\\" + entry.cFileName); } while (FindNextFileW(search, &entry));
+  FindClose(search);
+  return found;
+}
+/** A file's size in bytes, or -1 when there is no such file. */
+long long file_size(const std::wstring& path) {
+  WIN32_FILE_ATTRIBUTE_DATA data{};
+  if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data)) return -1;
+  return (static_cast<long long>(data.nFileSizeHigh) << 32) | data.nFileSizeLow;
+}
 /** Reset every external failure mode and supply a relocated system module. */
 void reset() {
   allocationFails = writeFails = shortWrite = threadFails = exitTarget = wrongMappedPath = false;
@@ -310,6 +328,37 @@ int main() {
       ++failures;
     }
     CHECK(GetFileAttributesW((outside + L"\\secret.txt").c_str()) != INVALID_FILE_ATTRIBUTES);
+  }
+  // A content pack's stand-in path (core/pack_files.h) names no file to copy: it copies as an empty ".pack"
+  // named like a DLL copy, its manifest beside it as <copy minus extension>.json, its string table as
+  // <...>.i18n.json, its assets folder as <...>.assets, and the session lists that ".pack" copy.
+  {
+    const std::wstring packFolder = std::wstring(root) + L"\\EmotePack";
+    CHECK(CreateDirectoryW(packFolder.c_str(), nullptr));
+    CHECK(CreateDirectoryW((packFolder + L"\\i18n").c_str(), nullptr));
+    CHECK(CreateDirectoryW((packFolder + L"\\assets").c_str(), nullptr));
+    write_text(packFolder + L"\\manifest.json",
+      R"({"id":"someone.emote-pack","name":"Emote Pack","author":"Someone","version":"1.0.0","description":"D","contentPackFor":{"id":"me.example"}})");
+    write_text(packFolder + L"\\i18n\\default.json", R"({"emote.one":"One"})");
+    write_text(packFolder + L"\\assets\\one.txt", "one");
+    const std::wstring standIn = pm::packfiles::stand_in(std::filesystem::path(packFolder)).wstring();
+    CHECK(pm::packfiles::is_stand_in(standIn));
+    reset();
+    CHECK(pm::loader::load(42, source.c_str(), {standIn}).outcome == Outcome::active);
+    const std::vector<std::wstring> packs = bin_copies(directory, L"EmotePack-42-*.pack");
+    CHECK(packs.size() == 1);
+    if (!packs.empty()) {
+      const std::wstring& packCopy = packs[0];
+      CHECK(file_size(packCopy) == 0);  // the stand-in copies as an empty file, not as a DLL
+      const std::wstring stem = packCopy.substr(0, packCopy.size() - 5);  // without ".pack"
+      CHECK(read_text(stem + L".json").find("contentPackFor") != std::string::npos);
+      CHECK(read_text(stem + L".i18n.json") == R"({"emote.one":"One"})");
+      CHECK(read_text(stem + L".assets\\one.txt") == "one");
+      // The session lists the ".pack" copy itself, and no DLL copy was made for the pack.
+      CHECK(read_text(directory + L"\\bin\\session-42.txt").find(pm::text::narrow(packCopy)) != std::string::npos);
+    }
+    CHECK(bin_copies(directory, L"EmotePack-42-*.dll").empty());
+    CHECK(GetFileAttributesW(standIn.c_str()) == INVALID_FILE_ATTRIBUTES);  // the launcher creates nothing in the pack's folder
   }
   reset(); CHECK(pm::loader::load(42, nullptr).outcome == Outcome::file_error);
   CHECK(threadStarts == 0);

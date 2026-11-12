@@ -5,6 +5,7 @@
 #include "text_table.h"
 #include "win_handle.h"
 #include "../host/mod_deps.h"
+#include "pack_files.h"
 #include <windows.h>
 #include <commctrl.h>
 #include <shellapi.h>
@@ -122,8 +123,9 @@ std::vector<ModEntry> discover_mods(const std::vector<ModsFolder>& roots, std::w
     const modlist::Reading reading = modlist::read_folder(dir, m.manifest, why, place);
     if (reading == modlist::Reading::Refused) refuse(dir, why);
     if (reading != modlist::Reading::Readable) continue;
-    m.dll = (dir / widen(m.manifest.dll)).wstring();
-    if (!fs::is_regular_file(m.dll, error)) {  // a folder of that name is no DLL either
+    // A content pack has no DLL: its stand-in names it in the lists, and its files are copied as a mod's are.
+    m.dll = m.manifest.is_pack() ? pm::packfiles::stand_in(dir).wstring() : (dir / widen(m.manifest.dll)).wstring();
+    if (!m.manifest.is_pack() && !fs::is_regular_file(m.dll, error)) {  // a folder of that name is no DLL either
       refuse(dir, pm::i18n::text("launcher.mod-missing-dll"));
       continue;
     }
