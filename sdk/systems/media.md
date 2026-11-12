@@ -79,6 +79,17 @@ player held still should take the game's own hold (`PCCanvas.PausePlayerInPlace`
 leave the clock alone; a mod that does stop the clock should expect the picture to sit wrong when it starts
 again.
 
+**Never write a time scale of exactly 0.** The investigator's movement divides by the frame's scaled step:
+`PhysicsCharacterController.Move` stores the frame's walk divided by `Time.deltaTime`, and the first-person
+controller calls it every frame, held or not. At a scale of 0 that is 0 divided by 0 for every frame the clock is
+stopped, and Unity runs the controller's physical step (its `FixedUpdate`) before the next `Update` once the clock
+moves again, so that step moves the local rig by the NaN it stored. The game's log then fills with "Infinity or NaN
+floating point numbers appear when calculating the transform matrix for a Collider" for every collider of the local
+rig and the networked body, the camera that rides the rig renders from nowhere (the picture flashes, then goes
+black), and the investigator stays lost (the dev menu's pause, seen in the game on 2026-11-12). A mod that needs the
+game nearly stopped writes the smallest positive scale it can live with (the dev menu uses one ten-thousandth),
+never 0.
+
 - `VideoPlayer` and `AsyncGPUReadback` have no managed methods left in this build (they were stripped). The engine
   still registers their calls: setting a URL, a render target and looping; prepare, play, pause and stop; asking for a
   texture's data and reading it back. A mod reaches them through icall entries, which the map supports. The vanilla

@@ -19,18 +19,26 @@ namespace pm::devmenu {
 inline bool may_open(bool offlineMode, bool inRoom) { return offlineMode || !inRoom; }
 
 // ---- Pause while the menu is open ----
+
+/** The time scale the menu calls paused: the smallest it ever writes, never 0. The game itself never writes the time
+ *  scale, and its movement divides by the frame's scaled time: PhysicsCharacterController.Move stores the frame's walk
+ *  divided by Time.deltaTime, so at a scale of 0 every frame of a pause stored 0/0, and the first physical step after
+ *  it moved the local rig to NaN (the live test of 2026-11-12: every rig collider NaN, the picture flashing, then
+ *  black, the game stuck). At this scale ten minutes of pause pass as a twentieth of a second of game time. */
+inline constexpr float kPausedScale = 0.0001f;
+
 struct Pause {
   bool frozen = false;  // the menu has the game frozen right now
   float saved = 1.0f;   // the timeScale to go back to when it closes
 };
 
-/** The timeScale when the menu opens: 0 when pausing is on, saving what ran. A second open (a re-entry
+/** The timeScale when the menu opens: kPausedScale when pausing is on, saving what ran. A second open (a re-entry
  *  while already frozen) keeps the first saved value. */
 inline float pause_open(Pause& p, float current, bool pauseWhenOpen) {
   if (!pauseWhenOpen) return current;
   if (!p.frozen) p.saved = current;
   p.frozen = true;
-  return 0.0f;
+  return kPausedScale;
 }
 
 /** The timeScale when the menu closes: what ran before it opened; false, changing nothing, when the menu
@@ -55,9 +63,10 @@ inline float next_speed_multiplier(float current, int steps) {
 }
 
 /** The game's timeScale the "tick speed" row cycles to: the next preset above `current`, wrapping to the
- *  first (0 paused, 0.25, 0.5, 1 real time, 2, 4). A value between presets moves to the next one above it. */
+ *  first (paused, which is kPausedScale and never 0, then 0.25, 0.5, 1 real time, 2, 4). A value between presets moves
+ *  to the next one above it. */
 inline float next_time_scale(float current) {
-  static constexpr float kScales[] = {0.0f, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
+  static constexpr float kScales[] = {kPausedScale, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
   for (const float s : kScales)
     if (s > current + 0.001f) return s;
   return kScales[0];
@@ -65,7 +74,7 @@ inline float next_time_scale(float current) {
 
 // ---- The switches the mod's hooks read ----
 struct Switches {
-  // Freeze the game at timeScale 0 while the menu is open. Off by default since 2026-11-12 (the user's call
+  // Freeze the game (kPausedScale) while the menu is open. Off by default since 2026-11-12 (the user's call
   // after three live tries): the game's own code never writes the time scale at all, and its picture adapts
   // to the light using the frame's scaled time, so a frozen clock behind the menu is the one thing every
   // broken screen after a close shared. The row and the tick-speed row stay for a developer who wants them.

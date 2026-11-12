@@ -10,31 +10,6 @@ reports an entry whose problem is already gone.
 
 <!-- next: 35 -->
 
-## 33. The dev menu can still wreck the picture through the clock, and no cause is proven
-
-  mods/dev_menu/actions.cpp:1 (set_time_scale), mods/dev_menu/menu_rule.h (the tick-speed and pause rows)
-
-  The user's fifth live try (2026-11-12): "it worked fine until I changed the game speed setting, then the same
-  thing happened (flashing colours then black screen)". The pause is off by default since that report, but the
-  tick-speed row still writes `Time.timeScale` on purpose, and the picture broke the same way in every round that
-  touched the clock. What is proven from this build: 64 call sites write `Time.set_timeScale` and all of them are
-  bundled middleware (nothing in the game's own code writes it); nothing in the render path reads it; the
-  renderer's auto-exposure pass feeds its adaptation the frame's scaled delta every frame
-  (`AutoExposureComputeRenderPass`'s constant setup calls `Time.get_deltaTime`), but the adaptation maths lives in
-  the compiled shader, so no division by a frozen delta is visible in managed code. The mechanism is therefore
-  unproven, and the author's rule applies: fix the cause, never add a hook that undoes our own side effect.
-
-  Prompt:
-  > Find why the picture comes back with flashing colours and then black after the dev menu changes
-  > `Time.timeScale`, and fix that rather than the symptom. Run the experiment matrix with the author in the game
-  > (the standing ban-risk warning first): set the tick-speed row to 0.5x, then 1x, then 2x, then 0x, one at a
-  > time, saying at each step whether the picture is wrong, whether writing 1 back brings it back, whether the
-  > game is still running, and whether a scene change clears it. Then finish reading the render path
-  > (`OccaSoftware.AutoExposure`'s compute and fragment passes, and anything else that consumes the scaled frame
-  > time) to name the mechanism. If the clock is not the cause, say what is; if it is, decide with the author
-  > whether the rows stay (the author's choice on 2026-11-12 was to keep them and fix the cause) and write what
-  > you found into sdk/systems/media.md.
-
 ## 32. A community mod has only the install folder to live in, which an update may replace
 
   tools/launcher.cpp:525

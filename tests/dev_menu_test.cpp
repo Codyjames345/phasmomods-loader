@@ -23,10 +23,10 @@ void the_menu_opens_only_in_the_sandbox() {
 
 void opening_the_menu_freezes_and_closing_restores() {
   Pause p;
-  CHECK(pause_open(p, 1.0f, true) == 0.0f);
+  CHECK(pause_open(p, 1.0f, true) == kPausedScale);
   CHECK(p.frozen && p.saved == 1.0f);
   // A second open while frozen keeps the first saved speed, not 0.
-  CHECK(pause_open(p, 0.0f, true) == 0.0f);
+  CHECK(pause_open(p, kPausedScale, true) == kPausedScale);
   CHECK(p.saved == 1.0f);
   float restore = 0.0f;
   CHECK(pause_close(p, restore) && restore == 1.0f && !p.frozen);
@@ -127,8 +127,9 @@ void the_debug_read_out_is_a_switch_like_the_others() {
 void the_tick_speed_row_cycles_the_presets() {
   CHECK(next_time_scale(1.0f) == 2.0f);
   CHECK(next_time_scale(2.0f) == 4.0f);
-  CHECK(next_time_scale(4.0f) == 0.0f);  // wraps to paused
-  CHECK(next_time_scale(0.0f) == 0.25f);
+  CHECK(next_time_scale(4.0f) == kPausedScale);  // wraps to paused
+  CHECK(next_time_scale(kPausedScale) == 0.25f);
+  CHECK(next_time_scale(0.0f) == 0.25f);  // a clock someone else stopped still steps up
   CHECK(next_time_scale(0.25f) == 0.5f);
   CHECK(next_time_scale(0.5f) == 1.0f);
   CHECK(next_time_scale(1.3f) == 2.0f);  // between presets: the next above
@@ -294,6 +295,21 @@ void no_revive_reason_is_left() {
                 "menu.cpp indexes the reasons' text keys in Why order");
 }
 
+// The live test of 2026-11-12 (pause while open): every collider of the local rig went to NaN and the picture
+// flashed, then went black. PhysicsCharacterController.Move divides the frame's walk by Time.deltaTime, and a time
+// scale of 0 makes that 0/0 for every frame of the pause; the first physical step after it moves the rig by that NaN.
+// The game itself never writes the time scale, so the menu never writes 0: "paused" is the smallest scale that is not.
+void the_menu_never_stops_the_clock_dead() {
+  CHECK(kPausedScale > 0.0f && kPausedScale <= 0.001f);
+  Pause p;
+  CHECK(pause_open(p, 1.0f, true) > 0.0f);
+  float scale = 1.0f;
+  for (int i = 0; i < 12; ++i) {  // twice round every preset
+    scale = next_time_scale(scale);
+    CHECK(scale > 0.0f);
+  }
+}
+
 // The save freeze follows the dev session and never lets go within a run; the store switches answer only inside
 // the sandbox, so an online lobby later in the same run sees the game's own answers (the user's ask, 2026-11-12).
 void the_store_is_free_only_in_the_sandbox_and_the_save_stays() {
@@ -381,6 +397,7 @@ int main() {
   the_new_switches_start_off();
   no_revive_reason_is_left();
   the_store_is_free_only_in_the_sandbox_and_the_save_stays();
+  the_menu_never_stops_the_clock_dead();
   the_weather_and_type_rows_follow_the_contract();
   the_dummy_rows_need_a_contract_and_the_dummy();
   the_hunt_target_row_needs_a_hunt();

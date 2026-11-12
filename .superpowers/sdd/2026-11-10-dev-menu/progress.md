@@ -708,3 +708,25 @@ entries by the local model, reviewed; gamecheck 1966 entries, 1854 resolved, 0 m
 Smoke 47: complete a side objective: the truck's board ticks it; fail one. 48: spawn an item from the loadout at your
 feet; spawn until the pool runs out (the refusal shows). 49: never run out: light a candle and watch it hold; use a
 crucifix past its uses. 50: sight assist held off: a hunt that sees you never speeds up (HUD live speed).
+
+## Round 12 (2026-11-12): the pause's broken picture, found
+
+The user: "pause while menu is open still causes the graphics flashing and game to stop running (but no crash)".
+mods.log: the last open was at timeScale 0.00 with no close after it. Player.log (no timestamps): 216 copies each of
+"Infinity or NaN floating point numbers appear when calculating the transform matrix for a Collider" for every
+collider of LocalPCPlayer(Clone) and PCPlayer(Clone): the local rig's position went to NaN.
+
+Mechanism, from the decompile already read for noclip: PhysicsCharacterController.Move stores displacement /
+Time.deltaTime; at timeScale 0 every frame of the pause stores 0/0 = NaN; when the clock moves again Unity runs the
+controller's FixedUpdate before the next Update, so the step applies that NaN and the rig, and the camera on it, go to
+NaN (flashing, then black; the investigator lost). It also explains FINDINGS 33's tick-speed reports: cycling past
+the top preset wrapped to 0. The game never writes the time scale itself, so this is our own write.
+
+Fix at the cause: the menu never writes 0. menu_rule.h kPausedScale = 0.0001 is "paused" for both the pause while
+open and the tick-speed cycle's first preset. Test first: the_menu_never_stops_the_clock_dead (pause_open and two
+laps of next_time_scale never give 0). FINDINGS 33 removed; sdk/systems/media.md "Never write a time scale of
+exactly 0" records it for authors. validate 95/95.
+
+Smoke 51: pause while open on, open and close the menu several times in a contract, walk after each close: no
+flashing, no black, and Player.log has no "Infinity or NaN" line. Cycle the game speed through every preset twice.
+If the picture still drifts bright after a long pause, that is the exposure adaptation media.md describes, not this.
