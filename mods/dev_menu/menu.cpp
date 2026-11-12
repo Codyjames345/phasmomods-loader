@@ -66,7 +66,7 @@ enum ValueKind {
   OnFriendly, OnLoseEquipment, CountEvidence, NameType, NumberReward, NumberPayout, LineState, LineIdentity,
   NameRoom, NumberSpeed, PickRoom, OnEvents, PickEvent, NumberSanity, OnFrozen, OnGod, NumberScale,
   OnPause, OnSession, OnOffline, NumberMultiplier, OnBlind, OnDebugHud, LineEvidence, OnNoclip, OnLockSanity,
-  NumberLockedSanity, OnEspGhost, OnEspRooms, NameWeather, PickWeatherValue, PickRetypeValue, OnUnlockAll, OnFreeShop, OnSaveFrozen, OnDummy,
+  NumberLockedSanity, OnEspGhost, OnEspRooms, NameWeather, PickWeatherValue, PickRetypeValue, OnUnlockAll, OnFreeShop, OnSaveFrozen, OnDummy, LineTypeDials, OnEspDoors, OnEspHiding, OnEspSwitches, PickOptionValue,
 };
 
 enum Kind { Nav, Click, Read };
@@ -91,6 +91,7 @@ int g_roomPick = 0;       // the room picker's cursor index
 int g_eventPick = 0;      // the event picker's cursor index
 int g_weatherPick = 0;    // the weather picker's cursor index
 int g_retypePick = 0;     // the re-type picker's cursor index
+int g_optionPick = 0;     // the difficulty option picker's cursor index
 Pause g_pause;
 bool g_wasCursorLocked = true;
 // Unity's UI input module, borrowed while the menu is open: the game runs it only while its journal is
@@ -168,6 +169,14 @@ std::string valueText(const Row& r) {
     case NameWeather: return actions::weather_now();
     case OnUnlockAll: return onOff(actions::switches().unlockAll);
     case OnDummy: return onOff(dummy::available());
+    case LineTypeDials: return actions::type_dials();
+    case PickOptionValue: {
+      const char* label = actions::option_label(g_optionPick);
+      return (label && *label ? i18n::text(label) : std::string{}) + ": " + actions::option_value(g_optionPick);
+    }
+    case OnEspDoors: return onOff(actions::switches().espDoors);
+    case OnEspHiding: return onOff(actions::switches().espHiding);
+    case OnEspSwitches: return onOff(actions::switches().espSwitches);
     case OnFreeShop: return onOff(actions::switches().freeShop);
     case OnSaveFrozen: return onOff(freeze_save(actions::session_on()));
     case PickWeatherValue: return actions::weather_name(g_weatherPick);
@@ -201,6 +210,11 @@ std::vector<Row> sectionRows(int section) {
       add(Click, Action::BumpType, -1, i18n::key("dev-menu.ghost-type-down"), NoValue);
       add(Click, Action::BumpType, +1, i18n::key("dev-menu.ghost-type-up"), NoValue);
       add(Read, Action::Info, 0, i18n::key("dev-menu.reward"), NumberReward);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.option"), PickOptionValue);
+      add(Click, Action::PickOption, -1, i18n::key("dev-menu.option-prev"), NoValue);
+      add(Click, Action::PickOption, +1, i18n::key("dev-menu.option-next"), NoValue);
+      add(Click, Action::StepOption, -1, i18n::key("dev-menu.option-down"), NoValue);
+      add(Click, Action::StepOption, +1, i18n::key("dev-menu.option-up"), NoValue);
       break;
     case 1:  // Contract
       add(Click, Action::UnlockDoor, 0, i18n::key("dev-menu.unlock-door"), NoValue);
@@ -218,6 +232,11 @@ std::vector<Row> sectionRows(int section) {
       add(Read, Action::Info, 0, i18n::key("dev-menu.state"), LineState);
       add(Read, Action::Info, 0, i18n::key("dev-menu.identity"), LineIdentity);
       add(Read, Action::Info, 0, i18n::key("dev-menu.evidence-given"), LineEvidence);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.type-dials"), LineTypeDials);
+      add(Click, Action::BumpFlames, +1, i18n::key("dev-menu.flames-more"), NoValue);
+      add(Click, Action::BumpFlames, 0, i18n::key("dev-menu.flames-clear"), NoValue);
+      add(Click, Action::TypeChangeNow, 0, i18n::key("dev-menu.type-change-now"), NoValue);
+      add(Click, Action::ChaseMe, 0, i18n::key("dev-menu.chase-me"), NoValue);
       add(Read, Action::Info, 0, i18n::key("dev-menu.retype-pick"), PickRetypeValue);
       add(Click, Action::PickRetype, -1, i18n::key("dev-menu.retype-prev"), NoValue);
       add(Click, Action::PickRetype, +1, i18n::key("dev-menu.retype-next"), NoValue);
@@ -261,6 +280,7 @@ std::vector<Row> sectionRows(int section) {
       add(Click, Action::SetNoclip, 0, i18n::key("dev-menu.noclip"), OnNoclip);
       add(Click, Action::MeToGhost, 0, i18n::key("dev-menu.me-to-ghost"), NoValue);
       add(Click, Action::MeToGhostRoom, 0, i18n::key("dev-menu.me-to-ghost-room"), NoValue);
+      add(Click, Action::MeToTruck, 0, i18n::key("dev-menu.me-to-truck"), NoValue);
       add(Read, Action::Info, 0, i18n::key("dev-menu.dummy"), OnDummy);
       add(Click, Action::SpawnDummy, 0, i18n::key("dev-menu.dummy-spawn"), NoValue);
       add(Click, Action::DummyAction, 0, i18n::key("dev-menu.dummy-to-me"), NoValue);
@@ -286,6 +306,9 @@ std::vector<Row> sectionRows(int section) {
       add(Click, Action::SetDebugHud, 0, i18n::key("dev-menu.debug-hud"), OnDebugHud);
       add(Click, Action::SetEspGhost, 0, i18n::key("dev-menu.esp-ghost"), OnEspGhost);
       add(Click, Action::SetEspRooms, 0, i18n::key("dev-menu.esp-rooms"), OnEspRooms);
+      add(Click, Action::SetEspDoors, 0, i18n::key("dev-menu.esp-doors"), OnEspDoors);
+      add(Click, Action::SetEspHiding, 0, i18n::key("dev-menu.esp-hiding"), OnEspHiding);
+      add(Click, Action::SetEspSwitches, 0, i18n::key("dev-menu.esp-switches"), OnEspSwitches);
       add(Read, Action::Info, 0, i18n::key("dev-menu.session"), OnSession);
       add(Read, Action::Info, 0, i18n::key("dev-menu.offline-state"), OnOffline);
       break;
@@ -515,6 +538,31 @@ void run(const Row& r) {
   Switches& s = actions::switches();
   switch (r.action) {
     case Action::UnlockDoor: actions::unlock_main_door(); break;
+    case Action::BumpFlames: actions::bump_flames(r.arg); break;
+    case Action::TypeChangeNow: actions::type_change_now(); break;
+    case Action::ChaseMe:
+      if (!actions::chase_me()) g_refusal = Why::NotHunting;
+      break;
+    case Action::MeToTruck:
+      if (!actions::me_to_truck()) g_refusal = Why::NoTruck;
+      break;
+    case Action::PickOption: {
+      const int n = actions::option_count();
+      if (n > 0) g_optionPick = ((g_optionPick + r.arg) % n + n) % n;
+      break;
+    }
+    case Action::StepOption: {
+      // The friendly switch keeps its own rule (menu_rule.h): never while a hunt runs.
+      if (std::string_view(actions::option_label(g_optionPick)) == "dev-menu.option.friendly") {
+        const Can now = actions::snapshot();
+        if (now.hunting) {
+          g_refusal = Why::Hunting;
+          break;
+        }
+      }
+      actions::option_step(g_optionPick, r.arg);
+      break;
+    }
     case Action::PickRetype: {
       const int n = actions::type_options();
       if (n > 0) g_retypePick = ((g_retypePick + r.arg) % n + n) % n;
@@ -595,6 +643,9 @@ void run(const Row& r) {
     case Action::SetEspGhost: s.espGhost = !s.espGhost; break;
     case Action::SetEspRooms: s.espRooms = !s.espRooms; break;
     case Action::SetUnlockAll: s.unlockAll = !s.unlockAll; break;
+    case Action::SetEspDoors: s.espDoors = !s.espDoors; break;  // overlay.cpp draws all three
+    case Action::SetEspHiding: s.espHiding = !s.espHiding; break;
+    case Action::SetEspSwitches: s.espSwitches = !s.espSwitches; break;
     case Action::SpawnDummy:
       if (!dummy::spawn()) g_refusal = Why::NoPlayer;
       break;

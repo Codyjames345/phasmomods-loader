@@ -633,3 +633,34 @@ contract: make the dummy the target: the hunt ignores you. Let it kill the dummy
 investigator" reads off; revive it. Remove it. Leave the contract with it present: no errors.
 Open: whether the copy's body is visible to the local camera; whether any kept script's absence throws in a reader
 the research did not list (PlayerAudio is gone: the hunt's Listen never reaches the dummy, which is not in a spot).
+
+## Round 10 (2026-11-12): the remaining plan features
+
+Committed round 9 as 6209a59. Then, with the local model doing the mechanical parts:
+
+- Difficulty: every custom option. The local model mapped the 24 Difficulty fields still unmapped (all real names,
+  "Inferred: from its name" since no decompile was cited) and the two nested option enums, DifficultyValueType (the
+  C# ValueType: None..VeryHigh) and FuseBoxValueType (Broken, Off, On); gamecheck 1952 entries, 1840 resolved,
+  0 missing, 0 ambiguous. The Difficulty section gained one picker over 27 options (option: value, previous, next,
+  lower, higher): a switch flips, a level or the fuse box's power wraps through the game's own enum values (the top
+  read from the map), a number steps by the menu's step and stops at 0. The friendly option keeps its no-mid-hunt
+  rule. When each option takes effect is the game's: some live, some at the next contract; not traced per option.
+- Ghost: a type-dials read-out (Onryo flames, Thaye step and threshold, Gallu and Dayan states, interaction boost,
+  Banshee target), one more blown-out flame / clear them, "run the type's change now" (typeChangeDue: the Mimic's
+  copy, the Thaye's ageing, the Obambo's switch at the next state change), and "make the hunt go for you"
+  (GhostHuntState.SetTarget).
+- Player: teleport to the truck (the scene's ExitLevel).
+- Game: tick-speed presets 0, 0.25, 0.5, 1, 2, 4; ESP for doors (open/shut, locked), hiding places, light switches
+  and the fuse box (the local model's overlay work: scene searches cached for 2 s; the light uses
+  LightSwitch.get_IsSwitchOn, the wrapper the map exposes); HUD lines for the weather, the type dials and the dummy.
+- validate 95/95.
+
+Not done, and why: the Loader page (every mod's state) needs a new host-contract function at the end (contract 2.5),
+a versioning step left for the user's go. The objective board's complete/fail path, infinite durability and battery,
+spawning items or cursed possessions, the sight-assist pin and a per-option map of when each difficulty option is
+read all still need reverse engineering.
+
+Smoke 43: Difficulty picker: step ghost speed up during a hunt and watch the HUD's live speed; step starting sanity and
+the evidence count (some apply only at the next contract). 44: ESP doors/hiding/switches label the level; toggling a
+light flips its label. 45: game speed cycles through 0.25 and 4. 46: type dials change with the rows; "run the
+type's change now" on a Mimic copies another type at its next state change.

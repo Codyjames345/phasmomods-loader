@@ -147,6 +147,33 @@ std::string type_name(int32_t type);
  *  Thaye and Obambo timers keep running from where they were. False with no ghost. */
 bool retype(int32_t type);
 
+/** How many custom-difficulty options the Difficulty picker offers: every option of the game's custom difficulty that
+ *  the map names (Difficulty's fields). */
+int option_count();
+/** Option `index`'s text key. */
+const char* option_label(int index);
+/** Option `index`'s value now, read from the contract's Difficulty: on/off, a whole number, a level (the game's
+ *  ValueType number) or a multiplier. Empty with no difficulty. */
+std::string option_value(int index);
+/** Steps option `index` once, up (+1) or down (-1): a switch flips, a level or the fuse box's power moves to the next
+ *  of the game's own values and wraps, a number moves by the menu's step and stops at 0. The game reads each option
+ *  where it reads it: some at once, some only at the contract's next start (each map note says, where known). */
+void option_step(int index, int direction);
+
+/** The type's own dials in one line: the Onryo's blown-out flames, the Thaye's age step and hunt threshold, the
+ *  Gallu's and the Dayan's states, the interaction boost and whom the Banshee is set on. */
+std::string type_dials();
+/** Adds `delta` to the Onryo's count of blown-out flames (GhostAI.flamesBlownOut), or clears it for 0. */
+void bump_flames(int delta);
+/** Asks for the type's own change at the ghost's next state change (GhostController.typeChangeDue): the Mimic's
+ *  copy, the Thaye's ageing or the Obambo's switch. Any other type ignores it. */
+void type_change_now();
+/** Points the running hunt at the local investigator through the hunt's own GhostHuntState.SetTarget. False with
+ *  no hunt. */
+bool chase_me();
+/** Teleports the investigator to the truck (the scene's ExitLevel), onto the mesh beside it. */
+bool me_to_truck();
+
 /** How many weathers the weather picker offers: every contract weather, the Blood Moon included. */
 int weather_count();
 /** The game's own value name of picker weather `index`; empty out of range. */

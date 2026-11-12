@@ -379,6 +379,134 @@ inline constexpr pm::sdk::EntryDesc Difficulty_playerSpeed{
     .key = "Difficulty.playerSpeed", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "Difficulty", .name = "playerSpeed", .type = "float"};
 
+/// The custom difficulty's sanity pill restoration amount, an int. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_sanityPillRestorationAmount{
+    .key = "Difficulty.sanityPillRestorationAmount", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "sanityPillRestorationAmount", .type = "int"};
+
+/// The custom difficulty's starting sanity, an int. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_startingSanity{
+    .key = "Difficulty.startingSanity", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "startingSanity",
+    .type = "int"};
+
+/// The custom difficulty's sanity drain, a float. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_sanityDrain{
+    .key = "Difficulty.sanityDrain", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "sanityDrain",
+    .type = "float"};
+
+/// The custom difficulty's flashlights option, a bool. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_flashlights{
+    .key = "Difficulty.flashlights", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "flashlights",
+    .type = "bool"};
+
+/// The custom difficulty's changing favourite room option, a ValueType number (None 0, Low 1, Medium 2, High 3,
+/// VeryHigh 4). Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_changingFavouriteRoom{
+    .key = "Difficulty.changingFavouriteRoom", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "changingFavouriteRoom"};
+
+/// The custom difficulty's ghost interaction amount, a ValueType number (None 0, Low 1, Medium 2, High 3,
+/// VeryHigh 4). Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_interactionAmount{
+    .key = "Difficulty.interactionAmount", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "interactionAmount"};
+
+/// The custom difficulty's event frequency, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
+/// Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_eventFrequency{
+    .key = "Difficulty.eventFrequency", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "eventFrequency"};
+
+/// The custom difficulty's hunt duration, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
+/// Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_huntDuration{
+    .key = "Difficulty.huntDuration", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "huntDuration"};
+
+/// The custom difficulty's grace period, an int. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_gracePeriod{
+    .key = "Difficulty.gracePeriod", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "gracePeriod",
+    .type = "int"};
+
+/// The custom difficulty's fingerprint chance, a float. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_fingerprintChance{
+    .key = "Difficulty.fingerprintChance", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "fingerprintChance", .type = "float"};
+
+/// The custom difficulty's fingerprint duration, an int. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_fingerprintDuration{
+    .key = "Difficulty.fingerprintDuration", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "fingerprintDuration", .type = "int"};
+
+/// The custom difficulty's option for kills extending the hunt duration, a ValueType number (None 0, Low 1,
+/// Medium 2, High 3, VeryHigh 4). Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_killsExtendHuntDuration{
+    .key = "Difficulty.killsExtendHuntDuration", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "killsExtendHuntDuration"};
+
+/// The custom difficulty's roaming frequency, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
+/// Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_roamingFrequency{
+    .key = "Difficulty.roamingFrequency", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "roamingFrequency"};
+
+/// The custom difficulty's ghost speed, a float. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_ghostSpeed{
+    .key = "Difficulty.ghostSpeed", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "ghostSpeed",
+    .type = "float"};
+
+/// The custom difficulty's setup time, an int. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_setupTime{
+    .key = "Difficulty.setupTime", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "setupTime",
+    .type = "int"};
+
+/// The custom difficulty's selected weather, a WeatherValueType (the WeatherValueType note above numbers it).
+/// Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_selectedWeather{
+    .key = "Difficulty.selectedWeather", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "selectedWeather"};
+
+/// The custom difficulty's amount of doors open, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
+/// Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_amountOfDoorsOpen{
+    .key = "Difficulty.amountOfDoorsOpen", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "amountOfDoorsOpen"};
+
+/// The custom difficulty's amount of hiding places, a ValueType number (None 0, Low 1, Medium 2, High 3,
+/// VeryHigh 4). Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_amountOfHidingPlaces{
+    .key = "Difficulty.amountOfHidingPlaces", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "amountOfHidingPlaces"};
+
+/// The custom difficulty's sanity monitor option, a bool. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_sanityMonitor{
+    .key = "Difficulty.sanityMonitor", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "sanityMonitor",
+    .type = "bool"};
+
+/// The custom difficulty's activity monitor option, a bool. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_activityMonitor{
+    .key = "Difficulty.activityMonitor", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "activityMonitor", .type = "bool"};
+
+/// The custom difficulty's option for the fuse box showing on the map, a bool. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_fuseBoxVisibleOnMap{
+    .key = "Difficulty.fuseBoxVisibleOnMap", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "fuseBoxVisibleOnMap", .type = "bool"};
+
+/// The custom difficulty's fuse box starting power, a FuseBoxValueType (the FuseBoxValueType note below numbers
+/// it). Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_fuseBoxStartPower{
+    .key = "Difficulty.fuseBoxStartPower", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "fuseBoxStartPower"};
+
+/// The custom difficulty's number of cursed possessions, an int. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_cursedPossessionsQuantity{
+    .key = "Difficulty.cursedPossessionsQuantity", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "cursedPossessionsQuantity", .type = "int"};
+
+/// The custom difficulty's override multiplier, a float. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_overrideMultiplier{
+    .key = "Difficulty.overrideMultiplier", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "overrideMultiplier", .type = "float"};
+
 /// System.Enum (mscorlib). Inferred: the .NET class.
 inline constexpr pm::sdk::EntryDesc SystemEnum{.key = "Enum", .name = "Enum", .assembly = "mscorlib", .ns = "System"};
 
@@ -433,6 +561,50 @@ inline constexpr pm::sdk::EntryDesc WeatherValueType_BloodMoon{.key = "WeatherVa
 inline constexpr pm::sdk::EntryDesc Difficulty_actualWeather{.key = "Difficulty.actualWeather", .kind = pm::sdk::Kind::Field,
                                                              .confidence = pm::sdk::Confidence::Decompiled,
                                                              .owner = "Difficulty", .name = "actualWeather"};
+
+inline constexpr const char* DifficultyValueType_values[] = {"None", "Low", "Medium", "High", "VeryHigh"};
+
+/// The numbering of the custom difficulty's level options, an enum nested in Difficulty (real name ValueType):
+/// None 0, Low 1, Medium 2, High 3, VeryHigh 4. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType{.key = "DifficultyValueType", .owner = "Difficulty",
+                                                        .name = "ValueType", .values = DifficultyValueType_values};
+
+/// None. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType_None{
+    .key = "DifficultyValueType.None", .kind = pm::sdk::Kind::EnumValue, .owner = "DifficultyValueType",
+    .name = "None"};
+/// Low. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType_Low{
+    .key = "DifficultyValueType.Low", .kind = pm::sdk::Kind::EnumValue, .owner = "DifficultyValueType", .name = "Low"};
+/// Medium. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType_Medium{
+    .key = "DifficultyValueType.Medium", .kind = pm::sdk::Kind::EnumValue, .owner = "DifficultyValueType",
+    .name = "Medium"};
+/// High. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType_High{
+    .key = "DifficultyValueType.High", .kind = pm::sdk::Kind::EnumValue, .owner = "DifficultyValueType",
+    .name = "High"};
+/// VeryHigh. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType_VeryHigh{
+    .key = "DifficultyValueType.VeryHigh", .kind = pm::sdk::Kind::EnumValue, .owner = "DifficultyValueType",
+    .name = "VeryHigh"};
+
+inline constexpr const char* FuseBoxValueType_values[] = {"Broken", "Off", "On"};
+
+/// The custom difficulty's fuse box power numbering, an enum nested in Difficulty: Broken 0, Off 1, On 2.
+/// Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc FuseBoxValueType{.key = "FuseBoxValueType", .owner = "Difficulty",
+                                                     .values = FuseBoxValueType_values};
+
+/// Broken: the fuse box starts broken. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc FuseBoxValueType_Broken{
+    .key = "FuseBoxValueType.Broken", .kind = pm::sdk::Kind::EnumValue, .owner = "FuseBoxValueType", .name = "Broken"};
+/// Off: the fuse box starts off. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc FuseBoxValueType_Off{
+    .key = "FuseBoxValueType.Off", .kind = pm::sdk::Kind::EnumValue, .owner = "FuseBoxValueType", .name = "Off"};
+/// On: the fuse box starts on. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc FuseBoxValueType_On{
+    .key = "FuseBoxValueType.On", .kind = pm::sdk::Kind::EnumValue, .owner = "FuseBoxValueType", .name = "On"};
 
 /// The contract's hunt settings (Assembly-CSharp, global namespace), a MonoBehaviourPun with one static instance.
 /// Decompiled.
@@ -494,6 +666,58 @@ struct Difficulty {
   static constexpr pm::api::Field<pm::map::Difficulty_sprinting, int32_t> sprinting{};
   /// The players' speed factor: playerSpeed.get(d). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Difficulty_playerSpeed, float> playerSpeed{};
+  /// The sanity pill restoration amount: sanityPillRestorationAmount.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_sanityPillRestorationAmount, int32_t>
+      sanityPillRestorationAmount{};
+  /// The players' starting sanity: startingSanity.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_startingSanity, int32_t> startingSanity{};
+  /// The sanity drain: sanityDrain.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_sanityDrain, float> sanityDrain{};
+  /// The flashlights option: flashlights.get(d), .set(d, v). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Difficulty_flashlights, bool> flashlights{};
+  /// The changing favourite room option, a DifficultyValueType number: changingFavouriteRoom.get(d).
+  /// Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_changingFavouriteRoom, int32_t> changingFavouriteRoom{};
+  /// The ghost interaction amount, a DifficultyValueType number: interactionAmount.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_interactionAmount, int32_t> interactionAmount{};
+  /// The event frequency, a DifficultyValueType number: eventFrequency.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_eventFrequency, int32_t> eventFrequency{};
+  /// The hunt duration, a DifficultyValueType number: huntDuration.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_huntDuration, int32_t> huntDuration{};
+  /// The grace period: gracePeriod.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_gracePeriod, int32_t> gracePeriod{};
+  /// The fingerprint chance: fingerprintChance.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_fingerprintChance, float> fingerprintChance{};
+  /// The fingerprint duration: fingerprintDuration.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_fingerprintDuration, int32_t> fingerprintDuration{};
+  /// The option for kills extending the hunt duration, a DifficultyValueType number:
+  /// killsExtendHuntDuration.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_killsExtendHuntDuration, int32_t> killsExtendHuntDuration{};
+  /// The roaming frequency, a DifficultyValueType number: roamingFrequency.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_roamingFrequency, int32_t> roamingFrequency{};
+  /// The ghost speed: ghostSpeed.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_ghostSpeed, float> ghostSpeed{};
+  /// The setup time: setupTime.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_setupTime, int32_t> setupTime{};
+  /// The selected weather, a WeatherValueType number: selectedWeather.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_selectedWeather, int32_t> selectedWeather{};
+  /// The amount of doors open, a DifficultyValueType number: amountOfDoorsOpen.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_amountOfDoorsOpen, int32_t> amountOfDoorsOpen{};
+  /// The amount of hiding places, a DifficultyValueType number: amountOfHidingPlaces.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_amountOfHidingPlaces, int32_t> amountOfHidingPlaces{};
+  /// The sanity monitor option: sanityMonitor.get(d), .set(d, v). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Difficulty_sanityMonitor, bool> sanityMonitor{};
+  /// The activity monitor option: activityMonitor.get(d), .set(d, v). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Difficulty_activityMonitor, bool> activityMonitor{};
+  /// The option for the fuse box showing on the map: fuseBoxVisibleOnMap.get(d), .set(d, v). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Difficulty_fuseBoxVisibleOnMap, bool> fuseBoxVisibleOnMap{};
+  /// The fuse box starting power, a FuseBoxValueType number: fuseBoxStartPower.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_fuseBoxStartPower, int32_t> fuseBoxStartPower{};
+  /// The number of cursed possessions: cursedPossessionsQuantity.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_cursedPossessionsQuantity, int32_t>
+      cursedPossessionsQuantity{};
+  /// The override multiplier: overrideMultiplier.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_overrideMultiplier, float> overrideMultiplier{};
   /// What it multiplies a contract's reward by: GetRewardMultiplier(d). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::Difficulty_GetRewardMultiplier, float(void*)> GetRewardMultiplier{};
 };
@@ -611,6 +835,32 @@ inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_Sunrise> Sunrise{}
 /// BloodMoon(). Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_BloodMoon> BloodMoon{};
 }  // namespace WeatherValueType
+
+/// The custom difficulty's level options' numbering (None 0, Low 1, Medium 2, High 3, VeryHigh 4): the
+/// DifficultyValueType of its changingFavouriteRoom, interactionAmount, eventFrequency, huntDuration,
+/// killsExtendHuntDuration, roamingFrequency, amountOfDoorsOpen and amountOfHidingPlaces options.
+namespace DifficultyValueType {
+/// None(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DifficultyValueType_None> None{};
+/// Low(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DifficultyValueType_Low> Low{};
+/// Medium(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DifficultyValueType_Medium> Medium{};
+/// High(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DifficultyValueType_High> High{};
+/// VeryHigh(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DifficultyValueType_VeryHigh> VeryHigh{};
+}  // namespace DifficultyValueType
+
+/// The custom difficulty's fuse box power: the FuseBoxValueType of its fuseBoxStartPower option.
+namespace FuseBoxValueType {
+/// Broken(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::FuseBoxValueType_Broken> Broken{};
+/// Off(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::FuseBoxValueType_Off> Off{};
+/// On(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::FuseBoxValueType_On> On{};
+}  // namespace FuseBoxValueType
 
 namespace CursedItemType {
 /// The CursedItemType enum type: klass(), is(obj), type_object() and make_array(n). Unresolved: null and false.

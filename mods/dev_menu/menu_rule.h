@@ -55,9 +55,9 @@ inline float next_speed_multiplier(float current, int steps) {
 }
 
 /** The game's timeScale the "tick speed" row cycles to: the next preset above `current`, wrapping to the
- *  first (0 paused, 0.5, 1 real time, 2). A value between presets moves to the next one above it. */
+ *  first (0 paused, 0.25, 0.5, 1 real time, 2, 4). A value between presets moves to the next one above it. */
 inline float next_time_scale(float current) {
-  static constexpr float kScales[] = {0.0f, 0.5f, 1.0f, 2.0f};
+  static constexpr float kScales[] = {0.0f, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
   for (const float s : kScales)
     if (s > current + 0.001f) return s;
   return kScales[0];
@@ -88,6 +88,10 @@ struct Switches {
   // the single player sandbox, and the dev session's save freeze keeps all of it off the save.
   bool unlockAll = false;
   bool freeShop = false;
+  // More ESP: the level's doors (open, shut, locked), hiding places, light switches and fuse box.
+  bool espDoors = false;
+  bool espHiding = false;
+  bool espSwitches = false;
 };
 
 /** The save freeze (the user's ask, 2026-11-12: unlock and free shop without touching the save): once a dev session
@@ -140,7 +144,10 @@ enum class Action {
   FireState,                                      // Ghost: one named attempt (interact, ability, throw)
   GhostToMe,                                      // Ghost: the NavMeshAgent warp to the investigator
   PickRetype, Retype,                             // Ghost: the type, changed now
+  BumpFlames, TypeChangeNow, ChaseMe,             // Ghost: the type's own dials, and the hunt's target
+  MeToTruck,                                      // Player: back to the truck
   SetFriendly, SetLoseEquipment, BumpEvidence, BumpType,  // Difficulty
+  PickOption, StepOption,                         // Difficulty: every custom option, by a picker
   SetSanity, ToggleFreeze, KillLocal, ReviveLocal,  // Player
   BumpPlayerSpeed, ResetPlayerSpeed,              // Player: the game's own speed multiplier
   SetNoclip, MeToGhost, MeToGhostRoom,            // Player: movement
@@ -148,6 +155,7 @@ enum class Action {
   SetGodMode, SetPauseWhenOpen, CycleTimeScale, SetDebugHud, SetEspGhost, SetEspRooms,  // switches
   SetUnlockAll, SetFreeShop,                     // Equipment: the store
   SpawnDummy, DummyAction,                       // Player: the dummy investigator
+  SetEspDoors, SetEspHiding, SetEspSwitches,     // Game: more ESP
   Info,                                          // a read-out: no click
 };
 
@@ -235,6 +243,18 @@ inline Why refuse(Action action, const Can& c) {
       // it while one runs (photon.md, "Do not change a difficulty's friendlyGhost behind the game's back").
       if (!c.difficulty) return Why::NoDifficulty;
       return c.hunting ? Why::Hunting : Why::None;
+    case Action::BumpFlames:     // the Onryo's count of blown-out flames (GhostAI.flamesBlownOut)
+    case Action::TypeChangeNow:  // the game's own moment for the Mimic, Thaye and Obambo (typeChangeDue)
+      if (!c.contract) return Why::NoContract;
+      return c.ghost ? Why::None : Why::NoGhost;
+    case Action::ChaseMe:  // GhostHuntState.SetTarget, the hunt's own call
+      if (!c.contract) return Why::NoContract;
+      if (!c.ghost) return Why::NoGhost;
+      if (!c.player) return Why::NoPlayer;
+      return c.hunting ? Why::None : Why::NotHunting;
+    case Action::MeToTruck:
+      if (!c.contract) return Why::NoContract;
+      return c.player ? Why::None : Why::NoPlayer;
     case Action::PickRetype:  // only the menu's own cursor
       return Why::None;
     case Action::Retype:
@@ -246,6 +266,12 @@ inline Why refuse(Action action, const Can& c) {
       if (!c.contract) return Why::NoContract;
       if (!c.ghost) return Why::NoGhost;
       return c.player ? Why::None : Why::NoPlayer;
+    case Action::PickOption:  // only the menu's own cursor
+      return Why::None;
+    case Action::StepOption:
+      // The friendly switch among them keeps its own rule: never mid-hunt.
+      if (!c.difficulty) return Why::NoDifficulty;
+      return Why::None;
     case Action::SetLoseEquipment:
     case Action::BumpEvidence:
     case Action::BumpType:
@@ -285,6 +311,9 @@ inline Why refuse(Action action, const Can& c) {
     case Action::SetDebugHud:  // the mod's own text on its own canvas: it needs nothing from a contract
     case Action::SetEspGhost:
     case Action::SetEspRooms:
+    case Action::SetEspDoors:
+    case Action::SetEspHiding:
+    case Action::SetEspSwitches:
     case Action::SetUnlockAll:  // the store's own checks; the hooks also ask the sandbox gate each time
     case Action::SetFreeShop:
       return Why::None;

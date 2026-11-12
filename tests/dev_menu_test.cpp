@@ -126,8 +126,10 @@ void the_debug_read_out_is_a_switch_like_the_others() {
 
 void the_tick_speed_row_cycles_the_presets() {
   CHECK(next_time_scale(1.0f) == 2.0f);
-  CHECK(next_time_scale(2.0f) == 0.0f);  // wraps to paused
-  CHECK(next_time_scale(0.0f) == 0.5f);
+  CHECK(next_time_scale(2.0f) == 4.0f);
+  CHECK(next_time_scale(4.0f) == 0.0f);  // wraps to paused
+  CHECK(next_time_scale(0.0f) == 0.25f);
+  CHECK(next_time_scale(0.25f) == 0.5f);
   CHECK(next_time_scale(0.5f) == 1.0f);
   CHECK(next_time_scale(1.3f) == 2.0f);  // between presets: the next above
 }
@@ -322,6 +324,25 @@ void the_dummy_rows_need_a_contract_and_the_dummy() {
     CHECK(refuse(a, Can{.sandbox = true}) == Why::None);
 }
 
+// The custom difficulty's options step on the contract's Difficulty alone; the picker's cursor needs nothing.
+void every_difficulty_option_needs_only_the_difficulty() {
+  CHECK(refuse(Action::PickOption, Can{.sandbox = true}) == Why::None);
+  CHECK(refuse(Action::StepOption, Can{.sandbox = true}) == Why::NoDifficulty);
+  CHECK(refuse(Action::StepOption, Can{.sandbox = true, .difficulty = true}) == Why::None);
+}
+
+// The hunt's target can be pointed only at a hunt that runs; the type's dials need only the ghost.
+void the_hunt_target_row_needs_a_hunt() {
+  const Can quiet{.sandbox = true, .contract = true, .ghost = true, .player = true};
+  CHECK(refuse(Action::ChaseMe, quiet) == Why::NotHunting);
+  CHECK(refuse(Action::BumpFlames, quiet) == Why::None);
+  CHECK(refuse(Action::TypeChangeNow, quiet) == Why::None);
+  CHECK(refuse(Action::MeToTruck, quiet) == Why::None);
+  const Can hunting{.sandbox = true, .contract = true, .ghost = true, .player = true, .hunting = true};
+  CHECK(refuse(Action::ChaseMe, hunting) == Why::None);
+  CHECK(refuse(Action::MeToTruck, Can{.sandbox = true, .player = true}) == Why::NoContract);
+}
+
 // The weather and the re-type: a contract for both, a difficulty for the weather, and no hunt for the re-type.
 void the_weather_and_type_rows_follow_the_contract() {
   const Can menu{.sandbox = true};
@@ -362,6 +383,8 @@ int main() {
   the_store_is_free_only_in_the_sandbox_and_the_save_stays();
   the_weather_and_type_rows_follow_the_contract();
   the_dummy_rows_need_a_contract_and_the_dummy();
+  the_hunt_target_row_needs_a_hunt();
+  every_difficulty_option_needs_only_the_difficulty();
   std::printf(g_failures ? "%d check(s) failed\n" : "all dev menu rule tests passed\n", g_failures);
   return g_failures ? 1 : 0;
 }

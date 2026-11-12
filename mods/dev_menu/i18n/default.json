@@ -24,6 +24,38 @@
   "dev-menu.ghost-type-down": "Previous type", // PM_TEXT_AI
   "dev-menu.ghost-type-up": "Next type", // PM_TEXT_AI
   "dev-menu.reward": "Reward multiplier", // PM_TEXT_AI
+  "dev-menu.option": "Option", // PM_TEXT_AI
+  "dev-menu.option-prev": "Previous option", // PM_TEXT_AI
+  "dev-menu.option-next": "Next option", // PM_TEXT_AI
+  "dev-menu.option-down": "Lower", // PM_TEXT_AI
+  "dev-menu.option-up": "Higher", // PM_TEXT_AI
+  "dev-menu.option.starting-sanity": "Starting sanity", // PM_TEXT_AI
+  "dev-menu.option.pill-restore": "Sanity pill restores", // PM_TEXT_AI
+  "dev-menu.option.sanity-drain": "Sanity drain speed", // PM_TEXT_AI
+  "dev-menu.option.sprinting": "Sprinting", // PM_TEXT_AI
+  "dev-menu.option.player-speed-option": "Player speed", // PM_TEXT_AI
+  "dev-menu.option.flashlights": "Flashlights", // PM_TEXT_AI
+  "dev-menu.option.lose-equipment": "Lose equipment on death", // PM_TEXT_AI
+  "dev-menu.option.ghost-speed": "Ghost speed", // PM_TEXT_AI
+  "dev-menu.option.roaming": "Roaming frequency", // PM_TEXT_AI
+  "dev-menu.option.favourite-room-changes": "Changing favourite room", // PM_TEXT_AI
+  "dev-menu.option.interactions": "Interaction amount", // PM_TEXT_AI
+  "dev-menu.option.events": "Event frequency", // PM_TEXT_AI
+  "dev-menu.option.friendly": "Friendly ghost", // PM_TEXT_AI
+  "dev-menu.option.grace-period": "Grace period", // PM_TEXT_AI
+  "dev-menu.option.hunt-duration": "Hunt duration", // PM_TEXT_AI
+  "dev-menu.option.kills-extend": "Kills extend hunts", // PM_TEXT_AI
+  "dev-menu.option.evidence": "Evidence given", // PM_TEXT_AI
+  "dev-menu.option.fingerprint-chance": "Fingerprint chance", // PM_TEXT_AI
+  "dev-menu.option.fingerprint-duration": "Fingerprint duration", // PM_TEXT_AI
+  "dev-menu.option.setup-time": "Setup time", // PM_TEXT_AI
+  "dev-menu.option.doors-open": "Doors starting open", // PM_TEXT_AI
+  "dev-menu.option.hiding-places": "Number of hiding places", // PM_TEXT_AI
+  "dev-menu.option.sanity-monitor": "Sanity monitor", // PM_TEXT_AI
+  "dev-menu.option.activity-monitor": "Activity monitor", // PM_TEXT_AI
+  "dev-menu.option.fusebox-power": "Fuse box at start", // PM_TEXT_AI
+  "dev-menu.option.fusebox-on-map": "Fuse box visible on map", // PM_TEXT_AI
+  "dev-menu.option.cursed-quantity": "Cursed possessions", // PM_TEXT_AI
   "dev-menu.unlock-door": "Unlock the main door", // PM_TEXT_AI
   "dev-menu.weather": "Weather now", // PM_TEXT_AI
   "dev-menu.weather-pick": "Weather to change to", // PM_TEXT_AI
@@ -84,6 +116,12 @@
   "dev-menu.why.dead": "you are already dead", // PM_TEXT_AI
   "dev-menu.why.no-truck": "this level has no truck to leave in", // PM_TEXT_AI
   "dev-menu.evidence-given": "Evidence this contract gives", // PM_TEXT_AI
+  "dev-menu.type-dials": "Type dials", // PM_TEXT_AI
+  "dev-menu.flames-more": "One more blown-out flame (Onryo)", // PM_TEXT_AI
+  "dev-menu.flames-clear": "Clear the blown-out flames", // PM_TEXT_AI
+  "dev-menu.type-change-now": "Run the type's change now (Mimic, Thaye, Obambo)", // PM_TEXT_AI
+  "dev-menu.chase-me": "Make the hunt go for you", // PM_TEXT_AI
+  "dev-menu.me-to-truck": "Teleport to the truck", // PM_TEXT_AI
   "dev-menu.retype-pick": "Type to change it to", // PM_TEXT_AI
   "dev-menu.retype-prev": "Previous type", // PM_TEXT_AI
   "dev-menu.retype-next": "Next type", // PM_TEXT_AI
@@ -107,6 +145,19 @@
   "dev-menu.free-shop": "Free shop", // PM_TEXT_AI
   "dev-menu.esp-ghost": "ESP: ghost", // PM_TEXT_AI
   "dev-menu.esp-rooms": "ESP: room names", // PM_TEXT_AI
+  "dev-menu.esp-doors": "ESP: doors", // PM_TEXT_AI
+  "dev-menu.esp-hiding": "ESP: hiding places", // PM_TEXT_AI
+  "dev-menu.esp-switches": "ESP: light switches and fuse box", // PM_TEXT_AI
+  "dev-menu.esp.door": "Door", // PM_TEXT_AI
+  "dev-menu.esp.door-open": "open", // PM_TEXT_AI
+  "dev-menu.esp.door-shut": "shut", // PM_TEXT_AI
+  "dev-menu.esp.door-locked": "locked", // PM_TEXT_AI
+  "dev-menu.esp.hiding": "Hiding place", // PM_TEXT_AI
+  "dev-menu.esp.switch": "Light", // PM_TEXT_AI
+  "dev-menu.esp.fusebox": "Fuse box", // PM_TEXT_AI
+  "dev-menu.hud.weather": "Weather", // PM_TEXT_AI
+  "dev-menu.hud.dials": "Type dials", // PM_TEXT_AI
+  "dev-menu.hud.dummy": "Dummy", // PM_TEXT_AI
   "dev-menu.esp.ghost": "Ghost", // PM_TEXT_AI
   "dev-menu.hud.room": "Room now / favourite", // PM_TEXT_AI
   "dev-menu.hud.evidence": "Evidence", // PM_TEXT_AI

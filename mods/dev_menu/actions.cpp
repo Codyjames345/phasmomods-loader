@@ -6,6 +6,7 @@
 #include "dummy.h"
 
 #include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <random>
 #include <type_traits>
@@ -17,6 +18,7 @@
 #include "hooks.h"
 #include "log.h"
 #include "runtime.h"
+#include "text_table.h"
 
 #include "Difficulty.h"
 #include "Equipment.h"
@@ -891,6 +893,175 @@ bool retype(int32_t type) {
   return true;
 }
 
+// ---- The custom difficulty's options, live (the user's first ask: every option, changeable mid-contract) ----
+
+namespace {
+
+enum class OptionKind { Bool, Int, Float, Level, Fuse };
+
+struct Option {
+  const char* label;  // the option's text key
+  OptionKind kind;
+  float step;         // the menu's step, not the game's: the game's own menu sets these by its sliders
+  float (*get)(void* d);
+  void (*put)(void* d, float v);
+};
+
+const std::vector<Option>& options() {
+  static const std::vector<Option> table = {
+      {pm::i18n::key("dev-menu.option.starting-sanity"), OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::startingSanity.get(d)); },
+       [](void* d, float v) { Difficulty::startingSanity.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.pill-restore"), OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::sanityPillRestorationAmount.get(d)); },
+       [](void* d, float v) { Difficulty::sanityPillRestorationAmount.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.sanity-drain"), OptionKind::Float, 0.25f, [](void* d) { return Difficulty::sanityDrain.get(d); },
+       [](void* d, float v) { Difficulty::sanityDrain.set(d, v); }},
+      {pm::i18n::key("dev-menu.option.sprinting"), OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::sprinting.get(d)); },
+       [](void* d, float v) { Difficulty::sprinting.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.player-speed-option"), OptionKind::Float, 0.25f, [](void* d) { return Difficulty::playerSpeed.get(d); },
+       [](void* d, float v) { Difficulty::playerSpeed.set(d, v); }},
+      {pm::i18n::key("dev-menu.option.flashlights"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::flashlights.get(d) ? 1.0f : 0.0f; },
+       [](void* d, float v) { Difficulty::flashlights.set(d, v > 0.5f); }},
+      {pm::i18n::key("dev-menu.option.lose-equipment"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::loseItemsOnDeath.get(d) ? 1.0f : 0.0f; },
+       [](void* d, float v) { Difficulty::loseItemsOnDeath.set(d, v > 0.5f); }},
+      {pm::i18n::key("dev-menu.option.ghost-speed"), OptionKind::Float, 0.25f, [](void* d) { return Difficulty::ghostSpeed.get(d); },
+       [](void* d, float v) { Difficulty::ghostSpeed.set(d, v); }},
+      {pm::i18n::key("dev-menu.option.roaming"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::roamingFrequency.get(d)); },
+       [](void* d, float v) { Difficulty::roamingFrequency.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.favourite-room-changes"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::changingFavouriteRoom.get(d)); },
+       [](void* d, float v) { Difficulty::changingFavouriteRoom.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.interactions"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::interactionAmount.get(d)); },
+       [](void* d, float v) { Difficulty::interactionAmount.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.events"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::eventFrequency.get(d)); },
+       [](void* d, float v) { Difficulty::eventFrequency.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.friendly"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::friendlyGhost.get(d) ? 1.0f : 0.0f; },
+       [](void* d, float v) { Difficulty::friendlyGhost.set(d, v > 0.5f); }},
+      {pm::i18n::key("dev-menu.option.grace-period"), OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::gracePeriod.get(d)); },
+       [](void* d, float v) { Difficulty::gracePeriod.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.hunt-duration"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::huntDuration.get(d)); },
+       [](void* d, float v) { Difficulty::huntDuration.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.kills-extend"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::killsExtendHuntDuration.get(d)); },
+       [](void* d, float v) { Difficulty::killsExtendHuntDuration.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.evidence"), OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::evidenceGiven.get(d)); },
+       [](void* d, float v) { Difficulty::evidenceGiven.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.fingerprint-chance"), OptionKind::Float, 0.1f, [](void* d) { return Difficulty::fingerprintChance.get(d); },
+       [](void* d, float v) { Difficulty::fingerprintChance.set(d, v); }},
+      {pm::i18n::key("dev-menu.option.fingerprint-duration"), OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::fingerprintDuration.get(d)); },
+       [](void* d, float v) { Difficulty::fingerprintDuration.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.setup-time"), OptionKind::Int, 30.0f, [](void* d) { return static_cast<float>(Difficulty::setupTime.get(d)); },
+       [](void* d, float v) { Difficulty::setupTime.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.doors-open"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::amountOfDoorsOpen.get(d)); },
+       [](void* d, float v) { Difficulty::amountOfDoorsOpen.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.hiding-places"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::amountOfHidingPlaces.get(d)); },
+       [](void* d, float v) { Difficulty::amountOfHidingPlaces.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.sanity-monitor"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::sanityMonitor.get(d) ? 1.0f : 0.0f; },
+       [](void* d, float v) { Difficulty::sanityMonitor.set(d, v > 0.5f); }},
+      {pm::i18n::key("dev-menu.option.activity-monitor"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::activityMonitor.get(d) ? 1.0f : 0.0f; },
+       [](void* d, float v) { Difficulty::activityMonitor.set(d, v > 0.5f); }},
+      {pm::i18n::key("dev-menu.option.fusebox-power"), OptionKind::Fuse, 1.0f, [](void* d) { return static_cast<float>(Difficulty::fuseBoxStartPower.get(d)); },
+       [](void* d, float v) { Difficulty::fuseBoxStartPower.set(d, static_cast<int32_t>(std::lround(v))); }},
+      {pm::i18n::key("dev-menu.option.fusebox-on-map"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::fuseBoxVisibleOnMap.get(d) ? 1.0f : 0.0f; },
+       [](void* d, float v) { Difficulty::fuseBoxVisibleOnMap.set(d, v > 0.5f); }},
+      {pm::i18n::key("dev-menu.option.cursed-quantity"), OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::cursedPossessionsQuantity.get(d)); },
+       [](void* d, float v) { Difficulty::cursedPossessionsQuantity.set(d, static_cast<int32_t>(std::lround(v))); }},
+  };
+  return table;
+}
+
+// The highest number of the two option enums, from the game's own value names (the map), so an update that adds a
+// level still reaches it.
+float top_of(OptionKind kind) {
+  if (kind == OptionKind::Level) return static_cast<float>(DifficultyValueType::VeryHigh());
+  if (kind == OptionKind::Fuse) return static_cast<float>(FuseBoxValueType::On());
+  return 0.0f;
+}
+
+}  // namespace
+
+int option_count() { return static_cast<int>(options().size()); }
+
+const char* option_label(int index) {
+  return index >= 0 && index < option_count() ? options()[index].label : "";
+}
+
+std::string option_value(int index) {
+  void* d = difficulty();
+  if (!d || index < 0 || index >= option_count()) return {};
+  const Option& o = options()[index];
+  const float v = o.get(d);
+  if (o.kind == OptionKind::Bool) return v > 0.5f ? "on" : "off";
+  if (o.kind == OptionKind::Float) {
+    char buf[32];
+    std::snprintf(buf, sizeof buf, "%.2f", static_cast<double>(v));
+    return buf;
+  }
+  return std::to_string(static_cast<int>(std::lround(v)));
+}
+
+void option_step(int index, int direction) {
+  void* d = difficulty();
+  if (!d || index < 0 || index >= option_count() || direction == 0) return;
+  const Option& o = options()[index];
+  float v = o.get(d);
+  switch (o.kind) {
+    case OptionKind::Bool: v = v > 0.5f ? 0.0f : 1.0f; break;
+    case OptionKind::Level:
+    case OptionKind::Fuse: {
+      const float top = top_of(o.kind);
+      v += static_cast<float>(direction);
+      if (v < 0.0f) v = top;  // the enum's levels wrap, as a picker's do
+      if (v > top) v = 0.0f;
+      break;
+    }
+    default:
+      v += o.step * static_cast<float>(direction);
+      if (v < 0.0f) v = 0.0f;  // the menu's floor: none of these options means anything below nothing
+      break;
+  }
+  o.put(d, v);
+}
+
+// ---- The type's own dials ----
+
+std::string type_dials() {
+  void* ai = game::ghost_ai();
+  void* c = controller();
+  if (!ai || !c) return {};
+  std::string out = "flames " + std::to_string(GhostAI::flamesBlownOut.get(ai));
+  out += ", thaye " + std::to_string(GhostController::thayeStep.get(c)) + " (" +
+         std::to_string(GhostController::thayeThreshold.get(c)) + ")";
+  out += ", gallu " + std::to_string(GhostController::galluState.get(c));
+  out += ", dayan " + std::to_string(GhostController::dayanState.get(c));
+  if (GhostAI::interactionBoost.get(ai)) out += ", boost";
+  void* banshee = GhostAI::bansheeTarget.get(ai);
+  if (banshee) out += banshee == game::local_player() ? ", banshee: you" : ", banshee: other";
+  return out;
+}
+
+void bump_flames(int delta) {
+  void* ai = game::ghost_ai();
+  if (!ai) return;
+  // The Onryo's hunt reads the count at its idle check (above 2: it hunts); 0 clears it as the game does.
+  const int32_t n = delta == 0 ? 0 : GhostAI::flamesBlownOut.get(ai) + delta;
+  GhostAI::flamesBlownOut.set(ai, n < 0 ? 0 : n);
+}
+
+void type_change_now() {
+  // The game's own moment: AttemptGhostTypeStateChange runs at the ghost's next state change and, with this set,
+  // runs the identity's change (the Mimic's copy, the Thaye's ageing, the Obambo's switch); any other type ignores it.
+  void* c = controller();
+  if (c) GhostController::typeChangeDue.set(c, true);
+}
+
+bool chase_me() {
+  void* ai = game::ghost_ai();
+  void* player = game::local_player();
+  void* machine = ai ? GhostAI::stateMachine.get(ai) : nullptr;
+  void* state = machine ? GhostStateMachine::current.get(machine) : nullptr;
+  if (!state || !player || !GhostHuntState::type.is(state)) return false;
+  GhostHuntState::SetTarget(state, player);
+  return true;
+}
+
 // ---- Weather: the Monkey Paw's transition, and the difficulty's weather with it ----
 
 namespace {
@@ -1033,6 +1204,15 @@ bool me_to_ghost_room() {
     if (on_mesh(b.center, b.extents.y + 2.0f, floor)) return stand_at(floor);
   }
   return false;
+}
+
+bool me_to_truck() {
+  // The truck is where the scene's ExitLevel (the lift) stands.
+  void* lift = exit_level();
+  void* t = lift ? game::transform_of(lift) : nullptr;
+  Vector3 floor{};
+  if (!t || !on_mesh(game::position(t), 6.0f, floor)) return false;
+  return stand_at(floor);
 }
 
 bool ghost_to_me() {

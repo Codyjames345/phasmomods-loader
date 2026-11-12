@@ -2,17 +2,25 @@
 // It only reads the game, through actions.h, and changes nothing in it.
 #include "overlay.h"
 
+#include <windows.h>
+
 #include <cstdio>
 #include <string>
 #include <vector>
 
 #include "Camera.h"
+#include "ClosetZone.h"
+#include "Door.h"
+#include "LevelController.h"
+#include "LightSwitch.h"
+#include "UnityObject.h"
 #include "UnityUI.h"
 #include "actions.h"
 #include "dummy.h"
 #include "game.h"
 #include "held.h"
 #include "log.h"
+#include "runtime.h"
 #include "text_table.h"
 #include "ui.h"
 
@@ -39,16 +47,42 @@ constexpr const char* kOnKey = i18n::key("dev-menu.on");
 constexpr const char* kOffKey = i18n::key("dev-menu.off");
 constexpr const char* kEspGhostKey = i18n::key("dev-menu.esp.ghost");
 constexpr const char* kEspDummyKey = i18n::key("dev-menu.esp.dummy");
+constexpr const char* kWeatherKey = i18n::key("dev-menu.hud.weather");
+constexpr const char* kDialsKey = i18n::key("dev-menu.hud.dials");
+constexpr const char* kHudDummyKey = i18n::key("dev-menu.hud.dummy");
+constexpr const char* kEspDoorKey = i18n::key("dev-menu.esp.door");
+constexpr const char* kEspDoorOpenKey = i18n::key("dev-menu.esp.door-open");
+constexpr const char* kEspDoorShutKey = i18n::key("dev-menu.esp.door-shut");
+constexpr const char* kEspDoorLockedKey = i18n::key("dev-menu.esp.door-locked");
+constexpr const char* kEspHidingKey = i18n::key("dev-menu.esp.hiding");
+constexpr const char* kEspSwitchKey = i18n::key("dev-menu.esp.switch");
+constexpr const char* kEspFuseboxKey = i18n::key("dev-menu.esp.fusebox");
 
 const ui::Color kText{0.92f, 0.92f, 0.92f, 1.0f};
 const ui::Color kGhostColour{1.0f, 0.35f, 0.35f, 1.0f};
 const ui::Color kRoomColour{0.55f, 0.85f, 1.0f, 1.0f};
 const ui::Color kDummyColour{0.55f, 1.0f, 0.55f, 1.0f};
+const ui::Color kDoorColour{1.0f, 0.8f, 0.4f, 1.0f};
+const ui::Color kHidingColour{0.8f, 0.6f, 1.0f, 1.0f};
+const ui::Color kSwitchColour{1.0f, 1.0f, 0.6f, 1.0f};
 
 api::Held g_canvas;            // one canvas carries the HUD text and the ESP labels, over the game's own HUD
 void* g_hud = nullptr;         // the debug read-out's single text
 std::vector<void*> g_labels;   // the ESP text pool, grown as needed and switched off when unused
 bool g_canvasTold = false;     // a canvas that cannot be made is worth one log, not one every frame
+
+// A scene search for every door, hiding place, switch or fuse box is costly, so each kind's objects are
+// held between searches and re-found at most every kEspScanMs, and only while that kind's switch is on.
+// A cached object a scene change destroyed is skipped, and the next scan replaces it.
+constexpr uint64_t kEspScanMs = 2000;
+struct EspCache {
+  std::vector<api::Held> items;
+  uint64_t nextScan = 0;
+};
+EspCache g_doors;
+EspCache g_hiding;
+EspCache g_lights;
+EspCache g_fuseboxes;
 
 std::string number(float v) {
   char buf[32];
@@ -75,6 +109,9 @@ std::string hud_text() {
   add(kPlayerSpeedKey, number(actions::speed_multiplier()));
   add(kClockKey, number(actions::time_scale()));
   add(kNoclipKey, i18n::text(actions::switches().noclip ? kOnKey : kOffKey));
+  add(kWeatherKey, actions::weather_now());
+  add(kDialsKey, actions::type_dials());
+  add(kHudDummyKey, i18n::text(dummy::available() ? kOnKey : kOffKey));
   return out;
 }
 
@@ -102,11 +139,37 @@ void place_label(void* camera, float scale, const Vector3& world, float above, f
   ui::set_active(t, true);
 }
 
+// Refinds the cache's objects of the System.Type `type` when its scan is due (`now` from
+// GetTickCount64). Objects the game keeps switched off are left out. The type being unresolved only
+// leaves the cache empty; every member then answers its unresolved default.
+void esp_rescan(EspCache& cache, void* type, uint64_t now) {
+  if (now < cache.nextScan) return;
+  cache.nextScan = now + kEspScanMs;
+  cache.items.clear();
+  const api::RefArray found{type ? phasmo::Object::FindAllOfType(type, false) : nullptr};
+  for (size_t i = 0; i < found.size(); ++i)
+    if (void* o = found[i]; game::alive(o)) cache.items.emplace_back(o);
+}
+
+// Draws one ESP label per live cached object, `above` metres over its own transform, its text made from
+// the object by `make_text`.
+template <typename Text>
+void esp_labels(EspCache& cache, void* camera, float scale, float above, float width, float height,
+                const ui::Color& colour, size_t& used, Text make_text) {
+  for (const api::Held& item : cache.items) {
+    void* o = item.get();
+    if (!game::alive(o)) continue;
+    void* t = game::transform_of(o);
+    if (!t) continue;
+    place_label(camera, scale, game::position(t), above, width, height, make_text(o), colour, used);
+  }
+}
+
 }  // namespace
 
 void tick() {
   const auto& s = actions::switches();
-  if (!s.debugHud && !s.espGhost && !s.espRooms) {
+  if (!s.debugHud && !s.espGhost && !s.espRooms && !s.espDoors && !s.espHiding && !s.espSwitches) {
     if (g_canvas && game::alive(g_canvas)) ui::set_active(g_canvas, false);
     return;
   }
@@ -127,13 +190,13 @@ void tick() {
 
   if (s.debugHud) {
     if (!g_hud || !game::alive(g_hud)) {
-      // The box is taller than the menu's old read-out and starts lower so eleven lines grow downward from
-      // the same top edge.
+      // The box is taller than the menu's old read-out and starts lower so fourteen lines grow downward
+      // from the same top edge.
       g_hud = ui::create_text(g_canvas, "pm dev menu hud text", 22.0f);
       if (g_hud) {
         ui::set_color(g_hud, kText);
         ui::set_alignment(g_hud, ui::Align::TopLeft);
-        ui::place(g_hud, {0.0f, 0.5f}, {0.0f, 0.5f}, {-930.0f, 375.0f}, {860.0f, 260.0f});
+        ui::place(g_hud, {0.0f, 0.5f}, {0.0f, 0.5f}, {-930.0f, 335.0f}, {860.0f, 340.0f});
       }
     }
     if (g_hud) {
@@ -171,6 +234,38 @@ void tick() {
                                                     actions::room_name(i), kRoomColour, used);
       }
     }
+    // Doors, hiding places and switches come from the cached scene searches: each kind is re-found at
+    // most every kEspScanMs, and only while its switch is on.
+    const uint64_t now = GetTickCount64();
+    if (s.espDoors) {
+      esp_rescan(g_doors, phasmo::Door::type.type_object(), now);
+      esp_labels(g_doors, camera, scale, 1.0f, 260.0f, 32.0f, kDoorColour, used, [](void* door) {
+        std::string text = i18n::text(kEspDoorKey) + " " +
+                           i18n::text(phasmo::Door::closed.get(door) ? kEspDoorShutKey : kEspDoorOpenKey);
+        if (phasmo::Door::locked.get(door)) text += ", " + i18n::text(kEspDoorLockedKey);
+        return text;
+      });
+    }
+    if (s.espHiding) {
+      esp_rescan(g_hiding, phasmo::ClosetZone::type.type_object(), now);
+      esp_labels(g_hiding, camera, scale, 0.5f, 300.0f, 32.0f, kHidingColour, used,
+                 [](void*) { return i18n::text(kEspHidingKey); });
+    }
+    if (s.espSwitches) {
+      // The fuse box shares the switch's ESP and its colour: one switch shows all the level's electrics.
+      esp_rescan(g_lights, phasmo::LightSwitch::type.type_object(), now);
+      esp_rescan(g_fuseboxes, phasmo::FuseBox::type.type_object(), now);
+      // get_IsSwitchOn is what the phasmo::LightSwitch wrapper answers for "is it on"; the wrapper does
+      // not expose the map's get_isOn, which additionally requires the switch's fuse not blown.
+      esp_labels(g_lights, camera, scale, 0.2f, 200.0f, 30.0f, kSwitchColour, used, [](void* light) {
+        return i18n::text(kEspSwitchKey) + " " +
+               i18n::text(phasmo::LightSwitch::get_IsSwitchOn(light) ? kOnKey : kOffKey);
+      });
+      esp_labels(g_fuseboxes, camera, scale, 0.2f, 260.0f, 32.0f, kSwitchColour, used, [](void* box) {
+        return i18n::text(kEspFuseboxKey) + " " +
+               i18n::text(phasmo::FuseBox::powerOn.get(box) ? kOnKey : kOffKey);
+      });
+    }
   }
   // Whatever the pool holds past what this frame drew is not wanted now, ESP off or camera missing alike.
   for (size_t i = used; i < g_labels.size(); ++i) {
@@ -183,6 +278,11 @@ void destroy() {
   g_canvas = nullptr;
   g_hud = nullptr;
   g_labels.clear();
+  g_doors.items.clear();
+  g_hiding.items.clear();
+  g_lights.items.clear();
+  g_fuseboxes.items.clear();
+  g_doors.nextScan = g_hiding.nextScan = g_lights.nextScan = g_fuseboxes.nextScan = 0;
 }
 
 }  // namespace pm::devmenu::overlay
