@@ -10,6 +10,7 @@
 #include "keybinds.h"
 #include "log.h"
 #include "menu.h"
+#include "overlay.h"
 #include "mod_glue.h"
 #include "text_table.h"
 #include "ui.h"
@@ -59,6 +60,8 @@ void tick() {
   // Defensive: whatever happens to the room state, the menu never shows outside the single player sandbox.
   if (menu::is_open() && !actions::can_open()) menu::close();
   menu::tick();
+  actions::tick();  // the sanity lock and noclip's rig, menu open or not
+  overlay::tick();  // the debug HUD and ESP stay up while the menu is closed
 }
 
 }  // namespace
@@ -77,6 +80,7 @@ extern "C" __declspec(dllexport) void pmmod_tick() {
 extern "C" __declspec(dllexport) void pmmod_stop() {
   pm::mod::guarded_stop(pm::devmenu::g_running, [] {
     pm::devmenu::menu::destroy();
+    pm::devmenu::overlay::destroy();
     pm::devmenu::actions::stop();
     pm::api::keys::clear_keys();
   });

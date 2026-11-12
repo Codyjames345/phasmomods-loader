@@ -68,6 +68,17 @@ inline constexpr pm::sdk::EntryDesc Player_isDead{.key = "Player.isDead", .kind 
                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Player",
                                                   .type = "bool", .facts = Player_isDead_facts};
 
+// The death start's RPC marks the victim dying on every client; of Player's bools it stores only this one.
+inline constexpr pm::sdk::Fact Player_dying_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "Player.NotifyOfDeathStart"}};
+
+/// Whether the investigator is dying: a kill has started (Player.NotifyOfDeathStart sets it on every client) and has
+/// not finished. Player.FinishPlayerRevive clears it with isDead. The Revive RPC accepts a player dead or dying, and
+/// the Monkey Paw's wish kills only a wisher neither dead nor dying (sdk/systems/players.md). Decompiled.
+inline constexpr pm::sdk::EntryDesc Player_dying{.key = "Player.dying", .kind = pm::sdk::Kind::Field,
+                                                 .confidence = pm::sdk::Confidence::Decompiled, .owner = "Player",
+                                                 .type = "bool", .facts = Player_dying_facts};
+
 inline constexpr const char* DeathType_values[] = {"HangedMan", "SnappedNeck"};
 
 /// The kinds of death a kill gives (Player.BeginDeathSequence's argument), an enum (name obfuscated, value names
@@ -208,6 +219,30 @@ inline constexpr pm::sdk::EntryDesc FirstPersonController_EnableMovement{
     .key = "FirstPersonController.EnableMovement", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "FirstPersonController", .name = "EnableMovement",
     .params = FirstPersonController_bool};
+
+/// The investigator's physical step on PC (Assembly-CSharp, global namespace), a MonoBehaviour beside the
+/// FirstPersonController, which holds it. Decompiled: its FixedUpdate is the whole physical step. It copies its
+/// transform's position to its Rigidbody, runs its passes that push the capsule out of what it overlaps and
+/// slide it along what it meets, applies gravity (Physics.gravity scaled by its gravity multiplier) while it is
+/// not grounded, and then writes the Rigidbody's position and rotation back to its transform and zeroes the
+/// Rigidbody's velocities. So a write to its transform's position is where the next step starts (a teleport), and
+/// while the behaviour is disabled nothing moves the investigator but such writes: no walls, floors or gravity.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController{.key = "PhysicsCharacterController",
+                                                               .confidence = pm::sdk::Confidence::Decompiled,
+                                                               .name = "PhysicsCharacterController",
+                                                               .assembly = "Assembly-CSharp", .ns = ""};
+
+inline constexpr const char* PhysicsCharacterController_Move_params[] = {"Vector3"};
+
+/// Move(displacement): the walk the controller is asked for this frame, in metres. Decompiled: it stores the
+/// displacement divided by Time.deltaTime as the velocity the next FixedUpdate applies, and sets the flag that
+/// step reads; it moves nothing itself. The FirstPersonController calls it from its movement each frame with
+/// the walk or sprint the player's input gives (the rig's speed multiplier included), and the VR rig's
+/// physics move provider calls it too. A mod hooks it to read or replace the frame's walk.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_Move{
+    .key = "PhysicsCharacterController.Move", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PhysicsCharacterController", .name = "Move",
+    .params = PhysicsCharacterController_Move_params};
 
 /// The player's journal: Player's one JournalController field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc Player_journal{.key = "Player.journal", .kind = pm::sdk::Kind::Field, .owner = "Player",
@@ -501,7 +536,10 @@ inline constexpr const char* Player_RevivePlayer_params[] = {"bool"};
 /// the revive animation. With the flag set it also sends `SendRemoveHighPriestess` to the master client.
 /// Its two callers pass false, both on the master: the Monkey Paw's revive wish (MonkeyPaw.ReviveWish), on
 /// the first dead player who is not the wisher, and the High Priestess card's coroutine
-/// (TarotCards.HighPriestess), on the player that card chose (sdk/systems/players.md). Decompiled.
+/// (TarotCards.HighPriestess), on the player that card chose (sdk/systems/players.md). The Revive RPC's body
+/// refuses, with the game's report on the sender even offline, unless a list held by LevelValues contains one
+/// of two values (very likely the contract's cursed possessions: the paw or the cards) and the player is
+/// marked dead or dying; never call it where the game itself would not. Decompiled.
 inline constexpr pm::sdk::EntryDesc Player_RevivePlayer{.key = "Player.RevivePlayer", .kind = pm::sdk::Kind::Method,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Player", .name = "RevivePlayer",
@@ -1148,6 +1186,8 @@ struct Player {
   static constexpr pm::api::Type<pm::map::Player> type{};
   /// Whether it is dead: isDead.get(player). Unresolved: reads false, writes nothing.
   static constexpr pm::api::Field<pm::map::Player_isDead, bool> isDead{};
+  /// Whether a kill of it has started and not finished: dying.get(player). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Player_dying, bool> dying{};
   /// The closet it hides in, or null: closet.get(player). Unresolved: null.
   static constexpr pm::api::Field<pm::map::Player_closet, void*> closet{};
   /// Its body object, a GameObject: body.get(player). Unresolved: null.
@@ -1233,6 +1273,16 @@ struct FirstPersonController {
   static constexpr pm::api::Type<pm::map::FirstPersonController> type{};
   /// EnableMovement(fpc, on): the walk-and-look switch. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::FirstPersonController_EnableMovement, void(void*, bool)> EnableMovement{};
+};
+
+/// The investigator's physical step on PC: walls, floors and gravity. `controller` below is the
+/// PhysicsCharacterController, found on the local rig with Component.GetComponentInChildren.
+struct PhysicsCharacterController {
+  /// The type: klass(), is(obj), type_object() for GetComponent. Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::PhysicsCharacterController> type{};
+  /// Move(controller, displacement): the frame's walk, in metres; the next physical step applies it. A mod
+  /// hooks it to read or replace the walk. Local only. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_Move, void(void*, Vector3)> Move{};
 };
 
 /// The body's animation scripts.

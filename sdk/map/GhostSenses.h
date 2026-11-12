@@ -146,6 +146,8 @@ inline constexpr pm::api::EnumValue<pm::map::NoiseKind_CrouchFootstep> CrouchFoo
 
 /// A part of a player the ghost's sight can see.
 struct PlayerLOSTarget {
+  /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::PlayerLOSTarget> type{};
   /// Its player: player.get(target). Unresolved: null.
   static constexpr pm::api::Field<pm::map::PlayerLOSTarget_player, void*> player{};
 };

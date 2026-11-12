@@ -54,6 +54,60 @@ inline constexpr pm::sdk::EntryDesc Equipment_placed{
 inline constexpr pm::sdk::EntryDesc StoreItem{.key = "StoreItem", .confidence = pm::sdk::Confidence::Decompiled,
                                               .name = "StoreItem", .assembly = "Assembly-CSharp", .ns = ""};
 
+// Of the item's look-alike bool() methods, only the unlock check is called by the lobby's add check.
+inline constexpr pm::sdk::Fact StoreItem_IsUnlocked_facts[] = {
+    {.is = pm::sdk::Fact::Is::CalledBy, .method = "InventoryEquipment.CanAddToLobby"}};
+
+/// Whether the item (this tier of it) is unlocked: the store's one unlock check (name obfuscated), asked by the store's
+/// buy and sell, the lobby's add, the loadouts, the tiers' status and the tier achievements. Decompiled: true in a mode
+/// that unlocks everything, otherwise the level check (StoreItem.MeetsLevel) and a bool the save keeps for the item's
+/// name and tier. A mod hooks it to show items unlocked without touching the save.
+inline constexpr pm::sdk::EntryDesc StoreItem_IsUnlocked{
+    .key = "StoreItem.IsUnlocked", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "StoreItem", .type = "bool", .facts = StoreItem_IsUnlocked_facts};
+
+// The level check is the bool() the unlock check calls.
+inline constexpr pm::sdk::Fact StoreItem_MeetsLevel_facts[] = {
+    {.is = pm::sdk::Fact::Is::CalledBy, .method = "StoreItem.IsUnlocked"}};
+
+/// Whether the player's level reaches the item's required level (name obfuscated). Decompiled: true in the
+/// everything-unlocked mode, otherwise the level the save keeps against the item's required level.
+inline constexpr pm::sdk::EntryDesc StoreItem_MeetsLevel{
+    .key = "StoreItem.MeetsLevel", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "StoreItem", .type = "bool", .facts = StoreItem_MeetsLevel_facts};
+
+inline constexpr const char* StoreItem_CanAfford_params[] = {"int"};
+
+// Of the item's bool(int) methods, the purchase calls only this one.
+inline constexpr pm::sdk::Fact StoreItem_CanAfford_facts[] = {
+    {.is = pm::sdk::Fact::Is::CalledBy, .method = "StoreEquipment.Buy"}};
+
+/// Whether the player can buy an amount of the item (name obfuscated): StoreEquipment.Buy's own check before it
+/// spends. Decompiled: the money the save keeps covers the amount times the cost, and the owned amount stays under
+/// 1000.
+inline constexpr pm::sdk::EntryDesc StoreItem_CanAfford{
+    .key = "StoreItem.CanAfford", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "StoreItem", .type = "bool", .params = StoreItem_CanAfford_params, .facts = StoreItem_CanAfford_facts};
+
+/// One item's place in the store's screen (Assembly-CSharp, global namespace). Decompiled.
+inline constexpr pm::sdk::EntryDesc StoreEquipment{.key = "StoreEquipment", .confidence = pm::sdk::Confidence::Decompiled,
+                                                   .name = "StoreEquipment", .assembly = "Assembly-CSharp", .ns = ""};
+
+inline constexpr const char* StoreEquipment_int[] = {"int"};
+
+/// Whether the buy button may be pressed for an amount: the money the save keeps covers it and the owned amount stays
+/// under 1000. The screen sets the button's interactable state from it. Decompiled.
+inline constexpr pm::sdk::EntryDesc StoreEquipment_CanBuy{
+    .key = "StoreEquipment.CanBuy", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "StoreEquipment", .name = "CanBuy", .params = StoreEquipment_int};
+
+/// The purchase: StoreItem.CanAfford, then the save's money less the cost, the owned amount raised
+/// (EquipmentInfo.AddAmountOwned, which saves it), the money challenges and the contract's money-spent count. Every
+/// one of those writes goes through EasySave3. Decompiled.
+inline constexpr pm::sdk::EntryDesc StoreEquipment_Buy{
+    .key = "StoreEquipment.Buy", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "StoreEquipment", .name = "Buy", .params = StoreEquipment_int};
+
 inline constexpr const char* StoreItemTier_values[] = {"One", "Two", "Three"};
 
 // Found by its values' names.
@@ -345,6 +399,18 @@ struct WhiteSage {
 struct StoreItem {
   /// Its tier, a StoreItemTier number: tier.get(storeItem). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::StoreItem_tier, int32_t> tier{};
+  /// IsUnlocked(item): the store's unlock check. A mod hooks it. Unresolved: does nothing, false.
+  static constexpr pm::api::Method<pm::map::StoreItem_IsUnlocked, bool(void*)> IsUnlocked{};
+  /// MeetsLevel(item): the level check. A mod hooks it. Unresolved: does nothing, false.
+  static constexpr pm::api::Method<pm::map::StoreItem_MeetsLevel, bool(void*)> MeetsLevel{};
+  /// CanAfford(item, amount): the purchase's own money check. A mod hooks it. Unresolved: does nothing, false.
+  static constexpr pm::api::Method<pm::map::StoreItem_CanAfford, bool(void*, int32_t)> CanAfford{};
+};
+
+/// One item's place in the store's screen. `entry` below is the StoreEquipment.
+struct StoreEquipment {
+  /// CanBuy(entry, amount): whether the buy button may be pressed. A mod hooks it. Unresolved: does nothing, false.
+  static constexpr pm::api::Method<pm::map::StoreEquipment_CanBuy, bool(void*, int32_t)> CanBuy{};
 };
 
 /// The tiers of a store item: compare StoreItem::tier with them.

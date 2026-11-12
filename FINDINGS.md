@@ -35,29 +35,6 @@ reports an entry whose problem is already gone.
   > whether the rows stay (the author's choice on 2026-11-12 was to keep them and fix the cause) and write what
   > you found into sdk/systems/media.md.
 
-## 34. The dev menu has no noclip row, because the character controller's blocking is unmapped
-
-  mods/dev_menu/actions.cpp:1 (no noclip action), sdk/map/Player.h (FirstPersonController, PhysicsCharacterController)
-
-  The user's original brief asks for player cheats "invincibility, speed hacks, noclip"; the speed rows landed
-  (2026-11-12, through `LocalPCPlayer.SetPlayerSpeedMultiplier`), noclip did not. Reading the controller this
-  build (re/out/charcontroller.c) shows why it is not a one-field write: `FirstPersonController` drives a game
-  `PhysicsCharacterController`, whose step sets its Rigidbody's position directly, applies gravity scaled by its
-  own gravity-multiplier float, and then calls a private pass that recomputes the capsule's world centre and
-  hands it on; it also keeps a set of colliders it ignores, filled by its public AddIgnoreCollider. No physics
-  query with a layer mask was found in the step, so which mechanism actually stops the player at a wall is not
-  yet known, and the class's two layer-mask fields and that pass all carry obfuscated names the game shuffles
-  every update, so a map entry for them has to be found by shape rather than by name.
-
-  Prompt:
-  > Prove how the local investigator is stopped by a wall (decompile the controller's step and the pass it calls,
-  > and the thing that pass hands its capsule to), then map what a mod needs as entries found by shape, with
-  > notes and no obfuscated name anywhere (CLAUDE.md, "Obfuscated names are never named"), and check they resolve
-  > with .\tools\gamecheck.ps1 -IfConfigured -Expect. Ask the author first which noclip they want: passing
-  > through walls while still walking on floors, or free flight (the two need different mechanisms, and the game
-  > has no flag for either). Then add the row to the dev menu's Player section with its text as a PM_TEXT_TODO
-  > placeholder, and its rule in menu_rule.h (refuse without a rig).
-
 ## 32. A community mod has only the install folder to live in, which an update may replace
 
   tools/launcher.cpp:525

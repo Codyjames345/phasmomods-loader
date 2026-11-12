@@ -481,3 +481,155 @@ the line.
 Left open, and unproven: `mods/playable_ghost/journal.cpp` adds `RectTransform` itself as a component to a GameObject
 it makes, which has never been proven from the game. It is guarded (`if (!rect) continue;`) and `place` now refuses
 what is not a RectTransform, so it cannot fault; but if Playable Ghost's journal pages go missing, look there first.
+
+## Round 8 (2026-11-12): the revive report, a safety audit, progress protection and the missing features
+
+The user's report: the revive row crashed the game. The game's own log says more: `HACKER DETECTED: ... Revive`, a
+self-report raised through the game's cloud code, then a fault. The decompile of Player's Revive coroutine shows why:
+before its master check it needs a list held by LevelValues to contain 1 or 7 (very likely the Monkey Paw and the tarot
+cards) and the player dead or dying, and otherwise reports the sender. Offline skips only the sender checks. The plan's
+"no RPC can be refused offline" was wrong; corrected in the plan, photon.md, players.md and Player.RevivePlayer's note.
+The only report in the retained logs is this one click.
+
+Safety: the revive row is gone. menu_rule.h now refuses wherever the game's body would: Kill needs a contract (the death
+RPC refuses on the menu's scene) and refuses friendly, dead or mid-hunt; Force hunt refuses on friendly; the Friendly
+switch refuses mid-hunt (photon.md's "behind the game's back"); Appear refuses mid-hunt.
+
+Progress protection was half built: only CheckMissions/CheckChallenges were hooked, so a dev session still paid XP and
+money and could lose equipment. Now hooked, all on the dev session: RewardManager.StartResults (money save, challenges,
+event score; Next does not depend on it, per its decompile), SingleplayerProfile.AddXPAndFunds, and
+InventoryManager.ResetAllEquipment (runs the game's ReturnItemstoInventory instead); consumables are always kept in a
+session, so the keep switch became a read-out. Stats, quests and apocalypse remain unmapped (plan's RE pass).
+
+New: noclip (PhysicsCharacterController, new map entries; its FixedUpdate is the whole physical step and starts from the
+transform, decompiled; noclip disables it and the Move hook turns the game's own walk along the camera's pitch),
+teleport to the ghost / its room, bring the ghost to you (NavMeshAgent.Warp on the mesh), interact / ability / throw now
+(unforced ChangeState), sanity lock, the given evidence read-out, ESP (ghost and room labels) and an 11-line HUD in the
+new overlay.cpp (drafted by the local model, reviewed). All PM_TEXT_TODO replaced with PM_TEXT_AI text; the duplicated
+speed-up/speed-down keys split into ghost-* and player-*. FINDINGS 34 (noclip) removed.
+
+Not built, with reasons: mid-contract ghost re-type (needs CreateGhost/SyncValues/SyncEvidence re-run outside their
+once-per-contract state, exactly the kind of RPC state check that reports; RE spike first), weather mid-contract
+(TransitionWeatherProfile unmapped; lightning refuses outside a storm), unlock-all / free shop (writes saves, against
+progress protection), the dummy player (spike). Open: whether PlayerSanity.insanity is sanity or insanity (its note says
+100 is most insane; vanilla-ghosts.md's Thaye threshold reads like sanity) - the rows treat the field consistently.
+
+Checks: validate.ps1 100% of 95 tests, docs and API reference clean; gamecheck 1884 entries, 1772 resolved, 0 missing,
+0 ambiguous. raw_scan's canvas allowlist names overlay.cpp (plan's Game section; the author's ESP ask).
+
+## Smoke list addenda for the seventh live try (the standing ban-risk warning still applies)
+
+29. No revive row exists. Kill you: refused in the lobby, on a friendly difficulty and mid-hunt, with the reason shown.
+30. Progress: note money, XP and level; play a dev contract, die with lose-items on, finish. The reward screen shows no
+    totals and Next returns to the lobby; money, XP, level and the brought equipment are unchanged.
+31. Noclip: on, look up and walk: you rise through the ceiling; sprint is faster; off: you fall back onto a floor.
+32. Teleport to the ghost, to the ghost room, and bring the ghost to you; each lands on a floor.
+33. Interact / ability / throw now: the ghost tries each (the game may still refuse, which shows as nothing happening).
+34. Hold sanity at 50, then 0: the read-out stays there. Say whether "0" makes the ghost hunt more (insanity question).
+35. Debug HUD and ESP on, menu closed: ghost label with its distance follows the ghost through walls; room names float
+    in each room.
+36. Search the game's Player.log for "HACKER" after the run; there must be none.
+
+## Round 9 (2026-11-12): revive restored, kill in hunts, weather
+
+The user: the self-report is not an issue; restore revive properly, not limited to contracts with the paw or the
+cards; why no kill in a hunt; weather (to and from the Blood Moon), ghost type and dummy wanted; investigate unlock
+and free shop without save writes.
+
+- Crash cause read from the dump: the stack bottoms out in the game's own CloudEvents self-report continuation (the
+  moderation call's completion), so the crash was the report's, not ours. The Revive body's list is
+  `Difficulty.actualCursedItems` (real name, a CursedItemType[]: none 0, tarotCards 1, ouijaBoard 2, mirror 3,
+  musicBox 4, summoningCircle 5, voodooDoll 6, monkeyPaw 7). New entries CursedItemType(+tarotCards, monkeyPaw) and
+  Difficulty.actualCursedItems, resolved at +0xB0 with 1 and 7.
+- Revive (the user's explicit allowance of the array swap, after the auto-mode classifier refused it once as a
+  security weakening): a contract without either reviver gets a copy of its array with the paw added, the game's own
+  Player.RevivePlayer runs, and the contract's own array goes back once the investigator is neither dead nor dying,
+  or after 5 seconds (actions::tick, and on stop).
+- Kill: hunts no longer refuse it. New entry Player.dying (the bool NotifyOfDeathStart stores; resolved +0x29, the
+  byte the Revive body reads); the kill refuses only while a kill is already under way.
+- Weather: RandomWeather.TransitionWeatherProfile (real name) mapped, decompiled: local only, writes
+  LevelValues.weather, returns for a dead local player, else sound and sky tween; never writes actualWeather. The paw's
+  handler calls it and costs 7 sanity. WeatherValueType (Difficulty's numbering, Random 0 .. BloodMoon 8) mapped and
+  paired by name with WeatherType. The row writes Difficulty.actualWeather (read live by UpdateSpeed and GhostAbility)
+  then runs the transition, so the Blood Moon is real both ways.
+
+Smoke additions: 37. Die, then Revive in a contract with no cursed possession and one with the paw: you stand up, and
+Player.log has no HACKER line. 38. Kill during a hunt works; a second kill click while dying says a kill is under way.
+39. Weather to bloodMoon: red sky, and hunts run at Blood Moon speed (HUD live speed); back to clear: normal speed.
+Heavy rain starts lightning; leaving it stops it.
+
+Round 9, continued: the ghost type, changed now. The local model's research (verified for the risky step: the
+SyncEvidence decompile tests its once-flag first and returns silently) gave the path now in ghost-types.md
+("Changing the type mid-contract"): controller identity and behaviour, PickEvidence, clear GhostInfo.evidenceSynced
+(new entry, GhostInfo's one bool, +0x7C; a Loads/Stores fact could not prove the register, so shape alone), then
+GhostAI.Init on the controller's traits (the spawn's own path: sync RPCs as master, every per-type start step, and
+the host's custom-ghost hooks). Then EvidenceController.ghostOrb (real name) is switched off when the new type gives
+no orbs and EvidenceController.freezing (by its Stores fact in SpawnAllGhostTypeEvidence, +0x58) is set from the new
+evidence. Refused mid-hunt. Not re-run: the Mimic/Thaye/Obambo timers; the model. gamecheck 1908 entries, 1796
+resolved, 0 missing, 0 ambiguous.
+
+Smoke 40: re-type a Spirit to a Mimic: orbs appear and its evidence line changes; to a type without orbs: the orb is
+gone; to one with freezing: the ghost room freezes; to a Banshee: hunts aim at you; to a custom ghost: its tell runs.
+Player.log has no HACKER line.
+
+Shop and unlock research (local model, not yet built; scratchpad shop_findings.md, summary for the ledger): StoreItem's
+obfuscated no-arg bool is the single unlock gate (level and an ES3 save bool), with a sibling level-only gate;
+StoreEquipment.Buy and BuyUpgrade read and write ES3 money and the owned/upgrade keys directly; StoreItem's owned
+amount setter writes no save. A save-free free shop means: hook the two gates to true, CanBuy/CanBuyUpgrade to true,
+and replace Buy/BuyUpgrade with the owned-amount setter only. Open risk: ES3 may serialise whole StoreItems on quit
+(diff the save in a live test). The gates are obfuscated with decoys: they need shape-and-fact entries before use.
+
+Round 9, continued: unlock everything, the free shop and the save freeze (the user's ask: no change to the save).
+
+- The lobby's equipment commit and the post-contract return both write the save on their own, so hooking the shop's
+  writers one by one would leak free items into the save through the return. Instead: EasySave3's
+  `ES3IO.CommitBackup` (real names, assembly EasySave3) is the one step of all 13 of its writers that replaces the real
+  save (decompiled: moves the written .tmp over the file, or copies the temporary PlayerPrefs key). Skipped once a dev
+  session starts, for the rest of the run (menu_rule.h freeze_save): nothing the run saves reaches disk. It stays on
+  until the game closes, since in-memory free purchases would otherwise reach the save with the next ordinary write.
+  The Equipment section shows it ("Save frozen until the game closes").
+- Unlock everything: StoreItem.IsUnlocked (obfuscated; CalledBy InventoryEquipment.CanAddToLobby) and
+  StoreItem.MeetsLevel (CalledBy StoreItem.IsUnlocked) answer true. Free shop: StoreEquipment.CanBuy (real) and
+  StoreItem.CanAfford (obfuscated; CalledBy StoreEquipment.Buy) answer true. Each answers only while the sandbox gate
+  holds (store_switch_applies), so an online lobby later in the run gets the game's own answers. Vanilla Buy still
+  runs: its money and owned writes stop at the frozen commit; the owned amount rises in memory.
+- Fixtures: EasySave3 is a new assembly for the map, so tests/fixtures/diffable/EasySave3 (placeholder), the three
+  fixture lists in tests/gamecheck_test.cmake and game_map_test's fake images (23, 4600 classes) gained it.
+- gamecheck: 1917 entries, 1805 resolved, 0 missing, 0 ambiguous; the three obfuscated store methods land on the
+  research's RVAs. validate.ps1: 95/95.
+- Research notes (raw RVAs) kept in the ignored re/dump/notes/2026-11-12-dev-menu-{shop,retype,dummy}.md.
+
+Smoke 41: open the menu, then in the lobby: Unlock everything shows every item and tier unlocked; Free shop buys with
+no money; close the game, start it again without the menu: money, owned amounts and unlocks are as before the run,
+and SaveFile.txt's timestamp did not change during the dev run (a .tmp beside it may have).
+
+Next: the dummy investigator, chosen by the user as "any ghost's target" (research in re/dump/notes; needs the
+player prefab's Resources name, a spawn with Player.Start never run, and hooks on the hunt's three obfuscated
+target pickers, which walk Network.playerSpots only).
+
+Round 9, continued: the dummy investigator, as "any ghost's target" (the user's choice).
+
+- Body: a copy of the local investigator's networked body (game::instantiate under a parent that is switched off),
+  every MonoBehaviour but Player, PlayerSanity and PlayerLOSTarget destroyed before it is switched on, those three
+  switched off. So no script of its own runs (Player.Start, which would claim Network.localPlayer for a view the master
+  thinks is its own, never runs; the PhotonView is gone before its Awake). Player.Awake (decompiled: clears one runtime
+  list) is the only code of it that runs. Cloning the live body, not Resources.Load("PCPlayer"), keeps a hard-coded
+  prefab name out of the code. Never in Network.playerSpots.
+- Hooks (dummy.cpp): StartPick and KeepNearest offer the dummy when it stands nearer the ghost's head than the player
+  the game kept (new entry GhostHuntState.kept, the hunt's fourth Player field, +0x60, by its Stores facts in
+  KeepNearest and StartPick); SightPick offers it when the game found nobody and the hunt's own Sees passes. A Banshee
+  goes for it only through "Make the dummy the Banshee's target" (GhostAI.bansheeTarget, which StartPick keeps).
+  The kill hook kills the dummy itself (Player.isDead on it): the game's kill sends its death animation to the view's
+  Photon owner, which the dummy lacks. Recorded difference: a dummy kill does not join the hunt's killed list or
+  lengthen the hunt.
+- Its room (Player.currentRoom) is kept current every frame; the hunt's tests throw on a player with none.
+- ESP shows it with the ghost's ESP (its body may sit on the layer the local camera leaves out).
+- New type wrappers PlayerLOSTarget::type and PlayerSanity::type. gamecheck 1918 / 1806 resolved / 0 missing /
+  0 ambiguous; validate 95/95.
+
+Smoke 42 (watch Player.log for exceptions): add the dummy, walk away from it: a hunt chases whichever of you is
+nearer (switch on ESP to see it). Hide in a closet with the dummy in the open: the hunt goes for the dummy. Banshee
+contract: make the dummy the target: the hunt ignores you. Let it kill the dummy: the ESP label stays, "Dummy
+investigator" reads off; revive it. Remove it. Leave the contract with it present: no errors.
+Open: whether the copy's body is visible to the local camera; whether any kept script's absence throws in a reader
+the research did not list (PlayerAudio is gone: the hunt's Listen never reaches the dummy, which is not in a spot).

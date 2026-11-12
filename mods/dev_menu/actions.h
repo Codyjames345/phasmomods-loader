@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "Transform.h"
 #include "menu_rule.h"
 
 // The dev menu's game side: its three hooks and the rows' actions. Every action is the game's own method,
@@ -11,10 +12,16 @@
 // rules in menu_rule.h decide before a click, and the game's own guards still decide after. Main thread.
 namespace pm::devmenu::actions {
 
-/** Creates the progression-suppression, god-mode and consumable hooks. False when any cannot be made: the
- *  mod stays off, since a dev session without progression suppression is refused (fail closed). */
+using phasmo::Vector3;
+
+/** Creates the progression-suppression, god-mode and noclip hooks. False when any cannot be made: the mod
+ *  stays off, since a dev session without progression suppression is refused (fail closed). */
 bool start();
+/** Puts back everything the menu left in the game (the ghost's sight, the rig's physical step) and clears the
+ *  switches. */
 void stop();
+/** Every frame, menu open or not: the sanity lock, and noclip's switch going off with a rig a scene took. */
+void tick();
 
 /** Marks the dev session on, once, when the menu first opens: from then the contract can earn no progress. */
 void note_session();
@@ -108,8 +115,14 @@ void set_ghost_blind(bool blind);
  *  that has a HUD and a journal controller (the game's release throws without one), and answers whether it
  *  asked, so the menu releases only a hold it took. */
 bool pause_player(bool held);
+/** Kills the local investigator the way the Monkey Paw and the tarot cards do (Player.BeginDeathSequence with
+ *  SnappedNeck, on the master). */
 void kill_local();
-void revive_local();
+/** Revives the local investigator through the game's own Player.RevivePlayer. Its Revive RPC goes on only in a
+ *  contract carrying the tarot cards or the Monkey Paw, so a contract without either has the paw added to its
+ *  Difficulty.actualCursedItems until the revive lands (at most 5 seconds; the author's call, 2026-11-12), and
+ *  then its own array goes back. False, asking nothing, without a player or a difficulty. */
+bool revive_local();
 void unlock_main_door();
 /** Ends the contract the way the game's own lift button does, by calling
  *  ExitLevel.StartAttemptExitLevel on the scene's ExitLevel (offline this client is the master, so this
@@ -121,6 +134,61 @@ bool end_contract();
 void leave();
 void quit();
 void set_time_scale(float value);
+
+/** How many types the re-type picker offers: the contract's offered collection, custom ghosts included. */
+int type_options();
+/** The GhostType number of picker option `index`; -1 out of range. */
+int32_t type_option(int index);
+/** A type for a developer: a custom ghost's content id and its number, or the number alone. */
+std::string type_name(int32_t type);
+/** Turns the running ghost into `type` the way the game set it up at spawn: the controller's identity and behaviour,
+ *  the game's own evidence pick, and GhostAI.Init again on those traits (the game's sync, the evidence in the world
+ *  and every per-type start step); then the orb and the freezing flag the old type left are put right. The Mimic,
+ *  Thaye and Obambo timers keep running from where they were. False with no ghost. */
+bool retype(int32_t type);
+
+/** How many weathers the weather picker offers: every contract weather, the Blood Moon included. */
+int weather_count();
+/** The game's own value name of picker weather `index`; empty out of range. */
+std::string weather_name(int index);
+/** The weather the contract plays now (Difficulty.actualWeather), by name; empty with no contract. */
+std::string weather_now();
+/** Changes the contract's weather to picker weather `index`: Difficulty.actualWeather (which the hunt's Blood Moon
+ *  branch reads) and then the Monkey Paw's own RandomWeather.TransitionWeatherProfile (LevelValues.weather, the
+ *  sky, the sound; local, nothing sent). Works to and from the Blood Moon. False with no contract or no scene
+ *  weather. */
+bool apply_weather(int index);
+
+/** Whether noclip is on. */
+bool noclip();
+/** Switches the PC rig's physical step (PhysicsCharacterController) off or back on. While it is off the
+ *  investigator passes through walls and floors, falls nowhere, and the walk the game asks for moves them along
+ *  the camera (the mod's PhysicsCharacterController.Move hook). False, changing nothing, without a PC rig. */
+bool set_noclip(bool on);
+/** Teleports the investigator to the ghost, standing on the navigation mesh under it. False when the game gives
+ *  no ghost, no PC rig or no mesh near it. Local: the rig's transform, as the physical step reads it. */
+bool me_to_ghost();
+/** Teleports the investigator into the ghost's favourite room, onto the mesh nearest the room's first collider's
+ *  centre. False as me_to_ghost. */
+bool me_to_ghost_room();
+/** Warps the ghost onto the mesh at the investigator's feet with its own NavMeshAgent (NavMeshAgent.Warp, the
+ *  call the game's own ghost teleports make). The ghost's position reaches others the way its walking does. */
+bool ghost_to_me();
+/** The evidence the contract gives (GhostController.givenEvidence), vanilla ones by the enum's value names and a
+ *  custom one by its number; empty with no contract. */
+std::string given_evidence();
+/** The ghost's position in the world; false with no ghost. */
+bool ghost_at(Vector3& out);
+/** The speed the ghost's NavMeshAgent moves at now, in metres a second (the hunt's real speed while hunting);
+ *  0 with no ghost. */
+float ghost_agent_speed();
+/** The name of the level room the ghost stands in now (game::room_at), empty outside every room. */
+std::string ghost_room_now();
+/** Metres from the local camera to the ghost; negative with no ghost or no camera. */
+float ghost_distance();
+/** The world centre of room `index` of the level's room list (the first of its colliders' boxes); false when
+ *  the room or its colliders are missing. */
+bool room_centre(int index, Vector3& out);
 
 /** The event kinds the Ghost page can fire: the game's GhostState numbers, named by the map. Filled now;
  *  empty when the enum values did not resolve. */

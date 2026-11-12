@@ -341,6 +341,19 @@ inline constexpr pm::sdk::Fact GhostHuntState_lastPlayer_facts[] = {
     {.is = pm::sdk::Fact::Is::Stores, .method = "GhostHuntState.Listen"},
     {.is = pm::sdk::Fact::Is::Loads, .method = "GhostHuntState.UpdateSpeed", .negate = true}};
 
+// Of the hunt's four Player fields, the start pick and the keep-nearest both store only the one they keep.
+inline constexpr pm::sdk::Fact GhostHuntState_kept_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "GhostHuntState.KeepNearest"},
+    {.is = pm::sdk::Fact::Is::Stores, .method = "GhostHuntState.StartPick"}};
+
+/// The player the hunt keeps, a Player, or null: StartPick sets it once as the hunt starts (the Banshee's target when
+/// it may, otherwise a player from the network's list), KeepNearest moves it to the nearest player it may go for each
+/// frame (not for the Banshee or the Kormos), and the chase tests it with Sees. Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostHuntState_kept{
+    .key = "GhostHuntState.kept", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "GhostHuntState", .type = "Player", .facts = GhostHuntState_kept_facts,
+    .access = pm::sdk::Visibility::Private};
+
 /// The player the hunt last went for, a Player, or null: SetTarget and Listen set it with searchTarget,
 /// and while it is set the hunt's wander stays near where that player was. Its kill clears it.
 /// Decompiled.
@@ -461,6 +474,8 @@ struct GhostHuntState {
   static constexpr pm::api::Field<pm::map::GhostHuntState_searchTarget, void*> searchTarget{};
   /// The player it last went for, a Player: lastPlayer.get(hunt), or null. Unresolved: null.
   static constexpr pm::api::Field<pm::map::GhostHuntState_lastPlayer, void*> lastPlayer{};
+  /// The player the hunt keeps (StartPick, then KeepNearest): kept.get(state). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GhostHuntState_kept, void*> kept{};
   /// The players it has seen, a List<Player>: seen.get(hunt), read as a pm::api::List. Unresolved: null.
   static constexpr pm::api::Field<pm::map::GhostHuntState_seen, void*> seen{};
   /// The players it has killed, a List<Player>: killed.get(hunt), read as a pm::api::List. Unresolved:

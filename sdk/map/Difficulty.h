@@ -332,6 +332,32 @@ inline constexpr pm::sdk::EntryDesc Difficulty_friendlyGhost{
     .key = "Difficulty.friendlyGhost", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "Difficulty", .name = "friendlyGhost"};
 
+inline constexpr const char* CursedItemType_values[] = {"none",       "tarotCards",   "ouijaBoard", "mirror",
+                                                        "musicBox",   "summoningCircle", "voodooDoll", "monkeyPaw"};
+
+/// The cursed possessions a contract can carry (Assembly-CSharp, global namespace, name obfuscated): none 0,
+/// tarotCards 1, ouijaBoard 2, mirror 3, musicBox 4, summoningCircle 5, voodooDoll 6, monkeyPaw 7. Decompiled.
+inline constexpr pm::sdk::EntryDesc CursedItemType{.key = "CursedItemType", .confidence = pm::sdk::Confidence::Decompiled,
+                                                   .assembly = "Assembly-CSharp", .ns = "",
+                                                   .values = CursedItemType_values};
+
+/// The tarot cards. One of the two possessions the Revive RPC accepts (Difficulty.actualCursedItems). Decompiled.
+inline constexpr pm::sdk::EntryDesc CursedItemType_tarotCards{
+    .key = "CursedItemType.tarotCards", .kind = pm::sdk::Kind::EnumValue, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "CursedItemType", .name = "tarotCards"};
+
+/// The Monkey Paw. One of the two possessions the Revive RPC accepts (Difficulty.actualCursedItems). Decompiled.
+inline constexpr pm::sdk::EntryDesc CursedItemType_monkeyPaw{
+    .key = "CursedItemType.monkeyPaw", .kind = pm::sdk::Kind::EnumValue, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "CursedItemType", .name = "monkeyPaw"};
+
+/// The cursed possessions the contract carries, a CursedItemType[]. Decompiled: the Revive RPC's body (Player's Revive
+/// coroutine) goes on only when it holds tarotCards or monkeyPaw, and otherwise raises the game's report on the sender
+/// and revives nobody, offline too (sdk/systems/players.md).
+inline constexpr pm::sdk::EntryDesc Difficulty_actualCursedItems{
+    .key = "Difficulty.actualCursedItems", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "Difficulty", .name = "actualCursedItems", .type = "@CursedItemType[]"};
+
 /// Whether a death costs the equipment brought: the reward screen, when its copy of the death status is set, calls
 /// InventoryManager.ResetAllEquipment while this is set and InventoryManager.ReturnItemstoInventory otherwise, and
 /// shows its insurance row only while it is set (sdk/systems/contract.md). Decompiled.
@@ -367,6 +393,40 @@ inline constexpr pm::sdk::EntryDesc SystemEnum_ToString{.key = "Enum.ToString", 
 inline constexpr pm::sdk::EntryDesc SystemEnum_GetHashCode{.key = "Enum.GetHashCode", .kind = pm::sdk::Kind::Method,
                                                            .confidence = pm::sdk::Confidence::Decompiled,
                                                            .owner = "Enum", .name = "GetHashCode"};
+
+inline constexpr const char* WeatherValueType_values[] = {"Random", "LightRain", "HeavyRain", "Snow", "Wind",
+                                                          "Clear",  "Fog",       "Sunrise",   "BloodMoon"};
+
+/// The difficulty's weather numbering, an enum nested in Difficulty (real names): Random 0, LightRain 1, HeavyRain 2,
+/// Snow 3, Wind 4, Clear 5, Fog 6, Sunrise 7, BloodMoon 8. It is not LevelValues' WeatherType, which numbers the
+/// scene's profiles (clear 0 to bloodMoon 7): a mod pairs the two by name. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType{.key = "WeatherValueType", .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .owner = "Difficulty", .values = WeatherValueType_values};
+
+/// Light rain. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_LightRain{.key = "WeatherValueType.LightRain", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "LightRain"};
+/// Heavy rain. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_HeavyRain{.key = "WeatherValueType.HeavyRain", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "HeavyRain"};
+/// Snow. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_Snow{.key = "WeatherValueType.Snow", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "Snow"};
+/// Wind. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_Wind{.key = "WeatherValueType.Wind", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "Wind"};
+/// Clear. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_Clear{.key = "WeatherValueType.Clear", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "Clear"};
+/// Fog. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_Fog{.key = "WeatherValueType.Fog", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "Fog"};
+/// Sunrise. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_Sunrise{.key = "WeatherValueType.Sunrise", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "Sunrise"};
+/// The Blood Moon: the hunt's Blood Moon branch reads it here. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_BloodMoon{.key = "WeatherValueType.BloodMoon", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "BloodMoon"};
 
 /// The contract's weather as it is played, a WeatherValueType (8 is the blood moon). WintersJestManager.RPC_MakeKrampusStronger
 /// and GhostAI.speedFlag's readers compare it. Decompiled.
@@ -411,6 +471,12 @@ namespace phasmo {
 struct Difficulty {
   /// The Difficulty type. Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Difficulty> type{};
+  /// The contract's cursed possessions, a CursedItemType[]: actualCursedItems.get(d), read as a
+  /// pm::api::Array<int32_t>. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Difficulty_actualCursedItems, void*> actualCursedItems{};
+  /// The weather as it is played, a WeatherValueType number: actualWeather.get(d). The hunt's Blood Moon branch
+  /// reads it each time (GhostAI.speedFlag's note). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_actualWeather, int32_t> actualWeather{};
   /// Which preset it is: difficulty.get(d). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Difficulty_difficulty, int32_t> difficulty{};
   /// The forced ghost type, GhostType.None for Random: ghostTypeOverride.get(d), .set(d, type).
@@ -524,6 +590,36 @@ struct Enum {
   /// For an enum stored as an int, its value: GetHashCode(boxed). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::SystemEnum_GetHashCode, int32_t(void*)> GetHashCode{};
 };
+
+/// The cursed possessions a contract can carry: the numbers Difficulty.actualCursedItems holds.
+/// The difficulty's weather numbering (Difficulty.actualWeather). Pair it with WeatherType by name.
+namespace WeatherValueType {
+/// LightRain(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_LightRain> LightRain{};
+/// HeavyRain(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_HeavyRain> HeavyRain{};
+/// Snow(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_Snow> Snow{};
+/// Wind(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_Wind> Wind{};
+/// Clear(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_Clear> Clear{};
+/// Fog(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_Fog> Fog{};
+/// Sunrise(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_Sunrise> Sunrise{};
+/// BloodMoon(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_BloodMoon> BloodMoon{};
+}  // namespace WeatherValueType
+
+namespace CursedItemType {
+/// The CursedItemType enum type: klass(), is(obj), type_object() and make_array(n). Unresolved: null and false.
+inline constexpr pm::api::Type<pm::map::CursedItemType> type{};
+/// tarotCards(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::CursedItemType_tarotCards> tarotCards{};
+/// monkeyPaw(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::CursedItemType_monkeyPaw> monkeyPaw{};
+}  // namespace CursedItemType
 
 /// @}
 }  // namespace phasmo

@@ -70,41 +70,91 @@ struct Switches {
   // to the light using the frame's scaled time, so a frozen clock behind the menu is the one thing every
   // broken screen after a close shared. The row and the tick-speed row stay for a developer who wants them.
   bool pauseWhenOpen = false;
-  bool godMode = false;         // a hunt's kill of the local investigator is refused
-  bool keepConsumables = false;  // a saved consumable stock never goes down
+  bool godMode = false;  // a hunt's kill of the local investigator is refused
   // The debug read-out stays on screen while the menu is closed: the ghost's state, its type, its speed and
   // who its hunt is set on (the user's original brief). Off until a developer asks for it.
   bool debugHud = false;
+  // Noclip: the investigator's physical step is switched off and the walk the game asks for moves them
+  // along the camera instead, through walls and floors (actions.cpp, PhysicsCharacterController).
+  bool noclip = false;
+  // Hold the local investigator's sanity at lockedSanity: the menu sets it back through the game's own
+  // setter whenever the game has moved it.
+  bool lockSanity = false;
+  int lockedSanity = 100;
+  // ESP: labels drawn over the game's picture at the ghost and at each of the level's rooms.
+  bool espGhost = false;
+  bool espRooms = false;
+  // The store: every item and tier unlocked, and every purchase allowed whatever the money. Both act only inside
+  // the single player sandbox, and the dev session's save freeze keeps all of it off the save.
+  bool unlockAll = false;
+  bool freeShop = false;
 };
+
+/** The save freeze (the user's ask, 2026-11-12: unlock and free shop without touching the save): once a dev session
+ *  has started, EasySave3's commit of a written save is skipped for the rest of the run, so nothing the run saves,
+ *  bought, earned or changed, ever replaces the save on disk. It stays on until the game closes, because the run's
+ *  in-memory state (a free purchase, say) would otherwise reach the save with the next ordinary write. */
+inline bool freeze_save(bool devSessionOn) { return devSessionOn; }
+
+/** Whether a store switch answers for the game now: only while it is on and the sandbox gate holds, so an online
+ *  lobby later in the same run sees the game's own answers. */
+inline bool store_switch_applies(bool switchOn, bool sandbox) { return switchOn && sandbox; }
 
 /** God mode: only the local investigator's kill is refused; a hunt of anybody else (a dummy, another
  *  player) runs. The kill's network body is never touched, and offline the kill decision is this client's. */
 inline bool god_refuses_kill(bool godMode, bool targetIsLocal) { return godMode && targetIsLocal; }
 
-/** Progression suppression (the user's rule, 2026-11-10): while a dev session is on, the contract's mission
- *  and challenge checks are skipped, so the session earns nothing towards XP, money, stats, quests, the
- *  apocalypse or achievements. The mod does not start when those hooks cannot be made, so a running mod
- *  with the session on always has them. Coverage past these two checks waits on the RE pass the plan names. */
+/** Progression suppression (the user's rule, 2026-11-10): while a dev session is on, every progress write the
+ *  map knows is skipped: the contract's mission and challenge checks, the reward screen's results (its saved
+ *  money, its challenge progress and the seasonal event's score), its experience pay, and the decrement of a
+ *  saved consumable stock. The mod does not start when those hooks cannot be made, so a running mod with the
+ *  session on always has them. Stats, quests and the apocalypse counter wait on the RE pass the plan names. */
 inline bool suppress_progress(bool devSessionOn) { return devSessionOn; }
 
-/** Never lose a consumable: a decrement of the saved stock is skipped while the switch is on. */
-inline bool keep_refuses_consume(bool keepConsumables) { return keepConsumables; }
+/** The reward screen's loss of the brought equipment (a death with the difficulty's lose-items set) becomes
+ *  the game's own return of it while a dev session is on, so a dev session never costs a saved item. */
+inline bool return_instead_of_losing(bool devSessionOn) { return devSessionOn; }
+
+/** The sanity the lock holds next: the locked value cycles 100, 50, 0 and back to 100. */
+inline int next_locked_sanity(int current) {
+  if (current > 50) return 50;
+  if (current > 0) return 0;
+  return 100;
+}
+
+/** Whether the lock must put the value back now: the game moved PlayerSanity.insanity more than half a point
+ *  from the locked value. A smaller drift waits, so the game's setter (which sends the value on) is not asked
+ *  every frame. The lock holds the field the sanity read-out shows, and sets it through
+ *  PlayerSanity.SetInsanity exactly as the set rows do, so the lock and those rows always agree. */
+inline bool sanity_needs_reset(float valueNow, int locked) {
+  return std::fabs(valueNow - static_cast<float>(locked)) > 0.5f;
+}
 
 // ---- What the rows may run right now ----
 // A row's click asks this first; the game's own guards still decide, and a game refusal shows its reason.
 enum class Action {
   UnlockDoor, EndContract, Leave, Quit,          // Contract
+  PickWeather, ApplyWeather,                     // Contract: the weather
   ForceHunt, EndHunt, ClearCooldown, Appear, UnAppear, ApplyRoom, RandomRoom, PickRoom, BumpSpeed,  // Ghost
   ToggleEvents, FireEvent, SetGhostBlind,         // Ghost
+  FireState,                                      // Ghost: one named attempt (interact, ability, throw)
+  GhostToMe,                                      // Ghost: the NavMeshAgent warp to the investigator
+  PickRetype, Retype,                             // Ghost: the type, changed now
   SetFriendly, SetLoseEquipment, BumpEvidence, BumpType,  // Difficulty
-  SetSanity, ToggleFreeze, KillLocal, ReviveLocal,         // Player
-  BumpPlayerSpeed, ResetPlayerSpeed,                     // Player: the game's own speed multiplier
-  SetGodMode, SetKeepConsumables, SetPauseWhenOpen, CycleTimeScale, SetDebugHud,  // switches
+  SetSanity, ToggleFreeze, KillLocal, ReviveLocal,  // Player
+  BumpPlayerSpeed, ResetPlayerSpeed,              // Player: the game's own speed multiplier
+  SetNoclip, MeToGhost, MeToGhostRoom,            // Player: movement
+  SetLockSanity, CycleLockedSanity,               // Player: the sanity lock
+  SetGodMode, SetPauseWhenOpen, CycleTimeScale, SetDebugHud, SetEspGhost, SetEspRooms,  // switches
+  SetUnlockAll, SetFreeShop,                     // Equipment: the store
+  SpawnDummy, DummyAction,                       // Player: the dummy investigator
   Info,                                          // a read-out: no click
 };
 
+// The order is the order of the reasons' text keys in menu.cpp (kWhyKeys): add at the end only.
 enum class Why {
-  None, NotOffline, NoContract, NoGhost, NoDifficulty, NoPlayer, Hunting, NotHunting, NoRooms, Dead, Alive, NoTruck
+  None, NotOffline, NoContract, NoGhost, NoDifficulty, NoPlayer, Hunting, NotHunting, NoRooms, Dead, NoTruck,
+  Friendly, NoRig, Alive, Dying, NoDummy,
 };
 
 // What the game looks like to the menu right now, read every tick (actions.cpp fills it).
@@ -116,26 +166,53 @@ struct Can {
   bool player = false;       // this client has an investigator
   bool hunting = false;      // the ghost hunts now
   bool dead = false;         // the local investigator is dead
+  bool dying = false;        // a kill of the local investigator has started and not finished (Player.dying)
+  bool friendly = false;     // the contract's difficulty has a friendly ghost (Difficulty.friendlyGhost)
+  bool dummy = false;        // the dummy investigator is in the contract (dummy.h)
   int rooms = 0;             // the level's rooms
 };
 
 /** Why running `action` now is refused, or Why::None. The sandbox gate is assumed (the menu shut otherwise)
- *  and kept as a defensive check. Why::NoTruck is not one of these rules: refuse() never returns it, it
- *  is what the end-contract action reports when the running scene has no ExitLevel object to ask. */
+ *  and kept as a defensive check. Why::NoTruck and Why::NoRig are not these rules' answers: refuse() never
+ *  returns them; they are what an action reports when the game has no truck, or no PC rig, to ask.
+ *
+ *  Offline is not a shield. The game's RPC bodies let any sender through offline, but their checks of the
+ *  game's state still run, and a refusal raises the game's own report on the sender: the live log of
+ *  2026-11-12 shows the Revive RPC refused offline and reported, and the game faulting after it
+ *  (sdk/systems/photon.md). So every row that reaches a checked RPC refuses here first, in every state the
+ *  game's body would refuse: a kill on the menu's scene, of a dead investigator or on a friendly difficulty,
+ *  a friendly switch while a hunt (and its kill) is under way, and a forced hunt on a friendly difficulty.
+ *  The Revive body goes on only in a contract carrying the tarot cards or the Monkey Paw; the revive row's
+ *  action lends the contract the paw for the length of the revive (the author's call, 2026-11-12; actions.cpp),
+ *  so here it needs only a contract and an investigator who is dead or dying. */
 inline Why refuse(Action action, const Can& c) {
   if (!c.sandbox) return Why::NotOffline;
   switch (action) {
     case Action::Info:
       return Why::None;
+    case Action::PickWeather:  // only the menu's own cursor
+      return Why::None;
+    case Action::ApplyWeather:
+      if (!c.contract) return Why::NoContract;
+      return c.difficulty ? Why::None : Why::NoDifficulty;
     case Action::Leave:
     case Action::Quit:
     case Action::UnlockDoor:
     case Action::EndContract:
       return c.contract ? Why::None : Why::NoContract;
     case Action::ForceHunt:
-    case Action::ClearCooldown:
+      // The hunt's RPC body refuses on a friendly difficulty (photon.md): refuse before the game is asked.
+      if (!c.contract) return Why::NoContract;
+      if (!c.ghost) return Why::NoGhost;
+      return c.friendly ? Why::Friendly : Why::None;
     case Action::Appear:
+      // A hunt runs its own appearances; one asked mid-hunt is not a path the game takes.
+      if (!c.contract) return Why::NoContract;
+      if (!c.ghost) return Why::NoGhost;
+      return c.hunting ? Why::Hunting : Why::None;
+    case Action::ClearCooldown:
     case Action::UnAppear:
+    case Action::FireState:  // ChangeState unforced: the game's own guards decide the attempt
     case Action::BumpSpeed:
     case Action::ToggleEvents:
     case Action::FireEvent:
@@ -154,26 +231,69 @@ inline Why refuse(Action action, const Can& c) {
       if (c.hunting) return Why::Hunting;  // the game refuses a favourite room mid-hunt, and so does the row
       return c.rooms > 0 ? Why::None : Why::NoRooms;
     case Action::SetFriendly:
+      // A hunt that started unfriendly would meet a friendly check in its own kill and door RPCs: never switch
+      // it while one runs (photon.md, "Do not change a difficulty's friendlyGhost behind the game's back").
+      if (!c.difficulty) return Why::NoDifficulty;
+      return c.hunting ? Why::Hunting : Why::None;
+    case Action::PickRetype:  // only the menu's own cursor
+      return Why::None;
+    case Action::Retype:
+      // Init mid-hunt would restart the ghost under its own hunt; change it between hunts.
+      if (!c.contract) return Why::NoContract;
+      if (!c.ghost) return Why::NoGhost;
+      return c.hunting ? Why::Hunting : Why::None;
+    case Action::GhostToMe:
+      if (!c.contract) return Why::NoContract;
+      if (!c.ghost) return Why::NoGhost;
+      return c.player ? Why::None : Why::NoPlayer;
     case Action::SetLoseEquipment:
     case Action::BumpEvidence:
     case Action::BumpType:
       return c.difficulty ? Why::None : Why::NoDifficulty;
+    case Action::KillLocal:
+      // The death animation's RPC refuses, and reports, a kill on the menu's scene, of an investigator marked
+      // dead or on a friendly difficulty (sdk/systems/players.md). A hunt is fine; a kill already under way (the
+      // hunt's own, or the last click's) is not, since its victim is about to be marked dead.
+      if (!c.contract) return Why::NoContract;
+      if (!c.player) return Why::NoPlayer;
+      if (c.dead) return Why::Dead;
+      if (c.dying) return Why::Dying;
+      return c.friendly ? Why::Friendly : Why::None;
+    case Action::ReviveLocal:
+      // Player.RevivePlayer waits for the dead mark; the Revive RPC accepts a player dead or dying.
+      if (!c.contract) return Why::NoContract;
+      if (!c.player) return Why::NoPlayer;
+      return (c.dead || c.dying) ? Why::None : Why::Alive;
+    case Action::MeToGhost:
+    case Action::MeToGhostRoom:
+      if (!c.contract) return Why::NoContract;
+      if (!c.ghost) return Why::NoGhost;
+      if (!c.player) return Why::NoPlayer;
+      if (action == Action::MeToGhostRoom && c.rooms <= 0) return Why::NoRooms;
+      return Why::None;
     case Action::SetSanity:
     case Action::ToggleFreeze:
-    case Action::KillLocal:
-    case Action::ReviveLocal:
-    case Action::BumpPlayerSpeed:    // the game's own multiplier, on this client's rig
+    case Action::BumpPlayerSpeed:  // the game's own multiplier, on this client's rig
     case Action::ResetPlayerSpeed:
-      if (!c.player) return Why::NoPlayer;
-      if (action == Action::KillLocal) return c.dead ? Why::Dead : Why::None;
-      if (action == Action::ReviveLocal) return c.dead ? Why::None : Why::Alive;
-      return Why::None;
+    case Action::SetNoclip:
+    case Action::SetLockSanity:
+      return c.player ? Why::None : Why::NoPlayer;
+    case Action::CycleLockedSanity:  // only the menu's own number: the lock applies it when on
     case Action::SetGodMode:
-    case Action::SetKeepConsumables:
     case Action::SetPauseWhenOpen:
     case Action::CycleTimeScale:
     case Action::SetDebugHud:  // the mod's own text on its own canvas: it needs nothing from a contract
+    case Action::SetEspGhost:
+    case Action::SetEspRooms:
+    case Action::SetUnlockAll:  // the store's own checks; the hooks also ask the sandbox gate each time
+    case Action::SetFreeShop:
       return Why::None;
+    case Action::SpawnDummy:
+      if (!c.contract) return Why::NoContract;
+      return c.player ? Why::None : Why::NoPlayer;
+    case Action::DummyAction:  // move, Banshee target, revive, remove: all need the dummy
+      if (!c.contract) return Why::NoContract;
+      return c.dummy ? Why::None : Why::NoDummy;
   }
   return Why::None;
 }

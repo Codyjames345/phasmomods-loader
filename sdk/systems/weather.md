@@ -18,9 +18,16 @@ reads 0, which is clear.
 - The result is the contract's actual weather, `Difficulty.actualWeather`, which the game syncs to every client. Read it
   there rather than from the sky.
 - **Blood Moon makes hunts faster** (see [Ghost AI](ghost-ai.md), "Hunt speed").
-- **The Monkey Paw's weather wish** changes the weather mid-contract through `RandomWeather`'s profile transition, which
-  sets the weather at once; its visuals and sound are skipped on a client whose local player is dead. That method is not
-  mapped yet.
+- **The Monkey Paw's weather wish** changes the weather mid-contract through
+  `RandomWeather.TransitionWeatherProfile(weather, animate)`, local to the client that runs it: it writes the scene's
+  profile for that `WeatherType` into `LevelValues.weather`, then (unless the local player is dead) plays the sound and
+  tweens the sky. It sends nothing and leaves `Difficulty.actualWeather` alone, so a paw wish for the Blood Moon changes
+  the sky but not the hunt's Blood Moon branch, which reads `actualWeather` each time. The wish then takes 7 off the
+  wisher's sanity.
+- **Two numberings.** `Difficulty.actualWeather` is a `WeatherValueType` (Random 0, LightRain 1, HeavyRain 2, Snow 3,
+  Wind 4, Clear 5, Fog 6, Sunrise 7, BloodMoon 8); the scene's profiles are `WeatherType` (clear 0 to bloodMoon 7). Pair
+  them by name, never by number. A mod that wants a whole weather change (the dev menu's weather row) writes
+  `actualWeather` and then runs the transition.
 - **Read the weather each time you need it.** The transition writes the wished profile into `LevelValues.weather` before
   it checks for a dead player, and the paw's weather handler has no master check, so the field changes on the host too.
   The game's storm reads it again at each strike, so a wish for heavy rain starts the storm. A mod that reads the weather

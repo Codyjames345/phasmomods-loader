@@ -1,12 +1,12 @@
 // Dev Menu's text: the keybinds row, the menu's rows and read-outs, and the reasons a row refuses. This is
 // a developer tool, but the words are still the game's UI, so every entry here is a placeholder for the user
-// to rewrite (AI_POLICY.md): PM_TEXT_AI where an earlier agent wrote words the user has not replaced, and
-// PM_TEXT_TODO where nobody has written any yet. A {{token}} is a value the code fills in. Keep one entry
-// per line.
+// to rewrite (AI_POLICY.md): PM_TEXT_AI marks words an agent wrote that the user has not replaced. On
+// 2026-11-12 the user asked for the entries nobody had written yet to be filled the same way. A {{token}} is a
+// value the code fills in. Keep one entry per line.
 {
   "dev-menu.key-label": "Open dev menu", // PM_TEXT_AI
   "dev-menu.title": "Dev menu", // PM_TEXT_AI
-  "dev-menu.hint": "Press the dev menu key again to close.", // PM_TEXT_AI
+  "dev-menu.hint": "Press the dev menu key again to close. Progress is not saved in a dev session.", // PM_TEXT_AI
   "dev-menu.section.difficulty": "Difficulty", // PM_TEXT_AI
   "dev-menu.section.contract": "Contract", // PM_TEXT_AI
   "dev-menu.section.ghost": "Ghost", // PM_TEXT_AI
@@ -25,6 +25,11 @@
   "dev-menu.ghost-type-up": "Next type", // PM_TEXT_AI
   "dev-menu.reward": "Reward multiplier", // PM_TEXT_AI
   "dev-menu.unlock-door": "Unlock the main door", // PM_TEXT_AI
+  "dev-menu.weather": "Weather now", // PM_TEXT_AI
+  "dev-menu.weather-pick": "Weather to change to", // PM_TEXT_AI
+  "dev-menu.weather-prev": "Previous weather", // PM_TEXT_AI
+  "dev-menu.weather-next": "Next weather", // PM_TEXT_AI
+  "dev-menu.weather-apply": "Change the weather", // PM_TEXT_AI
   "dev-menu.end-contract": "End the contract (the truck leaves)", // PM_TEXT_AI
   "dev-menu.leave": "Leave the contract", // PM_TEXT_AI
   "dev-menu.quit": "Quit the game", // PM_TEXT_AI
@@ -43,9 +48,7 @@
   "dev-menu.room-next": "Next room", // PM_TEXT_AI
   "dev-menu.room-apply": "Move the ghost there", // PM_TEXT_AI
   "dev-menu.room-random": "Move it to a random room", // PM_TEXT_AI
-  "dev-menu.speed-down": "Slower", // PM_TEXT_AI
-  "dev-menu.speed-up": "Faster", // PM_TEXT_AI
-  "dev-menu.ghost-blind": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "dev-menu.ghost-blind": "Ghost is blind", // PM_TEXT_AI
   "dev-menu.block-events": "Block ghost events", // PM_TEXT_AI
   "dev-menu.event": "Ghost event", // PM_TEXT_AI
   "dev-menu.event-prev": "Previous event", // PM_TEXT_AI
@@ -57,32 +60,72 @@
   "dev-menu.sanity-100": "Set sanity to 100", // PM_TEXT_AI
   "dev-menu.freeze": "Freeze you", // PM_TEXT_AI
   "dev-menu.die": "Kill you", // PM_TEXT_AI
-  "dev-menu.revive": "Revive you", // PM_TEXT_AI
   "dev-menu.god-mode": "God mode", // PM_TEXT_AI
-  "dev-menu.player-speed": "PM_TEXT_TODO",  // PM_TEXT_TODO
-  "dev-menu.speed-down": "PM_TEXT_TODO",  // PM_TEXT_TODO
-  "dev-menu.speed-up": "PM_TEXT_TODO",  // PM_TEXT_TODO
-  "dev-menu.speed-reset": "PM_TEXT_TODO",  // PM_TEXT_TODO
-  "dev-menu.keep-consumables": "Never lose consumables", // PM_TEXT_AI
+  "dev-menu.player-speed": "Your speed multiplier", // PM_TEXT_AI
+  "dev-menu.speed-reset": "Reset your speed", // PM_TEXT_AI
   "dev-menu.tick-speed": "Game speed", // PM_TEXT_AI
   "dev-menu.pause-when-open": "Pause while this menu is open", // PM_TEXT_AI
   "dev-menu.session": "Dev session", // PM_TEXT_AI
   "dev-menu.offline-state": "Single player", // PM_TEXT_AI
-  "dev-menu.debug-hud": "PM_TEXT_TODO",  // PM_TEXT_TODO
-  "dev-menu.hud.state": "PM_TEXT_TODO",  // PM_TEXT_TODO
-  "dev-menu.hud.type": "PM_TEXT_TODO",  // PM_TEXT_TODO
-  "dev-menu.hud.speed": "PM_TEXT_TODO",  // PM_TEXT_TODO
-  "dev-menu.hud.target": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "dev-menu.debug-hud": "Debug HUD", // PM_TEXT_AI
+  "dev-menu.hud.state": "State", // PM_TEXT_AI
+  "dev-menu.hud.type": "Type", // PM_TEXT_AI
+  "dev-menu.hud.speed": "Base / live speed", // PM_TEXT_AI
+  "dev-menu.hud.target": "Hunt target room", // PM_TEXT_AI
   "dev-menu.refused": "Not now: {{why}}", // PM_TEXT_AI
   "dev-menu.why.not-offline": "the dev menu only runs in single player", // PM_TEXT_AI
   "dev-menu.why.no-contract": "no contract is running", // PM_TEXT_AI
   "dev-menu.why.no-ghost": "this contract has no ghost yet", // PM_TEXT_AI
   "dev-menu.why.no-difficulty": "the contract's difficulty is not loaded", // PM_TEXT_AI
   "dev-menu.why.no-player": "you are not in the contract yet", // PM_TEXT_AI
-  "dev-menu.why.hunting": "the ghost cannot change rooms during a hunt", // PM_TEXT_AI
+  "dev-menu.why.hunting": "a hunt is running", // PM_TEXT_AI
   "dev-menu.why.not-hunting": "the ghost is not hunting", // PM_TEXT_AI
   "dev-menu.why.no-rooms": "the level has no rooms yet", // PM_TEXT_AI
   "dev-menu.why.dead": "you are already dead", // PM_TEXT_AI
+  "dev-menu.why.no-truck": "this level has no truck to leave in", // PM_TEXT_AI
+  "dev-menu.evidence-given": "Evidence this contract gives", // PM_TEXT_AI
+  "dev-menu.retype-pick": "Type to change it to", // PM_TEXT_AI
+  "dev-menu.retype-prev": "Previous type", // PM_TEXT_AI
+  "dev-menu.retype-next": "Next type", // PM_TEXT_AI
+  "dev-menu.retype-apply": "Change the ghost type now", // PM_TEXT_AI
+  "dev-menu.interact-now": "Make it interact now", // PM_TEXT_AI
+  "dev-menu.ability-now": "Make it use its ability now", // PM_TEXT_AI
+  "dev-menu.throw-now": "Make it throw something now", // PM_TEXT_AI
+  "dev-menu.ghost-to-me": "Bring the ghost to you", // PM_TEXT_AI
+  "dev-menu.ghost-speed-down": "Ghost slower", // PM_TEXT_AI
+  "dev-menu.ghost-speed-up": "Ghost faster", // PM_TEXT_AI
+  "dev-menu.sanity-lock": "Hold your sanity", // PM_TEXT_AI
+  "dev-menu.sanity-lock-value": "Sanity to hold", // PM_TEXT_AI
+  "dev-menu.noclip": "Noclip (fly through walls)", // PM_TEXT_AI
+  "dev-menu.me-to-ghost": "Teleport to the ghost", // PM_TEXT_AI
+  "dev-menu.me-to-ghost-room": "Teleport to the ghost room", // PM_TEXT_AI
+  "dev-menu.player-speed-down": "You slower", // PM_TEXT_AI
+  "dev-menu.player-speed-up": "You faster", // PM_TEXT_AI
+  "dev-menu.equipment-protected": "Equipment and consumables are kept", // PM_TEXT_AI
+  "dev-menu.save-frozen": "Save frozen until the game closes", // PM_TEXT_AI
+  "dev-menu.unlock-all": "Unlock everything", // PM_TEXT_AI
+  "dev-menu.free-shop": "Free shop", // PM_TEXT_AI
+  "dev-menu.esp-ghost": "ESP: ghost", // PM_TEXT_AI
+  "dev-menu.esp-rooms": "ESP: room names", // PM_TEXT_AI
+  "dev-menu.esp.ghost": "Ghost", // PM_TEXT_AI
+  "dev-menu.hud.room": "Room now / favourite", // PM_TEXT_AI
+  "dev-menu.hud.evidence": "Evidence", // PM_TEXT_AI
+  "dev-menu.hud.distance": "Distance", // PM_TEXT_AI
+  "dev-menu.hud.sanity": "Sanity", // PM_TEXT_AI
+  "dev-menu.hud.player-speed": "Your speed", // PM_TEXT_AI
+  "dev-menu.hud.clock": "Game speed", // PM_TEXT_AI
+  "dev-menu.hud.noclip": "Noclip", // PM_TEXT_AI
+  "dev-menu.why.friendly": "the ghost is friendly, so the game would refuse it", // PM_TEXT_AI
+  "dev-menu.why.no-rig": "the game gave no PC player or no walkable floor for it", // PM_TEXT_AI
   "dev-menu.why.alive": "you are not dead", // PM_TEXT_AI
-  "dev-menu.why.no-truck": "this level has no truck to leave in" // PM_TEXT_AI
+  "dev-menu.why.dying": "a kill is already under way", // PM_TEXT_AI
+  "dev-menu.revive": "Revive you", // PM_TEXT_AI
+  "dev-menu.dummy": "Dummy investigator", // PM_TEXT_AI
+  "dev-menu.dummy-spawn": "Add the dummy beside you", // PM_TEXT_AI
+  "dev-menu.dummy-to-me": "Move the dummy to you", // PM_TEXT_AI
+  "dev-menu.dummy-banshee": "Make the dummy the Banshee's target", // PM_TEXT_AI
+  "dev-menu.dummy-revive": "Revive the dummy", // PM_TEXT_AI
+  "dev-menu.dummy-remove": "Remove the dummy", // PM_TEXT_AI
+  "dev-menu.why.no-dummy": "there is no dummy in this contract", // PM_TEXT_AI
+  "dev-menu.esp.dummy": "Dummy" // PM_TEXT_AI
 }

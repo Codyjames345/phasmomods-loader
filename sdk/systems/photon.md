@@ -197,6 +197,13 @@ Most of the game's RPC bodies start by checking who sent them, and some also che
 
 **A refusal is never harmless, and it can harm an account.** Every refusal is to be avoided.
 
+**Offline and outside a room, only the sender checks pass.** The game's state checks still run, and a refusal
+still raises the report. The live log of 2026-11-12 shows it: in a single player contract, `Player.RevivePlayer`
+on a dead investigator in a contract without the Monkey Paw or the tarot cards was refused by the `Revive` RPC's
+body, the report was raised for `Revive`, and the game faulted after it ([players](players.md), "The `Revive`
+RPC's own checks"). So a mod's single player sandbox is no excuse to reach an RPC in a state the game never
+would.
+
 ### What a mod must not do
 
 - **Send by calling the game's own method, on the client the game sends it from.** The method holds the guard the

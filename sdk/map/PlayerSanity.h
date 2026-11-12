@@ -85,6 +85,8 @@ namespace phasmo {
 
 /// A player's sanity. `sanity` below is the PlayerSanity.
 struct PlayerSanity {
+  /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::PlayerSanity> type{};
   /// Update(sanity). A mod hooks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PlayerSanity_Update, void(void*)> Update{};
   /// The candle test of Update: CandleIsOn(closure, candle). A mod hooks it. Unresolved: false.

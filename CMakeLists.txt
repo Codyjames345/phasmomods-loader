@@ -218,7 +218,8 @@ pm_options(Emotes)
 
 # Dev Menu: the single player sandbox, developerOnly so players never see it
 # (docs/superpowers/specs/2026-11-10-dev-menu-content-plan.md).
-add_library(DevMenu SHARED mods/dev_menu/mod.cpp mods/dev_menu/actions.cpp mods/dev_menu/menu.cpp)
+add_library(DevMenu SHARED mods/dev_menu/mod.cpp mods/dev_menu/actions.cpp mods/dev_menu/menu.cpp
+            mods/dev_menu/overlay.cpp mods/dev_menu/dummy.cpp)
 target_include_directories(DevMenu PRIVATE mods/dev_menu)
 target_include_directories(DevMenu BEFORE PRIVATE sdk/api sdk/map)
 target_link_libraries(DevMenu PRIVATE pmmod)

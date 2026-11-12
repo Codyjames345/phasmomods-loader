@@ -66,9 +66,12 @@ launcher.ini settings):
 Dev mode is single player only and fully sandboxed. This replaces the second round's private-room
 scope: the menu only opens while PUN runs offline, which is the game's own single player state.
 
-- No room exists, so nothing is listed anywhere, nobody can join, and no RPC can be refused: the
-  game's sender checks let everyone through outside a room or offline (systems/photon.md), so the
-  refusal risk that row scoping existed for cannot arise. No special networking work is needed to
+- No room exists, so nothing is listed anywhere and nobody can join. **Corrected 2026-11-12:** the
+  claim that no RPC can be refused offline was wrong. The sender checks let everyone through offline,
+  but the RPC bodies' checks of the game's state still run, and a refusal still raises the game's
+  report: the menu's revive row did exactly that (the `Revive` body refuses without the paw or the
+  cards in the contract; systems/players.md). Every row now refuses in menu_rule.h wherever the
+  game's body would, and the revive row is gone. No special networking work is needed to
   "disable" it: single player already runs with PUN offline. The menu never connects, never creates
   a room, and simply will not open inside one (SDK: the same offline gate).
 - Pause-while-open and the timeScale rows are fully live, since freezing the contract is freezing

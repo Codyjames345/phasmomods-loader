@@ -3,8 +3,10 @@
 // click already passed refuse() before an action here runs. Everything reads the running game now, per the
 // dynamic-over-hard-coded rule: state numbers, room lists, type lists and every value come from the map.
 #include "actions.h"
+#include "dummy.h"
 
 #include <chrono>
+#include <cmath>
 #include <random>
 #include <type_traits>
 #include <string>
@@ -17,19 +19,27 @@
 #include "runtime.h"
 
 #include "Difficulty.h"
+#include "Equipment.h"
+#include "EvidenceController.h"
+#include "GhostInfo.h"
 #include "GameController.h"
 #include "GhostAI.h"
 #include "GhostCollection.h"
 #include "GhostController.h"
 #include "GhostHuntState.h"
+#include "GhostTypes.h"
 #include "LevelController.h"
+#include "LevelRoom.h"
 #include "MainManager.h"
 #include "Photon.h"
 #include "Player.h"
 #include "PlayerSanity.h"
+#include "Rewards.h"
 #include "Sensor.h"
 #include "UnityAudio.h"
 #include "UnityObject.h"
+#include "UnityWorld.h"
+#include "Weather.h"
 
 #include "content.h"
 
@@ -54,6 +64,18 @@ bool g_frozen = false;       // our last ToggleFreezePlayerMovement for the loca
 api::Held g_visionInput;
 int32_t g_visionLayers = 0;
 bool g_visionEmptied = false;
+// The physical step noclip switched off, so the walk hook knows its rig and a stop can switch it back on.
+api::Held g_noclipController;
+// The revive's loan: the Difficulty whose cursed possessions are lent the Monkey Paw, its own array to give back,
+// and when the loan ends at the latest.
+api::Held g_lentFrom;
+api::Held g_ownCursed;
+uint64_t g_loanEnds = 0;
+uint64_t g_nextSanityLock = 0;  // the sanity lock asks the game's setter at most this often (ms clock)
+
+uint64_t now_ms() {
+  return static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch() / std::chrono::milliseconds(1));
+}
 
 // ---- The hooks. Their creation is actions::start(): if one cannot be made the mod stays off, so a dev
 // session always has progression suppression (fail closed). ----
@@ -62,6 +84,7 @@ bool g_visionEmptied = false;
 // kill decision is this client's and the kill's network body is never touched.
 bool det_kill(api::Original<GhostHuntState::Kill> original, void* hunt, void* player, bool force, float reach,
               float slowReach) {
+  if (dummy::on_kill(player)) return true;  // the dummy dies here: its Photon owner, which it lacks, is never asked
   if (god_refuses_kill(g_switches.godMode, player && player == game::local_player())) return false;
   return original(hunt, player, force, reach, slowReach);
 }
@@ -79,10 +102,95 @@ void det_check_challenges(api::Original<ExitLevel::CheckChallenges> original) {
   original();
 }
 
-// Never lose a consumable: the saved stock's decrement is skipped while the switch is on.
+// A dev session spends no consumable: the saved stock's decrement is skipped while the session is on.
 void det_remove_amount(api::Original<EquipmentInfo::RemoveAmountOwned> original, void* info, int32_t amount) {
-  if (keep_refuses_consume(g_switches.keepConsumables)) return;
+  if (suppress_progress(g_session)) return;
   original(info, amount);
+}
+
+// The reward screen's results save the contract's money, progress the money and experience challenges and save
+// the seasonal event's score (RewardManager.Results, sdk/systems/contract.md). None of it runs in a dev session;
+// the screen's Next does not wait on it (its decompile: it refreshes the inventory and the level read-out).
+void det_start_results(api::Original<RewardManager::StartResults> original, void* screen) {
+  if (suppress_progress(g_session)) {
+    PM_LOG("dev-menu: the reward screen's results are skipped: this run is a dev session");
+    return;
+  }
+  original(screen);
+}
+
+// The experience pay: every call is the reward screen's (its Skip among them).
+void det_add_xp(api::Original<SingleplayerProfile::AddXPAndFunds> original, void* profile, int32_t xp,
+                int32_t money) {
+  if (suppress_progress(g_session)) return;
+  original(profile, xp, money);
+}
+
+// A death with the difficulty's lose-items set costs the brought equipment at the reward screen. In a dev
+// session the screen's other branch runs instead, the game's own return of it to the player's stock.
+void det_reset_equipment(api::Original<InventoryManager::ResetAllEquipment> original, void* inventory) {
+  if (return_instead_of_losing(g_session)) {
+    InventoryManager::ReturnItemstoInventory(inventory);
+    return;
+  }
+  original(inventory);
+}
+
+// The save freeze: once a dev session has started, EasySave3's commit of a written save is skipped, so the save on
+// disk never changes for the rest of the run (menu_rule.h, freeze_save). The temporary copy the writer made is all
+// that changes, and the next write rewrites it from the real save.
+void det_commit(api::Original<ES3IO::CommitBackup> original, void* settings) {
+  if (freeze_save(g_session)) {
+    static bool told = false;
+    if (!told) {
+      told = true;
+      PM_LOG("dev-menu: the save is frozen for this run: the game's saves stop at EasySave3's temporary copy");
+    }
+    return;
+  }
+  original(settings);
+}
+
+// The store switches. Each answers only inside the single player sandbox (store_switch_applies), so a lobby joined
+// later in the same run gets the game's own answers.
+bool det_unlocked(api::Original<StoreItem::IsUnlocked> original, void* item) {
+  if (store_switch_applies(g_switches.unlockAll, can_open())) return true;
+  return original(item);
+}
+bool det_meets_level(api::Original<StoreItem::MeetsLevel> original, void* item) {
+  if (store_switch_applies(g_switches.unlockAll, can_open())) return true;
+  return original(item);
+}
+bool det_can_afford(api::Original<StoreItem::CanAfford> original, void* item, int32_t amount) {
+  if (store_switch_applies(g_switches.freeShop, can_open())) return true;
+  return original(item, amount);
+}
+bool det_can_buy(api::Original<StoreEquipment::CanBuy> original, void* entry, int32_t amount) {
+  if (store_switch_applies(g_switches.freeShop, can_open())) return true;
+  return original(entry, amount);
+}
+
+// Noclip: while the rig's physical step is switched off, the walk the game asks for this frame moves the rig
+// along the camera instead, so looking up and walking forward climbs. The horizontal walk is split into the
+// part along the camera's facing, which follows the camera's pitch, and the part across it, which stays level;
+// its length is the game's own walk or sprint at the rig's own speed multiplier.
+void det_move(api::Original<PhysicsCharacterController::Move> original, void* controller, Vector3 walk) {
+  original(controller, walk);
+  if (!g_switches.noclip || !controller || controller != static_cast<void*>(g_noclipController)) return;
+  void* camera = game::local_camera();
+  void* body = game::transform_of(controller);
+  if (!camera || !body) return;
+  const Vector3 f = game::forward(game::transform_of(camera));
+  const float flat = std::hypot(f.x, f.z);
+  Vector3 step{walk.x, 0.0f, walk.z};
+  if (flat > 0.0001f) {
+    const float fx = f.x / flat, fz = f.z / flat;
+    const float along = walk.x * fx + walk.z * fz;  // metres along the camera's level facing
+    // The part along the facing is turned onto the camera's own forward, a unit vector, so its length stays.
+    step = {walk.x - along * fx + along * f.x, along * f.y, walk.z - along * fz + along * f.z};
+  }
+  const Vector3 at = game::position(body);
+  game::set_position(body, {at.x + step.x, at.y + step.y, at.z + step.z});
 }
 
 // ---- Reading the contract ----
@@ -189,8 +297,20 @@ bool start() {
          api::hook<ExitLevel::CheckMissions>(&det_check_missions, "Dev Menu: no missions at the end") &&
          api::hook<ExitLevel::CheckChallenges>(&det_check_challenges, "Dev Menu: no challenges at the end") &&
          api::hook<EquipmentInfo::RemoveAmountOwned>(&det_remove_amount, "Dev Menu: consumables stay") &&
+         api::hook<RewardManager::StartResults>(&det_start_results, "Dev Menu: no reward results") &&
+         api::hook<SingleplayerProfile::AddXPAndFunds>(&det_add_xp, "Dev Menu: no experience pay") &&
+         api::hook<InventoryManager::ResetAllEquipment>(&det_reset_equipment, "Dev Menu: equipment comes back") &&
+         api::hook<PhysicsCharacterController::Move>(&det_move, "Dev Menu: noclip moves along the camera") &&
+         api::hook<ES3IO::CommitBackup>(&det_commit, "Dev Menu: the save stays as it was in a dev session") &&
+         api::hook<StoreItem::IsUnlocked>(&det_unlocked, "Dev Menu: everything unlocked") &&
+         api::hook<StoreItem::MeetsLevel>(&det_meets_level, "Dev Menu: every level reached") &&
+         api::hook<StoreItem::CanAfford>(&det_can_afford, "Dev Menu: the store is free") &&
+         api::hook<StoreEquipment::CanBuy>(&det_can_buy, "Dev Menu: the buy button is free") &&
+         dummy::hook() &&
          hooks::enable_all();
 }
+
+void end_loan();
 
 void stop() {
   // The host takes the mod's hooks down when the mod stops; nothing to do here beyond our own state. The
@@ -201,6 +321,42 @@ void stop() {
     RangeSensor::layers.set(g_visionInput, g_visionLayers);
   g_visionEmptied = false;
   g_visionInput = nullptr;
+  // Nor with the investigator's physical step switched off, or the contract's possessions on loan.
+  set_noclip(false);
+  end_loan();
+  dummy::despawn();
+  g_switches = Switches{};
+}
+
+// Puts the contract's own cursed possessions back once the revive the loan was for has landed.
+void end_loan() {
+  if (g_lentFrom && api::alive(g_lentFrom)) Difficulty::actualCursedItems.set(g_lentFrom, g_ownCursed);
+  g_lentFrom = nullptr;
+  g_ownCursed = nullptr;
+  g_loanEnds = 0;
+}
+
+void tick() {
+  dummy::tick();
+  if (g_lentFrom) {
+    void* player = game::local_player();
+    const bool revived = player && !Player::isDead.get(player) && !Player::dying.get(player);
+    if (revived || now_ms() >= g_loanEnds) end_loan();
+  }
+  // A scene change takes the rig, and its switched-off step, with it: the switch goes off with them.
+  if (g_switches.noclip && (!g_noclipController || !api::alive(g_noclipController))) {
+    g_switches.noclip = false;
+    g_noclipController = nullptr;
+  }
+  if (g_switches.lockSanity) {
+    void* player = game::local_player();
+    void* s = player ? Player::sanity.get(player) : nullptr;
+    const uint64_t now = now_ms();
+    if (s && now >= g_nextSanityLock && sanity_needs_reset(PlayerSanity::insanity.get(s), g_switches.lockedSanity)) {
+      g_nextSanityLock = now + 250;
+      PlayerSanity::SetInsanity(s, g_switches.lockedSanity);
+    }
+  }
 }
 
 void note_session() {
@@ -238,6 +394,9 @@ Can snapshot() {
   c.player = player != nullptr;
   c.hunting = c.ghost && GhostAI::isHunting.get(game::ghost_ai());
   c.dead = c.player && Player::isDead.get(player);
+  c.dying = c.player && Player::dying.get(player);
+  c.friendly = friendly();
+  c.dummy = dummy::player() != nullptr;
   c.rooms = static_cast<int>(game::level_rooms().size());
   return c;
 }
@@ -581,10 +740,39 @@ void kill_local() {
   if (player) Player::BeginDeathSequence(player, phasmo::DeathType::SnappedNeck());
 }
 
-void revive_local() {
-  // The two game callers (the paw's wish and the High Priestess) both pass false (players.md).
+bool revive_local() {
+  // The game's own revive, Player.RevivePlayer with false as both of its callers pass. Its Revive RPC goes on only
+  // when the contract carries the tarot cards or the Monkey Paw (Difficulty.actualCursedItems; players.md), the
+  // two things that revive in vanilla. A contract without either borrows the paw: the array is swapped for a copy
+  // with the paw added until the revive lands (tick), then the contract's own array goes back.
   void* player = game::local_player();
-  if (player) Player::RevivePlayer(player, false);
+  void* d = difficulty();
+  if (!player || !d) return false;
+  if (!g_lentFrom) {
+    void* own = Difficulty::actualCursedItems.get(d);
+    const int32_t tarot = CursedItemType::tarotCards(), paw = CursedItemType::monkeyPaw();
+    bool carried = false;
+    {
+      const api::Array<int32_t> items{own};
+      for (size_t i = 0; i < items.size(); ++i)
+        if (items[i] == tarot || items[i] == paw) carried = true;
+    }
+    if (!carried) {
+      const size_t n = api::Array<int32_t>{own}.size();
+      void* lent = CursedItemType::type.make_array(n + 1);
+      if (!lent) return false;
+      const api::Array<int32_t> copy{lent};
+      const api::Array<int32_t> items{own};  // read afresh: make_array was a managed call
+      for (size_t i = 0; i < n; ++i) copy[i] = items[i];
+      copy[n] = paw;
+      g_lentFrom = d;
+      g_ownCursed = own;
+      g_loanEnds = now_ms() + 5000;
+      Difficulty::actualCursedItems.set(d, lent);
+    }
+  }
+  Player::RevivePlayer(player, false);
+  return true;
 }
 
 void unlock_main_door() {
@@ -630,6 +818,308 @@ void quit() {
 }
 
 void set_time_scale(float value) { Time::set_timeScale(value); }
+
+// ---- The ghost's type, changed mid-contract the way the game set it up at spawn ----
+
+namespace {
+
+// The scene's EvidenceController, found as the pause menu is (at most one scene search a second).
+void* evidence_controller() {
+  static uint64_t nextSearch = 0;
+  static api::Held found;
+  if (found && game::alive(found)) return found;
+  const uint64_t now = now_ms();
+  if (now < nextSearch) return nullptr;
+  nextSearch = now + 1000;
+  void* type = EvidenceController::type.type_object();
+  found = type ? Object::FindObjectOfType(type, true) : nullptr;
+  return found;
+}
+
+bool list_holds(void* list, int32_t value) {
+  const api::List l{list};
+  const size_t n = l.size();
+  const api::Array<int32_t> items{l.items()};
+  for (size_t i = 0; i < n; ++i)
+    if (items[i] == value) return true;
+  return false;
+}
+
+}  // namespace
+
+int type_options() { return static_cast<int>(offered_types().size()); }
+
+int32_t type_option(int index) {
+  const std::vector<int32_t> types = offered_types();
+  return index >= 0 && static_cast<size_t>(index) < types.size() ? types[index] : -1;
+}
+
+std::string type_name(int32_t type) {
+  if (type < 0) return {};
+  const std::string id = api::content::id_of(type);
+  return id.empty() ? std::to_string(type) : id + " (" + std::to_string(type) + ")";
+}
+
+bool retype(int32_t type) {
+  // The spawn path, run again on this client, the master: the controller's traits take the type as the roll
+  // writes it (identity and behaviour), the game's own evidence pick runs for it (GhostController.PickEvidence,
+  // local), and GhostAI.Init runs on those traits as GhostController.CreateGhost runs it. Init copies the traits to
+  // GhostInfo and runs StartGhost: the game's own sync (SyncValuesNetworked, then SyncEvidence, whose once-flag is
+  // cleared first so it takes the new evidence; both pass their sender check, this client being the master) and
+  // every per-type start step (the Banshee's target, the Mimic's and the Dayan's lists). The host's content layer
+  // hooks the same Init and sync, so a custom type arms as it does at spawn.
+  void* c = controller();
+  void* ai = game::ghost_ai();
+  void* info = ai ? GhostAI::info.get(ai) : nullptr;
+  const PmGameEntry* traits = api::Use<pm::map::GhostController_traits>::entry();
+  if (!c || !info || !traits || type < 0) return false;
+  GhostController::ghostType.set(c, type);
+  GhostController::behaviourType.set(c, type);
+  GhostController::PickEvidence(c);
+  GhostInfo::evidenceSynced.set(info, false);
+  GhostAI::Init(ai, static_cast<char*>(c) + traits->offset);
+  // What the game never undoes, since a contract's type never changes: the orb the last type's evidence switched
+  // on, and the freezing flag it set (EvidenceController's notes).
+  if (void* ec = evidence_controller()) {
+    void* given = GhostController::givenEvidence.get(c);
+    const bool orbs = list_holds(given, EvidenceType::GhostOrb()) || type == GhostType::Mimic();
+    void* orb = EvidenceController::ghostOrb.get(ec);
+    if (!orbs && orb && api::alive(orb)) GameObject::SetActive(Component::get_gameObject(orb), false);
+    EvidenceController::freezing.set(ec, list_holds(given, EvidenceType::Temperature()));
+  }
+  PM_LOG("dev-menu: the ghost is now type %d (%s)", type, type_name(type).c_str());
+  return true;
+}
+
+// ---- Weather: the Monkey Paw's transition, and the difficulty's weather with it ----
+
+namespace {
+
+// The weathers a contract can have, paired by name across the game's two numberings: the scene's profiles
+// (LevelValues' WeatherType, what RandomWeather.TransitionWeatherProfile takes) and the difficulty's
+// (WeatherValueType, what Difficulty.actualWeather holds and the hunt's Blood Moon branch reads). Both numbers are
+// read from the game now; the dead players' profile is never a contract's and is left out.
+struct WeatherPair {
+  const char* name;
+  int32_t scene;
+  int32_t played;
+};
+
+std::vector<WeatherPair> weathers() {
+  return {{"clear", WeatherType::clear(), WeatherValueType::Clear()},
+          {"foggy", WeatherType::foggy(), WeatherValueType::Fog()},
+          {"rain", WeatherType::rain(), WeatherValueType::LightRain()},
+          {"heavyRain", WeatherType::heavyRain(), WeatherValueType::HeavyRain()},
+          {"snow", WeatherType::snow(), WeatherValueType::Snow()},
+          {"wind", WeatherType::wind(), WeatherValueType::Wind()},
+          {"sunrise", WeatherType::sunrise(), WeatherValueType::Sunrise()},
+          {"bloodMoon", WeatherType::bloodMoon(), WeatherValueType::BloodMoon()}};
+}
+
+}  // namespace
+
+int weather_count() { return static_cast<int>(weathers().size()); }
+
+std::string weather_name(int index) {
+  const std::vector<WeatherPair> all = weathers();
+  return index >= 0 && static_cast<size_t>(index) < all.size() ? all[index].name : std::string{};
+}
+
+std::string weather_now() {
+  void* d = difficulty();
+  if (!d) return {};
+  const int32_t played = Difficulty::actualWeather.get(d);
+  for (const WeatherPair& w : weathers())
+    if (w.played == played) return w.name;
+  return std::to_string(played);
+}
+
+bool apply_weather(int index) {
+  const std::vector<WeatherPair> all = weathers();
+  void* scene = RandomWeather::instance.get();
+  void* d = difficulty();
+  if (index < 0 || static_cast<size_t>(index) >= all.size() || !d || !scene || !api::alive(scene)) return false;
+  // The difficulty first, so the hunt's Blood Moon branch (GhostHuntState.UpdateSpeed, GhostActivity.GhostAbility)
+  // agrees with the sky from the next frame; then the paw's own transition: LevelValues.weather, the sky, the sound.
+  // The storm's lightning reads LevelValues.weather at each strike, so it starts and stops with the change.
+  Difficulty::actualWeather.set(d, all[index].played);
+  RandomWeather::TransitionWeatherProfile(scene, all[index].scene, true);
+  return true;
+}
+
+// ---- Movement: noclip and the teleports ----
+
+// The PC rig's physical step (the PhysicsCharacterController the FirstPersonController drives), or null for a
+// VR rig, off contract, or where the class did not resolve.
+void* rig_controller() {
+  void* rig = pc_rig();
+  void* type = PhysicsCharacterController::type.type_object();
+  if (!rig || !type) return nullptr;
+  void* controller = Component::GetComponentInChildren(rig, type, true);
+  if (!controller) controller = Component::GetComponentInParent(rig, type, true);
+  return controller && api::alive(controller) ? controller : nullptr;
+}
+
+bool noclip() { return g_switches.noclip; }
+
+bool set_noclip(bool on) {
+  if (!on) {
+    if (g_noclipController && api::alive(g_noclipController)) Behaviour::set_enabled(g_noclipController, true);
+    g_noclipController = nullptr;
+    g_switches.noclip = false;
+    return true;
+  }
+  void* controller = rig_controller();
+  if (!controller) return false;
+  g_noclipController = controller;
+  Behaviour::set_enabled(controller, false);
+  g_switches.noclip = true;
+  return true;
+}
+
+namespace {
+
+// The nearest point of the navigation mesh within `reach` metres, or false.
+bool on_mesh(Vector3 p, float reach, Vector3& out) {
+  NavMeshHit hit{};
+  if (!NavMesh::SamplePosition(&p, &hit, reach, -1)) return false;
+  out = hit.position;
+  return true;
+}
+
+// Moves the rig so it stands over `floor` (a point of the navigation mesh) as high as it stands over the mesh
+// now, so the capsule lands on its feet wherever the rig's own origin sits. The next physical step starts from
+// the transform (PhysicsCharacterController's note).
+bool stand_at(Vector3 floor) {
+  void* controller = rig_controller();
+  void* body = controller ? game::transform_of(controller) : nullptr;
+  if (!body) return false;
+  const Vector3 at = game::position(body);
+  Vector3 under{};
+  const float lift = on_mesh(at, 4.0f, under) ? at.y - under.y : 0.0f;
+  game::set_position(body, {floor.x, floor.y + lift, floor.z});
+  return true;
+}
+
+Vector3 ghost_position() {
+  void* ai = game::ghost_ai();
+  void* t = ai ? game::transform_of(ai) : nullptr;
+  return t ? game::position(t) : Vector3{};
+}
+
+}  // namespace
+
+bool me_to_ghost() {
+  if (!game::ghost_ai()) return false;
+  Vector3 floor{};
+  if (!on_mesh(ghost_position(), 4.0f, floor)) return false;
+  return stand_at(floor);
+}
+
+bool me_to_ghost_room() {
+  void* room = nullptr;
+  {
+    const api::RefArray rooms = game::level_rooms();
+    const int index = favourite_room_index();
+    if (index >= 0 && static_cast<size_t>(index) < rooms.size()) room = rooms[index];
+  }
+  void* list = room ? LevelRoom::roomColliders.get(room) : nullptr;
+  if (!list) return false;
+  api::RefArray colliders{api::List{list}.items()};
+  for (size_t i = 0; i < colliders.size(); ++i) {
+    if (!colliders[i]) continue;
+    const Bounds b = Collider::get_bounds(colliders[i]);
+    Vector3 floor{};
+    if (on_mesh(b.center, b.extents.y + 2.0f, floor)) return stand_at(floor);
+  }
+  return false;
+}
+
+bool ghost_to_me() {
+  void* ai = game::ghost_ai();
+  void* agent = ai ? GhostAI::agent.get(ai) : nullptr;
+  void* player = game::local_player();
+  void* t = player ? game::transform_of(player) : nullptr;
+  if (!agent || !t) return false;
+  Vector3 floor{};
+  if (!on_mesh(game::position(t), 4.0f, floor)) return false;
+  return NavMeshAgent::Warp(agent, &floor);
+}
+
+// ---- Read-outs added with the HUD ----
+
+bool ghost_at(Vector3& out) {
+  void* ai = game::ghost_ai();
+  void* t = ai ? game::transform_of(ai) : nullptr;
+  if (!t) return false;
+  out = game::position(t);
+  return true;
+}
+
+float ghost_agent_speed() {
+  void* ai = game::ghost_ai();
+  void* agent = ai ? GhostAI::agent.get(ai) : nullptr;
+  return agent ? NavMeshAgent::get_speed(agent) : 0.0f;
+}
+
+std::string ghost_room_now() {
+  Vector3 p{};
+  if (!ghost_at(p)) return {};
+  void* room = game::room_at(p);
+  return room ? api::to_utf8(LevelRoom::name.get(room)) : std::string{};
+}
+
+float ghost_distance() {
+  Vector3 g{};
+  void* camera = game::local_camera();
+  void* t = camera ? game::transform_of(camera) : nullptr;
+  if (!t || !ghost_at(g)) return -1.0f;
+  return game::distance(g, game::position(t));
+}
+
+bool room_centre(int index, Vector3& out) {
+  const api::RefArray rooms = game::level_rooms();
+  if (index < 0 || static_cast<size_t>(index) >= rooms.size() || !rooms[index]) return false;
+  void* list = LevelRoom::roomColliders.get(rooms[index]);
+  if (!list) return false;
+  api::RefArray colliders{api::List{list}.items()};
+  const size_t n = api::List{list}.size();
+  for (size_t i = 0; i < n; ++i) {
+    if (!colliders[i]) continue;
+    out = Collider::get_bounds(colliders[i]).center;
+    return true;
+  }
+  return false;
+}
+
+std::string given_evidence() {
+  void* c = controller();
+  void* list = c ? GhostController::givenEvidence.get(c) : nullptr;
+  if (!list) return {};
+  // The vanilla evidence by the enum's own value names, read now; anything else (a custom evidence) by number.
+  const std::pair<int32_t, const char*> names[] = {
+      {EvidenceType::EMF(), "EMF"},
+      {EvidenceType::SpiritBox(), "SpiritBox"},
+      {EvidenceType::ultraViolet(), "ultraViolet"},
+      {EvidenceType::GhostOrb(), "GhostOrb"},
+      {EvidenceType::GhostWritingBook(), "GhostWritingBook"},
+      {EvidenceType::Temperature(), "Temperature"},
+      {EvidenceType::DotsProjector(), "DotsProjector"},
+  };
+  std::string out;
+  const api::List items{list};
+  const size_t n = items.size();
+  const api::Array<int32_t> values{items.items()};
+  for (size_t i = 0; i < n; ++i) {
+    const int32_t e = values[i];
+    std::string name = std::to_string(e);
+    for (const auto& [value, label] : names)
+      if (value == e) name = label;
+    if (!out.empty()) out += ", ";
+    out += name;
+  }
+  return out;
+}
 
 std::vector<EventKind> event_kinds() {
   static const EventKind kinds[] = {

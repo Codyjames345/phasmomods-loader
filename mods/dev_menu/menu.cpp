@@ -11,9 +11,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "actions.h"
+#include "dummy.h"
 #include "buttons.h"
 #include "menu_layout.h"
 #include "game.h"
@@ -34,11 +36,6 @@ namespace i18n = pm::i18n;
 constexpr const char* kTitleKey = i18n::key("dev-menu.title");
 constexpr const char* kHintKey = i18n::key("dev-menu.hint");
 constexpr const char* kOnKey = i18n::key("dev-menu.on");
-// The developer read-out's four labels. Its wording is the user's to write (PM_TEXT_TODO in the table).
-constexpr const char* kHudStateKey = i18n::key("dev-menu.hud.state");
-constexpr const char* kHudTypeKey = i18n::key("dev-menu.hud.type");
-constexpr const char* kHudSpeedKey = i18n::key("dev-menu.hud.speed");
-constexpr const char* kHudTargetKey = i18n::key("dev-menu.hud.target");
 constexpr const char* kOffKey = i18n::key("dev-menu.off");
 constexpr const char* kRefusedKey = i18n::key("dev-menu.refused");
 constexpr const char* kWhyKeys[] = {nullptr, i18n::key("dev-menu.why.not-offline"),
@@ -48,7 +45,11 @@ constexpr const char* kWhyKeys[] = {nullptr, i18n::key("dev-menu.why.not-offline
                                     i18n::key("dev-menu.why.no-player"),
                                     i18n::key("dev-menu.why.hunting"), i18n::key("dev-menu.why.not-hunting"),
                                     i18n::key("dev-menu.why.no-rooms"), i18n::key("dev-menu.why.dead"),
-                                    i18n::key("dev-menu.why.alive"), i18n::key("dev-menu.why.no-truck")};
+                                    i18n::key("dev-menu.why.no-truck"), i18n::key("dev-menu.why.friendly"),
+                                    i18n::key("dev-menu.why.no-rig"), i18n::key("dev-menu.why.alive"),
+                                    i18n::key("dev-menu.why.dying"), i18n::key("dev-menu.why.no-dummy")};
+static_assert(sizeof kWhyKeys / sizeof kWhyKeys[0] == static_cast<size_t>(Why::NoDummy) + 1,
+              "every refusal reason has its text, in the order of menu_rule.h's Why");
 
 // The sections, in the order they show down the left.
 constexpr int kSections = 6;
@@ -63,8 +64,9 @@ constexpr const char* kSectionKeys[kSections] = {i18n::key("dev-menu.section.dif
 enum ValueKind {
   NoValue,
   OnFriendly, OnLoseEquipment, CountEvidence, NameType, NumberReward, NumberPayout, LineState, LineIdentity,
-  NameRoom, NumberSpeed, PickRoom, OnEvents, PickEvent, NumberSanity, OnFrozen, OnGod, OnKeep, NumberScale,
-  OnPause, OnSession, OnOffline, NumberMultiplier, OnBlind, OnDebugHud,
+  NameRoom, NumberSpeed, PickRoom, OnEvents, PickEvent, NumberSanity, OnFrozen, OnGod, NumberScale,
+  OnPause, OnSession, OnOffline, NumberMultiplier, OnBlind, OnDebugHud, LineEvidence, OnNoclip, OnLockSanity,
+  NumberLockedSanity, OnEspGhost, OnEspRooms, NameWeather, PickWeatherValue, PickRetypeValue, OnUnlockAll, OnFreeShop, OnSaveFrozen, OnDummy,
 };
 
 enum Kind { Nav, Click, Read };
@@ -87,6 +89,8 @@ bool g_active = false;    // the rows are shown
 int g_section = 0;
 int g_roomPick = 0;       // the room picker's cursor index
 int g_eventPick = 0;      // the event picker's cursor index
+int g_weatherPick = 0;    // the weather picker's cursor index
+int g_retypePick = 0;     // the re-type picker's cursor index
 Pause g_pause;
 bool g_wasCursorLocked = true;
 // Unity's UI input module, borrowed while the menu is open: the game runs it only while its journal is
@@ -106,9 +110,6 @@ void* g_refusalText = nullptr;
 // The rows' list, on the game's own ScrollRect and clip (the user's original brief asked for a ScrollRect).
 // Its parts are null when the game's classes did not resolve; the menu still works, the rows just do not move.
 ui::ScrollView g_view;
-// The developer read-out's own canvas, which stays up while the menu is closed.
-api::Held g_hudCanvas;
-void* g_hudText = nullptr;
 
 std::string onOff(bool on) { return i18n::text(on ? kOnKey : kOffKey); }
 
@@ -151,7 +152,6 @@ std::string valueText(const Row& r) {
     case NumberSanity: return number(actions::sanity());
     case OnFrozen: return onOff(actions::frozen());
     case OnGod: return onOff(actions::switches().godMode);
-    case OnKeep: return onOff(actions::switches().keepConsumables);
     case NumberScale: return number(actions::time_scale());
     case OnPause: return onOff(actions::switches().pauseWhenOpen);
     case OnSession: return onOff(actions::session_on());
@@ -159,6 +159,19 @@ std::string valueText(const Row& r) {
     case NumberMultiplier: return number(actions::speed_multiplier());
     case OnBlind: return onOff(actions::ghost_blind());
     case OnDebugHud: return onOff(actions::switches().debugHud);
+    case LineEvidence: return actions::given_evidence();
+    case OnNoclip: return onOff(actions::noclip());
+    case OnLockSanity: return onOff(actions::switches().lockSanity);
+    case NumberLockedSanity: return whole(actions::switches().lockedSanity);
+    case OnEspGhost: return onOff(actions::switches().espGhost);
+    case OnEspRooms: return onOff(actions::switches().espRooms);
+    case NameWeather: return actions::weather_now();
+    case OnUnlockAll: return onOff(actions::switches().unlockAll);
+    case OnDummy: return onOff(dummy::available());
+    case OnFreeShop: return onOff(actions::switches().freeShop);
+    case OnSaveFrozen: return onOff(freeze_save(actions::session_on()));
+    case PickWeatherValue: return actions::weather_name(g_weatherPick);
+    case PickRetypeValue: return actions::type_name(actions::type_option(g_retypePick));
   }
   return {};
 }
@@ -191,6 +204,11 @@ std::vector<Row> sectionRows(int section) {
       break;
     case 1:  // Contract
       add(Click, Action::UnlockDoor, 0, i18n::key("dev-menu.unlock-door"), NoValue);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.weather"), NameWeather);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.weather-pick"), PickWeatherValue);
+      add(Click, Action::PickWeather, -1, i18n::key("dev-menu.weather-prev"), NoValue);
+      add(Click, Action::PickWeather, +1, i18n::key("dev-menu.weather-next"), NoValue);
+      add(Click, Action::ApplyWeather, 0, i18n::key("dev-menu.weather-apply"), NoValue);
       add(Click, Action::EndContract, 0, i18n::key("dev-menu.end-contract"), NoValue);
       add(Click, Action::Leave, 0, i18n::key("dev-menu.leave"), NoValue);
       add(Click, Action::Quit, 0, i18n::key("dev-menu.quit"), NoValue);
@@ -199,6 +217,11 @@ std::vector<Row> sectionRows(int section) {
     case 2:  // Ghost
       add(Read, Action::Info, 0, i18n::key("dev-menu.state"), LineState);
       add(Read, Action::Info, 0, i18n::key("dev-menu.identity"), LineIdentity);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.evidence-given"), LineEvidence);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.retype-pick"), PickRetypeValue);
+      add(Click, Action::PickRetype, -1, i18n::key("dev-menu.retype-prev"), NoValue);
+      add(Click, Action::PickRetype, +1, i18n::key("dev-menu.retype-next"), NoValue);
+      add(Click, Action::Retype, 0, i18n::key("dev-menu.retype-apply"), NoValue);
       add(Read, Action::Info, 0, i18n::key("dev-menu.room"), NameRoom);
       add(Read, Action::Info, 0, i18n::key("dev-menu.base-speed"), NumberSpeed);
       add(Click, Action::ForceHunt, 0, i18n::key("dev-menu.force-hunt"), NoValue);
@@ -206,13 +229,17 @@ std::vector<Row> sectionRows(int section) {
       add(Click, Action::ClearCooldown, 0, i18n::key("dev-menu.clear-cooldown"), NoValue);
       add(Click, Action::Appear, 0, i18n::key("dev-menu.appear"), NoValue);
       add(Click, Action::UnAppear, 0, i18n::key("dev-menu.unappear"), NoValue);
+      add(Click, Action::FireState, 0, i18n::key("dev-menu.interact-now"), NoValue);
+      add(Click, Action::FireState, 1, i18n::key("dev-menu.ability-now"), NoValue);
+      add(Click, Action::FireState, 2, i18n::key("dev-menu.throw-now"), NoValue);
+      add(Click, Action::GhostToMe, 0, i18n::key("dev-menu.ghost-to-me"), NoValue);
       add(Read, Action::Info, 0, i18n::key("dev-menu.room-pick"), PickRoom);
       add(Click, Action::PickRoom, -1, i18n::key("dev-menu.room-prev"), NoValue);
       add(Click, Action::PickRoom, +1, i18n::key("dev-menu.room-next"), NoValue);
       add(Click, Action::ApplyRoom, 0, i18n::key("dev-menu.room-apply"), NoValue);
       add(Click, Action::RandomRoom, 0, i18n::key("dev-menu.room-random"), NoValue);
-      add(Click, Action::BumpSpeed, -1, i18n::key("dev-menu.speed-down"), NoValue);
-      add(Click, Action::BumpSpeed, +1, i18n::key("dev-menu.speed-up"), NoValue);
+      add(Click, Action::BumpSpeed, -1, i18n::key("dev-menu.ghost-speed-down"), NoValue);
+      add(Click, Action::BumpSpeed, +1, i18n::key("dev-menu.ghost-speed-up"), NoValue);
       add(Click, Action::ToggleEvents, 0, i18n::key("dev-menu.block-events"), OnEvents);
       add(Click, Action::SetGhostBlind, 0, i18n::key("dev-menu.ghost-blind"), OnBlind);
       add(Read, Action::Info, 0, i18n::key("dev-menu.event"), PickEvent);
@@ -225,22 +252,40 @@ std::vector<Row> sectionRows(int section) {
       add(Click, Action::SetSanity, 0, i18n::key("dev-menu.sanity-0"), NoValue);
       add(Click, Action::SetSanity, 50, i18n::key("dev-menu.sanity-50"), NoValue);
       add(Click, Action::SetSanity, 100, i18n::key("dev-menu.sanity-100"), NoValue);
+      add(Click, Action::SetLockSanity, 0, i18n::key("dev-menu.sanity-lock"), OnLockSanity);
+      add(Click, Action::CycleLockedSanity, 0, i18n::key("dev-menu.sanity-lock-value"), NumberLockedSanity);
       add(Click, Action::ToggleFreeze, 0, i18n::key("dev-menu.freeze"), OnFrozen);
       add(Click, Action::KillLocal, 0, i18n::key("dev-menu.die"), NoValue);
       add(Click, Action::ReviveLocal, 0, i18n::key("dev-menu.revive"), NoValue);
       add(Click, Action::SetGodMode, 0, i18n::key("dev-menu.god-mode"), OnGod);
+      add(Click, Action::SetNoclip, 0, i18n::key("dev-menu.noclip"), OnNoclip);
+      add(Click, Action::MeToGhost, 0, i18n::key("dev-menu.me-to-ghost"), NoValue);
+      add(Click, Action::MeToGhostRoom, 0, i18n::key("dev-menu.me-to-ghost-room"), NoValue);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.dummy"), OnDummy);
+      add(Click, Action::SpawnDummy, 0, i18n::key("dev-menu.dummy-spawn"), NoValue);
+      add(Click, Action::DummyAction, 0, i18n::key("dev-menu.dummy-to-me"), NoValue);
+      add(Click, Action::DummyAction, 1, i18n::key("dev-menu.dummy-banshee"), NoValue);
+      add(Click, Action::DummyAction, 2, i18n::key("dev-menu.dummy-revive"), NoValue);
+      add(Click, Action::DummyAction, 3, i18n::key("dev-menu.dummy-remove"), NoValue);
       add(Read, Action::Info, 0, i18n::key("dev-menu.player-speed"), NumberMultiplier);
-      add(Click, Action::BumpPlayerSpeed, -1, i18n::key("dev-menu.speed-down"), NoValue);
-      add(Click, Action::BumpPlayerSpeed, +1, i18n::key("dev-menu.speed-up"), NoValue);
+      add(Click, Action::BumpPlayerSpeed, -1, i18n::key("dev-menu.player-speed-down"), NoValue);
+      add(Click, Action::BumpPlayerSpeed, +1, i18n::key("dev-menu.player-speed-up"), NoValue);
       add(Click, Action::ResetPlayerSpeed, 0, i18n::key("dev-menu.speed-reset"), NoValue);
       break;
     case 4:  // Equipment
-      add(Click, Action::SetKeepConsumables, 0, i18n::key("dev-menu.keep-consumables"), OnKeep);
+      // A dev session keeps every consumable and every brought item whatever happens (actions.cpp's hooks), so
+      // the section says so instead of offering a switch that could only ever be on.
+      add(Read, Action::Info, 0, i18n::key("dev-menu.equipment-protected"), OnSession);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.save-frozen"), OnSaveFrozen);
+      add(Click, Action::SetUnlockAll, 0, i18n::key("dev-menu.unlock-all"), OnUnlockAll);
+      add(Click, Action::SetFreeShop, 0, i18n::key("dev-menu.free-shop"), OnFreeShop);
       break;
     case 5:  // Game
       add(Click, Action::CycleTimeScale, 0, i18n::key("dev-menu.tick-speed"), NumberScale);
       add(Click, Action::SetPauseWhenOpen, 0, i18n::key("dev-menu.pause-when-open"), OnPause);
       add(Click, Action::SetDebugHud, 0, i18n::key("dev-menu.debug-hud"), OnDebugHud);
+      add(Click, Action::SetEspGhost, 0, i18n::key("dev-menu.esp-ghost"), OnEspGhost);
+      add(Click, Action::SetEspRooms, 0, i18n::key("dev-menu.esp-rooms"), OnEspRooms);
       add(Read, Action::Info, 0, i18n::key("dev-menu.session"), OnSession);
       add(Read, Action::Info, 0, i18n::key("dev-menu.offline-state"), OnOffline);
       break;
@@ -267,8 +312,6 @@ void releasePlayer();
 void refresh();
 void fitList();
 void followSelection();
-void showDebugHud(bool on);
-void refreshDebugHud();
 
 // The geometry lives in menu_layout.h, where the offline test checks it: the live test of 2026-11-12 found
 // the rows reaching up into the hint line, and a Ghost section too long for the screen, because the layout
@@ -472,6 +515,22 @@ void run(const Row& r) {
   Switches& s = actions::switches();
   switch (r.action) {
     case Action::UnlockDoor: actions::unlock_main_door(); break;
+    case Action::PickRetype: {
+      const int n = actions::type_options();
+      if (n > 0) g_retypePick = ((g_retypePick + r.arg) % n + n) % n;
+      break;
+    }
+    case Action::Retype:
+      if (!actions::retype(actions::type_option(g_retypePick))) g_refusal = Why::NoGhost;
+      break;
+    case Action::PickWeather: {
+      const int n = actions::weather_count();
+      if (n > 0) g_weatherPick = ((g_weatherPick + r.arg) % n + n) % n;
+      break;
+    }
+    case Action::ApplyWeather:
+      if (!actions::apply_weather(g_weatherPick)) g_refusal = Why::NoDifficulty;
+      break;
     case Action::EndContract: {
       // The game's own truck path, refused honestly when the scene has no truck to ask. Its coroutine
       // waits on the game's clock, so the menu steps out of the way: close() unpauses and the ending runs.
@@ -532,17 +591,52 @@ void run(const Row& r) {
     case Action::BumpPlayerSpeed: actions::bump_speed_multiplier(r.arg); break;
     case Action::ResetPlayerSpeed: actions::reset_speed_multiplier(); break;
     case Action::SetGhostBlind: actions::set_ghost_blind(!actions::ghost_blind()); break;
-    case Action::SetDebugHud: {
-      Switches& d = actions::switches();
-      d.debugHud = !d.debugHud;
-      showDebugHud(d.debugHud);
+    case Action::SetDebugHud: s.debugHud = !s.debugHud; break;  // overlay.cpp draws it
+    case Action::SetEspGhost: s.espGhost = !s.espGhost; break;
+    case Action::SetEspRooms: s.espRooms = !s.espRooms; break;
+    case Action::SetUnlockAll: s.unlockAll = !s.unlockAll; break;
+    case Action::SpawnDummy:
+      if (!dummy::spawn()) g_refusal = Why::NoPlayer;
+      break;
+    case Action::DummyAction:
+      switch (r.arg) {
+        case 0: dummy::to_me(); break;
+        case 1:
+          if (!dummy::make_banshee_target()) g_refusal = Why::NoGhost;
+          break;
+        case 2: dummy::revive(); break;
+        default: dummy::despawn(); break;
+      }
+      break;  // actions.cpp's store hooks read it
+    case Action::SetFreeShop: s.freeShop = !s.freeShop; break;
+    case Action::FireState: {
+      // The three named attempts are the game's own states, fired unforced like the event picker's.
+      static constexpr const char* kStates[] = {"interact", "GhostAbility", "throwing"};
+      if (r.arg < 0 || r.arg >= 3) break;
+      for (const actions::EventKind& k : actions::event_kinds())
+        if (std::string_view(k.name) == kStates[r.arg]) actions::fire_event(k.value);
       break;
     }
+    case Action::GhostToMe:
+      if (!actions::ghost_to_me()) g_refusal = Why::NoRig;
+      break;
+    case Action::SetNoclip:
+      if (!actions::set_noclip(!actions::noclip())) g_refusal = Why::NoRig;
+      break;
+    case Action::MeToGhost:
+      if (!actions::me_to_ghost()) g_refusal = Why::NoRig;
+      break;
+    case Action::MeToGhostRoom:
+      if (!actions::me_to_ghost_room()) g_refusal = Why::NoRig;
+      break;
+    case Action::SetLockSanity: s.lockSanity = !s.lockSanity; break;  // actions::tick holds it
+    case Action::CycleLockedSanity: s.lockedSanity = next_locked_sanity(s.lockedSanity); break;
     case Action::ToggleFreeze: actions::set_frozen(!actions::frozen()); break;
     case Action::KillLocal: actions::kill_local(); break;
-    case Action::ReviveLocal: actions::revive_local(); break;
+    case Action::ReviveLocal:
+      if (!actions::revive_local()) g_refusal = Why::NoDifficulty;
+      break;
     case Action::SetGodMode: s.godMode = !s.godMode; break;
-    case Action::SetKeepConsumables: s.keepConsumables = !s.keepConsumables; break;
     case Action::SetPauseWhenOpen: {
       s.pauseWhenOpen = !s.pauseWhenOpen;
       if (s.pauseWhenOpen && !g_pause.frozen) {
@@ -649,42 +743,6 @@ void refresh() {
   followSelection();  // the arrow keys and a gamepad moved the selection inside the game
 }
 
-// ---- The developer read-out (the user's original brief: "debug HUD with ghost speed/target/state") ----
-// The mod's own text on its own small canvas, which stays up while the menu is closed so a developer can
-// watch a hunt while playing it. It is a tool's read-out, not a game screen, and every word of it is a
-// placeholder in the mod's table for the user to write.
-void showDebugHud(bool on) {
-  if (!on) {
-    if (g_hudCanvas && game::alive(g_hudCanvas)) ui::set_active(g_hudCanvas, false);
-    return;
-  }
-  if (!g_hudCanvas || !game::alive(g_hudCanvas)) {
-    g_hudCanvas = ui::create_canvas("pm dev menu hud", 29000);
-    g_hudText = nullptr;
-    if (!g_hudCanvas) {
-      PM_LOG("dev-menu: the debug read-out's canvas could not be made");
-      return;
-    }
-    g_hudText = ui::create_text(g_hudCanvas, "pm dev menu hud text", 22.0f);
-    if (g_hudText) {
-      ui::set_color(g_hudText, kText);
-      ui::set_alignment(g_hudText, ui::Align::TopLeft);
-      ui::place(g_hudText, {0.0f, 0.5f}, {0.0f, 0.5f}, {-930.0f, 440.0f}, {860.0f, 130.0f});
-    }
-  }
-  ui::set_active(g_hudCanvas, true);
-  refreshDebugHud();
-}
-
-void refreshDebugHud() {
-  if (!actions::switches().debugHud || !g_hudText || !game::alive(g_hudText)) return;
-  const std::string line = i18n::text(kHudStateKey) + ": " + actions::ghost_line() + "\n" +
-                           i18n::text(kHudTypeKey) + ": " + actions::ghost_identity() + "\n" +
-                           i18n::text(kHudSpeedKey) + ": " + number(actions::base_speed()) + "\n" +
-                           i18n::text(kHudTargetKey) + ": " + actions::hunt_target_room();
-  ui::set_text(g_hudText, line.c_str());
-}
-
 }  // namespace
 
 bool is_open() { return g_active && g_canvas && game::alive(g_canvas); }
@@ -722,8 +780,6 @@ void close() {
 }
 
 void tick() {
-  // The read-out runs on its own: it stays up while the menu is closed, which is when it is worth having.
-  if (actions::switches().debugHud) refreshDebugHud();
   if (!g_active) return;
   if (!g_canvas || !game::alive(g_canvas)) {
     recover();  // the scene changed under the menu: the game goes back to how open() found it
@@ -745,9 +801,6 @@ void destroy() {
   returnInput();
   if (g_active && g_wasCursorLocked) game::lock_cursor();
   if (g_canvas) ui::destroy(g_canvas);
-  if (g_hudCanvas) ui::destroy(g_hudCanvas);
-  g_hudText = nullptr;
-  g_hudCanvas = nullptr;
   g_canvas = nullptr;
   g_built = false;
   g_active = false;

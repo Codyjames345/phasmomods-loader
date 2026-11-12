@@ -23,6 +23,30 @@ inline constexpr const char* WeatherType_values[] = {"clear", "foggy", "rain", "
 inline constexpr pm::sdk::EntryDesc WeatherType{.key = "WeatherType", .owner = "LevelValues",
                                                 .values = WeatherType_values};
 
+/// Clear. Inferred: from the value's name.
+inline constexpr pm::sdk::EntryDesc WeatherType_clear{.key = "WeatherType.clear", .kind = pm::sdk::Kind::EnumValue,
+    .owner = "WeatherType", .name = "clear"};
+
+/// Fog. Inferred: from the value's name.
+inline constexpr pm::sdk::EntryDesc WeatherType_foggy{.key = "WeatherType.foggy", .kind = pm::sdk::Kind::EnumValue,
+    .owner = "WeatherType", .name = "foggy"};
+
+/// Snow. Inferred: from the value's name.
+inline constexpr pm::sdk::EntryDesc WeatherType_snow{.key = "WeatherType.snow", .kind = pm::sdk::Kind::EnumValue,
+    .owner = "WeatherType", .name = "snow"};
+
+/// Wind. Inferred: from the value's name.
+inline constexpr pm::sdk::EntryDesc WeatherType_wind{.key = "WeatherType.wind", .kind = pm::sdk::Kind::EnumValue,
+    .owner = "WeatherType", .name = "wind"};
+
+/// Sunrise. Inferred: from the value's name.
+inline constexpr pm::sdk::EntryDesc WeatherType_sunrise{.key = "WeatherType.sunrise", .kind = pm::sdk::Kind::EnumValue,
+    .owner = "WeatherType", .name = "sunrise"};
+
+/// The Blood Moon. Inferred: from the value's name.
+inline constexpr pm::sdk::EntryDesc WeatherType_bloodMoon{.key = "WeatherType.bloodMoon", .kind = pm::sdk::Kind::EnumValue,
+    .owner = "WeatherType", .name = "bloodMoon"};
+
 /// Rain. Inferred: from the value's name.
 inline constexpr pm::sdk::EntryDesc WeatherType_rain{.key = "WeatherType.rain", .kind = pm::sdk::Kind::EnumValue,
                                                      .owner = "WeatherType", .name = "rain"};
@@ -47,6 +71,19 @@ inline constexpr pm::sdk::EntryDesc RandomWeather_instance{.key = "RandomWeather
                                                            .confidence = pm::sdk::Confidence::Decompiled,
                                                            .flags = pm::sdk::kStatic, .owner = "RandomWeather",
                                                            .type = "@RandomWeather"};
+
+inline constexpr const char* RandomWeather_TransitionWeatherProfile_params[] = {"@WeatherType", "bool"};
+
+/// TransitionWeatherProfile(weather, animate): the Monkey Paw's weather wish, on the client that runs it. Decompiled: it
+/// takes the scene's profile for that weather type (an index into its own profile array, refused past its end), writes
+/// it to LevelValues.weather, and returns there when the local player is dead (Player.isDead); otherwise it plays the
+/// transition's sound and tweens the sky to it (animate), or applies it at once. It sends nothing and never writes
+/// Difficulty.actualWeather, so the hunt-speed rules that read that field keep the contract's first weather. The paw's
+/// weather handler calls it with animate set, then takes 7 off the wisher's sanity.
+inline constexpr pm::sdk::EntryDesc RandomWeather_TransitionWeatherProfile{
+    .key = "RandomWeather.TransitionWeatherProfile", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "RandomWeather", .name = "TransitionWeatherProfile",
+    .params = RandomWeather_TransitionWeatherProfile_params};
 
 /// The weather's effects controller, an AzureEffectsController: the one its storm's lightning strikes
 /// from (LightningController.PlayLightningNetworked uses RandomWeather.instance's). Decompiled.
@@ -117,6 +154,18 @@ struct WeatherProfile {
 /// The weather types. Unresolved values are 0, which is clear: check use::resolved() before relying
 /// on one.
 namespace WeatherType {
+/// clear(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherType_clear> clear{};
+/// foggy(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherType_foggy> foggy{};
+/// snow(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherType_snow> snow{};
+/// wind(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherType_wind> wind{};
+/// sunrise(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherType_sunrise> sunrise{};
+/// bloodMoon(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherType_bloodMoon> bloodMoon{};
 /// rain(). Unresolved: 0.
 inline constexpr pm::api::EnumValue<pm::map::WeatherType_rain> rain{};
 /// heavyRain(). Unresolved: 0.
@@ -131,6 +180,10 @@ struct RandomWeather {
   static constexpr pm::api::StaticField<pm::map::RandomWeather_instance, void*> instance{};
   /// Its effects controller: effects.get(weather). Unresolved: null.
   static constexpr pm::api::Field<pm::map::RandomWeather_effects, void*> effects{};
+  /// TransitionWeatherProfile(weather, type, animate): the Monkey Paw's weather change on this client, local only:
+  /// LevelValues.weather, the sky and the sound (map note). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::RandomWeather_TransitionWeatherProfile, void(void*, int32_t, bool)>
+      TransitionWeatherProfile{};
 };
 
 /// The sky's effects. `effects` below is one.

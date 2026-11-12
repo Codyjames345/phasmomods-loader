@@ -35,6 +35,23 @@ Custom Ghosts relies on steps 3 and 4 today: it gives a custom ghost the behavio
 sends the custom type in SyncValues instead of `None`, and sets the behaviour back to `None` after
 `SyncValuesNetworked` (see `docs/custom-ghosts.md`).
 
+## Changing the type mid-contract
+
+The game never does it, but its spawn path can be run again on the master (the dev menu's re-type row does):
+
+1. Write the type to both `GhostController.ghostType` and `GhostController.behaviourType`, as the roll does.
+2. `GhostController.PickEvidence`: local, no RPC; it rebuilds `GhostController.givenEvidence` for the behaviour type.
+3. Clear `GhostInfo.evidenceSynced`. `GhostInfo.SyncEvidence` tests it before anything else and returns silently
+   while it is set, so without this the new evidence never arrives.
+4. `GhostAI.Init` with the controller's traits (by address), as `GhostController.CreateGhost` calls it: it copies them
+   to `GhostInfo` and runs `StartGhost`, which sends the game's own `SyncValuesNetworked` and `SyncEvidence` (their
+   sender check passes for the master) and runs every per-type start step.
+5. Put right what no contract ever undoes: `EvidenceController.ghostOrb`'s GameObject stays on once an orb was
+   placed, and `EvidenceController.freezing` stays set; switch the orb off and set the flag from the new evidence.
+
+Not re-run: the Mimic, Thaye and Obambo timers in `GhostController.Update` keep their running time, and the ghost's
+model stays the one `CreateGhost` set up. What `Init`'s last transform call does was not read.
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/ghost-types.md).

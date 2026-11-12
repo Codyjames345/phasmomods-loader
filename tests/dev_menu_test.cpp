@@ -140,23 +140,26 @@ void the_hooks_answer_the_switches() {
   // Progression checks are skipped exactly while a dev session is on.
   CHECK(suppress_progress(true));
   CHECK(!suppress_progress(false));
-  // A consumable stock is protected only while the switch is on.
-  CHECK(keep_refuses_consume(true));
-  CHECK(!keep_refuses_consume(false));
+  // A dev session returns the brought equipment instead of losing it, and only while it is on.
+  CHECK(return_instead_of_losing(true));
+  CHECK(!return_instead_of_losing(false));
 }
 
 void a_full_offline_contract_allows_everything() {
   const Can c{.sandbox = true, .contract = true, .ghost = true, .difficulty = true, .player = true, .rooms = 4};
   for (const Action a : {Action::ForceHunt, Action::ClearCooldown, Action::Appear, Action::UnAppear,
-                         Action::BumpSpeed, Action::ToggleEvents, Action::FireEvent, Action::UnlockDoor,
+                         Action::BumpSpeed, Action::ToggleEvents, Action::FireEvent, Action::FireState,
+                         Action::GhostToMe, Action::UnlockDoor,
                          Action::EndContract, Action::Leave, Action::Quit, Action::SetFriendly,
                          Action::SetLoseEquipment,
                          Action::BumpEvidence, Action::BumpType, Action::SetSanity, Action::ToggleFreeze,
-                         Action::KillLocal, Action::SetGodMode, Action::SetKeepConsumables,
-                         Action::SetPauseWhenOpen, Action::CycleTimeScale})
+                         Action::KillLocal, Action::SetGodMode,
+                         Action::SetNoclip, Action::MeToGhost, Action::MeToGhostRoom,
+                         Action::SetLockSanity, Action::CycleLockedSanity,
+                         Action::SetPauseWhenOpen, Action::CycleTimeScale, Action::SetEspGhost,
+                         Action::SetEspRooms})
     CHECK(refuse(a, c) == Why::None);
   CHECK(refuse(Action::EndHunt, c) == Why::NotHunting);
-  CHECK(refuse(Action::ReviveLocal, c) == Why::Alive);
 }
 
 void rows_refuse_for_what_the_contract_lacks() {
@@ -192,12 +195,144 @@ void hunt_and_room_rows_follow_the_hunt() {
   CHECK(refuse(Action::ForceHunt, noRooms) == Why::None);  // a hunt needs no room list
 }
 
-void death_and_revival_answer_each_other() {
-  const Can dead{.sandbox = true, .player = true, .dead = true};
+void a_dead_investigator_cannot_be_killed_again() {
+  const Can dead{.sandbox = true, .contract = true, .player = true, .dead = true};
   CHECK(refuse(Action::KillLocal, dead) == Why::Dead);
-  CHECK(refuse(Action::ReviveLocal, dead) == Why::None);
   CHECK(refuse(Action::SetSanity, dead) == Why::None);  // sanity can still be set on a corpse
   CHECK(refuse(Action::ToggleFreeze, dead) == Why::None);
+  // The revive answers the kill: a dead or dying investigator in any contract (the action lends the paw).
+  CHECK(refuse(Action::ReviveLocal, dead) == Why::None);
+  const Can dying{.sandbox = true, .contract = true, .player = true, .dying = true};
+  CHECK(refuse(Action::ReviveLocal, dying) == Why::None);
+  const Can alive{.sandbox = true, .contract = true, .player = true};
+  CHECK(refuse(Action::ReviveLocal, alive) == Why::Alive);
+  const Can lobby{.sandbox = true, .player = true, .dead = true};
+  CHECK(refuse(Action::ReviveLocal, lobby) == Why::NoContract);
+}
+
+// The kill row refuses before the game is asked, everywhere the game's own RPC body refuses and reports the
+// sender (sdk/systems/players.md): no contract, a friendly difficulty, or a kill already under way. A hunt alone
+// is no reason: the user's call, 2026-11-12.
+void the_kill_row_refuses_everywhere_the_game_would_report() {
+  const Can lobby{.sandbox = true, .player = true};
+  CHECK(refuse(Action::KillLocal, lobby) == Why::NoContract);
+  const Can friendly{.sandbox = true, .contract = true, .player = true, .friendly = true};
+  CHECK(refuse(Action::KillLocal, friendly) == Why::Friendly);
+  const Can hunting{.sandbox = true, .contract = true, .player = true, .hunting = true};
+  CHECK(refuse(Action::KillLocal, hunting) == Why::None);
+  const Can dying{.sandbox = true, .contract = true, .player = true, .hunting = true, .dying = true};
+  CHECK(refuse(Action::KillLocal, dying) == Why::Dying);
+  const Can normal{.sandbox = true, .contract = true, .player = true};
+  CHECK(refuse(Action::KillLocal, normal) == Why::None);
+}
+
+// The hunt's RPC body refuses a friendly difficulty, and a hunt that started unfriendly would meet a
+// friendly check in its own kill: never force a hunt on a friendly ghost, never switch mid-hunt.
+void a_friendly_ghost_refuses_forced_hunts_and_switches_only_between_hunts() {
+  const Can friendly{.sandbox = true, .contract = true, .ghost = true, .friendly = true};
+  CHECK(refuse(Action::ForceHunt, friendly) == Why::Friendly);
+  const Can switchMidHunt{.sandbox = true, .difficulty = true, .hunting = true};
+  CHECK(refuse(Action::SetFriendly, switchMidHunt) == Why::Hunting);
+  const Can betweenHunts{.sandbox = true, .difficulty = true};
+  CHECK(refuse(Action::SetFriendly, betweenHunts) == Why::None);
+  const Can hunting{.sandbox = true, .contract = true, .ghost = true, .hunting = true};
+  CHECK(refuse(Action::Appear, hunting) == Why::Hunting);
+}
+
+// The movement rows warp the investigator or the ghost, so they need a ghost and this client's investigator;
+// the room row also needs the level to have rooms. Noclip only moves the investigator.
+void the_movement_rows_need_a_ghost_and_a_player() {
+  const Can menu{.sandbox = true};
+  CHECK(refuse(Action::MeToGhost, menu) == Why::NoContract);
+  CHECK(refuse(Action::GhostToMe, menu) == Why::NoContract);
+  CHECK(refuse(Action::MeToGhostRoom, menu) == Why::NoContract);
+  const Can bare{.sandbox = true, .contract = true};
+  CHECK(refuse(Action::MeToGhost, bare) == Why::NoGhost);
+  CHECK(refuse(Action::GhostToMe, bare) == Why::NoGhost);
+  CHECK(refuse(Action::MeToGhostRoom, bare) == Why::NoGhost);
+  const Can noPlayer{.sandbox = true, .contract = true, .ghost = true};
+  CHECK(refuse(Action::MeToGhost, noPlayer) == Why::NoPlayer);
+  CHECK(refuse(Action::GhostToMe, noPlayer) == Why::NoPlayer);
+  CHECK(refuse(Action::MeToGhostRoom, noPlayer) == Why::NoPlayer);
+  CHECK(refuse(Action::SetNoclip, noPlayer) == Why::NoPlayer);
+  const Can noRooms{.sandbox = true, .contract = true, .ghost = true, .player = true, .rooms = 0};
+  CHECK(refuse(Action::MeToGhostRoom, noRooms) == Why::NoRooms);
+  CHECK(refuse(Action::MeToGhost, noRooms) == Why::None);  // only the room row needs the room list
+  const Can rig{.sandbox = true, .player = true};
+  CHECK(refuse(Action::SetNoclip, rig) == Why::None);
+}
+
+// The locked sanity cycles 100, 50, 0, and the lock only puts the value back once the game has moved it by
+// more than half a point, so the game's setter (which sends the value on) is not asked every frame.
+void the_sanity_lock_cycles_and_waits_for_real_drift() {
+  CHECK(next_locked_sanity(100) == 50);
+  CHECK(next_locked_sanity(50) == 0);
+  CHECK(next_locked_sanity(0) == 100);
+  CHECK(next_locked_sanity(75) == 50);  // any value above 50 steps to 50
+  CHECK(!sanity_needs_reset(50.0f, 50));
+  CHECK(!sanity_needs_reset(50.4f, 50));  // a drift under half a point waits
+  CHECK(sanity_needs_reset(51.0f, 50));
+  CHECK(sanity_needs_reset(0.0f, 100));
+}
+
+void the_new_switches_start_off() {
+  const Switches s;
+  CHECK(!s.noclip);
+  CHECK(!s.lockSanity);
+  CHECK(!s.espGhost);
+  CHECK(!s.espRooms);
+  CHECK(s.lockedSanity == 100);
+}
+
+// menu.cpp's kWhyKeys array indexes the reasons' text in enum order, so the reasons only ever grow at the end.
+void no_revive_reason_is_left() {
+  static_assert(static_cast<int>(Why::NoRig) == static_cast<int>(Why::Friendly) + 1,
+                "menu.cpp indexes the reasons' text keys in Why order");
+  static_assert(static_cast<int>(Why::Dying) == static_cast<int>(Why::Alive) + 1,
+                "menu.cpp indexes the reasons' text keys in Why order");
+}
+
+// The save freeze follows the dev session and never lets go within a run; the store switches answer only inside
+// the sandbox, so an online lobby later in the same run sees the game's own answers (the user's ask, 2026-11-12).
+void the_store_is_free_only_in_the_sandbox_and_the_save_stays() {
+  CHECK(freeze_save(true));
+  CHECK(!freeze_save(false));
+  CHECK(store_switch_applies(true, true));
+  CHECK(!store_switch_applies(true, false));
+  CHECK(!store_switch_applies(false, true));
+  const Switches s;
+  CHECK(!s.unlockAll && !s.freeShop);
+  const Can menu{.sandbox = true};
+  CHECK(refuse(Action::SetUnlockAll, menu) == Why::None);
+  CHECK(refuse(Action::SetFreeShop, menu) == Why::None);
+  CHECK(refuse(Action::SetFreeShop, Can{}) == Why::NotOffline);
+}
+
+// The dummy: it is added beside the investigator in a contract, and every other dummy row needs it there. The
+// switches that share the plain answer are not caught by the dummy's tests (a fall-through once did that).
+void the_dummy_rows_need_a_contract_and_the_dummy() {
+  const Can menu{.sandbox = true, .player = true};
+  CHECK(refuse(Action::SpawnDummy, menu) == Why::NoContract);
+  const Can contract{.sandbox = true, .contract = true, .player = true};
+  CHECK(refuse(Action::SpawnDummy, contract) == Why::None);
+  CHECK(refuse(Action::DummyAction, contract) == Why::NoDummy);
+  const Can withDummy{.sandbox = true, .contract = true, .player = true, .dummy = true};
+  CHECK(refuse(Action::DummyAction, withDummy) == Why::None);
+  for (const Action a : {Action::SetGodMode, Action::SetEspRooms, Action::SetUnlockAll, Action::SetFreeShop})
+    CHECK(refuse(a, Can{.sandbox = true}) == Why::None);
+}
+
+// The weather and the re-type: a contract for both, a difficulty for the weather, and no hunt for the re-type.
+void the_weather_and_type_rows_follow_the_contract() {
+  const Can menu{.sandbox = true};
+  CHECK(refuse(Action::ApplyWeather, menu) == Why::NoContract);
+  CHECK(refuse(Action::PickWeather, menu) == Why::None);
+  const Can contract{.sandbox = true, .contract = true, .ghost = true, .difficulty = true, .player = true};
+  CHECK(refuse(Action::ApplyWeather, contract) == Why::None);
+  CHECK(refuse(Action::Retype, contract) == Why::None);
+  const Can hunting{.sandbox = true, .contract = true, .ghost = true, .difficulty = true, .hunting = true};
+  CHECK(refuse(Action::Retype, hunting) == Why::Hunting);
+  CHECK(refuse(Action::ApplyWeather, hunting) == Why::None);
 }
 
 }  // namespace
@@ -217,7 +352,16 @@ int main() {
   a_full_offline_contract_allows_everything();
   rows_refuse_for_what_the_contract_lacks();
   hunt_and_room_rows_follow_the_hunt();
-  death_and_revival_answer_each_other();
+  a_dead_investigator_cannot_be_killed_again();
+  the_kill_row_refuses_everywhere_the_game_would_report();
+  a_friendly_ghost_refuses_forced_hunts_and_switches_only_between_hunts();
+  the_movement_rows_need_a_ghost_and_a_player();
+  the_sanity_lock_cycles_and_waits_for_real_drift();
+  the_new_switches_start_off();
+  no_revive_reason_is_left();
+  the_store_is_free_only_in_the_sandbox_and_the_save_stays();
+  the_weather_and_type_rows_follow_the_contract();
+  the_dummy_rows_need_a_contract_and_the_dummy();
   std::printf(g_failures ? "%d check(s) failed\n" : "all dev menu rule tests passed\n", g_failures);
   return g_failures ? 1 : 0;
 }
