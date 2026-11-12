@@ -31,7 +31,7 @@ extern "C" {
 /// The host contract's minor version this header describes. Within a major version a host runs mods
 /// built for its own minor version or an older one.
 /// @since Contract 2.0
-#define PMMOD_API_MINOR 3u
+#define PMMOD_API_MINOR 4u
 /// Major in the high 16 bits, minor in the low 16. Version 1 (the first contract) had no minor.
 /// @since Contract 2.0
 #define PMMOD_API_VERSION ((PMMOD_API_MAJOR << 16) | PMMOD_API_MINOR)
@@ -249,6 +249,19 @@ typedef struct PmGhostRules {
   /// player controlling the ghost asks it through content_held_back.
   bool (*heldBack)(int32_t kind, void* user);
 } PmGhostRules;
+
+/// A content pack made for the calling mod (PmHostApi::content_packs): a mod folder of data alone whose manifest names
+/// that mod in "contentPackFor" (sdk/README.md, "Content packs"). The host copies a pack for each game process as it
+/// copies a mod, and every text and path here lasts until the mods next stop.
+/// @since Contract 2.4
+typedef struct PmContentPack {
+  uint32_t size;          ///< the bytes of this struct the host filled: sizeof(PmContentPack) of the host, at most the caller's
+  const char* id;         ///< the pack's mod id, "<author>.<name>" (UTF-8)
+  const char* name;       ///< its manifest's name, as the Mods panel shows it (UTF-8)
+  const char* version;    ///< its manifest's version, MAJOR.MINOR.PATCH
+  const wchar_t* folder;  ///< the copy of its assets folder for this game process; read-only
+  const wchar_t* text;    ///< the copy of its i18n/default.json for this game process (core/text_table.h); may not exist
+} PmContentPack;
 
 /// One entry of a managed Dictionary<K, int> (the host contract's dictionary_int_entries).
 /// @since Contract 2.2
@@ -815,6 +828,26 @@ struct PmHostApi {
   /// not installed. The text lasts until the mods next start afresh: copy it to keep it. Main thread.
   /// @since Contract 2.3
   const char* (*mod_name)(const char* modId);
+  /// @}
+  /// @name Content packs
+  /// Added in version 2.4, after mod_name: the content packs made for a mod (PmContentPack).
+  /// @since Contract 2.4
+  /// @{
+
+  /// Fills `out` with the content packs made for the mod `modId` that this start of the mods starts: each pack enabled in
+  /// the Mods panel whose dependencies are met, whose framework is `modId`, and which the framework has not reported
+  /// failed. A pack starts just after its framework, so a framework asks for its packs from its own pmmod_start and
+  /// finds them there. In id order. Each entry is `itemSize` bytes (the caller's sizeof(PmContentPack)); the host
+  /// writes at most that much of each, and sets its `size`. Returns how many packs there are, which may be more than
+  /// `max`. 0 for a null `modId` or `itemSize` smaller than version 2.4's struct. Main thread.
+  /// @since Contract 2.4
+  uint32_t (*content_packs)(const char* modId, PmContentPack* out, uint32_t max, uint32_t itemSize);
+  /// From a framework's pmmod_start: the content pack `packId` cannot be used (its data is broken, say), for `why`
+  /// (UTF-8, for the Mods panel). The pack does not start in this start, its Mods panel row says why, and so it is not in
+  /// the lobby's list of mods. Outside a pmmod_start, or for a pack that already started, it is logged and does nothing.
+  /// Main thread.
+  /// @since Contract 2.4
+  void (*content_pack_failed)(const char* packId, const char* why);
   /// @}
 };
 

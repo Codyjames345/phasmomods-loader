@@ -112,6 +112,8 @@ void guarded_stop(bool& running, void (*stop)()) {
 
 bool peer_has(int actor, const char* id) { return g_host && g_host->peer_has_mod(actor, id); }
 
+bool bound() { return g_host && g_info; }
+
 bool mod_started(const char* id) { return g_host && g_host->mod_started(id); }
 
 std::string shown_name() {

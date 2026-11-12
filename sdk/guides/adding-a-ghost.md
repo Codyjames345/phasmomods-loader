@@ -109,7 +109,7 @@ inline pm::api::content::GhostDef definition() {
 ### ghost.h: the rules
 
 A ghost's behaviour comes from rules attached to its id. The host runs a type's rules while the contract's ghost acts as
-that type, on the main thread ([README, "Which rules run"](../README.md#the-host-contract-version-23)):
+that type, on the main thread ([README, "Which rules run"](../README.md#the-host-contract-version-24)):
 
 | Rule | When the host calls it |
 | --- | --- |

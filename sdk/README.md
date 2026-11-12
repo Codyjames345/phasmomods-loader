@@ -494,9 +494,9 @@ that requires one whose hook could not be made stays off, and the log names the 
 false for that reason alone while a mod runs.
 It replaces return-address checks, which break when several mods chain detours on one function.
 
-### The host contract, version 2.3
+### The host contract, version 2.4
 
-`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.3 today).
+`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.4 today).
 `pm_api_compatible(host, mod)` accepts a mod of the same major and a minor no newer than the host's.
 Within a major, `PmHostApi` and every published struct only grow at the end; a new major refuses
 older mods. Version 2.0 added these members, after the services of version 1:
@@ -662,6 +662,17 @@ A message on a mod's channel goes only to verified players and reaches the mod o
 from a client that lacks it, or from an older suite, whose presence reads as nothing here. A mod's own messages in single
 player pass.
 
+#### Content packs
+
+A content pack is a mod folder of data alone, as SMAPI's: a manifest.json whose `contentPackFor` names the
+mod it is for (`{"id": "<mod id>", "minimumVersion": "1.2.0"}`), an `assets` folder, an `i18n/default.json`,
+and no `dll`. The loader treats a pack as a mod in every way but code: the Mods panel lists it, it needs its
+framework (a required dependency), it starts right after the framework and stops with it, and the lobby's
+list includes it, so a joiner without it is removed. Its build is a hash of its files. The framework reads
+its packs from its own `pmmod_start` with `pm::api::packs::owned()` and reports a pack it cannot use with
+`pm::api::packs::failed(id, why)`, which keeps that pack off with the reason in the Mods panel. What a pack
+holds is the framework's own format: the Emotes mod reads an `emotes.json` catalogue and a bundle.
+
 #### The lobby's rules
 
 The host enforces these for every mod; no mod does any of it (`host/join_guard.h`):
@@ -794,6 +805,19 @@ evidence in the world stays its mod's job.
   board (`pm::mod::show_message` in `core/mod_glue.h`). One asked for in a contract shows once the lobby is back. It
   replaces any message showing or waiting, so keep it for news a player needs. This is how a mod tells a player something
   outside a contract: never draw a window of your own. The fake backend records each in `pm::fake::messages`.
+
+Version 2.4 added two members, at the end of `PmHostApi`:
+
+- `content_packs(modId, out, max, itemSize)` and `content_pack_failed(packId, why)`: the content packs made
+  for a mod (wrapper: `sdk/api/packs.h`, `pm::api::packs`; see "Content packs", below). `content_packs`
+  fills `out`, at most `max` entries, with the packs whose framework is `modId`, in id order: entries sit
+  `itemSize` bytes apart, the host writes at most `sizeof(PmContentPack)` bytes into each and sets its
+  `size`, and the answer is how many there are, which may be more than `max`; 0 for a null `modId` or an
+  `itemSize` smaller than `sizeof(PmContentPack)`. `content_pack_failed(packId, why)` is for the framework,
+  from its `pmmod_start` while its pack has not started: that pack stays off for this start, its Mods panel
+  row says `why`, and it is not in the lobby's list; asked anywhere else it logs and changes nothing. The
+  fake backend answers the first from `pm::fake::content_packs` and lists every second call, in order, in
+  `pm::fake::failed_packs`.
 
 Which rules run. The host keeps the contract ghost's acting-as type (`sdk/runtime/content_acting.h`):
 its behaviour type, or its identity when the behaviour type is "no type" (a custom ghost). The Mimic's

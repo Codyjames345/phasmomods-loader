@@ -52,7 +52,7 @@ add_custom_command(TARGET gamecheck POST_BUILD COMMAND gamecheck --map-digest "$
 
 # A mod's side of the host contract (core/mod_api.h) and the game API it calls (sdk/api, sdk/map).
 add_library(pmmod STATIC core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/api/assets.cpp
-  sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/keybinds.cpp sdk/api/menu_rows.cpp sdk/api/settings.cpp
+  sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/keybinds.cpp sdk/api/menu_rows.cpp sdk/api/settings.cpp sdk/api/packs.cpp
   sdk/api/player_anim.cpp sdk/api/third_person.cpp sdk/api/talk_loudness.cpp sdk/api/screen_effects.cpp)
 target_include_directories(pmmod PUBLIC sdk/api sdk/map)
 target_link_libraries(pmmod PUBLIC pmcore)
@@ -576,6 +576,10 @@ add_dependencies(mods_test pm_fake_mod pm_fake_mod_1 pm_fake_mod_2_0 pm_fake_mod
 pm_test(mod_glue core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(mod_glue_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# A mod's own content packs (sdk/api/packs.h): the host contract's content_packs and content_pack_failed.
+pm_test(content_packs sdk/api/packs.cpp core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(content_packs_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(game_api sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp
   sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(game_api_test PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)

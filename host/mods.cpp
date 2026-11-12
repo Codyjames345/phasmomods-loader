@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <map>
 #include <filesystem>
 #include <iterator>
 
@@ -33,6 +34,9 @@ std::vector<std::string> g_startOrder;  // the running mods' ids in the order th
 std::vector<moddeps::LeftOut> g_off;   // the chosen mods the last start left off, with why
 bool g_starting = false;               // a mod's pmmod_start runs
 std::string g_startError;              // the first host call that failed during it
+std::string g_startingId;              // whose pmmod_start runs, while g_starting
+std::vector<std::string> g_planned;    // the ids the current start starts, in order (moddeps::Plan::order)
+std::map<std::string, std::string> g_failedPacks;  // packs their framework reported failed in this start, and why
 
 /** The folder this host DLL was loaded from. */
 fs::path host_folder() {
@@ -312,6 +316,8 @@ std::vector<consent::Selected> notice_list() {
 void start(const PmHostApi* api, const std::vector<std::string>& ids, Group group) {
   const std::vector<modlist::Manifest> all = manifests();
   const moddeps::Plan plan = moddeps::plan(all, ids);
+  g_planned = plan.order;
+  g_failedPacks.clear();
   for (const std::string& note : plan.notes) PM_LOG("mods: %s", note.c_str());
   // The dependencies are settled from the manifests, so a mod they leave off never loads. Its DLL, what only that can say
   // (its game entries) and its start are judged here, one mod at a time, and a mod that does not start takes those that
@@ -322,6 +328,11 @@ void start(const PmHostApi* api, const std::vector<std::string>& ids, Group grou
     if (!load_dll(m)) {
       row = m.refusedRow;
       log = m.refusedLog;
+      return false;
+    }
+    if (const auto failed = g_failedPacks.find(id); failed != g_failedPacks.end()) {
+      row = failed->second;
+      log = "its framework could not use it (" + failed->second + ")";
       return false;
     }
     if (m.manifest.is_pack()) {  // data only: started once its framework has, which the dependency order guarantees
@@ -344,8 +355,10 @@ void start(const PmHostApi* api, const std::vector<std::string>& ids, Group grou
     if (group.begin) group.begin(id);
     g_startError.clear();
     g_starting = true;
+    g_startingId = id;
     m.started = m.start(api);
     g_starting = false;
+    g_startingId.clear();
     // Any failure of the host's during the start keeps the mod off, whatever its start answered: it never runs half there.
     std::string failure;
     if (const std::string hook = hooks::group_failure(); !hook.empty()) failure = "a hook could not be made (" + hook + ")";
@@ -394,6 +407,27 @@ const char* name_of(const char* id) {
   if (!id) return nullptr;
   const Mod* m = find_mod(id);
   return m ? m->manifest.name.c_str() : nullptr;
+}
+
+std::vector<const Mod*> packs_for(std::string_view frameworkId) {
+  std::vector<const Mod*> packs;
+  for (const Mod& m : g_mods) {
+    if (!m.manifest.is_pack() || m.manifest.contentPackFor != frameworkId || g_failedPacks.count(m.manifest.id)) continue;
+    if (m.started || std::find(g_planned.begin(), g_planned.end(), m.manifest.id) != g_planned.end()) packs.push_back(&m);
+  }
+  std::sort(packs.begin(), packs.end(), [](const Mod* a, const Mod* b) { return a->manifest.id < b->manifest.id; });
+  return packs;
+}
+
+bool pack_failed(const std::string& packId, const std::string& why) {
+  const Mod* m = find_mod(packId);
+  if (!g_starting || !m || !m->manifest.is_pack() || m->manifest.contentPackFor != g_startingId || m->started) {
+    PM_LOG("mods: a report that pack %s failed was ignored: only its framework's pmmod_start may make one, before it starts",
+           packId.c_str());
+    return false;
+  }
+  g_failedPacks[packId] = why;
+  return true;
 }
 
 void start_error(const std::string& why) {

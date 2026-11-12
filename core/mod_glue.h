@@ -15,6 +15,8 @@ namespace pm::mod {
 // requires did not resolve (logged with their keys), or when the IL2CPP API cannot be resolved.
 bool bind(const PmHostApi* api, const PmModInfo* info);
 const PmHostApi& host();
+// Whether bind succeeded, so host() and info() may be asked.
+bool bound();
 const PmModInfo& info();
 
 // Whether the client of `actor` is verified and the host runs the mod `id` (core/mod_api.h peer_has_mod). Deprecated, as

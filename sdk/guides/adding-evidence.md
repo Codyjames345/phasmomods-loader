@@ -31,7 +31,7 @@ A ghost gives it by naming its id in `GhostDef::evidence`, whichever mod registe
 flame ghosts name `phasmomods.spectral-flame.flame`, and Custom Ghosts requires Spectral Flame in its manifest, so the
 loader starts Spectral Flame first. Once every mod has started, the host drops any ghost whose evidence no
 running mod registered, keeps the mod that registered it off for that start, and starts the others again without it,
-all logged ([README, "The host contract, version 2.3"](../README.md#the-host-contract-version-23)).
+all logged ([README, "The host contract, version 2.4"](../README.md#the-host-contract-version-24)).
 
 ## What the host does with it
 
