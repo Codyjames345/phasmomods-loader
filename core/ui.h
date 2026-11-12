@@ -31,8 +31,11 @@ void set_uv_rect(void* rawImage, Rect uv);  // the part of the texture shown, 0.
 void destroy(void* gameObjectOrComponent);
 void set_active(void* component, bool on);
 
-// RectTransform layout: anchors and pivot in 0..1 of the parent, position and size in canvas units.
-void place(void* component, Vec2 anchor, Vec2 pivot, Vec2 position, Vec2 size);
+// RectTransform layout: anchors and pivot in 0..1 of the parent, position and size in canvas units. Pass the
+// UI component, or the GameObject it is on: either way the object's transform has to be a RectTransform, which it
+// is once the object has taken a component of a class that requires one (every UI class here does). An object
+// without one is left alone and named in the log once: the game faults on laying out a plain Transform.
+void place(void* gameObjectOrComponent, Vec2 anchor, Vec2 pivot, Vec2 position, Vec2 size);
 void set_text(void* text, const char* utf8);  // TextMeshPro rich text
 // TMPro.TextAlignmentOptions, each read from the game (phasmo::TextAlignmentOptions).
 enum class Align { TopLeft, Left, Center, Top };
@@ -65,7 +68,10 @@ struct ScrollView {
 // A vertical scroll view under `parent` of `size` centred at `position`, its content `contentHeight` tall.
 // Its parts are null when the game's classes did not resolve: a view with no `scroll` still shows its rows,
 // they just cannot move. The view carries a background that catches the pointer, so a drag anywhere in it
-// scrolls, and a clip, so rows outside the view are not drawn over the rest of the menu.
+// scrolls, and a clip, so rows outside the view are not drawn over the rest of the menu. The content shows
+// nothing of its own, so it carries a LayoutElement: that is what gives it a RectTransform for the list's
+// height to be set on (menus.md, "A list that scrolls"). Put the rows under `content` with the create_*
+// helpers, which give every row a UI component the same way.
 ScrollView create_scroll_view(void* parent, const char* name, Vec2 position, Vec2 size, float contentHeight);
 
 // Make the content `contentHeight` tall, for a list whose rows come and go; the part showing stays showing.

@@ -482,6 +482,15 @@ inline constexpr pm::sdk::EntryDesc ScrollRect_StopMovement{
 inline constexpr pm::sdk::EntryDesc RectMask2D{.key = "RectMask2D", .name = "RectMask2D",
                                                .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
 
+/// Unity UI's layout marker (UnityEngine.UI), a UIBehaviour: it holds the minimum, preferred and flexible sizes
+/// a LayoutGroup would give its object, and does nothing when no LayoutGroup asks for them, so it draws nothing
+/// and changes nothing else. It is mapped for what its own class declares, [RequireComponent(typeof(RectTransform))]
+/// (its decompiled copy in this build): adding it to a GameObject made at run time is how such an object comes to
+/// have a RectTransform for the layout entries to act on, for a list's content that carries no graphic of its own.
+/// Present in this build's UnityEngine.UI (class dump); its behaviour is Unity's documented API.
+inline constexpr pm::sdk::EntryDesc LayoutElement{.key = "LayoutElement", .name = "LayoutElement",
+                                                  .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
+
 /// TextMeshPro's base text (Unity.TextMeshPro, namespace TMPro). Inferred: TextMeshPro's documented API.
 inline constexpr pm::sdk::EntryDesc TMP_Text{.key = "TMP_Text", .name = "TMP_Text", .assembly = "Unity.TextMeshPro",
                                              .ns = "TMPro"};
@@ -858,6 +867,13 @@ struct ScrollRect {
 struct RectMask2D {
   /// The class: type_object() finds it for AddComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::RectMask2D> type{};
+};
+
+/// Unity UI's layout marker. Its sizes are only ever read by a LayoutGroup, so on its own it neither draws nor
+/// behaves; what it is for here is that its class requires a RectTransform.
+struct LayoutElement {
+  /// The class: type_object() finds it for AddComponent. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::LayoutElement> type{};
 };
 
 /// The ways a scroll rect keeps its content inside the viewport. Unresolved values are 0, which is

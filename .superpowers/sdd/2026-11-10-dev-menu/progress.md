@@ -424,3 +424,60 @@ was what made gamecheck report it missing).
     wrong, whether writing 1 back brings it back, and whether the game is still running. Then repeat in
     a contract and end the contract to see whether a scene change clears it. FINDINGS.md 33 has the
     matrix and what is already proven.
+
+## Round 7 (2026-11-12): the crash on opening the menu, found and fixed at the SDK layer
+
+The user's report: "trying to open the dev menu crashed the game".
+
+The chain was read, not guessed.
+
+- Our own log ends at `actions::note_session()` ("dev session on") and never reaches the last line of
+  `menu::open()`, so the fault is inside `menu::build()`.
+- The game's crash folder held a `crash.dmp`. Reading it with `cdb -z` gives the exception record: an access
+  violation (c0000005) on a read of `ffffffff0000000b`, from `mov rdi, qword ptr [rax+8]` with `rax` loaded from
+  `[rbx+30h]`, inside UnityPlayer.
+- DevMenu was relinked with the linker's map file, after comparing its `.text` byte for byte against the build that
+  actually ran so the map belongs to that code. That puts our own names under the crash's frames: the guarded tick,
+  the mod's tick lambda, `menu::open()+117`, `menu::build()+1123`, `pm::ui::create_scroll_view()+356`. The call at
+  that address is `game::transform_of(view.viewport)`.
+
+Root cause: a type confusion in our own helper. `ui::child` makes GameObjects, and `core/game.cpp`'s `transform_of`
+asked every object through `Component.get_transform`. A GameObject is not a Component, so the engine read a layout
+that object does not have and faulted. Every older use of that helper handed over a component, which is why only the
+new scroll list fell over, and why five live tries passed before it.
+
+Fix at the SDK layer rather than at the call site, so no mod can repeat it:
+
+- `pm::game::transform_of` and `pm::game::game_object_of` ask the object's own class which accessor answers it
+  (`GameObject` map entry, through `pm::api::Type::klass()` and `.is()`), and answer null when the class cannot be
+  read. A GameObject's own GameObject is itself, as the engine's own `GameObject.gameObject` says.
+- New `pm::game::rect_transform_of`: the object's transform, but only when its class says it is a RectTransform
+  (`RectTransform` map entry). `core/ui.cpp`'s place, stretch, set_scroll_height, contains and normalized_point all
+  use it, and log once instead of faulting when the object has no RectTransform. `ScrollRect.content` and
+  `ScrollRect.viewport` are typed RectTransform in the map, so those two field sets use it too.
+- `create_scroll_view` now puts the ScrollRect and the RectMask2D on the viewport before placing it, and gives the
+  content a `LayoutElement` before stretching it. The order is what the game's own package declares: every UI class
+  in this build's UnityEngine.UI carries `[RequireComponent(typeof(RectTransform))]` (the decompiled Graphic,
+  RectMask2D, ScrollRect and LayoutElement), and the fifth live try laid out every row that was made as a bare
+  GameObject plus a UI component. What converts the transform was not read, and nothing needs to know: the code asks
+  the object instead of assuming, and refuses rather than faulting.
+
+Tests first, as always. `tests/object_kind_test.cpp` (a new target) went red with 12 checks against the old
+helpers; after that fix the four new checks for the RectTransform question went red; then green. `validate.ps1`:
+95 of 95 tests pass, the docs tests pass, and the API reference builds with no warnings.
+`tools/gamecheck.ps1 -IfConfigured -Expect` against the pinned build: 1882 entries, 1770 resolved, 0 missing,
+0 ambiguous, with `LayoutElement` resolving by name.
+
+Docs that carry the fact now: `sdk/systems/menus.md` ("A list that scrolls", the two kinds of object and what a
+layout entry may act on), `sdk/internals/reverse-engineering.md` (the crash, how it was read, and what shape to
+look for), the notes on `transform_of`, `object_transform`, `game_object_of` and `rect_transform_of` in
+`core/game.h`, and the notes on `place` and `create_scroll_view` in `core/ui.h`.
+
+Smoke list for the sixth live try, item 28: open the menu, and it must not fault. If the log carries "an object
+asked to be placed has no RectTransform" or "a scroll view's content has no RectTransform", that is the engine
+answering how a transform becomes a RectTransform, and the list will look wrong rather than crash the game. Report
+the line.
+
+Left open, and unproven: `mods/playable_ghost/journal.cpp` adds `RectTransform` itself as a component to a GameObject
+it makes, which has never been proven from the game. It is guarded (`if (!rect) continue;`) and `place` now refuses
+what is not a RectTransform, so it cannot fault; but if Playable Ghost's journal pages go missing, look there first.

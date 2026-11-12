@@ -34,8 +34,17 @@ void room_actors(std::vector<int>& out);
 
 // Unity
 bool alive(void* unityObject);  // UnityEngine.Object implicit bool (not destroyed)
-void* transform_of(void* component);
-void* object_transform(void* gameObject);  // GameObject.transform
+// The object's own Transform, whichever kind of object this is: a GameObject answers through
+// GameObject.get_transform, anything else through Component.get_transform. A GameObject is not a Component, so
+// the two accessors are not interchangeable, and the helper picks by the object's own class. Null when the object
+// is null or when its kind cannot be read: nothing is guessed. Main thread, any phase.
+void* transform_of(void* gameObjectOrComponent);
+void* object_transform(void* gameObject);  // GameObject.get_transform, for an object already known to be one
+// The RectTransform of a UI object, for the entries that set anchors, pivot, position and size: those read a
+// layout a plain Transform does not have. Null when the object's transform is a plain Transform, when the object
+// is null, or when the class cannot be read. An object made at run time has a RectTransform once it takes a
+// component whose class requires one; see sdk/systems/menus.md, "A list that scrolls".
+void* rect_transform_of(void* gameObjectOrComponent);
 Vector3 position(void* transform);
 inline float distance(Vector3 a, Vector3 b) { return std::hypot(a.x - b.x, a.y - b.y, a.z - b.z); }
 void set_position(void* transform, Vector3 p);
@@ -47,7 +56,9 @@ Quaternion rotation(void* transform);
 void set_rotation(void* transform, Quaternion r);
 void* new_game_object(const char* name);
 void* add_component(void* gameObject, void* type);  // type: System.Type
-void* game_object_of(void* component);
+// The GameObject the object belongs to: a GameObject's own is itself, and a component's comes from
+// Component.get_gameObject. Null when the object is null or when its kind cannot be read.
+void* game_object_of(void* gameObjectOrComponent);
 void set_enabled(void* behaviour, bool on);
 bool enabled(void* behaviour);
 void destroy(void* object);  // UnityEngine.Object.Destroy

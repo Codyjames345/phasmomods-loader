@@ -504,6 +504,11 @@ pm_test(game_gates host/host_game.cpp sdk/fake/fake_game.cpp sdk/runtime/scene_f
   sdk/runtime/content_acting.cpp)
 target_link_libraries(game_gates_test PRIVATE pmmod)
 target_include_directories(game_gates_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# core/game.cpp's helpers that ask an object for its own Transform or GameObject, over the fake game backend.
+pm_test(object_kind sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp
+  sdk/runtime/content_acting.cpp)
+target_link_libraries(object_kind_test PRIVATE pmmod)
+target_include_directories(object_kind_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 # Before the mods' folders, as for content_difficulty_test.
 target_include_directories(glue_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(score)

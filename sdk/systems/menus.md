@@ -169,6 +169,27 @@ reaches it through the canvas's `GraphicRaycaster` and one graphic inside the vi
 on (`Graphic.set_raycastTarget`). It clips nothing of its own: put a `RectMask2D` on the viewport, not on the
 content, or rows outside the view draw over the rest of the screen.
 
+Two kinds of object are in play, and they are not interchangeable. A `GameObject` is not a `Component`: its own
+transform comes from `GameObject.get_transform` and a component's from `Component.get_transform`, and asking one
+through the other's accessor reads a layout that object does not have. The game faults on it, which is what the
+dev menu's first scroll list did on 2026-11-12: the helper that made the viewport and the content returned
+GameObjects, and the layout helper asked them through the component accessor. `pm::game::transform_of` and
+`pm::game::game_object_of` ask the object what it is (`GameObject` type through `pm::api::Type::is`) and answer
+null when the class cannot be read rather than guess.
+
+The same shape decides what a layout entry may act on. The entries that place a UI object (`RectTransform.set_anchorMin`,
+`set_anchorMax`, `set_pivot`, `set_anchoredPosition`, `set_sizeDelta`), the `ScrollRect.content` and
+`ScrollRect.viewport` fields and both `RectTransformUtility` hit tests all want a RectTransform, and an object only
+has one once something asks for it: every UI class in the game's own UnityEngine.UI declares
+`[RequireComponent(typeof(RectTransform))]` (`Graphic`, so `Image` and `RawImage`, `TextMeshProUGUI`, `RectMask2D`,
+`ScrollRect` and `LayoutElement`). In game an object made bare and then given one of those components does answer
+the layout entries; that is how every row of the dev menu and of the emotes wheel is made. Laying an object out
+before it takes any component has never worked. What converts the transform has not been read, and a mod does not
+need it: put the components on first and lay out afterwards, and read the transform back through
+`pm::game::rect_transform_of`, which answers null for an object that has no RectTransform instead of faulting.
+A list's content shows nothing itself, so it carries a `LayoutElement`: it draws nothing, and only a LayoutGroup
+ever reads what it holds.
+
 Unity's editor builds the three objects into the scene; a mod makes them at run time, and a ScrollRect made that
 way holds the free-running mode, because the editor's Reset never runs. So `ScrollRect.movementType` wants
 `ScrollRect.MovementType.Clamped`, or one drag can throw the list out of the menu for good.

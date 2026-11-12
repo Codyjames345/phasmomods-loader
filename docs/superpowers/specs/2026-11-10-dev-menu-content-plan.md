@@ -412,9 +412,12 @@ In rough order of how much of the menu waits on each:
 2. `Time.set_timeScale`, keyboard polling (the map has `Mouse` but no `Keyboard`; poll the physical
    key left of 1), Unity `Slider` and `ScrollRect` (the user's call: plain scroll views, no vanilla
    widget dressing for the menu) - SDK small, one-line entries. The `ScrollRect` entries and the
-   loader's scroll helpers went in 2026-11-12, with `RectMask2D` and
+   loader's scroll helpers went in 2026-11-12, with `RectMask2D`, `LayoutElement` and
    `EventSystem.get_currentSelectedGameObject`; `Slider` is still unmapped (the menu steps its
-   numbers with +/- rows instead).
+   numbers with +/- rows instead). That first live list faulted the game the same day: the helpers
+   asked GameObjects through the Component accessor, and an object has a RectTransform only once it
+   takes a component whose class requires one. The reading and the fix are in the ledger and in
+   `sdk/systems/menus.md`.
 3. Mid-contract weather transition (`RandomWeather.TransitionWeatherProfile`) - RE
 4. Movement speed and the character controller (player cheats) - the speed half went in 2026-11-12
    through the rig's own multiplier; what stops the player at a wall is still RE (FINDINGS.md 34)

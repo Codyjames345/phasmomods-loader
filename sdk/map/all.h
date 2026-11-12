@@ -1471,6 +1471,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &ScrollRect_set_verticalNormalizedPosition,
     &ScrollRect_StopMovement,
     &RectMask2D,
+    &LayoutElement,
     &TMP_Text,
     &TMP_Text_set_text,
     &TMP_Text_get_text,
