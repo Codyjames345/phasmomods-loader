@@ -6,6 +6,7 @@
 #include <cstring>
 #include <atomic>
 #include <cstddef>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <set>
@@ -351,31 +352,30 @@ const char* api_mod_name(const char* id) {
     return id ? mods::name_of(modid::migrated_id(id).c_str()) : nullptr;  // a bundled mod's old id means that mod
   });
 }
-// The texts content_packs hands out, kept until the next call: the host contract says they last until the mods stop,
-// and a framework asks once, from its pmmod_start.
+// The texts content_packs hands out, one entry per pack id, never replaced or removed: the host contract says they last
+// until the mods stop, and a pack's id, manifest and copied paths stay the same for the whole game process. A map's
+// nodes never move, so the pointers stay valid across later calls.
 struct PackTexts {
   std::string id, name, version;
   std::wstring folder, text;
 };
-std::vector<PackTexts> g_packTexts;
+std::map<std::string, PackTexts> g_packTexts;
 uint32_t api_content_packs(const char* modId, PmContentPack* out, uint32_t max, uint32_t itemSize) {
   return host::contained("suite", "listing a mod's content packs", uint32_t{0}, [&]() -> uint32_t {
     if (!modId || itemSize < sizeof(PmContentPack)) return 0;
     const std::vector<const mods::Mod*> packs = mods::packs_for(modid::migrated_id(modId));
-    g_packTexts.clear();
-    for (const mods::Mod* m : packs) {
+    for (uint32_t i = 0; i < packs.size(); ++i) {
+      const mods::Mod* m = packs[i];
       std::filesystem::path text = m->dll;
       text.replace_extension(L".i18n.json");
-      g_packTexts.push_back({m->manifest.id, m->manifest.name, m->manifest.version,
-                             modassets::beside_copy(m->dll).wstring(), text.wstring()});
-    }
-    for (uint32_t i = 0; out && i < max && i < g_packTexts.size(); ++i) {
-      const PackTexts& t = g_packTexts[i];
+      const PackTexts& t = g_packTexts.try_emplace(m->manifest.id, PackTexts{m->manifest.id, m->manifest.name, m->manifest.version,
+                                                 modassets::beside_copy(m->dll).wstring(), text.wstring()}).first->second;
+      if (!out || i >= max) continue;
       const PmContentPack entry{sizeof(PmContentPack), t.id.c_str(), t.name.c_str(), t.version.c_str(), t.folder.c_str(),
                                 t.text.c_str()};
       std::memcpy(reinterpret_cast<unsigned char*>(out) + static_cast<size_t>(i) * itemSize, &entry, sizeof entry);
     }
-    return static_cast<uint32_t>(g_packTexts.size());
+    return static_cast<uint32_t>(packs.size());
   });
 }
 void api_content_pack_failed(const char* packId, const char* why) {
