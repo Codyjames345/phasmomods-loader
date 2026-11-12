@@ -128,6 +128,7 @@ struct Facing {
 struct Song {
   api::Held source;  // its looping AudioSource; its GameObject goes with it
   api::Held intro;   // the intro song's AudioSource, played once before it, or null
+  api::Held group;   // the mixer group both play through, or null before one is found
   float volume = 0.0f;  // the volume it plays at
 };
 
@@ -556,6 +557,33 @@ void apply_facings(float dt) {
   }
 }
 
+// The Photon player a networked Player belongs to, or null: the game pairs them through its player spots
+// (Network.playerSpots), as core/players.h does the other way round.
+void* photon_player_of(void* player) {
+  void* net = player ? game::network() : nullptr;
+  const api::List spots{net ? phasmo::Network::playerSpots.get(net) : nullptr};
+  for (size_t i = 0; i < spots.size(); ++i)
+    if (void* spot = spots[i]; spot && phasmo::PlayerSpot::player.get(spot) == player)
+      return phasmo::PlayerSpot::photonPlayer.get(spot);
+  return nullptr;
+}
+
+// The actor a networked Player belongs to, 0 for none.
+int actor_of(void* player) {
+  void* photon = photon_player_of(player);
+  return photon ? game::actor_number(photon) : 0;
+}
+
+// The mixer group a dancer's song plays through: the one the game gives the player's own sounds, footsteps among them,
+// by the floor it has the player on (SoundController.GetPlayersAudioGroup), so the game's mixer muffles it as it muffles
+// their steps. Null outside a level or when the player has no spot.
+void* players_group(void* player) {
+  void* sounds = phasmo::SoundController::instance.get();
+  void* photon = photon_player_of(player);
+  if (!sounds || !game::alive(sounds) || !photon) return nullptr;
+  return phasmo::SoundController::GetPlayersAudioGroup(sounds, photon);
+}
+
 void stop_song(int actor) {
   auto it = g.songs.find(actor);
   if (it == g.songs.end()) return;
@@ -567,19 +595,31 @@ void stop_song(int actor) {
 // A song's volume on this client: the player's Emotes volume setting (the audio page) of its base.
 float song_volume() { return kSongVolume * api::settings::value(kVolumeSetting); }
 
-// Each song follows the setting as the player applies it.
-void follow_volume() {
-  for (auto& [actor, s] : g.songs)
-    if (s.source && game::alive(s.source) && s.volume != song_volume()) {
+// Each song follows the setting as the player applies it, and the dancer's mixer group as the game moves them between
+// floors (a walking emote can take them up the stairs).
+void follow_settings() {
+  for (auto& [actor, s] : g.songs) {
+    if (!s.source || !game::alive(s.source)) continue;
+    const bool introAlive = s.intro && game::alive(s.intro);
+    if (s.volume != song_volume()) {
       s.volume = song_volume();
       phasmo::AudioSource::set_volume(s.source, s.volume);
-      if (s.intro && game::alive(s.intro)) phasmo::AudioSource::set_volume(s.intro, s.volume);
+      if (introAlive) phasmo::AudioSource::set_volume(s.intro, s.volume);
     }
+    void* group = players_group(game::player_of_actor(actor));
+    if (group && group != s.group.get()) {
+      phasmo::AudioSource::set_outputAudioMixerGroup(s.source, group);
+      if (introAlive) phasmo::AudioSource::set_outputAudioMixerGroup(s.intro, group);
+      s.group = group;
+    }
+  }
 }
 
-// One of a dancer's song sources, under `parent`, playing `clip` as the player's voice would sound (its fall with distance
-// and the game's mixer group for where the player stands). Null when it cannot be made.
-void* song_source(void* parent, void* voice, void* clip, bool loop) {
+// One of a dancer's song sources, under `parent`, playing `clip` as the player's voice would sound to others (its fall
+// with distance) through `group`. The dancer's own client hears their song in neither ear (`own`): its listener stays on
+// the head camera, which the mouse turns while the view is outside, so a positional song panned and swelled as the
+// camera moved round. Null when it cannot be made.
+void* song_source(void* parent, void* voice, void* clip, void* group, bool loop, bool own) {
   void* go = game::new_game_object("pm emote song");
   if (!go || !parent) return nullptr;
   phasmo::Transform::SetParent(game::object_transform(go), parent, false);
@@ -591,7 +631,7 @@ void* song_source(void* parent, void* voice, void* clip, bool loop) {
   }
   phasmo::AudioSource::set_clip(source, clip);
   phasmo::AudioSource::set_loop(source, loop);
-  phasmo::AudioSource::set_spatialBlend(source, 1.0f);
+  phasmo::AudioSource::set_spatialBlend(source, own ? 0.0f : 1.0f);
   phasmo::AudioSource::set_volume(source, song_volume());
   // It falls off with distance as the player's own voice does (the voice's AudioSource).
   if (voice) {
@@ -602,12 +642,7 @@ void* song_source(void* parent, void* voice, void* clip, bool loop) {
     phasmo::AudioSource::set_maxDistance(source, phasmo::AudioSource::get_maxDistance(voice));
     phasmo::AudioSource::set_rolloffMode(source, phasmo::AudioSource::get_rolloffMode(voice));
   }
-  // Through the game's mixer group for where the player stands, as the game's own sounds go (muffled on another floor).
-  void* sounds = phasmo::SoundController::instance.get();
-  const Vector3 at = game::position(parent);
-  if (sounds && game::alive(sounds))
-    if (void* group = phasmo::SoundController::GetFloorAudioSnapshot(sounds, &at))
-      phasmo::AudioSource::set_outputAudioMixerGroup(source, group);
+  if (group) phasmo::AudioSource::set_outputAudioMixerGroup(source, group);
   return source;
 }
 
@@ -624,16 +659,21 @@ void start_song(int actor, void* player, int emote) {
   void* voice = audio ? phasmo::PlayerAudio::GetPlayerVoiceAudioSource(audio) : nullptr;
   if (voice && !game::alive(voice)) voice = nullptr;
   void* parent = voice ? game::transform_of(voice) : game::transform_of(player);
+  // Through the group the game gives the player's own sounds. The group of the point the song plays from was the floor
+  // above when a dancer stood on the stairs, muffling their song.
+  const bool own = actor == game::local_actor();
+  void* group = players_group(player);
   // The song in the bundle is cut to its loop, so the engine loops it sample for sample.
-  void* source = song_source(parent, voice, clip, true);
+  void* source = song_source(parent, voice, clip, group, true, own);
   if (!source) return;
   Song& song = g.songs[actor];
   song.source = source;
+  song.group = group;
   song.volume = song_volume();
   // An intro song plays once, and the looping song starts on the sample it ends: both start this frame, the loop with
   // a delay of the intro's length (AudioSource.PlayScheduled is stripped from this game build).
   void* intro = g.a.introSongs[emote];
-  void* introSource = intro ? song_source(parent, voice, intro, false) : nullptr;
+  void* introSource = intro ? song_source(parent, voice, intro, group, false, own) : nullptr;
   const float introSeconds = g.a.table[emote].introSongSeconds;
   if (introSource && introSeconds > 0.0f) {
     song.intro = introSource;
@@ -651,17 +691,6 @@ void send(const std::vector<EmoteMsg>& msgs) {
     const std::vector<uint8_t> bytes = pack(m);
     net::send(bytes.data(), bytes.size(), net::To::Others, true);
   }
-}
-
-// The actor a networked Player belongs to, 0 for none: the game pairs them through its player spots (Network.playerSpots),
-// as core/players.h does the other way round.
-int actor_of(void* player) {
-  void* net = player ? game::network() : nullptr;
-  const api::List spots{net ? phasmo::Network::playerSpots.get(net) : nullptr};
-  for (size_t i = 0; i < spots.size(); ++i)
-    if (void* spot = spots[i]; spot && phasmo::PlayerSpot::player.get(spot) == player)
-      return game::actor_number(phasmo::PlayerSpot::photonPlayer.get(spot));
-  return 0;
 }
 
 // A dancer whose death has begun, let go of at once: their clip off with nothing blending, their song off, their body
@@ -1064,7 +1093,7 @@ void tick() {
   const float now = static_cast<float>(nowMs - g.startTick) / 1000.0f;
   keys::tick_keys();
   api::settings::tick_settings();
-  follow_volume();
+  follow_settings();
   api::anim::tick_player_anims(dt);
   api::view::tick_third_person(dt);
 
