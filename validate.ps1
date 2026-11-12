@@ -4,6 +4,8 @@ $ErrorActionPreference = 'Stop'
 if ($LASTEXITCODE -ne 0) { throw 'The native build failed.' }
 & ctest --test-dir (Join-Path $PSScriptRoot 'build') --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw 'The native tests failed.' }
+& dotnet run --project (Join-Path $PSScriptRoot 'tests/emote_tools') -c Release
+if ($LASTEXITCODE -ne 0) { throw 'The emote tools tests failed.' }
 & (Join-Path $PSScriptRoot 'tests/assetcheck_test.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'The scene check tests failed.' }
 & (Join-Path $PSScriptRoot 'tools/gamecheck.ps1') -IfConfigured -Mods (Join-Path $PSScriptRoot 'dist/PhasmoMods/mods')
