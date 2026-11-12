@@ -311,8 +311,10 @@ inline constexpr pm::sdk::EntryDesc CanvasScaler_set_matchWidthOrHeight{
     .key = "CanvasScaler.set_matchWidthOrHeight", .kind = pm::sdk::Kind::Method, .owner = "CanvasScaler",
     .name = "set_matchWidthOrHeight"};
 
-/// Lets a canvas catch the pointer, so its graphics that catch it keep clicks from the UI beneath
-/// (UnityEngine.UI). Inferred: Unity's documented API.
+/// One canvas's pointer hit-tester (UnityEngine.UI): it turns the pointer's position into hits on that
+/// canvas's graphics. The Canvas has no part of this of its own (no member of UnityEngine.UIModule's Canvas
+/// mentions a raycast at all), so a canvas a mod makes at runtime catches nothing until it has one of these
+/// (pm::api::buttons::catch_pointer). Read from the build 2026-11-12.
 inline constexpr pm::sdk::EntryDesc GraphicRaycaster{.key = "GraphicRaycaster", .name = "GraphicRaycaster",
                                                      .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
 
@@ -332,7 +334,12 @@ inline constexpr pm::sdk::EntryDesc Graphic_get_color{.key = "Graphic.get_color"
 inline constexpr pm::sdk::EntryDesc Graphic_set_color{.key = "Graphic.set_color", .kind = pm::sdk::Kind::Method,
                                                       .owner = "Graphic", .name = "set_color", .params = Graphic_Color};
 
-/// Sets whether the graphic catches the pointer. Inferred: Unity's documented property setter.
+/// Sets whether the graphic catches the pointer. Decompiled: it keeps a flag and a copy of that flag, and
+/// when the flag changes it puts the graphic into, or out of, the raycast list of the canvas it draws on
+/// (UnityEngine.UI's own graphic registry) - in only while the component is active and enabled. The
+/// raycaster walks nothing but that list, so a graphic with this off is never hit, hovered or clicked at
+/// all: pm::ui::create_image makes its pictures with it off, and a row that must take a click switches it
+/// on (pm::api::buttons::attach does it for a button).
 inline constexpr pm::sdk::EntryDesc Graphic_set_raycastTarget{.key = "Graphic.set_raycastTarget",
                                                               .kind = pm::sdk::Kind::Method, .owner = "Graphic",
                                                               .name = "set_raycastTarget", .params = Graphic_bool};
@@ -681,6 +688,9 @@ struct GraphicRaycaster {
 
 /// Unity UI's base of everything drawn. `graphic` below is the Graphic.
 struct Graphic {
+  /// The class: every UI picture and text is one (Image, RawImage, TextMeshProUGUI). Its type_object() finds
+  /// whichever an object has. Unresolved: is() is false, type_object() null.
+  static constexpr pm::api::Type<pm::map::Graphic> type{};
   /// get_color.virtual_call(graphic): its colour, TextMeshPro's own on a text. Unresolved: all zero.
   static constexpr pm::api::Method<pm::map::Graphic_get_color, Color(void*)> get_color{};
   /// set_color.virtual_call(graphic, &colour): sets it, TextMeshPro's own on a text. Unresolved: does

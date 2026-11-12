@@ -4,15 +4,20 @@
 /// @brief Buttons from the game's own UI: a mod's graphic gets the game's Button component, so hover, press,
 /// selection and arrow-key navigation are the game's own, and the mod's code runs on the click.
 ///
-/// Two things must hold before a mod's canvas answers the player at all. The canvas needs a GraphicRaycaster
-/// (catch_pointer): without one its graphics catch nothing and clicks and hover pass through to the game's UI.
-/// And Unity's UI input runs through the EventSystem's one input module, which the game keeps switched off
-/// except while its journal is open (JournalController.OpenCloseJournal): in a contract no canvas of any kind
-/// takes clicks and no menu takes arrow keys until that module is on again (input_module, input_on, input_set).
+/// Three things must hold before a mod's canvas answers the player at all. The canvas needs a GraphicRaycaster
+/// (catch_pointer): a Canvas does no hit-testing of its own, so without one its graphics are never hit and
+/// clicks and hover go to whatever else has a raycaster. Each graphic that should be hit needs its
+/// raycastTarget on (attach switches it on for the row's own graphic). And Unity's UI input runs through the
+/// EventSystem's one input module, which the game keeps switched off except while its journal is open
+/// (JournalController.OpenCloseJournal): in a contract no canvas of any kind takes clicks and no menu takes
+/// arrow keys until that module is on again (input_module, input_on, input_set).
 ///
 /// A click reaches the mod through a UnityAction the host makes (the contract's unity_action_new), added to the
-/// button's own onClick: the game's Button.Press and a submit of the selected button both invoke it, and the
-/// listener runs inside the game's managed call, so the mod's function must not let an exception escape.
+/// button's own onClick, which the game invokes on both paths: Button.OnPointerClick does it for a pointer
+/// click of the left button, and Button.OnSubmit calls Button.Press, which does it for Enter or the gamepad A
+/// button on the selected button. The listener runs inside the game's managed call either way, so the mod's
+/// function must not let an exception escape. A Button that is off, hidden or not interactable runs nothing:
+/// the game guards both paths before invoking.
 ///
 /// Main thread. Local client only.
 /// @ingroup runtime
@@ -22,16 +27,20 @@
 
 namespace pm::api::buttons {
 
-/// The game's Button on `gameObject`: the one it already has, or a new one added to it. The object needs a
-/// Graphic for the pointer to hit it (pm::ui::create_image makes one, and it catches the pointer by default).
-/// @param gameObject The object to make a button.
+/// The game's Button on the object: the one it already has, or a new one added to it. Pass the object's
+/// GameObject or any component on it (pm::ui::create_image hands back the component). The Button's graphic
+/// is the object's own Graphic, and attach switches that Graphic's raycastTarget on, so the game's pointer
+/// actually hits the row (pm::ui::create_image makes pictures that do not catch the pointer, and one that
+/// does not catch it leaves the Button unhoverable and unclickable).
+/// @param gameObjectOrComponent The object to make a button: its GameObject, or a component on it.
 /// @return The Button component; null for null, or when the game's entries did not resolve.
-void* attach(void* gameObject);
+void* attach(void* gameObjectOrComponent);
 
-/// The GraphicRaycaster of the canvas `gameObject`: the one it already has, or a new one added to it.
-/// @param canvasGameObject The canvas's own GameObject.
+/// The GraphicRaycaster of the canvas: the one it already has, or a new one added to it. Pass the canvas's
+/// GameObject or its Canvas component (pm::ui::create_canvas hands back the component).
+/// @param canvasGameObjectOrComponent The canvas: its GameObject, or a component on it.
 /// @return The GraphicRaycaster; null for null, or when the game's entries did not resolve.
-void* catch_pointer(void* canvasGameObject);
+void* catch_pointer(void* canvasGameObjectOrComponent);
 
 /// Runs `fn(user)` when the game invokes that button's onClick: its own Press, or Enter or the gamepad A
 /// button on the selected button. Main thread, inside the game's managed call: `fn` must not let an exception

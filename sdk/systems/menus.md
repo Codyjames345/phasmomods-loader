@@ -123,6 +123,44 @@ back afterwards, exactly as `sdk/api/buttons.h` does. The same journal toggle ca
 `PCCanvas.PausePlayerInPlace` on the local player's HUD (its entry note in `sdk/map/Player.h`): the game's
 way to hold the player still and free the cursor while an overlay is up.
 
+## What a canvas needs before it answers the pointer
+
+Three things have to hold, and a mod's own canvas starts with none of them (all read from the build's own
+compiled Unity UI code, 2026-11-12):
+
+- The canvas needs a `GraphicRaycaster`. A `Canvas` has no hit-testing of its own: no member of
+  UnityEngine.UIModule's `Canvas` mentions a raycast at all, and the hit-test is
+  `GraphicRaycaster.Raycast` in UnityEngine.UI. A canvas made at runtime therefore catches nothing until one
+  is added.
+- The graphic hit needs its `raycastTarget` on. `Graphic.set_raycastTarget` is what puts a graphic into, or
+  out of, the raycast list of the canvas it draws on (UnityEngine.UI's own graphic registry), and only while
+  the component is active and enabled; the raycaster walks nothing but that list. A graphic with it off is
+  never hovered, pressed or clicked, whatever sits on the same object. `pm::ui::create_image` makes its
+  pictures with it off.
+- The object hit needs a `Button` or other `Selectable` on it, since that is what the event system selects,
+  hovers and submits.
+
+`sdk/api/buttons.h`'s `attach` and `catch_pointer` do all three, and take the object as either its GameObject
+or any component on it, which is what `pm::ui`'s creators hand back. Each half goes where it belongs: the
+map's `Component.GetComponent` is `Component`'s own method, so its object has to be a component (for a
+GameObject the helpers use that object's `Transform`, which every GameObject has), while
+`GameObject.AddComponent` runs on the GameObject. Both mixed up is what left every row of the dev menu
+without a button on 2026-11-11.
+
+## How a click reaches a Button
+
+`Button.onClick` (a `ButtonClickedEvent`, Unity's own) is invoked by two paths, read from the build on
+2026-11-12. A pointer click runs `Button.OnPointerClick`, which returns at once unless the event's button is
+the left one, and then runs the button's own invoke list after two guards on the button itself: Unity's UI
+runs its active and interactable checks here, so a button that is off, hidden or not interactable runs
+nothing. A submit of the selected object (Enter, or the gamepad's A button) runs `Button.OnSubmit`, which
+calls `Button.Press` and starts a short finish coroutine, and `Press` walks the same invoke list. Either way
+the listener runs inside the game's managed call, so a mod's handler must not let an exception escape
+(`sdk/api/buttons.h`).
+
+A scene always has an `EventSystem`: the game's `EventSystemChecker`, present where Unity's own may be
+absent, makes one with its input module at scene start when the scene has none (decompiled 2026-11-11).
+
 A scene always has an `EventSystem`: the game's `EventSystemChecker`, present where Unity's own may be
 absent, makes one with its input module at scene start when the scene has none (decompiled 2026-11-11).
 

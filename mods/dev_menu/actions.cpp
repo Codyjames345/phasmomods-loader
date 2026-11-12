@@ -333,8 +333,13 @@ float reward_multiplier() {
 }
 
 int bonus_reward() {
+  // GetInvestigationBonusReward throws a NullReferenceException unless the contract's objectives are set
+  // (its map note): at the main menu it threw on every frame the menu was open (the live log of
+  // 2026-11-11). Ask only while a contract runs and its main objective is there.
   void* v = values();
-  return v ? LevelValues::GetInvestigationBonusReward(v) : 0;
+  void* level = game::level_controller();
+  if (!v || !level || !game::alive(level) || !LevelValues::mainObjective.get(v)) return 0;
+  return LevelValues::GetInvestigationBonusReward(v);
 }
 
 float sanity() {
@@ -453,13 +458,21 @@ void set_frozen(bool value) {
   g_frozen = value;
 }
 
-void pause_player(bool held) {
+bool pause_player(bool held) {
   // The game's own hold for a full-screen overlay, what opening the journal does (PCCanvas's own entry
-  // note): no walking, no looking, crosshair away, cursor free. Nothing at the main menu, where there is
-  // no LocalPCPlayer.
+  // note): no walking, no looking, crosshair away, cursor free. Ask only for a rig that can carry it:
+  // the release reads the rig's journal controller and throws when the rig has none (the decompile,
+  // 2026-11-11), so a rig without a journal or HUD never hears the call at all, and the answer says
+  // whether the game was asked (the mod only ever releases a hold it asked for).
+  // Network.localRig is typed LocalPlayer, which is abstract: the VR rig is a different class with its own
+  // fields, so its object is only read as a LocalPCPlayer when it really is one.
   void* rig = game::local_player_component();
-  void* hud = rig ? LocalPCPlayer::canvas.get(rig) : nullptr;
-  if (hud) PCCanvas::PausePlayerInPlace(hud, held);
+  if (!rig || !LocalPCPlayer::type.is(rig)) return false;
+  void* hud = LocalPCPlayer::canvas.get(rig);
+  void* journal = LocalPlayer::journalController.get(rig);
+  if (!hud || !journal) return false;
+  PCCanvas::PausePlayerInPlace(hud, held);
+  return true;
 }
 
 void kill_local() {

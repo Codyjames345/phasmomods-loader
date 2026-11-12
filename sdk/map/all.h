@@ -1113,6 +1113,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &Network_localRig,
     &LocalPlayer_player,
     &LocalPlayer_camera,
+    &LocalPlayer_journalController,
     &Player_RevivePlayer,
     &LevelValues_completed,
     &Selectable_get_interactable,

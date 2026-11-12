@@ -82,8 +82,10 @@ void set_forced_type(int value);
 void set_sanity(int percent);
 void set_frozen(bool value);
 /** Holds the local investigator in place while the menu is up, as the game does for its journal: no walking
- *  and no looking, crosshair away, cursor free; false gives all of it back. Does nothing at the main menu. */
-void pause_player(bool held);
+ *  and no looking, crosshair away, cursor free; false gives all of it back. Asks the game only for a PC rig
+ *  that has a HUD and a journal controller (the game's release throws without one), and answers whether it
+ *  asked, so the menu releases only a hold it took. */
+bool pause_player(bool held);
 void kill_local();
 void revive_local();
 void unlock_main_door();

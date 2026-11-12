@@ -251,8 +251,13 @@ inline constexpr pm::sdk::EntryDesc LevelValues_instance{
     .key = "LevelValues.instance", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .flags = pm::sdk::kStatic, .owner = "LevelValues", .type = "@LevelValues"};
 
-/// The money the contract's objectives pay: the main objective's ObjectiveValues.moneyReward plus each
-/// side objective's. Decompiled.
+/// The money the contract's objectives pay: the main objective's ObjectiveValues.moneyReward, plus the
+/// moneyReward of every side objective whose own bool flag reads true (the objective's flags are
+/// obfuscated, so the map knows the class by its fields, not by them). Decompiled. It throws a
+/// NullReferenceException when LevelValues.mainObjective is null,
+/// when the main objective has no values, or when the side objectives' list (a field of LevelValues not
+/// mapped yet) is null or holds a null entry. At the main menu it throws: read LevelValues.mainObjective
+/// first, and ask only while a contract runs (the dev menu's live test, 2026-11-11).
 inline constexpr pm::sdk::EntryDesc LevelValues_GetInvestigationBonusReward{
     .key = "LevelValues.GetInvestigationBonusReward", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "LevelValues", .name = "GetInvestigationBonusReward"};

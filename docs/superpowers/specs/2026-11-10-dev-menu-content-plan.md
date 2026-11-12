@@ -14,7 +14,10 @@ dev-menu key per the user; the binding sits on that physical position, so non-US
 same key) and only when the game runs offline, in its own single player mode
 (`PhotonNetwork.get_OfflineMode`, already mapped) - the user's final call, a sandbox (third round,
 below). While the menu is open the game runs at timeScale 0, so the contract freezes and the menu
-stays responsive (Unity still runs `Update` at dt 0; the menu's own polling keeps working). The
+stays responsive (Unity still runs `Update` at dt 0; the menu's own polling keeps working). Changed by
+the user on 2026-11-12 after three live tries: the pause is off by default and is a row a developer
+turns on, because the game's own code never writes the time scale and its picture adapts to the light
+using the scaled frame time (`sdk/systems/media.md`). The clock is left alone until asked. The
 menu puts nothing on a network there is not on: offline, every game path it calls is the game's own
 single player path.
 
@@ -302,7 +305,8 @@ Time:
 
 - Tick speed slider: 0x (paused), 0.5x, 1x, 2x, and fine values - `Time.get_timeScale` is mapped,
   the setter needs one entry (SDK small)
-- "Pause while the menu is open": the default; restores the previous timescale on close (same entry)
+- "Pause while the menu is open": restores the previous timescale on close (same entry). Off by default
+  since 2026-11-12, the user's call; the row and the tick speed row stay
 
 Debug HUD (a `ui::` canvas, PG-HUD style; toggles per block):
 

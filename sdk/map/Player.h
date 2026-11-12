@@ -172,15 +172,22 @@ inline constexpr pm::sdk::EntryDesc PCCanvas_crosshair{.key = "PCCanvas.crosshai
 
 inline constexpr const char* PCCanvas_bool[] = {"bool"};
 
-/// PausePlayerInPlace(paused): holds the local player still while a full-screen overlay is up, and lets
-/// them go again when it closes; the game calls it with true from the journal (and the options page opened
-/// from it) and the voice recognition overlay, and with false when those close. Decompiled: with true it
-/// calls FirstPersonController.EnableMovement false (no walking and no looking), hides the HUD's crosshair
-/// object, resets held item sway, switches the game HUD's CanvasGroup interactable off, and releases the
-/// mouse cursor; with false it reverses all of it and locks the cursor again, unless a component of the
-/// player holds a bool that refuses the release (that component was not identified). It skips itself when
-/// the player's movement already matches the request, reading the two flags EnableMovement writes. It
-/// neither moves the player nor touches the game's clock.
+/// PausePlayerInPlace(paused): the game's hold for a full-screen overlay. It runs on the local player's HUD
+/// canvas and reaches everything through that canvas's own LocalPlayer. The game calls it with true from
+/// JournalController.OpenCloseJournal, from the options page it opens and from the voice recognition
+/// overlay's own toggle, and with false when those close. Decompiled, with true it: calls
+/// FirstPersonController.EnableMovement false (no walking and no looking); writes a zero to a float on the
+/// investigator's character-animation component, reached through LocalPlayer.player; switches the HUD's
+/// shown state; sets the crosshair's GameObject inactive; resets held item sway (PCItemSway.ResetSway);
+/// switches the game HUD's CanvasGroup interactable off; and frees the mouse cursor. With false it does the
+/// same in reverse and locks the cursor again, but first reads LocalPlayer.journalController: no journal
+/// controller throws there, and one that says its own journal is open returns without releasing anything.
+/// A piece missing after the movement switch (the investigator, its animation component, the crosshair, the
+/// sway) throws a NullReferenceException with the movement already switched, so a mod should check those
+/// before it asks. The call skips itself when the movement already matches the request, reading the two
+/// flags EnableMovement writes. It never moves the player and never touches the game's clock. Ask once when
+/// an overlay opens and release once when it closes, exactly as the journal toggle does; asking every frame
+/// re-runs all of this whenever the game has put the player's state back.
 inline constexpr pm::sdk::EntryDesc PCCanvas_PausePlayerInPlace{
     .key = "PCCanvas.PausePlayerInPlace", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "PCCanvas", .name = "PausePlayerInPlace", .params = PCCanvas_bool};
@@ -323,6 +330,14 @@ inline constexpr pm::sdk::EntryDesc LocalPlayer_player{.key = "LocalPlayer.playe
 /// The rig's eyes, a Camera: LocalPlayer's one Camera field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc LocalPlayer_camera{.key = "LocalPlayer.camera", .kind = pm::sdk::Kind::Field,
                                                        .owner = "LocalPlayer", .type = "Camera"};
+
+/// The rig's journal page controller: LocalPlayer's one JournalController field. Decompiled role, from
+/// the class dump: PCCanvas.PausePlayerInPlace checks it when releasing its hold (a rig with no journal
+/// controller throws at the release; a journal that says itself open refuses the release), and
+/// JournalController.OpenCloseJournal keeps its own open state on that controller.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_journalController{
+    .key = "LocalPlayer.journalController", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LocalPlayer", .type = "@JournalController"};
 
 // How fast the local investigator moves. LocalPlayer declares the speeds and LocalPCPlayer (and the VR
 // rig) applies them; sdk/systems/players.md, "Speed and stamina", ties them together.
@@ -1061,6 +1076,10 @@ struct LocalPlayer {
   static constexpr pm::api::Field<pm::map::LocalPlayer_player, void*> player{};
   /// Its Camera: camera.get(rig). Unresolved: null.
   static constexpr pm::api::Field<pm::map::LocalPlayer_camera, void*> camera{};
+  /// Its journal page controller, a JournalController: journalController.get(rig). This is what
+  /// PCCanvas.PausePlayerInPlace checks on release: a rig this answers null for has no journal, and the
+  /// release throws there. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LocalPlayer_journalController, void*> journalController{};
   /// Its walking speed in metres a second, before the multiplier: walkSpeed.get(rig). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::LocalPlayer_walkSpeed, float> walkSpeed{};
   /// Its sprinting speed in metres a second, before the multiplier, whether sprinting is on or not:

@@ -93,7 +93,10 @@ void guarded_tick(const bool& running, void (*tick)()) {
   try {
     tick();
   } catch (const Il2CppExceptionWrapper& e) {
-    if (g_host) g_host->log_exception("tick: managed exception caught at the frame boundary", e.ex);
+    // The host writes this line, not the mod's own log sink, so it carries no mod prefix: name the mod.
+    const std::string where = std::string(g_info && g_info->id ? g_info->id : "a mod") +
+                              ": tick: managed exception caught at the frame boundary";
+    if (g_host) g_host->log_exception(where.c_str(), e.ex);
     else PM_LOG("tick: managed exception caught at the frame boundary");
   } catch (...) {
     PM_LOG("tick: unknown exception caught at the frame boundary");

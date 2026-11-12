@@ -18,6 +18,7 @@
 #include "game.h"
 #include "held.h"
 #include "log.h"
+#include "managed_exception.h"
 #include "text_table.h"
 #include "ui.h"
 
@@ -84,6 +85,11 @@ bool g_wasCursorLocked = true;
 // open, and without it no canvas takes clicks and no menu takes arrow keys.
 void* g_module = nullptr;
 bool g_moduleWas = false;
+// Whether open() asked the game to hold the player (actions::pause_player answered true): only a hold the
+// menu took is re-asserted while it is open and released when it closes.
+bool g_held = false;
+// The rows whose read has thrown once already: logged once each, then shown empty.
+std::vector<bool> g_readFailed;
 Why g_refusal = Why::None;  // the last refused click, shown until a click works
 std::vector<Row> g_rows;
 void* g_title = nullptr;
@@ -234,6 +240,8 @@ void rowClicked(void* user);
 void selectSectionRow();
 void borrowInput();
 void returnInput();
+void releasePlayer();
+void refresh();
 
 // The layout, in canvas units about the canvas centre (the emotes wheel's convention).
 constexpr float kTop = 380.0f;      // the first row's line
@@ -354,14 +362,15 @@ void recover() {
   float restore = 0.0f;
   if (pause_close(g_pause, restore)) actions::set_time_scale(restore);
   returnInput();
-  actions::pause_player(false);
   if (g_wasCursorLocked) game::lock_cursor();
   g_active = false;
   g_built = false;
   g_canvas = nullptr;
   g_rows.clear();
+  g_readFailed.clear();
   g_title = g_hint = g_refusalText = nullptr;
   g_refusal = Why::None;
+  releasePlayer();  // last, as in close()
 }
 
 // ---- Clicks ----
@@ -487,6 +496,7 @@ void rowClicked(void* user) {
       g_section = r.arg;
       setSectionShown(g_section, true);
       refreshNav();
+      refresh();  // the section's values now, not a frame late
       selectSectionRow();  // arrow keys continue from the section now showing
     }
     return;
@@ -520,11 +530,36 @@ void returnInput() {
   g_moduleWas = false;
 }
 
-// Reread every shown row's value, and the refusal line.
+// Gives back the hold open() took. Last in every closing path: the game's release can throw (its map
+// note), and nothing the menu changed may stay changed because of that.
+void releasePlayer() {
+  if (!g_held) return;
+  g_held = false;
+  actions::pause_player(false);
+}
+
+// A row's value, read now. A read the game throws on shows nothing, and is logged once with its row's
+// name: one failing read must not stop the frame, which would leave every later row and the rest of the
+// tick unrun (the live test of 2026-11-11, where the payout read threw on every frame at the main menu).
+std::string safeValueText(size_t i) {
+  if (g_readFailed.size() != g_rows.size()) g_readFailed.assign(g_rows.size(), false);
+  if (g_readFailed[i]) return {};
+  try {
+    return valueText(g_rows[i]);
+  } catch (const Il2CppExceptionWrapper&) {
+    g_readFailed[i] = true;
+    PM_LOG("dev-menu: reading the row \"%s\" threw a managed exception; it shows nothing from now on",
+           g_rows[i].label);
+  }
+  return {};
+}
+
+// Reread the shown section's values, and the refusal line. Hidden sections are read when they show.
 void refresh() {
-  for (Row& r : g_rows) {
-    if (r.kind == Nav || !r.text) continue;
-    const std::string value = valueText(r);
+  for (size_t i = 0; i < g_rows.size(); ++i) {
+    Row& r = g_rows[i];
+    if (r.kind == Nav || !r.text || r.section != g_section) continue;
+    const std::string value = safeValueText(i);
     const std::string line = value.empty() ? i18n::text(r.label) : i18n::text(r.label) + "  " + value;
     ui::set_text(r.text, line.c_str());
   }
@@ -549,19 +584,23 @@ void open() {
   game::free_cursor();
   const float scale = pause_open(g_pause, actions::time_scale(), actions::switches().pauseWhenOpen);
   if (g_pause.frozen) actions::set_time_scale(scale);
-  actions::pause_player(true);  // the journal's own hold: no walking and no looking behind the menu
   borrowInput();
   selectSectionRow();
+  g_held = actions::pause_player(true);  // the journal's own hold: no walking and no looking behind the menu
+  // The clock is what the live tests of 2026-11-11 and 2026-11-12 blame for the picture after a close, so
+  // the log says plainly what this open did to it (see sdk/systems/media.md).
+  PM_LOG("dev-menu: open at timeScale %s, the player %s", number(scale).c_str(), g_held ? "held" : "not held");
 }
 
 void close() {
   if (!is_open()) return;
   show(false);
-  returnInput();
-  actions::pause_player(false);
   float restore = 0.0f;
   if (pause_close(g_pause, restore)) actions::set_time_scale(restore);
+  PM_LOG("dev-menu: closed at timeScale %s", number(actions::time_scale()).c_str());
+  returnInput();
   if (g_wasCursorLocked) game::lock_cursor();
+  releasePlayer();
 }
 
 void tick() {
@@ -575,7 +614,7 @@ void tick() {
   // off and releases the player's hold while the menu is still up, and both calls skip a state that
   // already matches, so an unchanged frame does nothing.
   if (g_module && !api::buttons::input_on(g_module)) api::buttons::input_set(g_module, true);
-  actions::pause_player(true);
+  if (g_held) actions::pause_player(true);
 }
 
 void destroy() {
@@ -584,16 +623,17 @@ void destroy() {
   float restore = 0.0f;
   if (pause_close(g_pause, restore)) actions::set_time_scale(restore);
   returnInput();
-  actions::pause_player(false);
   if (g_active && g_wasCursorLocked) game::lock_cursor();
   if (g_canvas) ui::destroy(g_canvas);
   g_canvas = nullptr;
   g_built = false;
   g_active = false;
   g_rows.clear();
+  g_readFailed.clear();
   g_title = g_hint = g_refusalText = nullptr;
   g_refusal = Why::None;
   g_pause = Pause{};
+  releasePlayer();  // last: the game's release may throw, and everything above is already put back
 }
 
 }  // namespace pm::devmenu::menu

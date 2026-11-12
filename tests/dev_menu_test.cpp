@@ -36,6 +36,19 @@ void pausing_can_be_switched_off() {
   CHECK(!pause_close(p, restore));
 }
 
+void the_menu_does_not_pause_the_clock_by_default() {
+  // The user's call, 2026-11-12, after three live tries: the game's own code never writes the time scale,
+  // and its picture adapts to light using the scaled frame time, so holding the clock at 0 behind the menu
+  // is the one thing every broken screen shared. The pause stays a row a developer switches on, and the
+  // clock is left alone until they do.
+  const Switches s;
+  CHECK(!s.pauseWhenOpen);
+  Pause p;
+  CHECK(pause_open(p, 1.0f, s.pauseWhenOpen) == 1.0f && !p.frozen);
+  float restore = 2.0f;
+  CHECK(!pause_close(p, restore) && restore == 2.0f);  // closing changes a clock it never touched
+}
+
 void the_tick_speed_row_cycles_the_presets() {
   CHECK(next_time_scale(1.0f) == 2.0f);
   CHECK(next_time_scale(2.0f) == 0.0f);  // wraps to paused
@@ -118,6 +131,7 @@ int main() {
   the_menu_opens_only_in_the_sandbox();
   opening_the_menu_freezes_and_closing_restores();
   pausing_can_be_switched_off();
+  the_menu_does_not_pause_the_clock_by_default();
   the_tick_speed_row_cycles_the_presets();
   the_hooks_answer_the_switches();
   a_full_offline_contract_allows_everything();

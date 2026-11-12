@@ -51,7 +51,11 @@ inline float next_time_scale(float current) {
 
 // ---- The switches the mod's hooks read ----
 struct Switches {
-  bool pauseWhenOpen = true;    // freeze the game at timeScale 0 while the menu is open
+  // Freeze the game at timeScale 0 while the menu is open. Off by default since 2026-11-12 (the user's call
+  // after three live tries): the game's own code never writes the time scale at all, and its picture adapts
+  // to the light using the frame's scaled time, so a frozen clock behind the menu is the one thing every
+  // broken screen after a close shared. The row and the tick-speed row stay for a developer who wants them.
+  bool pauseWhenOpen = false;
   bool godMode = false;         // a hunt's kill of the local investigator is refused
   bool keepConsumables = false;  // a saved consumable stock never goes down
 };

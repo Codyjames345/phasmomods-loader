@@ -227,6 +227,99 @@ The user launches the game; no loader file ever enters the game folder.
     come back. If it does, the camera hold was not the cause - file it in FINDINGS.md as a game
     behaviour with our exact steps and retest at the next build.
 
+
+## 2026-11-12: fourth live try - no buttons, an exception storm, and the picture (fixed)
+
+The user's fourth report, with a screenshot of the main menu room bright and harsh: "The menu buttons
+still don't work, and the graphics still freak out after closing the menu."
+
+What was wrong, and the proof:
+
+1. No row ever had a Button. `sdk/api/buttons.cpp`'s `attach` and `catch_pointer` accepted only GameObjects,
+   while `pm::ui`'s creators hand back components (a Canvas, a RawImage), and their `GetComponent` was
+   `Component`'s own method run with a GameObject as its object. Every row logged "could not be made a
+   button". The helpers now take either, reach siblings through the GameObject's `Transform` (every GameObject
+   has one) and add through the GameObject, and `attach` switches the row's `Graphic.raycastTarget` on,
+   without which the raycaster never sees the row at all.
+2. A NullReferenceException every frame at the main menu. `LevelValues.GetInvestigationBonusReward` throws
+   when `LevelValues.mainObjective` is null, when the main objective has no `ObjectiveValues`, or when the
+   side-objectives list (an unmapped field) is null or holds a null entry. `actions::bonus_reward` now asks
+   only with a live LevelController and a main objective; a row whose read throws is logged once and shown
+   empty; `refresh()` reads only the section on screen, not all six.
+3. The host's bare "tick: managed exception caught at the frame boundary" line named no mod: the mod's own
+   log sink carries the prefix but `log_exception` does not. `guarded_tick` now puts the mod's id in the
+   message it hands the host.
+4. The pause is off by default. The user chose "default off, keep rows" (2026-11-12), so
+   `Switches::pauseWhenOpen` is false and opening the menu leaves `Time.timeScale` alone. The row and the
+   tick-speed row stay for a developer who wants them. Test first: `dev_menu_test` gained
+   `the_menu_does_not_pause_the_clock_by_default`, red against the old default and green after. `open()` and
+   `close()` log the time scale they found and whether the player was held, so the next log says plainly what
+   the menu did to the clock.
+5. The hold is asked only for a PC rig that has a HUD and a journal controller
+   (`LocalPCPlayer::type.is(rig)`), because the release reads that controller and throws when it is missing.
+   `pause_player` answers whether it asked, and only a hold the menu took is re-asserted or released.
+
+## 2026-11-12: verification pass over everything written (the user's request)
+
+Every claim in this branch's code comments, map notes and system pages was re-read against the build (the C#
+dump for shapes and offsets, `re/callers.mjs` for callers, headless Ghidra for bodies). Confirmed as written:
+the journal toggle switches `EventSystem.currentInputModule` and calls `PCCanvas.PausePlayerInPlace` on
+`LocalPCPlayer.canvas`; the hold's chain (EnableMovement false, a zero on the animation component, the HUD
+state, the crosshair inactive, sway reset, CanvasGroup interactable off, cursor free) and its release (the
+journal-controller check first, then the reverse, cursor locked again); `CursorLockMode` is None 0, Locked 1,
+Confined 2, so our free-then-lock order around the hold is right; the offsets `LocalPlayer.player` +0x20,
+`journalController` +0x28, `camera` +0x30, `LocalPCPlayer.canvas` +0x120, `FirstPersonController` +0x128,
+`PCItemSway` +0x138, and that `LocalPCPlayer : LocalPlayer` with `PCCanvas` holding a `LocalPCPlayer`, so the
+rig's base fields sit where the map says; `ObjectiveValues.moneyReward` +0x30; and the pause's callers, which
+are the journal toggle, the options page, one more private journal method and the voice recognition UI.
+
+What the pass corrected or strengthened:
+
+- `Player.h`'s PausePlayerInPlace note claimed a sibling HUD-state method writes a different value to the
+  same float. Decompiling `PCCanvas.SetState` by RVA does not show that, so the claim is gone and the note was
+  rewritten from the decompile (it now says the journal check runs before the movement switch).
+- `Difficulty.h` said the reward is the main objective's moneyReward "plus each side objective's". The loop
+  adds only an objective whose own bool flag reads true, and that flag is obfuscated, so the note says that.
+- The raycastTarget and GraphicRaycaster claims are proven, not inferred: `Graphic.set_raycastTarget` puts a
+  graphic into or out of its canvas's raycast list (Unity's own graphic registry) and only while the component
+  is active and enabled, and `GraphicRaycaster.Raycast` walks nothing but that list; no member of
+  UnityEngine.UIModule's `Canvas` mentions a raycast. Both map notes moved from "Inferred: Unity's documented
+  API" to the decompiled facts, and `sdk/systems/menus.md` gained "What a canvas needs before it answers the
+  pointer" and "How a click reaches a Button".
+- The Button paths are read from the build: `OnPointerClick` returns unless the event's button is the left
+  one and then walks `onClick`'s invoke list after two guards on the button; `OnSubmit` calls `Press`, which
+  walks the same list, then starts a short coroutine. `sdk/api/buttons.h` now documents that, including that a
+  Button which is off, hidden or not interactable runs nothing.
+- The clock claims hold two ways: 64 sites call `Time.set_timeScale` and all of them are middleware (a
+  slow-motion demo's `Update`, an on-screen console, and the UI framework's time-scale graph node), and the C#
+  dump mentions `timeScale` in only four non-game assemblies. The auto-exposure claim holds too: the exposure
+  feature's compute pass puts `Time.get_deltaTime` into its per-frame constants beside the EV range and the
+  adaptation speeds. `sdk/systems/media.md` gained "What a frozen clock does to the picture", which also tells
+  authors to take the game's hold and leave the clock alone.
+
+Still unproven: which of the menu's open-time changes blows the picture out. The pause is the only thing all
+three broken rounds shared, and it is now off by default, so the live test decides. If the picture still goes
+wrong with the pause off, file it in FINDINGS.md with the exact steps and stop blaming the clock.
+
+Checks: build clean; `validate.ps1` 94/94; the API reference has no warnings; gamecheck 1867 entries, 1755
+resolved, 0 missing, and `LocalPlayer.journalController` resolves (the record file's map hash moved with the
+map, as it should).
+
+## Smoke list addenda for the fifth live try (each line is the user's in-game check; the standing ban-risk warning still applies)
+
+16. Main menu, single player: open the menu, move a selection with the arrows, press Enter. The row runs. With
+    the mouse: hover shows the game's hover look, a left click runs the row, a right click does nothing.
+17. `mods.log` gains no "tick: managed exception" line while the menu sits open at the main menu. If one row's
+    read throws, exactly one line names that row and it shows empty from then on.
+18. `mods.log` shows "dev-menu: open at timeScale 1.00, ..." and "dev-menu: closed at timeScale 1.00", and
+    nothing changed the clock unless the pause row was switched on.
+19. Graphics, pause off (the new default): open and close the menu at the main menu and in a contract; the
+    picture stays as it was. Then switch "Pause when open" on, leave it open a minute and close: if the
+    picture comes back bright and harsh, the pause is the cause. Say which happened.
+20. With the pause on, the tick-speed row still cycles 0x, 0.5x, 1x, 2x, and closing the menu gives back the
+    speed that ran before the pause.
+21. The game's hold is felt behind the menu: no walking, no looking, no crosshair. Movement, crosshair, the
+    cursor lock and the HUD come back on close, and the input module goes back to the state open() found.
 ## Plan rows the v1 cut left out although their map entries exist (for the user to schedule)
 
 - Contract: objective board read-out (LevelValues.mainObjective, Objective.values) and the objective's
