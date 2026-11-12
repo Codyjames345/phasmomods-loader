@@ -24,6 +24,9 @@ static class Program
         BoolFieldReadsFalseAndFallsBack();
         Pcm16HeaderAndSamples();
         Pcm16WritesOnlyTheFramesAsked();
+        PackFilePathsStayInThePack();
+        ProjectAssetPathsStayInAssets();
+        BundleIsAPlainFileName();
         if (failures == 0)
         {
             Console.WriteLine("emote tools tests passed");
@@ -376,6 +379,41 @@ static class Program
         else if (U32(wav, 40) != 8 || U32(wav, 4) != 44)
         {
             Fail("pcm16_writes_only_the_frames_asked", "data size was " + U32(wav, 40) + ", riff size " + U32(wav, 4) + ", expected 8 and 44");
+        }
+    }
+
+    // A catalogue may come from another author: what it names must not reach outside the pack folder or the project's
+    // Assets folder when the tool writes there.
+    static void PackFilePathsStayInThePack()
+    {
+        foreach (string ok in new[] { "loudness/floss.txt", "loudness/sub/a.intro.txt" })
+        {
+            if (!PackPaths.IsPackFile(ok)) Fail("pack_file_paths_stay_in_the_pack", ok + " was refused");
+        }
+        foreach (string bad in new[] { "", "../x.txt", "loudness/../../x.txt", @"loudness\..\..\x.txt", "C:/x.txt",
+                                       "C:x.txt", "/x.txt", @"\\server\x.txt", "loudness/./x.txt", "a//b.txt" })
+        {
+            if (PackPaths.IsPackFile(bad)) Fail("pack_file_paths_stay_in_the_pack", bad + " was accepted");
+        }
+    }
+
+    static void ProjectAssetPathsStayInAssets()
+    {
+        if (!PackPaths.IsProjectAsset("Assets/Emotes/Clips/Floss.anim"))
+            Fail("project_asset_paths_stay_in_assets", "a clip under Assets was refused");
+        foreach (string bad in new[] { "", "Assets", "Assets/", "Assets/../ProjectSettings/x.asset", "Packages/x.anim",
+                                       "C:/Assets/x.anim", "/Assets/x.anim", @"Assets\..\x.anim", "assets2/x.anim" })
+        {
+            if (PackPaths.IsProjectAsset(bad)) Fail("project_asset_paths_stay_in_assets", bad + " was accepted");
+        }
+    }
+
+    static void BundleIsAPlainFileName()
+    {
+        if (!PackPaths.IsPlainFileName("emotes.bundle")) Fail("bundle_is_a_plain_file_name", "emotes.bundle was refused");
+        foreach (string bad in new[] { "", ".", "..", "../emotes.bundle", "a/b.bundle", @"a\b.bundle", "C:b.bundle" })
+        {
+            if (PackPaths.IsPlainFileName(bad)) Fail("bundle_is_a_plain_file_name", bad + " was accepted");
         }
     }
 }

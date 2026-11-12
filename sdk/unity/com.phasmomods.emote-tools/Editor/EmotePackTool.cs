@@ -139,6 +139,10 @@ namespace PhasmoMods.EmoteTools
                 why = "emotes.json holds no emotes";
                 return false;
             }
+            if (!CheckPaths(cat, out why))
+            {
+                return false;
+            }
             foreach (EmoteEntry emote in cat.emotes)
             {
                 if (string.IsNullOrEmpty(emote.name))
@@ -447,6 +451,10 @@ namespace PhasmoMods.EmoteTools
                 why = "emotes.json holds no emotes";
                 return false;
             }
+            if (!CheckPaths(cat, out why))
+            {
+                return false;
+            }
             if (string.IsNullOrEmpty(cat.bundle))
             {
                 why = "emotes.json names no bundle";
@@ -573,6 +581,39 @@ namespace PhasmoMods.EmoteTools
             string target = Path.Combine(packPath, cat.bundle);
             File.Copy(built, target, true);
             Debug.Log("EM OK " + target);
+            why = null;
+            return true;
+        }
+
+        // Every path the catalogue names stays where the tool may read and write: asset paths under the project's
+        // Assets folder, loudness files under the pack folder, and the bundle a plain file name in it. A catalogue may
+        // come from another author, and the tool writes songs, clips, loudness files and the bundle where it says.
+        private static bool CheckPaths(CatalogueFile cat, out string why)
+        {
+            if (!string.IsNullOrEmpty(cat.bundle) && !PackPaths.IsPlainFileName(cat.bundle))
+            {
+                why = "the bundle name " + cat.bundle + " is not a plain file name";
+                return false;
+            }
+            foreach (EmoteEntry e in cat.emotes)
+            {
+                foreach (string asset in new[] { e.clip, e.moveClip, e.introClip, e.song, e.introSong, e.icon, e.clipSource, e.songSource })
+                {
+                    if (!string.IsNullOrEmpty(asset) && !PackPaths.IsProjectAsset(asset))
+                    {
+                        why = e.name + " names " + asset + ", which is not a file under the project's Assets folder";
+                        return false;
+                    }
+                }
+                foreach (string file in new[] { e.loudness, e.introLoudness })
+                {
+                    if (!string.IsNullOrEmpty(file) && !PackPaths.IsPackFile(file))
+                    {
+                        why = e.name + " names " + file + ", which is not a file under the pack folder";
+                        return false;
+                    }
+                }
+            }
             why = null;
             return true;
         }

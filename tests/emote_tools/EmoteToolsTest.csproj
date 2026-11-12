@@ -12,6 +12,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="../../sdk/unity/com.phasmomods.emote-tools/Editor/LoopFinder.cs" />
+    <Compile Include="../../sdk/unity/com.phasmomods.emote-tools/Editor/PackPaths.cs" />
     <Compile Include="../../sdk/unity/com.phasmomods.emote-tools/Editor/CatalogueText.cs" />
     <Compile Include="../../sdk/unity/com.phasmomods.emote-tools/Editor/WavWriter.cs" />
   </ItemGroup>
