@@ -195,7 +195,7 @@
         @{ Name = 'mods/emotes/i18n/default.json'; Source = 'mods/emotes/i18n/default.json' }
         # The Emotes bundle (its clips, songs and icons; mods/emotes/assets/emotes.json names them). Gitignored like the Squatter's: built
         # in the private assets repository's unity/emotes-bundle and placed by CI from there. Sha256 pins the build.
-        @{ Name = 'mods/emotes/assets/emotes.bundle'; Source = 'mods/emotes/assets/emotes.bundle'; Sha256 = 'B5782284638B90C0AD85BAFF3ADEB0989B86E3CD11602ED6C9F6569972E59042' }
+        @{ Name = 'mods/emotes/assets/emotes.bundle'; Source = 'mods/emotes/assets/emotes.bundle'; Sha256 = 'EA1CE43B44AE8F83911C844BF1EE6E36847A4403ECE61072B48DAD575A4B4E1E' }
         # The catalogue of the mod's own emotes (mods/emotes/catalogue.h), and each song's loudness for the ghost's hearing.
         @{ Name = 'mods/emotes/assets/emotes.json'; Source = 'mods/emotes/assets/emotes.json' }
         @{ Name = 'mods/emotes/assets/loudness/disco-fever.txt'; Source = 'mods/emotes/assets/loudness/disco-fever.txt' }
@@ -206,6 +206,15 @@
         @{ Name = 'mods/emotes/assets/loudness/scenario.txt'; Source = 'mods/emotes/assets/loudness/scenario.txt' }
         @{ Name = 'mods/emotes/assets/loudness/smooth-moves.txt'; Source = 'mods/emotes/assets/loudness/smooth-moves.txt' }
         @{ Name = 'mods/emotes/assets/loudness/take-the-l.txt'; Source = 'mods/emotes/assets/loudness/take-the-l.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/build-up.txt'; Source = 'mods/emotes/assets/loudness/build-up.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/build-up.intro.txt'; Source = 'mods/emotes/assets/loudness/build-up.intro.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/get-griddy.txt'; Source = 'mods/emotes/assets/loudness/get-griddy.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/lavish.txt'; Source = 'mods/emotes/assets/loudness/lavish.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/never-gonna.txt'; Source = 'mods/emotes/assets/loudness/never-gonna.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/running-man.txt'; Source = 'mods/emotes/assets/loudness/running-man.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/savor-the-w.txt'; Source = 'mods/emotes/assets/loudness/savor-the-w.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/sprinkler.txt'; Source = 'mods/emotes/assets/loudness/sprinkler.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/stride.txt'; Source = 'mods/emotes/assets/loudness/stride.txt' }
     )
     Records = @{ Name = 'builds'; Source = 'sdk/builds' }
 }

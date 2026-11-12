@@ -1,5 +1,5 @@
 // The Emotes mod's own emotes, in the catalogue format every emote pack uses (mods/emotes/catalogue.h,
-// sdk/guides/emotes.md). Clockwise from the top of the wheel's first page, in this order. Each song loops by itself in the
+// sdk/guides/emotes.md). Clockwise from the top of the wheel, eight to a page, in this order. Each song loops by itself in the
 // bundle, cut to its loop by the emote pack tool (tools/emote_pack.ps1) from its songSource near songLoopGuess, and
 // songLoop is what the tool measured, for the ghost's hearing.
 {
@@ -37,6 +37,30 @@
     {"name": "take-the-l", "clip": "Assets/Emotes/Clips/TakeTheL.anim", "song": "Assets/Emotes/Loops/take_the_l.wav",
      "songSource": "Assets/Emotes/Songs/take_the_l.mp3", "songLoopGuess": 13,
      "icon": "Assets/Emotes/Icons/take_the_l.png", "label": "emotes.name.take-the-l", "loudness": "loudness/take-the-l.txt",
-     "songLoop": {"start": 0, "seconds": 12.631583}}
+     "songLoop": {"start": 0, "seconds": 12.631583}},
+    {"name": "build-up", "clip": "Assets/Emotes/Clips/BuildUpLoop.anim", "song": "Assets/Emotes/Loops/build_up.wav",
+     "introClip": "Assets/Emotes/Clips/BuildUpStart.anim", "introSong": "Assets/Emotes/Intros/build_up.wav", "introLoudness": "loudness/build-up.intro.txt",
+     "icon": "Assets/Emotes/Icons/build_up.png", "label": "emotes.name.build-up", "loudness": "loudness/build-up.txt", "songLoop": {"start": 0, "seconds": 18.633333}},
+    {"name": "get-griddy", "clip": "Assets/Emotes/Clips/GetGriddy.anim", "song": "Assets/Emotes/Loops/get_griddy.wav",
+     "icon": "Assets/Emotes/Icons/get_griddy.png", "label": "emotes.name.get-griddy", "loudness": "loudness/get-griddy.txt", "songLoop": {"start": 0, "seconds": 24.400021}},
+    {"name": "lavish", "clip": "Assets/Emotes/Clips/Lavish.anim", "song": "Assets/Emotes/Loops/lavish.wav",
+     "clipSource": "Assets/Emotes/Source/Lavish.anim", "clipLoopGuess": 4.733, "songSource": "Assets/Emotes/Songs/lavish.mp3", "songLoopGuess": 28,
+     "icon": "Assets/Emotes/Icons/lavish.png", "label": "emotes.name.lavish", "loudness": "loudness/lavish.txt", "songLoop": {"start": 0, "seconds": 28.204875}},
+    {"name": "never-gonna", "clip": "Assets/Emotes/Clips/NeverGonnaLoop.anim", "song": "Assets/Emotes/Loops/never_gonna.wav",
+     "introClip": "Assets/Emotes/Clips/NeverGonnaStart.anim",
+     "icon": "Assets/Emotes/Icons/never_gonna.png", "label": "emotes.name.never-gonna", "loudness": "loudness/never-gonna.txt", "songLoop": {"start": 0, "seconds": 33.591729}},
+    {"name": "running-man", "clip": "Assets/Emotes/Clips/RunningMan.anim", "song": "Assets/Emotes/Loops/running_man.wav",
+     "clipSource": "Assets/Emotes/Source/RunningMan.anim", "clipLoopGuess": 5.633, "songSource": "Assets/Emotes/Songs/running_man.mp3", "songLoopGuess": 15,
+     "icon": "Assets/Emotes/Icons/running_man.png", "label": "emotes.name.running-man", "loudness": "loudness/running-man.txt", "songLoop": {"start": 0, "seconds": 14.93}},
+    {"name": "savor-the-w", "clip": "Assets/Emotes/Clips/SavorTheW.anim", "song": "Assets/Emotes/Loops/savor_the_w.wav",
+     "clipSource": "Assets/Emotes/Source/SavorTheW.anim", "clipLoopGuess": 1.967, "songSource": "Assets/Emotes/Songs/savor_the_w.mp3", "songLoopGuess": 15,
+     "icon": "Assets/Emotes/Icons/savor_the_w.png", "label": "emotes.name.savor-the-w", "loudness": "loudness/savor-the-w.txt", "songLoop": {"start": 0, "seconds": 15.458938}},
+    {"name": "sprinkler", "clip": "Assets/Emotes/Clips/Sprinkler.anim", "song": "Assets/Emotes/Loops/sprinkler.wav",
+     "clipSource": "Assets/Emotes/Source/Sprinkler.anim", "clipLoopGuess": 3.267, "songSource": "Assets/Emotes/Songs/sprinkler.mp3", "songLoopGuess": 22.5,
+     "icon": "Assets/Emotes/Icons/sprinkler.png", "label": "emotes.name.sprinkler", "loudness": "loudness/sprinkler.txt", "songLoop": {"start": 0, "seconds": 22.499}},
+    {"name": "stride", "clip": "Assets/Emotes/Clips/Stride.anim", "song": "Assets/Emotes/Loops/stride.wav",
+     "moveClip": "Assets/Emotes/Clips/Stride.anim",
+     "clipSource": "Assets/Emotes/Source/Stride.anim", "clipLoopGuess": 16.667, "songSource": "Assets/Emotes/Songs/stride.mp3", "songLoopGuess": 17,
+     "icon": "Assets/Emotes/Icons/stride.png", "label": "emotes.name.stride", "loudness": "loudness/stride.txt", "songLoop": {"start": 0, "seconds": 16.633313}}
   ]
 }
