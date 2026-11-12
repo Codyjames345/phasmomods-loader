@@ -1,0 +1,8 @@
+{
+  "name": "com.phasmomods.emote-tools",
+  "version": "1.0.0",
+  "displayName": "PhasmoMods Emote Tools",
+  "description": "Finds an emote's song and clip loops from a rough guess and builds an emote pack's bundle.",
+  "unity": "2022.3",
+  "license": "Apache-2.0"
+}

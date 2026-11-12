@@ -39,5 +39,5 @@ the VR button again closes the wheel. The wheel stays shut while a menu or the j
 
 The mod is `mods/emotes`. Its dances, songs and icons are in `emotes.bundle`, built in the private assets repository
 (`unity/emotes-bundle`) and pinned in `tools/payload.psd1`. Each song's measured loudness is
-`assets/loudness/<dance>.txt` (`tools/emote_loudness.mjs` makes it), and the dances are listed in `assets/emotes.json`. The wheel's colours and sizes are placeholders in
+`assets/loudness/<dance>.txt`, which the emote pack tool (`tools/emote_pack.ps1`, `sdk/unity/com.phasmomods.emote-tools`) writes with the bundle, and the dances are listed in `assets/emotes.json`. The wheel's colours and sizes are placeholders in
 `mods/emotes/wheel_style.h`, and the dances' names are in its string table.

@@ -16,6 +16,14 @@ static class Program
         RmsOfFullScaleSquareIsOne();
         RmsCountsAPartialLastWindow();
         MonoAveragesChannels();
+        StripCommentsKeepsSlashesInStrings();
+        SetSongLoopReplacesAnExistingOne();
+        SetSongLoopInsertsAMissingOne();
+        SetSongLoopIgnoresANameInsideAComment();
+        SetSongLoopOfAMissingEmoteThrows();
+        BoolFieldReadsFalseAndFallsBack();
+        Pcm16HeaderAndSamples();
+        Pcm16WritesOnlyTheFramesAsked();
         if (failures == 0)
         {
             Console.WriteLine("emote tools tests passed");
@@ -181,6 +189,193 @@ static class Program
                 joined += (i > 0 ? ", " : "") + got[i];
             }
             Fail("mono_averages_channels", "got {" + joined + "}, expected {2, 0}");
+        }
+    }
+
+    // Little readers for the WavWriter header checks.
+    static bool TagAt(byte[] b, int at, string tag)
+    {
+        for (int i = 0; i < tag.Length; i++)
+        {
+            if (b[at + i] != (byte)tag[i])
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static int U16(byte[] b, int at)
+    {
+        return b[at] | (b[at + 1] << 8);
+    }
+
+    static uint U32(byte[] b, int at)
+    {
+        return (uint)(b[at] | (b[at + 1] << 8) | (b[at + 2] << 16) | (b[at + 3] << 24));
+    }
+
+    static short I16(byte[] b, int at)
+    {
+        return (short)(b[at] | (b[at + 1] << 8));
+    }
+
+    static void StripCommentsKeepsSlashesInStrings()
+    {
+        string text = "\"a // b\" // note\nnext // also\n";
+        string want = "\"a // b\" \nnext \n";
+        string got = CatalogueText.StripComments(text);
+        if (got != want)
+        {
+            Fail("strip_comments_keeps_slashes_in_strings", "got [" + got + "], expected [" + want + "]");
+        }
+    }
+
+    static void SetSongLoopReplacesAnExistingOne()
+    {
+        string text = "// the pack's two dances\n" +
+            "{\n" +
+            "  \"format\": 1,\n" +
+            "  \"bundle\": \"pack.bundle\",\n" +
+            "  \"emotes\": [\n" +
+            "    {\"name\": \"a\", \"song\": \"Assets/Songs/a.wav\", \"songLoop\": {\"start\": 0, \"seconds\": 4.0}},\n" +
+            "    {\"name\": \"b\", \"song\": \"Assets/Songs/b.wav\", \"songLoop\": {\"start\": 0, \"seconds\": 9.5}}\n" +
+            "  ]\n" +
+            "}\n";
+        string want = text.Replace("{\"start\": 0, \"seconds\": 9.5}", "{\"start\": 0, \"seconds\": 8.542}");
+        string got = CatalogueText.SetSongLoop(text, "b", 0, 8.542);
+        if (got != want)
+        {
+            Fail("set_song_loop_replaces_an_existing_one", "got [" + got + "], expected only b's songLoop to change to {\"start\": 0, \"seconds\": 8.542}");
+        }
+    }
+
+    static void SetSongLoopInsertsAMissingOne()
+    {
+        string text = "{\n" +
+            "  \"emotes\": [\n" +
+            "    {\"name\": \"a\", \"song\": \"Assets/Songs/a.wav\"}\n" +
+            "  ]\n" +
+            "}\n";
+        string want = text.Replace("{\"name\": \"a\", \"song\": \"Assets/Songs/a.wav\"}",
+            "{\"name\": \"a\", \"song\": \"Assets/Songs/a.wav\", \"songLoop\": {\"start\": 0, \"seconds\": 16.692}}");
+        string got = CatalogueText.SetSongLoop(text, "a", 0, 16.692);
+        if (got != want)
+        {
+            Fail("set_song_loop_inserts_a_missing_one", "got [" + got + "]");
+        }
+    }
+
+    static void SetSongLoopIgnoresANameInsideAComment()
+    {
+        string text = "{\n" +
+            "  \"emotes\": [\n" +
+            "    // {\"name\": \"c\", \"song\": \"Assets/Songs/c.wav\"} was dropped from the pack\n" +
+            "    {\"name\": \"a\", \"song\": \"Assets/Songs/a.wav\", \"songLoop\": {\"start\": 0, \"seconds\": 4.0}}\n" +
+            "  ]\n" +
+            "}\n";
+        bool threw = false;
+        try
+        {
+            CatalogueText.SetSongLoop(text, "c", 0, 4.0);
+        }
+        catch (ArgumentException)
+        {
+            threw = true;
+        }
+        if (!threw)
+        {
+            Fail("set_song_loop_ignores_a_name_inside_a_comment", "the emote named in the comment was matched");
+        }
+        string want = text.Replace("{\"start\": 0, \"seconds\": 4.0}", "{\"start\": 0, \"seconds\": 5.5}");
+        string got = CatalogueText.SetSongLoop(text, "a", 0, 5.5);
+        if (got != want)
+        {
+            Fail("set_song_loop_ignores_a_name_inside_a_comment", "emote a did not survive the comment in the array: got [" + got + "]");
+        }
+    }
+
+    static void SetSongLoopOfAMissingEmoteThrows()
+    {
+        string text = "{\n  \"emotes\": [\n    {\"name\": \"a\", \"songLoop\": {\"start\": 0, \"seconds\": 4.0}}\n  ]\n}\n";
+        bool threw = false;
+        try
+        {
+            CatalogueText.SetSongLoop(text, "b", 0, 4.0);
+        }
+        catch (ArgumentException)
+        {
+            threw = true;
+        }
+        if (!threw)
+        {
+            Fail("set_song_loop_of_a_missing_emote_throws", "no ArgumentException for an absent emote");
+        }
+    }
+
+    static void BoolFieldReadsFalseAndFallsBack()
+    {
+        string text = "{\n" +
+            "  \"emotes\": [\n" +
+            "    {\"name\": \"a\", \"loops\": false},\n" +
+            "    {\"name\": \"b\"}\n" +
+            "  ]\n" +
+            "}\n";
+        if (CatalogueText.BoolField(text, "a", "loops", true))
+        {
+            Fail("bool_field_reads_false_and_falls_back", "a's loops read as true, expected false");
+        }
+        if (!CatalogueText.BoolField(text, "b", "loops", true))
+        {
+            Fail("bool_field_reads_false_and_falls_back", "b fell back to false, expected the fallback true");
+        }
+        if (!CatalogueText.BoolField(text, "a", "missing", true))
+        {
+            Fail("bool_field_reads_false_and_falls_back", "a's missing field fell back to false, expected true");
+        }
+    }
+
+    static void Pcm16HeaderAndSamples()
+    {
+        float[] interleaved = { 0.5f, -0.5f, 1f, -1f, 2f, -2f };
+        byte[] wav = WavWriter.Pcm16(interleaved, 2, 48000, 3);
+        if (wav.Length != 44 + 12)
+        {
+            Fail("pcm16_header_and_samples", "length was " + wav.Length + ", expected 56");
+            return;
+        }
+        if (!TagAt(wav, 0, "RIFF") || U32(wav, 4) != 48 || !TagAt(wav, 8, "WAVE") ||
+            !TagAt(wav, 12, "fmt ") || U32(wav, 16) != 16 || U16(wav, 20) != 1 ||
+            U16(wav, 22) != 2 || U32(wav, 24) != 48000 || U32(wav, 28) != 192000 ||
+            U16(wav, 32) != 4 || U16(wav, 34) != 16 || !TagAt(wav, 36, "data") || U32(wav, 40) != 12)
+        {
+            Fail("pcm16_header_and_samples", "the header was not 48-byte PCM: " +
+                "riff size " + U32(wav, 4) + ", fmt size " + U32(wav, 16) + ", format " + U16(wav, 20) +
+                ", channels " + U16(wav, 22) + ", rate " + U32(wav, 24) + ", byte rate " + U32(wav, 28) +
+                ", block align " + U16(wav, 32) + ", bits " + U16(wav, 34) + ", data size " + U32(wav, 40));
+        }
+        short[] wantSamples = { 16384, -16384, 32767, -32767, 32767, -32767 };
+        for (int i = 0; i < wantSamples.Length; i++)
+        {
+            short got = I16(wav, 44 + 2 * i);
+            if (got != wantSamples[i])
+            {
+                Fail("pcm16_header_and_samples", "sample " + i + " was " + got + ", expected " + wantSamples[i]);
+            }
+        }
+    }
+
+    static void Pcm16WritesOnlyTheFramesAsked()
+    {
+        float[] interleaved = { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f };
+        byte[] wav = WavWriter.Pcm16(interleaved, 2, 8000, 2);
+        if (wav.Length != 44 + 8)
+        {
+            Fail("pcm16_writes_only_the_frames_asked", "length was " + wav.Length + ", expected 52");
+        }
+        else if (U32(wav, 40) != 8 || U32(wav, 4) != 44)
+        {
+            Fail("pcm16_writes_only_the_frames_asked", "data size was " + U32(wav, 40) + ", riff size " + U32(wav, 4) + ", expected 8 and 44");
         }
     }
 }

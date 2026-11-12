@@ -282,7 +282,10 @@ void the_shipped_catalogue_parses_with_a_label_for_each() {
   for (const EmoteDef& e : cat.emotes) CHECK(table.has(e.label));
   CHECK(cat.emotes[0].id == "phasmomods.emotes.disco-fever" && cat.emotes[7].id == "phasmomods.emotes.take-the-l");
   CHECK(bundle_path(cat.emotes[7].clip) == "assets/emotes/clips/takethel.anim");
-  const float measured[] = {8.542f, 16.0f, 16.692f, 15.118f, 18.935f, 32.542f, 19.2f, 12.632f};
+  // Each song's loop as the emote pack tool measured it, in samples at the song's own rate (the counts the songs were
+  // first cut to by hand).
+  const float measured[] = {410016 / 48000.0f, 768000 / 48000.0f, 736132 / 44100.0f, 725669 / 48000.0f,
+                            908884 / 48000.0f, 1435119 / 44100.0f, 921600 / 48000.0f, 606316 / 48000.0f};
   for (int i = 0; i < 8; ++i)
     CHECK(cat.emotes[i].songLoop.start == 0.0f && std::fabs(cat.emotes[i].songLoop.length - measured[i]) < 1e-4f);
 }
