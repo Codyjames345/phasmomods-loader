@@ -3,6 +3,9 @@
 // emote id hashes to, and the wheel's order across packs. The plan is
 // docs/superpowers/plans/2026-11-12-emotes-pages-packs-walking.md. Run: build\emotes_catalogue_test.exe
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -10,6 +13,7 @@
 #include "../third_party/nlohmann/json.hpp"
 #include "catalogue.h"
 #include "check.h"
+#include "text_table.h"
 
 namespace {
 
@@ -94,6 +98,27 @@ void the_example_parses() {
   CHECK(near(e.songLoop.length, 16.692f));
   CHECK(e.key == emote_key("p.x.floss"));
   CHECK(cat.warnings.empty());
+}
+
+// The SDK's example pack (sdk/examples/example_emote_pack) parses as a pack of its own: one emote named by its pack
+// id, a bundle named after the pack so it cannot collide with another pack's, no warnings for its tool-only fields,
+// and its emote's label in the pack's own string table.
+void the_example_pack_parses() {
+  std::ifstream in(std::filesystem::path(PM_TEXT_DIR) / "sdk" / "examples" / "example_emote_pack" / "assets" / "emotes.json",
+                   std::ios::binary);
+  const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  Catalogue cat;
+  std::string why;
+  CHECK(parse_catalogue(text, "example.emote-pack", cat, why));
+  CHECK(cat.warnings.empty());
+  CHECK(cat.bundle == "example.emote-pack.bundle");
+  CHECK(cat.emotes.size() == 1);
+  if (cat.emotes.size() != 1) return;
+  CHECK(cat.emotes[0].id == "example.emote-pack.example-dance");
+  pm::i18n::Table table;
+  CHECK(table.load(std::filesystem::path(PM_TEXT_DIR) / "sdk" / "examples" / "example_emote_pack" / "i18n" / "default.json",
+                   why));
+  CHECK(table.has(cat.emotes[0].label));
 }
 
 void format_other_than_1_is_refused() {
@@ -330,6 +355,7 @@ void a_broken_pack_is_reported_and_skipped() {
 
 int main() {
   the_example_parses();
+  the_example_pack_parses();
   format_other_than_1_is_refused();
   a_bundle_name_with_a_path_is_refused();
   a_path_outside_Assets_or_with_dotdot_is_refused();

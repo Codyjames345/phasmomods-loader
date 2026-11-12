@@ -62,6 +62,7 @@ Does not exist yet. These arrive with stage 2, when every bundled mod is on the 
 Until then, mods are built inside this repository, as the bundled ones are (see `CMakeLists.txt`, the
 `GhostTells` target), and the host loads the mods that sit in a `mods` folder beside it. The guides walk through
 whole mods: [adding a ghost](guides/adding-a-ghost.md) builds `sdk/examples/example_ghost/`;
+[an emote pack](guides/emotes.md#an-emote-pack) builds `sdk/examples/example_emote_pack/`;
 [adding evidence](guides/adding-evidence.md) follows Spectral Flame; [tells for vanilla
 ghosts](guides/tells-for-vanilla-ghosts.md) follows Ghost Tells; [the Mimic and your
 ghost](guides/mimic-and-your-ghost.md) and [lobbies, saves and players](guides/lobbies-saves-and-players.md)
@@ -70,8 +71,8 @@ say what the loader guarantees; [a mod's own files](guides/mod-files.md) says wh
 whose files cannot be copied is off); [custom animation](guides/custom-animation.md) shows a figure of a mod's own
 (an AssetBundle of clips, a script-free copy of the investigator's body and Unity Cloth, with the helpers in
 `sdk/api/bundles.h` and `sdk/api/models.h`); [emotes](guides/emotes.md) covers a key in the game's keybinds menu, a clip on
-a player's own body, a third-person view, a sound the ghost hears as talking and a screen blur; and
-[equipment](guides/equipment.md) describes the game's equipment system. Everything below
+a player's own body, a third-person view, a sound the ghost hears as talking, a screen blur and an emote pack of your
+own; and [equipment](guides/equipment.md) describes the game's equipment system. Everything below
 describes what is in the code now.
 
 ## Making a mod

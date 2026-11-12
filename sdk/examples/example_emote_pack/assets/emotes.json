@@ -1,0 +1,16 @@
+// The SDK's example emote pack: one emote, in the catalogue format every emote pack uses (mods/emotes/catalogue.h,
+// sdk/guides/emotes.md "An emote pack"). clipSource, clipLoopGuess, songSource and songLoopGuess are for the emote pack
+// tool (tools/emote_pack.ps1) alone: the source clip and song to measure, and the loop lengths to search near. The tool
+// cuts the looped clip and song at those paths, measures the loudness file, builds the bundle, and writes the measured
+// songLoop back into this file; the mod reads the rest.
+{
+  "format": 1,
+  "bundle": "example.emote-pack.bundle",
+  "emotes": [
+    {"name": "example-dance", "clip": "Assets/ExamplePack/Clips/ExampleDance.anim", "song": "Assets/ExamplePack/Loops/example_dance.wav",
+     "songSource": "Assets/ExamplePack/Songs/example_dance.mp3", "songLoopGuess": 12,
+     "clipSource": "Assets/ExamplePack/Source/ExampleDance.anim", "clipLoopGuess": 11.5,
+     "icon": "Assets/ExamplePack/Icons/example_dance.png", "label": "example-emote-pack.name.example-dance",
+     "loudness": "loudness/example-dance.txt"}
+  ]
+}
