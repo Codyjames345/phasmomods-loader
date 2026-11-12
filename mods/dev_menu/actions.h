@@ -139,6 +139,8 @@ void set_time_scale(float value);
 int type_options();
 /** The GhostType number of picker option `index`; -1 out of range. */
 int32_t type_option(int index);
+/** The contract's offered ghost types in one line: how many, and how many are custom ghosts. Empty off contract. */
+std::string content_line();
 /** A type for a developer: a custom ghost's content id and its number, or the number alone. */
 std::string type_name(int32_t type);
 /** Turns the running ghost into `type` the way the game set it up at spawn: the controller's identity and behaviour,
@@ -150,6 +152,9 @@ bool retype(int32_t type);
 /** How many custom-difficulty options the Difficulty picker offers: every option of the game's custom difficulty that
  *  the map names (Difficulty's fields). */
 int option_count();
+/** When the game reads option `index`: 0 on each use or frame (a change applies at once), 1 once as the contract
+ *  begins (it waits for the next contract), 2 both, 3 no reader found. */
+int option_when(int index);
 /** Option `index`'s text key. */
 const char* option_label(int index);
 /** Option `index`'s value now, read from the contract's Difficulty: on/off, a whole number, a level (the game's
@@ -159,6 +164,26 @@ std::string option_value(int index);
  *  of the game's own values and wraps, a number moves by the menu's step and stops at 0. The game reads each option
  *  where it reads it: some at once, some only at the contract's next start (each map note says, where known). */
 void option_step(int index, int direction);
+
+/** How many objectives the contract has: the main one and its side ones (LevelValues). */
+int objective_count();
+/** Objective `index` in one line: its kind's number (ObjectiveValues.type), its state, and "(main)" for the first. */
+std::string objective_line(int index);
+/** Completes or fails objective `index` the game's own way: ObjectiveManager.CompleteObjective or FailObjective with
+ *  its kind, locally, the call the game's own objective RPC runs; the truck's board and the journal follow. False
+ *  before the game has set the objectives up, or with no such objective. */
+bool settle_objective(int index, bool complete);
+/** How many items the contract's loadout lists (LevelValues.equipmentLoadout), the truck spawner's list. */
+int item_count();
+/** Item `index`'s name (StoreItem.itemName). */
+std::string item_name(int index);
+/** Spawns one of item `index` a metre above the investigator, through the truck spawner's own local call
+ *  (ObjectPooler.SpawnFromEquipmentPool). False when the pool has no copy left or nothing can be found. */
+bool spawn_item(int index);
+/** Each tick while "never run out" is on: candles burn back up to what they first held, crucifixes are as new. */
+void keep_supplies();
+/** Each tick: the hunt's sight assist held as the switch says (none, or frozen where it stood). */
+void hold_sight();
 
 /** The type's own dials in one line: the Onryo's blown-out flames, the Thaye's age step and hunt threshold, the
  *  Gallu's and the Dayan's states, the interaction boost and whom the Banshee is set on. */

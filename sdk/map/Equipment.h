@@ -2,11 +2,14 @@
 
 // Equipment: the base class of every item a player carries, sets down and uses (a Candle among them),
 // and StoreItem, the store's description of an item, with its tier. The fields used here are
-// obfuscated but for the tier, so they are found by shape. Notes read from decompiled code are from
-// build 25811160.
+// obfuscated but for the tier, so they are found by shape. Also ObjectPooler, which spawns a store
+// item's prefab from the game's own pool, and the truck's starting loadout that LevelValues keeps.
+// Notes read from decompiled code are from build 25811160.
 
 #include "entry.h"
 #include "game_api.h"
+#include "Props.h"
+#include "Transform.h"
 
 namespace pm::map {
 
@@ -138,6 +141,12 @@ inline constexpr pm::sdk::EntryDesc StoreItem_tier{.key = "StoreItem.tier", .kin
                                                    .confidence = pm::sdk::Confidence::Decompiled,
                                                    .owner = "StoreItem", .name = "tier", .type = "@StoreItemTier"};
 
+/// The item's name, a string: the game's own key for the item, and the one part of the save's stock key
+/// that Equipment.ConsumeNetworked builds for a consumable. Decompiled.
+inline constexpr pm::sdk::EntryDesc StoreItem_itemName{.key = "StoreItem.itemName", .kind = pm::sdk::Kind::Field,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .owner = "StoreItem", .name = "itemName", .type = "string"};
+
 // The candle test of PlayerSanity reads one bool of Equipment: its owner is the closure class, so the
 // fact matches that offset through any register.
 inline constexpr pm::sdk::Fact Equipment_isOn_facts[] = {
@@ -235,8 +244,10 @@ inline constexpr pm::sdk::EntryDesc Crucifix_CrucifixUseNetworked{
     .key = "Crucifix.CrucifixUseNetworked", .kind = pm::sdk::Kind::Method, .owner = "Crucifix",
     .name = "CrucifixUseNetworked", .params = Equipment_bool_info};
 
-/// How many times the crucifix has been used. Inferred: from its name.
+/// How many times the crucifix has been used: a private int, and Crucifix.CrucifixUseNetworked adds one
+/// to it each time the game accepts a use. Decompiled.
 inline constexpr pm::sdk::EntryDesc Crucifix_useCount{.key = "Crucifix.useCount", .kind = pm::sdk::Kind::Field,
+                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                       .owner = "Crucifix", .name = "useCount", .type = "int"};
 
 inline constexpr const char* EVPRecorder_int_int[] = {"int", "int"};
@@ -284,6 +295,44 @@ inline constexpr pm::sdk::EntryDesc WhiteSage_YureiTrap{
     .key = "WhiteSage.YureiTrap", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "WhiteSage", .type = "void", .params = WhiteSage_sensorHandler_params,
     .facts = WhiteSage_YureiTrap_facts};
+
+inline constexpr const char* ObjectPooler_SpawnFromEquipmentPool_params[] = {"@StoreItem", "Vector3", "Quaternion"};
+
+/// SpawnFromEquipmentPool(item, pos, rot): takes a free pooled object of that store item, switches it on,
+/// sets it at the position and rotation given and re-parents it; an item the pool has no entry for logs an
+/// error and answers null. Decompiled. It is this client's own copy: no RPC is sent, and every client
+/// spawns its own truck items this way (the game's ItemSpawner spawn loop calls it per loadout entry).
+inline constexpr pm::sdk::EntryDesc ObjectPooler_SpawnFromEquipmentPool{
+    .key = "ObjectPooler.SpawnFromEquipmentPool", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "ObjectPooler", .name = "SpawnFromEquipmentPool",
+    .type = "GameObject", .params = ObjectPooler_SpawnFromEquipmentPool_params};
+
+/// One entry of the truck's starting equipment loadout (a class nested in LevelValues): the store item and
+/// how many of it the contract starts with. Decompiled.
+inline constexpr pm::sdk::EntryDesc GameEquipmentLoadout{.key = "GameEquipmentLoadout",
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "LevelValues", .name = "GameEquipmentLoadout",
+                                                         .assembly = "Assembly-CSharp"};
+
+/// The entry's item: its StoreItem field (the game names it item). Decompiled.
+inline constexpr pm::sdk::EntryDesc GameEquipmentLoadout_equipment{
+    .key = "GameEquipmentLoadout.equipment", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GameEquipmentLoadout", .name = "item",
+    .type = "@StoreItem"};
+
+/// How many of the item the contract starts with. Decompiled.
+inline constexpr pm::sdk::EntryDesc GameEquipmentLoadout_amount{.key = "GameEquipmentLoadout.amount",
+                                                                .kind = pm::sdk::Kind::Field,
+                                                                .confidence = pm::sdk::Confidence::Decompiled,
+                                                                .owner = "GameEquipmentLoadout", .name = "amount",
+                                                                .type = "int"};
+
+/// The equipment the truck starts the contract with, a List of the GameEquipmentLoadout: the ItemSpawner's
+/// spawn loop takes `amount` of `equipment` from a truck socket whose item matches, at contract start.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc LevelValues_equipmentLoadout{
+    .key = "LevelValues.equipmentLoadout", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LevelValues", .type = "List<@GameEquipmentLoadout>"};
 
 }  // namespace pm::map
 
@@ -399,6 +448,8 @@ struct WhiteSage {
 struct StoreItem {
   /// Its tier, a StoreItemTier number: tier.get(storeItem). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::StoreItem_tier, int32_t> tier{};
+  /// Its name, the game's own string: itemName.get(storeItem), or null. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::StoreItem_itemName, void*> itemName{};
   /// IsUnlocked(item): the store's unlock check. A mod hooks it. Unresolved: does nothing, false.
   static constexpr pm::api::Method<pm::map::StoreItem_IsUnlocked, bool(void*)> IsUnlocked{};
   /// MeetsLevel(item): the level check. A mod hooks it. Unresolved: does nothing, false.
@@ -411,6 +462,26 @@ struct StoreItem {
 struct StoreEquipment {
   /// CanBuy(entry, amount): whether the buy button may be pressed. A mod hooks it. Unresolved: does nothing, false.
   static constexpr pm::api::Method<pm::map::StoreEquipment_CanBuy, bool(void*, int32_t)> CanBuy{};
+};
+
+/// One entry of the truck's starting equipment loadout. `loadout` below is the GameEquipmentLoadout.
+struct GameEquipmentLoadout {
+  /// The item, a StoreItem: equipment.get(loadout), or null. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GameEquipmentLoadout_equipment, void*> equipment{};
+  /// How many of it the contract starts with: amount.get(loadout). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::GameEquipmentLoadout_amount, int32_t> amount{};
+};
+
+/// The game's object pools. `pooler` below is the ObjectPooler.
+struct ObjectPooler {
+  /// The ObjectPooler type: klass(), is(obj), type_object(). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::ObjectPooler> type{};
+  /// SpawnFromEquipmentPool(pooler, storeItem, &pos, &rot): this client's own pooled copy of the item at
+  /// the position and rotation given, or null if the pool has no entry for the item. No RPC is sent.
+  /// Unresolved: null.
+  static constexpr pm::api::Method<pm::map::ObjectPooler_SpawnFromEquipmentPool,
+                                   void*(void*, void*, const Vector3*, const Quaternion*)>
+      SpawnFromEquipmentPool{};
 };
 
 /// The tiers of a store item: compare StoreItem::tier with them.

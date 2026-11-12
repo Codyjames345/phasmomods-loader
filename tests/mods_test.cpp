@@ -181,6 +181,27 @@ void suspend_and_resume_in_a_room(const fs::path& data) {
 // hooks and content from that start come out, and the log says why.
 std::string g_refusal;
 bool g_endedStarted = true;
+// The fake mod's entry in the host contract's mod_entry, found by its id among every installed mod (the list ends at the
+// first index the host refuses); flags 0xFFFFFFFF when it is not listed.
+uint32_t fake_entry_flags() {
+  for (int32_t i = 0; i < 64; ++i) {
+    PmModEntry e{};
+    e.size = sizeof e;
+    if (!pm::mods::entry(i, &e)) break;
+    if (e.id && std::string(e.id) == "fake-mod") return e.flags;
+  }
+  return 0xFFFFFFFFu;
+}
+std::string fake_entry_reason() {
+  for (int32_t i = 0; i < 64; ++i) {
+    PmModEntry e{};
+    e.size = sizeof e;
+    if (!pm::mods::entry(i, &e)) break;
+    if (e.id && std::string(e.id) == "fake-mod") return e.offReason ? e.offReason : "";
+  }
+  return "<not listed>";
+}
+
 void refused_content_keeps_the_mod_off(const fs::path& data) {
   pm::log::set_sink(&capture, "");
   g_mark = pm::hooks::mark();
@@ -207,10 +228,18 @@ void refused_content_keeps_the_mod_off(const fs::path& data) {
   CHECK(!g_endedStarted && g_content == 0 && target_answer(1) == 2);
   CHECK(logged("mods: fake-mod stays off: the host refused its content (the ghost \"a.b\" is refused: custom content is off"));
   CHECK(pm::mods::off_reason("fake-mod") == "It did not start. mods.log says why");
+  // The host contract's mod_entry lists it, off, with the same reason the Mods panel shows.
+  CHECK(fake_entry_flags() == 0 && fake_entry_reason() == "It did not start. mods.log says why");
+  {
+    PmModEntry tooSmall{};
+    tooSmall.size = sizeof(uint32_t);  // no room even for the id
+    CHECK(!pm::mods::entry(0, &tooSmall) && !pm::mods::entry(0, nullptr) && !pm::mods::entry(-1, &tooSmall));
+  }
 
   g_refusal.clear();  // nothing refused: it starts
   pm::mods::start(&api, {"fake-mod"}, group);
   CHECK(pm::mods::started("fake-mod") && g_endedStarted && target_answer(1) == 102);
+  CHECK((fake_entry_flags() & PM_MOD_ENTRY_STARTED) != 0 && fake_entry_reason().empty());
   pm::mods::stop_all();
   pm::hooks::rollback_to(g_mark);
   pm::log::set_sink(nullptr, nullptr);
@@ -310,9 +339,9 @@ void dropped_content_keeps_its_owner_off(const fs::path& data) {
 }
 
 // A mod built against an older minor version of contract 2 (`minor`, from `dll`) loads and starts in
-// the 2.4 host: the contract only grew at the end.
+// the 2.5 host: the contract only grew at the end.
 void older_minor_still_loads(const fs::path& data, const char* dll, uint32_t minor) {
-  CHECK(PMMOD_API_VERSION == ((2u << 16) | 4u));
+  CHECK(PMMOD_API_VERSION == ((2u << 16) | 5u));
   pm::log::set_sink(&capture, "");
   g_lines.clear();
   pm::mods::set_installed(data, fake_install(dll));

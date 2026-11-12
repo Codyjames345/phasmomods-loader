@@ -350,6 +350,9 @@ const char* api_mod_name(const char* id) {
     return id ? mods::name_of(modid::migrated_id(id).c_str()) : nullptr;  // a bundled mod's old id means that mod
   });
 }
+bool api_mod_entry(int32_t index, PmModEntry* out) {
+  return host::contained("suite", "listing the installed mods", false, [&] { return mods::entry(index, out); });
+}
 void* api_unity_action_new(void* target, void (*listener)(void*)) {
   // The game's listener shape takes the target and the hidden MethodInfo of the instance-method calling
   // convention; a mod's listener takes only the target and leaves the rest unread.
@@ -828,8 +831,8 @@ bool start(void* gameAssembly, void* unityPlayer, const build::Hashes& game) {
     PM_LOG("suite: the local application-data folder is unavailable; set LOCALAPPDATA and restart the game");
     return false;
   }
-  // Positional: a member added to PmHostApi after unity_action_new fails this until it is given here too.
-  static_assert(offsetof(PmHostApi, unity_action_new) + sizeof(PmHostApi::unity_action_new) == sizeof(PmHostApi),
+  // Positional: a member added to PmHostApi after mod_entry fails this until it is given here too.
+  static_assert(offsetof(PmHostApi, mod_entry) + sizeof(PmHostApi::mod_entry) == sizeof(PmHostApi),
                 "g_api lists every PmHostApi member");
   g_api = {PMMOD_API_VERSION, gameAssembly, unityPlayer, g_dataDirectory.c_str(),
            &api_log, &api_create_hook, &api_enable_hooks, &api_send, &api_set_receiver,
@@ -849,7 +852,7 @@ bool start(void* gameAssembly, void* unityPlayer, const build::Hashes& game) {
            &api_room_agrees, &api_collection_count, &api_array_element_size, &api_list_remove_at,
            &api_content_player_move, &api_content_interaction_lost, &api_content_roll_taken, &api_steer_agent,
            &api_abandon_ghost_spawn, &api_dictionary_int_entries, &api_mod_started, &api_show_message,
-           &api_content_flags_of, &api_mod_name, &api_unity_action_new};
+           &api_content_flags_of, &api_mod_name, &api_unity_action_new, &api_mod_entry};
   // The host's own game side of content reaches the game through the map, like a mod: the game API
   // bound to the host's contract. Without every entry it needs, custom content stays off.
   std::string unbound;

@@ -22,6 +22,7 @@
 
 #include "Difficulty.h"
 #include "Equipment.h"
+#include "Candle.h"
 #include "EvidenceController.h"
 #include "GhostInfo.h"
 #include "GameController.h"
@@ -340,6 +341,8 @@ void end_loan() {
 
 void tick() {
   dummy::tick();
+  keep_supplies();
+  hold_sight();
   if (g_lentFrom) {
     void* player = game::local_player();
     const bool revived = player && !Player::isDead.get(player) && !Player::dying.get(player);
@@ -856,6 +859,19 @@ int32_t type_option(int index) {
   return index >= 0 && static_cast<size_t>(index) < types.size() ? types[index] : -1;
 }
 
+std::string content_line() {
+  // The contract's offered collection, and how many of it are custom ghosts: a vanilla type's content id is the
+  // host's "vanilla." one, a custom ghost's is its mod's own.
+  const std::vector<int32_t> types = offered_types();
+  int custom = 0;
+  for (const int32_t t : types) {
+    const std::string id = api::content::id_of(t);
+    if (!id.empty() && id.rfind("vanilla.", 0) != 0) ++custom;
+  }
+  if (types.empty()) return {};
+  return std::to_string(types.size()) + " types, " + std::to_string(custom) + " custom";
+}
+
 std::string type_name(int32_t type) {
   if (type < 0) return {};
   const std::string id = api::content::id_of(type);
@@ -899,8 +915,15 @@ namespace {
 
 enum class OptionKind { Bool, Int, Float, Level, Fuse };
 
+// When the game reads the option (re/dump/notes/2026-11-12-difficulty-readers.md, from decompiles of every reader
+// reached through LevelValues): Live on each use or frame, so a change applies at once; Start once as the contract
+// begins, so a change waits for the next contract; Mixed both (a value seeded at the start and a test read live);
+// Unknown where no reader was found.
+enum class OptionWhen { Live, Start, Mixed, Unknown };
+
 struct Option {
   const char* label;  // the option's text key
+  OptionWhen when;
   OptionKind kind;
   float step;         // the menu's step, not the game's: the game's own menu sets these by its sliders
   float (*get)(void* d);
@@ -909,59 +932,59 @@ struct Option {
 
 const std::vector<Option>& options() {
   static const std::vector<Option> table = {
-      {pm::i18n::key("dev-menu.option.starting-sanity"), OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::startingSanity.get(d)); },
+      {pm::i18n::key("dev-menu.option.starting-sanity"), OptionWhen::Mixed, OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::startingSanity.get(d)); },
        [](void* d, float v) { Difficulty::startingSanity.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.pill-restore"), OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::sanityPillRestorationAmount.get(d)); },
+      {pm::i18n::key("dev-menu.option.pill-restore"), OptionWhen::Live, OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::sanityPillRestorationAmount.get(d)); },
        [](void* d, float v) { Difficulty::sanityPillRestorationAmount.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.sanity-drain"), OptionKind::Float, 0.25f, [](void* d) { return Difficulty::sanityDrain.get(d); },
+      {pm::i18n::key("dev-menu.option.sanity-drain"), OptionWhen::Start, OptionKind::Float, 0.25f, [](void* d) { return Difficulty::sanityDrain.get(d); },
        [](void* d, float v) { Difficulty::sanityDrain.set(d, v); }},
-      {pm::i18n::key("dev-menu.option.sprinting"), OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::sprinting.get(d)); },
+      {pm::i18n::key("dev-menu.option.sprinting"), OptionWhen::Mixed, OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::sprinting.get(d)); },
        [](void* d, float v) { Difficulty::sprinting.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.player-speed-option"), OptionKind::Float, 0.25f, [](void* d) { return Difficulty::playerSpeed.get(d); },
+      {pm::i18n::key("dev-menu.option.player-speed-option"), OptionWhen::Start, OptionKind::Float, 0.25f, [](void* d) { return Difficulty::playerSpeed.get(d); },
        [](void* d, float v) { Difficulty::playerSpeed.set(d, v); }},
-      {pm::i18n::key("dev-menu.option.flashlights"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::flashlights.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.flashlights"), OptionWhen::Live, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::flashlights.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::flashlights.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.lose-equipment"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::loseItemsOnDeath.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.lose-equipment"), OptionWhen::Live, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::loseItemsOnDeath.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::loseItemsOnDeath.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.ghost-speed"), OptionKind::Float, 0.25f, [](void* d) { return Difficulty::ghostSpeed.get(d); },
+      {pm::i18n::key("dev-menu.option.ghost-speed"), OptionWhen::Live, OptionKind::Float, 0.25f, [](void* d) { return Difficulty::ghostSpeed.get(d); },
        [](void* d, float v) { Difficulty::ghostSpeed.set(d, v); }},
-      {pm::i18n::key("dev-menu.option.roaming"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::roamingFrequency.get(d)); },
+      {pm::i18n::key("dev-menu.option.roaming"), OptionWhen::Live, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::roamingFrequency.get(d)); },
        [](void* d, float v) { Difficulty::roamingFrequency.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.favourite-room-changes"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::changingFavouriteRoom.get(d)); },
+      {pm::i18n::key("dev-menu.option.favourite-room-changes"), OptionWhen::Live, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::changingFavouriteRoom.get(d)); },
        [](void* d, float v) { Difficulty::changingFavouriteRoom.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.interactions"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::interactionAmount.get(d)); },
+      {pm::i18n::key("dev-menu.option.interactions"), OptionWhen::Live, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::interactionAmount.get(d)); },
        [](void* d, float v) { Difficulty::interactionAmount.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.events"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::eventFrequency.get(d)); },
+      {pm::i18n::key("dev-menu.option.events"), OptionWhen::Live, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::eventFrequency.get(d)); },
        [](void* d, float v) { Difficulty::eventFrequency.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.friendly"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::friendlyGhost.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.friendly"), OptionWhen::Live, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::friendlyGhost.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::friendlyGhost.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.grace-period"), OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::gracePeriod.get(d)); },
+      {pm::i18n::key("dev-menu.option.grace-period"), OptionWhen::Start, OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::gracePeriod.get(d)); },
        [](void* d, float v) { Difficulty::gracePeriod.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.hunt-duration"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::huntDuration.get(d)); },
+      {pm::i18n::key("dev-menu.option.hunt-duration"), OptionWhen::Start, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::huntDuration.get(d)); },
        [](void* d, float v) { Difficulty::huntDuration.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.kills-extend"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::killsExtendHuntDuration.get(d)); },
+      {pm::i18n::key("dev-menu.option.kills-extend"), OptionWhen::Live, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::killsExtendHuntDuration.get(d)); },
        [](void* d, float v) { Difficulty::killsExtendHuntDuration.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.evidence"), OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::evidenceGiven.get(d)); },
+      {pm::i18n::key("dev-menu.option.evidence"), OptionWhen::Start, OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::evidenceGiven.get(d)); },
        [](void* d, float v) { Difficulty::evidenceGiven.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.fingerprint-chance"), OptionKind::Float, 0.1f, [](void* d) { return Difficulty::fingerprintChance.get(d); },
+      {pm::i18n::key("dev-menu.option.fingerprint-chance"), OptionWhen::Live, OptionKind::Float, 0.1f, [](void* d) { return Difficulty::fingerprintChance.get(d); },
        [](void* d, float v) { Difficulty::fingerprintChance.set(d, v); }},
-      {pm::i18n::key("dev-menu.option.fingerprint-duration"), OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::fingerprintDuration.get(d)); },
+      {pm::i18n::key("dev-menu.option.fingerprint-duration"), OptionWhen::Live, OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::fingerprintDuration.get(d)); },
        [](void* d, float v) { Difficulty::fingerprintDuration.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.setup-time"), OptionKind::Int, 30.0f, [](void* d) { return static_cast<float>(Difficulty::setupTime.get(d)); },
+      {pm::i18n::key("dev-menu.option.setup-time"), OptionWhen::Start, OptionKind::Int, 30.0f, [](void* d) { return static_cast<float>(Difficulty::setupTime.get(d)); },
        [](void* d, float v) { Difficulty::setupTime.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.doors-open"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::amountOfDoorsOpen.get(d)); },
+      {pm::i18n::key("dev-menu.option.doors-open"), OptionWhen::Start, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::amountOfDoorsOpen.get(d)); },
        [](void* d, float v) { Difficulty::amountOfDoorsOpen.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.hiding-places"), OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::amountOfHidingPlaces.get(d)); },
+      {pm::i18n::key("dev-menu.option.hiding-places"), OptionWhen::Start, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::amountOfHidingPlaces.get(d)); },
        [](void* d, float v) { Difficulty::amountOfHidingPlaces.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.sanity-monitor"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::sanityMonitor.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.sanity-monitor"), OptionWhen::Start, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::sanityMonitor.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::sanityMonitor.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.activity-monitor"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::activityMonitor.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.activity-monitor"), OptionWhen::Unknown, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::activityMonitor.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::activityMonitor.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.fusebox-power"), OptionKind::Fuse, 1.0f, [](void* d) { return static_cast<float>(Difficulty::fuseBoxStartPower.get(d)); },
+      {pm::i18n::key("dev-menu.option.fusebox-power"), OptionWhen::Start, OptionKind::Fuse, 1.0f, [](void* d) { return static_cast<float>(Difficulty::fuseBoxStartPower.get(d)); },
        [](void* d, float v) { Difficulty::fuseBoxStartPower.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.fusebox-on-map"), OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::fuseBoxVisibleOnMap.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.fusebox-on-map"), OptionWhen::Unknown, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::fuseBoxVisibleOnMap.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::fuseBoxVisibleOnMap.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.cursed-quantity"), OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::cursedPossessionsQuantity.get(d)); },
+      {pm::i18n::key("dev-menu.option.cursed-quantity"), OptionWhen::Start, OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::cursedPossessionsQuantity.get(d)); },
        [](void* d, float v) { Difficulty::cursedPossessionsQuantity.set(d, static_cast<int32_t>(std::lround(v))); }},
   };
   return table;
@@ -978,6 +1001,10 @@ float top_of(OptionKind kind) {
 }  // namespace
 
 int option_count() { return static_cast<int>(options().size()); }
+
+int option_when(int index) {
+  return index >= 0 && index < option_count() ? static_cast<int>(options()[index].when) : 3;
+}
 
 const char* option_label(int index) {
   return index >= 0 && index < option_count() ? options()[index].label : "";
@@ -1018,6 +1045,174 @@ void option_step(int index, int direction) {
       break;
   }
   o.put(d, v);
+}
+
+// ---- Objectives: the game's own ObjectiveManager ----
+
+namespace {
+
+void* objective_manager() {
+  static uint64_t nextSearch = 0;
+  static api::Held found;
+  if (found && game::alive(found)) return found;
+  const uint64_t now = now_ms();
+  if (now < nextSearch) return nullptr;
+  nextSearch = now + 1000;
+  void* type = ObjectiveManager::type.type_object();
+  found = type ? Object::FindObjectOfType(type, true) : nullptr;
+  return found;
+}
+
+// The contract's objectives: the main one, then the side ones, as LevelValues holds them.
+std::vector<void*> objectives() {
+  std::vector<void*> out;
+  void* v = values();
+  if (!v) return out;
+  if (void* main = LevelValues::mainObjective.get(v)) out.push_back(main);
+  const api::List sides{LevelValues::sideObjectives.get(v)};
+  for (size_t i = 0; i < sides.size(); ++i)
+    if (sides[i]) out.push_back(sides[i]);
+  return out;
+}
+
+int32_t objective_type(void* objective) {
+  void* values = objective ? Objective::values.get(objective) : nullptr;
+  return values ? ObjectiveValues::type.get(values) : -1;
+}
+
+}  // namespace
+
+int objective_count() { return static_cast<int>(objectives().size()); }
+
+std::string objective_line(int index) {
+  const std::vector<void*> all = objectives();
+  if (index < 0 || static_cast<size_t>(index) >= all.size()) return {};
+  void* o = all[static_cast<size_t>(index)];
+  const int32_t state = Objective::state.get(o);
+  // The kind's number (ObjectiveValues.type) and the game's own state: 0 open, 1 complete, 2 failed.
+  return "type " + std::to_string(objective_type(o)) + ", " +
+         (state == 1 ? "complete" : state == 2 ? "failed" : "open") + (index == 0 ? " (main)" : "");
+}
+
+bool settle_objective(int index, bool complete) {
+  const std::vector<void*> all = objectives();
+  void* manager = objective_manager();
+  if (index < 0 || static_cast<size_t>(index) >= all.size() || !manager) return false;
+  // The game's own local call, the one its RPC body runs; it refuses itself until the objectives are set up.
+  if (!ObjectiveManager::HasSetupObjectives(manager)) return false;
+  const int32_t type = objective_type(all[static_cast<size_t>(index)]);
+  if (type < 0) return false;
+  if (complete)
+    ObjectiveManager::CompleteObjective(manager, type);
+  else
+    ObjectiveManager::FailObjective(manager, type);
+  return true;
+}
+
+// ---- Equipment: the truck's items, one at a time, and supplies that never run out ----
+
+namespace {
+
+void* pooler() {
+  static uint64_t nextSearch = 0;
+  static api::Held found;
+  if (found && game::alive(found)) return found;
+  const uint64_t now = now_ms();
+  if (now < nextSearch) return nullptr;
+  nextSearch = now + 1000;
+  void* type = ObjectPooler::type.type_object();
+  found = type ? Object::FindObjectOfType(type, true) : nullptr;
+  return found;
+}
+
+// The contract's loadout, as the truck's spawner reads it (LevelValues.equipmentLoadout).
+std::vector<void*> loadout_items() {
+  std::vector<void*> out;
+  void* v = values();
+  const api::List list{v ? LevelValues::equipmentLoadout.get(v) : nullptr};
+  for (size_t i = 0; i < list.size(); ++i) {
+    void* entry = list[i];
+    void* item = entry ? GameEquipmentLoadout::equipment.get(entry) : nullptr;
+    if (item) out.push_back(item);
+  }
+  return out;
+}
+
+// What each candle held when the switch first saw it, so it can be put back after the game burns it down.
+std::vector<std::pair<api::Held, float>> g_candles;
+uint64_t g_nextSupplyScan = 0;
+
+}  // namespace
+
+int item_count() { return static_cast<int>(loadout_items().size()); }
+
+std::string item_name(int index) {
+  const std::vector<void*> items = loadout_items();
+  if (index < 0 || static_cast<size_t>(index) >= items.size()) return {};
+  return api::to_utf8(StoreItem::itemName.get(items[static_cast<size_t>(index)]));
+}
+
+bool spawn_item(int index) {
+  const std::vector<void*> items = loadout_items();
+  void* pool = pooler();
+  void* player = game::local_player();
+  void* t = player ? game::transform_of(player) : nullptr;
+  if (index < 0 || static_cast<size_t>(index) >= items.size() || !pool || !t) return false;
+  // The truck spawner's own call, local: the pool hands out its next copy of the item, or null when it has none left.
+  const Vector3 at = game::position(t);
+  const Vector3 drop{at.x, at.y + 1.0f, at.z};
+  const Quaternion upright{0.0f, 0.0f, 0.0f, 1.0f};
+  return ObjectPooler::SpawnFromEquipmentPool(pool, items[static_cast<size_t>(index)], &drop, &upright) != nullptr;
+}
+
+void keep_supplies() {
+  if (!g_switches.neverRunOut) {
+    g_candles.clear();
+    return;
+  }
+  const uint64_t now = now_ms();
+  if (now >= g_nextSupplyScan) {
+    g_nextSupplyScan = now + 2000;
+    // New candles join with what they hold now; the ones already known keep their first value.
+    void* type = Candle::type.type_object();
+    const api::RefArray found{type ? Object::FindAllOfType(type, false) : nullptr};
+    for (size_t i = 0; i < found.size(); ++i) {
+      void* c = found[i];
+      if (!c) continue;
+      bool known = false;
+      for (const auto& [held, start] : g_candles) known = known || held == c;
+      if (!known) g_candles.emplace_back(api::Held{c}, Candle::candleDuration.get(c));
+    }
+    void* cross = Crucifix::type.type_object();
+    const api::RefArray crosses{cross ? Object::FindAllOfType(cross, false) : nullptr};
+    for (size_t i = 0; i < crosses.size(); ++i)
+      if (crosses[i]) Crucifix::useCount.set(crosses[i], 0);  // a crucifix as good as new
+  }
+  std::erase_if(g_candles, [](const auto& c) { return !c.first || !api::alive(c.first); });
+  for (const auto& [held, start] : g_candles)
+    if (Candle::candleDuration.get(held) < start) Candle::candleDuration.set(held, start);
+}
+
+// ---- The hunt's sight assist ----
+
+namespace {
+float g_heldSight = -1.0f;  // the value a frozen hold keeps, or negative before it is taken
+}
+
+void hold_sight() {
+  void* ai = game::ghost_ai();
+  void* machine = ai ? GhostAI::stateMachine.get(ai) : nullptr;
+  void* state = machine ? GhostStateMachine::current.get(machine) : nullptr;
+  if (g_switches.sightHold == kSightGame || !state || !GhostHuntState::type.is(state)) {
+    g_heldSight = -1.0f;
+    return;
+  }
+  if (g_switches.sightHold == kSightNone) {
+    GhostHuntState::sightSpeedUp.set(state, 1.0f);  // the multiplier that changes nothing: no assist
+    return;
+  }
+  if (g_heldSight < 0.0f) g_heldSight = GhostHuntState::sightSpeedUp.get(state);
+  GhostHuntState::sightSpeedUp.set(state, g_heldSight);
 }
 
 // ---- The type's own dials ----

@@ -122,6 +122,20 @@ std::string shown_name() {
   return name && *name ? std::string(name) : std::string(g_info ? g_info->name : "");
 }
 
+std::vector<ModEntry> mod_entries() {
+  std::vector<ModEntry> out;
+  // mod_entry came in contract 2.5: a host built before it has no such member to call.
+  if (!g_host || g_host->version < ((PMMOD_API_MAJOR << 16) | 5u) || !g_host->mod_entry) return out;
+  for (int32_t i = 0;; ++i) {
+    PmModEntry e{};
+    e.size = sizeof e;
+    if (!g_host->mod_entry(i, &e)) break;
+    out.push_back({e.id ? e.id : "", e.name ? e.name : "", e.version ? e.version : "", e.author ? e.author : "",
+                   e.offReason ? e.offReason : "", e.flags});
+  }
+  return out;
+}
+
 void show_message(const std::string& title, const std::string& body) {
   if (g_host) g_host->show_message(title.c_str(), body.c_str());
 }

@@ -543,8 +543,11 @@ uint32_t fields_of_type(const char* typeKey, const void* obj, const char* fieldT
   return count;
 }
 
-// Positional: a member added to PmHostApi after unity_action_new fails this until it is given here too.
-static_assert(offsetof(PmHostApi, unity_action_new) + sizeof(PmHostApi::unity_action_new) == sizeof(PmHostApi),
+// The host contract's mod_entry: the fake game installs no mods, so the list is empty.
+bool mod_entry(int32_t, PmModEntry*) { return false; }
+
+// Positional: a member added to PmHostApi after mod_entry fails this until it is given here too.
+static_assert(offsetof(PmHostApi, mod_entry) + sizeof(PmHostApi::mod_entry) == sizeof(PmHostApi),
               "kHost lists every PmHostApi member");
 const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_hook, &enable_hooks, &send,
                       &set_receiver, &peer_has_mod, &register_service, &service, &mod_game_entry, &hook_entry,
@@ -560,7 +563,7 @@ const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_ho
                       &room_agrees, &collection_count, &array_element_size, &host_list_remove_at,
                       &content_player_move, &content_interaction_lost, &content_roll_taken, &steer_agent,
                       &abandon_ghost_spawn, &dictionary_int_entries, &mod_started, &show_message,
-                      &content_flags_of, &mod_name, &unity_action_new};
+                      &content_flags_of, &mod_name, &unity_action_new, &mod_entry};
 
 }  // namespace
 

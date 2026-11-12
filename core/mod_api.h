@@ -31,7 +31,7 @@ extern "C" {
 /// The host contract's minor version this header describes. Within a major version a host runs mods
 /// built for its own minor version or an older one.
 /// @since Contract 2.0
-#define PMMOD_API_MINOR 4u
+#define PMMOD_API_MINOR 5u
 /// Major in the high 16 bits, minor in the low 16. Version 1 (the first contract) had no minor.
 /// @since Contract 2.0
 #define PMMOD_API_VERSION ((PMMOD_API_MAJOR << 16) | PMMOD_API_MINOR)
@@ -255,6 +255,32 @@ typedef struct PmGhostRules {
 struct PmIntEntry {
   int32_t key;    ///< the entry's key, a 4-byte value such as an enum's number
   int32_t value;  ///< the entry's value
+};
+
+/// What PmModEntry::flags says of an installed mod.
+/// @since Contract 2.5
+enum PmModEntryFlags : uint32_t {
+  /// It runs on this client now (mod_started answers the same).
+  PM_MOD_ENTRY_STARTED = 1,
+  /// Its manifest marks it developerOnly (offered only with launcher.ini developer=1).
+  PM_MOD_ENTRY_DEVELOPER_ONLY = 2,
+  /// Its manifest says it records voice (recordsVoice).
+  PM_MOD_ENTRY_RECORDS_VOICE = 4,
+};
+
+/// One installed mod, as the host contract's mod_entry gives it (SMAPI's IModRegistry.GetAll is the precedent). The
+/// strings are UTF-8 and the host's own: they last until the mods are next listed afresh (a start of the mods) or the
+/// next mod_entry for the same index, whichever comes first; copy them to keep them. Grows only at the end: set `size`
+/// before asking, and the host fills only what fits in it.
+/// @since Contract 2.5
+struct PmModEntry {
+  uint32_t size;          ///< set by the mod to sizeof(PmModEntry) before it asks
+  const char* id;         ///< the manifest's id, `<author>.<mod>`
+  const char* name;       ///< the manifest's name, the Mods panel's
+  const char* version;    ///< the manifest's version; empty when an old-format mod gave none
+  const char* author;     ///< the manifest's author; empty for an old-format mod
+  uint32_t flags;         ///< PmModEntryFlags bits
+  const char* offReason;  ///< why the last start left it off or refused it, the Mods panel's words; empty while it runs
 };
 
 /// What the host gives a mod: the services of the host contract, passed to pmmod_start. The host keeps
@@ -824,6 +850,13 @@ struct PmHostApi {
   /// the event should call it; the mod adds it to the event with `phasmo::UnityEvent::AddListener`. Main thread.
   /// @since Contract 2.4
   void* (*unity_action_new)(void* target, void (*listener)(void* target));
+  /// Added in version 2.5, after unity_action_new: the installed mod at `index` (0 up), in the host's own order, into
+  /// `out`, whose `size` the mod sets first; the host fills only the members that fit in it and leaves `size` as it was.
+  /// Every installed mod is listed, running or not, the asking mod included. Read-only: it changes nothing, and says
+  /// nothing of other players' mods. False, writing nothing, past the last mod, for a null `out` or a `size` too small
+  /// for `id`. Main thread.
+  /// @since Contract 2.5
+  bool (*mod_entry)(int32_t index, PmModEntry* out);
   /// @}
 };
 

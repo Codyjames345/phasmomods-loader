@@ -18,6 +18,7 @@
 #include "dummy.h"
 #include "buttons.h"
 #include "menu_layout.h"
+#include "mod_glue.h"
 #include "game.h"
 #include "held.h"
 #include "log.h"
@@ -52,13 +53,14 @@ static_assert(sizeof kWhyKeys / sizeof kWhyKeys[0] == static_cast<size_t>(Why::N
               "every refusal reason has its text, in the order of menu_rule.h's Why");
 
 // The sections, in the order they show down the left.
-constexpr int kSections = 6;
+constexpr int kSections = 7;
 constexpr const char* kSectionKeys[kSections] = {i18n::key("dev-menu.section.difficulty"),
                                                  i18n::key("dev-menu.section.contract"),
                                                  i18n::key("dev-menu.section.ghost"),
                                                  i18n::key("dev-menu.section.player"),
                                                  i18n::key("dev-menu.section.equipment"),
-                                                 i18n::key("dev-menu.section.game")};
+                                                 i18n::key("dev-menu.section.game"),
+                                                 i18n::key("dev-menu.section.loader")};
 
 // What a row shows after its label. Each row names one of these; the value is read from the game now.
 enum ValueKind {
@@ -66,7 +68,7 @@ enum ValueKind {
   OnFriendly, OnLoseEquipment, CountEvidence, NameType, NumberReward, NumberPayout, LineState, LineIdentity,
   NameRoom, NumberSpeed, PickRoom, OnEvents, PickEvent, NumberSanity, OnFrozen, OnGod, NumberScale,
   OnPause, OnSession, OnOffline, NumberMultiplier, OnBlind, OnDebugHud, LineEvidence, OnNoclip, OnLockSanity,
-  NumberLockedSanity, OnEspGhost, OnEspRooms, NameWeather, PickWeatherValue, PickRetypeValue, OnUnlockAll, OnFreeShop, OnSaveFrozen, OnDummy, LineTypeDials, OnEspDoors, OnEspHiding, OnEspSwitches, PickOptionValue,
+  NumberLockedSanity, OnEspGhost, OnEspRooms, NameWeather, PickWeatherValue, PickRetypeValue, OnUnlockAll, OnFreeShop, OnSaveFrozen, OnDummy, LineTypeDials, OnEspDoors, OnEspHiding, OnEspSwitches, PickOptionValue, PickModValue, LineContent, PickObjectiveValue, OnNeverRunOut, PickItemValue, NameSightHold,
 };
 
 enum Kind { Nav, Click, Read };
@@ -92,6 +94,9 @@ int g_eventPick = 0;      // the event picker's cursor index
 int g_weatherPick = 0;    // the weather picker's cursor index
 int g_retypePick = 0;     // the re-type picker's cursor index
 int g_optionPick = 0;     // the difficulty option picker's cursor index
+int g_modPick = 0;        // the Loader page's mod picker
+int g_objectivePick = 0;  // the objective picker
+int g_itemPick = 0;       // the item picker
 Pause g_pause;
 bool g_wasCursorLocked = true;
 // Unity's UI input module, borrowed while the menu is open: the game runs it only while its journal is
@@ -172,7 +177,36 @@ std::string valueText(const Row& r) {
     case LineTypeDials: return actions::type_dials();
     case PickOptionValue: {
       const char* label = actions::option_label(g_optionPick);
-      return (label && *label ? i18n::text(label) : std::string{}) + ": " + actions::option_value(g_optionPick);
+      static constexpr const char* kWhenKeys[] = {i18n::key("dev-menu.option-when.live"),
+                                                  i18n::key("dev-menu.option-when.start"),
+                                                  i18n::key("dev-menu.option-when.mixed"),
+                                                  i18n::key("dev-menu.option-when.unknown")};
+      const int when = actions::option_when(g_optionPick);
+      return (label && *label ? i18n::text(label) : std::string{}) + ": " + actions::option_value(g_optionPick) +
+             "  (" + i18n::text(kWhenKeys[when >= 0 && when < 4 ? when : 3]) + ")";
+    }
+    case PickModValue: {
+      // Every installed mod, from the host contract's mod_entry (2.5): its name, id, version, and whether it runs or
+      // why it is off, in the Mods panel's own words.
+      const std::vector<pm::mod::ModEntry> mods = pm::mod::mod_entries();
+      if (mods.empty()) return {};
+      const pm::mod::ModEntry& m = mods[static_cast<size_t>(((g_modPick % static_cast<int>(mods.size())) +
+                                                            static_cast<int>(mods.size())) % static_cast<int>(mods.size()))];
+      std::string line = m.name + " (" + m.id + (m.version.empty() ? "" : " " + m.version) + "): ";
+      line += (m.flags & PM_MOD_ENTRY_STARTED) ? i18n::text(kOnKey) : i18n::text(kOffKey);
+      if (!m.offReason.empty()) line += ", " + m.offReason;
+      return line + "  [" + whole(((g_modPick % static_cast<int>(mods.size())) + static_cast<int>(mods.size())) %
+                                  static_cast<int>(mods.size()) + 1) + "/" + whole(static_cast<int>(mods.size())) + "]";
+    }
+    case LineContent: return actions::content_line();
+    case PickObjectiveValue: return actions::objective_line(g_objectivePick);
+    case OnNeverRunOut: return onOff(actions::switches().neverRunOut);
+    case PickItemValue: return actions::item_name(g_itemPick);
+    case NameSightHold: {
+      static constexpr const char* kHoldKeys[] = {i18n::key("dev-menu.sight-game"), i18n::key("dev-menu.sight-none"),
+                                                  i18n::key("dev-menu.sight-frozen")};
+      const int h = actions::switches().sightHold;
+      return h >= 0 && h < 3 ? i18n::text(kHoldKeys[h]) : std::string{};
     }
     case OnEspDoors: return onOff(actions::switches().espDoors);
     case OnEspHiding: return onOff(actions::switches().espHiding);
@@ -218,6 +252,11 @@ std::vector<Row> sectionRows(int section) {
       break;
     case 1:  // Contract
       add(Click, Action::UnlockDoor, 0, i18n::key("dev-menu.unlock-door"), NoValue);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.objective"), PickObjectiveValue);
+      add(Click, Action::PickObjective, -1, i18n::key("dev-menu.objective-prev"), NoValue);
+      add(Click, Action::PickObjective, +1, i18n::key("dev-menu.objective-next"), NoValue);
+      add(Click, Action::CompleteObjective, 0, i18n::key("dev-menu.objective-complete"), NoValue);
+      add(Click, Action::FailObjective, 0, i18n::key("dev-menu.objective-fail"), NoValue);
       add(Read, Action::Info, 0, i18n::key("dev-menu.weather"), NameWeather);
       add(Read, Action::Info, 0, i18n::key("dev-menu.weather-pick"), PickWeatherValue);
       add(Click, Action::PickWeather, -1, i18n::key("dev-menu.weather-prev"), NoValue);
@@ -237,6 +276,7 @@ std::vector<Row> sectionRows(int section) {
       add(Click, Action::BumpFlames, 0, i18n::key("dev-menu.flames-clear"), NoValue);
       add(Click, Action::TypeChangeNow, 0, i18n::key("dev-menu.type-change-now"), NoValue);
       add(Click, Action::ChaseMe, 0, i18n::key("dev-menu.chase-me"), NoValue);
+      add(Click, Action::CycleSightHold, 0, i18n::key("dev-menu.sight-hold"), NameSightHold);
       add(Read, Action::Info, 0, i18n::key("dev-menu.retype-pick"), PickRetypeValue);
       add(Click, Action::PickRetype, -1, i18n::key("dev-menu.retype-prev"), NoValue);
       add(Click, Action::PickRetype, +1, i18n::key("dev-menu.retype-next"), NoValue);
@@ -298,7 +338,18 @@ std::vector<Row> sectionRows(int section) {
       add(Read, Action::Info, 0, i18n::key("dev-menu.equipment-protected"), OnSession);
       add(Read, Action::Info, 0, i18n::key("dev-menu.save-frozen"), OnSaveFrozen);
       add(Click, Action::SetUnlockAll, 0, i18n::key("dev-menu.unlock-all"), OnUnlockAll);
+      add(Click, Action::SetNeverRunOut, 0, i18n::key("dev-menu.never-run-out"), OnNeverRunOut);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.item"), PickItemValue);
+      add(Click, Action::PickItem, -1, i18n::key("dev-menu.item-prev"), NoValue);
+      add(Click, Action::PickItem, +1, i18n::key("dev-menu.item-next"), NoValue);
+      add(Click, Action::SpawnItem, 0, i18n::key("dev-menu.item-spawn"), NoValue);
       add(Click, Action::SetFreeShop, 0, i18n::key("dev-menu.free-shop"), OnFreeShop);
+      break;
+    case 6:  // Loader
+      add(Read, Action::Info, 0, i18n::key("dev-menu.mod"), PickModValue);
+      add(Click, Action::PickMod, -1, i18n::key("dev-menu.mod-prev"), NoValue);
+      add(Click, Action::PickMod, +1, i18n::key("dev-menu.mod-next"), NoValue);
+      add(Read, Action::Info, 0, i18n::key("dev-menu.content"), LineContent);
       break;
     case 5:  // Game
       add(Click, Action::CycleTimeScale, 0, i18n::key("dev-menu.tick-speed"), NumberScale);
@@ -546,6 +597,27 @@ void run(const Row& r) {
     case Action::MeToTruck:
       if (!actions::me_to_truck()) g_refusal = Why::NoTruck;
       break;
+    case Action::PickMod: g_modPick += r.arg; break;  // wrapped where it is read: the list can change
+    case Action::PickObjective: {
+      const int n = actions::objective_count();
+      if (n > 0) g_objectivePick = ((g_objectivePick + r.arg) % n + n) % n;
+      break;
+    }
+    case Action::CompleteObjective:
+    case Action::FailObjective:
+      if (!actions::settle_objective(g_objectivePick, r.action == Action::CompleteObjective))
+        g_refusal = Why::NoContract;
+      break;
+    case Action::SetNeverRunOut: s.neverRunOut = !s.neverRunOut; break;  // actions::tick keeps the supplies
+    case Action::PickItem: {
+      const int n = actions::item_count();
+      if (n > 0) g_itemPick = ((g_itemPick + r.arg) % n + n) % n;
+      break;
+    }
+    case Action::SpawnItem:
+      if (!actions::spawn_item(g_itemPick)) g_refusal = Why::NoPlayer;
+      break;
+    case Action::CycleSightHold: s.sightHold = next_sight_hold(s.sightHold); break;
     case Action::PickOption: {
       const int n = actions::option_count();
       if (n > 0) g_optionPick = ((g_optionPick + r.arg) % n + n) % n;

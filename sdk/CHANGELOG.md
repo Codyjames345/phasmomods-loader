@@ -6,6 +6,23 @@ a host runs a mod built for the same major version and a minor no newer than its
 major version `PmHostApi` and every published struct only grow at the end, and every content struct begins with its
 `size`, so a mod built for an older minor keeps loading.
 
+## [2.5] - Unreleased
+
+### Added
+
+- **Every installed mod, read-only.** `PmHostApi::mod_entry(index, out)` gives the installed mod at an index (id, name,
+  version, author, whether it runs, whether it is developer-only or records voice, and why it is off), filling a
+  `PmModEntry` up to the `size` the mod sets; SMAPI's `IModRegistry.GetAll` is the precedent. `pm::mod::mod_entries()`
+  (`core/mod_glue.h`) copies them all out. The dev menu's Loader page reads it.
+
+## [2.4] - Unreleased
+
+### Added
+
+- **A game event's listener.** `PmHostApi::unity_action_new(target, listener)` makes a UnityAction bound to a managed
+  target, the way the game makes its own listeners, so a mod's button takes the game's own click
+  (`sdk/api/buttons.h`).
+
 ## [2.3] - Unreleased
 
 ### Added

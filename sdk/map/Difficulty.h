@@ -10,6 +10,8 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Equipment.h"
+#include "Rewards.h"
 
 namespace pm::map {
 
@@ -255,8 +257,8 @@ inline constexpr pm::sdk::EntryDesc LevelValues_instance{
 /// moneyReward of every side objective whose own bool flag reads true (the objective's flags are
 /// obfuscated, so the map knows the class by its fields, not by them). Decompiled. It throws a
 /// NullReferenceException when LevelValues.mainObjective is null,
-/// when the main objective has no values, or when the side objectives' list (a field of LevelValues not
-/// mapped yet) is null or holds a null entry. At the main menu it throws: read LevelValues.mainObjective
+/// when the main objective has no values, or when the side objectives' list (LevelValues.sideObjectives)
+/// is null or holds a null entry. At the main menu it throws: read LevelValues.mainObjective
 /// first, and ask only while a contract runs (the dev menu's live test, 2026-11-11).
 inline constexpr pm::sdk::EntryDesc LevelValues_GetInvestigationBonusReward{
     .key = "LevelValues.GetInvestigationBonusReward", .kind = pm::sdk::Kind::Method,
@@ -379,81 +381,99 @@ inline constexpr pm::sdk::EntryDesc Difficulty_playerSpeed{
     .key = "Difficulty.playerSpeed", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "Difficulty", .name = "playerSpeed", .type = "float"};
 
-/// The custom difficulty's sanity pill restoration amount, an int. Inferred: from its name.
+/// The custom difficulty's sanity pill restoration amount, an int. PainKillers.Use reads it from the
+/// contract's difficulty every time a player uses a sanity pill, so a change applies at once. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_sanityPillRestorationAmount{
     .key = "Difficulty.sanityPillRestorationAmount", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "sanityPillRestorationAmount", .type = "int"};
 
-/// The custom difficulty's starting sanity, an int. Inferred: from its name.
+/// The custom difficulty's starting sanity, an int. PlayerSanity.Start seeds a player's sanity from it as
+/// the contract begins, so that seed waits for the next contract. PlayerSanity.Update reads it every frame
+/// to cap sanity, so that cap follows a change at once. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_startingSanity{
     .key = "Difficulty.startingSanity", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "startingSanity",
     .type = "int"};
 
-/// The custom difficulty's sanity drain, a float. Inferred: from its name.
+/// The custom difficulty's sanity drain, a float. PlayerSanity.Start copies it onto the player as the
+/// contract begins, and the sanity update drains by that copy, so a change waits for the next contract.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_sanityDrain{
     .key = "Difficulty.sanityDrain", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "sanityDrain",
     .type = "float"};
 
-/// The custom difficulty's flashlights option, a bool. Inferred: from its name.
+/// The custom difficulty's flashlights option, a bool. Torch.UseNetworked reads it every time a player uses
+/// a torch and gives up on the torch when it is clear, so a change applies at once. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_flashlights{
     .key = "Difficulty.flashlights", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "flashlights",
     .type = "bool"};
 
 /// The custom difficulty's changing favourite room option, a ValueType number (None 0, Low 1, Medium 2, High 3,
-/// VeryHigh 4). Inferred: from its name.
+/// VeryHigh 4). GhostWanderState.Exit reads it every time the ghost finishes wandering, so a change applies
+/// at once. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_changingFavouriteRoom{
     .key = "Difficulty.changingFavouriteRoom", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "changingFavouriteRoom"};
 
 /// The custom difficulty's ghost interaction amount, a ValueType number (None 0, Low 1, Medium 2, High 3,
-/// VeryHigh 4). Inferred: from its name.
+/// VeryHigh 4). One of the ghost AI's states, whose class is obfuscated and not in the map, reads it when
+/// the ghost enters that state, and which state was not proven; a change waits for the ghost to enter it.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_interactionAmount{
     .key = "Difficulty.interactionAmount", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "interactionAmount"};
 
 /// The custom difficulty's event frequency, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
-/// Inferred: from its name.
+/// GhostIdleState.Execute reads it on every idle tick while the ghost waits, so a change applies at once.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_eventFrequency{
     .key = "Difficulty.eventFrequency", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "eventFrequency"};
 
 /// The custom difficulty's hunt duration, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
-/// Inferred: from its name.
+/// DifficultySettings.Start switches on it as the contract begins and caches the hunt length the hunts use,
+/// so a change waits for the next contract. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_huntDuration{
     .key = "Difficulty.huntDuration", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "huntDuration"};
 
-/// The custom difficulty's grace period, an int. Inferred: from its name.
+/// The custom difficulty's grace period, an int. DifficultySettings.Start copies it into the hunt settings
+/// as the contract begins, so a change waits for the next contract. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_gracePeriod{
     .key = "Difficulty.gracePeriod", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "gracePeriod",
     .type = "int"};
 
-/// The custom difficulty's fingerprint chance, a float. Inferred: from its name.
+/// The custom difficulty's fingerprint chance, a float. Fingerprint.AttemptToSpawnFingerprints reads it on
+/// every attempt to spawn fingerprints, so a change applies at once. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_fingerprintChance{
     .key = "Difficulty.fingerprintChance", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "fingerprintChance", .type = "float"};
 
-/// The custom difficulty's fingerprint duration, an int. Inferred: from its name.
+/// The custom difficulty's fingerprint duration, an int. Fingerprint.EnableFingerprintsNetworked reads it
+/// every time fingerprints spawn, for their despawn timer, so a change applies at once. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_fingerprintDuration{
     .key = "Difficulty.fingerprintDuration", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "fingerprintDuration", .type = "int"};
 
 /// The custom difficulty's option for kills extending the hunt duration, a ValueType number (None 0, Low 1,
-/// Medium 2, High 3, VeryHigh 4). Inferred: from its name.
+/// Medium 2, High 3, VeryHigh 4). GhostHuntState.Kill reads it after every kill to extend the hunt timer, so
+/// a change applies at once. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_killsExtendHuntDuration{
     .key = "Difficulty.killsExtendHuntDuration", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "killsExtendHuntDuration"};
 
 /// The custom difficulty's roaming frequency, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
-/// Inferred: from its name.
+/// GhostWanderState.PickDestination reads it every time the ghost picks a destination, so a change applies at
+/// once. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_roamingFrequency{
     .key = "Difficulty.roamingFrequency", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "roamingFrequency"};
 
-/// The custom difficulty's ghost speed, a float. Inferred: from its name.
+/// The custom difficulty's ghost speed, a float. GhostHuntState.UpdateSpeed reads it every frame of a hunt
+/// and scales the ghost's movement speed by it, so a change applies at once. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_ghostSpeed{
     .key = "Difficulty.ghostSpeed", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "ghostSpeed",
     .type = "float"};
 
-/// The custom difficulty's setup time, an int. Inferred: from its name.
+/// The custom difficulty's setup time, an int. SetupPhaseController.Start sets the setup countdown from it as
+/// the contract begins, so a change waits for the next contract. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_setupTime{
     .key = "Difficulty.setupTime", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "setupTime",
     .type = "int"};
@@ -465,39 +485,47 @@ inline constexpr pm::sdk::EntryDesc Difficulty_selectedWeather{
     .name = "selectedWeather"};
 
 /// The custom difficulty's amount of doors open, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
-/// Inferred: from its name.
+/// A LevelController coroutine reads it once while the level is generated and picks doors to open by it, so a
+/// change waits for the next contract. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_amountOfDoorsOpen{
     .key = "Difficulty.amountOfDoorsOpen", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "amountOfDoorsOpen"};
 
 /// The custom difficulty's amount of hiding places, a ValueType number (None 0, Low 1, Medium 2, High 3,
-/// VeryHigh 4). Inferred: from its name.
+/// VeryHigh 4). A LevelController method reads it once while the level is generated and places or clears
+/// hiding places by it, so a change waits for the next contract. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_amountOfHidingPlaces{
     .key = "Difficulty.amountOfHidingPlaces", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "amountOfHidingPlaces"};
 
-/// The custom difficulty's sanity monitor option, a bool. Inferred: from its name.
+/// The custom difficulty's sanity monitor option, a bool. Wristwatch.Start copies it onto the watch as the
+/// contract begins and hides the sanity bars when it is clear, so a change waits for the next contract.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_sanityMonitor{
     .key = "Difficulty.sanityMonitor", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "sanityMonitor",
     .type = "bool"};
 
-/// The custom difficulty's activity monitor option, a bool. Inferred: from its name.
+/// The custom difficulty's activity monitor option, a bool. Inferred: from its name. No reader through
+/// LevelValues was found in this build.
 inline constexpr pm::sdk::EntryDesc Difficulty_activityMonitor{
     .key = "Difficulty.activityMonitor", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "activityMonitor", .type = "bool"};
 
-/// The custom difficulty's option for the fuse box showing on the map, a bool. Inferred: from its name.
+/// The custom difficulty's option for the fuse box showing on the map, a bool. Inferred: from its name. No
+/// reader through LevelValues was found in this build.
 inline constexpr pm::sdk::EntryDesc Difficulty_fuseBoxVisibleOnMap{
     .key = "Difficulty.fuseBoxVisibleOnMap", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "fuseBoxVisibleOnMap", .type = "bool"};
 
 /// The custom difficulty's fuse box starting power, a FuseBoxValueType (the FuseBoxValueType note below numbers
-/// it). Inferred: from its name.
+/// it). FuseBox.Start reads it as the contract begins and sets the box's starting power from it, so a change
+/// waits for the next contract. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_fuseBoxStartPower{
     .key = "Difficulty.fuseBoxStartPower", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "fuseBoxStartPower"};
 
-/// The custom difficulty's number of cursed possessions, an int. Inferred: from its name.
+/// The custom difficulty's number of cursed possessions, an int. CursedItemsController.Start reads it at level
+/// load to bound how many possessions spawn, so a change waits for the next contract. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_cursedPossessionsQuantity{
     .key = "Difficulty.cursedPossessionsQuantity", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
     .name = "cursedPossessionsQuantity", .type = "int"};
@@ -786,6 +814,12 @@ struct LevelValues {
   /// The contract's main objective, an Objective (Rewards.h): mainObjective.get(values), or null.
   /// Unresolved: null.
   static constexpr pm::api::Field<pm::map::LevelValues_mainObjective, void*> mainObjective{};
+  /// The contract's side objectives, a List of the Objective (Rewards.h): sideObjectives.get(values).
+  /// Read the list as pm::api::List. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LevelValues_sideObjectives, void*> sideObjectives{};
+  /// The equipment the truck starts the contract with, a List of the GameEquipmentLoadout (Equipment.h):
+  /// equipmentLoadout.get(values). Read the list as pm::api::List. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LevelValues_equipmentLoadout, void*> equipmentLoadout{};
   /// The money the contract's objectives pay, the main one's and the side ones':
   /// GetInvestigationBonusReward(values). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::LevelValues_GetInvestigationBonusReward, int32_t(void*)>

@@ -385,6 +385,15 @@ int main() {
   the_dummy_rows_need_a_contract_and_the_dummy();
   the_hunt_target_row_needs_a_hunt();
   every_difficulty_option_needs_only_the_difficulty();
+  CHECK(refuse(Action::PickMod, Can{.sandbox = true}) == Why::None);  // the Loader page reads, anywhere
+  // The objectives, the spawned item and the switches of this round.
+  CHECK(refuse(Action::CompleteObjective, Can{.sandbox = true}) == Why::NoContract);
+  CHECK(refuse(Action::SpawnItem, Can{.sandbox = true, .contract = true}) == Why::NoPlayer);
+  CHECK(refuse(Action::CycleSightHold, Can{.sandbox = true}) == Why::None);
+  CHECK(next_sight_hold(kSightGame) == kSightNone && next_sight_hold(kSightNone) == kSightFrozen &&
+        next_sight_hold(kSightFrozen) == kSightGame);
+  CHECK(!Switches{}.neverRunOut && Switches{}.sightHold == kSightGame);
+  CHECK(navOffset(6) - kNavPitch / 2.0f > kRefuseY + kRefuseBox / 2.0f);  // the seventh section clears the refusal line
   std::printf(g_failures ? "%d check(s) failed\n" : "all dev menu rule tests passed\n", g_failures);
   return g_failures ? 1 : 0;
 }

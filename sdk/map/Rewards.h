@@ -22,6 +22,35 @@ inline constexpr pm::sdk::EntryDesc ObjectiveValues_moneyReward{.key = "Objectiv
                                                                 .owner = "ObjectiveValues", .name = "moneyReward",
                                                                 .type = "int"};
 
+/// Which kind of objective this ObjectiveValues describes, read as an int: CompleteObjective and
+/// FailObjective find the objective whose kind matches the one they are given. Decompiled.
+inline constexpr pm::sdk::EntryDesc ObjectiveValues_type{.key = "ObjectiveValues.type", .kind = pm::sdk::Kind::Field,
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "ObjectiveValues", .name = "type"};
+
+inline constexpr const char* ObjectiveState_values[] = {"None", "Complete", "Failed"};
+
+// Its name is obfuscated, so it is found by its value names, which are real.
+/// How far one of the contract's objectives has got (Assembly-CSharp, global namespace): None while it is
+/// open, Complete once done, Failed once failed. Decompiled.
+inline constexpr pm::sdk::EntryDesc ObjectiveState{.key = "ObjectiveState",
+                                                   .confidence = pm::sdk::Confidence::Decompiled,
+                                                   .assembly = "Assembly-CSharp", .ns = "",
+                                                   .values = ObjectiveState_values};
+
+/// How far the objective has got, its one ObjectiveState field: completing sets Complete and failing sets
+/// Failed, and CompleteObjective leaves an objective already Complete or Failed alone. Decompiled.
+inline constexpr pm::sdk::EntryDesc Objective_state{.key = "Objective.state", .kind = pm::sdk::Kind::Field,
+                                                    .confidence = pm::sdk::Confidence::Decompiled,
+                                                    .owner = "Objective", .type = "@ObjectiveState"};
+
+/// The contract's side objectives, a List of the Objective: LevelValues.GetInvestigationBonusReward sums
+/// their rewards, and CompleteObjective matches the kind it is given against each entry's own kind.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc LevelValues_sideObjectives{
+    .key = "LevelValues.sideObjectives", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LevelValues", .type = "List<@Objective>"};
+
 inline constexpr const char* Objective_fieldTypes[] = {"@ObjectiveValues", "string", "int"};
 
 // Its name is obfuscated, so it is found by its fields.
@@ -37,6 +66,38 @@ inline constexpr pm::sdk::EntryDesc Objective_values{.key = "Objective.values", 
                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                      .owner = "Objective",
                                                      .type = "@ObjectiveValues"};
+
+/// The contract's objectives and their whiteboard list (Assembly-CSharp, global namespace), a
+/// MonoBehaviourPun: it rolls the side objectives at the contract's start and ticks them off as they
+/// finish. Decompiled.
+inline constexpr pm::sdk::EntryDesc ObjectiveManager{.key = "ObjectiveManager",
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .name = "ObjectiveManager", .assembly = "Assembly-CSharp",
+                                                     .ns = ""};
+
+/// CompleteObjective(kind): finishes on this client alone the open side objective whose kind matches the
+/// one given, or the main objective for the game's identify-the-ghost kind, and ticks the whiteboard and
+/// the journal as it goes. Decompiled: the game's own CompleteObjectiveRPC body tail-jumps into it, and it
+/// sends no RPC itself. It does nothing until HasSetupObjectives, and never touches an objective already
+/// Complete or Failed.
+inline constexpr pm::sdk::EntryDesc ObjectiveManager_CompleteObjective{
+    .key = "ObjectiveManager.CompleteObjective", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "ObjectiveManager", .name = "CompleteObjective"};
+
+/// FailObjective(kind): the mirror of CompleteObjective: it fails on this client alone the open objective
+/// of that kind, through the objective's own fail step and the journal's fail line. Decompiled. It does
+/// nothing until HasSetupObjectives.
+inline constexpr pm::sdk::EntryDesc ObjectiveManager_FailObjective{
+    .key = "ObjectiveManager.FailObjective", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "ObjectiveManager", .name = "FailObjective"};
+
+/// Whether this contract's objectives have been chosen and wired: false until the game has rolled them
+/// and filled its own list, and CompleteObjective and FailObjective do nothing while it is false. A mod
+/// must never send the game's own RPC that fills the list (sdk/systems/photon.md). Decompiled.
+inline constexpr pm::sdk::EntryDesc ObjectiveManager_HasSetupObjectives{
+    .key = "ObjectiveManager.HasSetupObjectives", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "ObjectiveManager",
+    .name = "get_HasSetupObjectives"};
 
 /// The local player's saved progress in single player and in an online game alike (Assembly-CSharp,
 /// global namespace). Inferred: from its name.
@@ -85,12 +146,33 @@ namespace phasmo {
 struct ObjectiveValues {
   /// The money it pays: moneyReward.get(values). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::ObjectiveValues_moneyReward, int32_t> moneyReward{};
+  /// Which kind of objective it is, read as an int: type.get(values). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::ObjectiveValues_type, int32_t> type{};
 };
 
 /// One of the contract's objectives. `objective` below is the Objective.
 struct Objective {
   /// Its ObjectiveValues: values.get(objective). Unresolved: null.
   static constexpr pm::api::Field<pm::map::Objective_values, void*> values{};
+  /// How far it has got, ObjectiveState read as an int: state.get(objective) — 0 open, 1 complete,
+  /// 2 failed. Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Objective_state, int32_t> state{};
+};
+
+/// The contract's objectives and their whiteboard list. `manager` below is the ObjectiveManager.
+struct ObjectiveManager {
+  /// The ObjectiveManager type: klass(), is(obj), type_object(). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::ObjectiveManager> type{};
+  /// HasSetupObjectives(manager): whether this contract's objectives have been chosen and wired; the two
+  /// below do nothing before they have. Unresolved: false.
+  static constexpr pm::api::Method<pm::map::ObjectiveManager_HasSetupObjectives, bool(void*)>
+      HasSetupObjectives{};
+  /// CompleteObjective(manager, kind): finishes on this client alone the open objective of that kind, with
+  /// no RPC sent. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ObjectiveManager_CompleteObjective, void(void*, int32_t)>
+      CompleteObjective{};
+  /// FailObjective(manager, kind): the mirror of CompleteObjective. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ObjectiveManager_FailObjective, void(void*, int32_t)> FailObjective{};
 };
 
 /// EasySave3's file helpers.

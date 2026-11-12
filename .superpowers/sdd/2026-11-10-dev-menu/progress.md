@@ -664,3 +664,47 @@ Smoke 43: Difficulty picker: step ghost speed up during a hunt and watch the HUD
 the evidence count (some apply only at the next contract). 44: ESP doors/hiding/switches label the level; toggling a
 light flips its label. 45: game speed cycles through 0.25 and 4. 46: type dials change with the rows; "run the
 type's change now" on a Mimic copies another type at its next state change.
+
+## Round 11 (2026-11-12): host contract 2.5 and the Loader page
+
+Committed round 10 as 3238830. The user said go for both the contract change and the remaining RE.
+
+- Contract 2.5 (PMMOD_API_MINOR 5): `bool mod_entry(int32_t index, PmModEntry* out)` at the end of PmHostApi, SMAPI's
+  IModRegistry.GetAll as the precedent. One entry per call because an array of a growing struct has no stride the host
+  could trust; PmModEntry begins with `size`, set by the mod, and the host fills only what fits (id, name, version,
+  author, PmModEntryFlags STARTED / DEVELOPER_ONLY / RECORDS_VOICE, offReason). The flags became an enum named
+  PM_MOD_ENTRY_* after PM_MOD_RECORDS_VOICE turned out to exist already in PmModFlags. host/mods.cpp entry() keeps each
+  index's off reason alive for the pointer; host/suite.cpp wires it; sdk/fake answers an empty list.
+  pm::mod::mod_entries() (core/mod_glue.h) copies the list out and returns nothing from a host older than 2.5.
+- tests/mods_test.cpp: the fake mod's entry off with the Mods panel's reason, then started; null, -1 and a size too
+  small are refused; the pinned version is 2.5 and older minors still load.
+- sdk/CHANGELOG.md gained [2.5] and the missing [2.4]; sdk/README's contract section is "version 2.5" and now lists
+  2.3's content_flags_of and mod_name, 2.4's unity_action_new and 2.5's mod_entry (it had stopped at show_message);
+  the guides' anchors follow.
+- Dev menu: a seventh section, Loader: a mod picker (name, id, version: on or off with the reason, [n/N]) and the
+  contract's offered ghost types with how many are custom.
+- validate 95/95, docs clean.
+
+Round 11, continued: the RE batch (local model research in re/dump/notes/2026-11-12-dev-menu-batch2.md; its map
+entries by the local model, reviewed; gamecheck 1966 entries, 1854 resolved, 0 missing, 0 ambiguous).
+
+- Objectives (Contract): a picker over the contract's objectives (LevelValues.mainObjective, then
+  LevelValues.sideObjectives), each shown by its kind's number (ObjectiveValues.type) and its state (Objective.state,
+  the ObjectiveState enum: None, Complete, Failed; mapped by its values because a plain int sits beside it and `.type =
+  "int"` would have taken the wrong field). Complete / fail call ObjectiveManager.CompleteObjective / FailObjective, the
+  local methods the game's own objective RPCs tail-jump into (no sender check; refused by the manager itself until
+  HasSetupObjectives). Challenge progress they touch is a save write, stopped by the session's save freeze.
+- Item spawn (Equipment): a picker over LevelValues.equipmentLoadout (GameEquipmentLoadout.equipment, the C# `item`;
+  StoreItem.itemName) and "spawn one at your feet" through ObjectPooler.SpawnFromEquipmentPool, the truck spawner's own
+  local call (no RPC, no save); false when the pool has no copy left.
+- Never run out (Equipment): candles burn back up to what each held when first seen (Candle.candleDuration), crucifixes
+  reset to new (Crucifix.useCount, now Decompiled). Electronics' charge: the counter was not found (research notes);
+  no row.
+- Hunt sight assist (Ghost): game / held off (sightSpeedUp 1, the neutral multiplier) / held where it stood.
+- Cursed possessions mid-contract: not built; they are pre-placed level objects enabled at Start by seven placement
+  methods whose bodies were not read.
+- validate 95/95. Still running: when each difficulty option is read (re/dump/notes/2026-11-12-difficulty-readers.md).
+
+Smoke 47: complete a side objective: the truck's board ticks it; fail one. 48: spawn an item from the loadout at your
+feet; spawn until the pool runs out (the refusal shows). 49: never run out: light a candle and watch it hold; use a
+crucifix past its uses. 50: sight assist held off: a hunt that sees you never speeds up (HUD live speed).

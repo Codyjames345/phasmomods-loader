@@ -498,9 +498,9 @@ that requires one whose hook could not be made stays off, and the log names the 
 false for that reason alone while a mod runs.
 It replaces return-address checks, which break when several mods chain detours on one function.
 
-### The host contract, version 2.3
+### The host contract, version 2.5
 
-`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.3 today).
+`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.5 today).
 `pm_api_compatible(host, mod)` accepts a mod of the same major and a minor no newer than the host's.
 Within a major, `PmHostApi` and every published struct only grow at the end; a new major refuses
 older mods. Version 2.0 added these members, after the services of version 1:
@@ -794,10 +794,17 @@ evidence in the world stays its mod's job.
 - `mod_started(modId)`: whether that mod has started on this client and runs now, for an
   optional dependency, from `pmmod_start` onwards (`pm::mod::mod_started` in `core/mod_glue.h`). See
   "Dependencies". The fake backend answers it from `pm::fake::started_mods`.
-- `show_message(title, body)`, the last member: a one-button message in the game's own popup on the menu's and the lobby's
+- `show_message(title, body)`: a one-button message in the game's own popup on the menu's and the lobby's
   board (`pm::mod::show_message` in `core/mod_glue.h`). One asked for in a contract shows once the lobby is back. It
   replaces any message showing or waiting, so keep it for news a player needs. This is how a mod tells a player something
   outside a contract: never draw a window of your own. The fake backend records each in `pm::fake::messages`.
+- Version 2.3 added `content_flags_of(type)`, a custom ghost's `PM_GHOST_*` flags, and `mod_name(modId)`, the name the
+  installed mod's manifest gives it (`pm::mod::shown_name` in `core/mod_glue.h`).
+- Version 2.4 added `unity_action_new(target, listener)`, a UnityAction made the way the game makes its own listeners, so a
+  mod's button takes the game's own click (`sdk/api/buttons.h`).
+- Version 2.5 added `mod_entry(index, out)`, the last member: the installed mod at an index (id, name, version, author,
+  whether it runs, developer-only, records voice, and why it is off), filling a `PmModEntry` up to the `size` the mod sets.
+  `pm::mod::mod_entries()` in `core/mod_glue.h` copies every one out. Read-only; it says nothing of other players' mods.
 
 Which rules run. The host keeps the contract ghost's acting-as type (`sdk/runtime/content_acting.h`):
 its behaviour type, or its identity when the behaviour type is "no type" (a custom ghost). The Mimic's

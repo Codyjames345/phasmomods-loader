@@ -92,7 +92,16 @@ struct Switches {
   bool espDoors = false;
   bool espHiding = false;
   bool espSwitches = false;
+  // Candles burn and crucifixes are used up as the game says, but the menu puts each back where it started.
+  bool neverRunOut = false;
+  // The hunt's sight assist (GhostHuntState.sightSpeedUp): the game's own, held at none (1, the multiplier that
+  // changes nothing), or held where it stood when the hold began.
+  int sightHold = 0;  // SightHold below
 };
+
+/** The sight assist row's three settings, in the order the row cycles them. */
+enum SightHold { kSightGame = 0, kSightNone = 1, kSightFrozen = 2 };
+inline int next_sight_hold(int current) { return (current + 1) % 3; }
 
 /** The save freeze (the user's ask, 2026-11-12: unlock and free shop without touching the save): once a dev session
  *  has started, EasySave3's commit of a written save is skipped for the rest of the run, so nothing the run saves,
@@ -156,6 +165,11 @@ enum class Action {
   SetUnlockAll, SetFreeShop,                     // Equipment: the store
   SpawnDummy, DummyAction,                       // Player: the dummy investigator
   SetEspDoors, SetEspHiding, SetEspSwitches,     // Game: more ESP
+  PickMod,                                       // Loader: the mod picker
+  PickObjective, CompleteObjective, FailObjective,  // Contract: the objectives, the game's own way
+  SetNeverRunOut,                                // Equipment: candles and crucifixes
+  PickItem, SpawnItem,                           // Equipment: one of the truck's items at your feet
+  CycleSightHold,                                // Ghost: the hunt's sight assist
   Info,                                          // a read-out: no click
 };
 
@@ -266,6 +280,17 @@ inline Why refuse(Action action, const Can& c) {
       if (!c.contract) return Why::NoContract;
       if (!c.ghost) return Why::NoGhost;
       return c.player ? Why::None : Why::NoPlayer;
+    case Action::CompleteObjective:
+    case Action::FailObjective:
+      return c.contract ? Why::None : Why::NoContract;
+    case Action::SpawnItem:
+      if (!c.contract) return Why::NoContract;
+      return c.player ? Why::None : Why::NoPlayer;
+    case Action::SetNeverRunOut:  // a switch: it acts on whatever the contract holds
+    case Action::CycleSightHold:  // a switch: it acts only while a hunt runs
+    case Action::PickObjective:   // only the menu's own cursor
+    case Action::PickItem:        // only the menu's own cursor
+    case Action::PickMod:     // only the menu's own cursor
     case Action::PickOption:  // only the menu's own cursor
       return Why::None;
     case Action::StepOption:

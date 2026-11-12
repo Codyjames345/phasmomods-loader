@@ -13,6 +13,11 @@
   "dev-menu.section.player": "Player", // PM_TEXT_AI
   "dev-menu.section.equipment": "Equipment", // PM_TEXT_AI
   "dev-menu.section.game": "Game", // PM_TEXT_AI
+  "dev-menu.section.loader": "Loader", // PM_TEXT_AI
+  "dev-menu.mod": "Mod", // PM_TEXT_AI
+  "dev-menu.mod-prev": "Previous mod", // PM_TEXT_AI
+  "dev-menu.mod-next": "Next mod", // PM_TEXT_AI
+  "dev-menu.content": "Ghost types this contract offers", // PM_TEXT_AI
   "dev-menu.on": "on", // PM_TEXT_AI
   "dev-menu.off": "off", // PM_TEXT_AI
   "dev-menu.friendly": "Friendly ghost", // PM_TEXT_AI
@@ -29,6 +34,10 @@
   "dev-menu.option-next": "Next option", // PM_TEXT_AI
   "dev-menu.option-down": "Lower", // PM_TEXT_AI
   "dev-menu.option-up": "Higher", // PM_TEXT_AI
+  "dev-menu.option-when.live": "applies now", // PM_TEXT_AI
+  "dev-menu.option-when.start": "next contract", // PM_TEXT_AI
+  "dev-menu.option-when.mixed": "partly now", // PM_TEXT_AI
+  "dev-menu.option-when.unknown": "not traced", // PM_TEXT_AI
   "dev-menu.option.starting-sanity": "Starting sanity", // PM_TEXT_AI
   "dev-menu.option.pill-restore": "Sanity pill restores", // PM_TEXT_AI
   "dev-menu.option.sanity-drain": "Sanity drain speed", // PM_TEXT_AI
@@ -57,6 +66,20 @@
   "dev-menu.option.fusebox-on-map": "Fuse box visible on map", // PM_TEXT_AI
   "dev-menu.option.cursed-quantity": "Cursed possessions", // PM_TEXT_AI
   "dev-menu.unlock-door": "Unlock the main door", // PM_TEXT_AI
+  "dev-menu.objective": "Objective", // PM_TEXT_AI
+  "dev-menu.objective-prev": "Previous objective", // PM_TEXT_AI
+  "dev-menu.objective-next": "Next objective", // PM_TEXT_AI
+  "dev-menu.objective-complete": "Complete this objective", // PM_TEXT_AI
+  "dev-menu.objective-fail": "Fail this objective", // PM_TEXT_AI
+  "dev-menu.never-run-out": "Candles and crucifixes never run out", // PM_TEXT_AI
+  "dev-menu.item": "Item", // PM_TEXT_AI
+  "dev-menu.item-prev": "Previous item", // PM_TEXT_AI
+  "dev-menu.item-next": "Next item", // PM_TEXT_AI
+  "dev-menu.item-spawn": "Spawn one at your feet", // PM_TEXT_AI
+  "dev-menu.sight-hold": "Hunt sight assist", // PM_TEXT_AI
+  "dev-menu.sight-game": "the game's own", // PM_TEXT_AI
+  "dev-menu.sight-none": "held off", // PM_TEXT_AI
+  "dev-menu.sight-frozen": "held where it is", // PM_TEXT_AI
   "dev-menu.weather": "Weather now", // PM_TEXT_AI
   "dev-menu.weather-pick": "Weather to change to", // PM_TEXT_AI
   "dev-menu.weather-prev": "Previous weather", // PM_TEXT_AI
