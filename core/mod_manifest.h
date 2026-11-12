@@ -45,6 +45,10 @@ struct Manifest {
   std::vector<std::string> unknownFields;      // what this loader does not know, for one log line
   bool recordsVoice = false;                   // it keeps other players' speech in memory: the consent notice says so
   bool oldFormat = false;                      // from a mod.ini
+  // A content pack's framework mod (SMAPI's ContentPackFor): the pack is data for that mod, has no DLL, and depends on
+  // it as a required dependency, which is also in `dependencies`. Empty for a mod with code.
+  std::string contentPackFor;
+  bool is_pack() const { return !contentPackFor.empty(); }
 };
 
 /** Whether Windows takes `name`'s part before its first dot as a device, not a file: NUL.dll opens nothing a mod could be. */
@@ -162,6 +166,38 @@ inline bool read_incompatibilities(const json& j, Manifest& m, std::string& why)
   return true;
 }
 
+// A content pack's "contentPackFor": {"id": "<mod id>", "minimumVersion": "x.y.z"}, the mod it is data for. That mod
+// becomes a required dependency, so the dependency graph starts it first and keeps the pack off without it.
+inline bool read_content_pack_for(const json& j, Manifest& m, std::string& why) {
+  const auto field = j.find("contentPackFor");
+  if (field == j.end()) return true;
+  const auto id = field->is_object() ? field->find("id") : field->end();
+  if (!field->is_object() || id == field->end() || !id->is_string()) {
+    why = i18n::text("manifest.pack-for");
+    return false;
+  }
+  Dependency d;
+  d.id = modid::migrated_id(id->get_ref<const std::string&>());
+  std::vector<std::string> seen;
+  for (const Dependency& listed : m.dependencies) seen.push_back(listed.id);
+  if (!read_id_list_entry(d.id, m, seen, "contentPackFor", why)) return false;
+  for (const auto& [key, value] : field->items()) {
+    if (key == "id") continue;
+    if (key == "minimumVersion") {
+      if (!value.is_string() || !modid::parse_version(value.get_ref<const std::string&>())) {
+        why = i18n::text("manifest.dependency-version");
+        return false;
+      }
+      d.minimumVersion = value.get_ref<const std::string&>();
+    } else {
+      note_unknown(m, "contentPackFor." + key);
+    }
+  }
+  m.contentPackFor = d.id;
+  m.dependencies.push_back(std::move(d));
+  return true;
+}
+
 inline bool read_manifest(std::string_view text, Manifest& m, std::string& why) {
   bool tooDeep = false, repeated = false;
   std::vector<std::set<std::string>> open;  // the field names of each object still open
@@ -220,11 +256,18 @@ inline bool read_manifest(std::string_view text, Manifest& m, std::string& why) 
       !shown_text(j, "description", i18n::text("manifest.no-description"), kMaxDescriptionBytes, m.description, why))
     return false;
   const auto dll = j.find("dll");
-  if (dll == j.end() || !dll->is_string() || !valid_dll(dll->get_ref<const std::string&>())) {
+  if (j.contains("contentPackFor")) {
+    // A content pack is data only: no code of its own may load.
+    if (dll != j.end()) {
+      why = i18n::text("manifest.pack-dll");
+      return false;
+    }
+  } else if (dll == j.end() || !dll->is_string() || !valid_dll(dll->get_ref<const std::string&>())) {
     why = i18n::text("manifest.bad-dll");
     return false;
+  } else {
+    m.dll = dll->get_ref<const std::string&>();
   }
-  m.dll = dll->get_ref<const std::string&>();
   if (const auto website = j.find("website"); website != j.end()) {
     if (!website->is_string()) {
       why = i18n::text("manifest.website-not-text");
@@ -244,10 +287,11 @@ inline bool read_manifest(std::string_view text, Manifest& m, std::string& why) 
     }
     m.recordsVoice = voice->get<bool>();
   }
-  if (!read_dependencies(j, m, why) || !read_incompatibilities(j, m, why)) return false;
-  static constexpr std::string_view kKnown[] = {"$schema", "id",  "name",    "author",       "version",
-                                                "description", "dll", "website", "dependencies", "incompatibilities",
-                                                "recordsVoice"};
+  if (!read_dependencies(j, m, why) || !read_content_pack_for(j, m, why) || !read_incompatibilities(j, m, why))
+    return false;
+  static constexpr std::string_view kKnown[] = {"$schema",      "id",          "name",      "author",
+                                                "version",      "description", "dll",       "website",
+                                                "dependencies", "incompatibilities", "recordsVoice", "contentPackFor"};
   for (const auto& entry : j.items())
     if (std::find(std::begin(kKnown), std::end(kKnown), entry.key()) == std::end(kKnown)) note_unknown(m, entry.key());
   std::sort(m.unknownFields.begin(), m.unknownFields.end());
