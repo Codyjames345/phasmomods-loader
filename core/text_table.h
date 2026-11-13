@@ -150,7 +150,7 @@ class Table {
  private:
   std::map<std::string, std::string, std::less<>> entries_;
   std::function<void(const std::string&)> missing_;
-  mutable std::mutex told_mutex_;  // guards both lines below: get() takes it only when the key is missing
+  mutable std::mutex told_mutex_;  // guards missing_ and told_: get() takes it only when the key is missing
   mutable std::set<std::string, std::less<>> told_;
 };
 
