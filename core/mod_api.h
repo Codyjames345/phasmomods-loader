@@ -945,8 +945,10 @@ struct PmModInfo {
   /// its own network channel. Declare 0: the loader gives the mod one from 64 to 255, derived from a stable
   /// hash of its id (core/mod_ids.h hashed_channel), so every client agrees on it without negotiating; a mod
   /// declaring 64 to 255 is refused. 1 to 63 are reserved: only the loader's own bundled mods, whose id author
-  /// is the project's, may name one, and they keep their fixed numbers. Two mods landing on one channel are
-  /// both refused, each with a message naming the other.
+  /// is the project's, may name one, and they keep their fixed numbers. The loader settles channels across every
+  /// planned mod before any of them starts: every mod on a channel two or more mods claim is refused, three or
+  /// more included, each with a message naming the others. A mod already running keeps its channel: a newcomer
+  /// that lands on it is refused, naming it.
   uint8_t channel;
   uint32_t flags;  ///< PmModFlags
 };
