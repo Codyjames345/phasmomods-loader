@@ -102,6 +102,14 @@ clients it fires and on which it does not.
 | `on_favourite_room_changed(room)` | `GhostController.ChangeFavouriteRoomTo` | the master |
 | `on_event(ghost, kind)`, `on_appear(ghost)` | **to map** (ghost events, below) | |
 | `on_sanity_changed(player, amount, cause)` | `PlayerSanity.ChangeSanity`, `PlayerSanity.SetInsanity`; the cause is **to map** | |
+| `on_room_entered(player, room)` | `LevelRoom.OnTriggerEnter` (sets `Player.currentRoom`) | every client, as a player's camera collider enters a room |
+| `on_light_used(switch, on, byGhost)` | `LightSwitch.Use` (RPC body, hooked only) | every client, for each use of a switch |
+| `on_smudge(incense)` | `WhiteSage.UseNetworked` (inferred: upgrade in Round 14) | every client |
+| `on_salt_step(spot)` | `SaltSpot.SyncSalt` (RPC body, hooked only) | every client |
+| `on_flame_out(flame, byGhost)` | `FireSource.BlowOutFire` | the master |
+| `on_photo(by, subject, stars)` | the photo camera's capture: **to map** (Round 16) | |
+| `on_phrase(text)` | `PhraseListenerController.OnPhraseRecognized` | the client whose own player spoke, for every phrase, in a hunt or not (`sdk/systems/voice.md`) |
+| `on_item_grabbed(player, item)`, `on_item_dropped(player, item)` | `NetworkedPropGrab`'s grab and drop RPCs: **to map** (Round 15) | every client |
 
 ---
 
@@ -141,9 +149,14 @@ clients it fires and on which it does not.
 - The salt state value (`GhostState.salt`, named in `sdk/systems/ghost-ai.md` but with no entry). **Read**.
 - The ghost's speed outside hunts, if the game sets one by type (only `GhostAI.Awake` and the idle state's entry are
   known to set it). **Read**.
+- A sound, knock or footstep of the ghost's at a chosen point away from the ghost (revamp, "Sounds at a chosen point").
+  **Call**.
+- A hunt's warning effects without a hunt (revamp, "Hunts"). **Call**.
+- How long an appearance lasts, and ending or extending it (revamp, "Ghost events and appearing"). **Read**, **change**.
 
 **RE needed.** `GhostAI.EventPick` and the event states it starts; the GhostAudio class and who calls its plays; the
-`GhostInfo.favouriteRoom` writers; the `GhostState` value for salt (by `SaltSpot.SyncSalt`'s change).
+`GhostInfo.favouriteRoom` writers; the `GhostState` value for salt (by `SaltSpot.SyncSalt`'s change); where a
+`Noise` or a `Footstep` can be placed (both are mapped in `Footstep.h`, the ghost's own); the appearance's timer.
 
 **Helpers.** `current_ghost()`, `ghost_info()`, `is_hunting()`, `ghost_room()`, `favourite_room()`; plus
 `phasmo::ghost_type()` (`GhostInfo.identityType`) and `phasmo::acting_as()` (`GhostInfo.behaviourType`, which a
@@ -187,7 +200,8 @@ phasmo::GhostAudio::PlaySound(audio, kind);  // to map
 - Where: the body (`Player.body`, its transform), `Player.currentRoom`, `Player.closet`, `Player.losTargets`,
   `LocalPlayer.TeleportPlayer`, `VRPlayer.Teleport`, `PhysicsCharacterController` (capsule and masks).
 - What they carry: `Player.propGrab`, `NetworkedPropGrab.inventory`, `Player.keys`, `PCPropGrab.GetItemInCameraSlot`
-  (local only).
+  (local only), `PhotonObjectInteract.inUse` (whether something uses an object now, on this client; for a door,
+  set by `Door.NetworkedGrabbedDoor` as a player grabs it).
 - How they move: `LocalPlayer.walkSpeed`, `sprintSpeed`, `speedMultiplier`, `LocalPCPlayer.SetPlayerSpeedMultiplier`,
   `ResetPlayerSpeedMultiplier`, `PlayerStamina.canSprint`, `NetworkedStamina.moving`, `FirstPersonController.moveInput`,
   `running`, `sdk/api/movement.h`, `Player.ToggleFreezePlayerMovement` (inferred), `PCCanvas.PausePlayerInPlace`.
@@ -198,6 +212,10 @@ phasmo::GhostAudio::PlaySound(audio, kind);  // to map
 
 **To map.**
 - The item in a player's hand, on every client (not only the local camera slot). **Read**.
+- A player picking up, holding and dropping any prop, not only equipment: the grab and drop RPCs of
+  `NetworkedPropGrab` (players.md: "The grab and drop RPCs themselves have no map entries"), the holder of a prop, and
+  a drop forced through the game's own method (for a door, `Door.ForceDropDoorNetworked` is mapped and hook only).
+  **Hook**, **read**, **call**.
 - Whether a player is in the truck, per player: what `ExitLevel.ThereAreAlivePlayersOutsideTheTruck` reads, or the
   trigger's own occupants. **Read**.
 - Whether a player is talking now (the push-to-talk and walkie presses, `PlayerVoice`'s voice mode, which
@@ -246,11 +264,12 @@ bool safe = phasmo::in_truck(player);  // helper, to map
 it (`GhostIdleState.HuntInsanity`).
 
 **To map.**
-- **Every way sanity drops or rises**, each as a cause a hook can tell apart: the darkness drain, a ghost event, seeing
-  the ghost appear, a hunt, a cursed possession's use (the mirror, the Ouija board, the tarot cards, the monkey paw's
-  weather wish takes 7 per `sdk/systems/weather.md`), a ghost's ability (the Jinn, the Yurei, the Poltergeist), the
-  Phantom when seen, the Moroi's curse, the sanity pill, and the Winter's Jest RPC (`WintersJestManager.RPC_MakeKrampusStronger`
-  acts on sanity). **Hook** (to see fear as it happens).
+- **Every way sanity drops or rises**, each as a cause a hook can tell apart. Mapped causes: the darkness drain
+  (`PlayerSanity.Update`), the monkey paw's weather wish (7, `sdk/systems/weather.md`) and the Winter's Jest RPC
+  (`WintersJestManager.RPC_MakeKrampusStronger` acts on sanity). Game knowledge, to verify by RE: a ghost event, seeing
+  the ghost appear, a hunt, the other cursed possessions (the mirror, the Ouija board, the tarot cards), the Jinn's,
+  Yurei's and Poltergeist's abilities, the Phantom when seen, the Moroi's curse and the sanity pill. **Hook** (to see
+  fear as it happens).
 - The sanity medication's use (an item; not mapped). **Hook**.
 - Where insanity is synced to other clients (`SetInsanity` sends it; how often the drain reaches others). **Read**.
 
@@ -268,7 +287,9 @@ the caller found by RE (the host's `inside<>` already tells callers apart).
 float mine = phasmo::sanity_of(phasmo::local_player());  // helper
 float team = phasmo::average_sanity();                    // helper
 
-// Take 10 sanity from a player, as the game does (the difficulty's limits apply).
+// Take 10 sanity from a player, as the game does (the difficulty's limits apply). Which client may change which
+// player's sanity, and how the change reaches the others, is to map (Round 4); until then, only on that player's own
+// client.
 phasmo::PlayerSanity::ChangeSanity(phasmo::Player::sanity.get(player), 10.0f);
 
 // Tell me whenever someone loses sanity, and why.
@@ -286,7 +307,7 @@ The map, the truck, the fuse box, doors, lights, hiding places and the cursed po
   (`GhostForceDoor`, `CheckDoorDuringHunt`, `GhostOpenDoorEvent`), slams (`CreateDoorSlamNoise`, `PlayDoorSlamNoise`),
   the exits (`DoorKind`, `LevelController.huntingDoors`, `LockHuntingDoors`, `UnlockHuntingDoors`, `SmallMapVariation`),
   a quiet open (`HingeDoor.OpenDoor`).
-- Lights: all of `LightSwitch.h` (`isOn`, `UseLightSwitch`, `Use`, `FlickerNetworked`, `room`, `sources`,
+- Lights: all of `LightSwitch.h` (`get_isOn`, `get_IsSwitchOn`, `UseLightSwitch`, `Use`, `FlickerNetworked`, `room`, `sources`,
   `ghostUseRefused`, `isFuseboxSwitch`), `LevelRoom.lightSwitches` (inferred), `LevelRoom.AreRoomLightsOn` (inferred).
 - The fuse box: `LevelController.fuseBox`, `FuseBox.powerOn`, `outOfOrder`, `BreakFuseBox`, `GhostUse`;
   `Difficulty.fuseBoxStartPower`, `fuseBoxVisibleOnMap`; `GhostState.fusebox`.
@@ -300,13 +321,20 @@ The map, the truck, the fuse box, doors, lights, hiding places and the cursed po
 - Props: all of `Props.h` (`PhotonObjectInteract`, `Prop.TryThrow`, `Sink`, `SaltSpot`).
 
 **To map.**
-- **The map itself**: which map this contract is on, its name as the game shows it, and its size class (small, medium,
-  large; `GhostActivity.sensorBox` and the open doors are set "by the map's size", per their notes). **Read**.
+- **The map itself**: which map this contract is on, its name as the game shows it, and its size (`GhostActivity.sensorBox`
+  and the open doors are set "by the map's size", per their notes; that the size is a class of small, medium and large
+  is game knowledge, to verify by RE). **Read**.
+- The truck's activity monitor: what feeds it, and how a ghost action shows on it (only the difficulty switch
+  `Difficulty.activityMonitor` is mapped). **Read**, **hook**.
 - The player's own use of the fuse box (the switch a player flips) and the power going off in a hunt or by the ghost,
   as one event. **Hook**.
 - Every `CursedItemType` value by name, not only two. **Read**.
 - `LevelRoom.lightSwitches` and `AreRoomLightsOn`: upgrade from inferred. **Read**.
 - Light bulbs breaking (game knowledge, to verify by RE: a ghost may burst a bulb). **Hook**.
+- Windows and mirrors as objects the ghost acts on: a window's knock (`GhostState.windowKnock` is mapped), its prints,
+  and breath fogging a window or a mirror (game knowledge, to verify by RE: whether the game has a fog or breath effect
+  on glass at all; if it has none, the revamp's "breath on the window" has no vanilla path and goes to the user).
+  **Call**, **hook**.
 - The truck's own state: whether the truck's doors are closing (`LiftButton.isClosed` is mapped; the rest of the
   leave sequence is in `contract.md`). Nothing more is needed unless a round finds a gap.
 
@@ -353,9 +381,13 @@ bool lit = phasmo::LevelRoom::AreRoomLightsOn(room, &flickering);
 - Which room the ghost counts as in when it stands outdoors (Task 17's navigation item; `LevelRoom.OnTriggerEnter`
   skips `RoomKind.outsideMap`). **Read**.
 - `LevelRoom.name` as the player reads it (localised) and its key. **Read**.
+- **Changing a room's temperature through the game**: making a room colder (or giving Freezing in it on demand)
+  through whatever the game's own cooling goes through, never a write to `LevelRoom.temperature` that the next
+  `LevelRoom.Update` overwrites. **Change**.
 
-**RE needed.** `LevelRoom.Update`'s branches and the fields it reads (the "few flags" it returns on); `ResetTemperature`'s
-difficulty case; `LevelRoom.name`'s writers; the readers of `LevelRoom.GetPlayersInRoom`.
+**RE needed.** `LevelRoom.Update`'s branches and the fields it reads (the "few flags" it returns on), and which of its
+inputs a mod can set through a game method; `ResetTemperature`'s difficulty case; `LevelRoom.name`'s writers; the
+readers of `LevelRoom.GetPlayersInRoom`.
 
 **Helpers.** `room_of()`, `room_at()`, `ghost_room()`, `favourite_room()`; `phasmo::each_room(f)`;
 `phasmo::players_in(room)` over `LevelRoom.GetPlayersInRoom`.
@@ -399,29 +431,34 @@ stays documented only (`sdk/guides/equipment.md`).
 | --- | --- | --- |
 | EMF reader | its level now (1 to 5) and the reading it shows from; an `EMF` reading's level, place and life | read, hook |
 | Thermometer | its shown reading | read |
-| Spirit box | whether it is on and listening; the question heard; the game's choice to answer, and the answer; the breath sound (the Deogen) | hook, read |
+| Spirit box | whether it is on and listening; the question heard; the game's choice to answer, and the answer; a breath sound (`MediaSubject.spiritBoxBreath` is mapped; that it is the Deogen's is game knowledge, to verify by RE); playing audio through its speaker as an answer | hook, read, call |
 | Ghost writing book | placed, written in, which page | hook, read |
 | D.O.T.S. projector | on, placed, its area; whether the ghost shows in it (`GhostDotsState`) | read, hook |
 | UV light and glowsticks | on, charge; which prints it shows | read |
-| Video camera | on, night vision (media.md: not mapped), who views it (mapped through `CCTVController.viewers`) | read |
+| Video camera | on, night vision (media.md: not mapped), who views the monitor (mapped: `CCTVController.viewers`); which room or point each camera covers, and whether it films the ghost | read |
 | Photo camera | a photo taken, its subject and its stars; the photo's flash on the ghost | hook |
-| Parabolic microphone | its reading, the sounds it picks up (the Banshee's scream, the Myling) | read, hook |
+| Parabolic microphone | its reading, the sounds it picks up (`MediaSubject.bansheeWail` and `paranormalSound` are mapped media kinds; the Banshee's scream and the Myling's extra sounds on it are game knowledge, to verify by RE) | read, hook |
 | Sound sensor, motion sensor | each trigger, with where and when | hook |
 | Sound recorder | a recording's subject | hook |
-| Crucifix | its range by ghost type, a burn (a prevented hunt), upgrade `CrucifixUseNetworked` from inferred | hook, read |
+| Crucifix | its range test, a burn (`MediaSubject.usedCrucifix` is a mapped media kind), upgrade `CrucifixUseNetworked` from inferred; that a burn prevents a hunt and that the range differs by type are game knowledge, to verify by RE | hook, read |
 | Incense | a smudge, its target (the ghost, in a hunt or not), upgrade `UseNetworked` from inferred | hook |
 | Salt | a pile laid; a step in it (`SaltSpot.SyncSalt`, mapped); the footprints | hook |
 | Firelight, igniter | mapped (`FireSource`, `IgniteFire`) | |
 | Sanity medication | a use and the amount restored | hook |
 | Head gear, tripod, torches | on or off (`Equipment.isOn`) is enough unless a round finds more | read |
-| Any item | which player holds it, in hand or put away (section 2) | read |
+| Any item | which player holds it, in hand or put away (section 2); which way a held item points, to test whether it is aimed at the ghost | read |
+| Any electronic item | the ghost upsetting it outside a hunt: a torch flickering, an item reacting, a placed or held item switched off as the ghost would (`sdk/systems/ghost-ai.md`: "which code flickers the lights and upsets the electronics in a hunt was not traced"; what the ghost does to equipment outside a hunt is game knowledge, to verify by RE) | call, hook |
 
 **RE needed.** Each item class's own `Use` override, its networked use and its fields (the EMF reader's level, the
-thermometer's shown value, the spirit box's answer roll and its phrase check, the camera's photo and its subject
-detection, the sensors' triggers); `EMF`'s fields; the crucifix's range test; the media's star rating.
+thermometer's shown value, the spirit box's answer roll, its phrase check and its speaker's AudioSource, the camera's
+photo and its subject detection, the sensors' triggers); `EMF`'s fields; the crucifix's range test; the media's star
+rating; how a CCTV camera's view is set (its Camera, for a coverage test against `LevelController.rooms`); the hunt's
+electronics effect (shared with the hunt-effects round).
 
 **Helpers.** `phasmo::each_item(f)` (every `Equipment` in the level, through `Object.FindObjectsOfType`, with the costly
-scan kept as `core/game.h`'s `each_running_camera` keeps it); `phasmo::holder_of(item)`.
+scan kept as `core/game.h`'s `each_running_camera` keeps it); `phasmo::holder_of(item)`; `phasmo::aimed_at(item, point)`
+(the held item's transform against a point, once the held item is mapped; a geometric test, not the game's, said so in
+its note); `phasmo::cameras_covering(room)`.
 
 **Questions an author asks.**
 
@@ -477,13 +514,19 @@ and the guess (`GetGhostType`, `ghostButtons`, `ghostSync`, `UnselectGhost`), ev
 `PlayersList`; the scene objects in `Scene.h`; texts (`LocalisationSystem.h`); `sdk/api/journal.h` (open or not);
 the host's content journal lines (`PmHostApi::journal_lines`).
 
-**To map.** A photo's reward (its stars and money) and the photo page's total; who took each media item; upgrade
-`Media`, `JournalMedia`, `MediaValues` from inferred. **Read**, **hook**.
+**To map.**
+- A photo's reward (its stars and money) and the photo page's total; who took each media item; upgrade `Media`,
+  `JournalMedia`, `MediaValues` from inferred. **Read**, **hook**.
+- **The team's guess**: each player's pick on every client (whether `JournalController.ghostSync`, the guess sync
+  `journal.md` describes, carries every pick or one shared pick), and the guess the results judge
+  (`ExitLevel.CheckMissions` completes the identify objective "when the journal names the ghost", per `contract.md`:
+  whose journal is to map). **Read**.
 
 **RE needed.** The photo camera's capture and its subject scoring; the reward screen's photo line (`RewardManager`
-builds rows).
+builds rows); `JournalGhostSyncController`'s values and owners; `ExitLevel.CheckMissions`' read of the guess.
 
-**Helpers.** `phasmo::guessed_ghost()` (`local_player()`, `Player.journal`, `JournalController.GetGhostType`);
+**Helpers.** `phasmo::guessed_ghost()` (`local_player()`, `Player.journal`, `JournalController.GetGhostType`), the local
+player's pick; `phasmo::guess_of(player)` and `phasmo::judged_guess()` once the team's guess is mapped;
 `phasmo::marked_evidence()` (the evidence buttons' states).
 
 **Questions an author asks.**
@@ -643,10 +686,15 @@ bindings, cursor, mouse), `MainMenu.h` (`ErrorManager`, the popup), `ServerManag
 `sdk/systems/menus.md`; `sdk/api/buttons.h`, `menu_rows.h`, `keybinds.h`, `settings.h`, `input_device.h`; the popup
 through `pm::mod::show_message`.
 
-**To map.** Only what a round needs for the revamp's surfaces (the truck monitor's pages, the journal's), under the
-vanilla-UI-only rule. Nice-to-have, last.
+**To map.** The surfaces the revamp's screens will use (revamp section, "The ghost player's screens"): every kept idea
+tagged as a screen (the minigames, the hiding-place guess, the escape check, the ghost's objectives, loadout and
+recap, and the energy every loop spends) needs a game surface under the vanilla-UI-only rule, or a `PM_UI_TODO` until
+the user designs one. Which surface each uses is the user's decision (Questions for the user); once decided, the
+round maps that surface (the truck monitor's pages, the journal's pages, the lobby board, a cloned widget). Other UI
+work stays a nice-to-have.
 
-**RE needed.** None now.
+**RE needed.** For each surface the user picks: how the game builds and pages it, as `menus.md` and `journal.md` do for
+theirs.
 
 **Questions an author asks.**
 
@@ -721,152 +769,266 @@ This is held with Task 18 until the user says to start it, so it is the last rou
 ## 17. The Playable Ghost revamp's needs
 
 The revamp (user, 2026-11-13) rebuilds Playable Ghost as a per-ghost gameplay loop once the SDK is fully mapped. Each
-type keeps the tells investigators use, and its personality, derived from its vanilla rules, shapes its loop. So the
-revamp needs every vanilla rule of every type, and every lever a ghost pulls. One row per need. "Mapped" gives the keys;
-"to map" gives the RE.
+type keeps the tells investigators use, and its personality, derived from its vanilla rules, shapes its loop. This
+section lists every game fact and lever the revamp needs, from three sources: the brief's list; the user's ideas page
+(100 ideas, of which the 86 the user marked keep or maybe count, cited by id: e01 to e10 the economy, m01 to m12 the
+minigames, v movement, s senses, h haunts, t traps, d evidence, u hunts, y per type, g goals, p other players); and the
+user's per-ghost page (one loop per ghost, 45 loops, with the Aswang, Draugr and Hydra as the user revised them; the
+ledger of 2026-11-13 holds both pages' links). Ideas that need nothing from the game (energy sums, combos, progression
+kept by the loader) have no row.
 
-### Vanilla type rules that `vanilla-ghosts.md` says are not mapped
+A row is **mapped** (keys given), **partly** (the mapped keys, then what is missing) or **to map** (the RE needed).
+**Round** is the mapping round below that closes it. A behaviour not in a map note or an `sdk/systems` page is written as
+"game knowledge, to verify by RE", even where the user's loop states it: the loops describe the game as players know it,
+and the SDK records only what the code proves.
 
-| Type | Need | Status | Keys, or RE needed |
-| --- | --- | --- | --- |
-| Wraith (1) | teleports to a player | to map | `GhostActivity.GhostAbility`'s branch for the Wraith (its target pick, the warp, the EMF it leaves) |
-| Wraith (1) | never steps in salt | to map | `SaltSpot.SyncSalt` is mapped and says "unless the ghost's type ignores salt": read which type its test names, and the salt sensor that calls it |
-| Phantom (2) | sanity drain while a player looks at it | to map | the looking test (which of a player's cameras, what range) and its `PlayerSanity.ChangeSanity` call; game knowledge, to verify by RE |
-| Phantom (2) | a photo makes it vanish | to map | the photo camera's capture and its call to `GhostAI.UnAppear` or the event's end |
-| Phantom (2) | blinks less in hunts | to map | `GhostAI.Update`'s blink timer while `GhostAI.isHunting` (its note says the model blinks on a timer), by type |
-| Jinn (5) | faster with the power on and its target far | to map | `GhostHuntState.UpdateSpeed`'s Jinn branch (distance, `FuseBox.powerOn`) |
-| Jinn (5) | its sanity-drop ability | to map | `GhostActivity.GhostAbility`'s Jinn branch and the drain it applies (game knowledge, to verify by RE: near the fuse box) |
-| Jinn (5) | never turns the power off | to map | the type test before `GhostState.fusebox` (in the idle roll or `FuseBox.GhostUse`) |
-| Revenant (7) | fast with sight, slow without | to map | `GhostHuntState.UpdateSpeed`'s Revenant branch (`target`, `searchTarget`) |
-| Yokai (12) | voices provoke it | mapped | `GhostIdleState.TypeHuntRules` (hunt line 80 while `LevelRoom.ArePlayersTalkingInRoom` in its room, with a chance bonus) |
-| Yokai (12) | hears only near it in hunts | mapped | `GhostHuntState.Hears` (2.5 m); its electronics range in `GhostHuntState.SensesGear` is to verify by RE |
-| Hantu (13) | speed by temperature | to map | `GhostHuntState.UpdateSpeed`'s Hantu branch (`LevelRoom.temperature` of `LevelController.currentGhostRoom`) |
-| Hantu (13) | freezing breath with the power off | to map | the breath effect's class and its test of `FuseBox.powerOn`; game knowledge, to verify by RE |
-| Hantu (13) | never turns the power on | to map | the type test before `GhostState.fusebox` |
-| Demon (9) | its hunt line | mapped | `GhostIdleState.TypeHuntRules` (70) |
-| Demon (9) | its shorter hunt cooldown | to map | who reads `GhostAI.postHuntCooldown` and how long it lasts by type (only its set is mapped) |
-| Demon (9) | its wider crucifix range | to map | the crucifix's range test by type (section 6) |
-| Demon (9) | its smudge hold | mapped | `GhostAI.StopGhostFromHunting` |
-| Oni (11) | never the airball event | to map | `GhostAI.EventPick`'s event list and the Oni's remap (`GhostState.randomEvent`'s note: the Oni and Shade remap events 1, 3 and 4) |
-| Banshee (4) | its singing event | to map | the singing event state among `GhostAI.EventPick`'s five |
-| Banshee (4) | its scream on the parabolic microphone | to map | the paranormal sound pick by type and the parabolic microphone's pickup |
-| Moroi (21) | the spirit box curse | to map | the spirit box's answer path and the curse's drain multiplier on `PlayerSanity.Update` |
-| Deogen (22) | speed by distance to its target | to map | `GhostHuntState.RefreshBase` reads "a field of its GhostAI" for the Deogen: map that field and its writer |
-| Deogen (22) | breathing on the spirit box | to map | the spirit box's answer branch by type (`MediaSubject.spiritBoxBreath` is mapped as a media kind) |
-| Obake (19) | six-finger prints | to map | `Fingerprint.AttemptToSpawnFingerprints` (mapped) and the print variant pick (`MediaSubject.obakeFingerprint` is mapped) |
-| Obake (19) | shapeshift | to map | the model swap in an event or hunt (`MediaSubject.obakeShapeshift` is mapped; `GhostAI`'s two GhostModel arrays have no entries, per ghost-ai.md) |
-| Raiju (18) | electronics range | partly | `GhostActivity.electronicsSensor`, `nearElectronics`, `UpdateElectronics` (inferred), its hunt line in `TypeHuntRules` (65 near electronics); to map: the sensor's range setting and the speed branch in `UpdateSpeed` |
-| The Twins (17) | two speeds | partly | `GhostHuntState.UpdateSpeed`'s offset of 0.2 or -0.2 set as the Twins' hunt begins (ghost-ai.md, "Hunt speed"); to map: the offset's field and which twin hunts; `GhostActivity.TwinInteraction` is mapped |
-| Myling (15) | more sounds on the parabolic microphone | to map | the paranormal sound frequency by type; `Footstep.Play` (its quieter steps) is mapped |
-| Mimic (20) | ghost orbs | mapped | `EvidenceController.SpawnAllGhostTypeEvidence`, `ForceRespawnGhostOrb`, `ghostOrb`, `EvidenceType.GhostOrb` |
-| Poltergeist (3) | throws many props at once | to map | `GhostActivity.GhostAbility`'s Poltergeist branch; its throw rules (`InteractWithARandomProp`, `GhostHuntState.throwTimer`) are mapped |
-| Poltergeist (3) | sanity drop per prop thrown | to map | the drain in that branch (game knowledge, to verify by RE) |
-| Yurei (10) | its ability's sanity drain | to map | `GhostActivity.GhostAbility`'s Yurei branch (game knowledge, to verify by RE: a door shut and a drain nearby) |
-| Gallu (25) | what moves its rage | to map | the writers of `GhostController.galluState` (game knowledge, to verify by RE: protections used against it) |
-| Dayan (26) | beyond what is mapped | partly | `GhostController.dayanState`, `GhostAI.DayanPlayerChecks`, `NetworkedStamina.moving`, its hunt line; to map: its speeds in `UpdateSpeed`, what `DayanPlayerChecks` measures (range, which player) |
-| Obambo (27) | beyond what is mapped | partly | `GhostAI.obamboAggressive`, its hunt lines (65, 10); to map: its switch timer and its speeds |
-| Kormos (28) | beyond what is mapped | partly | its event array, chase, `PlayerProcessor`, hearing (`GhostHearing`, footsteps in hunts); to map: the player flag `PlayerProcessor` reads, and the room condition in `TypeHuntRules` |
-| Deildegast (30) | beyond what is mapped | partly | `GhostActivity.lightChance`, `InteractWithARandomProp`, `GhostAI.movedProps` (inferred); to map: the speed by moved props (inferred only) |
-| Aswang (29) | everything | to map | no rule is mapped: its branches in `TypeHuntRules`, `UpdateSpeed`, `RefreshBase`, `GhostAbility`, `EventPick`, `PickDestination`, `GhostHuntState.Sees`, the evidence pick; the user's loop for it waits on this (ledger, 2026-11-13) |
+### The vanilla types' rules
+
+| Type | Need, and the loop or idea that needs it | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- | --- |
+| Spirit (0) | its smudge hold on hunts (Spirit loop) | mapped | `GhostAI.StopGhostFromHunting` (a length of its own) | |
+| Spirit (0) | its name heard (Spirit loop, e04) | mapped | `PhraseListenerController.OnPhraseRecognized` on the speaker's client, compared in a hunt with `GhostInfo.name`; `NetworkedReaction` (inferred) on the ghost's client | 22 |
+| Wraith (1) | game knowledge, to verify by RE: it teleports to a player and leaves EMF there (Wraith loop) | to map | where the teleport lives (a branch of `GhostActivity.GhostAbility` is the first place to look), its target pick, the warp, the EMF (`GhostInteraction.CreateInteractionEMF` is mapped) | 12 |
+| Wraith (1) | game knowledge, to verify by RE: it never steps in salt | partly | `SaltSpot.SyncSalt` "unless the ghost's type ignores salt": read which type the test names, and the salt sensor that calls it | 12 |
+| Phantom (2) | game knowledge, to verify by RE: a player looking at it loses sanity faster (Phantom loop, e02) | to map | the looking test (its camera, range and cone) and its sanity call | 26 |
+| Phantom (2) | game knowledge, to verify by RE: a photo of it ends its appearance | to map | the photo camera's capture and what it calls on the ghost (`GhostAI.UnAppear` is mapped) | 16 |
+| Phantom (2) | game knowledge, to verify by RE: it shows less often in a hunt | to map | `GhostAI.Update` makes the model blink on a timer while `isHunting` (ghost-ai.md): read the timer and any branch by type | 7 |
+| Poltergeist (3) | its throws (Poltergeist loop) | mapped | `GhostActivity.InteractWithARandomProp` (20 in 100, a throw), `GhostHuntState.throwTimer` (never skips) | |
+| Poltergeist (3) | game knowledge, to verify by RE: a throw of many props at once that costs nearby players sanity | to map | its ability's branch and the drain | 12 |
+| Poltergeist (3) | game knowledge, to verify by RE: it throws harder than other types (m01, the user's note) | to map | the throw's strength and any branch by type (Throws, below) | 15 |
+| Banshee (4) | one target, hunts only them, its hunt check reads the target (Banshee loop) | mapped | `GhostAI.bansheeTarget`, `GhostAI.SetNewBansheeTarget`, `GhostHuntState.SightPick`, `Chase`, `KeepNearest`, `TargetAllows`, `GhostIdleState.HuntInsanity` | |
+| Banshee (4) | the target alone (y01) | mapped | `phasmo::each_player`, `position_of` (helpers), `Player.currentRoom` | 1 |
+| Banshee (4) | game knowledge, to verify by RE: its singing event, aimed at the target, on demand (y01) | to map | the event states of `GhostAI.EventPick` (Ghost events, below) | 6 |
+| Banshee (4) | game knowledge, to verify by RE: its scream on the parabolic microphone | to map | `MediaSubject.bansheeWail` is a mapped media kind; what plays it and what picks it up | 27 |
+| Jinn (5) | game knowledge, to verify by RE: fast at a distance with the power on (y05) | to map | `GhostHuntState.UpdateSpeed`'s branch for the Jinn, if it has one | 11 |
+| Jinn (5) | game knowledge, to verify by RE: its ability drops nearby sanity while the power is on | to map | its ability's branch and the drain | 12 |
+| Jinn (5) | game knowledge, to verify by RE: it never turns the power off | to map | the type test before `GhostState.fusebox` or in `FuseBox.GhostUse` | 12 |
+| Mare (6) | darkness: never flickers, switches lights off, reads lit rooms, its hunt line (y06) | mapped | `GhostActivity.lightChance`, `GhostWanderState.PickDestination`, `GhostIdleState.TypeHuntRules` (40 with a light on in its room, 60 otherwise) | |
+| Mare (6) | a light switched on near it; switching a chosen light off as the ghost (the rolling blackout) | mapped | `LightSwitch.Use` (RPC body, hook only: on, prints, byGhost, counted), `LightSwitch.UseLightSwitch` (its third argument is the ghost's use), `LightSwitch.room`, `LevelRoom.floor` | 2 |
+| Revenant (7) | game knowledge, to verify by RE: slow with nobody in sight, fast on sight (y07) | to map | `GhostHuntState.UpdateSpeed`'s branch for the Revenant | 11 |
+| Shade (8) | its form coin, event remap, hunt line 35, a larger activity roll | mapped | `GhostAI.Appear`, `GhostState.randomEvent`, `GhostIdleState.TypeHuntRules`, `GhostIdleState.rollRange` | |
+| Shade (8) | game knowledge, to verify by RE: little activity with players near it (Shade loop, y02) | to map | any branch by type in the idle roll or `GhostActivity.TryInteract` that reads players near the ghost | 12 |
+| Demon (9) | hunt line 70, its own smudge hold | mapped | `GhostIdleState.TypeHuntRules`, `GhostAI.StopGhostFromHunting` | |
+| Demon (9) | game knowledge, to verify by RE: a shorter wait between hunts | to map | the readers of `GhostAI.postHuntCooldown` (only its set is mapped) and any length by type | 5 |
+| Demon (9) | game knowledge, to verify by RE: a wider crucifix range | to map | the crucifix's range test (Protections, below) | 14 |
+| Yurei (10) | the incense traps it | mapped | `WhiteSage.YureiTrap`, `GhostAI.TemporarilyStopWander`; a door locked for a time: `Door.LockDoorForTime` | |
+| Yurei (10) | game knowledge, to verify by RE: its ability slams a door and drains sanity (y04) | to map | its ability's branch | 12 |
+| Oni (11) | its form coin and event remap | mapped | `GhostAI.Appear`, `GhostState.randomEvent` | |
+| Oni (11) | game knowledge, to verify by RE: very active near players; never the airball event; a touch in an event drains more (y03) | to map | the idle roll's branches by type (activity), `GhostAI.EventPick`'s event list (airball), the event states' drain (touch) | 12, 6, 27 |
+| Yokai (12) | voices provoke it; it hears only within 2.5 m in a hunt | mapped | `GhostIdleState.TypeHuntRules` (80 while players talk in its room), `GhostHuntState.Hears` (2.5 m); its electronics range in `GhostHuntState.SensesGear` is to verify | 11 |
+| Hantu (13) | its last evidence is kept | mapped | `GhostController.PickEvidence` | |
+| Hantu (13) | game knowledge, to verify by RE: faster in cold rooms, slower in warm | to map | `GhostHuntState.UpdateSpeed`'s branch for the Hantu (`LevelRoom.temperature` is mapped) | 11 |
+| Hantu (13) | game knowledge, to verify by RE: visible breath in hunts with the power off | to map | the breath effect and its test of `FuseBox.powerOn` | 20 |
+| Hantu (13) | game knowledge, to verify by RE: it never turns the power on | to map | the type test before `GhostState.fusebox` | 12 |
+| Goryo (14) | never roams far, never moves its room | mapped | `GhostWanderState.PickDestination`, `GhostWanderState.Exit` | |
+| Goryo (14) | game knowledge, to verify by RE: its D.O.T.S. shows only on camera; a camera watching its room (Goryo loop) | to map | the D.O.T.S. showing's camera test (Evidence, below); which camera covers which room (section 6) | 20, 16 |
+| Myling (15) | quieter steps in a hunt | mapped | `Footstep.Play` (8 m less), `Footstep.reach` | |
+| Myling (15) | game knowledge, to verify by RE: more sounds on the parabolic microphone | to map | the paranormal sound pick by type (`MediaSubject.paranormalSound` is mapped) | 27 |
+| Onryo (16) | three flames, then a hunt; flames blown out | mapped | `GhostAI.flamesBlownOut`, `FireSource.CountGhostBlowOut`, `FireSource.BlowOutFire`, `GhostIdleState.Execute`, `GameController.AmountOfDeadPlayers` | |
+| Twins (17) | a second interaction around the twin | mapped | `GhostActivity.TwinInteraction` | |
+| Twins (17) | the second twin's place, and acting there at will (y11) | to map | the twin's own box: its position and how it moves; whether starting `GhostActivity.TwinInteraction` (a coroutine, `MonoBehaviour.StartCoroutine` is mapped) is a lawful path for a chosen action | 13 |
+| Twins (17) | two hunt speeds, and which twin hunts | partly | `GhostHuntState.UpdateSpeed` adds 0.2 or -0.2 at random as the Twins' hunt begins (ghost-ai.md); to map: the offset's field and which body hunts | 11 |
+| Raiju (18) | electronics near it; its hunt line | partly | `GhostActivity.electronicsSensor`, `nearElectronics`, `UpdateElectronics` (inferred), `GhostIdleState.TypeHuntRules` (65 near electronics); to map: the sensor's range and the speed branch | 11 |
+| Raiju (18) | game knowledge, to verify by RE: it upsets electronics from farther | to map | the electronics effect's range by type (Electronics, below) | 21 |
+| Obake (19) | its last evidence is kept; print and shapeshift media kinds | mapped | `GhostController.PickEvidence`, `MediaSubject.obakeFingerprint`, `MediaSubject.obakeShapeshift` | |
+| Obake (19) | game knowledge, to verify by RE: six-fingered prints, prints that fade sooner, choosing when to leave prints (y14) | to map | the print variant pick in `Fingerprint.AttemptToSpawnFingerprints`; the print's life by type (`Difficulty.fingerprintDuration` is mapped) | 19 |
+| Obake (19) | game knowledge, to verify by RE: a shapeshift in hunts | to map | the model swap (GhostAI's two GhostModel arrays have no entries, per ghost-ai.md) | 7 |
+| Mimic (20) | copies, picked at each switch; ghost orbs | mapped | `GhostController.MimicCopy`, `mimicNext`, `mimicCopies`, `AttemptGhostTypeStateChange`; `EvidenceController.SpawnAllGhostTypeEvidence`, `ghostOrb`, `ForceRespawnGhostOrb` | |
+| Moroi (21) | hunt speed from the team's insanity | mapped | `GhostHuntState.RefreshBase` | |
+| Moroi (21) | game knowledge, to verify by RE: whoever hears it on the spirit box is cursed and loses sanity faster; sanity pills lift the curse (y13) | to map | the spirit box's answer path and where the curse is held and read; the pill's use | 18, 14 |
+| Deogen (22) | sees everyone, slow kill | mapped | `GhostHuntState.Sees`, `Kill`, `slowKillReach` | |
+| Deogen (22) | game knowledge, to verify by RE: fast far from its target, slow up close | to map | `GhostHuntState.RefreshBase` reads "a field of its GhostAI" for the Deogen: that field and its writer | 11 |
+| Deogen (22) | game knowledge, to verify by RE: heavy breathing on the spirit box | to map | the spirit box's answer branch (`MediaSubject.spiritBoxBreath` is a mapped media kind) | 18 |
+| Thaye (23) | its age, its falling hunt line, its events read the age | mapped | `GhostController.thaye`, `thayeStep`, `thayeThreshold`, `GhostIdleState.TypeHuntRules`, `GhostState.randomEvent` | |
+| Thaye (23) | ageing a step when the player spends (y12) | to map | the ageing is `ThayeAgeChangeNetworked` (named in `GhostController.thayeStep`'s note; an RPC, so hook only); the game asks for it through `GhostController.typeChangeDue`, which its timer sets and `AttemptGhostTypeStateChange` clears as it acts: read whether setting that flag and letting the next state change run is the game's own path, or what else is | 13 |
+| Gallu (25) | its rage state | mapped | `GhostController.galluState`, its hunt lines in `TypeHuntRules` | |
+| Gallu (25) | game knowledge, to verify by RE: protections used against it enrage it, then it tires; spending its rage (Gallu loop) | to map | the writers of `galluState` (an RPC or a method), and a lawful way to set it through them | 13 |
+| Dayan (26) | its strength, empowered by movement near it | mapped | `GhostController.dayanState`, `GhostAI.DayanPlayerChecks`, `NetworkedStamina.moving`, its hunt lines | |
+| Dayan (26) | its hunt speeds, and what `DayanPlayerChecks` measures | to map | its `UpdateSpeed` branch; `DayanPlayerChecks`' range and players | 27 |
+| Obambo (27) | its moods, flipped at its switches; hunts only while aggressive | mapped | `GhostAI.obamboAggressive`, `GhostController.AttemptGhostTypeStateChange`, `typeChangeDue` (Update sets it before calling the switch), its hunt lines (65 aggressive, 10 calm) | |
+| Obambo (27) | its switch timer and speeds | to map | its timer in `GhostController`'s Update; its `UpdateSpeed` branch | 27 |
+| Kormos (28) | fixed events, never switches prey, sensors within a distance, hears footsteps | mapped | `GhostState.randomEvent`, `GhostHuntState.KeepNearest`, `PlayerProcessor`, `GhostHearing` | |
+| Kormos (28) | the player flag `PlayerProcessor` reads; the room condition of its hunt line | to map | `PlayerProcessor`'s player read; `TypeHuntRules`' Kormos branch | 26 |
+| Aswang (29) | everything (its loop waits on this) | to map | As decompiled, `TypeHuntRules` gives it the 50 of every type without a branch and `RefreshBase` the base speed of every type but the Moroi and Deogen, so its rules are not there. RE: find where its type number is compared (a whole-assembly scan for comparisons with its `GhostType` value, as `audited_ghost_types()` gives it), then map each rule found | 27 |
+| Deildegast (30) | fewer light and more prop interactions | mapped | `GhostActivity.lightChance`, `InteractWithARandomProp` | |
+| Deildegast (30) | its speed by props moved | partly | `GhostAI.movedProps` (inferred, and the speed rule only inferred from it); to map: the reader in `UpdateSpeed` | 27 |
+
+### The bundled custom ghosts' loops
+
+Each custom ghost's AI rules are already built on public map entries (`mods/custom_ghosts/`). Only what their player
+loops add beyond those rules is listed.
+
+| Loop | Need | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- | --- |
+| Echo | the game's speech recognition shows heard phrases as text to pick from (the user's note) | partly | `PhraseListenerController.OnPhraseRecognized(string)`; to map: the recognizer's phrase lists and controller | 22 |
+| Draugr | a player carrying its thing (the thief) | to map | a prop's holder (Props in hands, below) | 15 |
+| Draugr | its room growing colder | to map | changing a room's temperature (section 5) | 20 |
+| Lithobolia | aimed throws at a player it sees; a hit costs sanity | to map | a throw's aim and its hit (Throws, below) | 15 |
+| Gremlin | switching running electronics off as the ghost | to map | the ghost upsetting equipment (Electronics, below) | 21 |
+| Brownie | watched, the truck monitor included | partly | `CCTVController.viewers`, `GetCCTVCamerasByCurrentCameraType`; to map: whether a camera films the ghost | 16 |
+| Lethe | its media fades unless viewed | partly | `JournalMedia.RemoveMedia`, `Journal_PhotoPage`, `JournalController.currentPage`, `open`; to map: who took the media and when a player views it | 16 |
+| Mesmer | a different form per player; cameras show the truth | partly | Wearing an investigator's form, below | 28 |
+| Hydra | haunts echoed from a second spot; heads that linger and touch things | to map | sounds and interactions at a chosen point (below); the twin's box mechanism may serve (Twins row) | 9, 13 |
+| Bogeyman | closets as waypoints; a cursed hiding place found first | mapped | `ClosetZone` (`navSpot`, `occupants`), `Player.closet`, `GhostHuntState.SetTarget`, `SetCloset`, `NavMeshAgent.Warp` | |
+| Black Shuck | running water and rain break trails | mapped | `Sink.used`, `Sink.water`, `Difficulty.actualWeather`, `LevelValues.weather` | |
+| Tempest | lightning paces it | mapped | `LightningController.PlayLocalLightning`, `PlayLightningNetworked` (hook only), `LevelValues.weather` | |
+| Kikimora, Dullahan, Knell, Asterion | their loops reuse their rules and the shared mechanics below | mapped | their rules' entries | |
 
 ### Sanity and players
 
-| Need | Status | Keys, or RE needed |
-| --- | --- | --- |
-| Per-player sanity | mapped | `Player.sanity`, `PlayerSanity.insanity` |
-| Every way it drops, as it happens | to map | the callers of `PlayerSanity.ChangeSanity` and `SetInsanity` (section 3) |
-| Per-player position | mapped | the body's transform (`Component.get_transform`, `Transform.get_position`), `Player.body` |
-| Per-player room | mapped | `Player.currentRoom`, `LevelController.rooms` with `LevelRoom.roomColliders` |
+| Need | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- |
+| Per-player sanity, the team's average (e02, e05, s01) | mapped | `Player.sanity`, `PlayerSanity.insanity`, `GameController.GetAveragePlayerInsanity` | 1 |
+| Every way it drops, as it happens (e01, e02) | to map | the callers of `PlayerSanity.ChangeSanity` and `SetInsanity` (section 3) | 4 |
+| Per-player position and room | mapped | `Player.body`, `Component.get_transform`, `Transform.get_position`, `Player.currentRoom` | 1 |
+| A player entering a room or a doorway (t02, t04) | mapped | `LevelRoom.OnTriggerEnter` (`on_room_entered`); a doorway as a point near `Door.body` | 2 |
+| Players moving near the ghost (Dayan) | mapped | `NetworkedStamina.moving` | |
+| Players fleeing to the truck (g02) | to map | whether a player is in the truck (section 2) | 25 |
 
 ### Ghost events and appearing
 
-| Need | Status | Keys, or RE needed |
-| --- | --- | --- |
-| The events, each kind | to map | `GhostAI.EventPick` "starts one of five event states" (its note): each state's class, by what it does, and its kind number |
-| Start an event of a chosen kind | to map | `EventPick(bool, int)` takes an event number, which `ChangeState` passes as -1: read whether a chosen number is honoured and whether calling it outside `ChangeState` keeps the game's state bookkeeping; if not, a chosen kind needs `ChangeState(randomEvent)` with a hook on `EventPick` that picks the number |
-| Appearing | mapped | `GhostAI.Appear(int form)`, `MakeGhostAppear` (RPC, hook only), `isAppeared`, `UnAppear`, `GhostState.appear` |
-| The forms of an appearance | to map | the `int` `Appear` takes (the Shade and Oni coin may change it): its values by what the ghost shows |
-| The singing event | to map | one of the five event states (Banshee row above) |
-| The game's player-shaped event | to map | `GhostController.GhostEventPlayer` (ghost-ai.md: an agent, a noise, particles, a photo evidence, a target; spawned by RPC; none mapped); and whether any game code runs it (community notes say not) |
-| The sanity cost of an event | to map | the event states' drain calls (section 3) |
+| Need | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- |
+| The events, each kind | to map | `GhostAI.EventPick` "starts one of five event states" (its note): each state's class, by what it does, and its kind number | 6 |
+| Start an event of a chosen kind (the Banshee's song on demand, y01) | to map | `EventPick(bool, int)` takes an event number, which `ChangeState` passes as -1: read whether a chosen number is honoured and whether the state bookkeeping holds when it is; otherwise `ChangeState(randomEvent)` with a hook on `EventPick` that picks the number. Scope is a question for the user (h06 was marked no) | 6 |
+| An event's target and place (y01 "aimed at the target", t04 a room) | to map | each event state's target player and where it runs | 6 |
+| Appearing | mapped | `GhostAI.Appear(int)`, `MakeGhostAppear` (RPC, hook only), `isAppeared`, `UnAppear` (ends an appearance on every client when called on the host) | |
+| `GhostState.appear` | mapped, not usable | `ChangeState` stores it but starts no state object for it and logs an error (its note); a mod never changes state to it | |
+| The forms of an appearance | to map | the `int` `Appear` takes (the Shade's and Oni's coin may change it): its values by what the ghost shows | 7 |
+| How long an appearance lasts; extending it (m04, the Phantom loop) | to map | the appearance's timer and who ends it; ending early is mapped (`GhostAI.UnAppear`) | 7 |
+| The game's player-shaped event | to map | `GhostController.GhostEventPlayer` (ghost-ai.md: an agent, a noise, particles, a photo evidence and a target; spawning it warps the agent and starts it on every client by RPC; an obfuscated state class calls it; its prefab has no model, so it is a particle cloud that walks to a player, not a figure in their form; community notes say the game never uses it, which was not checked in a run). It cannot serve "wear a face" (below) | 28 |
+| The sanity cost of an event, and of a touch | to map | the event states' sanity calls (section 3) | 4, 6 |
 
 ### Interactions
 
-| Need | Status | Keys, or RE needed |
-| --- | --- | --- |
-| Door slam | mapped | `Door.GhostForceDoor`, `CreateDoorSlamNoise`, `PlayDoorSlamNoise`, `GhostOpenDoorEvent`; a slam is a ghost interaction with its traces (doors.md) |
-| Door hold | mapped | `Door.GhostForceDoor` keeps the push "there" (its note), `Door.forceRoutine` |
-| Door lock | mapped | `Door.LockDoor`, `LockDoorForTime`, `LevelController.LockHuntingDoors` (doors.md, "Locking a door yourself") |
-| Lights per room, and whether a room is lit | mapped | `LevelRoom.lightSwitches` (inferred), `LevelRoom.AreRoomLightsOn` (inferred), `LightSwitch.get_isOn`, `UseLightSwitch`, `FlickerNetworked` |
-| The breaker | partly | `FuseBox.powerOn`, `GhostUse`, `BreakFuseBox`, `outOfOrder`, `GhostState.fusebox`; to map: a player's use and the event of the power changing |
-| Electronics: radios, TVs, car alarms, phones | to map | each class and the ghost's use (`GhostState.carAlarm` is the only mapped value; `GhostActivity.UpdateElectronics` is the Raiju's sensor) |
-| Sinks | mapped | `Sink`, `Sink.water`, `Sink.used`, `MediaSubject.dirtyWater` |
-| Knocks and ghost sounds | to map | `GhostState.doorKnock`, `windowKnock` values are mapped; the sound plays (GhostAudio) and the paranormal sound pick are not |
-| Windows: prints, breath, knocks | to map | the window class, its fingerprints (`Fingerprint` is the general class), its knock (`GhostState.windowKnock`, `EMFType` has windowKnock per its note) |
-| Throw a chosen prop | mapped | `Prop.TryThrow(bool, bool)`, `GhostActivity.GetPropToThrow`, `throwable`, `GhostInteraction.CreateThrowingEMF` |
-| With a chosen force | to map | the force inside `Prop.TryThrow` (its two flags; whether a strength field exists) |
-| Move a prop as the ghost (possession) | mapped | the pattern in navigation.md, "Moving a thing along the floor" (`PhotonView.RequestOwnership`, `Rigidbody.AddForceAtPosition`, `Prop.PlayImpactSound`), with `GhostInteraction.CreateThrowingEMF` for the trace; whether the game counts it as an interaction (`LevelStats`) is to map |
+| Need | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- |
+| Door slam, with its strength (m02, h02) | mapped | `Door.GhostForceDoor(open, strength, skipRattle)`, `CreateDoorSlamNoise`, `PlayDoorSlamNoise` (hook only), `GhostOpenDoorEvent`; the leaf's angle: `Door.closedAngle`, `HingeDoor.openAngle`, `Door.body`; the doors of a floor: `LevelRoom.doors` (inferred), `LevelRoom.floor` | |
+| Door hold (h03) | partly | `Door.GhostForceDoor` drops the door from players' hands as it starts (`Door.ForceDropDoorNetworked`, `Door.grabbable`) and keeps the push there; to map: how long it keeps it and whether it can be extended | 15 |
+| Door lock | mapped | `Door.LockDoor`, `LockDoorForTime`, `LevelController.LockHuntingDoors` (doors.md, "Locking a door yourself") | |
+| Lights per room, whether a room is lit, flickering a chosen light (m03, e08) | partly | `LevelRoom.lightSwitches` (inferred), `AreRoomLightsOn` (inferred), `LightSwitch.get_isOn`, `UseLightSwitch`; a flicker is `GhostAI.ChangeState(GhostState.flicker, ...)` (the value is inferred) and arrives as `LightSwitch.FlickerNetworked` (hook only); to map: the flicker state's object and length | 21 |
+| The breaker, tripped or turned on as the ghost; a fumble's EMF (m06, the Jinn and Hantu loops) | partly | `FuseBox.powerOn`, `GhostUse`, `BreakFuseBox`, `outOfOrder`, `GhostState.fusebox`, `GhostInteraction.CreateInteractionEMF`; to map: a player's use, the power-changed event; sparks are game knowledge, to verify by RE | 21 |
+| Electronics: radios, TVs, car alarms, phones, set off one at a time or a room at once (h04, h05, m07) | to map | each class and the ghost's use (`GhostState.carAlarm` is the only mapped value) | 21 |
+| The ghost upsetting equipment outside a hunt (h04 "also make it affect equipment"; the Raiju, Jinn and Gremlin loops) | to map | section 6, "Any electronic item" | 21 |
+| Sinks | mapped | `Sink`, `Sink.water`, `Sink.used`, `MediaSubject.dirtyWater` | |
+| Knocks and ghost sounds | to map | `GhostState.doorKnock`, `windowKnock` (values, inferred) are mapped; the sound plays (GhostAudio) and the paranormal sound pick are not | 9 |
+| Windows and mirrors: prints, knocks, breath on glass (h11) | to map | section 4; whether the game has a breath effect on glass is game knowledge, to verify by RE | 20 |
+| A random action when pressure is full (e07) | mapped | `GhostActivity.TryInteract` (inferred), `NormalInteraction`, `GhostAI.ChangeState` | |
+| A room that flickers on its own and turns colder (e08) | partly | the flicker above; a room's temperature (section 5) | 20, 21 |
+| The truck's activity monitor (e10) | to map | section 4 | 21 |
+
+### Throws, props and possession
+
+| Need | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- |
+| A throw in a hunt | mapped | `Prop.TryThrow(bool, bool)`, `GhostActivity.GetPropToThrow`, `throwable`, `GhostHuntState.throwTimer`, `GhostInteraction.CreateThrowingEMF` | |
+| A throw outside a hunt (the Poltergeist and Lithobolia loops, m01) | to map | `Prop.TryThrow`'s note: "The hunt's tick is its only caller while a ghost hunts; the ghost's throwing state never reaches it." The throwing state's own throw (`GhostState.throwing`, inferred) is unmapped | 15 |
+| A throw's strength, by type (m01, the user's note) | to map | the force inside each throw path, and any branch by type (game knowledge, to verify by RE: the Poltergeist throws harder) | 15 |
+| A throw's aim and its hit (the Lithobolia's aimed throws at a player it sees, whose hits cost sanity; the Poltergeist's throw near someone) | to map | whether either throw path takes a direction; how the game detects a thrown prop hitting a player, if it does; else a mod aims through the prop's `Rigidbody` once it owns it (`PhotonView.RequestOwnership`, `Rigidbody.set_velocity`) | 15 |
+| A player picking up, holding and dropping any prop; a drop forced through the game (m05, t01, the Draugr) | to map | section 2 | 15 |
+| Moving a prop as the ghost, possession (v02, v03) | partly | the pattern in navigation.md, "Moving a thing along the floor" (`PhotonView.RequestOwnership`, `Rigidbody.AddForceAtPosition`, `Prop.PlayImpactSound`), with `GhostInteraction.CreateThrowingEMF` for the trace; `GhostAI.movedProps` (inferred) for the Deildegast; to map: whether the game counts it as an interaction (`LevelStats.amountOfGhostInteractions` sums counters such as `doorsMoved`) | 15 |
+
+### Sounds at a chosen point, and who heard them
+
+| Need | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- |
+| A ghost sound, knock or footstep at a chosen point away from the ghost (h05, t05, t06, v09, m08, m10, the Hydra's echoes, the Myling's sounds) | partly | the step and its sound are mapped (`Footstep.Play`, `Footstep.noise`, `Footstep.reach`, `Noise.PlaySound`, `Noise.SetVolume`, `Noise.SetMaxDistance`, `ObjectPooler.SpawnFromPool`); to map: whether a `Noise` or `Footstep` can be placed or pooled away from the ghost, the GhostAudio sounds, and whether the ghost's steps play outside hunts (game knowledge, to verify by RE) | 9 |
+| Quieter steps in a hunt (u02) | mapped | `Noise.SetVolume`, `Noise.SetMaxDistance`, `Footstep.reach` | |
+| Who heard a sound (e01, the Myling loop) | to map | the game has no "heard" of its own that is mapped; a helper over the sound's reach (`Footstep.reach`, the AudioSource's max distance) and the players' positions, said in its note to be the mod's measure, not the game's (a question for the user) | 9 |
+
+### Seeing and being seen
+
+| Need | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- |
+| Who is looking at the ghost (the Phantom, Shade, Oni and Brownie loops, y02, y03) | to map | the game's own test, if it has one (the Phantom's drain needs one); otherwise a helper over `Camera.WorldToViewportPoint` and `Physics.Raycast`, marked as not the game's (a question for the user) | 26 |
+| How many see it at once (the Oni loop) | to map | as above, counted | 26 |
+| Who witnessed an action (e01) | to map | as above, for a point and a moment | 26 |
+| Whether the ghost sees a player | mapped | `GhostAI.vision`, `Player.losTargets`, `core/game.h`'s `ghost_sees` (promoted in Round 1) | 1 |
+| Equipment aimed at the ghost (s03) | to map | the held item and its facing (section 6) | 17 |
+| A camera watching a room, filming the ghost (the Goryo and Brownie loops) | to map | section 6, "Video camera" | 16 |
+| Wearing an investigator's form, seen differently per player, true on cameras (h12, the Mesmer loop) | partly | Playable Ghost already draws an investigator's body (`mods/playable_ghost/form.h`) from `PlayerCharacter`, `PlayerCosmetics.SetPlayerCosmeticsNetworked`, `Player.renderers` and `sdk/api/models.h` (a local copy of the body, so per client); `Camera.get_cullingMask` and the `Layer` entries are mapped; to map: which layers the CCTV and photo cameras draw, so a form can hide from them | 28 |
 
 ### Cursed possessions, one by one
 
-| Possession | Status | Keys, or RE needed |
-| --- | --- | --- |
-| Ouija board | partly | `OuijaBoard.PlayMessageSequence` (inferred), `BreakBoard`; to map: the question heard, the answer chosen (the "answer coroutine" players.md mentions), the sanity cost |
-| Music box | partly | `MusicBox.UseNetworked` (inferred), `tween`, `BreakMusicBox`, `EnterMusicBoxState`, `GhostState.musicBox`; to map: the ghost's singing and walk to the box, the hunt trigger's range |
-| Tarot cards | partly | `TarotCards.ChangeState` (inferred), `HighPriestess`, `HangedMan`; to map: the card numbers by name and each card's effect |
-| Haunted mirror | partly | `HauntedMirror.UseNetworked` (inferred), `BreakItem`; to map: the sanity drain while used, the room it shows (the favourite room, game knowledge, to verify by RE) |
-| Monkey paw | partly | `MonkeyPaw.MakeWishNetworked` (inferred), `ReviveWish`, `OpenExitsWish`; to map: each wish's handler by wish ("which handler is which wish was not traced", ghost-ai.md) and the wish list |
-| Summoning circle | partly | `SummoningCircle` (inferred), `GhostState.summoningCircle`; to map: the candles lit, the teleport, the forced hunt |
-| Voodoo doll | partly | `VoodooDoll.NetworkedUse` (inferred), `StartHunt`; to map: the pin numbers and their interactions (`GhostActivity.NormalInteraction` with force) |
-| What the ghost may answer | to map | for each: whether the ghost's side (`GhostAI.ChangeState` or `NormalInteraction`) is reached, so a player ghost can answer; the Ouija board's answer is a string chosen by the game |
+| Possession | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- |
+| Ouija board (h10) | partly | `OuijaBoard.PlayMessageSequence` (inferred), `BreakBoard`; to map: the question heard, the answer chosen ("the Ouija board's answer coroutine", players.md), its sanity cost, and when a ghost may answer | 23 |
+| Music box (h10) | partly | `MusicBox.UseNetworked` (inferred), `tween`, `BreakMusicBox`, `EnterMusicBoxState`, `GhostState.musicBox`; to map: what the ghost does in the music box's state and the box's hunt condition | 23 |
+| Haunted mirror | partly | `HauntedMirror.UseNetworked` (inferred), `BreakItem`; to map: its sanity cost while used and what it shows (game knowledge, to verify by RE: the favourite room) | 23 |
+| Summoning circle | partly | `SummoningCircle` (inferred: "lit, it teleports the ghost onto itself"), `GhostState.summoningCircle`, ghost-ai.md's routes (a forced hunt among them); to map: its candles and how they light it, the teleport | 23 |
+| Tarot cards (h10) | partly | `TarotCards.ChangeState` (inferred), `HighPriestess`, `HangedMan`; to map: the card numbers by name and each card's effect | 24 |
+| Monkey paw | partly | `MonkeyPaw.MakeWishNetworked` (inferred), `ReviveWish`, `OpenExitsWish`; to map: each wish's handler by wish ("which handler is which wish was not traced", ghost-ai.md) | 24 |
+| Voodoo doll | partly | `VoodooDoll.NetworkedUse` (inferred), `StartHunt`; to map: the pin numbers and the interaction each forces (`GhostActivity.NormalInteraction` with force) | 24 |
+| Which possession the contract has | partly | `Difficulty.actualCursedItems`, `CursedItemType` (two values); to map: every value | 24 |
 
-### Evidence placing, and its timing
+### Evidence: placing it, holding it back, giving it now
 
-| Evidence | Status | Keys, or RE needed |
-| --- | --- | --- |
-| EMF 5 | partly | `GhostInteraction.CreateThrowingEMF`, `CreateInteractionEMF`, `CreateAppearedEMF`, `EMF`, `EMFType` (inferred); to map: the level each reading gets and the chance of 5 when the ghost gives EMF |
-| Ultraviolet (prints) | partly | `Fingerprint.AttemptToSpawnFingerprints`, `EvidenceController.IsFingerPrintEvidence`, `Difficulty.fingerprintChance`, `fingerprintDuration`; to map: where prints spawn (doors, switches, windows, keyboards) and the salt footprints |
-| Ghost writing | to map | the book's class and the ghost's write (an interaction?) |
-| D.O.T.S. | partly | `GhostState.dots`, `GhostDotsState` (`GoToNearest`, `radius`, `destination`); to map: what shows the ghost in the projector's light and for how long |
-| Ghost orbs | mapped | `EvidenceController.SpawnAllGhostTypeEvidence`, `ghostOrb`, `ForceRespawnGhostOrb` |
-| Freezing | partly | `EvidenceController.freezing`, `LevelRoom.temperature`; to map: the room cooling rule (section 5) |
-| Spirit box answer | to map | the spirit box's answer roll and its conditions (lights, distance, players), section 6 |
-| Timing | to map | when each evidence can first appear (setup, hunts), and the game's rate for each; the revamp lets the ghost player choose when to give evidence within a time limit (CLAUDE.md), so the vanilla rates are the baseline |
+The revamp lets the ghost player choose when to give each evidence of its type, within a time limit, and holding it
+back costs energy (CLAUDE.md; d01, d02, m12, the Obake loop). So each evidence needs the game's own path that places
+it, a hook that holds it back, and a lawful way to give it now; where giving it now has no game path, the AI's own
+behaviour gives it once the hold ends ("the game gives it on its own", d02).
 
-### Protections, photos and who looks
+| Evidence | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- |
+| EMF 5 | partly | `GhostInteraction.CreateThrowingEMF`, `CreateInteractionEMF`, `CreateAppearedEMF`, `EMF`, `EMFType` (inferred); to map: the level each reading gets, the chance of 5 when the ghost gives EMF, and where to hold a 5 back | 19 |
+| Ultraviolet | partly | `Fingerprint.AttemptToSpawnFingerprints` (on the master; a roll, then an RPC), `EvidenceController.IsFingerPrintEvidence`, `Difficulty.fingerprintChance`, `fingerprintDuration`; to map: where prints can appear, a print without the roll, the salt footprints | 19 |
+| Ghost writing (m12) | to map | the book's class, the ghost's write and its timing | 19 |
+| D.O.T.S. | partly | `GhostState.dots`, `GhostDotsState` (`GoToNearest`, `radius`, `destination`); to map: what shows the ghost in the projector's light, for how long, and the Goryo's camera-only rule | 20 |
+| Ghost orbs | mapped | `EvidenceController.SpawnAllGhostTypeEvidence`, `ghostOrb`, `ForceRespawnGhostOrb`; holding orbs back: to map whether the orb can be hidden through the game | 20 |
+| Freezing | partly | `EvidenceController.freezing`, `LevelRoom.temperature`; to map: the room's cooling (section 5), and how it is held back or given | 20 |
+| Spirit box answer | to map | section 6 | 18 |
+| A voice through the spirit box (p02, the Moroi loop) | to map | the spirit box's speaker (its AudioSource) and its answer event; the ghost player's voice is in other clients' taps (`PlayerVoice.localTap`, `VivoxParticipantTap.DoAudioFilterRead`), so playback goes through those; a mod that keeps the voice sets `recordsVoice` | 18 |
+| Timing | to map | when each evidence can first appear and the game's rate for each, the baseline for the time limit | 19, 20 |
 
-| Need | Status | Keys, or RE needed |
-| --- | --- | --- |
-| Crucifix used | partly | `Crucifix.CrucifixUseNetworked` (inferred), `useCount`; to map: the burn that prevents a hunt and its range |
-| Smudge | mapped | `WhiteSage.UseNetworked` (inferred), `GhostAI.StopGhostFromHunting`, `smudge`, `huntsHeldOff`, `WhiteSage.YureiTrap` |
-| Salt | mapped | `SaltSpot.SyncSalt` (hook only), `SaltSpot.flatSalt` |
-| Flames | mapped | `FireSource.BlowOutFire`, `IgniteFire`, `IgniteFireNetworked`, `CountGhostBlowOut`, `GhostAI.flamesBlownOut` (flames.md) |
-| A photo of the ghost | to map | the photo camera's capture and its subject (`MediaSubject.ghost` is mapped) |
-| Video of the ghost | partly | `CCTVController.viewers`, `GetCCTVCamerasByCurrentCameraType`, `core/game.h`'s `each_running_camera`; to map: whether a camera films the ghost (the game's test, if it has one) |
-| Who is looking at the ghost | to map | the game's own test, if any (the Phantom's drain needs one); otherwise a helper over `Camera.WorldToViewportPoint` and `Physics.Raycast`, marked as not the game's |
+### Protections, photos and media
+
+| Need | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- |
+| Crucifix used, a burn, its range (the Demon and Gallu loops) | partly | `Crucifix.CrucifixUseNetworked` (inferred), `useCount`, `MediaSubject.usedCrucifix`, `burningChapelCrucifix`; to map: the range test and what a burn stops (game knowledge, to verify by RE: a hunt) | 14 |
+| Smudge, in a hunt or out (the Spirit, Hydra and Gallu loops) | partly | `GhostAI.StopGhostFromHunting`, `smudge`, `huntsHeldOff`, `WhiteSage.YureiTrap`, `WhiteSage.UseNetworked` (inferred: upgrade, and map whom it smudged) | 14 |
+| Salt | mapped | `SaltSpot.SyncSalt` (hook only), `SaltSpot.flatSalt` | |
+| Flames | mapped | `FireSource.BlowOutFire`, `IgniteFire`, `IgniteFireNetworked`, `CountGhostBlowOut`, `GhostAI.flamesBlownOut` (flames.md) | |
+| Sanity pills | to map | section 3 | 14 |
+| A photo of the ghost (g01, the Phantom loop) | to map | the photo camera's capture and its subject (`MediaSubject.ghost` is mapped) | 16 |
+| Media that fades unviewed (the Lethe loop) | partly | Lethe row above | 16 |
 
 ### Hunts
 
-| Need | Status | Keys, or RE needed |
-| --- | --- | --- |
-| Start | mapped | `GhostAI.ChangeState(hunting)`, `GhostAI.Hunting` (hook only), `GhostIdleState.Execute`, the hunt lines, `GhostHuntState.Started`, `startDelay` |
-| End | partly | `GhostHuntState.Exit`, `GameController.ResetHuntEffects`, `LevelController.UnlockHuntingDoors`; to map: the time limit `Started` tests ("when its time is up"), `Difficulty.huntDuration`'s use, `killsExtendHuntDuration` |
-| Target | mapped | `GhostHuntState.target`, `searchTarget`, `SetTarget`, `SightPick`, `TargetPick`, `StartPick`, `Chase`, `KeepNearest`, `TargetAllows`, `lastPlayer`, `seen` |
-| Speed | mapped (base) | `GhostHuntState.UpdateSpeed`, `RefreshBase`, `baseSpeed`, `sightSpeedUp`, the content `huntSpeed` rule; each type's branch is in the type table above |
-| Kill | mapped | `GhostHuntState.Kill`, `killReach`, `slowKillReach`, `killed`, `Player.BeginDeathSequence` |
-| Hiding-place search | mapped | `GhostHuntState.SetCloset`, `searchCloset`, `ClosetZone.CheckCloset`, `navSpot`, `standOutsideEntrancePoint`, `Player.closet` |
-| Holding a caught player | to map | what the kill does with the ghost and the victim between the catch and the death (the choke, ghost-ai.md "A hunt's choke is the ghost's model during its kill"): the animation and its length |
-| Grace period | partly | `DifficultySettings.ResetHuntGracePeriod`, `Difficulty.gracePeriod`; to map: the grace's own field and reader |
+| Need | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- |
+| Each type's hunt line, read at runtime (e05 and the user's note, u01, m09, the Mare and Thaye loops) | partly | the line is readable now through mapped entries: make an idle state, give it the three controllers, run `GhostIdleState.HuntInsanity` and compare `GhostIdleState.insanity` with the insanity it started from (ghost-ai.md, "Each type's hunt line"); `TypeHuntRules`' offset field itself has no entry (no fact tells it from the chance bonus beside it). A helper `phasmo::hunt_line()` wraps the recipe | 5 |
+| May it hunt now, without the roll (u01, m09) | to map | the hunt branch's conditions: `LevelValues.eventsBlocked`, `GhostAI.postHuntCooldown`, `GhostAI.huntsHeldOff` (mapped) and "the type's, sanity and setup checks" (ghost-ai.md), whose setup checks are unmapped; a helper `phasmo::may_hunt_now()` | 5 |
+| Start | mapped | `GhostAI.ChangeState(hunting)`, `GhostAI.Hunting` (hook only), `GhostIdleState.Execute`, `GhostHuntState.Started`, `startDelay` (a shorter warning, u02) | |
+| A hunt's warning effects without a hunt: lights flicker, electronics upset, the hunt sound (u04, m09, the Spirit, Lethe and Hydra loops) | to map | ghost-ai.md: "Which code flickers the lights and upsets the electronics in a hunt was not traced"; the hunt sound plays through the ghost's GhostAudio noise from `GhostAI.Hunting`'s start (an RPC, so a bluff never calls it): map the effects' own methods so a mod plays them without a hunt | 8 |
+| End, length, a longer hunt (u02, u07) | partly | `GhostHuntState.Exit`, `GameController.ResetHuntEffects`, `LevelController.UnlockHuntingDoors`, `DifficultySettings.AddHuntDuration`; to map: the time limit `Started` tests ("when its time is up"), `Difficulty.huntDuration`'s and `killsExtendHuntDuration`'s readers | 10 |
+| Target | mapped | `GhostHuntState.target`, `searchTarget`, `SetTarget`, `SightPick`, `TargetPick`, `StartPick`, `Chase`, `KeepNearest`, `TargetAllows`, `lastPlayer`, `seen` | |
+| Speed | mapped (base) | `GhostHuntState.UpdateSpeed`, `RefreshBase`, `baseSpeed`, `sightSpeedUp`, the content `huntSpeed` rule; each type's branch is in the type table | 11 |
+| Kill | mapped | `GhostHuntState.Kill`, `killReach`, `slowKillReach`, `killed`, `Player.BeginDeathSequence` | |
+| Hiding-place search, guessing where a player hides (u05, t03) | mapped | `GhostHuntState.SetCloset`, `searchCloset`, `ClosetZone.CheckCloset`, `navSpot`, `standOutsideEntrancePoint`, `occupants`, `Player.closet` | |
+| Holding a caught player | to map | what happens between the catch and the death: `GhostHuntState.Kill` stops the ghost, clears the hunt's target and begins the death at once (its note), and the choke is the ghost's model during its kill (players.md); the animation and its length | 10 |
+| A caught investigator breaking free (u08) | to map | where the catch can be refused or ended before `Player.BeginDeathSequence` without breaking the death sequence (a detour on `GhostHuntState.Kill` that skips the original refuses the whole kill, which is mapped) | 10 |
+| The grace period | partly | `DifficultySettings.ResetHuntGracePeriod`, `Difficulty.gracePeriod`; to map: the grace's own field and reader | 10 |
+| Moving fast, returning home, warping (v01, v04, v05, v06) | mapped | `NavMeshAgent.set_speed`, `Warp`, `GhostController.WarpGhostToFavouriteRoom`, `pm::api::AgentSteering`; to map: `LevelController.SyncCurrentGhostRoom` so the ghost's room follows a warp | 31 |
 
 ### Dead players, objectives, temperature
 
-| Need | Status | Keys, or RE needed |
-| --- | --- | --- |
-| A dead player's state | mapped | `Player.isDead`, `dying`, `LocalPlayer.isDead`, `VoiceVolume.deathMultiplier`, `WeatherType.dead`, `Layer.DeadPlayer` |
-| What a dead player can do | to map | the dead player's movement and what they may use (`LightSwitch.UseLightSwitch`'s second argument "lets a dead local player use it", per its note); game knowledge, to verify by RE: dead players see the ghost and walk through walls |
-| The optional objectives: their list | partly | `LevelValues.sideObjectives`, `mainObjective`, `Objective`, `ObjectiveValues.type` (read as an int); to map: the objective kinds by name |
-| Their progress | partly | `Objective.state`, `ObjectiveManager.CompleteObjective`, `FailObjective`, `HasSetupObjectives`; to map: progress counts (for example a smudge or a photo objective's own test) |
-| Temperature per room | mapped (read) | `LevelRoom.temperature`; the cooling rule is to map (section 5) |
+| Need | Status | Keys, or RE needed | Round |
+| --- | --- | --- | --- |
+| A dead player's state | mapped | `Player.isDead`, `dying`, `LocalPlayer.isDead`, `VoiceVolume.deathMultiplier`, `WeatherType.dead`, `Layer.DeadPlayer` | |
+| What a dead player can do; the dead acting for the ghost (p01) | to map | the dead player's movement and what they may use (`LightSwitch.UseLightSwitch`'s second argument lets a dead local player use it, per its note); game knowledge, to verify by RE: dead players see the ghost and pass through walls. A dead player's action for the ghost reaches the master through the SDK's channel, which then acts through the game | 25 |
+| The optional objectives: their list | partly | `LevelValues.sideObjectives`, `mainObjective`, `Objective`, `ObjectiveValues.type` (read as an int); to map: the objective kinds by name | 29 |
+| Their progress | partly | `Objective.state`, `ObjectiveManager.CompleteObjective`, `FailObjective`, `HasSetupObjectives`; to map: progress counts | 29 |
+| The team's guess (g03, d03, the Mesmer loop) | to map | section 8 | 29 |
+| Temperature per room | mapped (read) | `LevelRoom.temperature`; changing it is to map (section 5) | 20 |
+
+### The ghost player's screens
+
+Every kept idea tagged as a screen (the minigames m01 to m12, the hiding-place guess u05, the escape check u08, the
+ghost's objectives g01, loadout g04 and recap g06, and the energy every loop spends) needs a place to show. Under the
+vanilla-UI-only rule each uses a surface the game has (the truck monitor, journal pages, the lobby board, a cloned
+widget, the game's popup) or carries `PM_UI_TODO` until the user designs one. Which surface each uses is the user's
+decision (Questions for the user), and Round 30 maps the surfaces chosen. The warning investigators get when the ghost
+spends big (p04) is player-facing too, so it waits on the same answer.
 
 ---
 
@@ -875,49 +1037,82 @@ revamp needs every vanilla rule of every type, and every lever a ghost pulls. On
 Each round is one implementer task: map, prove by RE, test against the fake backend, document in `sdk/systems/<area>.md`,
 add its question snippets to `tests/coverage_questions_test.cpp`, run `.\validate.ps1` and
 `.\tools\gamecheck.ps1 -IfConfigured -Expect`, commit. The basic lookups come first, then the revamp's needs, then the
-nice-to-haves. Rounds 1 and 2 need Task 14 Step 0b (typed handles) merged first.
+loader's services, then the nice-to-haves. A round whose RE finds more than one task's work stops and reports the
+split, rather than growing. Rounds 1 and 2 are written against typed handles (Task 14 Step 0b); the user moved 0b to
+after the playtest, so that ordering is a question below.
 
-1. **Basic lookups.** The shared helpers (`sdk/api/world.h`), typed, documented; `core/game.h` and `core/players.h` call
-   them; promote `raycast`, `ghost_sees`, `distance_to_room`; fix the three lagging docs. No RE.
-2. **Lifecycle events.** `sdk/api/events.h` over the mapped hooks; RE GameController's loaded and hunt events, the
-   setup phase's end, and the `Revive` body; `sdk/examples/hunt_watch/` and `sdk/guides/reading-the-game.md` can follow.
-3. **Sanity.** Every caller of `ChangeSanity` and `SetInsanity` as a cause; `SetInsanity` decompiled; the pill;
-   `on_sanity_changed`.
-4. **Ghost events and appearing.** The five event states, the kind numbers, a chosen kind, the forms `Appear` takes,
-   the singing event, the Oni's airball rule, `GhostEventPlayer`.
-5. **Hunts, complete.** The time limit, hunt duration and kills extending it, the grace period, the hold of a caught
-   player, the cooldown by type (the Demon), the blink timer by type (the Phantom).
-6. **Hunt speed by type.** Every branch of `GhostHuntState.UpdateSpeed` and `RefreshBase`: Jinn, Revenant, Hantu,
-   Deogen's field, the Twins' offset, Raiju, Dayan, Obambo, Deildegast, Aswang.
-7. **Abilities by type.** Every branch of `GhostActivity.GhostAbility`: Wraith, Jinn, Yurei, Poltergeist, Obake, and
-   the fuse box gates (Jinn, Hantu), the salt test (Wraith), the Gallu's rage writers.
-8. **Evidence placing.** EMF levels, prints and their places, the Obake's prints, the writing book, D.O.T.S., freezing
-   and the room's cooling (with section 5's temperature), the Hantu's breath, timing.
-9. **Equipment, readings and use events.** Section 6's table: the EMF reader, thermometer, spirit box (answers, the
-   Deogen's breath, the Moroi's curse), parabolic microphone (the Banshee, the Myling), sensors, crucifix (range, burn),
-   incense, photo camera (photos of the ghost, the Phantom's vanish), held item per player.
-10. **Cursed possessions.** Each possession's questions, answers, wishes, cards, pins, costs and hunts, and every
-    `CursedItemType` value.
-11. **Interactions in the world.** Electronics (radio, TV, car alarm, phone), windows, knocks and the ghost's sounds
-    (GhostAudio), the breaker's player use and power events, bulbs, the throw's force, the possession pattern counted
-    as an interaction, who looks at the ghost (the Phantom's test).
-12. **Players and the dead.** In the truck, talking and push-to-talk, crouching, the sprint sync
-    (`NetworkSyncSprint`), the Kormos's player flag, what a dead player can do.
-13. **The remaining types.** Whatever rounds 4 to 12 left of the type table: the Aswang's remaining rules, the Kormos,
-    Obambo and Dayan beyond, the Deildegast's speed.
-14. **Objectives and rewards.** Objective kinds by name, progress, the photo rewards and stars.
-15. **Voice and speech recognition.** The recognizer's phrase lists and controller, the spirit box's and the Ouija
-    board's phrase handlers, `on_phrase`. (Round 10 or 9 may pull this forward if their questions need it.)
-16. **Map data II.** The contract's map, its name and size, `GhostInfo.favouriteRoom`, `LevelRoom.name` localised,
-    the inferred room members upgraded.
-17. **The loader's services.** The data folder helper, frame time, log levels, typed settings, and the lobby answer
-    the user chooses.
-18. **The catch-up audit.** Section 15's five names (each mapped only if relied on) and the ~169 cited addresses.
-19. **Nice-to-haves.** Weather effects, the journal's remainder, UI widgets for the revamp's surfaces.
-20. **Navigation for Task 18.** Held until the user starts Task 18.
+1. **Basic lookups.** The shared helpers (`sdk/api/world.h`), typed and documented; `core/game.h` and `core/players.h`
+   call them; promote `raycast`, `ghost_sees`, `distance_to_room`; fix the three lagging docs. No RE.
+2. **Events over mapped hooks.** `sdk/api/events.h`: spawn, hunt, state change, death start and end, favourite room,
+   room entered, light used, salt, flames, phrase. No RE.
+3. **Events that need RE.** GameController's loaded and hunt events, the setup phase's end ("started"), the `Revive`
+   body. Then `sdk/examples/hunt_watch/` and `sdk/guides/reading-the-game.md` can follow.
+4. **Sanity causes.** Every caller of `ChangeSanity` and `SetInsanity` as a cause; `SetInsanity` decompiled; which
+   client may change whose sanity; `on_sanity_changed`.
+5. **The hunt check.** `phasmo::hunt_line()` over the documented recipe; the hunt branch's setup checks and
+   `phasmo::may_hunt_now()`; the readers of `postHuntCooldown` and any length by type.
+6. **Ghost events.** `EventPick`'s five event states, their kind numbers, a chosen kind (scoped by the user's answer),
+   each event's target and place, the singing event, the event list by type (the Oni's airball), the events' sanity
+   calls.
+7. **Appearing.** The forms `Appear` takes, an appearance's length and its extension, the blink timer in hunts by type,
+   the model swap (the Obake's shapeshift, the GhostModel arrays).
+8. **A hunt's effects without a hunt.** The code that flickers lights, upsets electronics and plays the hunt sound in a
+   hunt, mapped so a mod plays each alone.
+9. **Sounds at a chosen point.** GhostAudio and its sounds, knocks, the paranormal sound pick, placing a `Noise` or a
+   `Footstep` away from the ghost, the ghost's steps outside hunts, and the "who heard" helper.
+10. **Hunts, complete.** The time limit, hunt duration and kills extending it, the grace period, the hold of a caught
+    player, a lawful break-free point.
+11. **Hunt speed by type.** Every branch of `GhostHuntState.UpdateSpeed` and `RefreshBase`: the Jinn, Revenant, Hantu,
+    the Deogen's field, the Twins' offset, the Raiju, the Yokai's electronics range.
+12. **Abilities and the idle roll by type.** The branches of `GhostActivity.GhostAbility` (Wraith, Jinn, Yurei,
+    Poltergeist), the idle roll's branches by type (the Shade's and Oni's activity near players), the fuse box gates
+    (Jinn, Hantu), the salt test (Wraith).
+13. **Type states.** The Thaye's ageing and a lawful step, the Gallu's rage writers and a lawful change, the Twins'
+    second place and acting there.
+14. **Protections.** The crucifix's range and burn, the incense (decompiled, its target), the sanity pill, the Moroi's
+    curse being lifted.
+15. **Props, hands and throws.** A player's grab and drop of any prop, the held item, a forced drop, the door hold's
+    length, the throw outside a hunt, a throw's strength by type, its aim and hit, possession counted as an interaction.
+16. **Photos and video.** The photo camera's capture, subject and stars (`on_photo`, the Phantom's vanish), which room a
+    CCTV camera covers and whether it films the ghost, media viewed and its taker, the photo rewards.
+17. **Readings.** The EMF reader's level, the thermometer's shown value, the parabolic microphone, the sound and motion
+    sensors, the held item's facing (`aimed_at`).
+18. **The spirit box.** Its question, answer roll and answer, the Deogen's breath, the Moroi's curse, its speaker for a
+    voice.
+19. **Evidence I.** EMF 5, prints (places, the Obake's variant and life), the writing book; holding each back and
+    giving it now; their timing.
+20. **Evidence II and temperature.** D.O.T.S. (with the Goryo's camera rule), orbs, freezing and the room's cooling,
+    changing a room's temperature through the game, the Hantu's breath, breath on glass; holding each back; their
+    timing.
+21. **Electronics and power.** Radios, TVs, car alarms and phones, the ghost upsetting equipment, the flicker state, the
+    breaker's player use and the power events, bulbs, the activity monitor, window knocks.
+22. **Speech recognition.** The recognizer's phrase lists and controller, the spirit box's and Ouija board's phrase
+    handlers, `NetworkedReaction` decompiled.
+23. **Cursed possessions I.** The Ouija board, music box, haunted mirror and summoning circle.
+24. **Cursed possessions II.** The tarot cards, monkey paw wishes, voodoo doll pins, every `CursedItemType` value.
+25. **Players and the dead.** In the truck, talking and push-to-talk, crouching, the sprint sync
+    (`NetworkSyncSprint`), what a dead player can do.
+26. **Seeing.** The game's own looking test (the Phantom's), who sees the ghost and how many, who witnessed an action,
+    the Kormos's player flag and room condition.
+27. **The remaining type rules.** The Aswang (the whole-assembly scan, then each rule), the Banshee's scream, the
+    Myling's sounds, the Oni's touch, the Dayan's, Obambo's and Deildegast's speeds and timers.
+28. **The ghost player's form.** `GhostEventPlayer` mapped and documented as what it is; the CCTV's and photo camera's
+    layers, so a drawn form hides from them.
+29. **Journal and objectives.** The team's guess and the judged guess, objective kinds by name, progress.
+30. **The revamp's screens.** The surfaces the user chooses for each screen. Waits on that answer.
+31. **Map data II.** The contract's map, its name and size, `GhostInfo.favouriteRoom`, `LevelRoom.name` localised,
+    the inferred room members upgraded, `LevelController.SyncCurrentGhostRoom` (the ghost's room after a warp; also on
+    Task 18's list).
+32. **Loader services I.** The data folder helper, frame time, log levels.
+33. **Loader services II.** Typed settings, and the lobby answer the user chooses.
+34. **The catch-up names.** Section 15's five names, each mapped only if relied on.
+35. **The address audit.** The ~169 cited addresses. A group of tasks, not one: its first task lists them and splits
+    them into tasks of about 40 addresses each.
+36. **Nice-to-haves.** Weather effects, the journal's remainder, UI widgets beyond the revamp's surfaces.
+37. **Navigation for Task 18.** Held until the user starts Task 18.
 
-Then Task 17's Steps 3 to 6: the coverage gate, the example and guide (if not done after Round 2), the smoke list,
-the commits.
+Then Task 17's Steps 3 to 6: the coverage gate, the example and guide (if not done after Round 3), the smoke list, the
+commits.
 
 ## Questions for the user
 
@@ -927,7 +1122,18 @@ the commits.
 3. **The data folder**: `%LOCALAPPDATA%\PhasmoMods\<mod id>\` (what the bundled mods use now) or the plan's
    `%LOCALAPPDATA%\PhasmoMods\data\<mod id>\`.
 4. **Frame time**: map Unity's `Time` getters (no contract change) as proposed, or add the plan's contract member.
-5. **Order**: is it right that the revamp's needs (Rounds 3 to 15) come before the loader's services (Round 17)? The
-   services are small and a community author needs them before the revamp does.
-6. **The revamp's loops** may name needs this list misses (the per-ghost page's 45 loops). Should one round read the
-   recorded loops and add any missing need before Round 3 starts?
+5. **Step 0b's timing.** Rounds 1 and 2 return typed handles, but Task 14 Step 0b was moved to after the playtest.
+   Either wait for 0b before Round 1, or write Rounds 1 and 2 on `void*` now and convert them with 0b.
+6. **Order**: the revamp's needs (Rounds 4 to 30) come before the loader's services (Rounds 32 and 33). The services
+   are small and a community author needs them sooner. Keep the order, or move 32 and 33 up?
+7. **The revamp's screens** (gap 24): for each screen (the minigames, the hiding-place guess, the escape check, the
+   ghost's objectives, loadout and recap, the energy, the investigators' warning), which game surface it uses, or
+   `PM_UI_TODO` until you design one. This decides Round 30 and a third of the kept ideas.
+8. **Stand-ins for tests the game lacks.** Where the game has no test of its own (who looks at the ghost, who heard a
+   sound, who witnessed an action, an item aimed at the ghost), may a helper that measures it geometrically stand in,
+   documented as not the game's? Investigators read tells from the AI, so the Phantom's own looking test must be found
+   either way; the question is the other uses.
+9. **A chosen ghost event.** You marked h06 (pick the event) and h07 (show yourself) no, while the Banshee's loop wants
+   its song on demand. Is a chosen kind needed beyond the Banshee's song? The answer may shrink Round 6.
+10. **Breath on glass.** If RE finds the game has no breath or fog effect on windows and mirrors, h11 and the Hantu's
+    "cold breath on glass" have no vanilla path. Drop them, or design an effect?
