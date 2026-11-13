@@ -190,13 +190,13 @@ void tick() {
 
   if (s.debugHud) {
     if (!g_hud || !game::alive(g_hud)) {
-      // The box is taller than the menu's old read-out and starts lower so fourteen lines grow downward
-      // from the same top edge.
+      // Pinned to the screen's top-left corner, the lines growing downward. (It was placed 930 units left of the
+      // left edge, off the screen, which is why the user saw the switch do nothing, 2026-11-13.)
       g_hud = ui::create_text(g_canvas, "pm dev menu hud text", 22.0f);
       if (g_hud) {
         ui::set_color(g_hud, kText);
         ui::set_alignment(g_hud, ui::Align::TopLeft);
-        ui::place(g_hud, {0.0f, 0.5f}, {0.0f, 0.5f}, {-930.0f, 335.0f}, {860.0f, 340.0f});
+        ui::place(g_hud, {0.0f, 1.0f}, {0.0f, 1.0f}, {30.0f, -30.0f}, {860.0f, 400.0f});
       }
     }
     if (g_hud) {

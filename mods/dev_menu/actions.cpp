@@ -5,8 +5,13 @@
 #include "actions.h"
 #include "dummy.h"
 
+#include <algorithm>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <cstdio>
+#include <cctype>
 #include <cmath>
 #include <random>
 #include <type_traits>
@@ -17,11 +22,15 @@
 #include "game.h"
 #include "hooks.h"
 #include "log.h"
+#include "managed_exception.h"
 #include "runtime.h"
 #include "text_table.h"
 
 #include "Difficulty.h"
 #include "Equipment.h"
+#include "JournalController.h"
+#include "Props.h"
+#include "UnityEvents.h"
 #include "Candle.h"
 #include "EvidenceController.h"
 #include "GhostInfo.h"
@@ -30,6 +39,7 @@
 #include "GhostCollection.h"
 #include "GhostController.h"
 #include "GhostHuntState.h"
+#include "GhostIdleState.h"
 #include "GhostTypes.h"
 #include "LevelController.h"
 #include "LevelRoom.h"
@@ -111,15 +121,27 @@ void det_remove_amount(api::Original<EquipmentInfo::RemoveAmountOwned> original,
   original(info, amount);
 }
 
-// The reward screen's results save the contract's money, progress the money and experience challenges and save
-// the seasonal event's score (RewardManager.Results, sdk/systems/contract.md). None of it runs in a dev session;
-// the screen's Next does not wait on it (its decompile: it refreshes the inventory and the level read-out).
-void det_start_results(api::Original<RewardManager::StartResults> original, void* screen) {
-  if (suppress_progress(g_session)) {
-    PM_LOG("dev-menu: the reward screen's results are skipped: this run is a dev session");
-    return;
-  }
+// The reward screen's results fill the screen (its rows, the ghost's type) and also save the contract's money,
+// progress challenges and send the seasonal event's score (RewardManager.Results, sdk/internals/contract.md). Round 14
+// skipped the results whole, which left the screen unfilled ("Failed to load ghost type" and $0 on every row, the
+// user's test of 2026-11-13). Now they run, and in a dev session each progress part is taken out the way Playable
+// Ghost takes them out for the ghost player: the totals are set to nothing straight after the rows are built, which is
+// what the results then save; challenge progress is dropped; and the screen gets the game's own answer for a contract
+// with no seasonal event, so no score is sent. The rows still show what the contract would have paid.
+void det_build_rows(api::Original<RewardManager::BuildRows> original, void* screen) {
   original(screen);
+  if (!suppress_progress(g_session)) return;
+  RewardManager::SetTotals(screen, 0, 0);
+  PM_LOG("dev-menu: the reward screen pays nothing: this run is a dev session");
+}
+RewardEventRow det_event_row(api::Original<RewardManager::EventRow> original, void* screen) {
+  if (!suppress_progress(g_session)) return original(screen);
+  return RewardEventRow{};
+}
+void det_challenge_progress(api::Original<ChallengesController::ChangeChallengeProgression> original, void* controller,
+                            int32_t type, int32_t amount) {
+  if (suppress_progress(g_session)) return;
+  original(controller, type, amount);
 }
 
 // The experience pay: every call is the reward screen's (its Skip among them).
@@ -137,6 +159,14 @@ void det_reset_equipment(api::Original<InventoryManager::ResetAllEquipment> orig
     return;
   }
   original(inventory);
+}
+
+// The ghost sight setting, on the hunt's own sight test. Every target the hunt picks, keeps or kills passes this
+// test (GhostHuntState.Sees' note), so it decides who a hunt can see. The game's test still runs first, so its record
+// of whom it has seen stays right whenever its sensor does see the player.
+bool det_sees(api::Original<GhostHuntState::Sees> original, void* hunt, void* player, bool skipDeogen) {
+  const bool sees = original(hunt, player, skipDeogen);
+  return sight_answer(g_switches.ghostSight, sees, player && Player::isDead.get(player));
 }
 
 // The save freeze: once a dev session has started, EasySave3's commit of a written save is skipped, so the save on
@@ -300,10 +330,16 @@ bool start() {
          api::hook<ExitLevel::CheckMissions>(&det_check_missions, "Dev Menu: no missions at the end") &&
          api::hook<ExitLevel::CheckChallenges>(&det_check_challenges, "Dev Menu: no challenges at the end") &&
          api::hook<EquipmentInfo::RemoveAmountOwned>(&det_remove_amount, "Dev Menu: consumables stay") &&
-         api::hook<RewardManager::StartResults>(&det_start_results, "Dev Menu: no reward results") &&
+         api::hook<RewardManager::BuildRows>(&det_build_rows, "Dev Menu: the reward screen pays nothing",
+                                             api::Twins::CanonicalOnly) &&
+         api::hook<RewardManager::EventRow>(&det_event_row, "Dev Menu: no seasonal event score",
+                                            api::Twins::CanonicalOnly) &&
+         api::hook<ChallengesController::ChangeChallengeProgression>(
+             &det_challenge_progress, "Dev Menu: no challenge progress", api::Twins::CanonicalOnly) &&
          api::hook<SingleplayerProfile::AddXPAndFunds>(&det_add_xp, "Dev Menu: no experience pay") &&
          api::hook<InventoryManager::ResetAllEquipment>(&det_reset_equipment, "Dev Menu: equipment comes back") &&
          api::hook<PhysicsCharacterController::Move>(&det_move, "Dev Menu: noclip moves along the camera") &&
+         api::hook<GhostHuntState::Sees>(&det_sees, "Dev Menu: the ghost sight setting", api::Twins::CanonicalOnly) &&
          api::hook<ES3IO::CommitBackup>(&det_commit, "Dev Menu: the save stays as it was in a dev session") &&
          api::hook<StoreItem::IsUnlocked>(&det_unlocked, "Dev Menu: everything unlocked") &&
          api::hook<StoreItem::MeetsLevel>(&det_meets_level, "Dev Menu: every level reached") &&
@@ -339,8 +375,89 @@ void end_loan() {
   g_loanEnds = 0;
 }
 
+namespace {
+// The type's offset to the idle hunt check, as the game's own check last gave it for this ghost.
+int g_huntOffset = 0;
+bool g_haveOffset = false;
+void* g_offsetGhost = nullptr;
+uint64_t g_nextOffsetAsk = 0;
+api::Held g_scratchIdle;  // the menu's own idle state for this ghost, never run by the state machine
+
+// The menu's own idle state for `ai`, made as GhostAI.ChangeState makes one (GhostIdleState.ctor) and given the three
+// scene controllers its enter copies (the entry's note); remade for another ghost. Null when it cannot be made.
+void* scratch_idle(void* ai) {
+  // A plain managed object, not an engine one: api::alive does not apply, the Held keeps it.
+  if (!g_scratchIdle || GhostIdleState::ghost.get(g_scratchIdle) != ai) {
+    g_scratchIdle = api::Held{};
+    void* idle = GhostIdleState::type.make();
+    if (!idle) return nullptr;
+    GhostIdleState::ctor(idle, ai);
+    g_scratchIdle = api::Held{idle};
+  }
+  void* level = LevelController::instance.get();
+  void* game = GameController::instance.get();
+  void* sound = SoundController::instance.get();
+  if (!level || !game || !sound || !api::alive(level) || !api::alive(game) || !api::alive(sound)) return nullptr;
+  GhostIdleState::levelController.set(g_scratchIdle, level);
+  GhostIdleState::gameController.set(g_scratchIdle, game);
+  GhostIdleState::soundController.set(g_scratchIdle, sound);
+  return g_scratchIdle;
+}
+
+// Asks the game's own hunt insanity (GhostIdleState.HuntInsanity) twice a second, on the menu's own idle state, so
+// the answer comes whatever the ghost is doing and the ghost's running state is never touched (the user's ask of
+// 2026-11-13). The check starts from the insanity it measures and adds the type's offset, for every type and from
+// the contract as it stands (the Mare's lights, the Yokai's talk, the Raiju's electronics...); so the answer less
+// that starting insanity is the offset.
+void ask_hunt_offset() {
+  void* ai = game::ghost_ai();
+  if (ai != g_offsetGhost) {  // another contract or another ghost: the last answer no longer holds
+    g_offsetGhost = ai;
+    g_haveOffset = false;
+  }
+  const uint64_t now = now_ms();
+  if (!ai || now < g_nextOffsetAsk) return;
+  g_nextOffsetAsk = now + 500;
+  void* idle = scratch_idle(ai);
+  if (!idle) return;
+  // Where the check starts: the ghost's own player when it has one (the Banshee), the players' average otherwise.
+  float base = 0.0f;
+  void* focus = GhostAI::bansheeTarget.get(ai);
+  if (focus && api::alive(focus)) {
+    void* s = Player::sanity.get(focus);
+    if (!s) return;
+    base = PlayerSanity::insanity.get(s);
+  } else {
+    base = GameController::GetAveragePlayerInsanity(GameController::instance.get());
+  }
+  GhostIdleState::rollRange.set(idle, 100);  // as made: the Shade's rules grow it on every run
+  try {
+    GhostIdleState::HuntInsanity(idle);
+  } catch (const Il2CppExceptionWrapper&) {
+    static bool told = false;
+    if (!told) PM_LOG("dev-menu: the game's hunt check threw on the menu's idle state; the hunt line stays unknown");
+    told = true;
+    return;
+  }
+  g_huntOffset = GhostIdleState::insanity.get(idle) - static_cast<int>(base);
+  g_haveOffset = true;
+}
+}  // namespace
+
+int hunt_threshold() {
+  void* c = controller();
+  if (!c || !game::ghost_ai()) return -1;
+  // The Thaye's check is by its age instead: it hunts while the insanity is above 100 less
+  // GhostController.thayeThreshold, so at a sanity below the threshold.
+  if (api::content::id_of(GhostController::behaviourType.get(c)) == "vanilla.thaye")
+    return GhostController::thayeThreshold.get(c) - 1;
+  return g_haveOffset ? kHuntInsanity + g_huntOffset : -1;
+}
+
 void tick() {
   dummy::tick();
+  ask_hunt_offset();
+  end_contract_tick();
   keep_supplies();
   hold_sight();
   if (g_lentFrom) {
@@ -357,9 +474,10 @@ void tick() {
     void* player = game::local_player();
     void* s = player ? Player::sanity.get(player) : nullptr;
     const uint64_t now = now_ms();
-    if (s && now >= g_nextSanityLock && sanity_needs_reset(PlayerSanity::insanity.get(s), g_switches.lockedSanity)) {
+    if (s && now >= g_nextSanityLock &&
+        sanity_needs_reset(100.0f - PlayerSanity::insanity.get(s), g_switches.lockedSanity)) {
       g_nextSanityLock = now + 250;
-      PlayerSanity::SetInsanity(s, g_switches.lockedSanity);
+      PlayerSanity::SetInsanity(s, 100 - g_switches.lockedSanity);  // the lock holds sanity; the setter takes insanity
     }
   }
 }
@@ -433,19 +551,34 @@ std::string ghost_line() {
 std::string ghost_identity() {
   void* c = controller();
   if (!c) return {};
-  // The plan's identity card: the type the contract shows and the behaviour the roll actually gave,
-  // which differ only for a Mimic (GhostController.ghostType and .behaviourType).
+  // The identity card: the type the contract shows, and the rules its AI follows when they differ. A custom ghost's
+  // behaviour type is the game's "no type" (the host runs its rules on the generic AI, docs/custom-ghosts.md), and a
+  // Mimic's is the type it copies (GhostController.ghostType and .behaviourType).
   const int32_t type = GhostController::ghostType.get(c);
-  std::string out = std::to_string(type);
-  const std::string id = api::content::id_of(type);
-  if (!id.empty()) out += " " + id;
+  std::string out = pretty_type(type) + " (" + std::to_string(type) + ")";
   const int32_t behaviour = GhostController::behaviourType.get(c);
-  if (behaviour != type) {
-    out += " behaviour " + std::to_string(behaviour);
-    const std::string bid = api::content::id_of(behaviour);
-    if (!bid.empty()) out += " " + bid;
-  }
+  if (behaviour == GhostType::None()) return out + ", custom rules";
+  if (behaviour != type) out += ", acting as " + pretty_type(behaviour);
   return out;
+}
+
+std::string pretty_type(int32_t type) {
+  // A developer's name for a type, from its content id: the part after the last dot, words split and capitalised
+  // ("vanilla.yurei" reads Yurei, "phasmomods.custom-ghosts.black_shuck" reads Black Shuck).
+  const std::string id = api::content::id_of(type);
+  if (id.empty()) return std::to_string(type);
+  std::string name = id.substr(id.rfind('.') + 1);
+  bool start = true;
+  for (char& ch : name) {
+    if (ch == '_' || ch == '-') {
+      ch = ' ';
+      start = true;
+    } else if (start) {
+      ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+      start = false;
+    }
+  }
+  return name;
 }
 
 int favourite_room_index() {
@@ -498,16 +631,30 @@ int forced_type() {
 std::string forced_type_name() {
   const int32_t type = forced_type();
   if (type == 0) return "random";
-  const std::string id = api::content::id_of(type);
-  if (!id.empty()) return id;
-  return std::to_string(type);
+  return pretty_type(type);
 }
 
-int forced_type_options() { return 1 + static_cast<int>(offered_types().size()); }
+// Every ghost type the game and the running mods know, in number order: the host answers a content id for each
+// (vanilla.<name> from the GhostType enum's own value names, a custom ghost's own id), the "no type" value aside. Read
+// without a contract too, so the forced type can be chosen in the lobby, where the next contract's roll reads it.
+std::vector<int32_t> known_types() {
+  static uint64_t nextScan = 0;
+  static std::vector<int32_t> types;
+  const uint64_t now = now_ms();
+  if (now < nextScan && !types.empty()) return types;
+  nextScan = now + 2000;
+  types.clear();
+  const int32_t none = GhostType::None();
+  for (int32_t t = 0; t < 256; ++t)
+    if (t != none && !api::content::id_of(t).empty()) types.push_back(t);
+  return types;
+}
+
+int forced_type_options() { return 1 + static_cast<int>(known_types().size()); }
 
 int forced_type_value(int option) {
   if (option <= 0) return 0;  // the game's Random: no override
-  const std::vector<int32_t> types = offered_types();
+  const std::vector<int32_t> types = known_types();
   return static_cast<size_t>(option - 1) < types.size() ? types[option - 1] : 0;
 }
 
@@ -527,9 +674,11 @@ int bonus_reward() {
 }
 
 float sanity() {
+  // PlayerSanity.insanity is how far gone the investigator is (0 fully sane): the sanity the game shows is 100 less it
+  // (Playable Ghost's session.h reads it the same way).
   void* player = game::local_player();
   void* s = player ? Player::sanity.get(player) : nullptr;
-  return s ? PlayerSanity::insanity.get(s) : 0.0f;
+  return s ? 100.0f - PlayerSanity::insanity.get(s) : 0.0f;
 }
 
 bool dead() {
@@ -636,14 +785,6 @@ int random_room() {
   return static_cast<int>(rng() % static_cast<uint64_t>(n));
 }
 
-void bump_base_speed(float delta) {
-  void* ai = game::ghost_ai();
-  if (!ai) return;
-  float speed = GhostAI::baseSpeed.get(ai) + delta;
-  if (speed < 0.0f) speed = 0.0f;
-  GhostAI::baseSpeed.set(ai, speed);  // RefreshBase rereads the field, so the change holds (ghost-ai.md)
-}
-
 void fire_event(int32_t state) {
   void* ai = game::ghost_ai();
   if (ai) GhostAI::ChangeState(ai, state, nullptr, false);  // not forced: the game's guards still apply
@@ -678,9 +819,10 @@ void set_forced_type(int value) {
 }
 
 void set_sanity(int percent) {
+  // SetInsanity takes the insanity, so a sanity of `percent` is an insanity of 100 less it.
   void* player = game::local_player();
   void* s = player ? Player::sanity.get(player) : nullptr;
-  if (s) PlayerSanity::SetInsanity(s, percent);
+  if (s) PlayerSanity::SetInsanity(s, 100 - (percent < 0 ? 0 : percent > 100 ? 100 : percent));
 }
 
 void set_frozen(bool value) {
@@ -688,14 +830,6 @@ void set_frozen(bool value) {
   if (!player) return;
   Player::ToggleFreezePlayerMovement(player, value);
   g_frozen = value;
-}
-
-void bump_speed_multiplier(int steps) {
-  void* rig = pc_rig();
-  if (!rig) return;
-  // The game's own setter, which stores the multiplier and re-applies it to the controller in one call (the
-  // path a Monkey Paw wish's speed takes).
-  LocalPCPlayer::SetPlayerSpeedMultiplier(rig, next_speed_multiplier(speed_multiplier(), steps));
 }
 
 void reset_speed_multiplier() {
@@ -803,6 +937,90 @@ void* exit_level() {
   return level;
 }
 
+namespace {
+
+// The truck's door button, found as the pause menu is (at most one scene search a second).
+void* lift_button() {
+  static uint64_t nextSearch = 0;
+  static api::Held found;
+  if (found && game::alive(found)) return found;
+  const uint64_t now = now_ms();
+  if (now < nextSearch) return nullptr;
+  nextSearch = now + 1000;
+  void* type = LiftButton::type.type_object();
+  found = type ? Object::FindObjectOfType(type, false) : nullptr;
+  return found;
+}
+
+// The truck's button pressed as a player presses it: the button's Start adds its own press to its interaction's use
+// event at run time (PhotonObjectInteract.AddUseEvent), and a player's use runs that event; the press sends
+// LiftButton.AttemptUse to the master. Round 14 looked for a listener saved in the scene instead, and there is none
+// (the user's test of 2026-11-13: "no event that presses it").
+bool press(void* button) {
+  void* interact = LiftButton::photonInteract.get(button);
+  if (!interact) return false;
+  void* events[16] = {};
+  const size_t n = PhotonObjectInteract::type.fields_of<UnityEvent::type>(interact, false, events, 16);
+  for (size_t i = 0; i < n && i < 16; ++i) {
+    void* lists = events[i] ? UnityEventBase::m_Calls.get(events[i]) : nullptr;
+    const api::List calls{lists ? InvokableCallList::m_RuntimeCalls.get(lists) : nullptr};
+    for (size_t c = 0; c < calls.size(); ++c) {
+      void* call = calls[c];
+      void* action = call && InvokableCall::type.is(call) ? InvokableCall::Delegate.get(call) : nullptr;
+      if (action && Delegate::m_target.get(action) == button) {
+        UnityEvent::Invoke(events[i]);
+        return true;
+      }
+    }
+  }
+  PM_LOG("dev-menu: none of the truck button's events holds its press; it was not pressed");
+  return false;
+}
+
+// A press the menu is waiting to make once the game counts the investigator inside the truck.
+uint64_t g_pressAt = 0;
+uint64_t g_pressGiveUp = 0;
+
+}  // namespace
+
+EndContract end_contract_by_button() {
+  // The game's own way to end a contract is the truck's button: the press goes to the master, which closes the doors
+  // only with every living player inside, then the doors' use starts the truck's leaving (LiftButton.AttemptUse's
+  // note). Calling ExitLevel.StartAttemptExitLevel directly did nothing: only the press sets the flag it needs.
+  void* button = lift_button();
+  void* exit = button ? LiftButton::exitLevel.get(button) : nullptr;
+  if (!button || !exit) return EndContract::NoTruck;
+  if (LiftButton::isClosed.get(button)) return EndContract::DoorsShut;
+  if (!ExitLevel::ThereAreAlivePlayersOutsideTheTruck(exit))
+    return press(button) ? EndContract::Pressed : EndContract::NoTruck;
+  // Outside: into the truck first, then the press once the truck's inside has counted the investigator (its trigger
+  // runs on the physics step, so not this frame). Noclip goes off first: with the investigator's collider off the
+  // truck's trigger never counts them inside.
+  set_noclip(false);
+  if (!me_to_truck()) return EndContract::NoTruck;
+  const uint64_t now = now_ms();
+  g_pressAt = now + 300;
+  g_pressGiveUp = now + 4000;
+  return EndContract::Waiting;
+}
+
+void end_contract_tick() {
+  if (!g_pressAt) return;
+  const uint64_t now = now_ms();
+  if (now < g_pressAt) return;
+  void* button = lift_button();
+  void* exit = button ? LiftButton::exitLevel.get(button) : nullptr;
+  if (button && exit && !LiftButton::isClosed.get(button) && !ExitLevel::ThereAreAlivePlayersOutsideTheTruck(exit)) {
+    press(button);
+    g_pressAt = 0;
+    return;
+  }
+  if (now >= g_pressGiveUp) {
+    PM_LOG("dev-menu: the truck never counted the investigator inside; its button was not pressed");
+    g_pressAt = 0;
+  }
+}
+
 bool end_contract() {
   // The game's own master-side starter, the call LiftButton.NetworkedUse makes on the master: its
   // coroutine sends the game's own Exit RPC with the game's own sender. Nothing here is an RPC.
@@ -874,8 +1092,7 @@ std::string content_line() {
 
 std::string type_name(int32_t type) {
   if (type < 0) return {};
-  const std::string id = api::content::id_of(type);
-  return id.empty() ? std::to_string(type) : id + " (" + std::to_string(type) + ")";
+  return pretty_type(type) + " (" + std::to_string(type) + ")";
 }
 
 bool retype(int32_t type) {
@@ -913,109 +1130,184 @@ bool retype(int32_t type) {
 
 namespace {
 
-enum class OptionKind { Bool, Int, Float, Level, Fuse };
+enum class OptionKind { Bool, Int, Float, Level, Fuse, Choice };
 
 // When the game reads the option (re/dump/notes/2026-11-12-difficulty-readers.md, from decompiles of every reader
 // reached through LevelValues): Live on each use or frame, so a change applies at once; Start once as the contract
-// begins, so a change waits for the next contract; Mixed both (a value seeded at the start and a test read live);
-// Unknown where no reader was found.
+// begins, so a change waits for the next contract; Mixed both; Unknown where no reader was found.
 enum class OptionWhen { Live, Start, Mixed, Unknown };
 
 struct Option {
   const char* label;  // the option's text key
+  OptionGroup group;  // where the game's own custom difficulty menu puts it
   OptionWhen when;
   OptionKind kind;
-  float step;         // the menu's step, not the game's: the game's own menu sets these by its sliders
+  float step;         // the menu's step and top, not the game's: the game's own menu sets these with its sliders
+  float top;          // a number's or a choice's top; levels and the fuse box take theirs from the game's enum
   float (*get)(void* d);
   void (*put)(void* d, float v);
 };
 
 const std::vector<Option>& options() {
   static const std::vector<Option> table = {
-      {pm::i18n::key("dev-menu.option.starting-sanity"), OptionWhen::Mixed, OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::startingSanity.get(d)); },
+      {pm::i18n::key("dev-menu.option.starting-sanity"), OptionGroup::Player, OptionWhen::Mixed, OptionKind::Int, 5.0f, 100.0f,
+       [](void* d) { return static_cast<float>(Difficulty::startingSanity.get(d)); },
        [](void* d, float v) { Difficulty::startingSanity.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.pill-restore"), OptionWhen::Live, OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::sanityPillRestorationAmount.get(d)); },
+      {pm::i18n::key("dev-menu.option.pill-restore"), OptionGroup::Player, OptionWhen::Live, OptionKind::Int, 5.0f, 100.0f,
+       [](void* d) { return static_cast<float>(Difficulty::sanityPillRestorationAmount.get(d)); },
        [](void* d, float v) { Difficulty::sanityPillRestorationAmount.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.sanity-drain"), OptionWhen::Start, OptionKind::Float, 0.25f, [](void* d) { return Difficulty::sanityDrain.get(d); },
+      {pm::i18n::key("dev-menu.option.sanity-drain"), OptionGroup::Player, OptionWhen::Start, OptionKind::Float, 0.25f, 5.0f,
+       [](void* d) { return Difficulty::sanityDrain.get(d); },
        [](void* d, float v) { Difficulty::sanityDrain.set(d, v); }},
-      {pm::i18n::key("dev-menu.option.sprinting"), OptionWhen::Mixed, OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::sprinting.get(d)); },
+      {pm::i18n::key("dev-menu.option.sprinting"), OptionGroup::Player, OptionWhen::Mixed, OptionKind::Choice, 1.0f, 2.0f,
+       [](void* d) { return static_cast<float>(Difficulty::sprinting.get(d)); },
        [](void* d, float v) { Difficulty::sprinting.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.player-speed-option"), OptionWhen::Start, OptionKind::Float, 0.25f, [](void* d) { return Difficulty::playerSpeed.get(d); },
+      {pm::i18n::key("dev-menu.option.player-speed-option"), OptionGroup::Player, OptionWhen::Start, OptionKind::Float, 0.25f, 5.0f,
+       [](void* d) { return Difficulty::playerSpeed.get(d); },
        [](void* d, float v) { Difficulty::playerSpeed.set(d, v); }},
-      {pm::i18n::key("dev-menu.option.flashlights"), OptionWhen::Live, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::flashlights.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.flashlights"), OptionGroup::Player, OptionWhen::Live, OptionKind::Bool, 0.0f, 1.0f,
+       [](void* d) { return Difficulty::flashlights.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::flashlights.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.lose-equipment"), OptionWhen::Live, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::loseItemsOnDeath.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.lose-equipment"), OptionGroup::Player, OptionWhen::Live, OptionKind::Bool, 0.0f, 1.0f,
+       [](void* d) { return Difficulty::loseItemsOnDeath.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::loseItemsOnDeath.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.ghost-speed"), OptionWhen::Live, OptionKind::Float, 0.25f, [](void* d) { return Difficulty::ghostSpeed.get(d); },
+      {pm::i18n::key("dev-menu.option.ghost-speed"), OptionGroup::Ghost, OptionWhen::Live, OptionKind::Float, 0.25f, 5.0f,
+       [](void* d) { return Difficulty::ghostSpeed.get(d); },
        [](void* d, float v) { Difficulty::ghostSpeed.set(d, v); }},
-      {pm::i18n::key("dev-menu.option.roaming"), OptionWhen::Live, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::roamingFrequency.get(d)); },
+      {pm::i18n::key("dev-menu.option.roaming"), OptionGroup::Ghost, OptionWhen::Live, OptionKind::Level, 1.0f, 0.0f,
+       [](void* d) { return static_cast<float>(Difficulty::roamingFrequency.get(d)); },
        [](void* d, float v) { Difficulty::roamingFrequency.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.favourite-room-changes"), OptionWhen::Live, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::changingFavouriteRoom.get(d)); },
+      {pm::i18n::key("dev-menu.option.favourite-room-changes"), OptionGroup::Ghost, OptionWhen::Live, OptionKind::Level, 1.0f, 0.0f,
+       [](void* d) { return static_cast<float>(Difficulty::changingFavouriteRoom.get(d)); },
        [](void* d, float v) { Difficulty::changingFavouriteRoom.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.interactions"), OptionWhen::Live, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::interactionAmount.get(d)); },
+      {pm::i18n::key("dev-menu.option.interactions"), OptionGroup::Ghost, OptionWhen::Live, OptionKind::Level, 1.0f, 0.0f,
+       [](void* d) { return static_cast<float>(Difficulty::interactionAmount.get(d)); },
        [](void* d, float v) { Difficulty::interactionAmount.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.events"), OptionWhen::Live, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::eventFrequency.get(d)); },
+      {pm::i18n::key("dev-menu.option.events"), OptionGroup::Ghost, OptionWhen::Live, OptionKind::Level, 1.0f, 0.0f,
+       [](void* d) { return static_cast<float>(Difficulty::eventFrequency.get(d)); },
        [](void* d, float v) { Difficulty::eventFrequency.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.friendly"), OptionWhen::Live, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::friendlyGhost.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.friendly"), OptionGroup::Ghost, OptionWhen::Live, OptionKind::Bool, 0.0f, 1.0f,
+       [](void* d) { return Difficulty::friendlyGhost.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::friendlyGhost.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.grace-period"), OptionWhen::Start, OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::gracePeriod.get(d)); },
+      {pm::i18n::key("dev-menu.option.grace-period"), OptionGroup::Ghost, OptionWhen::Start, OptionKind::Int, 1.0f, 10.0f,
+       [](void* d) { return static_cast<float>(Difficulty::gracePeriod.get(d)); },
        [](void* d, float v) { Difficulty::gracePeriod.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.hunt-duration"), OptionWhen::Start, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::huntDuration.get(d)); },
+      {pm::i18n::key("dev-menu.option.hunt-duration"), OptionGroup::Ghost, OptionWhen::Start, OptionKind::Level, 1.0f, 0.0f,
+       [](void* d) { return static_cast<float>(Difficulty::huntDuration.get(d)); },
        [](void* d, float v) { Difficulty::huntDuration.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.kills-extend"), OptionWhen::Live, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::killsExtendHuntDuration.get(d)); },
+      {pm::i18n::key("dev-menu.option.kills-extend"), OptionGroup::Ghost, OptionWhen::Live, OptionKind::Level, 1.0f, 0.0f,
+       [](void* d) { return static_cast<float>(Difficulty::killsExtendHuntDuration.get(d)); },
        [](void* d, float v) { Difficulty::killsExtendHuntDuration.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.evidence"), OptionWhen::Start, OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::evidenceGiven.get(d)); },
+      {pm::i18n::key("dev-menu.option.evidence"), OptionGroup::Ghost, OptionWhen::Start, OptionKind::Int, 1.0f, 3.0f,
+       [](void* d) { return static_cast<float>(Difficulty::evidenceGiven.get(d)); },
        [](void* d, float v) { Difficulty::evidenceGiven.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.fingerprint-chance"), OptionWhen::Live, OptionKind::Float, 0.1f, [](void* d) { return Difficulty::fingerprintChance.get(d); },
+      {pm::i18n::key("dev-menu.option.fingerprint-chance"), OptionGroup::Ghost, OptionWhen::Live, OptionKind::Float, 0.05f, 1.0f,
+       [](void* d) { return Difficulty::fingerprintChance.get(d); },
        [](void* d, float v) { Difficulty::fingerprintChance.set(d, v); }},
-      {pm::i18n::key("dev-menu.option.fingerprint-duration"), OptionWhen::Live, OptionKind::Int, 5.0f, [](void* d) { return static_cast<float>(Difficulty::fingerprintDuration.get(d)); },
+      {pm::i18n::key("dev-menu.option.fingerprint-duration"), OptionGroup::Ghost, OptionWhen::Live, OptionKind::Int, 5.0f, 300.0f,
+       [](void* d) { return static_cast<float>(Difficulty::fingerprintDuration.get(d)); },
        [](void* d, float v) { Difficulty::fingerprintDuration.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.setup-time"), OptionWhen::Start, OptionKind::Int, 30.0f, [](void* d) { return static_cast<float>(Difficulty::setupTime.get(d)); },
+      {pm::i18n::key("dev-menu.option.setup-time"), OptionGroup::Contract, OptionWhen::Start, OptionKind::Int, 30.0f, 600.0f,
+       [](void* d) { return static_cast<float>(Difficulty::setupTime.get(d)); },
        [](void* d, float v) { Difficulty::setupTime.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.doors-open"), OptionWhen::Start, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::amountOfDoorsOpen.get(d)); },
+      {pm::i18n::key("dev-menu.option.doors-open"), OptionGroup::Contract, OptionWhen::Start, OptionKind::Level, 1.0f, 0.0f,
+       [](void* d) { return static_cast<float>(Difficulty::amountOfDoorsOpen.get(d)); },
        [](void* d, float v) { Difficulty::amountOfDoorsOpen.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.hiding-places"), OptionWhen::Start, OptionKind::Level, 1.0f, [](void* d) { return static_cast<float>(Difficulty::amountOfHidingPlaces.get(d)); },
+      {pm::i18n::key("dev-menu.option.hiding-places"), OptionGroup::Contract, OptionWhen::Start, OptionKind::Level, 1.0f, 0.0f,
+       [](void* d) { return static_cast<float>(Difficulty::amountOfHidingPlaces.get(d)); },
        [](void* d, float v) { Difficulty::amountOfHidingPlaces.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.sanity-monitor"), OptionWhen::Start, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::sanityMonitor.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.sanity-monitor"), OptionGroup::Contract, OptionWhen::Start, OptionKind::Bool, 0.0f, 1.0f,
+       [](void* d) { return Difficulty::sanityMonitor.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::sanityMonitor.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.activity-monitor"), OptionWhen::Unknown, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::activityMonitor.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.activity-monitor"), OptionGroup::Contract, OptionWhen::Unknown, OptionKind::Bool, 0.0f, 1.0f,
+       [](void* d) { return Difficulty::activityMonitor.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::activityMonitor.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.fusebox-power"), OptionWhen::Start, OptionKind::Fuse, 1.0f, [](void* d) { return static_cast<float>(Difficulty::fuseBoxStartPower.get(d)); },
+      {pm::i18n::key("dev-menu.option.fusebox-power"), OptionGroup::Contract, OptionWhen::Start, OptionKind::Fuse, 1.0f, 0.0f,
+       [](void* d) { return static_cast<float>(Difficulty::fuseBoxStartPower.get(d)); },
        [](void* d, float v) { Difficulty::fuseBoxStartPower.set(d, static_cast<int32_t>(std::lround(v))); }},
-      {pm::i18n::key("dev-menu.option.fusebox-on-map"), OptionWhen::Unknown, OptionKind::Bool, 0.0f, [](void* d) { return Difficulty::fuseBoxVisibleOnMap.get(d) ? 1.0f : 0.0f; },
+      {pm::i18n::key("dev-menu.option.fusebox-on-map"), OptionGroup::Contract, OptionWhen::Unknown, OptionKind::Bool, 0.0f, 1.0f,
+       [](void* d) { return Difficulty::fuseBoxVisibleOnMap.get(d) ? 1.0f : 0.0f; },
        [](void* d, float v) { Difficulty::fuseBoxVisibleOnMap.set(d, v > 0.5f); }},
-      {pm::i18n::key("dev-menu.option.cursed-quantity"), OptionWhen::Start, OptionKind::Int, 1.0f, [](void* d) { return static_cast<float>(Difficulty::cursedPossessionsQuantity.get(d)); },
+      {pm::i18n::key("dev-menu.option.cursed-quantity"), OptionGroup::Contract, OptionWhen::Start, OptionKind::Int, 1.0f, 7.0f,
+       [](void* d) { return static_cast<float>(Difficulty::cursedPossessionsQuantity.get(d)); },
        [](void* d, float v) { Difficulty::cursedPossessionsQuantity.set(d, static_cast<int32_t>(std::lround(v))); }},
   };
   return table;
 }
 
-// The highest number of the two option enums, from the game's own value names (the map), so an update that adds a
-// level still reaches it.
-float top_of(OptionKind kind) {
-  if (kind == OptionKind::Level) return static_cast<float>(DifficultyValueType::VeryHigh());
-  if (kind == OptionKind::Fuse) return static_cast<float>(FuseBoxValueType::On());
-  return 0.0f;
+// A level's or the fuse box's top, from the game's own value names (the map), so an update that adds one reaches it.
+float top_of(const Option& o) {
+  if (o.kind == OptionKind::Level) return static_cast<float>(DifficultyValueType::VeryHigh());
+  if (o.kind == OptionKind::Fuse) return static_cast<float>(FuseBoxValueType::On());
+  if (o.kind == OptionKind::Bool) return 1.0f;
+  return o.top;
 }
+
+bool valid(int index) { return index >= 0 && index < static_cast<int>(options().size()); }
 
 }  // namespace
 
 int option_count() { return static_cast<int>(options().size()); }
 
-int option_when(int index) {
-  return index >= 0 && index < option_count() ? static_cast<int>(options()[index].when) : 3;
+int option_when(int index) { return valid(index) ? static_cast<int>(options()[index].when) : 3; }
+
+const char* option_label(int index) { return valid(index) ? options()[index].label : ""; }
+
+OptionGroup option_group(int index) { return valid(index) ? options()[index].group : OptionGroup::Player; }
+
+OptionControl option_control(int index) {
+  if (!valid(index)) return OptionControl::Slider;
+  switch (options()[index].kind) {
+    case OptionKind::Bool: return OptionControl::Switch;
+    case OptionKind::Level:
+    case OptionKind::Fuse:
+    case OptionKind::Choice: return OptionControl::Choice;
+    default: return OptionControl::Slider;
+  }
 }
 
-const char* option_label(int index) {
-  return index >= 0 && index < option_count() ? options()[index].label : "";
+float option_top(int index) { return valid(index) ? top_of(options()[index]) : 0.0f; }
+
+float option_step_size(int index) { return valid(index) ? options()[index].step : 1.0f; }
+
+float option_number(int index) {
+  void* d = difficulty();
+  return d && valid(index) ? options()[index].get(d) : 0.0f;
+}
+
+void option_set(int index, float value) {
+  void* d = difficulty();
+  if (!d || !valid(index)) return;
+  const Option& o = options()[index];
+  const float top = top_of(o);
+  o.put(d, value < 0.0f ? 0.0f : (value > top ? top : value));
 }
 
 std::string option_value(int index) {
   void* d = difficulty();
-  if (!d || index < 0 || index >= option_count()) return {};
+  if (!d || !valid(index)) return {};
   const Option& o = options()[index];
   const float v = o.get(d);
   if (o.kind == OptionKind::Bool) return v > 0.5f ? "on" : "off";
+  // A level or the fuse box by the game's own value names (Difficulty.ValueType, Difficulty's fuse box enum), read
+  // through the map, so a renumbering in an update still names them right.
+  const int32_t n = static_cast<int32_t>(std::lround(v));
+  if (o.kind == OptionKind::Level) {
+    static constexpr const char* kLevelKeys[] = {i18n::key("dev-menu.level.none"), i18n::key("dev-menu.level.low"),
+                                                 i18n::key("dev-menu.level.medium"), i18n::key("dev-menu.level.high"),
+                                                 i18n::key("dev-menu.level.very-high")};
+    const int32_t values[] = {DifficultyValueType::None(), DifficultyValueType::Low(), DifficultyValueType::Medium(),
+                              DifficultyValueType::High(), DifficultyValueType::VeryHigh()};
+    for (int i = 0; i < 5; ++i)
+      if (values[i] == n) return i18n::text(kLevelKeys[i]);
+  }
+  if (o.kind == OptionKind::Fuse) {
+    static constexpr const char* kFuseKeys[] = {i18n::key("dev-menu.fuse.broken"), i18n::key("dev-menu.fuse.off"),
+                                                i18n::key("dev-menu.fuse.on")};
+    const int32_t values[] = {FuseBoxValueType::Broken(), FuseBoxValueType::Off(), FuseBoxValueType::On()};
+    for (int i = 0; i < 3; ++i)
+      if (values[i] == n) return i18n::text(kFuseKeys[i]);
+  }
   if (o.kind == OptionKind::Float) {
     char buf[32];
     std::snprintf(buf, sizeof buf, "%.2f", static_cast<double>(v));
@@ -1026,22 +1318,23 @@ std::string option_value(int index) {
 
 void option_step(int index, int direction) {
   void* d = difficulty();
-  if (!d || index < 0 || index >= option_count() || direction == 0) return;
+  if (!d || !valid(index) || direction == 0) return;
   const Option& o = options()[index];
   float v = o.get(d);
+  const float top = top_of(o);
   switch (o.kind) {
     case OptionKind::Bool: v = v > 0.5f ? 0.0f : 1.0f; break;
     case OptionKind::Level:
-    case OptionKind::Fuse: {
-      const float top = top_of(o.kind);
+    case OptionKind::Fuse:
+    case OptionKind::Choice:
       v += static_cast<float>(direction);
-      if (v < 0.0f) v = top;  // the enum's levels wrap, as a picker's do
+      if (v < 0.0f) v = top;  // a choice wraps, as a picker's does
       if (v > top) v = 0.0f;
       break;
-    }
     default:
       v += o.step * static_cast<float>(direction);
-      if (v < 0.0f) v = 0.0f;  // the menu's floor: none of these options means anything below nothing
+      if (v < 0.0f) v = 0.0f;
+      if (v > top) v = top;
       break;
   }
   o.put(d, v);
@@ -1152,17 +1445,78 @@ std::string item_name(int index) {
   return api::to_utf8(StoreItem::itemName.get(items[static_cast<size_t>(index)]));
 }
 
-bool spawn_item(int index) {
+namespace {
+// Whether `p` lies in the truck: inside the box of the trigger the game counts players in (ExitLevel.trigger).
+bool in_truck(Vector3 p) {
+  void* lift = exit_level();
+  void* inside = lift ? ExitLevel::trigger.get(lift) : nullptr;
+  void* box = inside ? Component::GetComponent(inside, Collider::type.type_object()) : nullptr;
+  if (!box) return false;
+  const Bounds b = Collider::get_bounds(box);
+  return std::fabs(p.x - b.center.x) <= b.extents.x && std::fabs(p.y - b.center.y) <= b.extents.y &&
+         std::fabs(p.z - b.center.z) <= b.extents.z;
+}
+
+// A copy of the item free to hand out. First one the pool has never handed out: the pool's Start switches every copy
+// off and its hand-out switches the one it gives on (ObjectPooler.SpawnFromEquipmentPool's note), so a copy still off
+// is unused. Then one lying in the truck that no hand or ghost is using (PhotonObjectInteract.inUse): the truck's own
+// spawner hands out every copy the loadout brings, so those are the copies a player sees as left (the user's test of
+// 2026-11-13, where every row said none were left). Null when neither exists; the counts go to the log either way.
+void* free_copy(void* pool, void* item) {
+  void* inTruck = nullptr;
+  size_t on = 0, truck = 0;
+  const api::List tiers{ObjectPooler::tierPools.get(pool)};
+  for (size_t t = 0; t < tiers.size(); ++t) {
+    const api::RefArray pools{tiers[t] ? TierEquipmentPool::equipmentPools.get(tiers[t]) : nullptr};
+    for (size_t p = 0; p < pools.size(); ++p) {
+      if (!pools[p] || EquipmentPool::item.get(pools[p]) != item) continue;
+      const api::RefArray copies{EquipmentPool::objects.get(pools[p])};
+      for (size_t c = 0; c < copies.size(); ++c) {
+        void* copy = copies[c];
+        if (!copy || !api::alive(copy)) continue;
+        if (!GameObject::get_activeSelf(copy)) return copy;
+        ++on;
+        void* t = GameObject::get_transform(copy);
+        void* interact = t ? Component::GetComponent(t, PhotonObjectInteract::type.type_object()) : nullptr;
+        if (interact && !PhotonObjectInteract::inUse.get(interact) && in_truck(game::position(t))) {
+          ++truck;
+          if (!inTruck) inTruck = copy;
+        }
+      }
+    }
+  }
+  PM_LOG("dev-menu: spawn: %zu copies of the item handed out, %zu of them free in the truck", on, truck);
+  return inTruck;
+}
+}  // namespace
+
+SpawnResult spawn_item(int index) {
   const std::vector<void*> items = loadout_items();
   void* pool = pooler();
-  void* player = game::local_player();
-  void* t = player ? game::transform_of(player) : nullptr;
-  if (index < 0 || static_cast<size_t>(index) >= items.size() || !pool || !t) return false;
-  // The truck spawner's own call, local: the pool hands out its next copy of the item, or null when it has none left.
-  const Vector3 at = game::position(t);
-  const Vector3 drop{at.x, at.y + 1.0f, at.z};
+  void* camera = game::local_camera();
+  void* eyes = camera ? game::transform_of(camera) : nullptr;
+  if (index < 0 || static_cast<size_t>(index) >= items.size() || !pool || !eyes) return SpawnResult::Failed;
+  // The game's hand-out moves whatever copy is at the front of its queue, even one in a hand, once every copy is out;
+  // so the menu picks a free copy itself and does to it what the hand-out does.
+  void* copy = free_copy(pool, items[static_cast<size_t>(index)]);
+  if (!copy) return SpawnResult::NoneLeft;
+  // A metre in front of the eyes, where the player sees it fall.
+  const Vector3 from = game::position(eyes);
+  const Vector3 ahead = game::forward(eyes);
+  const Vector3 at{from.x + ahead.x, from.y + ahead.y, from.z + ahead.z};
   const Quaternion upright{0.0f, 0.0f, 0.0f, 1.0f};
-  return ObjectPooler::SpawnFromEquipmentPool(pool, items[static_cast<size_t>(index)], &drop, &upright) != nullptr;
+  void* t = GameObject::get_transform(copy);
+  if (!t) return SpawnResult::Failed;
+  Transform::set_position(t, &at);
+  Transform::set_rotation(t, &upright);
+  GameObject::SetActive(copy, true);
+  if (void* interact = Component::GetComponent(t, PhotonObjectInteract::type.type_object())) {
+    PhotonObjectInteract::spawnPosition.set(interact, at);
+    // A copy resting in the truck may be held still (a kinematic body); it falls where it was put. Only the body's own
+    // switch: PhotonObjectInteract.FreezeRigidbody would also send the game's RPC.
+    if (void* body = PhotonObjectInteract::body.get(interact)) Rigidbody::set_isKinematic(body, false);
+  }
+  return SpawnResult::Spawned;
 }
 
 void keep_supplies() {
@@ -1199,6 +1553,13 @@ namespace {
 float g_heldSight = -1.0f;  // the value a frozen hold keeps, or negative before it is taken
 }
 
+float sight_now() {
+  void* ai = game::ghost_ai();
+  void* machine = ai ? GhostAI::stateMachine.get(ai) : nullptr;
+  void* state = machine ? GhostStateMachine::current.get(machine) : nullptr;
+  return state && GhostHuntState::type.is(state) ? GhostHuntState::sightSpeedUp.get(state) : -1.0f;
+}
+
 void hold_sight() {
   void* ai = game::ghost_ai();
   void* machine = ai ? GhostAI::stateMachine.get(ai) : nullptr;
@@ -1232,6 +1593,11 @@ std::string type_dials() {
   return out;
 }
 
+int flames_blown() {
+  void* ai = game::ghost_ai();
+  return ai ? GhostAI::flamesBlownOut.get(ai) : 0;
+}
+
 void bump_flames(int delta) {
   void* ai = game::ghost_ai();
   if (!ai) return;
@@ -1255,6 +1621,52 @@ bool chase_me() {
   if (!state || !player || !GhostHuntState::type.is(state)) return false;
   GhostHuntState::SetTarget(state, player);
   return true;
+}
+
+// ---- The dials: numbers a slider sets ----
+
+namespace {
+struct Dial {
+  float low, high, step;
+  Need need;
+  float (*get)();
+  void (*set)(float);
+};
+const Dial& dial(DialId id) {
+  static const Dial kDials[] = {
+      // Sanity, as the game shows it.
+      {0.0f, 100.0f, 1.0f, Need::Player, [] { return sanity(); },
+       [](float v) { set_sanity(static_cast<int>(std::lround(v))); }},
+      // The ghost's base hunt speed (GhostAI.baseSpeed): the menu's range, the game puts none on it.
+      {0.0f, 5.0f, 0.05f, Need::Ghost, [] { return base_speed(); },
+       [](float v) {
+         if (void* ai = game::ghost_ai()) GhostAI::baseSpeed.set(ai, v < 0.0f ? 0.0f : v);
+       }},
+      // The rig's speed multiplier, through the game's own setter (a Monkey Paw wish's path).
+      {0.25f, 4.0f, 0.05f, Need::Player, [] { return speed_multiplier(); },
+       [](float v) {
+         if (void* rig = pc_rig()) LocalPCPlayer::SetPlayerSpeedMultiplier(rig, v);
+       }},
+      // The Onryo's blown-out flames.
+      {0.0f, 5.0f, 1.0f, Need::Ghost, [] { return static_cast<float>(flames_blown()); },
+       [](float v) {
+         if (void* ai = game::ghost_ai()) GhostAI::flamesBlownOut.set(ai, static_cast<int32_t>(std::lround(v)));
+       }},
+  };
+  return kDials[static_cast<int>(id)];
+}
+}  // namespace
+
+float dial_low(DialId id) { return dial(id).low; }
+float dial_high(DialId id) { return dial(id).high; }
+float dial_step(DialId id) { return dial(id).step; }
+Need dial_need(DialId id) { return dial(id).need; }
+float dial_value(DialId id) { return dial(id).get(); }
+void dial_set(DialId id, float value) {
+  const Dial& d = dial(id);
+  float v = value < d.low ? d.low : (value > d.high ? d.high : value);
+  v = d.low + std::round((v - d.low) / d.step) * d.step;  // on the dial's own step
+  d.set(v);
 }
 
 // ---- Weather: the Monkey Paw's transition, and the difficulty's weather with it ----
@@ -1313,6 +1725,64 @@ bool apply_weather(int index) {
   return true;
 }
 
+// ---- The player's clicks while the menu is open ----
+
+namespace {
+// The journal whose open flag the menu raised, and the flag as the menu found it.
+void* g_flagJournal = nullptr;
+bool g_flagWas = false;
+}  // namespace
+
+void hold_input(bool held) {
+  // The journal's own gate: the item handlers behind the interact and primary-use actions (PCPropGrab's input
+  // handlers, read from their decompile 2026-11-13) do nothing while the local player's JournalController.open is
+  // set, which is how a click on the journal's pages never reaches the world. The menu raises the same flag while it
+  // is open, without showing the book, and puts it back as it found it on close (the user's report and ruling of
+  // 2026-11-13). Setting the field sends nothing: the journal's network sync is a separate call.
+  if (!held) {
+    if (g_flagJournal && api::alive(g_flagJournal)) JournalController::open.set(g_flagJournal, g_flagWas);
+    g_flagJournal = nullptr;
+    return;
+  }
+  void* rig = game::local_player_component();
+  void* journal = rig ? LocalPlayer::journalController.get(rig) : nullptr;
+  if (!journal) return;
+  if (journal != g_flagJournal) {
+    if (g_flagJournal && api::alive(g_flagJournal)) JournalController::open.set(g_flagJournal, g_flagWas);
+    g_flagJournal = journal;
+    g_flagWas = JournalController::open.get(journal);
+  }
+  JournalController::open.set(journal, true);
+}
+
+void overlay_closed() { g_flagWas = false; }
+
+// ---- The menu's settings, kept between runs ----
+
+namespace {
+std::filesystem::path g_settingsFile;
+}  // namespace
+
+void set_settings_file(const std::filesystem::path& file) { g_settingsFile = file; }
+
+// The file is menu_rule.h's settings_text, written whole each time; reading it back is read_settings.
+void save_settings() {
+  if (g_settingsFile.empty()) return;
+  std::error_code ec;
+  std::filesystem::create_directories(g_settingsFile.parent_path(), ec);
+  std::ofstream file(g_settingsFile, std::ios::binary | std::ios::trunc);
+  if (file) file << settings_text(g_switches);
+}
+
+void load_settings() {
+  if (g_settingsFile.empty()) return;
+  std::ifstream file(g_settingsFile, std::ios::binary);
+  if (!file) return;
+  std::ostringstream text;
+  text << file.rdbuf();
+  read_settings(text.str(), g_switches);
+}
+
 // ---- Movement: noclip and the teleports ----
 
 // The PC rig's physical step (the PhysicsCharacterController the FirstPersonController drives), or null for a
@@ -1328,10 +1798,22 @@ void* rig_controller() {
 
 bool noclip() { return g_switches.noclip; }
 
+// The rig's body and collider while noclip is on, and whether the body was kinematic before: with the physical step
+// off, the investigator's own capsule was still in the physics world, so walls still pushed it back out (the user's
+// test of 2026-11-13: flying worked, passing through did not). The collider goes off and the body stops being
+// simulated for as long as noclip is on, and both come back as they were.
+api::Held g_noclipBody;
+api::Held g_noclipCapsule;
+bool g_noclipWasKinematic = false;
+
 bool set_noclip(bool on) {
   if (!on) {
+    if (g_noclipCapsule && api::alive(g_noclipCapsule)) Collider::set_enabled(g_noclipCapsule, true);
+    if (g_noclipBody && api::alive(g_noclipBody)) Rigidbody::set_isKinematic(g_noclipBody, g_noclipWasKinematic);
     if (g_noclipController && api::alive(g_noclipController)) Behaviour::set_enabled(g_noclipController, true);
     g_noclipController = nullptr;
+    g_noclipBody = nullptr;
+    g_noclipCapsule = nullptr;
     g_switches.noclip = false;
     return true;
   }
@@ -1339,6 +1821,15 @@ bool set_noclip(bool on) {
   if (!controller) return false;
   g_noclipController = controller;
   Behaviour::set_enabled(controller, false);
+  if (void* body = PhysicsCharacterController::get_Rigidbody(controller)) {
+    g_noclipBody = body;
+    g_noclipWasKinematic = Rigidbody::get_isKinematic(body);
+    Rigidbody::set_isKinematic(body, true);
+  }
+  if (void* capsule = PhysicsCharacterController::get_CapsuleCollider(controller)) {
+    g_noclipCapsule = capsule;
+    Collider::set_enabled(capsule, false);
+  }
   g_switches.noclip = true;
   return true;
 }
@@ -1356,15 +1847,30 @@ bool on_mesh(Vector3 p, float reach, Vector3& out) {
 // Moves the rig so it stands over `floor` (a point of the navigation mesh) as high as it stands over the mesh
 // now, so the capsule lands on its feet wherever the rig's own origin sits. The next physical step starts from
 // the transform (PhysicsCharacterController's note).
-bool stand_at(Vector3 floor) {
-  void* controller = rig_controller();
-  void* body = controller ? game::transform_of(controller) : nullptr;
-  if (!body) return false;
-  const Vector3 at = game::position(body);
-  Vector3 under{};
-  const float lift = on_mesh(at, 4.0f, under) ? at.y - under.y : 0.0f;
-  game::set_position(body, {floor.x, floor.y + lift, floor.z});
+// The game's own move of the local investigator (LocalPlayer.TeleportPlayer, PCPlayer.Teleport's body): the rig's
+// root goes to `to`, with the physics controller off for the move. Moving the controller's own transform instead put
+// the investigator into the floor (the user's tests of 2026-11-13). The game's move switches the controller back on,
+// so noclip switches it off again afterwards. False without a rig or the entry.
+bool teleport_rig(Vector3 to) {
+  void* rig = game::local_player_component();
+  if (!rig || !entry_resolved<LocalPlayer::TeleportPlayer>()) return false;
+  const bool flying = g_switches.noclip;
+  if (flying) set_noclip(false);
+  LocalPlayer::TeleportPlayer(rig, &to);
+  if (flying) set_noclip(true);
   return true;
+}
+
+// Moves the rig so its root stands over `floor` (a point of the navigation mesh) as high as it stands over the mesh
+// now, never below it, and a few centimetres up so it settles onto the floor under gravity rather than starting in it.
+bool stand_at(Vector3 floor) {
+  void* rig = game::local_player_component();
+  void* root = rig ? game::transform_of(rig) : nullptr;
+  if (!root) return false;
+  const Vector3 at = game::position(root);
+  Vector3 under{};
+  const float lift = on_mesh(at, 4.0f, under) ? std::max(0.0f, at.y - under.y) : 0.0f;
+  return teleport_rig({floor.x, floor.y + lift + 0.05f, floor.z});
 }
 
 Vector3 ghost_position() {
@@ -1402,12 +1908,43 @@ bool me_to_ghost_room() {
 }
 
 bool me_to_truck() {
-  // The truck is where the scene's ExitLevel (the lift) stands.
+  // Where the contract itself put the investigator: the first of MultiplayerController.spawnPoints, the truck's start
+  // places, reached by the game's own move (LocalPlayer.TeleportPlayer, the rig's root, as the contract made it there).
+  // Placing the physics controller by the truck's trigger box put the investigator into the floor twice (the user's
+  // tests of 2026-11-13), so the box is only the fallback for a scene without start places.
+  {
+    void* mc = MultiplayerController::instance.get();
+    const api::List spots{mc && api::alive(mc) ? MultiplayerController::spawnPoints.get(mc) : nullptr};
+    void* spot = spots.size() > 0 ? spots[0] : nullptr;
+    if (spot && api::alive(spot) && teleport_rig(game::position(spot))) return true;
+  }
+  // Fallback: into the trigger the game counts players in (ExitLevel.trigger), on the floor a ray finds under the
+  // box's top, as high above it as the rig stands above the ground now.
   void* lift = exit_level();
-  void* t = lift ? game::transform_of(lift) : nullptr;
-  Vector3 floor{};
-  if (!t || !on_mesh(game::position(t), 6.0f, floor)) return false;
-  return stand_at(floor);
+  void* inside = lift ? ExitLevel::trigger.get(lift) : nullptr;
+  if (!inside) {
+    PM_LOG("dev-menu: the truck's inside could not be found (no ExitLevel or no trigger)");
+    return false;
+  }
+  void* box = Component::GetComponent(inside, Collider::type.type_object());
+  Vector3 target = game::position(game::transform_of(inside));
+  float top = target.y + 2.0f;
+  float reach = 4.0f;
+  if (box) {
+    const Bounds b = Collider::get_bounds(box);
+    target = b.center;
+    top = b.center.y + b.extents.y;
+    reach = 2.0f * b.extents.y + 1.0f;
+  }
+  // The truck's floor under the box's centre, found by a ray down from the box's top: the trigger's box reaches
+  // below the floor, so its own bottom put the rig inside the floor (the user's test of 2026-11-13).
+  const float down = game::raycast_distance({target.x, top, target.z}, {0.0f, -1.0f, 0.0f}, reach, -5);
+  if (down < 0.0f) {
+    PM_LOG("dev-menu: no floor was found inside the truck");
+    return false;
+  }
+  // The rig's root stands at its feet, as the contract's start places put it.
+  return teleport_rig({target.x, top - down + 0.05f, target.z});
 }
 
 bool ghost_to_me() {

@@ -244,6 +244,17 @@ inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_Move{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "PhysicsCharacterController", .name = "Move",
     .params = PhysicsCharacterController_Move_params};
 
+/// The controller's Rigidbody: the body its physical step moves. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_Rigidbody{
+    .key = "PhysicsCharacterController.get_Rigidbody", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_Rigidbody"};
+
+/// The controller's CapsuleCollider: the investigator's body in the physics world, what walls and floors meet.
+/// Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_CapsuleCollider{
+    .key = "PhysicsCharacterController.get_CapsuleCollider", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_CapsuleCollider"};
+
 /// The player's journal: Player's one JournalController field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc Player_journal{.key = "Player.journal", .kind = pm::sdk::Kind::Field, .owner = "Player",
                                                    .type = "@JournalController"};
@@ -820,6 +831,32 @@ inline constexpr pm::sdk::EntryDesc MultiplayerController_NetworkDestroyObjects{
     .key = "MultiplayerController.NetworkDestroyObjects", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "MultiplayerController", .name = "NetworkDestroyObjects"};
 
+/// The scene's MultiplayerController: the class's one static field of its own type. Decompiled.
+inline constexpr pm::sdk::EntryDesc MultiplayerController_instance{
+    .key = "MultiplayerController.instance", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kStatic, .owner = "MultiplayerController", .hint = "instance",
+    .type = "@MultiplayerController"};
+
+/// Where the local investigator starts the contract, a List<Transform>: in a contract, the controller makes the local
+/// player at a random one of them (Object.Instantiate of the player's prefab at its position), so they stand in the
+/// truck. FallTeleportBox sends a fallen player to the first one when no NavMesh point is near. The class's one field
+/// of that type. Decompiled.
+inline constexpr pm::sdk::EntryDesc MultiplayerController_spawnPoints{
+    .key = "MultiplayerController.spawnPoints", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "MultiplayerController", .hint = "spawnPoints",
+    .type = "List<Transform>"};
+
+inline constexpr const char* LocalPlayer_TeleportPlayer_params[] = {"Vector3"};
+
+/// TeleportPlayer(position): the game's own move of the local investigator, which PCPlayer.Teleport (the PC body of
+/// the abstract Player.Teleport) runs. Decompiled: it raises a flag of the rig's, switches the rig's
+/// PhysicsCharacterController off, sets the rig's own transform (the root the prefab was made at) to the position,
+/// and switches the controller back on, so it also undoes a mod's switching that controller off. Local; it sends
+/// nothing. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_TeleportPlayer{
+    .key = "LocalPlayer.TeleportPlayer", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LocalPlayer", .name = "TeleportPlayer", .type = "void", .params = LocalPlayer_TeleportPlayer_params};
+
 /// The Winter's Jest seasonal event (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc WintersJestManager{.key = "WintersJestManager", .confidence = pm::sdk::Confidence::Decompiled, .name = "WintersJestManager",
                                           .assembly = "Assembly-CSharp", .ns = ""};
@@ -1114,8 +1151,19 @@ struct Network {
   static constexpr pm::api::Method<pm::map::Network_OnPlayerLeftRoom, void(void*, void*)> OnPlayerLeftRoom{};
 };
 
+/// The scene's multiplayer helper.
+struct MultiplayerController {
+  /// The scene's controller: instance.get(), or null. Unresolved: null.
+  static constexpr pm::api::StaticField<pm::map::MultiplayerController_instance, void*> instance{};
+  /// Where the local investigator starts a contract, a List<Transform>: spawnPoints.get(controller). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::MultiplayerController_spawnPoints, void*> spawnPoints{};
+};
+
 /// This client's player rig. `rig` below is the LocalPlayer.
 struct LocalPlayer {
+  /// TeleportPlayer(rig, &position): the game's own move of the local investigator, by the rig's root; it switches
+  /// the rig's PhysicsCharacterController back on. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::LocalPlayer_TeleportPlayer, void(void*, const Vector3*)> TeleportPlayer{};
   /// Its networked investigator, a Player: player.get(rig). A write goes through the GC write barrier.
   /// Unresolved: null, writes nothing.
   static constexpr pm::api::Field<pm::map::LocalPlayer_player, void*> player{};
@@ -1283,6 +1331,11 @@ struct PhysicsCharacterController {
   /// Move(controller, displacement): the frame's walk, in metres; the next physical step applies it. A mod
   /// hooks it to read or replace the walk. Local only. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PhysicsCharacterController_Move, void(void*, Vector3)> Move{};
+  /// get_Rigidbody(controller): the body its step moves. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_Rigidbody, void*(void*)> get_Rigidbody{};
+  /// get_CapsuleCollider(controller): the investigator's collider. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_CapsuleCollider, void*(void*)>
+      get_CapsuleCollider{};
 };
 
 /// The body's animation scripts.

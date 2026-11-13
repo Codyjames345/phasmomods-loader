@@ -298,14 +298,58 @@ inline constexpr pm::sdk::EntryDesc WhiteSage_YureiTrap{
 
 inline constexpr const char* ObjectPooler_SpawnFromEquipmentPool_params[] = {"@StoreItem", "Vector3", "Quaternion"};
 
-/// SpawnFromEquipmentPool(item, pos, rot): takes a free pooled object of that store item, switches it on,
-/// sets it at the position and rotation given and re-parents it; an item the pool has no entry for logs an
-/// error and answers null. Decompiled. It is this client's own copy: no RPC is sent, and every client
-/// spawns its own truck items this way (the game's ItemSpawner spawn loop calls it per loadout entry).
+/// SpawnFromEquipmentPool(item, pos, rot): the pool keeps one queue of GameObjects per store item, built
+/// at its Start from every copy in `tierPools` (each switched off). This takes the queue's front copy,
+/// whatever it is doing, sets it at the position and rotation given, switches it on, writes the position
+/// to its PhotonObjectInteract.spawnPosition and puts it at the back of the queue. So once every copy is
+/// out, the next call moves the oldest copy, even one in the truck or in a player's hands; it never makes
+/// a new one. An item the pool has no entry for logs an error and answers null. Decompiled. It is this
+/// client's own copy: no RPC is sent, and every client spawns its own truck items this way (the game's
+/// ItemSpawner spawn loop calls it per loadout entry).
 inline constexpr pm::sdk::EntryDesc ObjectPooler_SpawnFromEquipmentPool{
     .key = "ObjectPooler.SpawnFromEquipmentPool", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "ObjectPooler", .name = "SpawnFromEquipmentPool",
     .type = "GameObject", .params = ObjectPooler_SpawnFromEquipmentPool_params};
+
+/// One tier's equipment copies (a class nested in ObjectPooler, real name): a name and its pools.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc TierEquipmentPool{.key = "TierEquipmentPool",
+                                                      .confidence = pm::sdk::Confidence::Decompiled,
+                                                      .owner = "ObjectPooler", .name = "TierEquipmentPool",
+                                                      .assembly = "Assembly-CSharp"};
+
+/// The tier's pools, one per store item: its EquipmentPool array (real name). Decompiled.
+inline constexpr pm::sdk::EntryDesc TierEquipmentPool_equipmentPools{
+    .key = "TierEquipmentPool.equipmentPools", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "TierEquipmentPool", .name = "equipmentPools",
+    .type = "EquipmentPool[]"};
+
+/// One store item's copies in the scene (a class nested in ObjectPooler, real name). Decompiled.
+inline constexpr pm::sdk::EntryDesc EquipmentPool{.key = "EquipmentPool", .confidence = pm::sdk::Confidence::Decompiled,
+                                                  .owner = "ObjectPooler", .name = "EquipmentPool",
+                                                  .assembly = "Assembly-CSharp"};
+
+/// The store item the copies are of (real name). Decompiled.
+inline constexpr pm::sdk::EntryDesc EquipmentPool_item{.key = "EquipmentPool.item", .kind = pm::sdk::Kind::Field,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .owner = "EquipmentPool", .name = "item",
+                                                       .type = "@StoreItem"};
+
+/// The copies, GameObjects placed in the scene: the pool's Start switches each off and queues it, and
+/// SpawnFromEquipmentPool switches one on when it hands it out, so a copy that is switched off has never
+/// been handed out (real name). Decompiled.
+inline constexpr pm::sdk::EntryDesc EquipmentPool_objects{.key = "EquipmentPool.objects",
+                                                          .kind = pm::sdk::Kind::Field,
+                                                          .confidence = pm::sdk::Confidence::Decompiled,
+                                                          .owner = "EquipmentPool", .name = "objects",
+                                                          .type = "GameObject[]"};
+
+/// Every tier's equipment copies: ObjectPooler's one List of TierEquipmentPool. The pool's Start queues
+/// the copies of every tier, keyed by store item. Decompiled.
+inline constexpr pm::sdk::EntryDesc ObjectPooler_tierPools{.key = "ObjectPooler.tierPools", .kind = pm::sdk::Kind::Field,
+                                                           .confidence = pm::sdk::Confidence::Decompiled,
+                                                           .owner = "ObjectPooler", .hint = "tierPools",
+                                                           .type = "List<@TierEquipmentPool>"};
 
 /// One entry of the truck's starting equipment loadout (a class nested in LevelValues): the store item and
 /// how many of it the contract starts with. Decompiled.
@@ -482,6 +526,23 @@ struct ObjectPooler {
   static constexpr pm::api::Method<pm::map::ObjectPooler_SpawnFromEquipmentPool,
                                    void*(void*, void*, const Vector3*, const Quaternion*)>
       SpawnFromEquipmentPool{};
+  /// Every tier's equipment copies, a List of TierEquipmentPool: tierPools.get(pooler). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::ObjectPooler_tierPools, void*> tierPools{};
+};
+
+/// One tier's equipment copies. `tier` below is one.
+struct TierEquipmentPool {
+  /// Its pools, an EquipmentPool array: equipmentPools.get(tier). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::TierEquipmentPool_equipmentPools, void*> equipmentPools{};
+};
+
+/// One store item's copies in the scene. `pool` below is one.
+struct EquipmentPool {
+  /// The StoreItem: item.get(pool). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::EquipmentPool_item, void*> item{};
+  /// The copies, a GameObject array; one switched off was never handed out: objects.get(pool).
+  /// Unresolved: null.
+  static constexpr pm::api::Field<pm::map::EquipmentPool_objects, void*> objects{};
 };
 
 /// The tiers of a store item: compare StoreItem::tier with them.

@@ -229,6 +229,9 @@ ScrollView create_scroll_view(void* parent, const char* name, Vec2 position, Vec
   view.contentHeight = contentHeight;
   if (void* back = create_raw_image(view.viewport, (base + " back").c_str(), nullptr)) {
     stretch(back, {0.0f, 0.0f}, {1.0f, 1.0f}, {0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f});
+    // It is there only to catch a drag anywhere in the view, so it paints nothing: a RawImage left at its default
+    // colour is a white sheet behind the rows (the dev menu's live test of 2026-11-12 showed it).
+    set_color(back, {0.0f, 0.0f, 0.0f, 0.0f});
     phasmo::Graphic::set_raycastTarget(back, true);
   }
   view.content = child(view.viewport, (base + " content").c_str());

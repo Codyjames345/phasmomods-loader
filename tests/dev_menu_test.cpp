@@ -54,57 +54,59 @@ void the_menu_does_not_pause_the_clock_by_default() {
 }
 
 // The user's report of 2026-11-12: "the menu UI is placed too high and some text appears over the 'Dev Menu'
-// heading". The rows were laid out from one constant, and nothing checked what that put next to what, so the
-// first row's box reached up into the hint line's box. Every box here has to clear the one above it.
+// heading". Every box here has to clear its neighbours, and everything stays on a 1920 by 1080 canvas.
 void the_rows_clear_the_heading_and_the_hint() {
-  CHECK(gap(kTitleY, kTitleBox, kHintY, kHintBox) >= 4.0f);   // the heading and the hint under it
-  CHECK(gap(kHintY, kHintBox, listTop(), 0.0f) >= 4.0f);       // the hint and the list's first row (what the
-                                                               // live test of 2026-11-12 found overlapping)
-  CHECK(gap(kViewY - kViewHigh / 2.0f, 0.0f, kRefuseY, kRefuseBox) >= 4.0f);  // the list and the refusal line
-  CHECK(listTop() - kPitch >= kViewY - kViewHigh / 2.0f);      // a whole row fits at the top of the view
-  CHECK(kViewX + kViewWide / 2.0f <= 960.0f);                  // the list stays on a 1920 wide canvas
-  CHECK(kNavX >= -960.0f);                                     // and so does the section column
+  CHECK(gap(kHeaderY, kHeaderBox, kRuleY, 0.0f) >= 4.0f);      // the header sits above its rule
+  CHECK(gap(kRuleY, 0.0f, kViewTop, 0.0f) >= 4.0f);             // the groups start under the rule
+  CHECK(gap(kViewBottom, 0.0f, kFooterY, kFooterBox) >= 4.0f);  // and end above the footer
+  CHECK(kSlabWide <= 1920.0f && kSlabHigh <= 1080.0f);
+  CHECK(kHeaderY + kHeaderBox / 2.0f <= kSlabHigh / 2.0f);      // the header inside the slab
+  CHECK(kFooterY - kFooterBox / 2.0f >= -kSlabHigh / 2.0f);     // and the footer
+  CHECK(kViewRight <= kSlabWide / 2.0f && kNavLeft >= -kSlabWide / 2.0f);
+  CHECK(kNavLeft + kNavWide < kViewLeft);                         // the section column clears the groups
+  CHECK(navOffset(6) - kNavPitch / 2.0f > kFooterY + kFooterBox / 2.0f);  // all seven sections fit
+  // A panel's row has room for its label beside a picker's value and its two step buttons.
+  CHECK(kRowWide - kPickerWide >= 240.0f);
 }
 
-// The list scrolls, so its length is not limited by the screen: the last row of a list far longer than the
-// view is still reachable, and a section that already fits is never scrolled out of place.
-void a_long_section_reaches_its_last_row() {
-  const int rows = 60;
-  const float height = listHeight(rows);
-  CHECK(height > kViewHigh);  // a list the view cannot show at once
-  float top = 0.0f;
-  for (int i = 0; i < rows; ++i) top = pm::ui::scroll_top_needed(height, kViewHigh, top, rowTop(i), kPitch);
-  // The last row is on screen: its top is at or below the view's top edge, and its bottom above the bottom.
-  CHECK(rowTop(rows - 1) >= top);
-  CHECK(rowTop(rows - 1) + kPitch <= top + kViewHigh);
-  CHECK(top <= height - kViewHigh);  // never scrolled past the end
-  // A section that fits is left alone, wherever it was.
-  const float fits = listHeight(8);
-  CHECK(pm::ui::scroll_top_needed(fits, kViewHigh, 0.0f, rowTop(7), kPitch) == 0.0f);
-  // Scrolling only moves as far as it must: a row already showing leaves the list where it is.
-  CHECK(pm::ui::scroll_top_needed(height, kViewHigh, 200.0f, rowTop(6), kPitch) == 200.0f);
+// The groups flow into two columns, each into the shorter so far, so the columns end close together and a section
+// uses the width of the screen instead of one long list. The scrolling area still reaches the last row of a section
+// far taller than the view.
+void the_groups_fill_two_columns() {
+  const std::vector<float> heights = {card_height(5), card_height(6), card_height(4), card_height(8)};
+  const std::vector<Placed> placed = flow(heights);
+  CHECK(placed.size() == 4);
+  CHECK(placed[0].column == 0 && placed[0].top == 0.0f);
+  CHECK(placed[1].column == 1 && placed[1].top == 0.0f);
+  CHECK(placed[2].column == 0 && placed[2].top == card_height(5) + kCardGap);  // the left column was shorter
+  CHECK(placed[3].column == 1);
+  const float tall = content_height(heights);
+  CHECK(tall == placed[3].top + card_height(8));
+  // Panels in the same column never overlap.
+  for (size_t i = 0; i < placed.size(); ++i)
+    for (size_t j = i + 1; j < placed.size(); ++j)
+      if (placed[i].column == placed[j].column)
+        CHECK(placed[j].top >= placed[i].top + heights[i] + kCardGap - 0.01f);
+  // Both columns stay inside the scrolling area.
+  CHECK(column_x(0) - kCardWide / 2.0f >= -kViewWide / 2.0f - 0.01f);
+  CHECK(column_x(1) + kCardWide / 2.0f <= kViewWide / 2.0f + 0.01f);
+  // A section much taller than the view: its last row can still be scrolled into view.
+  const std::vector<float> many(12, card_height(8));
+  const float height = content_height(many);
+  CHECK(height > kViewHigh);
+  const float lastRow = flow(many).back().top + row_line(7) - kPitch / 2.0f;
+  const float top = pm::ui::scroll_top_needed(height, kViewHigh, 0.0f, lastRow, kPitch);
+  CHECK(lastRow >= top && lastRow + kPitch <= top + kViewHigh);
 }
 
 // The player speed rows step the game's own speed multiplier (LocalPCPlayer.SetPlayerSpeedMultiplier, the
 // call a Monkey Paw wish makes). The step and its bounds are the menu's, not the game's: a developer wants
 // room to run, and a multiplier of 0 would leave the row with no way back up.
-void the_speed_rows_step_within_the_menu_bounds() {
-  CHECK(next_speed_multiplier(1.0f, +1) == 1.25f);
-  CHECK(next_speed_multiplier(1.0f, -1) == 0.75f);
-  CHECK(next_speed_multiplier(1.0f, +4) == 2.0f);
-  CHECK(next_speed_multiplier(0.25f, -1) == 0.25f);  // the floor
-  CHECK(next_speed_multiplier(0.0f, -1) == 0.25f);   // a rig stopped dead still steps up to the floor
-  CHECK(next_speed_multiplier(4.0f, +1) == 4.0f);    // and the ceiling
-  CHECK(next_speed_multiplier(1.6f, +1) == 1.75f);   // an odd value the game left there still steps
-}
-
 void the_new_rows_refuse_for_what_the_game_lacks() {
   Can c;
   c.sandbox = true;
-  CHECK(refuse(Action::BumpPlayerSpeed, c) == Why::NoPlayer);
   CHECK(refuse(Action::ResetPlayerSpeed, c) == Why::NoPlayer);
   c.player = true;
-  CHECK(refuse(Action::BumpPlayerSpeed, c) == Why::None);
   CHECK(refuse(Action::ResetPlayerSpeed, c) == Why::None);
   // Blinding the ghost asks its vision sensor, so it needs a ghost.
   CHECK(refuse(Action::SetGhostBlind, c) == Why::NoContract);
@@ -124,17 +126,6 @@ void the_debug_read_out_is_a_switch_like_the_others() {
   CHECK(!s.debugHud);  // off until a developer asks for it
 }
 
-void the_tick_speed_row_cycles_the_presets() {
-  CHECK(next_time_scale(1.0f) == 2.0f);
-  CHECK(next_time_scale(2.0f) == 4.0f);
-  CHECK(next_time_scale(4.0f) == kPausedScale);  // wraps to paused
-  CHECK(next_time_scale(kPausedScale) == 0.25f);
-  CHECK(next_time_scale(0.0f) == 0.25f);  // a clock someone else stopped still steps up
-  CHECK(next_time_scale(0.25f) == 0.5f);
-  CHECK(next_time_scale(0.5f) == 1.0f);
-  CHECK(next_time_scale(1.3f) == 2.0f);  // between presets: the next above
-}
-
 void the_hooks_answer_the_switches() {
   // God mode refuses only the local investigator's kill.
   CHECK(god_refuses_kill(true, true));
@@ -151,15 +142,16 @@ void the_hooks_answer_the_switches() {
 void a_full_offline_contract_allows_everything() {
   const Can c{.sandbox = true, .contract = true, .ghost = true, .difficulty = true, .player = true, .rooms = 4};
   for (const Action a : {Action::ForceHunt, Action::ClearCooldown, Action::Appear, Action::UnAppear,
-                         Action::BumpSpeed, Action::ToggleEvents, Action::FireEvent, Action::FireState,
+                         Action::ToggleEvents, Action::FireEvent, Action::FireState,
                          Action::GhostToMe, Action::UnlockDoor,
                          Action::EndContract, Action::Leave, Action::Quit, Action::SetFriendly,
                          Action::SetLoseEquipment,
-                         Action::BumpEvidence, Action::BumpType, Action::SetSanity, Action::ToggleFreeze,
+                         Action::BumpEvidence, Action::BumpType, Action::ToggleFreeze,
                          Action::KillLocal, Action::SetGodMode,
                          Action::SetNoclip, Action::MeToGhost, Action::MeToGhostRoom,
-                         Action::SetLockSanity, Action::CycleLockedSanity,
-                         Action::SetPauseWhenOpen, Action::CycleTimeScale, Action::SetEspGhost,
+                         Action::SetLockSanity, Action::SanityToThreshold, Action::OptionToggle,
+                         Action::OptionChoice, Action::Slide,
+                         Action::SetPauseWhenOpen, Action::SetEspGhost,
                          Action::SetEspRooms})
     CHECK(refuse(a, c) == Why::None);
   CHECK(refuse(Action::EndHunt, c) == Why::NotHunting);
@@ -176,8 +168,8 @@ void rows_refuse_for_what_the_contract_lacks() {
   CHECK(refuse(Action::EndContract, menu) == Why::NoContract);
   CHECK(refuse(Action::Leave, menu) == Why::NoContract);
   CHECK(refuse(Action::SetFriendly, menu) == Why::NoDifficulty);
-  CHECK(refuse(Action::SetSanity, menu) == Why::NoPlayer);
-  CHECK(refuse(Action::CycleTimeScale, menu) == Why::None);
+  CHECK(refuse(Action::SetLockSanity, menu) == Why::NoPlayer);
+  CHECK(refuse(Action::Slide, menu) == Why::None);  // a slider row asks what its own number needs
   CHECK(refuse(Action::SetGodMode, menu) == Why::None);
 
   // A contract with no ghost (the first seconds) still runs the difficulty and player rows.
@@ -201,7 +193,7 @@ void hunt_and_room_rows_follow_the_hunt() {
 void a_dead_investigator_cannot_be_killed_again() {
   const Can dead{.sandbox = true, .contract = true, .player = true, .dead = true};
   CHECK(refuse(Action::KillLocal, dead) == Why::Dead);
-  CHECK(refuse(Action::SetSanity, dead) == Why::None);  // sanity can still be set on a corpse
+  CHECK(refuse(Action::SetLockSanity, dead) == Why::None);  // sanity can still be held on a corpse
   CHECK(refuse(Action::ToggleFreeze, dead) == Why::None);
   // The revive answers the kill: a dead or dying investigator in any contract (the action lends the paw).
   CHECK(refuse(Action::ReviveLocal, dead) == Why::None);
@@ -265,13 +257,9 @@ void the_movement_rows_need_a_ghost_and_a_player() {
   CHECK(refuse(Action::SetNoclip, rig) == Why::None);
 }
 
-// The locked sanity cycles 100, 50, 0, and the lock only puts the value back once the game has moved it by
-// more than half a point, so the game's setter (which sends the value on) is not asked every frame.
-void the_sanity_lock_cycles_and_waits_for_real_drift() {
-  CHECK(next_locked_sanity(100) == 50);
-  CHECK(next_locked_sanity(50) == 0);
-  CHECK(next_locked_sanity(0) == 100);
-  CHECK(next_locked_sanity(75) == 50);  // any value above 50 steps to 50
+// The lock only puts the value back once the game has moved it by more than half a point, so the game's setter
+// (which sends the value on) is not asked every frame.
+void the_sanity_lock_waits_for_real_drift() {
   CHECK(!sanity_needs_reset(50.0f, 50));
   CHECK(!sanity_needs_reset(50.4f, 50));  // a drift under half a point waits
   CHECK(sanity_needs_reset(51.0f, 50));
@@ -303,11 +291,19 @@ void the_menu_never_stops_the_clock_dead() {
   CHECK(kPausedScale > 0.0f && kPausedScale <= 0.001f);
   Pause p;
   CHECK(pause_open(p, 1.0f, true) > 0.0f);
-  float scale = 1.0f;
-  for (int i = 0; i < 12; ++i) {  // twice round every preset
-    scale = next_time_scale(scale);
-    CHECK(scale > 0.0f);
-  }
+}
+
+// The ghost sight row (the user's ask, 2026-11-12: also line of sight from anywhere, like the Deogen): the setting
+// cycles normal, nobody, everyone; "everyone" passes every living player as the Deogen's branch does, never a dead one.
+void the_ghost_sight_setting_answers_the_sight_test() {
+  CHECK(next_ghost_sight(kGhostSightNormal) == kGhostSightNobody);
+  CHECK(next_ghost_sight(kGhostSightNobody) == kGhostSightEveryone);
+  CHECK(next_ghost_sight(kGhostSightEveryone) == kGhostSightNormal);
+  CHECK(Switches{}.ghostSight == kGhostSightNormal);
+  CHECK(sight_answer(kGhostSightNormal, true, false) && !sight_answer(kGhostSightNormal, false, false));
+  CHECK(!sight_answer(kGhostSightNobody, true, false));
+  CHECK(sight_answer(kGhostSightEveryone, false, false));
+  CHECK(!sight_answer(kGhostSightEveryone, false, true));  // the dead stay unseen
 }
 
 // The save freeze follows the dev session and never lets go within a run; the store switches answer only inside
@@ -340,11 +336,47 @@ void the_dummy_rows_need_a_contract_and_the_dummy() {
     CHECK(refuse(a, Can{.sandbox = true}) == Why::None);
 }
 
-// The custom difficulty's options step on the contract's Difficulty alone; the picker's cursor needs nothing.
+// The custom difficulty's options, each on its own row (2026-11-13), step on the contract's Difficulty alone.
 void every_difficulty_option_needs_only_the_difficulty() {
-  CHECK(refuse(Action::PickOption, Can{.sandbox = true}) == Why::None);
-  CHECK(refuse(Action::StepOption, Can{.sandbox = true}) == Why::NoDifficulty);
-  CHECK(refuse(Action::StepOption, Can{.sandbox = true, .difficulty = true}) == Why::None);
+  for (const Action a : {Action::OptionToggle, Action::OptionChoice}) {
+    CHECK(refuse(a, Can{.sandbox = true}) == Why::NoDifficulty);
+    CHECK(refuse(a, Can{.sandbox = true, .difficulty = true}) == Why::None);
+  }
+}
+
+// The sanity rows that sit on the ghost's hunt line need the ghost (its line) and the investigator (their sanity).
+void the_hunt_line_rows_need_the_ghost_and_the_investigator() {
+  CHECK(refuse(Action::SanityToThreshold, Can{.sandbox = true}) == Why::NoContract);
+  CHECK(refuse(Action::SanityToThreshold, Can{.sandbox = true, .contract = true}) == Why::NoGhost);
+  CHECK(refuse(Action::SanityToThreshold, Can{.sandbox = true, .contract = true, .ghost = true}) == Why::NoPlayer);
+  CHECK(refuse(Action::SanityToThreshold, Can{.sandbox = true, .contract = true, .ghost = true, .player = true}) ==
+        Why::None);
+  static_assert(static_cast<int>(Why::NoThreshold) == static_cast<int>(Why::DoorsShut) + 1,
+                "menu.cpp indexes the reasons' text keys in Why order");
+}
+
+// The settings kept between runs (the user's report, 2026-11-13): what is written reads back the same, a line this
+// build does not know is skipped, and a value out of range falls back rather than reaching the game.
+void the_settings_read_back_what_was_written() {
+  Switches s;
+  s.godMode = true;
+  s.debugHud = true;
+  s.espDoors = true;
+  s.lockSanity = true;
+  s.lockedSanity = 37;
+  s.ghostSight = kGhostSightEveryone;
+  s.freeShop = true;
+  Switches back;
+  read_settings(settings_text(s), back);
+  CHECK(back.godMode && back.debugHud && back.espDoors && back.lockSanity && back.freeShop);
+  CHECK(back.lockedSanity == 37);
+  CHECK(back.ghostSight == kGhostSightEveryone);
+  CHECK(!back.noclip);  // what the game holds is never kept
+  Switches odd;
+  read_settings("lockedSanity=400\nghostSight=9\nsomethingNew=1\ngodMode=x\n", odd);
+  CHECK(odd.lockedSanity == 100);
+  CHECK(odd.ghostSight == kGhostSightNormal);
+  CHECK(!odd.godMode);
 }
 
 // The hunt's target can be pointed only at a hunt that runs; the type's dials need only the ghost.
@@ -380,11 +412,9 @@ int main() {
   pausing_can_be_switched_off();
   the_menu_does_not_pause_the_clock_by_default();
   the_rows_clear_the_heading_and_the_hint();
-  a_long_section_reaches_its_last_row();
-  the_speed_rows_step_within_the_menu_bounds();
+  the_groups_fill_two_columns();
   the_new_rows_refuse_for_what_the_game_lacks();
   the_debug_read_out_is_a_switch_like_the_others();
-  the_tick_speed_row_cycles_the_presets();
   the_hooks_answer_the_switches();
   a_full_offline_contract_allows_everything();
   rows_refuse_for_what_the_contract_lacks();
@@ -393,15 +423,18 @@ int main() {
   the_kill_row_refuses_everywhere_the_game_would_report();
   a_friendly_ghost_refuses_forced_hunts_and_switches_only_between_hunts();
   the_movement_rows_need_a_ghost_and_a_player();
-  the_sanity_lock_cycles_and_waits_for_real_drift();
+  the_sanity_lock_waits_for_real_drift();
   the_new_switches_start_off();
   no_revive_reason_is_left();
   the_store_is_free_only_in_the_sandbox_and_the_save_stays();
+  the_ghost_sight_setting_answers_the_sight_test();
   the_menu_never_stops_the_clock_dead();
   the_weather_and_type_rows_follow_the_contract();
   the_dummy_rows_need_a_contract_and_the_dummy();
   the_hunt_target_row_needs_a_hunt();
   every_difficulty_option_needs_only_the_difficulty();
+  the_hunt_line_rows_need_the_ghost_and_the_investigator();
+  the_settings_read_back_what_was_written();
   CHECK(refuse(Action::PickMod, Can{.sandbox = true}) == Why::None);  // the Loader page reads, anywhere
   // The objectives, the spawned item and the switches of this round.
   CHECK(refuse(Action::CompleteObjective, Can{.sandbox = true}) == Why::NoContract);
@@ -410,7 +443,6 @@ int main() {
   CHECK(next_sight_hold(kSightGame) == kSightNone && next_sight_hold(kSightNone) == kSightFrozen &&
         next_sight_hold(kSightFrozen) == kSightGame);
   CHECK(!Switches{}.neverRunOut && Switches{}.sightHold == kSightGame);
-  CHECK(navOffset(6) - kNavPitch / 2.0f > kRefuseY + kRefuseBox / 2.0f);  // the seventh section clears the refusal line
   std::printf(g_failures ? "%d check(s) failed\n" : "all dev menu rule tests passed\n", g_failures);
   return g_failures ? 1 : 0;
 }

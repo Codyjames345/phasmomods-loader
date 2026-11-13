@@ -123,6 +123,11 @@ back afterwards, exactly as `sdk/api/buttons.h` does. The same journal toggle ca
 `PCCanvas.PausePlayerInPlace` on the local player's HUD (its entry note in `sdk/map/Player.h`): the game's
 way to hold the player still and free the cursor while an overlay is up.
 
+That hold does not stop a click from reaching the world. The investigator's interact and primary-use handlers
+check `JournalController.open` on the local player's journal instead, and do nothing while it is set (read from
+their decompile, 2026-11-13). A mod screen that takes clicks raises that flag while it is up and puts back the
+value it found when it closes, as the Dev Menu does. Setting the field sends nothing and shows no book.
+
 ## What a canvas needs before it answers the pointer
 
 Three things have to hold, and a mod's own canvas starts with none of them (all read from the build's own

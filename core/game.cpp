@@ -350,23 +350,33 @@ void* raycast(Vector3 origin, Vector3 direction, float maxDistance) {
   return raycast(origin, direction, maxDistance, -5);
 }
 
-void* raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
+namespace {
+// Casts the ray into `hit` (room for the game's RaycastHit); whether it hit.
+bool cast_into(unsigned char (&hit)[128], Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
   // The RaycastHit the query fills in, sized from the game: an array's stride is the struct's size.
   // Read once: a size that cannot be read or does not fit is remembered too, so no array is made per call.
   static size_t hitSize = 0;
   static bool sized = false;
   if (!std::exchange(sized, true)) hitSize = api::ValueArray{phasmo::RaycastHit::type.make_array(1)}.stride();
-  alignas(16) unsigned char hit[128] = {};
   if (!hitSize || hitSize > sizeof hit) {
     static bool logged = false;
     if (!std::exchange(logged, true)) PM_LOG("game: a RaycastHit of %zu bytes does not fit; no ray is cast", hitSize);
-    return nullptr;
+    return false;
   }
   const phasmo::Ray ray{origin, direction};
   // QueryTriggerInteraction.Ignore: room and sensor volumes are triggers and must not stop the ray.
-  if (!phasmo::Physics::RaycastHit(&ray, hit, maxDistance, layerMask, phasmo::QueryTriggerInteraction::Ignore()))
-    return nullptr;
-  return phasmo::RaycastHit::get_transform(hit);
+  return phasmo::Physics::RaycastHit(&ray, hit, maxDistance, layerMask, phasmo::QueryTriggerInteraction::Ignore());
+}
+}  // namespace
+
+void* raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
+  alignas(16) unsigned char hit[128] = {};
+  return cast_into(hit, origin, direction, maxDistance, layerMask) ? phasmo::RaycastHit::get_transform(hit) : nullptr;
+}
+
+float raycast_distance(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
+  alignas(16) unsigned char hit[128] = {};
+  return cast_into(hit, origin, direction, maxDistance, layerMask) ? phasmo::RaycastHit::get_distance(hit) : -1.0f;
 }
 bool is_child_of(void* transform, void* parent) { return phasmo::Transform::IsChildOf(transform, parent); }
 

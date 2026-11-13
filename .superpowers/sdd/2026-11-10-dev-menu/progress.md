@@ -730,3 +730,182 @@ exactly 0" records it for authors. validate 95/95.
 Smoke 51: pause while open on, open and close the menu several times in a contract, walk after each close: no
 flashing, no black, and Player.log has no "Infinity or NaN" line. Cycle the game speed through every preset twice.
 If the picture still drifts bright after a long pause, that is the exposure adaptation media.md describes, not this.
+
+## Round 13 (2026-11-12): the menu's UI and information architecture
+
+The user: the pause fix worked; most of the menu works; now a clean UI in the game's manner without losing function,
+and a better layout (the old one was bland and things were hard to find); and the game speed row read 0 while the
+menu's own pause held the clock.
+
+Design (frontend-design skill, plan reviewed against generic defaults): one slab like the truck's equipment rack.
+Palette: van slate #1D2328, gunmetal panels #262E35, bone #E6E1D3, fog #8B939B, flashlight amber #E9B04C for what is
+lit, warning red #D45A4E. The game's own font, hierarchy by size (title 40, sections 26, group names 21, rows 22, hint
+19), sentence case throughout. The one bold element: rectangular EMF-style lamps on every switch and three status
+lamps in the header (single player, dev session, save frozen).
+
+Information architecture: each section is split into named groups shown as flat panels flowed into two columns
+(menu_layout.h flow(): each panel into the shorter column so far). Every previous/next or lower/higher pair is one
+picker row, label then value between step buttons, so the Ghost page went from about 50 rows to about 33 in six
+groups. The Difficulty page's separate friendly, lose-items and evidence rows are gone (the option picker has them).
+Actions that end or undo something (end contract, leave, quit, fail objective, kill, remove dummy) are in the warning
+red. Rows are four kinds: read-out, action, switch (lamp), picker (two step buttons, each a game Button). The section
+column marks the current section with an amber bar.
+
+Game speed: while the menu's own pause holds the clock, the row shows the speed the game goes back to, with "(paused
+while this menu is open)".
+
+menu.cpp's presentation was rewritten; run(), the input borrowing, the hold and the pause logic were sliced in
+verbatim. The text table lost 30 orphaned prev/next labels and gained the group names, status lamps and the hint.
+Layout tests rewritten (the slab's bands clear each other; the groups fill two columns without overlap; a section far
+taller than the view still reaches its last row). validate 95/95.
+
+Smoke 52: open the menu: slab, header lamps (single player and dev session lit), seven sections with the amber bar;
+each section's groups in two columns; hover brightens rows, sections and step buttons; the arrow keys reach every
+control and the area scrolls to follow; pickers step both ways; switches light their lamp; danger rows are red; a
+refusal shows in red bottom left. Game section with pause while open on: the game speed row reads the real speed and
+says it is paused while the menu is open.
+
+Round 13, continued.
+
+- Chase speed-up (was "Hunt sight assist"): UpdateSpeed decompiled. It reads sightSpeedUp (+0xB4) afresh every frame:
+  up while the hunt has a target, down only with neither target nor searchTarget, clamped 1..1.65, speed = base x it
+  (1 while smudged). So the menu's hold works from the next frame; it seemed to do nothing because every hunt starts
+  at 1 and the climb takes about 13 s of chase. The row now shows the live multiplier during a hunt; ghost-ai.md and
+  the map note corrected (target, not sight).
+- Ghost sight (the user: also line of sight from anywhere, like the Deogen): one row cycling the game's own, sees
+  nobody (the vision mask emptied as before, plus GhostHuntState.Sees answering false, which also covers the Deogen's
+  own branch), and sees everyone anywhere (Sees answers true for every living player, the Deogen's rule; the game's
+  test runs first so its seen-list record stays right). Hook chains with Custom Ghosts' own Sees hook.
+- End the contract (the user: it did nothing). ExitLevel.StartAttemptExitLevel starts the leaving coroutine only
+  while the ExitLevel's leaving flag is set, and LiftButton.AttemptUse (the master's side of a press) is what sets it
+  when the doors close, after refusing while ExitLevel.ThereAreAlivePlayersOutsideTheTruck. The row called
+  StartAttemptExitLevel directly with the flag clear. Now it presses the truck's button the player's way: the
+  button's PhotonObjectInteract runs the UnityEvent whose saved listener (UnityEventBase.m_PersistentCalls ->
+  PersistentCallGroup.m_Calls -> PersistentCall.m_Target, Unity's real names; GetPersistentTarget is stripped) is the
+  button; the menu finds that event among the component's UnityEvents (fields_of) and invokes it. Outside the truck the
+  investigator is teleported into the truck's trigger first and the press follows once the game counts them inside
+  (4 s at most). The press method itself could not be mapped: twenty look-alikes differ only in the RPC's name.
+  ExitLevel.StartAttemptExitLevel's note corrected ("no code writes it" was wrong). gamecheck 1977/1865/0/0.
+
+Smoke 53: Ghost sight cycles; "sees everyone, anywhere" makes a hunt find you through walls; "sees nobody" makes a
+Deogen lose you. 54: Chase speed-up row shows the live multiplier climbing during a chase; held off stays 1.00.
+55: End the contract from outside the truck: you land in the truck, the doors close, the truck leaves; doors already
+shut gives "the truck's doors are already shut".
+
+## Round 14 (2026-11-13): the user's list after the redesign
+
+Fixed, built, validated (95/95 native tests, docs, stage, pinned assets, release), gamecheck 1979 entries, 1867
+resolved, 0 missing, 0 ambiguous. Not committed.
+
+- Forced ghost type stuck on Random, ids for names: the options are now every type id 0..255 that has a content id
+  (known_types, GhostType None aside), so custom ghosts can be forced; names come from the content id's last part,
+  title-cased (pretty_type). "Behaviour 24" was GhostType None, a custom ghost's own rules; the identity row now says
+  "custom rules" for it.
+- Noclip passed through nothing: the controller alone was off. Now the rig's Rigidbody goes kinematic and its
+  CapsuleCollider off while noclip is on (PhysicsCharacterController.get_Rigidbody / get_CapsuleCollider, new map
+  entries), restored on off.
+- Sanity: was read and set inverted (PlayerSanity.insanity is insanity). Now a 0..100 slider by the percent, a row
+  showing the ghost's hunt line (learned from GhostIdleState's check like Playable Ghost, the Thaye's own threshold),
+  and two clicks: sanity on the line, one above it. The hold keeps the sanity it had when switched on, and the slider
+  and those clicks move the held value. Refusal NoThreshold before the first idle roll.
+- Fixed lists became sliders: ghost base speed, Onryo flames, player speed multiplier, game speed (0 = paused, at
+  kPausedScale, up to 4). Slider row: step buttons, a track whose fill shows the value, click or drag on the track
+  sets it (the list's ScrollRect is off during a drag so the list does not scroll). Dead pickers and their helpers
+  removed (next_time_scale, next_locked_sanity, next_speed_multiplier, bump_*), with their tests.
+- Debug HUD did nothing: it was placed 930 units left of the screen's left edge. Now pinned top-left.
+- Custom difficulty: one row per option in the custom difficulty menu's groups (Player, Ghost, Contract): switches,
+  sliders, and choices showing the game's level and fuse box names (read through the map's enum values). Labels say
+  "(next contract)", "(partly now)" or "(not traced)" where the option is not read at once. Applying the start-cached
+  options live waits on the research agent (re/dump/notes/2026-11-13-difficulty-live.md).
+- End contract said "no truck": me_to_truck now uses ExitLevel.trigger's bounds (no navmesh at the target).
+- Clicks went through the menu into the world: the journal's own gate, found in PCPropGrab's interact and primary-use
+  handlers, which do nothing while the local journal's JournalController.open is set. The menu raises it while open
+  and puts back what it found on close (the user's ruling: copy the journal's approach). Map note and menus.md updated.
+  Known edge: opening the journal while the dev menu is open, then closing the dev menu first, writes the old false
+  back under a showing book until the journal is toggled.
+- Settings kept between runs: the switches a developer sets once (pause, god mode, HUD, ESP, sanity hold and value,
+  sight holds, store, never run out) are written to <data>/<mod id>/settings.txt after every click and drag, read at
+  start. The format is menu_rule.h's settings_text/read_settings, tested (unknown lines skipped, out of range falls back).
+- Repair: the round 14 script's slice had cut the objectives, equipment and sight-assist sections out of actions.cpp;
+  restored from the index copy plus sight_now.
+
+Smoke 56: force each custom ghost from the Difficulty page; names, not ids. 57: noclip through walls and floors, and
+walking normally after switching it off. 58: sanity slider; the hunt line row after the first idle roll; "on the line"
+lets a hunt start, "just above" does not (try a Demon and a Thaye). 59: drag every slider; the list does not scroll
+while dragging. 60: debug HUD top left. 61: every difficulty option on its own row; the friendly switch refuses
+mid-hunt. 62: end the contract from the house. 63: clicking the menu while looking at a light switch or an item does
+nothing in the world. 64: settings survive a restart of the game.
+
+## Round 15 (2026-11-13): the user's five reports after round 14
+
+- **Hunt line read from the game.** New map entries GhostIdleState.TypeHuntRules (the per-type offsets, every
+  vanilla type's line in its note and in sdk/systems/ghost-ai.md "Each type's hunt line") and GhostIdleState.rollRange;
+  wrapper GameController.GetAveragePlayerInsanity. The menu runs the game's own GhostIdleState.HuntInsanity on the
+  running idle state twice a second (master only, idle only), takes insanity less the starting insanity as the
+  offset, and puts `insanity` and `rollRange` back (the Shade's rules grow rollRange each run). The offset field and
+  the chance bonus could not be told apart by any provable fact (the type switch's jump table hides the register), so
+  they have no entry. Thaye: hunts below GhostController.thayeThreshold, a sanity (note corrected; it said insanity),
+  so its line is threshold - 1. No Demon special case (user, 2026-11-13).
+- **Hidden mouse after closing over another overlay.** The menu took and then released the game's hold while another
+  overlay (journal, options page) owned it; the release locked the cursor under that overlay. Now the menu takes the
+  hold only when the cursor was locked at open; tick() takes it over if the overlay closes first, and forgets the
+  journal flag it saved then (actions::overlay_closed), so closing the menu no longer leaves clicks blocked.
+- **Equipment spawn.** ObjectPooler.SpawnFromEquipmentPool rotates a fixed queue: past the free copies it moves the
+  oldest copy (from the truck or a hand). Its note was wrong ("a free pooled object") and is corrected. New entries
+  ObjectPooler.tierPools, TierEquipmentPool(.equipmentPools), EquipmentPool(.item, .objects),
+  PhotonObjectInteract.spawnPosition. The menu hands out a copy still switched off itself (position, rotation, on,
+  spawnPosition), a metre in front of the eyes, and refuses with "every copy of this item is already out".
+- **End contract.** The truck's trigger box reaches below the floor; the rig went into the floor and the trigger never
+  counted it. Now a ray down from the box's top finds the floor (core game::raycast_distance), and noclip goes off
+  first (its collider off means the trigger never counts the investigator). Known: the dummy investigator outside
+  the truck also keeps the button from being pressed.
+- **Debrief "Failed to load ghost type" (user's screenshot, 2026-11-13): our own doing, not the retype.** The
+  dev session hooked RewardManager.StartResults and skipped the results whole, so the screen was never filled ($0 on
+  every row, the ghost line's placeholder). Now the results run and the progress parts are taken out as Playable
+  Ghost does: SetTotals(0, 0) after RewardManager.BuildRows (what the results save), RewardManager.EventRow answers
+  empty (no seasonal score sent), ChallengesController.ChangeChallengeProgression is dropped in a dev session. The
+  experience pay was already dropped; the save freeze still holds. The multiplier achievement in the results' step 1
+  is left to the game (the user's standing rule on achievements).
+- **End contract, second test (2026-11-13): the teleport did work; the press did not.** mods.log: the truck counted
+  the investigator 0.3 s after the teleport, then "the truck button's interaction has no event that presses it".
+  LiftButton.Start adds the press at run time (decompiled: PhotonObjectInteract.AddUseEvent's work, in place); there
+  is no saved listener, so the round-14 search could never find it, and the LiftButton.photonInteract note said
+  otherwise (corrected). PCPropGrab's interact helper invokes that same event (the interaction's first UnityEvent)
+  after three flag checks. The event field could not be pinned by provable facts (both readers lose `this`), so the
+  press now finds the event whose run-time listener targets the button: new real-name entries UnityEventBase.m_Calls,
+  InvokableCallList(.m_RuntimeCalls), InvokableCall(.Delegate), Delegate(.m_target); also PhotonObjectInteract.AddUseEvent
+  and LiftButton.Start. The floor ray cast stays (it is still right that the box reaches below the floor).
+- **Difficulty live research done** (re/dump/notes/2026-11-13-difficulty-live.md), not applied yet.
+
+Smoke: 65: hunt line row shows a value within a second of the contract's start for several types (Mare with the room
+light on and off, Shade, Thaye); the on-line button lets a hunt start. 66: open the journal, open the dev menu, close
+the dev menu: the mouse stays free in the journal; repeat closing the journal first. 67: spawn an item until "already
+out"; nothing in the truck moves. 68: end contract from the house, with and without noclip: the investigator stands
+in the truck, the doors close and the truck leaves. 69: the debrief after a dev contract shows its rows, the ghost's
+type and a total of $0, and the money and level stay as they were.
+
+Round 15, third test (2026-11-13): end contract pressed and left; the investigator still landed in the floor. The
+contract's own start places are MultiplayerController.spawnPoints (decompiled: the controller instantiates the local
+player's prefab at a random one; FallTeleportBox uses the first as its fallback), and the game's own move is
+LocalPlayer.TeleportPlayer (PCPlayer.Teleport's body: controller off, rig root moved, controller on). New entries
+MultiplayerController.instance, .spawnPoints, LocalPlayer.TeleportPlayer. me_to_truck now uses them (noclip switched
+back off after the move, since the game's move re-enables the controller); the trigger box and floor ray are only the
+fallback. The other teleports (to the ghost, its room) still move the controller over a NavMesh point; no report
+against them.
+
+Round 15, fourth pass (2026-11-13), the user's asks:
+- **Hunt line without waiting for idle.** The idle state's enter only copies the three scene singletons
+  (LevelController, GameController, SoundController instances) into the state; the rest of it (timer, animation,
+  audio, rollRange by difficulty) is not read by the check. New entries GhostIdleState.ctor, .levelController,
+  .gameController, .soundController. The menu keeps its own idle state per ghost (type.make + ctor, held), refreshes
+  the three controllers and runs HuntInsanity on it twice a second; the live state is never touched. Raiju's rule
+  still runs GhostActivity.UpdateElectronics, the game's own refresh of a cached flag.
+- **Teleports to the ghost and its room sank into the floor.** All three teleports now go through
+  LocalPlayer.TeleportPlayer (teleport_rig): the rig's root over the NavMesh point, as high as it stands over the mesh
+  now (never below), plus 5 cm; noclip re-applied after. The truck fallback uses it too.
+- **Spawn said "none left" with copies in the truck.** The truck spawner hands out every copy the loadout brings, so
+  none is off. Now a copy lying in the truck's trigger box with PhotonObjectInteract.inUse clear is taken when no
+  unused one exists; its body is made non-kinematic (Rigidbody only: FreezeRigidbody would send the game's RPC). The
+  log counts the copies handed out and those free in the truck.
+Smoke: 70: hunt line row shows a value at once and during a hunt. 71: teleport to the ghost and to its room: on the
+floor. 72: spawn an item that is in the truck: a truck copy appears in front of you and falls.

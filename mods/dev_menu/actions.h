@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -90,7 +91,6 @@ void unappear();
  *  snapshot-style index into LevelController.rooms. */
 void apply_room(int index);
 int random_room();  // an index into the level's rooms, -1 with none
-void bump_base_speed(float delta);
 void fire_event(int32_t state);
 void set_events_blocked(bool value);
 void set_friendly(bool value);
@@ -99,10 +99,6 @@ void bump_evidence(int delta);
 void set_forced_type(int value);
 void set_sanity(int percent);
 void set_frozen(bool value);
-/** Steps the local PC rig's speed through the game's own setter (LocalPCPlayer.SetPlayerSpeedMultiplier, the
- *  call a Monkey Paw wish makes, which also re-applies it to the controller). `steps` is in quarter-steps,
- *  bounded by menu_rule.h. Nothing for a rig the game will not take it on. */
-void bump_speed_multiplier(int steps);
 /** Gives the rig back the speed multiplier the game kept for it at the start of the contract
  *  (LocalPCPlayer.ResetPlayerSpeedMultiplier). */
 void reset_speed_multiplier();
@@ -131,6 +127,15 @@ void unlock_main_door();
  *  has no ExitLevel (its serialized ready bool is an editor value, so in a truck-less scene the game
  *  would do nothing either). */
 bool end_contract();
+/** How a press of the truck's button went. */
+enum class EndContract { Pressed, Waiting, DoorsShut, NoTruck };
+/** Ends the contract the game's own way: the truck's button, pressed through its own interaction event (as a player
+ *  presses it; LiftButton.photonInteract's note), which the master accepts only with
+ *  every living player inside and the doors open. Outside the truck, the investigator is moved into it first and the
+ *  press follows once the game counts them inside (Waiting; at most four seconds). */
+EndContract end_contract_by_button();
+/** Each frame: the waiting press, once the game counts the investigator inside the truck. */
+void end_contract_tick();
 void leave();
 void quit();
 void set_time_scale(float value);
@@ -148,6 +153,41 @@ std::string type_name(int32_t type);
  *  and every per-type start step); then the orb and the freezing flag the old type left are put right. The Mimic,
  *  Thaye and Obambo timers keep running from where they were. False with no ghost. */
 bool retype(int32_t type);
+
+/** Every ghost type the game and the running mods know, in number order, "no type" aside: what the forced type offers.
+ *  Read in the lobby too. */
+std::vector<int32_t> known_types();
+/** A developer's name for a type from its content id ("Black Shuck"); its number when it has none. */
+std::string pretty_type(int32_t type);
+/** The sanity, in percent as the game shows it, at or below which this ghost may hunt now: the game's own idle check
+ *  learned as Playable Ghost learns it (the insanity the check used, less the player's own, added to the base line),
+ *  or the Thaye's age threshold. -1 until the first idle roll of the contract has been seen. */
+int hunt_threshold();
+
+/** Where the game's custom difficulty menu puts an option. */
+enum class OptionGroup { Player, Ghost, Contract };
+/** How an option is set in the menu: a switch, a slider, or a choice stepped through the game's values. */
+enum class OptionControl { Switch, Slider, Choice };
+OptionGroup option_group(int index);
+OptionControl option_control(int index);
+/** A slider's or a choice's top (levels and the fuse box from the game's own enums), and a slider's step. */
+float option_top(int index);
+float option_step_size(int index);
+/** Option `index`'s number now, and a new one, kept between 0 and its top. */
+float option_number(int index);
+void option_set(int index, float value);
+
+/** What a dial needs from the game before the menu may set it. */
+enum class Need { Player, Ghost };
+/** The numbers the menu sets with a slider. */
+enum class DialId { Sanity = 0, GhostSpeed = 1, PlayerSpeed = 2, Flames = 3 };
+float dial_low(DialId id);
+float dial_high(DialId id);
+float dial_step(DialId id);
+Need dial_need(DialId id);
+float dial_value(DialId id);
+/** Sets dial `id` to `value`, kept in its range and on its step. */
+void dial_set(DialId id, float value);
 
 /** How many custom-difficulty options the Difficulty picker offers: every option of the game's custom difficulty that
  *  the map names (Difficulty's fields). */
@@ -177,17 +217,26 @@ bool settle_objective(int index, bool complete);
 int item_count();
 /** Item `index`'s name (StoreItem.itemName). */
 std::string item_name(int index);
-/** Spawns one of item `index` a metre above the investigator, through the truck spawner's own local call
- *  (ObjectPooler.SpawnFromEquipmentPool). False when the pool has no copy left or nothing can be found. */
-bool spawn_item(int index);
+/** What spawn_item did. */
+enum class SpawnResult { Spawned, NoneLeft, Failed };
+/** Hands out one free copy of item `index` a metre in front of the investigator's eyes, as the truck spawner's own
+ *  local hand-out does (ObjectPooler.SpawnFromEquipmentPool): placed, switched on, its spawn position written. A copy
+ *  is free while it is still switched off; NoneLeft when every copy of the item is out (the game holds a fixed set
+ *  of copies and never makes more), Failed when the pool, the item or the investigator's eyes cannot be found.
+ *  This client's own copy: nothing is sent. */
+SpawnResult spawn_item(int index);
 /** Each tick while "never run out" is on: candles burn back up to what they first held, crucifixes are as new. */
 void keep_supplies();
+/** The running hunt's sight speed-up now (GhostHuntState.sightSpeedUp, 1 to 1.65); negative with no hunt. */
+float sight_now();
 /** Each tick: the hunt's sight assist held as the switch says (none, or frozen where it stood). */
 void hold_sight();
 
 /** The type's own dials in one line: the Onryo's blown-out flames, the Thaye's age step and hunt threshold, the
  *  Gallu's and the Dayan's states, the interaction boost and whom the Banshee is set on. */
 std::string type_dials();
+/** The Onryo's count of blown-out flames now (GhostAI.flamesBlownOut); 0 with no ghost. */
+int flames_blown();
 /** Adds `delta` to the Onryo's count of blown-out flames (GhostAI.flamesBlownOut), or clears it for 0. */
 void bump_flames(int delta);
 /** Asks for the type's own change at the ghost's next state change (GhostController.typeChangeDue): the Mimic's
@@ -210,6 +259,21 @@ std::string weather_now();
  *  sky, the sound; local, nothing sent). Works to and from the Blood Moon. False with no contract or no scene
  *  weather. */
 bool apply_weather(int index);
+
+/** While the menu is open (true, asked again each frame): raises the local player's JournalController.open, the
+ *  flag the game's interact and primary-use handlers refuse on while the journal is open, so a click on the menu does
+ *  not also use what the investigator looks at. The book does not show and nothing is sent. False puts the flag back
+ *  as the menu found it. */
+void hold_input(bool held);
+/** The game's overlay the menu opened over (the journal) has closed while the menu stayed open: closing the menu
+ *  then leaves JournalController.open clear, as that overlay's own close left it, not as the menu first found it. */
+void overlay_closed();
+/** Where the menu keeps its settings between runs (the mod's own folder of the host's data directory). */
+void set_settings_file(const std::filesystem::path& file);
+/** Writes the switches a developer sets once (the overlay, the store, the holds, god mode, the pause) to that file. */
+void save_settings();
+/** Reads them back; a missing file or a line this build cannot read leaves the defaults. */
+void load_settings();
 
 /** Whether noclip is on. */
 bool noclip();

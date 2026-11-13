@@ -6,7 +6,7 @@
 {
   "dev-menu.key-label": "Open dev menu", // PM_TEXT_AI
   "dev-menu.title": "Dev menu", // PM_TEXT_AI
-  "dev-menu.hint": "Press the dev menu key again to close. Progress is not saved in a dev session.", // PM_TEXT_AI
+  "dev-menu.hint": "Press the dev menu key to close. Arrow keys move between controls, Enter uses one.", // PM_TEXT_AI
   "dev-menu.section.difficulty": "Difficulty", // PM_TEXT_AI
   "dev-menu.section.contract": "Contract", // PM_TEXT_AI
   "dev-menu.section.ghost": "Ghost", // PM_TEXT_AI
@@ -15,26 +15,11 @@
   "dev-menu.section.game": "Game", // PM_TEXT_AI
   "dev-menu.section.loader": "Loader", // PM_TEXT_AI
   "dev-menu.mod": "Mod", // PM_TEXT_AI
-  "dev-menu.mod-prev": "Previous mod", // PM_TEXT_AI
-  "dev-menu.mod-next": "Next mod", // PM_TEXT_AI
   "dev-menu.content": "Ghost types this contract offers", // PM_TEXT_AI
   "dev-menu.on": "on", // PM_TEXT_AI
   "dev-menu.off": "off", // PM_TEXT_AI
-  "dev-menu.friendly": "Friendly ghost", // PM_TEXT_AI
-  "dev-menu.lose-equipment": "Lose equipment on death", // PM_TEXT_AI
-  "dev-menu.evidence": "Evidence given", // PM_TEXT_AI
-  "dev-menu.evidence-down": "Take one away", // PM_TEXT_AI
-  "dev-menu.evidence-up": "Give one more", // PM_TEXT_AI
   "dev-menu.ghost-type": "Forced ghost type", // PM_TEXT_AI
-  "dev-menu.ghost-type-down": "Previous type", // PM_TEXT_AI
-  "dev-menu.ghost-type-up": "Next type", // PM_TEXT_AI
   "dev-menu.reward": "Reward multiplier", // PM_TEXT_AI
-  "dev-menu.option": "Option", // PM_TEXT_AI
-  "dev-menu.option-prev": "Previous option", // PM_TEXT_AI
-  "dev-menu.option-next": "Next option", // PM_TEXT_AI
-  "dev-menu.option-down": "Lower", // PM_TEXT_AI
-  "dev-menu.option-up": "Higher", // PM_TEXT_AI
-  "dev-menu.option-when.live": "applies now", // PM_TEXT_AI
   "dev-menu.option-when.start": "next contract", // PM_TEXT_AI
   "dev-menu.option-when.mixed": "partly now", // PM_TEXT_AI
   "dev-menu.option-when.unknown": "not traced", // PM_TEXT_AI
@@ -67,25 +52,19 @@
   "dev-menu.option.cursed-quantity": "Cursed possessions", // PM_TEXT_AI
   "dev-menu.unlock-door": "Unlock the main door", // PM_TEXT_AI
   "dev-menu.objective": "Objective", // PM_TEXT_AI
-  "dev-menu.objective-prev": "Previous objective", // PM_TEXT_AI
-  "dev-menu.objective-next": "Next objective", // PM_TEXT_AI
   "dev-menu.objective-complete": "Complete this objective", // PM_TEXT_AI
   "dev-menu.objective-fail": "Fail this objective", // PM_TEXT_AI
   "dev-menu.never-run-out": "Candles and crucifixes never run out", // PM_TEXT_AI
   "dev-menu.item": "Item", // PM_TEXT_AI
-  "dev-menu.item-prev": "Previous item", // PM_TEXT_AI
-  "dev-menu.item-next": "Next item", // PM_TEXT_AI
-  "dev-menu.item-spawn": "Spawn one at your feet", // PM_TEXT_AI
-  "dev-menu.sight-hold": "Hunt sight assist", // PM_TEXT_AI
+  "dev-menu.item-spawn": "Spawn one in front of you", // PM_TEXT_AI
+  "dev-menu.sight-hold": "Chase speed-up", // PM_TEXT_AI
   "dev-menu.sight-game": "the game's own", // PM_TEXT_AI
   "dev-menu.sight-none": "held off", // PM_TEXT_AI
   "dev-menu.sight-frozen": "held where it is", // PM_TEXT_AI
   "dev-menu.weather": "Weather now", // PM_TEXT_AI
-  "dev-menu.weather-pick": "Weather to change to", // PM_TEXT_AI
-  "dev-menu.weather-prev": "Previous weather", // PM_TEXT_AI
-  "dev-menu.weather-next": "Next weather", // PM_TEXT_AI
+  "dev-menu.weather-pick": "Change to", // PM_TEXT_AI
   "dev-menu.weather-apply": "Change the weather", // PM_TEXT_AI
-  "dev-menu.end-contract": "End the contract (the truck leaves)", // PM_TEXT_AI
+  "dev-menu.end-contract": "End the contract (into the truck, doors shut)", // PM_TEXT_AI
   "dev-menu.leave": "Leave the contract", // PM_TEXT_AI
   "dev-menu.quit": "Quit the game", // PM_TEXT_AI
   "dev-menu.payout": "Bonus payout", // PM_TEXT_AI
@@ -98,21 +77,17 @@
   "dev-menu.clear-cooldown": "Clear the hunt cooldown", // PM_TEXT_AI
   "dev-menu.appear": "Make the ghost appear", // PM_TEXT_AI
   "dev-menu.unappear": "Make the ghost vanish", // PM_TEXT_AI
-  "dev-menu.room-pick": "Room to move it to", // PM_TEXT_AI
-  "dev-menu.room-prev": "Previous room", // PM_TEXT_AI
-  "dev-menu.room-next": "Next room", // PM_TEXT_AI
+  "dev-menu.room-pick": "Room", // PM_TEXT_AI
   "dev-menu.room-apply": "Move the ghost there", // PM_TEXT_AI
   "dev-menu.room-random": "Move it to a random room", // PM_TEXT_AI
-  "dev-menu.ghost-blind": "Ghost is blind", // PM_TEXT_AI
+  "dev-menu.ghost-blind": "Ghost sight", // PM_TEXT_AI
+  "dev-menu.ghost-sight.normal": "the game's own", // PM_TEXT_AI
+  "dev-menu.ghost-sight.nobody": "sees nobody", // PM_TEXT_AI
+  "dev-menu.ghost-sight.everyone": "sees everyone, anywhere", // PM_TEXT_AI
   "dev-menu.block-events": "Block ghost events", // PM_TEXT_AI
-  "dev-menu.event": "Ghost event", // PM_TEXT_AI
-  "dev-menu.event-prev": "Previous event", // PM_TEXT_AI
-  "dev-menu.event-next": "Next event", // PM_TEXT_AI
+  "dev-menu.event": "Event", // PM_TEXT_AI
   "dev-menu.event-fire": "Fire this event", // PM_TEXT_AI
   "dev-menu.sanity": "Your sanity", // PM_TEXT_AI
-  "dev-menu.sanity-0": "Set sanity to 0", // PM_TEXT_AI
-  "dev-menu.sanity-50": "Set sanity to 50", // PM_TEXT_AI
-  "dev-menu.sanity-100": "Set sanity to 100", // PM_TEXT_AI
   "dev-menu.freeze": "Freeze you", // PM_TEXT_AI
   "dev-menu.die": "Kill you", // PM_TEXT_AI
   "dev-menu.god-mode": "God mode", // PM_TEXT_AI
@@ -138,30 +113,23 @@
   "dev-menu.why.no-rooms": "the level has no rooms yet", // PM_TEXT_AI
   "dev-menu.why.dead": "you are already dead", // PM_TEXT_AI
   "dev-menu.why.no-truck": "this level has no truck to leave in", // PM_TEXT_AI
+  "dev-menu.why.doors-shut": "the truck's doors are already shut", // PM_TEXT_AI
   "dev-menu.evidence-given": "Evidence this contract gives", // PM_TEXT_AI
   "dev-menu.type-dials": "Type dials", // PM_TEXT_AI
-  "dev-menu.flames-more": "One more blown-out flame (Onryo)", // PM_TEXT_AI
   "dev-menu.flames-clear": "Clear the blown-out flames", // PM_TEXT_AI
   "dev-menu.type-change-now": "Run the type's change now (Mimic, Thaye, Obambo)", // PM_TEXT_AI
   "dev-menu.chase-me": "Make the hunt go for you", // PM_TEXT_AI
   "dev-menu.me-to-truck": "Teleport to the truck", // PM_TEXT_AI
-  "dev-menu.retype-pick": "Type to change it to", // PM_TEXT_AI
-  "dev-menu.retype-prev": "Previous type", // PM_TEXT_AI
-  "dev-menu.retype-next": "Next type", // PM_TEXT_AI
+  "dev-menu.retype-pick": "Change it to", // PM_TEXT_AI
   "dev-menu.retype-apply": "Change the ghost type now", // PM_TEXT_AI
   "dev-menu.interact-now": "Make it interact now", // PM_TEXT_AI
   "dev-menu.ability-now": "Make it use its ability now", // PM_TEXT_AI
   "dev-menu.throw-now": "Make it throw something now", // PM_TEXT_AI
   "dev-menu.ghost-to-me": "Bring the ghost to you", // PM_TEXT_AI
-  "dev-menu.ghost-speed-down": "Ghost slower", // PM_TEXT_AI
-  "dev-menu.ghost-speed-up": "Ghost faster", // PM_TEXT_AI
   "dev-menu.sanity-lock": "Hold your sanity", // PM_TEXT_AI
-  "dev-menu.sanity-lock-value": "Sanity to hold", // PM_TEXT_AI
   "dev-menu.noclip": "Noclip (fly through walls)", // PM_TEXT_AI
   "dev-menu.me-to-ghost": "Teleport to the ghost", // PM_TEXT_AI
   "dev-menu.me-to-ghost-room": "Teleport to the ghost room", // PM_TEXT_AI
-  "dev-menu.player-speed-down": "You slower", // PM_TEXT_AI
-  "dev-menu.player-speed-up": "You faster", // PM_TEXT_AI
   "dev-menu.equipment-protected": "Equipment and consumables are kept", // PM_TEXT_AI
   "dev-menu.save-frozen": "Save frozen until the game closes", // PM_TEXT_AI
   "dev-menu.unlock-all": "Unlock everything", // PM_TEXT_AI
@@ -201,5 +169,49 @@
   "dev-menu.dummy-revive": "Revive the dummy", // PM_TEXT_AI
   "dev-menu.dummy-remove": "Remove the dummy", // PM_TEXT_AI
   "dev-menu.why.no-dummy": "there is no dummy in this contract", // PM_TEXT_AI
-  "dev-menu.esp.dummy": "Dummy" // PM_TEXT_AI
+  "dev-menu.esp.dummy": "Dummy", // PM_TEXT_AI
+  "dev-menu.group.next-contract": "Next contract", // PM_TEXT_AI
+  "dev-menu.group.reward": "Reward", // PM_TEXT_AI
+  "dev-menu.group.contract": "This contract", // PM_TEXT_AI
+  "dev-menu.group.objectives": "Objectives", // PM_TEXT_AI
+  "dev-menu.group.weather": "Weather", // PM_TEXT_AI
+  "dev-menu.group.watch": "What it is doing", // PM_TEXT_AI
+  "dev-menu.group.hunts": "Hunts", // PM_TEXT_AI
+  "dev-menu.group.room": "Room and movement", // PM_TEXT_AI
+  "dev-menu.group.activity": "Activity", // PM_TEXT_AI
+  "dev-menu.group.type": "Type", // PM_TEXT_AI
+  "dev-menu.group.you": "You", // PM_TEXT_AI
+  "dev-menu.group.movement": "Movement", // PM_TEXT_AI
+  "dev-menu.group.dummy": "Dummy investigator", // PM_TEXT_AI
+  "dev-menu.group.store": "Store", // PM_TEXT_AI
+  "dev-menu.group.supplies": "In this contract", // PM_TEXT_AI
+  "dev-menu.group.time": "Time", // PM_TEXT_AI
+  "dev-menu.group.on-screen": "On screen", // PM_TEXT_AI
+  "dev-menu.group.session": "Session", // PM_TEXT_AI
+  "dev-menu.group.mods": "Installed mods", // PM_TEXT_AI
+  "dev-menu.group.content": "Content", // PM_TEXT_AI
+  "dev-menu.flames": "Onryo blown-out flames", // PM_TEXT_AI
+  "dev-menu.mod-state": "State", // PM_TEXT_AI
+  "dev-menu.paused-while-open": "(paused while this menu is open)", // PM_TEXT_AI
+  "dev-menu.status.offline": "Single player", // PM_TEXT_AI
+  "dev-menu.status.session": "Dev session", // PM_TEXT_AI
+  "dev-menu.status.frozen": "Save frozen", // PM_TEXT_AI
+  "dev-menu.group.option-player": "Player", // PM_TEXT_AI
+  "dev-menu.group.option-ghost": "Ghost", // PM_TEXT_AI
+  "dev-menu.group.option-contract": "Contract", // PM_TEXT_AI
+  "dev-menu.level.none": "None", // PM_TEXT_AI
+  "dev-menu.level.low": "Low", // PM_TEXT_AI
+  "dev-menu.level.medium": "Medium", // PM_TEXT_AI
+  "dev-menu.level.high": "High", // PM_TEXT_AI
+  "dev-menu.level.very-high": "Very high", // PM_TEXT_AI
+  "dev-menu.fuse.broken": "Broken", // PM_TEXT_AI
+  "dev-menu.fuse.off": "Off", // PM_TEXT_AI
+  "dev-menu.fuse.on": "On", // PM_TEXT_AI
+  "dev-menu.threshold": "This ghost can hunt at", // PM_TEXT_AI
+  "dev-menu.threshold-value": "{{sanity}}% sanity or lower", // PM_TEXT_AI
+  "dev-menu.threshold-unknown": "the game did not give it", // PM_TEXT_AI
+  "dev-menu.sanity-on-threshold": "Set sanity to the hunt line", // PM_TEXT_AI
+  "dev-menu.sanity-above-threshold": "Set sanity just above the hunt line", // PM_TEXT_AI
+  "dev-menu.why.no-threshold": "the game did not give the ghost's hunt line", // PM_TEXT_AI
+  "dev-menu.why.no-spare": "no copy of this item is unused or free in the truck" // PM_TEXT_AI
 }

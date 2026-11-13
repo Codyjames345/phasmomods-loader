@@ -56,9 +56,10 @@ inline constexpr pm::sdk::EntryDesc GhostHuntState_baseSpeed{.key = "GhostHuntSt
                                                              .owner = "GhostHuntState",
                                                              .type = "float", .facts = GhostHuntState_baseSpeed_facts};
 
-/// The line-of-sight speed-up the base is multiplied by: UpdateSpeed raises it 0.05 a second while
-/// the ghost sees its target (faster for one type), lowers it while it has none, and keeps it between
-/// 1 and 1.65. Decompiled.
+/// The line-of-sight speed-up the base is multiplied by: UpdateSpeed raises it 0.05 a second while the hunt has a
+/// target (faster for one type), lowers it only once it has neither a target nor a searchTarget, keeps it between 1
+/// and 1.65, and reads it afresh every frame (so a mod's write counts from the next one). A smudged ghost runs at 1
+/// whatever it holds. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostHuntState_sightSpeedUp{
     .key = "GhostHuntState.sightSpeedUp", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "GhostHuntState", .type = "float", .facts = GhostHuntState_sightSpeedUp_facts};

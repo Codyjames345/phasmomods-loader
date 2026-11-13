@@ -34,6 +34,9 @@ bool start(const PmHostApi* api) {
   const std::filesystem::path data =
       std::filesystem::path(mod::host().dataDirectory) / mod::info().id / "keybinds.txt";
   api::keys::begin_keys(mod::info().id, mod::shown_name(), data);
+  // The menu's own settings beside the keys: read once, written on every change (actions::save_settings).
+  actions::set_settings_file(std::filesystem::path(mod::host().dataDirectory) / mod::info().id / "settings.txt");
+  actions::load_settings();
   api::keys::ModKey key;
   key.id = kToggleKey;
   key.label = i18n::text("dev-menu.key-label");

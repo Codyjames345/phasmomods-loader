@@ -155,6 +155,9 @@ void each_running_camera(CameraScan& scan, uint64_t now, const std::function<boo
 void* raycast(Vector3 origin, Vector3 direction, float maxDistance);
 /** The same ray on the layers of `layerMask` only (a bit per layer), as a game script's own mask casts it. */
 void* raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask);
+/** How far along the ray (`direction` of length 1) the first non-trigger collider on the layers of `layerMask` is,
+ *  in metres; negative when nothing is hit within `maxDistance`. */
+float raycast_distance(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask);
 bool is_child_of(void* transform, void* parent);
 // What the ghost could interact with at hitTransform ("Door", "Light switch", ...), or null.
 const char* interactable_label(void* hitTransform);

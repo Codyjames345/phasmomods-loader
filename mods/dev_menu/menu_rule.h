@@ -5,6 +5,10 @@
 // is open, which actions a row may run right now and what the mod's three hooks refuse. Everything a row
 // *shows* is read from the game every frame (actions.cpp); only these rules decide.
 #include <cmath>
+#include <cstdlib>
+#include <sstream>
+#include <string>
+#include <string_view>
 
 namespace pm::devmenu {
 
@@ -50,28 +54,6 @@ inline bool pause_close(Pause& p, float& restore) {
   return true;
 }
 
-/** The investigator's speed multiplier the speed row steps to: `steps` quarter-steps from `current`, snapped
- *  to the nearest quarter, kept between 0.25 and 4. The bounds are the menu's, not the game's: the game puts
- *  no range on the multiplier (Difficulty.playerSpeed sets it, and a Monkey Paw wish calls the same setter),
- *  and a multiplier of 0 would leave the row no way back up. */
-inline float next_speed_multiplier(float current, int steps) {
-  const float moved = current + 0.25f * static_cast<float>(steps);
-  float snapped = std::lround(moved * 4.0f) / 4.0f;
-  if (snapped < 0.25f) snapped = 0.25f;
-  if (snapped > 4.0f) snapped = 4.0f;
-  return snapped;
-}
-
-/** The game's timeScale the "tick speed" row cycles to: the next preset above `current`, wrapping to the
- *  first (paused, which is kPausedScale and never 0, then 0.25, 0.5, 1 real time, 2, 4). A value between presets moves
- *  to the next one above it. */
-inline float next_time_scale(float current) {
-  static constexpr float kScales[] = {kPausedScale, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
-  for (const float s : kScales)
-    if (s > current + 0.001f) return s;
-  return kScales[0];
-}
-
 // ---- The switches the mod's hooks read ----
 struct Switches {
   // Freeze the game (kPausedScale) while the menu is open. Off by default since 2026-11-12 (the user's call
@@ -106,7 +88,27 @@ struct Switches {
   // The hunt's sight assist (GhostHuntState.sightSpeedUp): the game's own, held at none (1, the multiplier that
   // changes nothing), or held where it stood when the hold began.
   int sightHold = 0;  // SightHold below
+  // What the hunt's sight test answers (GhostSight below): the game's own, nobody, or every living player wherever
+  // they are, as the Deogen's own branch of GhostHuntState.Sees answers for that type.
+  int ghostSight = 0;
 };
+
+/** The idle check's base line: a hunt is possible while the insanity the check uses is at least this (GhostIdleState's
+ *  map note; Playable Ghost's tether.h kHuntInsanity). In sanity, the base line is 100 less it, which is also 50. */
+inline constexpr int kHuntInsanity = 50;
+
+/** The ghost sight row's three settings, in the order the row cycles them. */
+enum GhostSight { kGhostSightNormal = 0, kGhostSightNobody = 1, kGhostSightEveryone = 2 };
+inline int next_ghost_sight(int current) { return (current + 1) % 3; }
+
+/** What the hunt's sight test answers under the setting, given the game's own answer and whether the player is
+ *  dead: nobody is seen while the ghost sees nobody; every living player is seen while it sees everyone (the Deogen's
+ *  rule; a dead player, as one in the hunt's killed list, is never seen); otherwise the game's own answer. */
+inline bool sight_answer(int setting, bool gameSees, bool playerDead) {
+  if (setting == kGhostSightNobody) return false;
+  if (setting == kGhostSightEveryone) return !playerDead;
+  return gameSees;
+}
 
 /** The sight assist row's three settings, in the order the row cycles them. */
 enum SightHold { kSightGame = 0, kSightNone = 1, kSightFrozen = 2 };
@@ -137,13 +139,6 @@ inline bool suppress_progress(bool devSessionOn) { return devSessionOn; }
  *  the game's own return of it while a dev session is on, so a dev session never costs a saved item. */
 inline bool return_instead_of_losing(bool devSessionOn) { return devSessionOn; }
 
-/** The sanity the lock holds next: the locked value cycles 100, 50, 0 and back to 100. */
-inline int next_locked_sanity(int current) {
-  if (current > 50) return 50;
-  if (current > 0) return 0;
-  return 100;
-}
-
 /** Whether the lock must put the value back now: the game moved PlayerSanity.insanity more than half a point
  *  from the locked value. A smaller drift waits, so the game's setter (which sends the value on) is not asked
  *  every frame. The lock holds the field the sanity read-out shows, and sets it through
@@ -157,7 +152,7 @@ inline bool sanity_needs_reset(float valueNow, int locked) {
 enum class Action {
   UnlockDoor, EndContract, Leave, Quit,          // Contract
   PickWeather, ApplyWeather,                     // Contract: the weather
-  ForceHunt, EndHunt, ClearCooldown, Appear, UnAppear, ApplyRoom, RandomRoom, PickRoom, BumpSpeed,  // Ghost
+  ForceHunt, EndHunt, ClearCooldown, Appear, UnAppear, ApplyRoom, RandomRoom, PickRoom,  // Ghost
   ToggleEvents, FireEvent, SetGhostBlind,         // Ghost
   FireState,                                      // Ghost: one named attempt (interact, ability, throw)
   GhostToMe,                                      // Ghost: the NavMeshAgent warp to the investigator
@@ -165,12 +160,11 @@ enum class Action {
   BumpFlames, TypeChangeNow, ChaseMe,             // Ghost: the type's own dials, and the hunt's target
   MeToTruck,                                      // Player: back to the truck
   SetFriendly, SetLoseEquipment, BumpEvidence, BumpType,  // Difficulty
-  PickOption, StepOption,                         // Difficulty: every custom option, by a picker
-  SetSanity, ToggleFreeze, KillLocal, ReviveLocal,  // Player
-  BumpPlayerSpeed, ResetPlayerSpeed,              // Player: the game's own speed multiplier
+  ToggleFreeze, KillLocal, ReviveLocal,           // Player
+  ResetPlayerSpeed,                               // Player: the game's own speed multiplier
   SetNoclip, MeToGhost, MeToGhostRoom,            // Player: movement
-  SetLockSanity, CycleLockedSanity,               // Player: the sanity lock
-  SetGodMode, SetPauseWhenOpen, CycleTimeScale, SetDebugHud, SetEspGhost, SetEspRooms,  // switches
+  SetLockSanity,                                  // Player: the sanity lock
+  SetGodMode, SetPauseWhenOpen, SetDebugHud, SetEspGhost, SetEspRooms,  // switches
   SetUnlockAll, SetFreeShop,                     // Equipment: the store
   SpawnDummy, DummyAction,                       // Player: the dummy investigator
   SetEspDoors, SetEspHiding, SetEspSwitches,     // Game: more ESP
@@ -179,13 +173,16 @@ enum class Action {
   SetNeverRunOut,                                // Equipment: candles and crucifixes
   PickItem, SpawnItem,                           // Equipment: one of the truck's items at your feet
   CycleSightHold,                                // Ghost: the hunt's sight assist
+  OptionToggle, OptionChoice,                    // Difficulty: one custom option's own row (its switch or choice)
+  Slide,                                         // a slider's step or drag: the row says which number it sets
+  SanityToThreshold,                             // Player: sanity put on, or just above, the ghost's hunt line
   Info,                                          // a read-out: no click
 };
 
 // The order is the order of the reasons' text keys in menu.cpp (kWhyKeys): add at the end only.
 enum class Why {
   None, NotOffline, NoContract, NoGhost, NoDifficulty, NoPlayer, Hunting, NotHunting, NoRooms, Dead, NoTruck,
-  Friendly, NoRig, Alive, Dying, NoDummy,
+  Friendly, NoRig, Alive, Dying, NoDummy, DoorsShut, NoThreshold, NoSpare,
 };
 
 // What the game looks like to the menu right now, read every tick (actions.cpp fills it).
@@ -244,7 +241,6 @@ inline Why refuse(Action action, const Can& c) {
     case Action::ClearCooldown:
     case Action::UnAppear:
     case Action::FireState:  // ChangeState unforced: the game's own guards decide the attempt
-    case Action::BumpSpeed:
     case Action::ToggleEvents:
     case Action::FireEvent:
     case Action::SetGhostBlind:  // asks the ghost's own vision sensor
@@ -300,12 +296,18 @@ inline Why refuse(Action action, const Can& c) {
     case Action::PickObjective:   // only the menu's own cursor
     case Action::PickItem:        // only the menu's own cursor
     case Action::PickMod:     // only the menu's own cursor
-    case Action::PickOption:  // only the menu's own cursor
       return Why::None;
-    case Action::StepOption:
-      // The friendly switch among them keeps its own rule: never mid-hunt.
+    case Action::OptionToggle:
+    case Action::OptionChoice:
+      // The friendly switch among them keeps its own rule: never mid-hunt (menu.cpp asks it by the option's key).
       if (!c.difficulty) return Why::NoDifficulty;
       return Why::None;
+    case Action::Slide:  // the row asks what its own number needs (a difficulty, the investigator or the ghost)
+      return Why::None;
+    case Action::SanityToThreshold:
+      if (!c.contract) return Why::NoContract;
+      if (!c.ghost) return Why::NoGhost;
+      return c.player ? Why::None : Why::NoPlayer;
     case Action::SetLoseEquipment:
     case Action::BumpEvidence:
     case Action::BumpType:
@@ -331,17 +333,13 @@ inline Why refuse(Action action, const Can& c) {
       if (!c.player) return Why::NoPlayer;
       if (action == Action::MeToGhostRoom && c.rooms <= 0) return Why::NoRooms;
       return Why::None;
-    case Action::SetSanity:
     case Action::ToggleFreeze:
-    case Action::BumpPlayerSpeed:  // the game's own multiplier, on this client's rig
     case Action::ResetPlayerSpeed:
     case Action::SetNoclip:
     case Action::SetLockSanity:
       return c.player ? Why::None : Why::NoPlayer;
-    case Action::CycleLockedSanity:  // only the menu's own number: the lock applies it when on
     case Action::SetGodMode:
     case Action::SetPauseWhenOpen:
-    case Action::CycleTimeScale:
     case Action::SetDebugHud:  // the mod's own text on its own canvas: it needs nothing from a contract
     case Action::SetEspGhost:
     case Action::SetEspRooms:
@@ -359,6 +357,66 @@ inline Why refuse(Action action, const Can& c) {
       return c.dummy ? Why::None : Why::NoDummy;
   }
   return Why::None;
+}
+
+// ---- The settings kept between runs ----
+
+/** The switches a developer sets once and expects again, as the lines of the menu's settings file ("name=number").
+ *  What the game holds (noclip, the dummy) and what belongs to one contract (the forced type, the difficulty) are not
+ *  kept. */
+inline std::string settings_text(const Switches& s) {
+  std::ostringstream out;
+  out << "pauseWhenOpen=" << s.pauseWhenOpen << "\n"
+      << "godMode=" << s.godMode << "\n"
+      << "debugHud=" << s.debugHud << "\n"
+      << "espGhost=" << s.espGhost << "\n"
+      << "espRooms=" << s.espRooms << "\n"
+      << "espDoors=" << s.espDoors << "\n"
+      << "espHiding=" << s.espHiding << "\n"
+      << "espSwitches=" << s.espSwitches << "\n"
+      << "lockSanity=" << s.lockSanity << "\n"
+      << "lockedSanity=" << s.lockedSanity << "\n"
+      << "sightHold=" << s.sightHold << "\n"
+      << "ghostSight=" << s.ghostSight << "\n"
+      << "unlockAll=" << s.unlockAll << "\n"
+      << "freeShop=" << s.freeShop << "\n"
+      << "neverRunOut=" << s.neverRunOut << "\n";
+  return out.str();
+}
+
+/** Reads settings_text's lines back into `s`. A line this build does not know, or whose number does not read, leaves
+ *  that switch as it was; a number out of range takes the switch's default. */
+inline void read_settings(std::string_view text, Switches& s) {
+  const Switches defaults;
+  while (!text.empty()) {
+    const size_t eol = text.find('\n');
+    std::string_view line = text.substr(0, eol);
+    text = eol == std::string_view::npos ? std::string_view{} : text.substr(eol + 1);
+    if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+    const size_t eq = line.find('=');
+    if (eq == std::string_view::npos || eq + 1 >= line.size()) continue;
+    const std::string_view key = line.substr(0, eq);
+    const std::string number(line.substr(eq + 1));
+    char* end = nullptr;
+    const long v = std::strtol(number.c_str(), &end, 10);
+    if (end == number.c_str() || *end != '\0') continue;
+    const bool on = v != 0;
+    if (key == "pauseWhenOpen") s.pauseWhenOpen = on;
+    else if (key == "godMode") s.godMode = on;
+    else if (key == "debugHud") s.debugHud = on;
+    else if (key == "espGhost") s.espGhost = on;
+    else if (key == "espRooms") s.espRooms = on;
+    else if (key == "espDoors") s.espDoors = on;
+    else if (key == "espHiding") s.espHiding = on;
+    else if (key == "espSwitches") s.espSwitches = on;
+    else if (key == "lockSanity") s.lockSanity = on;
+    else if (key == "lockedSanity") s.lockedSanity = v >= 0 && v <= 100 ? static_cast<int>(v) : defaults.lockedSanity;
+    else if (key == "sightHold") s.sightHold = v >= 0 && v < 3 ? static_cast<int>(v) : defaults.sightHold;
+    else if (key == "ghostSight") s.ghostSight = v >= 0 && v < 3 ? static_cast<int>(v) : defaults.ghostSight;
+    else if (key == "unlockAll") s.unlockAll = on;
+    else if (key == "freeShop") s.freeShop = on;
+    else if (key == "neverRunOut") s.neverRunOut = on;
+  }
 }
 
 }  // namespace pm::devmenu

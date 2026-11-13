@@ -145,10 +145,20 @@ inline constexpr pm::sdk::EntryDesc PauseMenuController_Quit{
 inline constexpr pm::sdk::EntryDesc LiftButton{.key = "LiftButton", .confidence = pm::sdk::Confidence::Decompiled,
                                                .name = "LiftButton", .assembly = "Assembly-CSharp", .ns = ""};
 
+/// Unity's Start for the button: it adds the button's own press to its interaction's use event
+/// (a run-time listener whose target is the button), the work PhotonObjectInteract.AddUseEvent does, written out in
+/// place. Decompiled.
+inline constexpr pm::sdk::EntryDesc LiftButton_Start{.key = "LiftButton.Start", .kind = pm::sdk::Kind::Method,
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .owner = "LiftButton", .name = "Start", .type = "void"};
+
 inline constexpr const char* LiftButton_AttemptUse_params[] = {"PhotonMessageInfo"};
 
-/// A player's press of the button, an RPC the master runs: it refuses it until
-/// GameController.allPlayersLoaded and goes on to the networked use. Decompiled.
+/// A player's press of the button, an RPC the master runs. Decompiled: it refuses while the game is not loaded
+/// (GameController.allPlayersLoaded) or the button is busy; with the doors open it also refuses while
+/// ExitLevel.ThereAreAlivePlayersOutsideTheTruck, so the truck leaves only with every living player inside. Otherwise
+/// it marks the button busy, sets the ExitLevel's leaving flag to whether the doors are now closing, flips isClosed,
+/// and sends LiftButton.NetworkedUse with the new state to every client.
 inline constexpr pm::sdk::EntryDesc LiftButton_AttemptUse{
     .key = "LiftButton.AttemptUse", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LiftButton", .name = "AttemptUse", .params = LiftButton_AttemptUse_params};
@@ -162,9 +172,46 @@ inline constexpr pm::sdk::EntryDesc LiftButton_NetworkedUse{
     .key = "LiftButton.NetworkedUse", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LiftButton", .name = "NetworkedUse", .params = LiftButton_NetworkedUse_params};
 
-/// Whether the doors are closed. Inferred: from its name.
+/// Whether the doors are closed: LiftButton.AttemptUse flips it on the master before it sends the doors' use.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc LiftButton_isClosed{.key = "LiftButton.isClosed", .kind = pm::sdk::Kind::Field,
                                                         .owner = "LiftButton", .name = "isClosed", .type = "bool"};
+
+/// Whether the button may be pressed only once: the press refuses a second press of a single-use button. Decompiled.
+inline constexpr pm::sdk::EntryDesc LiftButton_isSingleUse{
+    .key = "LiftButton.isSingleUse", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LiftButton", .name = "isSingleUse", .type = "bool"};
+
+/// The truck's ExitLevel this button starts: the button's one field of that type. Decompiled.
+inline constexpr pm::sdk::EntryDesc LiftButton_exitLevel{
+    .key = "LiftButton.exitLevel", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LiftButton", .name = "exitLevel", .type = "@ExitLevel"};
+
+/// The button's interaction component, a PhotonObjectInteract: the button's one field of that type. The button's
+/// Start adds its own press to this component's use event at run time (PhotonObjectInteract.AddUseEvent; it is not a
+/// listener saved in the scene), and a player's use of the button runs that event; the press sends
+/// LiftButton.AttemptUse to the master. A mod presses the truck's button by invoking the interaction's UnityEvent that
+/// holds a run-time listener targeting this button (PhotonObjectInteract.AddUseEvent's note), as
+/// the player's use does. The press itself is a method of the button with an obfuscated name and twenty look-alikes
+/// that differ only in the name of the RPC they send, so no map entry can name it. Decompiled.
+inline constexpr pm::sdk::EntryDesc LiftButton_photonInteract{
+    .key = "LiftButton.photonInteract", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LiftButton", .name = "photonInteract", .type = "@PhotonObjectInteract"};
+
+/// Whether a living player stands outside the truck: the press refuses to close the doors while one does. Decompiled.
+inline constexpr pm::sdk::EntryDesc ExitLevel_ThereAreAlivePlayersOutsideTheTruck{
+    .key = "ExitLevel.ThereAreAlivePlayersOutsideTheTruck", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "ExitLevel", .name = "ThereAreAlivePlayersOutsideTheTruck"};
+
+/// The truck's inside, an ExitLevelTrigger: the ExitLevel's one field of that type. It keeps the players standing in
+/// it. Decompiled.
+inline constexpr pm::sdk::EntryDesc ExitLevel_trigger{
+    .key = "ExitLevel.trigger", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "ExitLevel", .name = "trigger", .type = "@ExitLevelTrigger"};
+
+/// The truck's inside (Assembly-CSharp, global namespace): a trigger volume that keeps the players in it. Decompiled.
+inline constexpr pm::sdk::EntryDesc ExitLevelTrigger{.key = "ExitLevelTrigger", .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .name = "ExitLevelTrigger", .assembly = "Assembly-CSharp", .ns = ""};
 
 inline constexpr const char* Application_int[] = {"int"};
 
@@ -194,10 +241,11 @@ inline constexpr pm::sdk::EntryDesc GameController_AmountOfDeadPlayers{
     .key = "GameController.AmountOfDeadPlayers", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "GameController", .name = "AmountOfDeadPlayers"};
 
-/// Starts the truck's leaving: its coroutine sets Network.sceneChanging, sends the truck's start-up sound
-/// by RPC, waits a fixed time, and sends ExitLevel.Exit by RPC - or, if the object's serialized ready bool
-/// (an editor value; no code writes it) is clear, sends the stop sound and clears sceneChanging instead.
-/// LiftButton.NetworkedUse starts it only on the master with the doors closing. Decompiled.
+/// Starts the truck's leaving: it stops the ExitLevel's coroutines and, only while its leaving flag is set, starts the
+/// one that sets Network.sceneChanging, sends the truck's start-up sound by RPC, waits a fixed time, and sends
+/// ExitLevel.Exit by RPC. LiftButton.AttemptUse sets that flag when the doors close and LiftButton.NetworkedUse then
+/// calls this on the master, so a direct call with the flag clear does nothing (the dev menu's live test of
+/// 2026-11-12). End a contract by pressing the button (LiftButton.photonInteract's note). Decompiled.
 inline constexpr pm::sdk::EntryDesc ExitLevel_StartAttemptExitLevel{
     .key = "ExitLevel.StartAttemptExitLevel", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "ExitLevel", .name = "StartAttemptExitLevel"};
@@ -435,6 +483,10 @@ struct GameController {
   /// The level's GameController: instance.get(), or null; check it with pm::api::alive, since a
   /// destroyed one stays after the level. Unresolved: null.
   static constexpr pm::api::StaticField<pm::map::GameController_instance, void*> instance{};
+  /// GetAveragePlayerInsanity(controller): the players' average insanity (100 less sanity), the number the
+  /// ghost's idle hunt check starts from when no player is its own. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::GameController_GetAveragePlayerInsanity, float(void*)>
+      GetAveragePlayerInsanity{};
   /// LoadBackToMenu(controller): back to the menu scene. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::GameController_LoadBackToMenu, void(void*)> LoadBackToMenu{};
   /// Exit(controller, &info): the contract's end when every player has died, on every client. A mod hooks
@@ -451,6 +503,12 @@ struct ExitLevel {
   /// The ExitLevel type: klass(), is(obj) and type_object() (for Object.FindObjectOfType).
   /// Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::ExitLevel> type{};
+  /// ThereAreAlivePlayersOutsideTheTruck(exitLevel): whether a living player stands outside the truck. Unresolved:
+  /// false.
+  static constexpr pm::api::Method<pm::map::ExitLevel_ThereAreAlivePlayersOutsideTheTruck, bool(void*)>
+      ThereAreAlivePlayersOutsideTheTruck{};
+  /// The truck's inside, an ExitLevelTrigger: trigger.get(exitLevel). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::ExitLevel_trigger, void*> trigger{};
   /// StartAttemptExitLevel(exit): the master's own starter for the truck leaving, what
   /// LiftButton.NetworkedUse calls on it. StopAllCoroutines first; with the object's serialized ready
   /// bool set (the editor writes it, no code does), it sets Network.sceneChanging, sends the truck's
@@ -502,6 +560,12 @@ struct LiftButton {
   static constexpr pm::api::Method<pm::map::LiftButton_NetworkedUse, void(void*, bool, void*)> NetworkedUse{};
   /// Whether the doors are closed: isClosed.get(button). Unresolved: false.
   static constexpr pm::api::Field<pm::map::LiftButton_isClosed, bool> isClosed{};
+  /// The LiftButton type: type_object() for Object.FindObjectOfType. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::LiftButton> type{};
+  /// The truck's ExitLevel this button starts: exitLevel.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LiftButton_exitLevel, void*> exitLevel{};
+  /// The button's interaction component, a PhotonObjectInteract: photonInteract.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LiftButton_photonInteract, void*> photonInteract{};
 };
 
 /// What RewardManager.EventRow answers: a Nullable of the score to send, 32 bytes in this build. All zero is no event.
