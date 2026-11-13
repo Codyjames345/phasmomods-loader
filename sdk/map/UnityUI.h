@@ -232,6 +232,23 @@ inline constexpr pm::sdk::EntryDesc EventSystem_currentInputModule{
     .key = "EventSystem.currentInputModule", .kind = pm::sdk::Kind::Field, .owner = "EventSystem",
     .name = "m_CurrentInputModule"};
 
+inline constexpr const char* EventSystem_GameObject[] = {"GameObject"};
+
+/// The GameObject the keyboard or gamepad selection is on, or null when nothing is: what
+/// SetSelectedGameObject sets and what the input module's arrow-key navigation moves. A mod that shows a
+/// list it scrolls can watch this to follow the player's selection. Inferred: Unity's documented property
+/// getter.
+inline constexpr pm::sdk::EntryDesc EventSystem_get_currentSelectedGameObject{
+    .key = "EventSystem.get_currentSelectedGameObject", .kind = pm::sdk::Kind::Method, .owner = "EventSystem",
+    .name = "get_currentSelectedGameObject"};
+
+/// SetSelectedGameObject(go): moves the keyboard and gamepad selection to go, so the input module's
+/// navigation starts from it; null clears the selection. Inferred: Unity's documented method.
+inline constexpr pm::sdk::EntryDesc EventSystem_SetSelectedGameObject{
+    .key = "EventSystem.SetSelectedGameObject", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Inferred, .owner = "EventSystem", .name = "SetSelectedGameObject",
+    .params = EventSystem_GameObject};
+
 /// A group of UI objects that can stop taking clicks together (UnityEngine.UIModule, namespace
 /// UnityEngine), a Behaviour. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc CanvasGroup{.key = "CanvasGroup", .name = "CanvasGroup",
@@ -302,8 +319,10 @@ inline constexpr pm::sdk::EntryDesc CanvasScaler_set_matchWidthOrHeight{
     .key = "CanvasScaler.set_matchWidthOrHeight", .kind = pm::sdk::Kind::Method, .owner = "CanvasScaler",
     .name = "set_matchWidthOrHeight"};
 
-/// Lets a canvas catch the pointer, so its graphics that catch it keep clicks from the UI beneath
-/// (UnityEngine.UI). Inferred: Unity's documented API.
+/// One canvas's pointer hit-tester (UnityEngine.UI): it turns the pointer's position into hits on that
+/// canvas's graphics. The Canvas has no part of this of its own (no member of UnityEngine.UIModule's Canvas
+/// mentions a raycast at all), so a canvas a mod makes at runtime catches nothing until it has one of these
+/// (pm::api::buttons::catch_pointer). Read from the build 2026-11-12.
 inline constexpr pm::sdk::EntryDesc GraphicRaycaster{.key = "GraphicRaycaster", .name = "GraphicRaycaster",
                                                      .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
 
@@ -323,7 +342,12 @@ inline constexpr pm::sdk::EntryDesc Graphic_get_color{.key = "Graphic.get_color"
 inline constexpr pm::sdk::EntryDesc Graphic_set_color{.key = "Graphic.set_color", .kind = pm::sdk::Kind::Method,
                                                       .owner = "Graphic", .name = "set_color", .params = Graphic_Color};
 
-/// Sets whether the graphic catches the pointer. Inferred: Unity's documented property setter.
+/// Sets whether the graphic catches the pointer. Decompiled: it keeps a flag and a copy of that flag, and
+/// when the flag changes it puts the graphic into, or out of, the raycast list of the canvas it draws on
+/// (UnityEngine.UI's own graphic registry) - in only while the component is active and enabled. The
+/// raycaster walks nothing but that list, so a graphic with this off is never hit, hovered or clicked at
+/// all: pm::ui::create_image makes its pictures with it off, and a row that must take a click switches it
+/// on (pm::api::buttons::attach does it for a button).
 inline constexpr pm::sdk::EntryDesc Graphic_set_raycastTarget{.key = "Graphic.set_raycastTarget",
                                                               .kind = pm::sdk::Kind::Method, .owner = "Graphic",
                                                               .name = "set_raycastTarget", .params = Graphic_bool};
@@ -384,6 +408,88 @@ inline constexpr pm::sdk::EntryDesc RectTransformUtility_ScreenPointToLocalPoint
     .key = "RectTransformUtility.ScreenPointToLocalPointInRectangle", .kind = pm::sdk::Kind::Method,
     .flags = pm::sdk::kStatic, .owner = "RectTransformUtility", .name = "ScreenPointToLocalPointInRectangle",
     .params = RectTransformUtility_ToLocal_params};
+
+/// Unity UI's scroll rect (UnityEngine.UI), an UIBehaviour: it moves a content RectTransform inside a
+/// viewport, keeps it inside the viewport's bounds, and scrolls on the pointer itself (it is a drag and a
+/// scroll handler), so a scroll view needs the canvas's GraphicRaycaster and one graphic inside the viewport
+/// with raycastTarget on. It clips nothing by itself: a RectMask2D (or a Mask) on the viewport does that.
+/// Present in this build's UnityEngine.UI (class dump); its behaviour is Unity's documented API.
+inline constexpr pm::sdk::EntryDesc ScrollRect{.key = "ScrollRect", .name = "ScrollRect",
+                                               .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
+
+/// The RectTransform it scrolls (m_Content): null until something sets it, and then everything it scrolls is
+/// a child of it. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc ScrollRect_content{.key = "ScrollRect.content", .kind = pm::sdk::Kind::Field,
+                                                       .owner = "ScrollRect", .name = "m_Content",
+                                                       .type = "@RectTransform"};
+
+/// The RectTransform it scrolls inside (m_Viewport), whose bounds it measures. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc ScrollRect_viewport{.key = "ScrollRect.viewport", .kind = pm::sdk::Kind::Field,
+                                                        .owner = "ScrollRect", .name = "m_Viewport",
+                                                        .type = "@RectTransform"};
+
+/// Whether it scrolls side to side (m_Horizontal). Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc ScrollRect_horizontal{.key = "ScrollRect.horizontal", .kind = pm::sdk::Kind::Field,
+                                                          .owner = "ScrollRect", .name = "m_Horizontal",
+                                                          .type = "bool"};
+
+/// Whether it scrolls up and down (m_Vertical). Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc ScrollRect_vertical{.key = "ScrollRect.vertical", .kind = pm::sdk::Kind::Field,
+                                                        .owner = "ScrollRect", .name = "m_Vertical",
+                                                        .type = "bool"};
+
+/// How a ScrollRect keeps its content inside the viewport, an enum nested in it: Unrestricted, Elastic,
+/// Clamped. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc ScrollMovementType{.key = "ScrollRect.MovementType", .owner = "ScrollRect",
+                                                       .name = "MovementType"};
+
+/// How the rect keeps its content in the viewport (m_MovementType), that enum's value. A ScrollRect made at
+/// run time holds 0 (Unrestricted), because Unity's editor-only Reset never runs: set it to Clamped unless
+/// the content is meant to run free. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc ScrollRect_movementType{
+    .key = "ScrollRect.movementType", .kind = pm::sdk::Kind::Field, .owner = "ScrollRect", .name = "m_MovementType"};
+
+/// Clamped: the content stops at the viewport edge rather than stretching back. Inferred: from the value's
+/// name and Unity's documented behaviour.
+inline constexpr pm::sdk::EntryDesc ScrollMovementType_Clamped{
+    .key = "ScrollRect.MovementType.Clamped", .kind = pm::sdk::Kind::EnumValue, .owner = "ScrollRect.MovementType",
+    .name = "Clamped"};
+
+inline constexpr const char* ScrollRect_bool[] = {"bool"};
+inline constexpr const char* ScrollRect_float[] = {"float"};
+
+/// Where the content sits, as a fraction of the way it can scroll (0 at the far bottom for a vertical view,
+/// 1 at the far top). Decompiled: it calls the rect's own bounds update first, then answers through that.
+inline constexpr pm::sdk::EntryDesc ScrollRect_get_verticalNormalizedPosition{
+    .key = "ScrollRect.get_verticalNormalizedPosition", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "ScrollRect", .name = "get_verticalNormalizedPosition"};
+
+/// Moves the content to that fraction: the setter forwards to the rect's own set-normalized-position with
+/// the vertical axis and its content field. Decompiled (the setter is a thunk to the private method).
+inline constexpr pm::sdk::EntryDesc ScrollRect_set_verticalNormalizedPosition{
+    .key = "ScrollRect.set_verticalNormalizedPosition", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "ScrollRect", .name = "set_verticalNormalizedPosition",
+    .params = ScrollRect_float};
+
+/// Stops the content's inertia: it zeroes the two velocity floats it keeps. Decompiled.
+inline constexpr pm::sdk::EntryDesc ScrollRect_StopMovement{
+    .key = "ScrollRect.StopMovement", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "ScrollRect", .name = "StopMovement"};
+
+/// Unity UI's rectangular clip (UnityEngine.UI), an UIBehaviour and an IClipper: it clips the graphics under
+/// it to its own rectangle, without a stencil or a drawn mask of its own. Put it on a viewport, not on the
+/// content. Present in this build's UnityEngine.UI (class dump).
+inline constexpr pm::sdk::EntryDesc RectMask2D{.key = "RectMask2D", .name = "RectMask2D",
+                                               .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
+
+/// Unity UI's layout marker (UnityEngine.UI), a UIBehaviour: it holds the minimum, preferred and flexible sizes
+/// a LayoutGroup would give its object, and does nothing when no LayoutGroup asks for them, so it draws nothing
+/// and changes nothing else. It is mapped for what its own class declares, [RequireComponent(typeof(RectTransform))]
+/// (its decompiled copy in this build): adding it to a GameObject made at run time is how such an object comes to
+/// have a RectTransform for the layout entries to act on, for a list's content that carries no graphic of its own.
+/// Present in this build's UnityEngine.UI (class dump); its behaviour is Unity's documented API.
+inline constexpr pm::sdk::EntryDesc LayoutElement{.key = "LayoutElement", .name = "LayoutElement",
+                                                  .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
 
 /// TextMeshPro's base text (Unity.TextMeshPro, namespace TMPro). Inferred: TextMeshPro's documented API.
 inline constexpr pm::sdk::EntryDesc TMP_Text{.key = "TMP_Text", .name = "TMP_Text", .assembly = "Unity.TextMeshPro",
@@ -595,6 +701,13 @@ struct EventSystem {
   static constexpr pm::api::Method<pm::map::EventSystem_get_current, void*()> get_current{};
   /// Its input module, a Behaviour: currentInputModule.get(system), or null. Unresolved: null.
   static constexpr pm::api::Field<pm::map::EventSystem_currentInputModule, void*> currentInputModule{};
+  /// SetSelectedGameObject(system, go): moves the keyboard and gamepad selection to go; null clears it.
+  /// Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::EventSystem_SetSelectedGameObject, void(void*, void*)>
+      SetSelectedGameObject{};
+  /// get_currentSelectedGameObject(system): the GameObject the selection is on, or null. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::EventSystem_get_currentSelectedGameObject, void*(void*)>
+      get_currentSelectedGameObject{};
 };
 
 /// A group of UI objects. `group` below is the CanvasGroup.
@@ -668,6 +781,9 @@ struct GraphicRaycaster {
 
 /// Unity UI's base of everything drawn. `graphic` below is the Graphic.
 struct Graphic {
+  /// The class: every UI picture and text is one (Image, RawImage, TextMeshProUGUI). Its type_object() finds
+  /// whichever an object has. Unresolved: is() is false, type_object() null.
+  static constexpr pm::api::Type<pm::map::Graphic> type{};
   /// get_color.virtual_call(graphic): its colour, TextMeshPro's own on a text. Unresolved: all zero.
   static constexpr pm::api::Method<pm::map::Graphic_get_color, Color(void*)> get_color{};
   /// set_color.virtual_call(graphic, &colour): sets it, TextMeshPro's own on a text. Unresolved: does
@@ -709,6 +825,63 @@ struct RectTransformUtility {
                                    bool(void*, Vector2, void*, Vector2*)>
       ScreenPointToLocalPointInRectangle{};
 };
+
+/// Unity UI's scroll rect. `scroll` below is a ScrollRect component. Build a view as Unity does: a viewport
+/// GameObject with a RectMask2D, a content GameObject under it taller than the viewport by the whole list's
+/// height, the rows under the content, then `content` and `viewport` set here with `vertical` on. The game's
+/// own pointer handling drags and wheel-scrolls it; the keyboard author moves it with
+/// set_verticalNormalizedPosition.
+struct ScrollRect {
+  /// The class: type_object() finds it for AddComponent. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::ScrollRect> type{};
+  /// The content RectTransform it scrolls: content.get(scroll), content.set(scroll, rect) (through the GC
+  /// write barrier). Unresolved: null, writes nothing.
+  static constexpr pm::api::Field<pm::map::ScrollRect_content, void*> content{};
+  /// The viewport RectTransform it scrolls inside: viewport.get(scroll), viewport.set(scroll, rect).
+  /// Unresolved: null, writes nothing.
+  static constexpr pm::api::Field<pm::map::ScrollRect_viewport, void*> viewport{};
+  /// Whether it scrolls side to side: horizontal.get(scroll), .set(scroll, on). Unresolved: false, writes
+  /// nothing.
+  static constexpr pm::api::Field<pm::map::ScrollRect_horizontal, bool> horizontal{};
+  /// Whether it scrolls up and down: vertical.get(scroll), .set(scroll, on). Unresolved: false, writes
+  /// nothing.
+  static constexpr pm::api::Field<pm::map::ScrollRect_vertical, bool> vertical{};
+  /// How it keeps the content inside the viewport, a ScrollRect.MovementType number (0 runs free, 1 stretches
+  /// and springs back, 2 stops at the edge): movementType.get(scroll), .set(scroll, value). A ScrollRect made
+  /// at run time holds 0 until it is set. Unresolved: 0, writes nothing.
+  static constexpr pm::api::Field<pm::map::ScrollRect_movementType, int32_t> movementType{};
+  /// get_verticalNormalizedPosition(scroll): how far down the content sits, 0 at the bottom and 1 at the top
+  /// of what it can scroll. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::ScrollRect_get_verticalNormalizedPosition, float(void*)>
+      get_verticalNormalizedPosition{};
+  /// set_verticalNormalizedPosition(scroll, value): moves the content there, 1 at the top and 0 at the
+  /// bottom; a value outside 0..1 is clamped by the game. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ScrollRect_set_verticalNormalizedPosition, void(void*, float)>
+      set_verticalNormalizedPosition{};
+  /// StopMovement(scroll): drops the content's inertia, so a view released mid-drag stops where it is.
+  /// Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::ScrollRect_StopMovement, void(void*)> StopMovement{};
+};
+
+/// Unity UI's rectangular clip. `object` below is the GameObject or any component of the one to clip.
+struct RectMask2D {
+  /// The class: type_object() finds it for AddComponent. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::RectMask2D> type{};
+};
+
+/// Unity UI's layout marker. Its sizes are only ever read by a LayoutGroup, so on its own it neither draws nor
+/// behaves; what it is for here is that its class requires a RectTransform.
+struct LayoutElement {
+  /// The class: type_object() finds it for AddComponent. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::LayoutElement> type{};
+};
+
+/// The ways a scroll rect keeps its content inside the viewport. Unresolved values are 0, which is
+/// Unrestricted: check use::resolved() first.
+namespace ScrollMovementType {
+/// Clamped(): the content stops at the viewport edge. Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::ScrollMovementType_Clamped> Clamped{};
+}  // namespace ScrollMovementType
 
 /// TextMeshPro's base text. `text` below is the TMP_Text (a TextMeshProUGUI).
 struct TMP_Text {

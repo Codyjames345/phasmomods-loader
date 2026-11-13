@@ -722,6 +722,10 @@ void no_unapproved_canvas(const fs::path& root) {
   // Canvases the author designed and asked for (the design names each): not windows waiting for a design.
   static const std::set<std::string> kAuthorDesigned{
       "mods/emotes/wheel.cpp",  // the emote wheel (docs/superpowers/specs/2026-11-10-emotes-design.md, "The wheel")
+      "mods/dev_menu/menu.cpp",  // the dev menu's plain rows, no vanilla dressing by the author's decision 6
+                                 // (docs/superpowers/specs/2026-11-10-dev-menu-content-plan.md, Decisions)
+      "mods/dev_menu/overlay.cpp",  // the dev menu's debug HUD and ESP labels: the plan's Game section names both
+                                    // as ui:: canvases, and the author asked for ESP on 2026-11-12
   };
   static const std::regex call(R"(\bcreate_canvas\s*\()");
   std::set<std::string> found;

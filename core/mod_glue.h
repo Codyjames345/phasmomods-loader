@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "mod_api.h"
 
@@ -26,6 +28,14 @@ bool mod_started(const char* id);
 // This mod's name as the player reads it, its manifest's (core/mod_api.h mod_name), for a heading of its own in a game
 // menu; PmModInfo::name when the host has none for it, and empty before bind.
 std::string shown_name();
+// One installed mod, copied out of the host contract's mod_entry (core/mod_api.h), so it outlives the next ask.
+struct ModEntry {
+  std::string id, name, version, author, offReason;
+  uint32_t flags = 0;  // PmModEntryFlags bits
+};
+// Every installed mod, running or not, in the host's order (core/mod_api.h mod_entry). Empty before bind, and from a
+// host older than contract 2.5.
+std::vector<ModEntry> mod_entries();
 // A one-button message in the game's own popup on the menu's and the lobby's board (core/mod_api.h show_message): one asked
 // for in a contract shows once the lobby is back. Nothing before bind.
 void show_message(const std::string& title, const std::string& body);

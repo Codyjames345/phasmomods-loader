@@ -50,6 +50,54 @@ inline constexpr pm::sdk::EntryDesc UnityEventBase_GetPersistentEventCount{
     .key = "UnityEventBase.GetPersistentEventCount", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "UnityEventBase", .name = "GetPersistentEventCount"};
 
+/// The event's listeners saved with the scene or prefab, a PersistentCallGroup. With GetPersistentTarget stripped from
+/// this build, reading it is how a mod finds what a saved listener calls (its targets). Inferred: Unity's source.
+inline constexpr pm::sdk::EntryDesc UnityEventBase_m_PersistentCalls{
+    .key = "UnityEventBase.m_PersistentCalls", .kind = pm::sdk::Kind::Field, .owner = "UnityEventBase",
+    .name = "m_PersistentCalls", .type = "@PersistentCallGroup"};
+/// The event's listener lists, an InvokableCallList: the saved listeners as the event built them, and those added at
+/// run time. Inferred: Unity's source.
+inline constexpr pm::sdk::EntryDesc UnityEventBase_m_Calls{.key = "UnityEventBase.m_Calls", .kind = pm::sdk::Kind::Field,
+                                                           .owner = "UnityEventBase", .name = "m_Calls",
+                                                           .type = "@InvokableCallList"};
+/// An event's listener lists (UnityEngine.CoreModule, namespace UnityEngine.Events). Inferred: Unity's source.
+inline constexpr pm::sdk::EntryDesc InvokableCallList{.key = "InvokableCallList", .name = "InvokableCallList",
+                                                      .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine.Events"};
+/// The listeners added at run time (UnityEvent.AddListener, and a game's own adders such as
+/// PhotonObjectInteract.AddUseEvent), a List<BaseInvokableCall>, in the order they were added. Inferred: Unity's
+/// source.
+inline constexpr pm::sdk::EntryDesc InvokableCallList_m_RuntimeCalls{
+    .key = "InvokableCallList.m_RuntimeCalls", .kind = pm::sdk::Kind::Field, .owner = "InvokableCallList",
+    .name = "m_RuntimeCalls", .type = "List<BaseInvokableCall>"};
+/// A listener of no arguments added at run time (UnityEngine.CoreModule, namespace UnityEngine.Events): not the
+/// generic InvokableCall<T0> and its kin. Inferred: Unity's source.
+inline constexpr pm::sdk::EntryDesc InvokableCall{.key = "InvokableCall", .flags = pm::sdk::kNotGeneric,
+                                                  .name = "InvokableCall", .assembly = "UnityEngine.CoreModule",
+                                                  .ns = "UnityEngine.Events"};
+/// The UnityAction the listener calls. Inferred: Unity's source.
+inline constexpr pm::sdk::EntryDesc InvokableCall_Delegate{.key = "InvokableCall.Delegate", .kind = pm::sdk::Kind::Field,
+                                                           .owner = "InvokableCall", .name = "Delegate"};
+/// .NET's delegate base (mscorlib, namespace System). Inferred: the runtime's source.
+inline constexpr pm::sdk::EntryDesc Delegate{.key = "Delegate", .name = "Delegate", .assembly = "mscorlib",
+                                             .ns = "System"};
+/// The object a delegate calls its method on, or null for a static method. Inferred: the runtime's source.
+inline constexpr pm::sdk::EntryDesc Delegate_m_target{.key = "Delegate.m_target", .kind = pm::sdk::Kind::Field,
+                                                      .owner = "Delegate", .name = "m_target", .type = "object"};
+/// An event's saved listeners (UnityEngine.CoreModule, namespace UnityEngine.Events). Inferred: Unity's source.
+inline constexpr pm::sdk::EntryDesc PersistentCallGroup{.key = "PersistentCallGroup", .name = "PersistentCallGroup",
+                                                        .assembly = "UnityEngine.CoreModule",
+                                                        .ns = "UnityEngine.Events"};
+/// The saved listeners themselves, a List<PersistentCall>, in the inspector's order. Inferred: Unity's source.
+inline constexpr pm::sdk::EntryDesc PersistentCallGroup_m_Calls{
+    .key = "PersistentCallGroup.m_Calls", .kind = pm::sdk::Kind::Field, .owner = "PersistentCallGroup",
+    .name = "m_Calls", .type = "List<@PersistentCall>"};
+/// One saved listener (UnityEngine.CoreModule, namespace UnityEngine.Events). Inferred: Unity's source.
+inline constexpr pm::sdk::EntryDesc PersistentCall{.key = "PersistentCall", .name = "PersistentCall",
+                                                   .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine.Events"};
+/// The Unity object the saved listener calls its method on. Inferred: Unity's source.
+inline constexpr pm::sdk::EntryDesc PersistentCall_m_Target{.key = "PersistentCall.m_Target",
+                                                            .kind = pm::sdk::Kind::Field, .owner = "PersistentCall",
+                                                            .name = "m_Target"};
 /// Unity's delegate with no arguments (UnityEngine.CoreModule, namespace UnityEngine.Events): a UnityEvent's
 /// listener. Not the generic UnityAction<T0> and its kin. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc UnityAction{.key = "UnityAction", .flags = pm::sdk::kNotGeneric,
@@ -97,6 +145,44 @@ struct UnityEventBase {
   /// GetPersistentEventCount(event): its listeners saved with the scene. Unresolved: 0.
   static constexpr pm::api::Method<pm::map::UnityEventBase_GetPersistentEventCount, int32_t(void*)>
       GetPersistentEventCount{};
+  /// Its saved listeners, a PersistentCallGroup: m_PersistentCalls.get(event). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::UnityEventBase_m_PersistentCalls, void*> m_PersistentCalls{};
+  /// Its listener lists, an InvokableCallList: m_Calls.get(event). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::UnityEventBase_m_Calls, void*> m_Calls{};
+};
+
+/// An event's listener lists. `lists` below is one.
+struct InvokableCallList {
+  /// The listeners added at run time, a List<BaseInvokableCall>: m_RuntimeCalls.get(lists), read as a
+  /// pm::api::List. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::InvokableCallList_m_RuntimeCalls, void*> m_RuntimeCalls{};
+};
+
+/// A run-time listener of no arguments. `call` below is one; check InvokableCall::type.is(call) first, since a list
+/// holds the generic kinds too.
+struct InvokableCall {
+  /// The type: klass(), is(obj). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::InvokableCall> type{};
+  /// The UnityAction it calls: Delegate.get(call). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::InvokableCall_Delegate, void*> Delegate{};
+};
+
+/// .NET's delegate base. `d` below is any delegate.
+struct Delegate {
+  /// The object it calls its method on, or null for a static method: m_target.get(d). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Delegate_m_target, void*> m_target{};
+};
+
+/// An event's saved listeners. `group` below is one.
+struct PersistentCallGroup {
+  /// The listeners, a List<PersistentCall>: m_Calls.get(group), read as a pm::api::List. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::PersistentCallGroup_m_Calls, void*> m_Calls{};
+};
+
+/// One saved listener. `call` below is one.
+struct PersistentCall {
+  /// The Unity object it calls its method on: m_Target.get(call). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::PersistentCall_m_Target, void*> m_Target{};
 };
 
 /// Unity's delegate with no arguments.

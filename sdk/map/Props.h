@@ -6,6 +6,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Transform.h"
 
 namespace pm::map {
 
@@ -44,6 +45,31 @@ inline constexpr pm::sdk::EntryDesc PhotonObjectInteract_prop{.key = "PhotonObje
                                                               .kind = pm::sdk::Kind::Field,
                                                               .owner = "PhotonObjectInteract",
                                                               .type = "@Prop"};
+
+// Of its three Vector3 fields the equipment pool's hand-out writes only this one (cross-owner: through the
+// GameObject's component).
+inline constexpr pm::sdk::Fact PhotonObjectInteract_spawnPosition_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "ObjectPooler.SpawnFromEquipmentPool"}};
+
+/// Where the object was last handed out: ObjectPooler.SpawnFromEquipmentPool writes the position it
+/// places the copy at here, beside switching it on. Decompiled.
+inline constexpr pm::sdk::EntryDesc PhotonObjectInteract_spawnPosition{
+    .key = "PhotonObjectInteract.spawnPosition", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PhotonObjectInteract", .hint = "spawnPosition",
+    .type = "Vector3", .facts = PhotonObjectInteract_spawnPosition_facts};
+
+inline constexpr const char* PhotonObjectInteract_AddUseEvent_params[] = {"UnityAction"};
+
+/// AddUseEvent(listener): adds a run-time listener (it is not saved in the scene) to the object's use event, the first of
+/// its UnityEvents, which a player's use of the object invokes (PCPropGrab's interact, after checks of the object's own
+/// flags). The truck's LiftButton.Start adds the button's own press to it the same way. The event field has no entry:
+/// no fact the offline reader can prove tells it from the other ten. A mod finds the event that holds a listener by the
+/// listener's target (UnityEventBase.m_Calls, InvokableCallList.m_RuntimeCalls, InvokableCall.Delegate,
+/// Delegate.m_target). Decompiled.
+inline constexpr pm::sdk::EntryDesc PhotonObjectInteract_AddUseEvent{
+    .key = "PhotonObjectInteract.AddUseEvent", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PhotonObjectInteract", .name = "AddUseEvent",
+    .type = "void", .params = PhotonObjectInteract_AddUseEvent_params};
 
 inline constexpr const char* PhotonObjectInteract_FreezeRigidbody_params[] = {"bool", "bool"};
 
@@ -231,6 +257,9 @@ struct PhotonObjectInteract {
   static constexpr pm::api::Field<pm::map::PhotonObjectInteract_grabbable, bool> grabbable{};
   /// Whether a player's hand or a ghost's force is using it now: inUse.get(interact). Unresolved: false.
   static constexpr pm::api::Field<pm::map::PhotonObjectInteract_inUse, bool> inUse{};
+  /// Where the equipment pool last handed it out: spawnPosition.get(interact), .set(interact, at).
+  /// Unresolved: a zero vector, writes nothing.
+  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_spawnPosition, Vector3> spawnPosition{};
 };
 
 /// The VR player's hold on an object. `grabbable` below is the VRGrabbable.

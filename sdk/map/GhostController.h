@@ -219,7 +219,9 @@ inline constexpr pm::sdk::EntryDesc GhostController_thayeStep{
     .owner = "GhostController", .type = "int", .facts = GhostController_thayeStep_facts,
     .within = "GhostController.thaye"};
 
-/// The insanity at which the Thaye may hunt, from 75 down 6 per step: an int of thaye. Decompiled.
+/// The Thaye's hunt line, a sanity, from 75 down 6 per step: an int of thaye. GhostIdleState.Execute's
+/// hunt branch hunts for the Thaye only while its insanity is above 100 less this, so at a sanity below
+/// it. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostController_thayeThreshold{
     .key = "GhostController.thayeThreshold", .kind = pm::sdk::Kind::Field,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostController", .type = "int",
@@ -369,7 +371,7 @@ struct GhostController {
   static constexpr pm::api::Field<pm::map::GhostController_dayanState, int32_t> dayanState{};
   /// The Thaye's age step: thayeStep.get(controller). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::GhostController_thayeStep, int32_t> thayeStep{};
-  /// The Thaye's hunt threshold, an insanity: thayeThreshold.get(controller). Unresolved: 0.
+  /// The Thaye's hunt line, a sanity it hunts below: thayeThreshold.get(controller). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::GhostController_thayeThreshold, int32_t> thayeThreshold{};
   /// The game's moment to change the ghost's type: AttemptGhostTypeStateChange(controller). A mod
   /// usually hooks it rather than calls it. Unresolved: does nothing.

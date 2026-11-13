@@ -188,6 +188,12 @@ inline constexpr pm::sdk::EntryDesc Time_get_timeScale{.key = "Time.get_timeScal
                                                        .flags = pm::sdk::kStatic, .owner = "Time",
                                                        .name = "get_timeScale"};
 
+/// Sets how fast game time passes, 1 as in real time and 0 stopping it (every Update then runs with a
+/// delta time of 0). Static. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc Time_set_timeScale{.key = "Time.set_timeScale", .kind = pm::sdk::Kind::Method,
+                                                       .flags = pm::sdk::kStatic, .owner = "Time",
+                                                       .name = "set_timeScale"};
+
 /// Unity's audio listener (UnityEngine.AudioModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc AudioListener{.key = "AudioListener", .name = "AudioListener",
                                                   .assembly = "UnityEngine.AudioModule", .ns = "UnityEngine"};
@@ -323,6 +329,9 @@ struct Time {
   static constexpr pm::api::Method<pm::map::Time_get_frameCount, int32_t()> get_frameCount{};
   /// get_timeScale(): 1 in real time. Unresolved: 0.
   static constexpr pm::api::Method<pm::map::Time_get_timeScale, float()> get_timeScale{};
+  /// set_timeScale(value): how fast game time passes, 0 freezing the game's own Update bodies (they
+  /// still run, with a delta time of 0). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::Time_set_timeScale, void(float)> set_timeScale{};
 };
 
 /// @}

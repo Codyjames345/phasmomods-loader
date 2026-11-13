@@ -55,8 +55,34 @@ int master_actor() { return room_gates::master_actor(); }
 void room_actors(std::vector<int>& out) { room_gates::room_actors(out); }
 
 bool alive(void* o) { return o && api::alive(o); }
-void* transform_of(void* c) { return phasmo::Component::get_transform(c); }
+
+namespace {
+/// What the object is, as its own class answers: 1 for a GameObject, 0 for a component or anything else, and
+/// -1 when the class cannot be read. A GameObject is not a Component, so the two accessors below are not
+/// interchangeable: passing one through the other's reads a layout the object does not have, and the game
+/// faults (what the dev menu's first scroll list did on 2026-11-12). No answer is guessed at -1.
+int kind_of(void* object) {
+  if (!object || !phasmo::GameObject::type.klass()) return -1;
+  return phasmo::GameObject::type.is(object) ? 1 : 0;
+}
+}  // namespace
+
+void* transform_of(void* object) {
+  const int kind = kind_of(object);
+  if (kind < 0) return nullptr;
+  return kind == 1 ? phasmo::GameObject::get_transform(object) : phasmo::Component::get_transform(object);
+}
 void* object_transform(void* go) { return go ? phasmo::GameObject::get_transform(go) : nullptr; }
+// The layout entries (anchors, pivot, position, size) belong to RectTransform, a Transform subclass the game
+// only gives an object when something asks for it: every UI class in the game's own UnityEngine.UI carries
+// [RequireComponent(typeof(RectTransform))] (Graphic, RawImage's base, RectMask2D, ScrollRect, LayoutElement).
+// So an object made at run time can be a plain Transform, and running the layout entries on one reads a layout
+// it does not have. Asked and answered, never guessed: the type check answers false for a plain Transform and for a
+// class that cannot be read, and both mean the same thing here, that the layout entries are not for this object.
+void* rect_transform_of(void* object) {
+  void* t = transform_of(object);
+  return t && phasmo::RectTransform::type.is(t) ? t : nullptr;
+}
 Vector3 position(void* t) { return phasmo::Transform::get_position(t); }
 void set_position(void* t, Vector3 p) {
   const Vector3 v = p;
@@ -76,7 +102,12 @@ void* new_game_object(const char* name) {
   return go;
 }
 void* add_component(void* go, void* type) { return go && type ? phasmo::GameObject::AddComponent(go, type) : nullptr; }
-void* game_object_of(void* c) { return phasmo::Component::get_gameObject(c); }
+void* game_object_of(void* object) {
+  const int kind = kind_of(object);
+  if (kind < 0) return nullptr;
+  // A GameObject's own GameObject is itself: only a component has one to be asked for.
+  return kind == 1 ? object : phasmo::Component::get_gameObject(object);
+}
 void set_enabled(void* b, bool on) { phasmo::Behaviour::set_enabled(b, on); }
 bool enabled(void* b) { return phasmo::Behaviour::get_enabled(b); }
 void destroy(void* o) {
@@ -319,23 +350,33 @@ void* raycast(Vector3 origin, Vector3 direction, float maxDistance) {
   return raycast(origin, direction, maxDistance, -5);
 }
 
-void* raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
+namespace {
+// Casts the ray into `hit` (room for the game's RaycastHit); whether it hit.
+bool cast_into(unsigned char (&hit)[128], Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
   // The RaycastHit the query fills in, sized from the game: an array's stride is the struct's size.
   // Read once: a size that cannot be read or does not fit is remembered too, so no array is made per call.
   static size_t hitSize = 0;
   static bool sized = false;
   if (!std::exchange(sized, true)) hitSize = api::ValueArray{phasmo::RaycastHit::type.make_array(1)}.stride();
-  alignas(16) unsigned char hit[128] = {};
   if (!hitSize || hitSize > sizeof hit) {
     static bool logged = false;
     if (!std::exchange(logged, true)) PM_LOG("game: a RaycastHit of %zu bytes does not fit; no ray is cast", hitSize);
-    return nullptr;
+    return false;
   }
   const phasmo::Ray ray{origin, direction};
   // QueryTriggerInteraction.Ignore: room and sensor volumes are triggers and must not stop the ray.
-  if (!phasmo::Physics::RaycastHit(&ray, hit, maxDistance, layerMask, phasmo::QueryTriggerInteraction::Ignore()))
-    return nullptr;
-  return phasmo::RaycastHit::get_transform(hit);
+  return phasmo::Physics::RaycastHit(&ray, hit, maxDistance, layerMask, phasmo::QueryTriggerInteraction::Ignore());
+}
+}  // namespace
+
+void* raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
+  alignas(16) unsigned char hit[128] = {};
+  return cast_into(hit, origin, direction, maxDistance, layerMask) ? phasmo::RaycastHit::get_transform(hit) : nullptr;
+}
+
+float raycast_distance(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
+  alignas(16) unsigned char hit[128] = {};
+  return cast_into(hit, origin, direction, maxDistance, layerMask) ? phasmo::RaycastHit::get_distance(hit) : -1.0f;
 }
 bool is_child_of(void* transform, void* parent) { return phasmo::Transform::IsChildOf(transform, parent); }
 

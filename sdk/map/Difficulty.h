@@ -10,6 +10,8 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Equipment.h"
+#include "Rewards.h"
 
 namespace pm::map {
 
@@ -251,8 +253,13 @@ inline constexpr pm::sdk::EntryDesc LevelValues_instance{
     .key = "LevelValues.instance", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .flags = pm::sdk::kStatic, .owner = "LevelValues", .type = "@LevelValues"};
 
-/// The money the contract's objectives pay: the main objective's ObjectiveValues.moneyReward plus each
-/// side objective's. Decompiled.
+/// The money the contract's objectives pay: the main objective's ObjectiveValues.moneyReward, plus the
+/// moneyReward of every side objective whose own bool flag reads true (the objective's flags are
+/// obfuscated, so the map knows the class by its fields, not by them). Decompiled. It throws a
+/// NullReferenceException when LevelValues.mainObjective is null,
+/// when the main objective has no values, or when the side objectives' list (LevelValues.sideObjectives)
+/// is null or holds a null entry. At the main menu it throws: read LevelValues.mainObjective
+/// first, and ask only while a contract runs (the dev menu's live test, 2026-11-11).
 inline constexpr pm::sdk::EntryDesc LevelValues_GetInvestigationBonusReward{
     .key = "LevelValues.GetInvestigationBonusReward", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "LevelValues", .name = "GetInvestigationBonusReward"};
@@ -327,6 +334,32 @@ inline constexpr pm::sdk::EntryDesc Difficulty_friendlyGhost{
     .key = "Difficulty.friendlyGhost", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "Difficulty", .name = "friendlyGhost"};
 
+inline constexpr const char* CursedItemType_values[] = {"none",       "tarotCards",   "ouijaBoard", "mirror",
+                                                        "musicBox",   "summoningCircle", "voodooDoll", "monkeyPaw"};
+
+/// The cursed possessions a contract can carry (Assembly-CSharp, global namespace, name obfuscated): none 0,
+/// tarotCards 1, ouijaBoard 2, mirror 3, musicBox 4, summoningCircle 5, voodooDoll 6, monkeyPaw 7. Decompiled.
+inline constexpr pm::sdk::EntryDesc CursedItemType{.key = "CursedItemType", .confidence = pm::sdk::Confidence::Decompiled,
+                                                   .assembly = "Assembly-CSharp", .ns = "",
+                                                   .values = CursedItemType_values};
+
+/// The tarot cards. One of the two possessions the Revive RPC accepts (Difficulty.actualCursedItems). Decompiled.
+inline constexpr pm::sdk::EntryDesc CursedItemType_tarotCards{
+    .key = "CursedItemType.tarotCards", .kind = pm::sdk::Kind::EnumValue, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "CursedItemType", .name = "tarotCards"};
+
+/// The Monkey Paw. One of the two possessions the Revive RPC accepts (Difficulty.actualCursedItems). Decompiled.
+inline constexpr pm::sdk::EntryDesc CursedItemType_monkeyPaw{
+    .key = "CursedItemType.monkeyPaw", .kind = pm::sdk::Kind::EnumValue, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "CursedItemType", .name = "monkeyPaw"};
+
+/// The cursed possessions the contract carries, a CursedItemType[]. Decompiled: the Revive RPC's body (Player's Revive
+/// coroutine) goes on only when it holds tarotCards or monkeyPaw, and otherwise raises the game's report on the sender
+/// and revives nobody, offline too (sdk/systems/players.md).
+inline constexpr pm::sdk::EntryDesc Difficulty_actualCursedItems{
+    .key = "Difficulty.actualCursedItems", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "Difficulty", .name = "actualCursedItems", .type = "@CursedItemType[]"};
+
 /// Whether a death costs the equipment brought: the reward screen, when its copy of the death status is set, calls
 /// InventoryManager.ResetAllEquipment while this is set and InventoryManager.ReturnItemstoInventory otherwise, and
 /// shows its insurance row only while it is set (sdk/systems/contract.md). Decompiled.
@@ -348,6 +381,160 @@ inline constexpr pm::sdk::EntryDesc Difficulty_playerSpeed{
     .key = "Difficulty.playerSpeed", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "Difficulty", .name = "playerSpeed", .type = "float"};
 
+/// The custom difficulty's sanity pill restoration amount, an int. PainKillers.Use reads it from the
+/// contract's difficulty every time a player uses a sanity pill, so a change applies at once. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_sanityPillRestorationAmount{
+    .key = "Difficulty.sanityPillRestorationAmount", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "sanityPillRestorationAmount", .type = "int"};
+
+/// The custom difficulty's starting sanity, an int. PlayerSanity.Start seeds a player's sanity from it as
+/// the contract begins, so that seed waits for the next contract. PlayerSanity.Update reads it every frame
+/// to cap sanity, so that cap follows a change at once. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_startingSanity{
+    .key = "Difficulty.startingSanity", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "startingSanity",
+    .type = "int"};
+
+/// The custom difficulty's sanity drain, a float. PlayerSanity.Start copies it onto the player as the
+/// contract begins, and the sanity update drains by that copy, so a change waits for the next contract.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_sanityDrain{
+    .key = "Difficulty.sanityDrain", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "sanityDrain",
+    .type = "float"};
+
+/// The custom difficulty's flashlights option, a bool. Torch.UseNetworked reads it every time a player uses
+/// a torch and gives up on the torch when it is clear, so a change applies at once. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_flashlights{
+    .key = "Difficulty.flashlights", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "flashlights",
+    .type = "bool"};
+
+/// The custom difficulty's changing favourite room option, a ValueType number (None 0, Low 1, Medium 2, High 3,
+/// VeryHigh 4). GhostWanderState.Exit reads it every time the ghost finishes wandering, so a change applies
+/// at once. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_changingFavouriteRoom{
+    .key = "Difficulty.changingFavouriteRoom", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "changingFavouriteRoom"};
+
+/// The custom difficulty's ghost interaction amount, a ValueType number (None 0, Low 1, Medium 2, High 3,
+/// VeryHigh 4). One of the ghost AI's states, whose class is obfuscated and not in the map, reads it when
+/// the ghost enters that state, and which state was not proven; a change waits for the ghost to enter it.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_interactionAmount{
+    .key = "Difficulty.interactionAmount", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "interactionAmount"};
+
+/// The custom difficulty's event frequency, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
+/// GhostIdleState.Execute reads it on every idle tick while the ghost waits, so a change applies at once.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_eventFrequency{
+    .key = "Difficulty.eventFrequency", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "eventFrequency"};
+
+/// The custom difficulty's hunt duration, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
+/// DifficultySettings.Start switches on it as the contract begins and caches the hunt length the hunts use,
+/// so a change waits for the next contract. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_huntDuration{
+    .key = "Difficulty.huntDuration", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "huntDuration"};
+
+/// The custom difficulty's grace period, an int. DifficultySettings.Start copies it into the hunt settings
+/// as the contract begins, so a change waits for the next contract. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_gracePeriod{
+    .key = "Difficulty.gracePeriod", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "gracePeriod",
+    .type = "int"};
+
+/// The custom difficulty's fingerprint chance, a float. Fingerprint.AttemptToSpawnFingerprints reads it on
+/// every attempt to spawn fingerprints, so a change applies at once. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_fingerprintChance{
+    .key = "Difficulty.fingerprintChance", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "fingerprintChance", .type = "float"};
+
+/// The custom difficulty's fingerprint duration, an int. Fingerprint.EnableFingerprintsNetworked reads it
+/// every time fingerprints spawn, for their despawn timer, so a change applies at once. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_fingerprintDuration{
+    .key = "Difficulty.fingerprintDuration", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "fingerprintDuration", .type = "int"};
+
+/// The custom difficulty's option for kills extending the hunt duration, a ValueType number (None 0, Low 1,
+/// Medium 2, High 3, VeryHigh 4). GhostHuntState.Kill reads it after every kill to extend the hunt timer, so
+/// a change applies at once. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_killsExtendHuntDuration{
+    .key = "Difficulty.killsExtendHuntDuration", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "killsExtendHuntDuration"};
+
+/// The custom difficulty's roaming frequency, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
+/// GhostWanderState.PickDestination reads it every time the ghost picks a destination, so a change applies at
+/// once. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_roamingFrequency{
+    .key = "Difficulty.roamingFrequency", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "roamingFrequency"};
+
+/// The custom difficulty's ghost speed, a float. GhostHuntState.UpdateSpeed reads it every frame of a hunt
+/// and scales the ghost's movement speed by it, so a change applies at once. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_ghostSpeed{
+    .key = "Difficulty.ghostSpeed", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "ghostSpeed",
+    .type = "float"};
+
+/// The custom difficulty's setup time, an int. SetupPhaseController.Start sets the setup countdown from it as
+/// the contract begins, so a change waits for the next contract. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_setupTime{
+    .key = "Difficulty.setupTime", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "setupTime",
+    .type = "int"};
+
+/// The custom difficulty's selected weather, a WeatherValueType (the WeatherValueType note above numbers it).
+/// Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_selectedWeather{
+    .key = "Difficulty.selectedWeather", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "selectedWeather"};
+
+/// The custom difficulty's amount of doors open, a ValueType number (None 0, Low 1, Medium 2, High 3, VeryHigh 4).
+/// A LevelController coroutine reads it once while the level is generated and picks doors to open by it, so a
+/// change waits for the next contract. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_amountOfDoorsOpen{
+    .key = "Difficulty.amountOfDoorsOpen", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "amountOfDoorsOpen"};
+
+/// The custom difficulty's amount of hiding places, a ValueType number (None 0, Low 1, Medium 2, High 3,
+/// VeryHigh 4). A LevelController method reads it once while the level is generated and places or clears
+/// hiding places by it, so a change waits for the next contract. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_amountOfHidingPlaces{
+    .key = "Difficulty.amountOfHidingPlaces", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "amountOfHidingPlaces"};
+
+/// The custom difficulty's sanity monitor option, a bool. Wristwatch.Start copies it onto the watch as the
+/// contract begins and hides the sanity bars when it is clear, so a change waits for the next contract.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_sanityMonitor{
+    .key = "Difficulty.sanityMonitor", .kind = pm::sdk::Kind::Field, .owner = "Difficulty", .name = "sanityMonitor",
+    .type = "bool"};
+
+/// The custom difficulty's activity monitor option, a bool. Inferred: from its name. No reader through
+/// LevelValues was found in this build.
+inline constexpr pm::sdk::EntryDesc Difficulty_activityMonitor{
+    .key = "Difficulty.activityMonitor", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "activityMonitor", .type = "bool"};
+
+/// The custom difficulty's option for the fuse box showing on the map, a bool. Inferred: from its name. No
+/// reader through LevelValues was found in this build.
+inline constexpr pm::sdk::EntryDesc Difficulty_fuseBoxVisibleOnMap{
+    .key = "Difficulty.fuseBoxVisibleOnMap", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "fuseBoxVisibleOnMap", .type = "bool"};
+
+/// The custom difficulty's fuse box starting power, a FuseBoxValueType (the FuseBoxValueType note below numbers
+/// it). FuseBox.Start reads it as the contract begins and sets the box's starting power from it, so a change
+/// waits for the next contract. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_fuseBoxStartPower{
+    .key = "Difficulty.fuseBoxStartPower", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "fuseBoxStartPower"};
+
+/// The custom difficulty's number of cursed possessions, an int. CursedItemsController.Start reads it at level
+/// load to bound how many possessions spawn, so a change waits for the next contract. Decompiled.
+inline constexpr pm::sdk::EntryDesc Difficulty_cursedPossessionsQuantity{
+    .key = "Difficulty.cursedPossessionsQuantity", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "cursedPossessionsQuantity", .type = "int"};
+
+/// The custom difficulty's override multiplier, a float. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Difficulty_overrideMultiplier{
+    .key = "Difficulty.overrideMultiplier", .kind = pm::sdk::Kind::Field, .owner = "Difficulty",
+    .name = "overrideMultiplier", .type = "float"};
+
 /// System.Enum (mscorlib). Inferred: the .NET class.
 inline constexpr pm::sdk::EntryDesc SystemEnum{.key = "Enum", .name = "Enum", .assembly = "mscorlib", .ns = "System"};
 
@@ -363,11 +550,89 @@ inline constexpr pm::sdk::EntryDesc SystemEnum_GetHashCode{.key = "Enum.GetHashC
                                                            .confidence = pm::sdk::Confidence::Decompiled,
                                                            .owner = "Enum", .name = "GetHashCode"};
 
+inline constexpr const char* WeatherValueType_values[] = {"Random", "LightRain", "HeavyRain", "Snow", "Wind",
+                                                          "Clear",  "Fog",       "Sunrise",   "BloodMoon"};
+
+/// The difficulty's weather numbering, an enum nested in Difficulty (real names): Random 0, LightRain 1, HeavyRain 2,
+/// Snow 3, Wind 4, Clear 5, Fog 6, Sunrise 7, BloodMoon 8. It is not LevelValues' WeatherType, which numbers the
+/// scene's profiles (clear 0 to bloodMoon 7): a mod pairs the two by name. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType{.key = "WeatherValueType", .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .owner = "Difficulty", .values = WeatherValueType_values};
+
+/// Light rain. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_LightRain{.key = "WeatherValueType.LightRain", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "LightRain"};
+/// Heavy rain. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_HeavyRain{.key = "WeatherValueType.HeavyRain", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "HeavyRain"};
+/// Snow. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_Snow{.key = "WeatherValueType.Snow", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "Snow"};
+/// Wind. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_Wind{.key = "WeatherValueType.Wind", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "Wind"};
+/// Clear. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_Clear{.key = "WeatherValueType.Clear", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "Clear"};
+/// Fog. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_Fog{.key = "WeatherValueType.Fog", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "Fog"};
+/// Sunrise. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_Sunrise{.key = "WeatherValueType.Sunrise", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "Sunrise"};
+/// The Blood Moon: the hunt's Blood Moon branch reads it here. Decompiled.
+inline constexpr pm::sdk::EntryDesc WeatherValueType_BloodMoon{.key = "WeatherValueType.BloodMoon", .kind = pm::sdk::Kind::EnumValue,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "WeatherValueType", .name = "BloodMoon"};
+
 /// The contract's weather as it is played, a WeatherValueType (8 is the blood moon). WintersJestManager.RPC_MakeKrampusStronger
 /// and GhostAI.speedFlag's readers compare it. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty_actualWeather{.key = "Difficulty.actualWeather", .kind = pm::sdk::Kind::Field,
                                                              .confidence = pm::sdk::Confidence::Decompiled,
                                                              .owner = "Difficulty", .name = "actualWeather"};
+
+inline constexpr const char* DifficultyValueType_values[] = {"None", "Low", "Medium", "High", "VeryHigh"};
+
+/// The numbering of the custom difficulty's level options, an enum nested in Difficulty (real name ValueType):
+/// None 0, Low 1, Medium 2, High 3, VeryHigh 4. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType{.key = "DifficultyValueType", .owner = "Difficulty",
+                                                        .name = "ValueType", .values = DifficultyValueType_values};
+
+/// None. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType_None{
+    .key = "DifficultyValueType.None", .kind = pm::sdk::Kind::EnumValue, .owner = "DifficultyValueType",
+    .name = "None"};
+/// Low. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType_Low{
+    .key = "DifficultyValueType.Low", .kind = pm::sdk::Kind::EnumValue, .owner = "DifficultyValueType", .name = "Low"};
+/// Medium. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType_Medium{
+    .key = "DifficultyValueType.Medium", .kind = pm::sdk::Kind::EnumValue, .owner = "DifficultyValueType",
+    .name = "Medium"};
+/// High. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType_High{
+    .key = "DifficultyValueType.High", .kind = pm::sdk::Kind::EnumValue, .owner = "DifficultyValueType",
+    .name = "High"};
+/// VeryHigh. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc DifficultyValueType_VeryHigh{
+    .key = "DifficultyValueType.VeryHigh", .kind = pm::sdk::Kind::EnumValue, .owner = "DifficultyValueType",
+    .name = "VeryHigh"};
+
+inline constexpr const char* FuseBoxValueType_values[] = {"Broken", "Off", "On"};
+
+/// The custom difficulty's fuse box power numbering, an enum nested in Difficulty: Broken 0, Off 1, On 2.
+/// Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc FuseBoxValueType{.key = "FuseBoxValueType", .owner = "Difficulty",
+                                                     .values = FuseBoxValueType_values};
+
+/// Broken: the fuse box starts broken. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc FuseBoxValueType_Broken{
+    .key = "FuseBoxValueType.Broken", .kind = pm::sdk::Kind::EnumValue, .owner = "FuseBoxValueType", .name = "Broken"};
+/// Off: the fuse box starts off. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc FuseBoxValueType_Off{
+    .key = "FuseBoxValueType.Off", .kind = pm::sdk::Kind::EnumValue, .owner = "FuseBoxValueType", .name = "Off"};
+/// On: the fuse box starts on. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc FuseBoxValueType_On{
+    .key = "FuseBoxValueType.On", .kind = pm::sdk::Kind::EnumValue, .owner = "FuseBoxValueType", .name = "On"};
 
 /// The contract's hunt settings (Assembly-CSharp, global namespace), a MonoBehaviourPun with one static instance.
 /// Decompiled.
@@ -406,6 +671,12 @@ namespace phasmo {
 struct Difficulty {
   /// The Difficulty type. Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Difficulty> type{};
+  /// The contract's cursed possessions, a CursedItemType[]: actualCursedItems.get(d), read as a
+  /// pm::api::Array<int32_t>. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::Difficulty_actualCursedItems, void*> actualCursedItems{};
+  /// The weather as it is played, a WeatherValueType number: actualWeather.get(d). The hunt's Blood Moon branch
+  /// reads it each time (GhostAI.speedFlag's note). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_actualWeather, int32_t> actualWeather{};
   /// Which preset it is: difficulty.get(d). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Difficulty_difficulty, int32_t> difficulty{};
   /// The forced ghost type, GhostType.None for Random: ghostTypeOverride.get(d), .set(d, type).
@@ -413,12 +684,68 @@ struct Difficulty {
   static constexpr pm::api::Field<pm::map::Difficulty_ghostTypeOverride, int32_t> ghostTypeOverride{};
   /// How many evidence the ghost gives: evidenceGiven.get(d). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Difficulty_evidenceGiven, int32_t> evidenceGiven{};
-  /// Whether its ghost is friendly (hunts lock no doors): friendlyGhost.get(d). Unresolved: false.
+  /// Whether its ghost is friendly (hunts lock no doors): friendlyGhost.get(d), .set(d, v). Unresolved:
+  /// false, writes nothing.
   static constexpr pm::api::Field<pm::map::Difficulty_friendlyGhost, bool> friendlyGhost{};
+  /// Whether players keep what they hold when they die: loseItemsOnDeath.get(d), .set(d, v). Read at
+  /// the reward screen. Unresolved: false, writes nothing.
+  static constexpr pm::api::Field<pm::map::Difficulty_loseItemsOnDeath, bool> loseItemsOnDeath{};
   /// Whether players may sprint, 0 off, 1 on, 2 infinite: sprinting.get(d). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Difficulty_sprinting, int32_t> sprinting{};
   /// The players' speed factor: playerSpeed.get(d). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Difficulty_playerSpeed, float> playerSpeed{};
+  /// The sanity pill restoration amount: sanityPillRestorationAmount.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_sanityPillRestorationAmount, int32_t>
+      sanityPillRestorationAmount{};
+  /// The players' starting sanity: startingSanity.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_startingSanity, int32_t> startingSanity{};
+  /// The sanity drain: sanityDrain.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_sanityDrain, float> sanityDrain{};
+  /// The flashlights option: flashlights.get(d), .set(d, v). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Difficulty_flashlights, bool> flashlights{};
+  /// The changing favourite room option, a DifficultyValueType number: changingFavouriteRoom.get(d).
+  /// Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_changingFavouriteRoom, int32_t> changingFavouriteRoom{};
+  /// The ghost interaction amount, a DifficultyValueType number: interactionAmount.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_interactionAmount, int32_t> interactionAmount{};
+  /// The event frequency, a DifficultyValueType number: eventFrequency.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_eventFrequency, int32_t> eventFrequency{};
+  /// The hunt duration, a DifficultyValueType number: huntDuration.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_huntDuration, int32_t> huntDuration{};
+  /// The grace period: gracePeriod.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_gracePeriod, int32_t> gracePeriod{};
+  /// The fingerprint chance: fingerprintChance.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_fingerprintChance, float> fingerprintChance{};
+  /// The fingerprint duration: fingerprintDuration.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_fingerprintDuration, int32_t> fingerprintDuration{};
+  /// The option for kills extending the hunt duration, a DifficultyValueType number:
+  /// killsExtendHuntDuration.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_killsExtendHuntDuration, int32_t> killsExtendHuntDuration{};
+  /// The roaming frequency, a DifficultyValueType number: roamingFrequency.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_roamingFrequency, int32_t> roamingFrequency{};
+  /// The ghost speed: ghostSpeed.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_ghostSpeed, float> ghostSpeed{};
+  /// The setup time: setupTime.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_setupTime, int32_t> setupTime{};
+  /// The selected weather, a WeatherValueType number: selectedWeather.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_selectedWeather, int32_t> selectedWeather{};
+  /// The amount of doors open, a DifficultyValueType number: amountOfDoorsOpen.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_amountOfDoorsOpen, int32_t> amountOfDoorsOpen{};
+  /// The amount of hiding places, a DifficultyValueType number: amountOfHidingPlaces.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_amountOfHidingPlaces, int32_t> amountOfHidingPlaces{};
+  /// The sanity monitor option: sanityMonitor.get(d), .set(d, v). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Difficulty_sanityMonitor, bool> sanityMonitor{};
+  /// The activity monitor option: activityMonitor.get(d), .set(d, v). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Difficulty_activityMonitor, bool> activityMonitor{};
+  /// The option for the fuse box showing on the map: fuseBoxVisibleOnMap.get(d), .set(d, v). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Difficulty_fuseBoxVisibleOnMap, bool> fuseBoxVisibleOnMap{};
+  /// The fuse box starting power, a FuseBoxValueType number: fuseBoxStartPower.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_fuseBoxStartPower, int32_t> fuseBoxStartPower{};
+  /// The number of cursed possessions: cursedPossessionsQuantity.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_cursedPossessionsQuantity, int32_t>
+      cursedPossessionsQuantity{};
+  /// The override multiplier: overrideMultiplier.get(d). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::Difficulty_overrideMultiplier, float> overrideMultiplier{};
   /// What it multiplies a contract's reward by: GetRewardMultiplier(d). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::Difficulty_GetRewardMultiplier, float(void*)> GetRewardMultiplier{};
 };
@@ -487,6 +814,12 @@ struct LevelValues {
   /// The contract's main objective, an Objective (Rewards.h): mainObjective.get(values), or null.
   /// Unresolved: null.
   static constexpr pm::api::Field<pm::map::LevelValues_mainObjective, void*> mainObjective{};
+  /// The contract's side objectives, a List of the Objective (Rewards.h): sideObjectives.get(values).
+  /// Read the list as pm::api::List. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LevelValues_sideObjectives, void*> sideObjectives{};
+  /// The equipment the truck starts the contract with, a List of the GameEquipmentLoadout (Equipment.h):
+  /// equipmentLoadout.get(values). Read the list as pm::api::List. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LevelValues_equipmentLoadout, void*> equipmentLoadout{};
   /// The money the contract's objectives pay, the main one's and the side ones':
   /// GetInvestigationBonusReward(values). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::LevelValues_GetInvestigationBonusReward, int32_t(void*)>
@@ -515,6 +848,62 @@ struct Enum {
   /// For an enum stored as an int, its value: GetHashCode(boxed). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::SystemEnum_GetHashCode, int32_t(void*)> GetHashCode{};
 };
+
+/// The cursed possessions a contract can carry: the numbers Difficulty.actualCursedItems holds.
+/// The difficulty's weather numbering (Difficulty.actualWeather). Pair it with WeatherType by name.
+namespace WeatherValueType {
+/// LightRain(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_LightRain> LightRain{};
+/// HeavyRain(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_HeavyRain> HeavyRain{};
+/// Snow(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_Snow> Snow{};
+/// Wind(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_Wind> Wind{};
+/// Clear(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_Clear> Clear{};
+/// Fog(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_Fog> Fog{};
+/// Sunrise(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_Sunrise> Sunrise{};
+/// BloodMoon(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::WeatherValueType_BloodMoon> BloodMoon{};
+}  // namespace WeatherValueType
+
+/// The custom difficulty's level options' numbering (None 0, Low 1, Medium 2, High 3, VeryHigh 4): the
+/// DifficultyValueType of its changingFavouriteRoom, interactionAmount, eventFrequency, huntDuration,
+/// killsExtendHuntDuration, roamingFrequency, amountOfDoorsOpen and amountOfHidingPlaces options.
+namespace DifficultyValueType {
+/// None(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DifficultyValueType_None> None{};
+/// Low(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DifficultyValueType_Low> Low{};
+/// Medium(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DifficultyValueType_Medium> Medium{};
+/// High(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DifficultyValueType_High> High{};
+/// VeryHigh(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::DifficultyValueType_VeryHigh> VeryHigh{};
+}  // namespace DifficultyValueType
+
+/// The custom difficulty's fuse box power: the FuseBoxValueType of its fuseBoxStartPower option.
+namespace FuseBoxValueType {
+/// Broken(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::FuseBoxValueType_Broken> Broken{};
+/// Off(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::FuseBoxValueType_Off> Off{};
+/// On(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::FuseBoxValueType_On> On{};
+}  // namespace FuseBoxValueType
+
+namespace CursedItemType {
+/// The CursedItemType enum type: klass(), is(obj), type_object() and make_array(n). Unresolved: null and false.
+inline constexpr pm::api::Type<pm::map::CursedItemType> type{};
+/// tarotCards(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::CursedItemType_tarotCards> tarotCards{};
+/// monkeyPaw(). Unresolved: 0.
+inline constexpr pm::api::EnumValue<pm::map::CursedItemType_monkeyPaw> monkeyPaw{};
+}  // namespace CursedItemType
 
 /// @}
 }  // namespace phasmo

@@ -44,7 +44,7 @@ namespace {
 
 using namespace pm::sdk;
 
-// Twenty-two images of 200 empty classes each, named as the map's required assemblies.
+// Twenty-three images of 200 empty classes each, named as the map's required assemblies.
 struct FakeImage {
   std::string name;
   int classes[200] = {};
@@ -56,11 +56,12 @@ FakeImage g_images[] = {{"Assembly-CSharp.dll"},     {"UnityEngine.AnimationModu
                         {"Unity.Services.Vivox.dll"},  {"UnityEngine.UIModule.dll"},     {"Unity.TextMeshPro.dll"},
                         {"Unity.InputSystem.dll"},     {"Photon3Unity3D.dll"},           {"DoozyRuntime.dll"},
                         {"com.rlabrecque.steamworks.net.dll"}, {"Assembly-CSharp-firstpass.dll"},
-                        {"Unity.RenderPipelines.Core.Runtime.dll"}, {"Unity.RenderPipelines.Universal.Runtime.dll"}};
+                        {"Unity.RenderPipelines.Core.Runtime.dll"}, {"Unity.RenderPipelines.Universal.Runtime.dll"},
+                        {"EasySave3.dll"}};
 void* g_assemblies[] = {&g_images[0], &g_images[1], &g_images[2], &g_images[3],  &g_images[4],  &g_images[5],
                         &g_images[6], &g_images[7], &g_images[8], &g_images[9], &g_images[10], &g_images[11],
                         &g_images[12], &g_images[13], &g_images[14], &g_images[15], &g_images[16], &g_images[17],
-                        &g_images[18], &g_images[19], &g_images[20], &g_images[21]};
+                        &g_images[18], &g_images[19], &g_images[20], &g_images[21], &g_images[22]};
 int g_domain = 0;
 
 // A module the size of its headers' SizeOfImage, with no function table.
@@ -120,7 +121,7 @@ void* module() { return g_module.bytes; }
 void builds_and_resolves_within_budget() {
   reset();
   CHECK(pm::gamemap::resolve(module(), nullptr, nullptr, 60000));
-  CHECK(classesRead == 4400);
+  CHECK(classesRead == 4600);
   CHECK(all_unresolved(nullptr) && pm::gamemap::result("GhostAI")->status == Status::Missing);
   CHECK(pm::gamemap::entry("GhostAI") == nullptr);  // unresolved: mods receive nothing
   CHECK(!logged("abandoned"));
@@ -155,14 +156,14 @@ void stop_before_the_native_sites_resolves_nothing() {
   reset();
   stopAtWait = checks;
   CHECK(!pm::gamemap::resolve(module(), nullptr, nullptr, 60000));
-  CHECK(classesRead == 4400);
+  CHECK(classesRead == 4600);
   CHECK(logged("the loaded UnityPlayer cannot be read"));  // the check after UnityPlayer was looked at
   CHECK(all_unresolved("startup was cancelled"));
 }
 
 void slow_build_leaves_the_hooks_budget() {
   reset();
-  tickPerClass = 100;  // 4400 classes would take 440 s
+  tickPerClass = 100;  // 4600 classes would take 460 s
   CHECK(!pm::gamemap::resolve(module(), nullptr, nullptr, 60000));
   // It stops at the first check with less than 10 s left, so the hooks keep their share.
   CHECK(clockMs >= 50000 && clockMs < 50100);
@@ -467,7 +468,7 @@ void publish_twice_is_refused() {
   icallAnswer = nullptr;
   CHECK(!pm::gamemap::resolve(module(), nullptr, nullptr, 60000));
   CHECK(count_logged("game map: already resolved; a second resolve is refused") == 1);
-  CHECK(classesRead == 4400);  // nothing was read again
+  CHECK(classesRead == 4600);  // nothing was read again
   CHECK(!pm::gamemap::publish(0x20000));
   CHECK(count_logged("game map: already published; a second publish is refused") == 1);
   CHECK(pm::gamemap::entry("Animator.SetBoolID") == kept && kept->code == &setBoolID);

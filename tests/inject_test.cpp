@@ -147,6 +147,7 @@ ULONGLONG WINAPI ticks() { return elapsed; }
 #define Sleep sleep_for
 #define GetTickCount64 ticks
 #include "../tools/inject.cpp"
+#include "../tools/session_sweep.cpp"  // its process views come from the same fakes
 #undef CloseHandle
 #undef GetTickCount64
 
@@ -221,7 +222,8 @@ int main() {
   CHECK(file != INVALID_HANDLE_VALUE); CHECK(CloseHandle(file));
   using pm::loader::Outcome;
   auto run = [&] { return pm::loader::load(42, source.c_str()); };
-  reset(); CHECK(run().outcome == Outcome::active); CHECK(frees == 1 && threadStarts == 1 && closes == 4);
+  // One more snapshot handle than before the sweep: the sweep takes the process list on every load (tools/session_sweep.h).
+  reset(); CHECK(run().outcome == Outcome::active); CHECK(frees == 1 && threadStarts == 1 && closes == 5);
   CHECK(wcsstr(copiedPath.c_str(), L"\\bin\\host-42-") != nullptr);
   // The selected mods are copied and listed, in order, in the session file the host reads.
   {
@@ -311,14 +313,60 @@ int main() {
     }
     CHECK(GetFileAttributesW((outside + L"\\secret.txt").c_str()) != INVALID_FILE_ATTRIBUTES);
   }
+  // What an earlier game left in bin goes at the next load: every copy name carries the game's process id (the DLL, the
+  // manifest and string-table sidecars, the .assets folder, the session file), and a name whose game has closed belongs
+  // to nobody. A game from an earlier launch that is still running keeps everything it has loaded.
+  {
+    const std::wstring bin = directory + L"\\bin";
+    write_text(bin + L"\\host-111-2-0.dll", "stale");
+    write_text(bin + L"\\Example-111-2-0.json", "{}");
+    write_text(bin + L"\\Example-111-2-0.i18n.json", "{}");
+    write_text(bin + L"\\session-111.txt", "stale");
+    CHECK(CreateDirectoryW((bin + L"\\Example-111-2-0.assets").c_str(), nullptr));
+    write_text(bin + L"\\Example-111-2-0.assets\\gone.txt", "gone");
+    write_text(bin + L"\\keepme.txt", "keep");       // a name the launcher never made is nobody's business
+    write_text(bin + L"\\host-43-4-0.dll", "game");  // the second running game the fake snapshot reports
+    reset(); processCount = 2;
+    CHECK(pm::loader::load(42, source.c_str()).outcome == Outcome::active);
+    processCount = 1;
+    for (const wchar_t* gone : {L"host-111-2-0.dll", L"Example-111-2-0.json", L"Example-111-2-0.i18n.json",
+                                L"session-111.txt", L"Example-111-2-0.assets"})
+      CHECK(GetFileAttributesW((bin + L"\\" + gone).c_str()) == INVALID_FILE_ATTRIBUTES);
+    CHECK(GetFileAttributesW((bin + L"\\keepme.txt").c_str()) != INVALID_FILE_ATTRIBUTES);
+    CHECK(GetFileAttributesW((bin + L"\\host-43-4-0.dll").c_str()) != INVALID_FILE_ATTRIBUTES);
+  }
+  // A copy another process holds stays until a later load can remove it: the sweep never fails a load.
+  {
+    const std::wstring bin = directory + L"\\bin";
+    write_text(bin + L"\\Example-555-1-0.dll", "held");
+    HANDLE held = CreateFileW((bin + L"\\Example-555-1-0.dll").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    CHECK(held != INVALID_HANDLE_VALUE);
+    reset(); CHECK(run().outcome == Outcome::active);
+    CHECK(GetFileAttributesW((bin + L"\\Example-555-1-0.dll").c_str()) != INVALID_FILE_ATTRIBUTES);
+    CloseHandle(held);
+    reset(); CHECK(run().outcome == Outcome::active);
+    CHECK(GetFileAttributesW((bin + L"\\Example-555-1-0.dll").c_str()) == INVALID_FILE_ATTRIBUTES);
+  }
+  // The shared native log cannot grow without end: past the cap the load moves it aside as mods.log.old, and the
+  // activation handshake reads the fresh file. A log under the cap is left alone.
+  reset();
+  write_log(std::string(static_cast<size_t>(pm::loader::kNativeLogCapBytes) + 1, 'x'));
+  CHECK(run().outcome == Outcome::active);
+  CHECK(read_text(directory + L"\\mods.log.old").size() == static_cast<size_t>(pm::loader::kNativeLogCapBytes) + 1);
+  const std::string freshLog = read_text(fakeLogPath);
+  CHECK(freshLog.find('x') == std::string::npos);
+  CHECK(freshLog.find("ModHost active") != std::string::npos);
+  reset(); CHECK(run().outcome == Outcome::active);
+  CHECK(read_text(directory + L"\\mods.log.old").size() == static_cast<size_t>(pm::loader::kNativeLogCapBytes) + 1);
   reset(); CHECK(pm::loader::load(42, nullptr).outcome == Outcome::file_error);
   CHECK(threadStarts == 0);
   reset(); allocationFails = true; CHECK(run().outcome == Outcome::allocation_failed); CHECK(frees == 0);
   reset(); writeFails = true; CHECK(run().outcome == Outcome::write_failed); CHECK(frees == 1 && threadStarts == 0);
   reset(); shortWrite = true; CHECK(run().outcome == Outcome::write_failed); CHECK(frees == 1 && threadStarts == 0);
   reset(); threadFails = true; CHECK(run().outcome == Outcome::thread_failed); CHECK(frees == 1);
-  reset(); threadWait = WAIT_TIMEOUT; CHECK(run().outcome == Outcome::indeterminate); CHECK(frees == 0 && closes == 3);
-  reset(); threadWait = WAIT_FAILED; CHECK(run().outcome == Outcome::indeterminate); CHECK(frees == 0 && closes == 3);
+  reset(); threadWait = WAIT_TIMEOUT; CHECK(run().outcome == Outcome::indeterminate); CHECK(frees == 0 && closes == 4);
+  reset(); threadWait = WAIT_FAILED; CHECK(run().outcome == Outcome::indeterminate); CHECK(frees == 0 && closes == 4);
   reset(); exitTarget = true; CHECK(run().outcome == Outcome::game_exited); CHECK(threadStarts == 0);
   reset(); exitAfterThread = true; CHECK(run().outcome == Outcome::game_exited); CHECK(frees == 0);
   reset(); exitAfterThread = true; threadWait = WAIT_TIMEOUT; CHECK(run().outcome == Outcome::game_exited); CHECK(frees == 0);

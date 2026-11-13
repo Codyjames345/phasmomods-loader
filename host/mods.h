@@ -128,6 +128,10 @@ bool started(const char* id);
 // The name the manifest of the installed mod `id` gives it, the Mods panel's: the host contract's mod_name. Null for null
 // and for an id no installed mod has. It lasts until the mods are listed afresh.
 const char* name_of(const char* id);
+// The installed mod at `index` for the host contract's mod_entry (core/mod_api.h): fills what fits in `out->size`. Its
+// strings are the host's, kept until the mods are listed afresh or the next ask for the same index. False past the end,
+// for null and for a size too small for `id`.
+bool entry(int32_t index, PmModEntry* out);
 void tick_all();
 void stop_all();  // in reverse start order, so a mod stops before those it depends on; their hooks stay until the host removes them
 

@@ -72,6 +72,14 @@ inline constexpr pm::sdk::EntryDesc GhostInfo_givenEvidence{.key = "GhostInfo.gi
                                                             .within = "GhostInfo.traits",
                                                             .sameFieldAs = "GhostController.givenEvidence"};
 
+/// Whether this client has taken the given evidence: GhostInfo.SyncEvidence tests it before anything else and
+/// returns at once, silently, when it is set; it sets it at its end. A mod that runs the evidence sync again (a
+/// mid-contract change of type) clears it first. Found by shape: it is GhostInfo's one bool (a second one in a game
+/// update leaves it ambiguous, and the mod that needs it off). Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostInfo_evidenceSynced{.key = "GhostInfo.evidenceSynced", .kind = pm::sdk::Kind::Field,
+                                                             .confidence = pm::sdk::Confidence::Decompiled,
+                                                             .owner = "GhostInfo", .type = "bool"};
+
 /// The host's sync of the traits (StartGhost calls it on the master): an RPC to every client of
 /// SyncValuesNetworked with the traits' behaviour type as the ghost's type and six more of their
 /// values, then an RPC of SyncEvidence with the given evidence: an int[] of LevelValues.difficulty's
@@ -141,6 +149,9 @@ struct GhostInfo {
   /// The host's sync of the traits to every client: SyncValues(info, traits), `traits` pointing at a
   /// GhostTraits (passed by address, as the x64 convention passes a struct). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::GhostInfo_SyncValues, void(void*, const void*)> SyncValues{};
+  /// Whether this client has taken the given evidence: evidenceSynced.get(info); GhostInfo.SyncEvidence runs once
+  /// while it is clear. Unresolved: false.
+  static constexpr pm::api::Field<pm::map::GhostInfo_evidenceSynced, bool> evidenceSynced{};
   /// The RPC's body on this client: SyncValuesNetworked(info, type, ...seven more values..., message),
   /// `message` pointing at a PhotonMessageInfo. A mod usually hooks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::GhostInfo_SyncValuesNetworked,

@@ -67,6 +67,11 @@ signature) and `re/map-addresses.tsv` (each map key's resolved value). Then:
 - **Which class a type global is.** For kind 1 the index is a type's index, not its definition's: find the definition
   in `global-metadata.dat` whose by-value type index is that number, and read its name. This named the coroutine class a
   `Door` method starts, and the static instances other methods read (`LevelController`, `GameController`).
+- **Two methods folded onto one address.** The linker folds bodies that compile identical, and `re/names.tsv` then lists
+  each original under that one address, so a decompile can name a call after the wrong one. `WaitForSeconds`' float
+  constructor shares an address with `MeshCombineStudio.MeshCombiner/LODSettings`'s, which made `ExitLevel`'s leaving
+  coroutine look like it yielded a LODSettings object. The type global the allocator just before takes is the class the
+  object really is (previous bullet), so read the allocation, not the constructor name.
 - **Virtual calls** show as a call through the object's class at a fixed offset. A class's new virtual methods take
   slots in the order of their metadata tokens, sixteen bytes each, so two known slots fix the rest; a byte search for
   indirect calls at that offset then finds a virtual method's callers, which `re/callers.mjs` cannot.
@@ -152,3 +157,15 @@ look for the cause in our code first.
   sees instead. After any change like that, read the game's log for an `at <Class>.Update ()` line repeated many times.
 - **A slower client never got the house key** when a mod destroyed a player's networked body: each client's all-loaded wait
   needs every `PlayerSpot.player` alive.
+- **Opening the dev menu's new scroll list faulted the game** (2026-11-12): a GameObject was asked for its transform through
+  `Component.get_transform`. The list's viewport and content are GameObjects, and the layout helper asked every object the
+  same question the same way; a GameObject is not a Component, so the engine read a layout that object does not have. The
+  chain was read, not guessed. Our own log names the last line before the fault, so it brackets the call. Unity writes a
+  crash folder with a `crash.dmp`; a debugger reads the exception record from it, which gives the address read and the
+  instruction that read it. And a mod DLL relinked with the linker's map file, its `.text` compared byte for byte first so
+  the map belongs to the code that actually ran, puts our own function names and offsets under the frames of that stack.
+  What to look for is a member typed `RectTransform` or `Component` handed something else: `ScrollRect.content`,
+  `ScrollRect.viewport`, the `RectTransformUtility` hit tests, every `RectTransform.set_*`. An object made at run time has no
+  RectTransform until it takes a component whose class requires one, so laying it out before that is the same mistake one
+  step on. The answer is to ask the object, never to assume: `pm::api::Type::is` on the class in question, as
+  `pm::game::transform_of`, `game_object_of` and `rect_transform_of` now do.

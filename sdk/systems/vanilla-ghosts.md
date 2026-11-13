@@ -133,7 +133,7 @@ here is an SDK gap: reverse engineer it and add it, as `sdk/internals/reverse-en
 
 ## Thaye (23)
 
-- It ages: its age step runs 0 to 10, and the insanity at which it may hunt falls from 75 by 6 a step
+- It ages: its age step runs 0 to 10, and the sanity below which it may hunt falls from 75 by 6 a step
   (`GhostController.thaye`, `GhostController.thayeStep`, `GhostController.thayeThreshold`).
 - The idle hunt check scales its chance by a further factor and tests the threshold (`GhostIdleState.HuntInsanity`,
   `GhostIdleState.Execute`).

@@ -37,6 +37,23 @@ inline constexpr pm::sdk::EntryDesc EvidenceController_IsFingerPrintEvidence{
     .key = "EvidenceController.IsFingerPrintEvidence", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "EvidenceController", .name = "IsFingerPrintEvidence"};
 
+/// The ghost orb, a Transform: the controller's one field of that name. The orb's RPC switches its GameObject on and
+/// places it; nothing in the game switches it off again. Decompiled.
+inline constexpr pm::sdk::EntryDesc EvidenceController_ghostOrb{.key = "EvidenceController.ghostOrb", .kind = pm::sdk::Kind::Field,
+                                                                .confidence = pm::sdk::Confidence::Decompiled,
+                                                                .owner = "EvidenceController", .name = "ghostOrb"};
+
+// SpawnAllGhostTypeEvidence stores one bool of the controller: the freezing flag.
+inline constexpr pm::sdk::Fact EvidenceController_freezing_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "EvidenceController.SpawnAllGhostTypeEvidence"}};
+
+/// Whether the ghost gives Freezing Temperatures, as the evidence setup left it: SpawnAllGhostTypeEvidence sets it on
+/// every client when the given evidence holds Temperature, and nothing in the game clears it. Decompiled.
+inline constexpr pm::sdk::EntryDesc EvidenceController_freezing{.key = "EvidenceController.freezing", .kind = pm::sdk::Kind::Field,
+                                                                .confidence = pm::sdk::Confidence::Decompiled,
+                                                                .owner = "EvidenceController", .type = "bool",
+                                                                .facts = EvidenceController_freezing_facts};
+
 /// The fingerprints a ghost can leave on one object, such as a door (Assembly-CSharp, global namespace), a
 /// MonoBehaviourPun. Decompiled.
 inline constexpr pm::sdk::EntryDesc Fingerprint{.key = "Fingerprint", .confidence = pm::sdk::Confidence::Decompiled,
@@ -69,6 +86,10 @@ struct EvidenceController {
   /// Moves the ghost orb to the favourite room when the ghost gives orbs or is acting as the Mimic:
   /// ForceRespawnGhostOrb(controller). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::EvidenceController_ForceRespawnGhostOrb, void(void*)> ForceRespawnGhostOrb{};
+  /// The ghost orb's Transform: ghostOrb.get(controller). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::EvidenceController_ghostOrb, void*> ghostOrb{};
+  /// Whether the ghost gives Freezing Temperatures, as the setup left it: freezing.get(controller). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::EvidenceController_freezing, bool> freezing{};
   /// Sets up the ghost's evidence in the world from its traits (a GhostTraits by address):
   /// SpawnAllGhostTypeEvidence(controller, traits). The game calls it once per contract on every client; a mod hooks
   /// it to follow that moment. Unresolved: does nothing.

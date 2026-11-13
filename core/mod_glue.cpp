@@ -93,7 +93,10 @@ void guarded_tick(const bool& running, void (*tick)()) {
   try {
     tick();
   } catch (const Il2CppExceptionWrapper& e) {
-    if (g_host) g_host->log_exception("tick: managed exception caught at the frame boundary", e.ex);
+    // The host writes this line, not the mod's own log sink, so it carries no mod prefix: name the mod.
+    const std::string where = std::string(g_info && g_info->id ? g_info->id : "a mod") +
+                              ": tick: managed exception caught at the frame boundary";
+    if (g_host) g_host->log_exception(where.c_str(), e.ex);
     else PM_LOG("tick: managed exception caught at the frame boundary");
   } catch (...) {
     PM_LOG("tick: unknown exception caught at the frame boundary");
@@ -117,6 +120,20 @@ bool mod_started(const char* id) { return g_host && g_host->mod_started(id); }
 std::string shown_name() {
   const char* name = g_host && g_info ? g_host->mod_name(g_info->id) : nullptr;
   return name && *name ? std::string(name) : std::string(g_info ? g_info->name : "");
+}
+
+std::vector<ModEntry> mod_entries() {
+  std::vector<ModEntry> out;
+  // mod_entry came in contract 2.5: a host built before it has no such member to call.
+  if (!g_host || g_host->version < ((PMMOD_API_MAJOR << 16) | 5u) || !g_host->mod_entry) return out;
+  for (int32_t i = 0;; ++i) {
+    PmModEntry e{};
+    e.size = sizeof e;
+    if (!g_host->mod_entry(i, &e)) break;
+    out.push_back({e.id ? e.id : "", e.name ? e.name : "", e.version ? e.version : "", e.author ? e.author : "",
+                   e.offReason ? e.offReason : "", e.flags});
+  }
+  return out;
 }
 
 void show_message(const std::string& title, const std::string& body) {

@@ -56,6 +56,12 @@ inline constexpr pm::sdk::EntryDesc InventoryManager_RemoveMyEquipmentFromLobby{
     .key = "InventoryManager.RemoveMyEquipmentFromLobby", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "InventoryManager", .name = "RemoveMyEquipmentFromLobby"};
 
+/// Whether this player may add the item to the lobby's pool: the store's unlock check (StoreItem.IsUnlocked) and the
+/// amount the player owns. Decompiled.
+inline constexpr pm::sdk::EntryDesc InventoryEquipment_CanAddToLobby{
+    .key = "InventoryEquipment.CanAddToLobby", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "InventoryEquipment", .name = "CanAddToLobby"};
+
 /// The reward screen's loss of the brought equipment: InventoryEquipment.ResetItem(true) on each of the pool's items.
 /// The screen calls it instead of ReturnItemstoInventory when its copy of the death status is set and the
 /// contract's Difficulty.loseItemsOnDeath is set. Decompiled.
@@ -182,6 +188,24 @@ struct InventoryManager {
   /// nothing.
   static constexpr pm::api::Method<pm::map::InventoryManager_RemoveMyEquipmentFromLobby, void(void*)>
       RemoveMyEquipmentFromLobby{};
+  /// ResetAllEquipment(inventory): the reward screen's loss of the brought equipment, on a death with the
+  /// difficulty's lose-items set. Local, and saved. A mod hooks it to keep the equipment. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::InventoryManager_ResetAllEquipment, void(void*)> ResetAllEquipment{};
+  /// ReturnItemstoInventory(inventory): the screen's return of the brought equipment to the player's stock, the
+  /// branch the game takes when nothing is lost (and on leaving a room). Local, and saved. Unresolved: does
+  /// nothing.
+  static constexpr pm::api::Method<pm::map::InventoryManager_ReturnItemstoInventory, void(void*)>
+      ReturnItemstoInventory{};
+};
+
+/// One item type's saved stock. `info` below is the EquipmentInfo.
+struct EquipmentInfo {
+  /// RemoveAmountOwned(info, amount): takes an amount off the saved stock of the item's current tier,
+  /// kept between 0 and 1000, and saves it; a negative amount adds. A mod hooks it to refuse a
+  /// decrement. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::EquipmentInfo_RemoveAmountOwned, void(void*, int32_t)>
+      RemoveAmountOwned{};
 };
 
 /// The player's saved loadouts. `loadouts` below is the LoadoutManager.

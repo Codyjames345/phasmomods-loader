@@ -3,6 +3,8 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <iterator>
 
@@ -201,6 +203,9 @@ modlist::Place place_beside(const fs::path& hostFolder, const fs::path& bin) {
 Installed find(const fs::path& dataDirectory, const fs::path& hostFolder, unsigned long pid) {
   Installed installed;
   std::error_code error;
+  // A developer's launcher.ini line is what shows developerOnly mods; the host gates them too, so a
+  // session file written while the flag was on still drops them if it was turned off since.
+  const bool developer = modlist::parse_developer(read_file(dataDirectory / L"launcher.ini"));
   // Only the launcher's own copy of the host, in bin, runs what the launcher listed for this process.
   // Read once, so a later process reusing the id never picks up a stale list.
   const fs::path bin = dataDirectory / L"bin";
@@ -212,8 +217,9 @@ Installed find(const fs::path& dataDirectory, const fs::path& hostFolder, unsign
       fs::path dll = widen(p);
       modlist::Manifest m;
       std::string why;
-      if (modlist::read_copy(dll, m, why) == modlist::Reading::Readable) installed.found.push_back({dll, std::move(m)});
-      else refuse(installed.refused, copy_name(dll), why);
+      const modlist::Reading reading = modlist::read_copy(dll, m, why, developer);
+      if (reading == modlist::Reading::Readable) installed.found.push_back({dll, std::move(m)});
+      else if (reading == modlist::Reading::Refused) refuse(installed.refused, copy_name(dll), why);
     }
     for (modlist::Refused& r : modlist::parse_session_refused(list)) refuse(installed.refused, std::move(r.name), std::move(r.why));
     installed.buildRecords = widen(modlist::parse_session_builds(list));
@@ -234,7 +240,7 @@ Installed find(const fs::path& dataDirectory, const fs::path& hostFolder, unsign
   for (const fs::path& folder : folders) {
     modlist::Manifest m;
     std::string why;
-    const modlist::Reading reading = modlist::read_folder(folder, m, why, place);
+    const modlist::Reading reading = modlist::read_folder(folder, m, why, place, developer);
     if (reading == modlist::Reading::Refused) refuse(installed.refused, text::narrow(folder.filename().wstring()), why);
     if (reading != modlist::Reading::Readable) continue;
     fs::path dll = folder / widen(m.dll);
@@ -377,6 +383,30 @@ const char* name_of(const char* id) {
   if (!id) return nullptr;
   const Mod* m = find_mod(id);
   return m ? m->manifest.name.c_str() : nullptr;
+}
+
+bool entry(int32_t index, PmModEntry* out) {
+  if (!out || index < 0 || static_cast<size_t>(index) >= g_mods.size()) return false;
+  const size_t room = out->size;
+  if (room < offsetof(PmModEntry, id) + sizeof(PmModEntry::id)) return false;
+  // The off reason is made afresh each ask, so it is kept here, one per index, for the pointer handed out.
+  static std::vector<std::string> reasons;
+  if (reasons.size() < g_mods.size()) reasons.resize(g_mods.size());
+  const Mod& m = g_mods[static_cast<size_t>(index)];
+  reasons[static_cast<size_t>(index)] = off_reason(m.manifest.id);
+  PmModEntry full{};
+  full.size = out->size;
+  full.id = m.manifest.id.c_str();
+  full.name = m.manifest.name.c_str();
+  full.version = m.manifest.version.c_str();
+  full.author = m.manifest.author.c_str();
+  full.flags = (started(m.manifest.id.c_str()) ? PM_MOD_ENTRY_STARTED : 0u) |
+               (m.manifest.developerOnly ? PM_MOD_ENTRY_DEVELOPER_ONLY : 0u) |
+               (m.manifest.recordsVoice ? PM_MOD_ENTRY_RECORDS_VOICE : 0u);
+  full.offReason = reasons[static_cast<size_t>(index)].c_str();
+  std::memcpy(out, &full, std::min(room, sizeof full));
+  out->size = static_cast<uint32_t>(room);
+  return true;
 }
 
 void start_error(const std::string& why) {

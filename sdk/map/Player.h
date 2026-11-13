@@ -68,6 +68,17 @@ inline constexpr pm::sdk::EntryDesc Player_isDead{.key = "Player.isDead", .kind 
                                                   .confidence = pm::sdk::Confidence::Decompiled, .owner = "Player",
                                                   .type = "bool", .facts = Player_isDead_facts};
 
+// The death start's RPC marks the victim dying on every client; of Player's bools it stores only this one.
+inline constexpr pm::sdk::Fact Player_dying_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "Player.NotifyOfDeathStart"}};
+
+/// Whether the investigator is dying: a kill has started (Player.NotifyOfDeathStart sets it on every client) and has
+/// not finished. Player.FinishPlayerRevive clears it with isDead. The Revive RPC accepts a player dead or dying, and
+/// the Monkey Paw's wish kills only a wisher neither dead nor dying (sdk/systems/players.md). Decompiled.
+inline constexpr pm::sdk::EntryDesc Player_dying{.key = "Player.dying", .kind = pm::sdk::Kind::Field,
+                                                 .confidence = pm::sdk::Confidence::Decompiled, .owner = "Player",
+                                                 .type = "bool", .facts = Player_dying_facts};
+
 inline constexpr const char* DeathType_values[] = {"HangedMan", "SnappedNeck"};
 
 /// The kinds of death a kill gives (Player.BeginDeathSequence's argument), an enum (name obfuscated, value names
@@ -169,6 +180,80 @@ inline constexpr pm::sdk::EntryDesc PCCanvas{.key = "PCCanvas", .name = "PCCanva
 /// dump.
 inline constexpr pm::sdk::EntryDesc PCCanvas_crosshair{.key = "PCCanvas.crosshair", .kind = pm::sdk::Kind::Field,
                                                        .owner = "PCCanvas", .type = "@Image"};
+
+inline constexpr const char* PCCanvas_bool[] = {"bool"};
+
+/// PausePlayerInPlace(paused): the game's hold for a full-screen overlay. It runs on the local player's HUD
+/// canvas and reaches everything through that canvas's own LocalPlayer. The game calls it with true from
+/// JournalController.OpenCloseJournal, from the options page it opens and from the voice recognition
+/// overlay's own toggle, and with false when those close. Decompiled, with true it: calls
+/// FirstPersonController.EnableMovement false (no walking and no looking); writes a zero to a float on the
+/// investigator's character-animation component, reached through LocalPlayer.player; switches the HUD's
+/// shown state; sets the crosshair's GameObject inactive; resets held item sway (PCItemSway.ResetSway);
+/// switches the game HUD's CanvasGroup interactable off; and frees the mouse cursor. With false it does the
+/// same in reverse and locks the cursor again, but first reads LocalPlayer.journalController: no journal
+/// controller throws there, and one that says its own journal is open returns without releasing anything.
+/// A piece missing after the movement switch (the investigator, its animation component, the crosshair, the
+/// sway) throws a NullReferenceException with the movement already switched, so a mod should check those
+/// before it asks. The call skips itself when the movement already matches the request, reading the two
+/// flags EnableMovement writes. It never moves the player and never touches the game's clock. Ask once when
+/// an overlay opens and release once when it closes, exactly as the journal toggle does; asking every frame
+/// re-runs all of this whenever the game has put the player's state back.
+inline constexpr pm::sdk::EntryDesc PCCanvas_PausePlayerInPlace{
+    .key = "PCCanvas.PausePlayerInPlace", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "PCCanvas", .name = "PausePlayerInPlace", .params = PCCanvas_bool};
+
+/// The local player's movement brain (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from
+/// the class dump.
+inline constexpr pm::sdk::EntryDesc FirstPersonController{.key = "FirstPersonController",
+                                                          .name = "FirstPersonController",
+                                                          .assembly = "Assembly-CSharp", .ns = ""};
+
+inline constexpr const char* FirstPersonController_bool[] = {"bool"};
+
+/// EnableMovement(on): the local player's walk-and-look switch. Decompiled: it writes its bool into two
+/// flags of its own, and with false it also freezes the player's Rigidbody rotation; enabling clears the
+/// flags but never unfreezes it. PCCanvas.PausePlayerInPlace reads those two flags to decide whether the
+/// player is already held.
+inline constexpr pm::sdk::EntryDesc FirstPersonController_EnableMovement{
+    .key = "FirstPersonController.EnableMovement", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "FirstPersonController", .name = "EnableMovement",
+    .params = FirstPersonController_bool};
+
+/// The investigator's physical step on PC (Assembly-CSharp, global namespace), a MonoBehaviour beside the
+/// FirstPersonController, which holds it. Decompiled: its FixedUpdate is the whole physical step. It copies its
+/// transform's position to its Rigidbody, runs its passes that push the capsule out of what it overlaps and
+/// slide it along what it meets, applies gravity (Physics.gravity scaled by its gravity multiplier) while it is
+/// not grounded, and then writes the Rigidbody's position and rotation back to its transform and zeroes the
+/// Rigidbody's velocities. So a write to its transform's position is where the next step starts (a teleport), and
+/// while the behaviour is disabled nothing moves the investigator but such writes: no walls, floors or gravity.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController{.key = "PhysicsCharacterController",
+                                                               .confidence = pm::sdk::Confidence::Decompiled,
+                                                               .name = "PhysicsCharacterController",
+                                                               .assembly = "Assembly-CSharp", .ns = ""};
+
+inline constexpr const char* PhysicsCharacterController_Move_params[] = {"Vector3"};
+
+/// Move(displacement): the walk the controller is asked for this frame, in metres. Decompiled: it stores the
+/// displacement divided by Time.deltaTime as the velocity the next FixedUpdate applies, and sets the flag that
+/// step reads; it moves nothing itself. The FirstPersonController calls it from its movement each frame with
+/// the walk or sprint the player's input gives (the rig's speed multiplier included), and the VR rig's
+/// physics move provider calls it too. A mod hooks it to read or replace the frame's walk.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_Move{
+    .key = "PhysicsCharacterController.Move", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PhysicsCharacterController", .name = "Move",
+    .params = PhysicsCharacterController_Move_params};
+
+/// The controller's Rigidbody: the body its physical step moves. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_Rigidbody{
+    .key = "PhysicsCharacterController.get_Rigidbody", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_Rigidbody"};
+
+/// The controller's CapsuleCollider: the investigator's body in the physics world, what walls and floors meet.
+/// Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_CapsuleCollider{
+    .key = "PhysicsCharacterController.get_CapsuleCollider", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_CapsuleCollider"};
 
 /// The player's journal: Player's one JournalController field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc Player_journal{.key = "Player.journal", .kind = pm::sdk::Kind::Field, .owner = "Player",
@@ -292,6 +377,14 @@ inline constexpr pm::sdk::EntryDesc LocalPlayer_player{.key = "LocalPlayer.playe
 inline constexpr pm::sdk::EntryDesc LocalPlayer_camera{.key = "LocalPlayer.camera", .kind = pm::sdk::Kind::Field,
                                                        .owner = "LocalPlayer", .type = "Camera"};
 
+/// The rig's journal page controller: LocalPlayer's one JournalController field. Decompiled role, from
+/// the class dump: PCCanvas.PausePlayerInPlace checks it when releasing its hold (a rig with no journal
+/// controller throws at the release; a journal that says itself open refuses the release), and
+/// JournalController.OpenCloseJournal keeps its own open state on that controller.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_journalController{
+    .key = "LocalPlayer.journalController", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LocalPlayer", .type = "@JournalController"};
+
 // How fast the local investigator moves. LocalPlayer declares the speeds and LocalPCPlayer (and the VR
 // rig) applies them; sdk/systems/players.md, "Speed and stamina", ties them together.
 
@@ -340,6 +433,13 @@ inline constexpr pm::sdk::EntryDesc LocalPCPlayer_SetPlayerSpeedMultiplier{
     .key = "LocalPCPlayer.SetPlayerSpeedMultiplier", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPCPlayer", .name = "SetPlayerSpeedMultiplier",
     .params = LocalPCPlayer_float};
+
+/// Puts the rig's speed multiplier back to the copy it kept when its speed was first set (LocalPlayer.Start
+/// copies the contract's Difficulty.playerSpeed into the multiplier and keeps that copy) and applies the speed
+/// again, on this client only. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPCPlayer_ResetPlayerSpeedMultiplier{
+    .key = "LocalPCPlayer.ResetPlayerSpeedMultiplier", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPCPlayer", .name = "ResetPlayerSpeedMultiplier"};
 
 // Of the rig's floats the multiplier's setter stores only this one, and the speed update reads it with
 // the two speeds. Both methods are LocalPCPlayer's, so each fact matches the offset through any register.
@@ -447,7 +547,10 @@ inline constexpr const char* Player_RevivePlayer_params[] = {"bool"};
 /// the revive animation. With the flag set it also sends `SendRemoveHighPriestess` to the master client.
 /// Its two callers pass false, both on the master: the Monkey Paw's revive wish (MonkeyPaw.ReviveWish), on
 /// the first dead player who is not the wisher, and the High Priestess card's coroutine
-/// (TarotCards.HighPriestess), on the player that card chose (sdk/systems/players.md). Decompiled.
+/// (TarotCards.HighPriestess), on the player that card chose (sdk/systems/players.md). The Revive RPC's body
+/// refuses, with the game's report on the sender even offline, unless a list held by LevelValues contains one
+/// of two values (very likely the contract's cursed possessions: the paw or the cards) and the player is
+/// marked dead or dying; never call it where the game itself would not. Decompiled.
 inline constexpr pm::sdk::EntryDesc Player_RevivePlayer{.key = "Player.RevivePlayer", .kind = pm::sdk::Kind::Method,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Player", .name = "RevivePlayer",
@@ -727,6 +830,32 @@ inline constexpr pm::sdk::EntryDesc MultiplayerController{.key = "MultiplayerCon
 inline constexpr pm::sdk::EntryDesc MultiplayerController_NetworkDestroyObjects{
     .key = "MultiplayerController.NetworkDestroyObjects", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "MultiplayerController", .name = "NetworkDestroyObjects"};
+
+/// The scene's MultiplayerController: the class's one static field of its own type. Decompiled.
+inline constexpr pm::sdk::EntryDesc MultiplayerController_instance{
+    .key = "MultiplayerController.instance", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kStatic, .owner = "MultiplayerController", .hint = "instance",
+    .type = "@MultiplayerController"};
+
+/// Where the local investigator starts the contract, a List<Transform>: in a contract, the controller makes the local
+/// player at a random one of them (Object.Instantiate of the player's prefab at its position), so they stand in the
+/// truck. FallTeleportBox sends a fallen player to the first one when no NavMesh point is near. The class's one field
+/// of that type. Decompiled.
+inline constexpr pm::sdk::EntryDesc MultiplayerController_spawnPoints{
+    .key = "MultiplayerController.spawnPoints", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "MultiplayerController", .hint = "spawnPoints",
+    .type = "List<Transform>"};
+
+inline constexpr const char* LocalPlayer_TeleportPlayer_params[] = {"Vector3"};
+
+/// TeleportPlayer(position): the game's own move of the local investigator, which PCPlayer.Teleport (the PC body of
+/// the abstract Player.Teleport) runs. Decompiled: it raises a flag of the rig's, switches the rig's
+/// PhysicsCharacterController off, sets the rig's own transform (the root the prefab was made at) to the position,
+/// and switches the controller back on, so it also undoes a mod's switching that controller off. Local; it sends
+/// nothing. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_TeleportPlayer{
+    .key = "LocalPlayer.TeleportPlayer", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LocalPlayer", .name = "TeleportPlayer", .type = "void", .params = LocalPlayer_TeleportPlayer_params};
 
 /// The Winter's Jest seasonal event (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc WintersJestManager{.key = "WintersJestManager", .confidence = pm::sdk::Confidence::Decompiled, .name = "WintersJestManager",
@@ -1022,13 +1151,28 @@ struct Network {
   static constexpr pm::api::Method<pm::map::Network_OnPlayerLeftRoom, void(void*, void*)> OnPlayerLeftRoom{};
 };
 
+/// The scene's multiplayer helper.
+struct MultiplayerController {
+  /// The scene's controller: instance.get(), or null. Unresolved: null.
+  static constexpr pm::api::StaticField<pm::map::MultiplayerController_instance, void*> instance{};
+  /// Where the local investigator starts a contract, a List<Transform>: spawnPoints.get(controller). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::MultiplayerController_spawnPoints, void*> spawnPoints{};
+};
+
 /// This client's player rig. `rig` below is the LocalPlayer.
 struct LocalPlayer {
+  /// TeleportPlayer(rig, &position): the game's own move of the local investigator, by the rig's root; it switches
+  /// the rig's PhysicsCharacterController back on. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::LocalPlayer_TeleportPlayer, void(void*, const Vector3*)> TeleportPlayer{};
   /// Its networked investigator, a Player: player.get(rig). A write goes through the GC write barrier.
   /// Unresolved: null, writes nothing.
   static constexpr pm::api::Field<pm::map::LocalPlayer_player, void*> player{};
   /// Its Camera: camera.get(rig). Unresolved: null.
   static constexpr pm::api::Field<pm::map::LocalPlayer_camera, void*> camera{};
+  /// Its journal page controller, a JournalController: journalController.get(rig). This is what
+  /// PCCanvas.PausePlayerInPlace checks on release: a rig this answers null for has no journal, and the
+  /// release throws there. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LocalPlayer_journalController, void*> journalController{};
   /// Its walking speed in metres a second, before the multiplier: walkSpeed.get(rig). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::LocalPlayer_walkSpeed, float> walkSpeed{};
   /// Its sprinting speed in metres a second, before the multiplier, whether sprinting is on or not:
@@ -1090,6 +1234,8 @@ struct Player {
   static constexpr pm::api::Type<pm::map::Player> type{};
   /// Whether it is dead: isDead.get(player). Unresolved: reads false, writes nothing.
   static constexpr pm::api::Field<pm::map::Player_isDead, bool> isDead{};
+  /// Whether a kill of it has started and not finished: dying.get(player). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::Player_dying, bool> dying{};
   /// The closet it hides in, or null: closet.get(player). Unresolved: null.
   static constexpr pm::api::Field<pm::map::Player_closet, void*> closet{};
   /// Its body object, a GameObject: body.get(player). Unresolved: null.
@@ -1152,6 +1298,10 @@ struct LocalPCPlayer {
   /// Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::LocalPCPlayer_SetPlayerSpeedMultiplier, void(void*, float)>
       SetPlayerSpeedMultiplier{};
+  /// ResetPlayerSpeedMultiplier(player): puts its speed multiplier back to the copy kept from the contract's
+  /// difficulty and applies the speed again, on this client. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::LocalPCPlayer_ResetPlayerSpeedMultiplier, void(void*)>
+      ResetPlayerSpeedMultiplier{};
 };
 
 /// The local player's HUD.
@@ -1160,6 +1310,32 @@ struct PCCanvas {
   static constexpr pm::api::Type<pm::map::PCCanvas> type{};
   /// Its crosshair, an Image: crosshair.get(canvas). Unresolved: null.
   static constexpr pm::api::Field<pm::map::PCCanvas_crosshair, void*> crosshair{};
+  /// PausePlayerInPlace(canvas, paused): holds the local player still while an overlay is up, or lets them
+  /// go again; the game uses it for the journal and the voice overlay. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::PCCanvas_PausePlayerInPlace, void(void*, bool)> PausePlayerInPlace{};
+};
+
+/// The local player's movement brain.
+struct FirstPersonController {
+  /// The type: klass(), is(obj). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::FirstPersonController> type{};
+  /// EnableMovement(fpc, on): the walk-and-look switch. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::FirstPersonController_EnableMovement, void(void*, bool)> EnableMovement{};
+};
+
+/// The investigator's physical step on PC: walls, floors and gravity. `controller` below is the
+/// PhysicsCharacterController, found on the local rig with Component.GetComponentInChildren.
+struct PhysicsCharacterController {
+  /// The type: klass(), is(obj), type_object() for GetComponent. Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::PhysicsCharacterController> type{};
+  /// Move(controller, displacement): the frame's walk, in metres; the next physical step applies it. A mod
+  /// hooks it to read or replace the walk. Local only. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_Move, void(void*, Vector3)> Move{};
+  /// get_Rigidbody(controller): the body its step moves. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_Rigidbody, void*(void*)> get_Rigidbody{};
+  /// get_CapsuleCollider(controller): the investigator's collider. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_CapsuleCollider, void*(void*)>
+      get_CapsuleCollider{};
 };
 
 /// The body's animation scripts.
