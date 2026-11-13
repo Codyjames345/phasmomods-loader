@@ -25,6 +25,7 @@
      "icon": "Assets/Emotes/Icons/floss.png", "label": "emotes.name.floss", "loudness": "loudness/floss.txt",
      "songLoop": {"start": 0, "seconds": 16.692336}},
     {"name": "forget-me-not", "clip": "Assets/Emotes/Clips/ForgetMeNot.anim", "song": "Assets/Emotes/Loops/forget_me_not.wav",
+     "clipSource": "Assets/Emotes/Source/ForgetMeNot.anim", "clipStart": 7.467375,
      "introSong": "Assets/Emotes/Intros/forget_me_not.wav", "introLoudness": "loudness/forget-me-not.intro.txt",
      "icon": "Assets/Emotes/Icons/forget_me_not.png", "label": "emotes.name.forget-me-not", "loudness": "loudness/forget-me-not.txt", "songLoop": {"start": 0, "seconds": 8.4}},
     {"name": "get-griddy", "clip": "Assets/Emotes/Clips/GetGriddy.anim", "song": "Assets/Emotes/Loops/get_griddy.wav",
