@@ -11,10 +11,13 @@
 // table, as a DLL does: a test of the loader's code and a mod's loads both, and a key the two share fails the test. Paths
 // are relative to the source folder: "i18n/default.json" for the loader, "mods/<folder>/i18n/default.json" for a mod.
 inline void use_text(std::initializer_list<const char*> tables) {
-  pm::i18n::Table all;
+  // A Table holds a mutex and is not copied, so the merged table is built straight into the process's
+  // own one. It is emptied first, as the fresh table that used to be copied over was.
+  pm::i18n::Table& all = pm::i18n::table();
+  std::string why;
+  all.parse("{}", why);
   for (const char* table : tables) {
     pm::i18n::Table one;
-    std::string why;
     const bool read = one.load(std::filesystem::path(PM_TEXT_DIR) / table, why);
     if (!read) std::printf("FAIL %s: %s\n", table, why.c_str());
     CHECK(read);
@@ -22,5 +25,4 @@ inline void use_text(std::initializer_list<const char*> tables) {
     if (!merged) std::printf("FAIL %s: %s\n", table, why.c_str());
     CHECK(merged);
   }
-  pm::i18n::table() = all;
 }
