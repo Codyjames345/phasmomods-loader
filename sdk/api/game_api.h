@@ -739,7 +739,12 @@ struct OriginalOf;
 
 /// What a hook's detour calls to go on with the game's call: the next detour in the chain of the
 /// body the call came in through, or that body itself. It passes the game's MethodInfo on. Valid
-/// only during the detour's call: do not keep it. Main thread, as the hooked call.
+/// only during the detour's call: do not keep it. `code` runs through the trampoline the host made
+/// for this link and leads on into the links below it, and unwinding the chain frees the
+/// trampolines: a kept original calls freed code once its own link, or one below it, is removed.
+/// A mod's hooks are removed when a start fails and when the mods stop, so a mod can never keep
+/// one; only the holder of the chain's lowest link, with nothing removable below it while it is
+/// kept, may. Main thread, as the hooked call.
 template <const sdk::EntryDesc& D, class R, class... A>
 struct OriginalOf<Method<D, R(A...)>> {
   R (*code)(A..., const void*);  ///< the next detour or the body; null before the hook is placed

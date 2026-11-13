@@ -30,7 +30,11 @@ using Press_t = void (*)(void* button, const void* method);
 Press_t g_press = nullptr;
 
 // The start's send, held while the room is closed for it: the call as the game made it, its objects kept from the collector, and
-// the chain below this hook that it goes on to.
+// the chain below this hook that it goes on to. game_api.h tells a detour not to keep its original, and keeping it here is safe
+// only because of where this hook sits: create_hooks installs it as the chain's lowest link, at consent and before any mod can
+// hook the method, the host unwinds a chain newest first, and a mod restart removes only what the mods made after this, so
+// nothing can be unhooked under this one while a start is held and the trampoline the original names stays alive. release_held
+// calls it on the main thread while that link stands; only the loader standing aside removes it, and nothing sends then.
 struct HeldSend {
   api::Held view, name, parameters;
   int32_t target = 0;
