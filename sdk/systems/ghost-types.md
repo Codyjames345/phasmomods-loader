@@ -52,6 +52,12 @@ The game never does it, but its spawn path can be run again on the master (the d
 Not re-run: the Mimic, Thaye and Obambo timers in `GhostController.Update` keep their running time, and the ghost's
 model stays the one `CreateGhost` set up. What `Init`'s last transform call does was not read.
 
+The Mimic does change its own type mid-contract, on the game's own timer: at each switch its
+`GhostController.MimicCopy` takes `GhostController.mimicNext` when it holds a value, otherwise a random element of
+the whole `GhostController.mimicCopies` list, and writes it to the ghost's behaviour type. The random pick is a
+plain element of the list: nothing skips or re-rolls, so the game's Mimic can copy the type it is copying now
+(`GhostController.BuildMimicCopies` fills the list with every type but None, the Mimic itself included).
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/ghost-types.md).

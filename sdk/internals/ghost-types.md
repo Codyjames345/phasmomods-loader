@@ -88,6 +88,11 @@ These are the answers to the content design's "Left to the builder" questions on
   when it is null), and stores it at `levelController.currentGhost.GhostInfo.traits.behaviour`. It then
   adds one to a LevelStats counter of copies, and starts the Thaye's age state or sets the Obambo's flag
   when it copied one of those.
+- The random element comes from one shared generic helper of the game's: given the list, it reads the
+  List's size, rolls `Random.RandomRangeInt(0, size)` and returns the item at that index (a no-type
+  number when the list is empty). It is given nothing else, and `MimicCopy` compares and re-rolls
+  nothing: **the pick may be the type the Mimic is copying now**, and since the Mimic itself is in the
+  list (see the builder below), re-copying it is one of the results.
 - Nothing sends the copy to the other clients: their GhostInfo keeps the behaviour type
   `SyncValuesNetworked` gave it (the Mimic). The AI runs on the host, which is where the copy matters.
 

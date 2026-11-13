@@ -47,5 +47,6 @@ Never compare against a fixed number. The game's types and yours are numbered at
 ## A player choosing the copy
 
 In Playable Ghost the player picks what the Mimic copies at each of the game's own switches (an allowed difference
-from the AI). The choice goes through the game's own `mimicNext`, which takes any type number, a custom one included.
-Your ghost needs nothing extra for this.
+from the AI): the player is never offered, and never picks, the type the Mimic is copying now, while the game's own
+random pick may land on it. The choice goes through the game's own `mimicNext`, which takes any type number, a custom
+one included. Your ghost needs nothing extra for this.

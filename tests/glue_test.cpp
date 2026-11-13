@@ -13,6 +13,7 @@
 
 #include "GhostAI.h"
 #include "GhostController.h"
+#include "GhostInfo.h"
 #include "GhostTypes.h"
 #include "JournalController.h"
 #include "GhostSenses.h"
@@ -300,8 +301,9 @@ void the_kormos_hears_each_footstep_its_hearing_holds() {
 
 // A Mimic's controller, with its type numbered unlike the game's own so the test proves the numbers are
 // read: Mimic 7, None 9. Its copies are 1, 7, 300 and 4; 300 does not fit a type the session sends.
+// Its ghost (the controller's levelController, the level's currentGhost and its info) is copying 7.
 struct Mimic {
-  Obj controller;
+  Obj controller, level, ghost, info;
   void* instance = nullptr;
   Mimic() {
     fake::reset();
@@ -309,11 +311,19 @@ struct Mimic {
     fake::field(map::GhostController_typeChangeDue, 0x14);
     fake::field(map::GhostController_mimicNext, 0x18);
     fake::field(map::GhostController_mimicCopies, 0x20);
+    fake::field(map::GhostController_levelController, 0x28);
+    fake::field(map::LevelController_currentGhost, 0x10);
+    fake::field(map::GhostAI_info, 0x10);
+    fake::field(map::GhostInfo_behaviourType, 0x10);
     fake::static_field(map::GhostController_instance, &instance, sizeof instance, true);
     fake::value(map::GhostType_Mimic, 7);
     bind();
     put(controller, 0x10, int32_t{7});
     put(controller, 0x20, fake::value_list({1, 7, 300, 4}));
+    put(controller, 0x28, static_cast<void*>(&level));
+    put(level, 0x10, static_cast<void*>(&ghost));
+    put(ghost, 0x10, static_cast<void*>(&info));
+    put(info, 0x10, int32_t{7});
   }
   phasmo::NullableGhostType next() const { return phasmo::GhostController::mimicNext.get(const_cast<Obj*>(&controller)); }
 };
@@ -340,6 +350,22 @@ void mimic_pick_waits_for_the_games_own_switch() {
   fake::destroy(&m.controller);
   CHECK(pm::mimic::copies(&m.controller).empty() && !pm::mimic::place_pick(&m.controller, 4));
   CHECK(pm::mimic::copies(nullptr).empty() && !pm::mimic::place_pick(nullptr, 4));
+}
+
+// The Mimic's player is never offered or left with the type it is copying now, though the game's own
+// random pick (GhostController.MimicCopy) may repeat it. The choice list leaves the current copy out in
+// the game's order; with no current copy none is left out; a list holding only the current copy is
+// empty. At the switch, place_pick refuses a pick equal to the current copy, however stale its offer.
+void mimic_player_cannot_pick_current_copy() {
+  CHECK(pm::mimic::offer({1, 7, 4}, 7) == std::vector<uint8_t>({1, 4}));
+  CHECK(pm::mimic::offer({1, 7, 4}, pm::session::kNoType) == std::vector<uint8_t>({1, 7, 4}));
+  CHECK(pm::mimic::offer({7}, 7).empty());
+  Mimic m;  // copies 1, 7 and 4; its ghost is copying 7
+  put(m.controller, 0x14, true);  // the timer has asked
+  CHECK(!pm::mimic::place_pick(&m.controller, 7) && !m.next().hasValue);  // the type it copies now
+  put(m.info, 0x10, int32_t{1});  // it now copies 1
+  CHECK(!pm::mimic::place_pick(&m.controller, 1) && !m.next().hasValue);
+  CHECK(pm::mimic::place_pick(&m.controller, 4) && m.next().hasValue && m.next().value == 4);
 }
 
 // Each investigator's guess is its death and the type chosen in its own journal, None meaning no guess.
@@ -450,6 +476,7 @@ int main() {
   the_aimed_filter_keeps_only_what_passes();
   the_kormos_hears_each_footstep_its_hearing_holds();
   mimic_pick_waits_for_the_games_own_switch();
+  mimic_player_cannot_pick_current_copy();
   the_guess_is_the_journals_choice();
   the_ghost_player_sees_no_salt_or_crucifix();
   std::printf(g_failures ? "%d check(s) failed\n" : "all glue tests passed\n", g_failures);

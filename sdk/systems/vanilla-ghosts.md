@@ -117,6 +117,8 @@ here is an SDK gap: reverse engineer it and add it, as `sdk/internals/reverse-en
 - It copies other types: at each of the game's switches, `GhostController.AttemptGhostTypeStateChange` runs
   `GhostController.MimicCopy`, which writes another type to the ghost's behaviour type on that client
   ([Ghost types and the Mimic](ghost-types.md), and the guide [The Mimic and your ghost](../guides/mimic-and-your-ghost.md)).
+- The game's own pick is a plain random element of the whole `GhostController.mimicCopies` list: nothing skips or
+  re-rolls, so it can copy the type it is copying now (`GhostController.MimicCopy`).
 
 ## Moroi (21)
 

@@ -672,3 +672,31 @@ slammed door goes quiet at once and the padlock comes the moment it is fully ope
   ghost speed and the three factors still in, pending the user's word). Expectations trimmed to what it reads.
   Native tests 102/102. A hard-stall fall (kBumpFallPace 2.5) is now reached only at about 150% ghost speed.
 - User, same day: the Squatter keeps the difficulty's ghost speed and the three GhostAI factors. Settled; no change.
+
+## 2026-11-13 Rest of stage 2b, orchestrated on the local model (Claude, user's request)
+- User: push a dev release, then continue the rest of stage 2b, each task updated to build on the current state. The local
+  model (local-qwen) implements one task at a time from a brief, then a fresh local-qwen reviews it; Claude reviews the
+  code only at the end of stage 2b and fixes what needs it. This overrides the 2026-11-08 "inline over subagents" memory
+  for this run.
+- Dev release: validate's staging failed once (dist in use by a running launcher); the build was current and ctest
+  102/102 passed, so 7818154 was pushed to development (5f2d50d..7818154); CI validates and publishes.
+- The old task-15/16/17 briefs are plan extracts from before contract 2.3 (Pg names, contract 2.2): superseded by the new
+  briefs task-16a-brief.md and on, written against the tree at 7818154.
+- Queue, no user decision needed: 16a Mimic player never picks its current copy; final-review M6, M7, M9, M10, M12, M13;
+  Step 1e's remainder; Step 0b typed handles. Needs the user: 14c (ccache or sccache, cached release), Task 16's list of
+  old Playable Ghost problems, the slot shift, Task 17's spec, Task 18 (held).
+- Task 16a done (local-qwen implementer). Step 1's answer, from decompiled GhostController.MimicCopy
+  (re/dump/notes/2026-11-13-mimic-copy-repeat.txt): the AI's random pick CAN repeat the type it is copying now,
+  a plain random element of the whole mimicCopies list (generic helper: the List's size, Random.RandomRangeInt
+  (0, size), that element; no compare against the behaviour type, no re-roll; the Mimic itself is in the list).
+  Documented for authors in sdk/systems/ghost-types.md, vanilla-ghosts.md, mimic-and-your-ghost.md and the
+  MimicCopy entry's note, with the workflow fact in the internals page; the player's leaving-out added to
+  ghost-ai.md's allowed differences (the user, 2026-11-01). mimic.h offer() drops the current copy from the
+  player's choice list, kept free of game calls; mimic.cpp current_copy() reads GhostInfo.behaviourType through
+  levelController/currentGhost/info, tick() offers with it and place_pick() refuses a pick equal to it. Tests
+  first: glue_test's mimic_player_cannot_pick_current_copy went red twice (no offer(), then place_pick accepted
+  the current copy) and green after; glue and mod_glue pass, native 102/102, emote tools, assetcheck, docs (API
+  reference no warnings), dev release, package and stage pass. pinned_assets_test.ps1 fails on this machine the
+  same way on the untouched tree: git 2.55 writes "You appear to have cloned an empty repository." to stderr at
+  its fixture clone and PowerShell Stop turns that into a terminating error; left alone. Commit: "Stop the
+  Mimic's player re-picking its current copy".

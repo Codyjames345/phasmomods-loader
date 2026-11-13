@@ -139,9 +139,10 @@ inline constexpr pm::sdk::EntryDesc GhostController_AttemptGhostTypeStateChange{
 
 /// The Mimic's copy, which AttemptGhostTypeStateChange jumps to when the identity is the Mimic. It
 /// takes mimicNext when it has a value (and clears it), otherwise a random type from mimicCopies
-/// (building it first when null), and writes it to the behaviour type of the ghost's GhostInfo,
-/// on this client only. It then counts the copy in LevelStats and starts the Thaye's or the Obambo's
-/// state when it copied one of them. Decompiled.
+/// (building it first when null): a plain random element of the whole list, with nothing skipped and
+/// nothing re-rolled, so it can be the type being copied now. It writes it to the behaviour type of
+/// the ghost's GhostInfo, on this client only. It then counts the copy in LevelStats and starts the
+/// Thaye's or the Obambo's state when it copied one of them. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostController_MimicCopy{.key = "GhostController.MimicCopy",
                                                               .kind = pm::sdk::Kind::Method,
                                                               .confidence = pm::sdk::Confidence::Decompiled,

@@ -2,8 +2,11 @@
 
 #include <algorithm>
 
+#include "GhostAI.h"
 #include "GhostController.h"
+#include "GhostInfo.h"
 #include "GhostTypes.h"
+#include "LevelController.h"
 #include "log.h"
 #include "runtime.h"
 
@@ -16,6 +19,19 @@ uint8_t g_pick = session::kNoType;
 
 bool is_mimic(void* controller) {
   return controller && api::alive(controller) && GhostController::ghostType.get(controller) == phasmo::GhostType::Mimic();
+}
+
+// The type the Mimic is copying now: the ghost's behaviour type, which MimicCopy rewrites at every
+// switch while GhostController.traits stays the Mimic's. The game reaches it through the same chain
+// (GhostController.levelController, LevelController.currentGhost, GhostAI.info); kNoType when the chain
+// is not there or its type is not one the session can send.
+uint8_t current_copy(void* controller) {
+  void* level = controller ? GhostController::levelController.get(controller) : nullptr;
+  void* ghost = level ? phasmo::LevelController::currentGhost.get(level) : nullptr;
+  void* info = ghost ? phasmo::GhostAI::info.get(ghost) : nullptr;
+  if (!info) return session::kNoType;
+  const int32_t t = phasmo::GhostInfo::behaviourType.get(info);
+  return t >= 0 && t < session::kNoType ? static_cast<uint8_t>(t) : session::kNoType;
 }
 
 void detour_attempt(api::Original<GhostController::AttemptGhostTypeStateChange> original, void* controller) {
@@ -33,6 +49,7 @@ bool place_pick(void* controller, uint8_t pick) {
   if (pick == session::kNoType || !is_mimic(controller) || !GhostController::typeChangeDue.get(controller) ||
       GhostController::mimicNext.get(controller).hasValue)
     return false;
+  if (pick == current_copy(controller)) return false;  // never the type it is copying now, stale offer or not
   const std::vector<uint8_t> offered = copies(controller);
   if (std::find(offered.begin(), offered.end(), pick) == offered.end()) return false;
   GhostController::mimicNext.set(controller, {true, pick});
@@ -66,7 +83,7 @@ void tick(session::Session& s, void* ghost) {
   }
   void* controller = GhostController::instance.get();
   if (!is_mimic(controller)) return;
-  s.offer_mimic(copies(controller));
+  s.offer_mimic(offer(copies(controller), current_copy(controller)));
 }
 
 uint8_t next() { return g_pick; }

@@ -871,6 +871,7 @@ Tasks 12a to 12d and 12c's rounds. The ghost player is one of two or more client
   - [ ] Map view: the floors change, the room outlines show, a click picks a room, the basement is named.
   - [ ] No error and no stuck ghost after `abandon_ghost_spawn`.
   - [ ] The Mimic: the player's pick becomes the next copy at the game's own switch; copying between custom ghosts mid-hunt, and a Bogeyman at the hunt's own change.
+  - [ ] The Mimic player is never offered the type it is copying now: at a switch its choice list holds every other copy, and the current copy is never re-picked even from a choice made before a switch.
 - Stepping out
   - [ ] The camera leaves the rig only once everyone has loaded; the body is parked, unseen and not solid, on every client; a Monkey Paw revive skips it; leaving gives the rig back.
   - [ ] The investigator form: the baked body appears and follows the ghost.

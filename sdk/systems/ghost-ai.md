@@ -328,8 +328,10 @@ The user allowed these differences, and no others (2026-10-31):
 - **Free steering in hunts:** no automatic walking, so the Bogeyman's route to the next hiding place and the Goryo's
   head for its room with no prey are the player's own. The Black Shuck's corridor stays.
 - **The Mimic's copy:** the Mimic player picks what it copies next, and the pick takes effect at each of the game's
-  own switches (`GhostController.AttemptGhostTypeStateChange`), where its AI copies at random. This is the user's
-  original Playable Ghost decision E2.
+  own switches (`GhostController.AttemptGhostTypeStateChange`), where its AI copies at random. The player is never
+  offered, and never re-picks, the type it is copying now, while the AI may keep copying it: its random pick is an
+  element of the whole `GhostController.mimicCopies` list with nothing skipped (`GhostController.MimicCopy`). The
+  user allowed the picking (Playable Ghost decision E2) and the leaving-out (2026-11-01).
 - **Slots of the player list (provisional, pending the user's first in-game test, 2026-11-01):** with a ghost player out
   of `Network.playerSpots`, investigators after them move down one place, so their marks, votes, sanity bar and pause
   card photo read another slot's. With an AI ghost no position moves in a contract. See
