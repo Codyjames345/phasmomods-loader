@@ -18,4 +18,7 @@ if ($LASTEXITCODE -ne 0) { throw 'The API reference failed.' }
 & (Join-Path $PSScriptRoot 'tests/stage_test.ps1')
 & (Join-Path $PSScriptRoot 'tests/pinned_assets_test.ps1')
 & (Join-Path $PSScriptRoot 'tests/changelog_section_test.ps1')
+& (Join-Path $PSScriptRoot 'tools/style_check.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'The style check found whitespace to fix.' }
+& (Join-Path $PSScriptRoot 'tests/style_check_test.ps1')
 & (Join-Path $PSScriptRoot 'tests/release_test.ps1')
