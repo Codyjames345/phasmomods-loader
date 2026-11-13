@@ -6,12 +6,14 @@
 #include "entry.h"
 #include "game_api.h"
 #include "Transform.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
 /// A room of the level (Assembly-CSharp, global namespace), a MonoBehaviour. Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelRoom{.key = "LevelRoom", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "LevelRoom", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "LevelRoom", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &MonoBehaviour};
 
 /// The room's colliders, a List<Collider>: the volumes that make up the room. Awake fills it with the
 /// room object's own colliders (GetComponents<Collider>) when the level left it empty, and makes the

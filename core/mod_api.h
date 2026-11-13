@@ -31,7 +31,7 @@ extern "C" {
 /// The host contract's minor version this header describes. Within a major version a host runs mods
 /// built for its own minor version or an older one.
 /// @since Contract 2.0
-#define PMMOD_API_MINOR 6u
+#define PMMOD_API_MINOR 7u
 /// Major in the high 16 bits, minor in the low 16. Version 1 (the first contract) had no minor.
 /// @since Contract 2.0
 #define PMMOD_API_VERSION ((PMMOD_API_MAJOR << 16) | PMMOD_API_MINOR)
@@ -275,6 +275,18 @@ struct PmIntEntry {
   int32_t value;  ///< the entry's value
 };
 
+/// How much a line of the shared log matters: the `level` of PmHostApi::log_level, as SMAPI's LogLevel. mods.log shows
+/// each line's level before its text, five letters wide ("WARN ").
+/// @since Contract 2.7
+enum PmLogLevel : uint32_t {
+  PM_LOG_TRACE = 0,  ///< step-by-step detail for tracking down a problem
+  PM_LOG_DEBUG,      ///< detail a mod's author reads while making the mod
+  PM_LOG_INFO,       ///< what happened, for anyone reading the log: the level of PmHostApi::log
+  PM_LOG_WARN,       ///< something went wrong, and the mod carries on
+  PM_LOG_ERROR,      ///< something failed: a feature, or the whole mod, is off
+  PM_LOG_ALERT,      ///< something the player should know about
+};
+
 /// What PmModEntry::flags says of an installed mod.
 /// @since Contract 2.5
 enum PmModEntryFlags : uint32_t {
@@ -320,7 +332,8 @@ struct PmHostApi {
   /// @since Contract 1.0
   const wchar_t* dataDirectory;
 
-  /// one line into the shared log (the mod names itself in it)
+  /// One line into the shared log (the mod names itself in it), at the info level; log_level (version 2.7) takes a
+  /// level. Any thread.
   /// @since Contract 1.0
   void (*log)(const char* line);
   /// A MinHook detour through the host's single MinHook instance, not yet enabled. A target that is
@@ -898,6 +911,18 @@ struct PmHostApi {
   /// @since Contract 2.6
   void (*content_pack_failed)(const char* packId, const char* why);
   /// @}
+  /// @name Log levels
+  /// Added in version 2.7, after content_pack_failed: a level for each line of the shared log.
+  /// @since Contract 2.7
+  /// @{
+
+  /// One line into the shared log at `level` (PmLogLevel), as SMAPI's Monitor.Log: mods.log shows the level before the
+  /// line. log writes at PM_LOG_INFO. A level past PM_LOG_ALERT is written as info; a null `line` writes nothing. A mod
+  /// built on core/log.h reaches it through PM_LOG_AT, which falls back to log, with the level's word in the text, on
+  /// an older host. Any thread, like log.
+  /// @since Contract 2.7
+  void (*log_level)(uint32_t level, const char* line);
+  /// @}
 };
 
 /// What a mod declares of itself in PmModInfo::flags.
@@ -920,8 +945,10 @@ struct PmModInfo {
   /// its own network channel. Declare 0: the loader gives the mod one from 64 to 255, derived from a stable
   /// hash of its id (core/mod_ids.h hashed_channel), so every client agrees on it without negotiating; a mod
   /// declaring 64 to 255 is refused. 1 to 63 are reserved: only the loader's own bundled mods, whose id author
-  /// is the project's, may name one, and they keep their fixed numbers. Two mods landing on one channel are
-  /// both refused, each with a message naming the other.
+  /// is the project's, may name one, and they keep their fixed numbers. The loader settles channels across every
+  /// planned mod before any of them starts: every mod on a channel two or more mods claim is refused, three or
+  /// more included, each with a message naming the others. A mod already running keeps its channel: a newcomer
+  /// that lands on it is refused, naming it.
   uint8_t channel;
   uint32_t flags;  ///< PmModFlags
 };

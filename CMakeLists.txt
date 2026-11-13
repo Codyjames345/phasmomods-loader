@@ -54,7 +54,7 @@ add_custom_command(TARGET gamecheck POST_BUILD COMMAND gamecheck --map-digest "$
 add_library(pmmod STATIC core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/api/assets.cpp
   sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/keybinds.cpp sdk/api/menu_rows.cpp sdk/api/buttons.cpp sdk/api/settings.cpp
   sdk/api/packs.cpp sdk/api/player_anim.cpp sdk/api/third_person.cpp sdk/api/talk_loudness.cpp sdk/api/screen_effects.cpp
-  sdk/api/movement.cpp sdk/api/input_device.cpp sdk/api/journal.cpp)
+  sdk/api/movement.cpp sdk/api/input_device.cpp sdk/api/journal.cpp sdk/api/frame_time.cpp)
 target_include_directories(pmmod PUBLIC sdk/api sdk/map)
 target_link_libraries(pmmod PUBLIC pmcore)
 pm_options(pmmod)
@@ -279,7 +279,7 @@ target_compile_definitions(startup_test PRIVATE PM_HOST PM_SUITE_VERSION="${PM_S
 target_include_directories(startup_test PRIVATE sdk/map)
 pm_test(build_check)
 target_link_libraries(build_check_test PRIVATE bcrypt)
-pm_test(inject)
+pm_test(inject core/log.cpp)  # core/log.cpp: the level words the launcher strips
 pm_test(assets sdk/api/assets.cpp)
 target_compile_definitions(inject_test PRIVATE UNICODE _UNICODE)
 pm_test(update tools/update.cpp tools/launcher.cpp host/mod_deps.cpp)
@@ -399,6 +399,12 @@ target_include_directories(third_person_test BEFORE PRIVATE sdk/api sdk/map sdk/
 pm_test(talk_loudness sdk/api/talk_loudness.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(talk_loudness_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# The shared log and its levels (core/log.h), written to a temporary LOCALAPPDATA.
+pm_test(log core/log.cpp)
+# The frame's time (sdk/api/frame_time.h): Unity's Time getters over the fake game backend.
+pm_test(frame_time sdk/api/frame_time.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(frame_time_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 # Whether this client's journal or pause screen is open (sdk/api/journal.h).
 pm_test(journal_open sdk/api/journal.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
@@ -558,6 +564,10 @@ add_library(pm_fake_mod_2_2 SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_2_2 PRIVATE pmmod)
 target_compile_definitions(pm_fake_mod_2_2 PRIVATE "PM_FAKE_MOD_API_VERSION=((2u << 16) | 2u)")
 pm_options(pm_fake_mod_2_2)
+add_library(pm_fake_mod_2_6 SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_2_6 PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_2_6 PRIVATE "PM_FAKE_MOD_API_VERSION=((2u << 16) | 6u)")
+pm_options(pm_fake_mod_2_6)
 # And as built against the first contract (version 1, no minor), for gamecheck's version check.
 add_library(pm_fake_mod_1 SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_1 PRIVATE pmmod)
@@ -642,7 +652,7 @@ target_include_directories(mods_test PRIVATE third_party/minhook/src/hde)
 target_link_libraries(mods_test PRIVATE minhook bcrypt)
 target_compile_definitions(mods_test PRIVATE PM_FAKE_MOD="$<TARGET_FILE:pm_fake_mod>"
   PM_FAKE_MOD_2_0="$<TARGET_FILE:pm_fake_mod_2_0>" PM_FAKE_MOD_2_1="$<TARGET_FILE:pm_fake_mod_2_1>"
-  PM_FAKE_MOD_2_2="$<TARGET_FILE:pm_fake_mod_2_2>"
+  PM_FAKE_MOD_2_2="$<TARGET_FILE:pm_fake_mod_2_2>" PM_FAKE_MOD_2_6="$<TARGET_FILE:pm_fake_mod_2_6>"
   PM_FAKE_MOD_OPTIONAL="$<TARGET_FILE:pm_fake_mod_optional>" PM_FAKE_MOD_VOICE="$<TARGET_FILE:pm_fake_mod_voice>"
   PM_FAKE_MOD_PLAIN="$<TARGET_FILE:pm_fake_mod_plain>"
   PM_FAKE_MOD_ZERO="$<TARGET_FILE:pm_fake_mod_zero>" PM_FAKE_MOD_LOW="$<TARGET_FILE:pm_fake_mod_low>"
@@ -654,7 +664,7 @@ target_compile_definitions(mods_test PRIVATE PM_FAKE_MOD="$<TARGET_FILE:pm_fake_
   PM_FAKE_MOD_THROWS="$<TARGET_FILE:pm_fake_mod_throws>" PM_FAKE_MOD_THROWS_REQUIRES="$<TARGET_FILE:pm_fake_mod_throws_requires>"
   PM_FAKE_MOD_1="$<TARGET_FILE:pm_fake_mod_1>" PM_FAKE_MOD_OLD_EXPORTS="$<TARGET_FILE:pm_fake_mod_old_exports>"
   PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-add_dependencies(mods_test pm_fake_mod pm_fake_mod_1 pm_fake_mod_2_0 pm_fake_mod_2_1 pm_fake_mod_2_2 pm_fake_mod_optional pm_fake_mod_voice
+add_dependencies(mods_test pm_fake_mod pm_fake_mod_1 pm_fake_mod_2_0 pm_fake_mod_2_1 pm_fake_mod_2_2 pm_fake_mod_2_6 pm_fake_mod_optional pm_fake_mod_voice
   pm_fake_mod_plain pm_fake_mod_zero pm_fake_mod_low pm_fake_mod_bundled_low pm_fake_mod_bundled_low_two
   pm_fake_mod_hash_one pm_fake_mod_hash_two pm_fake_mod_hash_three pm_fake_mod_latecomer
   pm_fake_mod_high pm_fake_mod_throws pm_fake_mod_throws_requires pm_fake_mod_old_exports)
@@ -668,6 +678,10 @@ target_include_directories(content_packs_test BEFORE PRIVATE sdk/api sdk/map sdk
 pm_test(game_api sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp
   sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(game_api_test PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# Typed handles (sdk/api/ref.h): base conversions from the map, as<> and HeldRef over the fake game backend.
+pm_test(ref sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp
+  sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(ref_test PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 pm_test(content sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp host/content_types.cpp
   host/content_text.cpp host/content_evidence.cpp
@@ -687,11 +701,11 @@ pm_test(content_difficulty sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runt
 # Before the mods' folders, so no mod's header stands for one of the map's on a file system that ignores
 # case.
 target_include_directories(content_difficulty_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime sdk/resolver)
-# Wrappers that must not compile (PM_EXPECT_COMPILE_FAIL 1 to 7) and the same written right (0), built
-# only by the test, which expects each wrong one to fail with its static_assert. The test builds them
-# outside the developer environment validate.ps1 builds in, so it gets this configure's compiler
+# Wrappers and handles that must not compile (PM_EXPECT_COMPILE_FAIL 1 to 10) and the same written right
+# (0), built only by the test, which expects each wrong one to fail with its own error. The test builds
+# them outside the developer environment validate.ps1 builds in, so it gets this configure's compiler
 # environment.
-foreach(case RANGE 0 7)
+foreach(case RANGE 0 10)
   add_library(compile_fail_${case} OBJECT EXCLUDE_FROM_ALL tests/compile_fail/wrappers.cpp)
   target_include_directories(compile_fail_${case} PRIVATE core sdk/api sdk/map)
   target_compile_definitions(compile_fail_${case} PRIVATE PM_EXPECT_COMPILE_FAIL=${case})

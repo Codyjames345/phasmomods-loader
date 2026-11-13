@@ -508,8 +508,8 @@ void same_model(const GameModel& a, const GameModel& b) {
       CHECK(same);
       if (!same) std::printf("  field %s.%s differs\n", ta.name.c_str(), fa.name.c_str());
     }
-    CHECK(ta.bases == tb.bases);
-    if (ta.bases != tb.bases) std::printf("  bases of %s differ\n", ta.name.c_str());
+    CHECK(ta.bases == tb.bases && ta.baseArities == tb.baseArities);
+    if (ta.bases != tb.bases || ta.baseArities != tb.baseArities) std::printf("  bases of %s differ\n", ta.name.c_str());
     CHECK(ta.methods.size() == tb.methods.size());
     for (size_t k = 0; k < ta.methods.size() && k < tb.methods.size(); ++k) {
       const ModelMethod& ma = ta.methods[k];
@@ -567,6 +567,7 @@ void runtime_matches_dump() {
     CHECK(sensor >= 0 && handle >= 0 && iprobe >= 0 && probeType >= 0);
     if (sensor < 0 || handle < 0 || iprobe < 0 || probeType < 0) continue;
     CHECK((m->types[sensor].bases == std::vector<std::string>{"Inner", "IProbe", "IComparable"}));
+    CHECK((m->types[sensor].baseArities == std::vector<int>{0, 0, 1}));  // IComparable<Probe>
     CHECK((m->types[handle].bases == std::vector<std::string>{"Object"}));
     CHECK((m->types[probeType].bases == std::vector<std::string>{"MonoBehaviour"}));
     CHECK(m->types[iprobe].isInterface && !m->types[sensor].isInterface);

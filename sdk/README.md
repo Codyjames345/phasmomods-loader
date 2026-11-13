@@ -82,8 +82,9 @@ describes what is in the code now.
   called from any thread; everything else runs on the main thread.
 - **Never keep a raw managed reference across frames.** The garbage collector moves and frees
   managed objects. Keep one in a `pm::api::Held` (`sdk/api/held.h`), which holds it through the host
-  contract's `gc_hold`, as `mods/ghost_tells/shade.cpp` does with its ghost. `tests/held_scan_test.cpp` fails the build on a raw `void*` kept at namespace
-  or struct scope. It scans `core/`, `host/` and the four bundled mod folders by name, so a new mod
+  contract's `gc_hold`, as `mods/ghost_tells/shade.cpp` does with its ghost (a typed handle, `pm::api::Ref<D>`, in a
+  `pm::api::HeldRef<D>`). `tests/held_scan_test.cpp` fails the build on a raw `void*`, a `Ref` or an `Object` kept at
+  namespace or struct scope. It scans `core/`, `host/` and the four bundled mod folders by name, so a new mod
   folder must be added to the list in that test.
 - **Private lobbies only.** Play with mods in private lobbies only. Playing with mods risks a ban on
   the account. Nothing in the SDK changes that, and `send` already refuses outside a private room.
@@ -298,6 +299,35 @@ process lifetime, so version it in the name (`"playable-ghost.v1"`) and make the
 `register_service` of a name already registered, logs it, and keeps the first table, so no mod can
 take over another's service. The host forgets the services when it stops.
 
+### The loader's services
+
+What the loader gives every mod besides the game, so no mod builds its own:
+
+- **The log.** `PM_LOG(...)` (`core/log.h`, printf-style) writes one line to the shared log,
+  `%LOCALAPPDATA%\PhasmoMods\mods.log`, with the mod's id in front. `PM_LOG_AT(level, ...)` writes it at a level,
+  `pm::log::Level::Trace`, `Debug`, `Info`, `Warn`, `Error` or `Alert`, as SMAPI's `LogLevel`; `PM_LOG` is `Info`.
+  Every line of `mods.log` shows its level, five letters wide, after the process and thread:
+  `12:00:00.000 [pid=4 tid=8] WARN  [someone.mod] the saved keys cannot be read`. The host contract's
+  `log_level` (version 2.7) carries it; on a host without it a line goes to `log` with its level's word in the text.
+- **A data folder.** `pm::mod::data_folder()` (`core/mod_glue.h`) is the mod's own folder for the files it keeps
+  between games, `%LOCALAPPDATA%\PhasmoMods\data\<mod id>\`, as SMAPI's `DirectoryPath` gives a mod one (the user's
+  choice, 2026-11-14). The first ask makes it. Before it, mods built `%LOCALAPPDATA%\PhasmoMods\<mod id>\`
+  themselves (the Dev Menu and Emotes did); for a mod with a new-format id the first ask moves each file from there
+  that the new folder lacks, logged, and never deletes a file it did not copy. A file that cannot be moved stays and
+  is tried again next start. The old folder goes once it is empty; one left holding only files the new folder already
+  has is renamed `<mod id>.moved`, so the move runs once and a kept file never comes back. An old-format id (`logs`,
+  `bin`) moves nothing, since it may name one of the loader's own folders. It answers empty before bind or when the
+  folder cannot be made (logged): build a file's path from it only when it is not empty, so nothing lands in the
+  game's working folder.
+  `PmHostApi::dataDirectory` stays `%LOCALAPPDATA%\PhasmoMods`, which the loader's own files share.
+- **The frame's time.** `pm::api::frame_time()` (`sdk/api/frame_time.h`) gives the frame's `deltaTime` and
+  `unscaledDeltaTime` and the game's `time` and `unscaledTime`, in seconds, read from Unity's `Time` through the map
+  (`Time.get_deltaTime`, `Time.get_unscaledDeltaTime`, `Time.get_time`, `Time.get_unscaledTime`), the values the
+  game's own scripts read in the same frame. `pmmod_tick` takes no time, so a timer reads these rather than a clock of
+  its own: game time follows the time scale and stands still while it is 0, real time does not. Ghost Tells' rules
+  run on `deltaTime`, read alone (`phasmo::Time::get_deltaTime`), so that is the one Time entry they require: calling
+  `frame_time()` makes all four required.
+
 ### Dependencies
 
 A mod names the mods it needs, and those it can use, in its manifest's `dependencies`, and the mods it cannot
@@ -499,9 +529,9 @@ that requires one whose hook could not be made stays off, and the log names the 
 false for that reason alone while a mod runs.
 It replaces return-address checks, which break when several mods chain detours on one function.
 
-### The host contract, version 2.6
+### The host contract, version 2.7
 
-`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.6 today).
+`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.7 today).
 `pm_api_compatible(host, mod)` accepts a mod of the same major and a minor no newer than the host's.
 Within a major, `PmHostApi` and every published struct only grow at the end; a new major refuses
 older mods. Version 2.0 added these members, after the services of version 1:
@@ -829,6 +859,11 @@ evidence in the world stays its mod's job.
   row says `why`, and it is not in the lobby's list; asked anywhere else it logs and changes nothing. The
   fake backend answers the first from `pm::fake::content_packs` and lists every second call, in order, in
   `pm::fake::failed_packs`.
+- Version 2.7 added `log_level(level, line)`, the last member: one line of the shared log at a level, `PM_LOG_TRACE`,
+  `PM_LOG_DEBUG`, `PM_LOG_INFO`, `PM_LOG_WARN`, `PM_LOG_ERROR` or `PM_LOG_ALERT` (`PmLogLevel`, SMAPI's `LogLevel`).
+  `log` writes at info, and a level the contract does not know is written as info. A mod reaches it through
+  `PM_LOG_AT` (`core/log.h`; see "The loader's services", above). The fake backend's `log_level`, like its `log`,
+  writes nothing.
 
 Which rules run. The host keeps the contract ghost's acting-as type (`sdk/runtime/content_acting.h`):
 its behaviour type, or its identity when the behaviour type is "no type" (a custom ghost). The Mimic's

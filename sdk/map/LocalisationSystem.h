@@ -6,6 +6,8 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -16,7 +18,7 @@ inline constexpr const char* LocalisationSystem_GetLocalisedValue_params[] = {"s
 inline constexpr pm::sdk::EntryDesc LocalisationSystem{.key = "LocalisationSystem",
                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                        .name = "LocalisationSystem", .assembly = "Assembly-CSharp",
-                                                       .ns = ""};
+                                                       .ns = "", .base = &MonoBehaviour};
 
 /// The text of a key in the player's language: GetLocalisedValue(key, fallback). The game names a ghost
 /// type through the key "Journal_<the GhostType value's name>Title" (a type with no enum name is a
@@ -101,7 +103,8 @@ inline constexpr pm::sdk::EntryDesc LocalisationSystem_GetNextOrPreviousLanguage
 /// The game's controller (Assembly-CSharp, global namespace), a MonoBehaviourPunCallbacks. Decompiled.
 inline constexpr pm::sdk::EntryDesc GameController{.key = "GameController",
                                                    .confidence = pm::sdk::Confidence::Decompiled,
-                                                   .name = "GameController", .assembly = "Assembly-CSharp", .ns = ""};
+                                                   .name = "GameController", .assembly = "Assembly-CSharp", .ns = "",
+                                                   .base = &MonoBehaviourPun};
 
 /// The average insanity of the players. The hunt's base refresh asks for it for the Moroi.
 /// Decompiled.

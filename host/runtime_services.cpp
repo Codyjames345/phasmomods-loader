@@ -239,6 +239,15 @@ void api_log_exception(const char* where, const void* exception) {
   }
 }
 
+void api_log_level(uint32_t level, const char* line) {
+  if (!line) return;
+  try {
+    PM_LOG_AT(log::level_of(level), "%s", line);
+  } catch (...) {
+    // Logging is best effort: a failed line is not worth failing the caller for.
+  }
+}
+
 namespace {
 void raise_spawn_abandoned() { il2cpp::raise_argument_null("GhostController.Spawn abandoned"); }
 }  // namespace

@@ -7,6 +7,8 @@
 // Notes read from decompiled code are from build 25811160.
 
 #include "LocalisationSystem.h"
+#include "Photon.h"
+#include "UnityObject.h"
 #include "entry.h"
 #include "game_api.h"
 
@@ -29,7 +31,8 @@ inline constexpr pm::sdk::EntryDesc GameController_LoadBackToMenu{
 inline constexpr pm::sdk::EntryDesc PlayerCountItemEnabler{.key = "PlayerCountItemEnabler",
                                                           .confidence = pm::sdk::Confidence::Decompiled,
                                                           .name = "PlayerCountItemEnabler",
-                                                          .assembly = "Assembly-CSharp", .ns = ""};
+                                                          .assembly = "Assembly-CSharp", .ns = "",
+                                                           .base = &MonoBehaviour};
 
 /// Its Start: it reads GameController.instance's loaded flag and, while it is clear, waits for the
 /// controller's loaded event instead. Decompiled.
@@ -53,7 +56,8 @@ inline constexpr pm::sdk::EntryDesc GameController_allPlayersLoaded{
 
 /// The truck's exit (Assembly-CSharp, global namespace), a MonoBehaviourPun. Decompiled.
 inline constexpr pm::sdk::EntryDesc ExitLevel{.key = "ExitLevel", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "ExitLevel", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "ExitLevel", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &MonoBehaviourPun};
 
 inline constexpr const char* ExitLevel_Exit_params[] = {"PhotonMessageInfo"};
 
@@ -99,7 +103,7 @@ inline constexpr pm::sdk::EntryDesc ExitLevel_CheckChallenges{
 inline constexpr pm::sdk::EntryDesc LoadingController{.key = "LoadingController",
                                                       .confidence = pm::sdk::Confidence::Decompiled,
                                                       .name = "LoadingController", .assembly = "Assembly-CSharp",
-                                                      .ns = ""};
+                                                      .ns = "", .base = &MonoBehaviour};
 
 /// The one LoadingController: the class's one static field of its own type. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc LoadingController_instance{
@@ -126,7 +130,8 @@ inline constexpr pm::sdk::EntryDesc LoadingController_LoadScene{
 inline constexpr pm::sdk::EntryDesc PauseMenuController{.key = "PauseMenuController",
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .name = "PauseMenuController",
-                                                        .assembly = "Assembly-CSharp", .ns = ""};
+                                                        .assembly = "Assembly-CSharp", .ns = "",
+                                                        .base = &MonoBehaviour};
 
 /// The Leave button: it clears LevelValues.completed, sets Network.sceneChanging, silences the listener and
 /// loads the main menu, and its coroutine disconnects Photon once the loading screen is ready. It reads the
@@ -150,7 +155,8 @@ inline constexpr pm::sdk::EntryDesc PauseMenuController_Resume{
 
 /// The truck's door button (Assembly-CSharp, global namespace), a MonoBehaviourPun. Decompiled.
 inline constexpr pm::sdk::EntryDesc LiftButton{.key = "LiftButton", .confidence = pm::sdk::Confidence::Decompiled,
-                                               .name = "LiftButton", .assembly = "Assembly-CSharp", .ns = ""};
+                                               .name = "LiftButton", .assembly = "Assembly-CSharp", .ns = "",
+                                               .base = &MonoBehaviour};
 
 /// Unity's Start for the button: it adds the button's own press to its interaction's use event
 /// (a run-time listener whose target is the button), the work PhotonObjectInteract.AddUseEvent does, written out in
@@ -218,7 +224,8 @@ inline constexpr pm::sdk::EntryDesc ExitLevel_trigger{
 
 /// The truck's inside (Assembly-CSharp, global namespace): a trigger volume that keeps the players in it. Decompiled.
 inline constexpr pm::sdk::EntryDesc ExitLevelTrigger{.key = "ExitLevelTrigger", .confidence = pm::sdk::Confidence::Decompiled,
-                                                     .name = "ExitLevelTrigger", .assembly = "Assembly-CSharp", .ns = ""};
+                                                     .name = "ExitLevelTrigger", .assembly = "Assembly-CSharp", .ns = "",
+                                                     .base = &MonoBehaviour};
 
 inline constexpr const char* Application_int[] = {"int"};
 
@@ -259,7 +266,7 @@ inline constexpr pm::sdk::EntryDesc ExitLevel_StartAttemptExitLevel{
 
 /// A player's contract statistics, on their Player. Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerStats{.key = "PlayerStats", .confidence = pm::sdk::Confidence::Decompiled,
-    .name = "PlayerStats", .assembly = "Assembly-CSharp", .ns = ""};
+    .name = "PlayerStats", .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviourPun};
 
 /// Sends this player's statistics to the others by RPC, running nothing locally. Only ExitLevel.Exit calls it, on the master. Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerStats_SyncStats{
@@ -274,7 +281,7 @@ inline constexpr pm::sdk::EntryDesc PlayerStats_SyncStatsNetworked{
 
 /// The reward screen back in the lobby. Decompiled.
 inline constexpr pm::sdk::EntryDesc RewardManager{.key = "RewardManager", .confidence = pm::sdk::Confidence::Decompiled,
-    .name = "RewardManager", .assembly = "Assembly-CSharp", .ns = ""};
+    .name = "RewardManager", .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviourPun};
 
 /// Copies GameplaySettings.PlayerDied for its results when LevelValues says the contract was played and completed. Decompiled.
 inline constexpr pm::sdk::EntryDesc RewardManager_Awake{
@@ -425,7 +432,8 @@ inline constexpr pm::sdk::EntryDesc RewardManager_EventRow{
 inline constexpr pm::sdk::EntryDesc ChallengesController{.key = "ChallengesController",
                                                          .confidence = pm::sdk::Confidence::Decompiled,
                                                          .name = "ChallengesController",
-                                                         .assembly = "Assembly-CSharp", .ns = ""};
+                                                         .assembly = "Assembly-CSharp", .ns = "",
+                                                         .base = &MonoBehaviour};
 
 /// Adds an amount to every challenge of one type: the controller's three challenge lists and its one more
 /// challenge. On a difficulty with a reward multiplier of 0 it can skip every type but three. It calls no

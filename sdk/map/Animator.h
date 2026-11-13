@@ -11,6 +11,7 @@
 #include "entry.h"
 #include "Transform.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -20,7 +21,8 @@ inline constexpr const char* AnimatorControllerParameterType_values[] = {"Float"
 
 /// Unity's animator component (UnityEngine.AnimationModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Animator{.key = "Animator", .name = "Animator",
-                                             .assembly = "UnityEngine.AnimationModule", .ns = "UnityEngine"};
+                                             .assembly = "UnityEngine.AnimationModule", .ns = "UnityEngine",
+                                             .base = &Behaviour};
 
 /// The Animator's parameters, a new AnimatorControllerParameter[] on every call (empty without a
 /// controller). Inferred: Unity's documented property getter.
@@ -145,7 +147,7 @@ inline constexpr pm::sdk::EntryDesc Animator_SetBool{.key = "Animator.SetBool", 
 /// controller loads as. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc RuntimeAnimatorController{
     .key = "RuntimeAnimatorController", .name = "RuntimeAnimatorController",
-    .assembly = "UnityEngine.AnimationModule", .ns = "UnityEngine"};
+    .assembly = "UnityEngine.AnimationModule", .ns = "UnityEngine", .base = &UnityObject};
 
 inline constexpr const char* Animator_RuntimeAnimatorController[] = {"RuntimeAnimatorController"};
 inline constexpr const char* Animator_Play_params[] = {"int", "int", "float"};

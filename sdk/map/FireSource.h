@@ -7,13 +7,15 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
 
 namespace pm::map {
 
 /// A flame (Assembly-CSharp, global namespace), a MonoBehaviourPun. Its Start adds it to the level's
 /// LevelController.fireSources. Decompiled.
 inline constexpr pm::sdk::EntryDesc FireSource{.key = "FireSource", .confidence = pm::sdk::Confidence::Decompiled,
-                                               .name = "FireSource", .assembly = "Assembly-CSharp", .ns = ""};
+                                               .name = "FireSource", .assembly = "Assembly-CSharp", .ns = "",
+                                               .base = &MonoBehaviourPun};
 
 /// The flame's own GameObject, which holds what it shows: Light switches it on (GameObject.SetActive)
 /// and Extinguish off. Decompiled.

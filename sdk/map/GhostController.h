@@ -8,6 +8,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -40,7 +41,8 @@ inline constexpr pm::sdk::Fact GhostController_givenEvidence_facts[] = {
 /// The ghost controller (Assembly-CSharp, global namespace), a MonoBehaviour. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostController{.key = "GhostController",
                                                     .confidence = pm::sdk::Confidence::Decompiled,
-                                                    .name = "GhostController", .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .name = "GhostController", .assembly = "Assembly-CSharp", .ns = "",
+                                                    .base = &MonoBehaviour};
 
 /// The current contract's controller: the class's one static field of its own type, set by Awake.
 /// Check it with pm::api::alive after a contract. Decompiled.

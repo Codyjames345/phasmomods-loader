@@ -31,11 +31,11 @@ bool start(const PmHostApi* api) {
   }
   // The key is the one left of the 1 on the game's own defaults, rebindable through the game's keybinds
   // menu (the user's call, 2026-11-10). minus and equals fall back when the game already has the first.
-  const std::filesystem::path data =
-      std::filesystem::path(mod::host().dataDirectory) / mod::info().id / "keybinds.txt";
-  api::keys::begin_keys(mod::info().id, mod::shown_name(), data);
+  // In the mod's data folder; with none (it could not be made, logged), nothing is saved.
+  const std::filesystem::path data = mod::data_folder();
+  api::keys::begin_keys(mod::info().id, mod::shown_name(), data.empty() ? data : data / "keybinds.txt");
   // The menu's own settings beside the keys: read once, written on every change (actions::save_settings).
-  actions::set_settings_file(std::filesystem::path(mod::host().dataDirectory) / mod::info().id / "settings.txt");
+  actions::set_settings_file(data.empty() ? data : data / "settings.txt");
   actions::load_settings();
   api::keys::ModKey key;
   key.id = kToggleKey;

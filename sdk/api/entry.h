@@ -154,6 +154,10 @@ struct EntryDesc {
   // An Inflated entry's type arguments, one type each: "@Key" for the type a Type entry resolved to, or a
   // name exactly one model type has.
   std::span<const char* const> typeArgs{};
+  // A Type entry's: the mapped Type entry of its nearest mapped base class, or null when no class it derives from is
+  // mapped. Compile-time data for typed handles, which convert to a base type's handle by it (sdk/api/ref.h); the
+  // resolver never reads it, and the offline check proves each one an ancestor of the class (sdk/offline/gamecheck.cpp).
+  const EntryDesc* base = nullptr;
 };
 
 }  // namespace pm::sdk

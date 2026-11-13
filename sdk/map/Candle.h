@@ -5,7 +5,9 @@
 // keeps its real name. Notes read from decompiled code are from build 25811160.
 
 #include "entry.h"
+#include "Equipment.h"
 #include "game_api.h"
+#include "UnityObject.h"
 #include "UnityRendering.h"
 
 namespace pm::map {
@@ -13,7 +15,8 @@ namespace pm::map {
 /// A candle or lantern (Assembly-CSharp, global namespace), an Equipment: Firelight from the store,
 /// whose Equipment.storeItem gives its tier, and the level's own candles, which have none. Decompiled.
 inline constexpr pm::sdk::EntryDesc Candle{.key = "Candle", .confidence = pm::sdk::Confidence::Decompiled,
-                                           .name = "Candle", .assembly = "Assembly-CSharp", .ns = ""};
+                                           .name = "Candle", .assembly = "Assembly-CSharp", .ns = "",
+                                           .base = &Equipment};
 
 /// The candle's flames, a CandleObject[]: Candle.UseNetworked lights or puts out each one's
 /// FireSource and sets its wax, and its Update melts the wax. Decompiled.
@@ -53,7 +56,8 @@ inline constexpr pm::sdk::EntryDesc CandleObject_fireSource{
 /// A candelabra of the level (Assembly-CSharp, global namespace), a MonoBehaviour holding candles.
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc Candlebra{.key = "Candlebra", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "Candlebra", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "Candlebra", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &MonoBehaviour};
 
 /// Its candles, a Candle[]: its Start listens to each one's lighting and putting out and sets its
 /// own light by how many burn. Decompiled.

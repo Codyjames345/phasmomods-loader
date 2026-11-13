@@ -8,6 +8,7 @@
 
 #include "Animator.h"
 #include "Transform.h"
+#include "UnityObject.h"
 #include "entry.h"
 #include "game_api.h"
 
@@ -79,12 +80,17 @@ inline constexpr pm::sdk::EntryDesc BipedReferences_spine{.key = "BipedReference
 inline constexpr pm::sdk::EntryDesc BipedReferences_eyes{.key = "BipedReferences.eyes", .kind = pm::sdk::Kind::Field,
                                                    .owner = "BipedReferences", .name = "eyes"};
 
+/// Every Final IK component's base (RootMotion.FinalIK.IK), the element type of IKExecutionOrder's list. Inferred:
+/// Final IK's own documentation.
+inline constexpr pm::sdk::EntryDesc FinalIK_IK{.key = "IK", .name = "IK", .assembly = "Assembly-CSharp-firstpass",
+                                               .ns = "RootMotion.FinalIK", .base = &MonoBehaviour};
+
 /// Final IK's full-body solver for a two-legged body (RootMotion.FinalIK.FullBodyBipedIK): hands, feet, shoulders,
 /// thighs and the body each reach for a point, and the rest of the body follows as a body does. Add it to the model's
 /// GameObject. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc FullBodyBipedIK{.key = "FullBodyBipedIK", .name = "FullBodyBipedIK",
                                                     .assembly = "Assembly-CSharp-firstpass",
-                                                    .ns = "RootMotion.FinalIK"};
+                                                    .ns = "RootMotion.FinalIK", .base = &FinalIK_IK};
 /// Its solver, an IKSolverFullBodyBiped. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc FullBodyBipedIK_solver{.key = "FullBodyBipedIK.solver",
                                                            .kind = pm::sdk::Kind::Field, .owner = "FullBodyBipedIK",
@@ -95,10 +101,14 @@ inline constexpr pm::sdk::EntryDesc FullBodyBipedIK_SetReferences{
     .key = "FullBodyBipedIK.SetReferences", .kind = pm::sdk::Kind::Method, .owner = "FullBodyBipedIK",
     .name = "SetReferences", .params = FinalIK_SetReferences};
 
+/// What every Final IK solver shares (RootMotion.FinalIK.IKSolver). Inferred: Final IK's own documentation.
+inline constexpr pm::sdk::EntryDesc IKSolver{.key = "IKSolver", .name = "IKSolver",
+                                             .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK"};
+
 /// The full-body solver (RootMotion.FinalIK.IKSolverFullBodyBiped). Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKSolverFullBodyBiped{.key = "IKSolverFullBodyBiped", .name = "IKSolverFullBodyBiped",
                                                           .assembly = "Assembly-CSharp-firstpass",
-                                                          .ns = "RootMotion.FinalIK"};
+                                                          .ns = "RootMotion.FinalIK", .base = &IKSolver};
 /// The left hand's effector, an IKEffector. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKSolverFullBodyBiped_get_leftHandEffector{
     .key = "IKSolverFullBodyBiped.get_leftHandEffector", .kind = pm::sdk::Kind::Method,
@@ -126,17 +136,12 @@ inline constexpr pm::sdk::EntryDesc IKSolver_Initiate{.key = "IKSolver.Initiate"
                                                       .owner = "IKSolver", .name = "Initiate",
                                                       .params = FinalIK_Transform};
 
-/// Every Final IK component's base (RootMotion.FinalIK.IK), the element type of IKExecutionOrder's list. Inferred:
-/// Final IK's own documentation.
-inline constexpr pm::sdk::EntryDesc FinalIK_IK{.key = "IK", .name = "IK", .assembly = "Assembly-CSharp-firstpass",
-                                               .ns = "RootMotion.FinalIK"};
-
 /// Runs Final IK components one after another in a set order each frame, as Final IK asks when two of them bend the
 /// same bones (a full-body solver, then a look-at): it switches them off and updates their solvers itself, after the
 /// Animator. Add it to the model's GameObject. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKExecutionOrder{.key = "IKExecutionOrder", .name = "IKExecutionOrder",
                                                      .assembly = "Assembly-CSharp-firstpass",
-                                                     .ns = "RootMotion.FinalIK"};
+                                                     .ns = "RootMotion.FinalIK", .base = &MonoBehaviour};
 /// The components, an IK[], in the order they run. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKExecutionOrder_IKComponents{.key = "IKExecutionOrder.IKComponents",
                                                                   .kind = pm::sdk::Kind::Field,
@@ -163,7 +168,8 @@ inline constexpr pm::sdk::EntryDesc IKExecutionOrder_Update{.key = "IKExecutionO
 /// What every Final IK grounder shares (RootMotion.FinalIK.Grounder): foot placement on the ground under each foot,
 /// the hips lowered to the lower foot, as games keep feet on stairs and slopes. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc Grounder{.key = "Grounder", .name = "Grounder",
-                                             .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK"};
+                                             .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK",
+                                             .base = &MonoBehaviour};
 /// Its solver, a Grounding. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc Grounder_solver{.key = "Grounder.solver", .kind = pm::sdk::Kind::Field,
                                                     .owner = "Grounder", .name = "solver"};
@@ -177,14 +183,12 @@ inline constexpr pm::sdk::EntryDesc Grounding_layers{.key = "Grounding.layers", 
 /// The grounder for a FullBodyBipedIK body (RootMotion.FinalIK.GrounderFBBIK): add it beside one and set its ik. It
 /// starts itself once the body's solver has. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc GrounderFBBIK{.key = "GrounderFBBIK", .name = "GrounderFBBIK",
-                                                  .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK"};
+                                                  .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK",
+                                                  .base = &Grounder};
 /// The FullBodyBipedIK it grounds. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc GrounderFBBIK_ik{.key = "GrounderFBBIK.ik", .kind = pm::sdk::Kind::Field,
                                                      .owner = "GrounderFBBIK", .name = "ik"};
 
-/// What every Final IK solver shares (RootMotion.FinalIK.IKSolver). Inferred: Final IK's own documentation.
-inline constexpr pm::sdk::EntryDesc IKSolver{.key = "IKSolver", .name = "IKSolver",
-                                             .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK"};
 /// The point the solver reaches for, in world space. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKSolver_IKPosition{.key = "IKSolver.IKPosition", .kind = pm::sdk::Kind::Field,
                                                         .owner = "IKSolver", .name = "IKPosition"};
@@ -197,7 +201,7 @@ inline constexpr pm::sdk::EntryDesc IKSolver_IKPositionWeight{.key = "IKSolver.I
 /// Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKSolverTrigonometric{.key = "IKSolverTrigonometric", .name = "IKSolverTrigonometric",
                                                           .assembly = "Assembly-CSharp-firstpass",
-                                                          .ns = "RootMotion.FinalIK"};
+                                                          .ns = "RootMotion.FinalIK", .base = &IKSolver};
 /// Sets the solver's bones (upper, lower, end, and the model's root) and starts it; true when the chain is valid.
 /// Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKSolverTrigonometric_SetChain{
@@ -211,7 +215,8 @@ inline constexpr pm::sdk::EntryDesc IKSolverTrigonometric_IKRotationWeight{
 /// A humanoid limb's solver (RootMotion.FinalIK.IKSolverLimb), an IKSolverTrigonometric that bends the limb as a human
 /// limb bends. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKSolverLimb{.key = "IKSolverLimb", .name = "IKSolverLimb",
-                                                 .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK"};
+                                                 .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK",
+                                                 .base = &IKSolverTrigonometric};
 /// Which limb the solver bends, an AvatarIKGoal value, for the way the elbow or knee turns. Inferred: Final IK's own
 /// documentation.
 inline constexpr pm::sdk::EntryDesc IKSolverLimb_goal{.key = "IKSolverLimb.goal", .kind = pm::sdk::Kind::Field,
@@ -220,7 +225,7 @@ inline constexpr pm::sdk::EntryDesc IKSolverLimb_goal{.key = "IKSolverLimb.goal"
 /// Final IK's limb component (RootMotion.FinalIK.LimbIK): an arm or a leg reaching for a point. Add it to the model's
 /// GameObject. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc LimbIK{.key = "LimbIK", .name = "LimbIK", .assembly = "Assembly-CSharp-firstpass",
-                                           .ns = "RootMotion.FinalIK"};
+                                           .ns = "RootMotion.FinalIK", .base = &FinalIK_IK};
 /// Its solver, an IKSolverLimb the component makes. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc LimbIK_solver{.key = "LimbIK.solver", .kind = pm::sdk::Kind::Field,
                                                   .owner = "LimbIK", .name = "solver"};
@@ -228,7 +233,8 @@ inline constexpr pm::sdk::EntryDesc LimbIK_solver{.key = "LimbIK.solver", .kind 
 /// A look-at solver (RootMotion.FinalIK.IKSolverLookAt): spine bones, a head and eyes turned toward a point. Inferred:
 /// Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKSolverLookAt{.key = "IKSolverLookAt", .name = "IKSolverLookAt",
-                                                   .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK"};
+                                                   .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK",
+                                                   .base = &IKSolver};
 /// Sets the solver's bones (spine bones, the head, eyes, and the model's root) and starts it; true when the chain is
 /// valid. An empty array is none. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKSolverLookAt_SetChain{.key = "IKSolverLookAt.SetChain",
@@ -251,7 +257,8 @@ inline constexpr pm::sdk::EntryDesc IKSolverLookAt_clampWeight{.key = "IKSolverL
 /// Final IK's look-at component (RootMotion.FinalIK.LookAtIK). Add it to the model's GameObject. Inferred: Final IK's
 /// own documentation.
 inline constexpr pm::sdk::EntryDesc LookAtIK{.key = "LookAtIK", .name = "LookAtIK",
-                                             .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK"};
+                                             .assembly = "Assembly-CSharp-firstpass", .ns = "RootMotion.FinalIK",
+                                             .base = &FinalIK_IK};
 /// Its solver, an IKSolverLookAt the component makes. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc LookAtIK_solver{.key = "LookAtIK.solver", .kind = pm::sdk::Kind::Field,
                                                     .owner = "LookAtIK", .name = "solver"};

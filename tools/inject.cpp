@@ -325,6 +325,10 @@ Result map_native(HANDLE process, LPTHREAD_START_ROUTINE entry, const std::wstri
   return result;
 }
 
+/** The levels a mods.log line may name before its text, each core/log.h's level_word and a space, in Level's order
+ * (inject_test checks them against level_word). A host before log levels wrote none. */
+constexpr const char* kLogLevelWords[] = {"TRACE ", "DEBUG ", "INFO  ", "WARN  ", "ERROR ", "ALERT "};
+
 /** Interpret complete PID-tagged lines, requiring loading before activation. */
 Outcome parse_line(const std::string& line, DWORD pid, bool& loading) {
   std::string prefix = "[pid=" + std::to_string(pid) + " tid=";
@@ -335,6 +339,11 @@ Outcome parse_line(const std::string& line, DWORD pid, bool& loading) {
   if (parsed.ec != std::errc{} || end - parsed.ptr < 2 || parsed.ptr[0] != ']' || parsed.ptr[1] != ' ') return Outcome::ready;
   std::string message(parsed.ptr + 2, end);
   if (!message.empty() && message.back() == '\r') message.pop_back();
+  for (const char* level : kLogLevelWords)
+    if (message.starts_with(level)) {
+      message.erase(0, std::char_traits<char>::length(level));
+      break;
+    }
   if (message == "ModHost loading") loading = true;
   if (!loading) return Outcome::ready;
   if (message == "ModHost active") return Outcome::active;

@@ -8,6 +8,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -16,7 +17,8 @@ inline constexpr const char* Transform_int[] = {"int"};
 
 /// Unity's transform component (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Transform{.key = "Transform", .name = "Transform",
-                                              .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                              .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                              .base = &Component};
 
 /// Finds a child by its name, or a descendant by a path of names separated by '/', inactive ones
 /// included; null when there is none. Where several children share a name it takes the first that
@@ -101,7 +103,8 @@ inline constexpr pm::sdk::EntryDesc Transform_get_parent{.key = "Transform.get_p
 
 /// A UI object's transform (UnityEngine.CoreModule), a Transform. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc RectTransform{.key = "RectTransform", .name = "RectTransform",
-                                                  .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                                  .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                                  .base = &Transform};
 
 /// Its rectangle in its own space: x, y, width and height, four floats. Inferred: Unity's documented
 /// property getter.

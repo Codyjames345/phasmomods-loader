@@ -6,7 +6,9 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
 #include "Transform.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -16,7 +18,7 @@ namespace pm::map {
 inline constexpr pm::sdk::EntryDesc PhotonObjectInteract{.key = "PhotonObjectInteract",
                                                          .confidence = pm::sdk::Confidence::Decompiled,
                                                          .name = "PhotonObjectInteract", .assembly = "Assembly-CSharp",
-                                                         .ns = ""};
+                                                         .ns = "", .base = &MonoBehaviour};
 
 /// Its Rigidbody, set on things that can be carried: its one field of that type. Decompiled.
 inline constexpr pm::sdk::EntryDesc PhotonObjectInteract_body{.key = "PhotonObjectInteract.body",
@@ -139,7 +141,7 @@ inline constexpr pm::sdk::EntryDesc VRGrabbable_IsSelectableBy{
 
 /// A throwable thing (Assembly-CSharp, global namespace), the base class of Equipment. Decompiled.
 inline constexpr pm::sdk::EntryDesc Prop{.key = "Prop", .confidence = pm::sdk::Confidence::Decompiled, .name = "Prop",
-                                         .assembly = "Assembly-CSharp", .ns = ""};
+                                         .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 inline constexpr const char* Prop_PlayImpactSound_params[] = {"float", "AudioClip[]"};
 inline constexpr const char* ObjectPooler_SpawnFromPool_params[] = {"string", "Vector3", "Quaternion", "bool"};
@@ -151,7 +153,8 @@ inline constexpr pm::sdk::Fact Prop_PlayImpactSound_facts[] = {
 /// The game's pool of reusable objects (Assembly-CSharp, global namespace), such as the sound object a prop's
 /// impact plays through. Decompiled.
 inline constexpr pm::sdk::EntryDesc ObjectPooler{.key = "ObjectPooler", .confidence = pm::sdk::Confidence::Decompiled,
-                                                 .name = "ObjectPooler", .assembly = "Assembly-CSharp", .ns = ""};
+                                                 .name = "ObjectPooler", .assembly = "Assembly-CSharp", .ns = "",
+                                                 .base = &MonoBehaviourPun};
 
 /// Takes an object of the named pool and puts it at a position and rotation, as Prop.PlayImpactSound does for
 /// its sound object. Decompiled.
@@ -195,7 +198,7 @@ inline constexpr pm::sdk::EntryDesc Prop_TryThrow{.key = "Prop.TryThrow", .kind 
 /// tween on the water surface; each later Use pauses or resumes it (DOTween.TogglePause), and it ends
 /// when the basin is full. Decompiled.
 inline constexpr pm::sdk::EntryDesc Sink{.key = "Sink", .confidence = pm::sdk::Confidence::Decompiled, .name = "Sink",
-                                         .assembly = "Assembly-CSharp", .ns = ""};
+                                         .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// The water surface's Transform, which the fill tween moves. Inferred: from the field's name.
 inline constexpr pm::sdk::EntryDesc Sink_water{.key = "Sink.water", .kind = pm::sdk::Kind::Field, .owner = "Sink",
@@ -208,7 +211,7 @@ inline constexpr pm::sdk::EntryDesc Sink_used{.key = "Sink.used", .kind = pm::sd
 
 /// A pile of salt a player has laid (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc SaltSpot{.key = "SaltSpot", .name = "SaltSpot", .assembly = "Assembly-CSharp",
-                                             .ns = ""};
+                                             .ns = "", .base = &MonoBehaviourPun};
 
 /// The flattened pile, a GameObject shown once the ghost has stepped in the salt. Inferred: from its
 /// name.

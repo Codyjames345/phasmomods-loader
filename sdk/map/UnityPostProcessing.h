@@ -8,6 +8,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -20,7 +21,8 @@ inline constexpr const char* PostProcessing_Type_bool[] = {"Type", "bool"};
 /// URP's documented API.
 inline constexpr pm::sdk::EntryDesc UniversalAdditionalCameraData{
     .key = "UniversalAdditionalCameraData", .name = "UniversalAdditionalCameraData",
-    .assembly = "Unity.RenderPipelines.Universal.Runtime", .ns = "UnityEngine.Rendering.Universal"};
+    .assembly = "Unity.RenderPipelines.Universal.Runtime", .ns = "UnityEngine.Rendering.Universal",
+                                                                  .base = &MonoBehaviour};
 
 /// Whether the camera renders post-processing (the volumes' effects). Inferred: URP's documented API.
 inline constexpr pm::sdk::EntryDesc UniversalAdditionalCameraData_get_renderPostProcessing{
@@ -44,7 +46,8 @@ inline constexpr pm::sdk::EntryDesc UniversalAdditionalCameraData_set_volumeLaye
 
 /// Unity's ScriptableObject (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc ScriptableObject{.key = "ScriptableObject", .name = "ScriptableObject",
-                                                     .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                                     .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                                     .base = &UnityObject};
 
 /// A new instance of the ScriptableObject System.Type given. Static. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc ScriptableObject_CreateInstance{
@@ -55,7 +58,7 @@ inline constexpr pm::sdk::EntryDesc ScriptableObject_CreateInstance{
 /// layer mask holds its GameObject's layer. Inferred: the render pipeline's documented API.
 inline constexpr pm::sdk::EntryDesc Volume{.key = "Volume", .name = "Volume",
                                            .assembly = "Unity.RenderPipelines.Core.Runtime",
-                                           .ns = "UnityEngine.Rendering"};
+                                           .ns = "UnityEngine.Rendering", .base = &MonoBehaviour};
 
 /// Whether the volume applies everywhere rather than inside its colliders. Inferred: the pipeline's source.
 inline constexpr pm::sdk::EntryDesc Volume_m_IsGlobal{.key = "Volume.m_IsGlobal", .kind = pm::sdk::Kind::Field,
@@ -76,7 +79,7 @@ inline constexpr pm::sdk::EntryDesc Volume_sharedProfile{.key = "Volume.sharedPr
 /// A volume's effects, a ScriptableObject. Inferred: the pipeline's documented API.
 inline constexpr pm::sdk::EntryDesc VolumeProfile{.key = "VolumeProfile", .name = "VolumeProfile",
                                                   .assembly = "Unity.RenderPipelines.Core.Runtime",
-                                                  .ns = "UnityEngine.Rendering"};
+                                                  .ns = "UnityEngine.Rendering", .base = &ScriptableObject};
 
 /// Adds an effect of the System.Type given (a VolumeComponent) and returns it; with `overrides` every parameter is
 /// marked as set. The non-generic overload. Inferred: the pipeline's documented API.
@@ -159,7 +162,7 @@ inline constexpr pm::sdk::EntryDesc DepthOfFieldModeParameter_ctor{
 /// URP's vignette effect, a VolumeComponent. Inferred: URP's documented API.
 inline constexpr pm::sdk::EntryDesc Vignette{.key = "Vignette", .name = "Vignette",
                                              .assembly = "Unity.RenderPipelines.Universal.Runtime",
-                                             .ns = "UnityEngine.Rendering.Universal"};
+                                             .ns = "UnityEngine.Rendering.Universal", .base = &ScriptableObject};
 
 /// How dark the edges are, 0 to 1, a ClampedFloatParameter. Inferred: URP's documented API.
 inline constexpr pm::sdk::EntryDesc Vignette_intensity{.key = "Vignette.intensity", .kind = pm::sdk::Kind::Field,
@@ -172,7 +175,7 @@ inline constexpr pm::sdk::EntryDesc Vignette_smoothness{.key = "Vignette.smoothn
 /// URP's depth-of-field effect, a VolumeComponent. Inferred: URP's documented API.
 inline constexpr pm::sdk::EntryDesc DepthOfField{.key = "DepthOfField", .name = "DepthOfField",
                                                  .assembly = "Unity.RenderPipelines.Universal.Runtime",
-                                                 .ns = "UnityEngine.Rendering.Universal"};
+                                                 .ns = "UnityEngine.Rendering.Universal", .base = &ScriptableObject};
 
 /// The mode, a DepthOfFieldModeParameter. Inferred: URP's documented API.
 inline constexpr pm::sdk::EntryDesc DepthOfField_mode{.key = "DepthOfField.mode", .kind = pm::sdk::Kind::Field,

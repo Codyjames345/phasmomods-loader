@@ -9,6 +9,9 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
+#include "UnityObject.h"
+#include "UnityPostProcessing.h"
 
 namespace pm::map {
 
@@ -30,7 +33,7 @@ inline constexpr pm::sdk::Fact JournalController_allGhosts_facts[] = {
 inline constexpr pm::sdk::EntryDesc JournalController{.key = "JournalController",
                                                       .confidence = pm::sdk::Confidence::Decompiled,
                                                       .name = "JournalController", .assembly = "Assembly-CSharp",
-                                                      .ns = ""};
+                                                      .ns = "", .base = &MonoBehaviour};
 
 /// Wakes the journal: builds its ghost lists (RebuildGhosts), then has the guess buttons' sync
 /// controller read the buttons (Initialise). Decompiled.
@@ -214,10 +217,25 @@ inline constexpr pm::sdk::EntryDesc JournalTab_max{.key = "JournalTab.max", .kin
                                                    .confidence = pm::sdk::Confidence::Decompiled,
                                                    .owner = "JournalTab", .name = "max", .type = "float"};
 
+/// A journal button with three states (Assembly-CSharp, global namespace), a MonoBehaviour: the base of
+/// the shared buttons. Decompiled.
+inline constexpr pm::sdk::EntryDesc ThreeStateButton{.key = "ThreeStateButton",
+                                                     .confidence = pm::sdk::Confidence::Decompiled,
+                                                     .name = "ThreeStateButton", .assembly = "Assembly-CSharp",
+                                                     .ns = "", .base = &MonoBehaviour};
+
+/// A journal button whose state the players share (Assembly-CSharp, global namespace). Decompiled.
+inline constexpr pm::sdk::EntryDesc NetworkThreeStateButton{.key = "NetworkThreeStateButton",
+                                                            .confidence = pm::sdk::Confidence::Decompiled,
+                                                            .name = "NetworkThreeStateButton",
+                                                            .assembly = "Assembly-CSharp", .ns = "",
+                                                            .base = &ThreeStateButton};
+
 /// A guess button on the evidence spread's ghost page (Assembly-CSharp, global namespace), a
 /// NetworkThreeStateButton. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostButton{.key = "GhostButton", .confidence = pm::sdk::Confidence::Decompiled,
-                                                .name = "GhostButton", .assembly = "Assembly-CSharp", .ns = ""};
+                                                .name = "GhostButton", .assembly = "Assembly-CSharp", .ns = "",
+                                                .base = &NetworkThreeStateButton};
 
 /// The ghost type the button guesses: the class's one GhostType field. RebuildGhosts pairs it with the
 /// ghost of that type, and the sync controller sends it. Decompiled.
@@ -226,25 +244,12 @@ inline constexpr pm::sdk::EntryDesc GhostButton_type{.key = "GhostButton.type", 
                                                      .owner = "GhostButton",
                                                      .type = "@GhostType"};
 
-/// A journal button with three states (Assembly-CSharp, global namespace), a MonoBehaviour: the base of
-/// the shared buttons. Decompiled.
-inline constexpr pm::sdk::EntryDesc ThreeStateButton{.key = "ThreeStateButton",
-                                                     .confidence = pm::sdk::Confidence::Decompiled,
-                                                     .name = "ThreeStateButton", .assembly = "Assembly-CSharp",
-                                                     .ns = ""};
-
 /// The button's own text (a TextMeshProUGUI): on an evidence button the evidence's name, whose
 /// TextLocaliserUI holds the key the ghost pages show for that evidence too. Decompiled.
 inline constexpr pm::sdk::EntryDesc ThreeStateButton_textLabel{.key = "ThreeStateButton.textLabel",
                                                                .kind = pm::sdk::Kind::Field,
                                                                .confidence = pm::sdk::Confidence::Decompiled,
                                                                .owner = "ThreeStateButton", .name = "textLabel"};
-
-/// A journal button whose state the players share (Assembly-CSharp, global namespace). Decompiled.
-inline constexpr pm::sdk::EntryDesc NetworkThreeStateButton{.key = "NetworkThreeStateButton",
-                                                            .confidence = pm::sdk::Confidence::Decompiled,
-                                                            .name = "NetworkThreeStateButton",
-                                                            .assembly = "Assembly-CSharp", .ns = ""};
 
 /// What the button raises when the player changes it (the event OnUserStateChanged's delegate, an
 /// Action<NetworkThreeStateButton>): the class's one field of that type. The sync controller's
@@ -261,7 +266,8 @@ inline constexpr pm::sdk::EntryDesc NetworkThreeStateButton_userStateChanged{
 inline constexpr pm::sdk::EntryDesc JournalGhostSyncController{.key = "JournalGhostSyncController",
                                                                .confidence = pm::sdk::Confidence::Decompiled,
                                                                .name = "JournalGhostSyncController",
-                                                               .assembly = "Assembly-CSharp", .ns = ""};
+                                                               .assembly = "Assembly-CSharp", .ns = "",
+                                                               .base = &MonoBehaviourPun};
 
 /// The controller that sends a player's evidence marks to the others and shows theirs (Assembly-CSharp,
 /// global namespace), on the evidence spread's evidence page: the guess sync's generic base for
@@ -271,13 +277,15 @@ inline constexpr pm::sdk::EntryDesc JournalGhostSyncController{.key = "JournalGh
 inline constexpr pm::sdk::EntryDesc JournalEvidenceSyncController{.key = "JournalEvidenceSyncController",
                                                                   .confidence = pm::sdk::Confidence::Decompiled,
                                                                   .name = "JournalEvidenceSyncController",
-                                                                  .assembly = "Assembly-CSharp", .ns = ""};
+                                                                  .assembly = "Assembly-CSharp", .ns = "",
+                                                                  .base = &MonoBehaviourPun};
 
 /// An evidence button on the evidence spread's evidence page (Assembly-CSharp, global namespace), a
 /// NetworkThreeStateButton: a row with the evidence's name and, under it, a line saying how it is
 /// found, each a text with a TextLocaliserUI. Decompiled.
 inline constexpr pm::sdk::EntryDesc EvidenceButton{.key = "EvidenceButton", .confidence = pm::sdk::Confidence::Decompiled,
-                                                   .name = "EvidenceButton", .assembly = "Assembly-CSharp", .ns = ""};
+                                                   .name = "EvidenceButton", .assembly = "Assembly-CSharp", .ns = "",
+                                                   .base = &NetworkThreeStateButton};
 
 /// The evidence the button marks: the class's one EvidenceType field. Its state change hands it to the
 /// journal's evidence lists, and the sync controller sends it. Decompiled.
@@ -307,7 +315,7 @@ inline constexpr pm::sdk::EntryDesc Ghost{.key = "Ghost", .confidence = pm::sdk:
 inline constexpr pm::sdk::EntryDesc TextLocaliserUI{.key = "TextLocaliserUI",
                                                     .confidence = pm::sdk::Confidence::Decompiled,
                                                     .name = "TextLocaliserUI", .assembly = "Assembly-CSharp",
-                                                    .ns = ""};
+                                                    .ns = "", .base = &MonoBehaviour};
 
 /// The localisation key it writes, a string. Decompiled.
 inline constexpr pm::sdk::EntryDesc TextLocaliserUI_key{.key = "TextLocaliserUI.key", .kind = pm::sdk::Kind::Field,
@@ -351,7 +359,8 @@ inline constexpr pm::sdk::EntryDesc JournalController_open{.key = "JournalContro
 
 /// The journal's media page (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc Journal_PhotoPage{.key = "Journal_PhotoPage", .name = "Journal_PhotoPage",
-                                                      .assembly = "Assembly-CSharp", .ns = ""};
+                                                      .assembly = "Assembly-CSharp", .ns = "",
+                                                      .base = &MonoBehaviourPun};
 
 /// The journal's media page: its one Journal_PhotoPage field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc JournalController_photoPage{.key = "JournalController.photoPage",
@@ -376,7 +385,7 @@ inline constexpr pm::sdk::EntryDesc Journal_PhotoPage_sounds{.key = "Journal_Pho
 
 /// One media slot of the page (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc JournalMedia{.key = "JournalMedia", .name = "JournalMedia",
-                                                 .assembly = "Assembly-CSharp", .ns = ""};
+                                                 .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// A piece of media (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc Media{.key = "Media", .name = "Media", .assembly = "Assembly-CSharp", .ns = ""};
@@ -413,7 +422,7 @@ inline constexpr pm::sdk::EntryDesc Media_value{.key = "Media.value", .kind = pm
 
 /// What a kind of media is (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc MediaValues{.key = "MediaValues", .name = "MediaValues", .assembly = "Assembly-CSharp",
-                                                .ns = ""};
+                                                .ns = "", .base = &ScriptableObject};
 
 /// The media's subject, a MediaSubject number. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc MediaValues_evidenceType{.key = "MediaValues.evidenceType",
@@ -423,7 +432,7 @@ inline constexpr pm::sdk::EntryDesc MediaValues_evidenceType{.key = "MediaValues
 /// A thing in the world a photo, video or sound can capture (Assembly-CSharp, global namespace).
 /// Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc Evidence{.key = "Evidence", .name = "Evidence", .assembly = "Assembly-CSharp",
-                                             .ns = ""};
+                                             .ns = "", .base = &MonoBehaviourPun};
 
 inline constexpr const char* MediaSubject_values[] = {"emfSpot", "ouijaBoard", "fingerprint", "emf5"};
 
@@ -631,7 +640,8 @@ inline constexpr pm::sdk::EntryDesc JournalController_ShowCanvas{
 inline constexpr pm::sdk::EntryDesc JournalRigController{.key = "JournalRigController",
                                                          .confidence = pm::sdk::Confidence::Decompiled,
                                                          .name = "JournalRigController",
-                                                         .assembly = "Assembly-CSharp", .ns = ""};
+                                                         .assembly = "Assembly-CSharp", .ns = "",
+                                                         .base = &MonoBehaviourPun};
 
 /// The book's Animator: the class's one Animator field. OpenCloseJournalNetworked sets its open bool.
 /// Decompiled.
@@ -723,7 +733,7 @@ inline constexpr pm::sdk::EntryDesc JournalRigController_HideJournal{
 /// The pause menu's list of the room's players (Assembly-CSharp, global namespace). Inferred: from the
 /// class dump.
 inline constexpr pm::sdk::EntryDesc PlayersList{.key = "PlayersList", .name = "PlayersList",
-                                                .assembly = "Assembly-CSharp", .ns = ""};
+                                                .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// Whether the list is this client's own, which it must be to fill: the class's one bool. Inferred:
 /// from the class dump.

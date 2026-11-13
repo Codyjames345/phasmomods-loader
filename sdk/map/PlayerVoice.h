@@ -7,12 +7,14 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
 /// One player's voice chat (Assembly-CSharp, global namespace), a MonoBehaviour. Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerVoice{.key = "PlayerVoice", .confidence = pm::sdk::Confidence::Decompiled,
-                                                .name = "PlayerVoice", .assembly = "Assembly-CSharp", .ns = ""};
+                                                .name = "PlayerVoice", .assembly = "Assembly-CSharp", .ns = "",
+                                                .base = &MonoBehaviour};
 
 /// The voice's player, the game's Player. Inferred: from the field's name.
 inline constexpr pm::sdk::EntryDesc PlayerVoice_player{.key = "PlayerVoice.player", .kind = pm::sdk::Kind::Field,
@@ -59,7 +61,7 @@ inline constexpr pm::sdk::EntryDesc PlayerVoice_globalTap{.key = "PlayerVoice.gl
 /// Unity.Services.Vivox.AudioTaps), on an object with an AudioSource. Inferred: Vivox's documented API.
 inline constexpr pm::sdk::EntryDesc VivoxParticipantTap{.key = "VivoxParticipantTap", .name = "VivoxParticipantTap",
                                                         .assembly = "Unity.Services.Vivox",
-                                                        .ns = "Unity.Services.Vivox.AudioTaps"};
+                                                        .ns = "Unity.Services.Vivox.AudioTaps", .base = &MonoBehaviour};
 
 inline constexpr const char* VivoxParticipantTap_DoAudioFilterRead_params[] = {"int", "Single[]", "int", "int", "int"};
 
@@ -100,7 +102,8 @@ inline constexpr pm::sdk::EntryDesc VivoxServiceInternal_UnmuteInputDevice{
 /// How loud one player's voice plays here (Assembly-CSharp, global namespace), a MonoBehaviour on that
 /// player. Its volume is a product of several volume multipliers. Decompiled.
 inline constexpr pm::sdk::EntryDesc VoiceVolume{.key = "VoiceVolume", .confidence = pm::sdk::Confidence::Decompiled,
-                                                .name = "VoiceVolume", .assembly = "Assembly-CSharp", .ns = ""};
+                                                .name = "VoiceVolume", .assembly = "Assembly-CSharp", .ns = "",
+                                                .base = &MonoBehaviour};
 
 /// The Player whose voice it is. Decompiled.
 inline constexpr pm::sdk::EntryDesc VoiceVolume_player{.key = "VoiceVolume.player", .kind = pm::sdk::Kind::Field,

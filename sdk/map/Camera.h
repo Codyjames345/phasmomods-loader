@@ -5,6 +5,7 @@
 #include "entry.h"
 #include "Transform.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -14,7 +15,7 @@ inline constexpr const char* Camera_Vector3[] = {"Vector3"};
 
 /// Unity's camera component (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Camera{.key = "Camera", .name = "Camera", .assembly = "UnityEngine.CoreModule",
-                                           .ns = "UnityEngine"};
+                                           .ns = "UnityEngine", .base = &Behaviour};
 
 /// Where a world point lies on the screen, for the camera's own eye: x and y in pixels from the bottom
 /// left, z in metres in front of the camera (negative behind it). The overload without an eye. Inferred:

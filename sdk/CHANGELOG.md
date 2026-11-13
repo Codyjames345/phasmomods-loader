@@ -6,9 +6,47 @@ a host runs a mod built for the same major version and a minor no newer than its
 major version `PmHostApi` and every published struct only grow at the end, and every content struct begins with its
 `size`, so a mod built for an older minor keeps loading.
 
+## [2.7] - Unreleased
+
+### Added
+
+- **Log levels.** `PmHostApi::log_level(level, line)` at the end of the table writes a line at a `PmLogLevel`, trace,
+  debug, info, warn, error or alert, as SMAPI's `LogLevel`; `log` stays info. `PM_LOG_AT(level, ...)` (`core/log.h`)
+  reaches it, and on a host without it writes the level's word into the line instead.
+- **A data folder per mod.** `pm::mod::data_folder()` (`core/mod_glue.h`) gives `%LOCALAPPDATA%\PhasmoMods\data\<mod
+  id>\`, made on the first ask, as SMAPI's `DirectoryPath` gives a mod a folder of its own. The first ask moves in the
+  files a mod with a `<author>.<mod>` id kept in `%LOCALAPPDATA%\PhasmoMods\<mod id>\` before, once, never deleting a
+  file it could not copy; what the new folder already had stays aside in `<mod id>.moved` (`core/data_folder.h`).
+- **The frame's time.** `Time.get_deltaTime`, `Time.get_unscaledDeltaTime`, `Time.get_time` and
+  `Time.get_unscaledTime` (Unity's documented getters), and `pm::api::frame_time()` (`sdk/api/frame_time.h`), which
+  reads all four. The host contract does not change for it.
+
+### Changed
+
+- **`mods.log` shows each line's level** after the process and thread: `[pid=4 tid=8] INFO  ModHost loading`. The
+  launcher reads lines with a level and without one.
+- **The Dev Menu and Emotes keep their files in their data folders**, moved there from `%LOCALAPPDATA%\PhasmoMods\<mod
+  id>\` on their first start.
+- **Ghost Tells' timers run on the game's frame time** (`Time.deltaTime`, at most a quarter of a second a frame)
+  instead of their own clock, so they follow the time scale. They require `Time.get_deltaTime` alone.
+
+## [2.6] - Unreleased
+
+### Added
+
+- **Content packs.** `PmHostApi::content_packs` and `content_pack_failed`, wrapped by `sdk/api/packs.h` (README,
+  "Content packs").
+
 ## [2.5] - Unreleased
 
 ### Added
+
+- **Typed handles, the foundation.** `pm::api::Ref<D>` (`sdk/api/ref.h`) is a handle to an object of the map's type
+  `D`, one pointer like the `void*` it will replace; it converts by itself to the handle of each base type the map
+  records and to `pm::api::Object`, a handle of an unmapped type, and `pm::api::as<D>(x)` (`game_api.h`) converts down
+  after asking the runtime. `pm::api::HeldRef<D>` (`held.h`) keeps one across frames as `Held` does. Each Type entry
+  gains `EntryDesc::base`, its nearest mapped base class, which `gamecheck` proves (`BASE` lines). No wrapper takes or
+  gives a handle yet, so nothing that compiled changes; Steamworks' `CSteamID` and Win32's `HWND` are the precedent.
 
 - **Every installed mod, read-only.** `PmHostApi::mod_entry(index, out)` gives the installed mod at an index (id, name,
   version, author, whether it runs, whether it is developer-only or records voice, and why it is off), filling a

@@ -6,6 +6,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -79,7 +80,8 @@ inline constexpr pm::sdk::EntryDesc PhotonPlayer_get_ActorNumber{
 /// The base class of the networked MonoBehaviours (PhotonUnityNetworking, namespace Photon.Pun); every
 /// FireSource is one. Inferred: Photon PUN's documented API.
 inline constexpr pm::sdk::EntryDesc MonoBehaviourPun{.key = "MonoBehaviourPun", .name = "MonoBehaviourPun",
-                                                     .assembly = "PhotonUnityNetworking", .ns = "Photon.Pun"};
+                                                     .assembly = "PhotonUnityNetworking", .ns = "Photon.Pun",
+                                                     .base = &MonoBehaviour};
 
 /// The PhotonView of the behaviour's GameObject: FireSource.BlowOutFire sends its RPC through it.
 /// Decompiled.
@@ -90,7 +92,8 @@ inline constexpr pm::sdk::EntryDesc MonoBehaviourPun_get_photonView{
 /// The network identity of a GameObject (PhotonUnityNetworking, namespace Photon.Pun). Inferred:
 /// Photon PUN's documented API.
 inline constexpr pm::sdk::EntryDesc PhotonView{.key = "PhotonView", .name = "PhotonView",
-                                               .assembly = "PhotonUnityNetworking", .ns = "Photon.Pun"};
+                                               .assembly = "PhotonUnityNetworking", .ns = "Photon.Pun",
+                                               .base = &MonoBehaviour};
 
 /// The view's id, the same number on every client of the room. Inferred: Photon PUN's documented
 /// property getter.
@@ -324,7 +327,8 @@ inline constexpr pm::sdk::EntryDesc PhotonRoom_set_IsOpen{
 /// PUN's per-frame driver (PhotonUnityNetworking, namespace Photon.Pun), a MonoBehaviour that lives for
 /// the whole process. Inferred: Photon PUN's documented API.
 inline constexpr pm::sdk::EntryDesc PhotonHandler{.key = "PhotonHandler", .name = "PhotonHandler",
-                                                  .assembly = "PhotonUnityNetworking", .ns = "Photon.Pun"};
+                                                  .assembly = "PhotonUnityNetworking", .ns = "Photon.Pun",
+                                                  .base = &MonoBehaviour};
 
 /// PUN's LateUpdate, run once a frame on the main thread in every scene, the menus included. The host hooks
 /// it as its frame boundary; a mod is ticked from there and needs no hook of its own. Inferred: Unity's

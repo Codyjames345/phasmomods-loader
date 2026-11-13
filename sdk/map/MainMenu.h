@@ -6,6 +6,7 @@
 // their types. The menu's taped buttons are Doozy's (sdk/map/Doozy.h). Notes read from decompiled code are from build
 // 25811160.
 
+#include "UnityObject.h"
 #include "UnityRendering.h"
 #include "entry.h"
 #include "game_api.h"
@@ -14,7 +15,7 @@ namespace pm::map {
 
 /// The main menu (Assembly-CSharp, global namespace), a MonoBehaviour on the menu's board. Decompiled.
 inline constexpr pm::sdk::EntryDesc ConnectToServer{.key = "ConnectToServer", .name = "ConnectToServer",
-                                                    .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// The main menu in this scene, or null. Static. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc ConnectToServer_get_Instance{
@@ -49,7 +50,7 @@ inline constexpr pm::sdk::EntryDesc MenuObjects_enabled{.key = "MenuObjects.enab
 
 /// The game's error popup (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc ErrorManager{.key = "ErrorManager", .name = "ErrorManager",
-                                                 .assembly = "Assembly-CSharp", .ns = ""};
+                                                 .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// The popup it shows and hides, a GameObject: its one GameObject field. Inferred: from the class dump and the scene.
 inline constexpr pm::sdk::EntryDesc ErrorManager_errorParent{.key = "ErrorManager.errorParent",
@@ -69,7 +70,7 @@ inline constexpr pm::sdk::EntryDesc ErrorManager_NextMessageButton{
 
 /// A board the camera can look at (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc CameraFocusUI{.key = "CameraFocusUI", .name = "CameraFocusUI",
-                                                  .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// Whether the camera is on this board now. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc CameraFocusUI_get_isFocused{.key = "CameraFocusUI.get_isFocused",

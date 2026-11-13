@@ -100,6 +100,19 @@ void no_entry_spells_an_object_array_the_dumps_way() {
   }
 }
 
+// A base is what typed handles convert to (sdk/api/ref.h): only a Type entry has one, and it is another Type entry of the
+// map itself, which the offline check proves an ancestor (sdk/offline/gamecheck.cpp).
+void every_base_is_a_mapped_type() {
+  for (const pm::sdk::EntryDesc* e : pm::map::kAllEntries) {
+    if (!e->base) continue;
+    const bool listed = std::find(std::begin(pm::map::kAllEntries), std::end(pm::map::kAllEntries), e->base) !=
+                        std::end(pm::map::kAllEntries);
+    const bool types = e->kind == pm::sdk::Kind::Type && e->base->kind == pm::sdk::Kind::Type && e->base != e;
+    if (!listed || !types) std::printf("a base that is not another mapped type: %s\n", e->key);
+    CHECK(listed && types);
+  }
+}
+
 void every_entry_has_a_note() {
   for (const Declared& d : declared()) {
     const bool noted = d.above.starts_with("///");
@@ -164,6 +177,8 @@ void map_digest_follows_what_the_resolver_reads() {
   CHECK(changed({.key = "K", .owner = "O", .params = kOne, .facts = kFact, .scene = "S"}));
   CHECK(changed({.key = "K", .owner = "O", .params = kOne, .facts = kFact, .access = pm::sdk::Visibility::Public}));
   CHECK(changed({.key = "K", .owner = "O", .params = kOne, .facts = kFact, .typeArgs = kOne}));
+  static constexpr EntryDesc kBase{.key = "B"};
+  CHECK(changed({.key = "K", .owner = "O", .params = kOne, .facts = kFact, .base = &kBase}));
   // Moving a character between two fields is a change too.
   CHECK(digest({.key = "K", .owner = "ab", .name = "c"}) != digest({.key = "K", .owner = "a", .name = "bc"}));
   CHECK(pm::sdk::map_digest(pm::map::kAllEntries) == pm::sdk::map_digest(pm::map::kAllEntries));
@@ -173,6 +188,7 @@ int main() {
   map_digest_follows_what_the_resolver_reads();
   every_entry_listed();
   keys_unique();
+  every_base_is_a_mapped_type();
   every_entry_has_a_note();
   no_entry_spells_an_object_array_the_dumps_way();
   no_anticheat_entries();

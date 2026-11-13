@@ -120,6 +120,7 @@ class Builder {
       if (name.empty()) return;
       if (ns && std::string_view(ns) == "System" && (name == "Object" || name == "ValueType" || name == "Enum")) return;
       t.bases.push_back(name);
+      t.baseArities.push_back(arity);
     };
     add(api_.class_get_parent(t.runtime));
     void* iter = nullptr;

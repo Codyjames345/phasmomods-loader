@@ -9,12 +9,15 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
 /// One footstep of a ghost (Assembly-CSharp, global namespace), a MonoBehaviour. Decompiled.
 inline constexpr pm::sdk::EntryDesc Footstep{.key = "Footstep", .confidence = pm::sdk::Confidence::Decompiled,
-                                             .name = "Footstep", .assembly = "Assembly-CSharp", .ns = ""};
+                                             .name = "Footstep", .assembly = "Assembly-CSharp", .ns = "",
+                                             .base = &MonoBehaviour};
 
 /// Unity's Awake for the footstep: it saves its Noise's AudioSource's max distance as the
 /// footstep's reach. Decompiled.
@@ -67,7 +70,8 @@ inline constexpr pm::sdk::EntryDesc Footstep_Play{.key = "Footstep.Play", .kind 
 /// detect (Assembly-CSharp, global namespace). A player's footstep is the subclass PlayerNoise, the
 /// only kind the ghost's hearing takes. Decompiled.
 inline constexpr pm::sdk::EntryDesc Noise{.key = "Noise", .confidence = pm::sdk::Confidence::Decompiled,
-                                          .name = "Noise", .assembly = "Assembly-CSharp", .ns = ""};
+                                          .name = "Noise", .assembly = "Assembly-CSharp", .ns = "",
+                                          .base = &MonoBehaviour};
 
 inline constexpr const char* Noise_float[] = {"float"};
 inline constexpr const char* Noise_PlaySound_params[] = {"AudioClip", "float", "bool", "bool"};
@@ -141,7 +145,7 @@ inline constexpr pm::sdk::EntryDesc Noise_SetMaxDistance{.key = "Noise.SetMaxDis
 inline constexpr pm::sdk::EntryDesc FootstepController{.key = "FootstepController",
                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                        .name = "FootstepController", .assembly = "Assembly-CSharp",
-                                                       .ns = ""};
+                                                       .ns = "", .base = &MonoBehaviourPun};
 /// The player's PlayerNoise its steps play through (FootstepController.AttemptPlaySound calls Noise.PlaySound on it, at a
 /// volume set for each surface in its code). Its AudioSource (Noise.source) holds how a player's step falls off with
 /// distance: a Custom rolloff curve, full to a fifth of its 15 m reach and silent at it (read from the asset files).

@@ -6,6 +6,10 @@
 // settings, and switches the investigator's actions off while the player steers the ghost.
 
 #include "Transform.h"
+#include "UnityEvents.h"
+#include "UnityObject.h"
+#include "UnityPostProcessing.h"
+#include "UnityUI.h"
 #include "entry.h"
 #include "game_api.h"
 
@@ -106,7 +110,8 @@ inline constexpr pm::sdk::EntryDesc InputActionMap_m_Bindings{.key = "InputActio
 /// A set of action maps (Unity.InputSystem), a ScriptableObject. Inferred: the Input System's documented
 /// API.
 inline constexpr pm::sdk::EntryDesc InputActionAsset{.key = "InputActionAsset", .name = "InputActionAsset",
-                                                     .assembly = "Unity.InputSystem", .ns = "UnityEngine.InputSystem"};
+                                                     .assembly = "Unity.InputSystem", .ns = "UnityEngine.InputSystem",
+                                                     .base = &ScriptableObject};
 
 /// The asset's action maps, an InputActionMap[]. Inferred: the Input System's own field.
 inline constexpr pm::sdk::EntryDesc InputActionAsset_m_ActionMaps{.key = "InputActionAsset.m_ActionMaps",
@@ -164,9 +169,14 @@ inline constexpr pm::sdk::EntryDesc InputControl_Vector2_ReadValue{
     .key = "InputControl<Vector2>.ReadValue", .kind = pm::sdk::Kind::Inflated, .owner = "InputControl`1",
     .name = "ReadValue", .type = "TValue", .typeArgs = InputControl_Vector2_ReadValue_args};
 
+/// A pointer device (Unity.InputSystem), the mouse's base class. Inferred: the Input System's documented
+/// API.
+inline constexpr pm::sdk::EntryDesc Pointer{.key = "Pointer", .name = "Pointer", .assembly = "Unity.InputSystem",
+                                            .ns = "UnityEngine.InputSystem"};
+
 /// The mouse (Unity.InputSystem). Inferred: the Input System's documented API.
 inline constexpr pm::sdk::EntryDesc Mouse{.key = "Mouse", .name = "Mouse", .assembly = "Unity.InputSystem",
-                                          .ns = "UnityEngine.InputSystem"};
+                                          .ns = "UnityEngine.InputSystem", .base = &Pointer};
 
 /// The mouse in use, or null when there is none. Static. Inferred: the Input System's documented property
 /// getter.
@@ -182,11 +192,6 @@ inline constexpr pm::sdk::EntryDesc Mouse_get_leftButton{.key = "Mouse.get_leftB
 /// InputControl<Vector2>.ReadValue: this frame's scrolling. Inferred: the Input System's documented property getter.
 inline constexpr pm::sdk::EntryDesc Mouse_get_scroll{.key = "Mouse.get_scroll", .kind = pm::sdk::Kind::Method,
                                                      .owner = "Mouse", .name = "get_scroll"};
-
-/// A pointer device (Unity.InputSystem), the mouse's base class. Inferred: the Input System's documented
-/// API.
-inline constexpr pm::sdk::EntryDesc Pointer{.key = "Pointer", .name = "Pointer", .assembly = "Unity.InputSystem",
-                                            .ns = "UnityEngine.InputSystem"};
 
 /// The pointer's movement since the last frame, a Vector2 control (a DeltaControl), in pixels. Inferred:
 /// the Input System's documented property getter.
@@ -301,7 +306,8 @@ inline constexpr pm::sdk::EntryDesc InputActionRebindingExtensions_RemoveAllBind
 /// (PCControls.LoadControlOverrides), so a change not applied is dropped. Decompiled.
 inline constexpr pm::sdk::EntryDesc ControlsManager{.key = "ControlsManager",
                                                     .confidence = pm::sdk::Confidence::Decompiled,
-                                                    .name = "ControlsManager", .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .name = "ControlsManager", .assembly = "Assembly-CSharp", .ns = "",
+                                                    .base = &MonoBehaviour};
 
 /// The page's Apply: stores the game's binding overrides. A mod hooks it to store its own. Decompiled.
 inline constexpr pm::sdk::EntryDesc ControlsManager_ApplyButton{
@@ -325,7 +331,8 @@ inline constexpr const char* Input_float[] = {"float"};
 /// The game's slider (Assembly-CSharp, UnityEngine.UI): Unity's Slider as the game rewrote it for VR, a Selectable.
 /// The audio page's master volume is one. Decompiled.
 inline constexpr pm::sdk::EntryDesc XRSlider{.key = "XRSlider", .confidence = pm::sdk::Confidence::Decompiled,
-                                             .name = "XRSlider", .assembly = "Assembly-CSharp", .ns = "UnityEngine.UI"};
+                                             .name = "XRSlider", .assembly = "Assembly-CSharp", .ns = "UnityEngine.UI",
+                                             .base = &Selectable};
 /// Its value. Read from the class dump.
 inline constexpr pm::sdk::EntryDesc XRSlider_get_value{.key = "XRSlider.get_value", .kind = pm::sdk::Kind::Method,
                                                        .confidence = pm::sdk::Confidence::Decompiled,
@@ -352,7 +359,7 @@ inline constexpr pm::sdk::EntryDesc XRSlider_m_OnValueChanged{
 /// The change event's type (a UnityEvent<float>), nested in XRSlider. Read from the class dump.
 inline constexpr pm::sdk::EntryDesc SliderEvent{.key = "SliderEvent", .confidence = pm::sdk::Confidence::Decompiled,
                                                 .owner = "XRSlider", .name = "SliderEvent",
-                                                .assembly = "Assembly-CSharp"};
+                                                .assembly = "Assembly-CSharp", .base = &UnityEventBase};
 /// The event's constructor: no listeners. Read from the class dump.
 inline constexpr pm::sdk::EntryDesc SliderEvent_ctor{.key = "SliderEvent.ctor", .kind = pm::sdk::Kind::Method,
                                                      .confidence = pm::sdk::Confidence::Decompiled,
@@ -364,7 +371,7 @@ inline constexpr pm::sdk::EntryDesc SliderEvent_ctor{.key = "SliderEvent.ctor", 
 inline constexpr pm::sdk::EntryDesc GameMyAudioManager{.key = "GameMyAudioManager",
                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                        .name = "GameMyAudioManager", .assembly = "Assembly-CSharp",
-                                                       .ns = ""};
+                                                       .ns = "", .base = &MonoBehaviour};
 /// The master volume's slider, an XRSlider in the page's list (its row: a title, a number and the slider). Decompiled.
 inline constexpr pm::sdk::EntryDesc GameMyAudioManager_masterVolumeSlider{
     .key = "GameMyAudioManager.masterVolumeSlider", .kind = pm::sdk::Kind::Field,
@@ -385,7 +392,7 @@ inline constexpr pm::sdk::EntryDesc GameMyAudioManager_OnDisable{
 /// A reference to an action, as a ScriptableObject a component can hold. Inferred: the Input System's documented API.
 inline constexpr pm::sdk::EntryDesc InputActionReference{.key = "InputActionReference", .name = "InputActionReference",
                                                         .assembly = "Unity.InputSystem",
-                                                        .ns = "UnityEngine.InputSystem"};
+                                                        .ns = "UnityEngine.InputSystem", .base = &ScriptableObject};
 
 inline constexpr const char* InputActionReference_InputAction[] = {"InputAction"};
 
@@ -408,7 +415,8 @@ inline constexpr pm::sdk::EntryDesc InputActionReference_get_action{.key = "Inpu
 /// Xbox set, on its Image in full colour; for keyboard and mouse it sets that Image's colour to clear, so no glyph
 /// shows. The game has no glyph for the mouse or keyboard. Decompiled.
 inline constexpr pm::sdk::EntryDesc GamepadButton{.key = "GamepadButton", .confidence = pm::sdk::Confidence::Decompiled,
-                                                  .name = "GamepadButton", .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .name = "GamepadButton", .assembly = "Assembly-CSharp", .ns = "",
+                                                  .base = &MonoBehaviour};
 
 /// The action whose glyph it shows: GamepadButton's one InputActionReference field. Decompiled.
 inline constexpr pm::sdk::EntryDesc GamepadButton_action{.key = "GamepadButton.action", .kind = pm::sdk::Kind::Field,
@@ -604,7 +612,8 @@ inline constexpr pm::sdk::EntryDesc GamepadButton_CheckInputDevice{
 /// The Input System's component for one player's input (Unity.InputSystem). Inferred: the Input System's documented
 /// API.
 inline constexpr pm::sdk::EntryDesc PlayerInput{.key = "PlayerInput", .name = "PlayerInput",
-                                                .assembly = "Unity.InputSystem", .ns = "UnityEngine.InputSystem"};
+                                                .assembly = "Unity.InputSystem", .ns = "UnityEngine.InputSystem",
+                                                .base = &MonoBehaviour};
 
 inline constexpr const char* InputDevices_PlayerInput[] = {"PlayerInput"};
 
@@ -632,7 +641,7 @@ inline constexpr pm::sdk::EntryDesc InputDevices_UsesKeyboard{
 /// an interactive rebind of the action it references, and it shows the binding's current key. Its fields keep their
 /// real names. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc RebindActionUI{.key = "RebindActionUI", .name = "RebindActionUI",
-                                                  .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// The row's action, an InputActionReference. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc RebindActionUI_m_Action{.key = "RebindActionUI.m_Action",

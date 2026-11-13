@@ -8,6 +8,9 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
+#include "UnityObject.h"
+#include "UnityPostProcessing.h"
 
 namespace pm::map {
 
@@ -37,7 +40,8 @@ inline constexpr pm::sdk::Fact Door_otherDoor_facts[] = {
 
 /// A door (Assembly-CSharp, global namespace), an abstract MonoBehaviour. Decompiled.
 inline constexpr pm::sdk::EntryDesc Door{.key = "Door", .confidence = pm::sdk::Confidence::Decompiled,
-                                         .name = "Door", .assembly = "Assembly-CSharp", .ns = ""};
+                                         .name = "Door", .assembly = "Assembly-CSharp", .ns = "",
+                                         .base = &MonoBehaviour};
 
 /// The door leaf's Rigidbody: Door's one field of that type. HingeDoor.Awake takes the hinge's ConfigurableJoint
 /// from it. Decompiled.
@@ -363,7 +367,8 @@ inline constexpr pm::sdk::EntryDesc DoorKind_PermanentLock{.key = "DoorKind.Perm
 
 /// A key's description (Assembly-CSharp, global namespace), a journal collectable's info. Decompiled.
 inline constexpr pm::sdk::EntryDesc KeyInfo{.key = "KeyInfo", .confidence = pm::sdk::Confidence::Decompiled,
-                                            .name = "KeyInfo", .assembly = "Assembly-CSharp", .ns = ""};
+                                            .name = "KeyInfo", .assembly = "Assembly-CSharp", .ns = "",
+                                            .base = &ScriptableObject};
 
 /// The kind of door the key opens, a DoorKind number: Door.AttemptToUnlockDoor compares it with the
 /// door's kind. Decompiled.
@@ -376,7 +381,7 @@ inline constexpr pm::sdk::EntryDesc KeyInfo_keyType{.key = "KeyInfo.keyType", .k
 /// GameController.allPlayersLoaded is false, outside the training; what shows it again was not traced.
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc Key{.key = "Key", .confidence = pm::sdk::Confidence::Decompiled, .name = "Key",
-                                        .assembly = "Assembly-CSharp", .ns = ""};
+                                        .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviourPun};
 
 /// A player picked the key up, on that player's client (Key.Start gives it to the key's
 /// PhotonObjectInteract as a grab event): it adds the key's KeyInfo to the local player's keys
@@ -509,7 +514,8 @@ inline constexpr pm::sdk::EntryDesc Door_NetworkedUngrabbedDoor{.key = "Door.Net
 
 /// A door that swings on a hinge (Assembly-CSharp, global namespace), a Door. Decompiled.
 inline constexpr pm::sdk::EntryDesc HingeDoor{.key = "HingeDoor", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "HingeDoor", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "HingeDoor", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &Door};
 
 /// Unity's Awake for the door: after Door.Awake it reads the hinge's joint limits from the leaf's body
 /// and stores the open angle, the closed angle plus the limit on the hinge's side. Decompiled.
