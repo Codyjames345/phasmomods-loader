@@ -3,6 +3,7 @@
 // examples say, the half-metre cancel, a looping song restarting with its clip, the message's bytes and the dead's rule.
 // The design is docs/superpowers/specs/2026-11-10-emotes-design.md. Run: build\emotes_test.exe
 #include <cmath>
+#include <utility>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -280,28 +281,34 @@ void the_shipped_catalogue_parses_with_a_label_for_each() {
   pm::i18n::Table table;
   CHECK(table.load(std::filesystem::path(PM_TEXT_DIR) / "mods" / "emotes" / "i18n" / "default.json", why));
   for (const EmoteDef& e : cat.emotes) CHECK(table.has(e.label));
-  CHECK(cat.emotes[0].id == "phasmomods.emotes.disco-fever" && cat.emotes[7].id == "phasmomods.emotes.take-the-l");
-  // The second page, alphabetical as the first: two with an intro clip (Build Up's with an intro song too), and Get
-  // Griddy, Running Man and Stride, which walk as they dance (the user, 2026-11-13).
-  CHECK(cat.emotes[8].id == "phasmomods.emotes.build-up" && cat.emotes[15].id == "phasmomods.emotes.stride");
-  CHECK(!cat.emotes[8].introClip.empty() && !cat.emotes[8].introSong.empty() && !cat.emotes[8].introLoudness.empty());
-  CHECK(!cat.emotes[11].introClip.empty() && cat.emotes[11].introSong.empty());
-  CHECK(cat.emotes[15].moveClip == cat.emotes[15].clip);
-  CHECK(cat.emotes[9].id == "phasmomods.emotes.get-griddy" && cat.emotes[9].moveClip == cat.emotes[9].clip);
-  CHECK(cat.emotes[12].id == "phasmomods.emotes.running-man" && cat.emotes[12].moveClip == cat.emotes[12].clip);
-  // The third page (the user's picks, 2026-11-13), alphabetical too: Forget Me Not opens with an intro song but no
-  // intro clip.
-  CHECK(cat.emotes[16].id == "phasmomods.emotes.crackdown" && cat.emotes[23].id == "phasmomods.emotes.true-heart");
-  CHECK(cat.emotes[18].id == "phasmomods.emotes.forget-me-not" && cat.emotes[18].introClip.empty() &&
-        !cat.emotes[18].introSong.empty());
+  // Every emote in alphabetical order by its name, across every page (the user, 2026-11-13).
+  for (size_t i = 1; i < cat.emotes.size(); ++i) CHECK(cat.emotes[i - 1].name < cat.emotes[i].name);
+  CHECK(cat.emotes.front().id == "phasmomods.emotes.build-up" && cat.emotes.back().id == "phasmomods.emotes.true-heart");
+  const auto named = [&](const char* name) -> const EmoteDef& {
+    for (const EmoteDef& e : cat.emotes)
+      if (e.name == name) return e;
+    static const EmoteDef none;
+    CHECK(!"an emote the test names is missing");
+    return none;
+  };
+  // Two with an intro clip (Build Up's with an intro song too), Forget Me Not with an intro song but no intro clip, and
+  // Get Griddy, Running Man and Stride, which walk as they dance (the user, 2026-11-13).
+  CHECK(!named("build-up").introClip.empty() && !named("build-up").introSong.empty() &&
+        !named("build-up").introLoudness.empty());
+  CHECK(!named("never-gonna").introClip.empty() && named("never-gonna").introSong.empty());
+  CHECK(named("forget-me-not").introClip.empty() && !named("forget-me-not").introSong.empty());
+  for (const char* walker : {"get-griddy", "running-man", "stride"})
+    CHECK(named(walker).moveClip == named(walker).clip);
   for (const EmoteDef& e : cat.emotes) CHECK(e.songLoop.length > 0.0f);
-  CHECK(bundle_path(cat.emotes[7].clip) == "assets/emotes/clips/takethel.anim");
+  CHECK(bundle_path(named("take-the-l").clip) == "assets/emotes/clips/takethel.anim");
   // Each song's loop as the emote pack tool measured it, in samples at the song's own rate (the counts the songs were
   // first cut to by hand).
-  const float measured[] = {410016 / 48000.0f, 768000 / 48000.0f, 736132 / 44100.0f, 725669 / 48000.0f,
-                            908884 / 48000.0f, 1435119 / 44100.0f, 921600 / 48000.0f, 606316 / 48000.0f};
-  for (int i = 0; i < 8; ++i)
-    CHECK(cat.emotes[i].songLoop.start == 0.0f && std::fabs(cat.emotes[i].songLoop.length - measured[i]) < 1e-4f);
+  const std::pair<const char*, float> measured[] = {
+      {"disco-fever", 410016 / 48000.0f},    {"electro-swing", 768000 / 48000.0f}, {"floss", 736132 / 44100.0f},
+      {"groove-jam", 725669 / 48000.0f},     {"orange-justice", 908884 / 48000.0f}, {"scenario", 1435119 / 44100.0f},
+      {"smooth-moves", 921600 / 48000.0f},   {"take-the-l", 606316 / 48000.0f}};
+  for (const auto& [name, seconds] : measured)
+    CHECK(named(name).songLoop.start == 0.0f && std::fabs(named(name).songLoop.length - seconds) < 1e-4f);
 }
 
 }  // namespace

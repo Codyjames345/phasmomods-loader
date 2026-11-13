@@ -7,10 +7,10 @@ The design is `docs/superpowers/specs/2026-11-10-emotes-design.md`.
 
 ## The dances
 
-Clockwise from the top of the wheel, the first page: Disco Fever, Electro Swing, Floss, Groove Jam, Orange Justice,
-Scenario, Smooth Moves and Take The L. The second page: Build Up, Get Griddy, Lavish, Never Gonna, Running Man, Savor
-The W, Sprinkler and Stride. The third page: Crackdown, Double Up, Forget Me Not, I'm Diamond, Monster Mash, Say So,
-The Macarena and True Heart. Each repeats until something ends it, and each song loops on its own, cut to the loop the
+Clockwise from the top of the wheel, eight to a page, in alphabetical order: Build Up, Crackdown, Disco Fever, Double
+Up, Electro Swing, Floss, Forget Me Not, Get Griddy, Groove Jam, I'm Diamond, Lavish, Monster Mash, Never Gonna, Orange
+Justice, Running Man, Savor The W, Say So, Scenario, Smooth Moves, Sprinkler, Stride, Take The L, The Macarena and True
+Heart. Each repeats until something ends it, and each song loops on its own, cut to the loop the
 emote pack tool measured, whatever its dance's length. Build Up and Never Gonna start with an intro (Build Up's song has
 one too, and so does Forget Me Not's), and Get Griddy, Running Man and Stride walk while they
 dance.
