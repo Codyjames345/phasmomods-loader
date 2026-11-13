@@ -11,7 +11,8 @@ Clockwise from the top of the wheel, the first page: Disco Fever, Electro Swing,
 Scenario, Smooth Moves and Take The L. The second page: Build Up, Get Griddy, Lavish, Never Gonna, Running Man, Savor
 The W, Sprinkler and Stride. Each repeats until something ends it, and each song loops on its own, cut to the loop the
 emote pack tool measured, whatever its dance's length. Build Up and Never Gonna start with an intro (Build Up's song has
-one too), and Stride walks while it dances.
+one too), and Get Griddy, Running Man and Stride walk while they
+dance.
 
 ## Controls
 
@@ -30,9 +31,10 @@ With more than eight dances the wheel turns pages. Scrolling down and the right 
 up and the left bumper to the previous, and the pages wrap: one turn past the last shows the first. In VR, point the
 right controller at the game's bumper glyph on one side of the page number and pull the right trigger. A row over the
 wheel shows the page number and the game's own glyph for each page control, and hides while the wheel has a single
-page. The wheel reopens on the page you last viewed while the mod has been running. While the wheel is open, the game actions bound to those
-page controls (the item swap on the scroll wheel, push-to-talk on the bumpers) are paused and come back when the wheel
-closes for any reason.
+page. The wheel reopens on the page you last viewed while the mod has been running. While the wheel is open, the game
+actions bound to those page controls (the item swap on the scroll wheel, push-to-talk on the bumpers) are paused and
+come back when the wheel closes for any reason. A paused action is paused on every key it is bound to, so push-to-talk's
+keyboard key does not talk while the wheel is open either.
 
 ## While you dance
 

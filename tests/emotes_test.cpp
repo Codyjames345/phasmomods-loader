@@ -281,12 +281,14 @@ void the_shipped_catalogue_parses_with_a_label_for_each() {
   CHECK(table.load(std::filesystem::path(PM_TEXT_DIR) / "mods" / "emotes" / "i18n" / "default.json", why));
   for (const EmoteDef& e : cat.emotes) CHECK(table.has(e.label));
   CHECK(cat.emotes[0].id == "phasmomods.emotes.disco-fever" && cat.emotes[7].id == "phasmomods.emotes.take-the-l");
-  // The second page, alphabetical as the first: two with an intro clip (Build Up's with an intro song too), and Stride,
-  // which walks as it dances.
+  // The second page, alphabetical as the first: two with an intro clip (Build Up's with an intro song too), and Get
+  // Griddy, Running Man and Stride, which walk as they dance (the user, 2026-11-13).
   CHECK(cat.emotes[8].id == "phasmomods.emotes.build-up" && cat.emotes[15].id == "phasmomods.emotes.stride");
   CHECK(!cat.emotes[8].introClip.empty() && !cat.emotes[8].introSong.empty() && !cat.emotes[8].introLoudness.empty());
   CHECK(!cat.emotes[11].introClip.empty() && cat.emotes[11].introSong.empty());
   CHECK(cat.emotes[15].moveClip == cat.emotes[15].clip);
+  CHECK(cat.emotes[9].id == "phasmomods.emotes.get-griddy" && cat.emotes[9].moveClip == cat.emotes[9].clip);
+  CHECK(cat.emotes[12].id == "phasmomods.emotes.running-man" && cat.emotes[12].moveClip == cat.emotes[12].clip);
   for (const EmoteDef& e : cat.emotes) CHECK(e.songLoop.length > 0.0f);
   CHECK(bundle_path(cat.emotes[7].clip) == "assets/emotes/clips/takethel.anim");
   // Each song's loop as the emote pack tool measured it, in samples at the song's own rate (the counts the songs were
