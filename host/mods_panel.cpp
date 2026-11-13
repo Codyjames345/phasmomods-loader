@@ -74,6 +74,11 @@ void make_tape(void* menu) {
     g.refusedBy = il2cpp::Held(menu);
     return;
   }
+  // News is never shown, and the disabled colour it saves is see-through: the tape is disabled while the board is not
+  // focused, so it would fade beside the picture tapes. It takes Training's, the picture tape it sits by, before it
+  // wakes; without it, it keeps News's.
+  void* training = host::find_child(hostgame::transform_of(menu), "Buttons/Training button");
+  if (!menu_panel::match_disabled_look(copy, training)) PM_LOG("mods panel: the Mods button keeps News's disabled colour");
   hostgame::set_active(hostgame::game_object_of(copy), true);
   phasmo::Vector2 at = RectTransform::get_anchoredPosition(news);
   if (hostgame::active_self(hostgame::game_object_of(news))) at.y += RectTransform::get_sizeDelta(news).y * kAboveNews;

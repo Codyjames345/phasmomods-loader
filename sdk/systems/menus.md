@@ -14,6 +14,18 @@ BAKE`). Each taped button (Singleplayer, Training, News, Go Online, Options, Cre
 `UIButton`, a `UISelectableColorAnimator` and Doozy's `ImageColorTarget`. Multiplayer is a plain Unity `Button`
 with its `Image`. News ships switched off in the scene.
 
+**A tape's colours.** The animator plays a colour for each state the button is in (normal, highlighted, pressed,
+selected, disabled), and each tape saves every state's colour as a custom colour of its own
+(`ColorTargetReaction.ToCustomValue`, reached through `UISelectableColorAnimator.DisabledAnimation` and
+`ColorAnimation.Animation` for the disabled one). A custom colour is used as saved: the hue, saturation, lightness
+and alpha offsets a reaction also keeps apply only to a start or current colour. The disabled colour shows whenever
+the board is not focused. The camera's focus switches every board's `CanvasGroup` on the main menu canvas to
+interactable only for the board it looks at, and Unity's `Selectable` is disabled while a group above it is not
+interactable. It reads that again when it is enabled, so a tape switched on while the board is not focused starts
+disabled. The picture tapes the menu shows (Singleplayer, Training) save an opaque white for disabled, so they look
+the same either way. News and the icon tapes (Go Online, Options, Credits, Quit) save white at half alpha, so News
+would show see-through until the board is focused.
+
 The error popup (`ErrorManager.errorParent`) has one Doozy button, `Error Accept Button`, built as a tape is.
 
 The lobby paper's checkboxes (`Create Lobby/Hardware/Toggle.1` and its kin) are Unity `Toggle`s: the box
@@ -41,6 +53,8 @@ pointer, and no selected state from a click.
 - **The Mods tape and the popups' buttons** are copies of News and of `Error Accept Button`. Every behaviour of the
   copy gets a new, empty `UnityEvent` and loses its runners; the click behaviour's new event then gets the loader's
   listener. The copy's other scripts that act for the game (its localisers, the error manager) stay switched off.
+  Before it wakes, the Mods tape takes Training's disabled colour in place of News's see-through one
+  (`menu_panel::match_disabled_look`), so it looks like the picture tape beside it while the board is not focused.
 - **The Mods panel's rows** are copies of `Toggle.1`, each with a new `ToggleEvent` and no group. The game's toggle
   flips the tick. The host reads `Toggle.get_isOn` each frame, as Playable Ghost's lobby tape does, because a listener
   on a `ToggleEvent` would be a `UnityAction<bool>`, a generic delegate.

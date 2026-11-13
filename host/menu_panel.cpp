@@ -187,6 +187,28 @@ bool clickable(Control& c, void* root) {
   return true;
 }
 
+namespace {
+
+// The reaction behind the disabled colour of the tape on root's GameObject, or null.
+void* disabled_reaction(void* root) {
+  void* animator = root ? hostgame::get_component(root, phasmo::UISelectableColorAnimator::type.type_object()) : nullptr;
+  void* animation = animator ? phasmo::UISelectableColorAnimator::DisabledAnimation.get(animator) : nullptr;
+  return animation ? phasmo::ColorAnimation::Animation.get(animation) : nullptr;
+}
+
+}  // namespace
+
+bool match_disabled_look(void* root, void* like) {
+  if (!api::all_resolved<phasmo::UISelectableColorAnimator::type, phasmo::UISelectableColorAnimator::DisabledAnimation,
+                         phasmo::ColorAnimation::Animation, phasmo::ColorTargetReaction::ToCustomValue>())
+    return false;
+  void* copied = disabled_reaction(root);
+  void* game = hostgame::alive(like) ? disabled_reaction(like) : nullptr;
+  if (!copied || !game) return false;
+  phasmo::ColorTargetReaction::ToCustomValue.set(copied, phasmo::ColorTargetReaction::ToCustomValue.get(game));
+  return true;
+}
+
 bool clicked(Control& c) {
   for (Listening& l : g_listening)
     if (c.button && l.target.get() == c.button.get()) return std::exchange(l.clicks, 0) > 0;

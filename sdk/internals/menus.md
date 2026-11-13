@@ -40,6 +40,20 @@ For maintainers and for anyone expanding the SDK. A mod author needs [The menus]
   animator of a copy holds the copy's button, since `Object.Instantiate` remaps references inside what it copies. So
   nobody but the button need call `Play`.
 
+## Why the Mods tape faded (2026-11-13)
+
+The user saw the Mods tape see-through at the game's start and after leaving a lobby, until the menu was focused. The
+tapes' colour data was read from the `Main_Menu` scene (`level2`) with UnityPy. A `UISelectableColorAnimator`'s type
+tree is stripped, so its five animations were read from its raw data, laid out as `ColorTargetReaction`'s serialized
+fields in the class dump. Every tape's states end on their custom colour. For the disabled state, News and Training
+differ in one value only: the custom colour's alpha, half for News, whole for Training and Singleplayer. The reaction's
+colour resolver (decompiled) returns a custom colour as it is and applies the offsets only to the start or current
+colour. `Selectable.OnEnable` and `Selectable.OnCanvasGroupChanged` (decompiled) both recompute whether the parent
+groups allow interaction and transition to disabled when they do not. The focus's listeners on `CameraFocusUI`
+(decompiled) set each registered board's `CanvasGroup.interactable` to whether it is the focused one, and the corkboard's
+`CameraFocusUI` holds the main menu canvas's group. So the tape is disabled whenever the board is not focused, and only
+the saved colour decides how that looks.
+
 ## How a Unity button is clicked
 
 The Multiplayer tape is a Unity `Button`. Its `OnPointerClick` checks the event is the left button's and runs
