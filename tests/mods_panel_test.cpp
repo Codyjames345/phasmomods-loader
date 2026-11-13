@@ -133,6 +133,16 @@ bool can_copy_rows() { return fixtureCanCopyRows; }
 bool main_menu_visible() { return fixtureVisible && fixtureButtons; }
 bool menu_buttons_shown() { return fixtureMenu && fixtureMenu->alive && fixtureButtons; }
 void make_inert(void*) {}
+// The copy's disabled colour was matched to `like` while the copy was still asleep: the fixture notes both.
+Node* matchedCopy = nullptr;
+Node* matchedLike = nullptr;
+bool matchedAsleep = false;
+bool match_disabled_look(void* root, void* like) {
+  matchedCopy = static_cast<Node*>(root);
+  matchedLike = static_cast<Node*>(like);
+  matchedAsleep = !matchedCopy->active;
+  return like != nullptr;
+}
 // The copy keeps the game's button with the loader's listener: the fixture notes which copy, and fixtureClickable
 // says whether its listener could be put on.
 bool clickable(Control& c, void* root) {
@@ -182,6 +192,7 @@ namespace {
 Node* make_menu() {
   auto* result = ui_fixture::make_node(nodes, "Menu");
   auto* buttons = ui_fixture::make_node(nodes, "Buttons", result);
+  ui_fixture::make_node(nodes, "Training button", buttons);
   auto* news = ui_fixture::make_node(nodes, "News", buttons);
   news->active = false;
   ui_fixture::make_node(nodes, "Text (TMP)", news);
@@ -198,6 +209,8 @@ void reset() {
   fixtureCanCopy = fixtureCanCopyRows = fixtureClickable = rowsInteractable = true;
   fixtureNow = 1000;
   newsRefusedLogs = 0;
+  pm::menu_panel::matchedCopy = pm::menu_panel::matchedLike = nullptr;
+  pm::menu_panel::matchedAsleep = false;
   clickTape = false;
   clickButton = clickRow = -1;
   unavailableRow = -1;
@@ -264,6 +277,19 @@ void tape_follows_native_buttons() {
   CHECK(tapes().size() == 1 && !ui_fixture::active_in_hierarchy(tapes()[0]));
   fixtureButtons = fixtureVisible = true;
   pm::mods_panel::tick(true);
+  CHECK(tape_shown());
+}
+/** The tape takes the disabled colour of Training, the picture tape beside it, before it wakes: News's own is
+    see-through, and the tape is disabled while the board is not focused. */
+void tape_takes_training_disabled_look() {
+  reset();
+  pm::mods_panel::tick(true);
+  CHECK(tapes().size() == 1);
+  if (tapes().empty()) return;
+  CHECK(pm::menu_panel::matchedCopy == tapes()[0]);
+  CHECK(pm::menu_panel::matchedLike && pm::menu_panel::matchedLike->name == "Training button" &&
+        pm::menu_panel::matchedLike->parent->parent == fixtureMenu);
+  CHECK(pm::menu_panel::matchedAsleep);
   CHECK(tape_shown());
 }
 /** The tape kept between frames stays reachable for the GC, and is released with it. */
@@ -700,6 +726,7 @@ int main() {
   no_tape_without_what_it_needs();
   tape_follows_native_buttons();
   tape_is_held();
+  tape_takes_training_disabled_look();
   hidden_open_panel_ignores_apply();
   replacement_menu_replaces_tape();
   missing_menu_removes_tape();

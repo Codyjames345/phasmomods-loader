@@ -71,6 +71,9 @@ constexpr int32_t kEventField = 0x20;           // ModyEvent.Event
 constexpr int32_t kOnValueChangedField = 0x48;  // Toggle.onValueChanged
 constexpr int32_t kGroupField = 0x50;           // Toggle.m_Group
 constexpr int32_t kPointerClick = 4;            // DoozyBehaviourName.PointerClick
+constexpr int32_t kDisabledAnimationField = 0x28;  // UISelectableColorAnimator.DisabledAnimation
+constexpr int32_t kAnimationField = 0x30;          // ColorAnimation.Animation
+constexpr int32_t kToCustomValueField = 0x38;      // ColorTargetReaction.ToCustomValue
 
 // The game's events: the persistent listeners each has (saved with the scene), the runtime ones AddListener gave it,
 // and how often the game's own action (a persistent listener) ran.
@@ -158,6 +161,39 @@ void copy_behaviours(Node* copy, const Node* original) {
   il2cpp::set_field<void*>(behaviours, kBehaviourListField, pm::fake::list(list));
   il2cpp::set_field<void*>(copy, kBehavioursField, behaviours);
 }
+// A tape's colour animator whose disabled state ends on `disabled`: its animation and reaction, saved by value.
+Node* colour_animator(Node* object, phasmo::Color disabled) {
+  Node* animator = add_script(object, "UISelectableColorAnimator");
+  auto* animation = ui_fixture::make_node(nodes, "ColorAnimation");
+  auto* reaction = ui_fixture::make_node(nodes, "ColorTargetReaction");
+  il2cpp::set_field<phasmo::Color>(reaction, kToCustomValueField, disabled);
+  il2cpp::set_field<void*>(animation, kAnimationField, reaction);
+  il2cpp::set_field<void*>(animator, kDisabledAnimationField, animation);
+  return animator;
+}
+Node* disabled_reaction_of(Node* object) {
+  Node* animator = script_of(object, "UISelectableColorAnimator");
+  auto* animation = animator ? il2cpp::field<Node*>(animator, kDisabledAnimationField) : nullptr;
+  return animation ? il2cpp::field<Node*>(animation, kAnimationField) : nullptr;
+}
+phasmo::Color disabled_colour_of(Node* object) {
+  Node* reaction = disabled_reaction_of(object);
+  return reaction ? il2cpp::field<phasmo::Color>(reaction, kToCustomValueField) : phasmo::Color{};
+}
+// Object.Instantiate copies an animator's animations by value: the copy's animation and reaction are its own.
+void copy_animation(Node* copy) {
+  auto* animation = il2cpp::field<Node*>(copy, kDisabledAnimationField);
+  if (!animation) return;
+  auto* reaction = il2cpp::field<Node*>(animation, kAnimationField);
+  auto* animationCopy = ui_fixture::make_node(nodes, "ColorAnimation");
+  *animationCopy = *animation;
+  if (reaction) {
+    auto* reactionCopy = ui_fixture::make_node(nodes, "ColorTargetReaction");
+    *reactionCopy = *reaction;
+    il2cpp::set_field<void*>(animationCopy, kAnimationField, reactionCopy);
+  }
+  il2cpp::set_field<void*>(copy, kDisabledAnimationField, animationCopy);
+}
 Node* clone(Node* original, Node* parent) {
   auto* result = ui_fixture::make_node(nodes, original->name, parent);
   auto children = original->children;
@@ -172,6 +208,7 @@ Node* clone(Node* original, Node* parent) {
     *copy = *script;
     copy->copiedFrom = script;
     if (std::strcmp(script->klass, "UIButton") == 0) copy_behaviours(copy, script);
+    if (std::strcmp(script->klass, "UISelectableColorAnimator") == 0) copy_animation(copy);
     result->scripts.push_back(copy);
   }
   return result;
@@ -390,6 +427,9 @@ void give(const pm::sdk::EntryDesc* without) {
   f::field(m::ModyEvent_Event, kEventField);
   f::field(m::Toggle_onValueChanged, kOnValueChangedField);
   f::field(m::Toggle_m_Group, kGroupField);
+  f::field(m::UISelectableColorAnimator_DisabledAnimation, kDisabledAnimationField);
+  f::field(m::ColorAnimation_Animation, kAnimationField);
+  f::field(m::ColorTargetReaction_ToCustomValue, kToCustomValueField);
   f::value(m::DoozyBehaviourName_PointerClick, kPointerClick);
   if (without) f::forget(*without);
   std::string missing;
@@ -627,6 +667,41 @@ void copies_keep_the_game_animator() {
   pm::menu_panel::tick(panel);
   for (auto& n : nodes) CHECK(n->played.empty());
   pm::menu_panel::close(panel);
+}
+/** A copied tape takes the disabled colour of the game's tape it is matched to, on its own animation only: the
+    original it was copied from and the tape it matched keep theirs. Without an entry, or without an animator on
+    either, nothing changes. */
+void copy_takes_the_disabled_look() {
+  const phasmo::Color seeThrough{1, 1, 1, 0.5f}, opaque{1, 1, 1, 1};
+  const auto same_colour = [](phasmo::Color a, phasmo::Color b) { return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a; };
+  const auto make = [&](Node*& news, Node*& training, Node*& copy) {
+    reset();
+    news = ui_fixture::make_node(nodes, "News", fixtureMenu);
+    news->active = false;
+    colour_animator(news, seeThrough);
+    training = ui_fixture::make_node(nodes, "Training button", fixtureMenu);
+    colour_animator(training, opaque);
+    copy = static_cast<Node*>(pm::hostgame::instantiate(news, fixtureMenu, false));
+  };
+  Node *news, *training, *copy;
+  make(news, training, copy);
+  CHECK(disabled_reaction_of(copy) && disabled_reaction_of(copy) != disabled_reaction_of(news));
+  CHECK(pm::menu_panel::match_disabled_look(copy, training));
+  CHECK(same_colour(disabled_colour_of(copy), opaque));
+  CHECK(same_colour(disabled_colour_of(news), seeThrough));
+  CHECK(same_colour(disabled_colour_of(training), opaque));
+  CHECK(!copy->active);  // it does not wake the copy
+  for (const pm::sdk::EntryDesc* d : {&pm::map::UISelectableColorAnimator_DisabledAnimation, &pm::map::ColorAnimation_Animation,
+                                      &pm::map::ColorTargetReaction_ToCustomValue, &pm::map::UISelectableColorAnimator}) {
+    make(news, training, copy);
+    give(d);
+    CHECK(!pm::menu_panel::match_disabled_look(copy, training));
+    CHECK(same_colour(disabled_colour_of(copy), seeThrough));
+  }
+  make(news, training, copy);
+  CHECK(!pm::menu_panel::match_disabled_look(copy, nullptr));
+  CHECK(!pm::menu_panel::match_disabled_look(copy, fixtureMenu));  // no animator there
+  CHECK(same_colour(disabled_colour_of(copy), seeThrough));
 }
 /** The entries the host does not call but a mod may: each wrapper reaches the game's method with its arguments, and
     without its entry calls nothing and gives its default. */
@@ -1395,6 +1470,7 @@ int main() {
   game_clicks_reach_the_panel();
   hidden_controls_ignore_input();
   copies_keep_the_game_animator();
+  copy_takes_the_disabled_look();
   entries_for_mods_reach_the_game();
   menu_visibility();
   aggregate_menu_visibility();

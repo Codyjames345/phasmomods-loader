@@ -113,6 +113,11 @@ void* menu_camera();
 // and the button is switched on. False when any step cannot be made: this switches on no button, and the listeners
 // it took off stay off, so whatever the copy's button then does runs nothing of the game's.
 bool clickable(Control& c, void* root);
+// Gives the copied tape on root's GameObject the disabled colour of the game's tape on like's: the custom colour its
+// animator's disabled state ends on (ColorTargetReaction.ToCustomValue). Call it before the copy wakes. A tape is
+// disabled while the board is not focused, and the colour News saves for that is see-through where the visible
+// picture tapes' is opaque. False, changing nothing, when either has no colour animator or this build lacks an entry.
+bool match_disabled_look(void* root, void* like);
 
 // Whether the game clicked the control since the last call; takes every click counted.
 bool clicked(Control& c);
