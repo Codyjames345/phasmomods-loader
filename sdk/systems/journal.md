@@ -26,6 +26,9 @@ The entries resolve the code facts afresh on every build.
 - The book holds a page per vanilla ghost, named after it, each with the same seven children in the
   same order: `Title`, `------------`, `Description`, `Evidence`, `Evidence 1`, `Evidence 2 ` (a
   trailing space), `Evidence 3` (all 30 pages). Each text carries a `TextLocaliserUI`.
+- The book object `GhostHuntingBookContent` is turned -90 degrees about X, and every page is turned
+  +90 back. Content parented under the book without a page's rotation renders edge-on; a copied page
+  brings its own rotation with it.
 - The Ghosts tab's list (`Ghost Select Page/Ghost Types List`) holds one Button per ghost, named after
   it. The Spirit's entry's onClick calls `JournalController.GoToPage` with an object argument, the
   GameObject `Spirit`, its page (the overload taking a GameObject); each entry so names its
