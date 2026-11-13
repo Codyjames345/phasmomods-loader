@@ -16,8 +16,14 @@ $env:GIT_CONFIG_NOSYSTEM = '1'
 $env:GIT_AUTHOR_NAME = $env:GIT_COMMITTER_NAME = 'Fixture'
 $env:GIT_AUTHOR_EMAIL = $env:GIT_COMMITTER_EMAIL = 'fixture@example.invalid'
 
-<# Run git, throwing when it fails. #>
-function Invoke-Git { & git @args; if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') failed." } }
+<# Run git, throwing when it fails. A native command's success is its exit code: git writes warnings to stderr even when
+   it succeeds (cloning an empty repository, Windows line endings), and Windows PowerShell 5.1 turns a stderr line
+   under Stop into a terminating error however it is redirected, so run git under Continue and judge only the exit code. #>
+function Invoke-Git {
+    $ErrorActionPreference = 'Continue'
+    & git @args
+    if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') failed." }
+}
 
 <# A project whose payload pins one file (to $Pin) beside one it does not, with the scripts the pinned files need. #>
 function New-PinFixture([string]$Name, [string]$Pin, [string]$Content) {

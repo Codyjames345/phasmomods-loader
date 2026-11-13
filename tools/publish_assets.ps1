@@ -16,8 +16,11 @@ $payloadFile = Join-Path $Root 'tools/payload.psd1'
 $pinned = @((Import-PowerShellDataFile -LiteralPath $payloadFile).Payload | Where-Object { $_.ContainsKey('Sha256') })
 if (-not $pinned.Count) { throw 'tools/payload.psd1 pins no file.' }
 
-<# Run git in the private clone, throwing when it fails. #>
+<# Run git in the private clone, throwing when it fails. A native command's success is its exit code: git writes
+   warnings to stderr even when it succeeds (Windows line endings on a plain add), and Windows PowerShell 5.1 turns a
+   stderr line under Stop into a terminating error, so run git under Continue and judge only the exit code. #>
 function Invoke-Private([string[]]$Arguments) {
+    $ErrorActionPreference = 'Continue'
     & git -C $Private @Arguments
     if ($LASTEXITCODE -ne 0) { throw "git $($Arguments -join ' ') failed in the private assets repository." }
 }
