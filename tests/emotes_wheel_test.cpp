@@ -148,8 +148,11 @@ void glyph_at_hits_each_glyph_and_misses_between() {
 
 // The keyboard and mouse page glyphs (the user's reference, traced as shapes, 2026-11-13): a mouse with its wheel, an
 // arrow above it for scrolling up and below it for scrolling down, white lines on clear, drawn at 100 texels so a
-// texel is one unit of the drawing.
-uint8_t alpha_at(const std::vector<uint8_t>& rgba, int x, int y) { return rgba[(static_cast<size_t>(y) * 100 + x) * 4 + 3]; }
+// texel is one unit of the drawing. Rows run from the bottom, as Unity's textures do (texture_from_rgba), so the
+// drawing's row y (from the top) is texture row 99 - y: a glyph drawn top row first showed upside down in game.
+uint8_t alpha_at(const std::vector<uint8_t>& rgba, int x, int y) {
+  return rgba[(static_cast<size_t>(99 - y) * 100 + x) * 4 + 3];
+}
 
 void the_scroll_glyphs_are_white_lines_on_clear() {
   for (ScrollArrow which : {ScrollArrow::Up, ScrollArrow::Down}) {

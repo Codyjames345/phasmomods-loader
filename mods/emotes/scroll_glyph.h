@@ -37,8 +37,9 @@ inline float to_capsule_outline(P p, P c, float w, float h) {
 
 }  // namespace glyph_detail
 
-/// The glyph as `size` x `size` RGBA texels, top row first: white everywhere, its lines opaque and the rest clear, with
-/// the lines' edges smoothed over one texel. The drawing is laid out on a square 100 units wide.
+/// The glyph as `size` x `size` RGBA texels, row by row from the bottom as Unity's textures are (texture_from_rgba):
+/// white everywhere, its lines opaque and the rest clear, with the lines' edges smoothed over one texel. The drawing is
+/// laid out on a square 100 units wide, y down from its top.
 inline std::vector<uint8_t> scroll_glyph_rgba(int size, ScrollArrow which) {
   using namespace glyph_detail;
   std::vector<uint8_t> rgba(static_cast<size_t>(size) * size * 4, 255);
@@ -65,7 +66,8 @@ inline std::vector<uint8_t> scroll_glyph_rgba(int size, ScrollArrow which) {
       d = std::min(d, to_segment(p, tip, {tip.x - 8.0f, tip.y + back}) - bodyHalf);
       d = std::min(d, to_segment(p, tip, {tip.x + 8.0f, tip.y + back}) - bodyHalf);
       const float alpha = std::clamp(0.5f - d / texel, 0.0f, 1.0f);
-      rgba[(static_cast<size_t>(y) * size + x) * 4 + 3] = static_cast<uint8_t>(std::lround(alpha * 255.0f));
+      const size_t row = static_cast<size_t>(size - 1 - y);  // the drawing's top is the texture's last row
+      rgba[(row * size + x) * 4 + 3] = static_cast<uint8_t>(std::lround(alpha * 255.0f));
     }
   return rgba;
 }
