@@ -551,21 +551,83 @@ void baseline_reports_a_malformed_line() {
 }  // namespace
 
 // Addresses in the SDK's documentation, which cites map keys instead (the user's rule of 2026-10-30): each offset (+0x..)
-// and each hex number of 0x100 or more, on a comment line of a source in sdk/map, sdk/api, sdk/examples, mods, host or core, and on any line
-// of a page in sdk/README.md, sdk/systems, sdk/guides, sdk/internals or sdk/examples. A line that says
-// "pm:not-game-data: <why>" (in Markdown as an HTML comment) is not counted. Older notes still hold some until they are
-// cited by key; tests/note_addresses_baseline.txt keeps each file's count from rising, as the raw sites' baseline does.
+// and each hex number of 0x100 or more, in any comment of a source in sdk/map, sdk/api, sdk/examples, mods, host or core - a whole-line
+// or trailing comment, or any line of a block comment - and on any line of a page in sdk/README.md, sdk/systems, sdk/guides,
+// sdk/internals or sdk/examples. A line that says "pm:not-game-data: <why>" (in Markdown as an HTML comment) is not counted.
+// Older notes still hold some until they are cited by key; tests/note_addresses_baseline.txt keeps each file's count from
+// rising, as the raw sites' baseline does. Text in a string or character literal is not a comment however it looks: the
+// final-review R7 planted RVAs in a trailing comment and a block comment's middle lines, where only whole-line comments were read.
 int note_addresses(const std::string& source, bool everyLine = false) {
   static const std::regex kAddress(R"(\+0x[0-9A-Fa-f]+|\b0x[0-9A-Fa-f]{3,})");
+  const auto countIn = [](const std::string& text) {
+    return static_cast<int>(std::distance(std::sregex_iterator(text.begin(), text.end(), kAddress), std::sregex_iterator()));
+  };
   int count = 0;
   std::istringstream in(source);
   std::string line;
+  bool inBlock = false;
   while (std::getline(in, line)) {
     if (line.find("pm:not-game-data:") != std::string::npos) continue;
-    const size_t start = line.find_first_not_of(" \t");
-    const bool comment = start != std::string::npos && (line.compare(start, 2, "//") == 0 || line.compare(start, 2, "/*") == 0 || line[start] == '*');
-    if (!everyLine && !comment) continue;
-    count += static_cast<int>(std::distance(std::sregex_iterator(line.begin(), line.end(), kAddress), std::sregex_iterator()));
+    if (everyLine) {
+      count += countIn(line);
+      continue;
+    }
+    std::string comment;
+    size_t i = 0;
+    if (inBlock) {
+      const size_t close = line.find("*/");
+      if (close == std::string::npos) {
+        count += countIn(line);  // the whole line lies inside the block
+        continue;
+      }
+      comment = line.substr(0, close + 2);
+      inBlock = false;
+      i = close + 2;
+    } else {
+      const size_t start = line.find_first_not_of(" \t");
+      if (start != std::string::npos && line[start] == '*') {
+        count += countIn(line);  // a block comment's line, as before
+        continue;
+      }
+    }
+    // The comment parts of what follows, skipping strings and character literals the way strip_line does.
+    for (; i < line.size(); ++i) {
+      const char c = line[i];
+      if (c == '"') {
+        ++i;
+        while (i < line.size() && line[i] != '"') {
+          if (line[i] == '\\') ++i;
+          ++i;
+        }
+        continue;
+      }
+      if (c == '\'' && !(i > 0 && std::isxdigit(static_cast<unsigned char>(line[i - 1])))) {
+        const size_t end = i + 1 < line.size() && line[i + 1] == '\\'
+                               ? line.find('\'', i + 3)
+                               : (i + 2 < line.size() && line[i + 2] == '\'' ? i + 2 : std::string::npos);
+        if (end != std::string::npos) {
+          i = end;
+          continue;
+        }
+      }
+      if (c == '/' && i + 1 < line.size()) {
+        if (line[i + 1] == '/') {
+          comment += line.substr(i);
+          break;
+        }
+        if (line[i + 1] == '*') {
+          const size_t close = line.find("*/", i + 2);
+          if (close == std::string::npos) {
+            comment += line.substr(i);
+            inBlock = true;
+            break;
+          }
+          comment += line.substr(i, close + 2 - i);
+          i = close + 1;
+        }
+      }
+    }
+    count += countIn(comment);
   }
   return count;
 }
@@ -599,6 +661,13 @@ void notes_count_addresses() {
   CHECK(note_addresses("A raw site is a hex literal of 0x100 or more <!-- pm:not-game-data: the scan's rule -->\n", true) == 0);
   CHECK(note_addresses(" * as the game's own test (0x214FD80 in build 25811160)\n") == 1);  // a block comment's lines
   CHECK(note_addresses("/** at 0x214FD80 */\n") == 1);
+  // Any comment counts, not only one that starts its line: the review's R7 planted an RVA and an offset in a
+  // trailing comment and on a block comment's middle lines.
+  CHECK(note_addresses("int k = 1;  // a trailing comment (0x3D1C2E0) and an offset +0x118\n") == 2);
+  CHECK(note_addresses("/* a block 0x214FD80\n   continues on 0x22AF160\n   and ends 0x22C3140 */\n") == 3);
+  CHECK(note_addresses("/* opens 0x214FD80\n   ends 0x22C3140 */ int g = 0x123;  // and 0x22C2EB0\n") == 3);  // a block's last line, and a trailing comment after it
+  CHECK(note_addresses("const char* s = \"// 0x3D1C2E0\";\n") == 0);  // a string that looks like a comment is not one
+  CHECK(note_addresses("int x = 0x1'0000;  // no address here\n") == 0);  // a digit separator does not start a string
 }
 // A DLL loaded in this process may be a mod, anybody's file, so it loads through core/quiet_load.h, where a bad image cannot
 // put up a blocking dialog. The launcher's remote load names LoadLibraryW only as a string: it loads the host's own DLL.
