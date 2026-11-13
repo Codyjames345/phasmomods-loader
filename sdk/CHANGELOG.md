@@ -50,7 +50,7 @@ major version `PmHostApi` and every published struct only grow at the end, and e
 - **The wrapper templates take handles.** `Method`, `Icall`, `Field`, `StaticField` and `Type` in `game_api.h` now
   accept `Ref<D>` and `Object` as their `R`, `A...`, field `T` and object parameters, and their hook bodies receive
   handles too; the game is still called, and hooked, with raw pointers, each wrapper converting at its own boundary
-  (`Method::body_entry`, `OriginalOf::code` name the raw signature). `Type::make()` gives a `Ref<D>` and
+  (`detail::Bodies::body_entry`, `OriginalOf::code` name the raw signature). `Type::make()` gives a `Ref<D>` and
   `make_array()` an `Object`; `type_object()` and `klass()` stay raw `void*`, a System.Type never being used as a
   handle. A transitional bridge keeps every existing `void*` caller compiling: `Object` constructors from `void*`,
   `const void*` and any class that reads as a `void*` such as `Held`, an `operator void*` on both handle types, and
