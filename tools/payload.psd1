@@ -216,7 +216,7 @@
         @{ Name = 'mods/emotes/assets/loudness/sprinkler.txt'; Source = 'mods/emotes/assets/loudness/sprinkler.txt' }
         @{ Name = 'mods/emotes/assets/loudness/stride.txt'; Source = 'mods/emotes/assets/loudness/stride.txt' }
         @{ Name = 'mods/emotes/assets/loudness/crackdown.txt'; Source = 'mods/emotes/assets/loudness/crackdown.txt' }
-        @{ Name = 'mods/emotes/assets/loudness/double-up.txt'; Source = 'mods/emotes/assets/loudness/double-up.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/sway.txt'; Source = 'mods/emotes/assets/loudness/sway.txt' }
         @{ Name = 'mods/emotes/assets/loudness/forget-me-not.txt'; Source = 'mods/emotes/assets/loudness/forget-me-not.txt' }
         @{ Name = 'mods/emotes/assets/loudness/forget-me-not.intro.txt'; Source = 'mods/emotes/assets/loudness/forget-me-not.intro.txt' }
         @{ Name = 'mods/emotes/assets/loudness/im-diamond.txt'; Source = 'mods/emotes/assets/loudness/im-diamond.txt' }
