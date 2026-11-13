@@ -188,6 +188,28 @@ inline constexpr pm::sdk::EntryDesc FirstPersonController_Move{.key = "FirstPers
                                                                .confidence = pm::sdk::Confidence::Decompiled,
                                                                .owner = "FirstPersonController", .name = "Move"};
 
+/// The Run action's callback (an InputAction.CallbackContext): sets FirstPersonController.running. In the game's hold
+/// mode it sets it while the action is in any phase but Canceled, so it holds while Run is held; in its toggle mode
+/// (FirstPersonController.get_m_ToggleSprint) it flips it each time the action is Performed. Then it invokes one of the
+/// controller's UnityEvents. Decompiled.
+inline constexpr pm::sdk::EntryDesc FirstPersonController_OnRun{.key = "FirstPersonController.OnRun",
+                                                                .kind = pm::sdk::Kind::Method,
+                                                                .confidence = pm::sdk::Confidence::Decompiled,
+                                                                .owner = "FirstPersonController", .name = "OnRun"};
+
+// OnRun stores one bool of the controller, and the speed update reads it through the rig's controller field.
+inline constexpr pm::sdk::Fact FirstPersonController_running_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "FirstPersonController.OnRun"},
+    {.is = pm::sdk::Fact::Is::Loads, .method = "LocalPCPlayer.UpdatePlayerSpeed"}};
+
+/// Whether the player asks to sprint: Run held, or toggled on in the game's toggle sprint mode
+/// (FirstPersonController.OnRun sets it). Not the sprint itself: LocalPCPlayer.UpdatePlayerSpeed gives the sprint
+/// speed only while this is set, sprinting is allowed and PlayerStamina.canSprint is set (pm::api::movement::sprinting
+/// reads the three). On the player's own client only. Decompiled.
+inline constexpr pm::sdk::EntryDesc FirstPersonController_running{
+    .key = "FirstPersonController.running", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "FirstPersonController", .type = "bool", .facts = FirstPersonController_running_facts};
+
 /// The local player's HUD (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from the
 /// class dump.
 inline constexpr pm::sdk::EntryDesc PCCanvas{.key = "PCCanvas", .name = "PCCanvas", .assembly = "Assembly-CSharp",
@@ -345,15 +367,16 @@ inline constexpr pm::sdk::EntryDesc LocalPlayer_walkSpeed{.key = "LocalPlayer.wa
 
 /// The rig's sprinting speed in metres a second, before the speed multiplier: a serialized float the
 /// prefab sets (the constructor's default is 3.0). LocalPCPlayer.UpdatePlayerSpeed takes it only while the
-/// sprint input is held, sprinting is allowed (Difficulty.sprinting not 0, or no contract) and the stamina
+/// player asks to sprint (FirstPersonController.running), sprinting is allowed (Difficulty.sprinting not 0, or no
+/// GameController.instance) and the stamina
 /// can sprint (PlayerStamina.canSprint); it holds the value even when sprinting is off. Decompiled.
 inline constexpr pm::sdk::EntryDesc LocalPlayer_sprintSpeed{
     .key = "LocalPlayer.sprintSpeed", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LocalPlayer", .type = "float", .facts = LocalPlayer_sprintSpeed_facts};
 
 /// Applies the rig's speed to its FirstPersonController, on the local player's client: the sprint speed
-/// while the sprint input is held, sprinting is allowed (Difficulty.sprinting is not 0, or no contract is
-/// running) and PlayerStamina.canSprint is set, otherwise the walk speed; times the speed multiplier, which
+/// while FirstPersonController.running is set, sprinting is allowed (Difficulty.sprinting of
+/// LevelValues.difficulty is not 0, or no GameController.instance exists) and PlayerStamina.canSprint is set, otherwise the walk speed; times the speed multiplier, which
 /// in a contract it skips while LocalPlayer.isDead is set. LocalPlayer.Start and the multiplier's setters run
 /// it. The VR rig's stamina applies its speed instead (VRStamina.Update). Decompiled.
 inline constexpr pm::sdk::EntryDesc LocalPCPlayer_UpdatePlayerSpeed{
@@ -431,6 +454,13 @@ inline constexpr pm::sdk::EntryDesc VRStamina{.key = "VRStamina", .confidence = 
 inline constexpr pm::sdk::EntryDesc VRStamina_Update{.key = "VRStamina.Update", .kind = pm::sdk::Kind::Method,
                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                      .owner = "VRStamina", .name = "Update"};
+
+/// The rig's input component, a PlayerInput (Unity.InputSystem): LocalPlayer's one field of that type. The game's
+/// input checks (InputDevices) read it. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_playerInput{.key = "LocalPlayer.playerInput",
+                                                            .kind = pm::sdk::Kind::Field,
+                                                            .confidence = pm::sdk::Confidence::Decompiled,
+                                                            .owner = "LocalPlayer", .type = "PlayerInput"};
 
 /// The rig's stamina, a PlayerStamina: LocalPlayer's one field of that type. Decompiled.
 inline constexpr pm::sdk::EntryDesc LocalPlayer_stamina{.key = "LocalPlayer.stamina", .kind = pm::sdk::Kind::Field,
@@ -1072,6 +1102,8 @@ struct LocalPlayer {
   static constexpr pm::api::Field<pm::map::LocalPlayer_speedMultiplier, float> speedMultiplier{};
   /// Its stamina, a PlayerStamina: stamina.get(rig). Unresolved: null.
   static constexpr pm::api::Field<pm::map::LocalPlayer_stamina, void*> stamina{};
+  /// The rig's PlayerInput: playerInput.get(rig). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LocalPlayer_playerInput, void*> playerInput{};
   /// Whether its player has died, on this client only (others read Player.isDead): isDead.get(rig). Unresolved:
   /// false.
   static constexpr pm::api::Field<pm::map::LocalPlayer_isDead, bool> isDead{};
@@ -1196,6 +1228,8 @@ struct FirstPersonController {
   static constexpr pm::api::Type<pm::map::FirstPersonController> type{};
   /// The Move input as the game last read it, two floats: moveInput.get(rig). Unresolved: zero.
   static constexpr pm::api::Field<pm::map::FirstPersonController_moveInput, Vector2> moveInput{};
+  /// Whether the player asks to sprint (Run held, or toggled on): running.get(rig). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::FirstPersonController_running, bool> running{};
 };
 
 /// The local player's HUD.

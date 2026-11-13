@@ -116,9 +116,13 @@ page's, when one of its lists is loaded, and the page's own divider when none is
 The game shows a gamepad button's glyph with a `GamepadButton` widget (the journal's and pause screen's LB and RB tabs
 are ones). It holds an Xbox and a PS5 set of sprites and picks one by the connected pad's name and the platform; its
 `GamepadButton.image` shows the picked sprite for its action (`GamepadButton.action`) in full colour while a gamepad is
-in use, and turns clear for keyboard and mouse. A mod that wants the same glyph reads `Image.get_sprite` of a live
-widget whose action is bound to that button, so the glyph follows the pad the game detected. The game has no glyph for
-a mouse button, the scroll wheel or a key.
+in use, and turns clear for keyboard and mouse. Which of the two is in use is the game's own check,
+`InputDevices.UsesKeyboard`, of the player's PlayerInput (`LocalPlayer.playerInput`): it compares the PlayerInput's
+current control scheme with the game's keyboard scheme, and answers false while VR runs
+(`GamepadButton.CheckInputDevice` hides the glyph while it, or VR, holds). `pm::api::input::keyboard_in_use()`
+(`sdk/api/input_device.h`) asks it about the local rig. A mod that wants the same glyph reads `Image.get_sprite` of a
+live widget whose action is bound to that button, so the glyph follows the pad the game detected, and shows it while
+`keyboard_in_use()` answers false. The game has no glyph for a mouse button, the scroll wheel or a key.
 
 ## How this was read
 

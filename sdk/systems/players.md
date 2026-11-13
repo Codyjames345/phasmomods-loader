@@ -174,9 +174,14 @@ sprinting speed (`LocalPlayer.sprintSpeed`), serialized floats its prefab sets, 
 `LocalPCPlayer.UpdatePlayerSpeed` gives the controller the sprint speed while three things hold, and the walk speed
 otherwise:
 
-- the sprint input is held;
-- sprinting is allowed: `Difficulty.sprinting` is not 0 (0 off, 1 on, 2 infinite), or no contract is running;
+- the player asks to sprint (`FirstPersonController.running`: `FirstPersonController.OnRun` holds it while Run is held,
+  or flips it on each press in the game's toggle sprint mode);
+- sprinting is allowed: `Difficulty.sprinting` of `LevelValues.difficulty` is not 0 (0 off, 1 on, 2 infinite), or no
+  `GameController.instance` exists (no contract is running);
 - the stamina may sprint (`PlayerStamina.canSprint`, of the rig's `LocalPlayer.stamina`).
+
+`pm::api::movement::sprinting()` (`sdk/api/movement.h`) reads the three on the local PC rig, so a mod asks the game
+whether its investigator sprints instead of measuring the speed.
 
 It then multiplies that speed by the multiplier, except in a contract while the rig's player is dead
 (`LocalPlayer.isDead`, which `LocalPlayer.CompleteLocalPlayerDeath` sets and the rig's revive clears). On VR the

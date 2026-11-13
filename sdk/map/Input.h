@@ -421,6 +421,43 @@ inline constexpr pm::sdk::EntryDesc GamepadButton_image{.key = "GamepadButton.im
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "GamepadButton", .type = "Image"};
 
+inline constexpr const char* GamepadButton_CheckInputDevice_params[] = {"bool", "PlayerInput"};
+
+/// Shows or hides the widget's glyph for the input the player uses: hidden (its Image clear) while
+/// InputDevices.UsesKeyboard answers true for the PlayerInput it is given or while VR runs, else the sprite for the
+/// action's gamepad binding from the PS5 or the Xbox set. The bool overload, which the other calls. Decompiled.
+inline constexpr pm::sdk::EntryDesc GamepadButton_CheckInputDevice{
+    .key = "GamepadButton.CheckInputDevice", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GamepadButton", .name = "CheckInputDevice",
+    .params = GamepadButton_CheckInputDevice_params};
+
+/// The Input System's component for one player's input (Unity.InputSystem). Inferred: the Input System's documented
+/// API.
+inline constexpr pm::sdk::EntryDesc PlayerInput{.key = "PlayerInput", .name = "PlayerInput",
+                                                .assembly = "Unity.InputSystem", .ns = "UnityEngine.InputSystem"};
+
+inline constexpr const char* InputDevices_PlayerInput[] = {"PlayerInput"};
+
+/// The game's checks of which input a player uses (Assembly-CSharp, global namespace), a static class: the only class
+/// that declares a static bool method of one PlayerInput. Each check answers false while VR runs, and otherwise
+/// compares the PlayerInput's current control scheme (PlayerInput.currentControlScheme) with one of the game's scheme
+/// names. Name obfuscated. Decompiled.
+inline constexpr pm::sdk::EntryDesc InputDevices{.key = "InputDevices", .confidence = pm::sdk::Confidence::Decompiled,
+                                                 .assembly = "Assembly-CSharp", .ns = "", .type = "bool",
+                                                 .params = InputDevices_PlayerInput};
+
+// Of the class's two static bool(PlayerInput) checks, the glyph widget calls only the keyboard one.
+inline constexpr pm::sdk::Fact InputDevices_UsesKeyboard_facts[] = {
+    {.is = pm::sdk::Fact::Is::CalledBy, .method = "GamepadButton.CheckInputDevice"}};
+
+/// Whether the player uses keyboard and mouse: false while VR runs, else whether the PlayerInput's current control
+/// scheme is the game's keyboard scheme. The game's glyph widgets hide their gamepad glyph while it answers true
+/// (GamepadButton.CheckInputDevice). Static. The player's own PlayerInput is LocalPlayer.playerInput. Decompiled.
+inline constexpr pm::sdk::EntryDesc InputDevices_UsesKeyboard{
+    .key = "InputDevices.UsesKeyboard", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .flags = pm::sdk::kStatic, .owner = "InputDevices", .type = "bool", .params = InputDevices_PlayerInput,
+    .facts = InputDevices_UsesKeyboard_facts};
+
 /// One row of the game's keybinds menu (Assembly-CSharp, global namespace): Unity's rebinding sample. Its button starts
 /// an interactive rebind of the action it references, and it shows the binding's current key. Its fields keep their
 /// real names. Inferred: from the class dump.
@@ -622,6 +659,12 @@ struct InputActionReference {
   static constexpr pm::api::Method<pm::map::InputActionReference_Create, void*(void*)> Create{};
   /// get_action(reference): the InputAction, or null. Unresolved: null.
   static constexpr pm::api::Method<pm::map::InputActionReference_get_action, void*(void*)> get_action{};
+};
+
+/// The game's checks of which input a player uses.
+struct InputDevices {
+  /// UsesKeyboard(playerInput): whether that player uses keyboard and mouse (false while VR runs). Unresolved: false.
+  static constexpr pm::api::Method<pm::map::InputDevices_UsesKeyboard, bool(void*)> UsesKeyboard{};
 };
 
 /// A widget showing one action's gamepad glyph. `button` below is the GamepadButton.
