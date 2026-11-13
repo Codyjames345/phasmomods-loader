@@ -29,12 +29,18 @@ two tables; a script that needs them stops with the command to run when either i
 `re/decomp.mjs` runs Ghidra headless (`analyzeHeadless.bat`, found on PATH) on a project it never
 changes:
 
-- the project folder `re/ghidra`, project name `GA`;
+- the project folder `re/ghidra`, or the folder `PM_GHIDRA_PROJECT` names, project name `GA`;
 - the program `GameAssembly.dll` in it, imported once from a copy of the game's `GameAssembly.dll`;
 - opened read-only with `-noanalysis`, so it decompiles from whatever analysis the import left;
 - with `re/Decomp.java` as its post-script.
 
-Put the Ghidra installation's `support` folder, which holds `analyzeHeadless.bat`, on PATH. The one-time import, on Ghidra 12.1.4, ran no analysis at all (its
+Ghidra rejects a project path with a folder whose name starts with '.', so a git worktree kept under `.claude` cannot
+open this checkout's `re/ghidra`: set `PM_GHIDRA_PROJECT` (in the process environment only, never in a file, like
+`PM_GAME_DIR`) to a project outside the dotted folder, for example the main checkout's `re\ghidra`. `decomp.mjs` checks
+the folder before running and stops with the same advice.
+
+Put the Ghidra installation's `support` folder, which holds `analyzeHeadless.bat`, on PATH; `decomp.mjs` searches PATH
+entries only, never the folder it runs from. The one-time import, on Ghidra 12.1.4, ran no analysis at all (its
 log, `re/import.log`, reports the import and nothing after it), and took the language from the file
 (`x86:LE:64:default:windows`). From the repository's root, with `re\ghidra` an empty folder and `re\dump\game` already made
 by `tools/gamecheck.ps1`:
@@ -52,7 +58,7 @@ work use `re/slimpe.mjs` to build a slim copy holding only the functions you nee
 
 | Script | Usage | Needs |
 | --- | --- | --- |
-| `decomp.mjs` | `node re/decomp.mjs <out.c> <rva or map key> ...` | the tables, `re/ghidra`, Ghidra's `support` folder on PATH |
+| `decomp.mjs` | `node re/decomp.mjs <out.c> <rva or map key> ...` | the tables, `re/ghidra` (or `PM_GHIDRA_PROJECT` from a worktree under `.claude`), Ghidra's `support` folder on PATH |
 | `callers.mjs` | `node re/callers.mjs <GameAssembly.dll> <rva> ...` | `re/names.tsv` |
 | `slimpe.mjs` | `node re/slimpe.mjs <GameAssembly.dll> <out.dll> <from>-<to>\|<map key> ...` | `re/names.tsv` |
 | `strings.mjs` | `node re/strings.mjs <global-metadata.dat> [regex]` | nothing |

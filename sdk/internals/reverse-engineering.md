@@ -25,7 +25,7 @@ signature) and `re/map-addresses.tsv` (each map key's resolved value). Then:
 
 | Script | What it does |
 | --- | --- |
-| `re/decomp.mjs` | Decompiles functions by map key (or address) with headless Ghidra (`re/Decomp.java`), naming the callees it knows. Needs a one-time import into `re/ghidra` and Ghidra's `support` folder on PATH. |
+| `re/decomp.mjs` | Decompiles functions by map key (or address) with headless Ghidra (`re/Decomp.java`), naming the callees it knows. Needs a one-time import into `re/ghidra` (or the project `PM_GHIDRA_PROJECT` names) and Ghidra's `support` folder on PATH. |
 | `re/callers.mjs` | Lists the direct call sites of a function, with the method each lies in: a fast stand-in for cross-references over the whole binary. |
 | `re/slimpe.mjs` | Builds a slim copy of GameAssembly.dll that holds only the chosen functions, at their real addresses, with every known method as an export, for an interactive Ghidra session. |
 | `re/strings.mjs` | Dumps IL2CPP's string literals from the metadata. |
@@ -33,8 +33,9 @@ signature) and `re/map-addresses.tsv` (each map key's resolved value). Then:
 | `tools/assetcheck.py` | Checks scene and asset facts with the pinned UnityPy ([Scene and asset facts](../systems/scene.md)). |
 
 - **Ghidra refuses a project path with a folder whose name starts with a dot** ("Path element starting with '.' is not
-  permitted"), so `re/decomp.mjs` fails inside a git worktree kept under a dotted folder. Copy `re/ghidra` to a path
-  without one and point a copy of the script at it.
+  permitted"), so a git worktree kept under a dotted folder needs `PM_GHIDRA_PROJECT` set (in the process environment,
+  never in a file) to a Ghidra project outside it, for example the main checkout's `re\ghidra`; `re/decomp.mjs` checks
+  the project path and stops with that advice.
 - **A scene's components without a type tree** still name their scripts: UnityPy reads the script reference raw, and the
   scene's GameObjects give their layer. The physics layer matrix (`PhysicsManager.m_LayerCollisionMatrix`) and the layer
   names (`TagManager`) are in `globalgamemanagers`; that is how the ghost was shown to pass through doors
