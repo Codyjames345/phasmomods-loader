@@ -117,46 +117,6 @@ inline bool walking_forward(float moveX, float moveY) {
   return moveY >= kForwardInput && std::fabs(moveX) < kForwardInput;
 }
 
-/// How much faster than its walk speed the investigator must move to count as sprinting. The game's sprint mode can
-/// toggle Run, so the mod reads a sprint from the speed (LocalPCPlayer.UpdatePlayerSpeed moves the rig faster than its
-/// walk speed only while it sprints). A starting value.
-inline constexpr float kSprintMargin = 1.15f;
-/// How long the speed is measured over, in seconds. A starting value.
-inline constexpr float kSpeedWindowSeconds = 0.3f;
-
-/// Whether the investigator sprints, from its travel over kSpeedWindowSeconds rather than one frame: the frame clock
-/// ticks in 10 to 16 ms steps, so one frame's travel over its dt read a walk as a sprint at 33 to 54 frames a second,
-/// and frames with a dt of 0 were never measured.
-class SprintGauge {
- public:
-  /// Each frame: where the investigator is, the seconds since the last frame (0 is fine), and its walk speed in metres a
-  /// second (0 or less: never a sprint). Returns whether it sprints, as the last whole window measured.
-  bool feed(Point pos, float dt, float walkSpeed) {
-    if (!started_) {
-      from_ = pos;
-      started_ = true;
-      return sprinting_;
-    }
-    seconds_ += dt;
-    if (seconds_ >= kSpeedWindowSeconds) {
-      const float speed = std::hypot(pos.x - from_.x, pos.z - from_.z) / seconds_;
-      sprinting_ = walkSpeed > 0.0f && speed > walkSpeed * kSprintMargin;
-      from_ = pos;
-      seconds_ = 0.0f;
-    }
-    return sprinting_;
-  }
-
-  /// Forgets the window, as after a scene change or a jump in position.
-  void reset() { *this = SprintGauge{}; }
-
- private:
-  Point from_{};
-  float seconds_ = 0.0f;
-  bool started_ = false;
-  bool sprinting_ = false;
-};
-
 /// A rotation (a unit quaternion, x y z w, as Unity's).
 struct Quat {
   float x, y, z, w;

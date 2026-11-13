@@ -45,6 +45,8 @@
 #include "player_anim.h"
 #include "players.h"
 #include "settings.h"
+#include "input_device.h"
+#include "movement.h"
 #include "talk_loudness.h"
 #include "text_table.h"
 #include "third_person.h"
@@ -54,7 +56,9 @@ namespace pm::emotes::play {
 
 namespace {
 
+namespace input = api::input;
 namespace keys = api::keys;
+namespace movement = api::movement;
 namespace talk = api::talk;
 
 // Starting values, judged with the user in game.
@@ -163,7 +167,6 @@ struct State {
   // sprite the game picked for the pad in use, and turn clear on keyboard and mouse.
   api::Held previousGlyph, nextGlyph;
   std::map<int, void*> playing;  // by actor: the clip playing on that body, so a phase whose clip it already is plays on
-  SprintGauge sprint;            // this client's investigator's speed, over a window
   int page = 0;  // the page the wheel shows, kept while the mod runs (the user's: the same session only)
   api::Held controlsOf;  // the rig the actions were read from
   api::Held pcLook, propGrab, hand, head;
@@ -381,12 +384,19 @@ void read_actions() {
          g.previousGlyph && g.nextGlyph ? "were found" : "were not found");
 }
 
-// The game's glyph for a shoulder button while the player uses a gamepad, else null: the widget's Image turns clear on
-// keyboard and mouse (sdk/systems/menus.md, "Input glyphs").
+// The sprite the game's glyph widget for a shoulder button holds (the Xbox or PS5 one it picked for the pad), or null
+// (sdk/systems/menus.md, "Input glyphs").
 void* glyph_of(const api::Held& image) {
   if (!image || !game::alive(image)) return nullptr;
-  if (phasmo::Graphic::get_color(image).a <= 0.0f) return nullptr;
   return phasmo::Image::get_sprite(image);
+}
+
+// The page glyphs on screen: the game's shoulder glyphs while the game's own check says a gamepad is in use
+// (pm::api::input::keyboard_in_use, as its glyph widgets decide), none on keyboard and mouse (the scroll glyph is the
+// user's to supply, PM_UI_TODO), and none when the check cannot answer.
+void show_screen_glyphs() {
+  const bool pad = !input::keyboard_in_use().value_or(true);
+  wheel::show_glyphs(pad ? glyph_of(g.previousGlyph) : nullptr, pad ? glyph_of(g.nextGlyph) : nullptr);
 }
 
 // Turns the wheel's page by `steps`, wrapping round.
@@ -873,6 +883,9 @@ std::optional<int> wheel_input(void* player, bool vr) {
     }
     void* cam = game::local_camera();
     wheel::face(cam ? game::transform_of(cam) : nullptr);
+    // The VR page targets show the game's shoulder glyphs (the user's choice, 2026-11-13, until a VR glyph of their
+    // own): the game shows no glyph in VR, so these are the sprites its widgets hold.
+    wheel::show_glyphs(glyph_of(g.previousGlyph), glyph_of(g.nextGlyph));
     void* right = phasmo::VRPlayer::rightHandIK.get(player);
     const int pointed = wheel::pointed(right);
     wheel::show_pick(pointed);
@@ -927,7 +940,7 @@ std::optional<int> wheel_input(void* player, bool vr) {
   }
   if (g.wheelIn.open) {
     wheel::show_pick(g.wheelIn.picked);
-    wheel::show_glyphs(glyph_of(g.previousGlyph), glyph_of(g.nextGlyph));  // none on keyboard and mouse yet (PM_UI_TODO)
+    show_screen_glyphs();
   }
   if (!g.wheelIn.open && wasOpen) {
     wheel::close();
@@ -1133,14 +1146,9 @@ void tick() {
         f.moveX = move.x;
         f.moveY = move.y;
       }
-    // Sprinting, read from the speed over a window (SprintGauge): the rig moves faster than its walk speed only while
-    // it sprints (LocalPCPlayer.UpdatePlayerSpeed), whether the game's sprint mode holds or toggles Run.
-    if (rig) {
-      const float walk = phasmo::LocalPlayer::walkSpeed.get(rig) * phasmo::LocalPlayer::speedMultiplier.get(rig);
-      f.sprinting = g.sprint.feed(f.pos, dt, walk);
-    } else {
-      g.sprint.reset();
-    }
+    // Sprinting as the game decides it (pm::api::movement::sprinting: Run held or toggled on, sprinting allowed and
+    // the stamina able); nothing on VR, where a walking emote stands anyway.
+    f.sprinting = movement::sprinting().value_or(false);
     const bool dancing = g.local->active();
     f.endAction = dancing && ((end_action_pressed(vr) && !wheel::is_open()) || journal_open(player));
   }

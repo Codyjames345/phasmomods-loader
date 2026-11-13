@@ -28,7 +28,7 @@ the VR button again closes the wheel. The wheel stays shut while a menu or the j
 
 With more than eight dances the wheel turns pages. Scrolling down and the right bumper go to the next page, scrolling
 up and the left bumper to the previous, and the pages wrap: one turn past the last shows the first. In VR, point the
-right controller at the page row's turn spot on one side of the page number and pull the right trigger. A row over the
+right controller at the game's bumper glyph on one side of the page number and pull the right trigger. A row over the
 wheel shows the page number and the game's own glyph for each page control, and hides while the wheel has a single
 page. The wheel reopens on the page you last viewed while the mod has been running. While the wheel is open, the game actions bound to those
 page controls (the item swap on the scroll wheel, push-to-talk on the bumpers) are paused and come back when the wheel
