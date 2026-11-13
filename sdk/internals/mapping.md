@@ -85,7 +85,12 @@ check the entry declares.
    look-alike is no candidate (`GhostWanderState` is one class's eight fields, and a state class
    declares those and one more float). Both models list a type's declared fields alike
    (`tests/runtime_model_test.cpp` checks the flag on each). Two exact matches are `Ambiguous`; the flag
-   on any other entry is `Missing`. Adding `kFieldOrder` to an exact list also asks that the fields lie in
+   on any other entry is `Missing`. A field found by shape among several of one type that nothing else tells apart may take `kFirstOfShape` (the one
+   nearest the object's start) or `kLastOfShape` (the furthest), applied after every other check, for fields whose
+   order the game's own code fixes (`GamepadButton.xboxIcons` and `ps5Icons`). A candidate in doubt (unread code, an
+   unsure type) keeps it unresolved. A `within` holder whose type name several model types share (the offline dump
+   names field types only) takes C#'s own reading of a plain name: the one top-level type of the owner's namespace,
+   never a type nested in another class. Adding `kFieldOrder` to an exact list also asks that the fields lie in
    the listed order by offset, which fixes the struct's size (`RewardManager.EventScore`, whose size a
    mod's copy of `RewardManager.EventRow`'s answer depends on); alone, the flag is `Missing`.
    An interface has no fields to go by. A type entry whose `within` names another type entry is the one

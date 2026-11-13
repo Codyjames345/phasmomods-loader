@@ -56,6 +56,11 @@ enum EntryFlags : uint32_t {
   // A Type entry that is no generic definition: the one of a name several generic arities share, which the models
   // name alike (UnityEvent beside UnityEvent<T0> to UnityEvent<T0, T1, T2, T3>).
   kNotGeneric = 128,
+  // A Field found by shape among several of one type that no other check tells apart: the one nearest the object's
+  // start (kFirstOfShape) or the furthest (kLastOfShape), once every other check has run. For fields whose order the
+  // game's own code fixes, such as GamepadButton's Xbox and PS5 icon sets, which its code takes in turn. Never both.
+  kFirstOfShape = 256,
+  kLastOfShape = 512,
 };
 
 // A member's accessibility as C# declares it, numbered as ECMA-335's FieldAccess mask (II.23.1.5);

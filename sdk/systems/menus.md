@@ -124,6 +124,12 @@ current control scheme with the game's keyboard scheme, and answers false while 
 live widget whose action is bound to that button, so the glyph follows the pad the game detected, and shows it while
 `keyboard_in_use()` answers false. The game has no glyph for a mouse button, the scroll wheel or a key.
 
+Each widget holds both sets whole: `GamepadButton.xboxIcons` (the first of its two `GamepadIcons` fields) and
+`GamepadButton.ps5Icons` (the second), each a struct of one Sprite per gamepad control named for the Input System's
+control (`buttonSouth`, `leftShoulder` and so on). The map reads each set's sprites inside the widget
+(`GamepadButton.xbox.buttonWest`, `GamepadButton.ps5.leftShoulder`), so a mod can show the game's own glyph for any
+button, from the set the game picked (the one its widgets' Images show).
+
 ## How this was read
 
 How these facts were read from the game, what the loader does with them and how the entries are found are in [the maintainers' page](../internals/menus.md).

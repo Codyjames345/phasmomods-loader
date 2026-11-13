@@ -1030,6 +1030,92 @@ inline constexpr pm::sdk::EntryDesc PCPropGrab_ParentItemOnLocalPlayer{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "PCPropGrab", .name = "ParentItemOnLocalPlayer",
     .params = PCPropGrab_PhotonObjectInteract};
 
+inline constexpr const char* Player_Vector3[] = {"Vector3"};
+
+/// Moves the local PC rig to a point, on this client only: it marks the rig as teleporting, switches its movement
+/// controller off (LocalPlayer.characterController), sets the rig's position and switches the controller on again. No
+/// RPC: the rig's position reaches other clients as any move does. PCPlayer's Teleport calls it, and so does the
+/// training room's hunt (TrainingHuntRoom). Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_TeleportPlayer{
+    .key = "LocalPlayer.TeleportPlayer", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LocalPlayer", .name = "TeleportPlayer", .params = Player_Vector3};
+
+/// Moves the local VR rig to a point, on this client only: it sets the position of the VR rig it holds. No RPC.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc VRPlayer_Teleport{.key = "VRPlayer.Teleport", .kind = pm::sdk::Kind::Method,
+                                                      .confidence = pm::sdk::Confidence::Decompiled,
+                                                      .owner = "VRPlayer", .name = "Teleport",
+                                                      .params = Player_Vector3};
+
+/// The rig's movement controller, a PhysicsCharacterController: LocalPlayer's one field of that type, which
+/// LocalPlayer.TeleportPlayer switches off for the move. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_characterController{
+    .key = "LocalPlayer.characterController", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPlayer", .type = "@PhysicsCharacterController"};
+
+/// The game's own character controller (Assembly-CSharp, global namespace), a MonoBehaviour on the local rig: it moves
+/// the player's capsule (a CapsuleCollider) against a layer mask of its own. Decompiled.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController{.key = "PhysicsCharacterController",
+                                                               .confidence = pm::sdk::Confidence::Decompiled,
+                                                               .name = "PhysicsCharacterController",
+                                                               .assembly = "Assembly-CSharp", .ns = ""};
+
+/// Its Awake: it works out the controller's collision mask from its Rigidbody's layer and stores it
+/// (PhysicsCharacterController.collisionMask). Decompiled.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_Awake{
+    .key = "PhysicsCharacterController.Awake", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PhysicsCharacterController", .name = "Awake"};
+
+// Of the controller's three LayerMask fields, Awake stores only the collision mask (the door and ground masks are set
+// in the prefab).
+inline constexpr pm::sdk::Fact PhysicsCharacterController_collisionMask_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "PhysicsCharacterController.Awake"}};
+
+/// The layers the player's capsule collides with as it moves, a LayerMask (read as its int): what blocks the player.
+/// Awake works it out from the Rigidbody's layer. Decompiled.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_collisionMask{
+    .key = "PhysicsCharacterController.collisionMask", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PhysicsCharacterController", .type = "LayerMask",
+    .facts = PhysicsCharacterController_collisionMask_facts};
+
+/// The layers the player stands on, a LayerMask (read as its int). Inferred: the property's name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_groundLayers{
+    .key = "PhysicsCharacterController.get_groundLayers", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_groundLayers"};
+
+/// The player's capsule radius, metres. Inferred: the property's name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_radius{
+    .key = "PhysicsCharacterController.get_radius", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_radius"};
+/// The player's capsule height, metres. Inferred: the property's name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_height{
+    .key = "PhysicsCharacterController.get_height", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_height"};
+/// The player's capsule centre, local to the rig. Inferred: the property's name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_center{
+    .key = "PhysicsCharacterController.get_center", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_center"};
+
+/// The PC interact's layer mask (read as its int): PCPropGrab.OnInteract's step casts a ray 1.8 m (a constant of its
+/// code) from the centre of PCPropGrab.playerCam on these layers, triggers ignored, and acts only on what it hits that
+/// has a PhotonObjectInteract, or a ChildPhotonInteract leading to one (a door, a light switch, an item). Anything
+/// else, such as another player, gets nothing. Decompiled.
+inline constexpr pm::sdk::EntryDesc PCPropGrab_mask{.key = "PCPropGrab.mask", .kind = pm::sdk::Kind::Field,
+                                                    .confidence = pm::sdk::Confidence::Decompiled,
+                                                    .owner = "PCPropGrab", .name = "mask", .type = "LayerMask"};
+
+/// The camera the PC interact casts from, a Camera. Decompiled.
+inline constexpr pm::sdk::EntryDesc PCPropGrab_playerCam{.key = "PCPropGrab.playerCam", .kind = pm::sdk::Kind::Field,
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "PCPropGrab", .name = "playerCam", .type = "Camera"};
+
+/// A collider's link to the interactable it belongs to (Assembly-CSharp, global namespace): the PC interact follows it
+/// to the PhotonObjectInteract. Decompiled.
+inline constexpr pm::sdk::EntryDesc ChildPhotonInteract{.key = "ChildPhotonInteract",
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .name = "ChildPhotonInteract", .assembly = "Assembly-CSharp",
+                                                        .ns = ""};
+
 /// The PC player's look on its own body (Assembly-CSharp, global namespace): in LateUpdate it bends the spine and head
 /// toward where the camera looks. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc PCLook{.key = "PCLook", .name = "PCLook", .assembly = "Assembly-CSharp", .ns = ""};
@@ -1107,6 +1193,10 @@ struct LocalPlayer {
   /// Whether its player has died, on this client only (others read Player.isDead): isDead.get(rig). Unresolved:
   /// false.
   static constexpr pm::api::Field<pm::map::LocalPlayer_isDead, bool> isDead{};
+  /// TeleportPlayer(rig, &point): moves the local PC rig there, as the game does. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::LocalPlayer_TeleportPlayer, void(void*, const Vector3*)> TeleportPlayer{};
+  /// The rig's PhysicsCharacterController: characterController.get(rig). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LocalPlayer_characterController, void*> characterController{};
 };
 
 /// A player's stamina on its own client. `stamina` below is the PlayerStamina.
@@ -1251,9 +1341,33 @@ struct PlayerCharacterAnimations {
 };
 
 /// The PC player's hands.
+/// The game's character controller. `controller` below is the PhysicsCharacterController.
+struct PhysicsCharacterController {
+  /// What blocks the player, as an int layer mask: collisionMask.get(controller). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::PhysicsCharacterController_collisionMask, int32_t> collisionMask{};
+  /// get_groundLayers(controller): what the player stands on, as an int layer mask. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_groundLayers, int32_t(void*)>
+      get_groundLayers{};
+  /// get_radius(controller), get_height(controller): the capsule's size, metres. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_radius, float(void*)> get_radius{};
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_height, float(void*)> get_height{};
+  /// get_center(controller): the capsule's centre, local to the rig. Unresolved: zero.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_center, Vector3(void*)> get_center{};
+};
+
+/// A collider's link to its interactable.
+struct ChildPhotonInteract {
+  /// The type: type_object() for GetComponent. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::ChildPhotonInteract> type{};
+};
+
 struct PCPropGrab {
   /// The type: type_object() for GetComponentInChildren. Unresolved: null.
   static constexpr pm::api::Type<pm::map::PCPropGrab> type{};
+  /// The interact ray's layers, as an int: mask.get(grab). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::PCPropGrab_mask, int32_t> mask{};
+  /// The camera the interact ray starts from: playerCam.get(grab). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::PCPropGrab_playerCam, void*> playerCam{};
   /// GetItemInCameraSlot(grab): the held item, a PhotonObjectInteract, or null. Unresolved: null.
   static constexpr pm::api::Method<pm::map::PCPropGrab_GetItemInCameraSlot, void*(void*)> GetItemInCameraSlot{};
   /// ParentItemOnLocalPlayer(grab, item): puts the item back in the camera slot. Unresolved: does nothing.
@@ -1275,6 +1389,8 @@ struct VRPlayer {
   static constexpr pm::api::Field<pm::map::VRPlayer_leftHandIK, void*> leftHandIK{};
   /// The right hand's IK target, a Transform: rightHandIK.get(player). Unresolved: null.
   static constexpr pm::api::Field<pm::map::VRPlayer_rightHandIK, void*> rightHandIK{};
+  /// Teleport(player, &point): moves the local VR rig there, on this client. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::VRPlayer_Teleport, void(void*, const Vector3*)> Teleport{};
 };
 
 /// What an investigator carries. `grab` below is a NetworkedPropGrab.

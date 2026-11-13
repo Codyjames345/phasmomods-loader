@@ -296,6 +296,9 @@ class Resolver {
       return missing(r, "an exact field list applies to a type found by its field types");
     if ((d.flags & kFieldOrder) && !(d.flags & kExactFields))
       return missing(r, "a field order applies to an exact field list");
+    if ((d.flags & (kFirstOfShape | kLastOfShape)) &&
+        (d.kind != Kind::Field || d.name || (d.flags & kFirstOfShape && d.flags & kLastOfShape)))
+      return missing(r, "first or last of a shape applies to one field found by shape, and not both");
     // The dump gives a top-level type's arity only (by its file's name), so a nested type's is not known.
     if ((d.flags & kNotGeneric) && (d.kind != Kind::Type || d.owner))
       return missing(r, "kNotGeneric applies to a top-level type entry");
@@ -350,6 +353,20 @@ class Resolver {
     if (same) std::erase_if(candidates, [&](const Candidate& c) { return c.member != same->inner; });
     for (const Fact& fact : d.facts) std::erase_if(candidates, [&](Candidate& c) { return !keeps(fact, c); });
     if (d.kind == Kind::Method && image_) same_behaviour(candidates);
+    // First or last of a shape: of the fields every check kept, the one nearest the object's start or the furthest.
+    // A candidate in doubt (code a fact could not read, an unsure type) keeps the entry unresolved: nothing is picked.
+    const bool sure = std::all_of(candidates.begin(), candidates.end(),
+                                  [](const Candidate& c) { return c.unread.empty() && c.unsure.empty(); });
+    if ((d.flags & (kFirstOfShape | kLastOfShape)) && candidates.size() > 1 && sure) {
+      const auto offset_of = [&](const Candidate& c) { return model_.types[c.type].fields[c.member].offset; };
+      const auto pick = (d.flags & kFirstOfShape)
+                            ? std::min_element(candidates.begin(), candidates.end(),
+                                               [&](const Candidate& a, const Candidate& b) { return offset_of(a) < offset_of(b); })
+                            : std::max_element(candidates.begin(), candidates.end(),
+                                               [&](const Candidate& a, const Candidate& b) { return offset_of(a) < offset_of(b); });
+      const Candidate kept = *pick;
+      candidates = {kept};
+    }
     decide(d, r, candidates, named, owner);
     if (r.status == Status::Resolved && d.hint && r.currentName != d.hint)
       r.detail = std::format("renamed from {}", d.hint);
@@ -369,7 +386,22 @@ class Resolver {
       return -1;
     }
     const ModelField& field = model_.types[holder.type].fields[holder.member];
-    const int t = field.typeIndex;
+    int t = field.typeIndex;
+    // A type the model names but does not pin (several types share the name, as the offline dump has it): C#'s own
+    // lookup decides for a plain name, the one top-level type of the owner's namespace, never one nested in another
+    // class. More than one such type, or none, leaves it unknown.
+    if (t < 0) {
+      const ModelType& holderType = model_.types[holder.type];
+      for (int i = 0; i < static_cast<int>(model_.types.size()); ++i) {
+        const ModelType& candidate = model_.types[i];
+        if (candidate.name != field.type || candidate.declaring >= 0 || candidate.ns != holderType.ns) continue;
+        if (t >= 0) {
+          t = -1;
+          break;
+        }
+        t = i;
+      }
+    }
     if (t < 0 || !model_.types[t].isValueType || model_.types[t].isEnum) {
       why = std::format("{} is not of a struct type the model knows", d.within);
       return -1;
