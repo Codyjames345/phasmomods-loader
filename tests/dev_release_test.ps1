@@ -43,6 +43,7 @@ Assert-That ($workflow -match '--pre\b') 'a development build is a pre-release, 
 Assert-That ($workflow -match '--channel dev\b') 'a development build is on its own channel'
 Assert-That ($workflow -match '--tag "dev-') 'a development tag doesn''t match the release pattern'
 Assert-That ($workflow -match 'Remove-OldDevReleases') 'the job clears old development builds'
+Assert-That ($workflow -match 'changelog_section\.ps1' -and $workflow -match 'gh release edit') 'every release and development build keeps its notes from the changelog'
 # A development push and a release's tag each build and test once: the publishing job's own package.ps1 validates what ships, so the
 # validate job would only repeat it. A push to main validates, having nothing else to do it.
 Assert-That ($workflow -match "  validate:\s+name: Validate\s+(#[^\n]*\s+)*if: github\.ref != 'refs/heads/development' && !startsWith\(github\.ref, 'refs/tags/'\)") 'the validate job leaves a development push and a tag to the jobs that publish them'

@@ -28,7 +28,9 @@ function New-ReleaseFixture {
     if (-not $PSCmdlet.ShouldProcess($fixture, 'Create release fixture')) { return }
     New-Item -ItemType Directory -Path (Join-Path $fixture 'tools') -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $project 'tools/release.ps1') -Destination (Join-Path $fixture 'tools')
+    Copy-Item -LiteralPath (Join-Path $project 'tools/changelog_section.ps1') -Destination (Join-Path $fixture 'tools')
     Set-Content -LiteralPath (Join-Path $fixture 'VERSION') -Value '0.1.0'
+    Set-Content -LiteralPath (Join-Path $fixture 'CHANGELOG.md') -Value "# Changelog`n`n## [Unreleased]`n`n- One note.`n"
     Write-RecordFixture $fixture $project
     # Stands for the real build: it writes the digest of the map as it is now, when a test says the map has changed.
     Set-Content -LiteralPath (Join-Path $fixture 'build.ps1') -Value "if (Test-Path -LiteralPath `"`$PSScriptRoot/new-digest`") { Copy-Item -LiteralPath `"`$PSScriptRoot/new-digest`" -Destination `"`$PSScriptRoot/build/map-digest.txt`" }; if (Test-Path -LiteralPath `"`$PSScriptRoot/build-fails`") { throw 'build failed' }"
@@ -104,7 +106,7 @@ try {
     $fixture = New-ReleaseFixture 'no checked build'
     Set-Content -LiteralPath (Join-Path $fixture 'new-digest') -Value 'fedcba9876543210'
     & (Join-Path $fixture 'tools/release.ps1') -Version '0.2.0' -NoCheckedBuild 3>$null | Out-Null
-    if (@(Invoke-Git $fixture @('show', '--name-only', '--format=', 'HEAD')) -join ',' -ne 'VERSION,sdk/builds/unchecked-release.allow') { throw 'The unchecked release commit holds the wrong files.' }
+    if (@(Invoke-Git $fixture @('show', '--name-only', '--format=', 'HEAD')) -join ',' -ne 'CHANGELOG.md,VERSION,sdk/builds/unchecked-release.allow') { throw 'The unchecked release commit holds the wrong files.' }
     & (Join-Path $fixture 'tools/check_build_record.ps1') -Root $fixture 3>$null  # as CI's package.ps1 runs it
     Set-Content -LiteralPath (Join-Path $fixture 'new-digest') -Value '1111111111111111'
     Assert-ReleaseFailure $fixture '0.3.0' 'checked-build record'  # the next map change needs its own say-so
@@ -127,6 +129,35 @@ try {
     Invoke-Git $fixture @('tag', 'v0.2.0') | Out-Null
     Assert-ReleaseFailure $fixture '0.2.0' 'already exists'
 
+    # refuses until a person has written the release notes: an empty Unreleased, no Unreleased at all, and
+    # a CHANGELOG.md that is missing each send their own word, and none of them commits or tags
+    $fixture = New-ReleaseFixture 'empty changelog'
+    Set-Content -LiteralPath (Join-Path $fixture 'CHANGELOG.md') -Value "# Changelog`n`n## [Unreleased]`n`n## [0.1.0] - 2025-01-01`n`n- Older note.`n"
+    Invoke-Git $fixture @('commit', '--quiet', '--all', '--message', 'Empty the section') | Out-Null
+    Assert-ReleaseFailure $fixture '0.2.0' 'Write the release notes'
+    $fixture = New-ReleaseFixture 'no unreleased'
+    Set-Content -LiteralPath (Join-Path $fixture 'CHANGELOG.md') -Value "# Changelog`n`n## [0.1.0] - 2025-01-01`n`n- Older note.`n"
+    Invoke-Git $fixture @('commit', '--quiet', '--all', '--message', 'Drop the section') | Out-Null
+    Assert-ReleaseFailure $fixture '0.2.0' 'Write the release notes'
+    $fixture = New-ReleaseFixture 'no changelog'
+    Invoke-Git $fixture @('rm', '--quiet', 'CHANGELOG.md') | Out-Null
+    Invoke-Git $fixture @('commit', '--quiet', '--all', '--message', 'Drop the changelog') | Out-Null
+    Assert-ReleaseFailure $fixture '0.2.0' 'Write the release notes'
+
+    # the release turns Unreleased into a dated section for its own version and starts an empty one above
+    # it, in the same commit as the VERSION bump
+    $fixture = New-ReleaseFixture 'changelog renamed'
+    & (Join-Path $fixture 'tools/release.ps1') -Version '0.2.0' | Out-Null
+    $changelog = Get-Content -LiteralPath (Join-Path $fixture 'CHANGELOG.md')
+    if (@($changelog | Where-Object { $_ -eq '## [Unreleased]' }).Count -ne 1) { throw 'The released changelog does not hold exactly one fresh Unreleased.' }
+    $dated = -1
+    for ($i = 0; $i -lt $changelog.Count; $i++) { if ($changelog[$i].StartsWith('## [0.2.0] - ')) { $dated = $i; break } }
+    if ($dated -lt 0) { throw 'The released changelog has no dated 0.2.0 section.' }
+    if ($changelog.IndexOf('## [Unreleased]') -ge $dated) { throw 'The new Unreleased is not above the 0.2.0 section.' }
+    if (-not $changelog[$dated].EndsWith((Get-Date -Format 'yyyy-MM-dd'))) { throw 'The 0.2.0 section is not dated today.' }
+    if ($changelog[$dated + 2] -ne '- One note.') { throw 'The written entries did not carry into the 0.2.0 section.' }
+    if (@(Invoke-Git $fixture @('show', '--name-only', '--format=', 'HEAD')) -join ',' -ne 'CHANGELOG.md,VERSION') { throw 'The release commit did not carry the changelog with the bump.' }
+
     # bumps and tags, and pushes nothing without -Push
     $fixture = New-ReleaseFixture 'bump and tag'
     $origin = Join-Path $testRoot 'bump origin.git'
@@ -137,7 +168,7 @@ try {
     if ((Get-Content -LiteralPath (Join-Path $fixture 'VERSION') -Raw).Trim() -ne '0.2.0') { throw 'VERSION was not bumped to 0.2.0.' }
     if ((Invoke-Git $fixture @('log', '-1', '--format=%s')) -join '' -ne 'Release 0.2.0') { throw 'The release commit has the wrong subject.' }
     if ((Invoke-Git $fixture @('rev-parse', 'HEAD~1')) -join '' -ne $previousHead) { throw 'The release is not a single commit on the previous head.' }
-    if (@(Invoke-Git $fixture @('show', '--name-only', '--format=', 'HEAD')) -join ',' -ne 'VERSION') { throw 'The release commit changed more than VERSION.' }
+    if (@(Invoke-Git $fixture @('show', '--name-only', '--format=', 'HEAD')) -join ',' -ne 'CHANGELOG.md,VERSION') { throw 'The release commit changed more than CHANGELOG.md and VERSION.' }
     if ((Invoke-Git $fixture @('cat-file', '-t', 'v0.2.0')) -join '' -ne 'tag') { throw 'The release tag is not annotated.' }
     $tagged = (Invoke-Git $fixture @('rev-parse', 'v0.2.0^{commit}')) -join ''
     $head = (Invoke-Git $fixture @('rev-parse', 'HEAD')) -join ''
