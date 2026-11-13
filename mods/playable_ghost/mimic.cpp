@@ -23,9 +23,14 @@ bool is_mimic(void* controller) {
 
 // The type the Mimic is copying now: the ghost's behaviour type, which MimicCopy rewrites at every
 // switch while GhostController.traits stays the Mimic's. The game reaches it through the same chain
-// (GhostController.levelController, LevelController.currentGhost, GhostAI.info); kNoType when the chain
-// is not there or its type is not one the session can send.
+// (GhostController.levelController, LevelController.currentGhost, GhostAI.info). kNoType when any entry
+// of the chain did not resolve (an unresolved get reads 0, and 0 is a real type, so nothing may be
+// taken for the copy without a readable entry), when the chain is not there, or when its type is not
+// one the session can send.
 uint8_t current_copy(void* controller) {
+  if (!api::all_resolved<GhostController::levelController, phasmo::LevelController::currentGhost,
+                         phasmo::GhostAI::info, phasmo::GhostInfo::behaviourType>())
+    return session::kNoType;
   void* level = controller ? GhostController::levelController.get(controller) : nullptr;
   void* ghost = level ? phasmo::LevelController::currentGhost.get(level) : nullptr;
   void* info = ghost ? phasmo::GhostAI::info.get(ghost) : nullptr;

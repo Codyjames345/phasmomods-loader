@@ -20,14 +20,14 @@ uint8_t next();  // the pick waiting for the next switch, or session::kNoType
 // game's order. Empty when `controller` is null, destroyed or not a Mimic's, and before its first copy.
 std::vector<uint8_t> copies(void* controller);
 // The types the ghost player chooses from, kept free of game calls so it can be tested offline: all of
-// `copies` except `current`, the type it is copying now (session::kNoType when none), in the game's
+// `list` except `current`, the type it is copying now (session::kNoType when none), in the game's
 // order. The game's own pick at a switch is a random element of the whole list and may copy the type
 // it is copying now (GhostController.MimicCopy); its player is never offered that one (the user's rule,
 // 2026-11-01).
-inline std::vector<uint8_t> offer(const std::vector<uint8_t>& copies, uint8_t current) {
+inline std::vector<uint8_t> offer(const std::vector<uint8_t>& list, uint8_t current) {
   std::vector<uint8_t> out;
-  out.reserve(copies.size());
-  for (uint8_t t : copies)
+  out.reserve(list.size());
+  for (uint8_t t : list)
     if (t != current) out.push_back(t);
   return out;
 }

@@ -368,6 +368,34 @@ void mimic_player_cannot_pick_current_copy() {
   CHECK(pm::mimic::place_pick(&m.controller, 4) && m.next().hasValue && m.next().value == 4);
 }
 
+// A map entry that did not resolve reads as 0, and 0 is a real ghost type: when the chain to the copying
+// ghost's behaviour type is unreadable, nothing may be taken for the current copy. Here the info's type
+// entry is missing, so a pick of type 0 is still the ghost player's to make.
+void mimic_an_unreadable_chain_hides_no_type() {
+  Obj controller, level, ghost, info;
+  fake::reset();
+  fake::field(map::GhostController_ghostType, 0x10);
+  fake::field(map::GhostController_typeChangeDue, 0x14);
+  fake::field(map::GhostController_mimicNext, 0x18);
+  fake::field(map::GhostController_mimicCopies, 0x20);
+  fake::field(map::GhostController_levelController, 0x28);
+  fake::field(map::LevelController_currentGhost, 0x10);
+  fake::field(map::GhostAI_info, 0x10);
+  // GhostInfo_behaviourType is not given: it stays unresolved, and its get would read 0.
+  fake::value(map::GhostType_Mimic, 7);
+  bind();
+  put(controller, 0x10, int32_t{7});
+  put(controller, 0x14, true);  // the timer has asked
+  put(controller, 0x20, fake::value_list({0, 7}));  // type 0 is one it may copy
+  put(controller, 0x28, static_cast<void*>(&level));
+  put(level, 0x10, static_cast<void*>(&ghost));
+  put(ghost, 0x10, static_cast<void*>(&info));
+  CHECK(pm::mimic::copies(&controller) == std::vector<uint8_t>({0, 7}));
+  CHECK(pm::mimic::place_pick(&controller, 0));
+  const phasmo::NullableGhostType next = phasmo::GhostController::mimicNext.get(&controller);
+  CHECK(next.hasValue && next.value == 0);
+}
+
 // Each investigator's guess is its death and the type chosen in its own journal, None meaning no guess.
 // The numbers are read: None is 9 here, and the game's own None (24) counts as a type.
 void the_guess_is_the_journals_choice() {
@@ -477,6 +505,7 @@ int main() {
   the_kormos_hears_each_footstep_its_hearing_holds();
   mimic_pick_waits_for_the_games_own_switch();
   mimic_player_cannot_pick_current_copy();
+  mimic_an_unreadable_chain_hides_no_type();
   the_guess_is_the_journals_choice();
   the_ghost_player_sees_no_salt_or_crucifix();
   std::printf(g_failures ? "%d check(s) failed\n" : "all glue tests passed\n", g_failures);
