@@ -1,0 +1,85 @@
+name: Bug report
+description: Something the loader or a mod does wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        If the problem could put your account at risk, do not open an issue here: report it
+        privately as SECURITY.md describes.
+  - type: input
+    id: loader-version
+    attributes:
+      label: Loader version
+      description: >
+        The title bar of the PhasmoMods Loader window shows it, for example
+        "PhasmoMods Loader 0.2.0". Development builds show a -dev number.
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: input
+    id: game-build
+    attributes:
+      label: Game build
+      description: >
+        PhasmoMods writes the game build it sees into its log, and mods.log names both versions
+        when they disagree. Leave blank if you do not know it.
+      placeholder: "as shown in mods.log, if known"
+    validations:
+      required: false
+  - type: textarea
+    id: mods
+    attributes:
+      label: Mods you run
+      description: >
+        Which mods are ticked, and whether a mod from outside this project (a community mod) is
+        involved. Say whether you use the development checkbox.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What you did, in order, as exactly as you can. Single player or a lobby, and what difficulty.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: other
+    attributes:
+      label: Anything else
+      description: Other mods that make it not happen, when it started, anything unusual.
+    validations:
+      required: false
+  - type: dropdown
+    id: reproducibility
+    attributes:
+      label: How often does it happen?
+      options:
+        - Every time
+        - Sometimes
+        - Once so far
+    validations:
+      required: true
+  - type: checkboxes
+    id: log
+    attributes:
+      label: Log attached
+      description: >
+        Attach the loader's log: the file mods.log in %LOCALAPPDATA%\PhasmoMods (not the game's own
+        log). It names mods and says what the loader did; read it over for anything you would rather
+        keep private before attaching.
+      options:
+        - label: I have attached %LOCALAPPDATA%\PhasmoMods\mods.log
+          required: true

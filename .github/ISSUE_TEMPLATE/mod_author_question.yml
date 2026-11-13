@@ -1,0 +1,30 @@
+name: Mod author question
+description: Questions about the SDK, the game API or making a mod.
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Before asking, check the SDK's own pages: [sdk/README.md](https://github.com/Codyjames345/phasmomods-loader/blob/main/sdk/README.md),
+        the `sdk/systems` pages and `sdk/guides`. If an answer you need is missing, say so: that is an SDK gap.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What you are trying to do with the SDK, and what you have already tried or read.
+    validations:
+      required: true
+  - type: input
+    id: sdk-version
+    attributes:
+      label: Loader or SDK version you build against
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: textarea
+    id: what-you-want
+    attributes:
+      label: What the SDK should let you do
+      description: If something in the SDK is missing, unclear or awkward, say what you wanted instead.
+    validations:
+      required: false
