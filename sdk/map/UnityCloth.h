@@ -14,7 +14,6 @@
 #include "entry.h"
 #include "game_api.h"
 #include "LevelRoom.h"
-#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -29,8 +28,7 @@ inline constexpr const char* UnityCloth_CapsuleColliders[] = {"CapsuleCollider[]
 /// after the mesh is set: it simulates that mesh's vertices. Decompiled: ClothAttachCharacters uses it.
 inline constexpr pm::sdk::EntryDesc Cloth{.key = "Cloth", .confidence = pm::sdk::Confidence::Decompiled,
                                           .flags = pm::sdk::kOptional, .name = "Cloth",
-                                          .assembly = "UnityEngine.ClothModule", .ns = "UnityEngine",
-                                          .base = &Component};
+                                          .assembly = "UnityEngine.ClothModule", .ns = "UnityEngine"};
 
 /// Sets the capsules the cloth collides with, a CapsuleCollider[]. A capsule shorter than its diameter is a sphere.
 /// The cloth reads only this list: a collider in it touches the cloth whatever its layer. Decompiled:

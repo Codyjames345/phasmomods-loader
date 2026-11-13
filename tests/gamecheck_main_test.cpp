@@ -91,6 +91,8 @@ inline constexpr EntryDesc kSelectable{.key = "Selectable", .base = &kUIBehaviou
 inline constexpr EntryDesc kToggle{.key = "Toggle", .base = &kBase};
 inline constexpr EntryDesc kPlainer{.key = "Plainer", .base = &kBase};
 inline constexpr EntryDesc kLoop{.key = "Loop", .base = &kBase};
+inline constexpr EntryDesc kCollider{.key = "Collider", .base = &kComponent};
+inline constexpr EntryDesc kWanderer{.key = "Wanderer", .base = &kBase};
 
 // A class of the model whose base list names `bases`, each written without type arguments.
 ModelType model_class(const char* assembly, const char* ns, const char* name, std::vector<std::string> bases,
@@ -110,8 +112,9 @@ bool names_line(const BaseCheck& check, const std::string& start) {
   return std::any_of(check.wrong.begin(), check.wrong.end(), [&](const std::string& l) { return l.starts_with(start); });
 }
 
-// Each parent on the way to a base must be the one type its name and arity can mean, or the entry is named: the check
-// never picks among namesakes, even ones that would all lead to the base.
+// Each parent on the way to a base must be the one type its name and arity can mean in the whole game, or the entry is
+// named: the check never picks among namesakes, even ones that would all lead to the base, and a name unique among the
+// assemblies the map names may still be shared by one it does not.
 void bases_check_reads_each_parent_exactly() {
   GameModel model;
   model.types = {
@@ -154,28 +157,43 @@ void bases_check_reads_each_parent_exactly() {
   ModelType nestedEnum = model_class("B", "Q", "Behaviour", {}, false, 7);
   nestedEnum.isEnum = nestedEnum.isValueType = true;
   model.types.push_back(nestedEnum);  // 28
+  // Collider's Component is in another assembly than Collider's own, so only a name the whole game declares once proves
+  // it; Behaviour's is pinned by its own namespace, whatever else the game declares.
+  model.types.push_back(model_class("UnityEngine.PhysicsModule", "UnityEngine", "Collider", {"Component"}));  // 29
+  model.types.push_back(model_class("A", "", "Wanderer", {"Outside"}));                                      // 30
+  // The whole game: the model's assemblies and two the map does not name.
+  GameModel game = model;
+  game.types.push_back(model_class("System", "System.ComponentModel", "Component", {}));
+  game.types.push_back(model_class("Other", "O", "Outside", {"Base"}));
   const auto at = [](const EntryDesc& d, int type) { return Result{.desc = &d, .status = Status::Resolved, .type = type}; };
   Resolution resolution;
   resolution.results = {at(kObject, 0),     at(kComponent, 2), at(kBehaviour, 3),    at(kGhost, 4),      at(kCamera, 5),
                         at(kWrong, 4),      at(kBase, 10),     at(kChild, 11),       at(kPlain, 7),      at(kLost, 12),
                         at(kOdd, 15),       at(kHangs, 4),     at(kMethod, 4),       at(kOnMethod, 4),   at(kOnStray, 4),
                         Result{.desc = &kUnresolved},          at(kPlayer, 16),      at(kVRPlayer, 18),  at(kUIBehaviour, 19),
-                        at(kSelectable, 21), at(kToggle, 24),  at(kPlainer, 25),     at(kLoop, 26)};
-  const BaseCheck check = check_bases(model, resolution);
-  CHECK(check.checked == 16);  // Hangs waits for its base, and entries without one are not checked
-  CHECK(check.wrong.size() == 10);
+                        at(kSelectable, 21), at(kToggle, 24),  at(kPlainer, 25),     at(kLoop, 26),
+                        at(kCollider, 29),   at(kWanderer, 30)};
+  // Against the model alone, Collider's Component looks unique.
+  CHECK(!names_line(check_bases(model, model, resolution), "BASE Collider "));
+  const BaseCheck check = check_bases(model, game, resolution);
+  CHECK(check.checked == 18);  // Hangs waits for its base, and entries without one are not checked
+  CHECK(check.wrong.size() == 12);
   for (const char* key : {"Component ", "Behaviour ", "GhostAI ", "Camera ", "Hangs ", "VRPlayer ", "Toggle "})
     CHECK(!names_line(check, std::string("BASE ") + key));
   CHECK(names_line(check, "BASE WrongGhost does not derive from Camera: the chain ends at UnityEngine.Object"));
-  CHECK(names_line(check, "BASE Child does not derive from Base: Child derives from Event, which 2 types of the model share"));
+  CHECK(names_line(check, "BASE Child does not derive from Base: Child derives from Event, which 2 types of the game share"));
   CHECK(names_line(check, "BASE Plain does not derive from Object: the chain ends at Plain"));
-  CHECK(names_line(check, "BASE Lost does not derive from Base: Lost derives from Missing, which is no type of the model"));
-  CHECK(names_line(check, "BASE Odd does not derive from Base: Odd derives from Dual, which 2 types of the model share"));
+  CHECK(names_line(check, "BASE Lost does not derive from Base: Lost derives from Missing, which is no type of the game"));
+  CHECK(names_line(check, "BASE Odd does not derive from Base: Odd derives from Dual, which 2 types of the game share"));
   CHECK(names_line(check, "BASE OnMethod: its base Method is not a type entry of the map"));
   CHECK(names_line(check, "BASE OnStray: its base Stray is not a type entry of the map"));
   CHECK(names_line(check, "BASE Selectable does not derive from UIBehaviour: UnityEngine.UI.Selectable derives from "
-                          "UIBehaviour, which 2 types of the model share"));
+                          "UIBehaviour, which 2 types of the game share"));
   CHECK(names_line(check, "BASE Plainer does not derive from Base: the chain ends at N.Signal"));
+  CHECK(names_line(check, "BASE Collider does not derive from Component: UnityEngine.Collider derives from Component, "
+                          "which 2 types of the game share"));
+  CHECK(names_line(check, "BASE Wanderer does not derive from Base: Wanderer derives from Outside, which lies in Other, "
+                          "an assembly the map does not name"));
   CHECK(names_line(check, "BASE Loop does not derive from Base: the chain from LoopB is deeper than 64 classes"));
 }
 }  // namespace

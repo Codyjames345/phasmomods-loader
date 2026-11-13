@@ -200,8 +200,8 @@ bool parse_method(std::string_view line, Declaration& out) {
 
 // The part of a type declaration line before its base list: "private sealed class Name<T> : Base".
 // The base list after a type declaration's name, ": Base, IThing<T>", as short names without generic
-// arguments, and in `arities` the number of type arguments each is written with (0 and 1); empty when
-// there is none.
+// arguments, and in `arities` the number of type arguments each is written with (for that example, 0
+// and 1); empty when there is none.
 std::vector<std::string> base_names(std::string_view line, std::vector<int>& arities) {
   std::vector<std::string> out;
   arities.clear();

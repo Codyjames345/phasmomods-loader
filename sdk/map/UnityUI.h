@@ -18,7 +18,6 @@ inline constexpr const char* UnityUI_Vector2[] = {"Vector2"};
 inline constexpr const char* UnityUI_int[] = {"int"};
 inline constexpr const char* UnityUI_float[] = {"float"};
 
-
 /// Unity's grid layout (UnityEngine.UI), a Behaviour: it places its active children in cells of one
 /// size, row by row, in their sibling order. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc GridLayoutGroup{.key = "GridLayoutGroup", .name = "GridLayoutGroup",
@@ -112,7 +111,9 @@ inline constexpr pm::sdk::EntryDesc Button_get_onClick{.key = "Button.get_onClic
                                                        .owner = "Button", .name = "get_onClick"};
 
 /// Unity's base of the UI's components (UnityEngine.UI, namespace UnityEngine.EventSystems). Inferred:
-/// Unity's documented API.
+/// Unity's documented API. The class dump cannot prove which UIBehaviour the classes of namespace UnityEngine.UI
+/// (Selectable, Graphic, the layout groups) derive from, since DoozyRuntime declares one too, so their handles carry
+/// no base past it: reach this type from them with pm::api::as.
 inline constexpr pm::sdk::EntryDesc UIBehaviour{.key = "UIBehaviour", .name = "UIBehaviour",
                                                 .assembly = "UnityEngine.UI", .ns = "UnityEngine.EventSystems",
                                                 .base = &MonoBehaviour};
@@ -377,8 +378,7 @@ inline constexpr pm::sdk::EntryDesc Graphic_get_canvasRenderer{.key = "Graphic.g
 
 /// What draws a Graphic on its canvas (UnityEngine.UIModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc CanvasRenderer{.key = "CanvasRenderer", .name = "CanvasRenderer",
-                                                   .assembly = "UnityEngine.UIModule", .ns = "UnityEngine",
-                                                   .base = &Component};
+                                                   .assembly = "UnityEngine.UIModule", .ns = "UnityEngine"};
 
 /// The colour it multiplies the graphic by; a Toggle fades a graphic through it. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc CanvasRenderer_GetColor{.key = "CanvasRenderer.GetColor",

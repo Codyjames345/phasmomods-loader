@@ -413,11 +413,13 @@ bool write_text(const std::filesystem::path& path, const std::string& text) {
 
 // The classes of the model, by their parents: what the bases check walks. The dump gives a class's parent only as the
 // short name and arity its base list begins with (C# lists the base class first), and short names are shared, so a
-// parent is read only where exactly one type fits; anything else leaves the chain unproved, and the check never picks.
+// parent is read only where exactly one type of the whole game fits; anything else leaves the chain unproved, and the
+// check never picks. `game` holds every assembly of the dump, `model` the ones the map names.
 class Ancestry {
  public:
-  explicit Ancestry(const GameModel& model) : model_(model) {
-    for (size_t i = 0; i < model.types.size(); ++i) named_[model.types[i].name].push_back(static_cast<int>(i));
+  Ancestry(const GameModel& model, const GameModel& game) : model_(model), game_(game) {
+    for (size_t i = 0; i < game.types.size(); ++i) named_[game.types[i].name].push_back(static_cast<int>(i));
+    for (size_t i = 0; i < model.types.size(); ++i) inModel_.emplace(identity(model, static_cast<int>(i)), static_cast<int>(i));
   }
 
   // Whether the chain of parents from the class `t` reaches the class `base`. False, with why, when the chain ends
@@ -447,7 +449,7 @@ class Ancestry {
   // from System.Object: the list is empty or begins with an interface). Only a type of that name and arity counts,
   // and never a struct, an enum, or one of the three types no base list names. A top-level class finds a type of its
   // own namespace before any a using directive brings in, so the one such type of its own assembly is its parent.
-  // Otherwise exactly one type must fit. Why the parent cannot be told, or empty.
+  // Otherwise exactly one type in every assembly of the game must fit. Why the parent cannot be told, or empty.
   std::string read_parent(int t, int& parent) const {
     parent = -1;
     const ModelType& type = model_.types[t];
@@ -457,7 +459,7 @@ class Ancestry {
     std::vector<int> found;
     if (const auto named = named_.find(name); named != named_.end())
       for (const int c : named->second) {
-        const ModelType& x = model_.types[c];
+        const ModelType& x = game_.types[c];
         if (x.isValueType || never_listed(x)) continue;
         // The dump knows a top-level type's arity only; a nested one's is not known, so it stays a candidate.
         if (arity >= 0 && x.declaring < 0 && x.genericParams != arity) continue;
@@ -466,18 +468,30 @@ class Ancestry {
     if (type.declaring < 0 && arity >= 0) {
       std::vector<int> own;
       for (const int c : found) {
-        const ModelType& x = model_.types[c];
+        const ModelType& x = game_.types[c];
         if (x.declaring < 0 && x.assembly == type.assembly && x.ns == type.ns) own.push_back(c);
       }
       if (own.size() == 1) found = std::move(own);
     }
-    if (found.empty()) return std::format("{} derives from {}, which is no type of the model", describe(t), name);
-    const bool interfaces = std::all_of(found.begin(), found.end(), [&](int c) { return model_.types[c].isInterface; });
+    if (found.empty()) return std::format("{} derives from {}, which is no type of the game", describe(t), name);
+    const bool interfaces = std::all_of(found.begin(), found.end(), [&](int c) { return game_.types[c].isInterface; });
     if (interfaces) return {};
     if (found.size() > 1)
-      return std::format("{} derives from {}, which {} types of the model share", describe(t), name, found.size());
-    parent = found.front();
+      return std::format("{} derives from {}, which {} types of the game share", describe(t), name, found.size());
+    const auto at = inModel_.find(identity(game_, found.front()));
+    if (at == inModel_.end())
+      return std::format("{} derives from {}, which lies in {}, an assembly the map does not name", describe(t), name,
+                         game_.types[found.front()].assembly);
+    parent = at->second;
     return {};
+  }
+
+  // A type as both models name it: its assembly, namespace, declaring types, name and arity.
+  static std::string identity(const GameModel& m, int t) {
+    const ModelType& type = m.types[t];
+    std::string out = std::format("{}`{}", type.name, type.genericParams);
+    for (int d = type.declaring; d >= 0; d = m.types[d].declaring) out = m.types[d].name + "/" + out;
+    return type.assembly + "|" + type.ns + "|" + out;
   }
 
   // System.Object, System.ValueType and System.Enum, which no base list names (sdk/resolver/model.h): Cpp2IL writes
@@ -492,7 +506,9 @@ class Ancestry {
   }
 
   const GameModel& model_;
-  std::unordered_map<std::string, std::vector<int>> named_;
+  const GameModel& game_;
+  std::unordered_map<std::string, std::vector<int>> named_;  // the game's types, by short name
+  std::unordered_map<std::string, int> inModel_;             // the model's types, by identity
 };
 // What the bases check found: how many entries' bases it checked, and a line for each that does not hold.
 struct BaseCheck {
@@ -501,12 +517,12 @@ struct BaseCheck {
 };
 
 // Proves the map's base data (EntryDesc::base), which typed handles convert by (sdk/api/ref.h): each resolved Type
-// entry's class derives from the class its base resolved to, each parent read exactly (Ancestry). A base that is
-// not a Type entry of the map is wrong too. An entry or a base that did not resolve is not checked: its own line is the
-// failure when it is required.
-BaseCheck check_bases(const GameModel& model, const Resolution& resolution) {
+// entry's class derives from the class its base resolved to, each parent read exactly (Ancestry) against `game`, every
+// assembly of the dump. A base that is not a Type entry of the map is wrong too. An entry or a base that did not resolve
+// is not checked: its own line is the failure when it is required.
+BaseCheck check_bases(const GameModel& model, const GameModel& game, const Resolution& resolution) {
   BaseCheck out;
-  const Ancestry ancestry(model);
+  const Ancestry ancestry(model, game);
   for (const Result& r : resolution.results) {
     const EntryDesc* base = r.desc->base;
     if (!base) continue;
@@ -577,6 +593,26 @@ int run(int argc, wchar_t** argv) {
   if (unparsed != 0) {
     std::fprintf(stderr, "gamecheck: %zu member lines of the dump could not be read\n", unparsed);
     return 2;
+  }  // Every assembly of the dump, for the bases check: a parent's name is unique only if no assembly of the game shares it,
+  // not merely none the map names. A line it could not read might be a type's, so that dump is refused too.
+  std::vector<std::string> everyAssembly;
+  const bool listed = each_entry(args.dump, [&](const std::filesystem::directory_entry& e) {
+    std::error_code kindError;
+    if (e.is_directory(kindError)) {
+      const std::u8string folder = e.path().filename().u8string();
+      everyAssembly.emplace_back(folder.begin(), folder.end());
+    }
+    return !kindError;
+  });
+  GameModel game;
+  size_t gameUnparsed = 0;
+  if (!listed || !load_dump(args.dump, everyAssembly, game, error, &gameUnparsed)) {
+    std::fprintf(stderr, "gamecheck: %s\n", listed ? error.c_str() : "cannot list the dump's assemblies");
+    return 2;
+  }
+  if (gameUnparsed != 0) {
+    std::fprintf(stderr, "gamecheck: %zu member lines of the dump's other assemblies could not be read\n", gameUnparsed);
+    return 2;
   }
   const std::vector<uint8_t> bytes = map_pe_file(args.image);
   const CodeImage image(bytes);
@@ -642,7 +678,7 @@ int run(int argc, wchar_t** argv) {
   if (steeringLacks.empty()) std::printf("HOST steering available\n");
   else std::printf("HOST steering unavailable: %s\n", steeringLacks.c_str());
   // Typed handles convert to a base type's handle by the map's word: each base must be an ancestor in this build.
-  const BaseCheck bases = check_bases(model, resolution);
+  const BaseCheck bases = check_bases(model, game, resolution);
   for (const std::string& line : bases.wrong) std::printf("%s\n", line.c_str());
   std::printf("BASES %zu checked, %zu wrong\n", bases.checked, bases.wrong.size());
   failed = failed || !bases.wrong.empty();

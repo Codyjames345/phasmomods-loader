@@ -165,8 +165,7 @@ inline constexpr pm::sdk::EntryDesc LevelRoom_temperature{
 
 /// Unity's collider component (UnityEngine.PhysicsModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Collider{.key = "Collider", .name = "Collider",
-                                             .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine",
-                                             .base = &Component};
+                                             .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine"};
 
 /// The collider's box in world space, a Bounds (its centre and its half size). Inferred: Unity's
 /// documented property getter.

@@ -1,7 +1,7 @@
 // Every managed object the host and the mods keep between frames must be an il2cpp::Held (see
 // host/il2cpp.h): the GC does not scan this code's memory. This test reads the sources and fails on a
 // raw void* (or std::vector<void*>), or a typed handle (pm::api::Ref or Object, sdk/api/ref.h, which
-// is the same reference by another type), declared at namespace or struct scope, the places that outlive
+// is the same reference by another type) or a std container of them, declared at namespace or struct scope, the places that outlive
 // a call: keep a handle in a pm::api::HeldRef. Pointers that are not managed objects (code addresses, views of runtime memory read in one
 // call) are listed in kNotObjects with why.
 #include <algorithm>
@@ -111,7 +111,7 @@ bool opens_data_scope(const std::string& header) {
  *  the declaration is matched after the last such boundary. */
 void scan_text(const std::string& source, const std::string& relative, std::vector<Hit>& hits) {
   const std::string text = code_only(source);
-  static const std::regex kRaw(R"((?:^|[)}:])\s*(?:(?:static|inline|thread_local|mutable)\s+)*(?:std::vector<\s*void\s*\*\s*>|void\s*\*|Ref\s*<[^;{}()]*?>|Object\b)\s*(\w+)\s*(?:\[[^\]]*\]\s*)?(?:=[^;]*|\{[^;]*\})?\s*$)");
+  static const std::regex kRaw(R"((?:^|[)}:])\s*(?:(?:static|inline|thread_local|mutable)\s+)*(?:std::vector<\s*void\s*\*\s*>|void\s*\*|Ref\s*<[^;{}()]*?>|Object\b|std::\w+\s*<[^;{}()=]*?(?:\bRef\s*<|\bObject\b)[^;{}()=]*>)\s*(\w+)\s*(?:\[[^\]]*\]\s*)?(?:=[^;]*|\{[^;]*\})?\s*$)");
   std::vector<char> scopes;  // 'd' namespace or struct, 'c' function body or initialiser
   std::string statement;
   int line = 1, statementLine = 1;
@@ -183,6 +183,11 @@ Object keptObject = nullptr;
 pm::api::HeldRef<pm::map::GhostAI> heldRef;
 pm::api::Ref<pm::map::GhostAI> handleFunction(Object from);
 struct Handles { Ref<pm::map::Camera> refMember{}; pm::api::Object objectMember; };
+std::vector<pm::api::Ref<pm::map::GhostAI>> keptRefs;
+std::optional<Object> maybeObject;
+struct Kept3 { std::array<pm::api::Object, 2> objects{}; std::map<int, Ref<pm::map::Camera>> byId; };
+std::vector<pm::api::HeldRef<pm::map::GhostAI>> heldRefs;
+std::vector<UnityObjectInfo> notHandles;
 const char* text = "void* inString;";
 )src";
   std::vector<Hit> hits;
@@ -191,7 +196,7 @@ const char* text = "void* inString;";
   for (const Hit& hit : hits) found.insert(hit.name);
   const std::set<std::string> expected{"afterMacro", "afterFunction", "list", "braced", "array",
                                        "inExtern", "member", "nested", "keptRef", "keptObject",
-                                       "refMember", "objectMember"};
+                                       "refMember", "objectMember", "keptRefs", "maybeObject", "objects", "byId"};
   for (const std::string& name : found)
     if (!expected.count(name)) std::printf("  scan reported a non-declaration: %s\n", name.c_str());
   for (const std::string& name : expected)

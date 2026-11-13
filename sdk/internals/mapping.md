@@ -335,9 +335,11 @@ dump names a parent only by the short name and the number of type arguments its 
 are shared (Doozy's `UIBehaviour` and Unity's, a nested enum named `Behaviour`, `InputControl` and `InputControl<T>`),
 so the check reads a parent as C# finds it and never picks: only a type of that name and arity counts, never a struct,
 an enum or `System.Object`; a top-level class's parent is the one such type of its own assembly and namespace, which C#
-finds before any `using` (the dump keeps no `using` lines); otherwise exactly one such type must exist in the model, or
-the parent is unproved. A class whose chain meets a shared name (Unity UI's classes deriving from `UIBehaviour`), leaves
-the model (a base in an assembly the map does not name) or ends at an unmapped generic gets no base. Then it
+finds before any `using` (the dump keeps no `using` lines); otherwise exactly one such type must exist in the whole
+game, every assembly of the dump and not only those the map names (gamecheck reads them all for this, and refuses a dump
+it cannot read whole), or the parent is unproved. A class whose chain meets a shared name (Unity UI's classes deriving
+from `UIBehaviour`, which Doozy declares too, and the physics module's from `Component`, which System declares too),
+leaves the model (a base in an assembly the map does not name) or ends at an unmapped generic gets no base. Then it
 copies the scene and asset files the scene facts need and runs
 `tools/assetcheck.py` on them, which prints `OK` or `MISSING` for each (see
 [scene and asset facts](../systems/scene.md)). The first configured run makes a Python venv in

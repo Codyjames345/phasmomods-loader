@@ -184,8 +184,7 @@ inline constexpr pm::sdk::EntryDesc NavMeshAgent_get_angularSpeed{.key = "NavMes
 
 /// Unity's rigid body (UnityEngine.PhysicsModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Rigidbody{.key = "Rigidbody", .name = "Rigidbody",
-                                              .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine",
-                                              .base = &Component};
+                                              .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine"};
 
 /// The body's centre of mass in world space. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Rigidbody_get_worldCenterOfMass{

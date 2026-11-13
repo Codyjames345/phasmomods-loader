@@ -6,7 +6,6 @@
 
 #include "LevelRoom.h"
 #include "Transform.h"
-#include "UnityObject.h"
 #include "game_api.h"
 
 namespace pm::map {
@@ -18,7 +17,7 @@ inline constexpr const char* UnityJoints_Rigidbody[] = {"Rigidbody"};
 /// Unity's joint, the base of every joint: what it is attached to and about which axis. Inferred: Unity's documented
 /// API.
 inline constexpr pm::sdk::EntryDesc Joint{.key = "Joint", .name = "Joint", .assembly = "UnityEngine.PhysicsModule",
-                                          .ns = "UnityEngine", .base = &Component};
+                                          .ns = "UnityEngine"};
 
 /// Sets the Rigidbody the joint holds its own body to (null: the world). Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc Joint_set_connectedBody{.key = "Joint.set_connectedBody", .kind = pm::sdk::Kind::Method,
