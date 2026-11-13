@@ -343,8 +343,24 @@ void the_journal_keeps_its_place_on_the_waist() {
   const Pose same = placed_on(waist, held);
   CHECK(near(same.p.x, 0.2f) && near(same.p.y, 0.9f) && near(same.p.z, 0.1f));
 }
+// Every emote's song plays at one loudness (the user, 2026-11-13): its gain brings the plain mean of its measured RMS
+// to kSongLoudness, within a quarter and four times, so a near-silent song is not blown up; no measurement is no change.
+void songs_are_brought_to_one_loudness() {
+  auto near = [](float a, float b) { return std::fabs(a - b) < 1e-4f; };
+  const std::vector<float> quiet{0.05f, 0.15f};  // mean 0.1
+  CHECK(near(song_gain(quiet), kSongLoudness / 0.1f));
+  const std::vector<float> loud{0.4f, 0.52f};  // mean 0.46
+  CHECK(near(song_gain(loud), kSongLoudness / 0.46f));
+  CHECK(near(song_gain(std::vector<float>{kSongLoudness}), 1.0f));
+  CHECK(song_gain(std::vector<float>{}) == 1.0f);
+  CHECK(song_gain(std::vector<float>{0.0f, 0.0f}) == 4.0f);   // silent: at most four times
+  CHECK(song_gain(std::vector<float>{0.001f}) == 4.0f);
+  CHECK(song_gain(std::vector<float>{5.0f}) == 0.25f);         // at least a quarter
+}
+
 
 int main() {
+  songs_are_brought_to_one_loudness();
   join_and_accept_round_trip();
   the_journal_keeps_its_place_on_the_waist();
   the_wheel_picks_by_direction();

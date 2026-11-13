@@ -154,6 +154,10 @@ a synced song into its loudness file.
 - An `introSong` plays once, and the looping song starts on the sample the intro ends; both begin together. The ghost
   hears the intro from its own loudness file and the loop from the song's.
 - A `loops: false` emote ends the frame its clip plays out.
+- Every song plays at one loudness: the mod divides `kSongLoudness` (`mods/emotes/emote_rule.h`) by the plain mean of
+  the song's `loudness` file and plays the song at that gain, within a quarter and four times. A pack's songs are
+  brought to the same level as the mod's own, so a song's own level does not matter; its intro song takes the loop's
+  gain, and a synced song its own. The ghost hears each song at the level it plays.
 
 ### The emote pack tool
 

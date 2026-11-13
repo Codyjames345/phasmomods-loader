@@ -151,6 +151,7 @@ struct Song {
   api::Held intro;   // the intro song's AudioSource, played once before it, or null
   api::Held group;   // the mixer group both play through, or null before one is found
   float volume = 0.0f;  // the volume it plays at
+  float gain = 1.0f;    // its song's gain to the one loudness every song plays at (song_gain)
 };
 
 // Every emote on the wheel, in wheel order (catalogue.h wheel_order): the mod's own, then each content pack's.
@@ -160,9 +161,11 @@ struct Assets {
   std::vector<api::Held> clips, songs, icons;
   std::vector<api::Held> moveClips, introClips, introSongs;  // null where an emote has none
   std::vector<talk::Envelope> loudness, introLoudness;
+  std::vector<float> gains;  // each song's gain to kSongLoudness, its intro song's too (song_gain)
   // A synced emote's second part and its synced song (null where none), and that song's loudness.
   std::vector<api::Held> partnerClips, partnerSongs;
   std::vector<talk::Envelope> partnerLoudness;
+  std::vector<float> partnerGains;  // each synced song's own gain
   std::vector<std::string> names;  // each emote's name as the player reads it
   EmoteTable table{};
 };
@@ -213,6 +216,7 @@ struct Loaded {
   EmoteDef def;
   api::Held clip, song, icon, moveClip, introClip, introSong, partnerClip, partnerSong;
   talk::Envelope loudness, introLoudness, partnerLoudness;
+  float gain = 1.0f, partnerGain = 1.0f;
   std::string name;
   EmoteInfo info;
 };
@@ -222,10 +226,12 @@ std::string read_text(const std::filesystem::path& file) {
   return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
-// A song's loudness file, measured beforehand, as loud as the song plays.
-talk::Envelope loudness_of(const std::filesystem::path& file) {
-  std::vector<float> rms = talk::parse_rms(read_text(file));
-  for (float& r : rms) r *= kSongVolume;
+// A song's loudness file, measured beforehand: its RMS amplitude per window.
+std::vector<float> rms_of(const std::filesystem::path& file) { return talk::parse_rms(read_text(file)); }
+
+// A song's loudness as it plays, for the ghost's hearing: its measured RMS at the song's base volume and its gain.
+talk::Envelope loudness_as_played(std::vector<float> rms, float gain) {
+  for (float& r : rms) r *= kSongVolume * gain;
   return talk::envelope_of_rms(rms);
 }
 
@@ -274,19 +280,26 @@ bool load_catalogue(const std::filesystem::path& folder, const std::string& pack
             api::load_bundle_asset(bundle, bundle_path(e.partner->song).c_str(), phasmo::AudioClip::type.type_object());
         if (!l.partnerSong)
           PM_LOG("Emotes: %s has no synced song %s; a pair dance to its song", packId.c_str(), e.partner->song.c_str());
-        l.partnerLoudness = loudness_of(folder / e.partner->loudness);
+        const std::vector<float> rms = rms_of(folder / e.partner->loudness);
+        l.partnerGain = song_gain(rms);
+        l.partnerLoudness = loudness_as_played(rms, l.partnerGain);
       }
     }
+    // Every song plays at one loudness (song_gain, the user's, 2026-11-13), from its own measured loudness file, so
+    // any emote added later, a pack's too, is brought to it. An intro song takes its loop's gain, keeping the step
+    // between them as the song has it.
+    const std::vector<float> songRms = rms_of(folder / e.loudness);
+    l.gain = song_gain(songRms);
+    l.loudness = loudness_as_played(songRms, l.gain);
     if (!e.introSong.empty()) {
       l.introSong = api::load_bundle_asset(bundle, bundle_path(e.introSong).c_str(), phasmo::AudioClip::type.type_object());
       if (!l.introSong) PM_LOG("Emotes: %s has no intro song %s; its song starts with its loop", packId.c_str(), e.introSong.c_str());
-      l.introLoudness = loudness_of(folder / e.introLoudness);
+      l.introLoudness = loudness_as_played(rms_of(folder / e.introLoudness), l.gain);
     }
     l.song = api::load_bundle_asset(bundle, bundle_path(e.song).c_str(), phasmo::AudioClip::type.type_object());
     if (!l.song) PM_LOG("Emotes: %s has no song %s; it plays silent", packId.c_str(), e.song.c_str());
     l.icon = api::load_bundle_asset(bundle, bundle_path(e.icon).c_str(), phasmo::Texture2D::type.type_object());
     if (!l.icon) PM_LOG("Emotes: %s has no icon %s; its segment shows bare", packId.c_str(), e.icon.c_str());
-    l.loudness = loudness_of(folder / e.loudness);
     l.name = nameOf(e.label);
     const float seconds = api::anim::clip_seconds(l.clip);
     l.info.clipSeconds = seconds;
@@ -303,8 +316,8 @@ bool load_catalogue(const std::filesystem::path& folder, const std::string& pack
       why = e.partner->clip + " is not as long as " + e.clip + ", so the two parts would drift apart";
       return false;
     }
-    PM_LOG("Emotes: %s, %.3f s, %s, song loop %.3f s from %.3f s", e.id.c_str(), seconds,
-           l.info.loops ? "looping" : "one-shot", l.info.song.length, l.info.song.start);
+    PM_LOG("Emotes: %s, %.3f s, %s, song loop %.3f s from %.3f s, song gain %.2f", e.id.c_str(), seconds,
+           l.info.loops ? "looping" : "one-shot", l.info.song.length, l.info.song.start, l.gain);
     out.push_back(std::move(l));
   }
   return true;
@@ -375,6 +388,8 @@ bool load_catalogues() {
         g.a.introSongs.push_back(std::move(l.introSong));
         g.a.loudness.push_back(l.loudness);
         g.a.introLoudness.push_back(l.introLoudness);
+        g.a.gains.push_back(l.gain);
+        g.a.partnerGains.push_back(l.partnerGain);
         g.a.partnerClips.push_back(std::move(l.partnerClip));
         g.a.partnerSongs.push_back(std::move(l.partnerSong));
         g.a.partnerLoudness.push_back(l.partnerLoudness);
@@ -722,8 +737,9 @@ void stop_song(int actor) {
   g.syncedSongs.erase(actor);
 }
 
-// A song's volume on this client: the player's Emotes volume setting (the audio page) of its base.
-float song_volume() { return kSongVolume * api::settings::value(kVolumeSetting); }
+// A song's volume on this client: the player's Emotes volume setting (the audio page) of its base, at the song's gain
+// to the one loudness every song plays at.
+float song_volume(float gain) { return kSongVolume * gain * api::settings::value(kVolumeSetting); }
 
 // Each song follows the setting as the player applies it, and the dancer's mixer group as the game moves them between
 // floors (a walking emote can take them up the stairs).
@@ -731,8 +747,8 @@ void follow_settings() {
   for (auto& [actor, s] : g.songs) {
     if (!s.source || !game::alive(s.source)) continue;
     const bool introAlive = s.intro && game::alive(s.intro);
-    if (s.volume != song_volume()) {
-      s.volume = song_volume();
+    if (s.volume != song_volume(s.gain)) {
+      s.volume = song_volume(s.gain);
       phasmo::AudioSource::set_volume(s.source, s.volume);
       if (introAlive) phasmo::AudioSource::set_volume(s.intro, s.volume);
     }
@@ -749,7 +765,7 @@ void follow_settings() {
 // with distance) through `group`. The dancer's own client hears their song in neither ear (`own`): its listener stays on
 // the head camera, which the mouse turns while the view is outside, so a positional song panned and swelled as the
 // camera moved round. Null when it cannot be made.
-void* song_source(void* parent, void* voice, void* clip, void* group, bool loop, bool own) {
+void* song_source(void* parent, void* voice, void* clip, void* group, bool loop, bool own, float volume) {
   void* go = game::new_game_object("pm emote song");
   if (!go || !parent) return nullptr;
   phasmo::Transform::SetParent(game::object_transform(go), parent, false);
@@ -762,7 +778,7 @@ void* song_source(void* parent, void* voice, void* clip, void* group, bool loop,
   phasmo::AudioSource::set_clip(source, clip);
   phasmo::AudioSource::set_loop(source, loop);
   phasmo::AudioSource::set_spatialBlend(source, own ? 0.0f : 1.0f);
-  phasmo::AudioSource::set_volume(source, song_volume());
+  phasmo::AudioSource::set_volume(source, volume);
   // It falls off with distance as the player's own voice does (the voice's AudioSource).
   if (voice) {
     const int32_t rolloff = phasmo::AudioSourceCurveType::CustomRolloff();
@@ -794,16 +810,18 @@ void start_song(int actor, void* player, int emote) {
   const bool own = actor == game::local_actor();
   void* group = players_group(player);
   // The song in the bundle is cut to its loop, so the engine loops it sample for sample.
-  void* source = song_source(parent, voice, clip, group, true, own);
+  const float gain = g.a.gains[emote];
+  void* source = song_source(parent, voice, clip, group, true, own, song_volume(gain));
   if (!source) return;
   Song& song = g.songs[actor];
   song.source = source;
   song.group = group;
-  song.volume = song_volume();
+  song.gain = gain;
+  song.volume = song_volume(gain);
   // An intro song plays once, and the looping song starts on the sample it ends: both start this frame, the loop with
   // a delay of the intro's length (AudioSource.PlayScheduled is stripped from this game build).
   void* intro = g.a.introSongs[emote];
-  void* introSource = intro ? song_source(parent, voice, intro, group, false, own) : nullptr;
+  void* introSource = intro ? song_source(parent, voice, intro, group, false, own, song.volume) : nullptr;
   const float introSeconds = g.a.table[emote].introSongSeconds;
   if (introSource && introSeconds > 0.0f) {
     song.intro = introSource;
@@ -831,6 +849,9 @@ void switch_to_synced_song(int first, int emote, double elapsed) {
   if (it->second.intro && game::alive(it->second.intro)) game::destroy(game::game_object_of(it->second.intro));
   it->second.intro = nullptr;
   void* source = it->second.source;
+  it->second.gain = g.a.partnerGains[emote];  // the synced song is brought to the same loudness by its own gain
+  it->second.volume = song_volume(it->second.gain);
+  phasmo::AudioSource::set_volume(source, it->second.volume);
   phasmo::AudioSource::set_clip(source, clip);
   phasmo::AudioSource::Play(source, 0);
   const float length = phasmo::AudioClip::get_length(clip);
