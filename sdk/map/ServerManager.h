@@ -5,6 +5,7 @@
 // fields are real; the card list and the card's player spot are obfuscated, so they are found by their
 // types. Notes read from decompiled code are from build 25811160.
 
+#include "Photon.h"
 #include "UnityRendering.h"
 #include "entry.h"
 #include "game_api.h"
@@ -14,7 +15,7 @@ namespace pm::map {
 /// The lobby's manager (Assembly-CSharp, global namespace), a MonoBehaviourPunCallbacks: the Ready
 /// button and the players' ID cards. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc ServerManager{.key = "ServerManager", .name = "ServerManager",
-                                                  .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviourPun};
 
 /// The lobby's Ready button, a Toggle. Inferred: from the field's name.
 inline constexpr pm::sdk::EntryDesc ServerManager_readyToggle{.key = "ServerManager.readyToggle",
@@ -32,21 +33,21 @@ inline constexpr pm::sdk::EntryDesc ServerManager_enabledColour{
     .key = "ServerManager.enabledColour", .kind = pm::sdk::Kind::Field, .flags = pm::sdk::kOptional,
     .owner = "ServerManager", .name = "enabledColour", .type = "Color"};
 
+/// A player's card (Assembly-CSharp, global namespace), a MonoBehaviourPun: the lobby's ID card and
+/// the others. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc ProfileCard{.key = "ProfileCard", .name = "ProfileCard",
+                                                .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviourPun};
+
 /// A player's lobby ID card (Assembly-CSharp, global namespace), a ProfileCard. Inferred: from the
 /// class dump.
 inline constexpr pm::sdk::EntryDesc MultiplayerProfile{.key = "MultiplayerProfile", .name = "MultiplayerProfile",
-                                                       .assembly = "Assembly-CSharp", .ns = ""};
+                                                       .assembly = "Assembly-CSharp", .ns = "", .base = &ProfileCard};
 
 /// The lobby's ID cards, a List<MultiplayerProfile>: ServerManager's one list of them. Inferred: from
 /// the class dump.
 inline constexpr pm::sdk::EntryDesc ServerManager_cards{.key = "ServerManager.cards", .kind = pm::sdk::Kind::Field,
                                                         .owner = "ServerManager",
                                                         .type = "List<@MultiplayerProfile>"};
-
-/// A player's card (Assembly-CSharp, global namespace), a MonoBehaviourPun: the lobby's ID card and
-/// the others. Inferred: from the class dump.
-inline constexpr pm::sdk::EntryDesc ProfileCard{.key = "ProfileCard", .name = "ProfileCard",
-                                                .assembly = "Assembly-CSharp", .ns = ""};
 
 /// The room's player the card shows, a PlayerSpot, or null for a card with no player: ProfileCard's
 /// one PlayerSpot field. Inferred: from the class dump.
@@ -149,7 +150,8 @@ inline constexpr pm::sdk::EntryDesc ServerManager_RemovePlayerCard{
 /// The room browser's controller (Assembly-CSharp, global namespace), on the main menu's Main Controller. Decompiled.
 inline constexpr pm::sdk::EntryDesc LobbyController{.key = "LobbyController",
                                                     .confidence = pm::sdk::Confidence::Decompiled,
-                                                    .name = "LobbyController", .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .name = "LobbyController", .assembly = "Assembly-CSharp", .ns = "",
+                                                    .base = &MonoBehaviourPun};
 
 /// Creates a room from the Create Lobby paper's room options, and keeps whether they list it, for the master's return from
 /// a contract. A player's choice of a public or private room reaches a room only here (sdk/systems/photon.md). Decompiled.

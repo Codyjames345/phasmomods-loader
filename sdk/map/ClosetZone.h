@@ -6,13 +6,15 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
 /// A closet or locker a player can hide in (Assembly-CSharp, global namespace). The hunt's closet
 /// search goes to its nav spot, checks it with CheckCloset, then kills whoever hides there. Decompiled.
 inline constexpr pm::sdk::EntryDesc ClosetZone{.key = "ClosetZone", .confidence = pm::sdk::Confidence::Decompiled,
-                                               .name = "ClosetZone", .assembly = "Assembly-CSharp", .ns = ""};
+                                               .name = "ClosetZone", .assembly = "Assembly-CSharp", .ns = "",
+                                               .base = &MonoBehaviour};
 
 /// The closet's left door, a Door. Inferred: from the field's name.
 inline constexpr pm::sdk::EntryDesc ClosetZone_leftClosetDoor{.key = "ClosetZone.leftClosetDoor",
@@ -71,7 +73,8 @@ inline constexpr pm::sdk::EntryDesc ClosetZone_OpenCloseClosetDoors{
 inline constexpr pm::sdk::EntryDesc DynamicNavMeshObstacle{.key = "DynamicNavMeshObstacle",
                                                            .confidence = pm::sdk::Confidence::Decompiled,
                                                            .name = "DynamicNavMeshObstacle",
-                                                           .assembly = "Assembly-CSharp", .ns = ""};
+                                                           .assembly = "Assembly-CSharp", .ns = "",
+                                                           .base = &MonoBehaviour};
 
 /// The obstacle's NavMeshObstacle, which Update switches on and off. Decompiled.
 inline constexpr pm::sdk::EntryDesc DynamicNavMeshObstacle_navMeshObstacle{
@@ -103,7 +106,7 @@ inline constexpr pm::sdk::EntryDesc ClosetZone_internalAreaObstacle{
 /// A hiding place that is not a closet (Assembly-CSharp, global namespace): under a bed, behind a
 /// curtain. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc HidingSpot{.key = "HidingSpot", .name = "HidingSpot", .assembly = "Assembly-CSharp",
-                                               .ns = ""};
+                                               .ns = "", .base = &MonoBehaviour};
 
 }  // namespace pm::map
 

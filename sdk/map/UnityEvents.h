@@ -10,11 +10,18 @@
 
 namespace pm::map {
 
+/// The base of Unity's events (UnityEngine.CoreModule, namespace UnityEngine.Events). Inferred: Unity's documented
+/// API.
+inline constexpr pm::sdk::EntryDesc UnityEventBase{.key = "UnityEventBase", .name = "UnityEventBase",
+                                                   .assembly = "UnityEngine.CoreModule",
+                                                   .ns = "UnityEngine.Events"};
+
 /// Unity's event with no arguments (UnityEngine.CoreModule, namespace UnityEngine.Events): what a Button's onClick and
 /// a Doozy behaviour's ModyEvent.Event are. Not the generic UnityEvent<T0> and its kin, which share its name.
 /// Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc UnityEvent{.key = "UnityEvent", .flags = pm::sdk::kNotGeneric, .name = "UnityEvent",
-                                               .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine.Events"};
+                                               .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine.Events",
+                                               .base = &UnityEventBase};
 
 /// A new event with no listeners: its base makes the lists that hold them, with the persistent ones to be read
 /// at the first Invoke. Decompiled.
@@ -35,12 +42,6 @@ inline constexpr pm::sdk::EntryDesc UnityEvent_AddListener{.key = "UnityEvent.Ad
 inline constexpr pm::sdk::EntryDesc UnityEvent_Invoke{.key = "UnityEvent.Invoke", .kind = pm::sdk::Kind::Method,
                                                       .confidence = pm::sdk::Confidence::Decompiled,
                                                       .owner = "UnityEvent", .name = "Invoke"};
-
-/// The base of Unity's events (UnityEngine.CoreModule, namespace UnityEngine.Events). Inferred: Unity's documented
-/// API.
-inline constexpr pm::sdk::EntryDesc UnityEventBase{.key = "UnityEventBase", .name = "UnityEventBase",
-                                                   .assembly = "UnityEngine.CoreModule",
-                                                   .ns = "UnityEngine.Events"};
 
 /// How many persistent listeners the event has: those saved with the scene or prefab (the inspector's list). This
 /// build has no runtime way to remove one (UnityEventBase's SetPersistentListenerState is stripped, and
@@ -102,7 +103,7 @@ inline constexpr pm::sdk::EntryDesc PersistentCall_m_Target{.key = "PersistentCa
 /// listener. Not the generic UnityAction<T0> and its kin. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc UnityAction{.key = "UnityAction", .flags = pm::sdk::kNotGeneric,
                                                 .name = "UnityAction", .assembly = "UnityEngine.CoreModule",
-                                                .ns = "UnityEngine.Events"};
+                                                .ns = "UnityEngine.Events", .base = &Delegate};
 
 /// The delegate's constructor, (object target, IntPtr method), as every delegate's: it keeps the target and the
 /// method, and binds the method's code to the target, refusing a null target for an instance method. Invoke then

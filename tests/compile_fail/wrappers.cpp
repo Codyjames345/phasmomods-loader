@@ -1,13 +1,40 @@
 // Wrappers that must not compile, one per value of PM_EXPECT_COMPILE_FAIL (1 to 7), each stopped by
-// its own static_assert in sdk/api/game_api.h. With PM_EXPECT_COMPILE_FAIL 0 the same wrappers,
-// written right, must compile, so a failing case fails for its assert and never for a broken build.
+// its own static_assert in sdk/api/game_api.h, and typed handles used wrongly (8 to 10), each stopped
+// by a conversion sdk/api/ref.h does not give. With PM_EXPECT_COMPILE_FAIL 0 the same code, written
+// right, must compile, so a failing case fails for its own error and never for a broken build.
 // Built by tests/compile_fail_test.cmake.
 #include <cstdint>
 
 #include "Animator.h"
+#include "Camera.h"
 #include "GhostAI.h"
+#include "UnityObject.h"
 #include "entry.h"
 #include "game_api.h"
+#include "ref.h"
+
+// Functions taking handles, outside the unnamed namespace so an unused one is no warning. GhostAI derives
+// from MonoBehaviour (through MonoBehaviourPun); Camera and GhostAI are unrelated.
+namespace handles {
+inline void* camera_of(pm::api::Ref<pm::map::Camera> camera) { return camera.raw(); }
+#if PM_EXPECT_COMPILE_FAIL == 8
+// A ghost is no camera: an unrelated handle is refused.
+inline void* wrong() { return camera_of(pm::api::Ref<pm::map::GhostAI>{}); }
+#elif PM_EXPECT_COMPILE_FAIL == 9
+// A MonoBehaviour may be no ghost: down a base handle only through pm::api::as.
+inline pm::api::Ref<pm::map::GhostAI> wrong(pm::api::Ref<pm::map::MonoBehaviour> behaviour) { return behaviour; }
+#elif PM_EXPECT_COMPILE_FAIL == 10
+// A raw reference becomes a handle only through Ref::unchecked, never on its own.
+inline pm::api::Ref<pm::map::GhostAI> wrong(void* raw) { return raw; }
+#else
+inline void* right() { return camera_of(pm::api::Ref<pm::map::Camera>{}); }
+inline pm::api::Ref<pm::map::MonoBehaviour> up(pm::api::Ref<pm::map::GhostAI> ghost) { return ghost; }
+inline pm::api::Ref<pm::map::GhostAI> down(pm::api::Ref<pm::map::MonoBehaviour> behaviour) {
+  return pm::api::as<pm::map::GhostAI>(behaviour);
+}
+inline pm::api::Ref<pm::map::GhostAI> wrap(void* raw) { return pm::api::Ref<pm::map::GhostAI>::unchecked(raw); }
+#endif
+}  // namespace handles
 
 namespace {
 
@@ -50,7 +77,7 @@ constexpr EnumValue<map::GhostAI> wrapper{};
 #elif PM_EXPECT_COMPILE_FAIL == 7
 // UnAppear is a method, not a type.
 constexpr Type<map::GhostAI_UnAppear> wrapper{};
-#else
+#elif PM_EXPECT_COMPILE_FAIL == 0
 constexpr Method<map::GhostAI_LookAtPlayer, void(void*, void*)> lookAtPlayer{};
 constexpr Icall<map::Animator_SetBoolID, void(void*, int32_t, bool)> setBoolID{};
 constexpr Method<kStaticMethod, void(int32_t)> staticMethod{};

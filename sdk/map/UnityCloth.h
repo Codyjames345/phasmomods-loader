@@ -13,6 +13,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "LevelRoom.h"
 
 namespace pm::map {
 
@@ -152,7 +153,8 @@ inline constexpr pm::sdk::EntryDesc List_UInt32_Add{
 /// Unity's capsule collider (UnityEngine.PhysicsModule), a Collider: what a Cloth collides with. Inferred: Unity's
 /// documented API.
 inline constexpr pm::sdk::EntryDesc CapsuleCollider{.key = "CapsuleCollider", .name = "CapsuleCollider",
-                                                    .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine"};
+                                                    .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine",
+                                                    .base = &Collider};
 
 /// Sets the capsule's radius, metres. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc CapsuleCollider_set_radius{

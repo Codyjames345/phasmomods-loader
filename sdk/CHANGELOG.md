@@ -10,6 +10,13 @@ major version `PmHostApi` and every published struct only grow at the end, and e
 
 ### Added
 
+- **Typed handles, the foundation.** `pm::api::Ref<D>` (`sdk/api/ref.h`) is a handle to an object of the map's type
+  `D`, one pointer like the `void*` it will replace; it converts by itself to the handle of each base type the map
+  records and to `pm::api::Object`, a handle of an unmapped type, and `pm::api::as<D>(x)` (`game_api.h`) converts down
+  after asking the runtime. `pm::api::HeldRef<D>` (`held.h`) keeps one across frames as `Held` does. Each Type entry
+  gains `EntryDesc::base`, its nearest mapped base class, which `gamecheck` proves (`BASE` lines). No wrapper takes or
+  gives a handle yet, so nothing that compiled changes; Steamworks' `CSteamID` and Win32's `HWND` are the precedent.
+
 - **Every installed mod, read-only.** `PmHostApi::mod_entry(index, out)` gives the installed mod at an index (id, name,
   version, author, whether it runs, whether it is developer-only or records voice, and why it is off), filling a
   `PmModEntry` up to the `size` the mod sets; SMAPI's `IModRegistry.GetAll` is the precedent. `pm::mod::mod_entries()`

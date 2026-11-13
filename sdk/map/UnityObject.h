@@ -121,7 +121,8 @@ inline constexpr pm::sdk::EntryDesc UnityObject_DestroyImmediate{
 
 /// Unity's scene object (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc GameObject{.key = "GameObject", .name = "GameObject",
-                                               .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                               .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                               .base = &UnityObject};
 
 /// The constructor GameObject(name): a new, active, empty GameObject in the scene at the world's
 /// origin, with a Transform. Run it on an object the GameObject type made. Inferred: Unity's documented
@@ -173,7 +174,8 @@ inline constexpr pm::sdk::EntryDesc GameObject_get_activeInHierarchy{
 /// Unity's base class of the components of a GameObject (UnityEngine.CoreModule). Inferred: Unity's
 /// documented API.
 inline constexpr pm::sdk::EntryDesc Component{.key = "Component", .name = "Component",
-                                              .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                              .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                              .base = &UnityObject};
 
 /// The component's Transform. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Component_get_transform{
@@ -203,7 +205,8 @@ inline constexpr pm::sdk::EntryDesc Component_GetComponentInChildren{
 /// Unity's base class of the components that can be switched on and off (UnityEngine.CoreModule).
 /// Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Behaviour{.key = "Behaviour", .name = "Behaviour",
-                                              .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                              .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                              .base = &Component};
 
 /// Whether the component is switched on. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Behaviour_get_enabled{
@@ -217,7 +220,8 @@ inline constexpr pm::sdk::EntryDesc Behaviour_set_enabled{.key = "Behaviour.set_
 /// Unity's base class of scripts (UnityEngine.CoreModule): every game script on an object is one.
 /// Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc MonoBehaviour{.key = "MonoBehaviour", .name = "MonoBehaviour",
-                                                  .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                                  .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                                  .base = &Behaviour};
 
 /// The GameObject's layer, 0 to 31. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc GameObject_get_layer{

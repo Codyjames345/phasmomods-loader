@@ -10,6 +10,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -19,7 +20,8 @@ inline constexpr const char* Playables_one[] = {"a"};
 
 /// Unity's animation clip (UnityEngine.AnimationModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc AnimationClip{.key = "AnimationClip", .name = "AnimationClip",
-                                                  .assembly = "UnityEngine.AnimationModule", .ns = "UnityEngine"};
+                                                  .assembly = "UnityEngine.AnimationModule", .ns = "UnityEngine",
+                                                  .base = &UnityObject};
 
 /// A clip's length in seconds: the engine function behind AnimationClip.length. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc AnimationClip_get_length{.key = "AnimationClip.get_length",

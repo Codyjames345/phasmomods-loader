@@ -6,7 +6,10 @@
 // code of build 25811160.
 
 #include "entry.h"
+#include "Footstep.h"
 #include "game_api.h"
+#include "Photon.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -16,7 +19,8 @@ namespace pm::map {
 /// GhostAI.isHunting is clear), and only the Kormos's hunt starts it, so no other ghost hears footsteps.
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostHearing{.key = "GhostHearing", .confidence = pm::sdk::Confidence::Decompiled,
-                                                 .name = "GhostHearing", .assembly = "Assembly-CSharp", .ns = ""};
+                                                 .name = "GhostHearing", .assembly = "Assembly-CSharp", .ns = "",
+                                                 .base = &MonoBehaviour};
 
 inline constexpr const char* HeardNoise_fieldTypes[] = {"PlayerNoise", "float"};
 
@@ -39,7 +43,7 @@ inline constexpr pm::sdk::EntryDesc HeardNoise_noise{.key = "HeardNoise.noise", 
 
 /// A player's footstep noise (Assembly-CSharp, global namespace), a Noise. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc PlayerNoise{.key = "PlayerNoise", .name = "PlayerNoise",
-                                                .assembly = "Assembly-CSharp", .ns = ""};
+                                                .assembly = "Assembly-CSharp", .ns = "", .base = &Noise};
 
 inline constexpr const char* NoiseKind_values[] = {"WalkFootstep", "SprintFootstep", "CrouchFootstep"};
 
@@ -67,7 +71,7 @@ inline constexpr pm::sdk::EntryDesc PlayerNoise_player{.key = "PlayerNoise.playe
 /// A part of a player the ghost's sight can see (Assembly-CSharp, global namespace). Inferred: from the
 /// class dump.
 inline constexpr pm::sdk::EntryDesc PlayerLOSTarget{.key = "PlayerLOSTarget", .name = "PlayerLOSTarget",
-                                                    .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 /// Its player: PlayerLOSTarget's one Player field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc PlayerLOSTarget_player{.key = "PlayerLOSTarget.player",
                                                            .kind = pm::sdk::Kind::Field, .owner = "PlayerLOSTarget",
@@ -80,7 +84,7 @@ inline constexpr pm::sdk::EntryDesc PlayerLOSTarget_player{.key = "PlayerLOSTarg
 inline constexpr pm::sdk::EntryDesc NetworkedStamina{.key = "NetworkedStamina",
                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                      .name = "NetworkedStamina", .assembly = "Assembly-CSharp",
-                                                     .ns = ""};
+                                                     .ns = "", .base = &MonoBehaviourPun};
 
 // The class's two sync methods, NetworkSyncSprint and NetworkSyncWalk, store their argument in the sprint
 // and walk bools and set moving while either is set, clearing it when neither is; but they are leaves the

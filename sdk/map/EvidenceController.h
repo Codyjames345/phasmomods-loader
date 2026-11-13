@@ -6,6 +6,8 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -13,7 +15,7 @@ namespace pm::map {
 inline constexpr pm::sdk::EntryDesc EvidenceController{.key = "EvidenceController",
                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                        .name = "EvidenceController", .assembly = "Assembly-CSharp",
-                                                       .ns = ""};
+                                                       .ns = "", .base = &MonoBehaviour};
 
 /// Moves the ghost orb to the favourite room (ChangeFavouriteRoomTo calls it), by an RPC to every
 /// client, but only when the ghost's given evidence holds Ghost Orbs or its GhostInfo's behaviour type
@@ -57,7 +59,8 @@ inline constexpr pm::sdk::EntryDesc EvidenceController_freezing{.key = "Evidence
 /// The fingerprints a ghost can leave on one object, such as a door (Assembly-CSharp, global namespace), a
 /// MonoBehaviourPun. Decompiled.
 inline constexpr pm::sdk::EntryDesc Fingerprint{.key = "Fingerprint", .confidence = pm::sdk::Confidence::Decompiled,
-                                                .name = "Fingerprint", .assembly = "Assembly-CSharp", .ns = ""};
+                                                .name = "Fingerprint", .assembly = "Assembly-CSharp", .ns = "",
+                                                .base = &MonoBehaviourPun};
 
 /// Tries to leave fingerprints on the object, on the master only: nothing unless the contract's ghost gives
 /// Ultraviolet (EvidenceController.IsFingerPrintEvidence); otherwise a roll against a chance the difficulty sets

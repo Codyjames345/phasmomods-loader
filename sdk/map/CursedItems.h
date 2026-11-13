@@ -6,6 +6,7 @@
 // from build 25811160.
 
 #include "Equipment.h"
+#include "Photon.h"
 #include "entry.h"
 #include "game_api.h"
 
@@ -13,7 +14,7 @@ namespace pm::map {
 
 /// The Ouija board (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc OuijaBoard{.key = "OuijaBoard", .name = "OuijaBoard",
-                                               .assembly = "Assembly-CSharp", .ns = ""};
+                                               .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 inline constexpr const char* OuijaBoard_PlayMessageSequence_params[] = {"string", "PhotonMessageInfo"};
 
@@ -24,7 +25,7 @@ inline constexpr pm::sdk::EntryDesc OuijaBoard_PlayMessageSequence{
 
 /// The haunted mirror (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc HauntedMirror{.key = "HauntedMirror", .name = "HauntedMirror",
-                                                  .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 /// The mirror is used (true) or put away, on every client. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc HauntedMirror_UseNetworked{
@@ -33,7 +34,7 @@ inline constexpr pm::sdk::EntryDesc HauntedMirror_UseNetworked{
 
 /// The music box (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc MusicBox{.key = "MusicBox", .name = "MusicBox", .assembly = "Assembly-CSharp",
-                                             .ns = ""};
+                                             .ns = "", .base = &Equipment};
 
 /// The box is used, on every client. A use the game accepts starts a new tween (tween), which a use it
 /// refuses does not. Inferred: from its name and Playable Ghost's use since it was built.
@@ -48,7 +49,7 @@ inline constexpr pm::sdk::EntryDesc MusicBox_tween{.key = "MusicBox.tween", .kin
 
 /// The tarot cards (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc TarotCards{.key = "TarotCards", .name = "TarotCards",
-                                               .assembly = "Assembly-CSharp", .ns = ""};
+                                               .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 inline constexpr const char* TarotCards_ChangeState_params[] = {"int", "bool", "PhotonMessageInfo"};
 
@@ -60,7 +61,7 @@ inline constexpr pm::sdk::EntryDesc TarotCards_ChangeState{.key = "TarotCards.Ch
 
 /// The voodoo doll (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc VoodooDoll{.key = "VoodooDoll", .name = "VoodooDoll",
-                                               .assembly = "Assembly-CSharp", .ns = ""};
+                                               .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 inline constexpr const char* VoodooDoll_NetworkedUse_params[] = {"int", "PhotonMessageInfo"};
 
@@ -72,7 +73,7 @@ inline constexpr pm::sdk::EntryDesc VoodooDoll_NetworkedUse{.key = "VoodooDoll.N
 
 /// The monkey paw (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc MonkeyPaw{.key = "MonkeyPaw", .name = "MonkeyPaw",
-                                              .assembly = "Assembly-CSharp", .ns = ""};
+                                              .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 inline constexpr const char* MonkeyPaw_MakeWishNetworked_params[] = {"int", "int", "string", "PhotonMessageInfo"};
 
@@ -132,7 +133,7 @@ inline constexpr pm::sdk::EntryDesc TarotCards_HighPriestess{
 /// A summoning circle (Assembly-CSharp, global namespace): lit, it teleports the ghost onto itself.
 /// Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc SummoningCircle{.key = "SummoningCircle", .name = "SummoningCircle",
-                                                    .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 /// The mirror breaks: while the ghost is not hunting, on the master, it counts the break in LevelStats, then a hunt,
 /// forced (GhostAI.ChangeState). It sets a field of DifficultySettings before the change and calls another of its
@@ -169,7 +170,8 @@ inline constexpr pm::sdk::EntryDesc VoodooDoll_StartHunt{
 
 /// The jackalope, a seasonal item (Assembly-CSharp, global namespace), a MonoBehaviourPun. Decompiled.
 inline constexpr pm::sdk::EntryDesc Jackalope{.key = "Jackalope", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "Jackalope", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "Jackalope", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &MonoBehaviourPun};
 
 /// An RPC, its int an actor number: the jackalope turns to that player and plays its sound; then on the master it
 /// clears GhostAI.postHuntCooldown, sets another bool of the GhostAI, and starts a hunt, not forced

@@ -200,22 +200,29 @@ bool parse_method(std::string_view line, Declaration& out) {
 
 // The part of a type declaration line before its base list: "private sealed class Name<T> : Base".
 // The base list after a type declaration's name, ": Base, IThing<T>", as short names without generic
-// arguments; empty when there is none.
-std::vector<std::string> base_names(std::string_view line) {
+// arguments, and in `arities` the number of type arguments each is written with (for that example, 0
+// and 1); empty when there is none.
+std::vector<std::string> base_names(std::string_view line, std::vector<int>& arities) {
   std::vector<std::string> out;
+  arities.clear();
   const size_t colon = line.find(" : ");
   if (colon == std::string_view::npos) return out;
-  int depth = 0;
+  int depth = 0, arity = 0;
   std::string current;
   auto flush = [&] {
     std::string name = canonical_type(trim(current));
     if (const size_t lt = name.find('<'); lt != std::string::npos) name.resize(lt);
-    if (!name.empty()) out.push_back(name == "object" ? std::string("Object") : std::move(name));
+    if (!name.empty()) {
+      out.push_back(name == "object" ? std::string("Object") : std::move(name));
+      arities.push_back(arity);
+    }
     current.clear();
+    arity = 0;
   };
   for (const char c : line.substr(colon + 3)) {
-    if (c == '<') ++depth;
+    if (c == '<' && depth++ == 0) arity = 1;
     if (c == '>') --depth;
+    if (c == ',' && depth == 1) ++arity;
     if (c == ',' && depth == 0) flush();
     else current += c;
   }
@@ -308,7 +315,7 @@ void parse_file(const std::string& text, const std::string& assembly, const std:
       // The file's name gives the arity of its top-level type only; a nested type's is not known, so kNotGeneric
       // applies to top-level types (sdk/resolver).
       t.genericParams = stack.empty() ? arity : 0;
-      if (!isEnum) t.bases = base_names(line);  // an enum's ": byte" names its storage, not a base
+      if (!isEnum) t.bases = base_names(line, t.baseArities);  // an enum's ": byte" names its storage, not a base
       model.types.push_back(std::move(t));
       stack.push_back({depth, static_cast<int>(model.types.size()) - 1});
       nextLiteral = 0;

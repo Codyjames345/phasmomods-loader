@@ -7,6 +7,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -19,7 +20,8 @@ inline constexpr const char* AudioClip_SetData_params[] = {"Single[]", "int"};
 
 /// Unity's audio player component (UnityEngine.AudioModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc AudioSource{.key = "AudioSource", .name = "AudioSource",
-                                                .assembly = "UnityEngine.AudioModule", .ns = "UnityEngine"};
+                                                .assembly = "UnityEngine.AudioModule", .ns = "UnityEngine",
+                                                .base = &Behaviour};
 
 /// Sets the clip the source plays. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc AudioSource_set_clip{.key = "AudioSource.set_clip", .kind = pm::sdk::Kind::Method,
@@ -155,7 +157,8 @@ inline constexpr pm::sdk::EntryDesc AudioSource_Play{.key = "AudioSource.Play", 
 
 /// Unity's sound asset (UnityEngine.AudioModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc AudioClip{.key = "AudioClip", .name = "AudioClip",
-                                              .assembly = "UnityEngine.AudioModule", .ns = "UnityEngine"};
+                                              .assembly = "UnityEngine.AudioModule", .ns = "UnityEngine",
+                                              .base = &UnityObject};
 
 /// A new empty clip: Create(name, lengthSamples, channels, frequency, stream). Static. Inferred:
 /// Unity's documented API.
@@ -201,7 +204,8 @@ inline constexpr pm::sdk::EntryDesc Time_set_timeScale{.key = "Time.set_timeScal
 
 /// Unity's audio listener (UnityEngine.AudioModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc AudioListener{.key = "AudioListener", .name = "AudioListener",
-                                                  .assembly = "UnityEngine.AudioModule", .ns = "UnityEngine"};
+                                                  .assembly = "UnityEngine.AudioModule", .ns = "UnityEngine",
+                                                  .base = &Behaviour};
 
 /// The volume everything this client hears plays at, 0 to 1. Static. Inferred: Unity's documented
 /// property getter.

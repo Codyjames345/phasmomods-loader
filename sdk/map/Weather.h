@@ -7,13 +7,16 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
+#include "UnityObject.h"
+#include "UnityPostProcessing.h"
 
 namespace pm::map {
 
 /// A weather's settings (Assembly-CSharp, global namespace), a ScriptableObject: its sky, its fog, its
 /// time of day and its weather type. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc WeatherProfile{.key = "WeatherProfile", .name = "WeatherProfile",
-                                                   .assembly = "Assembly-CSharp", .ns = ""};
+                                                   .assembly = "Assembly-CSharp", .ns = "", .base = &ScriptableObject};
 
 inline constexpr const char* WeatherType_values[] = {"clear", "foggy", "rain", "heavyRain"};
 
@@ -64,7 +67,8 @@ inline constexpr pm::sdk::EntryDesc WeatherType_dead{.key = "WeatherType.dead", 
 /// The scene's weather (Assembly-CSharp, global namespace): its sky, effects and profiles. Its
 /// TransitionWeatherProfile is the Monkey Paw's weather wish. Decompiled.
 inline constexpr pm::sdk::EntryDesc RandomWeather{.key = "RandomWeather", .confidence = pm::sdk::Confidence::Decompiled,
-                                                  .name = "RandomWeather", .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .name = "RandomWeather", .assembly = "Assembly-CSharp", .ns = "",
+                                                  .base = &MonoBehaviour};
 
 /// The scene's RandomWeather: the class's one static field of its own type. Decompiled.
 inline constexpr pm::sdk::EntryDesc RandomWeather_instance{.key = "RandomWeather.instance", .kind = pm::sdk::Kind::Field,
@@ -94,7 +98,8 @@ inline constexpr pm::sdk::EntryDesc RandomWeather_effects{.key = "RandomWeather.
 /// The sky's effects (Assembly-CSharp, UnityEngine.AzureSky): rain, wind and the thunder strikes.
 /// Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc AzureEffectsController{.key = "AzureEffectsController", .name = "AzureEffectsController",
-                                                           .assembly = "Assembly-CSharp", .ns = "UnityEngine.AzureSky"};
+                                                           .assembly = "Assembly-CSharp", .ns = "UnityEngine.AzureSky",
+                                                           .base = &MonoBehaviour};
 
 /// The thunder strikes it can play, a List<AzureThunderSettings> (each a prefab, a clip and a position).
 /// PlayLocalLightning throws on an empty list. Decompiled.
@@ -108,7 +113,7 @@ inline constexpr pm::sdk::EntryDesc AzureEffectsController_thunderSettingsList{
 inline constexpr pm::sdk::EntryDesc LightningController{.key = "LightningController",
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .name = "LightningController", .assembly = "Assembly-CSharp",
-                                                        .ns = ""};
+                                                        .ns = "", .base = &MonoBehaviourPun};
 
 /// The controller's own effects controller, an AzureEffectsController: no contract scene sets it, so it
 /// is null there. Decompiled.

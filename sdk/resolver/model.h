@@ -57,6 +57,9 @@ struct ModelType {
   // interfaces it declares, as its declaration lists them. System.Object, System.ValueType and
   // System.Enum, which the dump never writes, are left out.
   std::vector<std::string> bases;
+  // One per name in bases, the number of type arguments it is written with ("IComparable<Probe>" is 1), which tells a
+  // base apart from a namesake of another arity, as C# does. Empty when the source does not say.
+  std::vector<int> baseArities;
   void* runtime = nullptr;  // the Il2CppClass* in the host, null offline
 };
 
