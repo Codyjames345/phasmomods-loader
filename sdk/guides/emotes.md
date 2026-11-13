@@ -117,7 +117,7 @@ Each emote:
 | `loops` | no | `true` by default. `false` makes a one-shot, which ends when played out and cannot set `moveClip` or `introClip`. |
 | `songLoop` | no | `{ "start": ..., "seconds": ... }`, two non-negative numbers of seconds: where the song repeats, as the tool measured it, for the ghost's hearing. When it is absent, or its seconds are 0, the mod takes the clip's own length as the loop. |
 | `partner` | no | makes the emote synced, danced by two: see "A synced emote" below. |
-| `clipSource`, `clipLoopGuess`, `songSource`, `songLoopGuess` | no | the tool's notes: the source clip and song to measure, and the loop length to search near. The mod reads them silently; only the tool acts on them. |
+| `clipSource`, `clipLoopGuess`, `clipStart`, `songSource`, `songLoopGuess` | no | the tool's notes: the source clip and song to measure, the loop length to search near, and, for a source that already loops, how many seconds into it the written clip starts (Forget Me Not starts on its last 0.93 s, under its intro song). The mod reads them silently; only the tool acts on them. |
 
 An unknown field is not a failure: the pack loads and the mod names every unknown field in its log. A catalogue that
 breaks one of these rules is refused whole, with one reason for the log and nothing read from it.

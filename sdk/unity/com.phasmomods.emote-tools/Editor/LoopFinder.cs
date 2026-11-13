@@ -185,6 +185,21 @@ namespace PhasmoMods.EmoteTools
         /// Interleaved samples averaged to one channel: channel samples c, c+1, ... for each
         /// channels go together, and the output has one value per group.
         /// </summary>
+        /// <summary>
+        /// Where in a looping source of `length` seconds a clip made to start `start` seconds into it reads at its own
+        /// time `t`: that far on from the start, wrapping round at the source's end. The made clip's end (t = length)
+        /// reads its start again, so it still loops.
+        /// </summary>
+        public static double RotatedTime(double t, double start, double length)
+        {
+            if (length <= 0.0)
+            {
+                return t;
+            }
+            double at = (start + t) % length;
+            return at < 0.0 ? at + length : at;
+        }
+
         public static float[] Mono(float[] interleaved, int channels)
         {
             if (interleaved == null)

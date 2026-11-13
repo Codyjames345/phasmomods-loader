@@ -123,11 +123,11 @@ inline bool is_loudness_path(std::string_view path) {
   return ends_with(path, ".txt");
 }
 
-// clipSource, clipLoopGuess, songSource and songLoopGuess are what the loop tool left behind: read silently, never
-// warned about.
+// clipSource, clipLoopGuess, clipStart, songSource and songLoopGuess are what the loop tool left behind: read silently,
+// never warned about.
 inline bool known_emote_field(std::string_view field) {
   for (std::string_view f : {"name", "clip",   "moveClip", "introClip", "song", "introSong", "icon", "label",
-                             "loudness", "introLoudness", "loops", "songLoop", "clipSource", "clipLoopGuess",
+                             "loudness", "introLoudness", "loops", "songLoop", "clipSource", "clipLoopGuess", "clipStart",
                              "songSource", "songLoopGuess", "partner"})
     if (f == field) return true;
   return false;

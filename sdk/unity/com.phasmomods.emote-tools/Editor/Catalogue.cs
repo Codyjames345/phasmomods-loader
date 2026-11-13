@@ -22,6 +22,8 @@ namespace PhasmoMods.EmoteTools
         public string name, clip, moveClip, introClip, song, introSong, icon, label, loudness,
                      introLoudness, clipSource, songSource;
         public float clipLoopGuess, songLoopGuess;
+        // Seconds into clipSource, a seamless loop, where the clip the tool writes starts (0: its own start).
+        public float clipStart;
         public SongLoopEntry songLoop;
         public PartnerEntry partner;
     }

@@ -29,6 +29,7 @@ static class Program
         BundleIsAPlainFileName();
         ASourceIsNeverItsOwnOutput();
         PartnerPathsAreChecked();
+        AClipStartedLaterWrapsRound();
         if (failures == 0)
         {
             Console.WriteLine("emote tools tests passed");
@@ -458,5 +459,22 @@ static class Program
         }
         if (PackPaths.CheckCatalogue(with(new PartnerEntry { clip = good.clip, song = good.song, loudness = "../x.txt" }), out why))
             Fail("partner_paths_are_checked", "a loudness file outside the pack was accepted");
+    }
+
+    // A looping clip made to start later in its source (clipStart: Forget Me Not starts on its last 0.93 s, two claps,
+    // under its intro song): each time of the made clip reads the source that far on, wrapping round at the source's
+    // end, so the made clip ends where it starts and still loops.
+    static void AClipStartedLaterWrapsRound()
+    {
+        Action<double, double> near = (got, want) =>
+        {
+            if (Math.Abs(got - want) > 1e-9) Fail("a_clip_started_later_wraps_round", "got " + got + ", expected " + want);
+        };
+        near(LoopFinder.RotatedTime(0.0, 7.4, 8.4), 7.4);
+        near(LoopFinder.RotatedTime(0.5, 7.4, 8.4), 7.9);
+        near(LoopFinder.RotatedTime(1.0, 7.4, 8.4), 0.0);
+        near(LoopFinder.RotatedTime(3.0, 7.4, 8.4), 2.0);
+        near(LoopFinder.RotatedTime(8.4, 7.4, 8.4), 7.4);  // its end is its start: still a loop
+        near(LoopFinder.RotatedTime(2.0, 0.0, 8.4), 2.0);   // no start is the source as it is
     }
 }

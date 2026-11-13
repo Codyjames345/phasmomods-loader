@@ -257,6 +257,7 @@ void tool_fields_are_accepted_silently() {
   nlohmann::json& e = doc["emotes"][0];
   e["clipSource"] = "C:/Dev/clip.fbx";
   e["clipLoopGuess"] = 1.5;
+  e["clipStart"] = 7.467;
   e["songSource"] = "C:/Dev/song.wav";
   e["songLoopGuess"] = {{"start", 0}, {"seconds", 16.692}};
   Catalogue cat;

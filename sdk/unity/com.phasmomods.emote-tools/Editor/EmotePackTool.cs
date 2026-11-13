@@ -176,6 +176,15 @@ namespace PhasmoMods.EmoteTools
                         return false;
                     }
                 }
+                else if (!string.IsNullOrEmpty(emote.clipSource) && emote.clipStart > 0f)
+                {
+                    // A source that loops already, started later: Forget Me Not starts on its last 0.93 s (two claps)
+                    // under its intro song, so its loop meets its looping song (the user, 2026-11-13).
+                    if (!StartClipLater(emote, out why))
+                    {
+                        return false;
+                    }
+                }
             }
             File.WriteAllText(cataloguePath, text, new UTF8Encoding(false));
             why = null;
@@ -352,6 +361,59 @@ namespace PhasmoMods.EmoteTools
             AssetDatabase.DeleteAsset(emote.clip);
             AssetDatabase.CreateAsset(made, emote.clip);
             AssetDatabase.SaveAssets();
+            why = null;
+            return true;
+        }
+
+        // The source, a seamless loop, written to start emote.clipStart seconds in and wrap round its end
+        // (LoopFinder.RotatedTime): the same dance and length, beginning on another of its frames.
+        private static bool StartClipLater(EmoteEntry emote, out string why)
+        {
+            AnimationClip source = AssetDatabase.LoadAssetAtPath<AnimationClip>(emote.clipSource);
+            if (source == null)
+            {
+                why = "no clip source at " + emote.clipSource;
+                return false;
+            }
+            if (string.IsNullOrEmpty(emote.clip))
+            {
+                why = emote.name + " has a clipSource but no clip path to write";
+                return false;
+            }
+            float length = source.length, fps = source.frameRate;
+            if (emote.clipStart >= length)
+            {
+                why = emote.name + "'s clipStart is not within its source's " + length.ToString(CultureInfo.InvariantCulture) + " s";
+                return false;
+            }
+            int last = Mathf.RoundToInt(length * fps);
+            AnimationClip made = new AnimationClip { frameRate = fps };
+            foreach (EditorCurveBinding b in AnimationUtility.GetCurveBindings(source))
+            {
+                AnimationCurve sourceCurve = AnimationUtility.GetEditorCurve(source, b);
+                Keyframe[] keys = new Keyframe[last + 1];
+                for (int i = 0; i <= last; i++)
+                {
+                    float t = i == last ? length : i / fps;
+                    keys[i] = new Keyframe(t, sourceCurve.Evaluate((float)LoopFinder.RotatedTime(t, emote.clipStart, length)));
+                }
+                AnimationCurve curve = new AnimationCurve(keys);
+                for (int k = 0; k < curve.length; k++)
+                {
+                    AnimationUtility.SetKeyLeftTangentMode(curve, k, AnimationUtility.TangentMode.ClampedAuto);
+                    AnimationUtility.SetKeyRightTangentMode(curve, k, AnimationUtility.TangentMode.ClampedAuto);
+                }
+                AnimationUtility.SetEditorCurve(made, b, curve);
+            }
+            AnimationClipSettings settings = AnimationUtility.GetAnimationClipSettings(source);
+            settings.loopTime = true;
+            settings.stopTime = made.length;
+            AnimationUtility.SetAnimationClipSettings(made, settings);
+            AssetDatabase.DeleteAsset(emote.clip);
+            AssetDatabase.CreateAsset(made, emote.clip);
+            AssetDatabase.SaveAssets();
+            Debug.Log(string.Format(CultureInfo.InvariantCulture, "EMLOOP {0} clip started {1:F4} s into its source ({2:F3} s)",
+                                    emote.name, emote.clipStart, made.length));
             why = null;
             return true;
         }
