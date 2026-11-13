@@ -190,13 +190,15 @@ void a_start_that_comes_to_nothing_opens_the_room() {
   }
 }
 
-// host/suite.cpp has no test of its own, so these pin what it must hand over: the lobby's answer to the closer, the room's to the gate.
+// host/suite.cpp has no test of its own, so these pin what it must hand over: the lobby's answer and the master to the
+// start flow (host/start_flow.h, tested in tests/start_flow_test.cpp), and the room's answer to the gate.
 void the_suite_hands_over_the_lobby_and_the_room() {
   std::ifstream in(std::string(PM_TEXT_DIR) + "/host/suite.cpp", std::ios::binary);
   std::ostringstream read;
   read << in.rdbuf();
   const std::string suite = read.str();
-  CHECK(suite.find("hostgame::local_is_master(), frame_in_lobby(), [&]") != std::string::npos);
+  CHECK(suite.find("calls.is_master = &hostgame::local_is_master") != std::string::npos);
+  CHECK(suite.find("calls.in_lobby = &frame_in_lobby") != std::string::npos);
   CHECK(suite.find("gate.privateRoom =") != std::string::npos);
   const size_t asked = suite.find("consent::missing_notice_text(i18n::table())"), shown = suite.find("consent::begin(");
   CHECK(asked != std::string::npos && shown != std::string::npos && asked < shown);

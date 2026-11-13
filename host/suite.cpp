@@ -55,6 +55,7 @@ static_assert(pm::moddeps::kMaxMods == pm::presence::kMaxMods, "the mods that ma
 #include "service_registry.h"
 #include "services.h"
 #include "start_close.h"
+#include "start_flow.h"
 #include "steering.h"
 #include "text_files.h"
 #include "text_table.h"
@@ -549,67 +550,40 @@ void reopen_room() {
     PM_LOG("suite: the room closed for a contract's start could not be opened again");
 }
 
-// What becomes of an allowed start's send (lobby_gate::Config::startSend): the first is held while the room closes, and this
-// client's marker comes back to it through the server, behind the close (host/start_close.h). If the room cannot be closed or
-// the marker cannot be sent, nothing is held: the room opens again and the host is told to press again.
-int start_send() {
-  const startclose::Send send = g_closer.on_send(GetTickCount64(), current_room());
-  if (send == startclose::Send::AsSent) return static_cast<int>(lobby_gate::Send::AsSent);
-  if (send == startclose::Send::Refused) return static_cast<int>(lobby_gate::Send::Refused);
-  uint8_t marker[startclose::kMarkerBytes];
-  startclose::write_marker(g_closer.marker(), marker);
-  const int local = hostgame::local_actor();
-  if (local != 0 && set_room_open(false) &&
-      hostnet::send_through_server_to_all(hostnet::kHostChannel, marker, sizeof marker)) {
-    PM_LOG("suite: the room is closed for a contract's start; the start goes once the server confirms it");
-    return static_cast<int>(lobby_gate::Send::Held);
-  }
-  PM_LOG("suite: the room could not be closed for a contract's start; it does not go ahead");
-  g_closer.abandon();
-  reopen_room();
-  menu_panel::message(i18n::text("popup.contract-waiting"), startclose::not_closed_notice());
-  return static_cast<int>(lobby_gate::Send::Refused);
-}
-
 bool frame_in_lobby();
 
-// Every frame: a start whose room is closed goes once the server confirms the close and everyone is still verified; otherwise the
-// room opens again and the host hears why.
-void tick_start() {
-  if (g_closer.idle()) return;
-  joinguard::StartAnswer answer;
-  const startclose::Step step = g_closer.tick(GetTickCount64(), current_room(), hostgame::local_is_master(), frame_in_lobby(), [&] {
+// Everything the closed-room start (host/start_flow.h) touches outside the closer, made from this client. The decisions,
+// and every log line and popup, live in start_flow.h, where tests/start_flow_test.cpp checks them; this only hands over
+// the game's own room, marker, held send, popup and log. The release's containment stands here, as it did in the flow.
+startflow::Calls<joinguard::StartAnswer> flow_calls() {
+  startflow::Calls<joinguard::StartAnswer> calls;
+  calls.clock = &GetTickCount64;
+  calls.room = &current_room;
+  calls.local_actor = &hostgame::local_actor;
+  calls.is_master = &hostgame::local_is_master;
+  calls.in_lobby = &frame_in_lobby;
+  calls.close_room = [] { return set_room_open(false); };
+  calls.send_marker = [](const uint8_t* marker, size_t size) {
+    return hostnet::send_through_server_to_all(hostnet::kHostChannel, marker, size);
+  };
+  calls.reopen_room = &reopen_room;
+  calls.release_held = [] { return host::contained("suite", "sending a contract's start", false, [] { return lobby_gate::release_held(); }); };
+  calls.drop_held = [] { lobby_gate::drop_held(); };
+  calls.start_answer = [](joinguard::StartAnswer& answer) {
     answer = g_guard.start_answer(room_now(), g_presence);
     return answer.go;
-  });
-  switch (step) {
-    case startclose::Step::None: return;
-    case startclose::Step::Release:
-      PM_LOG("suite: the server confirmed the room closed and everyone is verified; the contract starts");
-      if (host::contained("suite", "sending a contract's start", false, [] { return lobby_gate::release_held(); })) {
-        g_closer.released(GetTickCount64());
-      } else {
-        PM_LOG("suite: a contract's start could not be sent; the room is open again");
-        g_closer.release_failed();
-        reopen_room();
-        menu_panel::message(i18n::text("popup.contract-waiting"), startclose::not_closed_notice());
-      }
-      return;
-    case startclose::Step::Drop:
-      lobby_gate::drop_held();
-      return;
-    case startclose::Step::Reopen:
-      lobby_gate::drop_held();
-      reopen_room();
-      if (g_closer.why() == startclose::Why::Waiting) tell_start_waits(answer);
-      if (g_closer.why() == startclose::Why::NotConfirmed) {
-        PM_LOG("suite: the server did not confirm the room closed in %llu ms; the room is open again",
-               static_cast<unsigned long long>(startclose::kConfirmMs));
-        menu_panel::message(i18n::text("popup.contract-waiting"), startclose::not_confirmed_notice());
-      }
-      return;
-  }
+  };
+  calls.tell_start_waits = &tell_start_waits;
+  calls.popup = [](const char* title_key, const std::string& text) { menu_panel::message(i18n::text(title_key), text); };
+  calls.log = &pm::log::write;
+  return calls;
 }
+
+// What becomes of an allowed start's send (lobby_gate::Config::startSend), decided by host/start_flow.h on this client.
+int start_send() { return startflow::start_send(g_closer, flow_calls()); }
+
+// Every frame: a start whose room is closed goes once the server confirms the close and everyone is still verified.
+void tick_start() { startflow::tick_start(g_closer, flow_calls()); }
 
 // The hooks the lobby's rules cannot do without (host/mod_session.h), made once the player agreed. All of them or none.
 bool install_required_hooks() {
