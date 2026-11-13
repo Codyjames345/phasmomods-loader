@@ -623,6 +623,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &AudioSource_set_clip,
     &AudioSource_set_spatialBlend,
     &AudioSource_set_volume,
+    &AudioSource_set_time,
     &AudioSource_set_minDistance,
     &AudioSource_set_maxDistance,
     &AudioRolloffMode,

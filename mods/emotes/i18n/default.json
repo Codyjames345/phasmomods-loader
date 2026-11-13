@@ -6,6 +6,7 @@
   "emotes.volume-label": "Music",
   "emotes.pack-unusable": "PM_TEXT_TODO",  // PM_TEXT_TODO
   "emotes.page": "{{page}} / {{pages}}",  // the page number over the wheel (the user's, 2026-11-13)
+  "emotes.join": "Join",  // the join prompt over a synced emote's dancer (the user's word, 2026-11-13)
   "emotes.name.disco-fever": "Disco Fever",
   "emotes.name.electro-swing": "Electro Swing",
   "emotes.name.floss": "Floss",

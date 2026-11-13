@@ -2,7 +2,9 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -19,10 +21,12 @@
 #include "JournalController.h"
 #include "Playables.h"
 #include "Player.h"
+#include "Props.h"
 #include "Transform.h"
 #include "UnityAudio.h"
 #include "UnityObject.h"
 #include "UnityUI.h"
+#include "UnityWorld.h"
 #include "UnityRendering.h"
 #include "UnityObject.h"
 #include "assets.h"
@@ -46,6 +50,8 @@
 #include "players.h"
 #include "settings.h"
 #include "input_device.h"
+#include "join_prompt.h"
+#include "sync_rule.h"
 #include "journal.h"
 #include "movement.h"
 #include "talk_loudness.h"
@@ -84,6 +90,15 @@ constexpr const char* kVrEndKeys[] = {"vr-left-grip", "vr-right-grip", "vr-left-
 constexpr const char* kEndActions[] = {"Pickup", "Primary Use", "Secondary Use", "HoldPrimaryUse", "Interact", "Drop",
                                        "Crouch"};
 constexpr const char* kLookAction = "Look";
+
+// Joining a synced emote (docs/superpowers/specs/2026-11-13-synced-emotes-design.md). The game's own Interact action
+// asks to join (the user, 2026-11-13: "default to the interact button"); in VR, whose Interact this mod has not found,
+// the right trigger the wheel picks with. The game's Interact ray reaches 1.8 m (PCPropGrab.OnInteract,
+// sdk/systems/players.md): no prompt while it would act on something, so one press never does both.
+constexpr const char* kInteractAction = "Interact";
+constexpr float kInteractReach = 1.8f;
+constexpr float kChestBelowHead = 0.25f;  // the prompt's look test aims this far below the head bone, metres
+constexpr float kFloorSkin = 0.05f;       // the spot's test lifts the capsule this far, so the floor is not in the way
 
 // The controls that turn the wheel's pages (the user's, 2026-11-12): the scroll wheel and the gamepad's shoulder
 // buttons. Every game action bound to one of them is paused while the wheel is open (the item swap on the scroll wheel,
@@ -144,6 +159,9 @@ struct Assets {
   std::vector<api::Held> clips, songs, icons;
   std::vector<api::Held> moveClips, introClips, introSongs;  // null where an emote has none
   std::vector<talk::Envelope> loudness, introLoudness;
+  // A synced emote's second part and its synced song (null where none), and that song's loudness.
+  std::vector<api::Held> partnerClips, partnerSongs;
+  std::vector<talk::Envelope> partnerLoudness;
   std::vector<std::string> names;  // each emote's name as the player reads it
   EmoteTable table{};
 };
@@ -177,6 +195,13 @@ struct State {
   ULONGLONG lastTick = 0;
   ULONGLONG startTick = 0;  // the mod's start: its clock counts from here, so a float keeps its precision
   bool loggedRoot = false;
+  // Joining a synced emote: the game's Interact action, the shoulder glyph's widget (whose Xbox and PS5 sets give
+  // Interact's glyph), this client's glide into a partner's spot, and the first dancers whose song is the synced one.
+  api::Held interactAction;
+  api::Held glyphWidget;
+  std::optional<Glide> glide;
+  std::set<int> syncedSongs;
+  bool loggedNoCapsule = false;
 };
 State g;
 
@@ -185,8 +210,8 @@ State g;
 // One catalogue's emotes, loaded from its bundle, before they take their places on the wheel.
 struct Loaded {
   EmoteDef def;
-  api::Held clip, song, icon, moveClip, introClip, introSong;
-  talk::Envelope loudness, introLoudness;
+  api::Held clip, song, icon, moveClip, introClip, introSong, partnerClip, partnerSong;
+  talk::Envelope loudness, introLoudness, partnerLoudness;
   std::string name;
   EmoteInfo info;
 };
@@ -235,6 +260,22 @@ bool load_catalogue(const std::filesystem::path& folder, const std::string& pack
         return false;
       }
     }
+    // A synced emote's second part must be there too; its synced song may be missing, and the pair dance to the song.
+    if (e.partner) {
+      l.partnerClip =
+          api::load_bundle_asset(bundle, bundle_path(e.partner->clip).c_str(), phasmo::AnimationClip::type.type_object());
+      if (!l.partnerClip) {
+        why = "the bundle has no clip " + e.partner->clip;
+        return false;
+      }
+      if (!e.partner->song.empty()) {
+        l.partnerSong =
+            api::load_bundle_asset(bundle, bundle_path(e.partner->song).c_str(), phasmo::AudioClip::type.type_object());
+        if (!l.partnerSong)
+          PM_LOG("Emotes: %s has no synced song %s; a pair dance to its song", packId.c_str(), e.partner->song.c_str());
+        l.partnerLoudness = loudness_of(folder / e.partner->loudness);
+      }
+    }
     if (!e.introSong.empty()) {
       l.introSong = api::load_bundle_asset(bundle, bundle_path(e.introSong).c_str(), phasmo::AudioClip::type.type_object());
       if (!l.introSong) PM_LOG("Emotes: %s has no intro song %s; its song starts with its loop", packId.c_str(), e.introSong.c_str());
@@ -254,6 +295,8 @@ bool load_catalogue(const std::filesystem::path& folder, const std::string& pack
     l.info.hasMove = static_cast<bool>(l.moveClip);
     l.info.introSeconds = l.introClip ? api::anim::clip_seconds(l.introClip) : 0.0f;
     l.info.introSongSeconds = l.introSong ? phasmo::AudioClip::get_length(l.introSong) : 0.0f;
+    l.info.synced = static_cast<bool>(l.partnerClip);
+    l.info.partnerSeconds = l.partnerClip ? api::anim::clip_seconds(l.partnerClip) : 0.0f;
     PM_LOG("Emotes: %s, %.3f s, %s, song loop %.3f s from %.3f s", e.id.c_str(), seconds,
            l.info.loops ? "looping" : "one-shot", l.info.song.length, l.info.song.start);
     out.push_back(std::move(l));
@@ -326,6 +369,9 @@ bool load_catalogues() {
         g.a.introSongs.push_back(std::move(l.introSong));
         g.a.loudness.push_back(l.loudness);
         g.a.introLoudness.push_back(l.introLoudness);
+        g.a.partnerClips.push_back(std::move(l.partnerClip));
+        g.a.partnerSongs.push_back(std::move(l.partnerSong));
+        g.a.partnerLoudness.push_back(l.partnerLoudness);
         g.a.names.push_back(l.name);
         g.a.table.push_back(l.info);
         break;
@@ -351,6 +397,8 @@ void read_actions() {
   g.wheelActions.clear();
   g.previousGlyph = nullptr;
   g.nextGlyph = nullptr;
+  g.interactAction = nullptr;
+  g.glyphWidget = nullptr;
   std::set<std::string> paging;  // the names of the actions bound to a page control
   void* asset = game_actions_asset();
   const api::RefArray maps{asset ? phasmo::InputActionAsset::m_ActionMaps.get(asset) : nullptr};
@@ -369,6 +417,7 @@ void read_actions() {
       for (const char* end : kEndActions)
         if (name == end) g.endActions.emplace_back(actions[i]);
       if (name == kLookAction || paging.count(name)) g.wheelActions.emplace_back(actions[i]);
+      if (name == kInteractAction && !g.interactAction) g.interactAction = actions[i];
     }
   }
   // The game's glyph widgets for the shoulder buttons, by the bindings of the action each shows.
@@ -384,12 +433,16 @@ void read_actions() {
     for (size_t b = 0; b < bindings.size(); ++b) {
       if (api::to_utf8(phasmo::InputBinding::m_Action.get(bindings.at(b))) != name) continue;
       const std::string path = api::to_utf8(phasmo::InputBinding::m_Path.get(bindings.at(b)));
-      if (path == "<Gamepad>/leftShoulder" && !g.previousGlyph) g.previousGlyph = image;
+      if (path == "<Gamepad>/leftShoulder" && !g.previousGlyph) {
+        g.previousGlyph = image;
+        g.glyphWidget = widgets[w];
+      }
       if (path == "<Gamepad>/rightShoulder" && !g.nextGlyph) g.nextGlyph = image;
     }
   }
-  PM_LOG("Emotes: the wheel pauses %zu of the game's actions while open; the shoulder glyphs %s", g.wheelActions.size(),
-         g.previousGlyph && g.nextGlyph ? "were found" : "were not found");
+  PM_LOG("Emotes: the wheel pauses %zu of the game's actions while open; the shoulder glyphs %s; Interact %s",
+         g.wheelActions.size(), g.previousGlyph && g.nextGlyph ? "were found" : "were not found",
+         g.interactAction ? "was found" : "was not found");
 }
 
 // The sprite the game's glyph widget for a shoulder button holds (the Xbox or PS5 one it picked for the pad), or null
@@ -405,6 +458,62 @@ void* glyph_of(const api::Held& image) {
 void show_screen_glyphs() {
   const bool pad = !input::keyboard_in_use().value_or(true);
   wheel::show_glyphs(pad ? glyph_of(g.previousGlyph) : nullptr, pad ? glyph_of(g.nextGlyph) : nullptr, !pad);
+}
+
+// A keyboard control's name as the join prompt's keycap shows it: "e" is E, "space" is Space.
+std::string key_name(std::string control) {
+  if (!control.empty()) control[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(control[0])));
+  return control;
+}
+
+// Interact's bindings as the player has them now, a rebinding in the game's menu included (its override path): its
+// gamepad control ("buttonWest") and its keyboard key's name ("E"), each empty when it has none.
+void read_interact_binding(std::string& pad, std::string& key) {
+  pad.clear();
+  key.clear();
+  void* map = g.interactAction ? phasmo::InputAction::m_ActionMap.get(g.interactAction) : nullptr;
+  const api::ValueArray bindings{map ? phasmo::InputActionMap::m_Bindings.get(map) : nullptr};
+  for (size_t b = 0; b < bindings.size(); ++b) {
+    if (api::to_utf8(phasmo::InputBinding::m_Action.get(bindings.at(b))) != kInteractAction) continue;
+    std::string path = api::to_utf8(phasmo::InputBinding::m_OverridePath.get(bindings.at(b)));
+    if (path.empty()) path = api::to_utf8(phasmo::InputBinding::m_Path.get(bindings.at(b)));
+    if (pad.empty() && path.rfind("<Gamepad>/", 0) == 0) pad = path.substr(10);
+    if (key.empty() && path.rfind("<Keyboard>/", 0) == 0) key = key_name(path.substr(11));
+  }
+}
+
+// The game's sprite for a gamepad control (its Input System path below <Gamepad>/), from the set the game picked for
+// the pad in use: the PS5 set while the shoulder glyph shows the PS5 sprite, else the Xbox set (sdk/systems/menus.md,
+// "Input glyphs"). Null for a control the sets have no sprite for.
+void* pad_sprite(const std::string& control) {
+  void* w = g.glyphWidget;
+  if (!w || !game::alive(w)) return nullptr;
+  void* shown = glyph_of(g.previousGlyph);
+  const bool ps5 = shown && shown == phasmo::GamepadButton::ps5_leftShoulder.get(w);
+  using B = phasmo::GamepadButton;
+#define PM_PAD(path, name) \
+  if (control == path) return ps5 ? B::ps5_##name.get(w) : B::xbox_##name.get(w)
+  PM_PAD("buttonSouth", buttonSouth);
+  PM_PAD("buttonNorth", buttonNorth);
+  PM_PAD("buttonEast", buttonEast);
+  PM_PAD("buttonWest", buttonWest);
+  PM_PAD("start", startButton);
+  PM_PAD("select", selectButton);
+  PM_PAD("leftTrigger", leftTrigger);
+  PM_PAD("rightTrigger", rightTrigger);
+  PM_PAD("leftShoulder", leftShoulder);
+  PM_PAD("rightShoulder", rightShoulder);
+  PM_PAD("dpad", dpad);
+  PM_PAD("dpad/up", dpadUp);
+  PM_PAD("dpad/down", dpadDown);
+  PM_PAD("dpad/left", dpadLeft);
+  PM_PAD("dpad/right", dpadRight);
+  PM_PAD("leftStick", leftStick);
+  PM_PAD("rightStick", rightStick);
+  PM_PAD("leftStickPress", leftStickPress);
+  PM_PAD("rightStickPress", rightStickPress);
+#undef PM_PAD
+  return nullptr;
 }
 
 // Turns the wheel's page by `steps`, wrapping round.
@@ -604,6 +713,7 @@ void stop_song(int actor) {
   for (const api::Held* s : {&it->second.source, &it->second.intro})
     if (*s && game::alive(*s)) game::destroy(game::game_object_of(*s));
   g.songs.erase(it);
+  g.syncedSongs.erase(actor);
 }
 
 // A song's volume on this client: the player's Emotes volume setting (the audio page) of its base.
@@ -696,6 +806,31 @@ void start_song(int actor, void* player, int emote) {
   } else {
     phasmo::AudioSource::Play(source, 0);
   }
+}
+
+// The pair's song becomes the emote's synced song, when its catalogue names one, at the point the first dancer's song
+// has reached (the design: "on joining, the pair's song switches to it at the same point"). Sway has none, and its song
+// plays on. A pair formed while the intro song still plays keeps it (a join waits for the dance's intro, which the intro
+// song can outlast).
+void switch_to_synced_song(int first, int emote, double elapsed) {
+  void* clip = emote >= 0 && emote < static_cast<int>(g.a.partnerSongs.size()) ? g.a.partnerSongs[emote].get() : nullptr;
+  auto it = g.songs.find(first);
+  if (!clip || it == g.songs.end() || !it->second.source || !game::alive(it->second.source)) return;
+  const EmoteInfo& info = g.a.table[emote];
+  const SongAt at = song_position(elapsed, info.introSongSeconds, info.song);
+  if (at.intro) {
+    PM_LOG("Emotes: a pair formed during the intro song; it keeps its song");
+    return;
+  }
+  if (it->second.intro && game::alive(it->second.intro)) game::destroy(game::game_object_of(it->second.intro));
+  it->second.intro = nullptr;
+  void* source = it->second.source;
+  phasmo::AudioSource::set_clip(source, clip);
+  phasmo::AudioSource::Play(source, 0);
+  const float length = phasmo::AudioClip::get_length(clip);
+  const double t = length > 0.0f ? std::fmod(at.seconds, static_cast<double>(length)) : at.seconds;
+  phasmo::AudioSource::set_time(source, static_cast<float>(t));
+  g.syncedSongs.insert(first);
 }
 
 // ---- This client's own investigator ----
@@ -821,13 +956,20 @@ void play_clip(int actor, void* player, void* clip, float blend) {
   g.playing[actor] = clip;
 }
 
+void apply_remote(const std::vector<RemoteOut>& outs);
+
 void apply_local(const LocalOut& o, void* player, bool vr) {
   const int me = game::local_actor();
+  // The pair this client left: the other dancer stops on their own client, and here at once.
+  if (o.partnerLeft) apply_remote(g.remote->drop(*o.partnerLeft));
   if (o.start >= 0) {
-    void* clip = clip_of(o.start, o.phase.value_or(first_phase(o.start)));
-    const bool played = api::anim::play_on_player(player, clip, kBlendIn);
+    // A second dancer plays the second part from the pair's point, to the first dancer's song (only theirs plays).
+    const bool second = g.local->role() == Role::Partner;
+    void* clip = second ? g.a.partnerClips[o.start].get() : clip_of(o.start, o.phase.value_or(first_phase(o.start)));
+    const bool played = second ? api::anim::play_on_player(player, clip, kBlendIn, g.local->partner_time())
+                               : api::anim::play_on_player(player, clip, kBlendIn);
     g.playing[me] = clip;
-    start_song(me, player, o.start);
+    if (!second) start_song(me, player, o.start);
     const auto song = g.songs.find(me);
     void* songClip = g.a.songs[o.start];
     PM_LOG("Emotes: %s starts (%s): clip %s, %s on the body; song %s, %s", g.a.defs[o.start].id.c_str(), vr ? "VR" : "screen",
@@ -838,13 +980,14 @@ void apply_local(const LocalOut& o, void* player, bool vr) {
     begin_facing(me, player, o.bodyYaw.value_or(0.0f));
   }
   // A walking emote's walk, a stop, or an intro's end: the phase's clip blends in over the one playing.
-  if (o.phase && o.start < 0 && !o.stop && g.local->active()) {
+  if (o.phase && o.start < 0 && !o.stop && g.local->active() && g.local->role() == Role::First) {
     const int emote = g.local->emote();
     const float blend = phase_blend_seconds(*o.phase, g.playing[me] == g.a.introClips[emote]);
     play_clip(me, player, clip_of(emote, *o.phase), blend);
   }
   if (o.stop) {
     g.playing.erase(me);
+    g.glide.reset();
     PM_LOG(o.atOnce ? "Emotes: the emote ends at once" : "Emotes: the emote ends");
     if (o.atOnce) {
       // The game has an animation of its own for this body (a death): nothing of ours is left blending, and the view
@@ -864,6 +1007,207 @@ void apply_local(const LocalOut& o, void* player, bool vr) {
     if (it != g.facings.end()) it->second.bodyYaw = *o.bodyYaw;
   }
   send(o.send);
+  for (const auto& [actor, m] : o.sendTo) {
+    const std::vector<uint8_t> bytes = pack(m);
+    net::send(bytes.data(), bytes.size(), net::To::Actor, true, actor);
+  }
+  // This client took a second dancer: it shows them dancing beside it from now, as every other client does.
+  if (o.acceptedActor && g.local->active())
+    apply_remote(g.remote->add_partner(*o.acceptedActor, me, g.local->emote(), g.local->elapsed(), g.local->yaw()));
+}
+
+// ---- Joining a synced emote ----
+
+// Moves this client's investigator so their body stands at `to`: both of the game's moves set the rig's own position
+// (LocalPlayer.TeleportPlayer on PC, VRPlayer.Teleport in VR, sdk/systems/players.md), so the rig goes by the gap
+// between the body and the spot.
+void move_body_to(void* player, Point to) {
+  void* rig = game::local_player_component();
+  if (!rig || !game::alive(rig) || !player) return;
+  const Vector3 body = game::position(game::transform_of(player)), at = game::position(game::transform_of(rig));
+  const Vector3 dest{at.x + to.x - body.x, at.y + to.y - body.y, at.z + to.z - body.z};
+  if (is_vr(player))
+    phasmo::VRPlayer::Teleport(player, &dest);
+  else
+    phasmo::LocalPlayer::TeleportPlayer(rig, &dest);
+}
+
+// Each frame of the glide into the partner's spot: the body moved along it and turned with it, until it is there.
+void step_glide(void* player, float dt) {
+  if (!g.glide) return;
+  if (!g.local->active() || !player || !game::alive(player)) {
+    g.glide.reset();
+    return;
+  }
+  g.glide->t += dt;
+  move_body_to(player, g.glide->at());
+  if (auto it = g.facings.find(game::local_actor()); it != g.facings.end()) it->second.bodyYaw = g.glide->yaw();
+  if (g.glide->done()) g.glide.reset();
+}
+
+// Whether the game's own Interact would act on something now: its ray from the centre of the rig's camera, on its
+// mask, hitting a PhotonObjectInteract or a ChildPhotonInteract (PCPropGrab.OnInteract, sdk/systems/players.md).
+// True when that cannot be read, so the prompt fails closed.
+bool interactable_ahead() {
+  void* grab = component_in_rig(phasmo::PCPropGrab::type.type_object());
+  void* cam = grab ? phasmo::PCPropGrab::playerCam.get(grab) : nullptr;
+  void* t = cam && game::alive(cam) ? game::transform_of(cam) : nullptr;
+  if (!t) return true;
+  void* hit = game::raycast(game::position(t), game::forward(t), kInteractReach, phasmo::PCPropGrab::mask.get(grab));
+  if (!hit) return false;
+  for (void* type : {phasmo::PhotonObjectInteract::type.type_object(), phasmo::ChildPhotonInteract::type.type_object()})
+    if (type && phasmo::Component::GetComponent(hit, type)) return true;
+  return false;
+}
+
+// Whether this client's investigator fits at `spot` (where the body would stand), on ground: the rig's own capsule
+// (PhysicsCharacterController's radius, height and centre) tested there against what blocks a player (its collision
+// mask), the investigator's own colliders aside, and its ground layers under it (sdk/systems/players.md). False when
+// the controller cannot be read.
+bool spot_clear(Point spot, void* player) {
+  void* rig = game::local_player_component();
+  void* ctrl = rig && game::alive(rig) ? phasmo::LocalPlayer::characterController.get(rig) : nullptr;
+  if (!ctrl || !game::alive(ctrl)) {
+    if (!g.loggedNoCapsule) PM_LOG("Emotes: the rig's character controller cannot be read; no join prompt");
+    g.loggedNoCapsule = true;
+    return false;
+  }
+  using C = phasmo::PhysicsCharacterController;
+  const int32_t mask = C::collisionMask.get(ctrl), ground = C::get_groundLayers(ctrl);
+  const float r = C::get_radius(ctrl), h = C::get_height(ctrl);
+  const Vector3 c = C::get_center(ctrl);
+  if (r <= 0.0f || h <= 0.0f || !mask) return false;
+  void* ctrlT = game::transform_of(ctrl);
+  void* bodyT = game::transform_of(player);
+  const Vector3 body = game::position(bodyT), at = game::position(ctrlT);
+  // The controller's object there, kept at its gap from the body; the capsule's centre is local to that object.
+  const Vector3 base{spot.x + at.x - body.x + c.x, spot.y + at.y - body.y + c.y, spot.z + at.z - body.z + c.z};
+  const float low = base.y - h / 2.0f + kFloorSkin + r, high = std::max(low, base.y + h / 2.0f - r);
+  for (float y = low;; y += r) {
+    const Vector3 centre{base.x, std::min(y, high), base.z};
+    const api::RefArray hits{
+        phasmo::Physics::OverlapSphere(&centre, r, mask, phasmo::QueryTriggerInteraction::Ignore())};
+    for (size_t i = 0; i < hits.size(); ++i) {
+      void* t = hits[i] ? game::transform_of(hits[i]) : nullptr;
+      if (t && !game::is_child_of(t, ctrlT) && !game::is_child_of(t, bodyT)) return false;
+    }
+    if (y >= high) break;
+  }
+  const Vector3 feet{base.x, base.y - h / 2.0f + 0.2f, base.z};
+  return game::raycast(feet, {0.0f, -1.0f, 0.0f}, 0.5f, ground) != nullptr;
+}
+
+// Where a first dancer's second part stands, from their body now and the facing they keep.
+std::optional<Point> spot_beside(int first, int emote) {
+  void* p = game::player_of_actor(first);
+  if (!p || !game::alive(p) || emote < 0 || !g.a.defs[emote].partner) return std::nullopt;
+  const Vector3 at = game::position(game::transform_of(p));
+  const PartnerDef& def = *g.a.defs[emote].partner;
+  return partner_spot({at.x, at.y, at.z}, g.remote->yaw(first), def.offsetRight, def.offsetForward);
+}
+
+int index_of_key(uint32_t key) {
+  for (size_t i = 0; i < g.a.table.size(); ++i)
+    if (g.a.table[i].key == key) return static_cast<int>(i);
+  return -1;
+}
+
+// The join prompt over the nearest dancer of a synced emote this client may join now, and a press of Interact (the
+// right trigger in VR) to ask (the user's design, 2026-11-13). Each client draws only its own prompt.
+void update_join(void* player, bool vr, const LocalFrame& f) {
+  const bool canDance = f.present && !f.dying && !g.local->active() && !g.local->waiting() && !wheel::is_open() &&
+                        !g.wheelIn.open && !journal_open() && keys::keys_ready();
+  void* cam = canDance ? game::local_camera() : nullptr;
+  void* camT = cam && game::alive(cam) ? game::transform_of(cam) : nullptr;
+  if (!camT) return join::hide();
+  const Vector3 eye = game::position(camT), look = game::forward(camT);
+  PromptCheck c;
+  c.me = {eye.x, eye.y, eye.z};
+  c.lookYaw = std::atan2(look.x, look.z) * 57.29577951f;
+  c.lookPitch = std::asin(std::clamp(look.y, -1.0f, 1.0f)) * 57.29577951f;
+  c.canDance = true;
+  c.targetSynced = true;
+  c.spotClear = true;  // tested below for the one dancer the prompt would show over
+  c.interactableInWay = !vr && interactable_ahead();
+  const bool meDown = f.dead || f.dying;
+  int best = 0, bestEmote = -1;
+  float bestDistance = 0.0f;
+  void* bestHead = nullptr;
+  for (const auto& [actor, emote] : g.remote->dancers()) {
+    if (!g.a.table[emote].synced || g.remote->partner_of(actor) != 0) continue;  // a second dancer is no one's first
+    void* p = game::player_of_actor(actor);
+    if (!p || !game::alive(p)) continue;
+    // Alive or dead as the dancer is: the two must be seen by the same players.
+    if ((phasmo::Player::isDead.get(p) || g.dying.count(actor) != 0) != meDown) continue;
+    void* animator = animator_of(p);
+    void* head = animator ? phasmo::Animator::GetBoneTransform(animator, phasmo::HumanBodyBones::Head()) : nullptr;
+    if (!head || !game::alive(head)) continue;
+    const Vector3 h = game::position(head);
+    c.target = {h.x, h.y - kChestBelowHead, h.z};
+    c.partFree = !g.remote->paired(actor);
+    c.targetInIntro = g.remote->in_intro(actor);
+    if (!shows_prompt(c)) continue;
+    const float d = game::distance(eye, {c.target.x, c.target.y, c.target.z});
+    if (best && d >= bestDistance) continue;
+    best = actor;
+    bestEmote = emote;
+    bestDistance = d;
+    bestHead = head;
+  }
+  const std::optional<Point> spot = best ? spot_beside(best, bestEmote) : std::nullopt;
+  if (!spot || !spot_clear(*spot, player)) return join::hide();
+  std::string pad, key;
+  read_interact_binding(pad, key);
+  // In VR the glyph is the game's sprite for the trigger that joins there, as the VR wheel shows the game's shoulder
+  // glyphs (the user's choice for the wheel, 2026-11-13); on screen the pad's sprite while the game says a pad is in
+  // use, else the keycap with the key's name.
+  void* sprite = vr ? pad_sprite("rightTrigger") : !input::keyboard_in_use().value_or(true) ? pad_sprite(pad) : nullptr;
+  join::show(bestHead, camT, sprite, key);
+  const bool pressed = vr ? keys::key_state(kVrPickKey).pressed
+                          : g.interactAction && phasmo::InputAction::WasPressedThisFrame(g.interactAction);
+  if (!pressed) return;
+  join::hide();
+  PM_LOG("Emotes: asks actor %d to dance %s together", best, g.a.defs[bestEmote].id.c_str());
+  apply_local(g.local->join_request(best, bestEmote, f), player, vr);
+}
+
+// The first dancer's Accept named this client: it takes the second part and glides to the spot beside them. An
+// Accept it no longer waits for is answered with an End (LocalSession::accepted).
+void accept_from(int first, const EmoteMsg& m) {
+  void* player = game::local_player();
+  if (!player || !game::alive(player)) return;
+  const bool vr = is_vr(player);
+  const int emote = index_of_key(m.key);
+  const std::optional<Point> spot = spot_beside(first, emote);
+  const float yaw = g.remote->yaw(first);
+  const double elapsed = g.remote->elapsed(first);
+  const Vector3 from = game::position(game::transform_of(player));
+  const float fromYaw = yaw_of(game::transform_of(player));
+  const LocalOut o = g.local->accepted(first, m.key, elapsed, spot.value_or(Point{from.x, from.y, from.z}), yaw);
+  if (o.start >= 0 && spot) {
+    Glide glide;
+    glide.from = {from.x, from.y, from.z};
+    glide.to = *spot;
+    glide.fromYaw = fromYaw;
+    glide.toYaw = yaw;
+    g.glide = glide;
+    PM_LOG("Emotes: joins actor %d in %s", first, g.a.defs[o.start].id.c_str());
+  }
+  apply_local(o, player, vr);
+  if (o.start >= 0) {
+    if (auto it = g.facings.find(game::local_actor()); it != g.facings.end() && g.glide) it->second.bodyYaw = fromYaw;
+    switch_to_synced_song(first, o.start, elapsed);
+  }
+}
+
+// When this client's partner is no longer dancing here (their End, a new dance of theirs, leaving, a death), this
+// client stops too: either dancer stopping ends both (the user, 2026-11-13).
+void end_with_partner() {
+  const std::optional<int> partner = g.local->partner();
+  if (!partner || g.remote->dancing(*partner)) return;
+  void* player = game::local_player();
+  apply_local(g.local->partner_ended(*partner), player && game::alive(player) ? player : nullptr,
+              player && is_vr(player));
 }
 
 // Whether the local investigator is one of the game's players (Playable Ghost's ghost player is not).
@@ -1002,6 +1346,8 @@ void detour_death_start(api::Original<phasmo::Player::NotifyOfDeathStart> origin
 }
 
 void end_everything_local() {
+  join::hide();
+  g.glide.reset();
   if (g.local && g.local->active()) {
     void* player = g.localPlayer.get();
     apply_local(g.local->end_now(), player && game::alive(player) ? player : nullptr, false);
@@ -1016,7 +1362,17 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
     void* player = game::player_of_actor(o.actor);
     switch (o.what) {
       case RemoteOut::Start:
-        if (player) {
+        if (player && o.partner) {
+          // A second dancer: the second part from the pair's point, no song of their own (only the first dancer's
+          // plays), and the first dancer's song switched to the synced one if the emote has one.
+          void* clip = g.a.partnerClips[o.emote];
+          api::anim::play_on_player(player, clip, kBlendIn, g.remote->partner_time(o.actor));
+          g.playing[o.actor] = clip;
+          begin_facing(o.actor, player, o.yaw);
+          const int first = g.remote->partner_of(o.actor);
+          switch_to_synced_song(first, o.emote,
+                                first == game::local_actor() ? g.local->elapsed() : g.remote->elapsed(first));
+        } else if (player) {
           void* clip = clip_of(o.emote, first_phase(o.emote));
           api::anim::play_on_player(player, clip, kBlendIn);
           g.playing[o.actor] = clip;
@@ -1056,7 +1412,9 @@ void raise_loudness(int actor, void* player, int emote, double elapsed, float no
   if (!player || emote < 0 || !g.paces[actor].due(now)) return;
   const EmoteInfo& info = g.a.table[emote];
   const SongAt at = song_position(elapsed, info.introSongSeconds, info.song);
-  const talk::Envelope& envelope = at.intro ? g.a.introLoudness[emote] : g.a.loudness[emote];
+  const bool synced = g.syncedSongs.count(actor) != 0;
+  const talk::Envelope& envelope =
+      at.intro ? g.a.introLoudness[emote] : synced ? g.a.partnerLoudness[emote] : g.a.loudness[emote];
   talk::add_talk_loudness(player, envelope.at(static_cast<float>(at.seconds)));
 }
 
@@ -1101,6 +1459,7 @@ bool start() {
   api::settings::add_slider(volume);
   g.local.emplace(g.a.table);
   g.remote.emplace(g.a.table);
+  if (!join::load()) PM_LOG("Emotes: the join prompt shows no keycap");
   if (!api::hook<phasmo::LocalJournalController::OpenCloseJournal>(&detour_journal, "Emotes: the journal key") ||
       !api::hook<phasmo::Player::NotifyOfDeathStart>(&detour_death_start, "Emotes: a kill begins") ||
       !pm::hooks::enable_all()) {
@@ -1163,6 +1522,7 @@ void tick() {
     // Sprinting as the game decides it (pm::api::movement::sprinting: Run held or toggled on, sprinting allowed and
     // the stamina able); nothing on VR, where a walking emote stands anyway.
     f.sprinting = movement::sprinting().value_or(false);
+    f.gliding = g.glide.has_value();
     const bool dancing = g.local->active();
     f.endAction = dancing && ((end_action_pressed(vr) && !wheel::is_open()) || journal_open());
   }
@@ -1180,7 +1540,12 @@ void tick() {
   } else {
     close_wheel();
   }
+  if (present && !f.dying)
+    update_join(player, vr, f);
+  else
+    join::hide();
   apply_local(g.local->tick(f), player, vr);
+  step_glide(player, dt);
   if (g.local->active() && !vr) hold_items_in_hand();
   if (g.logItemAfterView && !api::view::in_third_person()) {
     g.logItemAfterView = false;
@@ -1202,13 +1567,17 @@ void tick() {
                       p ? api::anim::clip_time(p) : -1.0});
   }
   apply_remote(g.remote->tick(frames, f.dead || f.dying, dt));
+  end_with_partner();
   apply_facings(dt);
 
   // The ghost hears the songs as the dancers talking, on the master, where it runs.
   if (game::is_master()) {
-    if (g.local->active()) raise_loudness(game::local_actor(), player, g.local->emote(), g.local->elapsed(), now);
+    // One song plays for a pair, the first dancer's, so only theirs counts.
+    if (g.local->active() && g.local->role() == Role::First)
+      raise_loudness(game::local_actor(), player, g.local->emote(), g.local->elapsed(), now);
     for (const auto& [actor, emote] : g.remote->dancers())
-      raise_loudness(actor, game::player_of_actor(actor), emote, g.remote->elapsed(actor), now);
+      if (g.remote->partner_of(actor) == 0)
+        raise_loudness(actor, game::player_of_actor(actor), emote, g.remote->elapsed(actor), now);
   }
 }
 
@@ -1221,7 +1590,19 @@ void receive(int sender, const uint8_t* data, size_t size) {
   void* local = game::local_player();
   const bool senderDown = player && (phasmo::Player::isDead.get(player) || g.dying.count(sender) != 0);
   const bool localDown = local && (phasmo::Player::isDead.get(local) || g.dying.count(game::local_actor()) != 0);
+  // Joining: a Join is this client's to answer as a first dancer; an Accept naming this client is its answer as a
+  // joiner (and goes on to the pairing below, as every client's does).
+  if (m->kind == Kind::Join) {
+    if (local && game::alive(local)) apply_local(g.local->on_join(sender, m->key), local, is_vr(local));
+    return;
+  }
+  if (m->kind == Kind::Accept && static_cast<int>(m->x) == game::local_actor()) accept_from(sender, *m);
+  // A new dance of this client's partner leaves the pair, which ends it for both.
+  if (m->kind == Kind::Start && g.local->partner() == sender) {
+    apply_local(g.local->partner_ended(sender), local && game::alive(local) ? local : nullptr, local && is_vr(local));
+  }
   apply_remote(g.remote->receive(sender, *m, senderDown, localDown));
+  end_with_partner();
 }
 
 void stop() {
@@ -1237,6 +1618,7 @@ void stop() {
   while (!g.songs.empty()) stop_song(g.songs.begin()->first);  // each song's sources, its intro's too
   set_look(true);  // the game's actions the open wheel paused come back before the mod lets go of them
   wheel::unload();
+  join::unload();
   // The engine loads a bundle once, so each is unloaded here for the mod's next start (the lobby's rules restart mods).
   for (api::Held& b : g.a.bundles)
     if (b && game::alive(b)) api::unload_bundle(b, true);

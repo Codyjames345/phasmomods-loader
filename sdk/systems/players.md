@@ -211,7 +211,9 @@ never sent: only the player's own client holds it. What every client does get is
 The game moves its own player with `LocalPlayer.TeleportPlayer` on PC (the training room's hunt does, and PCPlayer's
 `Teleport` calls it): it switches the rig's movement controller off (`LocalPlayer.characterController`, a
 `PhysicsCharacterController`), sets the rig's position and switches the controller on again. On VR, `VRPlayer.Teleport`
-sets the VR rig's position. Both act on this client only; no RPC is sent, and the position reaches other clients as any
+sets the position of the player's own LocalPlayer, the same rig transform, without switching the controller off. The
+rig's transform need not be where the body stands, so a mod moving the body to a point moves the rig by the gap between
+them. Both act on this client only; no RPC is sent, and the position reaches other clients as any
 move does.
 
 What blocks a player is the controller's own collision mask (`PhysicsCharacterController.collisionMask`), which its

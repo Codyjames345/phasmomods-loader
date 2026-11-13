@@ -1040,7 +1040,8 @@ inline constexpr pm::sdk::EntryDesc LocalPlayer_TeleportPlayer{
     .key = "LocalPlayer.TeleportPlayer", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LocalPlayer", .name = "TeleportPlayer", .params = Player_Vector3};
 
-/// Moves the local VR rig to a point, on this client only: it sets the position of the VR rig it holds. No RPC.
+/// Moves the local VR rig to a point, on this client only: it sets the position of the player's own LocalPlayer (the
+/// rig's transform, as LocalPlayer.TeleportPlayer does on PC, without switching the controller off). No RPC.
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc VRPlayer_Teleport{.key = "VRPlayer.Teleport", .kind = pm::sdk::Kind::Method,
                                                       .confidence = pm::sdk::Confidence::Decompiled,

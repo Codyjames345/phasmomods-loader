@@ -858,9 +858,86 @@ void the_glide_eases_into_the_spot() {
   CHECK(close_to(g.at(), Point{2, 0, 0}) && std::fabs(wrap_degrees(g.yaw() - 10.0f)) < 1e-3f && g.done());
 }
 
+// What the join prompt asks of a remote dancer: whether someone has joined them, and whether they are in their intro.
+void a_dancer_reports_its_pairing_and_intro() {
+  const EmoteTable t = synced_table(2.0f);
+  RemoteSessions r(t);
+  r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+  CHECK(r.in_intro(4) && !r.paired(4));
+  std::vector<RemoteFrame> frames(1);
+  frames[0].actor = 4;
+  frames[0].present = true;
+  r.tick(frames, false, 2.5f);
+  CHECK(!r.in_intro(4));
+  pair_up(r, 4, 7);
+  CHECK(r.paired(4) && r.paired(7));
+  CHECK(!r.paired(9) && !r.in_intro(9));
+}
+
+// The first dancer's facing locks when someone joins: it goes out, exactly, just before the Accept, so every client
+// puts the second dancer beside the yaw the first keeps rather than the last one sent.
+void the_accept_follows_the_locked_facing() {
+  const EmoteTable t = synced_table();
+  LocalSession s = first_dancer(t);
+  const LocalOut o = s.on_join(7, 1000u);
+  CHECK(o.send.size() == 2 && o.send[0].kind == Kind::Facing && o.send[1].kind == Kind::Accept);
+  CHECK(o.send[0].yaw == s.yaw());
+  RemoteSessions r(t);
+  r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 10.0f}, false, false);
+  CHECK(r.yaw(4) == 10.0f);
+  r.receive(4, o.send[0], false, false);
+  CHECK(r.yaw(4) == s.yaw());
+  CHECK(r.yaw(9) == 0.0f);  // nobody dancing
+}
+
+// An Accept the joiner no longer waits for (its Join gave up, or it never asked) is answered with an End, so the
+// first dancer's client, which already shows it dancing, lets go of the pair rather than showing a part never danced.
+void a_late_accept_is_answered_with_an_end() {
+  const EmoteTable t = synced_table();
+  LocalSession joiner(t);
+  joiner.join_request(4, 0, here(-1.0));
+  CHECK(joiner.waiting());  // no second Join while one awaits its answer
+  LocalFrame f = here(-1.0);
+  f.dt = kJoinWaitSeconds + 0.5f;
+  joiner.tick(f);
+  CHECK(!joiner.waiting());
+  const LocalOut late = joiner.accepted(4, 1000u, 3.0, Point{1, 0, 0}, 0.0f);
+  CHECK(late.start < 0 && !joiner.active());
+  const EmoteMsg* end = sent(late.send, Kind::End);
+  CHECK(end && end->key == 1000u);
+  // A dancer is not ended by a stray Accept: what it dances is its own.
+  LocalSession dancing = first_dancer(t);
+  CHECK(dancing.accepted(9, 1000u, 3.0, Point{1, 0, 0}, 0.0f).send.empty());
+  CHECK(dancing.active());
+}
+
+// Leaving a pair, by any end or by a new dance, names the partner left, so this client stops showing them at once
+// rather than a message's round trip later; drop() is that stop here.
+void leaving_a_pair_names_the_partner() {
+  const EmoteTable t = synced_table();
+  LocalSession s = first_dancer(t);
+  s.on_join(7, 1000u);
+  CHECK(s.end_now().partnerLeft == 7);
+  LocalSession again = first_dancer(t);
+  again.on_join(7, 1000u);
+  CHECK(again.pick(1, here(0.0)).partnerLeft == 7);  // a new dance leaves the pair too
+  CHECK(!first_dancer(t).end_now().partnerLeft);
+  RemoteSessions r(t);
+  r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+  r.add_partner(7, 4, 0, 1.0, 0.0f);
+  const std::vector<RemoteOut> out = r.drop(7);
+  CHECK(out.size() == 1 && out[0].what == RemoteOut::Stop && out[0].actor == 7 && !r.dancing(7));
+  CHECK(r.dancing(4) && !r.paired(4));  // the first dancer dances on here until their own End
+  CHECK(r.drop(9).empty());
+}
+
 }  // namespace
 
 int main() {
+  leaving_a_pair_names_the_partner();
+  the_accept_follows_the_locked_facing();
+  a_late_accept_is_answered_with_an_end();
+  a_dancer_reports_its_pairing_and_intro();
   the_spot_is_beside_the_first_dancer();
   the_prompt_needs_range_look_and_a_free_part();
   a_blocked_spot_shows_no_prompt();
