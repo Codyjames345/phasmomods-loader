@@ -1200,6 +1200,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &PauseMenuController,
     &PauseMenuController_Leave,
     &PauseMenuController_Quit,
+    &PauseMenuController_Resume,
     &Network_sceneChanging,
     &Application,
     &Application_Quit,

@@ -141,6 +141,13 @@ inline constexpr pm::sdk::EntryDesc PauseMenuController_Quit{
     .key = "PauseMenuController.Quit", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "PauseMenuController", .name = "Quit"};
 
+/// The Resume button: it closes the journal the menu sits in (JournalController.OpenCloseJournal), so the pause
+/// screen is open exactly while JournalController.open is set, then, on the PC rig outside VR, locks the cursor again
+/// (Cursor.set_lockState) unless one of two flags of the rig holds. Decompiled.
+inline constexpr pm::sdk::EntryDesc PauseMenuController_Resume{
+    .key = "PauseMenuController.Resume", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "PauseMenuController", .name = "Resume"};
+
 /// The truck's door button (Assembly-CSharp, global namespace), a MonoBehaviourPun. Decompiled.
 inline constexpr pm::sdk::EntryDesc LiftButton{.key = "LiftButton", .confidence = pm::sdk::Confidence::Decompiled,
                                                .name = "LiftButton", .assembly = "Assembly-CSharp", .ns = ""};

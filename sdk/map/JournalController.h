@@ -337,7 +337,9 @@ inline constexpr pm::sdk::EntryDesc JournalController_OpenCloseJournal{
 inline constexpr pm::sdk::Fact JournalController_open_facts[] = {
     {.is = pm::sdk::Fact::Is::Stores, .method = "JournalController.OpenCloseJournal"}};
 
-/// Whether the journal is open: the bool OpenCloseJournal flips. Decompiled.
+/// Whether the journal is open: the bool OpenCloseJournal flips. The pause screen is a page of the same journal (the
+/// journal holds the PauseMenuController, and PauseMenuController.Resume closes the journal), so this is set while the
+/// pause screen is open too. pm::api::journal::open() reads this client's own. Decompiled.
 inline constexpr pm::sdk::EntryDesc JournalController_open{.key = "JournalController.open", .kind = pm::sdk::Kind::Field,
                                                            .confidence = pm::sdk::Confidence::Decompiled,
                                                            .owner = "JournalController",
