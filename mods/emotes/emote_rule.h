@@ -5,7 +5,9 @@
 // when a move ends an emote, and when a looping emote's sound starts again. The values marked as starting values are
 // judged with the user in game.
 
+#include <algorithm>
 #include <cmath>
+#include <vector>
 #include <optional>
 
 namespace pm::emotes {
@@ -222,5 +224,26 @@ inline SongAt song_position(double elapsed, float introSongSeconds, SongLoop loo
 /// @param time The clip's time, seconds.
 /// @param clipSeconds Its length.
 inline bool one_shot_done(double time, float clipSeconds) { return clipSeconds > 0.0f && time >= clipSeconds; }
+
+/// The loudness every emote's song plays at (the user, 2026-11-13: "normalise the volume of each emote"): the plain mean
+/// of a song's RMS amplitude per 0.1 s window, as the emote pack tool measures it into the song's loudness file. Fixed at
+/// the plain average of the mod's own songs on 2026-11-13, so the dances keep their overall level and an added emote or
+/// pack never moves anyone else's.
+inline constexpr float kSongLoudness = 0.229f;
+/// The bounds of a song's gain: a near-silent song is not blown up, nor a loud one silenced.
+inline constexpr float kMinSongGain = 0.25f, kMaxSongGain = 4.0f;
+
+/// The gain that brings a song to kSongLoudness: kSongLoudness over the plain mean of its measured RMS windows, within
+/// kMinSongGain and kMaxSongGain. 1 for no measurement. Every client works it out from the same file, so every client
+/// hears the same level, and any emote with a loudness file, a pack's included, is normalised.
+/// @param rms The song's RMS amplitude per window, 0 to 1 (talk::parse_rms of its loudness file).
+inline float song_gain(const std::vector<float>& rms) {
+  if (rms.empty()) return 1.0f;
+  double sum = 0.0;
+  for (float r : rms) sum += r;
+  const double mean = sum / static_cast<double>(rms.size());
+  if (mean <= 0.0) return kMaxSongGain;
+  return std::clamp(static_cast<float>(kSongLoudness / mean), kMinSongGain, kMaxSongGain);
+}
 
 }  // namespace pm::emotes

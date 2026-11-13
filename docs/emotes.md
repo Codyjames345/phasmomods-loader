@@ -53,6 +53,8 @@ keyboard key does not talk while the wheel is open either.
 - A dance with an intro plays its intro clip once before its loop, and a dance with an intro song plays that song once
   before its looping song starts. Every player times the intro's end on their own clock, and walking forward during
   a walking dance's intro skips the rest of it.
+- Every dance's song plays at the same loudness: each is brought to one level from its measured loudness file, so no
+  dance is much louder or quieter than another, and the Emotes volume on the audio page sets them all.
 - The song plays from you and falls off with distance as your voice does. The ghost hears it through the same check it
   uses for voices, so dancing near it is as risky as shouting.
 - The dead may dance too: other dead players see it, and the living do not.
