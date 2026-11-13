@@ -335,6 +335,12 @@ Outcome parse_line(const std::string& line, DWORD pid, bool& loading) {
   if (parsed.ec != std::errc{} || end - parsed.ptr < 2 || parsed.ptr[0] != ']' || parsed.ptr[1] != ' ') return Outcome::ready;
   std::string message(parsed.ptr + 2, end);
   if (!message.empty() && message.back() == '\r') message.pop_back();
+  // The line's level, five letters wide and a space (core/log.h's level_word); a host before log levels wrote none.
+  for (const char* level : {"TRACE ", "DEBUG ", "INFO  ", "WARN  ", "ERROR ", "ALERT "})
+    if (message.starts_with(level)) {
+      message.erase(0, 6);
+      break;
+    }
   if (message == "ModHost loading") loading = true;
   if (!loading) return Outcome::ready;
   if (message == "ModHost active") return Outcome::active;

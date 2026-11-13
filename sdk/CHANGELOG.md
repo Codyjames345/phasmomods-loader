@@ -6,6 +6,36 @@ a host runs a mod built for the same major version and a minor no newer than its
 major version `PmHostApi` and every published struct only grow at the end, and every content struct begins with its
 `size`, so a mod built for an older minor keeps loading.
 
+## [2.7] - Unreleased
+
+### Added
+
+- **Log levels.** `PmHostApi::log_level(level, line)` at the end of the table writes a line at a `PmLogLevel`, trace,
+  debug, info, warn, error or alert, as SMAPI's `LogLevel`; `log` stays info. `PM_LOG_AT(level, ...)` (`core/log.h`)
+  reaches it, and on a host without it writes the level's word into the line instead.
+- **A data folder per mod.** `pm::mod::data_folder()` (`core/mod_glue.h`) gives `%LOCALAPPDATA%\PhasmoMods\data\<mod
+  id>\`, made on the first ask, as SMAPI's `DirectoryPath` gives a mod a folder of its own. The first ask moves in the
+  files a mod kept in `%LOCALAPPDATA%\PhasmoMods\<mod id>\` before, once, never deleting a file it could not copy.
+- **The frame's time.** `Time.get_deltaTime`, `Time.get_unscaledDeltaTime`, `Time.get_time` and
+  `Time.get_unscaledTime` (Unity's documented getters), and `pm::api::frame_time()` (`sdk/api/frame_time.h`), which
+  reads all four. The host contract does not change for it.
+
+### Changed
+
+- **`mods.log` shows each line's level** after the process and thread: `[pid=4 tid=8] INFO  ModHost loading`. The
+  launcher reads lines with a level and without one.
+- **The Dev Menu and Emotes keep their files in their data folders**, moved there from `%LOCALAPPDATA%\PhasmoMods\<mod
+  id>\` on their first start.
+- **Ghost Tells' timers run on the game's frame time** (`Time.deltaTime`, at most a quarter of a second a frame)
+  instead of their own clock, so they follow the time scale.
+
+## [2.6] - Unreleased
+
+### Added
+
+- **Content packs.** `PmHostApi::content_packs` and `content_pack_failed`, wrapped by `sdk/api/packs.h` (README,
+  "Content packs").
+
 ## [2.5] - Unreleased
 
 ### Added

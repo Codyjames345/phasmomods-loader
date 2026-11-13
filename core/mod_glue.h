@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,20 @@ struct ModEntry {
 // Every installed mod, running or not, in the host's order (core/mod_api.h mod_entry). Empty before bind, and from a
 // host older than contract 2.5.
 std::vector<ModEntry> mod_entries();
+/// @brief This mod's own folder for the files it keeps between games (settings, saved keys, records):
+/// `%LOCALAPPDATA%\PhasmoMods\data\<mod id>\`, as SMAPI's DirectoryPath gives a mod a folder of its own.
+///
+/// The first ask after bind makes the folder. It also moves in, once, the files the mod kept before in
+/// `%LOCALAPPDATA%\PhasmoMods\<mod id>\`, the folder mods built for themselves before this helper: each file the new
+/// folder lacks (sub-folders kept) is moved, and logged; one it already has stays in the old folder, logged, and so does
+/// one that cannot be moved or copied, which is never deleted. The old folder goes once nothing is left in it. Later
+/// asks answer the same folder at once.
+/// @return The folder, which exists; empty before bind, when the host gives no data folder, and when the folder cannot
+///   be made (logged). Build a file's path from it only when it is not empty, so nothing is written in the game's
+///   working folder.
+/// @pre Main thread, after bind (from pmmod_start on).
+/// @since Contract 2.7
+std::filesystem::path data_folder();
 // A one-button message in the game's own popup on the menu's and the lobby's board (core/mod_api.h show_message): one asked
 // for in a contract shows once the lobby is back. Nothing before bind.
 void show_message(const std::string& title, const std::string& body);

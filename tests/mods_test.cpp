@@ -342,9 +342,9 @@ void dropped_content_keeps_its_owner_off(const fs::path& data) {
 }
 
 // A mod built against an older minor version of contract 2 (`minor`, from `dll`) loads and starts in
-// the 2.6 host: the contract only grew at the end.
+// the 2.7 host: the contract only grew at the end.
 void older_minor_still_loads(const fs::path& data, const char* dll, uint32_t minor) {
-  CHECK(PMMOD_API_VERSION == ((2u << 16) | 6u));
+  CHECK(PMMOD_API_VERSION == ((2u << 16) | 7u));
   pm::log::set_sink(&capture, "");
   g_lines.clear();
   pm::mods::set_installed(data, fake_install(dll));
@@ -367,6 +367,9 @@ void mod_built_for_2_1_still_loads(const fs::path& data) { older_minor_still_loa
 
 // Contract 2.3 added PM_GHOST_NO_MIMIC_COPY; a 2.2 mod (the released contract) still loads.
 void mod_built_for_2_2_still_loads(const fs::path& data) { older_minor_still_loads(data, PM_FAKE_MOD_2_2, 2); }
+
+// Contract 2.7 added log_level at the end of PmHostApi; a 2.6 mod never reaches it.
+void mod_built_for_2_6_still_loads(const fs::path& data) { older_minor_still_loads(data, PM_FAKE_MOD_2_6, 6); }
 
 // A mod exporting the new names loads and logs nothing about them.
 void loads_mod_with_new_exports(const fs::path& data) {
@@ -1340,6 +1343,7 @@ int main() {
   mod_built_for_2_0_still_loads(data);
   mod_built_for_2_1_still_loads(data);
   mod_built_for_2_2_still_loads(data);
+  mod_built_for_2_6_still_loads(data);
   loads_mod_with_new_exports(data);
   loads_mod_with_old_exports_and_logs_once(data);
   manifest_id_must_match_dll(data);

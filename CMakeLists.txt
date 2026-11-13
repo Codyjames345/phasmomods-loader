@@ -399,6 +399,8 @@ target_include_directories(third_person_test BEFORE PRIVATE sdk/api sdk/map sdk/
 pm_test(talk_loudness sdk/api/talk_loudness.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(talk_loudness_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# The shared log and its levels (core/log.h), written to a temporary LOCALAPPDATA.
+pm_test(log core/log.cpp)
 # The frame's time (sdk/api/frame_time.h): Unity's Time getters over the fake game backend.
 pm_test(frame_time sdk/api/frame_time.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
@@ -562,6 +564,10 @@ add_library(pm_fake_mod_2_2 SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_2_2 PRIVATE pmmod)
 target_compile_definitions(pm_fake_mod_2_2 PRIVATE "PM_FAKE_MOD_API_VERSION=((2u << 16) | 2u)")
 pm_options(pm_fake_mod_2_2)
+add_library(pm_fake_mod_2_6 SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_2_6 PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_2_6 PRIVATE "PM_FAKE_MOD_API_VERSION=((2u << 16) | 6u)")
+pm_options(pm_fake_mod_2_6)
 # And as built against the first contract (version 1, no minor), for gamecheck's version check.
 add_library(pm_fake_mod_1 SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_1 PRIVATE pmmod)
@@ -608,13 +614,13 @@ target_include_directories(mods_test PRIVATE third_party/minhook/src/hde)
 target_link_libraries(mods_test PRIVATE minhook bcrypt)
 target_compile_definitions(mods_test PRIVATE PM_FAKE_MOD="$<TARGET_FILE:pm_fake_mod>"
   PM_FAKE_MOD_2_0="$<TARGET_FILE:pm_fake_mod_2_0>" PM_FAKE_MOD_2_1="$<TARGET_FILE:pm_fake_mod_2_1>"
-  PM_FAKE_MOD_2_2="$<TARGET_FILE:pm_fake_mod_2_2>"
+  PM_FAKE_MOD_2_2="$<TARGET_FILE:pm_fake_mod_2_2>" PM_FAKE_MOD_2_6="$<TARGET_FILE:pm_fake_mod_2_6>"
   PM_FAKE_MOD_OPTIONAL="$<TARGET_FILE:pm_fake_mod_optional>" PM_FAKE_MOD_VOICE="$<TARGET_FILE:pm_fake_mod_voice>"
   PM_FAKE_MOD_PLAIN="$<TARGET_FILE:pm_fake_mod_plain>" PM_FAKE_MOD_SAME_CHANNEL="$<TARGET_FILE:pm_fake_mod_same_channel>"
   PM_FAKE_MOD_THROWS="$<TARGET_FILE:pm_fake_mod_throws>" PM_FAKE_MOD_THROWS_REQUIRES="$<TARGET_FILE:pm_fake_mod_throws_requires>"
   PM_FAKE_MOD_1="$<TARGET_FILE:pm_fake_mod_1>" PM_FAKE_MOD_OLD_EXPORTS="$<TARGET_FILE:pm_fake_mod_old_exports>"
   PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-add_dependencies(mods_test pm_fake_mod pm_fake_mod_1 pm_fake_mod_2_0 pm_fake_mod_2_1 pm_fake_mod_2_2 pm_fake_mod_optional pm_fake_mod_voice
+add_dependencies(mods_test pm_fake_mod pm_fake_mod_1 pm_fake_mod_2_0 pm_fake_mod_2_1 pm_fake_mod_2_2 pm_fake_mod_2_6 pm_fake_mod_optional pm_fake_mod_voice
   pm_fake_mod_plain pm_fake_mod_same_channel pm_fake_mod_throws pm_fake_mod_throws_requires pm_fake_mod_old_exports)
 pm_test(mod_glue core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)

@@ -154,8 +154,12 @@ ULONGLONG WINAPI ticks() { return elapsed; }
 #undef GetTickCount64
 
 namespace {
-/** Build a process-specific native line using the production log format. */
-std::string event(const char* message, DWORD pid = 42) {
+/** Build a process-specific native line using the production log format, which names the line's level (core/log.h). */
+std::string event(const char* message, DWORD pid = 42, const char* level = "INFO ") {
+  return "12:00:00.000 [pid=" + std::to_string(pid) + " tid=7] " + level + " " + message + "\n";
+}
+/** The same line as a host before log levels wrote it, with no level. */
+std::string unlevelled_event(const char* message, DWORD pid = 42) {
   return "12:00:00.000 [pid=" + std::to_string(pid) + " tid=7] " + message + "\n";
 }
 /** The per-process asset folders (*.assets) the launcher has made in bin. */
@@ -428,6 +432,8 @@ int main() {
   reset(); emitted = event("ModHost loading") + event("ModHost inactive: test"); CHECK(run().outcome == Outcome::inactive);
   reset(); emitted = event("ModHost loading") + event("ModHost stopped; native module retained until process exit"); CHECK(run().outcome == Outcome::inactive);
   reset(); emitted = event("ModHost active"); CHECK(run().outcome == Outcome::activation_timeout);
+  reset(); emitted = unlevelled_event("ModHost loading") + unlevelled_event("ModHost active"); CHECK(run().outcome == Outcome::active);
+  reset(); emitted = event("ModHost loading") + event("ModHost inactive: test", 42, "ERROR"); CHECK(run().outcome == Outcome::inactive);
   reset(); emitted = event("ModHost loading", 99) + event("ModHost active", 99); CHECK(run().outcome == Outcome::activation_timeout);
   reset(); write_log(event("ModHost loading") + event("ModHost active")); emitted.clear(); CHECK(run().outcome == Outcome::activation_timeout);
   reset(); emitted.pop_back(); CHECK(run().outcome == Outcome::activation_timeout);

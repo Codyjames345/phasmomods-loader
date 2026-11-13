@@ -114,6 +114,15 @@ void api_log(const char* line) {
     // Logging is best effort; a failed line is not worth failing the caller for.
   }
 }
+// The host contract's log_level (version 2.7): the line with its level, a level the contract does not know as info.
+void api_log_level(uint32_t level, const char* line) {
+  if (!line) return;
+  try {
+    PM_LOG_AT(log::level_of(level), "%s", line);
+  } catch (...) {
+    // Logging is best effort, as for api_log.
+  }
+}
 bool api_create_hook(void* target, void* detour, void** original, const char* name) {
   try {
     return hooks::create(target, detour, original, name);
@@ -842,8 +851,8 @@ bool start(void* gameAssembly, void* unityPlayer, const build::Hashes& game) {
     PM_LOG("suite: the local application-data folder is unavailable; set LOCALAPPDATA and restart the game");
     return false;
   }
-  // Positional: a member added to PmHostApi after content_pack_failed fails this until it is given here too.
-  static_assert(offsetof(PmHostApi, content_pack_failed) + sizeof(PmHostApi::content_pack_failed) == sizeof(PmHostApi),
+  // Positional: a member added to PmHostApi after log_level fails this until it is given here too.
+  static_assert(offsetof(PmHostApi, log_level) + sizeof(PmHostApi::log_level) == sizeof(PmHostApi),
                 "g_api lists every PmHostApi member");
   g_api = {PMMOD_API_VERSION, gameAssembly, unityPlayer, g_dataDirectory.c_str(),
            &api_log, &api_create_hook, &api_enable_hooks, &api_send, &api_set_receiver,
@@ -864,7 +873,7 @@ bool start(void* gameAssembly, void* unityPlayer, const build::Hashes& game) {
            &api_content_player_move, &api_content_interaction_lost, &api_content_roll_taken, &api_steer_agent,
            &api_abandon_ghost_spawn, &api_dictionary_int_entries, &api_mod_started, &api_show_message,
            &api_content_flags_of, &api_mod_name, &api_unity_action_new, &api_mod_entry, &api_content_packs,
-           &api_content_pack_failed};
+           &api_content_pack_failed, &api_log_level};
   // The host's own game side of content reaches the game through the map, like a mod: the game API
   // bound to the host's contract. Without every entry it needs, custom content stays off.
   std::string unbound;

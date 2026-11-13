@@ -5,11 +5,13 @@
 #include <filesystem>
 #include <string>
 #include <system_error>
+#include <vector>
 
 #include "game_api.h"
 #include "hooks.h"
 #include "managed_exception.h"
 #include "log.h"
+#include "mod_ids.h"
 #include "net.h"
 #include "text_files.h"
 #include "text_table.h"
@@ -21,6 +23,53 @@ const PmHostApi* g_host = nullptr;
 const PmModInfo* g_info = nullptr;
 std::string g_prefix;
 net::Handler g_handler = nullptr;
+std::filesystem::path g_dataFolder;  // made since the last bind; empty until the first ask
+
+// A path within a folder, as the log shows it.
+std::string shown(const std::filesystem::path& relative) { return text::narrow(relative.generic_wstring()); }
+
+// Moves into `folder` each file of `old` that `folder` lacks, keeping sub-folders: renamed where it can be, else
+// copied and the original removed only once the copy is whole. A file `folder` already has, or one that can be neither
+// moved nor copied, stays in `old`, logged. Then removes the folders of `old` left empty, `old` itself included.
+void move_old_files(const std::filesystem::path& old, const std::filesystem::path& folder) {
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  std::vector<fs::path> files, folders;
+  for (fs::recursive_directory_iterator it(old, ec), end; !ec && it != end; it.increment(ec)) {
+    if (it->is_directory(ec)) folders.push_back(it->path());
+    else if (it->is_regular_file(ec)) files.push_back(it->path());
+  }
+  for (const fs::path& from : files) {
+    const fs::path relative = from.lexically_relative(old);
+    const fs::path to = folder / relative;
+    if (fs::exists(to, ec)) {
+      PM_LOG("data folder: kept %s in the old folder: the data folder has its own", shown(relative).c_str());
+      continue;
+    }
+    fs::create_directories(to.parent_path(), ec);
+    std::error_code moved;
+    fs::rename(from, to, moved);
+    if (moved) {
+      std::error_code copied;
+      fs::copy_file(from, to, copied);
+      if (copied) {
+        fs::remove(to, ec);  // a part of a copy; `to` did not exist before
+        PM_LOG_AT(log::Level::Warn, "data folder: could not move %s from the old folder; it stays there",
+                  shown(relative).c_str());
+        continue;
+      }
+      if (!fs::remove(from, ec)) {
+        PM_LOG("data folder: copied %s from the old folder, which keeps it too", shown(relative).c_str());
+        continue;
+      }
+    }
+    PM_LOG("data folder: moved %s from the old folder", shown(relative).c_str());
+  }
+  // The deepest first, so a folder's sub-folders go before it; a folder that still holds anything stays.
+  for (auto it = folders.rbegin(); it != folders.rend(); ++it)
+    if (fs::is_empty(*it, ec)) fs::remove(*it, ec);
+  if (fs::is_empty(old, ec)) fs::remove(old, ec);
+}
 
 /** Hands a payload to the mod's handler; nothing thrown may unwind into the host. */
 void receive(int32_t sender, const uint8_t* data, size_t size) {
@@ -60,7 +109,10 @@ bool bind(const PmHostApi* api, const PmModInfo* info) {
   g_host = api;
   g_info = info;
   g_prefix = std::string("[") + info->id + "] ";
+  g_dataFolder.clear();
   log::set_sink(api->log, g_prefix.c_str());
+  // log_level came in contract 2.7; without it a line's level goes into its text (core/log.h).
+  log::set_level_sink(api->version >= ((PMMOD_API_MAJOR << 16) | 7u) ? api->log_level : nullptr);
   load_text();
   std::string missing;
   if (!api::bind(api, missing)) {
@@ -136,6 +188,25 @@ std::vector<ModEntry> mod_entries() {
                    e.offReason ? e.offReason : "", e.flags});
   }
   return out;
+}
+
+std::filesystem::path data_folder() {
+  namespace fs = std::filesystem;
+  if (!g_dataFolder.empty()) return g_dataFolder;
+  if (!g_host || !g_info || !g_host->dataDirectory || !*g_host->dataDirectory) return {};
+  if (!g_info->id || !modid::valid_any_id(g_info->id)) return {};  // the host never starts such a mod: no folder to name
+  const fs::path base(g_host->dataDirectory);
+  const fs::path folder = base / L"data" / text::widen(g_info->id);
+  std::error_code ec;
+  fs::create_directories(folder, ec);
+  if (!fs::is_directory(folder, ec)) {
+    PM_LOG_AT(log::Level::Error, "data folder: cannot make %s", text::narrow(folder.wstring()).c_str());
+    return {};
+  }
+  const fs::path old = base / text::widen(g_info->id);
+  if (fs::is_directory(old, ec)) move_old_files(old, folder);
+  g_dataFolder = folder;
+  return g_dataFolder;
 }
 
 void show_message(const std::string& title, const std::string& body) {
