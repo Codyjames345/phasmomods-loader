@@ -598,6 +598,25 @@ add_library(pm_fake_mod_bundled_low_two SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_bundled_low_two PRIVATE pmmod)
 target_compile_definitions(pm_fake_mod_bundled_low_two PRIVATE PM_FAKE_MOD_ID="phasmomods.low-two" PM_FAKE_MOD_CHANNEL=5 PM_FAKE_MOD_NO_ENTRIES)
 pm_options(pm_fake_mod_bundled_low_two)
+# Three ids that all hash to channel 234 (modid::hashed_channel), found by a throwaway search: mods_test
+# collides them through the hash itself.
+add_library(pm_fake_mod_hash_one SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_hash_one PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_hash_one PRIVATE PM_FAKE_MOD_ID="cn.aaaa" PM_FAKE_MOD_NO_ENTRIES)
+pm_options(pm_fake_mod_hash_one)
+add_library(pm_fake_mod_hash_two SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_hash_two PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_hash_two PRIVATE PM_FAKE_MOD_ID="cn.aaem" PM_FAKE_MOD_NO_ENTRIES)
+pm_options(pm_fake_mod_hash_two)
+add_library(pm_fake_mod_hash_three SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_hash_three PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_hash_three PRIVATE PM_FAKE_MOD_ID="cn.aaoo" PM_FAKE_MOD_NO_ENTRIES)
+pm_options(pm_fake_mod_hash_three)
+# One id that hashes to the same channel (93) as "fake-plain": mods_test lets it arrive while that mod runs.
+add_library(pm_fake_mod_latecomer SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_latecomer PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_latecomer PRIVATE PM_FAKE_MOD_ID="tst.abac" PM_FAKE_MOD_NO_ENTRIES)
+pm_options(pm_fake_mod_latecomer)
 # One declaring a channel from the range the loader hands out from the id: refused too.
 add_library(pm_fake_mod_high SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_high PRIVATE pmmod)
@@ -628,12 +647,16 @@ target_compile_definitions(mods_test PRIVATE PM_FAKE_MOD="$<TARGET_FILE:pm_fake_
   PM_FAKE_MOD_PLAIN="$<TARGET_FILE:pm_fake_mod_plain>"
   PM_FAKE_MOD_ZERO="$<TARGET_FILE:pm_fake_mod_zero>" PM_FAKE_MOD_LOW="$<TARGET_FILE:pm_fake_mod_low>"
   PM_FAKE_MOD_BUNDLED_LOW="$<TARGET_FILE:pm_fake_mod_bundled_low>" PM_FAKE_MOD_BUNDLED_LOW_TWO="$<TARGET_FILE:pm_fake_mod_bundled_low_two>"
+  PM_FAKE_MOD_HASH_ONE="$<TARGET_FILE:pm_fake_mod_hash_one>" PM_FAKE_MOD_HASH_TWO="$<TARGET_FILE:pm_fake_mod_hash_two>"
+  PM_FAKE_MOD_HASH_THREE="$<TARGET_FILE:pm_fake_mod_hash_three>"
+  PM_FAKE_MOD_LATECOMER="$<TARGET_FILE:pm_fake_mod_latecomer>"
   PM_FAKE_MOD_HIGH="$<TARGET_FILE:pm_fake_mod_high>"
   PM_FAKE_MOD_THROWS="$<TARGET_FILE:pm_fake_mod_throws>" PM_FAKE_MOD_THROWS_REQUIRES="$<TARGET_FILE:pm_fake_mod_throws_requires>"
   PM_FAKE_MOD_1="$<TARGET_FILE:pm_fake_mod_1>" PM_FAKE_MOD_OLD_EXPORTS="$<TARGET_FILE:pm_fake_mod_old_exports>"
   PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_dependencies(mods_test pm_fake_mod pm_fake_mod_1 pm_fake_mod_2_0 pm_fake_mod_2_1 pm_fake_mod_2_2 pm_fake_mod_optional pm_fake_mod_voice
   pm_fake_mod_plain pm_fake_mod_zero pm_fake_mod_low pm_fake_mod_bundled_low pm_fake_mod_bundled_low_two
+  pm_fake_mod_hash_one pm_fake_mod_hash_two pm_fake_mod_hash_three pm_fake_mod_latecomer
   pm_fake_mod_high pm_fake_mod_throws pm_fake_mod_throws_requires pm_fake_mod_old_exports)
 pm_test(mod_glue core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)

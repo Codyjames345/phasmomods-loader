@@ -428,7 +428,8 @@ void manifest_id_must_match_dll(const fs::path& data) {
 }
 
 // A DLL that is not a mod, and one that is not there, stay off with a reason and stop nothing. Refused at load, a mod that
-// requires it reads as needing a mod that did not start, not as one that is not installed, and is never loaded itself.
+// requires it reads as needing a mod that did not start, not as one that is not installed; channels are settled across
+// every planned mod first, so its own DLL maps, but it never starts.
 // A refusal lasts: the next start does not try that DLL again, and its row says why even with the mod unticked.
 void a_dll_that_cannot_run_is_refused_with_a_reason(const fs::path& data, const fs::path& root) {
   const fs::path notADll = root / "copies" / "NotADll.dll";
@@ -460,7 +461,7 @@ void a_dll_that_cannot_run_is_refused_with_a_reason(const fs::path& data, const 
   CHECK(logged("mods: not-a-dll stays off: its DLL could not be loaded (Windows error 193)"));
   CHECK(pm::mods::off_reason("not-there") == "DLL could not be loaded");
   CHECK(pm::mods::off_reason("fake-optional") == "Depends on Bad Mod, which contains an error. Please check mods.log.");
-  CHECK(GetModuleHandleW(neverLoaded.c_str()) == nullptr);
+  CHECK(GetModuleHandleW(neverLoaded.c_str()) != nullptr);  // the channel pass loaded it; it never started
   pm::mods::stop_all();
   // The file is now a good DLL, and the refusal still stands until the game restarts: loaded or not, it is not tried again.
   CHECK(fs::copy_file(PM_FAKE_MOD_PLAIN, notADll, fs::copy_options::overwrite_existing, error));
@@ -710,6 +711,14 @@ fs::path fresh_copy(const fs::path& root, const char* from, const std::wstring& 
 }
 bool mapped(const fs::path& dll) { return GetModuleHandleW(dll.c_str()) != nullptr; }
 
+// How many times the fake mod DLL at `dll` ran pmmod_start (-1 if that copy is not mapped at all).
+int start_count(const fs::path& dll) {
+  const HMODULE module = GetModuleHandleW(dll.c_str());
+  if (!module) return -1;
+  const auto count = reinterpret_cast<int (*)()>(GetProcAddress(module, "fake_mod_start_count"));
+  return count ? count() : -2;
+}
+
 pm::modlist::Manifest named_manifest(const std::string& id, const std::string& name) {
   pm::modlist::Manifest m = fake_manifest(id);
   m.name = name;
@@ -840,7 +849,7 @@ void unresolved_mod_stays_off_and_is_named(const fs::path& data, const fs::path&
   CHECK(pm::mods::off_reason("fake-optional") == "Depends on Spectral Flame, which contains an error. Please check mods.log.");
   CHECK(logged("mods: fake-optional stays off: it needs Spectral Flame, which stays off: Needs GhostAI.UnAppear, which this game version lacks"));
   CHECK(pm::mods::off_reason("fake-plain").empty());
-  CHECK(!mapped(dependent));  // it never reached its DLL
+  CHECK(mapped(dependent));  // channels are settled for every planned mod first, so its DLL mapped; it never started
   pm::mods::stop_all();
   pm::log::set_sink(nullptr, nullptr);
 }
@@ -887,7 +896,7 @@ void dll_recording_voice_against_its_manifest_stays_off(const fs::path& data, co
   CHECK(pm::mods::off_reason("fake-voice") == "Undeclared voice recording, please check with the author.");
   CHECK(logged("mods: fake-voice stays off: its DLL records voice, which its manifest does not say"));
   CHECK(pm::mods::off_reason("fake-optional") == "Depends on Voice, which contains an error. Please check mods.log.");
-  CHECK(!mapped(dependent));
+  CHECK(mapped(dependent));  // the channel pass loads every planned mod's DLL; this one never started
   CHECK(pm::mods::started_builds().empty());
 
   pm::modlist::Manifest says = named_manifest("fake-voice", "Voice");
@@ -999,10 +1008,39 @@ void a_declared_high_channel_is_refused(const fs::path& data, const fs::path& ro
   pm::log::set_sink(nullptr, nullptr);
 }
 
-// Two mods that land on one channel are both refused, each refusal naming the other. The first had
-// started before the second's DLL showed the clash, so it comes out of the start too: stopped, and
-// kept off for good like any load refusal, and the next start keeps both off without trying again.
+// Two mods that land on one channel are both refused, each refusal naming the other, and this pair
+// collides through the hash itself: "cn.aaaa" and "cn.aaem" are ids found by a throwaway search whose
+// hashed_channel values are equal, both 234, pinned below so the fixtures cannot drift apart from the
+// test's expectation.
 void two_mods_on_one_channel_are_both_refused(const fs::path& data, const fs::path& root) {
+  CHECK(pm::modid::hashed_channel("cn.aaaa") == 234 && pm::modid::hashed_channel("cn.aaem") == 234);
+  const fs::path one = fresh_copy(root, PM_FAKE_MOD_HASH_ONE, L"HashOne");
+  const fs::path two = fresh_copy(root, PM_FAKE_MOD_HASH_TWO, L"HashTwo");
+  pm::log::set_sink(&capture, "");
+  g_lines.clear();
+  pm::mods::set_installed(data, {{{one, named_manifest("cn.aaaa", "One")}, {two, named_manifest("cn.aaem", "Two")}}, {}});
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  const std::vector<std::string> both{"cn.aaaa", "cn.aaem"};
+  pm::mods::start(&api, both);
+  CHECK(pm::mods::started_ids().empty());
+  CHECK(!pm::mods::started("cn.aaaa") && !pm::mods::started("cn.aaem"));
+  CHECK(pm::mods::installed()[0].channel == 234 && pm::mods::installed()[1].channel == 234);
+  CHECK(pm::mods::off_reason("cn.aaaa") == pm::i18n::text("mods.channel-shared", {{"mod", "cn.aaem"}}));
+  CHECK(pm::mods::off_reason("cn.aaem") == pm::i18n::text("mods.channel-shared", {{"mod", "cn.aaaa"}}));
+  CHECK(logged("mods: cn.aaaa stays off: it shares channel 234 with cn.aaem"));
+  CHECK(logged("mods: cn.aaem stays off: it shares channel 234 with cn.aaaa"));
+  CHECK(start_count(one) == 0 && start_count(two) == 0);  // neither ever ran
+  pm::mods::start(&api, both);  // the refusals last: a start that tries them again loads neither
+  CHECK(pm::mods::started_ids().empty());
+  CHECK(pm::mods::off_reason("cn.aaaa").find("cn.aaem") != std::string::npos);
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// The same for two of the loader's own mods, which name a fixed channel each: the two that land on one
+// are both refused, each naming the other, before either starts.
+void two_bundled_mods_on_one_fixed_channel_are_both_refused(const fs::path& data, const fs::path& root) {
   const fs::path one = fresh_copy(root, PM_FAKE_MOD_BUNDLED_LOW, L"ClashOne");
   const fs::path two = fresh_copy(root, PM_FAKE_MOD_BUNDLED_LOW_TWO, L"ClashTwo");
   pm::log::set_sink(&capture, "");
@@ -1020,9 +1058,107 @@ void two_mods_on_one_channel_are_both_refused(const fs::path& data, const fs::pa
   CHECK(pm::mods::off_reason("phasmomods.low-two") == pm::i18n::text("mods.channel-shared", {{"mod", "phasmomods.low-one"}}));
   CHECK(logged("mods: phasmomods.low-one stays off: it shares channel 5 with phasmomods.low-two"));
   CHECK(logged("mods: phasmomods.low-two stays off: it shares channel 5 with phasmomods.low-one"));
-  pm::mods::start(&api, both);  // the refusals last: a start that tries them again loads neither
+  CHECK(start_count(one) == 0 && start_count(two) == 0);  // neither ever ran
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// Three mods landing on one channel: all three are refused, each naming the other two by id, so the
+// rule holds for any number of claimants and not just the first pair found. "cn.aaaa", "cn.aaem" and
+// "cn.aaoo" all hash to channel 234.
+void three_mods_on_one_channel_are_all_refused(const fs::path& data, const fs::path& root) {
+  const fs::path one = fresh_copy(root, PM_FAKE_MOD_HASH_ONE, L"TripleOne");
+  const fs::path two = fresh_copy(root, PM_FAKE_MOD_HASH_TWO, L"TripleTwo");
+  const fs::path three = fresh_copy(root, PM_FAKE_MOD_HASH_THREE, L"TripleThree");
+  pm::log::set_sink(&capture, "");
+  g_lines.clear();
+  pm::mods::set_installed(data, {{{one, named_manifest("cn.aaaa", "One")}, {two, named_manifest("cn.aaem", "Two")},
+                                  {three, named_manifest("cn.aaoo", "Three")}}, {}});
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  pm::mods::start(&api, {"cn.aaaa", "cn.aaem", "cn.aaoo"});
   CHECK(pm::mods::started_ids().empty());
-  CHECK(pm::mods::off_reason("phasmomods.low-one").find("low-two") != std::string::npos);
+  CHECK(pm::mods::off_reason("cn.aaaa") == pm::i18n::text("mods.channel-shared", {{"mod", "cn.aaem, cn.aaoo"}}));
+  CHECK(pm::mods::off_reason("cn.aaem") == pm::i18n::text("mods.channel-shared", {{"mod", "cn.aaaa, cn.aaoo"}}));
+  CHECK(pm::mods::off_reason("cn.aaoo") == pm::i18n::text("mods.channel-shared", {{"mod", "cn.aaaa, cn.aaem"}}));
+  CHECK(logged("mods: cn.aaaa stays off: it shares channel 234 with cn.aaem, cn.aaoo"));
+  CHECK(logged("mods: cn.aaem stays off: it shares channel 234 with cn.aaaa, cn.aaoo"));
+  CHECK(logged("mods: cn.aaoo stays off: it shares channel 234 with cn.aaaa, cn.aaem"));
+  CHECK(start_count(one) == 0 && start_count(two) == 0 && start_count(three) == 0);
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// The channels are settled before any mod runs: neither colliding mod's code ever starts, while a mod
+// alone on its channel does. The colliding fixtures require no game entry, so they would start if the
+// host reached them.
+void no_mod_starts_before_channels_are_decided(const fs::path& data, const fs::path& root) {
+  const fs::path clash = fresh_copy(root, PM_FAKE_MOD_HASH_ONE, L"OrderClash");
+  const fs::path other = fresh_copy(root, PM_FAKE_MOD_HASH_TWO, L"OrderOther");
+  const fs::path solo = fresh_copy(root, PM_FAKE_MOD_PLAIN, L"OrderSolo");
+  pm::log::set_sink(&capture, "");
+  g_lines.clear();
+  pm::mods::set_installed(data, {{{clash, named_manifest("cn.aaaa", "Clash")}, {other, named_manifest("cn.aaem", "Other")},
+                                  {solo, named_manifest("fake-plain", "Solo")}}, {}});
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  pm::mods::start(&api, {"cn.aaaa", "cn.aaem", "fake-plain"});
+  CHECK(pm::mods::started_ids() == std::vector<std::string>{"fake-plain"});
+  CHECK(start_count(clash) == 0 && start_count(other) == 0);  // the pair was refused before its turn
+  CHECK(start_count(solo) == 1);
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// A mod that requires one of the refused mods stays off with the same dependency reason it gets for a
+// dependency that fails any other way. Its DLL is now loaded, because channels count every planned mod
+// before any start, but its pmmod_start never runs.
+void a_dependent_of_a_refused_mod_stays_off(const fs::path& data, const fs::path& root) {
+  const fs::path clash = fresh_copy(root, PM_FAKE_MOD_HASH_ONE, L"DepClash");
+  const fs::path other = fresh_copy(root, PM_FAKE_MOD_HASH_TWO, L"DepOther");
+  const fs::path dependent = fresh_copy(root, PM_FAKE_MOD_PLAIN, L"NeedsRefused");
+  pm::modlist::Manifest needs = named_manifest("fake-plain", "Dependent");
+  needs.dependencies = {{"cn.aaaa", "", true}};
+  pm::log::set_sink(&capture, "");
+  g_lines.clear();
+  pm::mods::set_installed(data, {{{clash, named_manifest("cn.aaaa", "One")}, {other, named_manifest("cn.aaem", "Two")},
+                                  {dependent, needs}}, {}});
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  pm::mods::start(&api, {"cn.aaaa", "cn.aaem", "fake-plain"});
+  CHECK(pm::mods::started_ids().empty());
+  CHECK(!pm::mods::started("fake-plain"));
+  CHECK(pm::mods::off_reason("fake-plain") == pm::i18n::text("deps.needs-not-started", {{"mod", "One"}}));
+  CHECK(mapped(dependent));  // the channel pass loaded its DLL, but it never started
+  CHECK(start_count(dependent) == 0);
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// A mod already running keeps its channel: it was settled before it started, and only newcomers to it
+// are refused. "tst.abac" hashes to 93, the same channel as "fake-plain" (pinned below): it arrives
+// while that mod runs, is refused naming it, and the running mod is not stopped.
+void a_running_mod_keeps_its_channel(const fs::path& data, const fs::path& root) {
+  CHECK(pm::modid::hashed_channel("fake-plain") == 93 && pm::modid::hashed_channel("tst.abac") == 93);
+  const fs::path solo = fresh_copy(root, PM_FAKE_MOD_PLAIN, L"RunningSolo");
+  const fs::path latecomer = fresh_copy(root, PM_FAKE_MOD_LATECOMER, L"Latecomer");
+  pm::log::set_sink(&capture, "");
+  g_lines.clear();
+  pm::mods::set_installed(data, {{{solo, named_manifest("fake-plain", "Solo")}, {latecomer, named_manifest("tst.abac", "Late")}}, {}});
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  pm::mods::start(&api, {"fake-plain"});
+  CHECK(pm::mods::started_ids() == std::vector<std::string>{"fake-plain"});
+  g_lines.clear();
+  pm::mods::start(&api, {"fake-plain", "tst.abac"});
+  CHECK(pm::mods::started("fake-plain"));  // it keeps the channel and was never stopped
+  CHECK(pm::mods::started_ids() == std::vector<std::string>{"fake-plain"});
+  CHECK(!pm::mods::started("tst.abac"));
+  CHECK(pm::mods::off_reason("tst.abac") == pm::i18n::text("mods.channel-shared", {{"mod", "fake-plain"}}));
+  CHECK(logged("mods: tst.abac stays off: it shares channel 93 with fake-plain"));
+  CHECK(start_count(solo) == 1 && start_count(latecomer) == 0);
   pm::mods::stop_all();
   pm::log::set_sink(nullptr, nullptr);
 }
@@ -1456,6 +1592,11 @@ int main() {
   reserved_channels_are_for_bundled_mods_only(data, root);
   a_declared_high_channel_is_refused(data, root);
   two_mods_on_one_channel_are_both_refused(data, root);
+  two_bundled_mods_on_one_fixed_channel_are_both_refused(data, root);
+  three_mods_on_one_channel_are_all_refused(data, root);
+  no_mod_starts_before_channels_are_decided(data, root);
+  a_dependent_of_a_refused_mod_stays_off(data, root);
+  a_running_mod_keeps_its_channel(data, root);
   bundled_manifests_say_what_their_dlls_do_about_voice();
   old_mod_ini_still_loads(data, root);
   unknown_fields_are_logged_once(data);

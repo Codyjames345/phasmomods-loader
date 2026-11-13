@@ -7,6 +7,7 @@
 // whether the mod PM_FAKE_MOD_ASKS has started, as a mod does for an optional dependency. PM_FAKE_MOD_FLAGS gives it
 // PmModInfo.flags, and PM_FAKE_MOD_NO_ENTRIES leaves it requiring no game entry. It declares channel
 // 0 by default, as every mod outside the loader's own must, so the host gives it one from its id.
+// Every copy counts how often pmmod_start runs, exported as fake_mod_start_count.
 #include <windows.h>
 
 #include "Camera.h"
@@ -34,6 +35,7 @@ bool g_failStart = false;
 const PmHostApi* g_api = nullptr;
 int g_asked = -1;        // what the host answered about PM_FAKE_MOD_ASKS at the last start: 1 started, 0 not, -1 not asked
 int g_askedAtStop = -1;  // and at the last stop
+int g_starts = 0;        // how many times its pmmod_start ran: what a mod records when it starts (mods_test)
 void* g_ghost = nullptr;
 
 int ask() {
@@ -45,6 +47,7 @@ int ask() {
 }
 
 bool start(const PmHostApi* api) {
+  ++g_starts;
   g_api = api;
   g_asked = ask();
   return !g_failStart;
@@ -68,6 +71,8 @@ extern "C" __declspec(dllexport) DWORD fake_mod_error_mode_at_load() { return g_
 // Whether its next starts fail, as a mod whose pmmod_start answers false (mods_test).
 extern "C" __declspec(dllexport) void fake_mod_fail_start(bool fail) { g_failStart = fail; }
 extern "C" __declspec(dllexport) int fake_mod_asked() { return g_asked; }
+// How many times pmmod_start has run in this copy of the DLL (mods_test: whether the host started it).
+extern "C" __declspec(dllexport) int fake_mod_start_count() { return g_starts; }
 extern "C" __declspec(dllexport) int fake_mod_asked_at_stop() { return g_askedAtStop; }
 extern "C" __declspec(dllexport) int fake_mod_ask_now() { return ask(); }
 
