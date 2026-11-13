@@ -61,7 +61,7 @@ struct Switches {
   // to the light using the frame's scaled time, so a frozen clock behind the menu is the one thing every
   // broken screen after a close shared. The row and the tick-speed row stay for a developer who wants them.
   bool pauseWhenOpen = false;
-  bool godMode = false;  // a hunt's kill of the local investigator is refused
+  bool godMode = false;  // a kill of the local investigator is refused, in a hunt or outside one
   // The debug read-out stays on screen while the menu is closed: the ghost's state, its type, its speed and
   // who its hunt is set on (the user's original brief). Off until a developer asks for it.
   bool debugHud = false;
@@ -127,6 +127,14 @@ inline bool store_switch_applies(bool switchOn, bool sandbox) { return switchOn 
 /** God mode: only the local investigator's kill is refused; a hunt of anybody else (a dummy, another
  *  player) runs. The kill's network body is never touched, and offline the kill decision is this client's. */
 inline bool god_refuses_kill(bool godMode, bool targetIsLocal) { return godMode && targetIsLocal; }
+
+/** God mode also refuses a death of the local investigator started outside a hunt's kill, at the game's death call
+ *  (Player.BeginDeathSequence): a custom ghost's catch (the Squatter's kick), the Monkey Paw's wish and the Hanged Man
+ *  call it directly, never through GhostHuntState.Kill. The menu's own Kill you row (`menuKill`) is never refused.
+ *  Skipping the call sends nothing, so no RPC body is asked. */
+inline bool god_refuses_death(bool godMode, bool targetIsLocal, bool menuKill) {
+  return god_refuses_kill(godMode, targetIsLocal) && !menuKill;
+}
 
 /** Progression suppression (the user's rule, 2026-11-10): while a dev session is on, every progress write the
  *  map knows is skipped: the contract's mission and challenge checks, the reward screen's results (its saved

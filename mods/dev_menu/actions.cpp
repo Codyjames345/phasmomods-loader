@@ -102,6 +102,15 @@ bool det_kill(api::Original<GhostHuntState::Kill> original, void* hunt, void* pl
   return original(hunt, player, force, reach, slowReach);
 }
 
+// God mode, outside a hunt: a death of the local investigator started at the game's death call itself (a custom
+// ghost's catch, the Monkey Paw, the Hanged Man) is refused before the call sends anything. The menu's own Kill you
+// row sets g_menuKill around its call so it still kills.
+bool g_menuKill = false;
+void det_begin_death(api::Original<Player::BeginDeathSequence> original, void* player, int32_t deathType) {
+  if (god_refuses_death(g_switches.godMode, player && player == game::local_player(), g_menuKill)) return;
+  original(player, deathType);
+}
+
 // Progression suppression: while a dev session is on, the contract's mission and challenge checks are
 // skipped, so the session earns nothing. These two are the checks the content plan maps; the remaining
 // write sites (stats, daily and weekly quests, the apocalypse counter) wait for the RE pass the plan
@@ -327,6 +336,7 @@ std::vector<int32_t> offered_types() {
 
 bool start() {
   return api::hook<GhostHuntState::Kill>(&det_kill, "Dev Menu: God mode keeps the local kill refused") &&
+         api::hook<Player::BeginDeathSequence>(&det_begin_death, "Dev Menu: God mode keeps the local death refused") &&
          api::hook<ExitLevel::CheckMissions>(&det_check_missions, "Dev Menu: no missions at the end") &&
          api::hook<ExitLevel::CheckChallenges>(&det_check_challenges, "Dev Menu: no challenges at the end") &&
          api::hook<EquipmentInfo::RemoveAmountOwned>(&det_remove_amount, "Dev Menu: consumables stay") &&
@@ -552,13 +562,12 @@ std::string ghost_identity() {
   void* c = controller();
   if (!c) return {};
   // The identity card: the type the contract shows, and the rules its AI follows when they differ. A custom ghost's
-  // behaviour type is the game's "no type" (the host runs its rules on the generic AI, docs/custom-ghosts.md), and a
-  // Mimic's is the type it copies (GhostController.ghostType and .behaviourType).
+  // behaviour type is the game's "no type" (the host runs its rules on the generic AI, docs/custom-ghosts.md), so it
+  // shows only its type; a Mimic's is the type it copies (GhostController.ghostType and .behaviourType).
   const int32_t type = GhostController::ghostType.get(c);
   std::string out = pretty_type(type) + " (" + std::to_string(type) + ")";
   const int32_t behaviour = GhostController::behaviourType.get(c);
-  if (behaviour == GhostType::None()) return out + ", custom rules";
-  if (behaviour != type) out += ", acting as " + pretty_type(behaviour);
+  if (behaviour != type && behaviour != GhostType::None()) out += ", acting as " + pretty_type(behaviour);
   return out;
 }
 
@@ -876,7 +885,10 @@ void kill_local() {
   // The documented mod path for a kill outside a hunt (sdk/systems/players.md): the master runs it with
   // the hunt's own death type, offline this client is the master.
   void* player = game::local_player();
-  if (player) Player::BeginDeathSequence(player, phasmo::DeathType::SnappedNeck());
+  if (!player) return;
+  g_menuKill = true;  // god mode lets the menu's own kill through (det_begin_death)
+  Player::BeginDeathSequence(player, phasmo::DeathType::SnappedNeck());
+  g_menuKill = false;
 }
 
 bool revive_local() {

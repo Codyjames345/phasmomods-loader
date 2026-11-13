@@ -131,6 +131,12 @@ void the_hooks_answer_the_switches() {
   CHECK(god_refuses_kill(true, true));
   CHECK(!god_refuses_kill(true, false));
   CHECK(!god_refuses_kill(false, true));
+  // It also refuses a death started outside a hunt (a custom ghost's catch, the Monkey Paw, the Hanged Man), but never
+  // the menu's own Kill you row.
+  CHECK(god_refuses_death(true, true, false));
+  CHECK(!god_refuses_death(true, true, true));
+  CHECK(!god_refuses_death(true, false, false));
+  CHECK(!god_refuses_death(false, true, false));
   // Progression checks are skipped exactly while a dev session is on.
   CHECK(suppress_progress(true));
   CHECK(!suppress_progress(false));
