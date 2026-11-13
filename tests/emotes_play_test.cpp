@@ -8,6 +8,7 @@
 
 #include "check.h"
 #include "emote_session.h"
+#include "sync_rule.h"
 
 namespace {
 
@@ -789,9 +790,82 @@ void the_joiner_tells_everyone_it_joined() {
   CHECK(word && word->key == 1000u && word->x == 4.0f);
 }
 
+// ---- Joining: the prompt, the spot and the glide (sync_rule.h) ----
+
+bool close_to(Point a, Point b, float tol = 1e-4f) {
+  return std::fabs(a.x - b.x) < tol && std::fabs(a.y - b.y) < tol && std::fabs(a.z - b.z) < tol;
+}
+
+void the_spot_is_beside_the_first_dancer() {
+  CHECK(close_to(partner_spot(Point{0, 0, 0}, 0.0f, 1.3f, 0.0f), Point{1.3f, 0, 0}));
+  CHECK(close_to(partner_spot(Point{0, 0, 0}, 90.0f, 1.3f, 0.0f), Point{0, 0, -1.3f}));
+  CHECK(close_to(partner_spot(Point{2, 1, 3}, 0.0f, 0.0f, 1.0f), Point{2, 1, 4}));  // forward is along the facing
+}
+
+// Every condition of the prompt holds: the joiner 2 m behind and left of a dancer at the origin, looking at their chest.
+PromptCheck a_good_check() {
+  PromptCheck c;
+  c.me = Point{0, 1.6f, -2.0f};
+  c.target = Point{0, 1.3f, 0};
+  c.lookYaw = 0.0f;
+  c.lookPitch = std::atan2(-0.3f, 2.0f) * 57.29577951f;
+  c.canDance = true;
+  c.targetSynced = true;
+  c.partFree = true;
+  c.targetInIntro = false;
+  c.spotClear = true;
+  c.interactableInWay = false;
+  return c;
+}
+
+void the_prompt_needs_range_look_and_a_free_part() {
+  CHECK(shows_prompt(a_good_check()));
+  PromptCheck far = a_good_check();
+  far.me = Point{0, 1.6f, -(kJoinRange + 0.5f)};
+  far.lookPitch = 0.0f;
+  CHECK(!shows_prompt(far));
+  PromptCheck away = a_good_check();
+  away.lookYaw = kJoinLookDegrees + 10.0f;
+  CHECK(!shows_prompt(away));
+  for (bool PromptCheck::*flag : {&PromptCheck::canDance, &PromptCheck::targetSynced, &PromptCheck::partFree}) {
+    PromptCheck c = a_good_check();
+    c.*flag = false;
+    CHECK(!shows_prompt(c));
+  }
+}
+
+void a_blocked_spot_shows_no_prompt() {
+  PromptCheck c = a_good_check();
+  c.spotClear = false;
+  CHECK(!shows_prompt(c));
+  PromptCheck behind = a_good_check();
+  behind.interactableInWay = true;  // the press would also act on a door or switch under the crosshair
+  CHECK(!shows_prompt(behind));
+}
+
+void no_prompt_during_the_intro() {
+  PromptCheck c = a_good_check();
+  c.targetInIntro = true;
+  CHECK(!shows_prompt(c));
+}
+
+void the_glide_eases_into_the_spot() {
+  Glide g{Point{0, 0, 0}, Point{2, 0, 0}, 350.0f, 10.0f, kGlideSeconds, 0.0f};
+  CHECK(close_to(g.at(), Point{0, 0, 0}) && std::fabs(wrap_degrees(g.yaw() - 350.0f)) < 1e-3f && !g.done());
+  g.t = kGlideSeconds / 2.0f;
+  CHECK(close_to(g.at(), Point{1, 0, 0}) && std::fabs(wrap_degrees(g.yaw() - 0.0f)) < 1e-3f);  // the short way round
+  g.t = kGlideSeconds;
+  CHECK(close_to(g.at(), Point{2, 0, 0}) && std::fabs(wrap_degrees(g.yaw() - 10.0f)) < 1e-3f && g.done());
+}
+
 }  // namespace
 
 int main() {
+  the_spot_is_beside_the_first_dancer();
+  the_prompt_needs_range_look_and_a_free_part();
+  a_blocked_spot_shows_no_prompt();
+  no_prompt_during_the_intro();
+  the_glide_eases_into_the_spot();
   an_accept_the_joiner_never_confirmed_shows_nothing();
   the_joiners_word_may_come_first();
   an_accept_cannot_take_over_a_dancing_player();
