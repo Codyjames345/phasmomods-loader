@@ -1,0 +1,9 @@
+{
+  "name": "PhasmoMods.EmoteTools.Editor",
+  "rootNamespace": "PhasmoMods.EmoteTools",
+  "references": [],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "autoReferenced": true
+}

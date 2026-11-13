@@ -27,6 +27,8 @@ void* create_text(void* parent, const char* name, float fontSize);  // TextMeshP
 void* create_image(void* parent, const char* name, Color color);    // a solid colour (a RawImage)
 void* create_raw_image(void* parent, const char* name, void* texture);  // UnityEngine.UI.RawImage
 void set_texture(void* rawImage, void* texture);
+void* create_sprite_image(void* parent, const char* name, void* sprite);  // UnityEngine.UI.Image showing a Sprite
+void set_sprite(void* image, void* sprite);  // an Image's Sprite, or null
 void set_uv_rect(void* rawImage, Rect uv);  // the part of the texture shown, 0..1
 void destroy(void* gameObjectOrComponent);
 void set_active(void* component, bool on);

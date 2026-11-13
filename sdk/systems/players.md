@@ -184,9 +184,14 @@ sprinting speed (`LocalPlayer.sprintSpeed`), serialized floats its prefab sets, 
 `LocalPCPlayer.UpdatePlayerSpeed` gives the controller the sprint speed while three things hold, and the walk speed
 otherwise:
 
-- the sprint input is held;
-- sprinting is allowed: `Difficulty.sprinting` is not 0 (0 off, 1 on, 2 infinite), or no contract is running;
+- the player asks to sprint (`FirstPersonController.running`: `FirstPersonController.OnRun` holds it while Run is held,
+  or flips it on each press in the game's toggle sprint mode);
+- sprinting is allowed: `Difficulty.sprinting` of `LevelValues.difficulty` is not 0 (0 off, 1 on, 2 infinite), or no
+  `GameController.instance` exists (no contract is running);
 - the stamina may sprint (`PlayerStamina.canSprint`, of the rig's `LocalPlayer.stamina`).
+
+`pm::api::movement::sprinting()` (`sdk/api/movement.h`) reads the three on the local PC rig, so a mod asks the game
+whether its investigator sprints instead of measuring the speed.
 
 It then multiplies that speed by the multiplier, except in a contract while the rig's player is dead
 (`LocalPlayer.isDead`, which `LocalPlayer.CompleteLocalPlayerDeath` sets and the rig's revive clears). On VR the
@@ -212,6 +217,28 @@ With sprinting off it does nothing unless `LocalPlayer.isDead` is set. On VR the
 never sent: only the player's own client holds it. What every client does get is the player's `NetworkedStamina`
 (`Player.stamina`): the player's client sends whether it walks and whether it sprints in the view's serialization, and
 `moving` follows them, so another client sees a sprint stop but not why.
+
+## Moving the local player, and what blocks a player
+
+The game moves its own player with `LocalPlayer.TeleportPlayer` on PC (the training room's hunt does, and PCPlayer's
+`Teleport` calls it): it switches the rig's movement controller off (`LocalPlayer.characterController`, a
+`PhysicsCharacterController`), sets the rig's position and switches the controller on again. On VR, `VRPlayer.Teleport`
+sets the position of the player's own LocalPlayer, the same rig transform, without switching the controller off. The
+rig's transform need not be where the body stands, so a mod moving the body to a point moves the rig by the gap between
+them. Both act on this client only; no RPC is sent, and the position reaches other clients as any
+move does.
+
+What blocks a player is the controller's own collision mask (`PhysicsCharacterController.collisionMask`), which its
+`Awake` works out from the Rigidbody's layer; what it stands on is `get_groundLayers`. Its capsule is
+`get_radius`, `get_height` and `get_center` (local to the rig). A mod that wants to know whether a player fits at a
+point tests that capsule's space against that mask.
+
+## What Interact acts on
+
+The PC Interact (`PCPropGrab.OnInteract`) casts a ray 1.8 m from the centre of `PCPropGrab.playerCam` on
+`PCPropGrab.mask`, triggers ignored, and acts only on what it hits that has a `PhotonObjectInteract`, or a
+`ChildPhotonInteract` leading to one: a door, a light switch, an item. Another player's body gets nothing, so a mod may
+use Interact on a player, as long as it does not act while that ray would hit an interactable.
 
 ## The body
 
@@ -265,6 +292,12 @@ scroll wheel), InventorySlot1 to 4 (1 to 4), Torch and Hat Use (T, D-pad down), 
 UIDown, UILeft, UIRight (the arrow keys and the D-pad) and UISelect and UIShoulder ones. A mod reads one by its name
 (`InputActionMap.m_Actions`, `InputAction.m_Name`) and asks `InputAction.WasPressedThisFrame`, so the player's own
 rebinding counts. `PCPropGrab` holds the handlers behind the item actions.
+
+How far the player pushes Move is `FirstPersonController.moveInput` on the PC rig (`LocalPCPlayer.firstPersonController`):
+the game's own copy of the Move action's value, at most length 1, zero when released, with the player's rebinding
+applied. W alone is (0, 1). The Run action can be held or toggled (the game's sprint mode setting), so whether the
+player is sprinting is read from the speed: the rig moves faster than its walk speed (`LocalPlayer.walkSpeed` times
+`LocalPlayer.speedMultiplier`) only while it sprints (`LocalPCPlayer.UpdatePlayerSpeed`).
 
 ## How this was read
 

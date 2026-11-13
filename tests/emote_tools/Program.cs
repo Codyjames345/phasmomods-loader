@@ -1,0 +1,480 @@
+using System;
+using PhasmoMods.EmoteTools;
+
+// Runs the emote tools checks and reports each failure.
+static class Program
+{
+    static int failures;
+
+    static int Main()
+    {
+        SongLoopFoundToTheSample();
+        SongLoopWithNoiseStillFound();
+        SongGuessOutsideSearchReportsLowScore();
+        ClipLoopFoundOnPeriodicCurves();
+        ClipMotionTermBreaksAPoseTie();
+        RmsOfFullScaleSquareIsOne();
+        RmsCountsAPartialLastWindow();
+        MonoAveragesChannels();
+        StripCommentsKeepsSlashesInStrings();
+        SetSongLoopReplacesAnExistingOne();
+        SetSongLoopInsertsAMissingOne();
+        SetSongLoopIgnoresANameInsideAComment();
+        SetSongLoopOfAMissingEmoteThrows();
+        BoolFieldReadsFalseAndFallsBack();
+        Pcm16HeaderAndSamples();
+        Pcm16WritesOnlyTheFramesAsked();
+        PackFilePathsStayInThePack();
+        ProjectAssetPathsStayInAssets();
+        BundleIsAPlainFileName();
+        ASourceIsNeverItsOwnOutput();
+        PartnerPathsAreChecked();
+        AClipStartedLaterWrapsRound();
+        if (failures == 0)
+        {
+            Console.WriteLine("emote tools tests passed");
+            return 0;
+        }
+        Console.WriteLine(failures + " check(s) failed");
+        return 1;
+    }
+
+    static void Fail(string name, string what)
+    {
+        failures++;
+        Console.WriteLine("FAIL " + name + ": " + what);
+    }
+
+    // A seeded random period tiled to length samples, values in -0.5..0.5, plus optional
+    // seeded noise of plus or minus one percent on every sample.
+    static float[] PeriodicSong(int period, int length, int seed, bool noise)
+    {
+        Random rng = new Random(seed);
+        float[] onePeriod = new float[period];
+        for (int i = 0; i < period; i++)
+        {
+            onePeriod[i] = (float)(rng.NextDouble() - 0.5);
+        }
+        float[] song = new float[length];
+        for (int i = 0; i < length; i++)
+        {
+            float v = onePeriod[i % period];
+            if (noise)
+            {
+                v += (float)(rng.NextDouble() * 0.02 - 0.01);
+            }
+            song[i] = v;
+        }
+        return song;
+    }
+
+    // frames[i] is every curve's value at frame i, each curve sin(2*pi*i/period + phaseStep*c).
+    static float[][] SinFrames(int frameCount, int curveCount, int period, double phaseStep)
+    {
+        float[][] frames = new float[frameCount][];
+        for (int i = 0; i < frameCount; i++)
+        {
+            frames[i] = new float[curveCount];
+            for (int c = 0; c < curveCount; c++)
+            {
+                frames[i][c] = (float)Math.Sin(2.0 * Math.PI * i / period + phaseStep * c);
+            }
+        }
+        return frames;
+    }
+
+    static void SongLoopFoundToTheSample()
+    {
+        const int rate = 48000;
+        float[] song = PeriodicSong(59259, 30 * rate, 1, false);
+        LoopResult r = LoopFinder.SongLoop(song, rate, 1.2);
+        if (r.At != 59259)
+        {
+            Fail("song_loop_found_to_the_sample", "At was " + r.At + ", expected 59259");
+        }
+        if (r.Score < 0.99)
+        {
+            Fail("song_loop_found_to_the_sample", "Score was " + r.Score + ", expected at least 0.99");
+        }
+    }
+
+    static void SongLoopWithNoiseStillFound()
+    {
+        const int rate = 48000;
+        float[] song = PeriodicSong(59259, 30 * rate, 2, true);
+        LoopResult r = LoopFinder.SongLoop(song, rate, 1.2);
+        if (Math.Abs(r.At - 59259) > 2)
+        {
+            Fail("song_loop_with_noise_still_found", "At was " + r.At + ", expected within 2 samples of 59259");
+        }
+    }
+
+    static void SongGuessOutsideSearchReportsLowScore()
+    {
+        const int rate = 48000;
+        float[] song = PeriodicSong(59259, 30 * rate, 1, false);
+        LoopResult r = LoopFinder.SongLoop(song, rate, 3.0, 0.5);
+        if (r.Score >= 0.5)
+        {
+            Fail("song_guess_outside_search_reports_low_score", "Score was " + r.Score + ", expected below 0.5");
+        }
+    }
+
+    static void ClipLoopFoundOnPeriodicCurves()
+    {
+        float[][] frames = SinFrames(200, 6, 37, 2.0 * Math.PI / 6.0);
+        LoopResult r = LoopFinder.ClipLoop(frames, 30f, 1.2);
+        if (r.At != 37)
+        {
+            Fail("clip_loop_found_on_periodic_curves", "At was " + r.At + ", expected 37");
+        }
+    }
+
+    static void ClipMotionTermBreaksAPoseTie()
+    {
+        // Frame 20 has the same value as frame 0 but is moving the other way, so the
+        // motion term must pick frame 40. Search 0.6 s reaches frame 40 (1.333 s),
+        // which 0.5 s (1.3 s, rounding to frame 39) would not, and still holds 20.
+        float[][] frames = SinFrames(120, 1, 40, 0.0);
+        LoopResult r = LoopFinder.ClipLoop(frames, 30f, 0.8, 0.6);
+        if (r.At != 40)
+        {
+            Fail("clip_motion_term_breaks_a_pose_tie", "At was " + r.At + ", expected 40");
+        }
+    }
+
+    static void RmsOfFullScaleSquareIsOne()
+    {
+        const int rate = 8000;
+        float[] song = new float[rate];
+        for (int i = 0; i < rate; i++)
+        {
+            song[i] = (i % 2 == 0) ? 1f : -1f;
+        }
+        float[] windows = LoopFinder.RmsWindows(song, rate);
+        if (windows.Length != 10)
+        {
+            Fail("rms_of_a_full_scale_square_is_one", "window count was " + windows.Length + ", expected 10");
+        }
+        for (int w = 0; w < windows.Length; w++)
+        {
+            if (Math.Abs(windows[w] - 1.0) > 1e-6)
+            {
+                Fail("rms_of_a_full_scale_square_is_one", "window " + w + " rms was " + windows[w] + ", expected within 1e-6 of 1");
+            }
+        }
+    }
+
+    static void RmsCountsAPartialLastWindow()
+    {
+        const int rate = 8000;
+        float[] song = new float[8400];
+        for (int i = 0; i < song.Length; i++)
+        {
+            song[i] = 0.5f;
+        }
+        float[] windows = LoopFinder.RmsWindows(song, rate);
+        if (windows.Length != 11)
+        {
+            Fail("rms_counts_a_partial_last_window", "window count was " + windows.Length + ", expected 11");
+        }
+        else if (Math.Abs(windows[10] - 0.5) > 1e-6)
+        {
+            Fail("rms_counts_a_partial_last_window", "last window rms was " + windows[10] + ", expected within 1e-6 of 0.5");
+        }
+    }
+
+    static void MonoAveragesChannels()
+    {
+        float[] got = LoopFinder.Mono(new float[] { 1f, 3f, -1f, 1f }, 2);
+        if (got.Length != 2 || got[0] != 2f || got[1] != 0f)
+        {
+            string joined = "";
+            for (int i = 0; i < got.Length; i++)
+            {
+                joined += (i > 0 ? ", " : "") + got[i];
+            }
+            Fail("mono_averages_channels", "got {" + joined + "}, expected {2, 0}");
+        }
+    }
+
+    // Little readers for the WavWriter header checks.
+    static bool TagAt(byte[] b, int at, string tag)
+    {
+        for (int i = 0; i < tag.Length; i++)
+        {
+            if (b[at + i] != (byte)tag[i])
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static int U16(byte[] b, int at)
+    {
+        return b[at] | (b[at + 1] << 8);
+    }
+
+    static uint U32(byte[] b, int at)
+    {
+        return (uint)(b[at] | (b[at + 1] << 8) | (b[at + 2] << 16) | (b[at + 3] << 24));
+    }
+
+    static short I16(byte[] b, int at)
+    {
+        return (short)(b[at] | (b[at + 1] << 8));
+    }
+
+    static void StripCommentsKeepsSlashesInStrings()
+    {
+        string text = "\"a // b\" // note\nnext // also\n";
+        string want = "\"a // b\" \nnext \n";
+        string got = CatalogueText.StripComments(text);
+        if (got != want)
+        {
+            Fail("strip_comments_keeps_slashes_in_strings", "got [" + got + "], expected [" + want + "]");
+        }
+    }
+
+    static void SetSongLoopReplacesAnExistingOne()
+    {
+        string text = "// the pack's two dances\n" +
+            "{\n" +
+            "  \"format\": 1,\n" +
+            "  \"bundle\": \"pack.bundle\",\n" +
+            "  \"emotes\": [\n" +
+            "    {\"name\": \"a\", \"song\": \"Assets/Songs/a.wav\", \"songLoop\": {\"start\": 0, \"seconds\": 4.0}},\n" +
+            "    {\"name\": \"b\", \"song\": \"Assets/Songs/b.wav\", \"songLoop\": {\"start\": 0, \"seconds\": 9.5}}\n" +
+            "  ]\n" +
+            "}\n";
+        string want = text.Replace("{\"start\": 0, \"seconds\": 9.5}", "{\"start\": 0, \"seconds\": 8.542}");
+        string got = CatalogueText.SetSongLoop(text, "b", 0, 8.542);
+        if (got != want)
+        {
+            Fail("set_song_loop_replaces_an_existing_one", "got [" + got + "], expected only b's songLoop to change to {\"start\": 0, \"seconds\": 8.542}");
+        }
+    }
+
+    static void SetSongLoopInsertsAMissingOne()
+    {
+        string text = "{\n" +
+            "  \"emotes\": [\n" +
+            "    {\"name\": \"a\", \"song\": \"Assets/Songs/a.wav\"}\n" +
+            "  ]\n" +
+            "}\n";
+        string want = text.Replace("{\"name\": \"a\", \"song\": \"Assets/Songs/a.wav\"}",
+            "{\"name\": \"a\", \"song\": \"Assets/Songs/a.wav\", \"songLoop\": {\"start\": 0, \"seconds\": 16.692}}");
+        string got = CatalogueText.SetSongLoop(text, "a", 0, 16.692);
+        if (got != want)
+        {
+            Fail("set_song_loop_inserts_a_missing_one", "got [" + got + "]");
+        }
+    }
+
+    static void SetSongLoopIgnoresANameInsideAComment()
+    {
+        string text = "{\n" +
+            "  \"emotes\": [\n" +
+            "    // {\"name\": \"c\", \"song\": \"Assets/Songs/c.wav\"} was dropped from the pack\n" +
+            "    {\"name\": \"a\", \"song\": \"Assets/Songs/a.wav\", \"songLoop\": {\"start\": 0, \"seconds\": 4.0}}\n" +
+            "  ]\n" +
+            "}\n";
+        bool threw = false;
+        try
+        {
+            CatalogueText.SetSongLoop(text, "c", 0, 4.0);
+        }
+        catch (ArgumentException)
+        {
+            threw = true;
+        }
+        if (!threw)
+        {
+            Fail("set_song_loop_ignores_a_name_inside_a_comment", "the emote named in the comment was matched");
+        }
+        string want = text.Replace("{\"start\": 0, \"seconds\": 4.0}", "{\"start\": 0, \"seconds\": 5.5}");
+        string got = CatalogueText.SetSongLoop(text, "a", 0, 5.5);
+        if (got != want)
+        {
+            Fail("set_song_loop_ignores_a_name_inside_a_comment", "emote a did not survive the comment in the array: got [" + got + "]");
+        }
+    }
+
+    static void SetSongLoopOfAMissingEmoteThrows()
+    {
+        string text = "{\n  \"emotes\": [\n    {\"name\": \"a\", \"songLoop\": {\"start\": 0, \"seconds\": 4.0}}\n  ]\n}\n";
+        bool threw = false;
+        try
+        {
+            CatalogueText.SetSongLoop(text, "b", 0, 4.0);
+        }
+        catch (ArgumentException)
+        {
+            threw = true;
+        }
+        if (!threw)
+        {
+            Fail("set_song_loop_of_a_missing_emote_throws", "no ArgumentException for an absent emote");
+        }
+    }
+
+    static void BoolFieldReadsFalseAndFallsBack()
+    {
+        string text = "{\n" +
+            "  \"emotes\": [\n" +
+            "    {\"name\": \"a\", \"loops\": false},\n" +
+            "    {\"name\": \"b\"}\n" +
+            "  ]\n" +
+            "}\n";
+        if (CatalogueText.BoolField(text, "a", "loops", true))
+        {
+            Fail("bool_field_reads_false_and_falls_back", "a's loops read as true, expected false");
+        }
+        if (!CatalogueText.BoolField(text, "b", "loops", true))
+        {
+            Fail("bool_field_reads_false_and_falls_back", "b fell back to false, expected the fallback true");
+        }
+        if (!CatalogueText.BoolField(text, "a", "missing", true))
+        {
+            Fail("bool_field_reads_false_and_falls_back", "a's missing field fell back to false, expected true");
+        }
+    }
+
+    static void Pcm16HeaderAndSamples()
+    {
+        float[] interleaved = { 0.5f, -0.5f, 1f, -1f, 2f, -2f };
+        byte[] wav = WavWriter.Pcm16(interleaved, 2, 48000, 3);
+        if (wav.Length != 44 + 12)
+        {
+            Fail("pcm16_header_and_samples", "length was " + wav.Length + ", expected 56");
+            return;
+        }
+        if (!TagAt(wav, 0, "RIFF") || U32(wav, 4) != 48 || !TagAt(wav, 8, "WAVE") ||
+            !TagAt(wav, 12, "fmt ") || U32(wav, 16) != 16 || U16(wav, 20) != 1 ||
+            U16(wav, 22) != 2 || U32(wav, 24) != 48000 || U32(wav, 28) != 192000 ||
+            U16(wav, 32) != 4 || U16(wav, 34) != 16 || !TagAt(wav, 36, "data") || U32(wav, 40) != 12)
+        {
+            Fail("pcm16_header_and_samples", "the header was not 48-byte PCM: " +
+                "riff size " + U32(wav, 4) + ", fmt size " + U32(wav, 16) + ", format " + U16(wav, 20) +
+                ", channels " + U16(wav, 22) + ", rate " + U32(wav, 24) + ", byte rate " + U32(wav, 28) +
+                ", block align " + U16(wav, 32) + ", bits " + U16(wav, 34) + ", data size " + U32(wav, 40));
+        }
+        short[] wantSamples = { 16384, -16384, 32767, -32767, 32767, -32767 };
+        for (int i = 0; i < wantSamples.Length; i++)
+        {
+            short got = I16(wav, 44 + 2 * i);
+            if (got != wantSamples[i])
+            {
+                Fail("pcm16_header_and_samples", "sample " + i + " was " + got + ", expected " + wantSamples[i]);
+            }
+        }
+    }
+
+    static void Pcm16WritesOnlyTheFramesAsked()
+    {
+        float[] interleaved = { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f };
+        byte[] wav = WavWriter.Pcm16(interleaved, 2, 8000, 2);
+        if (wav.Length != 44 + 8)
+        {
+            Fail("pcm16_writes_only_the_frames_asked", "length was " + wav.Length + ", expected 52");
+        }
+        else if (U32(wav, 40) != 8 || U32(wav, 4) != 44)
+        {
+            Fail("pcm16_writes_only_the_frames_asked", "data size was " + U32(wav, 40) + ", riff size " + U32(wav, 4) + ", expected 8 and 44");
+        }
+    }
+
+    // A catalogue may come from another author: what it names must not reach outside the pack folder or the project's
+    // Assets folder when the tool writes there.
+    static void PackFilePathsStayInThePack()
+    {
+        foreach (string ok in new[] { "loudness/floss.txt", "loudness/sub/a.intro.txt" })
+        {
+            if (!PackPaths.IsPackFile(ok)) Fail("pack_file_paths_stay_in_the_pack", ok + " was refused");
+        }
+        foreach (string bad in new[] { "", "../x.txt", "loudness/../../x.txt", @"loudness\..\..\x.txt", "C:/x.txt",
+                                       "C:x.txt", "/x.txt", @"\\server\x.txt", "loudness/./x.txt", "a//b.txt" })
+        {
+            if (PackPaths.IsPackFile(bad)) Fail("pack_file_paths_stay_in_the_pack", bad + " was accepted");
+        }
+    }
+
+    static void ProjectAssetPathsStayInAssets()
+    {
+        if (!PackPaths.IsProjectAsset("Assets/Emotes/Clips/Floss.anim"))
+            Fail("project_asset_paths_stay_in_assets", "a clip under Assets was refused");
+        foreach (string bad in new[] { "", "Assets", "Assets/", "Assets/../ProjectSettings/x.asset", "Packages/x.anim",
+                                       "C:/Assets/x.anim", "/Assets/x.anim", @"Assets\..\x.anim", "assets2/x.anim" })
+        {
+            if (PackPaths.IsProjectAsset(bad)) Fail("project_asset_paths_stay_in_assets", bad + " was accepted");
+        }
+    }
+
+    // The tool writes a cut clip or song at the catalogue's clip or song path: one that is also its source would be
+    // overwritten by its own cut, and a second run would cut the cut (the review, 2026-11-13).
+    static void ASourceIsNeverItsOwnOutput()
+    {
+        if (PackPaths.DistinctSourceAndOutput("Assets/A/Source.anim", "assets/a/source.anim"))
+            Fail("a_source_is_never_its_own_output", "the same path in another case was taken as two");
+        if (PackPaths.DistinctSourceAndOutput("Assets/A/X.anim", "Assets/A/X.anim"))
+            Fail("a_source_is_never_its_own_output", "the same path was taken as two");
+        if (!PackPaths.DistinctSourceAndOutput("Assets/A/Source/X.anim", "Assets/A/Clips/X.anim"))
+            Fail("a_source_is_never_its_own_output", "two paths were taken as one");
+        if (PackPaths.DistinctSourceAndOutput("", "Assets/A/Clips/X.anim"))
+            Fail("a_source_is_never_its_own_output", "an empty source was taken as a source");
+    }
+
+    static void BundleIsAPlainFileName()
+    {
+        if (!PackPaths.IsPlainFileName("emotes.bundle")) Fail("bundle_is_a_plain_file_name", "emotes.bundle was refused");
+        foreach (string bad in new[] { "", ".", "..", "../emotes.bundle", "a/b.bundle", @"a\b.bundle", "C:b.bundle" })
+        {
+            if (PackPaths.IsPlainFileName(bad)) Fail("bundle_is_a_plain_file_name", bad + " was accepted");
+        }
+    }
+
+    // A synced emote's second part names a clip, an intro clip, a song and a loudness file: each is held to the same
+    // places as the emote's own (the tool reads and writes them all).
+    static void PartnerPathsAreChecked()
+    {
+        Func<PartnerEntry, CatalogueFile> with = partner => new CatalogueFile
+        {
+            bundle = "emotes.bundle",
+            emotes = new[] { new EmoteEntry { name = "sway", clip = "Assets/E/Sway.anim", partner = partner } }
+        };
+        string why;
+        PartnerEntry good = new PartnerEntry { clip = "Assets/E/SwayPartner.anim", introClip = "Assets/E/SwayIn.anim",
+                                               song = "Assets/E/Synced.wav", loudness = "loudness/synced.txt" };
+        if (!PackPaths.CheckCatalogue(with(good), out why)) Fail("partner_paths_are_checked", "a good partner was refused: " + why);
+        if (!PackPaths.CheckCatalogue(with(new PartnerEntry()), out why))
+            Fail("partner_paths_are_checked", "an emote with no partner was refused: " + why);
+        foreach (string bad in new[] { "../x.anim", "Packages/x.anim", "Assets/../x.anim" })
+        {
+            foreach (PartnerEntry p in new[] { new PartnerEntry { clip = bad }, new PartnerEntry { clip = good.clip, introClip = bad },
+                                               new PartnerEntry { clip = good.clip, song = bad, loudness = good.loudness } })
+            {
+                if (PackPaths.CheckCatalogue(with(p), out why)) Fail("partner_paths_are_checked", bad + " was accepted in a partner");
+            }
+        }
+        if (PackPaths.CheckCatalogue(with(new PartnerEntry { clip = good.clip, song = good.song, loudness = "../x.txt" }), out why))
+            Fail("partner_paths_are_checked", "a loudness file outside the pack was accepted");
+    }
+
+    // A looping clip made to start later in its source (clipStart: Forget Me Not starts on its last 0.93 s, two claps,
+    // under its intro song): each time of the made clip reads the source that far on, wrapping round at the source's
+    // end, so the made clip ends where it starts and still loops.
+    static void AClipStartedLaterWrapsRound()
+    {
+        Action<double, double> near = (got, want) =>
+        {
+            if (Math.Abs(got - want) > 1e-9) Fail("a_clip_started_later_wraps_round", "got " + got + ", expected " + want);
+        };
+        near(LoopFinder.RotatedTime(0.0, 7.4, 8.4), 7.4);
+        near(LoopFinder.RotatedTime(0.5, 7.4, 8.4), 7.9);
+        near(LoopFinder.RotatedTime(1.0, 7.4, 8.4), 0.0);
+        near(LoopFinder.RotatedTime(3.0, 7.4, 8.4), 2.0);
+        near(LoopFinder.RotatedTime(8.4, 7.4, 8.4), 7.4);  // its end is its start: still a loop
+        near(LoopFinder.RotatedTime(2.0, 0.0, 8.4), 2.0);   // no start is the source as it is
+    }
+}

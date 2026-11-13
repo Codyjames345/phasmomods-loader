@@ -112,4 +112,29 @@ inline int segment_at(Vec2 p, float innerRadius, float outerRadius) {
   return segment_for(p.x, p.y, 0.0f);
 }
 
+/// Where the page row's parts sit, from the disc's centre (x right, y up), in the canvas's units: the page text in the
+/// middle, the previous page's glyph to its left and the next page's glyph to its right.
+struct PageRow {
+  Vec2 text, previous, next;
+};
+
+/// Where the page row's parts sit for a disc of `discRadius`: its centre `above` the top of the disc, the page text's
+/// box `textWidth` wide, each glyph `glyphSize` square and `glyphGap` between the text's edge and each glyph.
+inline PageRow page_row(float discRadius, float above, float textWidth, float glyphSize, float glyphGap) {
+  PageRow row;
+  row.text = {0.0f, discRadius + above};
+  row.previous = {-(textWidth / 2.0f + glyphGap + glyphSize / 2.0f), row.text.y};
+  row.next = {-row.previous.x, row.text.y};
+  return row;
+}
+
+/// Which page glyph a point of the disc's plane (in the same units) hits: -1 the previous glyph, +1 the next, 0
+/// neither. A glyph is the square glyphSize wide centred on its place.
+inline int glyph_at(Vec2 p, const PageRow& row, float glyphSize) {
+  const float half = glyphSize / 2.0f;
+  if (std::fabs(p.x - row.previous.x) <= half && std::fabs(p.y - row.previous.y) <= half) return -1;
+  if (std::fabs(p.x - row.next.x) <= half && std::fabs(p.y - row.next.y) <= half) return 1;
+  return 0;
+}
+
 }  // namespace pm::emotes::layout

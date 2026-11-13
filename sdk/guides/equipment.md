@@ -147,7 +147,7 @@ What the map already gives such a mod:
 - who carries it: `Player.propGrab` and `NetworkedPropGrab.inventory`;
 - the ghost's interest in switched-on equipment: `GhostHuntState.SensesGear`;
 - an evidence of its own: `pm::api::content::register_evidence`, which already puts a custom evidence on the journal,
-  into the game's evidence pick and to every client as a number (the SDK's README, "The host contract, version 2.5").
+  into the game's evidence pick and to every client as a number (the SDK's README, "The host contract, version 2.6").
 
 What is missing, each to map before a registration function could exist:
 

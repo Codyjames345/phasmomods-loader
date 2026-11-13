@@ -45,6 +45,8 @@ const Exempt kNotObjects[] = {
     {"mods/custom_ghosts/squatter.cpp", "player", "the chase's read of the players (Seen), made and read in one frame"},
     {"mods/custom_ghosts/squatter.cpp", "room", "the chase's read of the players (Seen), made and read in one frame"},
     {"mods/custom_ghosts/squatter.cpp", "closet", "the chase's read of the players (Seen), made and read in one frame"},
+    {"mods/emotes/emote.cpp", "ctrlT", "the join's read of the rig's capsule (Capsule), made and read in one frame"},
+    {"mods/emotes/emote.cpp", "bodyT", "the join's read of the rig's capsule (Capsule), made and read in one frame"},
 };
 
 struct Hit {

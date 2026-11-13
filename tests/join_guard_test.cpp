@@ -270,6 +270,23 @@ void joiner_missing_host_mod_is_removed() {
   CHECK(v.leave && v.suspend.empty());  // a removal is never a suspension
 }
 
+// A content pack is one of the lobby's mods like any other (its build comes from its pack files,
+// core/pack_files.h): a joiner that lacks it is removed exactly as for a missing mod, never suspended,
+// and out of the room it is told the host's whole list.
+void a_joiner_lacking_a_host_pack_is_removed() {
+  const Mod pack{"someone.pack", "8888888888888888", "Emote Pack", "1.0.0"};
+  Presence p;
+  Guard guard(&name_of);
+  p.set_local({kGhost});
+  p.observe(2, {1, 2}, 0);
+  hear(p, 1, {kGhost, pack}, 0);  // the host runs the pack; this client does not
+  const Verdict v = guard.judge(lobby(2, 1, {1, 2}, 0), p);
+  CHECK(v.leave && v.suspend.empty());  // removed, not suspended, as for any missing mod
+  guard.left(true);
+  const Verdict shown = guard.judge(outside(100), p);
+  CHECK(shown.show.find("Emote Pack 1.0.0: missing") != std::string::npos);
+}
+
 void joiner_with_other_build_is_removed() {
   Presence p;
   Guard guard(&name_of);
@@ -1310,6 +1327,7 @@ int main() {
   extras_notice_names_them();
   suspension_cascades_to_dependents();
   joiner_missing_host_mod_is_removed();
+  a_joiner_lacking_a_host_pack_is_removed();
   joiner_with_other_build_is_removed();
   extras_resume_on_leaving();
   suspended_client_announces_only_running_mods();

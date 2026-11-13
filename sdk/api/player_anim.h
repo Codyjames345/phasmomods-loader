@@ -36,6 +36,18 @@ inline constexpr int kSortingOrder = 2000;
 ///   entries did not resolve (logged).
 bool play_on_player(void* player, void* clip, float blendIn);
 
+/// As play_on_player, starting the clip `startSeconds` in rather than at its start: a looping clip wraps the time to its
+/// length, and a clip that does not loop holds it within its length. For a body joining another's dance part-way (a
+/// synced emote's second dancer).
+/// @param player A Player (any client's).
+/// @param clip An AnimationClip, loaded from a mod's bundle (sdk/api/bundles.h).
+/// @param blendIn Seconds to blend in; 0 or less is at once.
+/// @param startSeconds Seconds into the clip, 0 or more.
+/// @return As play_on_player without a start: false for a null or destroyed player or clip, a body with no Animator,
+///   or a build where the Playables entries did not resolve (logged).
+/// @since Contract 2.6
+bool play_on_player(void* player, void* clip, float blendIn, double startSeconds);
+
 /// Blends a player's clips out and ends them. Nothing for a player with none.
 /// @param player The Player.
 /// @param blendOut Seconds to blend out; 0 or less is at once.

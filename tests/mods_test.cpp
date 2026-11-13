@@ -1,5 +1,6 @@
 // Offline tests for which mods the host finds (host/mods.cpp find), that it loads no DLL until a mod starts, which versions
-// of the host contract it accepts, and which mods it starts. Run: build\mods_test.exe
+// of the host contract it accepts, which mods it starts, and which content packs each framework sees (packs_for,
+// pack_failed). Run: build\mods_test.exe
 #include <windows.h>
 
 #include <filesystem>
@@ -12,6 +13,7 @@
 #include "log.h"
 #include "mod_session.h"
 #include "mods.h"
+#include "pack_files.h"
 #include "quiet_load.h"
 
 #include "check.h"
@@ -42,10 +44,11 @@ bool logged(const std::string& text) {
 
 // Same major and a minor no newer than the host's: accepted. Anything else: refused.
 void api_versions() {
-  constexpr uint32_t host = (2u << 16) | 3u;
-  CHECK(pm_api_compatible(host, (2u << 16) | 3u));
+  constexpr uint32_t host = (2u << 16) | 4u;
+  CHECK(pm_api_compatible(host, (2u << 16) | 4u));
+  CHECK(pm_api_compatible(host, (2u << 16) | 3u));  // a mod built for 2.3 still loads
   CHECK(pm_api_compatible(host, (2u << 16) | 0u));
-  CHECK(!pm_api_compatible(host, (2u << 16) | 4u));
+  CHECK(!pm_api_compatible(host, (2u << 16) | 5u));
   CHECK(!pm_api_compatible(host, (1u << 16) | 0u));
   CHECK(!pm_api_compatible(host, (3u << 16) | 0u));
   CHECK(!pm_api_compatible(host, 1u));  // version 1 had no major number
@@ -339,9 +342,9 @@ void dropped_content_keeps_its_owner_off(const fs::path& data) {
 }
 
 // A mod built against an older minor version of contract 2 (`minor`, from `dll`) loads and starts in
-// the 2.5 host: the contract only grew at the end.
+// the 2.6 host: the contract only grew at the end.
 void older_minor_still_loads(const fs::path& data, const char* dll, uint32_t minor) {
-  CHECK(PMMOD_API_VERSION == ((2u << 16) | 5u));
+  CHECK(PMMOD_API_VERSION == ((2u << 16) | 6u));
   pm::log::set_sink(&capture, "");
   g_lines.clear();
   pm::mods::set_installed(data, fake_install(dll));
@@ -467,6 +470,218 @@ void a_dll_that_cannot_run_is_refused_with_a_reason(const fs::path& data, const 
   pm::mods::stop_all();
   pm::mods::start(&api, {"fake-mod"});
   CHECK(pm::mods::off_reason("not-a-dll") == "DLL could not be loaded");  // unticked, the row still says why
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// A content pack (core/pack_files.h) reaches the host as a ".pack" copy with its manifest, string table and
+// assets beside it, which is what its build is read from. The manifest parses as a pack: contentPackFor, no DLL.
+pm::modlist::Manifest pack_manifest(const std::string& id, const std::string& framework) {
+  pm::modlist::Manifest m;
+  m.id = id;
+  m.name = "Fake Pack";
+  m.author = "Someone";
+  m.version = "1.0.0";
+  m.description = "D";
+  m.contentPackFor = framework;  // is_pack(), and the framework as a required dependency, as the parser leaves them
+  m.dependencies = {{framework, "", true}};
+  return m;
+}
+fs::path fake_pack(const fs::path& root, const std::wstring& stem) {
+  const fs::path pack = root / "packs" / (stem + L".pack");
+  write(pack, "");
+  write(pack.parent_path() / (stem + L".json"),
+        R"({"id":"someone.pack","name":"Fake Pack","author":"Someone","version":"1.0.0","description":"D","contentPackFor":{"id":"fake-mod"}})");
+  write(pack.parent_path() / (stem + L".i18n.json"), R"({"clip.one":"One"})");
+  write(pack.parent_path() / (stem + L".assets") / "clip.txt", "one");
+  return pack;
+}
+pm::mods::Installed pack_and_framework(const fs::path& pack) {
+  pm::mods::Installed both = fake_install(PM_FAKE_MOD);
+  both.found.push_back({pack, pack_manifest("someone.pack", "fake-mod")});
+  return both;
+}
+void pack_host_api(PmHostApi& api) {
+  api = PmHostApi{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  api.mod_started = [](const char*) { return false; };  // the optional fake mod asks it at its start and stop
+  g_resolved = {"Camera", "GhostAI.UnAppear"};
+}
+
+// A content pack never loads code: the host starts it after its framework, in the dependency order the
+// manifest gives, counts its build from the pack files beside its ".pack", and gives it no start, tick or
+// stop function.
+void a_pack_starts_after_its_framework_without_code(const fs::path& data, const fs::path& root) {
+  pm::log::set_sink(&capture, "");
+  const fs::path pack = fake_pack(root, L"Pack-42-7-0");
+  pm::mods::set_installed(data, pack_and_framework(pack));
+  PmHostApi api{};
+  pack_host_api(api);
+  pm::mods::start(&api, {"someone.pack", "fake-mod"});  // the dependency plan decides the order, not the choice
+  CHECK(pm::mods::started_ids() == (std::vector<std::string>{"fake-mod", "someone.pack"}));
+  for (const pm::mods::Mod& m : pm::mods::installed()) {
+    if (m.manifest.id == "fake-mod") CHECK(m.start != nullptr);  // the framework does have code
+    if (m.manifest.id == "someone.pack") {
+      CHECK(m.start == nullptr && m.tick == nullptr && m.stop == nullptr);  // the pack has none to call
+      CHECK(m.build == pm::packfiles::build_of(pack));
+    }
+  }
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// A started pack is part of the lobby's presence like any other mod: its id and its build, so a joiner
+// without that exact build is matched out of the room (host/join_guard.h).
+void a_started_pack_is_in_the_presence(const fs::path& data, const fs::path& root) {
+  pm::log::set_sink(&capture, "");
+  const fs::path pack = fake_pack(root, L"InPresence-42-7-0");
+  pm::mods::set_installed(data, pack_and_framework(pack));
+  PmHostApi api{};
+  pack_host_api(api);
+  pm::mods::start(&api, {"fake-mod", "someone.pack"});
+  CHECK(pm::mods::started("someone.pack"));
+  const std::string build = pm::packfiles::build_of(pack);
+  CHECK(!build.empty());
+  bool listed = false;
+  for (const pm::presence::Mod& m : pm::mods::started_builds())
+    if (m.id == "someone.pack") listed = m.build == build;
+  CHECK(listed);
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// Stopping and ticking with a started pack call no code of its own: it has no stop or tick function, and
+// nothing crashes; afterwards it is simply not running.
+void stopping_a_pack_calls_no_code(const fs::path& data, const fs::path& root) {
+  pm::log::set_sink(&capture, "");
+  const fs::path pack = fake_pack(root, L"Stopped-42-7-0");
+  pm::mods::set_installed(data, pack_and_framework(pack));
+  PmHostApi api{};
+  pack_host_api(api);
+  pm::mods::start(&api, {"fake-mod", "someone.pack"});
+  CHECK(pm::mods::started("someone.pack"));
+  pm::mods::tick_all();  // the host's tick skips the pack: there is nothing to tick
+  pm::mods::stop_all();  // it stops without calling a stop function
+  CHECK(!pm::mods::started("fake-mod") && !pm::mods::started("someone.pack"));
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// What pm::mods::packs_for lists: the installed packs of a framework that this start runs, in id order,
+// none of another framework's. The fake mod's pmmod_start cannot run this file's code, so read it once the
+// start is through; host/mods.h says the framework's own pmmod_start sees this same list, before its packs
+// have started, which the test below exercises for real from inside a start.
+void a_framework_sees_its_packs_in_its_start(const fs::path& data, const fs::path& root) {
+  pm::log::set_sink(&capture, "");
+  const fs::path bee = fake_pack(root, L"Bee-42-7-0");
+  const fs::path ay = fake_pack(root, L"Ay-42-7-0");
+  const fs::path theirs = fake_pack(root, L"Theirs-42-7-0");
+  pm::mods::Installed all = fake_install(PM_FAKE_MOD);
+  all.found.push_back({PM_FAKE_MOD_OPTIONAL, fake_manifest("fake-optional")});
+  all.found.push_back({bee, pack_manifest("b.pack", "fake-mod")});
+  all.found.push_back({ay, pack_manifest("a.pack", "fake-mod")});
+  all.found.push_back({theirs, pack_manifest("someone.other", "fake-optional")});
+  pm::mods::set_installed(data, all);
+  PmHostApi api{};
+  pack_host_api(api);
+  pm::mods::start(&api, {"fake-mod", "fake-optional", "b.pack", "a.pack", "someone.other"});
+  const auto ids = [](std::vector<const pm::mods::Mod*> listed) {
+    std::vector<std::string> out;
+    for (const pm::mods::Mod* m : listed) out.push_back(m->manifest.id);
+    return out;
+  };
+  CHECK(pm::mods::started("b.pack") && pm::mods::started("a.pack") && pm::mods::started("someone.other"));
+  CHECK(ids(pm::mods::packs_for("fake-mod")) == (std::vector<std::string>{"a.pack", "b.pack"}));  // id order
+  CHECK(ids(pm::mods::packs_for("fake-optional")) == (std::vector<std::string>{"someone.other"}));
+  CHECK(pm::mods::packs_for("nobody").empty());
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// A framework reporting a pack it cannot use during its own pmmod_start (host/mods.h pack_failed): the
+// pack does not start in this start, its row says exactly why, it is not in the lobby's list, and later
+// packs_for no longer lists it; the other mods start as they would. PM_FAKE_MOD_OPTIONAL calls the host's
+// mod_started inside its pmmod_start, so the test's own call of pack_failed runs there: the window a real
+// framework's content_pack_failed call runs in, with the pack not started yet.
+bool g_inFrameworkStart = false;
+std::vector<std::string> g_packsInStart;  // what packs_for gave during the framework's pmmod_start
+bool g_packFailed = false;
+bool pack_failed_in_a_start(const char*) {
+  if (!g_inFrameworkStart) return false;
+  for (const pm::mods::Mod* m : pm::mods::packs_for("fake-optional")) g_packsInStart.push_back(m->manifest.id);
+  g_packFailed = pm::mods::pack_failed("someone.pack", "Its catalogue has no clips");
+  return false;
+}
+void a_failed_pack_stays_off_with_its_reason(const fs::path& data, const fs::path& root) {
+  pm::log::set_sink(&capture, "");
+  const fs::path pack = fake_pack(root, L"Broken-42-7-0");
+  pm::mods::Installed all = fake_install(PM_FAKE_MOD_OPTIONAL, "fake-optional");
+  all.found.push_back({pack, pack_manifest("someone.pack", "fake-optional")});
+  pm::mods::set_installed(data, all);
+  PmHostApi api{};
+  pack_host_api(api);
+  api.mod_started = &pack_failed_in_a_start;
+  g_inFrameworkStart = false;
+  g_packsInStart.clear();
+  g_packFailed = false;
+  pm::mods::Group group;
+  group.begin = [](const std::string& id) { g_inFrameworkStart = id == "fake-optional"; };
+  group.end = [](bool) { g_inFrameworkStart = false; };
+  pm::mods::start(&api, {"fake-optional", "someone.pack"}, group);
+  CHECK(pm::mods::started("fake-optional"));
+  CHECK(g_packsInStart == std::vector<std::string>{"someone.pack"});  // its own start saw the pack, not yet started
+  CHECK(g_packFailed);                                                // pack_failed is allowed there
+  CHECK(!pm::mods::started("someone.pack"));
+  CHECK(pm::mods::off_reason("someone.pack") == "Its catalogue has no clips");
+  bool listed = false;
+  for (const pm::presence::Mod& m : pm::mods::started_builds())
+    if (m.id == "someone.pack") listed = true;
+  CHECK(!listed);
+  bool stillListed = false;
+  for (const pm::mods::Mod* m : pm::mods::packs_for("fake-optional"))
+    if (m->manifest.id == "someone.pack") stillListed = true;
+  CHECK(!stillListed);  // a pack reported failed is out of the list
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// pack_failed outside its framework's pmmod_start: logged, false, and it changes nothing: the pack starts
+// and is in the lobby's list as any pack does.
+void pack_failed_outside_a_start_is_ignored(const fs::path& data, const fs::path& root) {
+  pm::log::set_sink(&capture, "");
+  const fs::path pack = fake_pack(root, L"Ignored-42-7-0");
+  pm::mods::set_installed(data, pack_and_framework(pack));
+  PmHostApi api{};
+  pack_host_api(api);
+  g_lines.clear();
+  CHECK(!pm::mods::pack_failed("someone.pack", "Too late for this"));  // no mod is starting at all
+  pm::mods::start(&api, {"fake-mod", "someone.pack"});
+  CHECK(pm::mods::started("someone.pack") && pm::mods::off_reason("someone.pack").empty());
+  bool listed = false;
+  for (const pm::presence::Mod& m : pm::mods::started_builds())
+    if (m.id == "someone.pack") listed = m.build == pm::packfiles::build_of(pack);
+  CHECK(listed);
+  CHECK(!pm::mods::pack_failed("someone.pack", "Too late for this"));  // after the start: the same
+  CHECK(pm::mods::started("someone.pack"));
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// A ".pack" path is a content pack or nothing: a manifest that is not a pack's, pointing at a stand-in,
+// never has that file loaded as a DLL, whatever bytes it holds. Its row says it was refused, and its code
+// stays unmapped.
+void a_stand_in_without_a_pack_manifest_never_loads(const fs::path& data, const fs::path& root) {
+  pm::log::set_sink(&capture, "");
+  const fs::path standIn = root / "packs" / L"NotAPack-42-7-0.pack";
+  std::error_code error;
+  CHECK(fs::copy_file(PM_FAKE_MOD, standIn, fs::copy_options::overwrite_existing, error));  // a real mod DLL behind a pack name
+  pm::mods::set_installed(data, {{{standIn, fake_manifest()}}, {}});  // fake_manifest: a normal mod's manifest
+  PmHostApi api{};
+  pack_host_api(api);
+  pm::mods::start(&api, {"fake-mod"});
+  CHECK(!pm::mods::started("fake-mod"));  // a ".pack" path is never loaded as a DLL
+  CHECK(GetModuleHandleW(standIn.c_str()) == nullptr);
+  CHECK(!pm::mods::off_reason("fake-mod").empty());  // its row says why
   pm::mods::stop_all();
   pm::log::set_sink(nullptr, nullptr);
 }
@@ -1132,6 +1347,13 @@ int main() {
   a_dll_that_cannot_run_is_refused_with_a_reason(data, root);
   a_repeated_id_is_refused_from_the_manifests(data);
   a_dll_that_throws_when_asked_is_refused(data);
+  a_pack_starts_after_its_framework_without_code(data, root);
+  a_started_pack_is_in_the_presence(data, root);
+  stopping_a_pack_calls_no_code(data, root);
+  a_framework_sees_its_packs_in_its_start(data, root);
+  a_failed_pack_stays_off_with_its_reason(data, root);
+  pack_failed_outside_a_start_is_ignored(data, root);
+  a_stand_in_without_a_pack_manifest_never_loads(data, root);
   no_mod_dll_loads_before_agreement(data, root);
   declined_loads_no_mod_dll(data, root);
   unticked_mod_is_not_loaded_until_switched_on(data, root);

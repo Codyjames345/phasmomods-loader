@@ -4,7 +4,11 @@
   "title": "PhasmoMods mod manifest",
   "description": "A mod's manifest.json, beside its DLL. The loader reads it with core/mod_manifest.h; sdk/README.md says what each field means. An unknown field is logged and ignored. The loader counts limits in UTF-8 bytes and an editor counts maxLength in characters, so text beyond ASCII can pass here and be refused at load: each field's description gives the limit in bytes.",
   "type": "object",
-  "required": ["id", "name", "author", "version", "description", "dll"],
+  "required": ["id", "name", "author", "version", "description"],
+  "oneOf": [
+    { "required": ["dll"] },
+    { "required": ["contentPackFor"], "properties": { "dependencies": { "maxItems": 0 } } }
+  ],
   "additionalProperties": true,
   "properties": {
     "$schema": {
@@ -49,6 +53,25 @@
       "description": "The file name of the mod's DLL beside this file, with no folder, at most 80 bytes, and not a name Windows keeps for a device (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9).",
       "pattern": "^(?![cC][oO][nN]\\.|[pP][rR][nN]\\.|[aA][uU][xX]\\.|[nN][uU][lL]\\.|[cC][oO][mM][1-9]\\.|[lL][pP][tT][1-9]\\.)[^\\u0000-\\u001f/\\\\:<>\"|?*]+\\.[dD][lL][lL]$",
       "maxLength": 80
+    },
+    "contentPackFor": {
+      "type": "object",
+      "description": "The mod this content pack is data for, as SMAPI's ContentPackFor: the pack has no dll and no dependencies of its own, and that mod is a required dependency.",
+      "required": ["id"],
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The other mod's id.",
+          "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)?$",
+          "maxLength": 64
+        },
+        "minimumVersion": {
+          "type": "string",
+          "description": "The oldest version of it that will do, MAJOR.MINOR.PATCH. Without this, any version.",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        }
+      }
     },
     "website": {
       "type": "string",

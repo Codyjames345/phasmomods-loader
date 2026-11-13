@@ -31,6 +31,17 @@ Manifest mod(const std::string& id, std::vector<Dependency> deps = {}, const std
   return m;
 }
 
+// A content pack's manifest (as SMAPI's ContentPackFor): no dll, and its contentPackFor names the mod its data is for.
+// Read through the parser, so it carries the framework dependency the parser adds.
+Manifest pack_of(const std::string& contentPackFor) {
+  Manifest m;
+  std::string why;
+  CHECK(pm::modlist::parse_manifest_json(
+      R"({"id":"a.pack","name":"A","author":"Me","version":"1.0.0","description":"D","contentPackFor":)" + contentPackFor + "}",
+      m, why));
+  return m;
+}
+
 const LeftOut* off(const Plan& p, const std::string& id) {
   for (const LeftOut& o : p.off)
     if (o.id == id) return &o;
@@ -236,6 +247,30 @@ void dependency_below_minimum_version_counts_as_missing() {
   CHECK(off(p, "me.custom") && off(p, "me.custom")->row == "Depends on Spectral Flame 1.2.0 or newer, its version is unknown");
 }
 
+// A content pack's parser-added dependency is a requirement like any other: the framework starts first, and a pack
+// without it, or with an older one, stays off.
+void a_pack_starts_after_its_framework() {
+  const std::vector<Manifest> all = {pack_of(R"({"id":"phasmomods.emotes"})"), mod("phasmomods.emotes")};
+  const Plan p = plan(all, {"a.pack", "phasmomods.emotes"});
+  CHECK(p.order == (Ids{"phasmomods.emotes", "a.pack"}));
+  CHECK(p.off.empty() && p.notes.empty());
+}
+
+void a_pack_without_its_framework_stays_off_with_the_reason() {
+  const std::vector<Manifest> all = {pack_of(R"({"id":"phasmomods.emotes"})")};
+  const Plan p = plan(all, {"a.pack"});
+  CHECK(p.order.empty());
+  CHECK(off(p, "a.pack") != nullptr);
+}
+
+void a_pack_for_an_older_framework_stays_off() {
+  const std::vector<Manifest> all = {pack_of(R"({"id":"phasmomods.emotes","minimumVersion":"1.2.0"})"),
+                                     mod("phasmomods.emotes", {}, "1.0.0")};
+  const Plan p = plan(all, {"a.pack", "phasmomods.emotes"});
+  CHECK(p.order == Ids{"phasmomods.emotes"});
+  CHECK(off(p, "a.pack") != nullptr);
+}
+
 void incompatible_mod_stays_off_with_reason() {
   std::vector<Manifest> all = {mod("me.a"), mod("me.b"), mod("me.c"), mod("me.d")};
   all[0].incompatibilities = {"me.b", "me.gone"};
@@ -375,6 +410,9 @@ int main() {
   panel_disabling_turns_off_dependents();
   mod_without_dependencies_depends_on_nothing();
   dependency_below_minimum_version_counts_as_missing();
+  a_pack_starts_after_its_framework();
+  a_pack_without_its_framework_stays_off_with_the_reason();
+  a_pack_for_an_older_framework_stays_off();
   incompatible_mod_stays_off_with_reason();
   playable_ghost_starts_after_custom_ghosts();
   untrusted_graphs_are_bounded();

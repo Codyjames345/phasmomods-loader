@@ -102,6 +102,12 @@ struct Group {
   std::string (*refusal)() = nullptr;
 };
 void start(const PmHostApi* api, const std::vector<std::string>& ids, Group group = {});
+// The content packs of the framework `frameworkId` that the current start starts or has started, less those it
+// reported failed, in id order (PmHostApi::content_packs). Main thread.
+std::vector<const Mod*> packs_for(std::string_view frameworkId);
+// During the pmmod_start of the framework of the pack `packId`, before the pack starts: the pack stays off for this
+// start, with `why` as its Mods panel reason (PmHostApi::content_pack_failed). False, logged, otherwise. Main thread.
+bool pack_failed(const std::string& packId, const std::string& why);
 // During a mod's pmmod_start: notes `why` a host call the mod made failed (the first one counts), which keeps that mod
 // off (start, above). Outside a start it does nothing. Main thread.
 void start_error(const std::string& why);

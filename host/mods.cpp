@@ -5,11 +5,13 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <map>
 #include <filesystem>
 #include <iterator>
 
 #include "contained.h"
 #include "file_hash.h"
+#include "pack_files.h"
 #include "hooks.h"
 #include "log.h"
 #include "mod_deps.h"
@@ -34,6 +36,9 @@ std::vector<std::string> g_startOrder;  // the running mods' ids in the order th
 std::vector<moddeps::LeftOut> g_off;   // the chosen mods the last start left off, with why
 bool g_starting = false;               // a mod's pmmod_start runs
 std::string g_startError;              // the first host call that failed during it
+std::string g_startingId;              // whose pmmod_start runs, while g_starting
+std::vector<std::string> g_planned;    // the ids the current start starts, in order (moddeps::Plan::order)
+std::map<std::string, std::string> g_failedPacks;  // packs their framework reported failed in this start, and why
 
 /** The folder this host DLL was loaded from. */
 fs::path host_folder() {
@@ -121,7 +126,17 @@ bool channel_taken(const Mod& m, uint8_t channel) {
  */
 bool load_dll(Mod& m) {
   if (!m.refusedRow.empty()) return false;
-  if (m.info) return true;
+  if (m.info || !m.build.empty()) return true;
+  // A content pack has no code: nothing loads, and its build is a hash of its copied files (core/pack_files.h).
+  if (m.manifest.is_pack()) {
+    m.build = packfiles::build_of(m.dll);
+    PM_LOG("mods: found %s %s (%s, a content pack for %s, build %s)", m.manifest.id.c_str(), m.manifest.version.c_str(),
+           m.manifest.name.c_str(), m.manifest.contentPackFor.c_str(), m.build.c_str());
+    return true;
+  }
+  // Only a real DLL path ever reaches the loader: never a content pack's stand-in, whatever its manifest claims.
+  if (m.dll.filename().empty() || packfiles::is_stand_in(m.dll))
+    return refuse_loaded(m, i18n::text("mods.not-a-mod"), "it names no DLL");
   HMODULE module = dll::load_mod(m.dll.c_str());
   if (!module) {
     const std::string error = std::to_string(GetLastError());
@@ -243,7 +258,7 @@ Installed find(const fs::path& dataDirectory, const fs::path& hostFolder, unsign
     const modlist::Reading reading = modlist::read_folder(folder, m, why, place, developer);
     if (reading == modlist::Reading::Refused) refuse(installed.refused, text::narrow(folder.filename().wstring()), why);
     if (reading != modlist::Reading::Readable) continue;
-    fs::path dll = folder / widen(m.dll);
+    fs::path dll = m.is_pack() ? packfiles::stand_in(folder) : folder / widen(m.dll);
     installed.found.push_back({std::move(dll), std::move(m)});
   }
   PM_LOG("mods: %zu found beside the host", installed.found.size());
@@ -307,6 +322,8 @@ std::vector<consent::Selected> notice_list() {
 void start(const PmHostApi* api, const std::vector<std::string>& ids, Group group) {
   const std::vector<modlist::Manifest> all = manifests();
   const moddeps::Plan plan = moddeps::plan(all, ids);
+  g_planned = plan.order;
+  g_failedPacks.clear();
   for (const std::string& note : plan.notes) PM_LOG("mods: %s", note.c_str());
   // The dependencies are settled from the manifests, so a mod they leave off never loads. Its DLL, what only that can say
   // (its game entries) and its start are judged here, one mod at a time, and a mod that does not start takes those that
@@ -318,6 +335,17 @@ void start(const PmHostApi* api, const std::vector<std::string>& ids, Group grou
       row = m.refusedRow;
       log = m.refusedLog;
       return false;
+    }
+    if (const auto failed = g_failedPacks.find(id); failed != g_failedPacks.end()) {
+      row = failed->second;
+      log = "its framework could not use it (" + failed->second + ")";
+      return false;
+    }
+    if (m.manifest.is_pack()) {  // data only: started once its framework has, which the dependency order guarantees
+      m.started = true;
+      g_startOrder.push_back(id);
+      PM_LOG("mods: %s started (a content pack)", id.c_str());
+      return true;
     }
     if (const std::vector<std::string> lacking = unresolved_entries(api, m); !lacking.empty()) {
       row = lacking_row(lacking);
@@ -333,8 +361,10 @@ void start(const PmHostApi* api, const std::vector<std::string>& ids, Group grou
     if (group.begin) group.begin(id);
     g_startError.clear();
     g_starting = true;
+    g_startingId = id;
     m.started = m.start(api);
     g_starting = false;
+    g_startingId.clear();
     // Any failure of the host's during the start keeps the mod off, whatever its start answered: it never runs half there.
     std::string failure;
     if (const std::string hook = hooks::group_failure(); !hook.empty()) failure = "a hook could not be made (" + hook + ")";
@@ -383,6 +413,27 @@ const char* name_of(const char* id) {
   if (!id) return nullptr;
   const Mod* m = find_mod(id);
   return m ? m->manifest.name.c_str() : nullptr;
+}
+
+std::vector<const Mod*> packs_for(std::string_view frameworkId) {
+  std::vector<const Mod*> packs;
+  for (const Mod& m : g_mods) {
+    if (!m.manifest.is_pack() || m.manifest.contentPackFor != frameworkId || g_failedPacks.count(m.manifest.id)) continue;
+    if (m.started || std::find(g_planned.begin(), g_planned.end(), m.manifest.id) != g_planned.end()) packs.push_back(&m);
+  }
+  std::sort(packs.begin(), packs.end(), [](const Mod* a, const Mod* b) { return a->manifest.id < b->manifest.id; });
+  return packs;
+}
+
+bool pack_failed(const std::string& packId, const std::string& why) {
+  const Mod* m = find_mod(packId);
+  if (!g_starting || !m || !m->manifest.is_pack() || m->manifest.contentPackFor != g_startingId || m->started) {
+    PM_LOG("mods: a report that pack %s failed was ignored: only its framework's pmmod_start may make one, before it starts",
+           packId.c_str());
+    return false;
+  }
+  g_failedPacks[packId] = why;
+  return true;
 }
 
 bool entry(int32_t index, PmModEntry* out) {
@@ -436,7 +487,7 @@ void settle(std::vector<std::string> ids, const std::function<std::vector<Droppe
 
 void tick_all() {
   for (Mod& m : g_mods)
-    if (m.started) m.tick();
+    if (m.started && m.tick) m.tick();
 }
 
 void stop_all() {
@@ -444,9 +495,9 @@ void stop_all() {
   for (const std::string& id : moddeps::stop_order(g_startOrder)) {
     Mod* m = find_mod(id);
     if (m && m->started) {
-      m->stop();
+      if (m->stop) m->stop();  // a content pack has no code to stop
       m->started = false;  // at once: a mod stopping after it asks mod_started about it
-      PM_LOG("mods: %s stopped", m->info->id);
+      PM_LOG("mods: %s stopped", m->manifest.id.c_str());
     }
   }
   g_startOrder.clear();
@@ -457,7 +508,7 @@ std::vector<std::string> started_ids() { return g_startOrder; }
 std::vector<presence::Mod> started_builds() {
   std::vector<presence::Mod> builds;
   for (const Mod& m : g_mods)
-    if (m.started) builds.push_back({m.info->id, m.build, m.manifest.name, m.manifest.version});
+    if (m.started) builds.push_back({m.manifest.id, m.build, m.manifest.name, m.manifest.version});
   return builds;
 }
 

@@ -44,6 +44,11 @@ inline constexpr pm::sdk::EntryDesc AudioSource_set_loop{.key = "AudioSource.set
                                                          .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
                                                          .name = "set_loop", .params = UnityAudio_bool};
 
+/// Sets where the source plays in its clip, in seconds. Inferred: Unity's documented property setter.
+inline constexpr pm::sdk::EntryDesc AudioSource_set_time{.key = "AudioSource.set_time", .kind = pm::sdk::Kind::Method,
+                                                         .owner = "AudioSource", .name = "set_time",
+                                                         .params = UnityAudio_float};
+
 /// Sets the source's volume, 0 to 1. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc AudioSource_set_volume{.key = "AudioSource.set_volume",
                                                            .kind = pm::sdk::Kind::Method, .owner = "AudioSource",
@@ -270,6 +275,8 @@ struct AudioSource {
   static constexpr pm::api::Method<pm::map::AudioSource_set_mute, void(void*, bool)> set_mute{};
   /// set_loop(source, loops). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::AudioSource_set_loop, void(void*, bool)> set_loop{};
+  /// set_time(source, seconds): where it plays in its clip. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::AudioSource_set_time, void(void*, float)> set_time{};
   /// set_volume(source, volume). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::AudioSource_set_volume, void(void*, float)> set_volume{};
   /// set_minDistance(source, metres). Unresolved: does nothing.

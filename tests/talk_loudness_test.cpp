@@ -46,7 +46,7 @@ void a_loud_sound_is_talking() {
 }
 
 void an_envelope_reads_from_measured_rms() {
-  // One RMS a window, as tools/emote_loudness.mjs writes them: the same scale as measuring the samples.
+  // One RMS a window, as the emote pack tool writes them (LoopFinder.RmsWindows): the same scale as measuring the samples.
   CHECK(std::fabs(talk::loudness_of_rms(0.0f) - talk::loudness_of({})) < 1e-6f);
   const std::vector<float> loud = sine(1.0f, 4800);
   double sum = 0;

@@ -671,6 +671,37 @@ void at_type_inside_generic_arguments() {
   CHECK(tr.find("Traits")->status == Status::Resolved && tr.find("Traits")->currentName == "ടഷള");
 }
 
+// Two fields of one type that no other check tells apart (GamepadButton's Xbox and PS5 icon sets, which its code
+// takes in turn): kFirstOfShape keeps the one nearest the object's start, kLastOfShape the furthest, once every other
+// check has run. Only for a field found by shape, and never both.
+void first_or_last_of_a_shape() {
+  ModelBuilder b;
+  b.type("Assembly-CSharp", "", "GhostAI");
+  b.field(0, "ദശ", "GamepadIcons", 0x68);
+  b.field(0, "സറ", "GamepadIcons", 0x100);
+  b.field(0, "f", "float", 0x40);
+  const GameModel model = b.build();
+  constexpr EntryDesc first{.key = "GhostAI.first", .kind = Kind::Field, .flags = kFirstOfShape, .owner = "GhostAI",
+                            .type = "GamepadIcons"};
+  constexpr EntryDesc last{.key = "GhostAI.last", .kind = Kind::Field, .flags = kLastOfShape, .owner = "GhostAI",
+                           .type = "GamepadIcons"};
+  constexpr EntryDesc plain{.key = "GhostAI.plain", .kind = Kind::Field, .owner = "GhostAI", .type = "GamepadIcons"};
+  const Resolution r = run({&kGhostAI, &first, &last, &plain}, model);
+  CHECK(r.find("GhostAI.first")->status == Status::Resolved && r.find("GhostAI.first")->currentName == "ദശ");
+  CHECK(r.find("GhostAI.last")->status == Status::Resolved && r.find("GhostAI.last")->currentName == "സറ");
+  CHECK(r.find("GhostAI.plain")->status == Status::Ambiguous);
+  constexpr EntryDesc named{.key = "GhostAI.named", .kind = Kind::Field, .flags = kFirstOfShape, .owner = "GhostAI",
+                            .name = "f"};
+  constexpr EntryDesc both{.key = "GhostAI.both", .kind = Kind::Field, .flags = kFirstOfShape | kLastOfShape,
+                           .owner = "GhostAI", .type = "GamepadIcons"};
+  constexpr EntryDesc method{.key = "GhostAI.method", .kind = Kind::Method, .flags = kFirstOfShape,
+                             .owner = "GhostAI", .type = "void"};
+  const Resolution bad = run({&kGhostAI, &named, &both, &method}, model);
+  CHECK(bad.find("GhostAI.named")->status == Status::Missing);
+  CHECK(bad.find("GhostAI.both")->status == Status::Missing);
+  CHECK(bad.find("GhostAI.method")->status == Status::Missing);
+}
+
 void field_shape_with_many_candidates_is_ambiguous() {
   ModelBuilder b;
   b.type("Assembly-CSharp", "", "GhostAI");
@@ -1129,6 +1160,37 @@ void struct_field_is_published_at_its_place_in_the_struct() {
                                     .owner = "Traits", .name = "shared"};
   const Resolution r = run({&Embedded::kTraits, &shared}, m.build());
   CHECK(r.find("Traits.shared")->status == Status::Resolved && r.find("Traits.shared")->offset == 0x4);
+}
+
+// A holder field whose type name another struct shares, nested in another class (the game's GamepadIcons and the Input
+// System sample's GamepadIconsExample.GamepadIcons): the offline model leaves the field's type unknown, and C#'s own
+// rule decides it, as for any plain type name in a class of the global namespace: the top-level struct of the owner's
+// namespace, never a type nested in another class. Members of each of two such holders then resolve in place.
+void a_struct_holder_whose_name_a_nested_type_shares() {
+  ModelBuilder m;
+  const int button = m.type("Assembly-CSharp", "", "Button");
+  const int icons = m.type("Assembly-CSharp", "", "Icons", -1, false, true);
+  const int example = m.type("Assembly-CSharp", "Samples", "Example");
+  const int nested = m.type("Assembly-CSharp", "Samples", "Icons", example, false, true);
+  m.field(button, "ഫര", "Icons", 0x68);
+  m.field(button, "തഷ", "Icons", 0x100);
+  m.field(icons, "west", "Sprite", 0x28);  // a struct's own offsets include the boxed header
+  m.field(nested, "west", "Sprite", 0x50);
+  const GameModel model = m.build();
+  static constexpr EntryDesc kButton{.key = "Button", .name = "Button", .assembly = "Assembly-CSharp", .ns = ""};
+  static constexpr EntryDesc kIcons{.key = "Icons", .name = "Icons", .assembly = "Assembly-CSharp", .ns = ""};
+  static constexpr EntryDesc first{.key = "Button.first", .kind = Kind::Field, .flags = kFirstOfShape,
+                                   .owner = "Button", .type = "Icons"};
+  static constexpr EntryDesc last{.key = "Button.last", .kind = Kind::Field, .flags = kLastOfShape, .owner = "Button",
+                                  .type = "Icons"};
+  static constexpr EntryDesc firstWest{.key = "Button.first.west", .kind = Kind::Field, .owner = "Button",
+                                       .name = "west", .type = "Sprite", .within = "Button.first"};
+  static constexpr EntryDesc lastWest{.key = "Button.last.west", .kind = Kind::Field, .owner = "Button",
+                                      .name = "west", .type = "Sprite", .within = "Button.last"};
+  const Resolution r = run({&kButton, &kIcons, &first, &last, &firstWest, &lastWest}, model);
+  CHECK(r.find("Button.first.west")->status == Status::Resolved && r.find("Button.first.west")->offset == 0x68 + 0x18);
+  CHECK(r.find("Button.last.west")->status == Status::Resolved && r.find("Button.last.west")->offset == 0x100 + 0x18);
+  (void)nested;
 }
 
 void field_within_an_embedded_struct() {
@@ -2417,6 +2479,8 @@ int main() {
   field_by_unique_type();
   at_type_inside_generic_arguments();
   field_shape_with_many_candidates_is_ambiguous();
+  first_or_last_of_a_shape();
+  a_struct_holder_whose_name_a_nested_type_shares();
   stale_hint_never_decides();
   hint_cannot_break_a_tie();
   method_by_shape();

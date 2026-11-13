@@ -53,6 +53,17 @@ std::string with(const std::string& field, const std::string& replacement) {
   return text.replace(at, field.size(), replacement);
 }
 
+// The smallest content pack that parses, as SMAPI's ContentPackFor: no dll, and the mod its data is for. `extra` adds
+// top-level fields after contentPackFor.
+std::string pack(const std::string& extra = "") {
+  return R"({"id":"a.pack","name":"A","author":"Me","version":"1.0.0","description":"D","contentPackFor":{"id":"phasmomods.emotes"})" + extra + "}";
+}
+
+// The same pack with its contentPackFor value replaced by `forWhat` whole.
+std::string pack_for(const std::string& forWhat) {
+  return R"({"id":"a.pack","name":"A","author":"Me","version":"1.0.0","description":"D","contentPackFor":)" + forWhat + "}";
+}
+
 bool parses(const std::string& text) {
   Manifest m;
   std::string why;
@@ -279,6 +290,93 @@ void manifest_unknown_field_is_ignored() {
   CHECK(m.unknownFields.size() == kMaxUnknownFieldsListed);
 }
 
+// A content pack, as SMAPI's ContentPackFor: a mod folder whose manifest names the mod its data is for and holds no DLL.
+
+void a_pack_names_its_framework_and_no_dll() {
+  Manifest m;
+  std::string why;
+  CHECK(parse_manifest_json(pack(), m, why));
+  CHECK(why.empty());
+  CHECK(m.is_pack());
+  CHECK(m.contentPackFor == "phasmomods.emotes");
+  CHECK(m.dll.empty());
+  CHECK(m.unknownFields.empty());
+  // The framework is a required dependency, added at the end of the list.
+  CHECK(m.dependencies.size() == 1);
+  if (m.dependencies.size() == 1) {
+    CHECK(m.dependencies[0].id == "phasmomods.emotes" && m.dependencies[0].minimumVersion.empty() &&
+          m.dependencies[0].required);
+  }
+}
+
+void a_pack_minimum_version_is_parsed() {
+  Manifest m;
+  std::string why;
+  CHECK(parse_manifest_json(pack_for(R"({"id":"phasmomods.emotes","minimumVersion":"1.2.0"})"), m, why));
+  CHECK(!m.dependencies.empty() && m.dependencies.back().minimumVersion == "1.2.0");
+  // minimumVersion obeys the same rule as a dependency's.
+  CHECK(!parse_manifest_json(pack_for(R"({"id":"phasmomods.emotes","minimumVersion":"1.2"})"), m, why));
+  CHECK(!why.empty());
+}
+
+void a_pack_with_a_dll_is_refused() {
+  Manifest m;
+  std::string why;
+  CHECK(!parse_manifest_json(pack(R"(,"dll":"a.dll")"), m, why));
+  CHECK(why == pm::i18n::text("manifest.pack-dll"));
+}
+
+// A pack depends on its framework alone (the review, 2026-11-13): the framework lists the packs planned for its start,
+// so a pack whose other dependency failed after the framework started would already be on its wheel, unstarted.
+void a_pack_with_other_dependencies_is_refused() {
+  for (const char* required : {"true", "false"}) {
+    Manifest m;
+    std::string why;
+    CHECK(!parse_manifest_json(pack(std::string(R"(,"dependencies":[{"id":"someone.other","required":)") + required +
+                                    "}]"),
+                               m, why));
+    CHECK(why == pm::i18n::text("manifest.pack-dependencies"));
+  }
+  Manifest m;
+  std::string why;
+  CHECK(parse_manifest_json(pack(R"(,"dependencies":[])"), m, why));
+}
+
+void a_pack_without_an_id_is_refused() {
+  // contentPackFor must be an object with a string id.
+  for (const char* forWhat : {"{}", R"("phasmomods.emotes")", R"({"id":5})"}) {
+    Manifest m;
+    std::string why;
+    CHECK(!parse_manifest_json(pack_for(forWhat), m, why));
+    CHECK(why == pm::i18n::text("manifest.pack-for"));
+  }
+}
+
+void a_pack_for_itself_or_listed_twice_is_refused() {
+  // The framework may not be the pack itself, and a pack that also lists it in "dependencies" names one mod twice.
+  CHECK(!why_refused(pack_for(R"({"id":"a.pack"})")).empty());
+  CHECK(!why_refused(pack(R"(,"dependencies":[{"id":"phasmomods.emotes"}])")).empty());
+}
+
+void a_mod_without_contentPackFor_is_no_pack() {
+  Manifest m;
+  std::string why;
+  CHECK(parse_manifest_json(minimal(), m, why));
+  CHECK(!m.is_pack() && m.contentPackFor.empty());
+}
+
+void a_mod_without_dll_or_contentPackFor_is_refused() {
+  // Without the field, a manifest still needs its dll.
+  CHECK(why_refused(with(R"(,"dll":"a.dll")", "")) == pm::i18n::text("manifest.bad-dll"));
+}
+
+void an_unknown_contentPackFor_field_is_listed() {
+  Manifest m;
+  std::string why;
+  CHECK(parse_manifest_json(pack_for(R"({"id":"phasmomods.emotes","extra":1})"), m, why));
+  CHECK(m.unknownFields == (std::vector<std::string>{"contentPackFor.extra"}));
+}
+
 void content_id_splits_at_the_last_dot() {
   const auto split = [](const char* id) { return split_content_id(id); };
   auto c = split("phasmomods.custom-ghosts.draugr");
@@ -370,24 +468,25 @@ std::string read_source(const std::string& relative) {
   return text.str();
 }
 
-// What ships: each bundled mod's manifest parses, names its DLL, and agrees with the DLL's compiled id.
+// What ships: each bundled mod's manifest parses, names its DLL and its version, and agrees with the DLL's compiled id.
 void bundled_manifests_are_valid() {
   struct Bundled {
     const char* folder;
     const char* id;
     const char* name;
     const char* dll;
+    const char* version;  // the user's: Emotes 2.0.0 and Custom Ghosts 1.1.0 (2026-11-13)
   };
-  for (const Bundled& b : {Bundled{"custom_ghosts", "phasmomods.custom-ghosts", "Custom Ghosts", "CustomGhosts.dll"},
-                           Bundled{"ghost_tells", "phasmomods.ghost-tells", "Ghost Tells", "GhostTells.dll"},
-                           Bundled{"playable_ghost", "phasmomods.playable-ghost", "Playable Ghost", "PlayableGhost.dll"},
-                           Bundled{"spectral_flame", "phasmomods.spectral-flame", "Spectral Flame", "SpectralFlame.dll"},
-                           Bundled{"emotes", "phasmomods.emotes", "Emotes", "Emotes.dll"},
-                           Bundled{"dev_menu", "phasmomods.dev-menu", "Dev Menu", "DevMenu.dll"}}) {
+  for (const Bundled& b : {Bundled{"custom_ghosts", "phasmomods.custom-ghosts", "Custom Ghosts", "CustomGhosts.dll", "1.1.0"},
+                           Bundled{"ghost_tells", "phasmomods.ghost-tells", "Ghost Tells", "GhostTells.dll", "1.0.0"},
+                           Bundled{"playable_ghost", "phasmomods.playable-ghost", "Playable Ghost", "PlayableGhost.dll", "1.0.0"},
+                           Bundled{"spectral_flame", "phasmomods.spectral-flame", "Spectral Flame", "SpectralFlame.dll", "1.0.0"},
+                           Bundled{"emotes", "phasmomods.emotes", "Emotes", "Emotes.dll", "2.0.0"},
+                           Bundled{"dev_menu", "phasmomods.dev-menu", "Dev Menu", "DevMenu.dll", "1.0.0"}}) {
     Manifest m;
     std::string why;
     CHECK(parse_manifest_json(read_source(std::string("mods/") + b.folder + "/manifest.json"), m, why));
-    CHECK(m.id == b.id && m.name == b.name && m.dll == b.dll && m.author == "PhasmoMods" && m.version == "1.0.0");
+    CHECK(m.id == b.id && m.name == b.name && m.dll == b.dll && m.author == "PhasmoMods" && m.version == b.version);
     CHECK(m.unknownFields.empty());
     CHECK(read_source(std::string("mods/") + b.folder + "/mod.cpp").find(std::string("\"") + b.id + "\"") != std::string::npos);
     CHECK(!fs::exists(fs::path(PM_SOURCE_DIR) / "mods" / b.folder / "mod.ini"));
@@ -410,8 +509,25 @@ void schema_agrees_with_the_parser() {
   std::vector<std::string> required;
   for (const auto& r : schema["required"]) required.push_back(r.get<std::string>());
   std::sort(required.begin(), required.end());
-  CHECK(required == (std::vector<std::string>{"author", "description", "dll", "id", "name", "version"}));
-  CHECK(properties.contains("website") && properties.contains("dependencies") && properties.contains("incompatibilities"));
+  CHECK(required == (std::vector<std::string>{"author", "description", "id", "name", "version"}));
+  CHECK(properties.contains("website") && properties.contains("dependencies") && properties.contains("incompatibilities") &&
+        properties.contains("contentPackFor"));
+  // A mod names its DLL or is a content pack, never both and never neither: oneOf says exactly that, so the schema
+  // agrees with the parser's manifest.bad-dll and manifest.pack-dll refusals.
+  const nlohmann::json& branches = schema["oneOf"];
+  CHECK(branches.is_array() && branches.size() == 2);
+  if (branches.is_array() && branches.size() == 2) {
+    const auto branch_needs = [&branches](const char* field) {
+      for (const auto& branch : branches) {
+        if (!branch.contains("required") || !branch["required"].is_array()) continue;
+        std::vector<std::string> wanted;
+        for (const auto& r : branch["required"]) wanted.push_back(r.get<std::string>());
+        if (wanted == (std::vector<std::string>{field})) return true;
+      }
+      return false;
+    };
+    CHECK(branch_needs("dll") && branch_needs("contentPackFor"));
+  }
   // The schema's text limits name what display_safe refuses, and its dll pattern refuses the reserved device names.
   for (const char* field : {"name", "author", "description"}) {
     const std::string pattern = properties[field]["pattern"].get<std::string>();
@@ -436,6 +552,15 @@ int main() {
   version_compares_as_numbers();
   manifest_malformed_skips_mod_with_reason();
   manifest_unknown_field_is_ignored();
+  a_pack_names_its_framework_and_no_dll();
+  a_pack_minimum_version_is_parsed();
+  a_pack_with_a_dll_is_refused();
+  a_pack_with_other_dependencies_is_refused();
+  a_pack_without_an_id_is_refused();
+  a_pack_for_itself_or_listed_twice_is_refused();
+  a_mod_without_contentPackFor_is_no_pack();
+  a_mod_without_dll_or_contentPackFor_is_refused();
+  an_unknown_contentPackFor_field_is_listed();
   content_id_splits_at_the_last_dot();
   old_bundled_ids_migrate_once();
   display_text_is_safe();

@@ -178,6 +178,11 @@ inline constexpr pm::sdk::EntryDesc Mouse_get_current{.key = "Mouse.get_current"
 inline constexpr pm::sdk::EntryDesc Mouse_get_leftButton{.key = "Mouse.get_leftButton", .kind = pm::sdk::Kind::Method,
                                                          .owner = "Mouse", .name = "get_leftButton"};
 
+/// The mouse's scroll wheel, a DeltaControl (a Vector2Control: y up when scrolled away from the player), read with
+/// InputControl<Vector2>.ReadValue: this frame's scrolling. Inferred: the Input System's documented property getter.
+inline constexpr pm::sdk::EntryDesc Mouse_get_scroll{.key = "Mouse.get_scroll", .kind = pm::sdk::Kind::Method,
+                                                     .owner = "Mouse", .name = "get_scroll"};
+
 /// A pointer device (Unity.InputSystem), the mouse's base class. Inferred: the Input System's documented
 /// API.
 inline constexpr pm::sdk::EntryDesc Pointer{.key = "Pointer", .name = "Pointer", .assembly = "Unity.InputSystem",
@@ -395,6 +400,234 @@ inline constexpr pm::sdk::EntryDesc InputActionReference_get_action{.key = "Inpu
                                                                    .owner = "InputActionReference",
                                                                    .name = "get_action"};
 
+/// A game UI widget that shows the gamepad glyph of one input action (Assembly-CSharp, global namespace): the
+/// journal's and pause screen's LB and RB page tabs are ones. It holds two GamepadIcons sets, an Xbox one and a PS5
+/// one (sprites named for their buttons, such as leftShoulder and rightShoulder). When the player's controls change
+/// (PlayerInput's controls-changed event) it shows, for a gamepad scheme, the sprite for the action's gamepad binding
+/// from the PS5 set when the gamepad's name says it is a PlayStation pad or the game runs on a PS5, else from the
+/// Xbox set, on its Image in full colour; for keyboard and mouse it sets that Image's colour to clear, so no glyph
+/// shows. The game has no glyph for the mouse or keyboard. Decompiled.
+inline constexpr pm::sdk::EntryDesc GamepadButton{.key = "GamepadButton", .confidence = pm::sdk::Confidence::Decompiled,
+                                                  .name = "GamepadButton", .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The action whose glyph it shows: GamepadButton's one InputActionReference field. Decompiled.
+inline constexpr pm::sdk::EntryDesc GamepadButton_action{.key = "GamepadButton.action", .kind = pm::sdk::Kind::Field,
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "GamepadButton", .type = "InputActionReference"};
+
+/// The Image the glyph shows on: GamepadButton's one Image field. Its sprite is the glyph the game picked for the
+/// current pad; its colour is clear while the player uses keyboard and mouse. Decompiled.
+inline constexpr pm::sdk::EntryDesc GamepadButton_image{.key = "GamepadButton.image", .kind = pm::sdk::Kind::Field,
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .owner = "GamepadButton", .type = "Image"};
+
+/// The game's struct of gamepad glyph sprites (Assembly-CSharp, global namespace), one Sprite per gamepad control,
+/// each field named for the Input System's control ("buttonSouth", "leftShoulder"). Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc GamepadIcons{.key = "GamepadIcons", .name = "GamepadIcons",
+                                                 .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The widget's Xbox glyph set: the first of its two GamepadIcons fields. GamepadButton.CheckInputDevice takes its
+/// sprites unless the pad's name says PlayStation or the game runs on a PS5. Decompiled.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xboxIcons{
+    .key = "GamepadButton.xboxIcons", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .flags = pm::sdk::kFirstOfShape, .owner = "GamepadButton", .type = "GamepadIcons"};
+
+/// The widget's PS5 glyph set: the second of its two GamepadIcons fields, which GamepadButton.CheckInputDevice takes
+/// for a PlayStation pad or on a PS5. Decompiled.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5Icons{
+    .key = "GamepadButton.ps5Icons", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .flags = pm::sdk::kLastOfShape, .owner = "GamepadButton", .type = "GamepadIcons"};
+
+/// The Xbox set's Sprite for the gamepad's buttonSouth control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_buttonSouth{.key = "GamepadButton.xbox.buttonSouth", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "buttonSouth", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's buttonNorth control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_buttonNorth{.key = "GamepadButton.xbox.buttonNorth", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "buttonNorth", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's buttonEast control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_buttonEast{.key = "GamepadButton.xbox.buttonEast", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "buttonEast", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's buttonWest control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_buttonWest{.key = "GamepadButton.xbox.buttonWest", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "buttonWest", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's startButton control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_startButton{.key = "GamepadButton.xbox.startButton", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "startButton", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's selectButton control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_selectButton{.key = "GamepadButton.xbox.selectButton", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "selectButton", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's leftTrigger control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_leftTrigger{.key = "GamepadButton.xbox.leftTrigger", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "leftTrigger", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's rightTrigger control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_rightTrigger{.key = "GamepadButton.xbox.rightTrigger", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "rightTrigger", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's leftShoulder control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_leftShoulder{.key = "GamepadButton.xbox.leftShoulder", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "leftShoulder", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's rightShoulder control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_rightShoulder{.key = "GamepadButton.xbox.rightShoulder", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "rightShoulder", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's dpad control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_dpad{.key = "GamepadButton.xbox.dpad", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "dpad", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's dpadUp control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_dpadUp{.key = "GamepadButton.xbox.dpadUp", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "dpadUp", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's dpadDown control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_dpadDown{.key = "GamepadButton.xbox.dpadDown", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "dpadDown", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's dpadLeft control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_dpadLeft{.key = "GamepadButton.xbox.dpadLeft", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "dpadLeft", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's dpadRight control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_dpadRight{.key = "GamepadButton.xbox.dpadRight", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "dpadRight", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's leftStick control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_leftStick{.key = "GamepadButton.xbox.leftStick", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "leftStick", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's rightStick control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_rightStick{.key = "GamepadButton.xbox.rightStick", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "rightStick", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's leftStickPress control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_leftStickPress{.key = "GamepadButton.xbox.leftStickPress", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "leftStickPress", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The Xbox set's Sprite for the gamepad's rightStickPress control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_xbox_rightStickPress{.key = "GamepadButton.xbox.rightStickPress", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "rightStickPress", .type = "Sprite", .within = "GamepadButton.xboxIcons"};
+/// The PS5 set's Sprite for the gamepad's buttonSouth control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_buttonSouth{.key = "GamepadButton.ps5.buttonSouth", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "buttonSouth", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's buttonNorth control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_buttonNorth{.key = "GamepadButton.ps5.buttonNorth", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "buttonNorth", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's buttonEast control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_buttonEast{.key = "GamepadButton.ps5.buttonEast", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "buttonEast", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's buttonWest control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_buttonWest{.key = "GamepadButton.ps5.buttonWest", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "buttonWest", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's startButton control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_startButton{.key = "GamepadButton.ps5.startButton", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "startButton", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's selectButton control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_selectButton{.key = "GamepadButton.ps5.selectButton", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "selectButton", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's leftTrigger control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_leftTrigger{.key = "GamepadButton.ps5.leftTrigger", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "leftTrigger", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's rightTrigger control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_rightTrigger{.key = "GamepadButton.ps5.rightTrigger", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "rightTrigger", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's leftShoulder control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_leftShoulder{.key = "GamepadButton.ps5.leftShoulder", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "leftShoulder", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's rightShoulder control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_rightShoulder{.key = "GamepadButton.ps5.rightShoulder", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "rightShoulder", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's dpad control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_dpad{.key = "GamepadButton.ps5.dpad", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "dpad", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's dpadUp control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_dpadUp{.key = "GamepadButton.ps5.dpadUp", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "dpadUp", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's dpadDown control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_dpadDown{.key = "GamepadButton.ps5.dpadDown", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "dpadDown", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's dpadLeft control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_dpadLeft{.key = "GamepadButton.ps5.dpadLeft", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "dpadLeft", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's dpadRight control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_dpadRight{.key = "GamepadButton.ps5.dpadRight", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "dpadRight", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's leftStick control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_leftStick{.key = "GamepadButton.ps5.leftStick", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "leftStick", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's rightStick control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_rightStick{.key = "GamepadButton.ps5.rightStick", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "rightStick", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's leftStickPress control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_leftStickPress{.key = "GamepadButton.ps5.leftStickPress", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "leftStickPress", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+/// The PS5 set's Sprite for the gamepad's rightStickPress control: GamepadIcons' field of that name, read inside
+/// the widget. Inferred: the struct's field name.
+inline constexpr pm::sdk::EntryDesc GamepadButton_ps5_rightStickPress{.key = "GamepadButton.ps5.rightStickPress", .kind = pm::sdk::Kind::Field,
+    .owner = "GamepadButton", .name = "rightStickPress", .type = "Sprite", .within = "GamepadButton.ps5Icons"};
+
+inline constexpr const char* GamepadButton_CheckInputDevice_params[] = {"bool", "PlayerInput"};
+
+/// Shows or hides the widget's glyph for the input the player uses: hidden (its Image clear) while
+/// InputDevices.UsesKeyboard answers true for the PlayerInput it is given or while VR runs, else the sprite for the
+/// action's gamepad binding from the PS5 or the Xbox set. The bool overload, which the other calls. Decompiled.
+inline constexpr pm::sdk::EntryDesc GamepadButton_CheckInputDevice{
+    .key = "GamepadButton.CheckInputDevice", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GamepadButton", .name = "CheckInputDevice",
+    .params = GamepadButton_CheckInputDevice_params};
+
+/// The Input System's component for one player's input (Unity.InputSystem). Inferred: the Input System's documented
+/// API.
+inline constexpr pm::sdk::EntryDesc PlayerInput{.key = "PlayerInput", .name = "PlayerInput",
+                                                .assembly = "Unity.InputSystem", .ns = "UnityEngine.InputSystem"};
+
+inline constexpr const char* InputDevices_PlayerInput[] = {"PlayerInput"};
+
+/// The game's checks of which input a player uses (Assembly-CSharp, global namespace), a static class: the only class
+/// that declares a static bool method of one PlayerInput. Each check answers false while VR runs, and otherwise
+/// compares the PlayerInput's current control scheme (PlayerInput.currentControlScheme) with one of the game's scheme
+/// names. Name obfuscated. Decompiled.
+inline constexpr pm::sdk::EntryDesc InputDevices{.key = "InputDevices", .confidence = pm::sdk::Confidence::Decompiled,
+                                                 .assembly = "Assembly-CSharp", .ns = "", .type = "bool",
+                                                 .params = InputDevices_PlayerInput};
+
+// Of the class's two static bool(PlayerInput) checks, the glyph widget calls only the keyboard one.
+inline constexpr pm::sdk::Fact InputDevices_UsesKeyboard_facts[] = {
+    {.is = pm::sdk::Fact::Is::CalledBy, .method = "GamepadButton.CheckInputDevice"}};
+
+/// Whether the player uses keyboard and mouse: false while VR runs, else whether the PlayerInput's current control
+/// scheme is the game's keyboard scheme. The game's glyph widgets hide their gamepad glyph while it answers true
+/// (GamepadButton.CheckInputDevice). Static. The player's own PlayerInput is LocalPlayer.playerInput. Decompiled.
+inline constexpr pm::sdk::EntryDesc InputDevices_UsesKeyboard{
+    .key = "InputDevices.UsesKeyboard", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .flags = pm::sdk::kStatic, .owner = "InputDevices", .type = "bool", .params = InputDevices_PlayerInput,
+    .facts = InputDevices_UsesKeyboard_facts};
+
 /// One row of the game's keybinds menu (Assembly-CSharp, global namespace): Unity's rebinding sample. Its button starts
 /// an interactive rebind of the action it references, and it shows the binding's current key. Its fields keep their
 /// real names. Inferred: from the class dump.
@@ -446,6 +679,16 @@ inline constexpr pm::sdk::EntryDesc Gamepad_get_current{.key = "Gamepad.get_curr
 inline constexpr pm::sdk::EntryDesc Gamepad_get_rightStick{.key = "Gamepad.get_rightStick",
                                                           .kind = pm::sdk::Kind::Method, .owner = "Gamepad",
                                                           .name = "get_rightStick"};
+
+/// The left shoulder button (LB, L1), a ButtonControl. Inferred: the Input System's documented property getter.
+inline constexpr pm::sdk::EntryDesc Gamepad_get_leftShoulder{.key = "Gamepad.get_leftShoulder",
+                                                            .kind = pm::sdk::Kind::Method, .owner = "Gamepad",
+                                                            .name = "get_leftShoulder"};
+
+/// The right shoulder button (RB, R1), a ButtonControl. Inferred: the Input System's documented property getter.
+inline constexpr pm::sdk::EntryDesc Gamepad_get_rightShoulder{.key = "Gamepad.get_rightShoulder",
+                                                             .kind = pm::sdk::Kind::Method, .owner = "Gamepad",
+                                                             .name = "get_rightShoulder"};
 
 }  // namespace pm::map
 
@@ -588,6 +831,98 @@ struct InputActionReference {
   static constexpr pm::api::Method<pm::map::InputActionReference_get_action, void*(void*)> get_action{};
 };
 
+/// The game's checks of which input a player uses.
+struct InputDevices {
+  /// UsesKeyboard(playerInput): whether that player uses keyboard and mouse (false while VR runs). Unresolved: false.
+  static constexpr pm::api::Method<pm::map::InputDevices_UsesKeyboard, bool(void*)> UsesKeyboard{};
+};
+
+/// A widget showing one action's gamepad glyph. `button` below is the GamepadButton.
+struct GamepadButton {
+  /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::GamepadButton> type{};
+  /// The action whose glyph it shows, an InputActionReference: action.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_action, void*> action{};
+  /// The Image it shows the glyph on: image.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_image, void*> image{};
+  /// The Xbox set's Sprite for the gamepad's buttonSouth control (GamepadIcons): xbox_buttonSouth.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonSouth, void*> xbox_buttonSouth{};
+  /// The Xbox set's Sprite for the gamepad's buttonNorth control (GamepadIcons): xbox_buttonNorth.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonNorth, void*> xbox_buttonNorth{};
+  /// The Xbox set's Sprite for the gamepad's buttonEast control (GamepadIcons): xbox_buttonEast.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonEast, void*> xbox_buttonEast{};
+  /// The Xbox set's Sprite for the gamepad's buttonWest control (GamepadIcons): xbox_buttonWest.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonWest, void*> xbox_buttonWest{};
+  /// The Xbox set's Sprite for the gamepad's startButton control (GamepadIcons): xbox_startButton.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_startButton, void*> xbox_startButton{};
+  /// The Xbox set's Sprite for the gamepad's selectButton control (GamepadIcons): xbox_selectButton.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_selectButton, void*> xbox_selectButton{};
+  /// The Xbox set's Sprite for the gamepad's leftTrigger control (GamepadIcons): xbox_leftTrigger.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftTrigger, void*> xbox_leftTrigger{};
+  /// The Xbox set's Sprite for the gamepad's rightTrigger control (GamepadIcons): xbox_rightTrigger.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightTrigger, void*> xbox_rightTrigger{};
+  /// The Xbox set's Sprite for the gamepad's leftShoulder control (GamepadIcons): xbox_leftShoulder.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftShoulder, void*> xbox_leftShoulder{};
+  /// The Xbox set's Sprite for the gamepad's rightShoulder control (GamepadIcons): xbox_rightShoulder.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightShoulder, void*> xbox_rightShoulder{};
+  /// The Xbox set's Sprite for the gamepad's dpad control (GamepadIcons): xbox_dpad.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpad, void*> xbox_dpad{};
+  /// The Xbox set's Sprite for the gamepad's dpadUp control (GamepadIcons): xbox_dpadUp.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadUp, void*> xbox_dpadUp{};
+  /// The Xbox set's Sprite for the gamepad's dpadDown control (GamepadIcons): xbox_dpadDown.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadDown, void*> xbox_dpadDown{};
+  /// The Xbox set's Sprite for the gamepad's dpadLeft control (GamepadIcons): xbox_dpadLeft.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadLeft, void*> xbox_dpadLeft{};
+  /// The Xbox set's Sprite for the gamepad's dpadRight control (GamepadIcons): xbox_dpadRight.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadRight, void*> xbox_dpadRight{};
+  /// The Xbox set's Sprite for the gamepad's leftStick control (GamepadIcons): xbox_leftStick.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftStick, void*> xbox_leftStick{};
+  /// The Xbox set's Sprite for the gamepad's rightStick control (GamepadIcons): xbox_rightStick.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightStick, void*> xbox_rightStick{};
+  /// The Xbox set's Sprite for the gamepad's leftStickPress control (GamepadIcons): xbox_leftStickPress.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftStickPress, void*> xbox_leftStickPress{};
+  /// The Xbox set's Sprite for the gamepad's rightStickPress control (GamepadIcons): xbox_rightStickPress.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightStickPress, void*> xbox_rightStickPress{};
+  /// The PS5 set's Sprite for the gamepad's buttonSouth control (GamepadIcons): ps5_buttonSouth.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonSouth, void*> ps5_buttonSouth{};
+  /// The PS5 set's Sprite for the gamepad's buttonNorth control (GamepadIcons): ps5_buttonNorth.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonNorth, void*> ps5_buttonNorth{};
+  /// The PS5 set's Sprite for the gamepad's buttonEast control (GamepadIcons): ps5_buttonEast.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonEast, void*> ps5_buttonEast{};
+  /// The PS5 set's Sprite for the gamepad's buttonWest control (GamepadIcons): ps5_buttonWest.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonWest, void*> ps5_buttonWest{};
+  /// The PS5 set's Sprite for the gamepad's startButton control (GamepadIcons): ps5_startButton.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_startButton, void*> ps5_startButton{};
+  /// The PS5 set's Sprite for the gamepad's selectButton control (GamepadIcons): ps5_selectButton.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_selectButton, void*> ps5_selectButton{};
+  /// The PS5 set's Sprite for the gamepad's leftTrigger control (GamepadIcons): ps5_leftTrigger.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftTrigger, void*> ps5_leftTrigger{};
+  /// The PS5 set's Sprite for the gamepad's rightTrigger control (GamepadIcons): ps5_rightTrigger.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightTrigger, void*> ps5_rightTrigger{};
+  /// The PS5 set's Sprite for the gamepad's leftShoulder control (GamepadIcons): ps5_leftShoulder.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftShoulder, void*> ps5_leftShoulder{};
+  /// The PS5 set's Sprite for the gamepad's rightShoulder control (GamepadIcons): ps5_rightShoulder.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightShoulder, void*> ps5_rightShoulder{};
+  /// The PS5 set's Sprite for the gamepad's dpad control (GamepadIcons): ps5_dpad.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpad, void*> ps5_dpad{};
+  /// The PS5 set's Sprite for the gamepad's dpadUp control (GamepadIcons): ps5_dpadUp.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadUp, void*> ps5_dpadUp{};
+  /// The PS5 set's Sprite for the gamepad's dpadDown control (GamepadIcons): ps5_dpadDown.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadDown, void*> ps5_dpadDown{};
+  /// The PS5 set's Sprite for the gamepad's dpadLeft control (GamepadIcons): ps5_dpadLeft.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadLeft, void*> ps5_dpadLeft{};
+  /// The PS5 set's Sprite for the gamepad's dpadRight control (GamepadIcons): ps5_dpadRight.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadRight, void*> ps5_dpadRight{};
+  /// The PS5 set's Sprite for the gamepad's leftStick control (GamepadIcons): ps5_leftStick.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftStick, void*> ps5_leftStick{};
+  /// The PS5 set's Sprite for the gamepad's rightStick control (GamepadIcons): ps5_rightStick.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightStick, void*> ps5_rightStick{};
+  /// The PS5 set's Sprite for the gamepad's leftStickPress control (GamepadIcons): ps5_leftStickPress.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftStickPress, void*> ps5_leftStickPress{};
+  /// The PS5 set's Sprite for the gamepad's rightStickPress control (GamepadIcons): ps5_rightStickPress.get(button). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightStickPress, void*> ps5_rightStickPress{};
+};
+
 /// A row of the game's keybinds menu.
 struct RebindActionUI {
   /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
@@ -611,6 +946,10 @@ struct Gamepad {
   static constexpr pm::api::Method<pm::map::Gamepad_get_current, void*()> get_current{};
   /// get_rightStick(pad): its right stick, a StickControl (read with Vector2Control::ReadValue). Unresolved: null.
   static constexpr pm::api::Method<pm::map::Gamepad_get_rightStick, void*(void*)> get_rightStick{};
+  /// get_leftShoulder(pad): LB, a ButtonControl. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Gamepad_get_leftShoulder, void*(void*)> get_leftShoulder{};
+  /// get_rightShoulder(pad): RB, a ButtonControl. Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Gamepad_get_rightShoulder, void*(void*)> get_rightShoulder{};
 };
 
 /// A group of input actions. `map` below is the InputActionMap.
@@ -652,6 +991,8 @@ struct Mouse {
   static constexpr pm::api::Method<pm::map::Mouse_get_current, void*()> get_current{};
   /// get_leftButton(mouse): its left button, a ButtonControl. Unresolved: null.
   static constexpr pm::api::Method<pm::map::Mouse_get_leftButton, void*(void*)> get_leftButton{};
+  /// get_scroll(mouse): its scroll wheel, a Vector2Control (read with Vector2Control::ReadValue). Unresolved: null.
+  static constexpr pm::api::Method<pm::map::Mouse_get_scroll, void*(void*)> get_scroll{};
 };
 
 /// A pointer device, the mouse's base. `pointer` below is the Pointer.

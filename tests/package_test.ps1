@@ -88,10 +88,14 @@ try {
         Set-Content -LiteralPath (Join-Path $fixture 'build.ps1') -Value "exit $buildExit"
         $fakeCtest = Join-Path $fixture 'ctest.cmd'
         Set-Content -LiteralPath $fakeCtest -Encoding ASCII -Value "@exit /b $testExit"
+        # The emote tools tests pass in the fixture, so only the guard under test can stop the package.
+        $fakeDotnet = Join-Path $fixture 'dotnet.cmd'
+        Set-Content -LiteralPath $fakeDotnet -Encoding ASCII -Value '@exit /b 0'
         $originalPath = $env:PATH
         try {
             $env:PATH = $fixture + ';' + $originalPath
             if ((Get-Command ctest).Source -ne $fakeCtest) { throw 'The fixture did not isolate the CTest command.' }
+            if ((Get-Command dotnet).Source -ne $fakeDotnet) { throw 'The fixture did not isolate the dotnet command.' }
             Assert-PackageFailure $fixture "The $failure failed"
 
             # Removing either real exit-code guard must let an invalid release through and fail the assertion.

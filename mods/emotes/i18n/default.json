@@ -4,12 +4,31 @@
 {
   "emotes.key-label": "Emote wheel",
   "emotes.volume-label": "Music",
-  "emotes.name.0": "Disco Fever",
-  "emotes.name.1": "Electro Swing",
-  "emotes.name.2": "Floss",
-  "emotes.name.3": "Groove Jam",
-  "emotes.name.4": "Orange Justice",
-  "emotes.name.5": "Scenario",
-  "emotes.name.6": "Smooth Moves",
-  "emotes.name.7": "Take The L"
+  "emotes.pack-unusable": "PM_TEXT_TODO",  // PM_TEXT_TODO
+  "emotes.page": "{{page}} / {{pages}}",  // the page number over the wheel (the user's, 2026-11-13)
+  "emotes.join": "Join",  // the join prompt over a synced emote's dancer (the user's word, 2026-11-13)
+  "emotes.name.disco-fever": "Disco Fever",
+  "emotes.name.electro-swing": "Electro Swing",
+  "emotes.name.floss": "Floss",
+  "emotes.name.groove-jam": "Groove Jam",
+  "emotes.name.orange-justice": "Orange Justice",
+  "emotes.name.scenario": "Scenario",
+  "emotes.name.smooth-moves": "Smooth Moves",
+  "emotes.name.take-the-l": "Take The L",
+  "emotes.name.build-up": "Build Up",
+  "emotes.name.get-griddy": "Get Griddy",
+  "emotes.name.lavish": "Lavish",
+  "emotes.name.never-gonna": "Never Gonna",
+  "emotes.name.running-man": "Running Man",
+  "emotes.name.savor-the-w": "Savor The W",
+  "emotes.name.sprinkler": "Sprinkler",
+  "emotes.name.stride": "Stride",
+  "emotes.name.sway": "Sway",
+  "emotes.name.crackdown": "Crackdown",
+  "emotes.name.forget-me-not": "Forget Me Not",
+  "emotes.name.im-diamond": "I'm Diamond",
+  "emotes.name.monster-mash": "Monster Mash",
+  "emotes.name.say-so": "Say So",
+  "emotes.name.the-macarena": "The Macarena",
+  "emotes.name.true-heart": "True Heart"
 }

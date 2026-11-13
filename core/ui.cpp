@@ -110,6 +110,17 @@ void* create_raw_image(void* parent, const char* name, void* texture) {
 }
 
 void set_texture(void* rawImage, void* texture) { phasmo::RawImage::set_texture(rawImage, texture); }
+
+void* create_sprite_image(void* parent, const char* name, void* sprite) {
+  void* go = child(parent, name);
+  void* image = game::add_component(go, phasmo::Image::type.type_object());
+  if (!image) return nullptr;
+  phasmo::Image::set_sprite(image, sprite);
+  phasmo::Graphic::set_raycastTarget(image, false);
+  return image;
+}
+
+void set_sprite(void* image, void* sprite) { phasmo::Image::set_sprite(image, sprite); }
 void set_uv_rect(void* rawImage, Rect uv) {
   const phasmo::Rect r{uv.x, uv.y, uv.width, uv.height};
   phasmo::RawImage::set_uvRect(rawImage, &r);

@@ -3,8 +3,10 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cstring>
 #include <atomic>
 #include <cstddef>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <set>
@@ -36,6 +38,7 @@
 #include "menu_panel.h"
 #include "mod_deps.h"
 #include "mods.h"
+#include "mod_assets.h"
 #include "mod_ids.h"
 #include "mod_session.h"
 #include "mods_panel.h"
@@ -350,6 +353,40 @@ const char* api_mod_name(const char* id) {
     return id ? mods::name_of(modid::migrated_id(id).c_str()) : nullptr;  // a bundled mod's old id means that mod
   });
 }
+// The texts content_packs hands out, one entry per pack id, never replaced or removed: the host contract says they last
+// until the mods stop, and a pack's id, manifest and copied paths stay the same for the whole game process. A map's
+// nodes never move, so the pointers stay valid across later calls.
+struct PackTexts {
+  std::string id, name, version;
+  std::wstring folder, text;
+};
+std::map<std::string, PackTexts> g_packTexts;
+uint32_t api_content_packs(const char* modId, PmContentPack* out, uint32_t max, uint32_t itemSize) {
+  return host::contained("suite", "listing a mod's content packs", uint32_t{0}, [&]() -> uint32_t {
+    // A caller built for 2.6 passes 2.6's size; the host fills each entry up to the caller's size, at most its own.
+    if (!modId || itemSize < PM_CONTENT_PACK_SIZE_2_6) return 0;
+    const size_t filled = std::min<size_t>(itemSize, sizeof(PmContentPack));
+    const std::vector<const mods::Mod*> packs = mods::packs_for(modid::migrated_id(modId));
+    for (uint32_t i = 0; i < packs.size(); ++i) {
+      const mods::Mod* m = packs[i];
+      std::filesystem::path text = m->dll;
+      text.replace_extension(L".i18n.json");
+      const PackTexts& t = g_packTexts.try_emplace(m->manifest.id, PackTexts{m->manifest.id, m->manifest.name, m->manifest.version,
+                                                 modassets::beside_copy(m->dll).wstring(), text.wstring()}).first->second;
+      if (!out || i >= max) continue;
+      const PmContentPack entry{static_cast<uint32_t>(filled), t.id.c_str(), t.name.c_str(), t.version.c_str(),
+                                t.folder.c_str(), t.text.c_str()};
+      std::memcpy(reinterpret_cast<unsigned char*>(out) + static_cast<size_t>(i) * itemSize, &entry, filled);
+    }
+    return static_cast<uint32_t>(packs.size());
+  });
+}
+void api_content_pack_failed(const char* packId, const char* why) {
+  host::contained("suite", "noting a content pack its framework could not use", 0, [&] {
+    if (packId) mods::pack_failed(packId, why && *why ? why : "its framework could not use it");
+    return 0;
+  });
+}
 bool api_mod_entry(int32_t index, PmModEntry* out) {
   return host::contained("suite", "listing the installed mods", false, [&] { return mods::entry(index, out); });
 }
@@ -450,7 +487,7 @@ void on_host_message(int32_t sender, const uint8_t* data, size_t size) {
 bool channel_open(uint8_t channel, int32_t sender) {
   return host::contained("suite", "asking whom a mod's channel takes", false, [&] {
     for (const mods::Mod& m : mods::installed())
-      if (m.started && m.info->channel == channel)
+      if (m.started && m.info && m.info->channel == channel)
         return g_agreement.delivers(sender, hostgame::local_actor(), {m.info->id, m.build});
     return false;
   });
@@ -831,8 +868,8 @@ bool start(void* gameAssembly, void* unityPlayer, const build::Hashes& game) {
     PM_LOG("suite: the local application-data folder is unavailable; set LOCALAPPDATA and restart the game");
     return false;
   }
-  // Positional: a member added to PmHostApi after mod_entry fails this until it is given here too.
-  static_assert(offsetof(PmHostApi, mod_entry) + sizeof(PmHostApi::mod_entry) == sizeof(PmHostApi),
+  // Positional: a member added to PmHostApi after content_pack_failed fails this until it is given here too.
+  static_assert(offsetof(PmHostApi, content_pack_failed) + sizeof(PmHostApi::content_pack_failed) == sizeof(PmHostApi),
                 "g_api lists every PmHostApi member");
   g_api = {PMMOD_API_VERSION, gameAssembly, unityPlayer, g_dataDirectory.c_str(),
            &api_log, &api_create_hook, &api_enable_hooks, &api_send, &api_set_receiver,
@@ -852,7 +889,8 @@ bool start(void* gameAssembly, void* unityPlayer, const build::Hashes& game) {
            &api_room_agrees, &api_collection_count, &api_array_element_size, &api_list_remove_at,
            &api_content_player_move, &api_content_interaction_lost, &api_content_roll_taken, &api_steer_agent,
            &api_abandon_ghost_spawn, &api_dictionary_int_entries, &api_mod_started, &api_show_message,
-           &api_content_flags_of, &api_mod_name, &api_unity_action_new, &api_mod_entry};
+           &api_content_flags_of, &api_mod_name, &api_unity_action_new, &api_mod_entry, &api_content_packs,
+           &api_content_pack_failed};
   // The host's own game side of content reaches the game through the map, like a mod: the game API
   // bound to the host's contract. Without every entry it needs, custom content stays off.
   std::string unbound;

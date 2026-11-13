@@ -1,0 +1,12 @@
+{
+  "id": "example.emote-pack",
+  "name": "Example Emote Pack",
+  "author": "Example",
+  "version": "1.0.0",
+  "description": "PM_TEXT_TODO",
+  "website": "",
+  "recordsVoice": false,
+  "contentPackFor": { "id": "phasmomods.emotes", "minimumVersion": "1.0.0" },
+  "dependencies": [],
+  "incompatibilities": []
+}

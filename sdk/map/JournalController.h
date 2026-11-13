@@ -337,10 +337,12 @@ inline constexpr pm::sdk::EntryDesc JournalController_OpenCloseJournal{
 inline constexpr pm::sdk::Fact JournalController_open_facts[] = {
     {.is = pm::sdk::Fact::Is::Stores, .method = "JournalController.OpenCloseJournal"}};
 
-/// Whether the journal is open: the bool OpenCloseJournal flips. It is also the gate on the investigator's hands:
-/// the input handlers behind the interact and primary-use actions (PCPropGrab's) do nothing while the local player's
-/// journal (LocalPlayer.journalController) has it set, which is why a click on the journal's pages never uses what
-/// the investigator looks at. A mod whose own screen is up can raise it for the same effect and put it back after;
+/// Whether the journal is open: the bool OpenCloseJournal flips. The pause screen is a page of the same journal (the
+/// journal holds the PauseMenuController, and PauseMenuController.Resume closes the journal), so this is set while the
+/// pause screen is open too. pm::api::journal::open() reads this client's own. It is also the gate on the investigator's
+/// hands: the input handlers behind the interact and primary-use actions (PCPropGrab's) do nothing while the local
+/// player's journal (LocalPlayer.journalController) has it set, which is why a click on the journal's pages never uses
+/// what the investigator looks at. A mod whose own screen is up can raise it for the same effect and put it back after;
 /// setting the field alone sends nothing and shows no book. Decompiled.
 inline constexpr pm::sdk::EntryDesc JournalController_open{.key = "JournalController.open", .kind = pm::sdk::Kind::Field,
                                                            .confidence = pm::sdk::Confidence::Decompiled,

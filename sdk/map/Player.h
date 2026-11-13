@@ -171,6 +171,56 @@ inline constexpr pm::sdk::EntryDesc LocalPCPlayer_canvas{.key = "LocalPCPlayer.c
                                                          .owner = "LocalPCPlayer",
                                                          .type = "@PCCanvas"};
 
+/// The PC rig's movement controller, the local player's movement brain (Assembly-CSharp, global namespace), a
+/// MonoBehaviour: it moves the local PC investigator from the Move input. Decompiled.
+inline constexpr pm::sdk::EntryDesc FirstPersonController{.key = "FirstPersonController",
+                                                          .confidence = pm::sdk::Confidence::Decompiled,
+                                                          .name = "FirstPersonController",
+                                                          .assembly = "Assembly-CSharp", .ns = ""};
+
+/// The rig's movement controller: LocalPCPlayer's one FirstPersonController field. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPCPlayer_firstPersonController{
+    .key = "LocalPCPlayer.firstPersonController", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPCPlayer", .type = "FirstPersonController"};
+
+/// The Move input as the game last read it, a Vector2 (x right, y forward): FirstPersonController's one Vector2
+/// field. FirstPersonController.Move, the Move action's callback, stores the action's value there, scaled down to
+/// length 1 when longer, and zero when the action is cancelled or both axes are inside a small dead zone. So W alone
+/// reads (0, 1) and up on the move stick reads its tilt, with the player's own rebinding applied. Local PC player
+/// only; the VR rig moves without it. Decompiled.
+inline constexpr pm::sdk::EntryDesc FirstPersonController_moveInput{
+    .key = "FirstPersonController.moveInput", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "FirstPersonController", .type = "Vector2"};
+
+/// The Move action's callback (an InputAction.CallbackContext): stores the input in FirstPersonController.moveInput
+/// as described there. Decompiled.
+inline constexpr pm::sdk::EntryDesc FirstPersonController_Move{.key = "FirstPersonController.Move",
+                                                               .kind = pm::sdk::Kind::Method,
+                                                               .confidence = pm::sdk::Confidence::Decompiled,
+                                                               .owner = "FirstPersonController", .name = "Move"};
+
+/// The Run action's callback (an InputAction.CallbackContext): sets FirstPersonController.running. In the game's hold
+/// mode it sets it while the action is in any phase but Canceled, so it holds while Run is held; in its toggle mode
+/// (FirstPersonController.get_m_ToggleSprint) it flips it each time the action is Performed. Then it invokes one of the
+/// controller's UnityEvents. Decompiled.
+inline constexpr pm::sdk::EntryDesc FirstPersonController_OnRun{.key = "FirstPersonController.OnRun",
+                                                                .kind = pm::sdk::Kind::Method,
+                                                                .confidence = pm::sdk::Confidence::Decompiled,
+                                                                .owner = "FirstPersonController", .name = "OnRun"};
+
+// OnRun stores one bool of the controller, and the speed update reads it through the rig's controller field.
+inline constexpr pm::sdk::Fact FirstPersonController_running_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "FirstPersonController.OnRun"},
+    {.is = pm::sdk::Fact::Is::Loads, .method = "LocalPCPlayer.UpdatePlayerSpeed"}};
+
+/// Whether the player asks to sprint: Run held, or toggled on in the game's toggle sprint mode
+/// (FirstPersonController.OnRun sets it). Not the sprint itself: LocalPCPlayer.UpdatePlayerSpeed gives the sprint
+/// speed only while this is set, sprinting is allowed and PlayerStamina.canSprint is set (pm::api::movement::sprinting
+/// reads the three). On the player's own client only. Decompiled.
+inline constexpr pm::sdk::EntryDesc FirstPersonController_running{
+    .key = "FirstPersonController.running", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "FirstPersonController", .type = "bool", .facts = FirstPersonController_running_facts};
+
 /// The local player's HUD (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from the
 /// class dump.
 inline constexpr pm::sdk::EntryDesc PCCanvas{.key = "PCCanvas", .name = "PCCanvas", .assembly = "Assembly-CSharp",
@@ -203,12 +253,6 @@ inline constexpr pm::sdk::EntryDesc PCCanvas_PausePlayerInPlace{
     .key = "PCCanvas.PausePlayerInPlace", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "PCCanvas", .name = "PausePlayerInPlace", .params = PCCanvas_bool};
 
-/// The local player's movement brain (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from
-/// the class dump.
-inline constexpr pm::sdk::EntryDesc FirstPersonController{.key = "FirstPersonController",
-                                                          .name = "FirstPersonController",
-                                                          .assembly = "Assembly-CSharp", .ns = ""};
-
 inline constexpr const char* FirstPersonController_bool[] = {"bool"};
 
 /// EnableMovement(on): the local player's walk-and-look switch. Decompiled: it writes its bool into two
@@ -226,7 +270,8 @@ inline constexpr pm::sdk::EntryDesc FirstPersonController_EnableMovement{
 /// slide it along what it meets, applies gravity (Physics.gravity scaled by its gravity multiplier) while it is
 /// not grounded, and then writes the Rigidbody's position and rotation back to its transform and zeroes the
 /// Rigidbody's velocities. So a write to its transform's position is where the next step starts (a teleport), and
-/// while the behaviour is disabled nothing moves the investigator but such writes: no walls, floors or gravity.
+/// while the behaviour is disabled nothing moves the investigator but such writes: no walls, floors or gravity. Its
+/// capsule (a CapsuleCollider) moves against a layer mask of its own (PhysicsCharacterController.collisionMask).
 inline constexpr pm::sdk::EntryDesc PhysicsCharacterController{.key = "PhysicsCharacterController",
                                                                .confidence = pm::sdk::Confidence::Decompiled,
                                                                .name = "PhysicsCharacterController",
@@ -410,15 +455,16 @@ inline constexpr pm::sdk::EntryDesc LocalPlayer_walkSpeed{.key = "LocalPlayer.wa
 
 /// The rig's sprinting speed in metres a second, before the speed multiplier: a serialized float the
 /// prefab sets (the constructor's default is 3.0). LocalPCPlayer.UpdatePlayerSpeed takes it only while the
-/// sprint input is held, sprinting is allowed (Difficulty.sprinting not 0, or no contract) and the stamina
+/// player asks to sprint (FirstPersonController.running), sprinting is allowed (Difficulty.sprinting not 0, or no
+/// GameController.instance) and the stamina
 /// can sprint (PlayerStamina.canSprint); it holds the value even when sprinting is off. Decompiled.
 inline constexpr pm::sdk::EntryDesc LocalPlayer_sprintSpeed{
     .key = "LocalPlayer.sprintSpeed", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "LocalPlayer", .type = "float", .facts = LocalPlayer_sprintSpeed_facts};
 
 /// Applies the rig's speed to its FirstPersonController, on the local player's client: the sprint speed
-/// while the sprint input is held, sprinting is allowed (Difficulty.sprinting is not 0, or no contract is
-/// running) and PlayerStamina.canSprint is set, otherwise the walk speed; times the speed multiplier, which
+/// while FirstPersonController.running is set, sprinting is allowed (Difficulty.sprinting of
+/// LevelValues.difficulty is not 0, or no GameController.instance exists) and PlayerStamina.canSprint is set, otherwise the walk speed; times the speed multiplier, which
 /// in a contract it skips while LocalPlayer.isDead is set. LocalPlayer.Start and the multiplier's setters run
 /// it. The VR rig's stamina applies its speed instead (VRStamina.Update). Decompiled.
 inline constexpr pm::sdk::EntryDesc LocalPCPlayer_UpdatePlayerSpeed{
@@ -503,6 +549,13 @@ inline constexpr pm::sdk::EntryDesc VRStamina{.key = "VRStamina", .confidence = 
 inline constexpr pm::sdk::EntryDesc VRStamina_Update{.key = "VRStamina.Update", .kind = pm::sdk::Kind::Method,
                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                      .owner = "VRStamina", .name = "Update"};
+
+/// The rig's input component, a PlayerInput (Unity.InputSystem): LocalPlayer's one field of that type. The game's
+/// input checks (InputDevices) read it. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_playerInput{.key = "LocalPlayer.playerInput",
+                                                            .kind = pm::sdk::Kind::Field,
+                                                            .confidence = pm::sdk::Confidence::Decompiled,
+                                                            .owner = "LocalPlayer", .type = "PlayerInput"};
 
 /// The rig's stamina, a PlayerStamina: LocalPlayer's one field of that type. Decompiled.
 inline constexpr pm::sdk::EntryDesc LocalPlayer_stamina{.key = "LocalPlayer.stamina", .kind = pm::sdk::Kind::Field,
@@ -849,7 +902,7 @@ inline constexpr pm::sdk::EntryDesc MultiplayerController_spawnPoints{
 inline constexpr const char* LocalPlayer_TeleportPlayer_params[] = {"Vector3"};
 
 /// TeleportPlayer(position): the game's own move of the local investigator, which PCPlayer.Teleport (the PC body of
-/// the abstract Player.Teleport) runs. Decompiled: it raises a flag of the rig's, switches the rig's
+/// the abstract Player.Teleport) runs, as does the training room's hunt (TrainingHuntRoom). Decompiled: it raises a flag of the rig's, switches the rig's
 /// PhysicsCharacterController off, sets the rig's own transform (the root the prefab was made at) to the position,
 /// and switches the controller back on, so it also undoes a mod's switching that controller off. Local; it sends
 /// nothing. Decompiled.
@@ -935,7 +988,13 @@ inline constexpr pm::sdk::EntryDesc LevelRoom_GetPlayersInRoom{
 inline constexpr pm::sdk::EntryDesc SoundController{.key = "SoundController", .confidence = pm::sdk::Confidence::Decompiled, .name = "SoundController",
                                           .assembly = "Assembly-CSharp", .ns = ""};
 
-/// The audio group a Player's sounds go through, by where the player is. It reads Network.GetPlayerFromPhotonPlayer's answer.
+/// The mixer group a player's own sounds go through: the group of the floor (FloorMixer) whose snapshot is that player's
+/// current one (PlayerAudio's, which the game moves as the player goes between rooms), else the exterior group when that
+/// snapshot is the exterior one, else the controller's other group. It takes a Photon player and finds the Player with
+/// Network.GetPlayerFromPhotonPlayer. The game routes a player's footsteps (FootstepController.AttemptPlaySound),
+/// equipment sounds (Equipment.PlayOnOffAudio) and the music box's song through it, so a player standing on stairs is
+/// heard as on the floor the game has them on, where SoundController.GetFloorAudioSnapshot of the same point may pick the
+/// floor above. Decompiled.
 inline constexpr pm::sdk::EntryDesc SoundController_GetPlayersAudioGroup{
     .key = "SoundController.GetPlayersAudioGroup", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "SoundController", .name = "GetPlayersAudioGroup"};
@@ -1095,6 +1154,78 @@ inline constexpr pm::sdk::EntryDesc PCPropGrab_ParentItemOnLocalPlayer{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "PCPropGrab", .name = "ParentItemOnLocalPlayer",
     .params = PCPropGrab_PhotonObjectInteract};
 
+inline constexpr const char* Player_Vector3[] = {"Vector3"};
+
+/// Moves the local VR rig to a point, on this client only: it sets the position of the player's own LocalPlayer (the
+/// rig's transform, as LocalPlayer.TeleportPlayer does on PC, without switching the controller off). No RPC.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc VRPlayer_Teleport{.key = "VRPlayer.Teleport", .kind = pm::sdk::Kind::Method,
+                                                      .confidence = pm::sdk::Confidence::Decompiled,
+                                                      .owner = "VRPlayer", .name = "Teleport",
+                                                      .params = Player_Vector3};
+
+/// The rig's movement controller, a PhysicsCharacterController: LocalPlayer's one field of that type, which
+/// LocalPlayer.TeleportPlayer switches off for the move. Decompiled.
+inline constexpr pm::sdk::EntryDesc LocalPlayer_characterController{
+    .key = "LocalPlayer.characterController", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "LocalPlayer", .type = "@PhysicsCharacterController"};
+
+/// Its Awake: it works out the controller's collision mask from its Rigidbody's layer and stores it
+/// (PhysicsCharacterController.collisionMask). Decompiled.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_Awake{
+    .key = "PhysicsCharacterController.Awake", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PhysicsCharacterController", .name = "Awake"};
+
+// Of the controller's three LayerMask fields, Awake stores only the collision mask (the door and ground masks are set
+// in the prefab).
+inline constexpr pm::sdk::Fact PhysicsCharacterController_collisionMask_facts[] = {
+    {.is = pm::sdk::Fact::Is::Stores, .method = "PhysicsCharacterController.Awake"}};
+
+/// The layers the player's capsule collides with as it moves, a LayerMask (read as its int): what blocks the player.
+/// Awake works it out from the Rigidbody's layer. Decompiled.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_collisionMask{
+    .key = "PhysicsCharacterController.collisionMask", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PhysicsCharacterController", .type = "LayerMask",
+    .facts = PhysicsCharacterController_collisionMask_facts};
+
+/// The layers the player stands on, a LayerMask (read as its int). Inferred: the property's name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_groundLayers{
+    .key = "PhysicsCharacterController.get_groundLayers", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_groundLayers"};
+
+/// The player's capsule radius, metres. Inferred: the property's name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_radius{
+    .key = "PhysicsCharacterController.get_radius", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_radius"};
+/// The player's capsule height, metres. Inferred: the property's name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_height{
+    .key = "PhysicsCharacterController.get_height", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_height"};
+/// The player's capsule centre, local to the rig. Inferred: the property's name.
+inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_center{
+    .key = "PhysicsCharacterController.get_center", .kind = pm::sdk::Kind::Method,
+    .owner = "PhysicsCharacterController", .name = "get_center"};
+
+/// The PC interact's layer mask (read as its int): PCPropGrab.OnInteract's step casts a ray 1.8 m (a constant of its
+/// code) from the centre of PCPropGrab.playerCam on these layers, triggers ignored, and acts only on what it hits that
+/// has a PhotonObjectInteract, or a ChildPhotonInteract leading to one (a door, a light switch, an item). Anything
+/// else, such as another player, gets nothing. Decompiled.
+inline constexpr pm::sdk::EntryDesc PCPropGrab_mask{.key = "PCPropGrab.mask", .kind = pm::sdk::Kind::Field,
+                                                    .confidence = pm::sdk::Confidence::Decompiled,
+                                                    .owner = "PCPropGrab", .name = "mask", .type = "LayerMask"};
+
+/// The camera the PC interact casts from, a Camera. Decompiled.
+inline constexpr pm::sdk::EntryDesc PCPropGrab_playerCam{.key = "PCPropGrab.playerCam", .kind = pm::sdk::Kind::Field,
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "PCPropGrab", .name = "playerCam", .type = "Camera"};
+
+/// A collider's link to the interactable it belongs to (Assembly-CSharp, global namespace): the PC interact follows it
+/// to the PhotonObjectInteract. Decompiled.
+inline constexpr pm::sdk::EntryDesc ChildPhotonInteract{.key = "ChildPhotonInteract",
+                                                        .confidence = pm::sdk::Confidence::Decompiled,
+                                                        .name = "ChildPhotonInteract", .assembly = "Assembly-CSharp",
+                                                        .ns = ""};
+
 /// The PC player's look on its own body (Assembly-CSharp, global namespace): in LateUpdate it bends the spine and head
 /// toward where the camera looks. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc PCLook{.key = "PCLook", .name = "PCLook", .assembly = "Assembly-CSharp", .ns = ""};
@@ -1182,9 +1313,13 @@ struct LocalPlayer {
   static constexpr pm::api::Field<pm::map::LocalPlayer_speedMultiplier, float> speedMultiplier{};
   /// Its stamina, a PlayerStamina: stamina.get(rig). Unresolved: null.
   static constexpr pm::api::Field<pm::map::LocalPlayer_stamina, void*> stamina{};
+  /// The rig's PlayerInput: playerInput.get(rig). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LocalPlayer_playerInput, void*> playerInput{};
   /// Whether its player has died, on this client only (others read Player.isDead): isDead.get(rig). Unresolved:
   /// false.
   static constexpr pm::api::Field<pm::map::LocalPlayer_isDead, bool> isDead{};
+  /// The rig's PhysicsCharacterController: characterController.get(rig). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LocalPlayer_characterController, void*> characterController{};
 };
 
 /// A player's stamina on its own client. `stamina` below is the PlayerStamina.
@@ -1291,6 +1426,8 @@ struct LocalPCPlayer {
   static constexpr pm::api::Field<pm::map::LocalPCPlayer_canvas, void*> canvas{};
   /// Its PCControls: controls.get(localPlayer). Unresolved: null.
   static constexpr pm::api::Field<pm::map::LocalPCPlayer_controls, void*> controls{};
+  /// Its movement controller: firstPersonController.get(rig). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::LocalPCPlayer_firstPersonController, void*> firstPersonController{};
   /// UpdatePlayerSpeed(player): applies its walk or sprint speed. A mod usually hooks it. Unresolved: does
   /// nothing.
   static constexpr pm::api::Method<pm::map::LocalPCPlayer_UpdatePlayerSpeed, void(void*)> UpdatePlayerSpeed{};
@@ -1304,6 +1441,18 @@ struct LocalPCPlayer {
       ResetPlayerSpeedMultiplier{};
 };
 
+/// The PC rig's movement controller. `rig` below is the FirstPersonController.
+struct FirstPersonController {
+  /// The type: klass(), is(obj). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::FirstPersonController> type{};
+  /// The Move input as the game last read it, two floats: moveInput.get(rig). Unresolved: zero.
+  static constexpr pm::api::Field<pm::map::FirstPersonController_moveInput, Vector2> moveInput{};
+  /// Whether the player asks to sprint (Run held, or toggled on): running.get(rig). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::FirstPersonController_running, bool> running{};
+  /// EnableMovement(rig, on): the walk-and-look switch. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::FirstPersonController_EnableMovement, void(void*, bool)> EnableMovement{};
+};
+
 /// The local player's HUD.
 struct PCCanvas {
   /// The type: klass(), is(obj). Unresolved: null and false.
@@ -1313,14 +1462,6 @@ struct PCCanvas {
   /// PausePlayerInPlace(canvas, paused): holds the local player still while an overlay is up, or lets them
   /// go again; the game uses it for the journal and the voice overlay. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PCCanvas_PausePlayerInPlace, void(void*, bool)> PausePlayerInPlace{};
-};
-
-/// The local player's movement brain.
-struct FirstPersonController {
-  /// The type: klass(), is(obj). Unresolved: null and false.
-  static constexpr pm::api::Type<pm::map::FirstPersonController> type{};
-  /// EnableMovement(fpc, on): the walk-and-look switch. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::FirstPersonController_EnableMovement, void(void*, bool)> EnableMovement{};
 };
 
 /// The investigator's physical step on PC: walls, floors and gravity. `controller` below is the
@@ -1336,6 +1477,17 @@ struct PhysicsCharacterController {
   /// get_CapsuleCollider(controller): the investigator's collider. Unresolved: null.
   static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_CapsuleCollider, void*(void*)>
       get_CapsuleCollider{};
+  /// What blocks the player, as an int layer mask: collisionMask.get(controller). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::PhysicsCharacterController_collisionMask, int32_t> collisionMask{};
+  /// get_groundLayers(controller): what the player stands on, as an int layer mask. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_groundLayers, int32_t(void*)>
+      get_groundLayers{};
+  /// get_radius(controller): the capsule's radius, metres. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_radius, float(void*)> get_radius{};
+  /// get_height(controller): the capsule's height, metres. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_height, float(void*)> get_height{};
+  /// get_center(controller): the capsule's centre, local to the rig. Unresolved: zero.
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_center, Vector3(void*)> get_center{};
 };
 
 /// The body's animation scripts.
@@ -1348,10 +1500,20 @@ struct PlayerCharacterAnimations {
       parentingTargetLeftHand{};
 };
 
+/// A collider's link to its interactable.
+struct ChildPhotonInteract {
+  /// The type: type_object() for GetComponent. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::ChildPhotonInteract> type{};
+};
+
 /// The PC player's hands.
 struct PCPropGrab {
   /// The type: type_object() for GetComponentInChildren. Unresolved: null.
   static constexpr pm::api::Type<pm::map::PCPropGrab> type{};
+  /// The interact ray's layers, as an int: mask.get(grab). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::PCPropGrab_mask, int32_t> mask{};
+  /// The camera the interact ray starts from: playerCam.get(grab). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::PCPropGrab_playerCam, void*> playerCam{};
   /// GetItemInCameraSlot(grab): the held item, a PhotonObjectInteract, or null. Unresolved: null.
   static constexpr pm::api::Method<pm::map::PCPropGrab_GetItemInCameraSlot, void*(void*)> GetItemInCameraSlot{};
   /// ParentItemOnLocalPlayer(grab, item): puts the item back in the camera slot. Unresolved: does nothing.
@@ -1373,6 +1535,8 @@ struct VRPlayer {
   static constexpr pm::api::Field<pm::map::VRPlayer_leftHandIK, void*> leftHandIK{};
   /// The right hand's IK target, a Transform: rightHandIK.get(player). Unresolved: null.
   static constexpr pm::api::Field<pm::map::VRPlayer_rightHandIK, void*> rightHandIK{};
+  /// Teleport(player, &point): moves the local VR rig there, on this client. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::VRPlayer_Teleport, void(void*, const Vector3*)> Teleport{};
 };
 
 /// What an investigator carries. `grab` below is a NetworkedPropGrab.
@@ -1454,6 +1618,10 @@ struct SoundController {
   /// noises take theirs. Unresolved: null.
   static constexpr pm::api::Method<pm::map::SoundController_GetFloorAudioSnapshot, void*(void*, const Vector3*)>
       GetFloorAudioSnapshot{};
+  /// GetPlayersAudioGroup(sounds, photonPlayer): the AudioMixerGroup that Photon player's own sounds play through, by
+  /// the floor the game has them on (map note). Unresolved: null.
+  static constexpr pm::api::Method<pm::map::SoundController_GetPlayersAudioGroup, void*(void*, void*)>
+      GetPlayersAudioGroup{};
   /// The shared door slam clips, an AudioClip[]: doorSlamClips.get(sounds). Unresolved: null.
   static constexpr pm::api::Field<pm::map::SoundController_doorSlamClips, void*> doorSlamClips{};
 };

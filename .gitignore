@@ -38,3 +38,7 @@
 # assets repository, and are kept there. Only each song's measured loudness (loudness.txt) is committed.
 /mods/emotes/assets/*/*.mp3
 /mods/emotes/assets/*/*.png
+
+# The emote tools test project's dotnet output.
+/tests/emote_tools/bin/
+/tests/emote_tools/obj/

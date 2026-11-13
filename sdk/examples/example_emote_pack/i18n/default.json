@@ -1,0 +1,5 @@
+// The pack's player-facing text: one entry per emote, the name the wheel shows under its icon, under the label key the
+// catalogue names. Write your own words over the placeholder; the game shows PM_TEXT_TODO until you do.
+{
+  "example-emote-pack.name.example-dance": "PM_TEXT_TODO"  // PM_TEXT_TODO
+}

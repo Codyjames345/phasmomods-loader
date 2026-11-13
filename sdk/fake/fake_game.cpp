@@ -468,6 +468,27 @@ const char* mod_name(const char* modId) {
   const auto it = modId ? g_modNames.find(std::string_view(modId)) : g_modNames.end();
   return it == g_modNames.end() ? nullptr : it->second.c_str();
 }
+// The host contract's content_packs and content_pack_failed: the packs a test gives, and the failures reported
+// (fake_game.h).
+std::vector<Pack> g_packs;
+std::vector<std::pair<std::string, std::string>> g_failedPacks;
+uint32_t content_packs(const char* modId, PmContentPack* out, uint32_t max, uint32_t itemSize) {
+  if (!modId || itemSize < sizeof(PmContentPack)) return 0;
+  uint32_t count = 0;
+  for (const Pack& p : g_packs) {
+    if (p.framework != modId) continue;
+    if (out && count < max) {
+      const PmContentPack entry{sizeof(PmContentPack), p.id.c_str(), p.name.c_str(), p.version.c_str(), p.folder.c_str(),
+                                p.text.c_str()};
+      std::memcpy(reinterpret_cast<unsigned char*>(out) + static_cast<size_t>(count) * itemSize, &entry, sizeof entry);
+    }
+    ++count;
+  }
+  return count;
+}
+void content_pack_failed(const char* packId, const char* why) {
+  if (packId) g_failedPacks.emplace_back(packId, why ? why : "");
+}
 // The host contract's show_message: every message asked for, in order (fake_game.h).
 std::vector<std::pair<std::string, std::string>> g_messages;
 void show_message(const char* title, const char* body) {
@@ -546,8 +567,8 @@ uint32_t fields_of_type(const char* typeKey, const void* obj, const char* fieldT
 // The host contract's mod_entry: the fake game installs no mods, so the list is empty.
 bool mod_entry(int32_t, PmModEntry*) { return false; }
 
-// Positional: a member added to PmHostApi after mod_entry fails this until it is given here too.
-static_assert(offsetof(PmHostApi, mod_entry) + sizeof(PmHostApi::mod_entry) == sizeof(PmHostApi),
+// Positional: a member added to PmHostApi after content_pack_failed fails this until it is given here too.
+static_assert(offsetof(PmHostApi, content_pack_failed) + sizeof(PmHostApi::content_pack_failed) == sizeof(PmHostApi),
               "kHost lists every PmHostApi member");
 const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_hook, &enable_hooks, &send,
                       &set_receiver, &peer_has_mod, &register_service, &service, &mod_game_entry, &hook_entry,
@@ -563,7 +584,8 @@ const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_ho
                       &room_agrees, &collection_count, &array_element_size, &host_list_remove_at,
                       &content_player_move, &content_interaction_lost, &content_roll_taken, &steer_agent,
                       &abandon_ghost_spawn, &dictionary_int_entries, &mod_started, &show_message,
-                      &content_flags_of, &mod_name, &unity_action_new, &mod_entry};
+                      &content_flags_of, &mod_name, &unity_action_new, &mod_entry, &content_packs,
+                      &content_pack_failed};
 
 }  // namespace
 
@@ -598,6 +620,8 @@ void reset() {
   g_dictionaries.clear();
   g_startedMods.clear();
   g_modNames.clear();
+  g_packs.clear();
+  g_failedPacks.clear();
   g_messages.clear();
   g_unityActions.clear();
   g_inSpawn = false;
@@ -731,6 +755,8 @@ void set_inside(const sdk::EntryDesc& d, int32_t depth) { g_insideDepths[d.key] 
 void spawn_running(bool running) { g_inSpawn = running; }
 int spawn_abandons() { return g_abandons; }
 void dictionary(const void* dict, std::vector<PmIntEntry> entries) { g_dictionaries[dict] = std::move(entries); }
+void content_packs(std::vector<Pack> packs) { g_packs = std::move(packs); }
+const std::vector<std::pair<std::string, std::string>>& failed_packs() { return g_failedPacks; }
 void started_mods(std::vector<std::string> ids) { g_startedMods = {ids.begin(), ids.end()}; }
 void mod_names(std::map<std::string, std::string> names) { g_modNames = {names.begin(), names.end()}; }
 const std::vector<std::pair<std::string, std::string>>& messages() { return g_messages; }

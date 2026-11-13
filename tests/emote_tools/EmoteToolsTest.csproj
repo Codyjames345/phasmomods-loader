@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../../sdk/unity/com.phasmomods.emote-tools/Editor/LoopFinder.cs" />
+    <Compile Include="../../sdk/unity/com.phasmomods.emote-tools/Editor/PackPaths.cs" />
+    <Compile Include="../../sdk/unity/com.phasmomods.emote-tools/Editor/Catalogue.cs" />
+    <Compile Include="../../sdk/unity/com.phasmomods.emote-tools/Editor/CatalogueText.cs" />
+    <Compile Include="../../sdk/unity/com.phasmomods.emote-tools/Editor/WavWriter.cs" />
+  </ItemGroup>
+
+</Project>

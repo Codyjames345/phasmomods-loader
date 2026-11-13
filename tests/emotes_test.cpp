@@ -3,14 +3,19 @@
 // examples say, the half-metre cancel, a looping song restarting with its clip, the message's bytes and the dead's rule.
 // The design is docs/superpowers/specs/2026-11-10-emotes-design.md. Run: build\emotes_test.exe
 #include <cmath>
+#include <utility>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "check.h"
-#include "emote_assets.h"
+#include "catalogue.h"
+#include "text_table.h"
 #include "emote_net.h"
 #include "emote_rule.h"
 
@@ -151,46 +156,109 @@ void a_looping_song_restarts_with_its_clip() {
 }
 
 void a_song_loops_at_its_own_points() {
-  // No loop points given: the song's loop is the clip's (start 0, the clip's length).
+  // No loop points given: the song's loop is the clip's (start 0, the clip's length), and no intro song.
   const SongLoop clipLoop{0.0f, 2.0f};
-  CHECK(song_position(1.5, clipLoop) == 1.5);
-  CHECK(std::fabs(song_position(2.5, clipLoop) - 0.5) < 1e-9);
+  CHECK(!song_position(1.5, 0.0f, clipLoop).intro);
+  CHECK(song_position(1.5, 0.0f, clipLoop).seconds == 1.5);
+  CHECK(std::fabs(song_position(2.5, 0.0f, clipLoop).seconds - 0.5) < 1e-9);
   // Its own points: an intro of 1 s, then a 4 s loop from 1 s to 5 s, whatever the clip's length.
   const SongLoop own{1.0f, 4.0f};
-  CHECK(song_position(3.0, own) == 3.0);             // still in the first pass
-  CHECK(std::fabs(song_position(5.5, own) - 1.5) < 1e-9);  // back to the loop point, half a second on
-  CHECK(std::fabs(song_position(9.5, own) - 1.5) < 1e-9);
+  CHECK(song_position(3.0, 0.0f, own).seconds == 3.0);             // still in the first pass
+  CHECK(std::fabs(song_position(5.5, 0.0f, own).seconds - 1.5) < 1e-9);  // back to the loop point, half a second on
+  CHECK(std::fabs(song_position(9.5, 0.0f, own).seconds - 1.5) < 1e-9);
   // No loop at all (length 0): the song plays on from the clip's start.
-  CHECK(song_position(50.0, SongLoop{0.0f, 0.0f}) == 50.0);
-  // An emote's loop: its own points when given, else its clip's length.
-  EmoteAsset e = kEmotes[0];
-  e.songLoopStart = e.songLoopSeconds = 0.0f;  // none given
-  CHECK(song_loop_of(e, 9.0f).start == 0.0f && song_loop_of(e, 9.0f).length == 9.0f);
-  e.songLoopStart = 2.0f;
-  e.songLoopSeconds = 3.0f;
-  CHECK(song_loop_of(e, 9.0f).start == 2.0f && song_loop_of(e, 9.0f).length == 3.0f);
+  CHECK(song_position(50.0, 0.0f, SongLoop{0.0f, 0.0f}).seconds == 50.0);
+}
+
+// An emote with an intro song: the clock below counts the whole emote, song intro first, then the loop song.
+void song_at_is_intro_then_loop() {
+  const SongLoop loop{0.0f, 4.0f};
+  const SongAt intro = song_position(1.0, 2.0f, loop);
+  CHECK(intro.intro && std::fabs(intro.seconds - 1.0) < 1e-9);
+  const SongAt back = song_position(7.0, 2.0f, loop);  // 7 - 2 = 5, past the loop's 4 s end: 1 s into the loop
+  CHECK(!back.intro && std::fabs(back.seconds - 1.0) < 1e-9);
+}
+
+void no_intro_song_starts_the_loop_song_at_once() {
+  const SongAt at = song_position(3.0, 0.0f, SongLoop{0.0f, 4.0f});
+  CHECK(!at.intro && at.seconds == 3.0);
 }
 
 // ---- The message ----
 
 void messages_round_trip() {
-  const EmoteMsg sent{Kind::Start, 7, 1.5f, -2.25f, 3.0f, 135.0f};
+  const EmoteMsg sent{Kind::Start, 1007u, false, 1.5f, -2.25f, 3.0f, 135.0f};
   const std::vector<uint8_t> bytes = pack(sent);
   CHECK(bytes.size() == kMessageBytes && bytes[0] == kMagic);
   const auto got = unpack(bytes);
   CHECK(got.has_value());
   if (got) {
-    CHECK(got->kind == Kind::Start && got->emote == 7);
+    CHECK(got->kind == Kind::Start && got->key == 1007u && !got->moving);
     CHECK(got->x == 1.5f && got->y == -2.25f && got->z == 3.0f && got->yaw == 135.0f);
   }
   for (Kind k : {Kind::Facing, Kind::End}) {
-    const auto again = unpack(pack(EmoteMsg{k, 0, 0, 0, 0, -45.0f}));
+    const auto again = unpack(pack(EmoteMsg{k, 1000u, false, 0, 0, 0, -45.0f}));
     CHECK(again && again->kind == k);
   }
 }
 
+// Every kind comes back whole. The key is a big number whose four bytes are all different, so a key written in the
+// wrong order fails here.
+void pack_unpack_round_trips_every_kind() {
+  CHECK(kMessageBytes == 23);
+  for (const Kind k : {Kind::Start, Kind::Facing, Kind::End, Kind::Move}) {
+    const bool walking = k == Kind::Move;  // the walking flag rides on Move until walking sends it
+    const EmoteMsg sent{k, 4000000000u, walking, 1.0f, 2.0f, 3.0f, 45.0f};
+    const auto got = unpack(pack(sent));
+    CHECK(got.has_value());
+    if (got) {
+      CHECK(got->kind == k && got->key == 4000000000u && got->moving == walking);
+      CHECK(got->x == 1.0f && got->y == 2.0f && got->z == 3.0f && got->yaw == 45.0f);
+    }
+  }
+}
+
+void a_short_or_long_message_is_refused() {
+  std::vector<uint8_t> b = pack(EmoteMsg{Kind::Start, 1003u, false, 0, 0, 0, 0});
+  CHECK(b.size() == kMessageBytes);
+  b.pop_back();
+  CHECK(b.size() == 22 && !unpack(b).has_value());  // short
+  b = pack(EmoteMsg{Kind::Start, 1003u, false, 0, 0, 0, 0});
+  b.push_back(0);
+  CHECK(b.size() == 24 && !unpack(b).has_value());  // long
+}
+
+void a_non_finite_number_is_refused() {
+  EmoteMsg bad{Kind::Start, 1003u, false, 0, 0, 0, 0};
+  bad.x = std::nanf("");
+  CHECK(!unpack(pack(bad)).has_value());
+  bad.x = 0;
+  bad.yaw = INFINITY;
+  CHECK(!unpack(pack(bad)).has_value());
+}
+
+// Only bit 0 of the flags byte means anything (the walking flag); a message claiming another flag is not understood.
+void unknown_flag_bits_are_refused() {
+  std::vector<uint8_t> b = pack(EmoteMsg{Kind::Start, 1003u, false, 0, 0, 0, 0});
+  b[2] = 2;
+  CHECK(!unpack(b).has_value());
+}
+
+// Join and Accept carry the synced emote's key; Accept carries the joiner's actor number in x, a whole positive number.
+void join_and_accept_round_trip() {
+  for (const EmoteMsg& m : {EmoteMsg{Kind::Join, 1000u, false, 0, 0, 0, 0}, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}}) {
+    const std::vector<uint8_t> bytes = pack(m);
+    const auto back = unpack(bytes);
+    CHECK(back && back->kind == m.kind && back->key == m.key && back->x == m.x);
+  }
+  for (float bad : {7.5f, -3.0f, 0.0f}) {
+    const std::vector<uint8_t> bytes = pack(EmoteMsg{Kind::Accept, 1000u, false, bad, 0, 0, 0});
+    CHECK(!unpack(bytes));
+  }
+}
+
 void bad_messages_are_dropped() {
-  std::vector<uint8_t> good = pack(EmoteMsg{Kind::Start, 3, 0, 0, 0, 0});
+  const std::vector<uint8_t> good = pack(EmoteMsg{Kind::Start, 1003u, false, 0, 0, 0, 0});
   CHECK(!unpack({}).has_value());
   std::vector<uint8_t> b = good;
   b[0] = 'C';
@@ -198,23 +266,8 @@ void bad_messages_are_dropped() {
   b = good;
   b[1] = 0;
   CHECK(!unpack(b).has_value());
-  b[1] = 4;
-  CHECK(!unpack(b).has_value());  // unknown kinds
-  b = good;
-  b[2] = kSegments;
-  CHECK(!unpack(b).has_value());  // past the wheel
-  b = good;
-  b.pop_back();
-  CHECK(!unpack(b).has_value());  // short
-  b = good;
-  b.push_back(0);
-  CHECK(!unpack(b).has_value());  // long
-  EmoteMsg nan{Kind::Start, 0, 0, 0, 0, 0};
-  nan.x = std::nanf("");
-  CHECK(!unpack(pack(nan)).has_value());
-  nan.x = 0;
-  nan.yaw = INFINITY;
-  CHECK(!unpack(pack(nan)).has_value());
+  b[1] = 7;
+  CHECK(!unpack(b).has_value());  // unknown kinds (4 is Move, 5 Join, 6 Accept)
 }
 
 void the_dead_dance_for_the_dead() {
@@ -226,28 +279,49 @@ void the_dead_dance_for_the_dead() {
 
 // ---- The emotes ----
 
-void every_slot_has_its_names() {
-  std::set<std::string> folders, clips, keys;
-  for (const EmoteAsset& e : kEmotes) {
-    folders.insert(e.folder);
-    clips.insert(e.clip);
-    keys.insert(e.nameKey);
-    CHECK(clip_path(e).starts_with("assets/emotes/clips/") && clip_path(e).ends_with(".anim"));
-    CHECK(clip_path(e).find_first_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ") == std::string::npos);  // bundle paths are lower case
-    CHECK(song_path(e) == std::string("assets/emotes/loops/") + e.folder + ".wav");  // cut to its loop (cut_loops.ps1)
-    CHECK(icon_path(e) == std::string("assets/emotes/icons/") + e.folder + ".png");
-    CHECK(loudness_path(e) == std::string(e.folder) + "/loudness.txt");
-  }
-  CHECK(folders.size() == kSegments && clips.size() == kSegments && keys.size() == kSegments);
-  CHECK(std::string(kEmotes[0].clip) == "DiscoFever" && std::string(kEmotes[7].clip) == "TakeTheL");
-  CHECK(clip_path(kEmotes[7]) == "assets/emotes/clips/takethel.anim");
-  // The two songs whose loop is not their clip's (the author, 2026-11-10), measured from the tracks: both from 0 s.
-  CHECK(kEmotes[2].songLoopStart == 0.0f && std::fabs(kEmotes[2].songLoopSeconds - 16.692f) < 1e-4f);  // Floss
-  CHECK(kEmotes[7].songLoopStart == 0.0f && std::fabs(kEmotes[7].songLoopSeconds - 12.632f) < 1e-4f);  // Take The L
-  // The rest, from the author's rough points (2026-11-10), measured on the waveform as Floss was.
-  const float measured[] = {8.542f, 16.0f, 0, 15.118f, 18.935f, 32.542f, 19.2f};
-  for (int i : {0, 1, 3, 4, 5, 6})
-    CHECK(kEmotes[i].songLoopStart == 0.0f && std::fabs(kEmotes[i].songLoopSeconds - measured[i]) < 1e-4f);
+// The mod's own catalogue (mods/emotes/assets/emotes.json) parses, names each emote's label in the mod's string table, and
+// keeps the eight in the author's order with the songs' measured loops (2026-11-10).
+void the_shipped_catalogue_parses_with_a_label_for_each() {
+  std::ifstream in(std::filesystem::path(PM_TEXT_DIR) / "mods" / "emotes" / "assets" / "emotes.json", std::ios::binary);
+  const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  Catalogue cat;
+  std::string why;
+  CHECK(parse_catalogue(text, "phasmomods.emotes", cat, why));
+  CHECK(cat.warnings.empty());
+  CHECK(cat.bundle == "emotes.bundle");
+  CHECK(cat.emotes.size() == 24);
+  if (cat.emotes.size() != 24) return;
+  pm::i18n::Table table;
+  CHECK(table.load(std::filesystem::path(PM_TEXT_DIR) / "mods" / "emotes" / "i18n" / "default.json", why));
+  for (const EmoteDef& e : cat.emotes) CHECK(table.has(e.label));
+  // Every emote in alphabetical order by its name, across every page (the user, 2026-11-13).
+  for (size_t i = 1; i < cat.emotes.size(); ++i) CHECK(cat.emotes[i - 1].name < cat.emotes[i].name);
+  CHECK(cat.emotes.front().id == "phasmomods.emotes.build-up" && cat.emotes.back().id == "phasmomods.emotes.true-heart");
+  const auto named = [&](const char* name) -> const EmoteDef& {
+    for (const EmoteDef& e : cat.emotes)
+      if (e.name == name) return e;
+    static const EmoteDef none;
+    CHECK(!"an emote the test names is missing");
+    return none;
+  };
+  // Two with an intro clip (Build Up's with an intro song too), Forget Me Not with an intro song but no intro clip, and
+  // Get Griddy, Running Man and Stride, which walk as they dance (the user, 2026-11-13).
+  CHECK(!named("build-up").introClip.empty() && !named("build-up").introSong.empty() &&
+        !named("build-up").introLoudness.empty());
+  CHECK(!named("never-gonna").introClip.empty() && named("never-gonna").introSong.empty());
+  CHECK(named("forget-me-not").introClip.empty() && !named("forget-me-not").introSong.empty());
+  for (const char* walker : {"get-griddy", "running-man", "stride"})
+    CHECK(named(walker).moveClip == named(walker).clip);
+  for (const EmoteDef& e : cat.emotes) CHECK(e.songLoop.length > 0.0f);
+  CHECK(bundle_path(named("take-the-l").clip) == "assets/emotes/clips/takethel.anim");
+  // Each song's loop as the emote pack tool measured it, in samples at the song's own rate (the counts the songs were
+  // first cut to by hand).
+  const std::pair<const char*, float> measured[] = {
+      {"disco-fever", 410016 / 48000.0f},    {"electro-swing", 768000 / 48000.0f}, {"floss", 736132 / 44100.0f},
+      {"groove-jam", 725669 / 48000.0f},     {"orange-justice", 908884 / 48000.0f}, {"scenario", 1435119 / 44100.0f},
+      {"smooth-moves", 921600 / 48000.0f},   {"take-the-l", 606316 / 48000.0f}};
+  for (const auto& [name, seconds] : measured)
+    CHECK(named(name).songLoop.start == 0.0f && std::fabs(named(name).songLoop.length - seconds) < 1e-4f);
 }
 
 }  // namespace
@@ -271,6 +345,7 @@ void the_journal_keeps_its_place_on_the_waist() {
 }
 
 int main() {
+  join_and_accept_round_trip();
   the_journal_keeps_its_place_on_the_waist();
   the_wheel_picks_by_direction();
   the_mouse_reach_is_capped();
@@ -281,10 +356,16 @@ int main() {
   only_a_move_past_half_a_metre_ends_it();
   a_looping_song_restarts_with_its_clip();
   a_song_loops_at_its_own_points();
+  song_at_is_intro_then_loop();
+  no_intro_song_starts_the_loop_song_at_once();
   messages_round_trip();
+  pack_unpack_round_trips_every_kind();
+  a_short_or_long_message_is_refused();
+  a_non_finite_number_is_refused();
+  unknown_flag_bits_are_refused();
   bad_messages_are_dropped();
   the_dead_dance_for_the_dead();
-  every_slot_has_its_names();
+  the_shipped_catalogue_parses_with_a_label_for_each();
   std::printf("%s\n", g_failures ? "emotes tests FAILED" : "emotes tests passed");
   return g_failures ? 1 : 0;
 }

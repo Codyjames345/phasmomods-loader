@@ -198,18 +198,37 @@
         @{ Name = 'mods/dev-menu/DevMenu.dll'; Source = 'build/DevMenu.dll' }
         @{ Name = 'mods/dev-menu/manifest.json'; Source = 'mods/dev_menu/manifest.json' }
         @{ Name = 'mods/dev-menu/i18n/default.json'; Source = 'mods/dev_menu/i18n/default.json' }
-        # The Emotes bundle (its eight clips, songs and icons; mods/emotes/emote_assets.h). Gitignored like the Squatter's: built
+        # The Emotes bundle (its clips, songs and icons; mods/emotes/assets/emotes.json names them). Gitignored like the Squatter's: built
         # in the private assets repository's unity/emotes-bundle and placed by CI from there. Sha256 pins the build.
-        @{ Name = 'mods/emotes/assets/emotes.bundle'; Source = 'mods/emotes/assets/emotes.bundle'; Sha256 = 'B5782284638B90C0AD85BAFF3ADEB0989B86E3CD11602ED6C9F6569972E59042' }
-        # Each song's loudness, measured from the same MP3 by tools/emote_loudness.mjs, for the ghost's hearing.
-        @{ Name = 'mods/emotes/assets/disco_fever/loudness.txt'; Source = 'mods/emotes/assets/disco_fever/loudness.txt' }
-        @{ Name = 'mods/emotes/assets/electro_swing/loudness.txt'; Source = 'mods/emotes/assets/electro_swing/loudness.txt' }
-        @{ Name = 'mods/emotes/assets/floss/loudness.txt'; Source = 'mods/emotes/assets/floss/loudness.txt' }
-        @{ Name = 'mods/emotes/assets/groove_jam/loudness.txt'; Source = 'mods/emotes/assets/groove_jam/loudness.txt' }
-        @{ Name = 'mods/emotes/assets/orange_justice/loudness.txt'; Source = 'mods/emotes/assets/orange_justice/loudness.txt' }
-        @{ Name = 'mods/emotes/assets/scenario/loudness.txt'; Source = 'mods/emotes/assets/scenario/loudness.txt' }
-        @{ Name = 'mods/emotes/assets/smooth_moves/loudness.txt'; Source = 'mods/emotes/assets/smooth_moves/loudness.txt' }
-        @{ Name = 'mods/emotes/assets/take_the_l/loudness.txt'; Source = 'mods/emotes/assets/take_the_l/loudness.txt' }
+        @{ Name = 'mods/emotes/assets/emotes.bundle'; Source = 'mods/emotes/assets/emotes.bundle'; Sha256 = '07A53CDA70B7400A1D94AEB63FF1BDB8C4DF668D4E75B9D1C610DF2E25D2A7DE' }
+        # The catalogue of the mod's own emotes (mods/emotes/catalogue.h), and each song's loudness for the ghost's hearing.
+        @{ Name = 'mods/emotes/assets/emotes.json'; Source = 'mods/emotes/assets/emotes.json' }
+        @{ Name = 'mods/emotes/assets/loudness/disco-fever.txt'; Source = 'mods/emotes/assets/loudness/disco-fever.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/electro-swing.txt'; Source = 'mods/emotes/assets/loudness/electro-swing.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/floss.txt'; Source = 'mods/emotes/assets/loudness/floss.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/groove-jam.txt'; Source = 'mods/emotes/assets/loudness/groove-jam.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/orange-justice.txt'; Source = 'mods/emotes/assets/loudness/orange-justice.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/scenario.txt'; Source = 'mods/emotes/assets/loudness/scenario.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/smooth-moves.txt'; Source = 'mods/emotes/assets/loudness/smooth-moves.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/take-the-l.txt'; Source = 'mods/emotes/assets/loudness/take-the-l.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/build-up.txt'; Source = 'mods/emotes/assets/loudness/build-up.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/build-up.intro.txt'; Source = 'mods/emotes/assets/loudness/build-up.intro.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/get-griddy.txt'; Source = 'mods/emotes/assets/loudness/get-griddy.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/lavish.txt'; Source = 'mods/emotes/assets/loudness/lavish.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/never-gonna.txt'; Source = 'mods/emotes/assets/loudness/never-gonna.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/running-man.txt'; Source = 'mods/emotes/assets/loudness/running-man.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/savor-the-w.txt'; Source = 'mods/emotes/assets/loudness/savor-the-w.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/sprinkler.txt'; Source = 'mods/emotes/assets/loudness/sprinkler.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/stride.txt'; Source = 'mods/emotes/assets/loudness/stride.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/crackdown.txt'; Source = 'mods/emotes/assets/loudness/crackdown.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/sway.txt'; Source = 'mods/emotes/assets/loudness/sway.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/forget-me-not.txt'; Source = 'mods/emotes/assets/loudness/forget-me-not.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/forget-me-not.intro.txt'; Source = 'mods/emotes/assets/loudness/forget-me-not.intro.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/im-diamond.txt'; Source = 'mods/emotes/assets/loudness/im-diamond.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/monster-mash.txt'; Source = 'mods/emotes/assets/loudness/monster-mash.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/say-so.txt'; Source = 'mods/emotes/assets/loudness/say-so.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/the-macarena.txt'; Source = 'mods/emotes/assets/loudness/the-macarena.txt' }
+        @{ Name = 'mods/emotes/assets/loudness/true-heart.txt'; Source = 'mods/emotes/assets/loudness/true-heart.txt' }
     )
     Records = @{ Name = 'builds'; Source = 'sdk/builds' }
 }

@@ -141,6 +141,22 @@ void every_shipped_table_matches_its_code(const fs::path& root) {
             }
         }
       }
+    // An emote catalogue (mods/emotes/catalogue.h) names its emotes' labels: each counts as asked for, and must be there.
+    static const std::regex label(R"re("label"\s*:\s*"([a-z0-9_.-]+)")re");
+    for (const fs::path& folder : c.code) {
+      const fs::path catalogue = folder / "assets" / "emotes.json";
+      if (!fs::exists(catalogue)) continue;
+      const std::string source = read_file(catalogue);
+      for (std::sregex_iterator it(source.begin(), source.end(), label), end; it != end; ++it) {
+        const std::string key = (*it)[1];
+        used.insert(key);
+        if (!t.has(key)) {
+          std::printf("FAIL %s names the label %s, which %s lacks\n", catalogue.string().c_str(), key.c_str(),
+                      c.table.string().c_str());
+          ++g_failures;
+        }
+      }
+    }
     for (const std::string& key : t.keys())
       if (!used.count(key)) {
         std::printf("FAIL %s: %s is asked for by no code\n", c.table.string().c_str(), key.c_str());

@@ -101,6 +101,15 @@ void dictionary(const void* dict, std::vector<PmIntEntry> entries);
 void started_mods(std::vector<std::string> ids);
 /// The names the host contract's mod_name gives the mods, by id; none until this is called.
 void mod_names(std::map<std::string, std::string> names);
+/// A content pack the host contract's content_packs hands to the mod `framework`.
+struct Pack {
+  std::string framework, id, name, version;
+  std::wstring folder, text;
+};
+/// The packs content_packs answers with (each for its framework, in the order given); none until this is called.
+void content_packs(std::vector<Pack> packs);
+/// Every (pack id, why) the host contract's content_pack_failed was given since the last reset, in order.
+const std::vector<std::pair<std::string, std::string>>& failed_packs();
 /// Every message the host contract's show_message was asked for since the last reset, as (title, body), in order.
 const std::vector<std::pair<std::string, std::string>>& messages();
 /// Every UnityAction the host contract's unity_action_new was asked for since the last reset, as (target,
