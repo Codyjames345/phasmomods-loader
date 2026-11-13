@@ -604,3 +604,71 @@ slammed door goes quiet at once and the padlock comes the moment it is fully ope
 - The bundle is pinned (tools/payload.psd1 Sha256) and published to the private repo under pinned/<sha>/; CI places it with
   tools/place_assets.ps1. validate.ps1 on development: exit 0, 82/82 and the script tests; gamecheck -Expect 0, 1685/1600.
 - Not pushed: a push to development publishes a pre-release; it waits for the user's text pass and go.
+
+## 2026-11-13 The Squatter's exits after a type change, and its mangled sheet (Claude, user's report)
+- User: once the Squatter locks the door, changing to another ghost type never unlocks it, even with the dev menu's
+  "Unlock the main door"; and the sheet looks mangled, with artifacts, not smooth curves (screenshot).
+- Door cause 1: squatter.cpp's tick kept the hold when the Squatter stopped haunting ("the lock belongs to the map"),
+  and the hold's hooks refuse Door.ToggleDoorLock on a held exit on every client, the game's hunt-end unlock
+  (LevelController.UnlockHuntingDoors) included. So no later hunt's end could reopen them. Fix: door::release(), called
+  from the tick whenever the type is not the Squatter's (the host's frame(0) as its rules stop included): every client
+  forgets the hold; the master, unless the contract's ghost hunts, calls LevelController.UnlockHuntingDoors (newly
+  wrapped in sdk/map/LevelController.h; ToggleDoorLock's RPCs check no sender). A Squatter frame with a null ghost
+  keeps the hold. Tests: squatter_door_test (3 new, red then green), custom_ghosts_test
+  another_type_lets_the_squatters_exits_go; the_squatters_lock_survives_a_tick_without_it now ticks a null ghost as
+  the Squatter, since type 0 is the rules stopping.
+- Door cause 2: the dev menu row only called SetupPhaseController.UnlockMainDoor, which sets mainDoorOpen and touches
+  no door, so after the setup phase it did nothing. It now also calls LevelController.UnlockHuntingDoors. A held
+  Squatter exit stays shut while the Squatter haunts (its rule). actions.cpp has no offline harness: smoke list only.
+- Sheet cause: make_sheet cut a ~4 m round sheet from a square grid and squeezed it radially onto the body-sized
+  hanging shape, so near the hem each ring was 24% of its length: of 8184 triangles, 3660 had a corner under 10
+  degrees (sharpest 3.5). Unity's cloth folds needles into shards and lights them in facets. Fix: the sheet is now
+  built in rings on the hanging shape, each ring as many points as its own length needs, stitched by the shorter
+  diagonal, half a step off the centre line so the halves mirror exactly; eye holes cut and their rims moved onto
+  the ovals as before. Result: 2159 points (was 4235), every corner >= 20 degrees but round the eyes (>= 12). New test
+  sheet_triangles_are_well_shaped (red at 3.5 and 5.4 degrees, then green); the grid tests were rewritten to the same
+  intent (budget and spacing, whole but for the eyes, oval rims, mirrored, eyes not covered, sheet between them).
+  coarseSpacing 0.08 -> 0.05 (a starting value, judged in game).
+- validate.ps1: exit 0, 102/102 and the script tests. gamecheck not configured in this shell. The worktree's
+  emotes.bundle was stale (10 Nov); copied the pinned one from the main checkout so staging could run.
+- Smoke list: new section at the end. Not committed or pushed: waits for the user.
+
+## 2026-11-13 The Squatter at hunt speed, and a loosely skinned, self-colliding sheet (Claude, user's report)
+- User: the sheet still clings to the arms and clips into itself; the Squatter should follow the regular hunt speed,
+  not the player's. User's choices: trace and map every part of the hunt speed; other paces keep their share of the
+  run; smooth the limbs' pull and turn on cloth self-collision.
+- Hunt speed, decompiled (GhostHuntState.UpdateSpeed, RefreshBase; constants read from the binary): speed-up +0.05/s
+  with a target (0.075 for one type), -0.01/s with neither target nor search target, held otherwise, clamp 1..1.65;
+  shared branch = base x speed-up + an offset only the Twins' hunt sets (+-0.2 at random), then x Difficulty.ghostSpeed,
+  x1.15 under Blood Moon or GhostAI.speedFlag, x three GhostAI factors. A scan of every store to those factors finds
+  only Awake and the constructor (one look-alike stores odd constants, uncalled), so they are 1 all contract. Mapped
+  GhostAI.huntSpeedFactor1..3 (StoresConst Awake 1, first/last of shape, IsNot for the middle); resolved at 0xCC/0xD0/
+  0xD4, expectations in re/dump/expect/squatter-hunt-speed.txt. The Twins' offset could not be singled out (its Loads
+  fact is not proven through this): left unmapped, documented in ghost-ai.md "Hunt speed"; 0 for a custom type.
+- squatter_rule.h: hunt_speed, next_speed_up, hunt_sense (Chasing = target, Searching/AtHidingPlace = search, else
+  neither); move_speed now takes the pace (Run 1, others their old share of the run). kSprintMargin and chase_sprint
+  removed; sprint reports still feed the tired taunt. squatter.cpp hunt_pace reads every input; 0 pace (logged once)
+  without a difficulty. Side effect: kBumpFallPace 2.5 is now reached only near the top of the speed-up.
+- Sheet skinning: sheet::skin_sheet (pull by distance^4, limbs at most 0.5 of a point, 12 neighbour blends with the
+  head cap fixed, the body's weights folded to its heaviest body bone before keeping 4). Stand-in rig test: 90th
+  percentile neighbour gap 0.15 (old 0.44), worst 0.58 (old 0.99), limb share 0.49 (old 1.0). weight_by_nearness
+  removed. Figure carriers carry a chain id per arm/leg.
+- Self-collision: icalls Cloth.set_selfCollisionDistance/Stiffness and SetSelfAndInterCollisionIndices (present in
+  this UnityPlayer's icall table), UInt32, List`1, Inflated List<UInt32>.ctor/.Add (all optional). Host: object_new
+  takes an Inflated entry's key (gamemap::instance_class), contract note 2.5, Method::new_object(); fake mirrors it.
+  add_cloth: ClothMesh::selfCollision + ClothSettings::selfCollisionDistance/Stiffness; a build without the entries
+  runs the cloth without it, logged once. Sheet: points where spacing >= 0.04 m, distance 0.8 x shortest edge among
+  them. gamecheck_test.cmake startup-only count 54 -> 57.
+- Text for the user: ghost.squatter.strength (PM_TEXT_AI) says "chases at just under a sprint", no longer true. Not
+  reworded (AI policy); the user's wording needed. docs/custom-ghosts.md row updated.
+- validate: native 102/102, emote tools, assetcheck, docs (API reference no warnings), dev release, package, stage,
+  pinned assets and release tests pass; offline game check on re/dump 1974 resolved, 0 missing/ambiguous, every
+  expectation met. build.ps1's staging step was blocked by Windows Defender flagging build\PhasmoMods Loader.exe
+  (untouched by this work); not worked around.
+- Smoke list: new section at the end. Not committed.
+- User, same day: the Squatter is not a ghost, so neither the Blood Moon nor line of sight changes its speed. Removed
+  the speed-up (next_speed_up, hunt_sense, so smudge too) and the Blood Moon factor; pace = GhostAI.baseSpeed x
+  Difficulty.ghostSpeed x the three GhostAI factors. Asked what else changes its speed: answered in chat (difficulty's
+  ghost speed and the three factors still in, pending the user's word). Expectations trimmed to what it reads.
+  Native tests 102/102. A hard-stall fall (kBumpFallPace 2.5) is now reached only at about 150% ghost speed.
+- User, same day: the Squatter keeps the difficulty's ghost speed and the three GhostAI factors. Settled; no change.

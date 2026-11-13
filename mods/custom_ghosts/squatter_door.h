@@ -16,8 +16,10 @@
 //  - A player is within the exits while their room (Player.currentRoom) is not of kind RoomKind.outsideMap, the line
 //    the game's own sanity drain and hunt draw.
 //  - The lock is the game's hunt lock, Door.HuntingCloseDoor, called on the master only, never on a friendly ghost's
-//    difficulty: its RPCs then pass every check on the receiving side (sdk/systems/photon.md). Nothing here unlocks:
-//    the doors go with the map's scene when the contract ends.
+//    difficulty: its RPCs then pass every check on the receiving side (sdk/systems/photon.md). While the Squatter
+//    haunts, nothing here unlocks, and the doors go with the map's scene when the contract ends. Once it stops
+//    haunting mid-contract (the dev menu's type change), every client lets go and the master ends the lock as a
+//    hunt's end does (release).
 //  - Every client holds the exits exactly when the master locked them, from the master's word alone: the master as it
 //    locks them, every other client in the same call that brings the master's lock (Door.HuntingCloseDoorNetworked,
 //    which the game takes only from the room's first actor). No client's own count of the players inside decides.
@@ -257,6 +259,16 @@ void set_haunting(bool on);
  * when any cannot be hooked.
  */
 bool create_hooks();
+
+/**
+ * Ends the hold once the Squatter no longer haunts the contract (squatter.cpp's tick, every frame another ghost or none
+ * haunts): this client forgets the exits it held, so the hooks above let every call on them through again, and the
+ * master then ends the lock as a hunt's end does, LevelController.UnlockHuntingDoors, which switches every exit back
+ * on and clears its lock on every client. While the contract's ghost hunts (GhostAI.isHunting) the master calls
+ * nothing, as that hunt's own end unlocks the same doors. Another client calls nothing: the master's unlock reaches
+ * it. Does nothing while nothing is held, or once the map's LevelController is gone. Main thread.
+ */
+void release();
 
 /**
  * Forgets the lock and the map it was for, as when the mods stop. A new map's LevelController forgets it too, so a

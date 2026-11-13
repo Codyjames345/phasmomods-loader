@@ -135,7 +135,7 @@ void* api_type_object(const char* typeKey) {
 }
 void* api_object_new(const char* typeKey) {
   return host::contained("suite", "making an object", static_cast<void*>(nullptr), [&]() -> void* {
-    il2cpp::Class* const klass = type_class(typeKey);
+    il2cpp::Class* const klass = static_cast<il2cpp::Class*>(gamemap::instance_class(typeKey));
     return klass ? il2cpp::object_new(klass) : nullptr;
   });
 }

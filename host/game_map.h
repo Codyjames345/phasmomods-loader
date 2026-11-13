@@ -79,4 +79,8 @@ const PmGameEntry* entry(const char* key);
 // which only the host may use. A mod that requires one is therefore never started.
 const PmGameEntry* mod_entry(const char* key);
 
+// The Il2CppClass* an object made for `key` is of: a resolved Type entry's class, or a resolved Inflated entry's
+// generic instance (List<UInt32> for List<UInt32>.ctor). Null for any other key or one unresolved. Main thread.
+void* instance_class(const char* key);
+
 }  // namespace pm::gamemap

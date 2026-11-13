@@ -2392,8 +2392,8 @@ void the_master_idles_the_squatter_once_as_steering_begins() {
   g_isMaster = false;
 }
 
-// The exits' lock belongs to the map, not to the ghost: a tick without the ghost mid-contract keeps it, so the master
-// never calls Door.HuntingCloseDoor twice for one map; the next map's LevelController starts unlocked.
+// A Squatter frame whose ghost reads null keeps the exits' lock, so the master never calls Door.HuntingCloseDoor twice
+// for one map; the next map's LevelController starts unlocked.
 void the_squatters_lock_survives_a_tick_without_it() {
   start();
   namespace map = pm::map;
@@ -2424,11 +2424,54 @@ void the_squatters_lock_survives_a_tick_without_it() {
   squatter::reset();
   squatter::tick(&ghost, kSquatter, false);
   CHECK(squatter::door::lock_all() && g_exitsClosed == 1);
-  squatter::tick(nullptr, 0, false);  // a frame without the ghost
+  squatter::tick(nullptr, kSquatter, false);  // a frame without the ghost
   squatter::tick(&ghost, kSquatter, false);
   CHECK(squatter::door::locked() && squatter::door::lock_all() && g_exitsClosed == 1);
   levelStatic = &nextLevel;  // the next contract
   CHECK(!squatter::door::locked() && squatter::door::lock_all() && g_exitsClosed == 2);
+  squatter::reset();
+}
+
+// Once another type haunts (the dev menu's type change), or none (the Squatter's rules stopping), the Squatter lets go
+// of the exits and the master unlocks them as a hunt's end does (user, 2026-11-13: changing to another ghost type never
+// unlocked them).
+int g_huntingDoorsUnlocked = 0;
+void fake_unlock_hunting_doors(void*, const void*) { ++g_huntingDoorsUnlocked; }
+void another_type_lets_the_squatters_exits_go() {
+  start();
+  namespace map = pm::map;
+  struct Obj {
+    void* klass = nullptr;
+    unsigned char bytes[0x40]{};
+  } values, difficulty, level, door, ghost;
+  void* valuesStatic = &values;
+  void* levelStatic = &level;
+  fake::static_field(map::LevelValues_instance, &valuesStatic, sizeof valuesStatic, true);
+  fake::field(map::LevelValues_difficulty, 0x10);
+  fake::field(map::Difficulty_friendlyGhost, 0x18);
+  fake::static_field(map::LevelController_instance, &levelStatic, sizeof levelStatic, true);
+  fake::field(map::LevelController_huntingDoors, 0x10);
+  fake::field(map::LevelController_mapVariations, 0x18);
+  fake::method(map::Door_HuntingCloseDoor, reinterpret_cast<void*>(&fake_hunting_close));
+  fake::method(map::LevelController_UnlockHuntingDoors, reinterpret_cast<void*>(&fake_unlock_hunting_doors));
+  fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_master));
+  std::string missing;
+  pm::api::bind(fake::host(), missing);
+  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  void* exits = fake::array(sizeof(void*), 1);
+  pm::api::RefArray{exits}.set(0, &door);
+  phasmo::LevelController::huntingDoors.set(&level, exits);
+  phasmo::LevelController::mapVariations.set(&level, fake::array(sizeof(void*), 0));
+  for (const int other : {static_cast<int>(kTempest), 0}) {
+    g_huntingDoorsUnlocked = 0;
+    squatter::reset();
+    squatter::tick(&ghost, kSquatter, false);
+    CHECK(squatter::door::lock_all() && squatter::door::locked());
+    squatter::tick(other ? &ghost : nullptr, other, false);
+    CHECK(!squatter::door::locked() && g_huntingDoorsUnlocked == 1);
+    squatter::tick(other ? &ghost : nullptr, other, false);  // let go once: nothing more to unlock
+    CHECK(g_huntingDoorsUnlocked == 1);
+  }
   squatter::reset();
 }
 
@@ -2607,6 +2650,7 @@ int main() {
   wiring::without_spectral_flame_only_four_stay();
   wiring::the_squatter_begins_lurking_or_moping();
   wiring::the_squatters_lock_survives_a_tick_without_it();
+  wiring::another_type_lets_the_squatters_exits_go();
   wiring::the_masters_tick_relocks_a_reopened_exit();
   wiring::the_squatter_follows_the_masters_shown();
   wiring::the_master_idles_the_squatter_once_as_steering_begins();

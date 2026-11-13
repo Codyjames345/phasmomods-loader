@@ -488,6 +488,15 @@ const PmGameEntry* mod_entry(const char* key) {
   return e && e->kind != PM_ENTRY_EXPORT && e->kind != PM_ENTRY_NATIVE_SITE ? e : nullptr;
 }
 
+void* instance_class(const char* key) {
+  const PmGameEntry* e = entry(key);
+  if (!e) return nullptr;
+  if (e->kind == PM_ENTRY_TYPE) return e->klass;
+  const auto it = g_index.find(key);
+  return e->kind == PM_ENTRY_METHOD && g_resolution.results[it->second].desc->kind == sdk::Kind::Inflated ? e->klass
+                                                                                                             : nullptr;
+}
+
 }  // namespace pm::gamemap
 
 // The host's own lookup (sdk/api/game_api.h), for its own code: native sites and exports included.

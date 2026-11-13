@@ -39,6 +39,7 @@ std::deque<std::vector<uint64_t>> g_memory;
 std::map<void*, void*> g_parents;                      // class -> the class it derives from
 std::map<std::pair<std::string, void*>, void*> g_overrides;  // (method key, class) -> fake MethodInfo
 std::map<std::string, void*> g_declared;               // method key -> its fake MethodInfo
+std::set<std::string> g_inflated;                      // the Inflated method keys given (object_new makes their class)
 std::map<void*, void*> g_typeObjects;                  // class -> its fake System.Type object
 std::set<const void*> g_destroyed;
 std::map<uint32_t, void*> g_holds;                     // live GC handles
@@ -221,8 +222,13 @@ void* type_object(const char* typeKey) {
   return object;
 }
 
+// As the host's (gamemap::instance_class): a Type entry's class, or an Inflated entry's generic instance.
 void* object_new(const char* typeKey) {
-  void* const klass = class_for(typeKey);
+  void* klass = class_for(typeKey);
+  if (!klass && typeKey && g_inflated.count(typeKey)) {
+    const PmGameEntry* e = game_entry(typeKey);
+    klass = e ? e->klass : nullptr;
+  }
   return klass ? allocate(kObjectBytes, klass) : nullptr;
 }
 
@@ -592,6 +598,7 @@ const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_ho
 void reset() {
   facts().set_engine(nullptr);  // releases what it kept while its holds still exist
   g_entries.clear();
+  g_inflated.clear();
   g_steerAsks.clear();
   g_steerRefused = false;
   g_statics.clear();
@@ -643,6 +650,7 @@ void method(const sdk::EntryDesc& d, void* fn, void* owner) {
   PmGameEntry& e = entry_for(d, PM_ENTRY_METHOD);
   e.code = fn;
   e.klass = owner;
+  if (d.kind == sdk::Kind::Inflated) g_inflated.insert(d.key);
   g_declared[d.key] = allocate(sizeof(void*), fn);  // a MethodInfo begins with its code
 }
 

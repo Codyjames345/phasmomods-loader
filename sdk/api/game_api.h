@@ -198,6 +198,18 @@ struct Method<D, R(A...)> {
   /// The entry's use: calling use::entry() or use::resolved() makes the entry required (see Use).
   using use = Use<D>;
 
+  /// For an Inflated entry: a new object of its generic instance (a List<UInt32> for List<UInt32>.ctor), fields
+  /// zeroed and no constructor run, so call the instance's constructor on it next, as C#'s `new` does. A managed
+  /// reference, valid this frame. Main thread. Unresolved, or a host older than Contract 2.5: null (logged once when
+  /// unresolved).
+  /// @return The object, or null.
+  /// @since Contract 2.5
+  template <int = 0>
+  void* new_object() const {
+    static_assert(D.kind == sdk::Kind::Inflated, "new_object makes an object of an Inflated entry's generic instance");
+    return use::entry() ? detail::object_new(D.key) : nullptr;
+  }
+
   /// Calls the method's code with the arguments and its MethodInfo, as the game does. The call is
   /// never virtual: it runs the declared body even when the object's class overrides it (see
   /// virtual_call). Unresolved: logs once and returns R{} without calling anything.

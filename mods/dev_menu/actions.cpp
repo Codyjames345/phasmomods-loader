@@ -926,9 +926,15 @@ bool revive_local() {
   return true;
 }
 
+// SetupPhaseController.UnlockMainDoor only ends the setup phase (it sets mainDoorOpen and touches no door), so after
+// the setup phase it did nothing to a locked exit (user, 2026-11-13). The exits themselves open as a hunt's end opens
+// them, LevelController.UnlockHuntingDoors; offline this client is the master. An exit Custom Ghosts' Squatter holds
+// stays shut while it haunts, as its rule says.
 void unlock_main_door() {
   void* setup = SetupPhaseController::instance.get();
   if (setup && game::alive(setup)) SetupPhaseController::UnlockMainDoor(setup);
+  void* level = LevelController::instance.get();
+  if (level && game::alive(level)) LevelController::UnlockHuntingDoors(level);
 }
 
 // The truck's ExitLevel object, for the end-contract row. Found the same careful way as the pause menu

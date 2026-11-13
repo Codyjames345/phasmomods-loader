@@ -311,17 +311,6 @@ inline bool at_door(Point ghost, Point door) {
 }
 
 /**
- * The sprint speed it chases a target at (move_speed): the target's own as their client reports it, else the
- * master's own player's, else `last`. A tired target's report still carries the speed they would sprint at, so the
- * Squatter's pace never changes when a player cannot sprint (the spec).
- */
-inline float chase_sprint(std::optional<Sprint> target, std::optional<Sprint> own, float last) {
-  if (target && target->speed > 0.0f) return target->speed;
-  if (own && own->speed > 0.0f) return own->speed;
-  return last;
-}
-
-/**
  * When to taunt a target about their sprint (tired_taunt_due), by target: a target who cannot sprint as the chase
  * first turns to them counts as one whose sprint has just lapsed, so a difficulty without sprinting gets the taunt too.
  */

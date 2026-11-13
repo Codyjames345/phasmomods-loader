@@ -40,6 +40,11 @@ const PmGameEntry* entry(const char* key) {
   return k == "Byte" && g_mapped ? &g_byte : nullptr;
 }
 const sdk::Result* result(std::string_view) { return nullptr; }
+// As the host's for a Type entry; no Inflated entry is given here.
+void* instance_class(const char* key) {
+  const PmGameEntry* e = entry(key);
+  return e && e->kind == PM_ENTRY_TYPE ? e->klass : nullptr;
+}
 }  // namespace pm::gamemap
 namespace pm::context {
 bool abandon_ghost_spawn(void (*)()) { return false; }

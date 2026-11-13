@@ -6,8 +6,8 @@
 #include <optional>
 
 // The Squatter's rules, kept free of game calls so they can be tested offline. It lurks in its room until
-// it first sees a player, chases at just under the players' sprint speed until every living player is out of
-// the house, then locks the way out. On a friendly ghost's difficulty it never chases: it mopes until it
+// it first sees a player, chases at the game's own hunt speed until every living player is out of the house, then
+// locks the way out. On a friendly ghost's difficulty it never chases: it mopes until it
 // sees someone, then follows them. Where the game reads the facts below is the mod's business, not this file's.
 namespace pm::custom::squatter {
 
@@ -50,8 +50,6 @@ struct Facts {
 
 // All the numbers below are starting values, to be tuned with the user in game.
 
-// How far under the players' sprint speed the Squatter's running pace sits.
-constexpr float kSprintMargin = 0.95f;
 // Seconds a move that loops lasts at least (move_hold_seconds).
 constexpr float kMoveSlotSeconds = 1.0f;
 // Seconds between two taunts about a player's lapsed sprint.
@@ -167,24 +165,43 @@ inline bool may_kick(Phase now, bool friendly, bool targetAlive, float distance,
   return !friendly && now == Phase::Chasing && targetAlive && distance <= reach;
 }
 
-/** Metres per second of one move, for a target sprint speed of `sprintSpeed`. Stumble stands still. */
-inline float move_speed(float sprintSpeed, Move m) {
-  float scale = 1.0f;  // starting values: Run 1.0, Duck 0.7, Weave 0.9, Roll 1.3, Parkour 1.1, Stumble 0
+// The game's own hunt speed, which the Squatter's chase follows (user, 2026-11-13: "the squatter should follow the
+// regular hunt speed, and not be based on the player's speed"), as GhostHuntState.UpdateSpeed works it out for a type
+// with no branch of its own (decompiled 2026-11-13, sdk/systems/ghost-ai.md "Hunt speed"), less what belongs to a
+// ghost alone (user, 2026-11-13: "the squatter shouldn't be affected by blood moon or line of sight since it's not a
+// ghost"): no line-of-sight speed-up (so no smudge, which only stops that), and no Blood Moon multiplier.
+
+/** What the hunt speed is made from, each read from the game (squatter.cpp). */
+struct HuntSpeed {
+  float base = 0.0f;         // GhostAI.baseSpeed, metres a second
+  float ghostSpeed = 1.0f;   // Difficulty.ghostSpeed
+  float factors[3] = {1.0f, 1.0f, 1.0f};  // GhostAI.huntSpeedFactor1 to 3
+};
+
+/** Metres a second the Squatter runs at with `h`: the base times the difficulty's ghost speed times the three factors.
+ *  (UpdateSpeed also adds an offset to the base, which only the Twins' hunt ever sets: 0 for a custom type.) */
+inline float hunt_speed(const HuntSpeed& h) {
+  return h.base * h.ghostSpeed * h.factors[0] * h.factors[1] * h.factors[2];
+}
+
+/** Metres per second of one move at a run of `pace` (hunt_speed). Stumble, Stand and Fall stand still. */
+inline float move_speed(float pace, Move m) {
+  // Each move's share of the run, as it had of the old sprint-based run (Run 0.92, Duck 0.7, Weave 0.9, Roll 1.3,
+  // Parkour 1.1, Walk and Sneak 0.6 of the sprint), so only the run itself changed. Starting values.
+  float scale = 1.0f;
   switch (m) {
-    // A little under the sprint with no clumsy move to slow it (user, 2026-11-09: the clumsy moves come from the
-    // surroundings, so it runs a little slower), about the old move cycle's average. A starting value.
-    case Move::Run: scale = 0.92f; break;
-    case Move::Duck: scale = 0.7f; break;
-    case Move::Weave: scale = 0.9f; break;
-    case Move::Roll: scale = 1.3f; break;
-    case Move::Parkour: scale = 1.1f; break;
+    case Move::Run: scale = 1.0f; break;
+    case Move::Duck: scale = 0.76f; break;
+    case Move::Weave: scale = 0.98f; break;
+    case Move::Roll: scale = 1.41f; break;
+    case Move::Parkour: scale = 1.2f; break;
     case Move::Stumble: scale = 0.0f; break;
-    case Move::Walk: scale = 0.6f; break;
+    case Move::Walk: scale = 0.65f; break;
     case Move::Stand: scale = 0.0f; break;
-    case Move::Sneak: scale = 0.6f; break;
+    case Move::Sneak: scale = 0.65f; break;
     case Move::Fall: scale = 0.0f; break;  // its ragdoll has it
   }
-  return sprintSpeed * kSprintMargin * scale;
+  return pace * scale;
 }
 
 

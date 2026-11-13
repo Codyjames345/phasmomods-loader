@@ -102,6 +102,53 @@ inline constexpr pm::sdk::EntryDesc Cloth_ClearTransformMotion{
     .key = "Cloth.ClearTransformMotion", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kOptional,
     .name = "UnityEngine.Cloth::ClearTransformMotion"};
 
+/// How close, in metres, two of the cloth's points may come before they push each other apart: its self-collision, which
+/// keeps the cloth from folding through itself. 0, Unity's default, is off. It acts only between the points
+/// SetSelfAndInterCollisionIndices names. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Cloth_set_selfCollisionDistance{
+    .key = "Cloth.set_selfCollisionDistance", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kOptional,
+    .name = "UnityEngine.Cloth::set_selfCollisionDistance", .params = UnityCloth_float};
+
+/// How hard the cloth's points push each other apart when they come too close, 0 to 1. Inferred: Unity's documented
+/// API.
+inline constexpr pm::sdk::EntryDesc Cloth_set_selfCollisionStiffness{
+    .key = "Cloth.set_selfCollisionStiffness", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kOptional,
+    .name = "UnityEngine.Cloth::set_selfCollisionStiffness", .params = UnityCloth_float};
+
+inline constexpr const char* UnityCloth_ListUInt32[] = {"List<UInt32>"};
+
+/// Which of the cloth's points take part in its self-collision, a List<UInt32> of mesh vertex indices. Inferred: Unity's
+/// documented API.
+inline constexpr pm::sdk::EntryDesc Cloth_SetSelfAndInterCollisionIndices{
+    .key = "Cloth.SetSelfAndInterCollisionIndices", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kOptional,
+    .name = "UnityEngine.Cloth::SetSelfAndInterCollisionIndices", .params = UnityCloth_ListUInt32};
+
+/// System.UInt32 (mscorlib). Inferred: .NET's documented type.
+inline constexpr pm::sdk::EntryDesc UInt32{.key = "UInt32", .name = "UInt32", .assembly = "mscorlib", .ns = "System"};
+
+inline constexpr const char* ListT_fieldTypes[] = {"T[]"};
+
+/// The generic definition List<T> (mscorlib, System.Collections.Generic). Inferred: .NET's documented type.
+inline constexpr pm::sdk::EntryDesc ListT{.key = "List`1", .name = "List", .assembly = "mscorlib",
+                                          .ns = "System.Collections.Generic", .fieldTypes = ListT_fieldTypes};
+
+inline constexpr const char* List_UInt32_args[] = {"@UInt32"};
+inline constexpr const char* ListT_ctor_params[] = {"int"};
+inline constexpr const char* ListT_Add_params[] = {"T"};
+
+/// A List<UInt32>'s constructor taking its first capacity: List<UInt32>.ctor(list, capacity) on an object made with
+/// new_object(). Optional: only the running game can say whether this build has code for the instance. Checked at
+/// startup only. Inferred: .NET's documented API.
+inline constexpr pm::sdk::EntryDesc List_UInt32_ctor{
+    .key = "List<UInt32>.ctor", .kind = pm::sdk::Kind::Inflated, .flags = pm::sdk::kOptional, .owner = "List`1",
+    .name = ".ctor", .params = ListT_ctor_params, .typeArgs = List_UInt32_args};
+
+/// Adds a number to a List<UInt32>: List<UInt32>.Add(list, value). Optional, as the constructor. Checked at startup
+/// only. Inferred: .NET's documented API.
+inline constexpr pm::sdk::EntryDesc List_UInt32_Add{
+    .key = "List<UInt32>.Add", .kind = pm::sdk::Kind::Inflated, .flags = pm::sdk::kOptional, .owner = "List`1",
+    .name = "Add", .params = ListT_Add_params, .typeArgs = List_UInt32_args};
+
 /// Unity's capsule collider (UnityEngine.PhysicsModule), a Collider: what a Cloth collides with. Inferred: Unity's
 /// documented API.
 inline constexpr pm::sdk::EntryDesc CapsuleCollider{.key = "CapsuleCollider", .name = "CapsuleCollider",
@@ -176,6 +223,27 @@ struct Cloth {
   static constexpr pm::api::Icall<pm::map::Cloth_get_vertices, void*(void*)> get_vertices{};
   /// get_normals(cloth): its simulated normals, a new Vector3[]. Unresolved: null.
   static constexpr pm::api::Icall<pm::map::Cloth_get_normals, void*(void*)> get_normals{};
+  /// set_selfCollisionDistance(cloth, metres): how close two of the points SetSelfAndInterCollisionIndices names may
+  /// come; 0 is off. Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Cloth_set_selfCollisionDistance, void(void*, float)>
+      set_selfCollisionDistance{};
+  /// set_selfCollisionStiffness(cloth, stiffness), 0 to 1. Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Cloth_set_selfCollisionStiffness, void(void*, float)>
+      set_selfCollisionStiffness{};
+  /// SetSelfAndInterCollisionIndices(cloth, list), a List<UInt32> of mesh vertex indices (ListUInt32 below makes one).
+  /// Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::Cloth_SetSelfAndInterCollisionIndices, void(void*, void*)>
+      SetSelfAndInterCollisionIndices{};
+};
+
+/// A List<UInt32>, for Cloth.SetSelfAndInterCollisionIndices: `void* list = ListUInt32::ctor.new_object();
+/// ListUInt32::ctor(list, capacity);` then `ListUInt32::Add(list, value)` for each number.
+struct ListUInt32 {
+  /// The constructor, ctor(list, capacity), and new_object() for the list it runs on. Unresolved: does nothing, and
+  /// new_object() gives null.
+  static constexpr pm::api::Method<pm::map::List_UInt32_ctor, void(void*, int32_t)> ctor{};
+  /// Add(list, value). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::List_UInt32_Add, void(void*, uint32_t)> Add{};
 };
 
 /// Unity's capsule collider. `capsule` below is one.

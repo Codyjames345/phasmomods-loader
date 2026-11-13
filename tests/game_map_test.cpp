@@ -345,6 +345,9 @@ void inflated_resolves_at_activation() {
   CHECK(pm::gamemap::result(ofClass.key)->status == Status::Resolved);
   CHECK(!askedOfMethod && inflateArgs == std::vector<void*>{&argClass});
   CHECK(logged("game map: 1/1 generic instances resolved on the main thread"));
+  // An object made for it (object_new) is of its generic instance, not the definition.
+  CHECK(pm::gamemap::instance_class(ofClass.key) == &inflatedClass);
+  CHECK(pm::gamemap::instance_class("No.Such.Key") == nullptr);
 
   prepare(ofMethod);
   pm::gamemap::resolve_inflated();
@@ -355,6 +358,7 @@ void inflated_resolves_at_activation() {
   inflateAnswer.invoker = at(kMissingInvoker);
   pm::gamemap::resolve_inflated();
   CHECK(pm::gamemap::entry(ofClass.key) == nullptr);
+  CHECK(pm::gamemap::instance_class(ofClass.key) == nullptr);  // nothing to make an object of
   CHECK(pm::gamemap::result(ofClass.key)->status == Status::Missing);
   CHECK(!checked_at_startup(*pm::gamemap::result(ofClass.key)));
   CHECK(logged("this game build has no code for the instance"));

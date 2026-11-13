@@ -317,6 +317,11 @@ struct LevelController {
   /// does, when outsideRoom or its roomColliders are null, so check both first. Unresolved: false.
   static constexpr pm::api::Method<pm::map::LevelController_IsPointInOutsideRoom, bool(void*, const Vector3*)>
       IsPointInOutsideRoom{};
+  /// UnlockHuntingDoors(level): opens the exits again as a hunt's end does, Door.ToggleDoorLock(true, true) on every
+  /// door of huntingDoors and of each variation's huntingDoorsToLock, which switches each back on for players and
+  /// clears its lock on every client. Its RPCs check no sender. Call it on the master, outside a hunt: during one it
+  /// opens the hunt's exits early. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::LevelController_UnlockHuntingDoors, void(void*)> UnlockHuntingDoors{};
 };
 
 /// @}

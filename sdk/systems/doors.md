@@ -345,6 +345,9 @@ ask, the interaction block, the fuse box, the ghost sent to its room, the trap w
 every door that is not a held exit. Before the lock every wish is the game's own. The house key's unlock
 (`Door.AttemptToUnlockDoor`) is not a wish: nothing refuses it, though the master may then lock the exit again as above.
 
+**When the Squatter stops haunting** mid-contract, the hold ends on every client and the master unlocks the exits as
+a hunt's end does ("Locking the exits outside a hunt" below), so from then on every wish is the game's own again.
+
 **At the contract's end** the doors go with the map's scene; the next contract loads the scene afresh, with every exit
 locked as above. Nothing carries over.
 
@@ -387,4 +390,6 @@ another ghost's force on one, reopens them.
 Custom Ghosts' Squatter locks every exit this way, on the master, once no living player is left in the map, and answers
 each try with a line of its own (`mods/custom_ghosts/squatter_door.h`). Every other client holds the exits once that lock
 reaches it, and the master locks an exit again when a raced wish or the house key unlocks it or switches it back on
-("The Monkey Paw" above).
+("The Monkey Paw" above). The hold lasts only while the Squatter haunts: once another ghost type does (a developer's
+type change mid-contract), every client lets go of the exits, and the master, unless a hunt is on, ends the lock with
+`LevelController.UnlockHuntingDoors`, as a hunt's end does (`squatter_door.h` `release`).

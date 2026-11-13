@@ -11,14 +11,22 @@
 // The Squatter's bedsheet as a mesh for Unity's Cloth, kept free of game calls so it can be tested offline. A plain
 // sheet generated in code, not an art asset (the user's ruling of 2026-11-04, in the Squatter's design).
 //
-// The sheet is a round sheet cut from a square grid laid over the head, its centre on the crown. It is made already
-// hanging: each point keeps its distance from the centre measured along the sheet, and the sheet follows a head and
-// shoulders profile (a cap over the head, a slope out to the shoulders, then down to the floor, flaring a little), so a
-// sheet as wide as the body reaches the floor all round (user, 2026-11-09). So the cloth starts close to where it settles,
-// instead of falling into place from a flat square, which the engine test showed drapes badly
-// (sdk/internals/engine-experiments.md). The grid is fine around the head, where the eyes are cut, and coarse
-// further out. The two eye holes are mirrored about the centre line, in front of the crown. Only the crown is
-// pinned; everything else is free for the cloth to move.
+// The sheet is round, its centre on the crown. It is made already hanging: it follows a head and shoulders profile (a
+// cap over the head, a slope out to the shoulders, then down to the floor, flaring a little), so a sheet as wide as the
+// body reaches the floor all round (user, 2026-11-09). So the cloth starts close to where it settles, instead of
+// falling into place from a flat square, which the engine test showed drapes badly
+// (sdk/internals/engine-experiments.md).
+//
+// Its points lie in rings round the crown, each ring a step down the sheet from the last, and each holding as many
+// points as its own length on the hanging shape needs at that step, so every triangle is about as wide as it is long,
+// as cloth meshes are built in games. (It was a square grid cut round and squeezed onto the hanging shape: every ring
+// at the hem squeezed to a quarter of its length, so most triangles were needles, which Unity's cloth folded into
+// jagged shards and lit in facets; user, 2026-11-13.) The rings are close round the head, where the eyes are cut, and
+// further apart lower down. The two eye holes are mirrored about the centre line, in front of the crown. Only the crown
+// is pinned; everything else is free for the cloth to move.
+//
+// `flat` is where a point lies on the sheet laid flat: its distance from the centre measured along the sheet, in the
+// direction it hangs, as a sheet is measured.
 //
 // Space: the sheet's own, in metres. The crown is the origin, y is up and z is forward (the way the face looks), x
 // is across. Unity's winding: each triangle's front faces out of the sheet (up at the crown).
@@ -45,10 +53,10 @@ struct Coefficient {
  * figure sets the sheet's size, the shoulders' width and drop from the body it covers (squatter_figure.cpp).
  */
 struct SheetShape {
-  float side = 2.0f;            // the round sheet's diameter, and the side of the square grid it is cut from
-  float fineSpacing = 0.02f;    // grid spacing within fineHalf of the centre lines, where the eyes are cut
-  float fineHalf = 0.24f;       // a whole number of fineSpacing
-  float coarseSpacing = 0.08f;  // the largest grid spacing further out
+  float side = 2.0f;            // the round sheet's diameter, measured along the sheet
+  float fineSpacing = 0.02f;    // the spacing of the points within fineHalf of the centre, where the eyes are cut
+  float fineHalf = 0.24f;       // how far from the centre, along the sheet, the fine spacing holds
+  float coarseSpacing = 0.05f;  // the largest spacing further out, which it widens to by kSpacingGrowth
   float pinRadius = 0.08f;      // points this close to the centre, measured on the sheet, stay with the head
   float eyeAcross = 0.04f;      // each eye's centre from the centre line
   float eyeForward = 0.16f;     // the eyes' centres in front of the crown, measured on the sheet
@@ -74,33 +82,42 @@ struct SheetMesh {
 /** What an unconstrained coefficient holds: no limit (Unity's own default for a vertex left free). */
 inline constexpr float kUnconstrained = std::numeric_limits<float>::max();
 
-/**
- * The grid lines along either side of the sheet, from -side/2 to side/2: every fineSpacing within fineHalf of the
- * centre, then evenly to the edge at no more than coarseSpacing. Symmetric about 0, exactly, and holding 0.
- */
-inline std::vector<float> sheet_axis(const SheetShape& s) {
-  std::vector<float> half{0.0f};
-  const int fine = static_cast<int>(std::lround(s.fineHalf / s.fineSpacing));
-  for (int i = 1; i <= fine; ++i) half.push_back(static_cast<float>(i) * s.fineSpacing);
-  const float rest = s.side / 2 - half.back();
-  const int coarse = rest > 0 ? static_cast<int>(std::ceil(rest / s.coarseSpacing - 1e-4f)) : 0;
-  for (int i = 1; i <= coarse; ++i) half.push_back(half[static_cast<size_t>(fine)] + rest * i / coarse);
-  std::vector<float> axis;
-  for (size_t i = half.size(); i-- > 1;) axis.push_back(-half[i]);
-  axis.insert(axis.end(), half.begin(), half.end());
-  return axis;
+// How much wider the spacing grows beyond fineHalf, per metre down the sheet, until it reaches coarseSpacing: a gentle
+// widening, so two rings next to each other differ in spacing by no more than about a quarter.
+inline constexpr float kSpacingGrowth = 0.25f;
+
+/** The spacing of the sheet's points `distance` metres from its centre, measured along the sheet. */
+inline float spacing_at(const SheetShape& s, float distance) {
+  if (distance <= s.fineHalf) return s.fineSpacing;
+  return std::min(s.coarseSpacing, s.fineSpacing + (distance - s.fineHalf) * kSpacingGrowth);
 }
 
-/** Whether the open cell [x0, x1] x [z0, z1] of the flat sheet overlaps an eye's rectangle, and so is cut. */
-inline bool cuts_an_eye(const SheetShape& s, float x0, float x1, float z0, float z1) {
-  for (const float side : {-1.0f, 1.0f}) {
-    const float x = side * s.eyeAcross;
-    if (x0 < x + s.eyeWidth / 2 && x1 > x - s.eyeWidth / 2 && z0 < s.eyeForward + s.eyeHeight / 2 &&
-        z1 > s.eyeForward - s.eyeHeight / 2)
-      return true;
+/**
+ * The rings' distances from the centre, measured along the sheet: 0 (the crown, one point), then a step of
+ * spacing_at each, the last one on the hem at side / 2 exactly.
+ */
+inline std::vector<float> ring_distances(const SheetShape& s) {
+  const float far = s.side / 2;
+  std::vector<float> rings{0.0f};
+  if (far <= 0) return rings;
+  for (;;) {
+    const float step = spacing_at(s, rings.back());
+    if (rings.back() + 1.5f * step >= far) break;
+    rings.push_back(rings.back() + step);
   }
-  return false;
+  rings.push_back(far);
+  return rings;
 }
+
+/** How far `p` (on the flat sheet) lies out on its eye's oval, the eye on its side of the centre line: 1 on the oval. */
+inline float eye_reach(const SheetShape& s, Vec2 p) {
+  const float cx = (p.x < 0 ? -1.0f : 1.0f) * s.eyeAcross;
+  const float u = (p.x - cx) / (s.eyeWidth / 2), v = (p.y - s.eyeForward) / (s.eyeHeight / 2);
+  return std::sqrt(u * u + v * v);
+}
+
+/** Whether `p` lies inside an eye's oval, and not on it. */
+inline bool in_an_eye(const SheetShape& s, Vec2 p) { return eye_reach(s, p) < 1.0f - 1e-4f; }
 
 /**
  * A point round an eye's hole on the flat sheet, `p`, moved along the line from its eye's centre onto the eye's oval
@@ -163,11 +180,6 @@ inline float reach_distance(const SheetShape& s, float drop) {
 /** How far the cap over the head reaches from the centre, measured along the sheet: the part the head alone carries. */
 inline float cap_distance(const SheetShape& s) { return s.headRadius * std::numbers::pi_v<float> / 2; }
 
-/** Whether the grid cell [x0, x1] x [z0, z1] belongs to the round sheet: its middle lies within side / 2 of the centre. */
-inline bool in_sheet(const SheetShape& s, float x0, float x1, float z0, float z1) {
-  return std::hypot((x0 + x1) / 2, (z0 + z1) / 2) <= s.side / 2;
-}
-
 // How worn cloth is set up in games (Unity's Cloth maxDistance, Unreal's painted max distance, the Polygon Treehouse
 // poncho): each point may move only a little from where the body carries it, nothing where it is worn and more toward
 // the hem, so the cloth keeps its shape and only sways. Starting values, judged with the user in game.
@@ -202,88 +214,255 @@ inline float distance_to(Vec3 p, const Segment& b) {
   return std::sqrt(x * x + y * y + z * z);
 }
 
-// How sharply a point's nearer bones outweigh its further ones: each bone's pull falls with the square of its distance.
-inline constexpr float kNearnessPower = 2.0f;
+/** Where the point at `flat` on the flat sheet hangs, in the sheet's space, and its outward normal there. */
+inline void hang_point(const SheetShape& s, Vec2 flat, Vec3& at, Vec3& normal) {
+  const float d = std::hypot(flat.x, flat.y), distance = std::min(d, s.side / 2);
+  const float across = d > 0 ? flat.x / d : 0.0f, forward = d > 0 ? flat.y / d : 0.0f;
+  float out = 0, height = 0, normalOut = 0, normalUp = 1;
+  hang(s, distance, out, height, normalOut, normalUp);
+  if (distance == 0) normalOut = 0, normalUp = 1;
+  at = {out * across, height, out * forward};
+  normal = {normalOut * across, normalUp, normalOut * forward};
+}
 
-/**
- * Which bones carry a point at `p` (the sheet's space) as worn clothing is skinned in games, by nearness: every bone of
- * `bones` pulls by the inverse of its distance to the power kNearnessPower, and the four that pull most carry the
- * point, their pulls scaled to add up to 1. So the sheet over an arm or a leg moves with it, and between two bones it
- * blends (user, 2026-11-09: the arms and legs came out of the sheet). No bones: bone 0 alone.
- */
-inline Weight weight_by_nearness(Vec3 p, std::span<const Segment> bones) {
-  Weight w;
-  if (bones.empty()) return w;
-  std::vector<std::pair<float, int32_t>> pulls;
-  for (size_t i = 0; i < bones.size(); ++i) {
-    const float d = std::max(distance_to(p, bones[i]), 0.01f);
-    pulls.emplace_back(1.0f / std::pow(d, kNearnessPower), static_cast<int32_t>(i));
-  }
-  const size_t kept = std::min<size_t>(4, pulls.size());
-  std::partial_sort(pulls.begin(), pulls.begin() + static_cast<std::ptrdiff_t>(kept), pulls.end(),
-                    [](const auto& a, const auto& b) { return a.first > b.first; });
-  float sum = 0;
-  for (size_t i = 0; i < kept; ++i) sum += pulls[i].first;
-  for (size_t i = 0; i < 4; ++i) {
-    w.bone[i] = i < kept ? pulls[i].second : pulls[0].second;
-    w.weight[i] = i < kept ? pulls[i].first / sum : 0.0f;
-  }
-  return w;
+// How a loose garment is skinned (user, 2026-11-13: the sheet clung to the arms and folded into itself). Starting
+// values, judged with the user in game.
+inline constexpr float kLimbShare = 0.5f;  // the most of any point the arms, hands, legs and feet together carry
+inline constexpr int kSmoothPasses = 12;   // times each point's weights are blended with its neighbours'
+inline constexpr float kSmoothBlend = 0.5f;  // how much of the neighbours' average each pass takes
+// How sharply a nearer bone outweighs a further one before the blending (by the inverse of its distance to this power):
+// sharp enough that each part of the sheet starts with one or two bones of its own rather than five or six alike, which
+// the four bones a point keeps would cut between at random, and the blending then spreads them over the seams between.
+inline constexpr float kLooseNearnessPower = 4.0f;
+
+/** Scales the limbs' share of `w` (one weight per bone, adding up to 1; `chain` -1 for a bone of the body) down to
+ *  kLimbShare at most, the body's up. */
+inline void cap_limbs(std::vector<float>& w, std::span<const int> chain) {
+  float limbs = 0.0f, body = 0.0f;
+  for (size_t i = 0; i < w.size(); ++i) (chain[i] >= 0 ? limbs : body) += w[i];
+  if (limbs <= kLimbShare || body <= 0.0f) return;
+  for (size_t i = 0; i < w.size(); ++i) w[i] *= chain[i] >= 0 ? kLimbShare / limbs : (1.0f - kLimbShare) / body;
 }
 
 /**
- * The sheet for `s`: the round sheet's cells less the eye cells, made hanging, its crown pinned, the points round each
- * eye's hole on its oval (onto_eye_oval). Vertices no triangle uses are left out.
+ * Every point's weights for the sheet `m` worn over `bones` (in the sheet's space), as a loose garment is skinned.
+ * `chain` gives each bone's limb: -1 for the body down the middle (bone 0 the head), and one number for each arm and
+ * each leg, shared by its bones. Each bone pulls a point by nearness (kLooseNearnessPower), the limbs together carry at
+ * most kLimbShare of it, and each point's weights are then blended with its neighbours' kSmoothPasses times, so the pull
+ * of a limb spreads over the sheet around it and fades rather than stopping at a seam. A point within `cap` of the
+ * centre, measured along the sheet, follows the head alone and is held so while the others are blended. Then the
+ * body's weights at a point go to its heaviest bone of the body there, as the trunk moves as one, so the four bones a
+ * point keeps are not spent on bones of the body pulling alike while a limb's are cut (the middle of the hem keeps both
+ * legs). Each point keeps its four heaviest bones, that trunk bone among them, their weights adding up to 1, a limb's
+ * share kLimbShare at most. No bones, or `chain` not one per bone: bone 0 alone everywhere.
+ */
+inline std::vector<Weight> skin_sheet(const SheetMesh& m, std::span<const Segment> bones, std::span<const int> chain,
+                                      float cap) {
+  const size_t n = m.vertices.size(), nb = bones.size();
+  std::vector<Weight> out(n);
+  if (nb == 0 || chain.size() != nb) return out;
+  std::vector<std::vector<float>> w(n, std::vector<float>(nb, 0.0f));
+  std::vector<bool> fixed(n, false);
+  for (size_t v = 0; v < n; ++v) {
+    if (std::hypot(m.flat[v].x, m.flat[v].y) <= cap) {
+      fixed[v] = true;
+      w[v][0] = 1.0f;
+      continue;
+    }
+    float sum = 0.0f;
+    for (size_t i = 0; i < nb; ++i) {
+      w[v][i] = 1.0f / std::pow(std::max(distance_to(m.vertices[v], bones[i]), 0.01f), kLooseNearnessPower);
+      sum += w[v][i];
+    }
+    for (float& x : w[v]) x /= sum;
+    cap_limbs(w[v], chain);
+  }
+  // Each point's neighbours along the triangles' edges.
+  std::vector<std::vector<size_t>> near(n);
+  for (size_t t = 0; t + 2 < m.triangles.size(); t += 3)
+    for (size_t k = 0; k < 3; ++k) {
+      const size_t a = static_cast<size_t>(m.triangles[t + k]), b = static_cast<size_t>(m.triangles[t + (k + 1) % 3]);
+      if (std::find(near[a].begin(), near[a].end(), b) == near[a].end()) near[a].push_back(b);
+      if (std::find(near[b].begin(), near[b].end(), a) == near[b].end()) near[b].push_back(a);
+    }
+  // Blending weights that each add up to 1 with a limb share of kLimbShare at most keeps both true.
+  for (int pass = 0; pass < kSmoothPasses; ++pass) {
+    std::vector<std::vector<float>> next = w;
+    for (size_t v = 0; v < n; ++v) {
+      if (fixed[v] || near[v].empty()) continue;
+      for (size_t i = 0; i < nb; ++i) {
+        float avg = 0.0f;
+        for (const size_t u : near[v]) avg += w[u][i];
+        avg /= static_cast<float>(near[v].size());
+        next[v][i] = (1.0f - kSmoothBlend) * w[v][i] + kSmoothBlend * avg;
+      }
+    }
+    w = std::move(next);
+  }
+  for (size_t v = 0; v < n; ++v) {
+    if (fixed[v]) continue;  // the head alone, as Weight starts
+    // The body's weight to its heaviest bone here, which the trunk moves as one with.
+    std::vector<float> merged = w[v];
+    size_t trunk = nb;
+    for (size_t i = 0; i < nb; ++i)
+      if (chain[i] < 0 && (trunk == nb || w[v][i] > w[v][trunk])) trunk = i;
+    for (size_t i = 0; i < nb; ++i)
+      if (chain[i] < 0 && i != trunk) merged[trunk] += merged[i], merged[i] = 0.0f;
+    std::vector<size_t> order(nb);
+    for (size_t i = 0; i < nb; ++i) order[i] = i;
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return merged[a] > merged[b]; });
+    std::vector<size_t> kept(order.begin(), order.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(4, nb)));
+    const auto body = std::find_if(order.begin(), order.end(), [&](size_t i) { return chain[i] < 0; });
+    if (body != order.end() && std::find(kept.begin(), kept.end(), *body) == kept.end()) kept.back() = *body;
+    std::vector<float> share(nb, 0.0f);
+    float sum = 0.0f;
+    for (const size_t i : kept) sum += merged[i];
+    for (const size_t i : kept) share[i] = sum > 0.0f ? merged[i] / sum : 0.0f;
+    cap_limbs(share, chain);
+    std::sort(kept.begin(), kept.end(), [&](size_t a, size_t b) { return share[a] > share[b]; });
+    for (size_t k = 0; k < 4; ++k) {
+      out[v].bone[k] = static_cast<int32_t>(k < kept.size() ? kept[k] : kept[0]);
+      out[v].weight[k] = k < kept.size() ? share[kept[k]] : 0.0f;
+    }
+  }
+  return out;
+}
+
+/**
+ * The sheet for `s`: its rings (ring_distances), each with as many points as its length round the hanging shape takes
+ * at its spacing (at least six), evenly round from half a step off straight ahead, one half the mirror of the other
+ * about the centre line, so the sheet is exactly symmetric. Each ring is joined to the next by triangles, each time taking the shorter of the
+ * two diagonals the next triangle could have. Then the eye holes: a triangle with a corner inside an eye's oval, or its
+ * middle inside it, is cut, and the points round each hole are moved onto the oval (onto_eye_oval). Points no
+ * triangle uses are left out. The crown is pinned.
  */
 inline SheetMesh make_sheet(const SheetShape& s) {
   SheetMesh m;
-  const std::vector<float> axis = sheet_axis(s);
-  if (axis.size() < 2) return m;
-  const size_t lines = axis.size(), cells = lines - 1;
-  std::vector<bool> kept(cells * cells), used(lines * lines), rim(lines * lines);
-  for (size_t j = 0; j < cells; ++j)
-    for (size_t i = 0; i < cells; ++i) {
-      const bool round = in_sheet(s, axis[i], axis[i + 1], axis[j], axis[j + 1]);
-      const bool eye = cuts_an_eye(s, axis[i], axis[i + 1], axis[j], axis[j + 1]);
-      const bool keep = round && !eye;
-      if (round && eye)
-        for (const size_t corner : {j * lines + i, j * lines + i + 1, (j + 1) * lines + i, (j + 1) * lines + i + 1})
-          rim[corner] = true;
-      kept[j * cells + i] = keep;
-      if (keep)
-        for (const size_t corner : {j * lines + i, j * lines + i + 1, (j + 1) * lines + i, (j + 1) * lines + i + 1})
-          used[corner] = true;
+  const std::vector<float> rings = ring_distances(s);
+  if (rings.size() < 2) return m;
+  // Every point on the flat sheet, ring by ring.
+  std::vector<Vec2> flat;
+  std::vector<size_t> first, count;
+  for (const float d : rings) {
+    first.push_back(flat.size());
+    if (d == 0) {
+      flat.push_back({0, 0});
+      count.push_back(1);
+      continue;
     }
-  std::vector<int32_t> index(lines * lines, -1);
-  const float far = s.side / 2;  // the hem: the furthest any point hangs from the crown
-  for (size_t j = 0; j < lines; ++j)
-    for (size_t i = 0; i < lines; ++i) {
-      if (!used[j * lines + i]) continue;
-      index[j * lines + i] = static_cast<int32_t>(m.vertices.size());
-      // A point round an eye's hole lies on the eye's oval.
-      const Vec2 at = rim[j * lines + i] ? onto_eye_oval(s, {axis[i], axis[j]}) : Vec2{axis[i], axis[j]};
-      const float x = at.x, z = at.y;
-      // A point of a rim cell beyond the round edge hangs at the edge, so the hem is round.
-      const float flat = std::hypot(x, z), distance = std::min(flat, far);
-      const float across = flat > 0 ? x / flat : 0.0f, forward = flat > 0 ? z / flat : 0.0f;
-      float out = 0, height = 0, normalOut = 0, normalUp = 1;
-      hang(s, distance, out, height, normalOut, normalUp);
-      if (distance == 0) normalOut = 0, normalUp = 1;
-      m.vertices.push_back({out * across, height, out * forward});
-      m.normals.push_back({normalOut * across, normalUp, normalOut * forward});
-      m.uv.push_back({x / s.side + 0.5f, z / s.side + 0.5f});
-      m.flat.push_back({x, z});
-      m.coefficients.push_back({sway_at(s, distance, far), kBackstop});
+    float out = 0, height = 0, normalOut = 0, normalUp = 0;
+    hang(s, d, out, height, normalOut, normalUp);
+    const size_t n = std::max<size_t>(6, static_cast<size_t>(std::lround(
+                                              2 * std::numbers::pi_v<float> * out / spacing_at(s, d))));
+    count.push_back(n);
+    // Half a step round from straight ahead, so no point lies on the centre line in front, where it would belong to
+    // neither eye; the second half mirrors the first, and an odd ring's middle point lies straight behind.
+    const size_t base = flat.size();
+    flat.resize(base + n);
+    for (size_t j = 0; j < (n + 1) / 2; ++j) {
+      const float angle = 2 * std::numbers::pi_v<float> * (static_cast<float>(j) + 0.5f) / static_cast<float>(n);
+      flat[base + j] = n % 2 == 1 && j == n / 2 ? Vec2{0.0f, -d} : Vec2{d * std::sin(angle), d * std::cos(angle)};
+      flat[base + n - 1 - j] = {-flat[base + j].x, flat[base + j].y};
     }
-  for (size_t j = 0; j < cells; ++j)
-    for (size_t i = 0; i < cells; ++i) {
-      if (!kept[j * cells + i]) continue;
-      const int32_t a = index[j * lines + i], b = index[j * lines + i + 1];
-      const int32_t c = index[(j + 1) * lines + i], d = index[(j + 1) * lines + i + 1];
-      // Clockwise seen from above, which is Unity's front face.
-      m.triangles.insert(m.triangles.end(), {a, c, b, b, c, d});
+  }
+  std::vector<Vec3> at(flat.size()), normal(flat.size());
+  for (size_t v = 0; v < flat.size(); ++v) hang_point(s, flat[v], at[v], normal[v]);
+  const auto gap = [&](size_t a, size_t b) {
+    const float x = at[a].x - at[b].x, y = at[a].y - at[b].y, z = at[a].z - at[b].z;
+    return x * x + y * y + z * z;
+  };
+  // Ring k joined to ring k + 1, clockwise seen from outside, which is Unity's front face.
+  std::vector<int32_t> triangles;
+  for (size_t k = 0; k + 1 < rings.size(); ++k) {
+    const size_t na = count[k], nb = count[k + 1];
+    const auto a = [&](size_t i) { return first[k] + i % na; };
+    const auto b = [&](size_t j) { return first[k + 1] + j % nb; };
+    const auto add = [&](size_t p, size_t q, size_t r) {
+      triangles.insert(triangles.end(), {static_cast<int32_t>(p), static_cast<int32_t>(q), static_cast<int32_t>(r)});
+    };
+    size_t i = 0, j = 0;
+    while (i < na || j < nb) {
+      bool inner;  // the next triangle moves on round the inner ring
+      if (na == 1 || i == na) inner = false;
+      else if (j == nb) inner = true;
+      else inner = gap(a(i + 1), b(j)) < gap(a(i), b(j + 1));
+      if (inner) {
+        add(a(i), b(j), a(i + 1));
+        ++i;
+      } else {
+        add(a(i), b(j), b(j + 1));
+        ++j;
+      }
+      if (na == 1 && j == nb) break;
     }
+  }
+  // The eye holes.
+  std::vector<bool> cut(triangles.size() / 3, false), kept(flat.size(), false), rim(flat.size(), false);
+  for (size_t t = 0; t < cut.size(); ++t) {
+    const Vec2 p = flat[static_cast<size_t>(triangles[t * 3])], q = flat[static_cast<size_t>(triangles[t * 3 + 1])];
+    const Vec2 r = flat[static_cast<size_t>(triangles[t * 3 + 2])];
+    const Vec2 middle{(p.x + q.x + r.x) / 3, (p.y + q.y + r.y) / 3};
+    cut[t] = in_an_eye(s, p) || in_an_eye(s, q) || in_an_eye(s, r) || in_an_eye(s, middle);
+  }
+  for (size_t t = 0; t < cut.size(); ++t)
+    for (size_t k = 0; k < 3; ++k) {
+      const size_t v = static_cast<size_t>(triangles[t * 3 + k]);
+      (cut[t] ? rim : kept)[v] = true;
+    }
+  std::vector<int32_t> index(flat.size(), -1);
+  const float far = s.side / 2;  // the hem
+  for (size_t v = 0; v < flat.size(); ++v) {
+    if (!kept[v]) continue;
+    index[v] = static_cast<int32_t>(m.vertices.size());
+    const Vec2 p = rim[v] ? onto_eye_oval(s, flat[v]) : flat[v];  // a point round an eye's hole lies on its oval
+    Vec3 point{}, n{};
+    hang_point(s, p, point, n);
+    m.vertices.push_back(point);
+    m.normals.push_back(n);
+    m.uv.push_back({p.x / s.side + 0.5f, p.y / s.side + 0.5f});
+    m.flat.push_back(p);
+    m.coefficients.push_back({sway_at(s, std::min(std::hypot(p.x, p.y), far), far), kBackstop});
+  }
+  for (size_t t = 0; t < cut.size(); ++t)
+    if (!cut[t])
+      for (size_t k = 0; k < 3; ++k) m.triangles.push_back(index[static_cast<size_t>(triangles[t * 3 + k])]);
   return m;
+}
+
+// The sheet's self-collision (user, 2026-11-13: it clipped into itself). Starting values, judged with the user in game.
+inline constexpr float kSelfCollisionSpacing = 0.04f;  // the closest spacing (spacing_at) of a point that takes part
+inline constexpr float kSelfCollisionShare = 0.8f;      // of the shortest edge between two of them: the distance kept
+
+/**
+ * The points of `m` (made for `s`) that take part in its self-collision: those where its spacing is
+ * kSelfCollisionSpacing or more, the part that hangs and folds below the shoulders, and not the close-set cap round the
+ * head and eyes, whose points lie nearer each other than any distance that would keep folds apart.
+ */
+inline std::vector<uint32_t> self_collision_points(const SheetMesh& m, const SheetShape& s) {
+  std::vector<uint32_t> out;
+  for (size_t v = 0; v < m.flat.size(); ++v)
+    if (spacing_at(s, std::hypot(m.flat[v].x, m.flat[v].y)) >= kSelfCollisionSpacing)
+      out.push_back(static_cast<uint32_t>(v));
+  return out;
+}
+
+/**
+ * The distance `points` of `m` keep from each other (ClothSettings::selfCollisionDistance): kSelfCollisionShare of the
+ * shortest edge between two of them as the sheet is made, so none push apart at rest. 0 when no edge joins two of them.
+ */
+inline float self_collision_distance(const SheetMesh& m, std::span<const uint32_t> points) {
+  std::vector<bool> in(m.vertices.size(), false);
+  for (const uint32_t v : points)
+    if (v < in.size()) in[v] = true;
+  float shortest = std::numeric_limits<float>::max();
+  for (size_t t = 0; t + 2 < m.triangles.size(); t += 3)
+    for (size_t k = 0; k < 3; ++k) {
+      const size_t a = static_cast<size_t>(m.triangles[t + k]), b = static_cast<size_t>(m.triangles[t + (k + 1) % 3]);
+      if (!in[a] || !in[b]) continue;
+      const Vec3 p = m.vertices[a], q = m.vertices[b];
+      shortest = std::min(shortest, std::sqrt((p.x - q.x) * (p.x - q.x) + (p.y - q.y) * (p.y - q.y) + (p.z - q.z) * (p.z - q.z)));
+    }
+  return shortest == std::numeric_limits<float>::max() ? 0.0f : kSelfCollisionShare * shortest;
 }
 
 }  // namespace pm::custom::sheet

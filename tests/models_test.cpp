@@ -840,6 +840,66 @@ void cloth_builds_the_mesh_and_its_colliders() {
   CHECK(std::find(g_destroyed.begin(), g_destroyed.end(), sphereGo) != g_destroyed.end());
 }
 
+// Self-collision, so the cloth does not fold through itself (user, 2026-11-13: the Squatter's sheet clipped into
+// itself): add_cloth hands Unity the points the mesh names as a List<UInt32> it builds with the list's own constructor
+// and Add, then the distance and stiffness. A build without those entries still gets its cloth, without it; a point past
+// the vertices fails the cloth, as any bad index does.
+int kList = 0;
+std::map<void*, std::vector<uint32_t>> g_listItems;
+std::vector<void*> g_selfLists;
+float g_selfDistance = 0.0f, g_selfStiffness = 0.0f;
+void f_list_ctor(void* list, int32_t, const void*) { g_listItems[list].clear(); }
+void f_list_add(void* list, uint32_t v, const void*) { g_listItems[list].push_back(v); }
+void f_self_indices(void*, void* list) { g_selfLists.push_back(list); }
+void f_self_distance(void*, float v) { g_selfDistance = v; }
+void f_self_stiffness(void*, float v) { g_selfStiffness = v; }
+
+void cloth_collides_with_itself_where_asked() {
+  for (const bool withSelf : {true, false}) {
+    start();
+    g_listItems.clear();
+    g_selfLists.clear();
+    g_selfDistance = g_selfStiffness = 0.0f;
+    if (withSelf) {
+      fake::method(map::List_UInt32_ctor, reinterpret_cast<void*>(&f_list_ctor), &kList);
+      fake::method(map::List_UInt32_Add, reinterpret_cast<void*>(&f_list_add), &kList);
+      ic(map::Cloth_SetSelfAndInterCollisionIndices, &f_self_indices);
+      ic(map::Cloth_set_selfCollisionDistance, &f_self_distance);
+      ic(map::Cloth_set_selfCollisionStiffness, &f_self_stiffness);
+      std::string ignored;
+      api::bind(fake::host(), ignored);  // start() bound before these were given
+    }
+    const Sheet sheet;
+    const uint32_t points[] = {1, 2};
+    api::ClothMesh mesh = sheet.mesh();
+    mesh.selfCollision = points;
+    api::ClothSettings settings;
+    settings.selfCollisionDistance = 0.02f;
+    settings.selfCollisionStiffness = 0.3f;
+    void* anchor = go_new("Sheet");
+    api::ClothParts parts;
+    std::string why;
+    CHECK(api::add_cloth(anchor, mesh, make_obj(&kMaterial), settings, {}, parts, &why));
+    if (withSelf) {
+      CHECK(g_selfLists.size() == 1 && klass_of(g_selfLists[0]) == &kList);
+      CHECK(!g_selfLists.empty() && g_listItems[g_selfLists[0]] == std::vector<uint32_t>({1, 2}));
+      CHECK(g_selfDistance == 0.02f && g_selfStiffness == 0.3f);
+      // Off unless asked: no distance, or no points, sets nothing.
+      g_selfLists.clear();
+      api::ClothParts plain;
+      CHECK(api::add_cloth(go_new("Plain"), sheet.mesh(), make_obj(&kMaterial), settings, {}, plain, &why));
+      CHECK(g_selfLists.empty());
+      // A point past the vertices fails the cloth.
+      const uint32_t past[] = {3};
+      mesh.selfCollision = past;
+      api::ClothParts bad;
+      CHECK(!api::add_cloth(go_new("Bad"), mesh, make_obj(&kMaterial), settings, {}, bad, &why));
+    } else {
+      CHECK(g_selfLists.empty() && g_selfDistance == 0.0f);
+    }
+  }
+}
+
 // A collider the cloth rests on may run along a limb as a capsule rather than being a line of spheres: one collider of
 // continuous coverage per limb is how games set cloth up on a body, and it is a fraction of the colliders the cloth has
 // to answer to each frame (Unity's cloth capsule colliders).
@@ -1024,6 +1084,7 @@ int main() {
   a_material_is_made_matte();
   a_costume_hides_only_what_it_covers();
   cloth_builds_the_mesh_and_its_colliders();
+  cloth_collides_with_itself_where_asked();
   a_cloth_collider_can_run_along_a_limb();
   a_bind_pose_undoes_the_bone();
   a_cloth_can_hang_heavier();

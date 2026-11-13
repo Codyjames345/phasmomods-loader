@@ -230,7 +230,8 @@ constexpr float kHemOnFloor = 0.0f;
 // carries that line: the head first, which alone carries the cap over it.
 struct Carrier {
   int32_t bone;
-  int32_t to;  // the joint the line runs to; -1 for a point at the bone
+  int32_t to;     // the joint the line runs to; -1 for a point at the bone
+  int chain = -1;  // the limb it belongs to (sheet::skin_sheet): -1 for the body, else one number per arm and leg
 };
 
 bool build_sheet() {
@@ -291,8 +292,9 @@ bool build_sheet() {
     coefficients.push_back({m.coefficients[i].maxDistance, m.coefficients[i].collisionSphereDistance});
   }
   g.sheetPoints = static_cast<int>(m.vertices.size());
-  // Skinned to the whole body as worn clothing is in games (sheet::weight_by_nearness): each point follows the bones
-  // nearest it, so the sheet goes with the arms and legs, and the cloth only sways about that (kHemSway). The cap over
+  // Skinned to the whole body loosely, as a loose garment is (sheet::skin_sheet): each point follows the bones nearest
+  // it, a limb carrying at most half of it and its pull spread smoothly over the sheet around it, so the sheet goes
+  // with the arms and legs as a drape rather than a sleeve, and the cloth only sways about that (kHemSway). The cap over
   // the head follows the head alone, so the eye holes stay over the eyes.
   const Carrier carriers[] = {
       {B::Head(), -1},
@@ -302,18 +304,18 @@ bool build_sheet() {
       {B::Hips(), B::Spine()},
       {B::LeftShoulder(), B::LeftUpperArm()},
       {B::RightShoulder(), B::RightUpperArm()},
-      {B::LeftUpperArm(), B::LeftLowerArm()},
-      {B::RightUpperArm(), B::RightLowerArm()},
-      {B::LeftLowerArm(), B::LeftHand()},
-      {B::RightLowerArm(), B::RightHand()},
-      {B::LeftHand(), -1},
-      {B::RightHand(), -1},
-      {B::LeftUpperLeg(), B::LeftLowerLeg()},
-      {B::RightUpperLeg(), B::RightLowerLeg()},
-      {B::LeftLowerLeg(), B::LeftFoot()},
-      {B::RightLowerLeg(), B::RightFoot()},
-      {B::LeftFoot(), -1},
-      {B::RightFoot(), -1}};
+      {B::LeftUpperArm(), B::LeftLowerArm(), 0},
+      {B::RightUpperArm(), B::RightLowerArm(), 1},
+      {B::LeftLowerArm(), B::LeftHand(), 0},
+      {B::RightLowerArm(), B::RightHand(), 1},
+      {B::LeftHand(), -1, 0},
+      {B::RightHand(), -1, 1},
+      {B::LeftUpperLeg(), B::LeftLowerLeg(), 2},
+      {B::RightUpperLeg(), B::RightLowerLeg(), 3},
+      {B::LeftLowerLeg(), B::LeftFoot(), 2},
+      {B::RightLowerLeg(), B::RightFoot(), 3},
+      {B::LeftFoot(), -1, 2},
+      {B::RightFoot(), -1, 3}};
   std::vector<void*> bones;
   std::vector<sheet::Segment> segments;
   for (const Carrier& c : carriers) {
@@ -339,21 +341,25 @@ bool build_sheet() {
     const float metres = std::sqrt(run.x * run.x + run.y * run.y + run.z * run.z);
     return api::ClothSphere{bone(from), radius, {run.x * 0.5f, run.y * 0.5f, run.z * 0.5f}, run, metres};
   };
+  std::vector<int> chains;
+  for (const Carrier& c : carriers) chains.push_back(c.chain);
   std::vector<api::ClothWeight> weights;
-  for (size_t v = 0; v < m.vertices.size(); ++v) {
-    api::ClothWeight w;  // the head alone
-    if (std::hypot(m.flat[v].x, m.flat[v].y) > cap) {
-      const sheet::Weight near = sheet::weight_by_nearness(m.vertices[v], segments);
-      for (int k = 0; k < 4; ++k) {
-        w.bone[k] = near.bone[k];
-        w.weight[k] = near.weight[k];
-      }
+  for (const sheet::Weight& near : sheet::skin_sheet(m, segments, chains, cap)) {
+    api::ClothWeight w;
+    for (int k = 0; k < 4; ++k) {
+      w.bone[k] = near.bone[k];
+      w.weight[k] = near.weight[k];
     }
     weights.push_back(w);
   }
   api::ClothMesh mesh{vertices, normals, uv, m.triangles, coefficients};
   mesh.bones = bones;
   mesh.weights = weights;
+  // The part of the sheet that hangs and folds keeps clear of itself (sheet::self_collision_points).
+  const std::vector<uint32_t> folding = sheet::self_collision_points(m, shape);
+  mesh.selfCollision = folding;
+  api::ClothSettings settings = kCloth;
+  settings.selfCollisionDistance = sheet::self_collision_distance(m, folding);
   const api::ClothSphere colliders[] = {
       {head, shape.headRadius, {0, kHeadCentreAboveBone, 0}},
       limb(B::Hips(), B::Neck(), kTorso),
@@ -369,7 +375,7 @@ bool build_sheet() {
       limb(B::RightUpperLeg(), B::RightLowerLeg(), kThigh),
       limb(B::LeftLowerLeg(), B::LeftFoot(), kShin),
       limb(B::RightLowerLeg(), B::RightFoot(), kShin)};
-  if (!api::add_cloth(anchor, mesh, material, kCloth, colliders, g.cloth, &why)) return fail("cloth", why), false;
+  if (!api::add_cloth(anchor, mesh, material, settings, colliders, g.cloth, &why)) return fail("cloth", why), false;
   return true;
 }
 

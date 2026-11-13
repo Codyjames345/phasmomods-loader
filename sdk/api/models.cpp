@@ -433,6 +433,32 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
   if (!list) return undo("no CapsuleCollider[] could be made");
   for (size_t i = 0; i < capsules.size(); ++i) RefArray{list}.set(i, capsules[i]);
   phasmo::Cloth::set_capsuleColliders(cloth, list);
+
+  // Self-collision, for the points the mesh names. An extra: a build without its entries runs the cloth without it.
+  if (settings.selfCollisionDistance > 0.0f && !mesh.selfCollision.empty()) {
+    for (const uint32_t v : mesh.selfCollision)
+      if (v >= n) return undo("a self-collision point indexes past the vertices");
+    using Distance = std::remove_cvref_t<decltype(phasmo::Cloth::set_selfCollisionDistance)>;
+    using Stiffness = std::remove_cvref_t<decltype(phasmo::Cloth::set_selfCollisionStiffness)>;
+    using Indices = std::remove_cvref_t<decltype(phasmo::Cloth::SetSelfAndInterCollisionIndices)>;
+    using Ctor = std::remove_cvref_t<decltype(phasmo::ListUInt32::ctor)>;
+    using Add = std::remove_cvref_t<decltype(phasmo::ListUInt32::Add)>;
+    void* points = Distance::use::resolved() && Stiffness::use::resolved() && Indices::use::resolved() &&
+                           Ctor::use::resolved() && Add::use::resolved()
+                       ? phasmo::ListUInt32::ctor.new_object()
+                       : nullptr;
+    if (points) {
+      phasmo::ListUInt32::ctor(points, static_cast<int32_t>(mesh.selfCollision.size()));
+      for (const uint32_t v : mesh.selfCollision) phasmo::ListUInt32::Add(points, v);
+      phasmo::Cloth::SetSelfAndInterCollisionIndices(cloth, points);
+      phasmo::Cloth::set_selfCollisionDistance(cloth, settings.selfCollisionDistance);
+      phasmo::Cloth::set_selfCollisionStiffness(cloth, std::clamp(settings.selfCollisionStiffness, 0.0f, 1.0f));
+    } else {
+      static bool logged = false;
+      if (!logged) PM_LOG("add_cloth: this game build has no cloth self-collision; the cloth runs without it");
+      logged = true;
+    }
+  }
   return true;
 }
 

@@ -85,7 +85,6 @@ struct Chase {
   api::Held openObstacle;
   bool obstacleWas = true;
   float steeredSpeed = 0.0f;                         // the speed steer last set (stops_dead)
-  float sprint = 0.0f;                       // the sprint speed it last chased at (chase_sprint)
   uint64_t moveUntil = 0;                    // when it next looks at the way ahead (a clumsy move's clip, or kSenseMs)
   uint64_t nextClumsy = 0, nextDive = 0;     // no clumsy move before the first, no dive before the second
   // A trip loses its footing, and a jump down a drop lands, at fallAt: it falls then, for fallCause. 0 for none.
@@ -524,6 +523,27 @@ bool inside_at(Point p) {
   return room && phasmo::LevelRoom::kind.get(room) != phasmo::RoomKind::outsideMap();
 }
 
+// The pace the Squatter `ghost` runs at (squatter_rule.h hunt_speed), each input read from the game as
+// GhostHuntState.UpdateSpeed reads it. 0, logged once, while the contract's difficulty cannot be read: the game's own
+// update could not run then either.
+float hunt_pace(void* ghost) {
+  void* values = phasmo::LevelValues::instance.get();
+  void* difficulty = values && api::alive(values) ? phasmo::LevelValues::difficulty.get(values) : nullptr;
+  if (!ghost || !difficulty) {
+    static bool logged = false;
+    if (!logged) PM_LOG("squatter: no difficulty to read the hunt speed from; it stands until there is one");
+    logged = true;
+    return 0.0f;
+  }
+  HuntSpeed h;
+  h.base = phasmo::GhostAI::baseSpeed.get(ghost);
+  h.ghostSpeed = phasmo::Difficulty::ghostSpeed.get(difficulty);
+  h.factors[0] = phasmo::GhostAI::huntSpeedFactor1.get(ghost);
+  h.factors[1] = phasmo::GhostAI::huntSpeedFactor2.get(ghost);
+  h.factors[2] = phasmo::GhostAI::huntSpeedFactor3.get(ghost);
+  return hunt_speed(h);
+}
+
 std::vector<Seen> read_players() {
   std::vector<Seen> out;
   const int32_t outside = phasmo::RoomKind::outsideMap();
@@ -843,9 +863,9 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     c.actOneOff = false;
   }
 
-  // Its pace: just under the target's sprint, whatever their stamina (squatter_chase.h chase_sprint).
+  // Its pace: the game's own hunt speed, less what is a ghost's alone (squatter_rule.h hunt_speed).
+  const float pace = hunt_pace(ghost);
   const std::optional<Sprint> targetSprint = c.target >= 0 ? g.sprints.of(c.target, t) : std::nullopt;
-  c.sprint = chase_sprint(targetSprint, g.sprints.of(game::local_actor(), t), c.sprint);
   const bool paused = t < c.pauseUntil;
 
   // Lines: the phase's own at a random gap; the taunt for a tired target; a line for each try at a locked exit.
@@ -938,7 +958,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
         }
       }
       const Move m = c.out.move;
-      speed = moves_by_clip(m) ? 0.0f : move_speed(c.sprint, m);  // a roll or a trip carries it by its clip
+      speed = moves_by_clip(m) ? 0.0f : move_speed(pace, m);  // a roll or a trip carries it by its clip
       to = targetSensed ? std::optional<Point>(target->at) : c.tracker.last_at();
       // A player in a hiding place it has a way into: it heads for the closet's spot (ClosetZone.navSpot on the mesh),
       // where the game's hunt goes, opening a door that stands ajar with the opening clip as it reaches it or the spot
@@ -986,7 +1006,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
     }
     case Phase::Searching: {
       c.out.move = Move::Sneak;  // creeping about, the user's Crouched Walking clip (2026-11-09)
-      speed = move_speed(c.sprint, Move::Run) * kSearchPace;
+      speed = move_speed(pace, Move::Run) * kSearchPace;
       // Around where it last sensed its target, else around where the search began, so it never stands still; a point
       // not inside the house is dropped and another tried next frame, so it never searches past an exit.
       if (!c.searchFrom) c.searchFrom = search_origin(c.tracker.last_at(), ghostAt);
@@ -1005,7 +1025,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       const bool there = spot && std::hypot(spot->x - ghostAt.x, spot->z - ghostAt.z) < kStandReach;
       if (there) face_toward(ghost, ghostAt, kickAt->face);  // squarely at the doors, so the kick lands on them
       c.out.move = Move::Run;
-      speed = there ? 0.0f : move_speed(c.sprint, Move::Run);
+      speed = there ? 0.0f : move_speed(pace, Move::Run);
       to = there ? std::optional<Point>(ghostAt) : spot;
       if (there && t >= c.nextBang && !paused) {  // demands they come out, kicking the door over and over
         act(Act::Bang, kBangGapMs / 2, t);
@@ -1020,7 +1040,7 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
       const Step step = follow_step(ghostAt, known ? std::optional<Point>(target->at) : std::nullopt, stand,
                                     c.tracker.last_at());
       c.out.move = Move::Walk;
-      speed = move_speed(c.sprint, Move::Run) * step.pace;
+      speed = move_speed(pace, Move::Run) * step.pace;
       to = step.to ? step.to : std::optional<Point>(ghostAt);
       break;
     }
@@ -1068,9 +1088,9 @@ void run(void* ghost, bool friendlyGhost, uint64_t t) {
   if (next == Phase::Chasing || next == Phase::Searching || next == Phase::Following) {
     if (hold_at_doors(agent, ghostAt, t)) speed = 0.0f;
     phasmo::Vector3 v = phasmo::NavMeshAgent::get_velocity(agent);
-    const float pace = std::hypot(v.x, v.z);
+    const float moving = std::hypot(v.x, v.z);
     // A hard stall, trying to run at kBumpFallPace or more, knocks it over backwards; a softer one plays the bump.
-    if (!paused && !down && c.stuck.update(pace, speed, t)) {
+    if (!paused && !down && c.stuck.update(moving, speed, t)) {
       if (knocks_over(FallCause::Bump, speed) && may_fall(c.out.move, c.out.act, down))
         fall(FallCause::Bump, wrap_angle(std::atan2(v.x, v.z) + std::numbers::pi_v<float>), t);
       else
@@ -1547,8 +1567,10 @@ void tick(void* haunting, int type, bool /*steered: a player's own lines come in
     forget_channel();
     figure::destroy();
     if (!haunting) ghost_sight::drop();  // shared (ghost_sight.h): kept while the contract's ghost lives
-    // The exits' lock is kept: it belongs to the map, and squatter_door forgets it once the map's LevelController
-    // is gone, so a tick without the ghost mid-contract never locks them twice.
+    // Another type, or none, haunts: the exits are let go and, on the master, unlocked as a hunt's end does (user,
+    // 2026-11-13: changing to another ghost type never unlocked them). A Squatter whose ghost reads null for a frame
+    // keeps them, so it never locks them twice.
+    if (type != kSquatter) door::release();
     return;
   }
   const bool master = game::is_master();

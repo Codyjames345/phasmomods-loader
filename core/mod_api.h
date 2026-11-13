@@ -435,7 +435,9 @@ struct PmHostApi {
   /// The System.Type object of the type `typeKey` names (C#'s typeof).
   /// @since Contract 2.1
   void* (*type_object)(const char* typeKey);
-  /// A new managed object of the class `typeKey` names, its fields zeroed. No constructor runs.
+  /// A new managed object of the class `typeKey` names, its fields zeroed. No constructor runs. `typeKey` is a Type
+  /// entry's key, or (from Contract 2.5) an Inflated entry's, which makes an object of its generic instance (a
+  /// List<UInt32> for List<UInt32>.ctor); an older host answers null for that.
   /// @since Contract 2.1
   void* (*object_new)(const char* typeKey);
   /// Whether the managed object `obj` is of the type `typeKey` names or of a class derived from it

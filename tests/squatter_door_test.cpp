@@ -11,6 +11,7 @@
 
 #include "Difficulty.h"
 #include "Door.h"
+#include "GhostAI.h"
 #include "LevelController.h"
 #include "LevelRoom.h"
 #include "CursedItems.h"
@@ -40,7 +41,8 @@ struct Obj {
 };
 
 // Where the fields lie in the fake objects.
-constexpr int32_t kLevelHuntingDoors = 0x08, kLevelVariations = 0x10;
+constexpr int32_t kLevelHuntingDoors = 0x08, kLevelVariations = 0x10, kLevelGhost = 0x18;
+constexpr int32_t kGhostHunting = 0x08;  // GhostAI.isHunting
 constexpr int32_t kVariationDoors = 0x08;
 constexpr int32_t kNetworkSpots = 0x08, kSpotPlayer = 0x08;
 constexpr int32_t kPlayerDead = 0x08, kPlayerRoom = 0x10;
@@ -69,6 +71,7 @@ T& at(Obj& o, int32_t offset) {
 
 Obj g_level, g_net, g_values, g_difficulty, g_variation, g_front, g_back, g_gateLeft, g_gateRight, g_bedroom;
 Obj g_hall, g_garden, g_campfire, g_outside;
+Obj g_ghost;  // the contract's ghost, LevelController.currentGhost
 Obj g_spots[4], g_players[4];
 Obj g_photon[3];  // the room's Photon players, actors 1 (the first, the master's), 2 and 3
 void* g_levelRef = nullptr;   // LevelController.instance
@@ -105,6 +108,7 @@ void fake_hunting_close(void* d, const void*) {
   if (g_lockRunsHere) lock_arrives(d);
 }
 void fake_toggle_lock(void*, bool, bool, const void*) { g_calls.push_back("ToggleDoorLock"); }
+void fake_unlock_hunting_doors(void*, const void*) { g_calls.push_back("UnlockHuntingDoors"); }
 void fake_lock(void*, bool, const void*) { g_calls.push_back("LockDoor"); }
 void fake_unlock(void*, bool, const void*) { g_calls.push_back("UnlockDoor"); }
 void fake_disable(void*, bool, bool, const void*) { g_calls.push_back("DisableOrEnableDoor"); }
@@ -293,6 +297,11 @@ void start(bool master = true, bool friendly = false) {
   fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_is_master));
   fake::method(map::Door_HuntingCloseDoor, reinterpret_cast<void*>(&fake_hunting_close));
   fake::method(map::Door_ToggleDoorLock, reinterpret_cast<void*>(&fake_toggle_lock));
+  fake::method(map::LevelController_UnlockHuntingDoors, reinterpret_cast<void*>(&fake_unlock_hunting_doors));
+  g_ghost = Obj{};
+  at<void*>(g_level, kLevelGhost) = &g_ghost;
+  fake::field(map::LevelController_currentGhost, kLevelGhost);
+  fake::field(map::GhostAI_isHunting, kGhostHunting);
   fake::method(map::Door_LockDoor, reinterpret_cast<void*>(&fake_lock));
   fake::method(map::Door_UnlockDoor, reinterpret_cast<void*>(&fake_unlock));
   fake::method(map::Door_DisableOrEnableDoor, reinterpret_cast<void*>(&fake_disable));
@@ -1095,7 +1104,49 @@ void a_missing_entry_fails_the_start() {
 
 }  // namespace
 
+// The hold is the Squatter's, not the map's (user, 2026-11-13: once it had locked the door, changing to another ghost
+// type never unlocked it). Once it no longer haunts, every exit it held takes the game's calls again, so another
+// ghost's hunt ends with its exits open, and the master ends the lock as a hunt's end does
+// (LevelController.UnlockHuntingDoors, sdk/systems/doors.md "How a hunt locks the exits").
+void the_hold_ends_when_the_squatter_stops_haunting() {
+  start();
+  CHECK(door::lock_all());
+  g_calls.clear();
+  door::set_haunting(false);
+  door::release();
+  CHECK(!door::locked() && !door::holds(&g_front));
+  CHECK(g_calls == std::vector<std::string>{"UnlockHuntingDoors"});
+  g_calls.clear();
+  toggle_lock(&g_front, true);  // a later hunt's end reaches the exit
+  CHECK(g_calls == std::vector<std::string>{"ToggleDoorLock"});
+  g_calls.clear();
+  door::release();  // nothing is held any more: nothing to end
+  CHECK(g_calls.empty());
+}
+
+// While the contract's ghost hunts, the hunt's own end unlocks the exits (GameController.ResetHuntEffects), so the
+// master lets go and calls nothing.
+void a_hunt_on_ends_the_lock_itself() {
+  start();
+  CHECK(door::lock_all());
+  at<bool>(g_ghost, kGhostHunting) = true;
+  g_calls.clear();
+  door::release();
+  CHECK(!door::locked() && g_calls.empty());
+}
+
+// Another client lets go of what the master's lock made it hold, and unlocks nothing: the master's unlock reaches it.
+void another_client_lets_go_and_unlocks_nothing() {
+  hold_from_the_master({&g_front});
+  CHECK(door::locked());
+  door::release();
+  CHECK(!door::locked() && g_calls.empty());
+}
+
 int main() {
+  the_hold_ends_when_the_squatter_stops_haunting();
+  a_hunt_on_ends_the_lock_itself();
+  another_client_lets_go_and_unlocks_nothing();
   a_door_too_narrow_to_pass_is_opened();
   a_door_reads_shut_as_the_game_snaps_it();
   a_door_open_as_far_as_it_goes_lets_it_through();

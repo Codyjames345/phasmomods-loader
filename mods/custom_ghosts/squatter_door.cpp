@@ -6,6 +6,7 @@
 
 #include "CursedItems.h"
 #include "Door.h"
+#include "GhostAI.h"
 #include "LevelController.h"
 #include "LevelRoom.h"
 #include "Photon.h"
@@ -399,6 +400,18 @@ bool create_hooks() {
          api::hook<phasmo::MonkeyPaw::OpenExitsWish>(&detour_open_exits_wish, "MonkeyPaw.OpenExitsWish", only) &&
          api::hook<phasmo::Door::HuntingCloseDoorNetworked>(&detour_hunting_close_networked,
                                                             "Door.HuntingCloseDoorNetworked", only);
+}
+
+void release() {
+  forget_old_level();
+  void* l = g_level.get();
+  if (!l) return;
+  void* ghost = phasmo::LevelController::currentGhost.get(l);
+  const bool hunting = ghost && api::alive(ghost) && phasmo::GhostAI::isHunting.get(ghost);
+  const bool unlock = phasmo::PhotonNetwork::get_IsMasterClient() && !hunting;
+  reset();  // first, so the hooks let the game's unlock through
+  PM_LOG("squatter: the exits are let go");
+  if (unlock) phasmo::LevelController::UnlockHuntingDoors(l);
 }
 
 void reset() {

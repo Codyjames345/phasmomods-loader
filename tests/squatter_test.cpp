@@ -282,13 +282,20 @@ void kick_needs_a_living_target_in_reach() {
   CHECK(!may_kick(Phase::LockedOut, false, true, 0.5f, 1.0f));
 }
 
-// With the clumsy moves coming only from the way ahead, it runs a little slower (user, 2026-11-09), about the old
-// cycle's average: just under the sprint, never at it.
-void speed_stays_just_under_sprint() {
-  for (const float s : {2.0f, 3.0f, 4.0f}) {
-    CHECK(move_speed(s, Move::Run) < 0.95f * s);
-    CHECK(move_speed(s, Move::Run) > 0.8f * s);
-    CHECK(move_speed(s, Move::Stumble) == 0.0f);
+// It runs at the game's own hunt speed (user, 2026-11-13: "the squatter should follow the regular hunt speed, and not
+// be based on the player's speed"), less what is a ghost's alone (user, 2026-11-13: not the Blood Moon or line of
+// sight, "since it's not a ghost"): the base times the difficulty's ghost speed times the ghost's three factors, and it
+// never speeds up the longer it chases. Its other moves keep their share of the run.
+void it_runs_at_the_hunt_speed() {
+  HuntSpeed h{.base = 1.7f, .ghostSpeed = 1.0f};
+  CHECK(std::fabs(hunt_speed(h) - 1.7f) < 1e-5f);
+  h = {.base = 1.7f, .ghostSpeed = 1.5f, .factors = {2.0f, 1.0f, 0.5f}};
+  CHECK(std::fabs(hunt_speed(h) - 1.7f * 1.5f) < 1e-5f);
+  for (const float pace : {1.7f, 2.4f, 2.8f}) {
+    CHECK(move_speed(pace, Move::Run) == pace);
+    CHECK(move_speed(pace, Move::Stumble) == 0.0f && move_speed(pace, Move::Stand) == 0.0f);
+    CHECK(move_speed(pace, Move::Walk) > 0.0f && move_speed(pace, Move::Walk) < pace);
+    CHECK(move_speed(pace, Move::Sneak) > 0.0f && move_speed(pace, Move::Sneak) < pace);
   }
 }
 
@@ -584,19 +591,8 @@ void steering_covers_every_phase_but_lurking() {
 
 #include "squatter_chase_cases.inc"
 
-// The Squatter's sheet (sheet_mesh.h). A cell is cut for an eye when it overlaps the eye's rectangle, so a hole is the
-// rectangle rounded out to whole cells.
+// The Squatter's sheet (sheet_mesh.h).
 namespace sh = pm::custom::sheet;
-
-bool overlaps_an_eye(const sh::SheetShape& s, float x0, float x1, float z0, float z1) {
-  for (const float side : {-1.0f, 1.0f}) {
-    const float x = side * s.eyeAcross;
-    if (x0 < x + s.eyeWidth / 2 && x1 > x - s.eyeWidth / 2 && z0 < s.eyeForward + s.eyeHeight / 2 &&
-        z1 > s.eyeForward - s.eyeHeight / 2)
-      return true;
-  }
-  return false;
-}
 
 // How far `p` lies out on its eye's oval: 1 on the oval, under 1 inside it.
 float eye_oval(const sh::SheetShape& s, sh::Vec2 p) {
@@ -606,16 +602,6 @@ float eye_oval(const sh::SheetShape& s, sh::Vec2 p) {
 }
 
 bool inside_an_eye(const sh::SheetShape& s, sh::Vec2 p) { return eye_oval(s, p) < 1.0f - 1e-4f; }
-
-// The cell (column, row) of the axis a point lies in, or -1 for a coordinate on no cell.
-std::pair<int, int> cell_of(const std::vector<float>& axis, sh::Vec2 p) {
-  const auto at = [&](float v) {
-    for (size_t i = 0; i + 1 < axis.size(); ++i)
-      if (v > axis[i] && v < axis[i + 1]) return static_cast<int>(i);
-    return -1;
-  };
-  return {at(p.x), at(p.y)};
-}
 
 sh::Vec2 centroid(const sh::SheetMesh& m, size_t triangle) {
   sh::Vec2 c{0, 0};
@@ -637,40 +623,97 @@ void the_sheet_stays_inside_its_point_budget() {
   const sh::SheetMesh m = sh::make_sheet(wide);
   CHECK(m.vertices.size() <= 6000);
   CHECK(m.triangles.size() <= 2 * m.vertices.size() * 3);
-  // And the grid is no finer than it says: fine only within fineHalf of the centre, where the eyes are cut, and no step
-  // wider than coarseSpacing beyond it.
-  const std::vector<float> ax = sh::sheet_axis(wide);
-  for (size_t i = 1; i < ax.size(); ++i) {
-    const float step = ax[i] - ax[i - 1];
-    const bool fine = std::fabs(ax[i]) <= wide.fineHalf + 1e-4f && std::fabs(ax[i - 1]) <= wide.fineHalf + 1e-4f;
-    CHECK(step <= (fine ? wide.fineSpacing : wide.coarseSpacing) + 1e-4f);
+  // And the sheet is as fine as it says: its rings a step of spacing_at apart, fine within fineHalf of the centre,
+  // where the eyes are cut, widening to coarseSpacing beyond it, and no edge of a triangle much longer than its step.
+  const std::vector<float> rings = sh::ring_distances(wide);
+  CHECK(rings.front() == 0.0f && rings.back() == wide.side / 2);
+  for (size_t i = 1; i + 1 < rings.size(); ++i)
+    CHECK(std::fabs(rings[i] - rings[i - 1] - sh::spacing_at(wide, rings[i - 1])) < 1e-5f);
+  CHECK(rings.back() - rings[rings.size() - 2] <= 1.5f * sh::spacing_at(wide, rings[rings.size() - 2]) + 1e-5f);
+  CHECK(sh::spacing_at(wide, wide.fineHalf) == wide.fineSpacing && sh::spacing_at(wide, wide.side) == wide.coarseSpacing);
+  for (size_t t = 0; t < m.triangles.size() / 3; ++t)
+    for (size_t k = 0; k < 3; ++k) {
+      const size_t p = static_cast<size_t>(m.triangles[t * 3 + k]), q = static_cast<size_t>(m.triangles[t * 3 + (k + 1) % 3]);
+      const sh::Vec3 a = m.vertices[p], b = m.vertices[q];
+      const float d = std::max(std::hypot(m.flat[p].x, m.flat[p].y), std::hypot(m.flat[q].x, m.flat[q].y));
+      const float edge = std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z));
+      // Round an eye's hole, whose points are moved onto the oval, an edge may stretch a little further.
+      const bool atAnEye = std::fabs(eye_oval(wide, m.flat[p]) - 1.0f) < 1e-4f ||
+                           std::fabs(eye_oval(wide, m.flat[q]) - 1.0f) < 1e-4f;
+      CHECK(edge <= (atAnEye ? 2.5f : 2.0f) * sh::spacing_at(wide, d));
+    }
+}
+
+// The smallest corner of a triangle of the hanging sheet, in degrees.
+float smallest_corner(const sh::SheetMesh& m, size_t triangle) {
+  const auto at = [&](size_t k) { return m.vertices[static_cast<size_t>(m.triangles[triangle * 3 + k])]; };
+  const auto corner = [](sh::Vec3 p, sh::Vec3 a, sh::Vec3 b) {
+    const float ax = a.x - p.x, ay = a.y - p.y, az = a.z - p.z, bx = b.x - p.x, by = b.y - p.y, bz = b.z - p.z;
+    const float la = std::sqrt(ax * ax + ay * ay + az * az), lb = std::sqrt(bx * bx + by * by + bz * bz);
+    if (la <= 0 || lb <= 0) return 0.0f;
+    return std::acos(std::clamp((ax * bx + ay * by + az * bz) / (la * lb), -1.0f, 1.0f)) * 180.0f / 3.14159265f;
+  };
+  return std::min({corner(at(0), at(1), at(2)), corner(at(1), at(2), at(0)), corner(at(2), at(0), at(1))});
+}
+
+// The sheet's triangles are well shaped as it hangs, as cloth meshes are built in games: no needle-thin triangles,
+// which Unity's cloth folds into jagged shards and lights in facets (user, 2026-11-13: "the bedsheet appears mangled
+// and has artifacts"). A sheet cut from a flat square grid and squeezed onto the hanging shape had every ring at the
+// hem squeezed to a quarter of its length, so most of its triangles were needles. Checked at the size the figure
+// cuts it for a tall body, and at the default. Round an eye's hole, whose points are moved onto the oval, a triangle
+// may be sharper, though still far from a needle.
+void sheet_triangles_are_well_shaped() {
+  sh::SheetShape tall;
+  tall.shoulderRadius = 0.32f;
+  tall.side = 2.0f * sh::reach_distance(tall, 1.8f);
+  for (const sh::SheetShape& shape : {tall, sh::SheetShape{}}) {
+    const sh::SheetMesh m = sh::make_sheet(shape);
+    CHECK(!m.triangles.empty());
+    float worst = 180.0f, worstAtAnEye = 180.0f;
+    for (size_t t = 0; t < m.triangles.size() / 3; ++t) {
+      bool atAnEye = false;
+      for (size_t k = 0; k < 3; ++k)
+        atAnEye = atAnEye || std::fabs(eye_oval(shape, m.flat[static_cast<size_t>(m.triangles[t * 3 + k])]) - 1.0f) < 1e-4f;
+      float& w = atAnEye ? worstAtAnEye : worst;
+      w = std::min(w, smallest_corner(m, t));
+    }
+    CHECK(worst >= 20.0f && worstAtAnEye >= 10.0f);
+    if (worst < 20.0f || worstAtAnEye < 10.0f)
+      std::printf("  the sheet's sharpest corners: %.1f degrees, %.1f round an eye\n", worst, worstAtAnEye);
   }
 }
 
-void sheet_is_closed_grid_with_eye_holes() {
+// The sheet is whole but for its two eye holes: every edge of a triangle is shared by two triangles, but on the hem
+// and round each eye's hole, and no point or triangle lies inside an eye.
+void sheet_is_whole_with_eye_holes() {
   const sh::SheetShape shape;
   const sh::SheetMesh m = sh::make_sheet(shape);
-  const std::vector<float> axis = sh::sheet_axis(shape);
-  CHECK(axis.size() >= 3);
-  if (axis.size() < 3) return;
-  CHECK(std::abs(axis.front() + shape.side / 2) < 1e-5f && std::abs(axis.back() - shape.side / 2) < 1e-5f);
-  CHECK(std::find(axis.begin(), axis.end(), 0.0f) != axis.end());
-  for (size_t i = 0; i < axis.size(); ++i) {
-    CHECK(axis[i] == -axis[axis.size() - 1 - i]);  // symmetric about the centre, exactly
-    if (i) CHECK(axis[i] > axis[i - 1]);
-  }
-  const size_t cells = axis.size() - 1;
-  size_t cut = 0;
-  size_t round = 0;  // the cells of the round sheet: those whose middle lies within its radius
-  for (size_t i = 0; i < cells; ++i)
-    for (size_t j = 0; j < cells; ++j) {
-      const float x = (axis[i] + axis[i + 1]) / 2, z = (axis[j] + axis[j + 1]) / 2;
-      if (std::hypot(x, z) > shape.side / 2) continue;
-      ++round;
-      if (overlaps_an_eye(shape, axis[i], axis[i + 1], axis[j], axis[j + 1])) ++cut;
+  std::map<std::pair<int32_t, int32_t>, int> edges;
+  for (size_t t = 0; t < m.triangles.size() / 3; ++t) {
+    CHECK(!inside_an_eye(shape, centroid(m, t)));
+    for (size_t k = 0; k < 3; ++k) {
+      const int32_t p = m.triangles[t * 3 + k], q = m.triangles[t * 3 + (k + 1) % 3];
+      ++edges[{std::min(p, q), std::max(p, q)}];
     }
-  CHECK(cut > 0 && round < cells * cells);
-  CHECK(m.triangles.size() == 6 * (round - cut));
+  }
+  const auto on_hem = [&](int32_t v) {
+    const sh::Vec2 f = m.flat[static_cast<size_t>(v)];
+    return std::hypot(f.x, f.y) >= shape.side / 2 - 1e-4f;
+  };
+  const auto on_oval = [&](int32_t v) {
+    return std::abs(eye_oval(shape, m.flat[static_cast<size_t>(v)]) - 1.0f) < 1e-4f;
+  };
+  size_t border = 0;
+  for (const auto& [edge, triangles] : edges) {
+    CHECK(triangles == 1 || triangles == 2);
+    if (triangles != 1) continue;
+    ++border;
+    const bool hem = on_hem(edge.first) && on_hem(edge.second);
+    const bool eye = on_oval(edge.first) && on_oval(edge.second) &&
+                     (m.flat[static_cast<size_t>(edge.first)].x < 0) == (m.flat[static_cast<size_t>(edge.second)].x < 0);
+    CHECK(hem || eye);
+  }
+  CHECK(border > 0);
   const size_t n = m.vertices.size();
   CHECK(n > 0 && m.normals.size() == n && m.uv.size() == n && m.flat.size() == n && m.coefficients.size() == n);
   if (n == 0 || m.flat.size() != n || m.uv.size() != n) return;
@@ -687,20 +730,15 @@ void sheet_is_closed_grid_with_eye_holes() {
   CHECK(inRange);
   CHECK(clearOfEyes);
   CHECK(std::count(used.begin(), used.end(), false) == 0);  // no vertex left over in a hole
-  // Each vertex lies on the grid but an eye's rim, which lies on the eye's oval (user, 2026-11-09: oval eye holes,
-  // not rectangles), eight to an eye, the two at its ends on the grid too; and its uv is its place on the sheet
-  // from 0 to 1.
-  size_t rim = 0;
+  // Each eye's hole is an oval (user, 2026-11-09: oval eye holes, not rectangles): the points round it lie on the
+  // oval, at least six to an eye and as many to each; and each point's uv is its place on the sheet from 0 to 1.
+  size_t left = 0, right = 0;
   for (size_t v = 0; v < n; ++v) {
-    const bool onGrid = std::find(axis.begin(), axis.end(), m.flat[v].x) != axis.end() &&
-                        std::find(axis.begin(), axis.end(), m.flat[v].y) != axis.end();
-    const bool onOval = std::abs(eye_oval(shape, m.flat[v]) - 1.0f) < 1e-4f;
-    CHECK(onGrid || onOval);
-    if (onOval) ++rim;
+    if (on_oval(static_cast<int32_t>(v))) ++(m.flat[v].x < 0 ? left : right);
     CHECK(std::abs(m.uv[v].x - (m.flat[v].x / shape.side + 0.5f)) < 1e-5f);
     CHECK(std::abs(m.uv[v].y - (m.flat[v].y / shape.side + 0.5f)) < 1e-5f);
   }
-  CHECK(rim == 16);
+  CHECK(left >= 6 && left == right);
 }
 
 void sheet_pins_only_the_top() {
@@ -751,28 +789,146 @@ void sheet_sways_only_near_its_shape() {
   CHECK(nearSway == 0.0f && std::fabs(farSway - sh::kHemSway) < 1e-5f && growing);
 }
 
-// Each point of the sheet follows the bones nearest it, as worn clothing is skinned in games (user, 2026-11-09: the
-// arms and legs came out of the sheet): over an arm the arm carries it, between two bones both do, and the four that
-// pull most carry it, their weights adding up to 1.
-void sheet_follows_the_bones_nearest_it() {
-  const sh::Segment bones[] = {{{0, -0.2f, 0}, {0, 0, 0}},               // a spine, under the crown
-                               {{0.3f, -0.4f, 0}, {0.3f, -0.9f, 0}},     // an arm out to the right
-                               {{-0.1f, -1.0f, 0}, {-0.1f, -1.8f, 0}},   // a leg
-                               {{0.1f, -1.0f, 0}, {0.1f, -1.8f, 0}},     // the other leg
-                               {{-0.3f, -0.4f, 0}, {-0.3f, -0.9f, 0}}};  // the other arm
-  CHECK(sh::distance_to({0.3f, -0.6f, 0.1f}, bones[1]) - 0.1f < 1e-5f);
-  CHECK(std::fabs(sh::distance_to({0, 0.5f, 0}, bones[0]) - 0.5f) < 1e-5f);  // past its end: from the end
-  sh::Weight w = sh::weight_by_nearness({0.32f, -0.6f, 0.05f}, bones);  // on the right arm
-  CHECK(w.bone[0] == 1 && w.weight[0] > 0.8f);
-  float sum = 0;
-  for (const float x : w.weight) sum += x;
-  CHECK(std::fabs(sum - 1.0f) < 1e-5f);
-  for (int k = 1; k < 4; ++k) CHECK(w.weight[k] <= w.weight[k - 1]);
-  w = sh::weight_by_nearness({0, -1.4f, 0.1f}, bones);  // between the legs: both, alike
-  CHECK(((w.bone[0] == 2 && w.bone[1] == 3) || (w.bone[0] == 3 && w.bone[1] == 2)) &&
-        std::fabs(w.weight[0] - w.weight[1]) < 1e-4f);
-  const sh::Weight none = sh::weight_by_nearness({0, 0, 0}, {});
-  CHECK(none.bone[0] == 0 && none.weight[0] == 1.0f && none.weight[1] == 0.0f);  // no bones read: bone 0 alone
+// A stand-in body under a sheet hung for it, in the sheet's space (the crown at the origin, metres): the head, neck,
+// chest, spine, hips and shoulders down the middle, then each arm (upper arm, forearm, hand) and leg (thigh, shin,
+// foot), as squatter_figure.cpp lists them. Made-up test numbers, not the game's. `chain` is -1 for the body and one
+// number for each arm and each leg.
+struct StandIn {
+  std::vector<sh::Segment> bones;
+  std::vector<int> chain;
+};
+StandIn stand_in() {
+  StandIn s;
+  const auto add = [&](sh::Vec3 a, sh::Vec3 b, int chain) {
+    s.bones.push_back({a, b});
+    s.chain.push_back(chain);
+  };
+  add({0, -0.12f, 0}, {0, -0.03f, 0}, -1);       // head
+  add({0, -0.2f, 0}, {0, -0.12f, 0}, -1);        // neck
+  add({0, -0.4f, 0}, {0, -0.2f, 0}, -1);         // chest
+  add({0, -0.6f, 0}, {0, -0.4f, 0}, -1);         // spine
+  add({0, -0.8f, 0}, {0, -0.6f, 0}, -1);         // hips
+  add({-0.05f, -0.25f, 0}, {-0.18f, -0.27f, 0}, -1);  // shoulders
+  add({0.05f, -0.25f, 0}, {0.18f, -0.27f, 0}, -1);
+  int chain = 0;
+  for (const float x : {-1.0f, 1.0f}) {
+    add({x * 0.18f, -0.27f, 0}, {x * 0.2f, -0.55f, 0}, chain);    // upper arm
+    add({x * 0.2f, -0.55f, 0}, {x * 0.21f, -0.8f, 0}, chain);     // forearm
+    add({x * 0.21f, -0.8f, 0}, {x * 0.21f, -0.8f, 0}, chain++);   // hand
+    add({x * 0.1f, -0.85f, 0}, {x * 0.1f, -1.3f, 0}, chain);      // thigh
+    add({x * 0.1f, -1.3f, 0}, {x * 0.1f, -1.7f, 0}, chain);       // shin
+    add({x * 0.1f, -1.7f, 0}, {x * 0.1f, -1.7f, 0}, chain++);     // foot
+  }
+  return s;
+}
+
+// How differently two points of the sheet are carried: the sum over the limbs' bones of the difference in each one's
+// share, plus the difference in the body's share together, 0 to 2. The body's bones count as one, since the trunk they
+// make moves as one under the sheet; what pulls a sheet into folds is a limb carrying one point and not the next.
+float carry_gap(const sh::Weight& a, const sh::Weight& b, const std::vector<int>& chain) {
+  std::vector<float> wa(chain.size(), 0.0f), wb(chain.size(), 0.0f);
+  for (int k = 0; k < 4; ++k) {
+    wa[static_cast<size_t>(a.bone[k])] += a.weight[k];
+    wb[static_cast<size_t>(b.bone[k])] += b.weight[k];
+  }
+  float gap = 0.0f, bodyA = 0.0f, bodyB = 0.0f;
+  for (size_t i = 0; i < chain.size(); ++i) {
+    if (chain[i] >= 0) gap += std::fabs(wa[i] - wb[i]);
+    else bodyA += wa[i], bodyB += wb[i];
+  }
+  return gap + std::fabs(bodyA - bodyB);
+}
+
+// The sheet is skinned loosely, as a loose garment is (user, 2026-11-13: it clung to the arms and folded into itself):
+// a limb carries at most kLimbShare of any point, the rest going to the body down the middle, and each point's weights
+// are smoothed with its neighbours', so points next to each other are carried alike and the sheet over an arm moves
+// with it as a broad drape, not a sleeve. The cap over the head follows the head alone. The arms still carry the sheet
+// beside them (user, 2026-11-09: the arms and legs came out of the sheet). Skinned by nearness alone (the old way), one
+// neighbour in ten differed by more than 0.44 and the worst by 0.99, with a limb carrying whole points.
+void the_sheet_is_skinned_loosely() {
+  sh::SheetShape shape;
+  shape.shoulderRadius = 0.32f;
+  shape.side = 2.0f * sh::reach_distance(shape, 1.75f);
+  const sh::SheetMesh m = sh::make_sheet(shape);
+  const StandIn body = stand_in();
+  const std::vector<sh::Weight> w = sh::skin_sheet(m, body.bones, body.chain, sh::cap_distance(shape));
+  CHECK(w.size() == m.vertices.size());
+  if (w.size() != m.vertices.size()) return;
+  float mostLimb = 0.0f;
+  for (size_t v = 0; v < w.size(); ++v) {
+    float sum = 0.0f, limb = 0.0f;
+    for (int k = 0; k < 4; ++k) {
+      sum += w[v].weight[k];
+      if (body.chain[static_cast<size_t>(w[v].bone[k])] >= 0) limb += w[v].weight[k];
+    }
+    CHECK(std::fabs(sum - 1.0f) < 1e-4f);
+    mostLimb = std::max(mostLimb, limb);
+    if (std::hypot(m.flat[v].x, m.flat[v].y) <= sh::cap_distance(shape))
+      CHECK(w[v].bone[0] == 0 && w[v].weight[0] == 1.0f);
+  }
+  CHECK(mostLimb <= sh::kLimbShare + 1e-4f);
+  std::vector<float> gaps;
+  for (size_t t = 0; t < m.triangles.size() / 3; ++t)
+    for (size_t k = 0; k < 3; ++k) {
+      const size_t a = static_cast<size_t>(m.triangles[t * 3 + k]), b = static_cast<size_t>(m.triangles[t * 3 + (k + 1) % 3]);
+      gaps.push_back(carry_gap(w[a], w[b], body.chain));
+    }
+  std::sort(gaps.begin(), gaps.end());
+  const float p90 = gaps[gaps.size() * 9 / 10], worst = gaps.back();
+  CHECK(p90 <= 0.2f && worst <= 0.7f);
+  if (p90 > 0.2f || worst > 0.7f)
+    std::printf("  the sheet's skinning: 90th percentile gap %.2f, worst %.2f\n", p90, worst);
+  // The sheet hanging beside the right forearm is carried by that arm noticeably.
+  size_t beside = 0;
+  float nearest = 1e9f;
+  for (size_t v = 0; v < m.vertices.size(); ++v) {
+    const float d = sh::distance_to(m.vertices[v], body.bones[14]);  // the right forearm (stand_in's order)
+    if (d < nearest) nearest = d, beside = v;
+  }
+  float arm = 0.0f;
+  for (int k = 0; k < 4; ++k)
+    if (body.chain[static_cast<size_t>(w[beside].bone[k])] == body.chain[14]) arm += w[beside].weight[k];
+  CHECK(arm >= 0.2f);
+}
+
+// The sheet folds through itself less with Unity's self-collision (user, 2026-11-13: it clipped into itself), over the
+// part of it that hangs and folds: the points where its spacing is kSelfCollisionSpacing or more, below the shoulders,
+// not the close-set cap round the head and eyes. The distance they keep is under the shortest edge between two of
+// them as the sheet is made, so no two points next to each other push apart at rest.
+void the_hanging_sheet_collides_with_itself() {
+  sh::SheetShape shape;
+  shape.shoulderRadius = 0.32f;
+  shape.side = 2.0f * sh::reach_distance(shape, 1.75f);
+  const sh::SheetMesh m = sh::make_sheet(shape);
+  const std::vector<uint32_t> points = sh::self_collision_points(m, shape);
+  CHECK(!points.empty() && points.size() < m.vertices.size());
+  std::vector<bool> in(m.vertices.size(), false);
+  for (const uint32_t v : points) {
+    CHECK(v < m.vertices.size());
+    if (v >= m.vertices.size()) return;
+    in[v] = true;
+    CHECK(sh::spacing_at(shape, std::hypot(m.flat[v].x, m.flat[v].y)) >= sh::kSelfCollisionSpacing);
+  }
+  CHECK(in[m.vertices.size() - 1]);  // the hem's
+  const float distance = sh::self_collision_distance(m, points);
+  CHECK(distance > 0.0f);
+  float shortest = 1e9f;
+  for (size_t t = 0; t < m.triangles.size() / 3; ++t)
+    for (size_t k = 0; k < 3; ++k) {
+      const size_t a = static_cast<size_t>(m.triangles[t * 3 + k]), b = static_cast<size_t>(m.triangles[t * 3 + (k + 1) % 3]);
+      if (!in[a] || !in[b]) continue;
+      const sh::Vec3 p = m.vertices[a], q = m.vertices[b];
+      shortest = std::min(shortest, std::sqrt((p.x - q.x) * (p.x - q.x) + (p.y - q.y) * (p.y - q.y) + (p.z - q.z) * (p.z - q.z)));
+    }
+  CHECK(distance < shortest);
+}
+
+// How far a point lies from a bone, measured to the line from its joint to the next (what skin_sheet pulls by).
+void a_point_is_measured_to_its_bone() {
+  const sh::Segment spine{{0, -0.2f, 0}, {0, 0, 0}}, arm{{0.3f, -0.4f, 0}, {0.3f, -0.9f, 0}};
+  CHECK(std::fabs(sh::distance_to({0.3f, -0.6f, 0.1f}, arm) - 0.1f) < 1e-5f);
+  CHECK(std::fabs(sh::distance_to({0, 0.5f, 0}, spine) - 0.5f) < 1e-5f);  // past its end: from the end
+  CHECK(std::fabs(sh::distance_to({0.3f, -1.2f, 0}, arm) - 0.3f) < 1e-5f);  // past its other end
 }
 
 // The sheet reaches the floor (user, 2026-11-09: make it larger so it reaches the floor): a sheet as wide as
@@ -793,45 +949,39 @@ void sheet_reaches_the_floor() {
   CHECK(widest > shape.shoulderRadius && widest < shape.shoulderRadius + shape.flare * drop + 1e-3f);
   size_t rim = 0;
   for (size_t v = 0; v < m.vertices.size(); ++v)
-    if (std::hypot(m.flat[v].x, m.flat[v].y) >= shape.side / 2) {
+    if (std::hypot(m.flat[v].x, m.flat[v].y) >= shape.side / 2 - 1e-4f) {  // on the hem, to a float's rounding
       ++rim;
       CHECK(std::fabs(m.vertices[v].y + drop) < 1e-3f);
     }
   CHECK(rim > 8);
 }
 
+// Whether the flat point `p` lies in triangle `t` of the flat sheet.
+bool covers(const sh::SheetMesh& m, size_t t, sh::Vec2 p) {
+  const auto at = [&](size_t k) { return m.flat[static_cast<size_t>(m.triangles[t * 3 + k])]; };
+  const auto side = [](sh::Vec2 a, sh::Vec2 b, sh::Vec2 c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); };
+  const float s0 = side(at(0), at(1), p), s1 = side(at(1), at(2), p), s2 = side(at(2), at(0), p);
+  return (s0 >= 0 && s1 >= 0 && s2 >= 0) || (s0 <= 0 && s1 <= 0 && s2 <= 0);
+}
+
 void eyes_are_mirrored() {
   const sh::SheetShape shape;
   const sh::SheetMesh m = sh::make_sheet(shape);
-  const std::vector<float> axis = sh::sheet_axis(shape);
-  CHECK(axis.size() >= 3 && !m.flat.empty());
-  if (axis.size() < 3 || m.flat.empty()) return;
-  const int cells = static_cast<int>(axis.size()) - 1;
-  std::set<std::pair<int, int>> present;
-  for (size_t t = 0; t < m.triangles.size() / 3; ++t) present.insert(cell_of(axis, centroid(m, t)));
-  CHECK(!present.contains({-1, -1}));
-  std::vector<std::pair<int, int>> holes;
-  for (int i = 0; i < cells; ++i)
-    for (int j = 0; j < cells; ++j) {
-      const size_t x = static_cast<size_t>(i), z = static_cast<size_t>(j);
-      if (!sh::in_sheet(shape, axis[x], axis[x + 1], axis[z], axis[z + 1])) continue;  // beyond the round edge
-      if (!present.contains({i, j})) holes.emplace_back(i, j);
-    }
-  CHECK(!holes.empty());
-  bool left = false, right = false;
-  for (const auto& [i, j] : holes) {
-    CHECK(!present.contains({cells - 1 - i, j}));  // its mirror across the centre line is a hole too
-    const float x = (axis[static_cast<size_t>(i)] + axis[static_cast<size_t>(i) + 1]) / 2;
-    const float z = (axis[static_cast<size_t>(j)] + axis[static_cast<size_t>(j) + 1]) / 2;
-    left = left || x < 0;
-    right = right || x > 0;
-    CHECK(z > 0);  // in front of the crown
-  }
-  CHECK(left && right);
-  // The sheet stays whole between the eyes: the cells either side of the centre line at eye height are kept.
-  const int eyeRow = cell_of(axis, {0.001f, shape.eyeForward + 0.001f}).second;  // off the grid line
-  CHECK(eyeRow >= 0);
-  CHECK(present.contains({cells / 2 - 1, eyeRow}) && present.contains({cells / 2, eyeRow}));
+  CHECK(!m.flat.empty());
+  if (m.flat.empty()) return;
+  // Every point has its mirror across the centre line, so the sheet and its holes are symmetric.
+  std::set<std::pair<float, float>> points;
+  for (const sh::Vec2& f : m.flat) points.insert({f.x, f.y});
+  for (const sh::Vec2& f : m.flat) CHECK(points.contains({-f.x, f.y}));
+  // A hole round each eye, one on either side of the centre line, in front of the crown: no triangle covers an eye's
+  // centre.
+  for (const float x : {-shape.eyeAcross, shape.eyeAcross})
+    for (size_t t = 0; t < m.triangles.size() / 3; ++t) CHECK(!covers(m, t, {x, shape.eyeForward}));
+  CHECK(shape.eyeForward > 0);
+  // The sheet stays whole between the eyes: a triangle covers the centre line at eye height.
+  bool between = false;
+  for (size_t t = 0; t < m.triangles.size() / 3; ++t) between = between || covers(m, t, {0.0f, shape.eyeForward});
+  CHECK(between);
 }
 
 // The sheet is made already hanging over a head and shoulders, the crown at its origin, so the cloth does not fall
@@ -1353,10 +1503,13 @@ int main() {
   the_frames_of_a_trip_are_timed_past_the_get_up();
   a_clip_change_is_a_jump_by_turn_or_by_place();
   the_sheet_stays_inside_its_point_budget();
-  sheet_is_closed_grid_with_eye_holes();
+  sheet_triangles_are_well_shaped();
+  sheet_is_whole_with_eye_holes();
   sheet_pins_only_the_top();
   sheet_sways_only_near_its_shape();
-  sheet_follows_the_bones_nearest_it();
+  a_point_is_measured_to_its_bone();
+  the_hanging_sheet_collides_with_itself();
+  the_sheet_is_skinned_loosely();
   sheet_reaches_the_floor();
   eyes_are_mirrored();
   sheet_hangs_from_the_crown();
@@ -1381,7 +1534,7 @@ int main() {
   the_get_ups_stand_alone();
   friendly_never_chases_or_kicks();
   kick_needs_a_living_target_in_reach();
-  speed_stays_just_under_sprint();
+  it_runs_at_the_hunt_speed();
   tired_taunt_fires_once_per_lapse();
   lines_match_the_phase();
   picks_never_repeat_and_handle_nothing();
@@ -1419,7 +1572,6 @@ int main() {
   voice_lines_never_talk_over_each_other();
   a_door_line_comes_from_behind_the_door();
   a_door_is_reached_within_reach();
-  the_chase_speed_comes_from_the_target();
   a_target_who_cannot_sprint_is_taunted();
   cues_play_once_and_never_replay_on_joining();
   the_chase_tunables_are_sane();

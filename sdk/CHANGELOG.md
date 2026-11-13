@@ -14,6 +14,14 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   version, author, whether it runs, whether it is developer-only or records voice, and why it is off), filling a
   `PmModEntry` up to the `size` the mod sets; SMAPI's `IModRegistry.GetAll` is the precedent. `pm::mod::mod_entries()`
   (`core/mod_glue.h`) copies them all out. The dev menu's Loader page reads it.
+- **Objects of a generic instance.** `PmHostApi::object_new` also takes an Inflated entry's key and makes an object of
+  its generic instance; `Method::new_object()` on an Inflated wrapper calls it (`List<UInt32>.ctor` makes a
+  `List<UInt32>`). An older host answers null.
+- **Cloth self-collision.** `Cloth.set_selfCollisionDistance`, `Cloth.set_selfCollisionStiffness` and
+  `Cloth.SetSelfAndInterCollisionIndices`, with `List<UInt32>.ctor` and `.Add` to build its list; `add_cloth`'s
+  `ClothSettings::selfCollision` turns it on for chosen points (`sdk/api/models.h`).
+- **The hunt's speed factors.** `GhostAI.huntSpeedFactor1` to `3`, the three factors every hunt's speed is multiplied by
+  ([ghost AI](systems/ghost-ai.md), "Hunt speed").
 
 ## [2.4] - Unreleased
 

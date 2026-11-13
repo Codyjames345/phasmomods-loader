@@ -88,13 +88,18 @@ behaviour type: one for the Spirit, another for the Demon, a third for the rest.
 A hunt is a state object, `GhostHuntState` (`sdk/map/GhostHuntState.h`). On the master its tick sets
 the speed in two steps:
 
-- **Every frame,** `GhostHuntState.UpdateSpeed` moves `sightSpeedUp`: up 0.05 a second (faster for one type) while
-  the hunt has a `target` (the player its sight last found), down only once it has neither a `target` nor a
-  `searchTarget`, and unchanged in between; it is kept between 1 and 1.65. So from 1 at a hunt's start it takes
-  about 13 seconds of chase to reach its top. It then sets the NavMeshAgent's speed to `baseSpeed` times
-  `sightSpeedUp` times the multipliers every type shares (the difficulty's ghost speed, Blood Moon), with
-  branches by type; while the ghost is smudged it uses 1 instead. It reads the field afresh every frame, so a
-  value a mod writes there counts from the next frame (decompiled 2026-11-12).
+- **Every frame,** `GhostHuntState.UpdateSpeed` moves `sightSpeedUp`: up 0.05 a second (0.075 for one type) while
+  the hunt has a `target` (the player its sight last found), down 0.01 a second only once it has neither a `target`
+  nor a `searchTarget`, and unchanged in between; it is kept between 1 and 1.65. So from 1 at a hunt's start it
+  takes about 13 seconds of chase to reach its top. It then sets the NavMeshAgent's speed, with branches by type.
+  The branch every type without one of its own takes ("no type", so a custom ghost, among them) is `baseSpeed`
+  times `sightSpeedUp`, plus an offset only the Twins' hunt sets (0.2 or -0.2 at random as it begins; 0 for every
+  other type). Every type but one then multiplies that by the multipliers they share: `Difficulty.ghostSpeed`,
+  1.15 when the difficulty's actual weather is the Blood Moon or `GhostAI.speedFlag` is set, and the ghost's three
+  factors `GhostAI.huntSpeedFactor1` to `3`, which `GhostAI.Awake` sets to 1 and nothing in the game changes.
+  While the ghost is smudged (`GhostAI.smudge`) it uses 1 in place of `sightSpeedUp`. It reads the field afresh
+  every frame, so a value a mod writes there counts from the next frame (decompiled 2026-11-12, the constants and
+  factors 2026-11-13).
 - **Every two seconds,** `GhostHuntState.RefreshBase` writes `baseSpeed`: from the players' average
   insanity for the Moroi, from a field of its GhostAI for the Deogen, and from GhostAI's base speed (1.7,
   set in `Awake`) for every other type, "no type" among them.

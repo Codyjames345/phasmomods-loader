@@ -158,6 +158,32 @@ inline constexpr pm::sdk::EntryDesc GhostAI_baseSpeed{.key = "GhostAI.baseSpeed"
                                                       .owner = "GhostAI", .type = "float",
                                                       .facts = GhostAI_baseSpeed_facts};
 
+// Awake stores the constant 1 in three floats of the ghost, the three after baseSpeed. Told apart by their order: the
+// first, the last, and the one that is neither.
+inline constexpr pm::sdk::Fact GhostAI_huntSpeedFactor_facts[] = {
+    {.is = pm::sdk::Fact::Is::StoresConst, .method = "GhostAI.Awake", .value = std::bit_cast<int32_t>(1.0f)}};
+inline constexpr pm::sdk::Fact GhostAI_huntSpeedFactor2_facts[] = {
+    {.is = pm::sdk::Fact::Is::StoresConst, .method = "GhostAI.Awake", .value = std::bit_cast<int32_t>(1.0f)},
+    {.is = pm::sdk::Fact::Is::IsNot, .method = "GhostAI.huntSpeedFactor1"},
+    {.is = pm::sdk::Fact::Is::IsNot, .method = "GhostAI.huntSpeedFactor3"}};
+
+/// The first of three factors the hunt's speed is multiplied by (GhostHuntState.UpdateSpeed, for every ghost type):
+/// Awake sets each to 1, and nothing else in this build writes them (a scan of the game's code for stores to them,
+/// 2026-11-13), so they stay 1 for the whole contract unless a mod changes them. Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostAI_huntSpeedFactor1{
+    .key = "GhostAI.huntSpeedFactor1", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .flags = pm::sdk::kFirstOfShape, .owner = "GhostAI", .type = "float", .facts = GhostAI_huntSpeedFactor_facts};
+
+/// The second of the three hunt speed factors (GhostAI.huntSpeedFactor1 says what they do). Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostAI_huntSpeedFactor2{
+    .key = "GhostAI.huntSpeedFactor2", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "GhostAI", .type = "float", .facts = GhostAI_huntSpeedFactor2_facts};
+
+/// The third of the three hunt speed factors (GhostAI.huntSpeedFactor1 says what they do). Decompiled.
+inline constexpr pm::sdk::EntryDesc GhostAI_huntSpeedFactor3{
+    .key = "GhostAI.huntSpeedFactor3", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .flags = pm::sdk::kLastOfShape, .owner = "GhostAI", .type = "float", .facts = GhostAI_huntSpeedFactor_facts};
+
 /// A Photon RPC that starts (true) or ends (false) a hunt on this client. It stores its first
 /// argument to isHunting, and when that is true sets postHuntCooldown to 1. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostAI_Hunting{.key = "GhostAI.Hunting", .kind = pm::sdk::Kind::Method,
@@ -807,6 +833,13 @@ struct GhostAI {
   /// The ghost's base hunt speed in metres a second (1.7 from Awake): baseSpeed.get(ghost).
   /// Unresolved: 0.
   static constexpr pm::api::Field<pm::map::GhostAI_baseSpeed, float> baseSpeed{};
+  /// The first of three factors a hunt's speed is multiplied by (1 from Awake, and nothing in the game changes them):
+  /// huntSpeedFactor1.get(ghost). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::GhostAI_huntSpeedFactor1, float> huntSpeedFactor1{};
+  /// The second hunt speed factor: huntSpeedFactor2.get(ghost). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::GhostAI_huntSpeedFactor2, float> huntSpeedFactor2{};
+  /// The third hunt speed factor: huntSpeedFactor3.get(ghost). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::GhostAI_huntSpeedFactor3, float> huntSpeedFactor3{};
   /// Sets the ghost up from the host's traits: Init(ghost, traits), `traits` pointing at a GhostTraits
   /// (passed by address, as the x64 convention passes a struct). A mod usually hooks it. Unresolved:
   /// does nothing.

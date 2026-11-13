@@ -218,14 +218,6 @@ void a_door_is_reached_within_reach() {
   CHECK(!at_door({0, 0, 0}, {0, 3.0f, 0}));  // another floor
 }
 
-// The speed it chases the target at: their own sprint as reported, else the master's own player's, else the last.
-void the_chase_speed_comes_from_the_target() {
-  CHECK(chase_sprint(Sprint{true, 5.0f}, Sprint{true, 4.0f}, 3.0f) == 5.0f);
-  CHECK(chase_sprint(std::nullopt, Sprint{true, 4.0f}, 3.0f) == 4.0f);
-  CHECK(chase_sprint(std::nullopt, std::nullopt, 3.0f) == 3.0f);
-  CHECK(chase_sprint(Sprint{false, 5.0f}, std::nullopt, 3.0f) == 5.0f);  // a tired target: the same speed
-}
-
 // A player who can't sprint when the chase turns to them is taunted, as one whose sprint lapses is.
 void a_target_who_cannot_sprint_is_taunted() {
   TauntBook b;

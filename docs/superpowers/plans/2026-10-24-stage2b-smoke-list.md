@@ -1129,3 +1129,24 @@ Footsteps from the players' own sounds (user 2026-11-09).
 - [ ] The Squatter's steps sound like a player's on the same floor: carpet, wood, concrete, tiles (vinyl), stairs, grass and gravel outside; running steps while it chases, walking steps while it lurks, searches or follows.
 - [ ] Every player hears its steps from where it is, and nothing changes when they stand on another surface themselves.
 - [ ] Its steps never make a ghost react as if a player made them, and no UV footprint appears.
+
+The user's report of 2026-11-13: the exits stayed locked after a type change, and the sheet looked mangled.
+
+- [ ] With the Squatter's exits locked (every living player outside), change the ghost to another type in the dev menu: every exit unlocks and can be swung open again, for the host and a client. The host's `mods.log` has `squatter: the exits are let go`.
+- [ ] After that change, the new ghost's hunts lock the exits and unlock them again as each hunt ends; a Monkey Paw wish on the exits does what the game does.
+- [ ] With the Squatter still the ghost and its exits locked, the dev menu's "Unlock the main door" leaves them shut (its rule). With any other ghost, mid-contract, the row unlocks every exit, and in the setup phase it still ends the setup phase.
+- [ ] The Squatter's sheet hangs in smooth curves and folds, with no jagged shards, torn-looking hem or dark slivers showing through it, standing, walking, running, rolling and sitting. Look from the front, the sides and close up.
+- [ ] The eye holes still sit over the eyes, as ovals, side by side with sheet between them, and the hem still reaches the floor all round.
+- [ ] Getting up and falling lag no more than before (the sheet now has about half as many points); note any change in how stiff or heavy it hangs.
+
+The user's report of 2026-11-13, second round: the sheet clung to the arms and clipped into itself, and the Squatter
+should run at the regular hunt speed.
+
+- [ ] The Squatter chases at a hunting ghost's base speed (1.7 m/s on a standard ghost speed) and stays at it: it never speeds up the longer it keeps you in sight. A sprinting player gets away from it.
+- [ ] On a custom difficulty with a higher or lower ghost speed it runs faster or slower to match; under a Blood Moon it runs at its usual speed.
+- [ ] Searching, heading for a hiding place and following (friendly) look paced as before against its run.
+- [ ] Note whether it ever falls over on a hard stall: that needs 2.5 m/s, which it now reaches only on a ghost speed of about 150%.
+- [ ] The sheet hangs from the shoulders over the arms as a drape, not like sleeves: arms swinging and reaching move it broadly, without the sheet clinging to them.
+- [ ] Walking, running, rolling and sitting, the sheet's folds do not pass through each other (no dark slivers of the inside showing), and the hem between the legs neither splits nor wraps each leg.
+- [ ] No arm, hand or leg comes out of the sheet in any move (it is carried less by the limbs now).
+- [ ] Frame rate with the Squatter in view is no worse than before (self-collision costs some each frame); the host's `mods.log` has no line saying the game build has no cloth self-collision.

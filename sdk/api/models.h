@@ -178,6 +178,9 @@ struct ClothMesh {
   std::span<void* const> bones;
   /// One per vertex when `bones` is not empty, naming bones by their index in it.
   std::span<const ClothWeight> weights;
+  /// The vertices that take part in the cloth's self-collision (ClothSettings::selfCollisionDistance), by index. Empty:
+  /// none.
+  std::span<const uint32_t> selfCollision;
 };
 
 /**
@@ -247,6 +250,13 @@ struct ClothSettings {
   /// Whether its colliders press it in smooth bulges rather than at its points (Cloth.set_useVirtualParticles). None
   /// keeps Unity's own.
   std::optional<bool> virtualParticles;
+  /// How close, in metres, two of ClothMesh::selfCollision's points may come before they push apart, so the cloth does
+  /// not fold through itself (Cloth.set_selfCollisionDistance). 0, Unity's own, is off. Keep it under the shortest
+  /// edge between those points as the mesh is made, or points next to each other push apart at rest. Each frame costs
+  /// more the more points take part.
+  float selfCollisionDistance = 0.0f;
+  /// How hard they push apart, 0 to 1 (Cloth.set_selfCollisionStiffness); Unity's own is 0.2.
+  float selfCollisionStiffness = 0.2f;
 };
 
 /**
