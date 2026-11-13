@@ -30,9 +30,10 @@ the VR button again closes the wheel. The wheel stays shut while the journal or 
 With more than eight dances the wheel turns pages. Scrolling down and the right bumper go to the next page, scrolling
 up and the left bumper to the previous, and the pages wrap: one turn past the last shows the first. In VR, point the
 right controller at the game's bumper glyph on one side of the page number and pull the right trigger. A row over the
-wheel shows the page number and the game's own glyph for each page control, and hides while the wheel has a single
-page. The wheel reopens on the page you last viewed while the mod has been running. While the wheel is open, the game
-actions bound to those page controls (the item swap on the scroll wheel, push-to-talk on the bumpers) are paused and
+wheel shows the page number ("2 / 3") between a glyph for each page control: a mouse scrolling up on the left and
+one scrolling down on the right on keyboard and mouse, the game's own bumper glyphs on a gamepad. It hides while the
+wheel has a single page. The wheel reopens on the page you last viewed while the mod has been running. While the wheel
+is open, the game actions bound to those page controls (the item swap on the scroll wheel, push-to-talk on the bumpers) are paused and
 come back when the wheel closes for any reason. A paused action is paused on every key it is bound to, so push-to-talk's
 keyboard key does not talk while the wheel is open either.
 

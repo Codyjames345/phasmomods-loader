@@ -400,11 +400,11 @@ void* glyph_of(const api::Held& image) {
 }
 
 // The page glyphs on screen: the game's shoulder glyphs while the game's own check says a gamepad is in use
-// (pm::api::input::keyboard_in_use, as its glyph widgets decide), none on keyboard and mouse (the scroll glyph is the
-// user's to supply, PM_UI_TODO), and none when the check cannot answer.
+// (pm::api::input::keyboard_in_use, as its glyph widgets decide), else the scroll glyphs (the user's design,
+// 2026-11-13: scroll up on the left, down on the right), which also show when the check cannot answer.
 void show_screen_glyphs() {
   const bool pad = !input::keyboard_in_use().value_or(true);
-  wheel::show_glyphs(pad ? glyph_of(g.previousGlyph) : nullptr, pad ? glyph_of(g.nextGlyph) : nullptr);
+  wheel::show_glyphs(pad ? glyph_of(g.previousGlyph) : nullptr, pad ? glyph_of(g.nextGlyph) : nullptr, !pad);
 }
 
 // Turns the wheel's page by `steps`, wrapping round.
@@ -891,7 +891,7 @@ std::optional<int> wheel_input(void* player, bool vr) {
     wheel::face(cam ? game::transform_of(cam) : nullptr);
     // The VR page targets show the game's shoulder glyphs (the user's choice, 2026-11-13, until a VR glyph of their
     // own): the game shows no glyph in VR, so these are the sprites its widgets hold.
-    wheel::show_glyphs(glyph_of(g.previousGlyph), glyph_of(g.nextGlyph));
+    wheel::show_glyphs(glyph_of(g.previousGlyph), glyph_of(g.nextGlyph), false);
     void* right = phasmo::VRPlayer::rightHandIK.get(player);
     const int pointed = wheel::pointed(right);
     wheel::show_pick(pointed);

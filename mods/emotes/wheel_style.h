@@ -28,6 +28,7 @@ inline constexpr float kNameBelow = 48.0f;      ///< how far under the disc the 
 inline constexpr float kPageAbove = 40.0f;      ///< how far above the disc's top the page row's centre sits
 inline constexpr float kPageFontSize = 36.0f;   ///< the page text's text size
 inline constexpr float kGlyphSize = 56.0f;      ///< a page glyph's width and height
+inline constexpr int kGlyphTexels = 128;        ///< the drawn scroll glyphs' texture size, in texels
 inline constexpr float kGlyphGap = 24.0f;       ///< the space between the page text's edge and each glyph
 inline constexpr float kPageTextWidth = 160.0f; ///< the page text's box width
 

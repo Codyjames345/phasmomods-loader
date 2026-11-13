@@ -23,9 +23,10 @@ void set_page(int page);
 /// The emote under `segment` of the page shown, or -1 for an empty segment or one out of range.
 int emote_at(int segment);
 
-/// Each frame while open: the glyphs of the page controls, the game's own Sprites for the device in use, or null for none
-/// (the page row hides a null glyph, and the whole row with one page).
-void show_glyphs(void* previousSprite, void* nextSprite);
+/// Each frame while open: the glyphs of the page controls. With `scroll`, the drawn scroll glyphs for keyboard and
+/// mouse (scroll_glyph.h); otherwise the game's own Sprites for the device in use, or null for none (the page row hides
+/// a null glyph, and the whole row with one page).
+void show_glyphs(void* previousSprite, void* nextSprite, bool scroll);
 
 /// The page glyph a VR controller points at: -1 the previous page's, +1 the next page's, 0 neither (and 0 when the
 /// wheel is not open in VR or has one page).

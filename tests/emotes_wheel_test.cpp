@@ -10,6 +10,7 @@
 
 #include "check.h"
 #include "emote_rule.h"
+#include "scroll_glyph.h"
 #include "wheel_layout.h"
 #include "wheel_style.h"
 
@@ -145,6 +146,50 @@ void glyph_at_hits_each_glyph_and_misses_between() {
 
 }  // namespace
 
+// The keyboard and mouse page glyphs (the user's reference, traced as shapes, 2026-11-13): a mouse with its wheel, an
+// arrow above it for scrolling up and below it for scrolling down, white lines on clear, drawn at 100 texels so a
+// texel is one unit of the drawing.
+uint8_t alpha_at(const std::vector<uint8_t>& rgba, int x, int y) { return rgba[(static_cast<size_t>(y) * 100 + x) * 4 + 3]; }
+
+void the_scroll_glyphs_are_white_lines_on_clear() {
+  for (ScrollArrow which : {ScrollArrow::Up, ScrollArrow::Down}) {
+    const std::vector<uint8_t> g = scroll_glyph_rgba(100, which);
+    CHECK(g.size() == 100u * 100u * 4u);
+    if (g.size() != 100u * 100u * 4u) return;
+    bool white = true;
+    for (size_t i = 0; i < g.size(); i += 4) white = white && g[i] == 255 && g[i + 1] == 255 && g[i + 2] == 255;
+    CHECK(white);
+    CHECK(alpha_at(g, 0, 0) == 0 && alpha_at(g, 99, 99) == 0 && alpha_at(g, 99, 0) == 0 && alpha_at(g, 0, 99) == 0);
+    // Mirrored left to right, as the reference is.
+    bool mirrored = true;
+    for (int y = 0; y < 100; ++y)
+      for (int x = 0; x < 50; ++x) mirrored = mirrored && alpha_at(g, x, y) == alpha_at(g, 99 - x, y);
+    CHECK(mirrored);
+  }
+}
+
+void the_up_glyph_has_its_arrow_above_the_mouse() {
+  const std::vector<uint8_t> g = scroll_glyph_rgba(100, ScrollArrow::Up);
+  CHECK(g.size() == 100u * 100u * 4u);
+  if (g.size() != 100u * 100u * 4u) return;
+  CHECK(alpha_at(g, 50, 5) == 255);   // the arrow's tip
+  CHECK(alpha_at(g, 46, 8) == 255);   // its head
+  CHECK(alpha_at(g, 28, 61) == 255);  // the mouse's left side, halfway down
+  CHECK(alpha_at(g, 50, 75) == 0);    // inside the mouse, under its wheel: an outline only
+  CHECK(alpha_at(g, 46, 91) == 0);    // nothing below
+}
+
+void the_down_glyph_has_its_arrow_below_the_mouse() {
+  const std::vector<uint8_t> g = scroll_glyph_rgba(100, ScrollArrow::Down);
+  CHECK(g.size() == 100u * 100u * 4u);
+  if (g.size() != 100u * 100u * 4u) return;
+  CHECK(alpha_at(g, 50, 94) == 255);  // the arrow's tip
+  CHECK(alpha_at(g, 46, 91) == 255);  // its head
+  CHECK(alpha_at(g, 28, 39) == 255);  // the mouse's left side, halfway down
+  CHECK(alpha_at(g, 50, 55) == 0);    // inside the mouse, under its wheel
+  CHECK(alpha_at(g, 46, 8) == 0);     // nothing above
+}
+
 int main() {
   the_wheel_shows_eight_segments_with_even_gaps();
   the_icons_sit_in_their_segments();
@@ -153,6 +198,9 @@ int main() {
   page_row_sits_above_the_disc();
   glyphs_sit_either_side_of_the_page_text();
   glyph_at_hits_each_glyph_and_misses_between();
+  the_scroll_glyphs_are_white_lines_on_clear();
+  the_up_glyph_has_its_arrow_above_the_mouse();
+  the_down_glyph_has_its_arrow_below_the_mouse();
   std::printf("%s\n", g_failures ? "emotes_wheel tests FAILED" : "emotes_wheel tests passed");
   return g_failures ? 1 : 0;
 }

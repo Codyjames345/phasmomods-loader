@@ -15,6 +15,7 @@
 #include "text_table.h"
 #include "ui.h"
 #include "wheel_layout.h"
+#include "scroll_glyph.h"
 #include "wheel_style.h"
 
 namespace pm::emotes::wheel {
@@ -26,12 +27,14 @@ struct State {
   std::vector<std::string> names;             // every emote's name, in wheel order
   std::array<api::Held, kSegments> segments;  // the drawn segment textures
   api::Held centre;                           // the drawn centre circle
+  api::Held scrollUp, scrollDown;             // the drawn keyboard and mouse page glyphs (scroll_glyph.h)
   api::Held canvas;                           // the open wheel's Canvas; its children go with it
   std::array<api::Held, kSegments> images;    // the open wheel's segment images
   std::array<api::Held, kSegments> iconImages;  // the open wheel's icon images, showing the page's icons
   api::Held name;                             // its name text
   api::Held pageText;                         // the page row: the page number, and a glyph for each page control
   api::Held previousGlyph, nextGlyph;
+  api::Held scrollUpImage, scrollDownImage;   // the open wheel's keyboard and mouse page glyphs
   int pages = 1;
   int page = 0;                               // the page shown: emotes page * kSegments onwards
   bool vr = false;
@@ -42,7 +45,7 @@ State g;
 
 ui::Color to_ui(style::Rgba c) { return {c.r, c.g, c.b, c.a}; }
 void show_icons();
-void show_page_row(void* previousSprite, void* nextSprite);
+void show_page_row(void* previousSprite, void* nextSprite, bool scroll);
 
 void* drawn(const std::vector<uint8_t>& rgba) {
   return ui::texture_from_rgba(style::kTextureSize, style::kTextureSize, rgba.data(), rgba.size());
@@ -83,7 +86,18 @@ bool build(void* canvas) {
   if (g.previousGlyph) ui::place(g.previousGlyph, mid, mid, {row.previous.x, row.previous.y}, {style::kGlyphSize, style::kGlyphSize});
   g.nextGlyph = ui::create_sprite_image(canvas, "pm emote next page", nullptr);
   if (g.nextGlyph) ui::place(g.nextGlyph, mid, mid, {row.next.x, row.next.y}, {style::kGlyphSize, style::kGlyphSize});
-  show_page_row(nullptr, nullptr);
+  // The keyboard and mouse glyphs at the same places: scroll up for the previous page, scroll down for the next.
+  g.scrollUpImage = ui::create_raw_image(canvas, "pm emote scroll up", g.scrollUp);
+  if (g.scrollUpImage) {
+    ui::set_color(g.scrollUpImage, to_ui(style::kNameWhite));
+    ui::place(g.scrollUpImage, mid, mid, {row.previous.x, row.previous.y}, {style::kGlyphSize, style::kGlyphSize});
+  }
+  g.scrollDownImage = ui::create_raw_image(canvas, "pm emote scroll down", g.scrollDown);
+  if (g.scrollDownImage) {
+    ui::set_color(g.scrollDownImage, to_ui(style::kNameWhite));
+    ui::place(g.scrollDownImage, mid, mid, {row.next.x, row.next.y}, {style::kGlyphSize, style::kGlyphSize});
+  }
+  show_page_row(nullptr, nullptr, false);
   g.name = ui::create_text(canvas, "pm emote name", style::kNameFontSize);
   if (g.name) {
     ui::set_color(g.name, to_ui(style::kNameWhite));
@@ -111,9 +125,9 @@ void show_icons() {
   }
 }
 
-// The page row: hidden with one page; otherwise the page number, and each control's glyph where the caller has one
-// (none on keyboard and mouse until the author's glyph arrives).
-void show_page_row(void* previousSprite, void* nextSprite) {
+// The page row: hidden with one page; otherwise the page number, and each control's glyph: the scroll glyphs for
+// keyboard and mouse (`scroll`), else the game's sprite where the caller has one.
+void show_page_row(void* previousSprite, void* nextSprite, bool scroll) {
   const bool many = g.pages > 1;
   if (g.pageText) {
     ui::set_active(g.pageText, many);
@@ -126,8 +140,10 @@ void show_page_row(void* previousSprite, void* nextSprite) {
     ui::set_sprite(image, sprite);
     ui::set_active(image, many && sprite);
   };
-  glyph(g.previousGlyph, previousSprite);
-  glyph(g.nextGlyph, nextSprite);
+  glyph(g.previousGlyph, scroll ? nullptr : previousSprite);
+  glyph(g.nextGlyph, scroll ? nullptr : nextSprite);
+  for (void* image : {g.scrollUpImage.get(), g.scrollDownImage.get()})
+    if (image) ui::set_active(image, many && scroll);
 }
 
 void* transform_of_canvas() { return g.canvas ? game::transform_of(g.canvas) : nullptr; }
@@ -147,6 +163,10 @@ bool load(const std::vector<void*>& icons, const std::vector<std::string>& names
     if (!g.segments[i]) return false;
   }
   g.centre = drawn(layout::circle_rgba(style::kTextureSize, 1.0f));
+  const std::vector<uint8_t> up = scroll_glyph_rgba(style::kGlyphTexels, ScrollArrow::Up);
+  const std::vector<uint8_t> down = scroll_glyph_rgba(style::kGlyphTexels, ScrollArrow::Down);
+  g.scrollUp = ui::texture_from_rgba(style::kGlyphTexels, style::kGlyphTexels, up.data(), up.size());
+  g.scrollDown = ui::texture_from_rgba(style::kGlyphTexels, style::kGlyphTexels, down.data(), down.size());
   g.loaded = g.centre;
   return g.loaded;
 }
@@ -210,8 +230,8 @@ void set_page(int page) {
   show_pick(-1);
 }
 
-void show_glyphs(void* previousSprite, void* nextSprite) {
-  if (is_open()) show_page_row(previousSprite, nextSprite);
+void show_glyphs(void* previousSprite, void* nextSprite, bool scroll) {
+  if (is_open()) show_page_row(previousSprite, nextSprite, scroll);
 }
 
 int pointed_glyph(void* hand) {
@@ -275,6 +295,8 @@ void unload() {
   for (api::Held& t : g.segments)
     if (t && game::alive(t)) game::destroy(t);
   if (g.centre && game::alive(g.centre)) game::destroy(g.centre);
+  for (const api::Held* t : {&g.scrollUp, &g.scrollDown})
+    if (*t && game::alive(*t)) game::destroy(*t);
   g = State{};
 }
 
