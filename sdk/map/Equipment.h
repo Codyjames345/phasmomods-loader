@@ -2,11 +2,14 @@
 
 // Equipment: the base class of every item a player carries, sets down and uses (a Candle among them),
 // and StoreItem, the store's description of an item, with its tier. The fields used here are
-// obfuscated but for the tier, so they are found by shape. Notes read from decompiled code are from
-// build 25811160.
+// obfuscated but for the tier, so they are found by shape. Also ObjectPooler, which spawns a store
+// item's prefab from the game's own pool, and the truck's starting loadout that LevelValues keeps.
+// Notes read from decompiled code are from build 25811160.
 
 #include "entry.h"
 #include "game_api.h"
+#include "Props.h"
+#include "Transform.h"
 
 namespace pm::map {
 
@@ -54,6 +57,60 @@ inline constexpr pm::sdk::EntryDesc Equipment_placed{
 inline constexpr pm::sdk::EntryDesc StoreItem{.key = "StoreItem", .confidence = pm::sdk::Confidence::Decompiled,
                                               .name = "StoreItem", .assembly = "Assembly-CSharp", .ns = ""};
 
+// Of the item's look-alike bool() methods, only the unlock check is called by the lobby's add check.
+inline constexpr pm::sdk::Fact StoreItem_IsUnlocked_facts[] = {
+    {.is = pm::sdk::Fact::Is::CalledBy, .method = "InventoryEquipment.CanAddToLobby"}};
+
+/// Whether the item (this tier of it) is unlocked: the store's one unlock check (name obfuscated), asked by the store's
+/// buy and sell, the lobby's add, the loadouts, the tiers' status and the tier achievements. Decompiled: true in a mode
+/// that unlocks everything, otherwise the level check (StoreItem.MeetsLevel) and a bool the save keeps for the item's
+/// name and tier. A mod hooks it to show items unlocked without touching the save.
+inline constexpr pm::sdk::EntryDesc StoreItem_IsUnlocked{
+    .key = "StoreItem.IsUnlocked", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "StoreItem", .type = "bool", .facts = StoreItem_IsUnlocked_facts};
+
+// The level check is the bool() the unlock check calls.
+inline constexpr pm::sdk::Fact StoreItem_MeetsLevel_facts[] = {
+    {.is = pm::sdk::Fact::Is::CalledBy, .method = "StoreItem.IsUnlocked"}};
+
+/// Whether the player's level reaches the item's required level (name obfuscated). Decompiled: true in the
+/// everything-unlocked mode, otherwise the level the save keeps against the item's required level.
+inline constexpr pm::sdk::EntryDesc StoreItem_MeetsLevel{
+    .key = "StoreItem.MeetsLevel", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "StoreItem", .type = "bool", .facts = StoreItem_MeetsLevel_facts};
+
+inline constexpr const char* StoreItem_CanAfford_params[] = {"int"};
+
+// Of the item's bool(int) methods, the purchase calls only this one.
+inline constexpr pm::sdk::Fact StoreItem_CanAfford_facts[] = {
+    {.is = pm::sdk::Fact::Is::CalledBy, .method = "StoreEquipment.Buy"}};
+
+/// Whether the player can buy an amount of the item (name obfuscated): StoreEquipment.Buy's own check before it
+/// spends. Decompiled: the money the save keeps covers the amount times the cost, and the owned amount stays under
+/// 1000.
+inline constexpr pm::sdk::EntryDesc StoreItem_CanAfford{
+    .key = "StoreItem.CanAfford", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "StoreItem", .type = "bool", .params = StoreItem_CanAfford_params, .facts = StoreItem_CanAfford_facts};
+
+/// One item's place in the store's screen (Assembly-CSharp, global namespace). Decompiled.
+inline constexpr pm::sdk::EntryDesc StoreEquipment{.key = "StoreEquipment", .confidence = pm::sdk::Confidence::Decompiled,
+                                                   .name = "StoreEquipment", .assembly = "Assembly-CSharp", .ns = ""};
+
+inline constexpr const char* StoreEquipment_int[] = {"int"};
+
+/// Whether the buy button may be pressed for an amount: the money the save keeps covers it and the owned amount stays
+/// under 1000. The screen sets the button's interactable state from it. Decompiled.
+inline constexpr pm::sdk::EntryDesc StoreEquipment_CanBuy{
+    .key = "StoreEquipment.CanBuy", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "StoreEquipment", .name = "CanBuy", .params = StoreEquipment_int};
+
+/// The purchase: StoreItem.CanAfford, then the save's money less the cost, the owned amount raised
+/// (EquipmentInfo.AddAmountOwned, which saves it), the money challenges and the contract's money-spent count. Every
+/// one of those writes goes through EasySave3. Decompiled.
+inline constexpr pm::sdk::EntryDesc StoreEquipment_Buy{
+    .key = "StoreEquipment.Buy", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "StoreEquipment", .name = "Buy", .params = StoreEquipment_int};
+
 inline constexpr const char* StoreItemTier_values[] = {"One", "Two", "Three"};
 
 // Found by its values' names.
@@ -83,6 +140,12 @@ inline constexpr pm::sdk::EntryDesc StoreItemTier_Three{.key = "StoreItemTier.Th
 inline constexpr pm::sdk::EntryDesc StoreItem_tier{.key = "StoreItem.tier", .kind = pm::sdk::Kind::Field,
                                                    .confidence = pm::sdk::Confidence::Decompiled,
                                                    .owner = "StoreItem", .name = "tier", .type = "@StoreItemTier"};
+
+/// The item's name, a string: the game's own key for the item, and the one part of the save's stock key
+/// that Equipment.ConsumeNetworked builds for a consumable. Decompiled.
+inline constexpr pm::sdk::EntryDesc StoreItem_itemName{.key = "StoreItem.itemName", .kind = pm::sdk::Kind::Field,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .owner = "StoreItem", .name = "itemName", .type = "string"};
 
 // The candle test of PlayerSanity reads one bool of Equipment: its owner is the closure class, so the
 // fact matches that offset through any register.
@@ -181,8 +244,10 @@ inline constexpr pm::sdk::EntryDesc Crucifix_CrucifixUseNetworked{
     .key = "Crucifix.CrucifixUseNetworked", .kind = pm::sdk::Kind::Method, .owner = "Crucifix",
     .name = "CrucifixUseNetworked", .params = Equipment_bool_info};
 
-/// How many times the crucifix has been used. Inferred: from its name.
+/// How many times the crucifix has been used: a private int, and Crucifix.CrucifixUseNetworked adds one
+/// to it each time the game accepts a use. Decompiled.
 inline constexpr pm::sdk::EntryDesc Crucifix_useCount{.key = "Crucifix.useCount", .kind = pm::sdk::Kind::Field,
+                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                       .owner = "Crucifix", .name = "useCount", .type = "int"};
 
 inline constexpr const char* EVPRecorder_int_int[] = {"int", "int"};
@@ -230,6 +295,88 @@ inline constexpr pm::sdk::EntryDesc WhiteSage_YureiTrap{
     .key = "WhiteSage.YureiTrap", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "WhiteSage", .type = "void", .params = WhiteSage_sensorHandler_params,
     .facts = WhiteSage_YureiTrap_facts};
+
+inline constexpr const char* ObjectPooler_SpawnFromEquipmentPool_params[] = {"@StoreItem", "Vector3", "Quaternion"};
+
+/// SpawnFromEquipmentPool(item, pos, rot): the pool keeps one queue of GameObjects per store item, built
+/// at its Start from every copy in `tierPools` (each switched off). This takes the queue's front copy,
+/// whatever it is doing, sets it at the position and rotation given, switches it on, writes the position
+/// to its PhotonObjectInteract.spawnPosition and puts it at the back of the queue. So once every copy is
+/// out, the next call moves the oldest copy, even one in the truck or in a player's hands; it never makes
+/// a new one. An item the pool has no entry for logs an error and answers null. Decompiled. It is this
+/// client's own copy: no RPC is sent, and every client spawns its own truck items this way (the game's
+/// ItemSpawner spawn loop calls it per loadout entry).
+inline constexpr pm::sdk::EntryDesc ObjectPooler_SpawnFromEquipmentPool{
+    .key = "ObjectPooler.SpawnFromEquipmentPool", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "ObjectPooler", .name = "SpawnFromEquipmentPool",
+    .type = "GameObject", .params = ObjectPooler_SpawnFromEquipmentPool_params};
+
+/// One tier's equipment copies (a class nested in ObjectPooler, real name): a name and its pools.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc TierEquipmentPool{.key = "TierEquipmentPool",
+                                                      .confidence = pm::sdk::Confidence::Decompiled,
+                                                      .owner = "ObjectPooler", .name = "TierEquipmentPool",
+                                                      .assembly = "Assembly-CSharp"};
+
+/// The tier's pools, one per store item: its EquipmentPool array (real name). Decompiled.
+inline constexpr pm::sdk::EntryDesc TierEquipmentPool_equipmentPools{
+    .key = "TierEquipmentPool.equipmentPools", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "TierEquipmentPool", .name = "equipmentPools",
+    .type = "EquipmentPool[]"};
+
+/// One store item's copies in the scene (a class nested in ObjectPooler, real name). Decompiled.
+inline constexpr pm::sdk::EntryDesc EquipmentPool{.key = "EquipmentPool", .confidence = pm::sdk::Confidence::Decompiled,
+                                                  .owner = "ObjectPooler", .name = "EquipmentPool",
+                                                  .assembly = "Assembly-CSharp"};
+
+/// The store item the copies are of (real name). Decompiled.
+inline constexpr pm::sdk::EntryDesc EquipmentPool_item{.key = "EquipmentPool.item", .kind = pm::sdk::Kind::Field,
+                                                       .confidence = pm::sdk::Confidence::Decompiled,
+                                                       .owner = "EquipmentPool", .name = "item",
+                                                       .type = "@StoreItem"};
+
+/// The copies, GameObjects placed in the scene: the pool's Start switches each off and queues it, and
+/// SpawnFromEquipmentPool switches one on when it hands it out, so a copy that is switched off has never
+/// been handed out (real name). Decompiled.
+inline constexpr pm::sdk::EntryDesc EquipmentPool_objects{.key = "EquipmentPool.objects",
+                                                          .kind = pm::sdk::Kind::Field,
+                                                          .confidence = pm::sdk::Confidence::Decompiled,
+                                                          .owner = "EquipmentPool", .name = "objects",
+                                                          .type = "GameObject[]"};
+
+/// Every tier's equipment copies: ObjectPooler's one List of TierEquipmentPool. The pool's Start queues
+/// the copies of every tier, keyed by store item. Decompiled.
+inline constexpr pm::sdk::EntryDesc ObjectPooler_tierPools{.key = "ObjectPooler.tierPools", .kind = pm::sdk::Kind::Field,
+                                                           .confidence = pm::sdk::Confidence::Decompiled,
+                                                           .owner = "ObjectPooler", .hint = "tierPools",
+                                                           .type = "List<@TierEquipmentPool>"};
+
+/// One entry of the truck's starting equipment loadout (a class nested in LevelValues): the store item and
+/// how many of it the contract starts with. Decompiled.
+inline constexpr pm::sdk::EntryDesc GameEquipmentLoadout{.key = "GameEquipmentLoadout",
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
+                                                         .owner = "LevelValues", .name = "GameEquipmentLoadout",
+                                                         .assembly = "Assembly-CSharp"};
+
+/// The entry's item: its StoreItem field (the game names it item). Decompiled.
+inline constexpr pm::sdk::EntryDesc GameEquipmentLoadout_equipment{
+    .key = "GameEquipmentLoadout.equipment", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GameEquipmentLoadout", .name = "item",
+    .type = "@StoreItem"};
+
+/// How many of the item the contract starts with. Decompiled.
+inline constexpr pm::sdk::EntryDesc GameEquipmentLoadout_amount{.key = "GameEquipmentLoadout.amount",
+                                                                .kind = pm::sdk::Kind::Field,
+                                                                .confidence = pm::sdk::Confidence::Decompiled,
+                                                                .owner = "GameEquipmentLoadout", .name = "amount",
+                                                                .type = "int"};
+
+/// The equipment the truck starts the contract with, a List of the GameEquipmentLoadout: the ItemSpawner's
+/// spawn loop takes `amount` of `equipment` from a truck socket whose item matches, at contract start.
+/// Decompiled.
+inline constexpr pm::sdk::EntryDesc LevelValues_equipmentLoadout{
+    .key = "LevelValues.equipmentLoadout", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .owner = "LevelValues", .type = "List<@GameEquipmentLoadout>"};
 
 }  // namespace pm::map
 
@@ -345,6 +492,57 @@ struct WhiteSage {
 struct StoreItem {
   /// Its tier, a StoreItemTier number: tier.get(storeItem). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::StoreItem_tier, int32_t> tier{};
+  /// Its name, the game's own string: itemName.get(storeItem), or null. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::StoreItem_itemName, void*> itemName{};
+  /// IsUnlocked(item): the store's unlock check. A mod hooks it. Unresolved: does nothing, false.
+  static constexpr pm::api::Method<pm::map::StoreItem_IsUnlocked, bool(void*)> IsUnlocked{};
+  /// MeetsLevel(item): the level check. A mod hooks it. Unresolved: does nothing, false.
+  static constexpr pm::api::Method<pm::map::StoreItem_MeetsLevel, bool(void*)> MeetsLevel{};
+  /// CanAfford(item, amount): the purchase's own money check. A mod hooks it. Unresolved: does nothing, false.
+  static constexpr pm::api::Method<pm::map::StoreItem_CanAfford, bool(void*, int32_t)> CanAfford{};
+};
+
+/// One item's place in the store's screen. `entry` below is the StoreEquipment.
+struct StoreEquipment {
+  /// CanBuy(entry, amount): whether the buy button may be pressed. A mod hooks it. Unresolved: does nothing, false.
+  static constexpr pm::api::Method<pm::map::StoreEquipment_CanBuy, bool(void*, int32_t)> CanBuy{};
+};
+
+/// One entry of the truck's starting equipment loadout. `loadout` below is the GameEquipmentLoadout.
+struct GameEquipmentLoadout {
+  /// The item, a StoreItem: equipment.get(loadout), or null. Unresolved: null.
+  static constexpr pm::api::Field<pm::map::GameEquipmentLoadout_equipment, void*> equipment{};
+  /// How many of it the contract starts with: amount.get(loadout). Unresolved: 0.
+  static constexpr pm::api::Field<pm::map::GameEquipmentLoadout_amount, int32_t> amount{};
+};
+
+/// The game's object pools. `pooler` below is the ObjectPooler.
+struct ObjectPooler {
+  /// The ObjectPooler type: klass(), is(obj), type_object(). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::ObjectPooler> type{};
+  /// SpawnFromEquipmentPool(pooler, storeItem, &pos, &rot): this client's own pooled copy of the item at
+  /// the position and rotation given, or null if the pool has no entry for the item. No RPC is sent.
+  /// Unresolved: null.
+  static constexpr pm::api::Method<pm::map::ObjectPooler_SpawnFromEquipmentPool,
+                                   void*(void*, void*, const Vector3*, const Quaternion*)>
+      SpawnFromEquipmentPool{};
+  /// Every tier's equipment copies, a List of TierEquipmentPool: tierPools.get(pooler). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::ObjectPooler_tierPools, void*> tierPools{};
+};
+
+/// One tier's equipment copies. `tier` below is one.
+struct TierEquipmentPool {
+  /// Its pools, an EquipmentPool array: equipmentPools.get(tier). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::TierEquipmentPool_equipmentPools, void*> equipmentPools{};
+};
+
+/// One store item's copies in the scene. `pool` below is one.
+struct EquipmentPool {
+  /// The StoreItem: item.get(pool). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::EquipmentPool_item, void*> item{};
+  /// The copies, a GameObject array; one switched off was never handed out: objects.get(pool).
+  /// Unresolved: null.
+  static constexpr pm::api::Field<pm::map::EquipmentPool_objects, void*> objects{};
 };
 
 /// The tiers of a store item: compare StoreItem::tier with them.

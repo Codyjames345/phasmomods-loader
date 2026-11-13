@@ -495,6 +495,17 @@ void show_message(const char* title, const char* body) {
   if (title && body) g_messages.emplace_back(title, body);
 }
 
+// The host contract's unity_action_new: records every ask (the target and the listener) and answers a fresh
+// token, which is not a fake object and is never read back: a test invokes the listener itself, as the
+// game's event would (fake_game.h).
+std::vector<std::pair<void*, void (*)(void*)>> g_unityActions;
+uintptr_t g_actionTokens = 1;
+void* unity_action_new(void* target, void (*listener)(void*)) {
+  if (!target || !listener) return nullptr;
+  g_unityActions.push_back({target, listener});
+  return reinterpret_cast<void*>(g_actionTokens++);
+}
+
 // What the host contract's steer_agent was asked, and whether it can steer (fake_game.h).
 std::vector<SteerAsk> g_steerAsks;
 bool g_steerRefused = false;
@@ -553,6 +564,9 @@ uint32_t fields_of_type(const char* typeKey, const void* obj, const char* fieldT
   return count;
 }
 
+// The host contract's mod_entry: the fake game installs no mods, so the list is empty.
+bool mod_entry(int32_t, PmModEntry*) { return false; }
+
 // Positional: a member added to PmHostApi after content_pack_failed fails this until it is given here too.
 static_assert(offsetof(PmHostApi, content_pack_failed) + sizeof(PmHostApi::content_pack_failed) == sizeof(PmHostApi),
               "kHost lists every PmHostApi member");
@@ -570,7 +584,8 @@ const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_ho
                       &room_agrees, &collection_count, &array_element_size, &host_list_remove_at,
                       &content_player_move, &content_interaction_lost, &content_roll_taken, &steer_agent,
                       &abandon_ghost_spawn, &dictionary_int_entries, &mod_started, &show_message,
-                      &content_flags_of, &mod_name, &content_packs, &content_pack_failed};
+                      &content_flags_of, &mod_name, &unity_action_new, &mod_entry, &content_packs,
+                      &content_pack_failed};
 
 }  // namespace
 
@@ -608,6 +623,7 @@ void reset() {
   g_packs.clear();
   g_failedPacks.clear();
   g_messages.clear();
+  g_unityActions.clear();
   g_inSpawn = false;
   g_abandons = 0;
   g_finds = g_parameterReads = 0;
@@ -744,6 +760,7 @@ const std::vector<std::pair<std::string, std::string>>& failed_packs() { return 
 void started_mods(std::vector<std::string> ids) { g_startedMods = {ids.begin(), ids.end()}; }
 void mod_names(std::map<std::string, std::string> names) { g_modNames = {names.begin(), names.end()}; }
 const std::vector<std::pair<std::string, std::string>>& messages() { return g_messages; }
+const std::vector<std::pair<void*, void (*)(void*)>>& unity_actions() { return g_unityActions; }
 
 bool list_remove_at(void* list, int32_t index) {
   auto* l = static_cast<FakeList*>(list);

@@ -20,7 +20,7 @@ foreach(case "no-such-dump" "unreadable-image" "unreadable-unity-player")
       "${WORK}/dump/UnityEngine.AIModule" "${WORK}/dump/UnityEngine.AudioModule" "${WORK}/dump/DOTween"
       "${WORK}/dump/Micosmo.SensorToolkit" "${WORK}/dump/Unity.Services.Vivox" "${WORK}/dump/UnityEngine.UIModule" "${WORK}/dump/Unity.InputSystem"
       "${WORK}/dump/com.rlabrecque.steamworks.net" "${WORK}/dump/Assembly-CSharp-firstpass"
-      "${WORK}/dump/Unity.RenderPipelines.Core.Runtime" "${WORK}/dump/Unity.RenderPipelines.Universal.Runtime")
+      "${WORK}/dump/Unity.RenderPipelines.Core.Runtime" "${WORK}/dump/Unity.RenderPipelines.Universal.Runtime" "${WORK}/dump/EasySave3")
     set(args --dump "${WORK}/dump" --image "${WORK}/not-an-image.dll")
   endif()
   execute_process(COMMAND "${GAMECHECK}" ${args} --addresses "${table}" RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
@@ -158,7 +158,8 @@ file(MAKE_DIRECTORY "${expectDump}/Assembly-CSharp" "${expectDump}/UnityEngine.A
   "${expectDump}/UnityEngine.AIModule" "${expectDump}/UnityEngine.AudioModule" "${expectDump}/DOTween"
   "${expectDump}/Micosmo.SensorToolkit" "${expectDump}/Unity.Services.Vivox" "${expectDump}/UnityEngine.UIModule" "${expectDump}/Unity.InputSystem"
   "${expectDump}/Unity.TextMeshPro" "${expectDump}/Assembly-CSharp-firstpass"
-  "${expectDump}/Unity.RenderPipelines.Core.Runtime" "${expectDump}/Unity.RenderPipelines.Universal.Runtime")
+  "${expectDump}/Unity.RenderPipelines.Core.Runtime" "${expectDump}/Unity.RenderPipelines.Universal.Runtime"
+  "${expectDump}/EasySave3")
 file(COPY "${EXPECT_DUMP}/GhostAI.cs" DESTINATION "${expectDump}/Assembly-CSharp")
 function(run_expect name text)
   set(file "${WORK}/${name}.txt")
@@ -214,7 +215,7 @@ function(content_dump name extra)
     "${dir}/com.rlabrecque.steamworks.net" "${dir}/PhotonRealtime" "${dir}/Photon3Unity3D" "${dir}/DoozyRuntime" "${dir}/UnityEngine.PhysicsModule"
     "${dir}/UnityEngine.AIModule" "${dir}/UnityEngine.AudioModule" "${dir}/DOTween"
     "${dir}/Micosmo.SensorToolkit" "${dir}/Unity.Services.Vivox" "${dir}/UnityEngine.UIModule" "${dir}/Unity.TextMeshPro" "${dir}/Unity.InputSystem" "${dir}/Assembly-CSharp-firstpass"
-    "${dir}/Unity.RenderPipelines.Core.Runtime" "${dir}/Unity.RenderPipelines.Universal.Runtime")
+    "${dir}/Unity.RenderPipelines.Core.Runtime" "${dir}/Unity.RenderPipelines.Universal.Runtime" "${dir}/EasySave3")
   set(values "")
   set(i 0)
   foreach(ghost IN LISTS ghostNames)

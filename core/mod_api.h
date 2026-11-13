@@ -275,6 +275,32 @@ struct PmIntEntry {
   int32_t value;  ///< the entry's value
 };
 
+/// What PmModEntry::flags says of an installed mod.
+/// @since Contract 2.5
+enum PmModEntryFlags : uint32_t {
+  /// It runs on this client now (mod_started answers the same).
+  PM_MOD_ENTRY_STARTED = 1,
+  /// Its manifest marks it developerOnly (offered only with launcher.ini developer=1).
+  PM_MOD_ENTRY_DEVELOPER_ONLY = 2,
+  /// Its manifest says it records voice (recordsVoice).
+  PM_MOD_ENTRY_RECORDS_VOICE = 4,
+};
+
+/// One installed mod, as the host contract's mod_entry gives it (SMAPI's IModRegistry.GetAll is the precedent). The
+/// strings are UTF-8 and the host's own: they last until the mods are next listed afresh (a start of the mods) or the
+/// next mod_entry for the same index, whichever comes first; copy them to keep them. Grows only at the end: set `size`
+/// before asking, and the host fills only what fits in it.
+/// @since Contract 2.5
+struct PmModEntry {
+  uint32_t size;          ///< set by the mod to sizeof(PmModEntry) before it asks
+  const char* id;         ///< the manifest's id, `<author>.<mod>`
+  const char* name;       ///< the manifest's name, the Mods panel's
+  const char* version;    ///< the manifest's version; empty when an old-format mod gave none
+  const char* author;     ///< the manifest's author; empty for an old-format mod
+  uint32_t flags;         ///< PmModEntryFlags bits
+  const char* offReason;  ///< why the last start left it off or refused it, the Mods panel's words; empty while it runs
+};
+
 /// What the host gives a mod: the services of the host contract, passed to pmmod_start. The host keeps
 /// it for the process lifetime, so a mod may keep the pointer. Members only grow at the end; check `version` before using a
 /// member added after the version a mod needs. A mod built on the game API reaches most of these
@@ -833,6 +859,22 @@ struct PmHostApi {
   /// not installed. The text lasts until the mods next start afresh: copy it to keep it. Main thread.
   /// @since Contract 2.3
   const char* (*mod_name)(const char* modId);
+  /// Added in version 2.4, after mod_name: a UnityAction (the game's delegate type for a no-argument UI event),
+  /// made the way the game makes its own listeners: bound to `target`, which must be a managed object (a
+  /// UnityEvent skips a listener whose target is a destroyed Unity object; key your own state off the `target`
+  /// the listener is called with), and calling `listener` when invoked. `listener` runs inside the game's
+  /// managed call on the main thread: it must not throw. Null, making nothing, when the game's UnityAction
+  /// constructor or Invoke did not resolve or `target` or `listener` is null. Keep the action alive as long as
+  /// the event should call it; the mod adds it to the event with `phasmo::UnityEvent::AddListener`. Main thread.
+  /// @since Contract 2.4
+  void* (*unity_action_new)(void* target, void (*listener)(void* target));
+  /// Added in version 2.5, after unity_action_new: the installed mod at `index` (0 up), in the host's own order, into
+  /// `out`, whose `size` the mod sets first; the host fills only the members that fit in it and leaves `size` as it was.
+  /// Every installed mod is listed, running or not, the asking mod included. Read-only: it changes nothing, and says
+  /// nothing of other players' mods. False, writing nothing, past the last mod, for a null `out` or a `size` too small
+  /// for `id`. Main thread.
+  /// @since Contract 2.5
+  bool (*mod_entry)(int32_t index, PmModEntry* out);
   /// @}
   /// @name Content packs
   /// Added in version 2.6, after mod_entry: the content packs made for a mod (PmContentPack).

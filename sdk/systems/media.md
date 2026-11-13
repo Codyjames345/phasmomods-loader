@@ -59,7 +59,36 @@ their values set by running each parameter's own constructor on it again (`Clamp
 none for either instance), so a mod that needed it would stay off.
 `sdk/api/screen_effects.h` does this. The game has no blur of its own for its menus.
 
-## Engine features the game does not use
+### What a frozen clock does to the picture
+
+Nothing in the game's code writes `Time.timeScale`. Every site that calls the setter in this build belongs to
+bundled middleware: an animation demo's slow-motion component, an on-screen console, and the time-scale node
+of the UI framework's graph system, which no game flow is known to run (from the whole-assembly call-site scan
+of 2026-11-12; the setter and getter are `Time.set_timeScale` and `Time.get_timeScale`). A mod that freezes
+the clock behind its own overlay is alone in doing it.
+
+The game's renderer also runs an automatic-exposure feature from bundled middleware, which keeps the
+picture's brightness matched to the light over time. The pass that does the adapting builds the block of
+constants it hands the GPU each frame, and one of them is `Time.get_deltaTime`, beside the exposure range, the
+exposure compensation and the dark-to-light and light-to-dark speeds. `Time.deltaTime` is the *scaled* step,
+so a clock held at `Time.timeScale` 0 feeds that adaptation a zero step for as long as it is held (read from
+that pass's own setup code, 2026-11-12; the feature is middleware rather than a game class, so it has no map
+entry, and its shader is compiled rather than decompiled). Seen in the game on 2026-11-11: after a mod's menu
+had been open a while at timeScale 0, the room came back bright and harsh when it closed. A mod that wants the
+player held still should take the game's own hold (`PCCanvas.PausePlayerInPlace`, `sdk/systems/menus.md`) and
+leave the clock alone; a mod that does stop the clock should expect the picture to sit wrong when it starts
+again.
+
+**Never write a time scale of exactly 0.** The investigator's movement divides by the frame's scaled step:
+`PhysicsCharacterController.Move` stores the frame's walk divided by `Time.deltaTime`, and the first-person
+controller calls it every frame, held or not. At a scale of 0 that is 0 divided by 0 for every frame the clock is
+stopped, and Unity runs the controller's physical step (its `FixedUpdate`) before the next `Update` once the clock
+moves again, so that step moves the local rig by the NaN it stored. The game's log then fills with "Infinity or NaN
+floating point numbers appear when calculating the transform matrix for a Collider" for every collider of the local
+rig and the networked body, the camera that rides the rig renders from nowhere (the picture flashes, then goes
+black), and the investigator stays lost (the dev menu's pause, seen in the game on 2026-11-12). A mod that needs the
+game nearly stopped writes the smallest positive scale it can live with (the dev menu uses one ten-thousandth),
+never 0.
 
 - `VideoPlayer` and `AsyncGPUReadback` have no managed methods left in this build (they were stripped). The engine
   still registers their calls: setting a URL, a render target and looping; prepare, play, pause and stop; asking for a

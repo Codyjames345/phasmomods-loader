@@ -1,5 +1,6 @@
 #include "launcher.h"
 #include "inject.h"
+#include "session_sweep.h"
 #include "update.h"
 #include "text_files.h"
 #include "text_table.h"
@@ -99,6 +100,8 @@ Result failure(Outcome outcome, const std::wstring& detail, DWORD error = 0) {
 using text::read_file;
 using text::widen;
 
+fs::path selection_file();  // defined below, beside the launcher's other data files
+
 std::vector<ModEntry> discover_mods(const std::vector<ModsFolder>& roots, std::wstring& problems,
                                     std::vector<modlist::Refused>& refused) {
   std::vector<ModEntry> mods;
@@ -117,10 +120,12 @@ std::vector<ModEntry> discover_mods(const std::vector<ModsFolder>& roots, std::w
     std::sort(here.begin(), here.end());
     for (fs::path& dir : here) folders.emplace_back(std::move(dir), root.place);
   }
+  // A developer's launcher.ini line is what shows developerOnly mods; nobody else sees them at all.
+  const bool developer = modlist::parse_developer(pm::text::read_file(selection_file()));
   for (const auto& [dir, place] : folders) {
     ModEntry m;
     std::string why;
-    const modlist::Reading reading = modlist::read_folder(dir, m.manifest, why, place);
+    const modlist::Reading reading = modlist::read_folder(dir, m.manifest, why, place, developer);
     if (reading == modlist::Reading::Refused) refuse(dir, why);
     if (reading != modlist::Reading::Readable) continue;
     // A content pack has no DLL: its stand-in names it in the lists, and its files are copied as a mod's are.
@@ -325,6 +330,7 @@ Result launch_steam(std::vector<std::wstring> arguments, const Package& package)
   if (result.outcome == Outcome::ready)
     return failure(Outcome::already_loaded, pm::text::widen(pm::i18n::text("launcher.phasmophobia-already-running-close")));
   if (result.outcome != Outcome::no_process) return result;
+  loader::sweep_previous_sessions();  // nothing an earlier session left outlives the process that wrote it (tools/session_sweep.h)
   std::wstring freshPath, logPath;
   auto probe = arguments;
   auto error = configure_log(probe, L"", logPath);

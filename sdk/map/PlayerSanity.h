@@ -85,12 +85,17 @@ namespace phasmo {
 
 /// A player's sanity. `sanity` below is the PlayerSanity.
 struct PlayerSanity {
+  /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
+  static constexpr pm::api::Type<pm::map::PlayerSanity> type{};
   /// Update(sanity). A mod hooks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PlayerSanity_Update, void(void*)> Update{};
   /// The candle test of Update: CandleIsOn(closure, candle). A mod hooks it. Unresolved: false.
   static constexpr pm::api::Method<pm::map::PlayerSanity_CandleIsOn, bool(void*, void*)> CandleIsOn{};
   /// ChangeSanity(sanity, amount): a positive amount is sanity lost. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PlayerSanity_ChangeSanity, void(void*, float)> ChangeSanity{};
+  /// SetInsanity(sanity, percent): sets the insanity to a number of percent, 0 to 100. Outside a room
+  /// nothing is sent. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::PlayerSanity_SetInsanity, void(void*, int32_t)> SetInsanity{};
   /// The insanity, 0 to 100: insanity.get(sanity), insanity.set(sanity, value). Unresolved: 0, writes
   /// nothing.
   static constexpr pm::api::Field<pm::map::PlayerSanity_insanity, float> insanity{};

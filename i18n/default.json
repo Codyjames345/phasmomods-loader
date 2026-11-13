@@ -178,6 +178,7 @@
   "manifest.pack-dll": "PM_TEXT_TODO",  // PM_TEXT_TODO
   "manifest.pack-for": "PM_TEXT_TODO",  // PM_TEXT_TODO
   "manifest.records-voice": "'recordsVoice' field is not true or false.",
+  "manifest.developer-only": "'developerOnly' field is not true or false.", // PM_TEXT_AI
   "manifest.reserved-author": "Author is PhasmoMods, which is reserved for bundled mods.",
   "manifest.reserved-id": "id uses the author \"phasmomods\", which is reserved for bundled mods.",
   "manifest.too-deep": "manifest.json nests deeper than {{levels}} levels.",

@@ -21,7 +21,11 @@
 //                                     "name=", "dll=", "description=" lines, and an optional "requires="
 //                                     naming the one mod it cannot run without
 //  %LOCALAPPDATA%\PhasmoMods\launcher.ini   "enabled=" followed by comma-separated mod ids: the mods
-//                                     that start (the launcher's ticks and the in-game Mods panel)
+//                                     that start (the launcher's ticks and the in-game Mods panel),
+//                                     and an optional "developer=1" line: with it, mods whose manifest
+//                                     says "developerOnly" are offered; without it they are nowhere to
+//                                     be seen, as if not installed (the launcher's own default is off,
+//                                     like SMAPI's DevelopmentMode)
 //  %LOCALAPPDATA%\PhasmoMods\bin\session-<pid>.txt   written by the launcher for the game process it
 //                                     loads the host into: one absolute mod DLL path per line, every
 //                                     installed mod; for each mod it refused a line "?<name><tab><why>"; and
@@ -159,11 +163,18 @@ inline Reading read_folder_manifest(const std::filesystem::path& folder, Manifes
  * manifest.json. A bad manifest.json refuses the mod, whatever else is there. A folder with a DLL and
  * neither file is refused, and one with neither is not a mod. A mod found at `place` that claims the
  * project's author is refused (reserved_author_refusal): the launcher and the host both read every mods
- * folder through here, so it holds whichever folder sorts first, and refuses nothing else.
+ * folder through here, so it holds whichever folder sorts first, and refuses nothing else. With
+ * `developer` false, a mod whose manifest says `developerOnly` reads as no mod at all, not as a refused
+ * one: it is nowhere offered, listed, loaded or synced (launcher.ini developer=1 is what shows it).
  */
-inline Reading read_folder(const std::filesystem::path& folder, Manifest& out, std::string& why, Place place) {
+inline Reading read_folder(const std::filesystem::path& folder, Manifest& out, std::string& why, Place place,
+                           bool developer = false) {
   const Reading reading = detail::read_folder_manifest(folder, out, why);
   if (reading != Reading::Readable) return reading;
+  if (out.developerOnly && !developer) {
+    out = {};
+    return Reading::None;
+  }
   why = reserved_author_refusal(out, place);
   if (why.empty()) return reading;
   out = {};
@@ -175,14 +186,39 @@ inline Reading read_folder(const std::filesystem::path& folder, Manifest& out, s
  * The launcher read the mod's own folder, and refused a reserved-author claim there, before copying it. The developer
  * tool pminject is the exception: it copies whatever DLL paths it is given, so nothing judged those.
  */
-inline Reading read_copy(const std::filesystem::path& dll, Manifest& out, std::string& why) {
+inline Reading read_copy(const std::filesystem::path& dll, Manifest& out, std::string& why, bool developer = false) {
   std::error_code error;
   const std::filesystem::path json = std::filesystem::path(dll).replace_extension(L".json");
-  if (std::filesystem::exists(json, error)) return detail::read_json(json, out, why);
-  const std::filesystem::path ini = std::filesystem::path(dll).replace_extension(L".ini");
-  if (std::filesystem::exists(ini, error)) return detail::read_ini(ini, out, why);
-  why = i18n::text("manifest.missing");
-  return Reading::Refused;
+  Reading reading = Reading::Refused;
+  if (std::filesystem::exists(json, error)) reading = detail::read_json(json, out, why);
+  else {
+    const std::filesystem::path ini = std::filesystem::path(dll).replace_extension(L".ini");
+    if (std::filesystem::exists(ini, error)) reading = detail::read_ini(ini, out, why);
+    else {
+      why = i18n::text("manifest.missing");
+      return Reading::Refused;
+    }
+  }
+  if (reading == Reading::Readable && out.developerOnly && !developer) {
+    out = {};
+    return Reading::None;
+  }
+  return reading;
+}
+
+/** Whether launcher.ini asks for developer mods: a "developer=" line holding 1 or true (any other value,
+ *  and no line at all, is off). Every player's default is off; the line is edited by hand, never written
+ *  by the launcher, and the launcher keeps it when it saves the mod choice. */
+inline bool parse_developer(std::string_view text) {
+  bool developer = false;
+  each_line(text, [&](std::string_view line) {
+    if (line.substr(0, 10) != "developer=") return;
+    std::string_view value = line.substr(10);
+    while (!value.empty() && value.front() == ' ') value.remove_prefix(1);
+    while (!value.empty() && value.back() == ' ') value.remove_suffix(1);
+    developer = value == "1" || value == "true";
+  });
+  return developer;
 }
 
 /** The ids on the launcher.ini "enabled=" line; `present` is false when there is no such line. */
@@ -207,10 +243,16 @@ inline std::vector<std::string> parse_enabled(std::string_view text, bool& prese
   return ids;
 }
 
-inline std::string write_enabled(const std::vector<std::string>& ids) {
-  std::string out = "# Mods the launcher starts. Written by the launcher.\nenabled=";
+inline constexpr const char* kChoiceHeader = "# Mods the launcher starts. Written by the launcher.";
+
+inline std::string enabled_line(const std::vector<std::string>& ids) {
+  std::string out = "enabled=";
   for (size_t i = 0; i < ids.size(); ++i) out += (i ? "," : "") + ids[i];
   return out + "\n";
+}
+
+inline std::string write_enabled(const std::vector<std::string>& ids) {
+  return std::string(kChoiceHeader) + "\n" + enabled_line(ids);
 }
 
 inline bool enabled(const std::vector<std::string>& ids, std::string_view id) {
@@ -236,12 +278,26 @@ inline std::vector<std::string> chosen(std::string_view launcherIni, const std::
   return present ? migrated_ids(ids) : installed;
 }
 
-/** Save `ids` as the choice in the launcher.ini at `file`, creating its folder. */
+/** Save `ids` as the choice in the launcher.ini at `file`, creating its folder. The enabled= line and
+ *  the launcher's own header comment are replaced; every other line already in the file is kept, so a
+ *  hand-edited developer= line or a player's own comment survives the launcher saving. */
 inline bool save_choice(const std::filesystem::path& file, const std::vector<std::string>& ids) {
   std::error_code error;
   std::filesystem::create_directories(file.parent_path(), error);
+  const std::string existing = text::read_file(file);
+  std::string kept;
+  size_t start = 0;
+  while (start <= existing.size()) {
+    size_t end = existing.find('\n', start);
+    if (end == std::string::npos) end = existing.size();
+    std::string_view line = std::string_view(existing).substr(start, end - start);
+    start = end + 1;
+    if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+    if (line.substr(0, 8) == "enabled=" || line == kChoiceHeader) continue;
+    kept += std::string(line) + "\n";
+  }
   std::ofstream out(file, std::ios::binary | std::ios::trunc);
-  out << write_enabled(ids);
+  out << std::string(kChoiceHeader) + "\n" + kept + enabled_line(ids);
   return static_cast<bool>(out);
 }
 

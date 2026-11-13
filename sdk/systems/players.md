@@ -105,6 +105,16 @@ spot, is reached only from decoys.
 - **`Player.RevivePlayer`** starts a coroutine that waits a frame at a time for the player's mark, then sends the
   `Revive` RPC to every client through the server and starts the revive animation. With its flag set it also sends
   `SendRemoveHighPriestess` to the master. Every caller in this build passes false.
+- **The `Revive` RPC's own checks** (Player's Revive coroutine, decompiled for build 25811160). Before anything else
+  the body reads a list of numbers held by an object of `LevelValues`, and goes on only when that list contains 1 or
+  7. Then it goes on only when the player is marked dead (`Player.isDead`) or dying (the bool after it). Failing
+  either test, it raises the game's report on the sender and stops. Only after both does it check that the sender
+  is the master. The two revivers in this build are the Monkey Paw and the tarot cards, so the list is very likely
+  the contract's cursed possessions, with 1 and 7 those two, but what fills the list was not read. **Offline does
+  not skip these tests**: the dev menu's revive row called `Player.RevivePlayer` on its own dead investigator in a
+  single player contract without either possession, and the game's log shows the report raised for `Revive`, and
+  the game faulting after it (2026-11-12). A mod never revives except where the game itself would (the paw's wish
+  or the High Priestess, in a contract that carries them).
 
 So a Player marked dead by anything but a death is found by all three: it raises the count, and a revive that picks
 it revives that Player on every client.
@@ -194,7 +204,9 @@ So in a contract the speed a living PC player would sprint at, whether sprinting
 `speedMultiplier` of that player's rig, and a dead one's is `sprintSpeed` alone; a VR player's is the same on the
 traced branch above.
 `LocalPCPlayer.SetPlayerSpeedMultiplier` changes the multiplier on that client only (a Monkey Paw wish calls it), so
-another client knows the multiplier only through the difficulty, unless the player's own client says. Custom Ghosts'
+another client knows the multiplier only through the difficulty, unless the player's own client says.
+`LocalPCPlayer.ResetPlayerSpeedMultiplier` puts back the copy the rig kept when its speed was first set (the same
+path ends a wish's speed) and re-applies it, so a mod that changes the multiplier has one game call that undoes it. Custom Ghosts'
 Squatter has each client tell the master its own player's sprint this way (`mods/custom_ghosts/squatter_net.h`).
 
 The stamina drains in a contract only while `Difficulty.sprinting` is 1, so with 2 nobody tires. When it runs out on

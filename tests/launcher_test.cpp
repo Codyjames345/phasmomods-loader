@@ -27,6 +27,7 @@ unsigned sleeps = 0, readyAfterSleeps = 0;
 bool concurrentLaunch = false;
 pm::loader::Outcome overlappingOutcome = pm::loader::Outcome::ready;
 int discoveryCalls = 0;
+std::wstring localTemp;  // LOCALAPPDATA as every test in this file sees it: a folder under the temporary one
 
 /** Emit the same completed marker for immediate and delayed fake child startup. */
 bool append_menu_marker() {
@@ -99,6 +100,7 @@ Result load(DWORD pid, const wchar_t*, const std::vector<std::wstring>&, const s
 #define WaitForSingleObject wait_for_process
 #define Sleep sleep_for
 #include "../tools/launcher.cpp"
+#include "../tools/session_sweep.cpp"  // startup calls it; its process view is the machine's own
 #undef CreateProcessW
 #undef GetModuleFileNameW
 #undef GetTickCount64
@@ -482,6 +484,35 @@ void result_line_names_the_cause() {
         std::wstring::npos);
 }
 
+/** What an earlier session left in the data folder goes at startup, while anything a live process still owns, or the
+ *  loader never wrote, stays (tools/session_sweep.h). */
+void previous_sessions_swept() {
+  namespace fs = std::filesystem;
+  const fs::path data = fs::path(localTemp) / L"PhasmoMods";
+  std::error_code error;
+  fs::create_directories(data / "bin", error);
+  fs::create_directories(data / "logs", error);
+  const auto write = [&](const fs::path& file) { std::ofstream out(file, std::ios::binary); out << "x"; };
+  const std::wstring gone = std::to_wstring(0xFFFFFFF0);  // Windows has never handed this process id out
+  const std::wstring here = std::to_wstring(GetCurrentProcessId());
+  write(data / "bin" / (L"host-" + gone + L"-1-0.dll"));
+  write(data / "bin" / (L"session-" + gone + L".txt"));
+  write(data / "logs" / (L"game-" + gone + L"-2.log"));
+  write(data / "bin" / (L"host-" + here + L"-1-0.dll"));
+  write(data / "logs" / (L"game-" + here + L"-2.log"));
+  write(data / "logs" / L"notes.log");   // not a name the launcher makes
+  write(data / "bin" / L"readme.txt");
+  pm::loader::sweep_previous_sessions();
+  CHECK(!fs::exists(data / "bin" / (L"host-" + gone + L"-1-0.dll"), error));
+  CHECK(!fs::exists(data / "bin" / (L"session-" + gone + L".txt"), error));
+  CHECK(!fs::exists(data / "logs" / (L"game-" + gone + L"-2.log"), error));
+  CHECK(!fs::exists(data / "bin" / (L"host-" + here + L"-1-0.dll"), error));  // this process is no game, so that copy is stale
+  CHECK(fs::exists(data / "logs" / (L"game-" + here + L"-2.log"), error));    // its writer is alive, so that log waits
+  CHECK(fs::exists(data / "logs" / L"notes.log", error));
+  CHECK(fs::exists(data / "bin" / L"readme.txt", error));
+  fs::remove_all(data, error);
+}
+
 /** Exercise argument preservation and conservative startup detection without a game. */
 int main() {
   {  // the loader's shipped text (core/text_table.h), so the messages read as players see them
@@ -492,6 +523,13 @@ int main() {
   CHECK(GetTempPathW(MAX_PATH, directory) > 0);
   CHECK(GetTempFileNameW(directory, L"pgl", 0, path) != 0);
   fixturePath = path;
+  // Startup sweeps the data folder, so this whole run sees a temporary LOCALAPPDATA, never the player's.
+  std::wstring savedLocal(32768, L'\0');
+  const DWORD savedLength = GetEnvironmentVariableW(L"LOCALAPPDATA", savedLocal.data(), static_cast<DWORD>(savedLocal.size()));
+  localTemp = (std::filesystem::path(path).parent_path() / L"pgl-local").wstring();
+  std::error_code sweepIgnore;
+  std::filesystem::create_directories(localTemp, sweepIgnore);
+  CHECK(SetEnvironmentVariableW(L"LOCALAPPDATA", localTemp.c_str()));
   quoting();
   log_options();
   readiness();
@@ -506,6 +544,9 @@ int main() {
   launch_option_quotes_spaced_name();
   launcher_log_is_in_data_directory();
   result_line_names_the_cause();
+  previous_sessions_swept();
+  SetEnvironmentVariableW(L"LOCALAPPDATA", savedLength && savedLength < savedLocal.size() ? savedLocal.data() : nullptr);
+  std::filesystem::remove_all(localTemp, sweepIgnore);
   CHECK(DeleteFileW(fixturePath.c_str()));
   return failures ? 1 : 0;
 }

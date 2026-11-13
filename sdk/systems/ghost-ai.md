@@ -46,6 +46,37 @@ master. Each frame `GhostIdleState.Execute` counts its timer down. When the time
    three flags clear, runs the type's, sanity and setup checks (the Thaye's against
    `GhostController.thayeThreshold`) and then draws a final 1-in-3, 1-in-4 or 1-in-5 chance.
 
+### Each type's hunt line
+
+The hunt branch needs the check's insanity (step 1) to be at least 50, and draws 1 in 5 from 50 and 1 in 3 from 75.
+`GhostIdleState.TypeHuntRules` adds the type's offset to it first, so the line in sanity is 50 plus that offset: a
+ghost may start an idle hunt at that sanity or below. The offsets, read from its decompile (the map note lists the
+exact conditions):
+
+| Type | Hunt line (sanity) |
+| --- | --- |
+| Mare (6) | 40 while a light in its room is on, 60 otherwise |
+| Shade (8) | 35 |
+| Demon (9) | 70 |
+| Yokai (12) | 80 while players talk in its room, 50 otherwise |
+| Onryo (16) | 40 while a lit flame is near it on its floor, 60 otherwise |
+| Raiju (18) | 65 while electronics are on near it, 50 otherwise |
+| Deogen (22) | 40 |
+| Thaye (23) | below `GhostController.thayeThreshold` (75 down 6 a step as it ages) |
+| Gallu (25) | 60 enraged, 40 weakened, 50 otherwise |
+| Dayan (26) | 65 in one state, 45 in the other, 50 before either |
+| Obambo (27) | 65 aggressive, 10 calm |
+| Kormos (28) | 70 while a condition on a player in its room holds, 50 otherwise |
+| every other type | 50 |
+
+These are the idle check's lines only. Hunts started another way skip them: the Onryo's three blown-out flames
+(step 2), and whatever a type's ability, an event or a cursed possession starts. To read the line the game would use
+now, whatever the ghost is doing, make an idle state of your own (`GhostIdleState.type.make()` and
+`GhostIdleState.ctor` with the ghost), give it the three scene controllers the state's enter copies
+(`GhostIdleState.levelController`, `.gameController`, `.soundController`, from each class's `instance`), run
+`GhostIdleState.HuntInsanity` on it and compare `GhostIdleState.insanity` with the insanity it started from, as the
+Dev Menu does. The ghost's running state is never touched.
+
 The hunt's start then goes through `GhostAI.ChangeState`, which stores idle instead while a flag of
 LevelValues is set (see "How it fits together"). `GhostAI.StopGhostFromHunting` holds hunts off for a
 while: its callers are the incense's smudge and a Monkey Paw wish. While the hold is on
@@ -57,10 +88,13 @@ behaviour type: one for the Spirit, another for the Demon, a third for the rest.
 A hunt is a state object, `GhostHuntState` (`sdk/map/GhostHuntState.h`). On the master its tick sets
 the speed in two steps:
 
-- **Every frame,** `GhostHuntState.UpdateSpeed` moves `sightSpeedUp`: up 0.05 a second while the ghost
-  sees its prey, down while it has none, kept between 1 and 1.65. It then sets the NavMeshAgent's speed
-  to `baseSpeed` times `sightSpeedUp` times the multipliers every type shares (the difficulty's ghost
-  speed, Blood Moon), with branches by type.
+- **Every frame,** `GhostHuntState.UpdateSpeed` moves `sightSpeedUp`: up 0.05 a second (faster for one type) while
+  the hunt has a `target` (the player its sight last found), down only once it has neither a `target` nor a
+  `searchTarget`, and unchanged in between; it is kept between 1 and 1.65. So from 1 at a hunt's start it takes
+  about 13 seconds of chase to reach its top. It then sets the NavMeshAgent's speed to `baseSpeed` times
+  `sightSpeedUp` times the multipliers every type shares (the difficulty's ghost speed, Blood Moon), with
+  branches by type; while the ghost is smudged it uses 1 instead. It reads the field afresh every frame, so a
+  value a mod writes there counts from the next frame (decompiled 2026-11-12).
 - **Every two seconds,** `GhostHuntState.RefreshBase` writes `baseSpeed`: from the players' average
   insanity for the Moroi, from a field of its GhostAI for the Deogen, and from GhostAI's base speed (1.7,
   set in `Awake`) for every other type, "no type" among them.

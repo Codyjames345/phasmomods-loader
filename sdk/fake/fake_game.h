@@ -67,7 +67,8 @@ void reset();
 /// set, room_agrees what room_agrees() set,
 /// and journal_lines records lines in
 /// the registry. list_add adds to a fake List of references; copy_settings and fields_of_type read the
-/// fields declare_fields() gave; steer_agent records the ask (see steer_asks). Every other function does nothing and answers false or null. The pointer stays valid
+/// fields declare_fields() gave; steer_agent records the ask (see steer_asks); unity_action_new records the
+/// ask (see unity_actions). Every other function does nothing and answers false or null. The pointer stays valid
 /// for the process lifetime.
 const PmHostApi* host();
 
@@ -111,6 +112,10 @@ void content_packs(std::vector<Pack> packs);
 const std::vector<std::pair<std::string, std::string>>& failed_packs();
 /// Every message the host contract's show_message was asked for since the last reset, as (title, body), in order.
 const std::vector<std::pair<std::string, std::string>>& messages();
+/// Every UnityAction the host contract's unity_action_new was asked for since the last reset, as (target,
+/// listener), in order. The token it answered is not a fake object and is never read back: call the listener
+/// with the target to act out the game's event invoking that action.
+const std::vector<std::pair<void*, void (*)(void*)>>& unity_actions();
 /// The native site entry `d` resolves to `code`. As in the host, the contract's game_entry never gives it to a mod:
 /// host_entry does, as pm::api::host_only::game_entry does in the host. A mod reaches steering only through
 /// steer_agent (see steer_asks).

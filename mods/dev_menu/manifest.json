@@ -1,0 +1,12 @@
+{
+  "id": "phasmomods.dev-menu",
+  "name": "Dev Menu",
+  "author": "PhasmoMods",
+  "version": "1.0.0",
+  "description": "PM_TEXT_TODO",
+  "dll": "DevMenu.dll",
+  "website": "",
+  "developerOnly": true,
+  "dependencies": [],
+  "incompatibilities": []
+}

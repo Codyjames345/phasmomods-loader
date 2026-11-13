@@ -193,6 +193,11 @@
         @{ Name = 'mods/emotes/Emotes.dll'; Source = 'build/Emotes.dll' }
         @{ Name = 'mods/emotes/manifest.json'; Source = 'mods/emotes/manifest.json' }
         @{ Name = 'mods/emotes/i18n/default.json'; Source = 'mods/emotes/i18n/default.json' }
+        # The Dev Menu ships in every release but stays out of sight: it is developerOnly, so the loader hides it
+        # unless the player's launcher.ini sets developer=1 (docs/superpowers/specs/2026-11-10-dev-menu-content-plan.md).
+        @{ Name = 'mods/dev-menu/DevMenu.dll'; Source = 'build/DevMenu.dll' }
+        @{ Name = 'mods/dev-menu/manifest.json'; Source = 'mods/dev_menu/manifest.json' }
+        @{ Name = 'mods/dev-menu/i18n/default.json'; Source = 'mods/dev_menu/i18n/default.json' }
         # The Emotes bundle (its clips, songs and icons; mods/emotes/assets/emotes.json names them). Gitignored like the Squatter's: built
         # in the private assets repository's unity/emotes-bundle and placed by CI from there. Sha256 pins the build.
         @{ Name = 'mods/emotes/assets/emotes.bundle'; Source = 'mods/emotes/assets/emotes.bundle'; Sha256 = '07A53CDA70B7400A1D94AEB63FF1BDB8C4DF668D4E75B9D1C610DF2E25D2A7DE' }

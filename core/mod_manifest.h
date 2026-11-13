@@ -44,6 +44,7 @@ struct Manifest {
   std::vector<std::string> incompatibilities;  // the ids of mods it cannot run beside
   std::vector<std::string> unknownFields;      // what this loader does not know, for one log line
   bool recordsVoice = false;                   // it keeps other players' speech in memory: the consent notice says so
+  bool developerOnly = false;                  // it ships for developers: only offered with launcher.ini developer=1
   bool oldFormat = false;                      // from a mod.ini
   // A content pack's framework mod (SMAPI's ContentPackFor): the pack is data for that mod, has no DLL, and depends on
   // it as a required dependency, which is also in `dependencies`. Empty for a mod with code.
@@ -293,11 +294,19 @@ inline bool read_manifest(std::string_view text, Manifest& m, std::string& why) 
     }
     m.recordsVoice = voice->get<bool>();
   }
+  if (const auto dev = j.find("developerOnly"); dev != j.end()) {
+    if (!dev->is_boolean()) {
+      why = i18n::text("manifest.developer-only");
+      return false;
+    }
+    m.developerOnly = dev->get<bool>();
+  }
   if (!read_dependencies(j, m, why) || !read_content_pack_for(j, m, why) || !read_incompatibilities(j, m, why))
     return false;
   static constexpr std::string_view kKnown[] = {"$schema",      "id",          "name",      "author",
                                                 "version",      "description", "dll",       "website",
-                                                "dependencies", "incompatibilities", "recordsVoice", "contentPackFor"};
+                                                "dependencies", "incompatibilities", "recordsVoice", "developerOnly",
+                                                "contentPackFor"};
   for (const auto& entry : j.items())
     if (std::find(std::begin(kKnown), std::end(kKnown), entry.key()) == std::end(kKnown)) note_unknown(m, entry.key());
   std::sort(m.unknownFields.begin(), m.unknownFields.end());

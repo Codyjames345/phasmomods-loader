@@ -6,6 +6,7 @@
 // that keep them working (host/menu_panel.h); sdk/systems/menus.md says how a click reaches a listener. Notes read from
 // decompiled code are from build 25811160.
 
+#include "UnityRendering.h"
 #include "entry.h"
 #include "game_api.h"
 
@@ -139,6 +140,44 @@ inline constexpr pm::sdk::EntryDesc UISelectableColorAnimator_Play{
     .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kOptional, .owner = "UISelectableColorAnimator",
     .name = "Play"};
 
+/// The colour the animator plays for the disabled state (4), a ColorAnimation saved with the scene by value, so a copy
+/// (Object.Instantiate) has its own. Its siblings NormalAnimation, HighlightedAnimation, PressedAnimation and
+/// SelectedAnimation are the other states'. A Unity Selectable is disabled while a CanvasGroup above it is not
+/// interactable, and the game switches the main menu canvas's group off while the camera looks at another board
+/// (sdk/systems/menus.md). Optional, as its type. Decompiled.
+inline constexpr pm::sdk::EntryDesc UISelectableColorAnimator_DisabledAnimation{
+    .key = "UISelectableColorAnimator.DisabledAnimation", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kOptional, .owner = "UISelectableColorAnimator",
+    .name = "DisabledAnimation", .type = "@ColorAnimation"};
+
+/// Doozy's colour animation (DoozyRuntime, namespace Doozy.Runtime.Reactor.Animations), a plain serialized class:
+/// a colour target and the reaction that moves it. Optional. Decompiled.
+inline constexpr pm::sdk::EntryDesc ColorAnimation{.key = "ColorAnimation", .confidence = pm::sdk::Confidence::Decompiled,
+                                                   .flags = pm::sdk::kOptional, .name = "ColorAnimation",
+                                                   .assembly = "DoozyRuntime", .ns = "Doozy.Runtime.Reactor.Animations"};
+
+/// The animation's reaction, a ColorTargetReaction: where the colour starts and ends. Optional. Decompiled.
+inline constexpr pm::sdk::EntryDesc ColorAnimation_Animation{
+    .key = "ColorAnimation.Animation", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
+    .flags = pm::sdk::kOptional, .owner = "ColorAnimation", .name = "Animation", .type = "@ColorTargetReaction"};
+
+/// Doozy's colour reaction on a target (DoozyRuntime, namespace Doozy.Runtime.Reactor.Reactions). Each end of the
+/// move names a reference value: the start colour, the target's current colour, or a custom colour of its own. The
+/// start and current colours take its hue, saturation, lightness and alpha offsets; a custom colour is used as it is,
+/// with no offset. The reaction reads them each time it sets its values. Optional. Decompiled.
+inline constexpr pm::sdk::EntryDesc ColorTargetReaction{
+    .key = "ColorTargetReaction", .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kOptional,
+    .name = "ColorTargetReaction", .assembly = "DoozyRuntime", .ns = "Doozy.Runtime.Reactor.Reactions"};
+
+/// The custom colour the move ends on, a Color, used when the end's reference value is the custom one. The main menu's
+/// taped buttons end every state on their custom colour. For the disabled state the visible picture tapes
+/// (Singleplayer, Training) save an opaque white, while News and the icon tapes save white at half alpha, so those show
+/// see-through while the board is not focused. Optional. Decompiled.
+inline constexpr pm::sdk::EntryDesc ColorTargetReaction_ToCustomValue{
+    .key = "ColorTargetReaction.ToCustomValue", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kOptional, .owner = "ColorTargetReaction",
+    .name = "ToCustomValue", .type = "Color"};
+
 }  // namespace pm::map
 
 /// @file
@@ -211,6 +250,21 @@ struct UISelectableColorAnimator {
   static constexpr pm::api::Type<pm::map::UISelectableColorAnimator> type{};
   /// Play(animator, state): state 0 normal, 1 highlighted, 2 pressed, 3 selected, 4 disabled. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::UISelectableColorAnimator_Play, void(void*, int32_t)> Play{};
+  /// The disabled state's colour animation: DisabledAnimation.get(animator). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::UISelectableColorAnimator_DisabledAnimation, void*> DisabledAnimation{};
+};
+
+/// A Doozy colour animation. `animation` below is one, as UISelectableColorAnimator.DisabledAnimation gives it.
+struct ColorAnimation {
+  /// Its reaction: Animation.get(animation). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::ColorAnimation_Animation, void*> Animation{};
+};
+
+/// A Doozy colour reaction. `reaction` below is one, as ColorAnimation.Animation gives it.
+struct ColorTargetReaction {
+  /// The custom colour it ends on: ToCustomValue.get(reaction), ToCustomValue.set(reaction, color). Takes effect the
+  /// next time the reaction sets its values, as it does when its animation plays. Unresolved: all zero, writes nothing.
+  static constexpr pm::api::Field<pm::map::ColorTargetReaction_ToCustomValue, Color> ToCustomValue{};
 };
 
 /// @}

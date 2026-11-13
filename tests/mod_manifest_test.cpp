@@ -126,6 +126,18 @@ void manifest_says_whether_it_records_voice() {
   }
 }
 
+void manifest_says_whether_it_is_for_developers() {
+  Manifest m;
+  std::string why;
+  CHECK(parse_manifest_json(minimal(), m, why) && !m.developerOnly);
+  CHECK(parse_manifest_json(minimal(R"(,"developerOnly":true)"), m, why) && m.developerOnly && m.unknownFields.empty());
+  CHECK(parse_manifest_json(minimal(R"(,"developerOnly":false)"), m, why) && !m.developerOnly);
+  for (const char* bad : {R"(,"developerOnly":"yes")", R"(,"developerOnly":1)", R"(,"developerOnly":null)"}) {
+    CHECK(!parse_manifest_json(minimal(bad), m, why));
+    CHECK(why == "'developerOnly' field is not true or false.");
+  }
+}
+
 void manifest_rejects_bad_id() {
   for (const char* id : {"noauthor", "two.dots.here", "Upper.mod", "author.Mod", ".mod", "author.", "a b.c", "a_b.c", "",
                          "vanilla.mod", "a.b\\u0000c"}) {
@@ -456,23 +468,25 @@ std::string read_source(const std::string& relative) {
   return text.str();
 }
 
-// What ships: each bundled mod's manifest parses, names its DLL, and agrees with the DLL's compiled id.
+// What ships: each bundled mod's manifest parses, names its DLL and its version, and agrees with the DLL's compiled id.
 void bundled_manifests_are_valid() {
   struct Bundled {
     const char* folder;
     const char* id;
     const char* name;
     const char* dll;
+    const char* version;  // the user's: Emotes 2.0.0 and Custom Ghosts 1.1.0 (2026-11-13)
   };
-  for (const Bundled& b : {Bundled{"custom_ghosts", "phasmomods.custom-ghosts", "Custom Ghosts", "CustomGhosts.dll"},
-                           Bundled{"ghost_tells", "phasmomods.ghost-tells", "Ghost Tells", "GhostTells.dll"},
-                           Bundled{"playable_ghost", "phasmomods.playable-ghost", "Playable Ghost", "PlayableGhost.dll"},
-                           Bundled{"spectral_flame", "phasmomods.spectral-flame", "Spectral Flame", "SpectralFlame.dll"},
-                           Bundled{"emotes", "phasmomods.emotes", "Emotes", "Emotes.dll"}}) {
+  for (const Bundled& b : {Bundled{"custom_ghosts", "phasmomods.custom-ghosts", "Custom Ghosts", "CustomGhosts.dll", "1.1.0"},
+                           Bundled{"ghost_tells", "phasmomods.ghost-tells", "Ghost Tells", "GhostTells.dll", "1.0.0"},
+                           Bundled{"playable_ghost", "phasmomods.playable-ghost", "Playable Ghost", "PlayableGhost.dll", "1.0.0"},
+                           Bundled{"spectral_flame", "phasmomods.spectral-flame", "Spectral Flame", "SpectralFlame.dll", "1.0.0"},
+                           Bundled{"emotes", "phasmomods.emotes", "Emotes", "Emotes.dll", "2.0.0"},
+                           Bundled{"dev_menu", "phasmomods.dev-menu", "Dev Menu", "DevMenu.dll", "1.0.0"}}) {
     Manifest m;
     std::string why;
     CHECK(parse_manifest_json(read_source(std::string("mods/") + b.folder + "/manifest.json"), m, why));
-    CHECK(m.id == b.id && m.name == b.name && m.dll == b.dll && m.author == "PhasmoMods" && m.version == "1.0.0");
+    CHECK(m.id == b.id && m.name == b.name && m.dll == b.dll && m.author == "PhasmoMods" && m.version == b.version);
     CHECK(m.unknownFields.empty());
     CHECK(read_source(std::string("mods/") + b.folder + "/mod.cpp").find(std::string("\"") + b.id + "\"") != std::string::npos);
     CHECK(!fs::exists(fs::path(PM_SOURCE_DIR) / "mods" / b.folder / "mod.ini"));
@@ -530,6 +544,7 @@ void schema_agrees_with_the_parser() {
 int main() {
   use_text({"i18n/default.json"});
   manifest_says_whether_it_records_voice();
+  manifest_says_whether_it_is_for_developers();
   manifest_reads_every_field();
   manifest_rejects_bad_id();
   old_bundled_ids_in_a_manifest_mean_the_mod();

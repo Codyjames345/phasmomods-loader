@@ -775,6 +775,9 @@ struct GhostAI {
   static constexpr pm::api::Field<pm::map::GhostAI_canWander, bool> canWander{};
   /// Whether its roll and wanders go to its favourite room instead: stayHome.get(ghost). Unresolved: false.
   static constexpr pm::api::Field<pm::map::GhostAI_stayHome, bool> stayHome{};
+  /// Whether the hunt's extra speed multiplier is in (the Blood Moon and the Hermit card both set it):
+  /// speedFlag.get(ghost). Unresolved: false.
+  static constexpr pm::api::Field<pm::map::GhostAI_speedFlag, bool> speedFlag{};
   /// Whether the idle roll's actions are not held back (the Tower card): interactionBoost.get(ghost).
   /// Unresolved: false.
   static constexpr pm::api::Field<pm::map::GhostAI_interactionBoost, bool> interactionBoost{};

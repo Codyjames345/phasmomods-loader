@@ -26,7 +26,7 @@ Ghost Tells registers one set of functions for all six ghosts, with `user` set t
 The rules run while the contract's ghost **acts as** that type, which is its behaviour type. So a Mimic copying the
 Mare runs the Mare's rules for as long as the copy lasts, and the switch stops one set and starts the next in the same
 call. The host sends the acting-as type to every client, so `tick` runs everywhere
-([README, "The host contract, version 2.4"](../README.md#the-host-contract-version-24)). Rules never start partway
+([README, "The host contract, version 2.6"](../README.md#the-host-contract-version-26)). Rules never start partway
 through a contract.
 
 ## Lines on its journal page

@@ -200,6 +200,10 @@ and `sdk/manifest.schema.json` lets an editor check it (point `"$schema"` at it)
   notice then adds a "Voices are recorded." paragraph that names the mod. The player agrees before your DLL loads, so
   this is what they agreed to: a DLL that sets `PM_MOD_RECORDS_VOICE` when its manifest does not say `true` stays off,
   with a reason on its row. An old-format `mod.ini` cannot say it, so such a mod that records voice needs a `manifest.json`.
+- `developerOnly`: optional, `true` when the mod is a tool for mod authors rather than for players. Players never see it:
+  with the developer setting off (the default in launcher.ini), the launcher, the Mods panel, the loading order and every
+  lobby list treat it as not installed. A developer puts `developer=1` in launcher.ini to make it appear; it is then chosen
+  like any mod and follows every lobby rule while chosen.
 - A field the loader does not know is named once in the log and ignored, so a later loader can add fields.
 
 An old-format `mod.ini` may not use the id `vanilla`, or a bundled mod's old flat id (`custom-ghosts` and the
@@ -495,9 +499,9 @@ that requires one whose hook could not be made stays off, and the log names the 
 false for that reason alone while a mod runs.
 It replaces return-address checks, which break when several mods chain detours on one function.
 
-### The host contract, version 2.4
+### The host contract, version 2.6
 
-`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.4 today).
+`PMMOD_API_VERSION` is a major number in the high 16 bits and a minor in the low 16 (2.6 today).
 `pm_api_compatible(host, mod)` accepts a mod of the same major and a minor no newer than the host's.
 Within a major, `PmHostApi` and every published struct only grow at the end; a new major refuses
 older mods. Version 2.0 added these members, after the services of version 1:
@@ -803,14 +807,19 @@ evidence in the world stays its mod's job.
 - `mod_started(modId)`: whether that mod has started on this client and runs now, for an
   optional dependency, from `pmmod_start` onwards (`pm::mod::mod_started` in `core/mod_glue.h`). See
   "Dependencies". The fake backend answers it from `pm::fake::started_mods`.
-- `show_message(title, body)`, the last member: a one-button message in the game's own popup on the menu's and the lobby's
+- `show_message(title, body)`: a one-button message in the game's own popup on the menu's and the lobby's
   board (`pm::mod::show_message` in `core/mod_glue.h`). One asked for in a contract shows once the lobby is back. It
   replaces any message showing or waiting, so keep it for news a player needs. This is how a mod tells a player something
   outside a contract: never draw a window of your own. The fake backend records each in `pm::fake::messages`.
-
-Version 2.4 added two members, at the end of `PmHostApi`:
-
-- `content_packs(modId, out, max, itemSize)` and `content_pack_failed(packId, why)`: the content packs made
+- Version 2.3 added `content_flags_of(type)`, a custom ghost's `PM_GHOST_*` flags, and `mod_name(modId)`, the name the
+  installed mod's manifest gives it (`pm::mod::shown_name` in `core/mod_glue.h`).
+- Version 2.4 added `unity_action_new(target, listener)`, a UnityAction made the way the game makes its own listeners, so a
+  mod's button takes the game's own click (`sdk/api/buttons.h`).
+- Version 2.5 added `mod_entry(index, out)`: the installed mod at an index (id, name, version, author,
+  whether it runs, developer-only, records voice, and why it is off), filling a `PmModEntry` up to the `size` the mod sets.
+  `pm::mod::mod_entries()` in `core/mod_glue.h` copies every one out. Read-only; it says nothing of other players' mods.
+- Version 2.6 added `content_packs(modId, out, max, itemSize)` and `content_pack_failed(packId, why)`, the last
+  members: the content packs made
   for a mod (wrapper: `sdk/api/packs.h`, `pm::api::packs`; see "Content packs", below). `content_packs`
   fills `out`, at most `max` entries, with the packs whose framework is `modId`, in id order: entries sit
   `itemSize` bytes apart, the host writes at most `sizeof(PmContentPack)` bytes into each and sets its

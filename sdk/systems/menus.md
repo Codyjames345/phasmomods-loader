@@ -14,6 +14,18 @@ BAKE`). Each taped button (Singleplayer, Training, News, Go Online, Options, Cre
 `UIButton`, a `UISelectableColorAnimator` and Doozy's `ImageColorTarget`. Multiplayer is a plain Unity `Button`
 with its `Image`. News ships switched off in the scene.
 
+**A tape's colours.** The animator plays a colour for each state the button is in (normal, highlighted, pressed,
+selected, disabled), and each tape saves every state's colour as a custom colour of its own
+(`ColorTargetReaction.ToCustomValue`, reached through `UISelectableColorAnimator.DisabledAnimation` and
+`ColorAnimation.Animation` for the disabled one). A custom colour is used as saved: the hue, saturation, lightness
+and alpha offsets a reaction also keeps apply only to a start or current colour. The disabled colour shows whenever
+the board is not focused. The camera's focus switches every board's `CanvasGroup` on the main menu canvas to
+interactable only for the board it looks at, and Unity's `Selectable` is disabled while a group above it is not
+interactable. It reads that again when it is enabled, so a tape switched on while the board is not focused starts
+disabled. The picture tapes the menu shows (Singleplayer, Training) save an opaque white for disabled, so they look
+the same either way. News and the icon tapes (Go Online, Options, Credits, Quit) save white at half alpha, so News
+would show see-through until the board is focused.
+
 The error popup (`ErrorManager.errorParent`) has one Doozy button, `Error Accept Button`, built as a tape is.
 
 The lobby paper's checkboxes (`Create Lobby/Hardware/Toggle.1` and its kin) are Unity `Toggle`s: the box
@@ -41,6 +53,8 @@ pointer, and no selected state from a click.
 - **The Mods tape and the popups' buttons** are copies of News and of `Error Accept Button`. Every behaviour of the
   copy gets a new, empty `UnityEvent` and loses its runners; the click behaviour's new event then gets the loader's
   listener. The copy's other scripts that act for the game (its localisers, the error manager) stay switched off.
+  Before it wakes, the Mods tape takes Training's disabled colour in place of News's see-through one
+  (`menu_panel::match_disabled_look`), so it looks like the picture tape beside it while the board is not focused.
 - **The Mods panel's rows** are copies of `Toggle.1`, each with a new `ToggleEvent` and no group. The game's toggle
   flips the tick. The host reads `Toggle.get_isOn` each frame, as Playable Ghost's lobby tape does, because a listener
   on a `ToggleEvent` would be a `UnityAction<bool>`, a generic delegate.
@@ -129,6 +143,105 @@ Each widget holds both sets whole: `GamepadButton.xboxIcons` (the first of its t
 control (`buttonSouth`, `leftShoulder` and so on). The map reads each set's sprites inside the widget
 (`GamepadButton.xbox.buttonWest`, `GamepadButton.ps5.leftShoulder`), so a mod can show the game's own glyph for any
 button, from the set the game picked (the one its widgets' Images show).
+
+## Unity's UI input during a contract
+
+Every click, hover and keyboard or gamepad move in any UI, the game's or a mod's, is routed by Unity's one
+`EventSystem` through its one input module (`EventSystem.currentInputModule`). The game keeps that module
+switched off during a contract: `JournalController.OpenCloseJournal`, the journal's own toggle, switches it
+on with `Behaviour.set_enabled` only while the journal shows, and off again when it closes (read from its
+decompile, 2026-11-11). So outside the journal no canvas takes clicks and no menu takes arrow keys: a mod
+that wants its own UI to answer the player has to run that module while its UI is up, and give the state
+back afterwards, exactly as `sdk/api/buttons.h` does. The same journal toggle calls
+`PCCanvas.PausePlayerInPlace` on the local player's HUD (its entry note in `sdk/map/Player.h`): the game's
+way to hold the player still and free the cursor while an overlay is up.
+
+That hold does not stop a click from reaching the world. The investigator's interact and primary-use handlers
+check `JournalController.open` on the local player's journal instead, and do nothing while it is set (read from
+their decompile, 2026-11-13). A mod screen that takes clicks raises that flag while it is up and puts back the
+value it found when it closes, as the Dev Menu does. Setting the field sends nothing and shows no book.
+
+## What a canvas needs before it answers the pointer
+
+Three things have to hold, and a mod's own canvas starts with none of them (all read from the build's own
+compiled Unity UI code, 2026-11-12):
+
+- The canvas needs a `GraphicRaycaster`. A `Canvas` has no hit-testing of its own: no member of
+  UnityEngine.UIModule's `Canvas` mentions a raycast at all, and the hit-test is
+  `GraphicRaycaster.Raycast` in UnityEngine.UI. A canvas made at runtime therefore catches nothing until one
+  is added.
+- The graphic hit needs its `raycastTarget` on. `Graphic.set_raycastTarget` is what puts a graphic into, or
+  out of, the raycast list of the canvas it draws on (UnityEngine.UI's own graphic registry), and only while
+  the component is active and enabled; the raycaster walks nothing but that list. A graphic with it off is
+  never hovered, pressed or clicked, whatever sits on the same object. `pm::ui::create_image` makes its
+  pictures with it off.
+- The object hit needs a `Button` or other `Selectable` on it, since that is what the event system selects,
+  hovers and submits.
+
+`sdk/api/buttons.h`'s `attach` and `catch_pointer` do all three, and take the object as either its GameObject
+or any component on it, which is what `pm::ui`'s creators hand back. Each half goes where it belongs: the
+map's `Component.GetComponent` is `Component`'s own method, so its object has to be a component (for a
+GameObject the helpers use that object's `Transform`, which every GameObject has), while
+`GameObject.AddComponent` runs on the GameObject. Both mixed up is what left every row of the dev menu
+without a button on 2026-11-11.
+
+## How a click reaches a Button
+
+`Button.onClick` (a `ButtonClickedEvent`, Unity's own) is invoked by two paths, read from the build on
+2026-11-12. A pointer click runs `Button.OnPointerClick`, which returns at once unless the event's button is
+the left one, and then runs the button's own invoke list after two guards on the button itself: Unity's UI
+runs its active and interactable checks here, so a button that is off, hidden or not interactable runs
+nothing. A submit of the selected object (Enter, or the gamepad's A button) runs `Button.OnSubmit`, which
+calls `Button.Press` and starts a short finish coroutine, and `Press` walks the same invoke list. Either way
+the listener runs inside the game's managed call, so a mod's handler must not let an exception escape
+(`sdk/api/buttons.h`).
+
+A scene always has an `EventSystem`: the game's `EventSystemChecker`, present where Unity's own may be
+absent, makes one with its input module at scene start when the scene has none (decompiled 2026-11-11).
+
+## A list that scrolls
+
+`ScrollRect` (UnityEngine.UI) moves a content RectTransform inside a viewport, keeps it inside the viewport's
+bounds and answers the pointer itself: it is a drag handler and a scroll handler, so a wheel turn or a drag only
+reaches it through the canvas's `GraphicRaycaster` and one graphic inside the viewport whose `raycastTarget` is
+on (`Graphic.set_raycastTarget`). It clips nothing of its own: put a `RectMask2D` on the viewport, not on the
+content, or rows outside the view draw over the rest of the screen.
+
+Two kinds of object are in play, and they are not interchangeable. A `GameObject` is not a `Component`: its own
+transform comes from `GameObject.get_transform` and a component's from `Component.get_transform`, and asking one
+through the other's accessor reads a layout that object does not have. The game faults on it, which is what the
+dev menu's first scroll list did on 2026-11-12: the helper that made the viewport and the content returned
+GameObjects, and the layout helper asked them through the component accessor. `pm::game::transform_of` and
+`pm::game::game_object_of` ask the object what it is (`GameObject` type through `pm::api::Type::is`) and answer
+null when the class cannot be read rather than guess.
+
+The same shape decides what a layout entry may act on. The entries that place a UI object (`RectTransform.set_anchorMin`,
+`set_anchorMax`, `set_pivot`, `set_anchoredPosition`, `set_sizeDelta`), the `ScrollRect.content` and
+`ScrollRect.viewport` fields and both `RectTransformUtility` hit tests all want a RectTransform, and an object only
+has one once something asks for it: every UI class in the game's own UnityEngine.UI declares
+`[RequireComponent(typeof(RectTransform))]` (`Graphic`, so `Image` and `RawImage`, `TextMeshProUGUI`, `RectMask2D`,
+`ScrollRect` and `LayoutElement`). In game an object made bare and then given one of those components does answer
+the layout entries; that is how every row of the dev menu and of the emotes wheel is made. Laying an object out
+before it takes any component has never worked. What converts the transform has not been read, and a mod does not
+need it: put the components on first and lay out afterwards, and read the transform back through
+`pm::game::rect_transform_of`, which answers null for an object that has no RectTransform instead of faulting.
+A list's content shows nothing itself, so it carries a `LayoutElement`: it draws nothing, and only a LayoutGroup
+ever reads what it holds.
+
+Unity's editor builds the three objects into the scene; a mod makes them at run time, and a ScrollRect made that
+way holds the free-running mode, because the editor's Reset never runs. So `ScrollRect.movementType` wants
+`ScrollRect.MovementType.Clamped`, or one drag can throw the list out of the menu for good.
+`ScrollRect.content` has to be a child of `ScrollRect.viewport`. Pin the content to the viewport's top edge
+(anchors (0,1) to (1,1), pivot (0.5,1)) and give it a `sizeDelta` height of the whole list, and every row then
+sits at a negative y below that edge: the list can grow and shrink without any row moving.
+`ScrollRect.set_verticalNormalizedPosition` moves it, 1 at the top and 0 at the bottom; the getter updates the
+rect's own bounds first, so it answers correctly even on a view built this frame. `ScrollRect.StopMovement`
+drops a drag's inertia.
+
+Keyboard and gamepad selection moves inside the game, which tells no mod. The event system's
+`get_currentSelectedGameObject` says where it got to, which is how a mod keeps the selected row in view. The
+loader's own helpers do all of this (create_scroll_view, set_scroll_height and scroll_reveal in `core/ui.h`),
+and `pm::ui::scroll_top_needed` is the same arithmetic for a list laid out differently.
 
 ## How this was read
 

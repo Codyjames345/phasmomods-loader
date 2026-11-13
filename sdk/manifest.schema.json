@@ -84,6 +84,11 @@
       "description": "true when the mod keeps other players' speech in memory during a contract. The consent notice says so, naming the mod. The player agrees before the DLL loads, so a DLL that sets PM_MOD_RECORDS_VOICE under a manifest that does not say this stays off.",
       "default": false
     },
+    "developerOnly": {
+      "type": "boolean",
+      "description": "true when the mod is a tool for mod authors. With the developer setting off, the launcher.ini default for everyone, the mod is not offered, listed, loaded or synced anywhere, exactly as if it were not installed; a developer sets developer=1 in launcher.ini to see it.",
+      "default": false
+    },
     "dependencies": {
       "type": "array",
       "description": "The mods this one needs or can use; it starts after each of them that starts. No mod twice, and not the mod itself.",
