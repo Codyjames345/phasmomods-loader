@@ -99,6 +99,7 @@ constexpr const char* kInteractAction = "Interact";
 constexpr float kInteractReach = 1.8f;
 constexpr float kChestBelowHead = 0.25f;  // the prompt's look test aims this far below the head bone, metres
 constexpr float kFloorSkin = 0.05f;       // the spot's test lifts the capsule this far, so the floor is not in the way
+constexpr float kPartLengthTolerance = 1.0f / 60.0f;  // a synced emote's two parts are one length within this, seconds
 
 // The controls that turn the wheel's pages (the user's, 2026-11-12): the scroll wheel and the gamepad's shoulder
 // buttons. Every game action bound to one of them is paused while the wheel is open (the item swap on the scroll wheel,
@@ -297,6 +298,11 @@ bool load_catalogue(const std::filesystem::path& folder, const std::string& pack
     l.info.introSongSeconds = l.introSong ? phasmo::AudioClip::get_length(l.introSong) : 0.0f;
     l.info.synced = static_cast<bool>(l.partnerClip);
     l.info.partnerSeconds = l.partnerClip ? api::anim::clip_seconds(l.partnerClip) : 0.0f;
+    // The two parts loop together, so they must be one length: a frame apart drifts a frame further each loop.
+    if (l.partnerClip && std::fabs(l.info.partnerSeconds - seconds) > kPartLengthTolerance) {
+      why = e.partner->clip + " is not as long as " + e.clip + ", so the two parts would drift apart";
+      return false;
+    }
     PM_LOG("Emotes: %s, %.3f s, %s, song loop %.3f s from %.3f s", e.id.c_str(), seconds,
            l.info.loops ? "looping" : "one-shot", l.info.song.length, l.info.song.start);
     out.push_back(std::move(l));
@@ -833,6 +839,20 @@ void switch_to_synced_song(int first, int emote, double elapsed) {
   g.syncedSongs.insert(first);
 }
 
+// Where a synced emote's second part starts on this client: where the first dancer's loop clip is on their body here
+// (its Playable's own time, which the session's summed clock can trail after a long frame, and which counts from the
+// end of any intro), wrapped to the second part's length; the session's clock when that clip is not on their body.
+double second_part_start(int first, int emote, double fallback) {
+  void* body = first == game::local_actor() ? game::local_player() : game::player_of_actor(first);
+  const auto playing = g.playing.find(first);
+  if (body && game::alive(body) && playing != g.playing.end() && playing->second == g.a.clips[emote].get()) {
+    const double t = api::anim::clip_time(body);
+    const float length = g.a.table[emote].partnerSeconds;
+    if (t >= 0.0) return length > 0.0f ? std::fmod(t, static_cast<double>(length)) : t;
+  }
+  return fallback;
+}
+
 // ---- This client's own investigator ----
 
 void send(const std::vector<EmoteMsg>& msgs) {
@@ -966,8 +986,11 @@ void apply_local(const LocalOut& o, void* player, bool vr) {
     // A second dancer plays the second part from the pair's point, to the first dancer's song (only theirs plays).
     const bool second = g.local->role() == Role::Partner;
     void* clip = second ? g.a.partnerClips[o.start].get() : clip_of(o.start, o.phase.value_or(first_phase(o.start)));
-    const bool played = second ? api::anim::play_on_player(player, clip, kBlendIn, g.local->partner_time())
-                               : api::anim::play_on_player(player, clip, kBlendIn);
+    const bool played =
+        second ? api::anim::play_on_player(player, clip, kBlendIn,
+                                           second_part_start(g.local->partner().value_or(0), o.start, g.local->partner_time()))
+               : api::anim::play_on_player(player, clip, kBlendIn);
+    if (!second) g.glide.reset();  // a dance of its own ends any glide into a pair
     g.playing[me] = clip;
     if (!second) start_song(me, player, o.start);
     const auto song = g.songs.find(me);
@@ -1060,41 +1083,89 @@ bool interactable_ahead() {
   return false;
 }
 
-// Whether this client's investigator fits at `spot` (where the body would stand), on ground: the rig's own capsule
-// (PhysicsCharacterController's radius, height and centre) tested there against what blocks a player (its collision
-// mask), the investigator's own colliders aside, and its ground layers under it (sdk/systems/players.md). False when
-// the controller cannot be read.
-bool spot_clear(Point spot, void* player) {
+// The rig's own capsule (PhysicsCharacterController: its radius, height and centre, and the layers that block and
+// carry a player, sdk/systems/players.md), placed from where the investigator's body stands. None, logged once, when
+// the controller cannot be read: then no join is offered.
+struct Capsule {
+  void* ctrlT = nullptr;  // the controller's Transform: the investigator's own colliders are under it or the body's
+  void* bodyT = nullptr;
+  int32_t mask = 0, ground = 0;
+  float r = 0.0f, h = 0.0f;
+  Vector3 centre{};  // from where the body stands to the capsule's centre
+};
+
+std::optional<Capsule> own_capsule(void* player) {
   void* rig = game::local_player_component();
   void* ctrl = rig && game::alive(rig) ? phasmo::LocalPlayer::characterController.get(rig) : nullptr;
-  if (!ctrl || !game::alive(ctrl)) {
+  if (!ctrl || !game::alive(ctrl) || !player) {
     if (!g.loggedNoCapsule) PM_LOG("Emotes: the rig's character controller cannot be read; no join prompt");
     g.loggedNoCapsule = true;
-    return false;
+    return std::nullopt;
   }
   using C = phasmo::PhysicsCharacterController;
-  const int32_t mask = C::collisionMask.get(ctrl), ground = C::get_groundLayers(ctrl);
-  const float r = C::get_radius(ctrl), h = C::get_height(ctrl);
-  const Vector3 c = C::get_center(ctrl);
-  if (r <= 0.0f || h <= 0.0f || !mask) return false;
-  void* ctrlT = game::transform_of(ctrl);
-  void* bodyT = game::transform_of(player);
-  const Vector3 body = game::position(bodyT), at = game::position(ctrlT);
-  // The controller's object there, kept at its gap from the body; the capsule's centre is local to that object.
-  const Vector3 base{spot.x + at.x - body.x + c.x, spot.y + at.y - body.y + c.y, spot.z + at.z - body.z + c.z};
-  const float low = base.y - h / 2.0f + kFloorSkin + r, high = std::max(low, base.y + h / 2.0f - r);
-  for (float y = low;; y += r) {
+  Capsule k;
+  k.ctrlT = game::transform_of(ctrl);
+  k.bodyT = game::transform_of(player);
+  k.mask = C::collisionMask.get(ctrl);
+  k.ground = C::get_groundLayers(ctrl);
+  k.r = C::get_radius(ctrl);
+  k.h = C::get_height(ctrl);
+  if (k.r <= 0.0f || k.h <= 0.0f || !k.mask) return std::nullopt;
+  const Vector3 body = game::position(k.bodyT), at = game::position(k.ctrlT), c = C::get_center(ctrl);
+  k.centre = {at.x - body.x + c.x, at.y - body.y + c.y, at.z - body.z + c.z};
+  return k;
+}
+
+Vector3 plus(Vector3 p, Vector3 v) { return {p.x + v.x, p.y + v.y, p.z + v.z}; }
+Vector3 at_point(Point p) { return {p.x, p.y, p.z}; }
+
+// Whether nothing that blocks a player lies on the straight line between two points: the first thing the ray meets
+// decides, and the investigator's own colliders, or the target's (a Transform, or null), do not count as in the way.
+bool line_clear(Vector3 from, Vector3 to, const Capsule& k, void* target) {
+  const Vector3 d{to.x - from.x, to.y - from.y, to.z - from.z};
+  const float length = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+  if (length < 0.001f) return true;
+  void* hit = game::raycast(from, {d.x / length, d.y / length, d.z / length}, length, k.mask);
+  return !hit || game::is_child_of(hit, k.ctrlT) || game::is_child_of(hit, k.bodyT) ||
+         (target && game::is_child_of(hit, target));
+}
+
+// Whether this client's investigator fits at `spot` (where the body would stand), on ground: the capsule tested there
+// against what blocks a player, its own colliders aside, with no other investigator standing in it, and its ground
+// layers under it. Another investigator is tested by where they stand, since the game's collision mask need not hold
+// the players' layers.
+bool spot_clear(Point spot, const Capsule& k) {
+  const Vector3 base = plus(at_point(spot), k.centre);
+  const float low = base.y - k.h / 2.0f + kFloorSkin + k.r, high = std::max(low, base.y + k.h / 2.0f - k.r);
+  for (float y = low;; y += k.r) {
     const Vector3 centre{base.x, std::min(y, high), base.z};
     const api::RefArray hits{
-        phasmo::Physics::OverlapSphere(&centre, r, mask, phasmo::QueryTriggerInteraction::Ignore())};
+        phasmo::Physics::OverlapSphere(&centre, k.r, k.mask, phasmo::QueryTriggerInteraction::Ignore())};
     for (size_t i = 0; i < hits.size(); ++i) {
       void* t = hits[i] ? game::transform_of(hits[i]) : nullptr;
-      if (t && !game::is_child_of(t, ctrlT) && !game::is_child_of(t, bodyT)) return false;
+      if (t && !game::is_child_of(t, k.ctrlT) && !game::is_child_of(t, k.bodyT)) return false;
     }
     if (y >= high) break;
   }
-  const Vector3 feet{base.x, base.y - h / 2.0f + 0.2f, base.z};
-  return game::raycast(feet, {0.0f, -1.0f, 0.0f}, 0.5f, ground) != nullptr;
+  bool someone = false;
+  game::each_player([&](void* p) {
+    if (someone || !p || !game::alive(p) || game::transform_of(p) == k.bodyT) return;
+    const Vector3 q = game::position(game::transform_of(p));
+    someone = std::hypot(q.x - spot.x, q.z - spot.z) < 2.0f * k.r && std::fabs(q.y - spot.y) < k.h;
+  });
+  if (someone) return false;
+  const Vector3 feet{base.x, base.y - k.h / 2.0f + 0.2f, base.z};
+  return game::raycast(feet, {0.0f, -1.0f, 0.0f}, 0.5f, k.ground) != nullptr;
+}
+
+// Whether the spot and the glide to it stay on this side of every wall, floor and ceiling: clear lines, at the capsule's
+// centre height, from the first dancer to the spot and from this investigator to it (the review, 2026-11-13).
+bool spot_reachable(Point spot, void* firstPlayer, const Capsule& k) {
+  if (!firstPlayer || !game::alive(firstPlayer)) return false;
+  void* firstT = game::transform_of(firstPlayer);
+  const Vector3 to = plus(at_point(spot), k.centre);
+  return line_clear(plus(game::position(firstT), k.centre), to, k, firstT) &&
+         line_clear(plus(game::position(k.bodyT), k.centre), to, k, nullptr);
 }
 
 // Where a first dancer's second part stands, from their body now and the facing they keep.
@@ -1119,7 +1190,8 @@ void update_join(void* player, bool vr, const LocalFrame& f) {
                         !g.wheelIn.open && !journal_open() && keys::keys_ready();
   void* cam = canDance ? game::local_camera() : nullptr;
   void* camT = cam && game::alive(cam) ? game::transform_of(cam) : nullptr;
-  if (!camT) return join::hide();
+  const std::optional<Capsule> k = camT ? own_capsule(player) : std::nullopt;
+  if (!k) return join::hide();
   const Vector3 eye = game::position(camT), look = game::forward(camT);
   PromptCheck c;
   c.me = {eye.x, eye.y, eye.z};
@@ -1147,6 +1219,8 @@ void update_join(void* player, bool vr, const LocalFrame& f) {
     c.partFree = !g.remote->paired(actor);
     c.targetInIntro = g.remote->in_intro(actor);
     if (!shows_prompt(c)) continue;
+    // Seen, not through a wall, a floor or a ceiling: the first thing between the eye and the dancer's chest is them.
+    if (!line_clear(eye, at_point(c.target), *k, game::transform_of(p))) continue;
     const float d = game::distance(eye, {c.target.x, c.target.y, c.target.z});
     if (best && d >= bestDistance) continue;
     best = actor;
@@ -1155,7 +1229,7 @@ void update_join(void* player, bool vr, const LocalFrame& f) {
     bestHead = head;
   }
   const std::optional<Point> spot = best ? spot_beside(best, bestEmote) : std::nullopt;
-  if (!spot || !spot_clear(*spot, player)) return join::hide();
+  if (!spot || !spot_clear(*spot, *k) || !spot_reachable(*spot, game::player_of_actor(best), *k)) return join::hide();
   std::string pad, key;
   read_interact_binding(pad, key);
   // In VR the glyph is the game's sprite for the trigger that joins there, as the VR wheel shows the game's shoulder
@@ -1171,6 +1245,17 @@ void update_join(void* player, bool vr, const LocalFrame& f) {
   apply_local(g.local->join_request(best, bestEmote, f), player, vr);
 }
 
+bool in_player_list(void* player);
+
+// This client's investigator as the session judges a join: in the player list, dead, or dying.
+LocalFrame standing_of(void* player) {
+  LocalFrame f;
+  f.present = player && game::alive(player) && in_player_list(player);
+  f.dead = f.present && phasmo::Player::isDead.get(player);
+  f.dying = g.dying.count(game::local_actor()) != 0;
+  return f;
+}
+
 // The first dancer's Accept named this client: it takes the second part and glides to the spot beside them. An
 // Accept it no longer waits for is answered with an End (LocalSession::accepted).
 void accept_from(int first, const EmoteMsg& m) {
@@ -1183,7 +1268,18 @@ void accept_from(int first, const EmoteMsg& m) {
   const double elapsed = g.remote->elapsed(first);
   const Vector3 from = game::position(game::transform_of(player));
   const float fromYaw = yaw_of(game::transform_of(player));
-  const LocalOut o = g.local->accepted(first, m.key, elapsed, spot.value_or(Point{from.x, from.y, from.z}), yaw);
+  // The answer comes up to kJoinWaitSeconds after the press: this investigator, or someone else, may have moved since,
+  // so the spot and the way to it are checked again, and a join that no longer fits is called off as one this client
+  // cannot dance (an End, which frees the first dancer as either stopping does).
+  LocalFrame standing = standing_of(player);
+  const std::optional<Capsule> k = own_capsule(player);
+  if (g.local->waiting() &&
+      !(spot && k && spot_clear(*spot, *k) && spot_reachable(*spot, game::player_of_actor(first), *k))) {
+    PM_LOG("Emotes: the spot beside actor %d is no longer free or reachable; the join is called off", first);
+    standing.present = false;
+  }
+  const LocalOut o =
+      g.local->accepted(first, m.key, elapsed, spot.value_or(Point{from.x, from.y, from.z}), yaw, standing);
   if (o.start >= 0 && spot) {
     Glide glide;
     glide.from = {from.x, from.y, from.z};
@@ -1366,10 +1462,11 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
           // A second dancer: the second part from the pair's point, no song of their own (only the first dancer's
           // plays), and the first dancer's song switched to the synced one if the emote has one.
           void* clip = g.a.partnerClips[o.emote];
-          api::anim::play_on_player(player, clip, kBlendIn, g.remote->partner_time(o.actor));
+          const int first = g.remote->partner_of(o.actor);
+          api::anim::play_on_player(player, clip, kBlendIn,
+                                    second_part_start(first, o.emote, g.remote->partner_time(o.actor)));
           g.playing[o.actor] = clip;
           begin_facing(o.actor, player, o.yaw);
-          const int first = g.remote->partner_of(o.actor);
           switch_to_synced_song(first, o.emote,
                                 first == game::local_actor() ? g.local->elapsed() : g.remote->elapsed(first));
         } else if (player) {
@@ -1534,7 +1631,8 @@ void tick() {
     end_at_once("the investigator begins to die");
     close_wheel();
   }
-  if (present && !f.dying && keys::keys_ready()) {
+  // Nothing else of the joiner's starts during the glide into a pair (the design): the wheel stays shut until it ends.
+  if (present && !f.dying && keys::keys_ready() && !g.glide) {
     if (const std::optional<int> played = wheel_input(player, vr))
       if (const int emote = wheel::emote_at(*played); emote >= 0) apply_local(g.local->pick(emote, f), player, vr);
   } else {

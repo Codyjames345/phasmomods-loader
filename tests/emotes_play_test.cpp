@@ -622,13 +622,13 @@ void an_accepted_partner_starts_at_the_first_dancers_point() {
   const EmoteTable t = synced_table();
   LocalSession joiner(t);
   joiner.join_request(4, 0, here(-1.0));
-  const LocalOut o = joiner.accepted(4, 1000u, 20.0, Point{2.3f, 0.0f, 1.0f}, 90.0f);
+  const LocalOut o = joiner.accepted(4, 1000u, 20.0, Point{2.3f, 0.0f, 1.0f}, 90.0f, here(-1.0));
   CHECK(o.start == 0 && o.phase == Phase::Loop && o.bodyYaw && *o.bodyYaw == 90.0f);
   CHECK(joiner.role() == Role::Partner && joiner.partner() == 4);
   CHECK(std::fabs(joiner.partner_time() - 4.1) < 1e-6);
   // An Accept nobody asked for starts nothing.
   LocalSession idle(t);
-  CHECK(idle.accepted(4, 1000u, 20.0, Point{}, 0.0f).start < 0);
+  CHECK(idle.accepted(4, 1000u, 20.0, Point{}, 0.0f, here(-1.0)).start < 0);
 }
 
 void a_join_unanswered_is_dropped() {
@@ -638,7 +638,7 @@ void a_join_unanswered_is_dropped() {
   LocalFrame f = here(-1.0);
   f.dt = kJoinWaitSeconds + 0.1f;
   joiner.tick(f);
-  CHECK(joiner.accepted(4, 1000u, 1.0, Point{}, 0.0f).start < 0);
+  CHECK(joiner.accepted(4, 1000u, 1.0, Point{}, 0.0f, here(-1.0)).start < 0);
 }
 
 void the_partner_time_follows_the_first_dancers_clock() {
@@ -665,7 +665,7 @@ void either_stopping_ends_both() {
   // Here: the partner, whose first dancer ended.
   LocalSession joiner(t);
   joiner.join_request(4, 0, here(-1.0));
-  joiner.accepted(4, 1000u, 3.0, Point{}, 0.0f);
+  joiner.accepted(4, 1000u, 3.0, Point{}, 0.0f, here(-1.0));
   CHECK(!joiner.partner_ended(9).stop);  // another player's end is not theirs
   CHECK(joiner.partner_ended(4).stop);
   // Everyone else: an End from either stops both.
@@ -682,7 +682,7 @@ void an_end_during_the_glide_ends_both() {
   const EmoteTable t = synced_table();
   LocalSession joiner(t);
   joiner.join_request(4, 0, here(-1.0));
-  joiner.accepted(4, 1000u, 3.0, Point{2.3f, 0.0f, 1.0f}, 0.0f);
+  joiner.accepted(4, 1000u, 3.0, Point{2.3f, 0.0f, 1.0f}, 0.0f, here(-1.0));
   LocalFrame gliding = here(0.0);
   gliding.pos = {0.0f, 0.0f, 0.0f};  // still far from the spot
   gliding.gliding = true;
@@ -785,7 +785,7 @@ void the_joiner_tells_everyone_it_joined() {
   const EmoteTable t = synced_table();
   LocalSession joiner(t);
   joiner.join_request(4, 0, here(-1.0));
-  const LocalOut o = joiner.accepted(4, 1000u, 3.0, Point{}, 0.0f);
+  const LocalOut o = joiner.accepted(4, 1000u, 3.0, Point{}, 0.0f, here(-1.0));
   const EmoteMsg* word = sent(o.send, Kind::Accept);
   CHECK(word && word->key == 1000u && word->x == 4.0f);
 }
@@ -901,13 +901,13 @@ void a_late_accept_is_answered_with_an_end() {
   f.dt = kJoinWaitSeconds + 0.5f;
   joiner.tick(f);
   CHECK(!joiner.waiting());
-  const LocalOut late = joiner.accepted(4, 1000u, 3.0, Point{1, 0, 0}, 0.0f);
+  const LocalOut late = joiner.accepted(4, 1000u, 3.0, Point{1, 0, 0}, 0.0f, here(-1.0));
   CHECK(late.start < 0 && !joiner.active());
   const EmoteMsg* end = sent(late.send, Kind::End);
   CHECK(end && end->key == 1000u);
   // A dancer is not ended by a stray Accept: what it dances is its own.
   LocalSession dancing = first_dancer(t);
-  CHECK(dancing.accepted(9, 1000u, 3.0, Point{1, 0, 0}, 0.0f).send.empty());
+  CHECK(dancing.accepted(9, 1000u, 3.0, Point{1, 0, 0}, 0.0f, here(-1.0)).send.empty());
   CHECK(dancing.active());
 }
 
@@ -931,9 +931,46 @@ void leaving_a_pair_names_the_partner() {
   CHECK(r.drop(9).empty());
 }
 
+// A dead player may join a dead dancer (alive or dead as the dancer is): their part goes on past the first frame, which
+// a death that was there before the join never ends (the review, 2026-11-13).
+void a_dead_joiner_dances_on() {
+  const EmoteTable t = synced_table();
+  LocalFrame dead = here(-1.0);
+  dead.dead = true;
+  LocalSession joiner(t);
+  joiner.join_request(4, 0, dead);
+  CHECK(joiner.accepted(4, 1000u, 3.0, Point{1.0f, 0.0f, 1.0f}, 0.0f, dead).start == 0);  // at its spot
+  dead.dt = 0.1f;
+  const LocalOut o = joiner.tick(dead);
+  CHECK(!o.stop && joiner.active());
+  // A joiner whose death began meanwhile does not start.
+  LocalSession dying(t);
+  dying.join_request(4, 0, here(-1.0));
+  LocalFrame begun = here(-1.0);
+  begun.dying = true;
+  CHECK(dying.accepted(4, 1000u, 3.0, Point{}, 0.0f, begun).start < 0 && !dying.active());
+}
+
+// The second part runs with the first dancer's loop clip, which starts when the intro ends: a pair formed 5 s into an
+// emote with a 2 s intro starts the second part 3 s in, on every client (the review, 2026-11-13).
+void the_second_part_counts_from_the_intro_end() {
+  const EmoteTable t = synced_table(2.0f);
+  LocalSession joiner(t);
+  joiner.join_request(4, 0, here(-1.0));
+  joiner.accepted(4, 1000u, 5.0, Point{}, 0.0f, here(-1.0));
+  CHECK(std::fabs(joiner.partner_time() - 3.0) < 1e-6);
+  RemoteSessions r(t);
+  r.add_partner(7, 4, 0, 5.0, 0.0f);
+  CHECK(std::fabs(r.partner_time(7) - 3.0) < 1e-6);
+  r.add_partner(9, 4, 0, 20.0, 0.0f);  // past a loop: wrapped to the second part's length
+  CHECK(std::fabs(r.partner_time(9) - std::fmod(18.0, 15.9)) < 1e-4);
+}
+
 }  // namespace
 
 int main() {
+  a_dead_joiner_dances_on();
+  the_second_part_counts_from_the_intro_end();
   leaving_a_pair_names_the_partner();
   the_accept_follows_the_locked_facing();
   a_late_accept_is_answered_with_an_end();

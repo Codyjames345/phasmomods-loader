@@ -79,6 +79,13 @@ struct LocalOut {
 };
 
 /// The emoter's side.
+/// Where a synced emote's second part is at the pair's clock `elapsed` (seconds since the first dancer began): the first
+/// dancer's loop clip starts when their intro ends, so the second part counts from there, wrapped to its own length.
+inline double second_part_time(double elapsed, const EmoteInfo& info) {
+  const double t = std::max(0.0, elapsed - static_cast<double>(info.introSeconds));
+  return info.partnerSeconds > 0.0f ? std::fmod(t, static_cast<double>(info.partnerSeconds)) : t;
+}
+
 class LocalSession {
  public:
   explicit LocalSession(const EmoteTable& table) : table_(table) {}
@@ -212,11 +219,15 @@ class LocalSession {
   /// The first dancer took this client (their Accept named it): this client dances the second part from the first
   /// dancer's point (`firstElapsed`, their clock), standing at `spot` facing `yaw`. Only the Accept this client asked
   /// for starts anything; the half-metre rule is measured from the spot. One this client no longer waits for, while it
-  /// dances nothing, is answered with an End: the first dancer's client already shows it dancing, and lets go.
-  LocalOut accepted(int firstActor, uint32_t key, double firstElapsed, Point spot, float yaw) {
+  /// dances nothing, is answered with an End: the first dancer's client already shows it dancing, and lets go. So is
+  /// one that reaches a joiner with no investigator or whose death has begun. `f` is this client's frame: a joiner
+  /// already dead dances on, as a dead player's pick does.
+  LocalOut accepted(int firstActor, uint32_t key, double firstElapsed, Point spot, float yaw, const LocalFrame& f) {
     LocalOut o;
     if (active_) return o;
-    if (!pendingJoin_ || *pendingJoin_ != firstActor || table_[static_cast<size_t>(pendingEmote_)].key != key) {
+    if (!pendingJoin_ || *pendingJoin_ != firstActor || table_[static_cast<size_t>(pendingEmote_)].key != key ||
+        !f.present || f.dying) {
+      pendingJoin_.reset();
       o.send.push_back(EmoteMsg{Kind::End, key, false, 0, 0, 0, 0});
       return o;
     }
@@ -228,7 +239,7 @@ class LocalSession {
     elapsed_ = firstElapsed;
     start_ = lastPos_ = spot;
     yaw_ = sentYaw_ = yaw;
-    wasDown_ = false;
+    wasDown_ = f.dead || f.dying;
     stopTimer_ = 0.0f;
     phase_ = Phase::Loop;
     o.start = emote_;
@@ -250,11 +261,9 @@ class LocalSession {
   /// Which part this client dances, and with whom: the other dancer's actor, or none.
   Role role() const { return role_; }
   std::optional<int> partner() const { return active_ ? partner_ : std::nullopt; }
-  /// Where in the second dancer's clip the pair is: the shared clock wrapped to that clip's length.
-  double partner_time() const {
-    const float length = info().partnerSeconds;
-    return length > 0.0f ? std::fmod(elapsed_, static_cast<double>(length)) : elapsed_;
-  }
+  /// Where in the second dancer's clip the pair is: the shared clock from the end of the first dancer's intro (their
+  /// loop clip starts there), wrapped to that clip's length.
+  double partner_time() const { return second_part_time(elapsed_, info()); }
 
   /// Ends the emote now, from outside (the mod stopping): what to undo and send.
   LocalOut end_now() {
@@ -484,8 +493,7 @@ class RemoteSessions {
   double partner_time(int actor) const {
     auto it = peers_.find(actor);
     if (it == peers_.end()) return 0.0;
-    const float length = table_[static_cast<size_t>(it->second.emote)].partnerSeconds;
-    return length > 0.0f ? std::fmod(it->second.elapsed, static_cast<double>(length)) : it->second.elapsed;
+    return second_part_time(it->second.elapsed, table_[static_cast<size_t>(it->second.emote)]);
   }
   /// Seconds since this peer's emote began, counted here; 0 for a peer not dancing.
   double elapsed(int actor) const {
