@@ -112,17 +112,12 @@ std::vector<ModEntry> discover_mods(const std::vector<ModsFolder>& roots, std::w
     refused.push_back({pm::text::narrow(dir.filename().wstring()), why});
   };
   std::error_code error;
-  std::vector<std::pair<fs::path, modlist::Place>> folders;
-  for (const ModsFolder& root : roots) {
-    std::vector<fs::path> here;
-    for (const auto& entry : fs::directory_iterator(root.path, error))
-      if (entry.is_directory(error)) here.push_back(entry.path());
-    std::sort(here.begin(), here.end());
-    for (fs::path& dir : here) folders.emplace_back(std::move(dir), root.place);
-  }
+  std::vector<modlist::ModsRoot> given;
+  for (const ModsFolder& root : roots) given.push_back({root.path, root.place});
   // A developer's launcher.ini line is what shows developerOnly mods; nobody else sees them at all.
   const bool developer = modlist::parse_developer(pm::text::read_file(selection_file()));
-  for (const auto& [dir, place] : folders) {
+  std::vector<fs::path> homes;  // parallel to `mods`: the folder each one was read from
+  for (const auto& [dir, place] : modlist::mod_folders(given)) {
     ModEntry m;
     std::string why;
     const modlist::Reading reading = modlist::read_folder(dir, m.manifest, why, place, developer);
@@ -134,14 +129,28 @@ std::vector<ModEntry> discover_mods(const std::vector<ModsFolder>& roots, std::w
       refuse(dir, pm::i18n::text("launcher.mod-missing-dll"));
       continue;
     }
-    bool repeated = false;
-    for (const ModEntry& other : mods) repeated |= other.manifest.id == m.manifest.id;
-    if (repeated) {
-      refuse(dir, pm::i18n::text("launcher.mod-repeats-id"));
+    mods.push_back(std::move(m));
+    homes.push_back(dir);
+  }
+  // An id two mods share is a conflict, not a race one folder won: every copy is refused, each naming the
+  // folder of all the others, so the player sees both places to look.
+  std::vector<std::string> ids, where;
+  for (size_t i = 0; i < mods.size(); ++i) {
+    ids.push_back(mods[i].manifest.id);
+    where.push_back(pm::text::narrow(homes[i].wstring()));
+  }
+  const auto repeats = modlist::folders_of_repeats(ids, where);
+  std::vector<ModEntry> kept;
+  for (size_t i = 0; i < mods.size(); ++i) {
+    if (repeats[i].empty()) {
+      kept.push_back(std::move(mods[i]));
       continue;
     }
-    mods.push_back(std::move(m));
+    std::string others;
+    for (const std::string& folder : repeats[i]) others += (others.empty() ? "" : ", ") + folder;
+    refuse(homes[i], pm::i18n::text("launcher.mod-repeats-id", {{"folder", others}}));
   }
+  mods.swap(kept);
   return mods;
 }
 
@@ -184,6 +193,19 @@ fs::path data_file(const wchar_t* name) {
 
 /** %LOCALAPPDATA%\PhasmoMods\launcher.ini, or empty when the folder is unavailable. */
 fs::path selection_file() { return data_file(L"launcher.ini"); }
+
+std::vector<ModsFolder> mods_folders(const fs::path& launcherFolder) {
+  std::vector<ModsFolder> folders{{launcherFolder / L"mods", modlist::Place::InstallFolder}};
+  // A mods folder in the data folder holds other authors' mods, which no update replaces; making it when it
+  // is missing gives players somewhere to put one without hunting for it. The install folder's is the
+  // package's own, so it is never created here.
+  if (const fs::path community = data_file(L"mods"); !community.empty()) {
+    std::error_code ignored;
+    std::filesystem::create_directories(community, ignored);
+    folders.push_back({community, modlist::Place::Elsewhere});
+  }
+  return folders;
+}
 
 fs::path launcher_log() { return data_file(L"launcher.log"); }
 
@@ -809,7 +831,7 @@ int show_window(HINSTANCE instance, const std::wstring& executable, const std::w
   WindowState state;
   std::wstring problems;
   std::vector<modlist::Refused> refused;
-  state.mods = discover_mods({{fs::path(executable).parent_path() / L"mods", modlist::Place::InstallFolder}}, problems, refused);
+  state.mods = discover_mods(mods_folders(fs::path(executable).parent_path()), problems, refused);
   state.selectionPath = selection_file();
   state.ticked = saved_selection(state.selectionPath, state.mods);
   state.package = {hostPath, all_dlls(state.mods), session_lines(refused, fs::path(executable).parent_path() / L"builds")};
@@ -916,7 +938,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
       std::wstring problems;
       std::vector<pm::modlist::Refused> refused;
       const auto mods = pm::launcher::discover_mods(
-          {{std::filesystem::path(executable).parent_path() / L"mods", pm::modlist::Place::InstallFolder}}, problems, refused);
+          pm::launcher::mods_folders(std::filesystem::path(executable).parent_path()), problems, refused);
       pm::launcher::append_log(problems);  // Steam shows no window; the host's Mods panel says the same
       const pm::launcher::Package package{hostPath, pm::launcher::all_dlls(mods),
                                           pm::launcher::session_lines(refused, std::filesystem::path(executable).parent_path() / L"builds")};

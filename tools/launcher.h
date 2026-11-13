@@ -61,13 +61,21 @@ struct ModsFolder {
  * The mods in `folders`, in that order, each in folder order: one sub-folder each with a manifest.json
  * (or a mod.ini for an old-format mod). `problems` names any that are broken, for the launcher's window,
  * and `refused` the same for the host's Mods panel. A broken one is left out, and never stops the others.
- * A mod that repeats an id found before it is refused; one outside the install folder that claims the
- * project's author is refused before that (modlist::read_folder), so it never takes the real mod's id.
+ * An id two mods share is refused in every folder that holds a copy, each row naming the folders of the
+ * others (modlist::folders_of_repeats); one outside the install folder that claims the project's author is
+ * refused before that (modlist::read_folder), so it never takes the real mod's id.
  * A mod whose manifest says `developerOnly` is left out unless launcher.ini says developer=1: players
  * never see a mod author's tools (modlist::parse_developer).
  */
 std::vector<ModEntry> discover_mods(const std::vector<ModsFolder>& folders, std::wstring& problems,
                                     std::vector<modlist::Refused>& refused);
+/**
+ * The mods folders to read, in order: "mods" beside the program in `launcherFolder` (the install folder,
+ * which updates replace), and %LOCALAPPDATA%\PhasmoMods\mods for other authors' mods, which no update
+ * touches and which is created empty when it is missing so players have somewhere to put one. The install
+ * folder's own "mods" is the package's and is never created here. Empty LOCALAPPDATA leaves out the second.
+ */
+std::vector<ModsFolder> mods_folders(const std::filesystem::path& launcherFolder);
 /** The session file's lines for mods refused here, and for the package's folder of checked-build records when given. */
 std::vector<std::string> session_lines(const std::vector<modlist::Refused>& refused, const std::filesystem::path& builds = {});
 /** The ids ticked in the saved selection; every mod when nothing has been saved yet. */

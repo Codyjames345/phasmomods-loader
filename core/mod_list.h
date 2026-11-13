@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cwctype>
 #include <filesystem>
 #include <fstream>
@@ -16,7 +17,10 @@
 // (tools/launcher.cpp) and the host (host/mods.cpp); it uses only standard file streams and touches no
 // game, so it can be tested offline. All text is UTF-8 with LF or CRLF line ends.
 //
-//  mods/<folder>/manifest.json        one mod (core/mod_manifest.h)
+//  mods/<folder>/manifest.json        one mod (core/mod_manifest.h); the mods folders read are the one
+//                                     beside the launcher (modlist::Place::InstallFolder) and
+//                                     %LOCALAPPDATA%\PhasmoMods\mods, the player's own for other authors'
+//                                     mods (mod_folders lists both callers' roots the same way)
 //  mods/<folder>/mod.ini              an old-format mod, in a folder with no manifest.json: "id=",
 //                                     "name=", "dll=", "description=" lines, and an optional "requires="
 //                                     naming the one mod it cannot run without
@@ -179,6 +183,56 @@ inline Reading read_folder(const std::filesystem::path& folder, Manifest& out, s
   if (why.empty()) return reading;
   out = {};
   return Reading::Refused;
+}
+
+/** One mods root: the folder that holds a mod per sub-folder, and where that root is. */
+struct ModsRoot {
+  std::filesystem::path path;
+  Place place = Place::Elsewhere;
+};
+
+/**
+ * The mod folders under `roots`: every sub-folder of every root that exists, each root's share in name
+ * order and the roots in the order given, each paired with that root's place. A root that is not there
+ * adds nothing, and a root that is another root already listed is read once, under the earlier root's
+ * place. Both the launcher (tools/launcher.cpp discover_mods) and the host (host/mods.cpp find) list
+ * their roots through here, so they read the same folders the same way.
+ */
+inline std::vector<std::pair<std::filesystem::path, Place>> mod_folders(const std::vector<ModsRoot>& roots) {
+  std::vector<std::pair<std::filesystem::path, Place>> folders;
+  std::vector<std::filesystem::path> seen;
+  std::error_code error;
+  for (const ModsRoot& root : roots) {
+    if (!std::filesystem::is_directory(root.path, error)) continue;
+    const std::filesystem::path here = std::filesystem::canonical(root.path, error);
+    if (!error) {
+      bool read = false;
+      for (const std::filesystem::path& earlier : seen) read |= earlier == here;
+      if (read) continue;
+      seen.push_back(here);
+    }
+    std::vector<std::filesystem::path> subfolders;
+    for (const auto& entry : std::filesystem::directory_iterator(root.path, error))
+      if (entry.is_directory(error)) subfolders.push_back(entry.path());
+    std::sort(subfolders.begin(), subfolders.end());
+    for (std::filesystem::path& folder : subfolders) folders.emplace_back(std::move(folder), root.place);
+  }
+  return folders;
+}
+
+/**
+ * For each of the mods given (one id and one folder each, in the same order), the folders of every other
+ * one that repeats its id; empty for a mod whose id is its own. Both the launcher and the host refuse
+ * every copy a repeated id is found in, each naming the folders of all the others, so a player sees both
+ * places to look and there is no winner by folder order (the shape SMAPI's duplicate-mod refusal takes).
+ */
+inline std::vector<std::vector<std::string>> folders_of_repeats(const std::vector<std::string>& ids,
+                                                                const std::vector<std::string>& folders) {
+  std::vector<std::vector<std::string>> repeats(ids.size());
+  for (size_t a = 0; a < ids.size(); ++a)
+    for (size_t b = 0; b < ids.size(); ++b)
+      if (a != b && ids[a] == ids[b]) repeats[a].push_back(folders[b]);
+  return repeats;
 }
 
 /**

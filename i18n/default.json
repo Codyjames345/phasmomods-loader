@@ -34,7 +34,7 @@
   "launcher.mod-dll-unreadable": "Mod DLL could not be read or copied. Reinstall this mod.",
   "launcher.mod-assets-unreadable": "PM_TEXT_TODO",  // PM_TEXT_TODO
   "launcher.mod-missing-dll": "Mod is missing its DLL. Reinstall this mod.",
-  "launcher.mod-repeats-id": "Mod repeats the id of another mod.",
+  "launcher.mod-repeats-id": "PM_TEXT_TODO {{folder}}",  // PM_TEXT_TODO: every copy of one mod id is refused, the launcher's words; {{folder}} names the folder of each other copy, separated by ", " (this wording replaces the author's "Mod repeats the id of another mod." now that every copy is refused, not just the later one)
   "launcher.attach": "&Attach to game",
   "launcher.check-updates-starting-installed": "Could not check for updates, please check for a newer version.",
   "launcher.checking-updates": "Checking for updates...",
@@ -194,7 +194,7 @@
   "mods.channel-shared": "PM_TEXT_TODO {{mod}}",  // PM_TEXT_TODO: mods landed on one network channel, all refused; {{mod}} names the other mods on it, separated by ", "
   "mods.dll-unloadable": "DLL could not be loaded",
   "mods.id-mismatch": "manifest and DLL disagree on the mod id",
-  "mods.id-repeated": "Repeats the id of another mod.",
+  "mods.id-repeated": "PM_TEXT_TODO {{folder}}",  // PM_TEXT_TODO: every copy of one mod id is refused, the host's words; {{folder}} names the folder of each other copy, separated by ", " (this wording replaces the author's "Repeats the id of another mod." now that every copy is refused, not just the later one)
   "mods.info-threw": "DLL failed when performing handshake. Check %LOCALAPPDATA%\\PhasmoMods\\mods.log for details.",
   "mods.lacks-entries": "Needs {{entry}} and {{count}} more, which this game version lacks",  // PM_TEXT_AI
   "mods.lacks-entry": "Needs {{entry}}, which this game version lacks",  // PM_TEXT_AI

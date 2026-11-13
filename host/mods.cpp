@@ -288,21 +288,20 @@ Installed find(const fs::path& dataDirectory, const fs::path& hostFolder, unsign
     return installed;
   }
   installed.buildRecords = hostFolder / L"builds";
-  std::vector<fs::path> folders;
-  for (const auto& entry : fs::directory_iterator(hostFolder / L"mods", error))
-    if (entry.is_directory(error)) folders.push_back(entry.path());
-  std::sort(folders.begin(), folders.end());
   const modlist::Place place = place_beside(hostFolder, bin);
-  for (const fs::path& folder : folders) {
+  // The data folder's "mods" is where players put other authors' mods; it is somewhere else, never the
+  // install folder, and it is read after the folder beside the host (core/mod_list.h mod_folders).
+  for (const auto& [folder, folderPlace] : modlist::mod_folders({{hostFolder / L"mods", place},
+                                                                 {dataDirectory / L"mods", modlist::Place::Elsewhere}})) {
     modlist::Manifest m;
     std::string why;
-    const modlist::Reading reading = modlist::read_folder(folder, m, why, place, developer);
+    const modlist::Reading reading = modlist::read_folder(folder, m, why, folderPlace, developer);
     if (reading == modlist::Reading::Refused) refuse(installed.refused, text::narrow(folder.filename().wstring()), why);
     if (reading != modlist::Reading::Readable) continue;
     fs::path dll = m.is_pack() ? packfiles::stand_in(folder) : folder / widen(m.dll);
     installed.found.push_back({std::move(dll), std::move(m)});
   }
-  PM_LOG("mods: %zu found beside the host", installed.found.size());
+  PM_LOG("mods: %zu found beside the host and in the data folder", installed.found.size());
   return installed;
 }
 
@@ -315,9 +314,20 @@ void set_installed(const fs::path& dataDirectory, const Installed& installed) {
   g_refused = installed.refused;
   g_dataDirectory = dataDirectory;
   g_buildRecords = installed.buildRecords;
+  // An id two found mods share is a conflict, not a race one folder won: every copy stays off, each row
+  // naming the folder of all the others (core/mod_list.h folders_of_repeats), before any DLL could say so.
+  std::vector<std::string> ids, where;
   for (const Found& f : installed.found) {
-    if (find_mod(f.manifest.id)) {
-      refuse(g_refused, f.manifest.name, i18n::text("mods.id-repeated"));
+    ids.push_back(f.manifest.id);
+    where.push_back(text::narrow(f.dll.parent_path().wstring()));
+  }
+  const auto repeats = modlist::folders_of_repeats(ids, where);
+  for (size_t i = 0; i < installed.found.size(); ++i) {
+    const Found& f = installed.found[i];
+    if (!repeats[i].empty()) {
+      std::string others;
+      for (const std::string& folder : repeats[i]) others += (others.empty() ? "" : ", ") + folder;
+      refuse(g_refused, f.manifest.name, i18n::text("mods.id-repeated", {{"folder", others}}));
       continue;
     }
     if (f.manifest.oldFormat) PM_LOG("mods: %s has a mod.ini, the old format; its version shows as unknown", f.manifest.id.c_str());

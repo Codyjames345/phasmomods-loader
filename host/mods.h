@@ -55,11 +55,13 @@ struct Installed {
  * Every installed mod: those the launcher listed for process `pid` when the host is the launcher's
  * copy in <dataDirectory>/bin (the list is then deleted; each copy's manifest is beside it as
  * <copy>.json, or <copy>.ini for an old-format mod), else every mod in the mods folder beside the
- * host, in folder order. A bad or missing manifest refuses that mod, logged; a folder with neither a
+ * host and in <dataDirectory>/mods (core/mod_list.h mod_folders: each folder in name order, the host's
+ * first), each in folder order. A bad or missing manifest refuses that mod, logged; a folder with neither a
  * manifest nor a DLL is no mod. The folder beside the host is the install folder, unless the host is a
- * copy in <dataDirectory>/bin: a mod there that claims the project's author is refused
- * (modlist::reserved_author_refusal). The launcher judged the mods it listed in their own folders. An empty
- * `hostFolder` (the host's own path could not be read) finds nothing beside it.
+ * copy in <dataDirectory>/bin; <dataDirectory>/mods is always somewhere else. A mod outside the install
+ * folder that claims the project's author is refused (modlist::reserved_author_refusal). The launcher
+ * judged the mods it listed in their own folders. An empty `hostFolder` (the host's own path could not be
+ * read) finds nothing: not beside it, and not in the data folder either.
  */
 Installed find(const std::filesystem::path& dataDirectory, const std::filesystem::path& hostFolder, unsigned long pid);
 // Where a mods folder beside a host in `hostFolder` is: a host in `bin`, the data folder's copy, has no install folder beside
@@ -67,8 +69,8 @@ Installed find(const std::filesystem::path& dataDirectory, const std::filesystem
 modlist::Place place_beside(const std::filesystem::path& hostFolder, const std::filesystem::path& bin);
 void read_installed(const std::wstring& dataDirectory);  // find, for this process: maps no DLL
 // Takes `installed.found` as the installed mods (what read_installed does with every one it finds), logging what their
-// manifests say that this loader passes over. It maps no DLL. A mod that repeats an id found before it is refused, logged
-// and listed in refused(). Nothing refused stops the others.
+// manifests say that this loader passes over. It maps no DLL. An id shared by two found mods refuses every copy of it,
+// each row naming the folders of the others; all are logged and listed in refused(). Nothing refused stops the others.
 void set_installed(const std::filesystem::path& dataDirectory, const Installed& installed);
 const std::vector<Mod>& installed();  // in the order found; each with its manifest, whether or not its DLL has loaded
 const std::vector<modlist::Refused>& refused();  // the mods that stay off, for the Mods panel
