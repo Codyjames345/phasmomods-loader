@@ -2,6 +2,7 @@
 // content_packs answers, what the wrapper hands the mod, and how the host fills a caller's array of a
 // bigger struct. The host's own list of a framework's packs (host/mods.h packs_for and pack_failed) is
 // tested in tests/mods_test.cpp. Run: build\content_packs_test.exe
+#include <cstddef>
 #include <cstring>
 #include <cwchar>
 #include <filesystem>
@@ -78,6 +79,18 @@ void the_struct_size_is_checked() {
   CHECK(pm::mod::host().content_packs(nullptr, out, 4, sizeof(PmContentPack)) == 0);
 }
 
+// A mod built for contract 2.4 passes 2.4's entry size; once a later minor grows PmContentPack, the host must still
+// fill those entries, up to the size the caller gave (the review, 2026-11-13).
+void a_2_4_caller_is_filled_up_to_its_size() {
+  give_packs();
+  CHECK(pm::mod::bind(fake::host(), &kInfo));
+  CHECK(PM_CONTENT_PACK_SIZE_2_4 == offsetof(PmContentPack, text) + sizeof(const wchar_t*));
+  PmContentPack out[4]{};
+  CHECK(pm::mod::host().content_packs("me.mod", out, 4, PM_CONTENT_PACK_SIZE_2_4) == 2);
+  CHECK(out[0].size == PM_CONTENT_PACK_SIZE_2_4);
+  CHECK(out[0].id && std::strcmp(out[0].id, "b.pack") == 0);
+}
+
 // The caller may hold a bigger struct per entry: the host steps itemSize bytes, writes at most
 // sizeof(PmContentPack) bytes into each entry and sets its size, and leaves everything else alone.
 void a_larger_caller_struct_is_stepped_by_item_size() {
@@ -111,6 +124,7 @@ int main() {
   failed_reaches_the_host();
   the_struct_size_is_checked();
   a_larger_caller_struct_is_stepped_by_item_size();
+  a_2_4_caller_is_filled_up_to_its_size();
   std::printf("%s\n", g_failures ? "content_packs tests FAILED" : "content_packs tests passed");
   return g_failures ? 1 : 0;
 }

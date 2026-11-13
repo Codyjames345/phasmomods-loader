@@ -255,13 +255,18 @@ typedef struct PmGhostRules {
 /// copies a mod, and every text and path here lasts until the mods next stop.
 /// @since Contract 2.4
 typedef struct PmContentPack {
-  uint32_t size;          ///< the bytes of this struct the host filled: sizeof(PmContentPack) of the host, at most the caller's
+  uint32_t size;          ///< the bytes of this struct the host filled: the caller's item size, at most the host's sizeof(PmContentPack)
   const char* id;         ///< the pack's mod id, "<author>.<name>" (UTF-8)
   const char* name;       ///< its manifest's name, as the Mods panel shows it (UTF-8)
   const char* version;    ///< its manifest's version, MAJOR.MINOR.PATCH
   const wchar_t* folder;  ///< the copy of its assets folder for this game process; read-only
   const wchar_t* text;    ///< the copy of its i18n/default.json for this game process (core/text_table.h); may not exist
 } PmContentPack;
+
+/// PmContentPack's size as contract 2.4 defines it, the smallest entry PmHostApi::content_packs fills: a mod built for
+/// 2.4 passes it as its item size, and the host fills that many bytes of each entry however the struct grows later.
+/// @since Contract 2.4
+constexpr uint32_t PM_CONTENT_PACK_SIZE_2_4 = static_cast<uint32_t>(offsetof(PmContentPack, text) + sizeof(const wchar_t*));
 
 /// One entry of a managed Dictionary<K, int> (the host contract's dictionary_int_entries).
 /// @since Contract 2.2

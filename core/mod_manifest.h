@@ -262,6 +262,12 @@ inline bool read_manifest(std::string_view text, Manifest& m, std::string& why) 
       why = i18n::text("manifest.pack-dll");
       return false;
     }
+    // And it depends on its framework alone: the framework reads the packs planned for its start, so a pack waiting on
+    // another mod that then failed would already be in the framework's hands, never started.
+    if (const auto deps = j.find("dependencies"); deps != j.end() && deps->is_array() && !deps->empty()) {
+      why = i18n::text("manifest.pack-dependencies");
+      return false;
+    }
   } else if (dll == j.end() || !dll->is_string() || !valid_dll(dll->get_ref<const std::string&>())) {
     why = i18n::text("manifest.bad-dll");
     return false;

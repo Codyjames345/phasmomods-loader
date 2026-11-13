@@ -667,7 +667,8 @@ player pass.
 
 A content pack is a mod folder of data alone, as SMAPI's: a manifest.json whose `contentPackFor` names the
 mod it is for (`{"id": "<mod id>", "minimumVersion": "1.2.0"}`), an `assets` folder, an `i18n/default.json`,
-and no `dll`. The loader treats a pack as a mod in every way but code: the Mods panel lists it, it needs its
+and no `dll`. A pack lists no `dependencies` of its own: its framework is its one dependency, so the framework
+never holds a pack that then cannot start. The loader treats a pack as a mod in every way but code: the Mods panel lists it, it needs its
 framework (a required dependency), it starts right after the framework and stops with it, and the lobby's
 list includes it, so a joiner without it is removed. Its build is a hash of its files. The framework reads
 its packs from its own `pmmod_start` with `pm::api::packs::owned()` and reports a pack it cannot use with

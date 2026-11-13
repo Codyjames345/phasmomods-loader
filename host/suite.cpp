@@ -362,7 +362,9 @@ struct PackTexts {
 std::map<std::string, PackTexts> g_packTexts;
 uint32_t api_content_packs(const char* modId, PmContentPack* out, uint32_t max, uint32_t itemSize) {
   return host::contained("suite", "listing a mod's content packs", uint32_t{0}, [&]() -> uint32_t {
-    if (!modId || itemSize < sizeof(PmContentPack)) return 0;
+    // A caller built for 2.4 passes 2.4's size; the host fills each entry up to the caller's size, at most its own.
+    if (!modId || itemSize < PM_CONTENT_PACK_SIZE_2_4) return 0;
+    const size_t filled = std::min<size_t>(itemSize, sizeof(PmContentPack));
     const std::vector<const mods::Mod*> packs = mods::packs_for(modid::migrated_id(modId));
     for (uint32_t i = 0; i < packs.size(); ++i) {
       const mods::Mod* m = packs[i];
@@ -371,9 +373,9 @@ uint32_t api_content_packs(const char* modId, PmContentPack* out, uint32_t max, 
       const PackTexts& t = g_packTexts.try_emplace(m->manifest.id, PackTexts{m->manifest.id, m->manifest.name, m->manifest.version,
                                                  modassets::beside_copy(m->dll).wstring(), text.wstring()}).first->second;
       if (!out || i >= max) continue;
-      const PmContentPack entry{sizeof(PmContentPack), t.id.c_str(), t.name.c_str(), t.version.c_str(), t.folder.c_str(),
-                                t.text.c_str()};
-      std::memcpy(reinterpret_cast<unsigned char*>(out) + static_cast<size_t>(i) * itemSize, &entry, sizeof entry);
+      const PmContentPack entry{static_cast<uint32_t>(filled), t.id.c_str(), t.name.c_str(), t.version.c_str(),
+                                t.folder.c_str(), t.text.c_str()};
+      std::memcpy(reinterpret_cast<unsigned char*>(out) + static_cast<size_t>(i) * itemSize, &entry, filled);
     }
     return static_cast<uint32_t>(packs.size());
   });

@@ -7,7 +7,7 @@
   "required": ["id", "name", "author", "version", "description"],
   "oneOf": [
     { "required": ["dll"] },
-    { "required": ["contentPackFor"] }
+    { "required": ["contentPackFor"], "properties": { "dependencies": { "maxItems": 0 } } }
   ],
   "additionalProperties": true,
   "properties": {
@@ -56,7 +56,7 @@
     },
     "contentPackFor": {
       "type": "object",
-      "description": "The mod this content pack is data for, as SMAPI's ContentPackFor: the pack has no dll, and that mod is a required dependency.",
+      "description": "The mod this content pack is data for, as SMAPI's ContentPackFor: the pack has no dll and no dependencies of its own, and that mod is a required dependency.",
       "required": ["id"],
       "additionalProperties": true,
       "properties": {

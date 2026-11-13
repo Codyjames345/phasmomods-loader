@@ -314,6 +314,22 @@ void a_pack_with_a_dll_is_refused() {
   CHECK(why == pm::i18n::text("manifest.pack-dll"));
 }
 
+// A pack depends on its framework alone (the review, 2026-11-13): the framework lists the packs planned for its start,
+// so a pack whose other dependency failed after the framework started would already be on its wheel, unstarted.
+void a_pack_with_other_dependencies_is_refused() {
+  for (const char* required : {"true", "false"}) {
+    Manifest m;
+    std::string why;
+    CHECK(!parse_manifest_json(pack(std::string(R"(,"dependencies":[{"id":"someone.other","required":)") + required +
+                                    "}]"),
+                               m, why));
+    CHECK(why == pm::i18n::text("manifest.pack-dependencies"));
+  }
+  Manifest m;
+  std::string why;
+  CHECK(parse_manifest_json(pack(R"(,"dependencies":[])"), m, why));
+}
+
 void a_pack_without_an_id_is_refused() {
   // contentPackFor must be an object with a string id.
   for (const char* forWhat : {"{}", R"("phasmomods.emotes")", R"({"id":5})"}) {
@@ -524,6 +540,7 @@ int main() {
   a_pack_names_its_framework_and_no_dll();
   a_pack_minimum_version_is_parsed();
   a_pack_with_a_dll_is_refused();
+  a_pack_with_other_dependencies_is_refused();
   a_pack_without_an_id_is_refused();
   a_pack_for_itself_or_listed_twice_is_refused();
   a_mod_without_contentPackFor_is_no_pack();
