@@ -15,6 +15,14 @@ set(expect_7 "Type wraps a map entry of kind Type")
 set(expect_8 "error C2664")
 set(expect_9 "error C2440")
 set(expect_10 "error C2440")
+# A handle wrapper's argument of an unrelated handle, through the typed call (11) and through the
+# transitional raw bridge (12): no overload takes it, which MSVC reports for a call on the wrapper
+# object as no matching call operator. A Ref built straight from a void* (13), and a field of a
+# pointer type (14).
+set(expect_11 "error C3889")
+set(expect_12 "error C3889")
+set(expect_13 "error C2440")
+set(expect_14 "a managed reference field is Field<D, void*>")
 
 execute_process(COMMAND "${CMAKE_COMMAND}" --build "${BUILD}" --target compile_fail_0
   RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE out)
@@ -22,7 +30,7 @@ if(NOT code EQUAL 0)
   message(FATAL_ERROR "the wrappers written right do not compile\n${out}")
 endif()
 
-foreach(case RANGE 1 10)
+foreach(case RANGE 1 14)
   execute_process(COMMAND "${CMAKE_COMMAND}" --build "${BUILD}" --target compile_fail_${case}
     RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE out)
   if(code EQUAL 0)

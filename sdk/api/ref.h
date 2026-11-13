@@ -9,7 +9,9 @@
 /// ghost is expected does not compile. As C# allows, a handle converts by itself to a handle of any base
 /// type the map names (each Type entry's `base`, sdk/api/entry.h, which the offline check proves) and to
 /// Object; going the other way, down to a derived type, asks the runtime first, through pm::api::as
-/// (game_api.h). A raw reference becomes a handle only through Ref::unchecked or Object::unchecked.
+/// (game_api.h). A raw reference becomes a Ref only through Ref::unchecked; Object takes one through
+/// constructors, and both handles convert back to a void*, while the typed-handle migration is
+/// unfinished: those bridge conversions are transitional and leave in its part 5.
 ///
 /// A handle is valid for the current frame only, as the reference it holds: keep an object across frames
 /// in a pm::api::HeldRef (held.h).
@@ -21,6 +23,23 @@
 #include "entry.h"
 
 namespace pm::api {
+
+class Object;
+template <const sdk::EntryDesc& D>
+class Ref;
+
+namespace detail {
+// Whether a type is one of the handles of this header: true for Ref<D> for any D and for Object,
+// with cv and references stripped. (The wrapper templates in game_api.h use it the same way.)
+template <class T>
+struct HandleTrait : std::false_type {};
+template <const sdk::EntryDesc& D>
+struct HandleTrait<Ref<D>> : std::true_type {};
+template <>
+struct HandleTrait<Object> : std::true_type {};
+template <class T>
+inline constexpr bool is_handle_v = HandleTrait<std::remove_cvref_t<T>>::value;
+}  // namespace detail
 
 /// Whether the map's type D is the type B or derives from it, following each Type entry's `base` from D.
 /// Compile-time data only: no game is asked. A type the map gives no base derives from nothing else here,
@@ -45,6 +64,25 @@ class Object {
   constexpr Object() = default;
   /// A null handle.
   constexpr Object(std::nullptr_t) {}
+  /// transitional: removed in part 5. Wraps a raw reference, so code that still keeps a game object
+  /// as a void* compiles where a wrapper's parameter is now an Object. New code gives a handle or
+  /// calls Object::unchecked.
+  /// @param object A managed object, or null.
+  constexpr Object(void* object) : object_(object) {}
+  /// transitional: removed in part 5. As the void* one, for a const raw reference; the const is
+  /// dropped, the GC not needing it.
+  /// @param object A managed object, or null.
+  constexpr Object(const void* object) : object_(const_cast<void*>(object)) {}
+  /// transitional: removed in part 5. Wraps any other class that reads as a raw reference, as
+  /// pm::api::Held (held.h) does, so code that still keeps a game object in one compiles where a
+  /// wrapper's parameter is now an Object. Only class types: a raw pointer other than the void*
+  /// and const void* above never becomes an Object. A handle never comes this way, so a Ref's own
+  /// conversion to Object stays its only one, with no ambiguity. New code gives a handle.
+  /// @tparam T A class type with an implicit conversion to void*, not one of the handles.
+  /// @param t The managed object to wrap, or null.
+  template <class T>
+    requires(std::is_class_v<T> && !detail::is_handle_v<T> && std::is_convertible_v<const T&, void*>)
+  Object(const T& t) : object_(static_cast<void*>(t)) {}
   /// Wraps a raw managed reference, as the host contract and the runtime services give one. Nothing is
   /// checked: the caller vouches that `object` is a managed object or null.
   /// @param object A managed object, or null.
@@ -68,6 +106,11 @@ class Object {
   /// Whether the handle is null.
   /// @return True for a null handle.
   constexpr bool operator==(std::nullptr_t) const { return object_ == nullptr; }
+  /// transitional: removed in part 5. The raw reference an Object used to be, so code that assigns a
+  /// wrapper's answer to a void* or passes one to the host contract compiles while a wrapper gives
+  /// handles. New code keeps a handle.
+  /// @return The object, or null.
+  constexpr operator void*() const { return object_; }
 
  private:
   void* object_ = nullptr;
@@ -135,6 +178,12 @@ class Ref {
   /// Whether the handle is null.
   /// @return True for a null handle.
   constexpr bool operator==(std::nullptr_t) const { return object_ == nullptr; }
+  /// transitional: removed in part 5. The raw reference a Ref used to be, so code that assigns a
+  /// wrapper's answer to a void* or passes one to a void* parameter compiles while a wrapper gives
+  /// handles. New code keeps a handle; nothing here gives Ref a constructor from a void*, which stays
+  /// the point of the handles.
+  /// @return The object, or null.
+  constexpr operator void*() const { return object_; }
 
  private:
   void* object_ = nullptr;

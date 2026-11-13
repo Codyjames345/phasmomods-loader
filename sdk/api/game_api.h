@@ -23,13 +23,22 @@
 /// **A call of a game method is never virtual:** it runs the body the map entry names, even when the
 /// object's class overrides it. Method::virtual_call runs the override, as C# calls a virtual method.
 ///
+/// **Handles:** where a wrapper names a game object, its parameter, return or field type is a typed
+/// handle (sdk/api/ref.h): `pm::api::Ref<D>` for a mapped type, `pm::api::Object` for any managed
+/// object. The game itself never sees one: every call, and every hook, crosses the boundary with the
+/// raw pointers, the wrapper converting at its own boundary (MSVC x64 returns a class with a
+/// constructor through a hidden pointer, so a game function must always be called, and hooked, with
+/// raw types). Code that still keeps a game object as a void* compiles through a transitional bridge
+/// (an Object constructor, a handle's `operator void*`, and a raw overload on each handle-taking
+/// wrapper), which is removed in part 5 of the typed-handle migration.
+///
 /// **Failure:** when an entry did not resolve anyway (an optional one, or the mod was not bound),
 /// nothing jumps to null: a call, a read or a write logs "<key> is not available in this game build"
 /// once and returns the type's default value (0, false, null) or does nothing.
 ///
-/// **Lifetime:** a managed reference a wrapper gives (a void* read from a field or returned by a call,
-/// a type object, a new object or array) is valid for the current frame only. Do not keep it across
-/// frames: keep the object in a pm::api::Held (held.h) instead.
+/// **Lifetime:** a managed reference a wrapper gives (a handle read from a field or returned by a
+/// call, a type object, a new object or array) is valid for the current frame only. Do not keep it
+/// across frames: keep the object in a pm::api::Held (held.h) instead.
 ///
 /// **Threading:** everything here runs on Unity's main thread, where the host calls pmmod_start and
 /// pmmod_tick, except the registration a wrapper makes while the mod's DLL loads. Each "logged once"
@@ -131,11 +140,50 @@ const void* virtual_method(const void* obj, const char* methodKey);
 bool copy_settings(const char* typeKey, void* dst, const void* src);
 uint32_t fields_of_type(const char* typeKey, const void* obj, const char* fieldTypeKey, bool arrayOf, void** out,
                         uint32_t max);
-// The object a virtual call is made on: an instance method's first argument.
+// The object a virtual call is made on: an instance method's first argument, already brought through
+// to_raw by the caller, so a handle arrives as the void* it holds.
 template <class Obj, class... Rest>
 const void* object_of(Obj obj, Rest...) {
   static_assert(std::is_pointer_v<Obj>, "an instance method's first parameter is the object, a pointer");
   return obj;
+}
+
+// The conversions behind the wrappers (ruling 1, typed handles part 2a): a wrapper's R or A may be
+// Ref<D> or Object (is_handle_v, ref.h), and the game's own signature, and a hook body's, always
+// names raw_t of them: void* for a handle, the type itself otherwise.
+template <class T>
+using raw_t = std::conditional_t<is_handle_v<T>, void*, T>;
+// The game's argument for a wrapper's argument: a handle's raw reference, or the value itself.
+template <class T>
+constexpr raw_t<T> to_raw(T x) {
+  if constexpr (is_handle_v<T>) return x.raw();
+  else return x;
+}
+// The wrapper's type for a raw result or argument: a handle wrapping it, or it unchanged.
+template <class T>
+constexpr T from_raw(raw_t<T> raw) {
+  if constexpr (is_handle_v<T>) return T::unchecked(raw);
+  else return raw;
+}
+// One argument the transitional raw overload of a handle-taking wrapper accepts where its parameter A
+// is a handle (removed in part 5): exactly void*, const void* or nullptr_t. A Ref of another type
+// never fits, typed or through the bridge: that is the point of the handles. For any other A,
+// anything convertible to A.
+template <class P, class A>
+concept RawBridgeArg =
+  (is_handle_v<A> && (std::is_same_v<std::decay_t<P>, void*> || std::is_same_v<std::decay_t<P>, const void*> ||
+                      std::is_same_v<std::decay_t<P>, std::nullptr_t>)) ||
+  (!is_handle_v<A> && std::is_convertible_v<P, A>);
+// Converts one raw bridge argument to the wrapper's parameter type A.
+template <class A, class P>
+constexpr A raw_bridge_to(P p) {
+  if constexpr (is_handle_v<A>) {
+    if constexpr (std::is_same_v<std::remove_cvref_t<P>, std::nullptr_t>) return A{};
+    else if constexpr (std::is_same_v<std::remove_cv_t<P>, const void*>) return from_raw<A>(const_cast<void*>(p));
+    else return from_raw<A>(p);
+  } else {
+    return static_cast<A>(p);
+  }
 }
 // Hooks bodies 0 to n - 1 of the method entry `key` through the host contract's hook_body, where n
 // is 1, or with `allTwins` its body_count: body i with entry(i), its `original` into originals[i].
@@ -185,8 +233,11 @@ struct Method;
 /// (`this`). A struct parameter whose size is not 1, 2, 4 or 8 bytes is passed by address, as the x64
 /// calling convention does, and the callee may modify it: write it as a pointer, and pass a copy when
 /// the original must stay unchanged. Where the entry gives its params, A... is one argument per
-/// param, after the object for an instance method, or the wrapper does not compile. A void* the
-/// method returns is a managed reference: do not keep it across frames. Main thread.
+/// param, after the object for an instance method, or the wrapper does not compile. R and any A may
+/// be the handles of ref.h where the map names a game object; the method is still called with the raw
+/// pointers, and a mod that still holds a raw void* for a handle parameter compiles through the
+/// wrapper's transitional raw overload (removed in part 5). A handle or void* the method returns is a
+/// managed reference: do not keep it across frames. Main thread.
 template <const sdk::EntryDesc& D, class R, class... A>
 struct Method<D, R(A...)> {
   static_assert(D.kind == sdk::Kind::Method || D.kind == sdk::Kind::Inflated,
@@ -211,13 +262,15 @@ struct Method<D, R(A...)> {
     return use::entry() ? detail::object_new(D.key) : nullptr;
   }
 
-  /// Calls the method's code with the arguments and its MethodInfo, as the game does. The call is
-  /// never virtual: it runs the declared body even when the object's class overrides it (see
-  /// virtual_call). Unresolved: logs once and returns R{} without calling anything.
+  /// Calls the method's code with the arguments and its MethodInfo, as the game does: the code is
+  /// reached through the game's raw signature (a void* for every handle in R and A...), and the raw
+  /// result comes back wrapped. The call is never virtual: it runs the declared body even when the
+  /// object's class overrides it (see virtual_call). Unresolved: logs once and returns R{} (a null
+  /// handle for a handle R) without calling anything.
   /// @param a The method's arguments, the object first for an instance method, as the entry's params
   ///   give them.
-  /// @return What the method returns; R{} when the entry did not resolve. A void* is a managed
-  ///   reference, valid this frame only.
+  /// @return What the method returns; R{} when the entry did not resolve. A handle or void* is a
+  ///   managed reference, valid this frame only.
   template <int = 0>
   R operator()(A... a) const {
     const PmGameEntry* e = use::entry();
@@ -225,14 +278,35 @@ struct Method<D, R(A...)> {
       if constexpr (std::is_void_v<R>) return;
       else return R{};
     }
-    return reinterpret_cast<R (*)(A..., const void*)>(e->code)(a..., e->method);
+    if constexpr (std::is_void_v<R>) {
+      reinterpret_cast<void (*)(detail::raw_t<A>..., const void*)>(e->code)(detail::to_raw(a)..., e->method);
+    } else {
+      return detail::from_raw<R>(reinterpret_cast<detail::raw_t<R> (*)(detail::raw_t<A>..., const void*)>(
+          e->code)(detail::to_raw(a)..., e->method));
+    }
+  }
+
+  /// transitional: removed in part 5. The same call as code that still holds raw void* makes it: each
+  /// argument going to a handle parameter must be void*, const void* or nullptr, and each argument is
+  /// converted to its parameter's type (a handle with Ref::unchecked) before operator() runs. A Ref
+  /// of another type is refused here too: the handles keep meaning what they say.
+  /// @tparam P The arguments' types: raw references where the wrapper's parameter is a handle, and
+  ///   anything convertible to a parameter otherwise.
+  /// @param p The arguments, the object first for an instance method.
+  /// @return What the method returns; R{} when the entry did not resolve.
+  template <class... P>
+    requires((detail::is_handle_v<A> || ...) && sizeof...(P) == sizeof...(A) && (detail::RawBridgeArg<P, A> && ...))
+  R operator()(P... p) const {
+    R (Method::*typed)(A...) const = &Method::operator();
+    return (this->*typed)(detail::raw_bridge_to<A, P>(p)...);
   }
 
   /// Calls the method as C# calls a virtual method: the method the class of the object (the first
-  /// argument) runs, its override or else the declared body, with that method's MethodInfo. A null
-  /// object, or one not of the method's declaring type, is refused: nothing is called, R{} is
-  /// returned, and the refusal is logged once per bind. Before bind it calls the declared body, as
-  /// operator() does. Unresolved: logs once and returns R{} without calling anything.
+  /// argument) runs, its override or else the declared body, with that method's MethodInfo. The code
+  /// is reached through the game's raw signature, as operator() does. A null object, or one not of
+  /// the method's declaring type, is refused: nothing is called, R{} is returned, and the refusal is
+  /// logged once per bind. Before bind it calls the declared body, as operator() does. Unresolved:
+  /// logs once and returns R{} without calling anything.
   /// @param a The method's arguments, the object first.
   /// @return What the method the object's class runs returns; R{} when the call is refused or the entry
   ///   did not resolve.
@@ -248,7 +322,7 @@ struct Method<D, R(A...)> {
     void* code = e->code;
     const void* method = e->method;
     if (detail::host()) {
-      const void* obj = detail::object_of(a...);
+      const void* obj = detail::object_of(detail::to_raw(a)...);
       method = obj ? detail::virtual_method(obj, D.key) : nullptr;
       // core/mod_api.h: a MethodInfo's first member is the address of its code.
       code = method ? *static_cast<void* const*>(method) : nullptr;
@@ -258,7 +332,26 @@ struct Method<D, R(A...)> {
         else return R{};
       }
     }
-    return reinterpret_cast<R (*)(A..., const void*)>(code)(a..., method);
+    if constexpr (std::is_void_v<R>) {
+      reinterpret_cast<void (*)(detail::raw_t<A>..., const void*)>(code)(detail::to_raw(a)..., method);
+    } else {
+      return detail::from_raw<R>(
+          reinterpret_cast<detail::raw_t<R> (*)(detail::raw_t<A>..., const void*)>(code)(detail::to_raw(a)..., method));
+    }
+  }
+
+  /// transitional: removed in part 5. virtual_call as code that still holds raw void* makes it,
+  /// converting each argument as operator()'s raw overload does.
+  /// @tparam P The arguments' types: raw references where the wrapper's parameter is a handle, and
+  ///   anything convertible to a parameter otherwise.
+  /// @param p The arguments, the object first.
+  /// @return What the method the object's class runs returns; R{} when the call is refused or the
+  ///   entry did not resolve.
+  template <class... P>
+    requires((detail::is_handle_v<A> || ...) && sizeof...(P) == sizeof...(A) && (detail::RawBridgeArg<P, A> && ...))
+  R virtual_call(P... p) const {
+    R (Method::*typed)(A...) const = &Method::virtual_call;
+    return (this->*typed)(detail::raw_bridge_to<A, P>(p)...);
   }
 
   /// Whether the method resolved in this game build. Never logs.
@@ -269,10 +362,11 @@ struct Method<D, R(A...)> {
   }
 };
 
-/// An instance field of type T. T is a plain value (bool, int32_t, float, a struct copied whole) or
-/// void* for a managed reference. Where the entry's type is a C# value type by name (bool, int,
-/// float and the like), a T of another size does not compile. Reads and writes go to the resolved
-/// offset in the object. Main thread.
+/// An instance field of type T. T is a plain value (bool, int32_t, float, a struct copied whole), one
+/// of the handles of ref.h, or void* for a managed reference. Where the entry's type is a C# value
+/// type by name (bool, int, float and the like), a T of another size does not compile. Reads and
+/// writes go to the resolved offset in the object; a handle reads the reference and wraps it, and
+/// writing one (or a void*) goes through the GC write barrier exactly as before. Main thread.
 template <const sdk::EntryDesc& D, class T>
 struct Field {
   static_assert(D.kind == sdk::Kind::Field, "Field wraps a map entry of kind Field");
@@ -286,41 +380,51 @@ struct Field {
   /// The entry's use: calling use::entry() or use::resolved() makes the entry required (see Use).
   using use = Use<D>;
 
-  /// The field's value in the managed object `obj`. Unresolved (logged once) or a null `obj`: T{}.
-  /// A reference (void*) is valid for the current frame only: do not keep it across frames.
+  /// The field's value in the managed object `obj`. Unresolved (logged once) or a null `obj`: T{} (a
+  /// null handle for a handle T). A reference (a handle, or void*) is valid for the current frame only:
+  /// do not keep it across frames. The wrapper takes any Object because it cannot know the owner type
+  /// at compile time: an EntryDesc names its owner by a key string, not by a C++ type, so knowing the
+  /// object is of the field's owner class is the caller's job.
   /// @param obj The managed object that holds the field, of the entry's owner type; null allowed.
   /// @return The field's value, or T{}.
   template <int = 0>
-  T get(const void* obj) const {
+  T get(Object obj) const {
     const PmGameEntry* e = use::entry();
     if (!e || !obj) return T{};
-    T value;
-    std::memcpy(&value, static_cast<const char*>(obj) + e->offset, sizeof value);
-    return value;
+    if constexpr (detail::is_handle_v<T>) {
+      void* value = nullptr;
+      std::memcpy(&value, static_cast<const char*>(obj.raw()) + e->offset, sizeof value);
+      return detail::from_raw<T>(value);
+    } else {
+      T value;
+      std::memcpy(&value, static_cast<const char*>(obj.raw()) + e->offset, sizeof value);
+      return value;
+    }
   }
 
-  /// Stores `value` in the managed object `obj`. A managed reference (void*) goes through the GC
-  /// write barrier (the host's set_reference); a plain value is written directly. Unresolved (logged
-  /// once) or a null `obj`: nothing is written. A write changes only this client's copy, and skips
-  /// whatever the game does when it sets the field itself: the field's note names the method to call
-  /// for the game's own behaviour.
+  /// Stores `value` in the managed object `obj`. A managed reference (a handle, or void*) goes through
+  /// the GC write barrier (the host's set_reference); a plain value is written directly. Unresolved
+  /// (logged once) or a null `obj`: nothing is written. A write changes only this client's copy, and
+  /// skips whatever the game does when it sets the field itself: the field's note names the method to
+  /// call for the game's own behaviour. As for get, the owner type is the caller's to know.
   /// @param obj The managed object that holds the field, of the entry's owner type; null allowed.
   /// @param value The value to store.
   template <int = 0>
-  void set(void* obj, T value) const {
+  void set(Object obj, T value) const {
     const PmGameEntry* e = use::entry();
     if (!e || !obj) return;
-    if constexpr (std::is_same_v<T, void*>) {
-      if (const PmHostApi* h = detail::host()) h->set_reference(obj, e->offset, value);
+    if constexpr (std::is_same_v<T, void*> || detail::is_handle_v<T>) {
+      if (const PmHostApi* h = detail::host()) h->set_reference(obj.raw(), e->offset, detail::to_raw(value));
     } else {
-      std::memcpy(static_cast<char*>(obj) + e->offset, &value, sizeof value);
+      std::memcpy(static_cast<char*>(obj.raw()) + e->offset, &value, sizeof value);
     }
   }
 };
 
-/// A static field of type T, one value for the whole class. T is a number, a bool, an enum, or void* for
-/// a managed reference. A struct is not supported: its bytes are copied whole, which would bypass the
-/// GC write barrier for any managed reference inside it, and the API cannot tell whether one does.
+/// A static field of type T, one value for the whole class. T is a number, a bool, an enum, one of
+/// the handles of ref.h, or void* for a managed reference. A struct is not supported: its bytes are
+/// copied whole, which would bypass the GC write barrier for any managed reference inside it, and the
+/// API cannot tell whether one does.
 /// Reading or writing it first runs the class's static constructor when that has not run
 /// yet, as the game's own first use would, so use it only from code that runs while the game plays
 /// (pmmod_tick, a hook's detour), never from a DLL's initialisation; the host never reads a static
@@ -330,9 +434,10 @@ template <const sdk::EntryDesc& D, class T>
 struct StaticField {
   static_assert(D.kind == sdk::Kind::Field && (D.flags & sdk::kStatic),
                 "StaticField wraps a map entry of kind Field flagged kStatic");
-  static_assert(std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_same_v<T, void*>,
-                "a static field is a number, a bool, an enum, or void* for a managed reference; a struct "
-                "may hold references, which a whole copy would store without the GC write barrier");
+  static_assert(std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_same_v<T, void*> || detail::is_handle_v<T>,
+                "a static field is a number, a bool, an enum, or void* or a handle for a managed "
+                "reference; a struct may hold references, which a whole copy would store without the "
+                "GC write barrier");
   static_assert(detail::value_size(D.type) == 0 || detail::value_size(D.type) == sizeof(T),
                 "T's size is not the size of the entry's type");
   /// The map entry this wraps (its key, kind and flags).
@@ -340,15 +445,21 @@ struct StaticField {
   /// The entry's use: calling use::entry() or use::resolved() makes the entry required (see Use).
   using use = Use<D>;
 
-  /// The field's value. Unresolved: logs once and returns T{}. When the host cannot read it (T's size
-  /// is not the field's, or the class's static constructor threw): logs once per bind and returns T{}.
-  /// A reference (void*) is valid for the current frame only: do not keep it across frames.
+  /// The field's value. Unresolved: logs once and returns T{} (a null handle for a handle T). When
+  /// the host cannot read it (T's size is not the field's, or the class's static constructor threw):
+  /// logs once per bind and returns T{}. A reference (a handle, or void*) is valid for the current
+  /// frame only: do not keep it across frames.
   /// @return The field's value, or T{}.
   template <int = 0>
   T get() const {
     if (!use::entry()) return T{};
-    T value{};
-    if (detail::static_get(D.key, &value, sizeof value)) return value;
+    if constexpr (detail::is_handle_v<T>) {
+      void* value = nullptr;
+      if (detail::static_get(D.key, &value, sizeof value)) return detail::from_raw<T>(value);
+    } else {
+      T value{};
+      if (detail::static_get(D.key, &value, sizeof value)) return value;
+    }
     detail::report_refused_static(use::slot());
     return T{};
   }
@@ -360,17 +471,30 @@ struct StaticField {
   /// @return True when the field was read.
   template <int = 0>
   bool read(T& out) const {
-    return use::resolved() && detail::static_get(D.key, &out, sizeof out);
+    if (!use::resolved()) return false;
+    if constexpr (detail::is_handle_v<T>) {
+      void* value = nullptr;
+      if (!detail::static_get(D.key, &value, sizeof value)) return false;
+      out = detail::from_raw<T>(value);
+      return true;
+    } else {
+      return detail::static_get(D.key, &out, sizeof out);
+    }
   }
 
-  /// Stores `value` in the field; a managed reference goes through the GC write barrier. Unresolved:
-  /// logs once and writes nothing. When the host cannot write it: logs once per bind and writes
-  /// nothing. The write is this client's alone.
+  /// Stores `value` in the field; a managed reference (a handle, or void*) goes through the GC write
+  /// barrier. Unresolved: logs once and writes nothing. When the host cannot write it: logs once per
+  /// bind and writes nothing. The write is this client's alone.
   /// @param value The value to store.
   template <int = 0>
   void set(T value) const {
     if (!use::entry()) return;
-    if (!detail::static_set(D.key, &value, sizeof value)) detail::report_refused_static(use::slot());
+    if constexpr (detail::is_handle_v<T>) {
+      void* raw = detail::to_raw(value);
+      if (!detail::static_set(D.key, &raw, sizeof raw)) detail::report_refused_static(use::slot());
+    } else {
+      if (!detail::static_set(D.key, &value, sizeof value)) detail::report_refused_static(use::slot());
+    }
   }
 
   /// Whether the field resolved in this game build. Never logs.
@@ -389,8 +513,10 @@ struct Icall;
 /// it takes no MethodInfo; an instance function's first parameter is the managed object. Where the
 /// entry gives its params, A... is one argument per param, after the object unless the entry is
 /// kStatic, or the wrapper does not compile; a struct parameter goes as for Method, by address, and
-/// the callee may modify it. A void* it returns is a managed reference: do not keep it across
-/// frames. Main thread.
+/// the callee may modify it. R and any A may be the handles of ref.h where the map names a game
+/// object; the function is still called with the raw pointers, with the same transitional raw
+/// overload as Method (removed in part 5). A handle or void* it returns is a managed reference: do
+/// not keep it across frames. Main thread.
 template <const sdk::EntryDesc& D, class R, class... A>
 struct Icall<D, R(A...)> {
   static_assert(D.kind == sdk::Kind::Icall, "Icall wraps a map entry of kind Icall");
@@ -402,8 +528,9 @@ struct Icall<D, R(A...)> {
   /// The entry's use: calling use::entry() or use::resolved() makes the entry required (see Use).
   using use = Use<D>;
 
-  /// Calls the engine function with the arguments. Unresolved: logs once and returns R{} without
-  /// calling anything.
+  /// Calls the engine function with the arguments, through the function's raw signature (a void* for
+  /// every handle in R and A...), and brings the raw result back wrapped. Unresolved: logs once and
+  /// returns R{} (a null handle for a handle R) without calling anything.
   /// @param a The function's arguments, the object first unless the entry is kStatic.
   /// @return What the function returns; R{} when the entry did not resolve.
   template <int = 0>
@@ -413,7 +540,27 @@ struct Icall<D, R(A...)> {
       if constexpr (std::is_void_v<R>) return;
       else return R{};
     }
-    return reinterpret_cast<R (*)(A...)>(e->code)(a...);
+    if constexpr (std::is_void_v<R>) {
+      reinterpret_cast<void (*)(detail::raw_t<A>...)>(e->code)(detail::to_raw(a)...);
+    } else {
+      return detail::from_raw<R>(
+          reinterpret_cast<detail::raw_t<R> (*)(detail::raw_t<A>...)>(e->code)(detail::to_raw(a)...));
+    }
+  }
+
+  /// transitional: removed in part 5. The same call as code that still holds raw void* makes it: each
+  /// argument going to a handle parameter must be void*, const void* or nullptr, and each argument is
+  /// converted to its parameter's type (a handle with Ref::unchecked) before operator() runs. A Ref of
+  /// another type is refused here too.
+  /// @tparam P The arguments' types: raw references where the wrapper's parameter is a handle, and
+  ///   anything convertible to a parameter otherwise.
+  /// @param p The arguments, the object first unless the entry is kStatic.
+  /// @return What the function returns; R{} when the entry did not resolve.
+  template <class... P>
+    requires((detail::is_handle_v<A> || ...) && sizeof...(P) == sizeof...(A) && (detail::RawBridgeArg<P, A> && ...))
+  R operator()(P... p) const {
+    R (Icall::*typed)(A...) const = &Icall::operator();
+    return (this->*typed)(detail::raw_bridge_to<A, P>(p)...);
   }
 
   /// Whether the icall resolved in this game build. Never logs.
@@ -471,16 +618,18 @@ struct Type {
   /// Whether the managed object `obj` is of this type or of a class derived from it (following the
   /// class's parents). An interface type never matches: the check does not look at the interfaces
   /// a class implements. False for a null `obj`, and when the type did not resolve (logged once).
-  /// @param obj Any managed object, or null.
+  /// @param obj Any managed handle, or null; a Ref of any type converts to the Object it takes, and
+  ///   a raw void* still reaches it through the transitional bridge.
   /// @return True when `obj` is of this type.
   template <int = 0>
-  bool is(const void* obj) const {
-    return use::entry() && obj && detail::is_instance(obj, D.key);
+  bool is(Object obj) const {
+    return use::entry() && obj && detail::is_instance(obj.raw(), D.key);
   }
 
   /// The type's System.Type object, as C#'s typeof gives it (for GetComponent, AddComponent and
-  /// the like). A managed object: do not keep it across frames without a pm::api::Held. Unresolved:
-  /// logs once and returns null.
+  /// the like). It stays a raw void* through the typed-handle migration: a System.Type is never used
+  /// as a handle of a game type, so a handle would add nothing to it. A managed object: do not keep
+  /// it across frames without a pm::api::Held. Unresolved: logs once and returns null.
   /// @return The System.Type, or null.
   template <int = 0>
   void* type_object() const {
@@ -490,21 +639,22 @@ struct Type {
   /// A new managed object of this class with every field zeroed. No constructor runs. Nothing else
   /// refers to it yet, so do not keep it across frames without a pm::api::Held (held.h). Not for engine
   /// objects: a Component or MonoBehaviour comes from AddComponent or Instantiate, never from
-  /// make(), which gives an object Unity knows nothing of. Unresolved: logs once and returns null.
-  /// @return The new object, or null.
+  /// make(), which gives an object Unity knows nothing of. Unresolved: logs once and returns a null
+  /// handle.
+  /// @return A handle to the new object, or null.
   template <int = 0>
-  void* make() const {
-    return use::entry() ? detail::object_new(D.key) : nullptr;
+  Ref<D> make() const {
+    return Ref<D>::unchecked(use::entry() ? detail::object_new(D.key) : nullptr);
   }
 
   /// A new managed array of `length` elements of this type, zeroed (read it with pm::api::Array or
   /// RefArray, runtime.h). Do not keep it across frames without a pm::api::Held. Unresolved: logs
-  /// once and returns null.
+  /// once and returns a null handle.
   /// @param length The number of elements.
-  /// @return The new array, or null.
+  /// @return A handle to the new array, or null.
   template <int = 0>
-  void* make_array(size_t length) const {
-    return use::entry() ? detail::array_new(D.key, length) : nullptr;
+  Object make_array(size_t length) const {
+    return Object::unchecked(use::entry() ? detail::array_new(D.key, length) : nullptr);
   }
 
   /// Copies `src`'s settings onto `dst`, two objects of this class or of classes derived from it:
@@ -518,8 +668,8 @@ struct Type {
   /// @param src The object to copy from.
   /// @return True when every setting was copied; false when nothing was.
   template <int = 0>
-  bool copy_settings(void* dst, const void* src) const {
-    return use::entry() && dst && src && detail::copy_settings(D.key, dst, src);
+  bool copy_settings(Object dst, Object src) const {
+    return use::entry() && dst && src && detail::copy_settings(D.key, dst.raw(), src.raw());
   }
 
   /// The references `obj` holds in every instance field this class itself declares of the type
@@ -531,14 +681,15 @@ struct Type {
   /// @tparam FieldType The Type wrapper of the fields' type, for example phasmo::GhostModel::type.
   /// @param obj The managed object of this class to read.
   /// @param arrayOf True to read the fields of an array of FieldType instead.
-  /// @param out Room for `max` references, in layout order; null only with `max` 0.
+  /// @param out Room for `max` raw references, in layout order; null only with `max` 0. The output
+  ///   stays void** for now; a mod wrapping a handle around each is part 2b of the migration.
   /// @param max How many references `out` takes.
   /// @return How many such fields the class declares, or 0.
   template <auto& FieldType>
-  size_t fields_of(const void* obj, bool arrayOf, void** out, size_t max) const {
+  size_t fields_of(Object obj, bool arrayOf, void** out, size_t max) const {
     using F = std::remove_cvref_t<decltype(FieldType)>;
     if (!use::entry() || !F::use::entry() || !obj) return 0;
-    return detail::fields_of_type(D.key, obj, F::desc.key, arrayOf, out, static_cast<uint32_t>(max));
+    return detail::fields_of_type(D.key, obj.raw(), F::desc.key, arrayOf, out, static_cast<uint32_t>(max));
   }
 };
 
@@ -760,14 +911,19 @@ struct OriginalOf;
 /// kept, may. Main thread, as the hooked call.
 template <const sdk::EntryDesc& D, class R, class... A>
 struct OriginalOf<Method<D, R(A...)>> {
-  R (*code)(A..., const void*);  ///< the next detour or the body; null before the hook is placed
-  const void* method;            ///< the game's MethodInfo, passed on as the call's last argument
-  /// Goes on with the game's call.
+  /// the next detour or the body, in the game's raw types (a void* for every handle in R and A...);
+  /// null before the hook is placed
+  detail::raw_t<R> (*code)(detail::raw_t<A>..., const void*);
+  const void* method;  ///< the game's MethodInfo, passed on as the call's last argument
+  /// Goes on with the game's call: the typed arguments go through to_raw to the next link, and its
+  /// raw result comes back through from_raw.
   /// @param a The call's arguments, as the detour received them or changed.
   /// @return What the rest of the chain returns; R{} when `code` is null.
   R operator()(A... a) const {
-    if (code) return code(a..., method);
-    if constexpr (!std::is_void_v<R>) return R{};
+    if (code) {
+      if constexpr (std::is_void_v<R>) code(detail::to_raw(a)..., method);
+      else return detail::from_raw<R>(code(detail::to_raw(a)..., method));
+    } else if constexpr (!std::is_void_v<R>) return R{};
   }
 };
 
@@ -780,19 +936,26 @@ namespace detail {
 // One entry function per body slot, for the Method wrapper W and the handler H that runs for each
 // call (H::run(original, args...)): body_entry<I> is what is hooked on body I, and `original[I]` is
 // what continues that body's chain. Each body_entry<I> reads its own slot, so no two of them are the
-// same code and the linker never folds them into one. Each holds a hooks::Guard while it runs.
+// same code and the linker never folds them into one. Each holds a hooks::Guard while it runs. The
+// entry functions the game calls take and return the game's raw types (a void* for every handle in
+// the wrapper's R and A...): the game never sees a handle, and H::run gets the wrapper's typed
+// arguments and gives back its typed result, converted at this boundary.
 template <class W, class H>
 struct Bodies;
 
 template <const sdk::EntryDesc& D, class R, class... A, class H>
 struct Bodies<Method<D, R(A...)>, H> {
-  using Code = R (*)(A..., const void*);
+  using Code = raw_t<R> (*)(raw_t<A>..., const void*);
   static inline Code original[kMaxBodies] = {};
 
   template <uint32_t I>
-  static R body_entry(A... a, const void* method) {
+  static raw_t<R> body_entry(raw_t<A>... a, const void* method) {
     hooks::Guard guard;
-    return H::run(OriginalOf<Method<D, R(A...)>>{original[I], method}, a...);
+    if constexpr (std::is_void_v<R>) {
+      H::run(OriginalOf<Method<D, R(A...)>>{original[I], method}, detail::from_raw<A>(a)...);
+    } else {
+      return detail::to_raw(H::run(OriginalOf<Method<D, R(A...)>>{original[I], method}, detail::from_raw<A>(a)...));
+    }
   }
 
   template <uint32_t... I>

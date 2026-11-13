@@ -1,8 +1,10 @@
 // Wrappers that must not compile, one per value of PM_EXPECT_COMPILE_FAIL (1 to 7), each stopped by
-// its own static_assert in sdk/api/game_api.h, and typed handles used wrongly (8 to 10), each stopped
-// by a conversion sdk/api/ref.h does not give. With PM_EXPECT_COMPILE_FAIL 0 the same code, written
-// right, must compile, so a failing case fails for its own error and never for a broken build.
-// Built by tests/compile_fail_test.cmake.
+// its own static_assert in sdk/api/game_api.h; typed handles used wrongly (8 to 10), each stopped by
+// a conversion sdk/api/ref.h does not give; a handle-taking wrapper's arguments used wrongly (11 to
+// 13), where the typed call and the transitional raw bridge (removed in part 5) each refuse them;
+// and a field of a pointer type (14), still refused by game_api.h's static_assert. With
+// PM_EXPECT_COMPILE_FAIL 0 the same code, written right, must compile, so a failing case fails for
+// its own error and never for a broken build. Built by tests/compile_fail_test.cmake.
 #include <cstdint>
 
 #include "Animator.h"
@@ -11,12 +13,27 @@
 #include "UnityObject.h"
 #include "entry.h"
 #include "game_api.h"
+#include "held.h"
 #include "ref.h"
 
 // Functions taking handles, outside the unnamed namespace so an unused one is no warning. GhostAI derives
 // from MonoBehaviour (through MonoBehaviourPun); Camera and GhostAI are unrelated.
 namespace handles {
 inline void* camera_of(pm::api::Ref<pm::map::Camera> camera) { return camera.raw(); }
+// Wrappers whose parameters and return are handles, for the bridge cases 11 to 14. An instance
+// method's params are its parameters after the object: SeeMethod takes one and TwoHandles two.
+inline constexpr const char* kSeeParams[] = {"int"};
+inline constexpr const char* kTwoParams[] = {"object"};
+inline constexpr pm::sdk::EntryDesc kSeeMethod{.key = "Test.SeeMethod", .kind = pm::sdk::Kind::Method,
+                                               .owner = "GhostAI", .name = "SeeMethod", .params = kSeeParams};
+inline constexpr pm::sdk::EntryDesc kTwoHandles{.key = "Test.TwoHandles", .kind = pm::sdk::Kind::Method,
+                                                .owner = "GhostAI", .name = "TwoHandles", .params = kTwoParams};
+inline constexpr pm::sdk::EntryDesc kHolderField{.key = "Test.holderField", .kind = pm::sdk::Kind::Field,
+                                                 .owner = "GhostAI", .type = "object"};
+inline constexpr pm::api::Method<kSeeMethod, pm::api::Ref<pm::map::Camera>(pm::api::Ref<pm::map::GhostAI>, int32_t)>
+    seeHandle{};
+inline constexpr pm::api::Method<kTwoHandles, void(pm::api::Ref<pm::map::GhostAI>, pm::api::Ref<pm::map::Camera>)>
+    twoHandles{};
 #if PM_EXPECT_COMPILE_FAIL == 8
 // A ghost is no camera: an unrelated handle is refused.
 inline void* wrong() { return camera_of(pm::api::Ref<pm::map::GhostAI>{}); }
@@ -26,6 +43,22 @@ inline pm::api::Ref<pm::map::GhostAI> wrong(pm::api::Ref<pm::map::MonoBehaviour>
 #elif PM_EXPECT_COMPILE_FAIL == 10
 // A raw reference becomes a handle only through Ref::unchecked, never on its own.
 inline pm::api::Ref<pm::map::GhostAI> wrong(void* raw) { return raw; }
+#elif PM_EXPECT_COMPILE_FAIL == 11
+// A handle-taking Method's object given a handle of an unrelated type: the typed call refuses it.
+inline void* wrongObject(pm::api::Ref<pm::map::Camera> camera) { return seeHandle(camera, 1).raw(); }
+#elif PM_EXPECT_COMPILE_FAIL == 12
+// Through the raw bridge too: void* for one handle parameter goes, an unrelated handle for the
+// other does not.
+inline void* wrongBridge(void* object, pm::api::Ref<pm::map::GhostAI> ghost) { twoHandles(object, ghost); }
+#elif PM_EXPECT_COMPILE_FAIL == 13
+// A raw reference still becomes a handle only through Ref::unchecked: passing one built straight
+// from a void* to a handle parameter is the same refusal.
+inline void* wrongWrap(void* object, void* camera) {
+  twoHandles(object, pm::api::Ref<pm::map::GhostAI>(camera));
+}
+#elif PM_EXPECT_COMPILE_FAIL == 14
+// A field's parameter is still refused: a managed reference is a handle or void*, never int*.
+constexpr pm::api::Field<kHolderField, int*> badField{};
 #else
 inline void* right() { return camera_of(pm::api::Ref<pm::map::Camera>{}); }
 inline pm::api::Ref<pm::map::MonoBehaviour> up(pm::api::Ref<pm::map::GhostAI> ghost) { return ghost; }
@@ -33,6 +66,21 @@ inline pm::api::Ref<pm::map::GhostAI> down(pm::api::Ref<pm::map::MonoBehaviour> 
   return pm::api::as<pm::map::GhostAI>(behaviour);
 }
 inline pm::api::Ref<pm::map::GhostAI> wrap(void* raw) { return pm::api::Ref<pm::map::GhostAI>::unchecked(raw); }
+// The handle-taking wrappers written right: all handles through the typed call, all raw references
+// through the bridge, and the field taking a handle.
+inline constexpr pm::api::Field<kHolderField, pm::api::Ref<pm::map::GhostAI>> holderField{};
+inline pm::api::Ref<pm::map::GhostAI> readHolder(void* object) { return holderField.get(object); }
+inline void* rightTyped(pm::api::Ref<pm::map::GhostAI> ghost, pm::api::Ref<pm::map::Camera> camera) {
+  twoHandles(ghost, camera);
+  return seeHandle(ghost, 1).raw();
+}
+inline void* rightRaw(void* object, void* camera) {
+  twoHandles(object, camera);
+  return seeHandle(object, 1).raw();
+}
+// A Held, which reads as a raw void*, reaches an Object parameter through the bridge's one
+// class-type constructor (ruling 4b).
+inline pm::api::Object heldAsObject(pm::api::Held held) { return held; }
 #endif
 }  // namespace handles
 

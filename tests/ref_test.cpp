@@ -44,7 +44,12 @@ static_assert(std::is_convertible_v<Ref<map::GhostAI>, Object>);
 static_assert(!std::is_convertible_v<Ref<map::MonoBehaviour>, Ref<map::GhostAI>>);
 static_assert(!std::is_convertible_v<Ref<map::GhostAI>, Ref<map::Camera>>);
 static_assert(!std::is_convertible_v<void*, Ref<map::GhostAI>>);
-static_assert(!std::is_convertible_v<void*, Object>);
+// The transitional bridge (part 5): an Object still takes a raw void* or const void*, so every void*
+// caller of a parameter that is now an Object keeps compiling while the wrappers move to handles.
+static_assert(std::is_convertible_v<void*, Object>);
+static_assert(std::is_convertible_v<const void*, Object>);
+static_assert(std::is_convertible_v<Ref<map::GhostAI>, void*>);  // and gives one back
+static_assert(std::is_convertible_v<Object, void*>);             // and gives one back
 static_assert(!std::is_convertible_v<Object, Ref<map::GhostAI>>);
 // A HeldRef reads as its Ref: up to a base type's handle and Object, never to an unrelated or derived one.
 static_assert(std::is_convertible_v<const api::HeldRef<map::GhostAI>&, Ref<map::MonoBehaviour>>);
