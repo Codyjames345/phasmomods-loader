@@ -270,34 +270,45 @@ void mod_folders() {
   std::wstring problems;
   std::vector<pm::modlist::Refused> refused;
   const auto mods = discover_mods({{root / "mods", pm::modlist::Place::InstallFolder}}, problems, refused);
-  CHECK(mods.size() == 2 && mods[0].manifest.id == "me.first" && mods[1].manifest.id == "second");
-  CHECK(mods.size() == 2 && mods[0].manifest.description == "One" && mods[0].manifest.version == "1.2.3");
-  CHECK(mods.size() == 2 && mods[1].manifest.oldFormat && mods[1].manifest.version.empty());
+  // Every copy of a repeated id is refused, so neither "a" nor "e" is a mod; only the old-format "b" is.
+  CHECK(mods.size() == 1 && mods[0].manifest.id == "second");
+  CHECK(mods.size() == 1 && mods[0].manifest.oldFormat && mods[0].manifest.version.empty());
   CHECK(problems.find(L"in c cannot be used. manifest.json is not valid JSON") != std::wstring::npos);
   CHECK(problems.find(L"in d cannot be used. Mod is missing its DLL") != std::wstring::npos);
-  CHECK(problems.find(L"in e cannot be used. Mod repeats the id") != std::wstring::npos);
   CHECK(problems.find(L"in f cannot be used. It has a DLL but no manifest.json") != std::wstring::npos);
   CHECK(problems.find(L"in g") == std::wstring::npos);  // a folder with no DLL is no mod
   CHECK(problems.find(L"in h cannot be used. Mod is missing its DLL") != std::wstring::npos);  // a folder is no DLL
-  CHECK(refused.size() == 5 && refused[0].name == "c" && refused[3].name == "f" && refused[4].name == "h");
+  // Each copy of the repeated id names the folder of the other copy.
+  CHECK(problems.find(L"in a cannot be used.") != std::wstring::npos &&
+        problems.find((root / "mods" / "e").wstring()) != std::wstring::npos);
+  CHECK(problems.find(L"in e cannot be used.") != std::wstring::npos &&
+        problems.find((root / "mods" / "a").wstring()) != std::wstring::npos);
+  CHECK(refused.size() == 6 && refused[0].name == "c" && refused[3].name == "h" &&
+        refused[4].name == "a" && refused[5].name == "e");  // broken first, then the repeated-id pair
+  if (refused.size() == 6) {
+    const std::string aWhy = pm::i18n::text("launcher.mod-repeats-id",
+                                            {{"folder", pm::text::narrow((root / "mods" / "e").wstring())}});
+    const std::string eWhy = pm::i18n::text("launcher.mod-repeats-id",
+                                            {{"folder", pm::text::narrow((root / "mods" / "a").wstring())}});
+    CHECK(refused[4].why == aWhy && refused[5].why == eWhy);  // each copy names the other's folder
+  }
   // They reach the host's Mods panel through the session file.
   const auto lines = session_lines(refused);
-  CHECK(lines.size() == 5 && pm::modlist::parse_session_refused(lines[1]).size() == 1 &&
+  CHECK(lines.size() == 6 && pm::modlist::parse_session_refused(lines[1]).size() == 1 &&
         pm::modlist::parse_session_refused(lines[1])[0].name == "d");
   // And the package's checked-build records, which the session file's mod list does not take for a mod.
   std::string session;
   for (const std::string& line : session_lines(refused, root / "builds")) session += line;
   CHECK(pm::modlist::parse_session_builds(session) == (root / "builds").string());
   CHECK(pm::modlist::parse_session(session).empty());
-  CHECK(pm::modlist::parse_session_refused(session).size() == 5);
+  CHECK(pm::modlist::parse_session_refused(session).size() == 6);
   CHECK(pm::modlist::parse_session_builds("a.dll\n?b\tc\n").empty());
   const fs::path ini = root / "data" / "launcher.ini";
-  CHECK(saved_selection(ini, mods) == (std::vector<std::string>{"me.first", "second"}));  // nothing saved: all
+  CHECK(saved_selection(ini, mods) == (std::vector<std::string>{"second"}));  // nothing saved: all
   CHECK(save_selection(ini, {"second"}));
   CHECK(saved_selection(ini, mods) == std::vector<std::string>{"second"});
   const auto dlls = all_dlls(mods);  // every installed mod is listed; the saved choice decides which load and start
-  CHECK(dlls.size() == 2 && dlls[0] == (root / "mods" / "a" / "First.dll").wstring() &&
-        dlls[1] == (root / "mods" / "b" / "Second.dll").wstring());
+  CHECK(dlls.size() == 1 && dlls[0] == (root / "mods" / "b" / "Second.dll").wstring());
   CHECK(save_selection(ini, {}));
   CHECK(saved_selection(ini, mods).empty());  // an empty saved selection stays empty
   fs::remove_all(root, error);
@@ -388,6 +399,143 @@ void real_mod_runs_when_an_impostor_sorts_first() {
     CHECK(refused[1].why == "Author is PhasmoMods, which is reserved for bundled mods.");
     CHECK(problems.find(L"in a cannot be used. id uses the author") != std::wstring::npos);
     CHECK(problems.find(L"repeats the id") == std::wstring::npos);  // the impostor never took the real one's id
+  }
+  fs::remove_all(root, error);
+}
+
+/** The launcher reads two mods folders: its own "mods" beside it, which updates replace, and
+ *  %LOCALAPPDATA%\PhasmoMods\mods, which no update replaces and which is made empty when it is missing, so
+ *  players have somewhere to put a downloaded mod. LOCALAPPDATA is a temporary folder for this whole run. */
+void missing_appdata_folder_is_created_by_the_launcher() {
+  using namespace pm::launcher;
+  namespace fs = std::filesystem;
+  std::error_code error;
+  const fs::path root = fs::path(fixturePath).parent_path() / (L"pg-roots-" + std::to_wstring(GetCurrentProcessId()));
+  const fs::path appdata = fs::path(localTemp) / L"PhasmoMods" / L"mods";
+  fs::remove_all(root, error);
+  fs::remove_all(appdata, error);
+  const auto folders = mods_folders(root);
+  CHECK(folders.size() == 2);
+  CHECK(folders[0].path == root / L"mods" && folders[0].place == pm::modlist::Place::InstallFolder);
+  CHECK(!fs::exists(root / L"mods", error));  // the install folder is the package's, never made here
+  CHECK(folders[1].path == appdata && folders[1].place == pm::modlist::Place::Elsewhere);
+  CHECK(fs::is_directory(appdata, error));  // a missing AppData mods folder is created
+  CHECK(fs::directory_iterator(appdata) == fs::directory_iterator{});  // and it is empty
+  fs::remove_all(root, error);
+}
+
+/** A mod in the AppData mods folder is found like any other, after the install folder's in root order. */
+void appdata_mods_are_found() {
+  using namespace pm::launcher;
+  namespace fs = std::filesystem;
+  const fs::path root = fs::path(fixturePath).parent_path() / (L"pg-two-" + std::to_wstring(GetCurrentProcessId()));
+  std::error_code error;
+  fs::remove_all(root, error);
+  const auto write = [&](const fs::path& file, const std::string& text) {
+    fs::create_directories(file.parent_path(), error);
+    std::ofstream(file, std::ios::binary) << text;
+  };
+  const auto json = [](const std::string& id, const std::string& dll) {
+    return R"({"id":")" + id + R"(","name":"N","author":"Me","version":"1.2.3","description":"One","dll":")" + dll + R"("})";
+  };
+  write(root / "inst" / "one" / "manifest.json", json("me.one", "One.dll"));
+  write(root / "inst" / "one" / "One.dll", "x");
+  write(root / "app" / "two" / "manifest.json", json("me.two", "Two.dll"));
+  write(root / "app" / "two" / "Two.dll", "x");
+  std::wstring problems;
+  std::vector<pm::modlist::Refused> refused;
+  const auto mods = discover_mods({{root / "inst", pm::modlist::Place::InstallFolder},
+                                   {root / "app", pm::modlist::Place::Elsewhere}}, problems, refused);
+  CHECK(mods.size() == 2 && mods[0].manifest.id == "me.one" && mods[1].manifest.id == "me.two");
+  CHECK(mods.size() == 2 && mods[1].dll == (root / "app" / "two" / "Two.dll").wstring());
+  CHECK(refused.empty() && problems.empty());
+  fs::remove_all(root, error);
+}
+
+/** The AppData folder is somewhere else: a mod there cannot take a bundled mod's id, and the bundled mod
+ *  beside the launcher still runs. */
+void appdata_mods_are_elsewhere() {
+  using namespace pm::launcher;
+  namespace fs = std::filesystem;
+  const fs::path root = fs::path(fixturePath).parent_path() / (L"pg-else-" + std::to_wstring(GetCurrentProcessId()));
+  std::error_code error;
+  fs::remove_all(root, error);
+  const auto write = [&](const fs::path& file, const std::string& text) {
+    fs::create_directories(file.parent_path(), error);
+    std::ofstream(file, std::ios::binary) << text;
+  };
+  write(root / "app" / "ghost_tells" / "manifest.json",
+        R"({"id":"phasmomods.ghost-tells","name":"N","author":"Me","version":"1.0.0","description":"One","dll":"GhostTells.dll"})");
+  write(root / "app" / "ghost_tells" / "GhostTells.dll", "x");
+  std::wstring problems;
+  std::vector<pm::modlist::Refused> refused;
+  const auto mods = discover_mods({{root / "inst", pm::modlist::Place::InstallFolder},
+                                   {root / "app", pm::modlist::Place::Elsewhere}}, problems, refused);
+  CHECK(mods.empty());
+  CHECK(refused.size() == 1 && refused[0].name == "ghost_tells");
+  CHECK(refused[0].why == "id uses the author \"phasmomods\", which is reserved for bundled mods.");
+  fs::remove_all(root, error);
+}
+
+/** And a mod there cannot claim the project's author in its manifest either, while the same claim beside the
+ *  launcher (a bundled mod) stays allowed. */
+void reserved_author_refused_in_appdata() {
+  using namespace pm::launcher;
+  namespace fs = std::filesystem;
+  const fs::path root = fs::path(fixturePath).parent_path() / (L"pg-auth-" + std::to_wstring(GetCurrentProcessId()));
+  std::error_code error;
+  fs::remove_all(root, error);
+  const auto write = [&](const fs::path& file, const std::string& text) {
+    fs::create_directories(file.parent_path(), error);
+    std::ofstream(file, std::ios::binary) << text;
+  };
+  const auto json = [](const std::string& id) {
+    return R"({"id":")" + id + R"(","name":"N","author":"PhasmoMods","version":"1.0.0","description":"One","dll":"Tells.dll"})";
+  };
+  write(root / "inst" / "mod" / "manifest.json", json("inst.tells"));  // a bundled mod, allowed
+  write(root / "inst" / "mod" / "Tells.dll", "x");
+  write(root / "app" / "mod" / "manifest.json", json("app.tells"));    // same claim somewhere else, refused
+  write(root / "app" / "mod" / "Tells.dll", "x");
+  std::wstring problems;
+  std::vector<pm::modlist::Refused> refused;
+  const auto mods = discover_mods({{root / "inst", pm::modlist::Place::InstallFolder},
+                                   {root / "app", pm::modlist::Place::Elsewhere}}, problems, refused);
+  CHECK(mods.size() == 1 && mods[0].manifest.id == "inst.tells");
+  CHECK(refused.size() == 1 && refused[0].name == "mod");
+  CHECK(refused[0].why == "Author is PhasmoMods, which is reserved for bundled mods.");
+  fs::remove_all(root, error);
+}
+
+/** One id in both mods folders is a conflict in both: every copy is refused, each naming the other's folder. */
+void duplicate_id_across_folders_refuses_both() {
+  using namespace pm::launcher;
+  namespace fs = std::filesystem;
+  const fs::path root = fs::path(fixturePath).parent_path() / (L"pg-dupe-" + std::to_wstring(GetCurrentProcessId()));
+  std::error_code error;
+  fs::remove_all(root, error);
+  const auto write = [&](const fs::path& file, const std::string& text) {
+    fs::create_directories(file.parent_path(), error);
+    std::ofstream(file, std::ios::binary) << text;
+  };
+  const auto json = [](const std::string& id) {
+    return R"({"id":")" + id + R"(","name":"N","author":"Me","version":"1.0.0","description":"One","dll":"Same.dll"})";
+  };
+  write(root / "inst" / "x" / "manifest.json", json("me.same"));
+  write(root / "inst" / "x" / "Same.dll", "x");
+  write(root / "app" / "x" / "manifest.json", json("me.same"));
+  write(root / "app" / "x" / "Same.dll", "x");
+  std::wstring problems;
+  std::vector<pm::modlist::Refused> refused;
+  const auto mods = discover_mods({{root / "inst", pm::modlist::Place::InstallFolder},
+                                   {root / "app", pm::modlist::Place::Elsewhere}}, problems, refused);
+  CHECK(mods.empty());
+  CHECK(refused.size() == 2 && refused[0].name == "x" && refused[1].name == "x");
+  if (refused.size() == 2) {
+    const std::string instWhy = pm::i18n::text("launcher.mod-repeats-id",
+                                               {{"folder", pm::text::narrow((root / "app" / "x").wstring())}});
+    const std::string appWhy = pm::i18n::text("launcher.mod-repeats-id",
+                                               {{"folder", pm::text::narrow((root / "inst" / "x").wstring())}});
+    CHECK(refused[0].why == instWhy && refused[1].why == appWhy);  // each copy names the other's folder
   }
   fs::remove_all(root, error);
 }
@@ -538,6 +686,11 @@ int main() {
   mod_folders();
   a_pack_folder_is_listed_with_its_stand_in();
   real_mod_runs_when_an_impostor_sorts_first();
+  missing_appdata_folder_is_created_by_the_launcher();
+  appdata_mods_are_found();
+  appdata_mods_are_elsewhere();
+  reserved_author_refused_in_appdata();
+  duplicate_id_across_folders_refuses_both();
   startup_wait();
   concurrent_startup();
   version_matches_version_file();

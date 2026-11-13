@@ -687,7 +687,7 @@ void a_stand_in_without_a_pack_manifest_never_loads(const fs::path& data, const 
   pm::log::set_sink(nullptr, nullptr);
 }
 
-// One id found twice is one mod: the second stays off, named, before any DLL could say so.
+// One id found twice is a conflict, not a winner: every copy stays off, and each row names the folder of the other.
 void a_repeated_id_is_refused_from_the_manifests(const fs::path& data) {
   pm::log::set_sink(&capture, "");
   pm::mods::Installed twice = fake_install(PM_FAKE_MOD);
@@ -695,9 +695,15 @@ void a_repeated_id_is_refused_from_the_manifests(const fs::path& data) {
   again.name = "Fake Again";
   twice.found.push_back({PM_FAKE_MOD_2_0, again});
   pm::mods::set_installed(data, twice);
-  CHECK(pm::mods::installed().size() == 1 && pm::mods::installed()[0].manifest.name == "Fake Mod");
-  CHECK(pm::mods::refused().size() == 1 && pm::mods::refused()[0].name == "Fake Again" &&
-        pm::mods::refused()[0].why == "Repeats the id of another mod.");
+  CHECK(pm::mods::installed().empty());
+  const std::string firstWhy = pm::i18n::text("mods.id-repeated", {
+      {"folder", pm::text::narrow(fs::path(PM_FAKE_MOD_2_0).parent_path().wstring())}});
+  const std::string secondWhy = pm::i18n::text("mods.id-repeated", {
+      {"folder", pm::text::narrow(fs::path(PM_FAKE_MOD).parent_path().wstring())}});
+  CHECK(pm::mods::refused().size() == 2 && pm::mods::refused()[0].name == "Fake Mod" &&
+        pm::mods::refused()[0].why == firstWhy);
+  CHECK(pm::mods::refused().size() == 2 && pm::mods::refused()[1].name == "Fake Again" &&
+        pm::mods::refused()[1].why == secondWhy);
   pm::log::set_sink(nullptr, nullptr);
 }
 
@@ -1426,6 +1432,41 @@ void a_mods_folder_beside_a_copied_host_is_elsewhere(const fs::path& data, const
   fs::remove_all(data / "bin" / "mods", error);
 }
 
+// The host reads the data folder's "mods" too, where players put other authors' mods: it is somewhere else,
+// its mods come after the host folder's, and one id found in both folders is refused in both.
+void the_host_reads_the_data_folder_mods_too(const fs::path& data, const fs::path& root) {
+  const fs::path package = root / "both" / "package";
+  const auto json = [](const std::string& id, const std::string& name, const std::string& dll) {
+    return R"({"id":")" + id + R"(","name":")" + name + R"(","author":"Me","version":"1.0.0","description":"D","dll":")" + dll + R"("})";
+  };
+  write(package / "mods" / "one" / "manifest.json", json("me.one", "One", "One.dll"));
+  write(data / "mods" / "two" / "manifest.json", json("me.two", "Two", "Two.dll"));
+  const pm::mods::Installed found = pm::mods::find(data, package, 81);
+  CHECK(found.found.size() == 2 && found.refused.empty());
+  if (found.found.size() == 2) {
+    CHECK(found.found[0].manifest.id == "me.one" && found.found[1].manifest.id == "me.two");  // the host folder first
+    CHECK(found.found[1].dll == (data / "mods" / "two" / "Two.dll").wstring());
+  }
+  // A repeated id across the two folders: find reports what is on disk, and every copy then stays off, naming the other.
+  write(package / "mods" / "x" / "manifest.json", json("me.same", "X One", "Same.dll"));
+  write(data / "mods" / "x" / "manifest.json", json("me.same", "X Two", "Same.dll"));
+  const pm::mods::Installed twice = pm::mods::find(data, package, 82);
+  CHECK(twice.found.size() == 4);
+  pm::mods::set_installed(data, twice);
+  CHECK(pm::mods::installed().size() == 2);
+  const std::string xOneWhy = pm::i18n::text("mods.id-repeated", {
+      {"folder", pm::text::narrow((data / "mods" / "x").wstring())}});
+  const std::string xTwoWhy = pm::i18n::text("mods.id-repeated", {
+      {"folder", pm::text::narrow((package / "mods" / "x").wstring())}});
+  CHECK(pm::mods::refused().size() == 2 && pm::mods::refused()[0].name == "X One" &&
+        pm::mods::refused()[0].why == xOneWhy);
+  CHECK(pm::mods::refused().size() == 2 && pm::mods::refused()[1].name == "X Two" &&
+        pm::mods::refused()[1].why == xTwoWhy);
+  std::error_code error;
+  fs::remove_all(data / "mods", error);
+  fs::remove_all(root / "both", error);
+}
+
 // Where the mods folder beside the host counts as being: an error that cannot rule out a real bin counts as bin, so a mods
 // folder the host cannot judge is never trusted. No bin at all is the usual first run.
 void a_folder_that_cannot_be_told_from_bin_counts_as_elsewhere(const fs::path& root) {
@@ -1604,6 +1645,7 @@ int main() {
   mod_started_can_turn_true_after_pmmod_start(data);
   bundled_mods_declare_their_dependencies();
   a_mods_folder_beside_a_copied_host_is_elsewhere(data, root);
+  the_host_reads_the_data_folder_mods_too(data, root);
   a_folder_that_cannot_be_told_from_bin_counts_as_elsewhere(root);
   a_host_with_no_folder_finds_nothing(data, root);
 

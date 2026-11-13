@@ -190,6 +190,40 @@ void bundled_mod_may_use_the_reserved_author() {
   CHECK(read_mod("{", "", Place::Elsewhere, m, why) == Reading::Refused && why.find("not valid JSON") != std::string::npos);
 }
 
+// The mod folders both the launcher and the host read: every root's sub-folders in name order, the roots
+// in the order given, so the install folder's mods come first. A root that is not there adds nothing, and
+// a root that is another root already read is read once, under the earlier root's place.
+void mod_folders_are_read_in_root_order_and_name_order() {
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / (L"pg-folders-" + std::to_wstring(GetCurrentProcessId()));
+  std::error_code error;
+  fs::remove_all(root, error);
+  for (const char* name : {"install/mods/beta", "install/mods/alpha", "appdata/mods/gamma"})
+    fs::create_directories(root / name, error);
+  const auto folders = mod_folders({{root / "install" / "mods", Place::InstallFolder},
+                                    {root / "appdata" / "mods", Place::Elsewhere}});
+  CHECK(folders.size() == 3);
+  CHECK(folders[0].first == root / "install" / "mods" / "alpha" && folders[0].second == Place::InstallFolder);
+  CHECK(folders[1].first == root / "install" / "mods" / "beta");
+  CHECK(folders[2].first == root / "appdata" / "mods" / "gamma" && folders[2].second == Place::Elsewhere);
+  CHECK(mod_folders({{root / "not-there"}, {root / "appdata" / "mods", Place::Elsewhere}}).size() == 1);
+  const auto twice = mod_folders({{root / "install" / "mods", Place::InstallFolder},
+                                  {root / "install" / "mods" / ".." / "mods", Place::Elsewhere}});
+  CHECK(twice.size() == 2 && twice[0].second == Place::InstallFolder && twice[1].second == Place::InstallFolder);
+  fs::remove_all(root, error);
+}
+
+// A mod id found more than once, in one folder or across two: every copy is a repeat, and each names the
+// folders of all the others (the shape SMAPI's duplicate refusal takes).
+void every_copy_of_a_repeated_id_names_the_others() {
+  const auto repeats = folders_of_repeats({"me.a", "me.b", "me.a", "me.a"}, {"one", "two", "three", "four"});
+  CHECK(repeats.size() == 4);
+  CHECK(repeats[0] == (std::vector<std::string>{"three", "four"}));
+  CHECK(repeats[1].empty());
+  CHECK(repeats[2] == (std::vector<std::string>{"one", "four"}));
+  CHECK(repeats[3] == (std::vector<std::string>{"one", "three"}));
+}
+
 void the_developer_flag_shows_developer_mods_and_hides_them() {
   CHECK(!parse_developer(""));
   CHECK(!parse_developer("enabled=a.b\n"));              // no line at all: off
@@ -242,6 +276,8 @@ int main() {
   requires_is_parsed();
   third_party_mod_cannot_claim_the_reserved_id_author();
   third_party_mod_cannot_claim_the_reserved_author_name();
+  mod_folders_are_read_in_root_order_and_name_order();
+  every_copy_of_a_repeated_id_names_the_others();
   bundled_mod_may_use_the_reserved_author();
   the_developer_flag_shows_developer_mods_and_hides_them();
   return g_failures ? 1 : 0;
