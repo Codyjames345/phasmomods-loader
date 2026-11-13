@@ -4,6 +4,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <string>
@@ -20,7 +21,9 @@
 // as SMAPI's do. A translation would be another file beside it (i18n/<language>.json); none exists yet.
 //
 // A key the table lacks shows as "[key]", so a missing text is seen, never silently blank, and the table's owner is told once
-// per key. Code reads its text with pm::i18n::text, giving the key and each token's value. Main thread.
+// per key. Code reads its text with pm::i18n::text, giving the key and each token's value. Looking up is safe from several
+// threads at once once the table has been loaded (the launcher looks up on its worker thread and its window thread both);
+// parsing, loading, merging and on_missing belong to one thread before any lookup.
 namespace pm::i18n {
 
 class Table {
@@ -87,6 +90,10 @@ class Table {
   std::string get(std::string_view key, Tokens tokens = {}) const {
     const auto it = entries_.find(key);
     if (it == entries_.end()) {
+      // Two threads can miss the same key at once (the launcher looks up text on its worker thread and its window thread),
+      // so the keys told and the tell they guard share a lock. A key the table has touches neither and stays lock-free.
+      // The callback must not look up text in this table: the lock is held across the call.
+      std::lock_guard<std::mutex> lock(told_mutex_);
       if (told_.insert(std::string(key)).second && missing_) missing_(std::string(key));
       return "[" + std::string(key) + "]";
     }
@@ -143,6 +150,7 @@ class Table {
  private:
   std::map<std::string, std::string, std::less<>> entries_;
   std::function<void(const std::string&)> missing_;
+  mutable std::mutex told_mutex_;  // guards both lines below: get() takes it only when the key is missing
   mutable std::set<std::string, std::less<>> told_;
 };
 

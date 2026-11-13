@@ -1,6 +1,7 @@
 // Offline test of the string tables (core/text_table.h) and of every table the project ships. Run: build\text_table_test.exe
 #include "text_table.h"
 
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -8,6 +9,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "check.h"
@@ -16,16 +18,16 @@ namespace {
 namespace fs = std::filesystem;
 using pm::i18n::Table;
 
-Table parsed(const char* json) {
-  Table t;
+// A table parsed from JSON. Table holds a mutex, so it is not copied out of here: the caller's table is filled in place.
+void parsed(Table& t, const char* json) {
   std::string why;
   CHECK(t.parse(json, why));
-  return t;
 }
 
 // A flat object of text, with comments, as SMAPI's i18n files are.
 void a_table_reads_text_and_comments() {
-  const Table t = parsed(R"({
+  Table t;
+  parsed(t, R"({
     // The lobby's popups
     "lobby.waiting": "Waiting for {{players}}.", // PM_TEXT_AI
     /* a block comment */ "lobby.left": "You left."
@@ -36,7 +38,8 @@ void a_table_reads_text_and_comments() {
 
 // Each {{token}} takes its value; one with none stays as written, so the gap is seen.
 void tokens_take_their_values() {
-  const Table t = parsed(R"({"k": "{{a}} and {{b}}, then {{a}} {{c}}", "brace": "a {{ b", "none": "plain"})");
+  Table t;
+  parsed(t, R"({"k": "{{a}} and {{b}}, then {{a}} {{c}}", "brace": "a {{ b", "none": "plain"})");
   CHECK(t.get("k", {{"a", "Alice"}, {"b", "Bob"}}) == "Alice and Bob, then Alice {{c}}");
   CHECK(t.get("brace", {{"b", "x"}}) == "a {{ b");
   CHECK(t.get("none", {{"a", "x"}}) == "plain");
@@ -46,7 +49,8 @@ void tokens_take_their_values() {
 
 // A missing key shows as [key], and its owner hears of it once.
 void a_missing_key_is_seen_and_told_once() {
-  Table t = parsed(R"({"a": "A"})");
+  Table t;
+  parsed(t, R"({"a": "A"})");
   std::vector<std::string> told;
   t.on_missing([&](const std::string& key) { told.push_back(key); });
   CHECK(t.get("lobby.gone") == "[lobby.gone]");
@@ -54,9 +58,29 @@ void a_missing_key_is_seen_and_told_once() {
   CHECK((told == std::vector<std::string>{"lobby.gone"}));
 }
 
+// The launcher reads text on its worker thread while the window thread reads it too (tools/launcher.cpp: the update check
+// and the status box), so one missing key can be looked up from several threads at once. Its owner must still hear of it
+// exactly once, and every reader still see [key].
+void a_missing_key_is_told_once_across_threads() {
+  Table t;
+  parsed(t, R"({"a": "A"})");
+  std::atomic<int> told{0};
+  t.on_missing([&](const std::string&) { ++told; });
+  std::atomic<int> wrong{0};
+  std::vector<std::thread> readers;
+  for (int i = 0; i < 8; ++i)
+    readers.emplace_back([&] {
+      for (int n = 0; n < 250; ++n)
+        if (t.get("lobby.gone") != "[lobby.gone]") ++wrong;
+    });
+  for (std::thread& reader : readers) reader.join();
+  CHECK(wrong.load() == 0 && told.load() == 1);
+}
+
 // What is not a flat object of text is refused, and leaves the table empty.
 void a_bad_table_is_refused() {
-  Table t = parsed(R"({"a": "A"})");
+  Table t;
+  parsed(t, R"({"a": "A"})");
   std::string why;
   CHECK(!t.parse("not json", why) && !why.empty() && t.size() == 0);
   CHECK(!t.parse(R"(["a"])", why));
@@ -189,6 +213,7 @@ int main() {
   a_table_reads_text_and_comments();
   tokens_take_their_values();
   a_missing_key_is_seen_and_told_once();
+  a_missing_key_is_told_once_across_threads();
   a_bad_table_is_refused();
   a_component_finds_its_table(fs::temp_directory_path());
   every_shipped_table_matches_its_code(PM_SOURCE_DIR);
