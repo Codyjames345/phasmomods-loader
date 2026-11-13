@@ -16,7 +16,8 @@ using phasmo::Vector3;
 bool create_hooks();  // before hooks::enable_all
 void reset();
 
-/** The frame's game time in seconds (pm::api::frame_time's deltaTime), at most 0.25 after a hitch; 0 unresolved. */
+/** The frame's game time in seconds (Time.deltaTime, as pm::api::frame_time gives it), at most 0.25 after a hitch; 0
+ * unresolved. */
 float frame_seconds();
 
 void* ghost();     // the contract's GhostAI, alive, or null

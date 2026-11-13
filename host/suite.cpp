@@ -114,15 +114,6 @@ void api_log(const char* line) {
     // Logging is best effort; a failed line is not worth failing the caller for.
   }
 }
-// The host contract's log_level (version 2.7): the line with its level, a level the contract does not know as info.
-void api_log_level(uint32_t level, const char* line) {
-  if (!line) return;
-  try {
-    PM_LOG_AT(log::level_of(level), "%s", line);
-  } catch (...) {
-    // Logging is best effort, as for api_log.
-  }
-}
 bool api_create_hook(void* target, void* detour, void** original, const char* name) {
   try {
     return hooks::create(target, detour, original, name);

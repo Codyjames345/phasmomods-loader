@@ -8,7 +8,27 @@ An entry is deleted in the change that fixes it. `/fix` takes a number or a few 
 a heading and does both halves; `/finding` writes a new entry; `harness-findings verify`
 reports an entry whose problem is already gone.
 
-<!-- next: 35 -->
+<!-- next: 36 -->
+
+## 35. Emotes still measures its frames with a clock of its own
+
+  mods/emotes/emote.cpp:1592
+
+  Emotes' tick takes its frame step from GetTickCount64, clamped to 0.1 s, and drives the dance animations and the
+  third-person view with it. The loader's services plan says no mod should measure its own frame time (stage 2b plan,
+  "Frame time"), and pm::api::frame_time() (sdk/api/frame_time.h) now gives Unity's own values; Ghost Tells moved onto
+  Time.deltaTime in Task 17's services round. Emotes was not named by that round. Moving it needs a choice the round
+  did not make: game time (follows the time scale, stops while it is 0) or real time (unscaledDeltaTime) for a dance
+  and its song. Spectral Flame's frame.now is a millisecond deadline clock, not a frame step, and is not part of this.
+  Found while reviewing Task 17's services round (2026-11-14).
+
+  Prompt:
+  > In PhasmoMods Loader, mods/emotes/emote.cpp's tick computes its frame step from GetTickCount64 (clamped to 0.1 s)
+  > instead of the frame time the SDK now gives (pm::api::frame_time() in sdk/api/frame_time.h, Unity's Time getters).
+  > Ask the author whether a dance should follow game time (deltaTime, which stops when the time scale is 0) or real time
+  > (unscaledDeltaTime), then move the tick onto that value, keep or drop the 0.1 s clamp as the author says, record the
+  > behaviour difference in the task report and the ledger, and test it over the fake backend as
+  > tests/ghost_tells_test.cpp's the_tells_time_is_the_games_frame_time does.
 
 ## 32. A community mod has only the install folder to live in, which an update may replace
 

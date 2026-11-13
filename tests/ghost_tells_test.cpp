@@ -690,7 +690,7 @@ void bind() {
 float g_deltaTime = 0;
 float delta_time(const void*) { return g_deltaTime; }
 
-// The tells' timers run on the frame's game time (Time.deltaTime through pm::api::frame_time), held to a quarter of a
+// The tells' timers run on the frame's game time (Time.deltaTime, as pm::api::frame_time reads it), held to a quarter of a
 // second after a hitch as the mod's own clock was; without the getter they stand still.
 void the_tells_time_is_the_games_frame_time() {
   start();
@@ -706,6 +706,16 @@ void the_tells_time_is_the_games_frame_time() {
   bind();
   g_deltaTime = 0.02f;
   CHECK(world::frame_seconds() == 0.0f);
+  // The one Time entry the tells read is the one they require: a build without the other getters still runs them.
+  const char* const* keys = nullptr;
+  const size_t n = api::used_required(&keys);
+  bool delta = false, other = false;
+  for (size_t i = 0; i < n; ++i) {
+    const std::string key = keys[i];
+    delta = delta || key == "Time.get_deltaTime";
+    other = other || key == "Time.get_unscaledDeltaTime" || key == "Time.get_time" || key == "Time.get_unscaledTime";
+  }
+  CHECK(delta && !other);
 }
 
 void the_world_reads_the_ghost_its_room_and_the_players() {

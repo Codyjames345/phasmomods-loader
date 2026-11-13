@@ -9,10 +9,10 @@
 #include "LevelController.h"
 #include "Photon.h"
 #include "Player.h"
+#include "UnityAudio.h"
 #include "UnityObject.h"
 #include "UnityWorld.h"
 #include "game.h"
-#include "frame_time.h"
 #include "game_api.h"
 #include "held.h"
 #include "runtime.h"
@@ -194,6 +194,7 @@ int living_within(Vector3 p, float range) {
   return n;
 }
 
-float frame_seconds() { return std::clamp(api::frame_time().deltaTime, 0.0f, kLongestFrame); }
+// Time.get_deltaTime alone, as pm::api::frame_time reads it: the one Time entry the tells require.
+float frame_seconds() { return std::clamp(phasmo::Time::get_deltaTime(), 0.0f, kLongestFrame); }
 
 }  // namespace pm::tells::world

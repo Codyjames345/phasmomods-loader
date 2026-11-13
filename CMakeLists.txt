@@ -279,7 +279,7 @@ target_compile_definitions(startup_test PRIVATE PM_HOST PM_SUITE_VERSION="${PM_S
 target_include_directories(startup_test PRIVATE sdk/map)
 pm_test(build_check)
 target_link_libraries(build_check_test PRIVATE bcrypt)
-pm_test(inject)
+pm_test(inject core/log.cpp)  # core/log.cpp: the level words the launcher strips
 pm_test(assets sdk/api/assets.cpp)
 target_compile_definitions(inject_test PRIVATE UNICODE _UNICODE)
 pm_test(update tools/update.cpp tools/launcher.cpp host/mod_deps.cpp)
