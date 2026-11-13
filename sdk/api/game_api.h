@@ -55,6 +55,7 @@
 #include "entry.h"
 #include "hooks.h"
 #include "mod_api.h"
+#include "ref.h"
 
 namespace pm::api {
 
@@ -540,6 +541,18 @@ struct Type {
     return detail::fields_of_type(D.key, obj, F::desc.key, arrayOf, out, static_cast<uint32_t>(max));
   }
 };
+
+/// The object `x` as a handle of the map's type D, when the runtime says it is one: of D or of a class
+/// derived from it, following the class's parents as Type::is does. The checked way down from a base
+/// type's handle or an Object (ref.h). Calling it makes D required, as Type::is does. Main thread.
+/// @tparam D A map entry of kind Type; never an interface, which no object matches.
+/// @param x Any handle, or null; a Ref of any type converts to the Object it takes.
+/// @return The handle of type D to the same object; null for a null `x`, an object of another type, and
+///   when D did not resolve (logged once).
+template <const sdk::EntryDesc& D>
+Ref<D> as(Object x) {
+  return Use<D>::entry() && x && detail::is_instance(x.raw(), D.key) ? Ref<D>::unchecked(x.raw()) : Ref<D>{};
+}
 
 /// A GameObject of the game's scenes or prefabs, found by its path from an object the mod already holds
 /// (a Scene entry). The path is the entry's, never the mod's: the game API takes no raw path string.
