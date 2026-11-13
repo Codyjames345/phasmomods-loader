@@ -105,6 +105,15 @@ on in the **Mods** panel switches on what it needs, and switching one off switch
 the mods that need it. If a mod can't run, every mod that needs it stays off too, and its
 row in the panel says why.
 
+## Someone else's mods
+
+A mod you downloaded goes in `%LOCALAPPDATA%\PhasmoMods\mods`: one folder each holding
+the mod's `manifest.json`, its DLL and any `i18n` folder it brings. The launcher finds
+it there, the same as the mods that come with the loader, and you tick it in the
+**Mods** panel. That folder is yours: no update replaces it, and uninstalling the
+loader leaves it alone. The `mods` folder inside the loader's own install folder holds
+the mods that ship with it, and an update may replace it, so put nothing there yourself.
+
 ## Install
 
 1. Download `PhasmoModsLoader-win-Setup.exe` from the latest release and run it.

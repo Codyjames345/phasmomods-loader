@@ -216,10 +216,10 @@ target_link_libraries(ExampleGhost PRIVATE pmmod)
 
 `pmmod` is the static library every mod links: the SDK's glue (`core/mod_glue.cpp`), the string table and the game
 API. Build with MSVC for x64, as the bundled mods are. To try a build, put `ExampleGhost.dll`, `manifest.json` and the
-`i18n` folder together in a folder of their own under the `mods` folder beside PhasmoMods Loader, then choose the mod
-in the Mods panel outside a lobby. That is the only mods folder today, and a loader update may replace it; a folder
-for other authors' mods in `%LOCALAPPDATA%\PhasmoMods\mods` is planned (README, "What exists today, and what does
-not"). Never put a mod or any loader file in the game's folder.
+`i18n` folder together in a folder of their own under `%LOCALAPPDATA%\PhasmoMods\mods`, then choose the
+mod in the Mods panel outside a lobby. That is where your mod belongs: a loader update never replaces
+it. The `mods` folder beside PhasmoMods Loader holds the mods that ship with the loader, and an update
+may replace it. Never put a mod or any loader file in the game's folder.
 
 ## Testing it without the game
 

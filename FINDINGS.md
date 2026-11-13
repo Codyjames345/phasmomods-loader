@@ -10,27 +10,6 @@ reports an entry whose problem is already gone.
 
 <!-- next: 35 -->
 
-## 32. A community mod has only the install folder to live in, which an update may replace
-
-  tools/launcher.cpp:525
-
-  The launcher discovers mods only in the `mods` folder beside it (discover_mods with Place::InstallFolder), and the
-  host reads the same folder when the launcher did not start it. core/mod_list.h already names a second place
-  (Place::Elsewhere, "such as one in %LOCALAPPDATA%\PhasmoMods"), and the reserved-author rule is built around it, but
-  nothing reads one. The installer and updater are Velopack's (tools/update_velopack.cpp), whose install keeps the
-  program in a `current` folder that each update replaces, so a community mod a player copied there is likely lost on
-  the next update. Not checked on a real update. sdk/README.md ("Does not exist yet") plans that folder in
-  %LOCALAPPDATA%\PhasmoMods\mods for stage 2; the stage 2b plan names it only as an example in the reserved-author
-  rule, and no task builds it. Found while writing sdk/guides/adding-a-ghost.md (stage 2b Task 14 Step 2).
-
-  Prompt:
-  > PhasmoMods Loader finds mods only in the `mods` folder beside the launcher (tools/launcher.cpp discover_mods, and
-  > host/mods.cpp when the launcher did not start the game). core/mod_list.h's Place::Elsewhere names a mods folder
-  > outside the install folder that nothing reads yet. First confirm on a Velopack install whether an update keeps a
-  > folder added under `current\mods`. Then confirm with the author that %LOCALAPPDATA%\PhasmoMods\mods, which
-  > sdk/README.md plans, is still where community mods should live, before adding it to discovery, the launcher's copy
-  > step and the Mods panel. Update sdk/guides/adding-a-ghost.md, docs/installation.md and this entry together.
-
 ## 31. Five mod-drawn windows remain, against the vanilla-UI rule
 
   core/notice.h:1

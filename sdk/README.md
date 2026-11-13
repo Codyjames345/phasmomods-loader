@@ -45,7 +45,6 @@ which are themselves written on the game API.
 Does not exist yet. These arrive with stage 2, when every bundled mod is on the game API:
 
 - the downloadable SDK zip with a template mod;
-- the mods folder in `%LOCALAPPDATA%\PhasmoMods\mods` for other authors' mods;
 - the generated game API reference. Until then this README, the headers and `sdk/systems` are the
   documentation, and each header's `///` notes are the reference. The pages include
   [the vanilla ghosts, type by type](systems/vanilla-ghosts.md) (what each ghost type does differently),
