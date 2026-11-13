@@ -34,6 +34,12 @@ git merge main                      # brings the new VERSION back
 git push
 ```
 
+- **Write the entries first.** `CHANGELOG.md` must have at least one entry under `## [Unreleased]` before
+  `tools\release.ps1` accepts a version; until then it refuses and says so. When it runs, it turns that section into
+  `## [<version>] - <today>` and opens a fresh empty `## [Unreleased]` above it, in the same commit as the `VERSION`
+  bump. The workflow puts a release's section on its GitHub release page, and a development build's notes are the
+  Unreleased section as it stands when that build is packed. Entries are what players read, so a person writes them
+  (`AI_POLICY.md`).
 - **Merge, don't squash.** `development` lives on, and a squash hides what it has already merged, so the next merge conflicts with
   its own past.
 - **Tag only on `main`.** `tools/release.ps1` bumps `VERSION`, tags and pushes atomically, and the workflow refuses a tag that isn't on

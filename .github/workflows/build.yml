@@ -207,6 +207,16 @@ jobs:
           dotnet tool run vpk upload github --repoUrl $env:REPO_URL --publish --pre --channel dev --tag "dev-$env:DEV_VERSION" `
               --targetCommitish $env:GITHUB_SHA --releaseName "PhasmoMods development $env:DEV_VERSION" --outputDir dist/releases --token $env:GH_TOKEN
           if ($LASTEXITCODE -ne 0) { throw "vpk upload failed with exit code $LASTEXITCODE." }
+          # vpk cannot write a release's body, so the notes come after: the Unreleased section of CHANGELOG.md,
+          # and no body at all when it is empty.
+          $notes = @(& tools/changelog_section.ps1 -Version Unreleased)
+          if ($LASTEXITCODE -ne 0) { throw "CHANGELOG.md has no Unreleased section, which release.ps1 always leaves. Exit code $LASTEXITCODE." }
+          if ($notes.Count) {
+            $notesFile = Join-Path $env:RUNNER_TEMP 'development-notes.md'
+            $notes | Set-Content -LiteralPath $notesFile
+            gh release edit "dev-$env:DEV_VERSION" --notes-file $notesFile
+            if ($LASTEXITCODE -ne 0) { throw "gh release edit failed with exit code $LASTEXITCODE." }
+          }
       - name: Remove old development builds
         shell: pwsh
         env:
@@ -316,3 +326,12 @@ jobs:
           dotnet tool run vpk upload github --repoUrl $env:REPO_URL --publish --tag $env:TAG `
               --releaseName "PhasmoMods $env:TAG" --outputDir dist/releases --token $env:GH_TOKEN
           if ($LASTEXITCODE -ne 0) { throw "vpk upload failed with exit code $LASTEXITCODE." }
+          # vpk cannot write a release's body, so the notes come after: the section release.ps1 wrote for this
+          # version. A tag with no section never came from release.ps1, so this fails rather than ship blank notes.
+          $version = $env:TAG -replace '^v', ''
+          $notes = @(& tools/changelog_section.ps1 -Version $version)
+          if ($LASTEXITCODE -ne 0) { throw "CHANGELOG.md has no section for $version; a release comes from tools/release.ps1, which writes one." }
+          $notesFile = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          $notes | Set-Content -LiteralPath $notesFile
+          gh release edit $env:TAG --notes-file $notesFile
+          if ($LASTEXITCODE -ne 0) { throw "gh release edit failed with exit code $LASTEXITCODE." }

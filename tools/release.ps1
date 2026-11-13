@@ -1,6 +1,9 @@
 # Bump the suite version, commit it and tag it. Usage: tools\release.ps1 -Version <x.y.z> [-Push] [-NoCheckedBuild]
 # -Push also sends main and the new tag to origin together, which starts the release workflow.
 # It builds first, so the map it checks is the map being released.
+# It refuses until CHANGELOG.md's Unreleased section holds entries, then turns that section into the dated
+# notes for this version and starts an empty Unreleased, all in the same commit as the bump (tools/changelog_section.ps1
+# reads that section back when the workflow publishes the release).
 # -NoCheckedBuild releases a map no checked-build record holds, for a fix that must ship while the live game build still has
 # an unresolved entry (tools/check_build_record.ps1): the release commit also holds the file that lets CI through, and
 # every player's notice says the game updated. Without it the release refuses.
@@ -40,6 +43,14 @@ if ([version]$Version -le [version]$current) { throw "The version $Version must 
 $tag = "v$Version"
 if (@(Invoke-Git @('tag', '--list', $tag)).Count) { throw "The tag $tag already exists." }
 
+# The players' release notes are written by a person in CHANGELOG.md (AI_POLICY.md) before the release runs:
+# the Unreleased section must hold at least one entry. Its words here are for the maintainer, not the player.
+$changelogFile = Join-Path $root 'CHANGELOG.md'
+if (-not (Test-Path -LiteralPath $changelogFile -PathType Leaf)) { throw "CHANGELOG.md is missing. Write the release notes for $Version there first." }
+$unreleased = @(& (Join-Path $PSScriptRoot 'changelog_section.ps1') -Version 'Unreleased' -Path $changelogFile)
+if ($LASTEXITCODE -ne 0) { throw "CHANGELOG.md has no ## [Unreleased] section. Write the release notes for $Version there first." }
+if (@($unreleased | Where-Object { $_.Trim() -ne '' }).Count -eq 0) { throw "The Unreleased section of CHANGELOG.md has no entries. Write the release notes for $Version there first." }
+
 if ($NoCheckedBuild) {
     $digestFile = Join-Path $root 'build/map-digest.txt'
     if (-not (Test-Path -LiteralPath $digestFile -PathType Leaf)) { throw 'build\map-digest.txt is missing. The build should have written it.' }
@@ -47,8 +58,22 @@ if ($NoCheckedBuild) {
     & (Join-Path $PSScriptRoot 'check_build_record.ps1') -Root $root
     Invoke-Git @('add', '--', 'sdk/builds/unchecked-release.allow') | Out-Null
 }
+# Turn Unreleased into the version's own dated section and open a fresh empty one above it, last of the checks
+# so nothing can fail after the edit; the release commit carries this file with the VERSION bump, and the
+# workflow reads that section as the release's notes.
+$changelogLines = @(Get-Content -LiteralPath $changelogFile)
+$datedHeading = "## [$Version] - $(Get-Date -Format 'yyyy-MM-dd')"
+for ($i = 0; $i -lt $changelogLines.Count; $i++) {
+    if ($changelogLines[$i] -match '^## \[Unreleased\]\s*$') {
+        $before = if ($i -gt 0) { $changelogLines[0..($i - 1)] } else { @() }
+        $after = if ($i + 1 -lt $changelogLines.Count) { $changelogLines[($i + 1)..($changelogLines.Count - 1)] } else { @() }
+        $changelogLines = @($before) + @('## [Unreleased]', '', $datedHeading) + @($after)
+        break
+    }
+}
+Set-Content -LiteralPath $changelogFile -Value $changelogLines
 Set-Content -LiteralPath $versionFile -Value $Version
-Invoke-Git @('add', '--', 'VERSION') | Out-Null
+Invoke-Git @('add', '--', 'CHANGELOG.md', 'VERSION') | Out-Null
 Invoke-Git @('commit', '--quiet', '--message', "Release $Version",
     '--message', "Raise the suite version from $current to $Version. Pushing the $tag tag builds and publishes the release.") | Out-Null
 # From here on a failure leaves the release commit (and perhaps the tag) behind, so it says how to
