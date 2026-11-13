@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -23,6 +24,17 @@ namespace pm::emotes {
 
 /// The most emotes one pack's file may hold.
 inline constexpr size_t kMaxEmotesPerPack = 64;
+
+/// A synced emote's second dancer's part (docs/superpowers/specs/2026-11-13-synced-emotes-design.md): the clip that dancer
+/// plays, where they stand, and the song the pair hears once they are two.
+struct PartnerDef {
+  std::string clip;       ///< the second dancer's clip, "Assets/....anim"
+  std::string introClip;  ///< played once before it, or empty; only with the first dancer's own introClip
+  std::string song;       ///< the synced song, which replaces the emote's song when the second dancer joins, or empty
+  std::string loudness;   ///< the synced song's loudness table; set exactly when song is
+  float offsetRight = 0.0f;    ///< where the second dancer stands, metres to the first dancer's right
+  float offsetForward = 0.0f;  ///< and metres in front of them
+};
 
 /// One emote as its pack's file describes it.
 struct EmoteDef {
@@ -40,6 +52,10 @@ struct EmoteDef {
   bool loops = true;
   SongLoop songLoop;         ///< {start, length} seconds; length 0 loops the song with its clip
   uint32_t key = 0;          ///< emote_key(id)
+  std::optional<PartnerDef> partner;  ///< the second dancer's part of a synced emote, or none
+
+  /// Whether two dancers dance it together.
+  bool synced() const { return partner.has_value(); }
 };
 
 /// One pack's whole catalogue.
@@ -112,7 +128,7 @@ inline bool is_loudness_path(std::string_view path) {
 inline bool known_emote_field(std::string_view field) {
   for (std::string_view f : {"name", "clip",   "moveClip", "introClip", "song", "introSong", "icon", "label",
                              "loudness", "introLoudness", "loops", "songLoop", "clipSource", "clipLoopGuess",
-                             "songSource", "songLoopGuess"})
+                             "songSource", "songLoopGuess", "partner"})
     if (f == field) return true;
   return false;
 }
@@ -260,6 +276,60 @@ inline bool parse_catalogue(std::string_view json, std::string_view packId, Cata
       if (!def.loops && (!def.moveClip.empty() || !def.introClip.empty())) {
         why = where + " is a one shot but sets a moveClip or introClip, which only a looping emote can play";
         return false;
+      }
+      if (const auto partner = e.find("partner"); partner != e.end()) {
+        const std::string who = where + ".partner";
+        if (!partner->is_object()) {
+          why = who + " is not an object";
+          return false;
+        }
+        for (auto item = partner->begin(); item != partner->end(); ++item) {
+          const std::string_view field = item.key();
+          if (field != "clip" && field != "introClip" && field != "song" && field != "loudness" && field != "offset")
+            result.warnings.push_back(who + "." + item.key());
+        }
+        PartnerDef part;
+        if (!detail::read_string(*partner, "clip", part.clip, why, true, who)) return false;
+        if (!detail::read_string(*partner, "introClip", part.introClip, why, false, who)) return false;
+        if (!detail::read_string(*partner, "song", part.song, why, false, who)) return false;
+        if (!detail::read_string(*partner, "loudness", part.loudness, why, false, who)) return false;
+        const auto offset = partner->find("offset");
+        const bool hasOffset = offset != partner->end() && offset->is_object();
+        const auto right = hasOffset ? offset->find("right") : offset;
+        const auto forward = hasOffset ? offset->find("forward") : offset;
+        if (!hasOffset || right == offset->end() || forward == offset->end() || !right->is_number() ||
+            !forward->is_number() || !std::isfinite(right->get<double>()) || !std::isfinite(forward->get<double>())) {
+          why = who + " needs an offset with a right and a forward number of metres";
+          return false;
+        }
+        part.offsetRight = static_cast<float>(right->get<double>());
+        part.offsetForward = static_cast<float>(forward->get<double>());
+        if (badPath("partner clip", part.clip, detail::is_project_path(part.clip, ".anim"))) return false;
+        if (!part.introClip.empty() &&
+            badPath("partner introClip", part.introClip, detail::is_project_path(part.introClip, ".anim")))
+          return false;
+        if (!part.song.empty() && badPath("partner song", part.song, detail::is_song_path(part.song))) return false;
+        if (!part.loudness.empty() && !detail::is_loudness_path(part.loudness)) {
+          why = who + " has a loudness path that is not a .txt file under the pack's assets folder";
+          return false;
+        }
+        if (part.song.empty() != part.loudness.empty()) {
+          why = who + " sets one of song and loudness without the other";
+          return false;
+        }
+        if (!def.moveClip.empty()) {
+          why = where + " is synced but sets a moveClip: two dancers never walk together";
+          return false;
+        }
+        if (!def.loops) {
+          why = where + " is synced but a one shot: only a looping emote is danced together";
+          return false;
+        }
+        if (!part.introClip.empty() && def.introClip.empty()) {
+          why = who + " sets an introClip, which needs the first dancer's own introClip";
+          return false;
+        }
+        def.partner = std::move(part);
       }
       def.id = result.packId + "." + def.name;
       def.key = emote_key(def.id);

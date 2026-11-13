@@ -351,11 +351,120 @@ void a_broken_pack_is_reported_and_skipped() {
   CHECK(wheel.size() == 2);
 }
 
+// A synced emote (docs/superpowers/specs/2026-11-13-synced-emotes-design.md): a standing emote whose second dancer's
+// part the catalogue names, with where that dancer stands.
+nlohmann::json synced() {
+  nlohmann::json doc = nlohmann::json::parse(pack_json({"sway"}));
+  doc["emotes"][0]["partner"] = {{"clip", "Assets/Emotes/Clips/SwayPartner.anim"},
+                                 {"offset", {{"right", 1.3}, {"forward", 0}}}};
+  return doc;
+}
+
+void a_partner_part_is_read() {
+  Catalogue cat;
+  std::string why;
+  CHECK(parse_catalogue(synced().dump(), "p.x", cat, why));
+  CHECK(cat.warnings.empty());
+  CHECK(cat.emotes.size() == 1);
+  if (cat.emotes.size() != 1) return;
+  const EmoteDef& e = cat.emotes[0];
+  CHECK(e.synced() && e.partner && e.partner->clip == "Assets/Emotes/Clips/SwayPartner.anim");
+  CHECK(e.partner && near(e.partner->offsetRight, 1.3f) && near(e.partner->offsetForward, 0.0f));
+  CHECK(e.partner && e.partner->introClip.empty() && e.partner->song.empty() && e.partner->loudness.empty());
+  // An emote without a partner is not synced.
+  CHECK(parse_catalogue(pack_json({"floss"}), "p.x", cat, why) && !cat.emotes[0].synced());
+}
+
+void a_partner_needs_a_clip_and_an_offset() {
+  for (const char* drop : {"clip", "offset"}) {
+    nlohmann::json doc = synced();
+    doc["emotes"][0]["partner"].erase(drop);
+    refused(doc.dump());
+  }
+  nlohmann::json notObject = synced();
+  notObject["emotes"][0]["partner"] = "Assets/x.anim";
+  refused(notObject.dump());
+  nlohmann::json noForward = synced();
+  noForward["emotes"][0]["partner"]["offset"].erase("forward");
+  refused(noForward.dump());
+  nlohmann::json textOffset = synced();
+  textOffset["emotes"][0]["partner"]["offset"]["right"] = "far";
+  refused(textOffset.dump());
+}
+
+void a_partner_song_needs_its_loudness() {
+  nlohmann::json songOnly = synced();
+  songOnly["emotes"][0]["partner"]["song"] = "Assets/Emotes/Loops/sway_sync.wav";
+  refused(songOnly.dump());
+  nlohmann::json loudnessOnly = synced();
+  loudnessOnly["emotes"][0]["partner"]["loudness"] = "loudness/sway.partner.txt";
+  refused(loudnessOnly.dump());
+  nlohmann::json both = synced();
+  both["emotes"][0]["partner"]["song"] = "Assets/Emotes/Loops/sway_sync.wav";
+  both["emotes"][0]["partner"]["loudness"] = "loudness/sway.partner.txt";
+  Catalogue cat;
+  std::string why;
+  CHECK(parse_catalogue(both.dump(), "p.x", cat, why));
+  CHECK(!cat.emotes.empty() && cat.emotes[0].partner && cat.emotes[0].partner->song == "Assets/Emotes/Loops/sway_sync.wav");
+}
+
+void a_synced_emote_cannot_walk() {
+  nlohmann::json doc = synced();
+  doc["emotes"][0]["moveClip"] = "Assets/Emotes/Clips/SwayWalk.anim";
+  refused(doc.dump());
+}
+
+void a_partner_intro_needs_the_first_dancers_intro() {
+  nlohmann::json doc = synced();
+  doc["emotes"][0]["partner"]["introClip"] = "Assets/Emotes/Clips/SwayPartnerStart.anim";
+  refused(doc.dump());
+  doc["emotes"][0]["introClip"] = "Assets/Emotes/Clips/SwayStart.anim";
+  Catalogue cat;
+  std::string why;
+  CHECK(parse_catalogue(doc.dump(), "p.x", cat, why));
+}
+
+void partner_paths_obey_the_path_rules() {
+  for (const auto& [field, value] : std::vector<std::pair<const char*, const char*>>{
+           {"clip", "Assets/../x.anim"}, {"clip", "Other/x.anim"}, {"clip", "Assets/x.wav"},
+           {"introClip", "C:/x.anim"}, {"song", "Assets/x.anim"}, {"loudness", "../x.txt"}}) {
+    nlohmann::json doc = synced();
+    doc["emotes"][0]["introClip"] = "Assets/Emotes/Clips/SwayStart.anim";
+    doc["emotes"][0]["partner"]["song"] = "Assets/Emotes/Loops/sway_sync.wav";
+    doc["emotes"][0]["partner"]["loudness"] = "loudness/sway.partner.txt";
+    doc["emotes"][0]["partner"][field] = value;
+    refused(doc.dump());
+  }
+}
+
+void a_one_shot_cannot_be_synced() {
+  nlohmann::json doc = synced();
+  doc["emotes"][0]["loops"] = false;
+  refused(doc.dump());
+}
+
+void an_unknown_partner_field_warns() {
+  nlohmann::json doc = synced();
+  doc["emotes"][0]["partner"]["colour"] = "red";
+  Catalogue cat;
+  std::string why;
+  CHECK(parse_catalogue(doc.dump(), "p.x", cat, why));
+  CHECK(cat.warnings.size() == 1 && cat.warnings[0] == "emotes[0].partner.colour");
+}
+
 }  // namespace
 
 int main() {
   the_example_parses();
   the_example_pack_parses();
+  a_partner_part_is_read();
+  a_partner_needs_a_clip_and_an_offset();
+  a_partner_song_needs_its_loudness();
+  a_synced_emote_cannot_walk();
+  a_partner_intro_needs_the_first_dancers_intro();
+  partner_paths_obey_the_path_rules();
+  a_one_shot_cannot_be_synced();
+  an_unknown_partner_field_warns();
   format_other_than_1_is_refused();
   a_bundle_name_with_a_path_is_refused();
   a_path_outside_Assets_or_with_dotdot_is_refused();
