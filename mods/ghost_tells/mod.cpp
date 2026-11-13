@@ -1,6 +1,4 @@
-#include <windows.h>
-
-#include <algorithm>
+#include <cstdint>
 
 #include "gate.h"
 #include "gate_rule.h"
@@ -38,8 +36,7 @@ constexpr const char* kId = "phasmomods.ghost-tells";
 constexpr PmModInfo kInfo{PMMOD_API_VERSION, kId, "Ghost Tells", 6, 0};
 
 bool g_running = false;
-int g_told = -1;           // the told ghost whose rules run now, or -1
-ULONGLONG g_lastTick = 0;  // the last rules tick, for the frame's time
+int g_told = -1;  // the told ghost whose rules run now, or -1
 
 void stop_told(int told) {
   switch (told) {
@@ -60,7 +57,6 @@ void rules_start(void* user) {
   try {
     if (g_told >= 0) stop_told(g_told);
     g_told = static_cast<int>(reinterpret_cast<intptr_t>(user));
-    g_lastTick = 0;
     PM_LOG("GhostTells: on for this contract");
   } catch (...) {
   }
@@ -81,9 +77,7 @@ void rules_tick(void* user) {
   try {
     const int told = static_cast<int>(reinterpret_cast<intptr_t>(user));
     if (!g_running || told != g_told) return;
-    const ULONGLONG now = GetTickCount64();
-    const float dt = g_lastTick ? std::min((now - g_lastTick) / 1000.0f, 0.25f) : 0.0f;
-    g_lastTick = now;
+    const float dt = world::frame_seconds();
     void* ghost = world::ghost();
     if (!ghost) {
       gate::tick(nullptr);

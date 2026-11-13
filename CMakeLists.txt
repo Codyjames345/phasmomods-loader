@@ -54,7 +54,7 @@ add_custom_command(TARGET gamecheck POST_BUILD COMMAND gamecheck --map-digest "$
 add_library(pmmod STATIC core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/api/assets.cpp
   sdk/api/bundles.cpp sdk/api/models.cpp sdk/api/keybinds.cpp sdk/api/menu_rows.cpp sdk/api/buttons.cpp sdk/api/settings.cpp
   sdk/api/packs.cpp sdk/api/player_anim.cpp sdk/api/third_person.cpp sdk/api/talk_loudness.cpp sdk/api/screen_effects.cpp
-  sdk/api/movement.cpp sdk/api/input_device.cpp sdk/api/journal.cpp)
+  sdk/api/movement.cpp sdk/api/input_device.cpp sdk/api/journal.cpp sdk/api/frame_time.cpp)
 target_include_directories(pmmod PUBLIC sdk/api sdk/map)
 target_link_libraries(pmmod PUBLIC pmcore)
 pm_options(pmmod)
@@ -399,6 +399,10 @@ target_include_directories(third_person_test BEFORE PRIVATE sdk/api sdk/map sdk/
 pm_test(talk_loudness sdk/api/talk_loudness.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(talk_loudness_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# The frame's time (sdk/api/frame_time.h): Unity's Time getters over the fake game backend.
+pm_test(frame_time sdk/api/frame_time.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(frame_time_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 # Whether this client's journal or pause screen is open (sdk/api/journal.h).
 pm_test(journal_open sdk/api/journal.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)

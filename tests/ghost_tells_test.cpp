@@ -19,6 +19,7 @@
 #include "Photon.h"
 #include "Player.h"
 #include "Transform.h"
+#include "UnityAudio.h"
 #include "UnityObject.h"
 #include "UnityWorld.h"
 #include "fake_game.h"
@@ -686,6 +687,27 @@ void bind() {
   api::bind(fake::host(), missing);
 }
 
+float g_deltaTime = 0;
+float delta_time(const void*) { return g_deltaTime; }
+
+// The tells' timers run on the frame's game time (Time.deltaTime through pm::api::frame_time), held to a quarter of a
+// second after a hitch as the mod's own clock was; without the getter they stand still.
+void the_tells_time_is_the_games_frame_time() {
+  start();
+  fake::method(map::Time_get_deltaTime, reinterpret_cast<void*>(&delta_time));
+  bind();
+  g_deltaTime = 0.02f;
+  CHECK(world::frame_seconds() == 0.02f);
+  g_deltaTime = 0.0f;  // the time scale at 0: the game's time stands still, and so do the tells'
+  CHECK(world::frame_seconds() == 0.0f);
+  g_deltaTime = 1.5f;  // a hitch
+  CHECK(world::frame_seconds() == 0.25f);
+  fake::forget(map::Time_get_deltaTime);
+  bind();
+  g_deltaTime = 0.02f;
+  CHECK(world::frame_seconds() == 0.0f);
+}
+
 void the_world_reads_the_ghost_its_room_and_the_players() {
   start();
   World w;
@@ -939,6 +961,7 @@ int main() {
   a_room_change_keeps_the_yureis_minute();
   a_searching_goryo_is_still_after_its_prey();
   the_mares_roll_is_answered_only_inside_its_coroutine();
+  game::the_tells_time_is_the_games_frame_time();
   game::the_world_reads_the_ghost_its_room_and_the_players();
   game::the_hunt_is_the_one_the_speed_update_ran();
   game::the_gate_reads_the_states_and_holds_back_the_ghosts_own_attempts();

@@ -12,6 +12,7 @@
 #include "UnityObject.h"
 #include "UnityWorld.h"
 #include "game.h"
+#include "frame_time.h"
 #include "game_api.h"
 #include "held.h"
 #include "runtime.h"
@@ -22,6 +23,7 @@ namespace {
 using phasmo::GhostAI;
 constexpr float kChest = 1.2f, kEye = 1.6f;  // metres above the feet
 constexpr float kFloor = 2.5f;               // metres up or down still counted as the same floor
+constexpr float kLongestFrame = 0.25f;       // seconds: a longer frame (a hitch) counts as this much
 // Unity's Physics.DefaultRaycastLayers (every layer but Ignore Raycast), a documented engine constant
 // the compiler folds into callers, so no game data holds it.
 constexpr int32_t kDefaultRaycastLayers = -5;
@@ -191,5 +193,7 @@ int living_within(Vector3 p, float range) {
   });
   return n;
 }
+
+float frame_seconds() { return std::clamp(api::frame_time().deltaTime, 0.0f, kLongestFrame); }
 
 }  // namespace pm::tells::world
