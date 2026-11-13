@@ -116,10 +116,29 @@ Each emote:
 | `introLoudness` | no | the intro song's loudness file: set it exactly when `introSong` is set. |
 | `loops` | no | `true` by default. `false` makes a one-shot, which ends when played out and cannot set `moveClip` or `introClip`. |
 | `songLoop` | no | `{ "start": ..., "seconds": ... }`, two non-negative numbers of seconds: where the song repeats, as the tool measured it, for the ghost's hearing. When it is absent, or its seconds are 0, the mod takes the clip's own length as the loop. |
+| `partner` | no | makes the emote synced, danced by two: see "A synced emote" below. |
 | `clipSource`, `clipLoopGuess`, `songSource`, `songLoopGuess` | no | the tool's notes: the source clip and song to measure, and the loop length to search near. The mod reads them silently; only the tool acts on them. |
 
 An unknown field is not a failure: the pack loads and the mod names every unknown field in its log. A catalogue that
 breaks one of these rules is refused whole, with one reason for the log and nothing read from it.
+
+### A synced emote
+
+An emote with a `partner` object is danced by two: the player who picks it dances `clip`, and another player can join
+and dance the partner's clip beside them (`docs/emotes.md`, "Dancing together"). The object:
+
+| Field | Required | What it is, and its rule |
+| --- | --- | --- |
+| `clip` | yes | the second dancer's clip: a `.anim` under `Assets/`. It loops as the emote does, and every client starts it at the first dancer's point, wrapped to its own length. |
+| `offset` | yes | `{ "right": ..., "forward": ... }`, two numbers of metres: where the second dancer stands, to the first dancer's right (negative for their left) and in front of them, facing the same way. Sway's is `-1.3` and `0`. |
+| `song` | no | a synced song under `Assets/` (`.wav`, `.ogg` or `.mp3`), which replaces the emote's song from the same point when someone joins. |
+| `loudness` | no | the synced song's loudness file: set it exactly when `song` is set. The ghost hears the synced song from it. |
+| `introClip` | no | a `.anim` under `Assets/`, allowed only when the emote has its own `introClip`. The mod reads it but does not play it yet: a join waits for the first dancer's intro to end. |
+
+A synced emote must loop and cannot set `moveClip`: two dancers never walk together, and a one-shot is never danced
+together. An unknown field inside `partner` is named in the log as `emotes[i].partner.<field>`. The emote pack tool
+checks the partner's paths as it checks the emote's own, sets the partner's clip to loop as the emote does, and measures
+a synced song into its loudness file.
 
 ### What the mod plays
 

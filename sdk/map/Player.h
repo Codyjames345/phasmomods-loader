@@ -1341,7 +1341,6 @@ struct PlayerCharacterAnimations {
       parentingTargetLeftHand{};
 };
 
-/// The PC player's hands.
 /// The game's character controller. `controller` below is the PhysicsCharacterController.
 struct PhysicsCharacterController {
   /// What blocks the player, as an int layer mask: collisionMask.get(controller). Unresolved: 0.
@@ -1349,8 +1348,9 @@ struct PhysicsCharacterController {
   /// get_groundLayers(controller): what the player stands on, as an int layer mask. Unresolved: 0.
   static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_groundLayers, int32_t(void*)>
       get_groundLayers{};
-  /// get_radius(controller), get_height(controller): the capsule's size, metres. Unresolved: 0.
+  /// get_radius(controller): the capsule's radius, metres. Unresolved: 0.
   static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_radius, float(void*)> get_radius{};
+  /// get_height(controller): the capsule's height, metres. Unresolved: 0.
   static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_height, float(void*)> get_height{};
   /// get_center(controller): the capsule's centre, local to the rig. Unresolved: zero.
   static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_center, Vector3(void*)> get_center{};
@@ -1362,6 +1362,7 @@ struct ChildPhotonInteract {
   static constexpr pm::api::Type<pm::map::ChildPhotonInteract> type{};
 };
 
+/// The PC player's hands.
 struct PCPropGrab {
   /// The type: type_object() for GetComponentInChildren. Unresolved: null.
   static constexpr pm::api::Type<pm::map::PCPropGrab> type{};

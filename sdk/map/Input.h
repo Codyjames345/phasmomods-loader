@@ -845,45 +845,81 @@ struct GamepadButton {
   static constexpr pm::api::Field<pm::map::GamepadButton_action, void*> action{};
   /// The Image it shows the glyph on: image.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_image, void*> image{};
-  /// The Xbox and the PS5 set's Sprite for each gamepad control, read from the widget: xbox_buttonSouth.get(button)
-  /// and so on, named for the control (GamepadIcons). Unresolved: null.
+  /// The Xbox set's Sprite for the gamepad's buttonSouth control (GamepadIcons): xbox_buttonSouth.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonSouth, void*> xbox_buttonSouth{};
+  /// The Xbox set's Sprite for the gamepad's buttonNorth control (GamepadIcons): xbox_buttonNorth.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonNorth, void*> xbox_buttonNorth{};
+  /// The Xbox set's Sprite for the gamepad's buttonEast control (GamepadIcons): xbox_buttonEast.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonEast, void*> xbox_buttonEast{};
+  /// The Xbox set's Sprite for the gamepad's buttonWest control (GamepadIcons): xbox_buttonWest.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonWest, void*> xbox_buttonWest{};
+  /// The Xbox set's Sprite for the gamepad's startButton control (GamepadIcons): xbox_startButton.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_startButton, void*> xbox_startButton{};
+  /// The Xbox set's Sprite for the gamepad's selectButton control (GamepadIcons): xbox_selectButton.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_selectButton, void*> xbox_selectButton{};
+  /// The Xbox set's Sprite for the gamepad's leftTrigger control (GamepadIcons): xbox_leftTrigger.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftTrigger, void*> xbox_leftTrigger{};
+  /// The Xbox set's Sprite for the gamepad's rightTrigger control (GamepadIcons): xbox_rightTrigger.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightTrigger, void*> xbox_rightTrigger{};
+  /// The Xbox set's Sprite for the gamepad's leftShoulder control (GamepadIcons): xbox_leftShoulder.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftShoulder, void*> xbox_leftShoulder{};
+  /// The Xbox set's Sprite for the gamepad's rightShoulder control (GamepadIcons): xbox_rightShoulder.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightShoulder, void*> xbox_rightShoulder{};
+  /// The Xbox set's Sprite for the gamepad's dpad control (GamepadIcons): xbox_dpad.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpad, void*> xbox_dpad{};
+  /// The Xbox set's Sprite for the gamepad's dpadUp control (GamepadIcons): xbox_dpadUp.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadUp, void*> xbox_dpadUp{};
+  /// The Xbox set's Sprite for the gamepad's dpadDown control (GamepadIcons): xbox_dpadDown.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadDown, void*> xbox_dpadDown{};
+  /// The Xbox set's Sprite for the gamepad's dpadLeft control (GamepadIcons): xbox_dpadLeft.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadLeft, void*> xbox_dpadLeft{};
+  /// The Xbox set's Sprite for the gamepad's dpadRight control (GamepadIcons): xbox_dpadRight.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadRight, void*> xbox_dpadRight{};
+  /// The Xbox set's Sprite for the gamepad's leftStick control (GamepadIcons): xbox_leftStick.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftStick, void*> xbox_leftStick{};
+  /// The Xbox set's Sprite for the gamepad's rightStick control (GamepadIcons): xbox_rightStick.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightStick, void*> xbox_rightStick{};
+  /// The Xbox set's Sprite for the gamepad's leftStickPress control (GamepadIcons): xbox_leftStickPress.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftStickPress, void*> xbox_leftStickPress{};
+  /// The Xbox set's Sprite for the gamepad's rightStickPress control (GamepadIcons): xbox_rightStickPress.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightStickPress, void*> xbox_rightStickPress{};
+  /// The PS5 set's Sprite for the gamepad's buttonSouth control (GamepadIcons): ps5_buttonSouth.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonSouth, void*> ps5_buttonSouth{};
+  /// The PS5 set's Sprite for the gamepad's buttonNorth control (GamepadIcons): ps5_buttonNorth.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonNorth, void*> ps5_buttonNorth{};
+  /// The PS5 set's Sprite for the gamepad's buttonEast control (GamepadIcons): ps5_buttonEast.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonEast, void*> ps5_buttonEast{};
+  /// The PS5 set's Sprite for the gamepad's buttonWest control (GamepadIcons): ps5_buttonWest.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonWest, void*> ps5_buttonWest{};
+  /// The PS5 set's Sprite for the gamepad's startButton control (GamepadIcons): ps5_startButton.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_startButton, void*> ps5_startButton{};
+  /// The PS5 set's Sprite for the gamepad's selectButton control (GamepadIcons): ps5_selectButton.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_selectButton, void*> ps5_selectButton{};
+  /// The PS5 set's Sprite for the gamepad's leftTrigger control (GamepadIcons): ps5_leftTrigger.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftTrigger, void*> ps5_leftTrigger{};
+  /// The PS5 set's Sprite for the gamepad's rightTrigger control (GamepadIcons): ps5_rightTrigger.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightTrigger, void*> ps5_rightTrigger{};
+  /// The PS5 set's Sprite for the gamepad's leftShoulder control (GamepadIcons): ps5_leftShoulder.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftShoulder, void*> ps5_leftShoulder{};
+  /// The PS5 set's Sprite for the gamepad's rightShoulder control (GamepadIcons): ps5_rightShoulder.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightShoulder, void*> ps5_rightShoulder{};
+  /// The PS5 set's Sprite for the gamepad's dpad control (GamepadIcons): ps5_dpad.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpad, void*> ps5_dpad{};
+  /// The PS5 set's Sprite for the gamepad's dpadUp control (GamepadIcons): ps5_dpadUp.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadUp, void*> ps5_dpadUp{};
+  /// The PS5 set's Sprite for the gamepad's dpadDown control (GamepadIcons): ps5_dpadDown.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadDown, void*> ps5_dpadDown{};
+  /// The PS5 set's Sprite for the gamepad's dpadLeft control (GamepadIcons): ps5_dpadLeft.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadLeft, void*> ps5_dpadLeft{};
+  /// The PS5 set's Sprite for the gamepad's dpadRight control (GamepadIcons): ps5_dpadRight.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadRight, void*> ps5_dpadRight{};
+  /// The PS5 set's Sprite for the gamepad's leftStick control (GamepadIcons): ps5_leftStick.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftStick, void*> ps5_leftStick{};
+  /// The PS5 set's Sprite for the gamepad's rightStick control (GamepadIcons): ps5_rightStick.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightStick, void*> ps5_rightStick{};
+  /// The PS5 set's Sprite for the gamepad's leftStickPress control (GamepadIcons): ps5_leftStickPress.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftStickPress, void*> ps5_leftStickPress{};
+  /// The PS5 set's Sprite for the gamepad's rightStickPress control (GamepadIcons): ps5_rightStickPress.get(button). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightStickPress, void*> ps5_rightStickPress{};
 };
 
