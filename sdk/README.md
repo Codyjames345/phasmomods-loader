@@ -84,8 +84,9 @@ describes what is in the code now.
   called from any thread; everything else runs on the main thread.
 - **Never keep a raw managed reference across frames.** The garbage collector moves and frees
   managed objects. Keep one in a `pm::api::Held` (`sdk/api/held.h`), which holds it through the host
-  contract's `gc_hold`, as `mods/ghost_tells/shade.cpp` does with its ghost. `tests/held_scan_test.cpp` fails the build on a raw `void*` kept at namespace
-  or struct scope. It scans `core/`, `host/` and the four bundled mod folders by name, so a new mod
+  contract's `gc_hold`, as `mods/ghost_tells/shade.cpp` does with its ghost (a typed handle, `pm::api::Ref<D>`, in a
+  `pm::api::HeldRef<D>`). `tests/held_scan_test.cpp` fails the build on a raw `void*`, a `Ref` or an `Object` kept at
+  namespace or struct scope. It scans `core/`, `host/` and the four bundled mod folders by name, so a new mod
   folder must be added to the list in that test.
 - **Private lobbies only.** Play with mods in private lobbies only. Playing with mods risks a ban on
   the account. Nothing in the SDK changes that, and `send` already refuses outside a private room.

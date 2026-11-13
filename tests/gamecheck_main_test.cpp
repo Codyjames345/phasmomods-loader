@@ -74,13 +74,10 @@ inline constexpr EntryDesc kGhost{.key = "GhostAI", .base = &kBehaviour};
 inline constexpr EntryDesc kCamera{.key = "Camera", .base = &kBehaviour};
 inline constexpr EntryDesc kWrong{.key = "WrongGhost", .base = &kCamera};
 inline constexpr EntryDesc kBase{.key = "Base"};
-inline constexpr EntryDesc kEvent{.key = "Event"};
 inline constexpr EntryDesc kChild{.key = "Child", .base = &kBase};
-inline constexpr EntryDesc kChildOfEvent{.key = "ChildOfEvent", .base = &kEvent};
 inline constexpr EntryDesc kPlain{.key = "Plain", .base = &kObject};
 inline constexpr EntryDesc kLost{.key = "Lost", .base = &kBase};
 inline constexpr EntryDesc kOdd{.key = "Odd", .base = &kBase};
-inline constexpr EntryDesc kSender{.key = "Sender", .base = &kBase};
 inline constexpr EntryDesc kUnresolved{.key = "Unresolved"};
 inline constexpr EntryDesc kHangs{.key = "Hangs", .base = &kUnresolved};
 inline constexpr EntryDesc kMethod{.key = "Method", .kind = Kind::Method};
@@ -91,9 +88,11 @@ inline constexpr EntryDesc kPlayer{.key = "Player"};
 inline constexpr EntryDesc kVRPlayer{.key = "VRPlayer", .base = &kPlayer};
 inline constexpr EntryDesc kUIBehaviour{.key = "UIBehaviour"};
 inline constexpr EntryDesc kSelectable{.key = "Selectable", .base = &kUIBehaviour};
-inline constexpr EntryDesc kSharedP{.key = "SharedP"};
-inline constexpr EntryDesc kUser{.key = "User", .base = &kSharedP};
+inline constexpr EntryDesc kToggle{.key = "Toggle", .base = &kBase};
+inline constexpr EntryDesc kPlainer{.key = "Plainer", .base = &kBase};
+inline constexpr EntryDesc kLoop{.key = "Loop", .base = &kBase};
 
+// A class of the model whose base list names `bases`, each written without type arguments.
 ModelType model_class(const char* assembly, const char* ns, const char* name, std::vector<std::string> bases,
                       bool isInterface = false, int declaring = -1) {
   ModelType t;
@@ -102,6 +101,7 @@ ModelType model_class(const char* assembly, const char* ns, const char* name, st
   t.name = name;
   t.isInterface = isInterface;
   t.declaring = declaring;
+  t.baseArities.assign(bases.size(), 0);
   t.bases = std::move(bases);
   return t;
 }
@@ -110,8 +110,9 @@ bool names_line(const BaseCheck& check, const std::string& start) {
   return std::any_of(check.wrong.begin(), check.wrong.end(), [&](const std::string& l) { return l.starts_with(start); });
 }
 
-// Each base must lie on every chain of parents the dump allows from its entry's class, or the entry is named.
-void bases_check_walks_every_parent_chain() {
+// Each parent on the way to a base must be the one type its name and arity can mean, or the entry is named: the check
+// never picks among namesakes, even ones that would all lead to the base.
+void bases_check_reads_each_parent_exactly() {
   GameModel model;
   model.types = {
       model_class("UnityEngine.CoreModule", "UnityEngine", "Object", {}),               // 0
@@ -125,60 +126,58 @@ void bases_check_walks_every_parent_chain() {
       model_class("A", "X", "Event", {"Base"}),                                       // 8
       model_class("A", "Y", "Event", {"Base"}),                                       // 9
       model_class("A", "", "Base", {}),                                               // 10
-      model_class("A", "", "Child", {"Event", "IThing"}),                             // 11: either Event, both from Base
+      model_class("A", "", "Child", {"Event", "IThing"}),                             // 11: either Event, so unproved
       model_class("A", "", "Lost", {"Missing"}),                                      // 12
       model_class("A", "Y", "Dual", {}),                                              // 13
       model_class("A", "Z", "Dual", {}, true),                                        // 14
       model_class("A", "", "Odd", {"Dual"}),                                          // 15: a class or an interface
-      model_class("A", "X", "Signal", {"Base"}),                                      // 16
-      model_class("A", "Y", "Signal", {}),                                            // 17
-      model_class("A", "", "Sender", {"Signal"}),                                     // 18: one Signal not from Base
       // A top-level class finds a class of its own namespace first: VRPlayer's Player is the game's, not Photon's.
-      model_class("Game", "", "Player", {}),                                          // 19
-      model_class("Photon", "Photon.Realtime", "Player", {}),                         // 20
-      model_class("Game", "", "VRPlayer", {"Player"}),                                // 21
-      // UI's classes cannot derive from Doozy's, whose UISelectable derives from UI's Selectable.
-      model_class("UI", "UnityEngine.EventSystems", "UIBehaviour", {}),               // 22
-      model_class("Doozy", "Doozy", "UIBehaviour", {}),                               // 23
-      model_class("UI", "UnityEngine.UI", "Selectable", {"UIBehaviour"}),             // 24
-      model_class("Doozy", "Doozy.Components", "UISelectable", {"Selectable"}),       // 25
-      // P and Q reference each other as far as the model shows, so neither Shared is ruled out for User.
-      model_class("P", "P", "FromQ", {"QOnly"}),                                      // 26
-      model_class("Q", "Q", "QOnly", {}),                                             // 27
-      model_class("Q", "Q2", "FromP", {"POnly"}),                                     // 28
-      model_class("P", "P3", "POnly", {}),                                            // 29
-      model_class("P", "PS", "Shared", {}),                                           // 30
-      model_class("Q", "QS", "Shared", {}),                                           // 31
-      model_class("P", "PU", "User", {"Shared"}),                                     // 32
+      model_class("Game", "", "Player", {}),                                          // 16
+      model_class("Photon", "Photon.Realtime", "Player", {}),                         // 17
+      model_class("Game", "", "VRPlayer", {"Player"}),                                // 18
+      // Two UIBehaviours, neither in Selectable's namespace: unproved.
+      model_class("UI", "UnityEngine.EventSystems", "UIBehaviour", {}),               // 19
+      model_class("Doozy", "Doozy", "UIBehaviour", {}),                               // 20
+      model_class("UI", "UnityEngine.UI", "Selectable", {"UIBehaviour"}),             // 21
+      // Signal and Signal<T> share a name: an arity tells them apart, even against the own namespace's.
+      model_class("A", "N", "Signal", {}),                                            // 22
+      model_class("A", "G", "Signal", {"Base"}),                                      // 23: Signal<T>
+      model_class("A", "N", "Toggle", {"Signal"}),                                    // 24: : Signal<bool>
+      model_class("A", "G", "Plainer", {"Signal"}),                                   // 25: : Signal
+      // A loop no game has: refused at the depth limit, never followed for ever.
+      model_class("A", "", "LoopA", {"LoopB"}),                                       // 26
+      model_class("A", "", "LoopB", {"LoopA"}),                                       // 27
   };
+  model.types[23].genericParams = 1;
+  model.types[24].baseArities = {1};
   // A nested enum sharing a class's name is no class anything derives from.
   ModelType nestedEnum = model_class("B", "Q", "Behaviour", {}, false, 7);
   nestedEnum.isEnum = nestedEnum.isValueType = true;
-  model.types.push_back(nestedEnum);  // 33
+  model.types.push_back(nestedEnum);  // 28
   const auto at = [](const EntryDesc& d, int type) { return Result{.desc = &d, .status = Status::Resolved, .type = type}; };
   Resolution resolution;
-  resolution.results = {at(kObject, 0),  at(kComponent, 2), at(kBehaviour, 3), at(kGhost, 4),         at(kCamera, 5),
-                        at(kWrong, 4),   at(kBase, 10),     at(kEvent, 8),     at(kChild, 11),        at(kChildOfEvent, 11),
-                        at(kPlain, 7),   at(kLost, 12),     at(kOdd, 15),      at(kSender, 18),       at(kHangs, 4),
-                        at(kMethod, 4),  at(kOnMethod, 4),  at(kOnStray, 4),   Result{.desc = &kUnresolved},
-                        at(kPlayer, 19), at(kVRPlayer, 21), at(kUIBehaviour, 22), at(kSelectable, 24),
-                        at(kSharedP, 30), at(kUser, 32)};
+  resolution.results = {at(kObject, 0),     at(kComponent, 2), at(kBehaviour, 3),    at(kGhost, 4),      at(kCamera, 5),
+                        at(kWrong, 4),      at(kBase, 10),     at(kChild, 11),       at(kPlain, 7),      at(kLost, 12),
+                        at(kOdd, 15),       at(kHangs, 4),     at(kMethod, 4),       at(kOnMethod, 4),   at(kOnStray, 4),
+                        Result{.desc = &kUnresolved},          at(kPlayer, 16),      at(kVRPlayer, 18),  at(kUIBehaviour, 19),
+                        at(kSelectable, 21), at(kToggle, 24),  at(kPlainer, 25),     at(kLoop, 26)};
   const BaseCheck check = check_bases(model, resolution);
   CHECK(check.checked == 16);  // Hangs waits for its base, and entries without one are not checked
-  CHECK(check.wrong.size() == 9);
-  for (const char* key : {"Component ", "Behaviour ", "GhostAI ", "Camera ", "Child ", "Hangs ", "VRPlayer ", "Selectable "})
+  CHECK(check.wrong.size() == 10);
+  for (const char* key : {"Component ", "Behaviour ", "GhostAI ", "Camera ", "Hangs ", "VRPlayer ", "Toggle "})
     CHECK(!names_line(check, std::string("BASE ") + key));
   CHECK(names_line(check, "BASE WrongGhost does not derive from Camera: the chain ends at UnityEngine.Object"));
-  CHECK(names_line(check, "BASE ChildOfEvent does not derive from Event: the chain ends at Base"));
+  CHECK(names_line(check, "BASE Child does not derive from Base: Child derives from Event, which 2 types of the model share"));
   CHECK(names_line(check, "BASE Plain does not derive from Object: the chain ends at Plain"));
   CHECK(names_line(check, "BASE Lost does not derive from Base: Lost derives from Missing, which is no type of the model"));
-  CHECK(names_line(check, "BASE Odd does not derive from Base: Odd derives from Dual, which names a class and an interface"));
-  CHECK(names_line(check, "BASE Sender does not derive from Base: the chain ends at Y.Signal"));
+  CHECK(names_line(check, "BASE Odd does not derive from Base: Odd derives from Dual, which 2 types of the model share"));
   CHECK(names_line(check, "BASE OnMethod: its base Method is not a type entry of the map"));
   CHECK(names_line(check, "BASE OnStray: its base Stray is not a type entry of the map"));
-  CHECK(names_line(check, "BASE User does not derive from SharedP: the chain ends at QS.Shared"));
+  CHECK(names_line(check, "BASE Selectable does not derive from UIBehaviour: UnityEngine.UI.Selectable derives from "
+                          "UIBehaviour, which 2 types of the model share"));
+  CHECK(names_line(check, "BASE Plainer does not derive from Base: the chain ends at N.Signal"));
+  CHECK(names_line(check, "BASE Loop does not derive from Base: the chain from LoopB is deeper than 64 classes"));
 }
-
 }  // namespace
 
 int main() {
@@ -187,7 +186,7 @@ int main() {
   std::filesystem::create_directories(scratch());
   exception_exits_2();
   unreadable_entry_stops_the_listing();
-  bases_check_walks_every_parent_chain();
+  bases_check_reads_each_parent_exactly();
   std::filesystem::remove_all(scratch(), ignored);
   return g_failures ? 1 : 0;
 }

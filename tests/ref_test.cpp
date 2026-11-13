@@ -46,6 +46,14 @@ static_assert(!std::is_convertible_v<Ref<map::GhostAI>, Ref<map::Camera>>);
 static_assert(!std::is_convertible_v<void*, Ref<map::GhostAI>>);
 static_assert(!std::is_convertible_v<void*, Object>);
 static_assert(!std::is_convertible_v<Object, Ref<map::GhostAI>>);
+// A HeldRef reads as its Ref: up to a base type's handle and Object, never to an unrelated or derived one.
+static_assert(std::is_convertible_v<const api::HeldRef<map::GhostAI>&, Ref<map::MonoBehaviour>>);
+static_assert(std::is_convertible_v<const api::HeldRef<map::GhostAI>&, Object>);
+static_assert(!std::is_convertible_v<const api::HeldRef<map::MonoBehaviour>&, Ref<map::GhostAI>>);
+static_assert(!std::is_convertible_v<const api::HeldRef<map::GhostAI>&, Ref<map::Camera>>);
+static_assert(std::is_constructible_v<api::HeldRef<map::MonoBehaviour>, Ref<map::GhostAI>>);
+static_assert(!std::is_constructible_v<api::HeldRef<map::GhostAI>, Ref<map::MonoBehaviour>>);
+static_assert(!std::is_constructible_v<api::HeldRef<map::GhostAI>, Ref<map::Camera>>);
 
 // Class pointers for the fake: GhostAI, a class derived from it, and Camera.
 int g_ghostClass = 0, g_derivedClass = 0, g_cameraClass = 0;
@@ -107,6 +115,11 @@ void held_typed_keeps_object() {
     CHECK(kept && kept.get().raw() == ghost && fake::held() == 1 && fake::held(ghost));
     const Ref<map::GhostAI> read = kept;
     CHECK(read.raw() == ghost);
+    CHECK(behaviour_of(kept) == ghost && object_of(kept) == ghost);  // where a base's handle or an Object is taken
+    CHECK(api::as<map::GhostAI>(kept).raw() == ghost);
+    api::HeldRef<map::MonoBehaviour> asBase = Ref<map::GhostAI>::unchecked(ghost);  // a base's HeldRef keeps a derived one
+    CHECK(asBase.get().raw() == ghost && fake::held() == 2);
+    asBase = nullptr;
     kept = Ref<map::GhostAI>::unchecked(ghost);  // the object it holds already keeps its handle
     CHECK(fake::held() == 1);
     kept = Ref<map::GhostAI>::unchecked(other);

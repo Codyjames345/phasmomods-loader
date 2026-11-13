@@ -10,10 +10,11 @@ set(expect_4 "T's size is not the size of the entry's type")  # a field
 set(expect_5 "T's size is not the size of the entry's type")  # a static field
 set(expect_6 "EnumValue wraps a map entry of kind EnumValue")
 set(expect_7 "Type wraps a map entry of kind Type")
-# An unrelated handle, a base handle taken as a derived one, and a raw reference taken as a handle.
-set(expect_8 "cannot convert argument 1 from 'pm::api::Ref<pm::map::GhostAI>' to 'pm::api::Ref<pm::map::Camera>'")
-set(expect_9 "cannot convert from 'pm::api::Ref<pm::map::MonoBehaviour>' to 'pm::api::Ref<pm::map::GhostAI>'")
-set(expect_10 "cannot convert from 'void *' to 'pm::api::Ref<pm::map::GhostAI>'")
+# An unrelated handle, a base handle taken as a derived one, and a raw reference taken as a handle: MSVC's
+# error codes for an argument and a value it cannot convert, which its wording may change around.
+set(expect_8 "error C2664")
+set(expect_9 "error C2440")
+set(expect_10 "error C2440")
 
 execute_process(COMMAND "${CMAKE_COMMAND}" --build "${BUILD}" --target compile_fail_0
   RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE out)

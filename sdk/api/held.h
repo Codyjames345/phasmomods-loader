@@ -99,9 +99,10 @@ class Held {
 };
 
 /// A Held of a typed handle (ref.h): keeps a managed object of the map's type D across frames with a
-/// strong GC handle, exactly as Held does, and gives it back as a Ref<D>. It reads as the Ref it replaces
-/// (assigned, tested and passed as a Ref<D>), and is moved, never copied. Assigning the object it already
-/// holds keeps its handle. Make it after pm::api::bind, as a Held. Main thread.
+/// strong GC handle, exactly as Held does, and gives it back as a Ref<D>. It reads as the Ref it replaces:
+/// assigned a Ref<D> or a Ref of a type derived from D, tested, and passed where a Ref<D>, a Ref of one of
+/// D's base types or an Object is taken. It is moved, never copied. Assigning the object it already holds
+/// keeps its handle. Make it after pm::api::bind, as a Held. Main thread.
 /// @tparam D A map entry of kind Type.
 /// @ingroup runtime
 /// @code
@@ -117,8 +118,11 @@ class HeldRef {
   /// Holds nothing, as a null handle.
   HeldRef(std::nullptr_t) {}
   /// Holds `object` with a strong GC handle.
+  /// @tparam S The handle's type: D or a type derived from it.
   /// @param object The object to keep; a null handle holds nothing.
-  HeldRef(Ref<D> object) : held_(object.raw()) {}
+  template <const sdk::EntryDesc& S>
+    requires(derives_from<S, D>())
+  HeldRef(Ref<S> object) : held_(object.raw()) {}
   /// Takes over `other`'s object and handle; `other` then holds nothing.
   /// @param other The HeldRef to move from.
   HeldRef(HeldRef&& other) noexcept = default;
@@ -127,9 +131,12 @@ class HeldRef {
   /// @return This HeldRef.
   HeldRef& operator=(HeldRef&& other) noexcept = default;
   /// Holds `object` instead, releasing what this held. Assigning the object already held keeps its handle.
+  /// @tparam S The handle's type: D or a type derived from it.
   /// @param object The object to keep; a null handle holds nothing.
   /// @return This HeldRef.
-  HeldRef& operator=(Ref<D> object) {
+  template <const sdk::EntryDesc& S>
+    requires(derives_from<S, D>())
+  HeldRef& operator=(Ref<S> object) {
     held_ = object.raw();
     return *this;
   }
@@ -143,9 +150,17 @@ class HeldRef {
   /// @return The handle, or a null one. Check pm::api::alive before using an engine object kept from an
   ///   earlier frame.
   Ref<D> get() const { return Ref<D>::unchecked(held_.get()); }
-  /// The held object, as the Ref it replaces.
+  /// The held object, as the handle of D or of one of its base types.
+  /// @tparam B D or a type D derives from.
   /// @return The handle, or a null one.
-  operator Ref<D>() const { return get(); }
+  template <const sdk::EntryDesc& B>
+    requires(derives_from<D, B>())
+  operator Ref<B>() const {
+    return get();
+  }
+  /// The held object, as a handle of an unnamed type (for pm::api::as).
+  /// @return The handle, or a null one.
+  operator Object() const { return get(); }
   /// Whether it holds an object.
   /// @return True when it holds one.
   explicit operator bool() const { return held_.get() != nullptr; }

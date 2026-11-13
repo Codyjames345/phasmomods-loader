@@ -1,7 +1,8 @@
 // Every managed object the host and the mods keep between frames must be an il2cpp::Held (see
 // host/il2cpp.h): the GC does not scan this code's memory. This test reads the sources and fails on a
-// raw void* (or std::vector<void*>) declared at namespace or struct scope, the places that outlive a
-// call. Pointers that are not managed objects (code addresses, views of runtime memory read in one
+// raw void* (or std::vector<void*>), or a typed handle (pm::api::Ref or Object, sdk/api/ref.h, which
+// is the same reference by another type), declared at namespace or struct scope, the places that outlive
+// a call: keep a handle in a pm::api::HeldRef. Pointers that are not managed objects (code addresses, views of runtime memory read in one
 // call) are listed in kNotObjects with why.
 #include <algorithm>
 #include <cctype>
@@ -29,6 +30,7 @@ const Exempt kNotObjects[] = {
     {"host/il2cpp.h", "monitor", "the layout of a managed object's header"},
     {"host/il2cpp.h", "bounds", "the layout of a managed array"},
     {"host/il2cpp.h", "object_", "Held's own storage, kept with its handle"},
+    {"host/il2cpp.h", "obj", "the header a managed string, array or list layout begins with, not a reference"},
     {"core/mod_api.h", "gameAssembly", "a module handle in the host's C interface"},
     {"core/mod_api.h", "unityPlayer", "a module handle in the host's C interface"},
     {"core/mod_api.h", "klass", "a game entry's Il2CppClass*, runtime metadata"},
@@ -109,7 +111,7 @@ bool opens_data_scope(const std::string& header) {
  *  the declaration is matched after the last such boundary. */
 void scan_text(const std::string& source, const std::string& relative, std::vector<Hit>& hits) {
   const std::string text = code_only(source);
-  static const std::regex kRaw(R"((?:^|[)}:])\s*(?:(?:static|inline|thread_local|mutable)\s+)*(?:std::vector<\s*void\s*\*\s*>|void\s*\*)\s*(\w+)\s*(?:\[[^\]]*\]\s*)?(?:=[^;]*|\{[^;]*\})?\s*$)");
+  static const std::regex kRaw(R"((?:^|[)}:])\s*(?:(?:static|inline|thread_local|mutable)\s+)*(?:std::vector<\s*void\s*\*\s*>|void\s*\*|Ref\s*<[^;{}()]*?>|Object\b)\s*(\w+)\s*(?:\[[^\]]*\]\s*)?(?:=[^;]*|\{[^;]*\})?\s*$)");
   std::vector<char> scopes;  // 'd' namespace or struct, 'c' function body or initialiser
   std::string statement;
   int line = 1, statementLine = 1;
@@ -176,6 +178,11 @@ class Kept {
   struct Inner { void* nested; } inner;
 };
 void* declaredFunction(int);
+pm::api::Ref<pm::map::GhostAI> keptRef;
+Object keptObject = nullptr;
+pm::api::HeldRef<pm::map::GhostAI> heldRef;
+pm::api::Ref<pm::map::GhostAI> handleFunction(Object from);
+struct Handles { Ref<pm::map::Camera> refMember{}; pm::api::Object objectMember; };
 const char* text = "void* inString;";
 )src";
   std::vector<Hit> hits;
@@ -183,7 +190,8 @@ const char* text = "void* inString;";
   std::set<std::string> found;
   for (const Hit& hit : hits) found.insert(hit.name);
   const std::set<std::string> expected{"afterMacro", "afterFunction", "list", "braced", "array",
-                                       "inExtern", "member", "nested"};
+                                       "inExtern", "member", "nested", "keptRef", "keptObject",
+                                       "refMember", "objectMember"};
   for (const std::string& name : found)
     if (!expected.count(name)) std::printf("  scan reported a non-declaration: %s\n", name.c_str());
   for (const std::string& name : expected)

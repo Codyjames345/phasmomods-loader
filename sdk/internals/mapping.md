@@ -329,22 +329,23 @@ time changed, and runs `build\gamecheck.exe --dump <dir> --image <GameAssembly.d
 value, then twins, aliases and `renamed from`; `STARTUP`, the key and the name for an icall or a generic instance's method,
 checked at startup only; `SCENE`, the key and its path or name for a scene fact, checked in the scene
 files), then a summary. After the summary it proves each resolved Type entry's `base`: the class must derive from the
-class the base resolved to on every chain of parents the dump allows. It prints `BASE <key> does not derive from <base
-key>: <why>` for one that does not, and `BASES <n> checked, <m> wrong`; a wrong base fails the check. The dump names a
-parent only by the short name its base list begins with, and short names are shared (Doozy's `UIBehaviour` and Unity's,
-a nested enum named `Behaviour`, `InputControl` and `InputControl<T>`), so the check reads a parent as C# finds it, as
-far as the dump shows: never a struct, an enum or `System.Object`; for a top-level class, the one class of that name in
-its own assembly and namespace, which C# finds before any `using`; never a class of an assembly that itself derives
-from a class of the deriving class's assembly, since assemblies do not reference each other in a circle; and otherwise
-every class of the name, each of which must lead to the base. A class whose chain leaves the model (a base in an
-assembly the map does not name) or ends at an unmapped generic cannot be proved, so its entry gets no base. Then it
+class the base resolved to, each parent on the way read exactly. It prints `BASE <key> does not derive from <base
+key>: <why>` for one that does not or cannot be proved, and `BASES <n> checked, <m> wrong`; either fails the check. The
+dump names a parent only by the short name and the number of type arguments its base list begins with, and short names
+are shared (Doozy's `UIBehaviour` and Unity's, a nested enum named `Behaviour`, `InputControl` and `InputControl<T>`),
+so the check reads a parent as C# finds it and never picks: only a type of that name and arity counts, never a struct,
+an enum or `System.Object`; a top-level class's parent is the one such type of its own assembly and namespace, which C#
+finds before any `using` (the dump keeps no `using` lines); otherwise exactly one such type must exist in the model, or
+the parent is unproved. A class whose chain meets a shared name (Unity UI's classes deriving from `UIBehaviour`), leaves
+the model (a base in an assembly the map does not name) or ends at an unmapped generic gets no base. Then it
 copies the scene and asset files the scene facts need and runs
 `tools/assetcheck.py` on them, which prints `OK` or `MISSING` for each (see
 [scene and asset facts](../systems/scene.md)). The first configured run makes a Python venv in
 `re\dump\venv` and installs the pinned UnityPy there, so it needs Python 3 (uv's Python 3.14, the
 `py` launcher or `python`, in that order); an unconfigured run needs no Python. It never runs game code and never writes in the game
 folder. Exit 0 when every required entry it can check resolved, every base holds and no mod would be switched off, 1
-when one did not or one would, 2 on bad arguments or input it cannot read.
+when one did not or one would, 2 on bad arguments or input it cannot read. The check proves a base is an ancestor, not
+that it is the nearest mapped one: when a class between them is mapped later, give the derived entries that class.
 
 `-Mods <dir>` adds `--mods <dir>`: gamecheck loads each mod DLL under `<dir>`, reads its
 `pmmod_requires` and prints `would switch off <mod id>: <keys>` for each mod the host would not start

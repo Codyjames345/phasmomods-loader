@@ -18,17 +18,11 @@ inline constexpr const char* UnityUI_Vector2[] = {"Vector2"};
 inline constexpr const char* UnityUI_int[] = {"int"};
 inline constexpr const char* UnityUI_float[] = {"float"};
 
-/// Unity's base of the UI's components (UnityEngine.UI, namespace UnityEngine.EventSystems). Inferred:
-/// Unity's documented API.
-inline constexpr pm::sdk::EntryDesc UIBehaviour{.key = "UIBehaviour", .name = "UIBehaviour",
-                                                .assembly = "UnityEngine.UI", .ns = "UnityEngine.EventSystems",
-                                                .base = &MonoBehaviour};
 
 /// Unity's grid layout (UnityEngine.UI), a Behaviour: it places its active children in cells of one
 /// size, row by row, in their sibling order. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc GridLayoutGroup{.key = "GridLayoutGroup", .name = "GridLayoutGroup",
-                                                    .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI",
-                                                    .base = &UIBehaviour};
+                                                    .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
 
 /// The cell size, two floats. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc GridLayoutGroup_get_cellSize{
@@ -83,7 +77,7 @@ inline constexpr pm::sdk::EntryDesc GridConstraint_FixedColumnCount{.key = "Grid
 inline constexpr pm::sdk::EntryDesc HorizontalOrVerticalLayoutGroup{.key = "HorizontalOrVerticalLayoutGroup",
                                                                     .name = "HorizontalOrVerticalLayoutGroup",
                                                                     .assembly = "UnityEngine.UI",
-                                                                    .ns = "UnityEngine.UI", .base = &UIBehaviour};
+                                                                    .ns = "UnityEngine.UI"};
 
 /// The space between children, a float. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc HorizontalOrVerticalLayoutGroup_get_spacing{
@@ -97,7 +91,7 @@ inline constexpr pm::sdk::EntryDesc HorizontalOrVerticalLayoutGroup_set_spacing{
 
 /// Unity's base of the controls (UnityEngine.UI), a UIBehaviour. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Selectable{.key = "Selectable", .name = "Selectable", .assembly = "UnityEngine.UI",
-                                               .ns = "UnityEngine.UI", .base = &UIBehaviour};
+                                               .ns = "UnityEngine.UI"};
 
 /// Unity's button (UnityEngine.UI), a Selectable. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Button{.key = "Button", .name = "Button", .assembly = "UnityEngine.UI",
@@ -117,6 +111,11 @@ inline constexpr pm::sdk::EntryDesc Button_Press{.key = "Button.Press", .kind = 
 inline constexpr pm::sdk::EntryDesc Button_get_onClick{.key = "Button.get_onClick", .kind = pm::sdk::Kind::Method,
                                                        .owner = "Button", .name = "get_onClick"};
 
+/// Unity's base of the UI's components (UnityEngine.UI, namespace UnityEngine.EventSystems). Inferred:
+/// Unity's documented API.
+inline constexpr pm::sdk::EntryDesc UIBehaviour{.key = "UIBehaviour", .name = "UIBehaviour",
+                                                .assembly = "UnityEngine.UI", .ns = "UnityEngine.EventSystems",
+                                                .base = &MonoBehaviour};
 /// Whether the component is active and enabled, virtual: Button.Press asks it first. Decompiled.
 inline constexpr pm::sdk::EntryDesc UIBehaviour_IsActive{.key = "UIBehaviour.IsActive", .kind = pm::sdk::Kind::Method,
                                                          .confidence = pm::sdk::Confidence::Decompiled,
@@ -124,7 +123,7 @@ inline constexpr pm::sdk::EntryDesc UIBehaviour_IsActive{.key = "UIBehaviour.IsA
 
 /// Unity UI's base of everything drawn (UnityEngine.UI). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Graphic{.key = "Graphic", .name = "Graphic", .assembly = "UnityEngine.UI",
-                                            .ns = "UnityEngine.UI", .base = &UIBehaviour};
+                                            .ns = "UnityEngine.UI"};
 
 /// Unity UI's image (UnityEngine.UI), a Graphic. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Image{.key = "Image", .name = "Image", .assembly = "UnityEngine.UI",
@@ -313,8 +312,7 @@ inline constexpr pm::sdk::EntryDesc Canvas_set_sortingOrder{.key = "Canvas.set_s
 /// Scales a canvas to the screen (UnityEngine.UI, namespace UnityEngine.UI). Inferred: Unity's documented
 /// API.
 inline constexpr pm::sdk::EntryDesc CanvasScaler{.key = "CanvasScaler", .name = "CanvasScaler",
-                                                 .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI",
-                                                 .base = &UIBehaviour};
+                                                 .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
 
 /// How a CanvasScaler scales, an enum nested in it. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc CanvasScaler_ScaleMode{.key = "CanvasScaler.ScaleMode", .owner = "CanvasScaler",
@@ -436,8 +434,7 @@ inline constexpr pm::sdk::EntryDesc RectTransformUtility_ScreenPointToLocalPoint
 /// with raycastTarget on. It clips nothing by itself: a RectMask2D (or a Mask) on the viewport does that.
 /// Present in this build's UnityEngine.UI (class dump); its behaviour is Unity's documented API.
 inline constexpr pm::sdk::EntryDesc ScrollRect{.key = "ScrollRect", .name = "ScrollRect",
-                                               .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI",
-                                               .base = &UIBehaviour};
+                                               .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
 
 /// The RectTransform it scrolls (m_Content): null until something sets it, and then everything it scrolls is
 /// a child of it. Inferred: from the class dump.
@@ -502,8 +499,7 @@ inline constexpr pm::sdk::EntryDesc ScrollRect_StopMovement{
 /// it to its own rectangle, without a stencil or a drawn mask of its own. Put it on a viewport, not on the
 /// content. Present in this build's UnityEngine.UI (class dump).
 inline constexpr pm::sdk::EntryDesc RectMask2D{.key = "RectMask2D", .name = "RectMask2D",
-                                               .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI",
-                                               .base = &UIBehaviour};
+                                               .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
 
 /// Unity UI's layout marker (UnityEngine.UI), a UIBehaviour: it holds the minimum, preferred and flexible sizes
 /// a LayoutGroup would give its object, and does nothing when no LayoutGroup asks for them, so it draws nothing
@@ -512,8 +508,7 @@ inline constexpr pm::sdk::EntryDesc RectMask2D{.key = "RectMask2D", .name = "Rec
 /// have a RectTransform for the layout entries to act on, for a list's content that carries no graphic of its own.
 /// Present in this build's UnityEngine.UI (class dump); its behaviour is Unity's documented API.
 inline constexpr pm::sdk::EntryDesc LayoutElement{.key = "LayoutElement", .name = "LayoutElement",
-                                                  .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI",
-                                                  .base = &UIBehaviour};
+                                                  .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
 
 /// Sets its text, TextMeshPro rich text. Inferred: TextMeshPro's documented property setter.
 inline constexpr pm::sdk::EntryDesc TMP_Text_set_text{.key = "TMP_Text.set_text", .kind = pm::sdk::Kind::Method,
