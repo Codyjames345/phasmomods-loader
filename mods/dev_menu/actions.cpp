@@ -552,13 +552,12 @@ std::string ghost_identity() {
   void* c = controller();
   if (!c) return {};
   // The identity card: the type the contract shows, and the rules its AI follows when they differ. A custom ghost's
-  // behaviour type is the game's "no type" (the host runs its rules on the generic AI, docs/custom-ghosts.md), and a
-  // Mimic's is the type it copies (GhostController.ghostType and .behaviourType).
+  // behaviour type is the game's "no type" (the host runs its rules on the generic AI, docs/custom-ghosts.md), so it
+  // shows only its type; a Mimic's is the type it copies (GhostController.ghostType and .behaviourType).
   const int32_t type = GhostController::ghostType.get(c);
   std::string out = pretty_type(type) + " (" + std::to_string(type) + ")";
   const int32_t behaviour = GhostController::behaviourType.get(c);
-  if (behaviour == GhostType::None()) return out + ", custom rules";
-  if (behaviour != type) out += ", acting as " + pretty_type(behaviour);
+  if (behaviour != type && behaviour != GhostType::None()) out += ", acting as " + pretty_type(behaviour);
   return out;
 }
 
