@@ -10,7 +10,9 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
 #include "Transform.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -34,7 +36,8 @@ inline constexpr pm::sdk::Fact GhostAI_postHuntCooldown_facts[] = {
 
 /// The ghost's AI component (Assembly-CSharp, global namespace), a MonoBehaviourPun. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostAI{.key = "GhostAI", .confidence = pm::sdk::Confidence::Decompiled,
-                                            .name = "GhostAI", .assembly = "Assembly-CSharp", .ns = ""};
+                                            .name = "GhostAI", .assembly = "Assembly-CSharp", .ns = "",
+                                            .base = &MonoBehaviourPun};
 
 /// The ghost's state, an enum nested in GhostAI (name obfuscated, value names real): idle, wander,
 /// hunting, favouriteRoom and 20 more. ChangeState switches on it to build the state's object. Decompiled.
@@ -537,7 +540,7 @@ inline constexpr pm::sdk::EntryDesc GhostAI_interaction{.key = "GhostAI.interact
 inline constexpr pm::sdk::EntryDesc GhostInteraction{.key = "GhostInteraction",
                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                      .name = "GhostInteraction", .assembly = "Assembly-CSharp",
-                                                     .ns = ""};
+                                                     .ns = "", .base = &MonoBehaviour};
 
 /// Leaves an EMF reading at a thrown or moved object: CreateThrowingEMF(object's PhotonObjectInteract,
 /// the reading's EMF type, a flag, and a range in metres; the game's defaults are objectMoved, false and
@@ -569,7 +572,8 @@ inline constexpr pm::sdk::EntryDesc GhostInteraction_CreateAppearedEMF{
 
 /// An EMF reader's reading (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from its
 /// name.
-inline constexpr pm::sdk::EntryDesc EMF{.key = "EMF", .name = "EMF", .assembly = "Assembly-CSharp", .ns = ""};
+inline constexpr pm::sdk::EntryDesc EMF{.key = "EMF", .name = "EMF", .assembly = "Assembly-CSharp", .ns = "",
+                                        .base = &MonoBehaviour};
 
 inline constexpr const char* EMFType_values[] = {"interaction", "objectMoved", "windowKnock", "lightSwitched"};
 
@@ -586,7 +590,8 @@ inline constexpr pm::sdk::EntryDesc EMFType_objectMoved{.key = "EMFType.objectMo
 /// One of the ghost's bodies (Assembly-CSharp, global namespace): its renderers, its Animator and its
 /// sounds. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostModel{.key = "GhostModel", .confidence = pm::sdk::Confidence::Decompiled,
-                                               .name = "GhostModel", .assembly = "Assembly-CSharp", .ns = ""};
+                                               .name = "GhostModel", .assembly = "Assembly-CSharp", .ns = "",
+                                               .base = &MonoBehaviourPun};
 
 /// The model's Animator, which plays its walk: GhostModel's one Animator field. It may sit on a child
 /// of the model. Decompiled.
@@ -598,7 +603,8 @@ inline constexpr pm::sdk::EntryDesc GhostModel_animator{.key = "GhostModel.anima
 /// The ghost's interactions and abilities (Assembly-CSharp, global namespace), a MonoBehaviour beside
 /// its GhostAI. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostActivity{.key = "GhostActivity", .confidence = pm::sdk::Confidence::Decompiled,
-                                                  .name = "GhostActivity", .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .name = "GhostActivity", .assembly = "Assembly-CSharp", .ns = "",
+                                                  .base = &MonoBehaviour};
 
 /// Whether the Raiju's electronics sensor finds running electronics near the ghost, which its hunt speed
 /// reads: GhostActivity's one public bool. Inferred: from the class dump.

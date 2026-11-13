@@ -6,17 +6,25 @@
 // that keep them working (host/menu_panel.h); sdk/systems/menus.md says how a click reaches a listener. Notes read from
 // decompiled code are from build 25811160.
 
+#include "UnityObject.h"
 #include "UnityRendering.h"
+#include "UnityUI.h"
 #include "entry.h"
 #include "game_api.h"
 
 namespace pm::map {
 
+/// Doozy's base of its controls (DoozyRuntime, namespace Doozy.Runtime.UIManager.Components), a Unity Selectable:
+/// selection, navigation and the states its animators play. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc UISelectable{.key = "UISelectable", .name = "UISelectable",
+                                                 .assembly = "DoozyRuntime",
+                                                 .ns = "Doozy.Runtime.UIManager.Components", .base = &Selectable};
+
 /// Doozy's button (DoozyRuntime, namespace Doozy.Runtime.UIManager.Components), a UISelectable: the main menu's taped
 /// buttons and the error popup's. Decompiled.
 inline constexpr pm::sdk::EntryDesc UIButton{.key = "UIButton", .confidence = pm::sdk::Confidence::Decompiled,
                                              .name = "UIButton", .assembly = "DoozyRuntime",
-                                             .ns = "Doozy.Runtime.UIManager.Components"};
+                                             .ns = "Doozy.Runtime.UIManager.Components", .base = &UISelectable};
 
 inline constexpr const char* Doozy_PointerEventData[] = {"PointerEventData"};
 inline constexpr const char* Doozy_BaseEventData[] = {"BaseEventData"};
@@ -36,12 +44,6 @@ inline constexpr pm::sdk::EntryDesc UIButton_OnPointerClick{
 inline constexpr pm::sdk::EntryDesc UIButton_OnSubmit{
     .key = "UIButton.OnSubmit", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "UIButton", .name = "OnSubmit", .params = Doozy_BaseEventData};
-
-/// Doozy's base of its controls (DoozyRuntime, namespace Doozy.Runtime.UIManager.Components), a Unity Selectable:
-/// selection, navigation and the states its animators play. Inferred: from the class dump.
-inline constexpr pm::sdk::EntryDesc UISelectable{.key = "UISelectable", .name = "UISelectable",
-                                                 .assembly = "DoozyRuntime",
-                                                 .ns = "Doozy.Runtime.UIManager.Components"};
 
 /// The control's behaviours, a DoozyBehaviours: what runs on a click, an enter, a selection. Saved with the scene,
 /// so a copy (Object.Instantiate) has its own, with its original's listeners. Decompiled.
@@ -69,12 +71,22 @@ inline constexpr pm::sdk::EntryDesc DoozyBehaviours_Behaviours{
     .key = "DoozyBehaviours.Behaviours", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "DoozyBehaviours", .name = "Behaviours"};
 
+/// Doozy's base of its events (DoozyRuntime, namespace Doozy.Runtime.Mody): a name and the runners of Doozy's own
+/// actions. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc ModyEventBase{.key = "ModyEventBase", .name = "ModyEventBase",
+                                                  .assembly = "DoozyRuntime", .ns = "Doozy.Runtime.Mody"};
+
+/// Doozy's event (DoozyRuntime, namespace Doozy.Runtime.Mody), a ModyEventBase with a UnityEvent. Inferred: from the
+/// class dump.
+inline constexpr pm::sdk::EntryDesc ModyEvent{.key = "ModyEvent", .name = "ModyEvent", .assembly = "DoozyRuntime",
+                                              .ns = "Doozy.Runtime.Mody", .base = &ModyEventBase};
+
 /// One behaviour of a control (DoozyRuntime, namespace Doozy.Runtime.UIManager, class UIBehaviour), a ModyEvent with
 /// a name (DoozyBehaviourName). When its signal comes, and its control is alive, active and interactable, it runs its
 /// runners (ModyEventBase.Runners) and then its event (ModyEvent.Event). Decompiled.
 inline constexpr pm::sdk::EntryDesc DoozyBehaviour{.key = "DoozyBehaviour", .confidence = pm::sdk::Confidence::Decompiled,
                                                    .name = "UIBehaviour", .assembly = "DoozyRuntime",
-                                                   .ns = "Doozy.Runtime.UIManager"};
+                                                   .ns = "Doozy.Runtime.UIManager", .base = &ModyEvent};
 
 inline constexpr const char* DoozyBehaviourName_values[] = {
     "PointerEnter",     "PointerExit",       "PointerDown",        "PointerUp",         "PointerClick",
@@ -94,21 +106,11 @@ inline constexpr pm::sdk::EntryDesc DoozyBehaviourName_PointerClick{
     .key = "DoozyBehaviourName.PointerClick", .kind = pm::sdk::Kind::EnumValue,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "DoozyBehaviourName", .name = "PointerClick"};
 
-/// Doozy's base of its events (DoozyRuntime, namespace Doozy.Runtime.Mody): a name and the runners of Doozy's own
-/// actions. Inferred: from the class dump.
-inline constexpr pm::sdk::EntryDesc ModyEventBase{.key = "ModyEventBase", .name = "ModyEventBase",
-                                                  .assembly = "DoozyRuntime", .ns = "Doozy.Runtime.Mody"};
-
 /// The event's runners, a List<ModyActionRunner>: Doozy's own actions it runs, before its UnityEvent. Saved with the
 /// scene. Decompiled.
 inline constexpr pm::sdk::EntryDesc ModyEventBase_Runners{
     .key = "ModyEventBase.Runners", .kind = pm::sdk::Kind::Field, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "ModyEventBase", .name = "Runners", .type = "List<ModyActionRunner>"};
-
-/// Doozy's event (DoozyRuntime, namespace Doozy.Runtime.Mody), a ModyEventBase with a UnityEvent. Inferred: from the
-/// class dump.
-inline constexpr pm::sdk::EntryDesc ModyEvent{.key = "ModyEvent", .name = "ModyEvent", .assembly = "DoozyRuntime",
-                                              .ns = "Doozy.Runtime.Mody"};
 
 /// The event's UnityEvent, read when it runs (not kept elsewhere), so a new one set here is the one that runs. Its
 /// listeners from the scene are persistent ones. Matched by name alone: the models name UnityEvent and its generic
@@ -131,7 +133,7 @@ inline constexpr pm::sdk::EntryDesc UISelectable_SetState{
 inline constexpr pm::sdk::EntryDesc UISelectableColorAnimator{
     .key = "UISelectableColorAnimator", .confidence = pm::sdk::Confidence::Decompiled, .flags = pm::sdk::kOptional,
     .name = "UISelectableColorAnimator",
-    .assembly = "DoozyRuntime", .ns = "Doozy.Runtime.UIManager.Animators"};
+    .assembly = "DoozyRuntime", .ns = "Doozy.Runtime.UIManager.Animators", .base = &MonoBehaviour};
 
 /// Plays the colour of a selection state: 0 normal, 1 highlighted, 2 pressed, 3 selected, 4 disabled. The state's enum is
 /// obfuscated. Optional, as its type. Decompiled.

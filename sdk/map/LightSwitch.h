@@ -6,6 +6,8 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -19,7 +21,8 @@ inline constexpr pm::sdk::Fact LightSwitch_ghostUseRefused_facts[] = {
 
 /// A light switch (Assembly-CSharp, global namespace), a MonoBehaviourPun. Decompiled.
 inline constexpr pm::sdk::EntryDesc LightSwitch{.key = "LightSwitch", .confidence = pm::sdk::Confidence::Decompiled,
-                                                .name = "LightSwitch", .assembly = "Assembly-CSharp", .ns = ""};
+                                                .name = "LightSwitch", .assembly = "Assembly-CSharp", .ns = "",
+                                                .base = &MonoBehaviourPun};
 
 /// Whether the switch is the fuse box's: UseLightSwitch returns at once while it is set, and
 /// get_IsSwitchOn answers the on flag only while it is clear. Decompiled.
@@ -75,7 +78,7 @@ inline constexpr pm::sdk::EntryDesc LightSwitch_room{.key = "LightSwitch.room", 
 
 /// A light a switch controls (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc LightSource{.key = "LightSource", .name = "LightSource", .assembly = "Assembly-CSharp",
-                                                .ns = ""};
+                                                .ns = "", .base = &MonoBehaviour};
 
 /// The light's Unity Light. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc LightSource_lightSource{.key = "LightSource.lightSource", .kind = pm::sdk::Kind::Field,

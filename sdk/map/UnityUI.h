@@ -6,6 +6,8 @@
 // Like every phasmo:: wrapper, these reach every mod.
 
 #include "Transform.h"
+#include "UnityEvents.h"
+#include "UnityObject.h"
 #include "UnityRendering.h"
 #include "entry.h"
 #include "game_api.h"
@@ -16,10 +18,17 @@ inline constexpr const char* UnityUI_Vector2[] = {"Vector2"};
 inline constexpr const char* UnityUI_int[] = {"int"};
 inline constexpr const char* UnityUI_float[] = {"float"};
 
+/// Unity's base of the UI's components (UnityEngine.UI, namespace UnityEngine.EventSystems). Inferred:
+/// Unity's documented API.
+inline constexpr pm::sdk::EntryDesc UIBehaviour{.key = "UIBehaviour", .name = "UIBehaviour",
+                                                .assembly = "UnityEngine.UI", .ns = "UnityEngine.EventSystems",
+                                                .base = &MonoBehaviour};
+
 /// Unity's grid layout (UnityEngine.UI), a Behaviour: it places its active children in cells of one
 /// size, row by row, in their sibling order. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc GridLayoutGroup{.key = "GridLayoutGroup", .name = "GridLayoutGroup",
-                                                    .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
+                                                    .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI",
+                                                    .base = &UIBehaviour};
 
 /// The cell size, two floats. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc GridLayoutGroup_get_cellSize{
@@ -74,7 +83,7 @@ inline constexpr pm::sdk::EntryDesc GridConstraint_FixedColumnCount{.key = "Grid
 inline constexpr pm::sdk::EntryDesc HorizontalOrVerticalLayoutGroup{.key = "HorizontalOrVerticalLayoutGroup",
                                                                     .name = "HorizontalOrVerticalLayoutGroup",
                                                                     .assembly = "UnityEngine.UI",
-                                                                    .ns = "UnityEngine.UI"};
+                                                                    .ns = "UnityEngine.UI", .base = &UIBehaviour};
 
 /// The space between children, a float. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc HorizontalOrVerticalLayoutGroup_get_spacing{
@@ -86,9 +95,13 @@ inline constexpr pm::sdk::EntryDesc HorizontalOrVerticalLayoutGroup_set_spacing{
     .key = "HorizontalOrVerticalLayoutGroup.set_spacing", .kind = pm::sdk::Kind::Method,
     .owner = "HorizontalOrVerticalLayoutGroup", .name = "set_spacing", .params = UnityUI_float};
 
+/// Unity's base of the controls (UnityEngine.UI), a UIBehaviour. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Selectable{.key = "Selectable", .name = "Selectable", .assembly = "UnityEngine.UI",
+                                               .ns = "UnityEngine.UI", .base = &UIBehaviour};
+
 /// Unity's button (UnityEngine.UI), a Selectable. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Button{.key = "Button", .name = "Button", .assembly = "UnityEngine.UI",
-                                           .ns = "UnityEngine.UI"};
+                                           .ns = "UnityEngine.UI", .base = &Selectable};
 
 /// Runs the button's click: while the button is active (IsActive) and interactable (IsInteractable),
 /// both asked as virtual calls, it invokes onClick. OnPointerClick checks the event is the left
@@ -104,19 +117,18 @@ inline constexpr pm::sdk::EntryDesc Button_Press{.key = "Button.Press", .kind = 
 inline constexpr pm::sdk::EntryDesc Button_get_onClick{.key = "Button.get_onClick", .kind = pm::sdk::Kind::Method,
                                                        .owner = "Button", .name = "get_onClick"};
 
-/// Unity's base of the UI's components (UnityEngine.UI, namespace UnityEngine.EventSystems). Inferred:
-/// Unity's documented API.
-inline constexpr pm::sdk::EntryDesc UIBehaviour{.key = "UIBehaviour", .name = "UIBehaviour",
-                                                .assembly = "UnityEngine.UI", .ns = "UnityEngine.EventSystems"};
-
 /// Whether the component is active and enabled, virtual: Button.Press asks it first. Decompiled.
 inline constexpr pm::sdk::EntryDesc UIBehaviour_IsActive{.key = "UIBehaviour.IsActive", .kind = pm::sdk::Kind::Method,
                                                          .confidence = pm::sdk::Confidence::Decompiled,
                                                          .owner = "UIBehaviour", .name = "IsActive"};
 
+/// Unity UI's base of everything drawn (UnityEngine.UI). Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc Graphic{.key = "Graphic", .name = "Graphic", .assembly = "UnityEngine.UI",
+                                            .ns = "UnityEngine.UI", .base = &UIBehaviour};
+
 /// Unity UI's image (UnityEngine.UI), a Graphic. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Image{.key = "Image", .name = "Image", .assembly = "UnityEngine.UI",
-                                          .ns = "UnityEngine.UI"};
+                                          .ns = "UnityEngine.UI", .base = &Graphic};
 
 /// The Sprite it shows, or null. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Image_get_sprite{.key = "Image.get_sprite", .kind = pm::sdk::Kind::Method,
@@ -129,7 +141,7 @@ inline constexpr pm::sdk::EntryDesc Image_set_sprite{.key = "Image.set_sprite", 
 /// Unity's canvas component (UnityEngine.UIModule), the root a UI is drawn in. Inferred: Unity's
 /// documented API.
 inline constexpr pm::sdk::EntryDesc Canvas{.key = "Canvas", .name = "Canvas", .assembly = "UnityEngine.UIModule",
-                                           .ns = "UnityEngine"};
+                                           .ns = "UnityEngine", .base = &Behaviour};
 
 /// The canvas's scale: screen pixels per canvas unit. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Canvas_get_scaleFactor{.key = "Canvas.get_scaleFactor",
@@ -139,10 +151,6 @@ inline constexpr pm::sdk::EntryDesc Canvas_get_scaleFactor{.key = "Canvas.get_sc
 /// The camera a canvas that is not drawn over the screen is seen through. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Canvas_get_worldCamera{.key = "Canvas.get_worldCamera", .kind = pm::sdk::Kind::Method,
                                                            .owner = "Canvas", .name = "get_worldCamera"};
-
-/// Unity's base of the controls (UnityEngine.UI), a UIBehaviour. Inferred: Unity's documented API.
-inline constexpr pm::sdk::EntryDesc Selectable{.key = "Selectable", .name = "Selectable", .assembly = "UnityEngine.UI",
-                                               .ns = "UnityEngine.UI"};
 
 /// Whether the control takes input, virtual: Button.Press asks it after IsActive. Decompiled.
 inline constexpr pm::sdk::EntryDesc Selectable_IsInteractable{
@@ -174,7 +182,7 @@ inline constexpr pm::sdk::EntryDesc Selectable_set_targetGraphic{
 
 /// Unity's toggle (UnityEngine.UI), a Selectable. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Toggle{.key = "Toggle", .name = "Toggle", .assembly = "UnityEngine.UI",
-                                           .ns = "UnityEngine.UI"};
+                                           .ns = "UnityEngine.UI", .base = &Selectable};
 
 /// The Graphic the toggle shows while it is on. Inferred: Unity's documented field.
 inline constexpr pm::sdk::EntryDesc Toggle_graphic{.key = "Toggle.graphic", .kind = pm::sdk::Kind::Field,
@@ -201,7 +209,7 @@ inline constexpr pm::sdk::EntryDesc Toggle_SetIsOnWithoutNotify{
 
 /// The toggle's change event type (a UnityEvent<bool>), nested in Toggle. Inferred: Unity's source.
 inline constexpr pm::sdk::EntryDesc ToggleEvent{.key = "ToggleEvent", .owner = "Toggle", .name = "ToggleEvent",
-                                                .assembly = "UnityEngine.UI"};
+                                                .assembly = "UnityEngine.UI", .base = &UnityEventBase};
 
 /// The event's constructor: no listeners. Optional: the Mods panel's rows (menu_panel::can_copy_rows) and the Playable
 /// Ghost mod's lobby tape use it, each checking it with pm::api::all_resolved; without it there is no Mods button, and
@@ -227,7 +235,8 @@ inline constexpr pm::sdk::EntryDesc Selectable_OnPointerExit{
 /// Unity's UI event system (UnityEngine.UI, namespace UnityEngine.EventSystems): it sends input to the
 /// UI through its current input module. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc EventSystem{.key = "EventSystem", .name = "EventSystem",
-                                                .assembly = "UnityEngine.UI", .ns = "UnityEngine.EventSystems"};
+                                                .assembly = "UnityEngine.UI", .ns = "UnityEngine.EventSystems",
+                                                .base = &UIBehaviour};
 
 /// The event system in use, or null. Static. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc EventSystem_get_current{.key = "EventSystem.get_current",
@@ -260,17 +269,22 @@ inline constexpr pm::sdk::EntryDesc EventSystem_SetSelectedGameObject{
 /// A group of UI objects that can stop taking clicks together (UnityEngine.UIModule, namespace
 /// UnityEngine), a Behaviour. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc CanvasGroup{.key = "CanvasGroup", .name = "CanvasGroup",
-                                                .assembly = "UnityEngine.UIModule", .ns = "UnityEngine"};
+                                                .assembly = "UnityEngine.UIModule", .ns = "UnityEngine",
+                                                .base = &Behaviour};
 
 /// Whether the group's objects take the pointer's clicks. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc CanvasGroup_set_blocksRaycasts{
     .key = "CanvasGroup.set_blocksRaycasts", .kind = pm::sdk::Kind::Method, .owner = "CanvasGroup",
     .name = "set_blocksRaycasts", .params = UnityUI_bool};
 
+/// TextMeshPro's base text (Unity.TextMeshPro, namespace TMPro). Inferred: TextMeshPro's documented API.
+inline constexpr pm::sdk::EntryDesc TMP_Text{.key = "TMP_Text", .name = "TMP_Text", .assembly = "Unity.TextMeshPro",
+                                             .ns = "TMPro", .base = &Graphic};
+
 /// TextMesh Pro's UI text (Unity.TextMeshPro, namespace TMPro): every text on the journal's pages.
 /// Inferred: TextMesh Pro's documented API.
 inline constexpr pm::sdk::EntryDesc TextMeshProUGUI{.key = "TextMeshProUGUI", .name = "TextMeshProUGUI",
-                                                    .assembly = "Unity.TextMeshPro", .ns = "TMPro"};
+                                                    .assembly = "Unity.TextMeshPro", .ns = "TMPro", .base = &TMP_Text};
 
 /// How a Canvas is drawn (UnityEngine.UIModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc RenderMode{.key = "RenderMode", .name = "RenderMode",
@@ -299,7 +313,8 @@ inline constexpr pm::sdk::EntryDesc Canvas_set_sortingOrder{.key = "Canvas.set_s
 /// Scales a canvas to the screen (UnityEngine.UI, namespace UnityEngine.UI). Inferred: Unity's documented
 /// API.
 inline constexpr pm::sdk::EntryDesc CanvasScaler{.key = "CanvasScaler", .name = "CanvasScaler",
-                                                 .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
+                                                 .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI",
+                                                 .base = &UIBehaviour};
 
 /// How a CanvasScaler scales, an enum nested in it. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc CanvasScaler_ScaleMode{.key = "CanvasScaler.ScaleMode", .owner = "CanvasScaler",
@@ -332,11 +347,8 @@ inline constexpr pm::sdk::EntryDesc CanvasScaler_set_matchWidthOrHeight{
 /// mentions a raycast at all), so a canvas a mod makes at runtime catches nothing until it has one of these
 /// (pm::api::buttons::catch_pointer). Read from the build 2026-11-12.
 inline constexpr pm::sdk::EntryDesc GraphicRaycaster{.key = "GraphicRaycaster", .name = "GraphicRaycaster",
-                                                     .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
-
-/// Unity UI's base of everything drawn (UnityEngine.UI). Inferred: Unity's documented API.
-inline constexpr pm::sdk::EntryDesc Graphic{.key = "Graphic", .name = "Graphic", .assembly = "UnityEngine.UI",
-                                            .ns = "UnityEngine.UI"};
+                                                     .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI",
+                                                     .base = &UIBehaviour};
 
 inline constexpr const char* Graphic_Color[] = {"Color"};
 inline constexpr const char* Graphic_bool[] = {"bool"};
@@ -367,7 +379,8 @@ inline constexpr pm::sdk::EntryDesc Graphic_get_canvasRenderer{.key = "Graphic.g
 
 /// What draws a Graphic on its canvas (UnityEngine.UIModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc CanvasRenderer{.key = "CanvasRenderer", .name = "CanvasRenderer",
-                                                   .assembly = "UnityEngine.UIModule", .ns = "UnityEngine"};
+                                                   .assembly = "UnityEngine.UIModule", .ns = "UnityEngine",
+                                                   .base = &Component};
 
 /// The colour it multiplies the graphic by; a Toggle fades a graphic through it. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc CanvasRenderer_GetColor{.key = "CanvasRenderer.GetColor",
@@ -382,7 +395,7 @@ inline constexpr pm::sdk::EntryDesc CanvasRenderer_SetColor{.key = "CanvasRender
 /// A graphic that shows a Texture (UnityEngine.UI); without one, a solid quad of its colour. Inferred:
 /// Unity's documented API.
 inline constexpr pm::sdk::EntryDesc RawImage{.key = "RawImage", .name = "RawImage", .assembly = "UnityEngine.UI",
-                                             .ns = "UnityEngine.UI"};
+                                             .ns = "UnityEngine.UI", .base = &Graphic};
 
 /// Sets the texture it shows, or null. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc RawImage_set_texture{.key = "RawImage.set_texture", .kind = pm::sdk::Kind::Method,
@@ -423,7 +436,8 @@ inline constexpr pm::sdk::EntryDesc RectTransformUtility_ScreenPointToLocalPoint
 /// with raycastTarget on. It clips nothing by itself: a RectMask2D (or a Mask) on the viewport does that.
 /// Present in this build's UnityEngine.UI (class dump); its behaviour is Unity's documented API.
 inline constexpr pm::sdk::EntryDesc ScrollRect{.key = "ScrollRect", .name = "ScrollRect",
-                                               .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
+                                               .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI",
+                                               .base = &UIBehaviour};
 
 /// The RectTransform it scrolls (m_Content): null until something sets it, and then everything it scrolls is
 /// a child of it. Inferred: from the class dump.
@@ -488,7 +502,8 @@ inline constexpr pm::sdk::EntryDesc ScrollRect_StopMovement{
 /// it to its own rectangle, without a stencil or a drawn mask of its own. Put it on a viewport, not on the
 /// content. Present in this build's UnityEngine.UI (class dump).
 inline constexpr pm::sdk::EntryDesc RectMask2D{.key = "RectMask2D", .name = "RectMask2D",
-                                               .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
+                                               .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI",
+                                               .base = &UIBehaviour};
 
 /// Unity UI's layout marker (UnityEngine.UI), a UIBehaviour: it holds the minimum, preferred and flexible sizes
 /// a LayoutGroup would give its object, and does nothing when no LayoutGroup asks for them, so it draws nothing
@@ -497,11 +512,8 @@ inline constexpr pm::sdk::EntryDesc RectMask2D{.key = "RectMask2D", .name = "Rec
 /// have a RectTransform for the layout entries to act on, for a list's content that carries no graphic of its own.
 /// Present in this build's UnityEngine.UI (class dump); its behaviour is Unity's documented API.
 inline constexpr pm::sdk::EntryDesc LayoutElement{.key = "LayoutElement", .name = "LayoutElement",
-                                                  .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI"};
-
-/// TextMeshPro's base text (Unity.TextMeshPro, namespace TMPro). Inferred: TextMeshPro's documented API.
-inline constexpr pm::sdk::EntryDesc TMP_Text{.key = "TMP_Text", .name = "TMP_Text", .assembly = "Unity.TextMeshPro",
-                                             .ns = "TMPro"};
+                                                  .assembly = "UnityEngine.UI", .ns = "UnityEngine.UI",
+                                                  .base = &UIBehaviour};
 
 /// Sets its text, TextMeshPro rich text. Inferred: TextMeshPro's documented property setter.
 inline constexpr pm::sdk::EntryDesc TMP_Text_set_text{.key = "TMP_Text.set_text", .kind = pm::sdk::Kind::Method,

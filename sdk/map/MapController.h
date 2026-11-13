@@ -6,13 +6,15 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
 /// The truck's map monitor (Assembly-CSharp, global namespace), a MonoBehaviour. Optional. Inferred:
 /// from the class dump.
 inline constexpr pm::sdk::EntryDesc MapController{.key = "MapController", .flags = pm::sdk::kOptional,
-                                                  .name = "MapController", .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .name = "MapController", .assembly = "Assembly-CSharp", .ns = "",
+                                                  .base = &MonoBehaviour};
 
 /// The level's MapController: the class's one static field of its own type. Optional. Inferred: from
 /// the class dump.

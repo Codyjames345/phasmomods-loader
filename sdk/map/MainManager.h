@@ -7,13 +7,15 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
 /// The menu scene's manager (Assembly-CSharp, global namespace), a MonoBehaviourPunCallbacks.
 /// Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc MainManager{.key = "MainManager", .name = "MainManager",
-                                                .assembly = "Assembly-CSharp", .ns = ""};
+                                                .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviourPun};
 
 /// The menu scene's MainManager: the class's one static field of its own type. Null, or a destroyed
 /// one, outside the menu scene. Inferred: from the class dump.
@@ -23,7 +25,7 @@ inline constexpr pm::sdk::EntryDesc MainManager_instance{.key = "MainManager.ins
 
 /// The lobby computer (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc GhostOS{.key = "GhostOS", .name = "GhostOS", .assembly = "Assembly-CSharp",
-                                            .ns = ""};
+                                            .ns = "", .base = &MonoBehaviour};
 
 /// The lobby's computer: MainManager's one GhostOS field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc MainManager_ghostOS{.key = "MainManager.ghostOS", .kind = pm::sdk::Kind::Field,
@@ -32,7 +34,7 @@ inline constexpr pm::sdk::EntryDesc MainManager_ghostOS{.key = "MainManager.ghos
 /// The lobby's shared equipment pool (Assembly-CSharp, global namespace), a MonoBehaviour: each
 /// player's loadout is added to it, and the truck is stocked from it. Inferred: from its methods' names.
 inline constexpr pm::sdk::EntryDesc InventoryManager{.key = "InventoryManager", .name = "InventoryManager",
-                                                     .assembly = "Assembly-CSharp", .ns = ""};
+                                                     .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// The computer's equipment pool: GhostOS's one InventoryManager field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc GhostOS_inventory{.key = "GhostOS.inventory", .kind = pm::sdk::Kind::Field,
@@ -77,7 +79,8 @@ inline constexpr pm::sdk::EntryDesc InventoryManager_ReturnItemstoInventory{
 
 /// A piece of equipment the player owns (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc EquipmentInfo{.key = "EquipmentInfo", .confidence = pm::sdk::Confidence::Decompiled,
-                                                  .name = "EquipmentInfo", .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .name = "EquipmentInfo", .assembly = "Assembly-CSharp", .ns = "",
+                                                  .base = &MonoBehaviourPun};
 
 inline constexpr const char* EquipmentInfo_int[] = {"int"};
 
@@ -92,7 +95,7 @@ inline constexpr pm::sdk::EntryDesc EquipmentInfo_RemoveAmountOwned{
 inline constexpr pm::sdk::EntryDesc InventoryEquipment{.key = "InventoryEquipment",
                                                        .confidence = pm::sdk::Confidence::Decompiled,
                                                        .name = "InventoryEquipment", .assembly = "Assembly-CSharp",
-                                                       .ns = ""};
+                                                       .ns = "", .base = &EquipmentInfo};
 
 inline constexpr const char* InventoryEquipment_bool[] = {"bool"};
 
@@ -136,7 +139,7 @@ inline constexpr pm::sdk::EntryDesc InventoryEquipment_AddToLobbyNetworked{
 /// The player's saved loadouts (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from its
 /// name.
 inline constexpr pm::sdk::EntryDesc LoadoutManager{.key = "LoadoutManager", .name = "LoadoutManager",
-                                                   .assembly = "Assembly-CSharp", .ns = ""};
+                                                   .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// The computer's loadouts: GhostOS's one LoadoutManager field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc GhostOS_loadouts{.key = "GhostOS.loadouts", .kind = pm::sdk::Kind::Field,

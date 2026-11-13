@@ -6,12 +6,14 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
 /// A player's sanity (Assembly-CSharp, global namespace), a MonoBehaviour on each player. Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerSanity{.key = "PlayerSanity", .confidence = pm::sdk::Confidence::Decompiled,
-                                                 .name = "PlayerSanity", .assembly = "Assembly-CSharp", .ns = ""};
+                                                 .name = "PlayerSanity", .assembly = "Assembly-CSharp", .ns = "",
+                                                 .base = &MonoBehaviour};
 
 /// Every frame, the sanity drain in the dark: it takes the first of the candles near the player (the
 /// class's List<Candle>) for which CandleIsOn answers true, Enumerable.FirstOrDefault with that test,
@@ -66,7 +68,7 @@ inline constexpr pm::sdk::EntryDesc PlayerSanity_insanity{.key = "PlayerSanity.i
 
 /// The truck's sanity monitor (Assembly-CSharp, global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc HeartRateData{.key = "HeartRateData", .name = "HeartRateData",
-                                                  .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// Redraws the monitor: it reads every player's insanity. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc HeartRateData_UpdateUI{.key = "HeartRateData.UpdateUI", .kind = pm::sdk::Kind::Method,

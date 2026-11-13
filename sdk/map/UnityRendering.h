@@ -11,6 +11,7 @@
 #include "entry.h"
 #include "game_api.h"
 #include "Transform.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -20,7 +21,8 @@ inline constexpr const char* UnityRendering_bool_bool[] = {"bool", "bool"};
 
 /// Unity's base class of renderers (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Renderer{.key = "Renderer", .name = "Renderer",
-                                             .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                             .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                             .base = &Component};
 
 /// The renderer's material as its asset is shared, unchanged. Inferred: Unity's documented property
 /// getter.
@@ -66,7 +68,7 @@ inline constexpr pm::sdk::EntryDesc Renderer_set_shadowCastingMode{
 
 /// Unity's light component (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Light{.key = "Light", .name = "Light", .assembly = "UnityEngine.CoreModule",
-                                          .ns = "UnityEngine"};
+                                          .ns = "UnityEngine", .base = &Behaviour};
 
 /// The light's colour. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Light_get_color{.key = "Light.get_color", .kind = pm::sdk::Kind::Method,
@@ -104,7 +106,7 @@ inline constexpr pm::sdk::EntryDesc Renderer_set_sharedMaterials{
 
 /// Unity's mesh (UnityEngine.CoreModule), an Object. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Mesh{.key = "Mesh", .name = "Mesh", .assembly = "UnityEngine.CoreModule",
-                                         .ns = "UnityEngine"};
+                                         .ns = "UnityEngine", .base = &UnityObject};
 
 /// The constructor Mesh(): a new, empty mesh. Run it on an object the Mesh type made. Inferred: Unity's
 /// documented API.
@@ -114,7 +116,8 @@ inline constexpr pm::sdk::EntryDesc Mesh_ctor{.key = "Mesh.ctor", .kind = pm::sd
 /// A renderer that draws a mesh deformed by a skeleton (UnityEngine.CoreModule): a character's body.
 /// Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc SkinnedMeshRenderer{.key = "SkinnedMeshRenderer", .name = "SkinnedMeshRenderer",
-                                                        .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                                        .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                                        .base = &Renderer};
 
 inline constexpr const char* SkinnedMeshRenderer_BakeMesh_params[] = {"Mesh", "bool"};
 
@@ -129,7 +132,8 @@ inline constexpr pm::sdk::EntryDesc SkinnedMeshRenderer_BakeMesh{.key = "Skinned
 /// The component that holds the mesh a MeshRenderer draws (UnityEngine.CoreModule). Inferred: Unity's
 /// documented API.
 inline constexpr pm::sdk::EntryDesc MeshFilter{.key = "MeshFilter", .name = "MeshFilter",
-                                               .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                               .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                               .base = &Component};
 
 inline constexpr const char* MeshFilter_Mesh[] = {"Mesh"};
 
@@ -141,7 +145,8 @@ inline constexpr pm::sdk::EntryDesc MeshFilter_set_sharedMesh{.key = "MeshFilter
 /// A renderer that draws its GameObject's MeshFilter's mesh (UnityEngine.CoreModule). Inferred: Unity's
 /// documented API.
 inline constexpr pm::sdk::EntryDesc MeshRenderer{.key = "MeshRenderer", .name = "MeshRenderer",
-                                                 .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                                 .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                                 .base = &Renderer};
 
 /// The kinds of light (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc LightType{.key = "LightType", .name = "LightType",
@@ -167,7 +172,8 @@ inline constexpr pm::sdk::EntryDesc Light_set_range{.key = "Light.set_range", .k
 
 /// Unity's material (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Material{.key = "Material", .name = "Material",
-                                             .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                             .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                             .base = &UnityObject};
 
 /// The texture the material's shader property (by its id, Shader.PropertyToID) holds. Private: the body
 /// of Material.GetTexture. Inferred: from its name, beside Unity's documented GetTexture.
@@ -265,7 +271,7 @@ inline constexpr pm::sdk::EntryDesc ShaderProperty_CandleMelt_EmissionColor{
 
 /// Unity's base class of textures (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Texture{.key = "Texture", .name = "Texture", .assembly = "UnityEngine.CoreModule",
-                                            .ns = "UnityEngine"};
+                                            .ns = "UnityEngine", .base = &UnityObject};
 
 /// The texture's width in pixels. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Texture_get_width{.key = "Texture.get_width", .kind = pm::sdk::Kind::Method,
@@ -299,7 +305,8 @@ inline constexpr pm::sdk::EntryDesc Texture_set_filterMode{.key = "Texture.set_f
 
 /// Unity's 2D texture (UnityEngine.CoreModule), a Texture. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Texture2D{.key = "Texture2D", .flags = pm::sdk::kOptional, .name = "Texture2D",
-                                              .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                              .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                              .base = &Texture};
 
 /// The constructor Texture2D(width, height): RGBA32 with mipmaps, readable. Run it on an object the
 /// Texture2D type made. Inferred: Unity's documented API.
@@ -356,7 +363,8 @@ inline constexpr pm::sdk::EntryDesc Texture2D_Apply{.key = "Texture2D.Apply", .k
 
 /// Unity's render texture (UnityEngine.CoreModule), a Texture. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc RenderTexture{.key = "RenderTexture", .name = "RenderTexture",
-                                                  .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine"};
+                                                  .assembly = "UnityEngine.CoreModule", .ns = "UnityEngine",
+                                                  .base = &Texture};
 
 /// The pixel formats of a render texture (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc RenderTextureFormat{.key = "RenderTextureFormat", .name = "RenderTextureFormat",

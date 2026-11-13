@@ -45,6 +45,12 @@ Code entry or a native site `pattern`, `within` and `patternOffset`, and for a s
 `path` and `component`. A map header ends with its `phasmo::` wrappers; add one for each
 entry a mod may use (an export gets none).
 
+A Type entry of a class also gets `base`: a pointer to the Type entry of its nearest base class the map names (`.base =
+&MonoBehaviourPun` for `GhostAI`), read from the `: Base` of its declaration in the dump and, where that class is not
+mapped, from the next class up. Leave it null when no class it derives from is mapped, and for an interface, a struct or
+an enum. Typed handles convert to a base type's handle by it (`sdk/api/ref.h`), and the resolver never reads it. The
+base must be declared before the entry, so include its header, or move its declaration up in the same header.
+
 The model is read from every assembly a Type entry names, and a build that lacks a required one
 cannot be resolved at all, for every mod. An assembly that only `kOptional` Type entries name is
 optional: a build without it is read without it, and those entries stay unresolved. Give a type in a
@@ -322,12 +328,22 @@ time changed, and runs `build\gamecheck.exe --dump <dir> --image <GameAssembly.d
 [--mods <dir>]`. It prints one line per entry (`OK`, `MISSING`, `AMBIGUOUS` or `BLOCKED`, the key, the
 value, then twins, aliases and `renamed from`; `STARTUP`, the key and the name for an icall or a generic instance's method,
 checked at startup only; `SCENE`, the key and its path or name for a scene fact, checked in the scene
-files), then a summary. Then it copies the scene and asset files the scene facts need and runs
+files), then a summary. After the summary it proves each resolved Type entry's `base`: the class must derive from the
+class the base resolved to on every chain of parents the dump allows. It prints `BASE <key> does not derive from <base
+key>: <why>` for one that does not, and `BASES <n> checked, <m> wrong`; a wrong base fails the check. The dump names a
+parent only by the short name its base list begins with, and short names are shared (Doozy's `UIBehaviour` and Unity's,
+a nested enum named `Behaviour`, `InputControl` and `InputControl<T>`), so the check reads a parent as C# finds it, as
+far as the dump shows: never a struct, an enum or `System.Object`; for a top-level class, the one class of that name in
+its own assembly and namespace, which C# finds before any `using`; never a class of an assembly that itself derives
+from a class of the deriving class's assembly, since assemblies do not reference each other in a circle; and otherwise
+every class of the name, each of which must lead to the base. A class whose chain leaves the model (a base in an
+assembly the map does not name) or ends at an unmapped generic cannot be proved, so its entry gets no base. Then it
+copies the scene and asset files the scene facts need and runs
 `tools/assetcheck.py` on them, which prints `OK` or `MISSING` for each (see
 [scene and asset facts](../systems/scene.md)). The first configured run makes a Python venv in
 `re\dump\venv` and installs the pinned UnityPy there, so it needs Python 3 (uv's Python 3.14, the
 `py` launcher or `python`, in that order); an unconfigured run needs no Python. It never runs game code and never writes in the game
-folder. Exit 0 when every required entry it can check resolved and no mod would be switched off, 1
+folder. Exit 0 when every required entry it can check resolved, every base holds and no mod would be switched off, 1
 when one did not or one would, 2 on bad arguments or input it cannot read.
 
 `-Mods <dir>` adds `--mods <dir>`: gamecheck loads each mod DLL under `<dir>`, reads its
@@ -380,7 +396,8 @@ gitignored. Map entries (names, shapes, facts, hints, notes) are committed.
 
 1. Read the game's code: `node re\decomp.mjs`, and the dump under `re\dump\cs`.
 2. Write the entry and its `///` note in `sdk/map/<Type>.h`, with the first strategy in the list above
-   that resolves it by itself. Add its key to `kAllEntries` in `sdk/map/all.h`, and the `phasmo::` wrapper.
+   that resolves it by itself. Add its key to `kAllEntries` in `sdk/map/all.h`, and the `phasmo::` wrapper. A class
+   gets its `base` (above), and every mapped class that derives from it may now have it as a nearer base.
 3. Run `.\tools\gamecheck.ps1`. The entry must be `OK` with the value you expect. To prove the facts
    matter, drop one and confirm the entry turns `AMBIGUOUS` or `MISSING`.
 4. Put anything you learned that is not in the entry's note into `sdk/systems/<system>.md`.

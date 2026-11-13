@@ -7,6 +7,7 @@
 #include "entry.h"
 #include "game_api.h"
 #include "Transform.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -14,7 +15,7 @@ namespace pm::map {
 /// name.
 inline constexpr pm::sdk::EntryDesc BasePulsableSensor{.key = "BasePulsableSensor", .name = "BasePulsableSensor",
                                                        .assembly = "Micosmo.SensorToolkit",
-                                                       .ns = "Micosmo.SensorToolkit"};
+                                                       .ns = "Micosmo.SensorToolkit", .base = &MonoBehaviour};
 
 /// Pulses the sensor: it completes any pending pulse and runs the sensor's own test, which for a
 /// RangeSensor rebuilds its detections, then invokes its OnPulsed delegate at once. Pulse is not
@@ -27,10 +28,22 @@ inline constexpr pm::sdk::EntryDesc BasePulsableSensor_Pulse{.key = "BasePulsabl
                                                              .confidence = pm::sdk::Confidence::Decompiled,
                                                              .owner = "BasePulsableSensor", .name = "Pulse"};
 
+/// A sensor (Micosmo.SensorToolkit): BasePulsableSensor with detections, signal processors and a
+/// filter; RangeSensor and LOSSensor derive from it. Inferred: from its name.
+inline constexpr pm::sdk::EntryDesc Sensor{.key = "Sensor", .name = "Sensor", .assembly = "Micosmo.SensorToolkit",
+                                           .ns = "Micosmo.SensorToolkit", .base = &BasePulsableSensor};
+
+/// A sensor that detects within a volume (Micosmo.SensorToolkit): RangeSensor derives from it. Its one
+/// public value field is the detection mode (DetectionMode). Inferred: from its name and the class dump.
+inline constexpr pm::sdk::EntryDesc BaseVolumeSensor{.key = "BaseVolumeSensor", .name = "BaseVolumeSensor",
+                                                     .assembly = "Micosmo.SensorToolkit",
+                                                     .ns = "Micosmo.SensorToolkit", .base = &Sensor};
+
 /// A sensor that detects what lies within a shape around it (Micosmo.SensorToolkit). Inferred: from its
 /// name.
 inline constexpr pm::sdk::EntryDesc RangeSensor{.key = "RangeSensor", .name = "RangeSensor",
-                                                .assembly = "Micosmo.SensorToolkit", .ns = "Micosmo.SensorToolkit"};
+                                                .assembly = "Micosmo.SensorToolkit", .ns = "Micosmo.SensorToolkit",
+                                                .base = &BaseVolumeSensor};
 
 inline constexpr const char* RangeSensor_Vector3[] = {"Vector3"};
 
@@ -54,11 +67,6 @@ inline constexpr pm::sdk::EntryDesc RangeSensor_onPulsed{.key = "RangeSensor.onP
 // the class, set up as the ghost's own and pulsed by hand). Read from the class dump and decompiles of
 // build 25811160.
 
-/// A sensor (Micosmo.SensorToolkit): BasePulsableSensor with detections, signal processors and a
-/// filter; RangeSensor and LOSSensor derive from it. Inferred: from its name.
-inline constexpr pm::sdk::EntryDesc Sensor{.key = "Sensor", .name = "Sensor", .assembly = "Micosmo.SensorToolkit",
-                                           .ns = "Micosmo.SensorToolkit"};
-
 /// The sensor's signal processors, a List<SignalProcessor> each signal passes through before it
 /// counts. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc Sensor_signalProcessors{.key = "Sensor.signalProcessors",
@@ -76,12 +84,6 @@ inline constexpr pm::sdk::EntryDesc Sensor_GetDetections{.key = "Sensor.GetDetec
 /// The sensor's SignalFilter: Sensor's one field of that type. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc Sensor_filter{.key = "Sensor.filter", .kind = pm::sdk::Kind::Field,
                                                   .owner = "Sensor", .type = "SignalFilter"};
-
-/// A sensor that detects within a volume (Micosmo.SensorToolkit): RangeSensor derives from it. Its one
-/// public value field is the detection mode (DetectionMode). Inferred: from its name and the class dump.
-inline constexpr pm::sdk::EntryDesc BaseVolumeSensor{.key = "BaseVolumeSensor", .name = "BaseVolumeSensor",
-                                                     .assembly = "Micosmo.SensorToolkit",
-                                                     .ns = "Micosmo.SensorToolkit"};
 
 /// The volume's own SignalFilter. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc BaseVolumeSensor_signalFilter{.key = "BaseVolumeSensor.signalFilter",
@@ -164,7 +166,7 @@ inline constexpr pm::sdk::EntryDesc RangeSensor_set_PulseMode{.key = "RangeSenso
 /// copies; its public HashSet is a reference and is left alone (only the editor's OnDrawGizmosSelected
 /// reads it). Inferred: from its name and the dump.
 inline constexpr pm::sdk::EntryDesc LOSSensor{.key = "LOSSensor", .name = "LOSSensor", .assembly = "Micosmo.SensorToolkit",
-                                              .ns = "Micosmo.SensorToolkit"};
+                                              .ns = "Micosmo.SensorToolkit", .base = &Sensor};
 
 /// The constructor: it makes the input observable and the pulse routine and stores the settings'
 /// defaults. Inferred: by name.
@@ -216,7 +218,7 @@ inline constexpr pm::sdk::EntryDesc LOSSensor_window{.key = "LOSSensor.window", 
 inline constexpr pm::sdk::EntryDesc GhostHuntingProcessor{.key = "GhostHuntingProcessor",
                                                           .confidence = pm::sdk::Confidence::Decompiled,
                                                           .name = "GhostHuntingProcessor", .assembly = "Assembly-CSharp",
-                                                          .ns = ""};
+                                                          .ns = "", .base = &MonoBehaviour};
 
 /// Whether the processor passes signals in a hunt or out of one. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc GhostHuntingProcessor_requirement{.key = "GhostHuntingProcessor.requirement",
@@ -235,7 +237,8 @@ inline constexpr pm::sdk::EntryDesc GhostHuntingProcessor_allowRaijuSkip{
 /// then also needs the part within a fixed distance of the sensor it is given, and fails it when a flag reached
 /// through one of the player's fields is set. Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerProcessor{.key = "PlayerProcessor", .confidence = pm::sdk::Confidence::Decompiled,
-                                                    .name = "PlayerProcessor", .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .name = "PlayerProcessor", .assembly = "Assembly-CSharp", .ns = "",
+                                                    .base = &MonoBehaviour};
 
 inline constexpr const char* Sensor_GameObject[] = {"GameObject"};
 

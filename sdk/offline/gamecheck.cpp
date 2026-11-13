@@ -30,9 +30,14 @@
 // each value whose name cannot be a vanilla id, or "CONTENT not read: <why>" when the enums cannot be
 // read (the entries' own lines are the failure). Nothing here asserts a fixed number. Then "HOST steering
 // available", or "HOST steering unavailable: <keys>" naming the host's own steering entries
-// (pm::map::kSteeringEntries) that did not resolve; their own lines are the failure.
-// Exit 0 when every required entry it can check resolved and no mod would be switched off, 1 when
-// one did not or one would, 2 on bad arguments, unreadable input or an exception (its reason printed).
+// (pm::map::kSteeringEntries) that did not resolve; their own lines are the failure. Then
+// "BASE <key> does not derive from <base key>: <why>" for each resolved Type entry whose base (the map's
+// data for typed handles, sdk/api/ref.h) is not an ancestor of its class on every chain of parents the
+// dump allows, "BASE <key>: its base <base key> is not a type entry of the map" for a base of the wrong
+// kind, and "BASES <n> checked, <m> wrong"; a wrong base counts as a failure.
+// Exit 0 when every required entry it can check resolved, every base holds and no mod would be switched
+// off, 1 when one did not or one would, 2 on bad arguments, unreadable input or an exception (its reason
+// printed).
 //
 // usage: gamecheck --map-digest <file>
 // Writes the map's digest (sdk/resolver/map_digest.h) to the file and checks nothing. The build runs it, for
@@ -58,10 +63,12 @@
 #include <fstream>
 #include <format>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <unordered_map>
 #include <vector>
 
 #include "all.h"
@@ -405,6 +412,163 @@ bool write_text(const std::filesystem::path& path, const std::string& text) {
   return false;
 }
 
+// The classes of the model, by their parents: what the bases check walks. The dump gives a class's parent only as the
+// short name its base list begins with (C# lists the base class first), and short names are shared, so a parent is read
+// as C# would find it, as far as the model can tell, and failing that as every class the name may stand for.
+class Ancestry {
+ public:
+  explicit Ancestry(const GameModel& model) : model_(model) {
+    for (size_t i = 0; i < model.types.size(); ++i) named_[model.types[i].name].push_back(static_cast<int>(i));
+    // An assembly whose class derives from a class only another assembly has references that one.
+    for (size_t i = 0; i < model.types.size(); ++i) {
+      const ModelType& type = model.types[i];
+      std::vector<int> parents;
+      if (type.isInterface || type.isValueType || !read_parents(static_cast<int>(i), parents).empty() || parents.size() != 1)
+        continue;
+      if (const std::string& to = model.types[parents.front()].assembly; to != type.assembly)
+        references_[type.assembly].insert(to);
+    }
+  }
+
+  // Whether every chain of parents the model allows from the class `t` reaches the class `base`. False, with why, when a
+  // chain ends without it, or when a parent cannot be told: a name that is no type of the model, or that names a class
+  // and an interface alike.
+  bool derives(int t, int base, std::string& why) const { return derives(t, base, why, 0); }
+
+ private:
+  // Deeper than any class chain the game has; a model that loops is refused rather than followed for ever.
+  static constexpr int kMaxDepth = 64;
+
+  bool derives(int t, int base, std::string& why, int depth) const {
+    if (t == base) return true;
+    if (depth > kMaxDepth) {
+      why = std::format("the chain from {} is deeper than {} classes", describe(t), kMaxDepth);
+      return false;
+    }
+    std::vector<int> classes;
+    if (why = parents(t, classes); !why.empty()) return false;
+    if (classes.empty()) {
+      why = std::format("the chain ends at {}", describe(t));
+      return false;
+    }
+    return std::all_of(classes.begin(), classes.end(), [&](int c) { return derives(c, base, why, depth + 1); });
+  }
+
+  // The classes t's parent may be: read_parents, less each class of another assembly that references t's own, which t's
+  // therefore cannot reference (assemblies do not reference each other in a circle). Where the model shows references
+  // both ways, or every class would go, it keeps them all.
+  std::string parents(int t, std::vector<int>& out) const {
+    if (std::string why = read_parents(t, out); !why.empty()) return why;
+    const std::string& own = model_.types[t].assembly;
+    std::vector<int> possible;
+    for (const int c : out) {
+      const std::string& other = model_.types[c].assembly;
+      if (other == own || !references(other, own) || references(own, other)) possible.push_back(c);
+    }
+    if (!possible.empty()) out = std::move(possible);
+    return {};
+  }
+
+  // The types the first name of t's base list may stand for, as C# finds a base class: none when the list is empty or
+  // begins with an interface (t derives from System.Object). A top-level class finds a type of its own namespace
+  // before any a using directive brings in, so one such type of its own assembly is its parent alone. Otherwise every
+  // class of that short name, less structs and enums (a nested enum may share a class's name) and the three types no
+  // base list names. Why the parent cannot be told, or empty.
+  std::string read_parents(int t, std::vector<int>& out) const {
+    out.clear();
+    const ModelType& type = model_.types[t];
+    if (type.bases.empty()) return {};
+    const std::string& name = type.bases.front();
+    const auto named = named_.find(name);
+    std::vector<int> found;
+    if (named != named_.end())
+      for (const int c : named->second)
+        if (!model_.types[c].isValueType && !never_listed(model_.types[c])) found.push_back(c);
+    if (type.declaring < 0) {
+      std::vector<int> own;
+      for (const int c : found) {
+        const ModelType& x = model_.types[c];
+        if (x.declaring < 0 && x.assembly == type.assembly && x.ns == type.ns) own.push_back(c);
+      }
+      if (own.size() == 1) {
+        if (!model_.types[own.front()].isInterface) out = std::move(own);
+        return {};
+      }
+    }
+    bool anInterface = false;
+    for (const int c : found) {
+      if (model_.types[c].isInterface) anInterface = true;
+      else out.push_back(c);
+    }
+    if (out.empty() && !anInterface) return std::format("{} derives from {}, which is no type of the model", describe(t), name);
+    if (!out.empty() && anInterface) {
+      out.clear();
+      return std::format("{} derives from {}, which names a class and an interface", describe(t), name);
+    }
+    return {};
+  }
+
+  // Whether the assembly `from` references `to`, directly or through others, as far as the model shows it.
+  bool references(const std::string& from, const std::string& to) const {
+    std::vector<std::string> todo{from};
+    std::set<std::string> seen{from};
+    while (!todo.empty()) {
+      const auto it = references_.find(todo.back());
+      todo.pop_back();
+      if (it == references_.end()) continue;
+      for (const std::string& next : it->second) {
+        if (next == to) return true;
+        if (seen.insert(next).second) todo.push_back(next);
+      }
+    }
+    return false;
+  }
+
+  // System.Object, System.ValueType and System.Enum, which no base list names (sdk/resolver/model.h): Cpp2IL writes
+  // UnityEngine.Object as "object" too, and the name "Object" there means UnityEngine's.
+  static bool never_listed(const ModelType& t) {
+    return t.assembly == "mscorlib" && t.ns == "System" && (t.name == "Object" || t.name == "ValueType" || t.name == "Enum");
+  }
+
+  std::string describe(int t) const {
+    const ModelType& type = model_.types[t];
+    return type.ns.empty() ? type.name : type.ns + "." + type.name;
+  }
+
+  const GameModel& model_;
+  std::unordered_map<std::string, std::vector<int>> named_;
+  std::unordered_map<std::string, std::set<std::string>> references_;  // by assembly, the assemblies it references
+};
+// What the bases check found: how many entries' bases it checked, and a line for each that does not hold.
+struct BaseCheck {
+  size_t checked = 0;
+  std::vector<std::string> wrong;
+};
+
+// Proves the map's base data (EntryDesc::base), which typed handles convert by (sdk/api/ref.h): each resolved Type
+// entry's class derives from the class its base resolved to, on every chain of parents the model allows. A base that is
+// not a Type entry of the map is wrong too. An entry or a base that did not resolve is not checked: its own line is the
+// failure when it is required.
+BaseCheck check_bases(const GameModel& model, const Resolution& resolution) {
+  BaseCheck out;
+  const Ancestry ancestry(model);
+  for (const Result& r : resolution.results) {
+    const EntryDesc* base = r.desc->base;
+    if (!base) continue;
+    const Result* b = resolution.find(base->key);
+    if (r.desc->kind != Kind::Type || base->kind != Kind::Type || !b || b->desc != base) {
+      ++out.checked;
+      out.wrong.push_back(std::format("BASE {}: its base {} is not a type entry of the map", r.desc->key, base->key));
+      continue;
+    }
+    if (r.status != Status::Resolved || b->status != Status::Resolved || r.type < 0 || b->type < 0) continue;
+    ++out.checked;
+    if (std::string why; !ancestry.derives(r.type, b->type, why))
+      out.wrong.push_back(std::format("BASE {} does not derive from {}: {}", r.desc->key, base->key, why));
+  }
+  return out;
+}
+
 // This build's record, from the two libraries as they were checked. 2 when one cannot be hashed or the file written.
 int write_build_record(const Args& args) {
   if (const pm::engine::Versions versions = pm::engine::read(args.gameData); !pm::engine::known(versions)) {
@@ -522,6 +686,11 @@ int run(int argc, wchar_t** argv) {
   }
   if (steeringLacks.empty()) std::printf("HOST steering available\n");
   else std::printf("HOST steering unavailable: %s\n", steeringLacks.c_str());
+  // Typed handles convert to a base type's handle by the map's word: each base must be an ancestor in this build.
+  const BaseCheck bases = check_bases(model, resolution);
+  for (const std::string& line : bases.wrong) std::printf("%s\n", line.c_str());
+  std::printf("BASES %zu checked, %zu wrong\n", bases.checked, bases.wrong.size());
+  failed = failed || !bases.wrong.empty();
   if (!args.gameData.empty()) {
     const pm::engine::Versions versions = pm::engine::read(args.gameData);
     if (pm::engine::known(versions)) {

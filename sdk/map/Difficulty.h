@@ -12,6 +12,9 @@
 #include "game_api.h"
 #include "Equipment.h"
 #include "Rewards.h"
+#include "Photon.h"
+#include "UnityObject.h"
+#include "UnityPostProcessing.h"
 
 namespace pm::map {
 
@@ -62,7 +65,8 @@ inline constexpr pm::sdk::Fact LevelValues_difficulty_facts[] = {
 /// a copy. ScriptableObject.CreateInstance makes them, never a scene, so one outlives the menu that
 /// made it. Decompiled.
 inline constexpr pm::sdk::EntryDesc Difficulty{.key = "Difficulty", .confidence = pm::sdk::Confidence::Decompiled,
-                                               .name = "Difficulty", .assembly = "Assembly-CSharp", .ns = ""};
+                                               .name = "Difficulty", .assembly = "Assembly-CSharp", .ns = "",
+                                               .base = &ScriptableObject};
 
 /// Which preset it is, an enum read as an int: the menu's Awake numbers its custom presets from its
 /// presets array (6, 7 and 8 for Custom 1 to 3). The preset choice makes the lobby's difficulty a
@@ -95,7 +99,8 @@ inline constexpr pm::sdk::EntryDesc Difficulty_evidenceGiven{.key = "Difficulty.
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc DifficultyOption{.key = "DifficultyOption",
                                                      .confidence = pm::sdk::Confidence::Decompiled,
-                                                     .name = "DifficultyOption", .assembly = "Assembly-CSharp", .ns = ""};
+                                                     .name = "DifficultyOption", .assembly = "Assembly-CSharp", .ns = "",
+                                                     .base = &MonoBehaviour};
 
 /// The option's right arrow: the index one up, clamped to the count less one (wrapping past a duplicate
 /// when the option allows none), then its value-changed actions run. Decompiled.
@@ -126,7 +131,7 @@ inline constexpr pm::sdk::EntryDesc DifficultyOption_count{
 inline constexpr pm::sdk::EntryDesc DifficultyUIManager{.key = "DifficultyUIManager",
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .name = "DifficultyUIManager", .assembly = "Assembly-CSharp",
-                                                        .ns = ""};
+                                                        .ns = "", .base = &MonoBehaviourPun};
 
 /// The Ghost Type option. Its index 0 is Random (GhostType.None) and its index i the ghost i - 1 of
 /// allGhostsData (the change handler); its count is set in the scene, never by code. Decompiled.
@@ -238,7 +243,8 @@ inline constexpr pm::sdk::EntryDesc ES3UserType_Difficulty_WriteScriptableObject
 /// The values of the running contract (Assembly-CSharp, global namespace), a MonoBehaviour kept across
 /// scenes (DontDestroyOnLoad; a later copy destroys itself). Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelValues{.key = "LevelValues", .confidence = pm::sdk::Confidence::Decompiled,
-                                                .name = "LevelValues", .assembly = "Assembly-CSharp", .ns = ""};
+                                                .name = "LevelValues", .assembly = "Assembly-CSharp", .ns = "",
+                                                .base = &MonoBehaviour};
 
 /// The one LevelValues, made on a new GameObject when there is none. Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelValues_get_Instance{.key = "LevelValues.get_Instance",
@@ -638,7 +644,8 @@ inline constexpr pm::sdk::EntryDesc FuseBoxValueType_On{
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc DifficultySettings{.key = "DifficultySettings",
                                                        .confidence = pm::sdk::Confidence::Decompiled,
-                                                       .name = "DifficultySettings", .assembly = "Assembly-CSharp", .ns = ""};
+                                                       .name = "DifficultySettings", .assembly = "Assembly-CSharp", .ns = "",
+                                                       .base = &MonoBehaviourPun};
 
 /// Adds its int to the hunt's duration, once a contract: unless a flag of the settings is set, it sends an RPC to every
 /// client, whose body adds the int to an int field of the settings and sets the flag. The music box's break, the

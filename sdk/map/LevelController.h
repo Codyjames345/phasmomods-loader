@@ -6,12 +6,15 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
 #include "Transform.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
 /// The contract's fuse box (Assembly-CSharp, global namespace). Inferred: from the class dump.
-inline constexpr pm::sdk::EntryDesc FuseBox{.key = "FuseBox", .name = "FuseBox", .assembly = "Assembly-CSharp", .ns = ""};
+inline constexpr pm::sdk::EntryDesc FuseBox{.key = "FuseBox", .name = "FuseBox", .assembly = "Assembly-CSharp", .ns = "",
+                                            .base = &MonoBehaviourPun};
 
 /// Breaks the box: it sets outOfOrder. Decompiled.
 inline constexpr pm::sdk::EntryDesc FuseBox_BreakFuseBox{.key = "FuseBox.BreakFuseBox", .kind = pm::sdk::Kind::Method,
@@ -47,7 +50,8 @@ inline constexpr pm::sdk::EntryDesc LevelController_fuseBox{.key = "LevelControl
 
 /// The contract's setup phase (Assembly-CSharp, global namespace). Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc SetupPhaseController{.key = "SetupPhaseController", .name = "SetupPhaseController",
-                                                         .assembly = "Assembly-CSharp", .ns = ""};
+                                                         .assembly = "Assembly-CSharp", .ns = "",
+                                                         .base = &MonoBehaviourPun};
 
 /// Unlocks the truck's main door; it sets mainDoorOpen, unless it is set already. Decompiled.
 inline constexpr pm::sdk::EntryDesc SetupPhaseController_UnlockMainDoor{
@@ -68,7 +72,8 @@ inline constexpr pm::sdk::EntryDesc SetupPhaseController_mainDoorOpen{
 /// The level's controller (Assembly-CSharp, global namespace), a MonoBehaviourPun. Decompiled.
 inline constexpr pm::sdk::EntryDesc LevelController{.key = "LevelController",
                                                     .confidence = pm::sdk::Confidence::Decompiled,
-                                                    .name = "LevelController", .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .name = "LevelController", .assembly = "Assembly-CSharp", .ns = "",
+                                                    .base = &MonoBehaviourPun};
 
 /// The current level's controller: the class's one static field of its own type. It outlives its
 /// level: after a contract it still points at the destroyed controller, so check it with
@@ -179,7 +184,8 @@ inline constexpr pm::sdk::Fact LevelController_outsideRoom_facts[] = {
 /// A hiding place a difficulty may close (Assembly-CSharp, global namespace), a MonoBehaviour with a trigger collider
 /// over the place: closets, lockers and walk-in rooms such as a pantry. Decompiled.
 inline constexpr pm::sdk::EntryDesc BlockedZone{.key = "BlockedZone", .confidence = pm::sdk::Confidence::Decompiled,
-                                                .name = "BlockedZone", .assembly = "Assembly-CSharp", .ns = ""};
+                                                .name = "BlockedZone", .assembly = "Assembly-CSharp", .ns = "",
+                                                .base = &MonoBehaviour};
 
 inline constexpr const char* BlockedZone_BlockZone_params[] = {"int", "int"};
 

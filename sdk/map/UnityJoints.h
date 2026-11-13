@@ -4,7 +4,9 @@
 // a CharacterJoint per bone, as Unity's Ragdoll Wizard lays them out. The game builds its dead players' ragdolls from the
 // same parts (RagdollBone pairs a Collider with a CharacterJoint).
 
+#include "LevelRoom.h"
 #include "Transform.h"
+#include "UnityObject.h"
 #include "game_api.h"
 
 namespace pm::map {
@@ -16,7 +18,7 @@ inline constexpr const char* UnityJoints_Rigidbody[] = {"Rigidbody"};
 /// Unity's joint, the base of every joint: what it is attached to and about which axis. Inferred: Unity's documented
 /// API.
 inline constexpr pm::sdk::EntryDesc Joint{.key = "Joint", .name = "Joint", .assembly = "UnityEngine.PhysicsModule",
-                                          .ns = "UnityEngine"};
+                                          .ns = "UnityEngine", .base = &Component};
 
 /// Sets the Rigidbody the joint holds its own body to (null: the world). Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc Joint_set_connectedBody{.key = "Joint.set_connectedBody", .kind = pm::sdk::Kind::Method,
@@ -31,7 +33,8 @@ inline constexpr pm::sdk::EntryDesc Joint_set_axis{.key = "Joint.set_axis", .kin
 /// Unity's character joint: a ball and socket with a twist limit about its axis and two swing limits, the joint of a
 /// ragdoll's limbs. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc CharacterJoint{.key = "CharacterJoint", .name = "CharacterJoint",
-                                                   .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine"};
+                                                   .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine",
+                                                   .base = &Joint};
 
 /// Sets the axis the joint swings about, in its own body's space. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc CharacterJoint_set_swingAxis{
@@ -61,7 +64,8 @@ inline constexpr pm::sdk::EntryDesc CharacterJoint_set_swing2Limit{
 
 /// Unity's box collider (UnityEngine.PhysicsModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc BoxCollider{.key = "BoxCollider", .name = "BoxCollider",
-                                                .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine"};
+                                                .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine",
+                                                .base = &Collider};
 
 /// Sets the box's size, metres, in its object's space. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc BoxCollider_set_size{.key = "BoxCollider.set_size", .kind = pm::sdk::Kind::Method,
@@ -75,7 +79,8 @@ inline constexpr pm::sdk::EntryDesc BoxCollider_set_center{.key = "BoxCollider.s
 
 /// Unity's sphere collider (UnityEngine.PhysicsModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc SphereCollider{.key = "SphereCollider", .name = "SphereCollider",
-                                                   .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine"};
+                                                   .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine",
+                                                   .base = &Collider};
 
 inline constexpr const char* UnityJoints_float[] = {"float"};
 

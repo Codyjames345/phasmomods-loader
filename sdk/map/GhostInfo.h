@@ -7,6 +7,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
 
 namespace pm::map {
 
@@ -23,7 +24,8 @@ inline constexpr pm::sdk::Fact GhostInfo_behaviourType_facts[] = {
 /// The ghost's info (Assembly-CSharp, global namespace), a MonoBehaviourPun. GhostAI holds it
 /// (GhostAI.info). Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostInfo{.key = "GhostInfo", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "GhostInfo", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "GhostInfo", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &MonoBehaviourPun};
 
 /// The ghost's traits as this client knows them: the class's one GhostTraits field. Its first field
 /// is the identity, the second the behaviour type; GhostAI.Init copies the host's traits in whole,

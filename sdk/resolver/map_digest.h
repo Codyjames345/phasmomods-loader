@@ -49,7 +49,8 @@ class MapHash {
 
 }  // namespace detail
 
-/** Everything the resolver reads of `entries`, in their order. `confidence` says only how sure a note may sound, so it is left out. */
+/** Everything the resolver reads of `entries`, in their order, and each one's base, which the offline check proves.
+ * `confidence` says only how sure a note may sound, so it is left out. */
 inline std::string map_digest(std::span<const EntryDesc* const> entries) {
   detail::MapHash h;
   h.number(static_cast<int64_t>(entries.size()));
@@ -73,6 +74,7 @@ inline std::string map_digest(std::span<const EntryDesc* const> entries) {
     for (const char* s : {e->scene, e->path, e->component, e->sameFieldAs}) h.text(s);
     h.number(static_cast<int64_t>(e->access));
     h.list(e->typeArgs);
+    h.text(e->base ? e->base->key : nullptr);
   }
   char hex[17];
   std::snprintf(hex, sizeof hex, "%016llx", static_cast<unsigned long long>(h.value()));

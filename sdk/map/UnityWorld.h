@@ -8,6 +8,7 @@
 #include "game_api.h"
 #include "Camera.h"
 #include "Transform.h"
+#include "UnityObject.h"
 
 namespace pm::map {
 
@@ -127,7 +128,8 @@ inline constexpr pm::sdk::EntryDesc NavMeshPathStatus_PathComplete{.key = "NavMe
 /// The component that walks an object over the navigation mesh (UnityEngine.AIModule, namespace
 /// UnityEngine.AI); the ghost's GhostAI.agent is one. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc NavMeshAgent{.key = "NavMeshAgent", .name = "NavMeshAgent",
-                                                 .assembly = "UnityEngine.AIModule", .ns = "UnityEngine.AI"};
+                                                 .assembly = "UnityEngine.AIModule", .ns = "UnityEngine.AI",
+                                                 .base = &Behaviour};
 
 /// Sends the agent towards a point; false when it cannot. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc NavMeshAgent_SetDestination{.key = "NavMeshAgent.SetDestination",
@@ -182,7 +184,8 @@ inline constexpr pm::sdk::EntryDesc NavMeshAgent_get_angularSpeed{.key = "NavMes
 
 /// Unity's rigid body (UnityEngine.PhysicsModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Rigidbody{.key = "Rigidbody", .name = "Rigidbody",
-                                              .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine"};
+                                              .assembly = "UnityEngine.PhysicsModule", .ns = "UnityEngine",
+                                              .base = &Component};
 
 /// The body's centre of mass in world space. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Rigidbody_get_worldCenterOfMass{

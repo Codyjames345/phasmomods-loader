@@ -246,6 +246,40 @@ if(said EQUAL -1)
 endif()
 message(STATUS "The CONTENT line reports the ranges custom content is numbered after.")
 
+# gamecheck_checks_bases: a Type entry's base (EntryDesc::base, what typed handles convert by) must be an ancestor of
+# its class in the dump. A dump of Unity's chain in which GhostAI derives from MonoBehaviourPun, as the map says, passes
+# the check; one in which GhostAI derives from MonoBehaviour directly fails it, naming both keys. The dump holds only
+# these classes, so other entries' failures set the exit code: the BASE lines are what is checked.
+function(base_dump name ghostBase)
+  set(dir "${WORK}/${name}")
+  file(MAKE_DIRECTORY "${dir}/Assembly-CSharp" "${dir}/UnityEngine.AnimationModule" "${dir}/UnityEngine.CoreModule" "${dir}/UnityEngine.UI" "${dir}/mscorlib" "${dir}/PhotonUnityNetworking"
+    "${dir}/com.rlabrecque.steamworks.net" "${dir}/PhotonRealtime" "${dir}/Photon3Unity3D" "${dir}/DoozyRuntime" "${dir}/UnityEngine.PhysicsModule"
+    "${dir}/UnityEngine.AIModule" "${dir}/UnityEngine.AudioModule" "${dir}/DOTween"
+    "${dir}/Micosmo.SensorToolkit" "${dir}/Unity.Services.Vivox" "${dir}/UnityEngine.UIModule" "${dir}/Unity.TextMeshPro" "${dir}/Unity.InputSystem" "${dir}/Assembly-CSharp-firstpass"
+    "${dir}/Unity.RenderPipelines.Core.Runtime" "${dir}/Unity.RenderPipelines.Universal.Runtime" "${dir}/EasySave3")
+  file(WRITE "${dir}/Assembly-CSharp/GhostAI.cs" "public class GhostAI : ${ghostBase}\n{\n}\n")
+  file(WRITE "${dir}/PhotonUnityNetworking/Photon/Pun/MonoBehaviourPun.cs" "public class MonoBehaviourPun : MonoBehaviour\n{\n}\n")
+  file(WRITE "${dir}/UnityEngine.CoreModule/UnityEngine/MonoBehaviour.cs" "public class MonoBehaviour : Behaviour\n{\n}\n")
+  file(WRITE "${dir}/UnityEngine.CoreModule/UnityEngine/Behaviour.cs" "public class Behaviour : Component\n{\n}\n")
+  file(WRITE "${dir}/UnityEngine.CoreModule/UnityEngine/Component.cs" "public class Component : object\n{\n}\n")
+  file(WRITE "${dir}/UnityEngine.CoreModule/UnityEngine/Object.cs" "public class object\n{\n}\n")
+  execute_process(COMMAND "${GAMECHECK}" --dump "${dir}" --image "${GAMECHECK}" --no-method-tables RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
+  set(base_out "${out}${err}" PARENT_SCOPE)
+endfunction()
+base_dump(base-right "MonoBehaviourPun")
+string(FIND "${base_out}" "\nBASE " wrongLine)
+string(FIND "${base_out}" "\nBASES 5 checked, 0 wrong\n" said)
+if(NOT wrongLine EQUAL -1 OR said EQUAL -1)
+  message(FATAL_ERROR "gamecheck_checks_bases: the map's bases did not hold in a dump that has them\n${base_out}")
+endif()
+base_dump(base-wrong "MonoBehaviour")
+string(FIND "${base_out}" "\nBASE GhostAI does not derive from MonoBehaviourPun: " wrongLine)
+string(FIND "${base_out}" "\nBASES 5 checked, 1 wrong\n" said)
+if(wrongLine EQUAL -1 OR said EQUAL -1)
+  message(FATAL_ERROR "gamecheck_checks_bases: a wrong base was not named\n${base_out}")
+endif()
+message(STATUS "The BASE lines name an entry whose class does not derive from its base.")
+
 # gamecheck_writes_the_build_record: the file is the two libraries' SHA-256 and the map's digest, named for the
 # build, and nothing else; writing it again replaces it. A library that cannot be read writes nothing and exits 2.
 set(records "${WORK}/records/sdk/builds")

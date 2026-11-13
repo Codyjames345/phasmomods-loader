@@ -8,14 +8,18 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "MainManager.h"
+#include "Photon.h"
 #include "Props.h"
 #include "Transform.h"
+#include "UnityPostProcessing.h"
 
 namespace pm::map {
 
 /// A carried item (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc Equipment{.key = "Equipment", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "Equipment", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "Equipment", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &Prop};
 
 /// The store's item this is, a StoreItem, whose tier PlayerSanity.Update reads from the first lit
 /// candle near the player and Candle.Update reads to leave the lantern's wax unmelted. Null for an
@@ -55,7 +59,8 @@ inline constexpr pm::sdk::EntryDesc Equipment_placed{
 
 /// What the store sells (Assembly-CSharp, global namespace), a ScriptableObject. Decompiled.
 inline constexpr pm::sdk::EntryDesc StoreItem{.key = "StoreItem", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "StoreItem", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "StoreItem", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &ScriptableObject};
 
 // Of the item's look-alike bool() methods, only the unlock check is called by the lobby's add check.
 inline constexpr pm::sdk::Fact StoreItem_IsUnlocked_facts[] = {
@@ -94,7 +99,8 @@ inline constexpr pm::sdk::EntryDesc StoreItem_CanAfford{
 
 /// One item's place in the store's screen (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc StoreEquipment{.key = "StoreEquipment", .confidence = pm::sdk::Confidence::Decompiled,
-                                                   .name = "StoreEquipment", .assembly = "Assembly-CSharp", .ns = ""};
+                                                   .name = "StoreEquipment", .assembly = "Assembly-CSharp", .ns = "",
+                                                   .base = &EquipmentInfo};
 
 inline constexpr const char* StoreEquipment_int[] = {"int"};
 
@@ -160,13 +166,15 @@ inline constexpr pm::sdk::EntryDesc Equipment_isOn{.key = "Equipment.isOn", .kin
                                                    .facts = Equipment_isOn_facts};
 
 /// A video camera (Assembly-CSharp, global namespace), an Equipment. Inferred: from the class's name.
-inline constexpr pm::sdk::EntryDesc CCTV{.key = "CCTV", .name = "CCTV", .assembly = "Assembly-CSharp", .ns = ""};
+inline constexpr pm::sdk::EntryDesc CCTV{.key = "CCTV", .name = "CCTV", .assembly = "Assembly-CSharp", .ns = "",
+                                         .base = &Equipment};
 
 /// The truck's monitor (Assembly-CSharp, global namespace): the cameras that are switched on, the kind of
 /// camera it shows, and who is viewing it. Decompiled.
 inline constexpr pm::sdk::EntryDesc CCTVController{.key = "CCTVController",
                                                    .confidence = pm::sdk::Confidence::Decompiled,
-                                                   .name = "CCTVController", .assembly = "Assembly-CSharp", .ns = ""};
+                                                   .name = "CCTVController", .assembly = "Assembly-CSharp", .ns = "",
+                                                   .base = &MonoBehaviourPun};
 
 /// The one CCTVController: the class's one static field of its own type. Null outside a contract. Decompiled.
 inline constexpr pm::sdk::EntryDesc CCTVController_instance{
@@ -196,45 +204,46 @@ inline constexpr pm::sdk::EntryDesc Equipment_Use{.key = "Equipment.Use", .kind 
 
 /// A motion sensor (Assembly-CSharp, global namespace), an Equipment. Inferred: from the class's name.
 inline constexpr pm::sdk::EntryDesc MotionSensor{.key = "MotionSensor", .name = "MotionSensor",
-                                                 .assembly = "Assembly-CSharp", .ns = ""};
+                                                 .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 /// A sound sensor (Assembly-CSharp, global namespace), an Equipment. Inferred: from the class's name.
 inline constexpr pm::sdk::EntryDesc SoundSensor{.key = "SoundSensor", .name = "SoundSensor",
-                                                .assembly = "Assembly-CSharp", .ns = ""};
+                                                .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 /// The EMF reader (Assembly-CSharp, global namespace), an Equipment. Inferred: from the class's name.
 inline constexpr pm::sdk::EntryDesc EMFReader{.key = "EMFReader", .name = "EMFReader", .assembly = "Assembly-CSharp",
-                                              .ns = ""};
+                                              .ns = "", .base = &Equipment};
 
 /// The parabolic microphone (Assembly-CSharp, global namespace), an Equipment. Inferred: from the
 /// class's name.
 inline constexpr pm::sdk::EntryDesc ParabolicMicrophone{.key = "ParabolicMicrophone", .name = "ParabolicMicrophone",
-                                                        .assembly = "Assembly-CSharp", .ns = ""};
+                                                        .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 /// The sound recorder (Assembly-CSharp, global namespace), an Equipment. Inferred: from the class's
 /// name.
 inline constexpr pm::sdk::EntryDesc SoundRecorder{.key = "SoundRecorder", .name = "SoundRecorder",
-                                                  .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 /// The thermometer (Assembly-CSharp, global namespace), an Equipment. Inferred: from the class's name.
 inline constexpr pm::sdk::EntryDesc Thermometer{.key = "Thermometer", .name = "Thermometer",
-                                                .assembly = "Assembly-CSharp", .ns = ""};
+                                                .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 /// The spirit box (Assembly-CSharp, global namespace), an Equipment. Inferred: from its use in the
 /// game's prefabs.
 inline constexpr pm::sdk::EntryDesc EVPRecorder{.key = "EVPRecorder", .name = "EVPRecorder",
-                                                .assembly = "Assembly-CSharp", .ns = ""};
+                                                .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 /// The D.O.T.S. projector (Assembly-CSharp, global namespace), an Equipment. Inferred: from its prefab.
 inline constexpr pm::sdk::EntryDesc IRLightSensor{.key = "IRLightSensor", .name = "IRLightSensor",
-                                                  .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .assembly = "Assembly-CSharp", .ns = "", .base = &Equipment};
 
 /// A torch (Assembly-CSharp, global namespace), an Equipment. Inferred: from the class's name.
-inline constexpr pm::sdk::EntryDesc Torch{.key = "Torch", .name = "Torch", .assembly = "Assembly-CSharp", .ns = ""};
+inline constexpr pm::sdk::EntryDesc Torch{.key = "Torch", .name = "Torch", .assembly = "Assembly-CSharp", .ns = "",
+                                          .base = &Equipment};
 
 /// A crucifix (Assembly-CSharp, global namespace), an Equipment. Inferred: from the class's name.
 inline constexpr pm::sdk::EntryDesc Crucifix{.key = "Crucifix", .name = "Crucifix", .assembly = "Assembly-CSharp",
-                                             .ns = ""};
+                                             .ns = "", .base = &Equipment};
 
 inline constexpr const char* Equipment_bool_info[] = {"bool", "PhotonMessageInfo"};
 
@@ -270,7 +279,8 @@ inline constexpr pm::sdk::EntryDesc EVPRecorder_PlayDifficultySound{
 
 /// Incense (Assembly-CSharp, global namespace), an Equipment. Decompiled.
 inline constexpr pm::sdk::EntryDesc WhiteSage{.key = "WhiteSage", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "WhiteSage", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "WhiteSage", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &Equipment};
 
 /// The incense is used, on every client. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc WhiteSage_UseNetworked{.key = "WhiteSage.UseNetworked",

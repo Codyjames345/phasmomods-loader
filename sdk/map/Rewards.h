@@ -6,13 +6,16 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Photon.h"
+#include "ServerManager.h"
+#include "UnityPostProcessing.h"
 
 namespace pm::map {
 
 /// One objective's settings, a ScriptableObject (Assembly-CSharp, global namespace). Inferred: from its
 /// name and its fields' names.
 inline constexpr pm::sdk::EntryDesc ObjectiveValues{.key = "ObjectiveValues", .name = "ObjectiveValues",
-                                                    .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .assembly = "Assembly-CSharp", .ns = "", .base = &ScriptableObject};
 
 /// The money the objective pays when completed. LevelValues.GetInvestigationBonusReward sums it over the
 /// main objective and the side objectives. Decompiled.
@@ -73,7 +76,7 @@ inline constexpr pm::sdk::EntryDesc Objective_values{.key = "Objective.values", 
 inline constexpr pm::sdk::EntryDesc ObjectiveManager{.key = "ObjectiveManager",
                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                      .name = "ObjectiveManager", .assembly = "Assembly-CSharp",
-                                                     .ns = ""};
+                                                     .ns = "", .base = &MonoBehaviourPun};
 
 /// CompleteObjective(kind): finishes on this client alone the open side objective whose kind matches the
 /// one given, or the main objective for the game's identify-the-ghost kind, and ticks the whiteboard and
@@ -102,7 +105,7 @@ inline constexpr pm::sdk::EntryDesc ObjectiveManager_HasSetupObjectives{
 /// The local player's saved progress in single player and in an online game alike (Assembly-CSharp,
 /// global namespace). Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc SingleplayerProfile{.key = "SingleplayerProfile", .name = "SingleplayerProfile",
-                                                        .assembly = "Assembly-CSharp", .ns = ""};
+                                                        .assembly = "Assembly-CSharp", .ns = "", .base = &ProfileCard};
 
 inline constexpr const char* SingleplayerProfile_AddXPAndFunds_params[] = {"int", "int"};
 

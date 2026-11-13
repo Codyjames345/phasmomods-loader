@@ -6,6 +6,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "UnityPostProcessing.h"
 
 namespace pm::map {
 
@@ -15,7 +16,8 @@ inline constexpr const char* GhostCollection_GetGhostOfType_params[] = {"@GhostT
 /// has one (GhostController.allGhostsCollection) and the difficulty menu another. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostCollection{.key = "GhostCollection",
                                                     .confidence = pm::sdk::Confidence::Decompiled,
-                                                    .name = "GhostCollection", .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .name = "GhostCollection", .assembly = "Assembly-CSharp", .ns = "",
+                                                    .base = &ScriptableObject};
 
 /// The collection's ghosts, a List<GhostData>, alphabetical by name as the assets ship it. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostCollection_ghosts{.key = "GhostCollection.ghosts",
@@ -41,7 +43,8 @@ inline constexpr pm::sdk::EntryDesc GhostCollection_GetDefaultWeightedGhostList{
 
 /// One ghost type's data (Assembly-CSharp, global namespace), a ScriptableObject. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostData{.key = "GhostData", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "GhostData", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "GhostData", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &ScriptableObject};
 
 /// The ghost type this data describes, a GhostType number. Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostData_type{.key = "GhostData.type", .kind = pm::sdk::Kind::Field,

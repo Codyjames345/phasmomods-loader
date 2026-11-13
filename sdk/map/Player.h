@@ -8,7 +8,9 @@
 #include <bit>
 #include <cstdint>
 
+#include "Photon.h"
 #include "Transform.h"
+#include "UnityObject.h"
 #include "entry.h"
 #include "game_api.h"
 
@@ -16,7 +18,8 @@ namespace pm::map {
 
 /// The game's networking hub (Assembly-CSharp, global namespace), one per process. Decompiled.
 inline constexpr pm::sdk::EntryDesc Network{.key = "Network", .confidence = pm::sdk::Confidence::Decompiled,
-                                            .name = "Network", .assembly = "Assembly-CSharp", .ns = ""};
+                                            .name = "Network", .assembly = "Assembly-CSharp", .ns = "",
+                                            .base = &MonoBehaviourPun};
 
 /// The one Network, from its static field. Static. LightSwitch.UseLightSwitch reads the local player through it.
 /// Decompiled.
@@ -54,7 +57,8 @@ inline constexpr pm::sdk::EntryDesc PlayerSpot_playerReady{.key = "PlayerSpot.pl
 
 /// An investigator (Assembly-CSharp, global namespace), an abstract MonoBehaviourPun. Decompiled.
 inline constexpr pm::sdk::EntryDesc Player{.key = "Player", .confidence = pm::sdk::Confidence::Decompiled,
-                                           .name = "Player", .assembly = "Assembly-CSharp", .ns = ""};
+                                           .name = "Player", .assembly = "Assembly-CSharp", .ns = "",
+                                           .base = &MonoBehaviourPun};
 
 // UseLightSwitch reads one bool of the local Player, through Network: it refuses a dead player's use.
 // It is another type's method, so the fact matches that offset through any register.
@@ -160,10 +164,16 @@ inline constexpr pm::sdk::EntryDesc Player_losTargets{.key = "Player.losTargets"
 inline constexpr pm::sdk::EntryDesc Player_sanity{.key = "Player.sanity", .kind = pm::sdk::Kind::Field, .owner = "Player",
                                                   .type = "@PlayerSanity"};
 
+/// This client's player rig (Assembly-CSharp, global namespace), an abstract MonoBehaviour: the
+/// controls, camera, hands and HUD of the local investigator. LocalPCPlayer is the PC one. Inferred: from
+/// the class dump.
+inline constexpr pm::sdk::EntryDesc LocalPlayer{.key = "LocalPlayer", .name = "LocalPlayer",
+                                                .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
+
 /// The local player on PC (Assembly-CSharp, global namespace), a LocalPlayer: Network's local player
 /// component. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc LocalPCPlayer{.key = "LocalPCPlayer", .name = "LocalPCPlayer",
-                                                  .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .assembly = "Assembly-CSharp", .ns = "", .base = &LocalPlayer};
 
 /// The local player's HUD canvas: LocalPCPlayer's one PCCanvas field.
 /// Inferred: from the class dump.
@@ -176,7 +186,8 @@ inline constexpr pm::sdk::EntryDesc LocalPCPlayer_canvas{.key = "LocalPCPlayer.c
 inline constexpr pm::sdk::EntryDesc FirstPersonController{.key = "FirstPersonController",
                                                           .confidence = pm::sdk::Confidence::Decompiled,
                                                           .name = "FirstPersonController",
-                                                          .assembly = "Assembly-CSharp", .ns = ""};
+                                                          .assembly = "Assembly-CSharp", .ns = "",
+                                                          .base = &MonoBehaviour};
 
 /// The rig's movement controller: LocalPCPlayer's one FirstPersonController field. Decompiled.
 inline constexpr pm::sdk::EntryDesc LocalPCPlayer_firstPersonController{
@@ -224,7 +235,7 @@ inline constexpr pm::sdk::EntryDesc FirstPersonController_running{
 /// The local player's HUD (Assembly-CSharp, global namespace), a MonoBehaviour. Inferred: from the
 /// class dump.
 inline constexpr pm::sdk::EntryDesc PCCanvas{.key = "PCCanvas", .name = "PCCanvas", .assembly = "Assembly-CSharp",
-                                             .ns = ""};
+                                             .ns = "", .base = &MonoBehaviour};
 
 /// The HUD's crosshair, the dot the player aims with: PCCanvas's one Image field. Inferred: from the class
 /// dump.
@@ -275,7 +286,8 @@ inline constexpr pm::sdk::EntryDesc FirstPersonController_EnableMovement{
 inline constexpr pm::sdk::EntryDesc PhysicsCharacterController{.key = "PhysicsCharacterController",
                                                                .confidence = pm::sdk::Confidence::Decompiled,
                                                                .name = "PhysicsCharacterController",
-                                                               .assembly = "Assembly-CSharp", .ns = ""};
+                                                               .assembly = "Assembly-CSharp", .ns = "",
+                                                               .base = &MonoBehaviour};
 
 inline constexpr const char* PhysicsCharacterController_Move_params[] = {"Vector3"};
 
@@ -310,7 +322,7 @@ inline constexpr pm::sdk::EntryDesc Player_journal{.key = "Player.journal", .kin
 inline constexpr pm::sdk::EntryDesc NetworkedPropGrab{.key = "NetworkedPropGrab",
                                                       .confidence = pm::sdk::Confidence::Decompiled,
                                                       .name = "NetworkedPropGrab", .assembly = "Assembly-CSharp",
-                                                      .ns = ""};
+                                                      .ns = "", .base = &MonoBehaviourPun};
 
 /// The items the investigator carries, a List<PhotonObjectInteract>: in a hand or put away, every
 /// item they picked up and have not dropped (NetworkedPropGrab's one list of them). The grab RPC adds
@@ -328,7 +340,8 @@ inline constexpr pm::sdk::EntryDesc Player_propGrab{.key = "Player.propGrab", .k
 
 /// A player's own voice and sounds (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerAudio{.key = "PlayerAudio", .confidence = pm::sdk::Confidence::Decompiled,
-                                                .name = "PlayerAudio", .assembly = "Assembly-CSharp", .ns = ""};
+                                                .name = "PlayerAudio", .assembly = "Assembly-CSharp", .ns = "",
+                                                .base = &MonoBehaviour};
 
 inline constexpr const char* PlayerAudio_float[] = {"float"};
 
@@ -367,7 +380,8 @@ inline constexpr const char* PhraseListenerController_OnPhraseRecognized_params[
 inline constexpr pm::sdk::EntryDesc PhraseListenerController{.key = "PhraseListenerController",
                                                              .confidence = pm::sdk::Confidence::Decompiled,
                                                              .name = "PhraseListenerController",
-                                                             .assembly = "Assembly-CSharp", .ns = ""};
+                                                             .assembly = "Assembly-CSharp", .ns = "",
+                                                             .base = &MonoBehaviour};
 
 /// The ghost's reaction to its name, on the client that runs the ghost. Inferred: from its name and
 /// Playable Ghost's use since it was built.
@@ -390,12 +404,6 @@ inline constexpr pm::sdk::EntryDesc PhraseListenerController_OnPhraseRecognized{
 inline constexpr pm::sdk::EntryDesc Network_localPlayer{.key = "Network.localPlayer", .kind = pm::sdk::Kind::Field,
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .owner = "Network", .type = "Player"};
-
-/// This client's player rig (Assembly-CSharp, global namespace), an abstract MonoBehaviour: the
-/// controls, camera, hands and HUD of the local investigator. LocalPCPlayer is the PC one. Inferred: from
-/// the class dump.
-inline constexpr pm::sdk::EntryDesc LocalPlayer{.key = "LocalPlayer", .name = "LocalPlayer",
-                                                .assembly = "Assembly-CSharp", .ns = ""};
 
 /// This client's player rig, a LocalPlayer: Network's one field of that type. Inferred: from the class
 /// dump.
@@ -531,15 +539,18 @@ inline constexpr pm::sdk::EntryDesc LocalPlayer_isDead{.key = "LocalPlayer.isDea
 /// A player's stamina on its own client (Assembly-CSharp, global namespace), abstract; PCStamina is the PC
 /// one. It reports sprinting and walking to every client through the player's NetworkedStamina. Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerStamina{.key = "PlayerStamina", .confidence = pm::sdk::Confidence::Decompiled,
-                                                  .name = "PlayerStamina", .assembly = "Assembly-CSharp", .ns = ""};
+                                                  .name = "PlayerStamina", .assembly = "Assembly-CSharp", .ns = "",
+                                                  .base = &MonoBehaviour};
 
 /// The PC player's stamina (Assembly-CSharp, global namespace), a PlayerStamina. Decompiled.
 inline constexpr pm::sdk::EntryDesc PCStamina{.key = "PCStamina", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "PCStamina", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "PCStamina", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &PlayerStamina};
 
 /// The VR player's stamina (Assembly-CSharp, global namespace), a PlayerStamina. Decompiled.
 inline constexpr pm::sdk::EntryDesc VRStamina{.key = "VRStamina", .confidence = pm::sdk::Confidence::Decompiled,
-                                              .name = "VRStamina", .assembly = "Assembly-CSharp", .ns = ""};
+                                              .name = "VRStamina", .assembly = "Assembly-CSharp", .ns = "",
+                                              .base = &PlayerStamina};
 
 /// The VR stamina's update, every frame on the player's own client. On the branch a flag of VRStamina picks
 /// (not traced) it gives the VR movement the rig's sprint speed while the stamina's sprint flag is set and the
@@ -722,7 +733,8 @@ inline constexpr pm::sdk::EntryDesc Network_UpdateVoiceBlockForPlayer{
 
 /// The Winter's Jest present (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc KrampusPresent{.key = "KrampusPresent", .confidence = pm::sdk::Confidence::Decompiled,
-                                                   .name = "KrampusPresent", .assembly = "Assembly-CSharp", .ns = ""};
+                                                   .name = "KrampusPresent", .assembly = "Assembly-CSharp", .ns = "",
+                                                   .base = &MonoBehaviourPun};
 
 /// Where the present spawns: it walks the room's Photon players (PhotonNetwork.get_PlayerList), finds each one's
 /// Player through Network.GetPlayerFromPhotonPlayer and reads its position, and throws when that answers null. For
@@ -742,7 +754,7 @@ inline constexpr pm::sdk::EntryDesc KrampusPresent_GetFurthestSpawnPositionFromP
 inline constexpr pm::sdk::EntryDesc UpdatePlayerColor{.key = "UpdatePlayerColor",
                                                       .confidence = pm::sdk::Confidence::Decompiled,
                                                       .name = "UpdatePlayerColor", .assembly = "Assembly-CSharp",
-                                                      .ns = ""};
+                                                      .ns = "", .base = &MonoBehaviour};
 
 /// The position this piece of UI is coloured for: its Start takes the colour at that place in Network's array of
 /// player colours, and follows that place when the colour changes. The PCPlayer prefab sets 0 to 3 on the marks P1
@@ -790,7 +802,8 @@ inline constexpr pm::sdk::EntryDesc JournalMedia_SetupVotes{
 
 /// The wristwatch (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc Wristwatch{.key = "Wristwatch", .confidence = pm::sdk::Confidence::Decompiled,
-                                               .name = "Wristwatch", .assembly = "Assembly-CSharp", .ns = ""};
+                                               .name = "Wristwatch", .assembly = "Assembly-CSharp", .ns = "",
+                                               .base = &MonoBehaviour};
 
 /// Sets each sanity bar from the Player at the same position in Network.playerSpots. Wristwatch.Start repeats it, by
 /// name, in a level on a difficulty that shows the bars. A bar past the list's end is not written. Decompiled.
@@ -814,7 +827,8 @@ inline constexpr pm::sdk::EntryDesc ProfileCard_AssignPlayer{
 /// The player's character model (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerCharacter{.key = "PlayerCharacter",
                                                     .confidence = pm::sdk::Confidence::Decompiled,
-                                                    .name = "PlayerCharacter", .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .name = "PlayerCharacter", .assembly = "Assembly-CSharp", .ns = "",
+                                                    .base = &MonoBehaviourPun};
 
 /// Sets a bool of the character from a body type's alternate-prefabs flag. Every enabled character listens for it on
 /// an event of Network that carries a position. With a position in the list, only the character whose view's owner is
@@ -849,7 +863,8 @@ inline constexpr pm::sdk::EntryDesc PlayerCharacter_ChangeHeadObjectsShadowCasti
 /// The player's cosmetics (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerCosmetics{.key = "PlayerCosmetics",
                                                     .confidence = pm::sdk::Confidence::Decompiled,
-                                                    .name = "PlayerCosmetics", .assembly = "Assembly-CSharp", .ns = ""};
+                                                    .name = "PlayerCosmetics", .assembly = "Assembly-CSharp", .ns = "",
+                                                    .base = &MonoBehaviourPun};
 
 /// The Animator of the investigator's body, a serialized field. On the PCPlayer prefab (Resources.Load("PCPlayer"),
 /// which LocalPCPlayer.CreateNetworkedPlayer spawns each investigator from) it sits on the body, "Rigged PC Model
@@ -876,7 +891,7 @@ inline constexpr pm::sdk::EntryDesc ServerManager_SetPlayerInformation{
 
 /// The game's multiplayer helpers (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc MultiplayerController{.key = "MultiplayerController", .confidence = pm::sdk::Confidence::Decompiled, .name = "MultiplayerController",
-                                          .assembly = "Assembly-CSharp", .ns = ""};
+                                          .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// The end of a contract's destroy: it destroys this client's own networked objects
 /// (PhotonNetwork.DestroyPlayerObjects) and sets a custom property of its Photon player. It reads no Network.localPlayer.
@@ -912,7 +927,7 @@ inline constexpr pm::sdk::EntryDesc LocalPlayer_TeleportPlayer{
 
 /// The Winter's Jest seasonal event (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc WintersJestManager{.key = "WintersJestManager", .confidence = pm::sdk::Confidence::Decompiled, .name = "WintersJestManager",
-                                          .assembly = "Assembly-CSharp", .ns = ""};
+                                          .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviourPun};
 
 /// The event's RPC: after the first-actor check (sdk/systems/photon.md), unless the weather is the blood moon or
 /// GhostAI.speedFlag is already set, it acts on Network.localPlayer's sanity, and it then sets GhostAI.speedFlag. A client
@@ -923,7 +938,7 @@ inline constexpr pm::sdk::EntryDesc WintersJestManager_RPC_MakeKrampusStronger{
 
 /// A saved loadout of the truck's equipment (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc Loadout{.key = "Loadout", .confidence = pm::sdk::Confidence::Decompiled, .name = "Loadout",
-                                          .assembly = "Assembly-CSharp", .ns = ""};
+                                          .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// The loadout's equip: it calls InventoryManager.AddLoadoutToLobby, the way a loadout reaches the truck.
 inline constexpr pm::sdk::EntryDesc Loadout_EquipLoadout{
@@ -943,7 +958,7 @@ inline constexpr pm::sdk::EntryDesc GhostOS_UpdatePlayerColor{
 
 /// The customisation screen's ID card preview (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc ProfileCardPreview{.key = "ProfileCardPreview", .confidence = pm::sdk::Confidence::Decompiled, .name = "ProfileCardPreview",
-                                          .assembly = "Assembly-CSharp", .ns = ""};
+                                          .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviourPun};
 
 /// Refreshes the preview from the local player's cosmetics, reading Network.GetIndexOfPlayer.
 inline constexpr pm::sdk::EntryDesc ProfileCardPreview_UpdateCosmeticData{
@@ -952,7 +967,7 @@ inline constexpr pm::sdk::EntryDesc ProfileCardPreview_UpdateCosmeticData{
 
 /// The customisation screen (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerCustomizationScreenManager{.key = "PlayerCustomizationScreenManager", .confidence = pm::sdk::Confidence::Decompiled, .name = "PlayerCustomizationScreenManager",
-                                          .assembly = "Assembly-CSharp", .ns = ""};
+                                          .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// Saves the outfit and sends PlayerCosmetics.SetPlayerCosmeticsNetworked, the only live code that names that RPC.
 inline constexpr pm::sdk::EntryDesc PlayerCustomizationScreenManager_SaveOutfit{
@@ -966,7 +981,7 @@ inline constexpr pm::sdk::EntryDesc PlayerCustomizationScreenManager_ResetSelect
 
 /// This client's own journal input (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc LocalJournalController{.key = "LocalJournalController", .confidence = pm::sdk::Confidence::Decompiled, .name = "LocalJournalController",
-                                          .assembly = "Assembly-CSharp", .ns = ""};
+                                          .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviour};
 
 /// Opens or closes the journal, unless a flag of the player's menu or of their Player stops it, and calls
 /// JournalController.OpenCloseJournal. Neither flag was shown to be a load check.
@@ -986,7 +1001,7 @@ inline constexpr pm::sdk::EntryDesc LevelRoom_GetPlayersInRoom{
 
 /// The game's sound groups (Assembly-CSharp, global namespace). Decompiled.
 inline constexpr pm::sdk::EntryDesc SoundController{.key = "SoundController", .confidence = pm::sdk::Confidence::Decompiled, .name = "SoundController",
-                                          .assembly = "Assembly-CSharp", .ns = ""};
+                                          .assembly = "Assembly-CSharp", .ns = "", .base = &MonoBehaviourPun};
 
 /// The mixer group a player's own sounds go through: the group of the floor (FloorMixer) whose snapshot is that player's
 /// current one (PlayerAudio's, which the game moves as the player goes between rooms), else the exterior group when that
@@ -1039,7 +1054,7 @@ inline constexpr pm::sdk::EntryDesc Player_ToggleFreezePlayerMovement{
 /// The PC player's input settings and actions (Assembly-CSharp, global namespace), a MonoBehaviour.
 /// Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc PCControls{.key = "PCControls", .name = "PCControls", .assembly = "Assembly-CSharp",
-                                               .ns = ""};
+                                               .ns = "", .base = &MonoBehaviour};
 
 /// The PC player's PCControls: LocalPCPlayer's one field of that type. Inferred: from the class
 /// dump.
@@ -1058,7 +1073,7 @@ inline constexpr pm::sdk::EntryDesc PCControls_actions{.key = "PCControls.action
 inline constexpr pm::sdk::EntryDesc DragRigidbodyUse{.key = "DragRigidbodyUse",
                                                      .confidence = pm::sdk::Confidence::Decompiled,
                                                      .name = "DragRigidbodyUse", .assembly = "Assembly-CSharp",
-                                                     .ns = ""};
+                                                     .ns = "", .base = &MonoBehaviour};
 
 inline constexpr const char* DragRigidbodyUse_OnInteract_params[] = {"CallbackContext"};
 
@@ -1100,7 +1115,8 @@ inline constexpr pm::sdk::EntryDesc Player_renderers{.key = "Player.renderers", 
 /// parameters it sets each frame. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc PlayerCharacterAnimations{.key = "PlayerCharacterAnimations",
                                                              .name = "PlayerCharacterAnimations",
-                                                             .assembly = "Assembly-CSharp", .ns = ""};
+                                                             .assembly = "Assembly-CSharp", .ns = "",
+                                                              .base = &MonoBehaviourPun};
 
 /// The investigator's PlayerCharacterAnimations: Player's one field of that type. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc Player_characterAnimations{.key = "Player.characterAnimations",
@@ -1136,7 +1152,7 @@ inline constexpr pm::sdk::EntryDesc PlayerAudio_GetPlayerVoiceAudioSource{
 /// switching items, and the slot in front of the camera the held item hangs in on its own client. Inferred: from the
 /// class dump.
 inline constexpr pm::sdk::EntryDesc PCPropGrab{.key = "PCPropGrab", .name = "PCPropGrab", .assembly = "Assembly-CSharp",
-                                              .ns = ""};
+                                              .ns = "", .base = &MonoBehaviour};
 
 /// The item in the camera slot (the held item, on the PC player's own client), a PhotonObjectInteract, or null.
 /// Inferred: from the class dump.
@@ -1224,15 +1240,16 @@ inline constexpr pm::sdk::EntryDesc PCPropGrab_playerCam{.key = "PCPropGrab.play
 inline constexpr pm::sdk::EntryDesc ChildPhotonInteract{.key = "ChildPhotonInteract",
                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                         .name = "ChildPhotonInteract", .assembly = "Assembly-CSharp",
-                                                        .ns = ""};
+                                                        .ns = "", .base = &MonoBehaviour};
 
 /// The PC player's look on its own body (Assembly-CSharp, global namespace): in LateUpdate it bends the spine and head
 /// toward where the camera looks. Inferred: from the class dump.
-inline constexpr pm::sdk::EntryDesc PCLook{.key = "PCLook", .name = "PCLook", .assembly = "Assembly-CSharp", .ns = ""};
+inline constexpr pm::sdk::EntryDesc PCLook{.key = "PCLook", .name = "PCLook", .assembly = "Assembly-CSharp", .ns = "",
+                                           .base = &MonoBehaviour};
 
 /// The VR player's investigator (Assembly-CSharp, global namespace), a Player. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc VRPlayer{.key = "VRPlayer", .name = "VRPlayer", .assembly = "Assembly-CSharp",
-                                            .ns = ""};
+                                            .ns = "", .base = &Player};
 
 /// The left hand's IK target, a Transform that follows the left controller. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc VRPlayer_leftHandIK{.key = "VRPlayer.leftHandIK", .kind = pm::sdk::Kind::Field,
