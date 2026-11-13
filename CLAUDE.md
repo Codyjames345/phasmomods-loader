@@ -201,17 +201,14 @@ and `reviewer-rules.md`. Problems not fixed yet are in `FINDINGS.md`. Ideas not 
 
 ## Ghosts
 
-- **AI and player follow the same rules** (2026-10-31). A ghost's player-controlled and AI versions always share one ruleset:
-  targets, kill limits, tie-breaks, speeds, held-back rules, tells and abilities. Never introduce a difference unless the user
-  allows that specific one; fix it or ask. The player makes the decisions the AI makes (where, whom, when) but keeps the AI's
-  senses, limits and tells. Allowed exceptions, all by the user:
-  1. the Yokai player hears voices at any volume within the game's range;
-  2. Echo Speak, Kikimora Tidy and Gremlin Short-out are used on demand rather than on timers;
-  3. interactions are aimed and paid for rather than rolled, with the type's odds setting the cost;
-  4. free steering in hunts (no automatic walking), though the Bogeyman's search still runs on reaching a hiding place and the
-     Black Shuck's scent corridor stays;
-  5. the Mimic player picks what it copies at each native switch;
-  6. provisional, judged in the first in-game test: investigators after the ghost player move down one slot.
+- **A ghost player keeps its type's tells and personality; how it plays may differ from the AI** (user, 2026-11-13, replacing
+  the 2026-10-31 rule that both share one ruleset: "a 1:1 playable ghost is quite boring"). Every tell investigators use to
+  identify the type stays exactly as the AI shows it, and the type's personality, derived from its vanilla rules, shapes its
+  player loop (the Mare's revolves around darkness making it stronger). Beyond that the player's loop is its own: energy,
+  minigames, traps and type signatures. Each ghost's loop is the user's, recorded in the per-ghost design (ledger, 2026-11-13);
+  never invent one. The Squatter is not a ghost and has no player loop. Until the Playable Ghost revamp lands, the existing
+  mod keeps its old exceptions (Yokai hearing, on-demand Echo Speak, Kikimora Tidy and Gremlin Short-out, aimed and paid
+  interactions, free steering in hunts, the Mimic picking its copy, never its current one).
 - **Every ghost is identifiable** (2026-10-30) in single player, on zero evidence, on every map and in every weather, all at
   once. Behaviour that shows only in multiplayer, with evidence, or in some weather is fine as an extra.
 - **Custom ghost tells** (2026-10-21, don't re-ask): every custom ghost has a unique zero-evidence tell; nothing strays from
@@ -224,8 +221,11 @@ and `reviewer-rules.md`. Problems not fixed yet are in `FINDINGS.md`. Ideas not 
   never only on zero-evidence ones, and no document may mention such a limit. Keep vanilla mechanics; no tell overlaps another
   ghost's. The Goryo has no leash.
 - **Spectral Flame and Tempest** decisions are in their design specs and are settled; don't re-ask them.
-- **Playable Ghost** decisions are in `docs/design.md`; build on them, don't re-ask. Evidence and unique behaviours stay exactly
-  vanilla. The win is vanilla. The ghost player has no body in the contract and is out of the game's player list.
+- **Playable Ghost is being revamped** (user, 2026-11-13): rebuilt from the ground up on the SDK as a per-ghost gameplay loop,
+  nearly a new game, once stage 2b and the remaining stages are done and the SDK is fully mapped. One comprehensive plan is
+  written for the user's local model to run overnight. Until then `docs/design.md` describes the mod as it is. Each type's
+  evidence stays its own, but the ghost player chooses when to give it, within a time limit, and holding it back costs
+  energy (user, 2026-11-13). The ghost player has no body in the contract and is out of the game's player list.
 - **The ghost that leaves the building** (2026-11-01): one ghost type will leave the house as its tell. It is stage 2b Task 18,
   held until the user says to start; the SDK side is Task 17.
 
