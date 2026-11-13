@@ -21,6 +21,12 @@ namespace pm::emotes {
 /// clip while the player holds forward.
 enum class Phase { Intro, Loop, Moving };
 
+/// How long a clip switch to `to` blends, in seconds, on every client alike: an intro ending (from the intro clip to
+/// the loop) over kIntroBlendSeconds, every walking switch over kMoveBlendSeconds.
+inline float phase_blend_seconds(Phase to, bool fromIntro) {
+  return to == Phase::Loop && fromIntro ? kIntroBlendSeconds : kMoveBlendSeconds;
+}
+
 /// What the session knows of each emote once its clip is loaded, in the wheel's order (catalogue.h's wheel_order).
 struct EmoteInfo {
   float clipSeconds = 0.0f;  ///< the clip's length
@@ -215,9 +221,16 @@ class RemoteSessions {
       case Kind::Start: {
         if (!shows_to(senderDown, receiverDown)) return out;
         // A Start names its emote by key; this client's table gives the index. A key it does not hold (the packs
-        // differ, or the wheel changed) is passed over: no output and no state change.
+        // differ, or the wheel changed) is passed over, but a dance the peer was already doing ends here: they have
+        // moved on from it.
         const int index = index_of_key(m.key);
-        if (index < 0) return out;
+        if (index < 0) {
+          if (it != peers_.end()) {
+            out.push_back({RemoteOut::Stop, actor, it->second.emote, 0.0f});
+            peers_.erase(it);
+          }
+          return out;
+        }
         // Their clock starts here: this client times their intro on it, as the emoter's does on its own.
         const Phase at = table_[static_cast<size_t>(index)].introSeconds > 0.0f ? Phase::Intro : Phase::Loop;
         peers_[actor] = Peer{index, 0.0, at};

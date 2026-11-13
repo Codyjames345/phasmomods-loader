@@ -321,10 +321,20 @@ namespace PhasmoMods.EmoteTools
                 emote.name, r.At, last, r.Score, share, median,
                 LoopFinder.ClipLoop(frames, fps, last / (double)fps, 0.4 / fps).Score));
             AnimationClip made;
+            bool loopPose = false;
             if (share <= ClipCutShare)
             {
                 made = CutClip(source, all, r.At, fps);
                 Debug.Log(string.Format("EMLOOP {0} clip {1} ({2:F4})", emote.name, r.At, r.Score));
+            }
+            else if (crossfadeTo >= source.length - 0.5f / fps)
+            {
+                // A guess of the clip's whole length leaves no tail to crossfade, and cutting it short loops the dance
+                // too soon: the whole clip loops, with Unity's Loop Pose (AnimationClipSettings.loopBlend) easing its
+                // end into its start.
+                made = CutClip(source, all, last, fps);
+                loopPose = true;
+                Debug.Log(string.Format("EMLOOP {0} clip whole with loop pose ({1:F4})", emote.name, r.Score));
             }
             else
             {
@@ -336,6 +346,7 @@ namespace PhasmoMods.EmoteTools
             }
             AnimationClipSettings settings = AnimationUtility.GetAnimationClipSettings(source);
             settings.loopTime = true;
+            settings.loopBlend = loopPose;
             settings.stopTime = made.length;
             AnimationUtility.SetAnimationClipSettings(made, settings);
             AssetDatabase.DeleteAsset(emote.clip);
@@ -473,10 +484,11 @@ namespace PhasmoMods.EmoteTools
             }
 
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            // Only this pack's bundle name is cleared: another bundle the project builds keeps its assets.
             foreach (string path in AssetDatabase.GetAllAssetPaths())
             {
                 AssetImporter imp = AssetImporter.GetAtPath(path);
-                if (imp != null && !string.IsNullOrEmpty(imp.assetBundleName))
+                if (imp != null && string.Equals(imp.assetBundleName, cat.bundle, StringComparison.OrdinalIgnoreCase))
                 {
                     imp.SetAssetBundleNameAndVariant("", "");
                 }
@@ -608,6 +620,13 @@ namespace PhasmoMods.EmoteTools
             }
             foreach (EmoteEntry e in cat.emotes)
             {
+                // A source the tool would overwrite with its own cut.
+                if ((!string.IsNullOrEmpty(e.clipSource) && !PackPaths.DistinctSourceAndOutput(e.clipSource, e.clip)) ||
+                    (!string.IsNullOrEmpty(e.songSource) && !PackPaths.DistinctSourceAndOutput(e.songSource, e.song)))
+                {
+                    why = e.name + " names one asset as both a source and the cut the tool writes from it";
+                    return false;
+                }
                 foreach (string asset in new[] { e.clip, e.moveClip, e.introClip, e.song, e.introSong, e.icon, e.clipSource, e.songSource })
                 {
                     if (!string.IsNullOrEmpty(asset) && !PackPaths.IsProjectAsset(asset))

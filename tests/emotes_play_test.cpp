@@ -449,6 +449,27 @@ void an_unknown_key_from_a_peer_is_ignored() {
   CHECK(r.receive(7, EmoteMsg{Kind::Facing, 1000u, false, 0, 0, 0, 90.0f}, false, false).empty());
 }
 
+// One blend rule for a clip switch on every client (the review, 2026-11-13: a peer's walk ended over 0.1 s where the
+// dancer's own ended over 0.25 s): an intro ending blends over kIntroBlendSeconds, every walk switch over
+// kMoveBlendSeconds.
+void a_switch_blends_alike_on_every_client() {
+  CHECK(phase_blend_seconds(Phase::Loop, true) == kIntroBlendSeconds);
+  CHECK(phase_blend_seconds(Phase::Loop, false) == kMoveBlendSeconds);
+  CHECK(phase_blend_seconds(Phase::Moving, true) == kMoveBlendSeconds);
+  CHECK(phase_blend_seconds(Phase::Moving, false) == kMoveBlendSeconds);
+}
+
+// A peer already dancing who starts an emote this client lacks: their old dance stops here, rather than playing on
+// until their End (the review, 2026-11-13).
+void an_unknown_key_stops_a_peers_old_dance() {
+  RemoteSessions r(table());
+  r.receive(7, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+  CHECK(r.dancing(7));
+  const auto out = r.receive(7, EmoteMsg{Kind::Start, 999999u, false, 0, 0, 0, 45.0f}, false, false);
+  CHECK(out.size() == 1 && out[0].what == RemoteOut::Stop && out[0].actor == 7);
+  CHECK(!r.dancing(7));
+}
+
 // More emotes than one page: the index goes into the whole table, and a peer matches the message's key to its own
 // table and gets the same index.
 void a_table_of_twenty_emotes_plays_the_last() {
@@ -538,6 +559,8 @@ int main() {
   a_vanished_emoter_is_cleaned_up();
   a_peers_one_shot_ends_here_too();
   an_unknown_key_from_a_peer_is_ignored();
+  an_unknown_key_stops_a_peers_old_dance();
+  a_switch_blends_alike_on_every_client();
   a_table_of_twenty_emotes_plays_the_last();
   a_peer_intro_switches_on_their_own_clock();
   a_peer_move_message_switches_their_clip();

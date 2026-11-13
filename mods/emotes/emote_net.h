@@ -20,8 +20,8 @@ inline constexpr uint8_t kMagic = 'E';
 /// How far the body must turn since the last Facing sent before another is sent, in degrees. A starting value.
 inline constexpr float kFacingSendDegrees = 5.0f;
 
-/// What a message says. Move is reserved for walking during an emote: nothing sends it yet, and a client that receives
-/// one does nothing with it yet (a later task adds the walking).
+/// What a message says. Move says a walking emote's dancer started (moving true) or stopped walking forward, so every
+/// client switches their clip (emote_session.h).
 enum class Kind : uint8_t { Start = 1, Facing = 2, End = 3, Move = 4 };
 
 /// A message: for Start, the emote's key, where the emoter stands and the body's yaw; for Facing, the yaw; End

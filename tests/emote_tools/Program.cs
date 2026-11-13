@@ -27,6 +27,7 @@ static class Program
         PackFilePathsStayInThePack();
         ProjectAssetPathsStayInAssets();
         BundleIsAPlainFileName();
+        ASourceIsNeverItsOwnOutput();
         if (failures == 0)
         {
             Console.WriteLine("emote tools tests passed");
@@ -406,6 +407,20 @@ static class Program
         {
             if (PackPaths.IsProjectAsset(bad)) Fail("project_asset_paths_stay_in_assets", bad + " was accepted");
         }
+    }
+
+    // The tool writes a cut clip or song at the catalogue's clip or song path: one that is also its source would be
+    // overwritten by its own cut, and a second run would cut the cut (the review, 2026-11-13).
+    static void ASourceIsNeverItsOwnOutput()
+    {
+        if (PackPaths.DistinctSourceAndOutput("Assets/A/Source.anim", "assets/a/source.anim"))
+            Fail("a_source_is_never_its_own_output", "the same path in another case was taken as two");
+        if (PackPaths.DistinctSourceAndOutput("Assets/A/X.anim", "Assets/A/X.anim"))
+            Fail("a_source_is_never_its_own_output", "the same path was taken as two");
+        if (!PackPaths.DistinctSourceAndOutput("Assets/A/Source/X.anim", "Assets/A/Clips/X.anim"))
+            Fail("a_source_is_never_its_own_output", "two paths were taken as one");
+        if (PackPaths.DistinctSourceAndOutput("", "Assets/A/Clips/X.anim"))
+            Fail("a_source_is_never_its_own_output", "an empty source was taken as a source");
     }
 
     static void BundleIsAPlainFileName()

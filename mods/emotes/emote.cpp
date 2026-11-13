@@ -276,6 +276,7 @@ bool load_catalogues() {
     PM_LOG("Emotes inactive: its own emotes cannot be loaded (%s)", why.c_str());
     return false;
   }
+  const size_t ownBundles = g.a.bundles.size();
   std::vector<Catalogue> packs;
   for (const api::packs::Pack& p : api::packs::owned()) {
     i18n::Table table;
@@ -303,6 +304,11 @@ bool load_catalogues() {
     // Two emotes share a key: keep the mod's own, and leave every pack out rather than guess which one meant it.
     PM_LOG("Emotes: the packs' emotes are left out (%s)", why.c_str());
     for (const Catalogue& c : packs) api::packs::failed(c.packId, i18n::text("emotes.pack-unusable"));
+    // Their bundles go too, so a later start of the mods can load them again.
+    while (g.a.bundles.size() > ownBundles) {
+      api::unload_bundle(g.a.bundles.back(), true);
+      g.a.bundles.pop_back();
+    }
     wheel_order(own, {}, order, why);
   }
   std::vector<void*> icons;
@@ -339,7 +345,7 @@ void* game_actions_asset() {
 // Reads the game's ending actions and Look by name from the local rig's controls, once per rig.
 void read_actions() {
   void* rig = game::local_player_component();
-  if (rig == g.controlsOf.get() && rig) return;
+  if (rig == g.controlsOf.get()) return;  // the same rig, or still none (the main menu): nothing new to read
   g.controlsOf = rig;
   g.endActions.clear();
   g.wheelActions.clear();
@@ -834,7 +840,7 @@ void apply_local(const LocalOut& o, void* player, bool vr) {
   // A walking emote's walk, a stop, or an intro's end: the phase's clip blends in over the one playing.
   if (o.phase && o.start < 0 && !o.stop && g.local->active()) {
     const int emote = g.local->emote();
-    const float blend = *o.phase == Phase::Loop && g.playing[me] == g.a.introClips[emote] ? kIntroBlendSeconds : kMoveBlendSeconds;
+    const float blend = phase_blend_seconds(*o.phase, g.playing[me] == g.a.introClips[emote]);
     play_clip(me, player, clip_of(emote, *o.phase), blend);
   }
   if (o.stop) {
@@ -1019,7 +1025,8 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
         }
         break;
       case RemoteOut::Phase:
-        play_clip(o.actor, player, clip_of(o.emote, o.phase), o.phase == Phase::Loop ? kIntroBlendSeconds : kMoveBlendSeconds);
+        play_clip(o.actor, player, clip_of(o.emote, o.phase),
+                  phase_blend_seconds(o.phase, g.playing[o.actor] == g.a.introClips[o.emote]));
         break;
       case RemoteOut::Stop:
         g.playing.erase(o.actor);
@@ -1055,8 +1062,15 @@ void raise_loudness(int actor, void* player, int emote, double elapsed, float no
 
 }  // namespace
 
+// A start that fails lets go of whatever it took (the bundles above all: the engine loads a bundle once, so a later
+// start of the mods could not load them again), as stop() does; the host never calls stop() after a failed start.
+bool fail_start() {
+  stop();
+  return false;
+}
+
 bool start() {
-  if (!load_catalogues()) return false;
+  if (!load_catalogues()) return fail_start();
   const std::filesystem::path data = std::filesystem::path(mod::host().dataDirectory) / mod::info().id / "keybinds.txt";
   keys::begin_keys(mod::info().id, mod::shown_name(), data);
   keys::ModKey wheel;
@@ -1091,7 +1105,7 @@ bool start() {
       !api::hook<phasmo::Player::NotifyOfDeathStart>(&detour_death_start, "Emotes: a kill begins") ||
       !pm::hooks::enable_all()) {
     PM_LOG("Emotes inactive: the journal key and the death's start could not be hooked");
-    return false;
+    return fail_start();
   }
   g.lastTick = g.startTick = GetTickCount64();
   return true;
@@ -1220,8 +1234,7 @@ void stop() {
   api::view::stop_third_person();
   for (auto& [actor, f] : g.facings)
     if (f.model && game::alive(f.model)) game::set_local_rotation(f.model, f.original);
-  for (auto& [actor, s] : g.songs)
-    if (s.source && game::alive(s.source)) game::destroy(game::game_object_of(s.source));
+  while (!g.songs.empty()) stop_song(g.songs.begin()->first);  // each song's sources, its intro's too
   set_look(true);  // the game's actions the open wheel paused come back before the mod lets go of them
   wheel::unload();
   // The engine loads a bundle once, so each is unloaded here for the mod's next start (the lobby's rules restart mods).

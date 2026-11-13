@@ -152,7 +152,9 @@ folder, which is the folder holding `emotes.json` (a pack's `assets` folder). Or
 one batch-mode Unity per step, `FindLoops` first, prints the `EMLOOP`, `EM` and `EMFAIL` lines from the run, and
 stops with the log's path when a step fails.
 
-`FindLoops` measures and cuts, then writes, and leaves the catalogue untouched if anything fails:
+`FindLoops` measures and cuts each emote in turn, writing its song and clip as it goes, then writes the measured loops
+into the catalogue; if anything fails it leaves the catalogue untouched, though the emotes before the failure are
+already written:
 
 - With a `songSource` and a positive `songLoopGuess`, it finds the sample lag near the guess at which the song best
   repeats itself, and writes a loop wav at the emote's `song` path. The loop is cut from its second time round, clear
@@ -164,7 +166,9 @@ stops with the log's path when a step fails.
   returns to its start, by pose and by motion. When that frame's cost is at most a quarter of the median over all
   the clip's frames (`ClipCutShare`), the clip is cut there. Otherwise it is crossfaded to the guess: its tail past
   `clipLoopGuess` blends into its start, so the guess must be shorter than the clip (its length less half a second
-  works). The result replaces the `clip` path, with `loopTime` on.
+  works). A guess of the clip's whole length keeps the whole clip instead, with Unity's Loop Pose
+  (`AnimationClipSettings.loopBlend`) easing its end into its start. The result replaces the `clip` path, with
+  `loopTime` on. A source must be another asset than the `clip` or `song` the tool writes from it.
 
 `Build` checks and builds: every named clip must exist and be humanoid, and gets its `loopTime` as the catalogue's
 `loops` says (intro clips never loop); it writes each song's loudness file (RMS amplitude per 0.1 s window) under

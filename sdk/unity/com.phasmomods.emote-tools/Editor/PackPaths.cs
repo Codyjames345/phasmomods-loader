@@ -40,6 +40,15 @@ namespace PhasmoMods.EmoteTools
         }
 
         /// <summary>
+        /// Whether a source and the output the tool writes from it are two assets: the tool would otherwise overwrite
+        /// the source with its own cut. Unity's asset paths ignore case. False with no source.
+        /// </summary>
+        public static bool DistinctSourceAndOutput(string source, string output)
+        {
+            return !string.IsNullOrEmpty(source) && !string.Equals(source, output, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Whether `name` is a plain file name, such as a bundle's: one pack file path part.
         /// </summary>
         public static bool IsPlainFileName(string name)
