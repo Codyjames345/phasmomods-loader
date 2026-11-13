@@ -42,11 +42,14 @@ std::vector<ModEntry> mod_entries();
 /// @brief This mod's own folder for the files it keeps between games (settings, saved keys, records):
 /// `%LOCALAPPDATA%\PhasmoMods\data\<mod id>\`, as SMAPI's DirectoryPath gives a mod a folder of its own.
 ///
-/// The first ask after bind makes the folder. It also moves in, once, the files the mod kept before in
-/// `%LOCALAPPDATA%\PhasmoMods\<mod id>\`, the folder mods built for themselves before this helper: each file the new
-/// folder lacks (sub-folders kept) is moved, and logged; one it already has stays in the old folder, logged, and so does
-/// one that cannot be moved or copied, which is never deleted. The old folder goes once nothing is left in it. Later
-/// asks answer the same folder at once.
+/// The first ask after bind makes the folder. For a mod with a new-format id (`<author>.<mod>`) it also moves in, once,
+/// the files the mod kept before in `%LOCALAPPDATA%\PhasmoMods\<mod id>\`, the folder mods built for themselves before
+/// this helper (core/data_folder.h): each file the new folder lacks (sub-folders kept) is moved, and logged. One the new
+/// folder already has stays in the old folder, and one that cannot be moved or copied stays too (a warning, tried again
+/// next start); nothing is ever deleted that was not copied. The old folder goes once nothing is left in it; one that
+/// keeps only files the new folder has is renamed `<mod id>.moved`, with one line in the log, so the move never runs
+/// again and a kept file never comes back. An old-format id (a flat name such as `logs`) moves nothing, since it may
+/// name one of the loader's own folders. Later asks answer the same folder at once.
 /// @return The folder, which exists; empty before bind, when the host gives no data folder, and when the folder cannot
 ///   be made (logged). Build a file's path from it only when it is not empty, so nothing is written in the game's
 ///   working folder.

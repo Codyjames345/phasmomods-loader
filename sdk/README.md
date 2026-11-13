@@ -311,17 +311,21 @@ What the loader gives every mod besides the game, so no mod builds its own:
 - **A data folder.** `pm::mod::data_folder()` (`core/mod_glue.h`) is the mod's own folder for the files it keeps
   between games, `%LOCALAPPDATA%\PhasmoMods\data\<mod id>\`, as SMAPI's `DirectoryPath` gives a mod one (the user's
   choice, 2026-11-14). The first ask makes it. Before it, mods built `%LOCALAPPDATA%\PhasmoMods\<mod id>\`
-  themselves (the Dev Menu and Emotes did); the first ask moves each file from there that the new folder lacks,
-  logged, keeps any file the new folder already has or that cannot be moved where it is, never deleting one, and
-  removes the old folder once it is empty. It answers empty before bind or when the folder cannot be made (logged):
-  build a file's path from it only when it is not empty, so nothing lands in the game's working folder.
+  themselves (the Dev Menu and Emotes did); for a mod with a new-format id the first ask moves each file from there
+  that the new folder lacks, logged, and never deletes a file it did not copy. A file that cannot be moved stays and
+  is tried again next start. The old folder goes once it is empty; one left holding only files the new folder already
+  has is renamed `<mod id>.moved`, so the move runs once and a kept file never comes back. An old-format id (`logs`,
+  `bin`) moves nothing, since it may name one of the loader's own folders. It answers empty before bind or when the
+  folder cannot be made (logged): build a file's path from it only when it is not empty, so nothing lands in the
+  game's working folder.
   `PmHostApi::dataDirectory` stays `%LOCALAPPDATA%\PhasmoMods`, which the loader's own files share.
 - **The frame's time.** `pm::api::frame_time()` (`sdk/api/frame_time.h`) gives the frame's `deltaTime` and
   `unscaledDeltaTime` and the game's `time` and `unscaledTime`, in seconds, read from Unity's `Time` through the map
   (`Time.get_deltaTime`, `Time.get_unscaledDeltaTime`, `Time.get_time`, `Time.get_unscaledTime`), the values the
   game's own scripts read in the same frame. `pmmod_tick` takes no time, so a timer reads these rather than a clock of
   its own: game time follows the time scale and stands still while it is 0, real time does not. Ghost Tells' rules
-  run on `deltaTime`.
+  run on `deltaTime`, read alone (`phasmo::Time::get_deltaTime`), so that is the one Time entry they require: calling
+  `frame_time()` makes all four required.
 
 ### Dependencies
 

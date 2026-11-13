@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "check.h"
+#include "data_folder.h"
 #include "fake_game.h"
 #include "log.h"
 #include "text_files.h"
@@ -116,14 +117,14 @@ void write(const fs::path& file, const std::string& text) {
 }
 
 // Binds the mod to a fake host whose data folder is `root`, its log kept in g_lines.
-bool bind_in(const fs::path& root, PmHostApi& host) {
+bool bind_in(const fs::path& root, PmHostApi& host, const PmModInfo& info = kInfo) {
   fake::reset();
   fake::data_directory(root.wstring());
   host = *fake::host();
   host.log = &host_log;
   host.log_level = nullptr;  // every line reaches host_log, a level other than info named in its text
   g_lines.clear();
-  return pm::mod::bind(&host, &kInfo);
+  return pm::mod::bind(&host, &info);
 }
 
 // The mod's own folder is <data>\data\<mod id>, made on the first ask.
@@ -162,11 +163,13 @@ void the_old_folders_files_move_in_once() {
   pm::log::set_sink(nullptr, nullptr);
 }
 
-// A file the new folder already has stays where it is in the old one, and the newer copy is kept; the old folder then
-// stays, holding it.
+// A file the new folder already has stays in the old one, and the data folder's own copy is kept. The old folder is
+// then put aside as <id>.moved, with one line for what it keeps, so the move runs once: no later start logs it again,
+// and a copy the player deletes from the data folder does not come back from the old one.
 void a_file_the_new_folder_has_stays_in_the_old_one() {
   const fs::path root = fresh_root("both");
   const fs::path old = root / "someone.glue", folder = root / "data" / "someone.glue";
+  const fs::path aside = root / "someone.glue.moved";
   write(old / "keybinds.txt", "old");
   write(old / "settings.txt", "moves");
   write(folder / "keybinds.txt", "new");
@@ -174,10 +177,72 @@ void a_file_the_new_folder_has_stays_in_the_old_one() {
   CHECK(bind_in(root, host));
   CHECK(pm::mod::data_folder() == folder);
   CHECK(pm::text::read_file(folder / "keybinds.txt") == "new");
-  CHECK(pm::text::read_file(old / "keybinds.txt") == "old");
   CHECK(pm::text::read_file(folder / "settings.txt") == "moves");
-  CHECK(!fs::exists(old / "settings.txt"));
-  CHECK(logged("data folder: kept keybinds.txt in the old folder: the data folder has its own"));
+  CHECK(!fs::exists(old));
+  CHECK(pm::text::read_file(aside / "keybinds.txt") == "old");
+  CHECK(!fs::exists(aside / "settings.txt"));
+  CHECK(logged("DEBUG data folder: kept keybinds.txt in the old folder: the data folder has its own"));
+  CHECK(logged("[someone.glue] data folder: kept 1 file(s) the data folder already has in someone.glue.moved"));
+  // The player resets their keys: the old copy stays aside, and nothing is logged.
+  fs::remove(folder / "keybinds.txt");
+  CHECK(bind_in(root, host));
+  CHECK(pm::mod::data_folder() == folder);
+  CHECK(!fs::exists(folder / "keybinds.txt"));
+  CHECK(!logged("data folder:"));
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// A file that can be copied but not removed from the old folder (another program holds it open without letting it go)
+// ends up in both: the data folder has it, and the old folder keeps its own. Nothing is lost.
+void a_file_that_cannot_be_removed_is_copied() {
+  const fs::path root = fresh_root("shared");
+  const fs::path old = root / "someone.glue", folder = root / "data" / "someone.glue";
+  write(old / "keybinds.txt", "shared");
+  const HANDLE held =
+      CreateFileW((old / "keybinds.txt").c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+  CHECK(held != INVALID_HANDLE_VALUE);
+  PmHostApi host{};
+  CHECK(bind_in(root, host));
+  CHECK(pm::mod::data_folder() == folder);
+  CloseHandle(held);
+  CHECK(pm::text::read_file(folder / "keybinds.txt") == "shared");
+  CHECK(pm::text::read_file(old / "keybinds.txt") == "shared" ||
+        pm::text::read_file(root / "someone.glue.moved" / "keybinds.txt") == "shared");
+  CHECK(logged("data folder: copied keybinds.txt from the old folder, which keeps it too"));
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// An old-format id ("logs", "bin", "mods", "data") can name one of the loader's own folders under PhasmoMods: such a
+// mod gets its data folder, and nothing is moved out of the folder its id names.
+void an_old_format_id_moves_nothing() {
+  const fs::path root = fresh_root("flat");
+  const PmModInfo flat{PMMOD_API_VERSION, "logs", "Flat", 211, 0};
+  write(root / "logs" / "launcher.log", "the launcher's");
+  PmHostApi host{};
+  CHECK(bind_in(root, host, flat));
+  CHECK(pm::mod::data_folder() == root / "data" / "logs");
+  CHECK(pm::text::read_file(root / "logs" / "launcher.log") == "the launcher's");
+  CHECK(!fs::exists(root / "data" / "logs" / "launcher.log"));
+  CHECK(!logged("data folder:"));
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// Two folders that hold each other never move: the data folder inside the old one (an id "data" would make that), or
+// the old one inside the data folder.
+void folders_that_hold_each_other_never_move() {
+  const fs::path root = fresh_root("nested");
+  pm::log::set_sink(&host_log, "");
+  pm::log::set_level_sink(nullptr);
+  g_lines.clear();
+  write(root / "data" / "someone.else" / "keys.txt", "another mod's");
+  pm::datafolder::move_old_files(root / "data", root / "data" / "data");
+  CHECK(pm::text::read_file(root / "data" / "someone.else" / "keys.txt") == "another mod's");
+  CHECK(!fs::exists(root / "data" / "data" / "someone.else"));
+  write(root / "outer" / "inner" / "keys.txt", "inner");
+  pm::datafolder::move_old_files(root / "outer" / "inner", root / "outer");
+  CHECK(pm::text::read_file(root / "outer" / "inner" / "keys.txt") == "inner");
+  CHECK(!fs::exists(root / "outer" / "keys.txt"));
+  CHECK(logged("data folder: the old folder and the data folder hold each other; nothing moves"));
   pm::log::set_sink(nullptr, nullptr);
 }
 
@@ -217,6 +282,9 @@ int main() {
   the_old_folders_files_move_in_once();
   a_file_the_new_folder_has_stays_in_the_old_one();
   a_file_that_cannot_move_is_never_deleted();
+  a_file_that_cannot_be_removed_is_copied();
+  an_old_format_id_moves_nothing();
+  folders_that_hold_each_other_never_move();
   no_host_folder_gives_no_data_folder();
   std::error_code ec;
   fs::remove_all(fs::temp_directory_path() / ("pm_glue_test_" + std::to_string(GetCurrentProcessId())), ec);

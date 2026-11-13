@@ -15,7 +15,8 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   reaches it, and on a host without it writes the level's word into the line instead.
 - **A data folder per mod.** `pm::mod::data_folder()` (`core/mod_glue.h`) gives `%LOCALAPPDATA%\PhasmoMods\data\<mod
   id>\`, made on the first ask, as SMAPI's `DirectoryPath` gives a mod a folder of its own. The first ask moves in the
-  files a mod kept in `%LOCALAPPDATA%\PhasmoMods\<mod id>\` before, once, never deleting a file it could not copy.
+  files a mod with a `<author>.<mod>` id kept in `%LOCALAPPDATA%\PhasmoMods\<mod id>\` before, once, never deleting a
+  file it could not copy; what the new folder already had stays aside in `<mod id>.moved` (`core/data_folder.h`).
 - **The frame's time.** `Time.get_deltaTime`, `Time.get_unscaledDeltaTime`, `Time.get_time` and
   `Time.get_unscaledTime` (Unity's documented getters), and `pm::api::frame_time()` (`sdk/api/frame_time.h`), which
   reads all four. The host contract does not change for it.
@@ -27,7 +28,7 @@ major version `PmHostApi` and every published struct only grow at the end, and e
 - **The Dev Menu and Emotes keep their files in their data folders**, moved there from `%LOCALAPPDATA%\PhasmoMods\<mod
   id>\` on their first start.
 - **Ghost Tells' timers run on the game's frame time** (`Time.deltaTime`, at most a quarter of a second a frame)
-  instead of their own clock, so they follow the time scale.
+  instead of their own clock, so they follow the time scale. They require `Time.get_deltaTime` alone.
 
 ## [2.6] - Unreleased
 
