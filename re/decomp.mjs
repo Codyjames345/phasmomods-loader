@@ -1,8 +1,8 @@
 // Decompile GameAssembly functions by RVA or map key (GhostAI.Hunting) with headless Ghidra and
 // annotate known callees.
 // usage: node decomp.mjs <out.c> <rva|key> [<rva|key> ...]
-// Requires the one-time import into re/ghidra (see re/README.md), GHIDRA_INSTALL_DIR, and the tables
-// tools/gamecheck.ps1 writes.
+// Requires the one-time import into re/ghidra (see re/README.md), Ghidra's support folder on PATH, and
+// the tables tools/gamecheck.ps1 writes.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,9 +17,13 @@ if (!outFile || targets.length === 0) {
 }
 requireTables();
 const rvas = targets.map((t) => (/^(0x)?[0-9a-f]+$/i.test(t) ? t : codeOf(t).start.toString(16)));
-const ghidra = process.env.GHIDRA_INSTALL_DIR;
-if (!ghidra) {
-  console.error('Set GHIDRA_INSTALL_DIR to the Ghidra installation folder.');
+// analyzeHeadless.bat lives in Ghidra's support folder, which must be on PATH.
+let headless;
+try {
+  headless = execFileSync('where.exe', ['analyzeHeadless.bat'],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\r?\n/)[0].trim();
+} catch {
+  console.error("Put Ghidra's support folder, which holds analyzeHeadless.bat, on PATH.");
   process.exit(2);
 }
 const raw = path.resolve(outFile + '.raw');
@@ -28,7 +32,7 @@ const q = (s) => `"${s}"`;
 const args = [path.join(here, 'ghidra'), 'GA', '-process', 'GameAssembly.dll', '-noanalysis',
   '-readOnly', '-scriptPath', here, '-postScript', 'Decomp.java', raw, ...rvas];
 execFileSync('cmd.exe', ['/d', '/s', '/c',
-  `"${[q(path.join(ghidra, 'support', 'analyzeHeadless.bat')), ...args.map(q)].join(' ')}"`],
+  `"${[q(headless), ...args.map(q)].join(' ')}"`],
   { stdio: ['ignore', 'ignore', 'inherit'], windowsVerbatimArguments: true });
 
 const names = new Map();

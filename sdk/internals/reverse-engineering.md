@@ -25,7 +25,7 @@ signature) and `re/map-addresses.tsv` (each map key's resolved value). Then:
 
 | Script | What it does |
 | --- | --- |
-| `re/decomp.mjs` | Decompiles functions by map key (or address) with headless Ghidra (`re/Decomp.java`), naming the callees it knows. Needs a one-time import into `re/ghidra` and `GHIDRA_INSTALL_DIR`. |
+| `re/decomp.mjs` | Decompiles functions by map key (or address) with headless Ghidra (`re/Decomp.java`), naming the callees it knows. Needs a one-time import into `re/ghidra` and Ghidra's `support` folder on PATH. |
 | `re/callers.mjs` | Lists the direct call sites of a function, with the method each lies in: a fast stand-in for cross-references over the whole binary. |
 | `re/slimpe.mjs` | Builds a slim copy of GameAssembly.dll that holds only the chosen functions, at their real addresses, with every known method as an export, for an interactive Ghidra session. |
 | `re/strings.mjs` | Dumps IL2CPP's string literals from the metadata. |

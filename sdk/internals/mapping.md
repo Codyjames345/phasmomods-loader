@@ -361,7 +361,7 @@ build stays stale after a map change and does no harm; nobody plays that build.
 
 The loader never looks at the anti-cheat to judge an update, and neither the map nor a record covers it.
 
-Reading a function's code needs Ghidra, `GHIDRA_INSTALL_DIR` and a one-time import into `re/ghidra`.
+Reading a function's code needs Ghidra, its `support` folder on PATH and a one-time import into `re/ghidra`.
 `re/README.md` describes the import.
 
 ```powershell
