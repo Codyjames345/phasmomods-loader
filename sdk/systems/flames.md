@@ -16,13 +16,18 @@ candelabra candles, and the level's other candles (a summoning circle's, an alta
 
 - `FireSource.Light` enables `flameLight`, switches `flame` on, plays its particles, sets
   `isOn` and warms its heat spot. `Extinguish` does the reverse.
+- Each flame's flicker comes from a `LightPulse` component on the same object. It flickers only the
+  light in practice: the renderer it is given is null on every Firelight, so its emission part of the
+  flicker never runs.
 - `FireSource.BlowOutFire(byGhost)` does nothing while `isOn` is clear. Otherwise it puts out the
   `equipment` it belongs to and sends `BlowOutFireNetworked` to every client. The ghost calls it on the
   master.
 - Each blow-out by the ghost runs `FireSource.CountGhostBlowOut`, which counts the Onryo's blow-outs
   toward its hunt ([the vanilla ghosts](vanilla-ghosts.md), "Onryo").
 - A `Candle` is an `Equipment`. Its `candleObjects` are its flames, each a `CandleObject` with its
-  `fireSource` and its wax renderers (`candleRend`).
+  `fireSource` and its wax renderers (`candleRend`). Only the tier 3 lantern has separate truck, held
+  and world models, and the game switches between them when it is put down and picked up; every other
+  flame keeps the one model it starts with.
 - `Candle.UseNetworked` lights or puts out every flame, on every client. It sets each wax material's
   `_EmissionColor` to `candleEmissionColor` when lit and to black when out. The tier 3 lantern's wax gets
   no glow.
@@ -72,6 +77,8 @@ answer of false while `Update` runs leaves that candle out of the drain, and cha
   Tanglewood_Street_House scene's shared assets, where `Candle Flame` comes from the main menu's and the
   other two from the scene's own. A material counts as a flame's only when it has the property, and a
   property that did not resolve leaves what it colours as the game's. The texture functions that make the
-  grey copy are optional entries: without them it tints the game's sprite.
+  grey copy are optional entries: without them it tints the game's sprite. The grey copy matters
+  because the game's own candle sprite is itself coloured (a white core, a yellow body, an orange tip
+  and a blue base), so a tint over it cannot reach a pure hue.
 - On the master it counts the ghost as busy, and never adds its own blow-out, while `GhostAI.state`
   is `hunting`, `appear` or `randomEvent` (`GhostAI.h` says what ChangeState does with each).
