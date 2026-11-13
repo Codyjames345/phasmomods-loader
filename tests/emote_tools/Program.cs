@@ -28,6 +28,7 @@ static class Program
         ProjectAssetPathsStayInAssets();
         BundleIsAPlainFileName();
         ASourceIsNeverItsOwnOutput();
+        PartnerPathsAreChecked();
         if (failures == 0)
         {
             Console.WriteLine("emote tools tests passed");
@@ -430,5 +431,32 @@ static class Program
         {
             if (PackPaths.IsPlainFileName(bad)) Fail("bundle_is_a_plain_file_name", bad + " was accepted");
         }
+    }
+
+    // A synced emote's second part names a clip, an intro clip, a song and a loudness file: each is held to the same
+    // places as the emote's own (the tool reads and writes them all).
+    static void PartnerPathsAreChecked()
+    {
+        Func<PartnerEntry, CatalogueFile> with = partner => new CatalogueFile
+        {
+            bundle = "emotes.bundle",
+            emotes = new[] { new EmoteEntry { name = "sway", clip = "Assets/E/Sway.anim", partner = partner } }
+        };
+        string why;
+        PartnerEntry good = new PartnerEntry { clip = "Assets/E/SwayPartner.anim", introClip = "Assets/E/SwayIn.anim",
+                                               song = "Assets/E/Synced.wav", loudness = "loudness/synced.txt" };
+        if (!PackPaths.CheckCatalogue(with(good), out why)) Fail("partner_paths_are_checked", "a good partner was refused: " + why);
+        if (!PackPaths.CheckCatalogue(with(new PartnerEntry()), out why))
+            Fail("partner_paths_are_checked", "an emote with no partner was refused: " + why);
+        foreach (string bad in new[] { "../x.anim", "Packages/x.anim", "Assets/../x.anim" })
+        {
+            foreach (PartnerEntry p in new[] { new PartnerEntry { clip = bad }, new PartnerEntry { clip = good.clip, introClip = bad },
+                                               new PartnerEntry { clip = good.clip, song = bad, loudness = good.loudness } })
+            {
+                if (PackPaths.CheckCatalogue(with(p), out why)) Fail("partner_paths_are_checked", bad + " was accepted in a partner");
+            }
+        }
+        if (PackPaths.CheckCatalogue(with(new PartnerEntry { clip = good.clip, song = good.song, loudness = "../x.txt" }), out why))
+            Fail("partner_paths_are_checked", "a loudness file outside the pack was accepted");
     }
 }

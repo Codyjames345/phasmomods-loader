@@ -49,6 +49,51 @@ namespace PhasmoMods.EmoteTools
         }
 
         /// <summary>
+        /// Whether every path a catalogue names stays where the tool may read and write: asset paths (clips, songs,
+        /// icons, sources, a synced emote's second part) under the project's Assets folder, loudness files under the
+        /// pack folder, and the bundle a plain file name in it; and no source is the cut the tool writes from it. A
+        /// catalogue may come from another author, and the tool writes where it says. `why` names the first that does
+        /// not.
+        /// </summary>
+        public static bool CheckCatalogue(CatalogueFile cat, out string why)
+        {
+            if (!string.IsNullOrEmpty(cat.bundle) && !IsPlainFileName(cat.bundle))
+            {
+                why = "the bundle name " + cat.bundle + " is not a plain file name";
+                return false;
+            }
+            foreach (EmoteEntry e in cat.emotes)
+            {
+                if ((!string.IsNullOrEmpty(e.clipSource) && !DistinctSourceAndOutput(e.clipSource, e.clip)) ||
+                    (!string.IsNullOrEmpty(e.songSource) && !DistinctSourceAndOutput(e.songSource, e.song)))
+                {
+                    why = e.name + " names one asset as both a source and the cut the tool writes from it";
+                    return false;
+                }
+                PartnerEntry p = e.partner ?? new PartnerEntry();
+                foreach (string asset in new[] { e.clip, e.moveClip, e.introClip, e.song, e.introSong, e.icon, e.clipSource,
+                                                 e.songSource, p.clip, p.introClip, p.song })
+                {
+                    if (!string.IsNullOrEmpty(asset) && !IsProjectAsset(asset))
+                    {
+                        why = e.name + " names " + asset + ", which is not a file under the project's Assets folder";
+                        return false;
+                    }
+                }
+                foreach (string file in new[] { e.loudness, e.introLoudness, p.loudness })
+                {
+                    if (!string.IsNullOrEmpty(file) && !IsPackFile(file))
+                    {
+                        why = e.name + " names " + file + ", which is not a file under the pack folder";
+                        return false;
+                    }
+                }
+            }
+            why = null;
+            return true;
+        }
+
+        /// <summary>
         /// Whether `name` is a plain file name, such as a bundle's: one pack file path part.
         /// </summary>
         public static bool IsPlainFileName(string name)

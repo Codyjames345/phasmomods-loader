@@ -524,6 +524,23 @@ namespace PhasmoMods.EmoteTools
                     }
                     AddNamed(named, emote.introClip);
                 }
+                // A synced emote's second part: humanoid, looping as the emote does, its intro played once.
+                if (emote.partner != null && emote.partner.Named)
+                {
+                    if (!SetClip(emote.partner.clip, wantsLoop, out why))
+                    {
+                        return false;
+                    }
+                    AddNamed(named, emote.partner.clip);
+                    if (!string.IsNullOrEmpty(emote.partner.introClip))
+                    {
+                        if (!SetClip(emote.partner.introClip, false, out why))
+                        {
+                            return false;
+                        }
+                        AddNamed(named, emote.partner.introClip);
+                    }
+                }
             }
 
             foreach (EmoteEntry emote in cat.emotes)
@@ -543,6 +560,14 @@ namespace PhasmoMods.EmoteTools
                         return false;
                     }
                     AddNamed(named, emote.introSong);
+                }
+                if (emote.partner != null && emote.partner.Named && !string.IsNullOrEmpty(emote.partner.song))
+                {
+                    if (!SetSong(emote.partner.song, emote.partner.loudness, packPath, out why))
+                    {
+                        return false;
+                    }
+                    AddNamed(named, emote.partner.song);
                 }
             }
 
@@ -608,44 +633,10 @@ namespace PhasmoMods.EmoteTools
             return true;
         }
 
-        // Every path the catalogue names stays where the tool may read and write: asset paths under the project's
-        // Assets folder, loudness files under the pack folder, and the bundle a plain file name in it. A catalogue may
-        // come from another author, and the tool writes songs, clips, loudness files and the bundle where it says.
+        // Every path the catalogue names stays where the tool may read and write (PackPaths.CheckCatalogue).
         private static bool CheckPaths(CatalogueFile cat, out string why)
         {
-            if (!string.IsNullOrEmpty(cat.bundle) && !PackPaths.IsPlainFileName(cat.bundle))
-            {
-                why = "the bundle name " + cat.bundle + " is not a plain file name";
-                return false;
-            }
-            foreach (EmoteEntry e in cat.emotes)
-            {
-                // A source the tool would overwrite with its own cut.
-                if ((!string.IsNullOrEmpty(e.clipSource) && !PackPaths.DistinctSourceAndOutput(e.clipSource, e.clip)) ||
-                    (!string.IsNullOrEmpty(e.songSource) && !PackPaths.DistinctSourceAndOutput(e.songSource, e.song)))
-                {
-                    why = e.name + " names one asset as both a source and the cut the tool writes from it";
-                    return false;
-                }
-                foreach (string asset in new[] { e.clip, e.moveClip, e.introClip, e.song, e.introSong, e.icon, e.clipSource, e.songSource })
-                {
-                    if (!string.IsNullOrEmpty(asset) && !PackPaths.IsProjectAsset(asset))
-                    {
-                        why = e.name + " names " + asset + ", which is not a file under the project's Assets folder";
-                        return false;
-                    }
-                }
-                foreach (string file in new[] { e.loudness, e.introLoudness })
-                {
-                    if (!string.IsNullOrEmpty(file) && !PackPaths.IsPackFile(file))
-                    {
-                        why = e.name + " names " + file + ", which is not a file under the pack folder";
-                        return false;
-                    }
-                }
-            }
-            why = null;
-            return true;
+            return PackPaths.CheckCatalogue(cat, out why);
         }
 
         // A project path such as Assets/Emotes/Loops/floss.wav as a full path on disk.
