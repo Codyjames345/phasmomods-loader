@@ -27,6 +27,13 @@ if (project.split(path.sep).some((p) => p.startsWith('.'))) {
   console.error(hint);
   process.exit(2);
 }
+// cmd.exe expands '%' inside the quotes it parses, and a '"' would break the quoting, so neither may
+// appear in a path the script hands to it.
+const cmdUnsafe = (p) => p.includes('%') || p.includes('"');
+if (cmdUnsafe(project)) {
+  console.error(`the Ghidra project path cannot contain '%' or '"', which cmd.exe expands: ${project}`);
+  process.exit(2);
+}
 if (!fs.existsSync(project)) {
   console.error(`no Ghidra project folder at ${project}.`);
   console.error(hint);
@@ -40,17 +47,24 @@ if (!fs.existsSync(path.join(project, 'GA.gpr'))) {
 const rvas = targets.map((t) => (/^(0x)?[0-9a-f]+$/i.test(t) ? t : codeOf(t).start.toString(16)));
 // analyzeHeadless.bat lives in Ghidra's support folder, which must be on PATH. Search PATH entries
 // only: where.exe checks the current directory first, so a planted analyzeHeadless.bat would run.
-const cwd = path.resolve(process.cwd());
+// Windows paths are case-insensitive, so compare them without case: an entry that names the current
+// directory in another case is the current directory and must be skipped too.
+const norm = process.platform === 'win32' ? (s) => s.toLowerCase() : (s) => s;
+const cwd = norm(path.resolve(process.cwd()));
 let headless;
 for (const entry of (process.env.PATH || '').split(';')) {
   if (!entry || !path.isAbsolute(entry)) continue;
   const dir = path.resolve(entry);
-  if (dir === cwd || dir.startsWith(cwd + path.sep)) continue;
+  if (norm(dir) === cwd || norm(dir).startsWith(cwd + path.sep)) continue;
   const bat = path.join(dir, 'analyzeHeadless.bat');
   if (fs.existsSync(bat)) { headless = bat; break; }
 }
 if (!headless) {
   console.error("Put Ghidra's support folder, which holds analyzeHeadless.bat, on PATH.");
+  process.exit(2);
+}
+if (cmdUnsafe(headless)) {
+  console.error(`the Ghidra runner path cannot contain '%' or '"', which cmd.exe expands: ${headless}`);
   process.exit(2);
 }
 const raw = path.resolve(outFile + '.raw');
