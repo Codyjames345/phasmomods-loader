@@ -41,6 +41,15 @@ change:
   and why the change is right. Work lands on the `development` branch;
   [docs/releasing.md](docs/releasing.md) covers releases.
 
+## Code style
+
+`.editorconfig` and `.clang-format` describe the code as it is: two-space indents, attached braces,
+`char* p`, and lines wrapped by hand. `validate.ps1` runs `tools/style_check.ps1`, which names trailing
+whitespace (Markdown exempt), a missing final newline and tab indentation in C/C++ across the tracked
+text files. clang-format is not enforced across the tree: the settings match the code closely but not
+exactly, mostly around hand-aligned trailing comments, so only run clang-format on what you are already
+editing.
+
 ## AI policy
 
 This project says plainly where AI took part, in [AI_POLICY.md](AI_POLICY.md): reverse engineering,

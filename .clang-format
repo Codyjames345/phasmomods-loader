@@ -1,0 +1,20 @@
+# clang-format settings measured from the code as it is (night of 2026-11-14). LLVM is the closest base style;
+# the tweaks below are the places where the code differs from it. Nothing enforces this file yet: a whole-tree
+# clang-format pass (the LLVM bundled with Visual Studio works) would still touch every file, mostly to move
+# trailing comments to its own alignment columns. Run clang-format on what you are already editing, not on the
+# whole tree, until the maintainers decide whether to enforce it; see CONTRIBUTING.md.
+BasedOnStyle: LLVM
+# The code wraps by hand and its longest lines pass 132, so no column limit: clang-format keeps every line break
+# as written.
+ColumnLimit: 0
+# The code writes "char* p", not "char *p".
+PointerAlignment: Left
+# A class's "public:" and "private:" sit one space in, one less than its members.
+AccessModifierOffset: -1
+# Short single-statement ifs and loops stay on their line, as the code writes them.
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+# Authors align trailing comments by hand; give clang-format the same two-space gap so it leaves them alone.
+SpacesBeforeTrailingComments: 2
+# Includes are grouped on purpose (game API, core, each mod), not sorted.
+SortIncludes: Never
