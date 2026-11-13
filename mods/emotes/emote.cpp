@@ -46,6 +46,7 @@
 #include "players.h"
 #include "settings.h"
 #include "input_device.h"
+#include "journal.h"
 #include "movement.h"
 #include "talk_loudness.h"
 #include "text_table.h"
@@ -57,6 +58,7 @@ namespace pm::emotes::play {
 namespace {
 
 namespace input = api::input;
+namespace journal = api::journal;
 namespace keys = api::keys;
 namespace movement = api::movement;
 namespace talk = api::talk;
@@ -406,11 +408,9 @@ void turn_page(int steps) {
   wheel::set_page(g.page);
 }
 
-// Whether the player's own journal is open (JournalController.open): opening it ends an emote (the user's ruling).
-bool journal_open(void* player) {
-  void* journal = player ? phasmo::Player::journal.get(player) : nullptr;
-  return journal && game::alive(journal) && phasmo::JournalController::open.get(journal);
-}
+// Whether this client's journal or pause screen is open (pm::api::journal::open, JournalController.open): opening
+// either ends an emote (the user's ruling) and closes the wheel.
+bool journal_open() { return journal::open().value_or(false); }
 
 bool end_action_pressed(bool vr) {
   for (const api::Held& a : g.endActions)
@@ -904,8 +904,8 @@ std::optional<int> wheel_input(void* player, bool vr) {
     }
     return std::nullopt;
   }
-  // On screen: a menu with the cursor free (the pause screen, the journal) closes it with nothing played.
-  const bool interrupted = phasmo::Cursor::get_lockState() != phasmo::CursorLockMode::Locked();
+  // On screen: the journal or the pause screen (one UI, the game's JournalController.open) closes it with nothing played.
+  const bool interrupted = journal_open();
   const bool wasOpen = g.wheelIn.open;
   int pickNow = -1;
   if (wasOpen) {
@@ -1150,7 +1150,7 @@ void tick() {
     // the stamina able); nothing on VR, where a walking emote stands anyway.
     f.sprinting = movement::sprinting().value_or(false);
     const bool dancing = g.local->active();
-    f.endAction = dancing && ((end_action_pressed(vr) && !wheel::is_open()) || journal_open(player));
+    f.endAction = dancing && ((end_action_pressed(vr) && !wheel::is_open()) || journal_open());
   }
   // The beginning of a death: the game's death animation takes the body back from its first frame, so the emote ends at
   // once instead of blending out over it, the wheel goes away and nothing is picked while the body falls (the user's

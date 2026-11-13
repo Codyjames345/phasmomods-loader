@@ -24,7 +24,7 @@ one too), and Stride walks while it dances.
 The key's default is B on a keyboard and D-pad down on a gamepad, but the game already uses both (B is the walkie-talkie,
 D-pad down the torch), so the defaults fall back to X and D-pad up. Rebind it in the game's own keybinds menu, where it
 has a row of its own; the mod remembers the rebinding. Letting go with the mouse or stick at rest plays nothing. Pressing
-the VR button again closes the wheel. The wheel stays shut while a menu or the journal is open.
+the VR button again closes the wheel. The wheel stays shut while the journal or the pause screen is open.
 
 With more than eight dances the wheel turns pages. Scrolling down and the right bumper go to the next page, scrolling
 up and the left bumper to the previous, and the pages wrap: one turn past the last shows the first. In VR, point the
