@@ -150,7 +150,8 @@ class Table {
  private:
   std::map<std::string, std::string, std::less<>> entries_;
   std::function<void(const std::string&)> missing_;
-  mutable std::mutex told_mutex_;  // guards missing_ and told_: get() takes it only when the key is missing
+  mutable std::mutex told_mutex_;  // guards reads of missing_ and told_ in get(): a missing key is told once across threads.
+                                   // on_missing() writes missing_ without it, set once before any lookup (the class comment).
   mutable std::set<std::string, std::less<>> told_;
 };
 
@@ -166,7 +167,8 @@ inline std::filesystem::path table_beside(const std::filesystem::path& running) 
 
 /// This module's own table: each DLL (the host, each mod) and the launcher has its own, since every module holds its own
 /// copy of this function's static. The module loads it once, as it starts (host/suite.cpp, core/mod_glue.cpp,
-/// tools/launcher.cpp). Main thread.
+/// tools/launcher.cpp). Loading it belongs to one thread before any lookup; lookups may come from several threads at
+/// once once it is loaded, as the launcher looks up text on its worker thread and its window thread both.
 inline Table& table() {
   static Table t;
   return t;
