@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "../core/log.h"
 #include "../core/pack_files.h"
 
 namespace {
@@ -154,9 +155,21 @@ ULONGLONG WINAPI ticks() { return elapsed; }
 #undef GetTickCount64
 
 namespace {
-/** Build a process-specific native line using the production log format. */
-std::string event(const char* message, DWORD pid = 42) {
+/** Build a process-specific native line using the production log format, which names the line's level (core/log.h). */
+std::string event(const char* message, DWORD pid = 42, const char* level = "INFO ") {
+  return "12:00:00.000 [pid=" + std::to_string(pid) + " tid=7] " + level + " " + message + "\n";
+}
+/** The same line as a host before log levels wrote it, with no level. */
+std::string unlevelled_event(const char* message, DWORD pid = 42) {
   return "12:00:00.000 [pid=" + std::to_string(pid) + " tid=7] " + message + "\n";
+}
+/** The launcher strips exactly the words the log writes: each of core/log.h's levels, in order, and a space. */
+void the_launcher_knows_every_level_word() {
+  using pm::log::Level;
+  const Level levels[] = {Level::Trace, Level::Debug, Level::Info, Level::Warn, Level::Error, Level::Alert};
+  CHECK(std::size(pm::loader::kLogLevelWords) == std::size(levels));
+  for (size_t i = 0; i < std::size(levels) && i < std::size(pm::loader::kLogLevelWords); ++i)
+    CHECK(std::string(pm::loader::kLogLevelWords[i]) == std::string(pm::log::level_word(levels[i])) + " ");
 }
 /** The per-process asset folders (*.assets) the launcher has made in bin. */
 std::vector<std::wstring> assets_copies(const std::wstring& directory) {
@@ -226,6 +239,7 @@ int main() {
     std::string why;
     if (!pm::i18n::table().load(std::filesystem::path(PM_TEXT_DIR) / "i18n" / "default.json", why)) std::printf("FAIL the loader's text: %s\n", why.c_str());
   }
+  the_launcher_knows_every_level_word();
   wchar_t temporary[MAX_PATH], root[MAX_PATH];
   CHECK(GetTempPathW(MAX_PATH, temporary)); CHECK(GetTempFileNameW(temporary, L"pgi", 0, root));
   CHECK(DeleteFileW(root)); CHECK(CreateDirectoryW(root, nullptr));
@@ -428,6 +442,8 @@ int main() {
   reset(); emitted = event("ModHost loading") + event("ModHost inactive: test"); CHECK(run().outcome == Outcome::inactive);
   reset(); emitted = event("ModHost loading") + event("ModHost stopped; native module retained until process exit"); CHECK(run().outcome == Outcome::inactive);
   reset(); emitted = event("ModHost active"); CHECK(run().outcome == Outcome::activation_timeout);
+  reset(); emitted = unlevelled_event("ModHost loading") + unlevelled_event("ModHost active"); CHECK(run().outcome == Outcome::active);
+  reset(); emitted = event("ModHost loading") + event("ModHost inactive: test", 42, "ERROR"); CHECK(run().outcome == Outcome::inactive);
   reset(); emitted = event("ModHost loading", 99) + event("ModHost active", 99); CHECK(run().outcome == Outcome::activation_timeout);
   reset(); write_log(event("ModHost loading") + event("ModHost active")); emitted.clear(); CHECK(run().outcome == Outcome::activation_timeout);
   reset(); emitted.pop_back(); CHECK(run().outcome == Outcome::activation_timeout);

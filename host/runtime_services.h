@@ -33,6 +33,8 @@ void api_gc_release(uint32_t handle);
 bool api_static_get(const char* key, void* out, size_t size);
 bool api_static_set(const char* key, const void* in, size_t size);
 void api_log_exception(const char* where, const void* exception);
+// The line at its level (log::level_of: a level the contract does not know is info); a null line writes nothing.
+void api_log_level(uint32_t level, const char* line);
 // Not contained: the exception it raises is what unwinds the spawn, up to the mod's catch around its call.
 void api_abandon_ghost_spawn();
 int32_t api_dictionary_int_entries(const void* dict, PmIntEntry* out, int32_t max);

@@ -5,7 +5,9 @@
 #include <filesystem>
 #include <string>
 #include <system_error>
+#include <vector>
 
+#include "data_folder.h"
 #include "game_api.h"
 #include "hooks.h"
 #include "managed_exception.h"
@@ -22,6 +24,7 @@ const PmHostApi* g_host = nullptr;
 const PmModInfo* g_info = nullptr;
 std::string g_prefix;
 net::Handler g_handler = nullptr;
+std::filesystem::path g_dataFolder;  // made since the last bind; empty until the first ask
 
 /** Hands a payload to the mod's handler; nothing thrown may unwind into the host. */
 void receive(int32_t sender, const uint8_t* data, size_t size) {
@@ -61,7 +64,10 @@ bool bind(const PmHostApi* api, const PmModInfo* info) {
   g_host = api;
   g_info = info;
   g_prefix = std::string("[") + info->id + "] ";
+  g_dataFolder.clear();
   log::set_sink(api->log, g_prefix.c_str());
+  // log_level came in contract 2.7; without it a line's level goes into its text (core/log.h).
+  log::set_level_sink(api->version >= ((PMMOD_API_MAJOR << 16) | 7u) ? api->log_level : nullptr);
   load_text();
   std::string missing;
   if (!api::bind(api, missing)) {
@@ -137,6 +143,27 @@ std::vector<ModEntry> mod_entries() {
                    e.offReason ? e.offReason : "", e.flags});
   }
   return out;
+}
+
+std::filesystem::path data_folder() {
+  namespace fs = std::filesystem;
+  if (!g_dataFolder.empty()) return g_dataFolder;
+  if (!g_host || !g_info || !g_host->dataDirectory || !*g_host->dataDirectory) return {};
+  if (!g_info->id || !modid::valid_any_id(g_info->id)) return {};  // the host never starts such a mod: no folder to name
+  const fs::path base(g_host->dataDirectory);
+  const fs::path folder = base / L"data" / text::widen(g_info->id);
+  std::error_code ec;
+  fs::create_directories(folder, ec);
+  if (!fs::is_directory(folder, ec)) {
+    PM_LOG_AT(log::Level::Error, "data folder: cannot make %s", text::narrow(folder.wstring()).c_str());
+    return {};
+  }
+  // Only a new-format id, `<author>.<mod>`, built a folder of its own there: an old-format one ("bin", "logs", "mods",
+  // "data") may name one of the loader's own folders, which never move.
+  const fs::path old = base / text::widen(g_info->id);
+  if (modid::valid_id(g_info->id) && fs::is_directory(old, ec)) datafolder::move_old_files(old, folder);
+  g_dataFolder = folder;
+  return g_dataFolder;
 }
 
 void show_message(const std::string& title, const std::string& body) {

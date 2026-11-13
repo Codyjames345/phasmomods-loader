@@ -196,6 +196,30 @@ inline constexpr pm::sdk::EntryDesc Time_get_timeScale{.key = "Time.get_timeScal
                                                        .flags = pm::sdk::kStatic, .owner = "Time",
                                                        .name = "get_timeScale"};
 
+/// The seconds from the last frame to this one, in game time: scaled by the time scale, so 0 while it is 0. Static.
+/// Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc Time_get_deltaTime{.key = "Time.get_deltaTime", .kind = pm::sdk::Kind::Method,
+                                                       .flags = pm::sdk::kStatic, .owner = "Time",
+                                                       .name = "get_deltaTime"};
+
+/// The seconds from the last frame to this one in real time, whatever the time scale. Static. Inferred: Unity's
+/// documented property getter.
+inline constexpr pm::sdk::EntryDesc Time_get_unscaledDeltaTime{.key = "Time.get_unscaledDeltaTime",
+                                                               .kind = pm::sdk::Kind::Method,
+                                                               .flags = pm::sdk::kStatic, .owner = "Time",
+                                                               .name = "get_unscaledDeltaTime"};
+
+/// The game time in seconds at the start of this frame, counted from the game's start and scaled by the time scale.
+/// Static. Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc Time_get_time{.key = "Time.get_time", .kind = pm::sdk::Kind::Method,
+                                                  .flags = pm::sdk::kStatic, .owner = "Time", .name = "get_time"};
+
+/// The real time in seconds at the start of this frame, counted from the game's start, whatever the time scale.
+/// Static. Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc Time_get_unscaledTime{.key = "Time.get_unscaledTime", .kind = pm::sdk::Kind::Method,
+                                                          .flags = pm::sdk::kStatic, .owner = "Time",
+                                                          .name = "get_unscaledTime"};
+
 /// Sets how fast game time passes, 1 as in real time and 0 stopping it (every Update then runs with a
 /// delta time of 0). Static. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc Time_set_timeScale{.key = "Time.set_timeScale", .kind = pm::sdk::Kind::Method,
@@ -340,6 +364,15 @@ struct Time {
   static constexpr pm::api::Method<pm::map::Time_get_frameCount, int32_t()> get_frameCount{};
   /// get_timeScale(): 1 in real time. Unresolved: 0.
   static constexpr pm::api::Method<pm::map::Time_get_timeScale, float()> get_timeScale{};
+  /// get_deltaTime(): seconds from the last frame to this one in game time, 0 while the time scale is 0. Unresolved: 0.
+  /// pm::api::frame_time() reads it with the other three.
+  static constexpr pm::api::Method<pm::map::Time_get_deltaTime, float()> get_deltaTime{};
+  /// get_unscaledDeltaTime(): seconds from the last frame to this one in real time. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::Time_get_unscaledDeltaTime, float()> get_unscaledDeltaTime{};
+  /// get_time(): game time in seconds at this frame's start, since the game started. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::Time_get_time, float()> get_time{};
+  /// get_unscaledTime(): real time in seconds at this frame's start, since the game started. Unresolved: 0.
+  static constexpr pm::api::Method<pm::map::Time_get_unscaledTime, float()> get_unscaledTime{};
   /// set_timeScale(value): how fast game time passes, 0 freezing the game's own Update bodies (they
   /// still run, with a delta time of 0). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Time_set_timeScale, void(float)> set_timeScale{};

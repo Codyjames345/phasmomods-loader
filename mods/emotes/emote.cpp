@@ -1547,8 +1547,9 @@ bool fail_start() {
 
 bool start() {
   if (!load_catalogues()) return fail_start();
-  const std::filesystem::path data = std::filesystem::path(mod::host().dataDirectory) / mod::info().id / "keybinds.txt";
-  keys::begin_keys(mod::info().id, mod::shown_name(), data);
+  // In the mod's data folder; with none (it could not be made, logged), nothing is saved.
+  const std::filesystem::path data = mod::data_folder();
+  keys::begin_keys(mod::info().id, mod::shown_name(), data.empty() ? data : data / "keybinds.txt");
   keys::ModKey wheel;
   wheel.id = kWheelKey;
   wheel.label = i18n::text(kKeyLabel);
@@ -1569,8 +1570,7 @@ bool start() {
     keys::add_key(k);
   }
   // The player's Emotes volume, on the journal's audio page (the user, 2026-11-10).
-  api::settings::begin_settings(mod::info().id, mod::shown_name(),
-                                std::filesystem::path(mod::host().dataDirectory) / mod::info().id / "settings.txt");
+  api::settings::begin_settings(mod::info().id, mod::shown_name(), data.empty() ? data : data / "settings.txt");
   api::settings::Slider volume;
   volume.id = kVolumeSetting;
   volume.label = i18n::text(kVolumeLabel);

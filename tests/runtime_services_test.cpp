@@ -1,9 +1,11 @@
 // The host contract's alive (host/runtime_services.cpp) is the game's own Object.op_Implicit, reached through the map: it
 // once went round through pm::api::alive, which asks this very function, and the first alive check of the game overflowed
 // the stack. And is_array_of, which reads what another client sent, and delegate_new, the loader's listeners on the
-// game's events. Run: build\runtime_services_test.exe
+// game's events, and log_level, a mod's line at its level. Run: build\runtime_services_test.exe
 #include <cstring>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "../host/il2cpp.cpp"
 #include "../host/runtime_services.cpp"
@@ -163,9 +165,28 @@ void delegate_is_made_by_its_own_constructor() {
   g_invoke = nullptr;
 }
 
+std::vector<std::pair<uint32_t, std::string>> g_levelled;
+void levelled(uint32_t level, const char* line) { g_levelled.emplace_back(level, line); }
+
+// The host contract's log_level: the line at its level, a level the contract does not know at info, and a null line
+// writes nothing.
+void log_level_writes_the_line_at_its_level() {
+  g_levelled.clear();
+  pm::log::set_level_sink(&levelled);
+  pm::runtime_services::api_log_level(PM_LOG_WARN, "slow");
+  pm::runtime_services::api_log_level(99, "unknown level");
+  pm::runtime_services::api_log_level(PM_LOG_ALERT, nullptr);
+  pm::log::set_level_sink(nullptr);
+  CHECK(g_levelled.size() == 2);
+  if (g_levelled.size() != 2) return;
+  CHECK(g_levelled[0].first == PM_LOG_WARN && g_levelled[0].second == "slow");
+  CHECK(g_levelled[1].first == PM_LOG_INFO && g_levelled[1].second == "unknown level");
+}
+
 }  // namespace
 
 int main() {
+  log_level_writes_the_line_at_its_level();
   alive_asks_the_game_once();
   only_the_exact_array_is_one();
   delegate_is_made_by_its_own_constructor();

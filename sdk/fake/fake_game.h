@@ -68,9 +68,12 @@ void reset();
 /// and journal_lines records lines in
 /// the registry. list_add adds to a fake List of references; copy_settings and fields_of_type read the
 /// fields declare_fields() gave; steer_agent records the ask (see steer_asks); unity_action_new records the
-/// ask (see unity_actions). Every other function does nothing and answers false or null. The pointer stays valid
-/// for the process lifetime.
+/// ask (see unity_actions); log and log_level write nothing; dataDirectory is what data_directory() gave. Every
+/// other function does nothing and answers false or null. The pointer stays valid for the process lifetime.
 const PmHostApi* host();
+/// The folder the host contract's dataDirectory names, for a test of a mod's data folder (pm::mod::data_folder): a
+/// temporary folder, never the player's. Empty until this is called, and again after reset.
+void data_directory(std::wstring folder);
 
 // Giving an entry again replaces it.
 

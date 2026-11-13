@@ -438,6 +438,9 @@ uint32_t content_flags_of(int32_t type) {
 
 // The rest of the contract does nothing.
 void log(const char*) {}
+void log_level(uint32_t, const char*) {}
+// The host contract's dataDirectory: the folder a test gives (fake_game.h), empty until then.
+std::wstring g_dataDirectory;
 bool create_hook(void*, void*, void**, const char*) { return false; }
 bool enable_hooks() { return false; }
 bool send(uint8_t, const uint8_t*, size_t, int32_t, bool, int32_t) { return false; }
@@ -573,10 +576,11 @@ uint32_t fields_of_type(const char* typeKey, const void* obj, const char* fieldT
 // The host contract's mod_entry: the fake game installs no mods, so the list is empty.
 bool mod_entry(int32_t, PmModEntry*) { return false; }
 
-// Positional: a member added to PmHostApi after content_pack_failed fails this until it is given here too.
-static_assert(offsetof(PmHostApi, content_pack_failed) + sizeof(PmHostApi::content_pack_failed) == sizeof(PmHostApi),
+// Positional: a member added to PmHostApi after log_level fails this until it is given here too.
+static_assert(offsetof(PmHostApi, log_level) + sizeof(PmHostApi::log_level) == sizeof(PmHostApi),
               "kHost lists every PmHostApi member");
-const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_hook, &enable_hooks, &send,
+// Not const: data_directory() points its dataDirectory at a test's folder.
+PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_hook, &enable_hooks, &send,
                       &set_receiver, &peer_has_mod, &register_service, &service, &mod_game_entry, &hook_entry,
                       &set_reference, &inside_entry, &string_new, &string_utf8, &array_length, &array_data,
                       &array_new, &list_count, &list_items, &type_object, &object_new, &is_instance, &alive,
@@ -591,12 +595,14 @@ const PmHostApi kHost{PMMOD_API_VERSION, nullptr, nullptr, L"", &log, &create_ho
                       &content_player_move, &content_interaction_lost, &content_roll_taken, &steer_agent,
                       &abandon_ghost_spawn, &dictionary_int_entries, &mod_started, &show_message,
                       &content_flags_of, &mod_name, &unity_action_new, &mod_entry, &content_packs,
-                      &content_pack_failed};
+                      &content_pack_failed, &log_level};
 
 }  // namespace
 
 void reset() {
   facts().set_engine(nullptr);  // releases what it kept while its holds still exist
+  g_dataDirectory.clear();
+  kHost.dataDirectory = L"";
   g_entries.clear();
   g_inflated.clear();
   g_steerAsks.clear();
@@ -645,6 +651,11 @@ void reset() {
 }
 
 const PmHostApi* host() { return &kHost; }
+
+void data_directory(std::wstring folder) {
+  g_dataDirectory = std::move(folder);
+  kHost.dataDirectory = g_dataDirectory.c_str();
+}
 
 void method(const sdk::EntryDesc& d, void* fn, void* owner) {
   PmGameEntry& e = entry_for(d, PM_ENTRY_METHOD);
