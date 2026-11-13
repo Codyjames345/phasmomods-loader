@@ -191,7 +191,7 @@
   "mods.a-game-entry": "a part of the game",  // PM_TEXT_AI
   "mods.channel-bundled": "PM_TEXT_TODO",  // PM_TEXT_TODO: a mod that is not the loader's own declaring a channel from 1 to 63
   "mods.channel-given": "PM_TEXT_TODO",  // PM_TEXT_TODO: a mod declaring a channel from 64 to 255, which the loader gives out from its id
-  "mods.channel-shared": "PM_TEXT_TODO {{mod}}",  // PM_TEXT_TODO: two mods landed on one network channel; {{mod}} names the other mod's id
+  "mods.channel-shared": "PM_TEXT_TODO {{mod}}",  // PM_TEXT_TODO: mods landed on one network channel, all refused; {{mod}} names the other mods on it, separated by ", "
   "mods.dll-unloadable": "DLL could not be loaded",
   "mods.id-mismatch": "manifest and DLL disagree on the mod id",
   "mods.id-repeated": "Repeats the id of another mod.",

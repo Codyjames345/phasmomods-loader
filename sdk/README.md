@@ -244,9 +244,9 @@ Once it has loaded a DLL, the host refuses one that lacks any of `pmmod_info`, `
 the loader's own mods, and 64 to 255 are the ones the loader gives out from ids), and one that sets
 `PM_MOD_RECORDS_VOICE` when its manifest does not say `recordsVoice`.
 The mod stays off until the game restarts, with its row and the log saying why, and a mod that requires it reads
-"Needs <name>, which did not start". Channels are judged as the mods load, and two mods that land on one channel are
-both refused, each row naming the other; one of the pair that had already started is stopped and taken out of the
-start.
+"Needs <name>, which did not start". Channels are settled before any mod starts: every planned mod's DLL is loaded and
+asked what it is first, and every mod not yet running on a channel two or more mods land on is refused, each row naming
+the others, so a colliding mod never runs. A mod already running from an earlier start keeps its channel.
 
 `PmModInfo` (`core/mod_api.h`), returned by `pmmod_info`, callable at any time:
 

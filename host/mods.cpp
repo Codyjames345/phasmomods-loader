@@ -113,13 +113,6 @@ bool refuse_loaded(Mod& m, std::string row, std::string log) {
   return false;
 }
 
-/** The loaded mod other than `m` that holds this effective channel and was not refused, or null. */
-Mod* channel_owner(const Mod& m, uint8_t channel) {
-  for (Mod& other : g_mods)
-    if (&other != &m && other.channel == channel && other.refusedRow.empty()) return &other;
-  return nullptr;
-}
-
 /**
  * Loads `m`'s DLL the first time it is needed, and checks what only the DLL can say. False with `m.refusedRow` and
  * `m.refusedLog` when it is refused. A DLL that loaded stays mapped, refused or not, so it is never loaded twice.
@@ -176,7 +169,8 @@ bool load_dll(Mod& m) {
   // The channel. Only the loader's own mods name a fixed one, from 1 to 63: the reserved id author that
   // core/mod_list.h checks says who they are. Every other mod declares 0 and gets a channel from 64 to 255
   // that every client derives from its id (modid::hashed_channel), so peers agree with nothing to
-  // negotiate. Two mods that land on one channel are both refused, each naming the other.
+  // negotiate. Mods that land on one channel are all refused before any of them starts, each naming the
+  // others: settle_channels, not load_dll, decides that, once every planned mod's channel is known.
   uint8_t channel = info->channel;
   if (channel == 0) {
     channel = modid::hashed_channel(info->id);
@@ -188,12 +182,6 @@ bool load_dll(Mod& m) {
   } else {
     return refuse_loaded(m, i18n::text("mods.channel-given"),
                          "it names channel " + std::to_string(channel) + ", which the loader gives out from the mod's id");
-  }
-  if (Mod* taken = channel_owner(m, channel)) {
-    refuse_loaded(*taken, i18n::text("mods.channel-shared", {{"mod", m.manifest.id}}),
-                  "it shares channel " + std::to_string(channel) + " with " + m.manifest.id);
-    return refuse_loaded(m, i18n::text("mods.channel-shared", {{"mod", taken->manifest.id}}),
-                         "it shares channel " + std::to_string(channel) + " with " + taken->manifest.id);
   }
   // The player agreed on the manifest's word. A manifest that says so when the DLL does not only warns too much.
   if ((info->flags & PM_MOD_RECORDS_VOICE) && !m.manifest.recordsVoice)
@@ -225,6 +213,37 @@ bool load_dll(Mod& m) {
   PM_LOG("mods: loaded %s %s (%s, build %s)", info->id, m.manifest.version.empty() ? "(version unknown)" : m.manifest.version.c_str(),
          m.manifest.name.c_str(), m.build.c_str());
   return true;
+}
+
+/**
+ * Settles the channels before any mod of this start runs. Loads every planned mod's DLL and reads its
+ * info first (no pmmod_start or pmmod_tick runs here: a DLL loaded does only what loading it already
+ * does), so each mod's effective channel is known; then every mod not yet running that shares a
+ * channel with another loaded mod is refused, each naming the other ids in id order. A mod already
+ * running keeps its channel: it was settled clean when it started, and only the newcomers to that
+ * channel are refused. load_dll is sticky, so the start that follows loads nothing a second time.
+ */
+void settle_channels(const std::vector<std::string>& order) {
+  for (const std::string& id : order)
+    if (Mod* m = find_mod(id)) load_dll(*m);
+  std::map<uint8_t, std::vector<Mod*>> onChannel;
+  for (Mod& m : g_mods)
+    if (m.channel && m.refusedRow.empty()) onChannel[m.channel].push_back(&m);
+  for (auto& [channel, holders] : onChannel) {
+    bool waiting = false;  // a mod on this channel has not started, so refusing it can still stop it
+    for (const Mod* m : holders) waiting = waiting || !m->started;
+    if (holders.size() < 2 || !waiting) continue;
+    std::sort(holders.begin(), holders.end(),
+              [](const Mod* a, const Mod* b) { return a->manifest.id < b->manifest.id; });
+    for (Mod* m : holders) {
+      if (m->started) continue;  // already running on it: its channel was settled before it started
+      std::string others;
+      for (const Mod* other : holders)
+        if (other != m) others += (others.empty() ? "" : ", ") + other->manifest.id;
+      refuse_loaded(*m, i18n::text("mods.channel-shared", {{"mod", others}}),
+                    "it shares channel " + std::to_string(channel) + " with " + others);
+    }
+  }
 }
 
 }  // namespace
@@ -347,9 +366,11 @@ void start(const PmHostApi* api, const std::vector<std::string>& ids, Group grou
   g_planned = plan.order;
   g_failedPacks.clear();
   for (const std::string& note : plan.notes) PM_LOG("mods: %s", note.c_str());
-  // The dependencies are settled from the manifests, so a mod they leave off never loads. Its DLL, what only that can say
-  // (its game entries) and its start are judged here, one mod at a time, and a mod that does not start takes those that
-  // require it with it.
+  // The dependencies are settled from the manifests, so a mod they leave off never loads. The channels are
+  // settled next, across every planned mod at once and before any mod starts, so a mod on a shared channel
+  // is refused without ever running. Its DLL, what only that can say (its game entries) and its start are
+  // judged after that, one mod at a time, and a mod that does not start takes those that require it with it.
+  settle_channels(plan.order);
   moddeps::Run run = moddeps::run(plan, all, [&](const std::string& id, std::string& row, std::string& log) {
     Mod& m = *find_mod(id);
     if (m.started) return true;
@@ -408,17 +429,6 @@ void start(const PmHostApi* api, const std::vector<std::string>& ids, Group grou
     PM_LOG("mods: %s started", m.info->id);
     return true;
   });
-  // Two mods that landed on one channel are both refused, and the first may have started before the
-  // second's DLL showed the clash. It comes out of the start now: stopped, taken out of the start order,
-  // and kept off for good like any refusal at load, its row naming the other as the other's names it.
-  // Its hooks and content stay until the host next restarts the mods, as a kept-off mod's do.
-  for (Mod& late : g_mods)
-    if (late.started && !late.refusedRow.empty()) {
-      if (late.stop) late.stop();
-      late.started = false;
-      std::erase(g_startOrder, late.manifest.id);
-      run.off.push_back({late.manifest.id, late.refusedRow, late.refusedLog, {}});
-    }
   hooks::begin_group();  // nothing the host creates later belongs to a mod
   for (const moddeps::LeftOut& o : run.off) PM_LOG("mods: %s stays off: %s", o.id.c_str(), o.log.c_str());
   // This start speaks only for what it tried: a room's restart of a few mods leaves the reasons of those it never asked for.

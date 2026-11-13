@@ -86,9 +86,12 @@ bool save_chosen(const std::vector<std::string>& ids);
 // for this run of the game, when the DLL does not load or is no mod, when it was built against another major version of
 // the host contract or a newer minor one, when its PmModInfo.id is not its manifest's id, when the channel it declares is
 // not one that mod may name (1 to 63 are the loader's own mods', and 64 to 255 are what the loader hands out from ids),
-// or when it and another loaded mod land on one channel, in which case both stay off naming each other and one that had
-// already started is stopped and taken out, or when it says it records voice and its manifest does not, since the player
-// agreed on the manifest's word. It stays off for now when one of its game entries api->game_entry does not give, or its pmmod_start
+// or when its channel is one another loaded mod uses, in which case every mod of this start not yet running on that
+// channel stays off naming the others by id: channels are settled across all the planned mods, after loading their DLLs
+// and before any of them starts, so a colliding mod never runs (a mod already running from an earlier start keeps its
+// channel, and only the newcomers to it are refused). A planned mod's DLL is loaded here even when it then stays off
+// for another reason, because its channel counts against the others. It also stays off when it says it records voice and
+// its manifest does not, since the player agreed on the manifest's word. It stays off for now when one of its game entries api->game_entry does not give, or its pmmod_start
 // fails. Each of those takes the mods that require it with it. Each is logged
 // with the chain of why, and off_reason says it for the Mods panel. `group` is what the host records
 // for a mod besides its hooks (its content): `begin` runs before each pmmod_start and `end` after it,
