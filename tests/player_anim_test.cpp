@@ -4,6 +4,7 @@
 // game's side is in sdk/systems/players.md, "The body". Run: build\player_anim_test.exe
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <map>
@@ -199,6 +200,22 @@ void the_clip_reports_its_time_and_loop() {
   anim::stop_all_player_anims();
 }
 
+// A synced emote's second dancer joins part-way through the first dancer's dance: their clip starts there, wrapped to
+// its length when it loops (2.5 s here), and at its start when it does not loop past its end.
+void a_clip_starts_where_asked() {
+  give();
+  CHECK(anim::play_on_player(&g_player, &g_clipA, 0.2f, 6.0));
+  auto live = live_on(&g_animator);
+  CHECK(live.size() == 1 && std::fabs(live[0]->time - 1.0) < 1e-9);  // 6.0 wrapped to 2.5 s
+  anim::stop_all_player_anims();
+  give();
+  g_loops = false;
+  CHECK(anim::play_on_player(&g_player, &g_clipA, 0.2f, 1.25));
+  live = live_on(&g_animator);
+  CHECK(live.size() == 1 && std::fabs(live[0]->time - 1.25) < 1e-9);
+  anim::stop_all_player_anims();
+}
+
 void nothing_plays_without_a_body() {
   give();
   CHECK(!anim::play_on_player(nullptr, &g_clipA, 0.2f));
@@ -211,6 +228,7 @@ void nothing_plays_without_a_body() {
 }  // namespace
 
 int main() {
+  a_clip_starts_where_asked();
   a_clip_blends_in_and_hands_back();
   a_second_play_replaces_the_first();
   a_destroyed_body_is_forgotten();

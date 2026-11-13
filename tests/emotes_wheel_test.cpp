@@ -10,6 +10,7 @@
 
 #include "check.h"
 #include "emote_rule.h"
+#include "keycap_glyph.h"
 #include "scroll_glyph.h"
 #include "wheel_layout.h"
 #include "wheel_style.h"
@@ -193,7 +194,23 @@ void the_down_glyph_has_its_arrow_below_the_mouse() {
   CHECK(alpha_at(g, 46, 8) == 0);     // nothing above
 }
 
+// The keycap the join prompt shows a keyboard key in (the design's keycap): a white rounded square outline on clear,
+// bottom row first, its middle clear for the key's name drawn over it.
+void the_keycap_is_a_white_outline_on_clear() {
+  const std::vector<uint8_t> g = keycap_glyph_rgba(100);
+  CHECK(g.size() == 100u * 100u * 4u);
+  if (g.size() != 100u * 100u * 4u) return;
+  bool white = true;
+  for (size_t i = 0; i < g.size(); i += 4) white = white && g[i] == 255 && g[i + 1] == 255 && g[i + 2] == 255;
+  CHECK(white);
+  CHECK(alpha_at(g, 50, 50) == 0);                          // the middle, where the key's name goes
+  CHECK(alpha_at(g, 0, 0) == 0 && alpha_at(g, 99, 99) == 0);  // the rounded corners
+  CHECK(alpha_at(g, 50, 6) == 255 && alpha_at(g, 50, 93) == 255);  // the top and bottom edges
+  CHECK(alpha_at(g, 6, 50) == 255 && alpha_at(g, 93, 50) == 255);  // the sides
+}
+
 int main() {
+  the_keycap_is_a_white_outline_on_clear();
   the_wheel_shows_eight_segments_with_even_gaps();
   the_icons_sit_in_their_segments();
   the_pick_turns_blue();

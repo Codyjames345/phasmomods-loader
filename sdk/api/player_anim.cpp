@@ -1,6 +1,7 @@
 #include "player_anim.h"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #include "Playables.h"
@@ -95,6 +96,17 @@ bool play_on_player(void* player, void* clip, float blendIn) {
   // The older clip, if any, stays at its weight under the new one until the new one is in.
   for (Layer& old : body->layers) old.target = old.weight;
   body->layers.push_back(l);
+  return true;
+}
+
+bool play_on_player(void* player, void* clip, float blendIn, double startSeconds) {
+  if (!play_on_player(player, clip, blendIn)) return false;
+  Body* body = find(player);
+  if (!body || body->layers.empty()) return false;
+  const double length = static_cast<double>(clip_seconds(clip));
+  double at = std::max(0.0, startSeconds);
+  if (length > 0.0) at = clip_loops(clip) ? std::fmod(at, length) : std::min(at, length);
+  phasmo::PlayableHandle::SetTime(&body->layers.back().clip, at);
   return true;
 }
 
