@@ -7,10 +7,10 @@ namespace pm::api::packs {
 
 namespace {
 
-// Whether the host the mod is bound to has the content pack functions (Contract 2.4 and later).
+// Whether the host the mod is bound to has the content pack functions (Contract 2.6 and later).
 const PmHostApi* host_with_packs() {
   const PmHostApi* host = mod::bound() ? &mod::host() : nullptr;
-  if (!host || !pm_api_compatible(host->version, (PMMOD_API_MAJOR << 16) | 4u)) return nullptr;
+  if (!host || !pm_api_compatible(host->version, (PMMOD_API_MAJOR << 16) | 6u)) return nullptr;
   return host;
 }
 

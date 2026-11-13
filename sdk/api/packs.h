@@ -19,7 +19,7 @@
 ///
 /// Main thread. Local only: nothing is sent; every player in the lobby has the same packs.
 /// @ingroup runtime
-/// @since Contract 2.4
+/// @since Contract 2.6
 
 #include <filesystem>
 #include <string>
@@ -39,7 +39,7 @@ struct Pack {
 
 /// The content packs made for the calling mod that start with it, in id order. Ask from pmmod_start: packs start just
 /// after the mod they are for, and are listed there already.
-/// @return Empty before bind, on a host older than Contract 2.4, and when there are none.
+/// @return Empty before bind, on a host older than Contract 2.6, and when there are none.
 std::vector<Pack> owned();
 
 /// From pmmod_start: the pack `packId` (one of owned()) cannot be used. It does not start, the Mods panel shows `why`, and

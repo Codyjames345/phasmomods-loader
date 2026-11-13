@@ -11,7 +11,7 @@
 ///
 /// Main thread. Local only.
 /// @ingroup runtime
-/// @since Contract 2.4
+/// @since Contract 2.6
 
 #include <optional>
 

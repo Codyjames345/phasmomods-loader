@@ -362,8 +362,8 @@ struct PackTexts {
 std::map<std::string, PackTexts> g_packTexts;
 uint32_t api_content_packs(const char* modId, PmContentPack* out, uint32_t max, uint32_t itemSize) {
   return host::contained("suite", "listing a mod's content packs", uint32_t{0}, [&]() -> uint32_t {
-    // A caller built for 2.4 passes 2.4's size; the host fills each entry up to the caller's size, at most its own.
-    if (!modId || itemSize < PM_CONTENT_PACK_SIZE_2_4) return 0;
+    // A caller built for 2.6 passes 2.6's size; the host fills each entry up to the caller's size, at most its own.
+    if (!modId || itemSize < PM_CONTENT_PACK_SIZE_2_6) return 0;
     const size_t filled = std::min<size_t>(itemSize, sizeof(PmContentPack));
     const std::vector<const mods::Mod*> packs = mods::packs_for(modid::migrated_id(modId));
     for (uint32_t i = 0; i < packs.size(); ++i) {

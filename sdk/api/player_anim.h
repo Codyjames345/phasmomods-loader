@@ -45,7 +45,7 @@ bool play_on_player(void* player, void* clip, float blendIn);
 /// @param startSeconds Seconds into the clip, 0 or more.
 /// @return As play_on_player without a start: false for a null or destroyed player or clip, a body with no Animator,
 ///   or a build where the Playables entries did not resolve (logged).
-/// @since Contract 2.4
+/// @since Contract 2.6
 bool play_on_player(void* player, void* clip, float blendIn, double startSeconds);
 
 /// Blends a player's clips out and ends them. Nothing for a player with none.
