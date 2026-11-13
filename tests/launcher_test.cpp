@@ -452,8 +452,8 @@ void appdata_mods_are_found() {
   fs::remove_all(root, error);
 }
 
-/** The AppData folder is somewhere else: a mod there cannot take a bundled mod's id, and the bundled mod
- *  beside the launcher still runs. */
+/** The AppData folder is somewhere else: a mod there cannot take a bundled mod's id (the impostor test above
+ *  covers the real mod beside the launcher still running). */
 void appdata_mods_are_elsewhere() {
   using namespace pm::launcher;
   namespace fs = std::filesystem;
