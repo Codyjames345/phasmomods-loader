@@ -224,6 +224,8 @@ class LocalSession {
     o.start = emote_;
     o.phase = phase_;
     o.bodyYaw = yaw_;
+    // Its own word that it joined, which everyone else needs beside the first dancer's before showing the pair.
+    o.send.push_back(EmoteMsg{Kind::Accept, key, false, static_cast<float>(firstActor), 0, 0, 0});
     return o;
   }
 
@@ -348,6 +350,7 @@ class RemoteSessions {
         }
         break;
       case Kind::End:
+        words_.erase(actor);
         if (it != peers_.end()) {
           out.push_back({RemoteOut::Stop, actor, it->second.emote, 0.0f});
           const int pair = it->second.pair;
@@ -358,12 +361,13 @@ class RemoteSessions {
       case Kind::Join:
         break;  // a Join is the first dancer's client's to answer (LocalSession::on_join)
       case Kind::Accept: {
-        // The first dancer took a second: they must be dancing that synced emote here, with no partner yet.
-        const int joiner = static_cast<int>(m.x);
-        if (it == peers_.end() || joiner == actor || it->second.pair != 0) break;
-        const EmoteInfo& info = table_[static_cast<size_t>(it->second.emote)];
-        if (!info.synced || info.key != m.key) break;
-        const std::vector<RemoteOut> shown = add_partner(joiner, actor, it->second.emote, it->second.elapsed, it->second.yaw);
+        // Two players' words make a pair: the first dancer's Accept names who it took, and the joiner's names whom it
+        // joined. Each sender is the loader's, never the payload's, so no player can be shown dancing a part they
+        // never agreed to (the security review, 2026-11-13). The words may come in either order.
+        const int named = static_cast<int>(m.x);
+        if (named == actor) break;
+        words_[actor] = Word{named, m.key};
+        const std::vector<RemoteOut> shown = pair_on_both_words(actor, named);
         out.insert(out.end(), shown.begin(), shown.end());
         break;
       }
@@ -455,7 +459,10 @@ class RemoteSessions {
     for (const auto& [actor, p] : peers_) out.emplace_back(actor, p.emote);
     return out;
   }
-  void clear() { peers_.clear(); }
+  void clear() {
+    peers_.clear();
+    words_.clear();
+  }
 
  private:
   /// The index of the emote with this catalogue key, or -1 when the table does not hold it.
@@ -463,6 +470,27 @@ class RemoteSessions {
     for (size_t i = 0; i < table_.size(); ++i)
       if (table_[i].key == key) return static_cast<int>(i);
     return -1;
+  }
+
+  // Pairs `a` and `b` once each has named the other for the same emote: the first dancer is the one dancing that synced
+  // emote here with no partner, and the joiner must not be dancing anything (no Accept takes over a dance).
+  std::vector<RemoteOut> pair_on_both_words(int a, int b) {
+    std::vector<RemoteOut> out;
+    auto wa = words_.find(a), wb = words_.find(b);
+    if (wa == words_.end() || wb == words_.end() || wa->second.named != b || wb->second.named != a ||
+        wa->second.key != wb->second.key)
+      return out;
+    const uint32_t key = wa->second.key;
+    for (const auto& [first, joiner] : {std::pair{a, b}, std::pair{b, a}}) {
+      auto f = peers_.find(first);
+      if (f == peers_.end() || f->second.pair != 0 || peers_.count(joiner)) continue;
+      const EmoteInfo& info = table_[static_cast<size_t>(f->second.emote)];
+      if (!info.synced || info.key != key) continue;
+      words_.erase(a);
+      words_.erase(b);
+      return add_partner(joiner, first, f->second.emote, f->second.elapsed, f->second.yaw);
+    }
+    return out;
   }
 
   // Stops `actor`'s dance, if any, with nothing more.
@@ -490,8 +518,13 @@ class RemoteSessions {
     int pair = 0;           ///< the other dancer of a synced emote, or 0
     bool second = false;    ///< they dance the second part (they joined `pair`)
   };
+  struct Word {
+    int named = 0;      ///< the other player an Accept named
+    uint32_t key = 0;   ///< for this synced emote
+  };
   EmoteTable table_;
   std::map<int, Peer> peers_;
+  std::map<int, Word> words_;  ///< each player's last Accept, until the pair it names is made or they end
 };
 
 }  // namespace pm::emotes

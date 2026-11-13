@@ -535,6 +535,12 @@ EmoteTable synced_table(float introSeconds = 0.0f) {
   return t;
 }
 
+// The first dancer `first` took `joiner`, and the joiner said so too: everyone else pairs them only on both words.
+void pair_up(RemoteSessions& r, int first, int joiner) {
+  r.receive(first, EmoteMsg{Kind::Accept, 1000u, false, static_cast<float>(joiner), 0, 0, 0}, false, false);
+  r.receive(joiner, EmoteMsg{Kind::Accept, 1000u, false, static_cast<float>(first), 0, 0, 0}, false, false);
+}
+
 // The first dancer dancing the synced emote, `seconds` in.
 LocalSession first_dancer(const EmoteTable& t, double seconds = 1.0) {
   LocalSession s(t);
@@ -638,7 +644,7 @@ void the_partner_time_follows_the_first_dancers_clock() {
   const EmoteTable t = synced_table();
   RemoteSessions r(t);
   r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
-  r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false);
+  pair_up(r, 4, 7);
   std::vector<RemoteFrame> frames(2);
   frames[0].actor = 4;
   frames[1].actor = 7;
@@ -665,7 +671,7 @@ void either_stopping_ends_both() {
   for (int ender : {4, 7}) {
     RemoteSessions r(t);
     r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
-    r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false);
+    pair_up(r, 4, 7);
     const auto out = r.receive(ender, EmoteMsg{Kind::End, 1000u, false, 0, 0, 0, 0}, false, false);
     CHECK(out.size() == 2 && !r.dancing(4) && !r.dancing(7));
   }
@@ -705,7 +711,7 @@ void a_gone_dancer_ends_the_pair_and_no_clock_runs_twice() {
   RemoteSessions r(t);
   r.receive(2, EmoteMsg{Kind::Start, 1001u, false, 0, 0, 0, 0}, false, false);  // a third player, dancing alone
   r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
-  r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false);
+  pair_up(r, 4, 7);
   std::vector<RemoteFrame> frames(3);
   frames[0].actor = 2;
   frames[1].actor = 4;
@@ -733,7 +739,8 @@ void an_accept_shows_the_partner_dancing() {
   const EmoteTable t = synced_table();
   RemoteSessions r(t);
   r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 30.0f}, false, false);
-  const auto out = r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false);
+  CHECK(r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false).empty());
+  const auto out = r.receive(7, EmoteMsg{Kind::Accept, 1000u, false, 4.0f, 0, 0, 0}, false, false);
   CHECK(out.size() >= 1 && out[0].what == RemoteOut::Start && out[0].actor == 7 && out[0].partner &&
         out[0].emote == 0 && out[0].yaw == 30.0f);
   // The first dancer's own client shows its partner the same way.
@@ -742,9 +749,53 @@ void an_accept_shows_the_partner_dancing() {
   CHECK(shown.size() >= 1 && shown[0].partner && mine.elapsed(7) == 5.0);
 }
 
+// A first dancer's Accept alone never shows another player dancing: the joiner must say so too (the security review,
+// 2026-11-13), in either order, and a player already dancing is never taken over.
+void an_accept_the_joiner_never_confirmed_shows_nothing() {
+  const EmoteTable t = synced_table();
+  RemoteSessions r(t);
+  r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+  CHECK(r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false).empty());
+  CHECK(!r.dancing(7));
+  // The joiner's word for another first dancer does not count.
+  CHECK(r.receive(7, EmoteMsg{Kind::Accept, 1000u, false, 9.0f, 0, 0, 0}, false, false).empty());
+  CHECK(!r.dancing(7));
+}
+
+void the_joiners_word_may_come_first() {
+  const EmoteTable t = synced_table();
+  RemoteSessions r(t);
+  r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+  CHECK(r.receive(7, EmoteMsg{Kind::Accept, 1000u, false, 4.0f, 0, 0, 0}, false, false).empty());
+  const auto out = r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false);
+  CHECK(!out.empty() && r.dancing(7) && r.partner_of(7) == 4);
+}
+
+void an_accept_cannot_take_over_a_dancing_player() {
+  const EmoteTable t = synced_table();
+  RemoteSessions r(t);
+  r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+  r.receive(7, EmoteMsg{Kind::Start, 1001u, false, 0, 0, 0, 0}, false, false);  // 7 dances something else
+  pair_up(r, 4, 7);
+  CHECK(r.partner_of(7) == 0);
+}
+
+void the_joiner_tells_everyone_it_joined() {
+  const EmoteTable t = synced_table();
+  LocalSession joiner(t);
+  joiner.join_request(4, 0, here(-1.0));
+  const LocalOut o = joiner.accepted(4, 1000u, 3.0, Point{}, 0.0f);
+  const EmoteMsg* word = sent(o.send, Kind::Accept);
+  CHECK(word && word->key == 1000u && word->x == 4.0f);
+}
+
 }  // namespace
 
 int main() {
+  an_accept_the_joiner_never_confirmed_shows_nothing();
+  the_joiners_word_may_come_first();
+  an_accept_cannot_take_over_a_dancing_player();
+  the_joiner_tells_everyone_it_joined();
   a_gone_dancer_ends_the_pair_and_no_clock_runs_twice();
   the_first_dancer_accepts_one_join();
   the_first_join_wins_and_the_second_is_refused();
