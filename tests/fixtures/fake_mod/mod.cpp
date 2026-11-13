@@ -5,7 +5,8 @@
 // contract version, it stands in for a mod built before the host's current minor version. Built with
 // PM_FAKE_MOD_ID, PM_FAKE_MOD_CHANNEL and PM_FAKE_MOD_ASKS, it is another mod, which asks the host
 // whether the mod PM_FAKE_MOD_ASKS has started, as a mod does for an optional dependency. PM_FAKE_MOD_FLAGS gives it
-// PmModInfo.flags, and PM_FAKE_MOD_NO_ENTRIES leaves it requiring no game entry.
+// PmModInfo.flags, and PM_FAKE_MOD_NO_ENTRIES leaves it requiring no game entry. It declares channel
+// 0 by default, as every mod outside the loader's own must, so the host gives it one from its id.
 #include <windows.h>
 
 #include "Camera.h"
@@ -19,7 +20,7 @@
 #define PM_FAKE_MOD_ID "fake-mod"
 #endif
 #ifndef PM_FAKE_MOD_CHANNEL
-#define PM_FAKE_MOD_CHANNEL 200
+#define PM_FAKE_MOD_CHANNEL 0
 #endif
 #ifndef PM_FAKE_MOD_FLAGS
 #define PM_FAKE_MOD_FLAGS 0

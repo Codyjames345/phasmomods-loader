@@ -334,8 +334,8 @@ struct PmHostApi {
   /// enable every hook created so far
   /// @since Contract 1.0
   bool (*enable_hooks)(void);
-  /// A message on the mod's own channel (PmModInfo::channel; at most PM_MAX_MESSAGE bytes). `actor` is
-  /// used with PM_TO_ACTOR.
+  /// A message on the mod's own channel: the one it declared, or, when it declared 0, the one derived from its id
+  /// (see PmModInfo::channel). At most PM_MAX_MESSAGE bytes. `actor` is used with PM_TO_ACTOR.
   /// @since Contract 1.0
   bool (*send)(uint8_t channel, const uint8_t* data, size_t size, int32_t to, bool reliable, int32_t actor);
   /// Null stops receiving. A message reaches it only from a verified player, on a client that matches the host; anything else
@@ -917,7 +917,12 @@ struct PmModInfo {
   uint32_t apiVersion;  ///< PMMOD_API_VERSION the mod was built against
   const char* id;  ///< `<author>.<mod>`, as in its manifest.json, e.g. "phasmomods.playable-ghost"
   const char* name;  ///< for the log; the manifest's name is what the player reads
-  uint8_t channel;  ///< its own network channel, 1..255, unique in the suite
+  /// its own network channel. Declare 0: the loader gives the mod one from 64 to 255, derived from a stable
+  /// hash of its id (core/mod_ids.h hashed_channel), so every client agrees on it without negotiating; a mod
+  /// declaring 64 to 255 is refused. 1 to 63 are reserved: only the loader's own bundled mods, whose id author
+  /// is the project's, may name one, and they keep their fixed numbers. Two mods landing on one channel are
+  /// both refused, each with a message naming the other.
+  uint8_t channel;
   uint32_t flags;  ///< PmModFlags
 };
 

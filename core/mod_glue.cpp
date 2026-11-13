@@ -10,6 +10,7 @@
 #include "hooks.h"
 #include "managed_exception.h"
 #include "log.h"
+#include "mod_ids.h"
 #include "net.h"
 #include "text_files.h"
 #include "text_table.h"
@@ -157,16 +158,24 @@ bool enable_all() { return g_host && g_host->enable_hooks(); }
 }  // namespace hooks
 
 namespace net {
+namespace {
+
+/** The channel this mod's messages go on: the one it declared, or, when it declared 0, the one the
+ *  host derives from its id. The host works it out the same way (core/mod_ids.h hashed_channel), so
+ *  the two agree without a word between them. */
+uint8_t own_channel() { return g_info->channel ? g_info->channel : modid::hashed_channel(g_info->id); }
+
+}  // namespace
 
 void set_handler(Handler handler) {
   g_handler = handler;
-  if (g_host) g_host->set_receiver(g_info->channel, handler ? &receive : nullptr);
+  if (g_host) g_host->set_receiver(own_channel(), handler ? &receive : nullptr);
 }
 
 bool send(const uint8_t* data, size_t size, To to, bool reliable, int actor) {
   if (!g_host) return false;
   const int32_t target = to == To::Master ? PM_TO_MASTER : to == To::Actor ? PM_TO_ACTOR : PM_TO_OTHERS;
-  return g_host->send(g_info->channel, data, size, target, reliable, actor);
+  return g_host->send(own_channel(), data, size, target, reliable, actor);
 }
 
 }  // namespace net

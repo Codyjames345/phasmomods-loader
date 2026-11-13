@@ -46,7 +46,6 @@ Does not exist yet. These arrive with stage 2, when every bundled mod is on the 
 
 - the downloadable SDK zip with a template mod;
 - the mods folder in `%LOCALAPPDATA%\PhasmoMods\mods` for other authors' mods;
-- the channel scheme for network messages of other authors' mods;
 - the generated game API reference. Until then this README, the headers and `sdk/systems` are the
   documentation, and each header's `///` notes are the reference. The pages include
   [the vanilla ghosts, type by type](systems/vanilla-ghosts.md) (what each ghost type does differently),
@@ -241,11 +240,13 @@ then stays loaded until the game exits, whether the mod runs or not.
 
 Once it has loaded a DLL, the host refuses one that lacks any of `pmmod_info`, `pmmod_start`, `pmmod_tick` or
 `pmmod_stop` ("is not a mod for this loader"), one whose `apiVersion` is not compatible with the host's
-(`pm_api_compatible`) or whose `channel` is 0, one whose `id` is not its manifest's, one that repeats the channel
-of a mod already loaded, and one that sets `PM_MOD_RECORDS_VOICE` when its manifest does not say `recordsVoice`.
+(`pm_api_compatible`), one whose `id` is not its manifest's, one that names a channel it may not (1 to 63 belong to
+the loader's own mods, and 64 to 255 are the ones the loader gives out from ids), and one that sets
+`PM_MOD_RECORDS_VOICE` when its manifest does not say `recordsVoice`.
 The mod stays off until the game restarts, with its row and the log saying why, and a mod that requires it reads
-"Needs <name>, which did not start". Channels are judged as the mods load, so of two with one channel, the first to
-start keeps it.
+"Needs <name>, which did not start". Channels are judged as the mods load, and two mods that land on one channel are
+both refused, each row naming the other; one of the pair that had already started is stopped and taken out of the
+start.
 
 `PmModInfo` (`core/mod_api.h`), returned by `pmmod_info`, callable at any time:
 
@@ -254,7 +255,7 @@ start keeps it.
 | `apiVersion` | `PMMOD_API_VERSION`, the version the mod was built against. |
 | `id` | The manifest's `id`, `<author>.<mod>`. |
 | `name` | For the log. Players read the manifest's `name`. |
-| `channel` | The mod's own network channel, 1 to 255, unique among the loaded mods and never 0 (the host's own). Today the author picks it. Stage 2 reserves 1 to 63 for the bundled mods and gives every other mod a channel from 64 to 255 derived from its id. |
+| `channel` | The mod's own network channel. A mod outside the loader's own declares 0 and the host gives it one from 64 to 255, derived from a stable FNV-1a hash of its id, so every client computes the same one with nothing to negotiate; declaring 64 to 255 yourself is refused. 1 to 63 are reserved: only the loader's own mods, whose id author is the project's, name a fixed channel. Channel 0 on the wire stays the host's own: no mod ever runs on it. |
 | `flags` | `PmModFlags`, below. |
 
 Flags:

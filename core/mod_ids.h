@@ -59,6 +59,22 @@ inline bool valid_old_id(std::string_view id) { return id.size() <= kMaxOldIdByt
 /** An id some installed mod can have, of either format. */
 inline bool valid_any_id(std::string_view id) { return valid_id(id) || valid_old_id(id); }
 
+/**
+ * The network channel a mod that declares 0 gets: 32-bit FNV-1a over the bytes of its id (offset
+ * basis 2166136261, prime 16777619), then 64 + hash % 192, so it lands in 64 to 255, the range the
+ * loader hands out while 1 to 63 stay for its own bundled mods. Every client derives the same one
+ * from the same id, so peers agree with nothing to negotiate. This function must never change: an id
+ * that hashed differently on two clients would put a mod's messages on two channels.
+ */
+inline uint8_t hashed_channel(std::string_view id) {
+  uint32_t hash = 2166136261u;
+  for (const char byte : id) {
+    hash ^= static_cast<unsigned char>(byte);
+    hash *= 16777619u;  // uint32_t arithmetic: mod 2^32, as FNV-1a means
+  }
+  return static_cast<uint8_t>(64 + hash % 192);
+}
+
 struct Version {
   uint32_t major = 0, minor = 0, patch = 0;
   auto operator<=>(const Version&) const = default;  // part by part, as numbers: 1.0.10 is newer than 1.0.1

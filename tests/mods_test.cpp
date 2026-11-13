@@ -917,24 +917,113 @@ void a_mod_for_another_contract_gets_its_reason_once_loaded(const fs::path& data
   pm::log::set_sink(nullptr, nullptr);
 }
 
-// Two mods with one channel: the first to start has it, and the other says so. Each order of the choice decides which.
-void a_repeated_channel_is_judged_in_start_order(const fs::path& data, const fs::path& root) {
-  const fs::path plain = fresh_copy(root, PM_FAKE_MOD_PLAIN, L"ChannelPlain");
-  const fs::path same = fresh_copy(root, PM_FAKE_MOD_SAME_CHANNEL, L"ChannelSame");
+// hashed_channel is 32-bit FNV-1a over the id's bytes (offset basis 2166136261, prime 16777619),
+// then 64 + hash % 192. Two ids are pinned to values worked byte by byte by hand, because every
+// client of every loader version must derive the same channel from the same id: if the function ever
+// changed, a mod's messages would land on different channels on two clients. Each number is the
+// running uint32 after its byte's h = (h ^ byte) * 16777619, from h = 2166136261.
+// "alpha.one" (bytes 61 6C 70 68 61 2E 6F 6E 65): 3826002220, 1059385280, 388321808, 3888173800,
+//   1569418667, 3346884703, 980091792, 4101458138, 2529658029; 2529658029 % 192 = 45; 64 + 45 = 109.
+// "beta.two" (bytes 62 65 74 61 2E 74 77 6F): 3876335077, 942383232, 1622040604, 2944525511,
+//   846944971, 925883053, 3126166830, 2510341459; 2510341459 % 192 = 19; 64 + 19 = 83.
+// An empty id hashes to the offset basis itself: 2166136261 % 192 = 133; 64 + 133 = 197.
+void hashed_channel_is_stable() {
+  CHECK(pm::modid::hashed_channel("alpha.one") == 109);
+  CHECK(pm::modid::hashed_channel("beta.two") == 83);
+  CHECK(pm::modid::hashed_channel("") == 197);
+  for (const char* id : {"fake-mod", "fake-optional", "me.first", "someone.pack", "phasmomods.ghost-tells"})
+    CHECK(pm::modid::hashed_channel(id) >= 64 && pm::modid::hashed_channel(id) <= 255);
+  CHECK(pm::modid::hashed_channel("me.a") != pm::modid::hashed_channel("me.b"));
+}
+
+// A mod that declares channel 0 is given one from its id: the value is exactly hashed_channel(id),
+// the host logs which one it gave, and it is the channel the host keeps for the mod (Mod::channel),
+// which is what the mod's own sends and receiver go on (core/mod_glue.cpp).
+void channel_zero_gets_a_hashed_channel(const fs::path& data, const fs::path& root) {
+  const fs::path zero = fresh_copy(root, PM_FAKE_MOD_ZERO, L"ZeroChannel");
+  pm::log::set_sink(&capture, "");
+  g_lines.clear();
+  pm::mods::set_installed(data, {{{zero, fake_manifest("fake-zero")}}, {}});
   PmHostApi api{};
   api.version = PMMOD_API_VERSION;
   api.game_entry = &game_entry;
+  pm::mods::start(&api, {"fake-zero"});
+  const uint8_t want = pm::modid::hashed_channel("fake-zero");
+  CHECK(pm::mods::started_ids() == std::vector<std::string>{"fake-zero"});
+  CHECK(pm::mods::installed()[0].channel == want);
+  CHECK(logged("mods: fake-zero gets channel " + std::to_string(want) + " from its id"));
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// Channels 1 to 63 are the loader's own mods' (core/mod_ids.h names_project_author, the same reserved-
+// author test core/mod_list.h uses): a mod with another author that names one is refused, and a mod
+// with the project's own author, as a bundled one has, names a fixed channel and starts.
+void reserved_channels_are_for_bundled_mods_only(const fs::path& data, const fs::path& root) {
+  const fs::path low = fresh_copy(root, PM_FAKE_MOD_LOW, L"LowThirdParty");
+  const fs::path own = fresh_copy(root, PM_FAKE_MOD_BUNDLED_LOW, L"LowOwn");
   pm::log::set_sink(&capture, "");
-  for (const bool plainFirst : {true, false}) {
-    g_lines.clear();
-    pm::mods::set_installed(data, {{{plain, fake_manifest("fake-plain")}, {same, fake_manifest("fake-same")}}, {}});
-    const std::string first = plainFirst ? "fake-plain" : "fake-same", second = plainFirst ? "fake-same" : "fake-plain";
-    pm::mods::start(&api, {first, second});
-    CHECK(pm::mods::started_ids() == std::vector<std::string>{first});
-    CHECK(pm::mods::off_reason(second) == "Repeats the network channel of a mod already loaded");
-    CHECK(logged("mods: " + second + " stays off: it repeats channel 203 of a mod already loaded"));
-    pm::mods::stop_all();
-  }
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  g_lines.clear();
+  pm::mods::set_installed(data, {{{low, named_manifest("fake-low", "Low")}}, {}});
+  pm::mods::start(&api, {"fake-low"});
+  CHECK(pm::mods::started_ids().empty());
+  CHECK(pm::mods::off_reason("fake-low") == pm::i18n::text("mods.channel-bundled"));
+  CHECK(logged("mods: fake-low stays off: it names channel 5, which only the loader's own mods may name"));
+  g_lines.clear();
+  pm::mods::set_installed(data, {{{own, named_manifest("phasmomods.low-one", "Own Low")}}, {}});
+  pm::mods::start(&api, {"phasmomods.low-one"});
+  CHECK(pm::mods::started("phasmomods.low-one"));
+  CHECK(pm::mods::installed()[0].channel == 5);
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// A mod that names a channel in the range the loader hands out from the id is refused too: a third-
+// party mod declares 0 and takes the channel its id gives, and the loader's own keep 1 to 63.
+void a_declared_high_channel_is_refused(const fs::path& data, const fs::path& root) {
+  const fs::path high = fresh_copy(root, PM_FAKE_MOD_HIGH, L"HighChannel");
+  pm::log::set_sink(&capture, "");
+  g_lines.clear();
+  pm::mods::set_installed(data, {{{high, named_manifest("fake-high", "High")}}, {}});
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  pm::mods::start(&api, {"fake-high"});
+  CHECK(pm::mods::started_ids().empty());
+  CHECK(pm::mods::off_reason("fake-high") == pm::i18n::text("mods.channel-given"));
+  CHECK(logged("mods: fake-high stays off: it names channel 200, which the loader gives out from the mod's id"));
+  pm::mods::stop_all();
+  pm::log::set_sink(nullptr, nullptr);
+}
+
+// Two mods that land on one channel are both refused, each refusal naming the other. The first had
+// started before the second's DLL showed the clash, so it comes out of the start too: stopped, and
+// kept off for good like any load refusal, and the next start keeps both off without trying again.
+void two_mods_on_one_channel_are_both_refused(const fs::path& data, const fs::path& root) {
+  const fs::path one = fresh_copy(root, PM_FAKE_MOD_BUNDLED_LOW, L"ClashOne");
+  const fs::path two = fresh_copy(root, PM_FAKE_MOD_BUNDLED_LOW_TWO, L"ClashTwo");
+  pm::log::set_sink(&capture, "");
+  g_lines.clear();
+  pm::mods::set_installed(data, {{{one, named_manifest("phasmomods.low-one", "One")},
+                                  {two, named_manifest("phasmomods.low-two", "Two")}}, {}});
+  PmHostApi api{};
+  api.version = PMMOD_API_VERSION;
+  api.game_entry = &game_entry;
+  const std::vector<std::string> both{"phasmomods.low-one", "phasmomods.low-two"};
+  pm::mods::start(&api, both);
+  CHECK(pm::mods::started_ids().empty());
+  CHECK(!pm::mods::started("phasmomods.low-one") && !pm::mods::started("phasmomods.low-two"));
+  CHECK(pm::mods::off_reason("phasmomods.low-one") == pm::i18n::text("mods.channel-shared", {{"mod", "phasmomods.low-two"}}));
+  CHECK(pm::mods::off_reason("phasmomods.low-two") == pm::i18n::text("mods.channel-shared", {{"mod", "phasmomods.low-one"}}));
+  CHECK(logged("mods: phasmomods.low-one stays off: it shares channel 5 with phasmomods.low-two"));
+  CHECK(logged("mods: phasmomods.low-two stays off: it shares channel 5 with phasmomods.low-one"));
+  pm::mods::start(&api, both);  // the refusals last: a start that tries them again loads neither
+  CHECK(pm::mods::started_ids().empty());
+  CHECK(pm::mods::off_reason("phasmomods.low-one").find("low-two") != std::string::npos);
+  pm::mods::stop_all();
   pm::log::set_sink(nullptr, nullptr);
 }
 
@@ -1362,7 +1451,11 @@ int main() {
   notice_shows_voice_from_the_manifest(data, root);
   dll_recording_voice_against_its_manifest_stays_off(data, root);
   a_mod_for_another_contract_gets_its_reason_once_loaded(data, root);
-  a_repeated_channel_is_judged_in_start_order(data, root);
+  hashed_channel_is_stable();
+  channel_zero_gets_a_hashed_channel(data, root);
+  reserved_channels_are_for_bundled_mods_only(data, root);
+  a_declared_high_channel_is_refused(data, root);
+  two_mods_on_one_channel_are_both_refused(data, root);
   bundled_manifests_say_what_their_dlls_do_about_voice();
   old_mod_ini_still_loads(data, root);
   unknown_fields_are_logged_once(data);

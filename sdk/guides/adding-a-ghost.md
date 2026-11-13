@@ -181,7 +181,7 @@ for six of the game's ghosts (`mods/ghost_tells/`).
 ### mod.cpp: the exports
 
 ```cpp
-constexpr PmModInfo kInfo{PMMOD_API_VERSION, "example.ghost", "Example Ghost", 220, 0};
+constexpr PmModInfo kInfo{PMMOD_API_VERSION, "example.ghost", "Example Ghost", 0, 0};
 bool g_running = false;
 example::Beat g_beat;
 
@@ -198,10 +198,11 @@ extern "C" __declspec(dllexport) void pmmod_tick() {}
 extern "C" __declspec(dllexport) void pmmod_stop() { pm::mod::guarded_stop(g_running, [] { g_beat = {}; }); }
 ```
 
-`PmModInfo`'s id must equal the manifest's. Its channel (220 here) is the mod's own network channel: other authors'
-mods take one from 64 to 255, and the loader refuses a second mod on a channel already taken
-([README, "The shape of a mod"](../README.md#the-shape-of-a-mod)). The example sends nothing, so the number matters only
-for that check. The guarded calls keep anything thrown inside the mod from reaching the game or another mod.
+`PmModInfo`'s id must equal the manifest's. Its channel (0 here) is what the mod declares: a mod outside the loader's
+own declares 0, and the loader gives it a channel from 64 to 255 derived from its id, so every player of your mod
+lands on the same one without negotiating; 1 to 63 are the loader's own mods', and declaring 64 to 255 yourself is
+refused ([README, "The shape of a mod"](../README.md#the-shape-of-a-mod)). The example sends nothing, so the channel
+matters only in that check. The guarded calls keep anything thrown inside the mod from reaching the game or another mod.
 
 ## Building it
 

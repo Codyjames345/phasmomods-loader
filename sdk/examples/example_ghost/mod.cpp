@@ -5,8 +5,9 @@
 
 namespace {
 
-// Its channel, 220, is one from the range other authors' mods use (64 to 255, sdk/README.md "PmModInfo"); it sends nothing.
-constexpr PmModInfo kInfo{PMMOD_API_VERSION, "example.ghost", "Example Ghost", 220, 0};
+// It declares channel 0, as every mod outside the loader's own does: the loader gives it one from 64 to 255,
+// derived from its id (sdk/README.md "PmModInfo"). It sends nothing.
+constexpr PmModInfo kInfo{PMMOD_API_VERSION, "example.ghost", "Example Ghost", 0, 0};
 bool g_running = false;
 example::Beat g_beat;
 

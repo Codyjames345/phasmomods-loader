@@ -9,7 +9,8 @@
 
 // The suite's messages over the game's own Photon room connection: PhotonNetwork.RaiseEvent with
 // event code 197 and a byte[] payload whose first byte is the channel (0 for the host, a mod's
-// PmModInfo::channel otherwise), received in LoadBalancingClient.OnEvent. Main thread.
+// effective channel otherwise: the one it declared or, for a mod declaring 0, the one the loader
+// derived from its id), received in LoadBalancingClient.OnEvent. Main thread.
 namespace pm::hostnet {
 
 constexpr uint8_t kEventCode = 197;

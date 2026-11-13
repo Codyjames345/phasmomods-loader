@@ -566,24 +566,43 @@ pm_options(pm_fake_mod_1)
 # Another mod, which uses the first when it is there, for mods_test's dependency checks.
 add_library(pm_fake_mod_optional SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_optional PRIVATE pmmod)
-target_compile_definitions(pm_fake_mod_optional PRIVATE PM_FAKE_MOD_ID="fake-optional" PM_FAKE_MOD_CHANNEL=201
+target_compile_definitions(pm_fake_mod_optional PRIVATE PM_FAKE_MOD_ID="fake-optional"
   PM_FAKE_MOD_ASKS="fake-mod")
 pm_options(pm_fake_mod_optional)
 # One that says in its DLL that it records voice, for the check against its manifest.
 add_library(pm_fake_mod_voice SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_voice PRIVATE pmmod)
-target_compile_definitions(pm_fake_mod_voice PRIVATE PM_FAKE_MOD_ID="fake-voice" PM_FAKE_MOD_CHANNEL=202 PM_FAKE_MOD_FLAGS=PM_MOD_RECORDS_VOICE)
+target_compile_definitions(pm_fake_mod_voice PRIVATE PM_FAKE_MOD_ID="fake-voice" PM_FAKE_MOD_FLAGS=PM_MOD_RECORDS_VOICE)
 pm_options(pm_fake_mod_voice)
 # One that requires no game entry, which runs whatever a build lacks.
 add_library(pm_fake_mod_plain SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_plain PRIVATE pmmod)
-target_compile_definitions(pm_fake_mod_plain PRIVATE PM_FAKE_MOD_ID="fake-plain" PM_FAKE_MOD_CHANNEL=203 PM_FAKE_MOD_NO_ENTRIES)
+target_compile_definitions(pm_fake_mod_plain PRIVATE PM_FAKE_MOD_ID="fake-plain" PM_FAKE_MOD_NO_ENTRIES)
 pm_options(pm_fake_mod_plain)
-# Another on that one's channel.
-add_library(pm_fake_mod_same_channel SHARED tests/fixtures/fake_mod/mod.cpp)
-target_link_libraries(pm_fake_mod_same_channel PRIVATE pmmod)
-target_compile_definitions(pm_fake_mod_same_channel PRIVATE PM_FAKE_MOD_ID="fake-same" PM_FAKE_MOD_CHANNEL=203 PM_FAKE_MOD_NO_ENTRIES)
-pm_options(pm_fake_mod_same_channel)
+# One that declares channel 0, as the default one does, to check the channel the host gives from the id.
+add_library(pm_fake_mod_zero SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_zero PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_zero PRIVATE PM_FAKE_MOD_ID="fake-zero" PM_FAKE_MOD_NO_ENTRIES)
+pm_options(pm_fake_mod_zero)
+# One declaring a channel from the range the loader's own mods keep (1 to 63), under an author that is
+# not the project's: refused. The two next to it declare the same channel under the project's author.
+add_library(pm_fake_mod_low SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_low PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_low PRIVATE PM_FAKE_MOD_ID="fake-low" PM_FAKE_MOD_CHANNEL=5 PM_FAKE_MOD_NO_ENTRIES)
+pm_options(pm_fake_mod_low)
+add_library(pm_fake_mod_bundled_low SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_bundled_low PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_bundled_low PRIVATE PM_FAKE_MOD_ID="phasmomods.low-one" PM_FAKE_MOD_CHANNEL=5 PM_FAKE_MOD_NO_ENTRIES)
+pm_options(pm_fake_mod_bundled_low)
+add_library(pm_fake_mod_bundled_low_two SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_bundled_low_two PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_bundled_low_two PRIVATE PM_FAKE_MOD_ID="phasmomods.low-two" PM_FAKE_MOD_CHANNEL=5 PM_FAKE_MOD_NO_ENTRIES)
+pm_options(pm_fake_mod_bundled_low_two)
+# One declaring a channel from the range the loader hands out from the id: refused too.
+add_library(pm_fake_mod_high SHARED tests/fixtures/fake_mod/mod.cpp)
+target_link_libraries(pm_fake_mod_high PRIVATE pmmod)
+target_compile_definitions(pm_fake_mod_high PRIVATE PM_FAKE_MOD_ID="fake-high" PM_FAKE_MOD_CHANNEL=200 PM_FAKE_MOD_NO_ENTRIES)
+pm_options(pm_fake_mod_high)
 # One built before the rename, exporting the old names, which the host still loads (core/mod_exports.h).
 add_library(pm_fake_mod_old_exports SHARED tests/fixtures/fake_mod/mod.cpp)
 target_link_libraries(pm_fake_mod_old_exports PRIVATE pmmod)
@@ -606,12 +625,16 @@ target_compile_definitions(mods_test PRIVATE PM_FAKE_MOD="$<TARGET_FILE:pm_fake_
   PM_FAKE_MOD_2_0="$<TARGET_FILE:pm_fake_mod_2_0>" PM_FAKE_MOD_2_1="$<TARGET_FILE:pm_fake_mod_2_1>"
   PM_FAKE_MOD_2_2="$<TARGET_FILE:pm_fake_mod_2_2>"
   PM_FAKE_MOD_OPTIONAL="$<TARGET_FILE:pm_fake_mod_optional>" PM_FAKE_MOD_VOICE="$<TARGET_FILE:pm_fake_mod_voice>"
-  PM_FAKE_MOD_PLAIN="$<TARGET_FILE:pm_fake_mod_plain>" PM_FAKE_MOD_SAME_CHANNEL="$<TARGET_FILE:pm_fake_mod_same_channel>"
+  PM_FAKE_MOD_PLAIN="$<TARGET_FILE:pm_fake_mod_plain>"
+  PM_FAKE_MOD_ZERO="$<TARGET_FILE:pm_fake_mod_zero>" PM_FAKE_MOD_LOW="$<TARGET_FILE:pm_fake_mod_low>"
+  PM_FAKE_MOD_BUNDLED_LOW="$<TARGET_FILE:pm_fake_mod_bundled_low>" PM_FAKE_MOD_BUNDLED_LOW_TWO="$<TARGET_FILE:pm_fake_mod_bundled_low_two>"
+  PM_FAKE_MOD_HIGH="$<TARGET_FILE:pm_fake_mod_high>"
   PM_FAKE_MOD_THROWS="$<TARGET_FILE:pm_fake_mod_throws>" PM_FAKE_MOD_THROWS_REQUIRES="$<TARGET_FILE:pm_fake_mod_throws_requires>"
   PM_FAKE_MOD_1="$<TARGET_FILE:pm_fake_mod_1>" PM_FAKE_MOD_OLD_EXPORTS="$<TARGET_FILE:pm_fake_mod_old_exports>"
   PM_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 add_dependencies(mods_test pm_fake_mod pm_fake_mod_1 pm_fake_mod_2_0 pm_fake_mod_2_1 pm_fake_mod_2_2 pm_fake_mod_optional pm_fake_mod_voice
-  pm_fake_mod_plain pm_fake_mod_same_channel pm_fake_mod_throws pm_fake_mod_throws_requires pm_fake_mod_old_exports)
+  pm_fake_mod_plain pm_fake_mod_zero pm_fake_mod_low pm_fake_mod_bundled_low pm_fake_mod_bundled_low_two
+  pm_fake_mod_high pm_fake_mod_throws pm_fake_mod_throws_requires pm_fake_mod_old_exports)
 pm_test(mod_glue core/mod_glue.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/api/content.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(mod_glue_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)

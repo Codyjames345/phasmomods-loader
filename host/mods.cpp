@@ -113,11 +113,11 @@ bool refuse_loaded(Mod& m, std::string row, std::string log) {
   return false;
 }
 
-/** Whether a loaded mod other than `m` already has this channel. */
-bool channel_taken(const Mod& m, uint8_t channel) {
-  for (const Mod& other : g_mods)
-    if (&other != &m && other.info && other.info->channel == channel) return true;
-  return false;
+/** The loaded mod other than `m` that holds this effective channel and was not refused, or null. */
+Mod* channel_owner(const Mod& m, uint8_t channel) {
+  for (Mod& other : g_mods)
+    if (&other != &m && other.channel == channel && other.refusedRow.empty()) return &other;
+  return nullptr;
 }
 
 /**
@@ -168,14 +168,33 @@ bool load_dll(Mod& m) {
   if (threw) return refuse_loaded(m, i18n::text("mods.info-threw"), "its pmmod_info threw");
   if (!info || !start || !tick || !stop || !info->id || !info->name)
     return refuse_loaded(m, i18n::text("mods.not-a-mod"), "its DLL is not a mod for this loader");
-  if (!pm_api_compatible(PMMOD_API_VERSION, info->apiVersion) || info->channel == 0)
+  if (!pm_api_compatible(PMMOD_API_VERSION, info->apiVersion))
     return refuse_loaded(m, i18n::text("mods.other-version"), "it was built for another version of the loader");
   if (m.manifest.id != info->id)
     return refuse_loaded(m, i18n::text("mods.id-mismatch"),
                          "the manifest says " + m.manifest.id + ", the DLL says " + info->id);
-  if (channel_taken(m, info->channel))
-    return refuse_loaded(m, i18n::text("mods.channel-taken"),
-                         "it repeats channel " + std::to_string(info->channel) + " of a mod already loaded");
+  // The channel. Only the loader's own mods name a fixed one, from 1 to 63: the reserved id author that
+  // core/mod_list.h checks says who they are. Every other mod declares 0 and gets a channel from 64 to 255
+  // that every client derives from its id (modid::hashed_channel), so peers agree with nothing to
+  // negotiate. Two mods that land on one channel are both refused, each naming the other.
+  uint8_t channel = info->channel;
+  if (channel == 0) {
+    channel = modid::hashed_channel(info->id);
+  } else if (channel <= 63) {
+    const std::string_view id{info->id};
+    if (!modid::names_project_author(id.substr(0, id.find('.'))))
+      return refuse_loaded(m, i18n::text("mods.channel-bundled"),
+                           "it names channel " + std::to_string(channel) + ", which only the loader's own mods may name");
+  } else {
+    return refuse_loaded(m, i18n::text("mods.channel-given"),
+                         "it names channel " + std::to_string(channel) + ", which the loader gives out from the mod's id");
+  }
+  if (Mod* taken = channel_owner(m, channel)) {
+    refuse_loaded(*taken, i18n::text("mods.channel-shared", {{"mod", m.manifest.id}}),
+                  "it shares channel " + std::to_string(channel) + " with " + m.manifest.id);
+    return refuse_loaded(m, i18n::text("mods.channel-shared", {{"mod", taken->manifest.id}}),
+                         "it shares channel " + std::to_string(channel) + " with " + taken->manifest.id);
+  }
   // The player agreed on the manifest's word. A manifest that says so when the DLL does not only warns too much.
   if ((info->flags & PM_MOD_RECORDS_VOICE) && !m.manifest.recordsVoice)
     return refuse_loaded(m, i18n::text("mods.voice-undeclared"), "its DLL records voice, which its manifest does not say");
@@ -195,6 +214,9 @@ bool load_dll(Mod& m) {
   if (oldNames)
     PM_LOG("mods: %s exports the names of contract 2.1 and before (%s*); they load until the next major contract version",
            info->id, std::string(modexports::kOldPrefix).c_str());
+  if (info->channel == 0)
+    PM_LOG("mods: %s gets channel %u from its id", info->id, static_cast<unsigned>(channel));
+  m.channel = channel;
   m.info = info;
   m.start = start;
   m.tick = tick;
@@ -386,6 +408,17 @@ void start(const PmHostApi* api, const std::vector<std::string>& ids, Group grou
     PM_LOG("mods: %s started", m.info->id);
     return true;
   });
+  // Two mods that landed on one channel are both refused, and the first may have started before the
+  // second's DLL showed the clash. It comes out of the start now: stopped, taken out of the start order,
+  // and kept off for good like any refusal at load, its row naming the other as the other's names it.
+  // Its hooks and content stay until the host next restarts the mods, as a kept-off mod's do.
+  for (Mod& late : g_mods)
+    if (late.started && !late.refusedRow.empty()) {
+      if (late.stop) late.stop();
+      late.started = false;
+      std::erase(g_startOrder, late.manifest.id);
+      run.off.push_back({late.manifest.id, late.refusedRow, late.refusedLog, {}});
+    }
   hooks::begin_group();  // nothing the host creates later belongs to a mod
   for (const moddeps::LeftOut& o : run.off) PM_LOG("mods: %s stays off: %s", o.id.c_str(), o.log.c_str());
   // This start speaks only for what it tried: a room's restart of a few mods leaves the reasons of those it never asked for.

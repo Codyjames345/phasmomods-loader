@@ -30,6 +30,9 @@ struct Mod {
   PmModStopFn stop = nullptr;
   std::string build;                 // the first 16 hex digits of its DLL's SHA-256: which build it is
   std::vector<std::string> entries;  // from its pmmod_requires: the game entries it cannot run without
+  // Its network channel once the DLL has loaded and passed the checks: the one it declared, or, when
+  // it declared 0, the one derived from its id (core/mod_ids.h hashed_channel). 0 until then.
+  uint8_t channel = 0;
   bool started = false;
   // Why its DLL was refused once loaded, for its row and the log; empty when it was not. It lasts until the game restarts.
   std::string refusedRow, refusedLog;
@@ -81,9 +84,11 @@ bool save_chosen(const std::vector<std::string>& ids);
 // as its own hook group (a mod that fails to start has its hooks removed). A mod the plan leaves off is never
 // loaded. Each other has its DLL loaded here if it has not been, with no Windows error dialog, and stays off for good,
 // for this run of the game, when the DLL does not load or is no mod, when it was built against another major version of
-// the host contract or a newer minor one, when its PmModInfo.id is not its manifest's id, when it repeats the channel of a
-// mod already loaded, or when it says it records voice and its manifest does not, since the player agreed on the
-// manifest's word. It stays off for now when one of its game entries api->game_entry does not give, or its pmmod_start
+// the host contract or a newer minor one, when its PmModInfo.id is not its manifest's id, when the channel it declares is
+// not one that mod may name (1 to 63 are the loader's own mods', and 64 to 255 are what the loader hands out from ids),
+// or when it and another loaded mod land on one channel, in which case both stay off naming each other and one that had
+// already started is stopped and taken out, or when it says it records voice and its manifest does not, since the player
+// agreed on the manifest's word. It stays off for now when one of its game entries api->game_entry does not give, or its pmmod_start
 // fails. Each of those takes the mods that require it with it. Each is logged
 // with the chain of why, and off_reason says it for the Mods panel. `group` is what the host records
 // for a mod besides its hooks (its content): `begin` runs before each pmmod_start and `end` after it,

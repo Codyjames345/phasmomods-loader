@@ -5,7 +5,7 @@
 
 namespace {
 #ifdef PM_FAKE_THROW_IN_REQUIRES
-constexpr PmModInfo kInfo{PMMOD_API_VERSION, "fake-throws", "Throws", 210, 0};
+constexpr PmModInfo kInfo{PMMOD_API_VERSION, "fake-throws", "Throws", 0, 0};  // channel 0: the loader gives one from the id
 #endif
 }  // namespace
 
