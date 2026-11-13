@@ -275,8 +275,8 @@ void the_shipped_catalogue_parses_with_a_label_for_each() {
   CHECK(parse_catalogue(text, "phasmomods.emotes", cat, why));
   CHECK(cat.warnings.empty());
   CHECK(cat.bundle == "emotes.bundle");
-  CHECK(cat.emotes.size() == 16);
-  if (cat.emotes.size() != 16) return;
+  CHECK(cat.emotes.size() == 24);
+  if (cat.emotes.size() != 24) return;
   pm::i18n::Table table;
   CHECK(table.load(std::filesystem::path(PM_TEXT_DIR) / "mods" / "emotes" / "i18n" / "default.json", why));
   for (const EmoteDef& e : cat.emotes) CHECK(table.has(e.label));
@@ -289,6 +289,11 @@ void the_shipped_catalogue_parses_with_a_label_for_each() {
   CHECK(cat.emotes[15].moveClip == cat.emotes[15].clip);
   CHECK(cat.emotes[9].id == "phasmomods.emotes.get-griddy" && cat.emotes[9].moveClip == cat.emotes[9].clip);
   CHECK(cat.emotes[12].id == "phasmomods.emotes.running-man" && cat.emotes[12].moveClip == cat.emotes[12].clip);
+  // The third page (the user's picks, 2026-11-13), alphabetical too: Forget Me Not opens with an intro song but no
+  // intro clip.
+  CHECK(cat.emotes[16].id == "phasmomods.emotes.crackdown" && cat.emotes[23].id == "phasmomods.emotes.true-heart");
+  CHECK(cat.emotes[18].id == "phasmomods.emotes.forget-me-not" && cat.emotes[18].introClip.empty() &&
+        !cat.emotes[18].introSong.empty());
   for (const EmoteDef& e : cat.emotes) CHECK(e.songLoop.length > 0.0f);
   CHECK(bundle_path(cat.emotes[7].clip) == "assets/emotes/clips/takethel.anim");
   // Each song's loop as the emote pack tool measured it, in samples at the song's own rate (the counts the songs were

@@ -63,6 +63,26 @@
     {"name": "stride", "clip": "Assets/Emotes/Clips/Stride.anim", "song": "Assets/Emotes/Loops/stride.wav",
      "moveClip": "Assets/Emotes/Clips/Stride.anim",
      "clipSource": "Assets/Emotes/Source/Stride.anim", "clipLoopGuess": 16.667, "songSource": "Assets/Emotes/Songs/stride.mp3", "songLoopGuess": 17,
-     "icon": "Assets/Emotes/Icons/stride.png", "label": "emotes.name.stride", "loudness": "loudness/stride.txt", "songLoop": {"start": 0, "seconds": 16.633313}}
+     "icon": "Assets/Emotes/Icons/stride.png", "label": "emotes.name.stride", "loudness": "loudness/stride.txt", "songLoop": {"start": 0, "seconds": 16.633313}},
+    {"name": "crackdown", "clip": "Assets/Emotes/Clips/Crackdown.anim", "song": "Assets/Emotes/Loops/crackdown.wav",
+     "clipSource": "Assets/Emotes/Source/Crackdown.anim", "clipLoopGuess": 6.7, "songSource": "Assets/Emotes/Songs/crackdown.mp3", "songLoopGuess": 26.66,
+     "icon": "Assets/Emotes/Icons/crackdown.png", "label": "emotes.name.crackdown", "loudness": "loudness/crackdown.txt", "songLoop": {"start": 0, "seconds": 26.663667}},
+    {"name": "double-up", "clip": "Assets/Emotes/Clips/DoubleUp.anim", "song": "Assets/Emotes/Loops/double_up.wav",
+     "clipSource": "Assets/Emotes/Source/DoubleUp.anim", "clipLoopGuess": 3.8, "songSource": "Assets/Emotes/Songs/double_up.mp3", "songLoopGuess": 22.61,
+     "icon": "Assets/Emotes/Icons/double_up.png", "label": "emotes.name.double-up", "loudness": "loudness/double-up.txt", "songLoop": {"start": 0, "seconds": 22.605918}},
+    {"name": "forget-me-not", "clip": "Assets/Emotes/Clips/ForgetMeNot.anim", "song": "Assets/Emotes/Loops/forget_me_not.wav",
+     "introSong": "Assets/Emotes/Intros/forget_me_not.wav", "introLoudness": "loudness/forget-me-not.intro.txt",
+     "icon": "Assets/Emotes/Icons/forget_me_not.png", "label": "emotes.name.forget-me-not", "loudness": "loudness/forget-me-not.txt", "songLoop": {"start": 0, "seconds": 8.4}},
+    {"name": "im-diamond", "clip": "Assets/Emotes/Clips/ImDiamond.anim", "song": "Assets/Emotes/Loops/im_diamond.wav",
+     "icon": "Assets/Emotes/Icons/im_diamond.png", "label": "emotes.name.im-diamond", "loudness": "loudness/im-diamond.txt", "songLoop": {"start": 0, "seconds": 8.433333}},
+    {"name": "monster-mash", "clip": "Assets/Emotes/Clips/MonsterMash.anim", "song": "Assets/Emotes/Loops/monster_mash.wav",
+     "icon": "Assets/Emotes/Icons/monster_mash.png", "label": "emotes.name.monster-mash", "loudness": "loudness/monster-mash.txt", "songLoop": {"start": 0, "seconds": 13.713917}},
+    {"name": "say-so", "clip": "Assets/Emotes/Clips/SaySo.anim", "song": "Assets/Emotes/Loops/say_so.wav",
+     "icon": "Assets/Emotes/Icons/say_so.png", "label": "emotes.name.say-so", "loudness": "loudness/say-so.txt", "songLoop": {"start": 0, "seconds": 17.2}},
+    {"name": "the-macarena", "clip": "Assets/Emotes/Clips/TheMacarena.anim", "song": "Assets/Emotes/Loops/the_macarena.wav",
+     "icon": "Assets/Emotes/Icons/the_macarena.png", "label": "emotes.name.the-macarena", "loudness": "loudness/the-macarena.txt", "songLoop": {"start": 0, "seconds": 18.6}},
+    {"name": "true-heart", "clip": "Assets/Emotes/Clips/TrueHeart.anim", "song": "Assets/Emotes/Loops/true_heart.wav",
+     "clipSource": "Assets/Emotes/Source/TrueHeart.anim", "clipLoopGuess": 7.7, "songSource": "Assets/Emotes/Songs/true_heart.mp3", "songLoopGuess": 23.0,
+     "icon": "Assets/Emotes/Icons/true_heart.png", "label": "emotes.name.true-heart", "loudness": "loudness/true-heart.txt", "songLoop": {"start": 0, "seconds": 23.001188}}
   ]
 }
