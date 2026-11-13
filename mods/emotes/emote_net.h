@@ -21,8 +21,13 @@ inline constexpr uint8_t kMagic = 'E';
 inline constexpr float kFacingSendDegrees = 5.0f;
 
 /// What a message says. Move says a walking emote's dancer started (moving true) or stopped walking forward, so every
-/// client switches their clip (emote_session.h).
-enum class Kind : uint8_t { Start = 1, Facing = 2, End = 3, Move = 4 };
+/// client switches their clip (emote_session.h). Join asks a synced emote's first dancer to take the sender as its
+/// second dancer, sent to that dancer alone; Accept, from the first dancer to everyone, names who joined: their Photon
+/// actor number in x (docs/superpowers/specs/2026-11-13-synced-emotes-design.md).
+enum class Kind : uint8_t { Start = 1, Facing = 2, End = 3, Move = 4, Join = 5, Accept = 6 };
+
+/// The largest actor number an Accept carries: a float holds every whole number up to it exactly.
+inline constexpr float kMaxActorInMessage = 16777216.0f;
 
 /// A message: for Start, the emote's key, where the emoter stands and the body's yaw; for Facing, the yaw; End
 /// carries nothing it needs. `moving` says the emoter is walking (bit 0 of the flags byte).
@@ -57,7 +62,7 @@ inline std::vector<uint8_t> pack(const EmoteMsg& m) {
 /// session passes over keys its own table does not hold.
 inline std::optional<EmoteMsg> unpack(std::span<const uint8_t> data) {
   if (data.size() != kMessageBytes || data[0] != kMagic) return std::nullopt;
-  if (data[1] < static_cast<uint8_t>(Kind::Start) || data[1] > static_cast<uint8_t>(Kind::Move)) return std::nullopt;
+  if (data[1] < static_cast<uint8_t>(Kind::Start) || data[1] > static_cast<uint8_t>(Kind::Accept)) return std::nullopt;
   if ((data[2] & ~1) != 0) return std::nullopt;  // only bit 0 means anything
   const uint32_t key = static_cast<uint32_t>(data[3]) | (static_cast<uint32_t>(data[4]) << 8) |
                        (static_cast<uint32_t>(data[5]) << 16) | (static_cast<uint32_t>(data[6]) << 24);
@@ -65,6 +70,10 @@ inline std::optional<EmoteMsg> unpack(std::span<const uint8_t> data) {
   std::memcpy(values, data.data() + 7, sizeof values);
   for (const float v : values)
     if (!std::isfinite(v)) return std::nullopt;
+  // An Accept's x is an actor number: a whole number from 1.
+  if (data[1] == static_cast<uint8_t>(Kind::Accept) &&
+      (values[0] < 1.0f || values[0] > kMaxActorInMessage || values[0] != std::floor(values[0])))
+    return std::nullopt;
   return EmoteMsg{static_cast<Kind>(data[1]), key, (data[2] & 1) != 0, values[0], values[1], values[2], values[3]};
 }
 

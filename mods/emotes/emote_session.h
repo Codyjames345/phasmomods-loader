@@ -27,6 +27,12 @@ inline float phase_blend_seconds(Phase to, bool fromIntro) {
   return to == Phase::Loop && fromIntro ? kIntroBlendSeconds : kMoveBlendSeconds;
 }
 
+/// Which part of a synced emote this body dances: the first dancer's, or the second's who joined them.
+enum class Role { First, Partner };
+
+/// How long a Join waits for its Accept before the joiner gives up, in seconds. A starting value.
+inline constexpr float kJoinWaitSeconds = 2.0f;
+
 /// What the session knows of each emote once its clip is loaded, in the wheel's order (catalogue.h's wheel_order).
 struct EmoteInfo {
   float clipSeconds = 0.0f;  ///< the clip's length
@@ -36,6 +42,8 @@ struct EmoteInfo {
   bool hasMove = false;      ///< the emote has a walking variant its pack's file names (moveClip)
   float introSeconds = 0.0f;       ///< the intro clip's length, 0 for none
   float introSongSeconds = 0.0f;   ///< the intro song's length, 0 for none
+  bool synced = false;             ///< two dance it: the catalogue names a second dancer's part
+  float partnerSeconds = 0.0f;     ///< the second dancer's clip's length
 };
 /// The wheel's emotes: any number, shown kSegments to a page (wheel_pages.h). An emote index is an int into this.
 using EmoteTable = std::vector<EmoteInfo>;
@@ -53,6 +61,7 @@ struct LocalFrame {
   bool endAction = false;   ///< a game action that ends an emote was pressed this frame
   double clipTime = -1.0;   ///< the emote clip's own time on its body, -1 when none plays
   float dt = 0.0f;          ///< seconds since the last frame; 0 turns the body at once
+  bool gliding = false;     ///< a joiner still gliding into the partner's spot: the half-metre rule waits for the spot
 };
 
 /// What the glue does for this client's investigator this frame.
@@ -63,6 +72,8 @@ struct LocalOut {
   std::optional<Phase> phase;     ///< play this phase's clip now (the pick's start, then each walking or intro switch)
   std::optional<float> bodyYaw;   ///< the visible body's yaw now
   std::vector<EmoteMsg> send;     ///< messages to every other client, in order
+  std::vector<std::pair<int, EmoteMsg>> sendTo;  ///< messages to one client each: its actor number, the message
+  std::optional<int> acceptedActor;  ///< this client took that player as its second dancer: show them dancing
 };
 
 /// The emoter's side.
@@ -76,6 +87,9 @@ class LocalSession {
     LocalOut o;
     if (!f.present || f.dying || emote < 0 || emote >= static_cast<int>(table_.size())) return o;
     active_ = true;
+    role_ = Role::First;
+    partner_.reset();
+    pendingJoin_.reset();
     emote_ = emote;
     start_ = lastPos_ = f.pos;
     yaw_ = sentYaw_ = f.viewYaw;
@@ -95,6 +109,10 @@ class LocalSession {
   /// One frame of the emote: its walking and intro phases, whether it ends, and its facing.
   LocalOut tick(const LocalFrame& f) {
     LocalOut o;
+    if (pendingJoin_) {  // a Join no Accept answered gives up after a while
+      pendingTimer_ += f.dt;
+      if (pendingTimer_ > kJoinWaitSeconds) pendingJoin_.reset();
+    }
     if (!active_) return o;
     const EmoteInfo& info = table_[static_cast<size_t>(emote_)];
     elapsed_ += f.dt;  // the emote's own clock: it runs across every clip switch, and every client counts it
@@ -131,8 +149,14 @@ class LocalSession {
     const bool died = down && !wasDown_;
     wasDown_ = down;
     const bool playedOut = f.clipTime >= 0.0 && !info.loops && one_shot_done(f.clipTime, info.clipSeconds);
-    if (!f.present || died || f.endAction || sprinted || moved_too_far(start_, f.pos) || playedOut) {
+    const bool movedAway = !f.gliding && moved_too_far(start_, f.pos);  // a joiner's rule starts at the spot
+    if (!f.present || died || f.endAction || sprinted || movedAway || playedOut) {
       end(o, died);  // a death takes the body at once: nothing of ours blends over the game's animation
+      return o;
+    }
+    // Two dancing together keep the facing they joined with, so the partner's spot never moves (2026-11-13).
+    if (partner_) {
+      o.bodyYaw = yaw_;
       return o;
     }
     // Walking within the half metre turns the body to the way it goes (the user's ruling), so it does not drift
@@ -148,6 +172,76 @@ class LocalSession {
       o.send.push_back(EmoteMsg{Kind::Facing, table_[static_cast<size_t>(emote_)].key, false, 0, 0, 0, yaw_});
     }
     return o;
+  }
+
+  /// A player near this client asks to join it: this client is a synced emote's first dancer and `actor` asked to be
+  /// its second (a Join for `key`). Taken while this client dances that synced emote, past any intro, with no partner
+  /// yet: the first to ask wins, and everyone is told (Accept). Anything else is passed over.
+  LocalOut on_join(int actor, uint32_t key) {
+    LocalOut o;
+    if (!active_ || role_ != Role::First || partner_ || actor <= 0) return o;
+    const EmoteInfo& info = table_[static_cast<size_t>(emote_)];
+    if (!info.synced || key != info.key || phase_ == Phase::Intro) return o;
+    partner_ = actor;
+    o.acceptedActor = actor;
+    o.send.push_back(EmoteMsg{Kind::Accept, key, false, static_cast<float>(actor), 0, 0, 0});
+    return o;
+  }
+
+  /// This client asks `firstActor`, who dances synced emote `emote`, to take it as their second dancer: a Join sent
+  /// to them alone. Not while this client dances, has no investigator, or has begun to die.
+  LocalOut join_request(int firstActor, int emote, const LocalFrame& f) {
+    LocalOut o;
+    if (active_ || !f.present || f.dying || firstActor <= 0 || emote < 0 || emote >= static_cast<int>(table_.size()))
+      return o;
+    const EmoteInfo& info = table_[static_cast<size_t>(emote)];
+    if (!info.synced) return o;
+    pendingJoin_ = firstActor;
+    pendingEmote_ = emote;
+    pendingTimer_ = 0.0f;
+    o.sendTo.emplace_back(firstActor, EmoteMsg{Kind::Join, info.key, false, 0, 0, 0, 0});
+    return o;
+  }
+
+  /// The first dancer took this client (their Accept named it): this client dances the second part from the first
+  /// dancer's point (`firstElapsed`, their clock), standing at `spot` facing `yaw`. Only the Accept this client asked
+  /// for starts anything; the half-metre rule is measured from the spot.
+  LocalOut accepted(int firstActor, uint32_t key, double firstElapsed, Point spot, float yaw) {
+    LocalOut o;
+    if (active_ || !pendingJoin_ || *pendingJoin_ != firstActor) return o;
+    if (table_[static_cast<size_t>(pendingEmote_)].key != key) return o;
+    active_ = true;
+    emote_ = pendingEmote_;
+    role_ = Role::Partner;
+    partner_ = firstActor;
+    pendingJoin_.reset();
+    elapsed_ = firstElapsed;
+    start_ = lastPos_ = spot;
+    yaw_ = sentYaw_ = yaw;
+    wasDown_ = false;
+    stopTimer_ = 0.0f;
+    phase_ = Phase::Loop;
+    o.start = emote_;
+    o.phase = phase_;
+    o.bodyYaw = yaw_;
+    return o;
+  }
+
+  /// `actor` ended their emote (their End, or they are gone): when they are this client's partner, this client ends
+  /// too, as either dancer stopping ends both (the user, 2026-11-13).
+  LocalOut partner_ended(int actor) {
+    LocalOut o;
+    if (active_ && partner_ && *partner_ == actor) end(o);
+    return o;
+  }
+
+  /// Which part this client dances, and with whom: the other dancer's actor, or none.
+  Role role() const { return role_; }
+  std::optional<int> partner() const { return active_ ? partner_ : std::nullopt; }
+  /// Where in the second dancer's clip the pair is: the shared clock wrapped to that clip's length.
+  double partner_time() const {
+    const float length = info().partnerSeconds;
+    return length > 0.0f ? std::fmod(elapsed_, static_cast<double>(length)) : elapsed_;
   }
 
   /// Ends the emote now, from outside (the mod stopping): what to undo and send.
@@ -173,6 +267,8 @@ class LocalSession {
     o.atOnce = atOnce;
     o.send.push_back(EmoteMsg{Kind::End, table_[static_cast<size_t>(emote_)].key, false, 0, 0, 0, yaw_});
     active_ = false;
+    role_ = Role::First;
+    partner_.reset();
   }
 
   EmoteTable table_;
@@ -183,6 +279,11 @@ class LocalSession {
   double elapsed_ = 0.0;             ///< seconds since the emote began
   Phase phase_ = Phase::Loop;        ///< the clip the body plays now
   float stopTimer_ = 0.0f;           ///< how long the forward input has been let go, while Moving
+  Role role_ = Role::First;          ///< which part of a synced emote this body dances
+  std::optional<int> partner_;       ///< the other dancer's actor while two dance together
+  std::optional<int> pendingJoin_;   ///< the first dancer a Join went to, while its Accept is awaited
+  int pendingEmote_ = -1;            ///< the synced emote that Join asked for
+  float pendingTimer_ = 0.0f;        ///< how long the Join has waited
 };
 
 /// A peer's investigator this frame, as the glue reads it.
@@ -203,6 +304,7 @@ struct RemoteOut {
   int emote = -1;
   float yaw = 0.0f;
   bool atOnce = false;  ///< this Stop leaves nothing blending: the game's own animation has the body (their death)
+  bool partner = false;  ///< a Start of a synced emote's second part: their clip is the partner's, from partner_time
   // Qualified: the What enumerator Phase names the same thing in this class's scope.
   pm::emotes::Phase phase = pm::emotes::Phase::Loop;  ///< a Phase output: play this phase's clip now
 };
@@ -233,20 +335,38 @@ class RemoteSessions {
         }
         // Their clock starts here: this client times their intro on it, as the emoter's does on its own.
         const Phase at = table_[static_cast<size_t>(index)].introSeconds > 0.0f ? Phase::Intro : Phase::Loop;
-        peers_[actor] = Peer{index, 0.0, at};
+        stop_pair(actor, out);  // a new dance ends any pairing this peer had
+        peers_[actor] = Peer{index, 0.0, at, m.yaw};
         out.push_back({RemoteOut::Start, actor, index, m.yaw});
         out.push_back({RemoteOut::Yaw, actor, index, m.yaw});
         break;
       }
       case Kind::Facing:
-        if (it != peers_.end()) out.push_back({RemoteOut::Yaw, actor, it->second.emote, m.yaw});
+        if (it != peers_.end()) {
+          it->second.yaw = m.yaw;
+          out.push_back({RemoteOut::Yaw, actor, it->second.emote, m.yaw});
+        }
         break;
       case Kind::End:
         if (it != peers_.end()) {
           out.push_back({RemoteOut::Stop, actor, it->second.emote, 0.0f});
+          const int pair = it->second.pair;
           peers_.erase(it);
+          stop_peer(pair, out);  // either dancer stopping ends both
         }
         break;
+      case Kind::Join:
+        break;  // a Join is the first dancer's client's to answer (LocalSession::on_join)
+      case Kind::Accept: {
+        // The first dancer took a second: they must be dancing that synced emote here, with no partner yet.
+        const int joiner = static_cast<int>(m.x);
+        if (it == peers_.end() || joiner == actor || it->second.pair != 0) break;
+        const EmoteInfo& info = table_[static_cast<size_t>(it->second.emote)];
+        if (!info.synced || info.key != m.key) break;
+        const std::vector<RemoteOut> shown = add_partner(joiner, actor, it->second.emote, it->second.elapsed, it->second.yaw);
+        out.insert(out.end(), shown.begin(), shown.end());
+        break;
+      }
       case Kind::Move:
         // Walking during an emote (2026-11-12): the emoter's client decides when, this client plays that clip.
         if (it != peers_.end()) {
@@ -266,6 +386,7 @@ class RemoteSessions {
   /// peer's own clock: a peer's intro ends here, on this client's time, with no message for it.
   std::vector<RemoteOut> tick(const std::vector<RemoteFrame>& frames, bool receiverDown, float dt = 0.0f) {
     std::vector<RemoteOut> out;
+    std::vector<int> partnersLeft;  // the other dancers of pairs whose dancer went this frame
     for (auto it = peers_.begin(); it != peers_.end();) {
       const RemoteFrame* f = nullptr;
       for (const RemoteFrame& r : frames)
@@ -277,6 +398,7 @@ class RemoteSessions {
         RemoteOut stop{RemoteOut::Stop, it->first, it->second.emote, 0.0f};
         stop.atOnce = down;
         out.push_back(stop);
+        if (it->second.pair != 0) partnersLeft.push_back(it->second.pair);  // either dancer gone ends both
         it = peers_.erase(it);
         continue;
       }
@@ -289,10 +411,39 @@ class RemoteSessions {
       }
       ++it;
     }
+    for (int actor : partnersLeft) stop_peer(actor, out);
+    return out;
+  }
+
+  /// Shows `joiner` dancing a synced emote's second part beside `first`, from the first dancer's point
+  /// (`firstElapsed`) and facing (`yaw`): on every client an Accept reaches, and on the first dancer's own, which
+  /// accepted them. `first` need not be a peer here (the first dancer's own client).
+  std::vector<RemoteOut> add_partner(int joiner, int first, int emote, double firstElapsed, float yaw) {
+    std::vector<RemoteOut> out;
+    if (joiner <= 0 || emote < 0 || emote >= static_cast<int>(table_.size())) return out;
+    stop_pair(joiner, out);
+    peers_[joiner] = Peer{emote, firstElapsed, Phase::Loop, yaw, first, true};
+    if (auto f = peers_.find(first); f != peers_.end()) f->second.pair = joiner;
+    RemoteOut start{RemoteOut::Start, joiner, emote, yaw};
+    start.partner = true;
+    out.push_back(start);
+    out.push_back({RemoteOut::Yaw, joiner, emote, yaw});
     return out;
   }
 
   bool dancing(int actor) const { return peers_.count(actor) != 0; }
+  /// The first dancer a second dancer joined, or 0 (not a second dancer, or not dancing).
+  int partner_of(int actor) const {
+    auto it = peers_.find(actor);
+    return it == peers_.end() || !it->second.second ? 0 : it->second.pair;
+  }
+  /// Where in a second dancer's clip they are: their clock, which began at the first dancer's, wrapped to the clip.
+  double partner_time(int actor) const {
+    auto it = peers_.find(actor);
+    if (it == peers_.end()) return 0.0;
+    const float length = table_[static_cast<size_t>(it->second.emote)].partnerSeconds;
+    return length > 0.0f ? std::fmod(it->second.elapsed, static_cast<double>(length)) : it->second.elapsed;
+  }
   /// Seconds since this peer's emote began, counted here; 0 for a peer not dancing.
   double elapsed(int actor) const {
     auto it = peers_.find(actor);
@@ -314,10 +465,30 @@ class RemoteSessions {
     return -1;
   }
 
+  // Stops `actor`'s dance, if any, with nothing more.
+  void stop_peer(int actor, std::vector<RemoteOut>& out) {
+    auto it = peers_.find(actor);
+    if (it == peers_.end()) return;
+    out.push_back({RemoteOut::Stop, actor, it->second.emote, 0.0f});
+    peers_.erase(it);
+  }
+
+  // Ends the pairing `actor` was in: their partner's dance stops (either dancer leaving the pair ends both).
+  void stop_pair(int actor, std::vector<RemoteOut>& out) {
+    auto it = peers_.find(actor);
+    if (it == peers_.end() || it->second.pair == 0) return;
+    const int pair = it->second.pair;
+    it->second.pair = 0;
+    stop_peer(pair, out);
+  }
+
   struct Peer {
-    int emote;         ///< the index into table_, found by key when the Start arrived
-    double elapsed;    ///< seconds since their emote began, counted on this client
-    Phase phase;       ///< the clip their body plays now
+    int emote;              ///< the index into table_, found by key when the Start arrived
+    double elapsed;         ///< seconds since their emote began, counted on this client
+    Phase phase;            ///< the clip their body plays now
+    float yaw = 0.0f;       ///< their body's facing, as last told
+    int pair = 0;           ///< the other dancer of a synced emote, or 0
+    bool second = false;    ///< they dance the second part (they joined `pair`)
   };
   EmoteTable table_;
   std::map<int, Peer> peers_;

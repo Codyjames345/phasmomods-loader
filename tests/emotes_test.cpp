@@ -244,6 +244,19 @@ void unknown_flag_bits_are_refused() {
   CHECK(!unpack(b).has_value());
 }
 
+// Join and Accept carry the synced emote's key; Accept carries the joiner's actor number in x, a whole positive number.
+void join_and_accept_round_trip() {
+  for (const EmoteMsg& m : {EmoteMsg{Kind::Join, 1000u, false, 0, 0, 0, 0}, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}}) {
+    const std::vector<uint8_t> bytes = pack(m);
+    const auto back = unpack(bytes);
+    CHECK(back && back->kind == m.kind && back->key == m.key && back->x == m.x);
+  }
+  for (float bad : {7.5f, -3.0f, 0.0f}) {
+    const std::vector<uint8_t> bytes = pack(EmoteMsg{Kind::Accept, 1000u, false, bad, 0, 0, 0});
+    CHECK(!unpack(bytes));
+  }
+}
+
 void bad_messages_are_dropped() {
   const std::vector<uint8_t> good = pack(EmoteMsg{Kind::Start, 1003u, false, 0, 0, 0, 0});
   CHECK(!unpack({}).has_value());
@@ -253,8 +266,8 @@ void bad_messages_are_dropped() {
   b = good;
   b[1] = 0;
   CHECK(!unpack(b).has_value());
-  b[1] = 5;
-  CHECK(!unpack(b).has_value());  // unknown kinds (4 is now Move)
+  b[1] = 7;
+  CHECK(!unpack(b).has_value());  // unknown kinds (4 is Move, 5 Join, 6 Accept)
 }
 
 void the_dead_dance_for_the_dead() {
@@ -332,6 +345,7 @@ void the_journal_keeps_its_place_on_the_waist() {
 }
 
 int main() {
+  join_and_accept_round_trip();
   the_journal_keeps_its_place_on_the_waist();
   the_wheel_picks_by_direction();
   the_mouse_reach_is_capped();

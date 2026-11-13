@@ -524,9 +524,242 @@ void a_peer_elapsed_follows_dt() {
   CHECK(std::fabs(r.elapsed(3) - 0.5) < 1e-9);
 }
 
+// ---- Synced emotes (docs/superpowers/specs/2026-11-13-synced-emotes-design.md) ----
+
+// A table of one synced emote: the first dancer's clip 15.9 s, the second dancer's part 15.9 s too (Sway).
+EmoteTable synced_table(float introSeconds = 0.0f) {
+  EmoteTable t = table_of(2, true, 15.9f);
+  t[0].synced = true;
+  t[0].partnerSeconds = 15.9f;
+  t[0].introSeconds = introSeconds;
+  return t;
+}
+
+// The first dancer dancing the synced emote, `seconds` in.
+LocalSession first_dancer(const EmoteTable& t, double seconds = 1.0) {
+  LocalSession s(t);
+  s.pick(0, here(-1.0));
+  LocalFrame f = here(0.0);
+  f.dt = static_cast<float>(seconds);
+  s.tick(f);
+  return s;
+}
+
+const EmoteMsg* sent(const std::vector<EmoteMsg>& msgs, Kind k) {
+  for (const EmoteMsg& m : msgs)
+    if (m.kind == k) return &m;
+  return nullptr;
+}
+
+void the_first_dancer_accepts_one_join() {
+  const EmoteTable t = synced_table();
+  LocalSession s = first_dancer(t);
+  const LocalOut o = s.on_join(7, 1000u);
+  CHECK(o.acceptedActor == 7);
+  const EmoteMsg* accept = sent(o.send, Kind::Accept);
+  CHECK(accept && accept->key == 1000u && accept->x == 7.0f);
+  CHECK(s.partner() == 7);
+}
+
+void the_first_join_wins_and_the_second_is_refused() {
+  const EmoteTable t = synced_table();
+  LocalSession s = first_dancer(t);
+  s.on_join(7, 1000u);
+  const LocalOut second = s.on_join(9, 1000u);
+  CHECK(!second.acceptedActor && second.send.empty());
+  CHECK(s.partner() == 7);
+}
+
+void no_join_during_the_intro() {
+  const EmoteTable t = synced_table(2.0f);
+  LocalSession s = first_dancer(t, 1.0);  // one second into a two-second intro
+  CHECK(!s.on_join(7, 1000u).acceptedActor);
+  LocalFrame f = here(0.0);
+  f.dt = 1.5f;
+  s.tick(f);  // past the intro
+  CHECK(s.on_join(7, 1000u).acceptedActor == 7);
+}
+
+void no_join_to_an_emote_that_is_not_synced() {
+  const EmoteTable t = synced_table();
+  LocalSession s(t);
+  s.pick(1, here(-1.0));  // emote 1 has no partner part
+  CHECK(!s.on_join(7, 1001u).acceptedActor);
+  LocalSession first = first_dancer(t);
+  CHECK(!first.on_join(7, 1001u).acceptedActor);  // a Join for another emote than the one danced
+}
+
+void a_join_after_the_end_is_refused() {
+  const EmoteTable t = synced_table();
+  LocalSession s = first_dancer(t);
+  s.end_now();
+  CHECK(!s.on_join(7, 1000u).acceptedActor);
+}
+
+void a_join_request_goes_to_the_first_dancer_only() {
+  const EmoteTable t = synced_table();
+  LocalSession joiner(t);
+  const LocalOut o = joiner.join_request(4, 0, here(-1.0));
+  CHECK(o.send.empty());
+  CHECK(o.sendTo.size() == 1 && o.sendTo[0].first == 4 && o.sendTo[0].second.kind == Kind::Join &&
+        o.sendTo[0].second.key == 1000u);
+  // Not while dancing already, nor while the death has begun.
+  LocalSession dancing = first_dancer(t);
+  CHECK(dancing.join_request(4, 0, here(-1.0)).sendTo.empty());
+  LocalFrame dying = here(-1.0);
+  dying.dying = true;
+  CHECK(LocalSession(t).join_request(4, 0, dying).sendTo.empty());
+}
+
+void an_accepted_partner_starts_at_the_first_dancers_point() {
+  const EmoteTable t = synced_table();
+  LocalSession joiner(t);
+  joiner.join_request(4, 0, here(-1.0));
+  const LocalOut o = joiner.accepted(4, 1000u, 20.0, Point{2.3f, 0.0f, 1.0f}, 90.0f);
+  CHECK(o.start == 0 && o.phase == Phase::Loop && o.bodyYaw && *o.bodyYaw == 90.0f);
+  CHECK(joiner.role() == Role::Partner && joiner.partner() == 4);
+  CHECK(std::fabs(joiner.partner_time() - 4.1) < 1e-6);
+  // An Accept nobody asked for starts nothing.
+  LocalSession idle(t);
+  CHECK(idle.accepted(4, 1000u, 20.0, Point{}, 0.0f).start < 0);
+}
+
+void a_join_unanswered_is_dropped() {
+  const EmoteTable t = synced_table();
+  LocalSession joiner(t);
+  joiner.join_request(4, 0, here(-1.0));
+  LocalFrame f = here(-1.0);
+  f.dt = kJoinWaitSeconds + 0.1f;
+  joiner.tick(f);
+  CHECK(joiner.accepted(4, 1000u, 1.0, Point{}, 0.0f).start < 0);
+}
+
+void the_partner_time_follows_the_first_dancers_clock() {
+  const EmoteTable t = synced_table();
+  RemoteSessions r(t);
+  r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+  r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false);
+  std::vector<RemoteFrame> frames(2);
+  frames[0].actor = 4;
+  frames[1].actor = 7;
+  for (RemoteFrame& f : frames) f.present = true;
+  for (int i = 0; i < 36000; ++i) r.tick(frames, false, 1.0f / 60.0f);
+  CHECK(r.dancing(7) && r.partner_of(7) == 4);
+  CHECK(std::fabs(r.elapsed(7) - r.elapsed(4)) < 1e-6);
+  CHECK(std::fabs(r.partner_time(7) - std::fmod(r.elapsed(4), static_cast<double>(15.9f))) < 1e-6);
+}
+
+void either_stopping_ends_both() {
+  const EmoteTable t = synced_table();
+  // Here: the first dancer, whose partner ended.
+  LocalSession first = first_dancer(t);
+  first.on_join(7, 1000u);
+  CHECK(first.partner_ended(7).stop);
+  // Here: the partner, whose first dancer ended.
+  LocalSession joiner(t);
+  joiner.join_request(4, 0, here(-1.0));
+  joiner.accepted(4, 1000u, 3.0, Point{}, 0.0f);
+  CHECK(!joiner.partner_ended(9).stop);  // another player's end is not theirs
+  CHECK(joiner.partner_ended(4).stop);
+  // Everyone else: an End from either stops both.
+  for (int ender : {4, 7}) {
+    RemoteSessions r(t);
+    r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+    r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false);
+    const auto out = r.receive(ender, EmoteMsg{Kind::End, 1000u, false, 0, 0, 0, 0}, false, false);
+    CHECK(out.size() == 2 && !r.dancing(4) && !r.dancing(7));
+  }
+}
+
+void an_end_during_the_glide_ends_both() {
+  const EmoteTable t = synced_table();
+  LocalSession joiner(t);
+  joiner.join_request(4, 0, here(-1.0));
+  joiner.accepted(4, 1000u, 3.0, Point{2.3f, 0.0f, 1.0f}, 0.0f);
+  LocalFrame gliding = here(0.0);
+  gliding.pos = {0.0f, 0.0f, 0.0f};  // still far from the spot
+  gliding.gliding = true;
+  gliding.dt = 0.1f;
+  CHECK(!joiner.tick(gliding).stop);  // the half-metre rule waits for the spot
+  CHECK(joiner.partner_ended(4).stop);
+}
+
+void paired_bodies_keep_their_yaw() {
+  const EmoteTable t = synced_table();
+  LocalSession first = first_dancer(t);
+  first.on_join(7, 1000u);
+  const float before = first.yaw();
+  for (float view : {80.0f, 170.0f, -170.0f}) {
+    LocalFrame f = here(0.0);
+    f.viewYaw = view;
+    f.dt = 0.5f;
+    const LocalOut o = first.tick(f);
+    CHECK(!sent(o.send, Kind::Facing));
+    CHECK(first.yaw() == before);
+  }
+}
+
+// A dancer of a pair who is gone ends the other, and every other dancer's clock still moves once a frame.
+void a_gone_dancer_ends_the_pair_and_no_clock_runs_twice() {
+  const EmoteTable t = synced_table();
+  RemoteSessions r(t);
+  r.receive(2, EmoteMsg{Kind::Start, 1001u, false, 0, 0, 0, 0}, false, false);  // a third player, dancing alone
+  r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 0}, false, false);
+  r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false);
+  std::vector<RemoteFrame> frames(3);
+  frames[0].actor = 2;
+  frames[1].actor = 4;
+  frames[2].actor = 7;
+  for (RemoteFrame& f : frames) f.present = true;
+  r.tick(frames, false, 1.0f);
+  frames[1].present = false;  // the first dancer leaves
+  const auto out = r.tick(frames, false, 1.0f);
+  CHECK(!r.dancing(4) && !r.dancing(7) && r.dancing(2));
+  CHECK(out.size() == 2);
+  CHECK(r.elapsed(2) == 2.0);
+}
+
+void an_accept_for_an_unknown_dance_is_ignored() {
+  const EmoteTable t = synced_table();
+  RemoteSessions r(t);
+  CHECK(r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false).empty());
+  CHECK(!r.dancing(7));
+  // A first dancer of another emote than the Accept names.
+  r.receive(4, EmoteMsg{Kind::Start, 1001u, false, 0, 0, 0, 0}, false, false);
+  CHECK(r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false).empty());
+}
+
+void an_accept_shows_the_partner_dancing() {
+  const EmoteTable t = synced_table();
+  RemoteSessions r(t);
+  r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, 30.0f}, false, false);
+  const auto out = r.receive(4, EmoteMsg{Kind::Accept, 1000u, false, 7.0f, 0, 0, 0}, false, false);
+  CHECK(out.size() >= 1 && out[0].what == RemoteOut::Start && out[0].actor == 7 && out[0].partner &&
+        out[0].emote == 0 && out[0].yaw == 30.0f);
+  // The first dancer's own client shows its partner the same way.
+  RemoteSessions mine(t);
+  const auto shown = mine.add_partner(7, 4, 0, 5.0, 30.0f);
+  CHECK(shown.size() >= 1 && shown[0].partner && mine.elapsed(7) == 5.0);
+}
+
 }  // namespace
 
 int main() {
+  a_gone_dancer_ends_the_pair_and_no_clock_runs_twice();
+  the_first_dancer_accepts_one_join();
+  the_first_join_wins_and_the_second_is_refused();
+  no_join_during_the_intro();
+  no_join_to_an_emote_that_is_not_synced();
+  a_join_after_the_end_is_refused();
+  a_join_request_goes_to_the_first_dancer_only();
+  an_accepted_partner_starts_at_the_first_dancers_point();
+  a_join_unanswered_is_dropped();
+  the_partner_time_follows_the_first_dancers_clock();
+  either_stopping_ends_both();
+  an_end_during_the_glide_ends_both();
+  paired_bodies_keep_their_yaw();
+  an_accept_for_an_unknown_dance_is_ignored();
+  an_accept_shows_the_partner_dancing();
   a_pick_starts_and_tells_everyone();
   moving_ends_the_emote();
   each_listed_action_ends_it();
