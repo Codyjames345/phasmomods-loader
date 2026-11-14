@@ -112,11 +112,11 @@ inline constexpr pm::sdk::EntryDesc IKSolverFullBodyBiped{.key = "IKSolverFullBo
 /// The left hand's effector, an IKEffector. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKSolverFullBodyBiped_get_leftHandEffector{
     .key = "IKSolverFullBodyBiped.get_leftHandEffector", .kind = pm::sdk::Kind::Method,
-    .owner = "IKSolverFullBodyBiped", .name = "get_leftHandEffector"};
+    .owner = "IKSolverFullBodyBiped", .name = "get_leftHandEffector", .type = "@IKEffector"};
 /// The right hand's effector, an IKEffector. Inferred: Final IK's own documentation.
 inline constexpr pm::sdk::EntryDesc IKSolverFullBodyBiped_get_rightHandEffector{
     .key = "IKSolverFullBodyBiped.get_rightHandEffector", .kind = pm::sdk::Kind::Method,
-    .owner = "IKSolverFullBodyBiped", .name = "get_rightHandEffector"};
+    .owner = "IKSolverFullBodyBiped", .name = "get_rightHandEffector", .type = "@IKEffector"};
 
 /// One point of the full-body solver a bone reaches for (RootMotion.FinalIK.IKEffector). Inferred: Final IK's own
 /// documentation.
@@ -375,9 +375,11 @@ struct FullBodyBipedIK {
 /// The full-body solver. `solver` below is one.
 struct IKSolverFullBodyBiped {
   /// get_leftHandEffector(solver), get_rightHandEffector(solver): an IKEffector. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::IKSolverFullBodyBiped_get_leftHandEffector, pm::api::Object(pm::api::Ref<pm::map::IKSolverFullBodyBiped>)>
+  static constexpr pm::api::Method<pm::map::IKSolverFullBodyBiped_get_leftHandEffector,
+                                   pm::api::Ref<pm::map::IKEffector>(pm::api::Ref<pm::map::IKSolverFullBodyBiped>)>
       get_leftHandEffector{};
-  static constexpr pm::api::Method<pm::map::IKSolverFullBodyBiped_get_rightHandEffector, pm::api::Object(pm::api::Ref<pm::map::IKSolverFullBodyBiped>)>
+  static constexpr pm::api::Method<pm::map::IKSolverFullBodyBiped_get_rightHandEffector,
+                                   pm::api::Ref<pm::map::IKEffector>(pm::api::Ref<pm::map::IKSolverFullBodyBiped>)>
       get_rightHandEffector{};  ///< the right hand's IKEffector
 };
 

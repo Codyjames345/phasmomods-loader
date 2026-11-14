@@ -182,11 +182,12 @@ inline constexpr pm::sdk::EntryDesc Mouse{.key = "Mouse", .name = "Mouse", .asse
 /// getter.
 inline constexpr pm::sdk::EntryDesc Mouse_get_current{.key = "Mouse.get_current", .kind = pm::sdk::Kind::Method,
                                                       .flags = pm::sdk::kStatic, .owner = "Mouse",
-                                                      .name = "get_current"};
+                                                      .name = "get_current", .type = "@Mouse"};
 
 /// The mouse's left button, a ButtonControl. Inferred: the Input System's documented property getter.
 inline constexpr pm::sdk::EntryDesc Mouse_get_leftButton{.key = "Mouse.get_leftButton", .kind = pm::sdk::Kind::Method,
-                                                         .owner = "Mouse", .name = "get_leftButton"};
+                                                         .owner = "Mouse", .name = "get_leftButton",
+                                                         .type = "@ButtonControl"};
 
 /// The mouse's scroll wheel, a DeltaControl (a Vector2Control: y up when scrolled away from the player), read with
 /// InputControl<Vector2>.ReadValue: this frame's scrolling. Inferred: the Input System's documented property getter.
@@ -257,7 +258,8 @@ inline constexpr const char* InputActionSetupExtensions_AddAction_params[] = {
 /// Input System's documented API.
 inline constexpr pm::sdk::EntryDesc InputActionSetupExtensions_AddAction{
     .key = "InputActionSetupExtensions.AddAction", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic,
-    .owner = "InputActionSetupExtensions", .name = "AddAction", .params = InputActionSetupExtensions_AddAction_params};
+    .owner = "InputActionSetupExtensions", .name = "AddAction", .type = "@InputAction",
+    .params = InputActionSetupExtensions_AddAction_params};
 
 /// Whether the action was pressed in this frame. Inferred: the Input System's documented API.
 inline constexpr pm::sdk::EntryDesc InputAction_WasPressedThisFrame{
@@ -399,13 +401,14 @@ inline constexpr const char* InputActionReference_InputAction[] = {"InputAction"
 /// A new reference to the action given. Static. Inferred: the Input System's documented API.
 inline constexpr pm::sdk::EntryDesc InputActionReference_Create{
     .key = "InputActionReference.Create", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic,
-    .owner = "InputActionReference", .name = "Create", .params = InputActionReference_InputAction};
+    .owner = "InputActionReference", .name = "Create", .type = "@InputActionReference",
+    .params = InputActionReference_InputAction};
 
 /// The action a reference names, found in its asset. Inferred: the Input System's documented API.
 inline constexpr pm::sdk::EntryDesc InputActionReference_get_action{.key = "InputActionReference.get_action",
                                                                    .kind = pm::sdk::Kind::Method,
                                                                    .owner = "InputActionReference",
-                                                                   .name = "get_action"};
+                                                                   .name = "get_action", .type = "@InputAction"};
 
 /// A game UI widget that shows the gamepad glyph of one input action (Assembly-CSharp, global namespace): the
 /// journal's and pause screen's LB and RB page tabs are ones. It holds two GamepadIcons sets, an Xbox one and a PS5
@@ -681,7 +684,7 @@ inline constexpr pm::sdk::EntryDesc Gamepad{.key = "Gamepad", .name = "Gamepad",
 /// The gamepad last used, or null when there is none. Static. Inferred: the Input System's documented API.
 inline constexpr pm::sdk::EntryDesc Gamepad_get_current{.key = "Gamepad.get_current", .kind = pm::sdk::Kind::Method,
                                                        .flags = pm::sdk::kStatic, .owner = "Gamepad",
-                                                       .name = "get_current"};
+                                                       .name = "get_current", .type = "@Gamepad"};
 
 /// The right stick, a StickControl, read with InputControl<Vector2>.ReadValue. Inferred: the Input System's documented
 /// API.
@@ -692,12 +695,12 @@ inline constexpr pm::sdk::EntryDesc Gamepad_get_rightStick{.key = "Gamepad.get_r
 /// The left shoulder button (LB, L1), a ButtonControl. Inferred: the Input System's documented property getter.
 inline constexpr pm::sdk::EntryDesc Gamepad_get_leftShoulder{.key = "Gamepad.get_leftShoulder",
                                                             .kind = pm::sdk::Kind::Method, .owner = "Gamepad",
-                                                            .name = "get_leftShoulder"};
+                                                            .name = "get_leftShoulder", .type = "@ButtonControl"};
 
 /// The right shoulder button (RB, R1), a ButtonControl. Inferred: the Input System's documented property getter.
 inline constexpr pm::sdk::EntryDesc Gamepad_get_rightShoulder{.key = "Gamepad.get_rightShoulder",
                                                              .kind = pm::sdk::Kind::Method, .owner = "Gamepad",
-                                                             .name = "get_rightShoulder"};
+                                                             .name = "get_rightShoulder", .type = "@ButtonControl"};
 
 }  // namespace pm::map
 
@@ -828,16 +831,16 @@ struct InputActionSetupExtensions {
   /// AddAction(map, name, type, binding, interactions, processors, groups, layout): the new InputAction. Unresolved:
   /// null.
   static constexpr pm::api::Method<pm::map::InputActionSetupExtensions_AddAction,
-                                   pm::api::Object(pm::api::Ref<pm::map::InputActionMap>, pm::api::Object, int32_t, pm::api::Object, pm::api::Object, pm::api::Object, pm::api::Object, pm::api::Object)>
+                                   pm::api::Ref<pm::map::InputAction>(pm::api::Ref<pm::map::InputActionMap>, pm::api::Object, int32_t, pm::api::Object, pm::api::Object, pm::api::Object, pm::api::Object, pm::api::Object)>
       AddAction{};
 };
 
 /// A reference to an action.
 struct InputActionReference {
   /// Create(action): a new reference to it. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::InputActionReference_Create, pm::api::Object(pm::api::Ref<pm::map::InputAction>)> Create{};
+  static constexpr pm::api::Method<pm::map::InputActionReference_Create, pm::api::Ref<pm::map::InputActionReference>(pm::api::Ref<pm::map::InputAction>)> Create{};
   /// get_action(reference): the InputAction, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::InputActionReference_get_action, pm::api::Object(pm::api::Ref<pm::map::InputActionReference>)> get_action{};
+  static constexpr pm::api::Method<pm::map::InputActionReference_get_action, pm::api::Ref<pm::map::InputAction>(pm::api::Ref<pm::map::InputActionReference>)> get_action{};
 };
 
 /// The game's checks of which input a player uses.
@@ -952,13 +955,13 @@ struct RebindActionUI {
 /// A gamepad.
 struct Gamepad {
   /// get_current(): the gamepad last used, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Gamepad_get_current, pm::api::Object()> get_current{};
+  static constexpr pm::api::Method<pm::map::Gamepad_get_current, pm::api::Ref<pm::map::Gamepad>()> get_current{};
   /// get_rightStick(pad): its right stick, a StickControl (read with Vector2Control::ReadValue). Unresolved: null.
   static constexpr pm::api::Method<pm::map::Gamepad_get_rightStick, pm::api::Object(pm::api::Ref<pm::map::Gamepad>)> get_rightStick{};
   /// get_leftShoulder(pad): LB, a ButtonControl. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Gamepad_get_leftShoulder, pm::api::Object(pm::api::Ref<pm::map::Gamepad>)> get_leftShoulder{};
+  static constexpr pm::api::Method<pm::map::Gamepad_get_leftShoulder, pm::api::Ref<pm::map::ButtonControl>(pm::api::Ref<pm::map::Gamepad>)> get_leftShoulder{};
   /// get_rightShoulder(pad): RB, a ButtonControl. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Gamepad_get_rightShoulder, pm::api::Object(pm::api::Ref<pm::map::Gamepad>)> get_rightShoulder{};
+  static constexpr pm::api::Method<pm::map::Gamepad_get_rightShoulder, pm::api::Ref<pm::map::ButtonControl>(pm::api::Ref<pm::map::Gamepad>)> get_rightShoulder{};
 };
 
 /// A group of input actions. `map` below is the InputActionMap.
@@ -997,9 +1000,9 @@ struct InputBinding {
 /// The mouse. `mouse` below is the Mouse.
 struct Mouse {
   /// get_current(): the mouse in use, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Mouse_get_current, pm::api::Object()> get_current{};
+  static constexpr pm::api::Method<pm::map::Mouse_get_current, pm::api::Ref<pm::map::Mouse>()> get_current{};
   /// get_leftButton(mouse): its left button, a ButtonControl. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Mouse_get_leftButton, pm::api::Object(pm::api::Ref<pm::map::Mouse>)> get_leftButton{};
+  static constexpr pm::api::Method<pm::map::Mouse_get_leftButton, pm::api::Ref<pm::map::ButtonControl>(pm::api::Ref<pm::map::Mouse>)> get_leftButton{};
   /// get_scroll(mouse): its scroll wheel, a Vector2Control (read with Vector2Control::ReadValue). Unresolved: null.
   static constexpr pm::api::Method<pm::map::Mouse_get_scroll, pm::api::Object(pm::api::Ref<pm::map::Mouse>)> get_scroll{};
 };

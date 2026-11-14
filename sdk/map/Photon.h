@@ -87,7 +87,8 @@ inline constexpr pm::sdk::EntryDesc MonoBehaviourPun{.key = "MonoBehaviourPun", 
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc MonoBehaviourPun_get_photonView{
     .key = "MonoBehaviourPun.get_photonView", .kind = pm::sdk::Kind::Method,
-    .confidence = pm::sdk::Confidence::Decompiled, .owner = "MonoBehaviourPun", .name = "get_photonView"};
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "MonoBehaviourPun", .name = "get_photonView",
+    .type = "@PhotonView"};
 
 /// The network identity of a GameObject (PhotonUnityNetworking, namespace Photon.Pun). Inferred:
 /// Photon PUN's documented API.
@@ -301,7 +302,7 @@ inline constexpr pm::sdk::EntryDesc PhotonNetwork_OnClientStateChanged{
 /// property getter.
 inline constexpr pm::sdk::EntryDesc PhotonNetwork_get_CurrentRoom{
     .key = "PhotonNetwork.get_CurrentRoom", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic,
-    .owner = "PhotonNetwork", .name = "get_CurrentRoom"};
+    .owner = "PhotonNetwork", .name = "get_CurrentRoom", .type = "@PhotonRoom"};
 
 /// Whether the room is listed in the lobby's room browser (a public room). Room declares its own getter
 /// beside RoomInfo's. A public room reads false from a contract's start until the lobby is back, because
@@ -482,7 +483,7 @@ struct PhotonNetwork {
   /// element may be a view whose engine object is gone: check it with pm::api::alive. Unresolved: null.
   static constexpr pm::api::Method<pm::map::PhotonNetwork_get_PhotonViews, pm::api::Object()> get_PhotonViews{};
   /// get_CurrentRoom(): the room this client is in, a PhotonRoom, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_CurrentRoom, pm::api::Object()> get_CurrentRoom{};
+  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_CurrentRoom, pm::api::Ref<pm::map::PhotonRoom>()> get_CurrentRoom{};
   /// RaiseEvent(code, content, options, sendOptions): raises an event with the room; `options` is a RaiseEventOptions and
   /// `sendOptions` a SendOptions, 8 bytes by value. False when PUN refuses it. Unresolved: false, nothing sent.
   static constexpr pm::api::Method<pm::map::PhotonNetwork_RaiseEvent, bool(uint8_t, pm::api::Object, pm::api::Ref<pm::map::RaiseEventOptions>, uint64_t)> RaiseEvent{};
@@ -499,7 +500,7 @@ struct PhotonPlayer {
 /// A networked MonoBehaviour. `behaviour` below is one.
 struct MonoBehaviourPun {
   /// get_photonView(behaviour): its PhotonView. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::MonoBehaviourPun_get_photonView, pm::api::Object(pm::api::Ref<pm::map::MonoBehaviourPun>)> get_photonView{};
+  static constexpr pm::api::Method<pm::map::MonoBehaviourPun_get_photonView, pm::api::Ref<pm::map::PhotonView>(pm::api::Ref<pm::map::MonoBehaviourPun>)> get_photonView{};
 };
 
 /// A GameObject's network identity. `view` below is the PhotonView.

@@ -32,7 +32,7 @@ inline constexpr pm::sdk::EntryDesc Transform_get_childCount{
 
 /// The child at an index, in the hierarchy's order. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Transform_GetChild{.key = "Transform.GetChild", .kind = pm::sdk::Kind::Method,
-                                                       .owner = "Transform", .name = "GetChild",
+                                                       .owner = "Transform", .name = "GetChild", .type = "@Transform",
                                                        .params = Transform_int};
 
 /// The Transform's index among its parent's children. Inferred: Unity's documented API.
@@ -99,7 +99,8 @@ inline constexpr pm::sdk::EntryDesc Transform_SetParent{.key = "Transform.SetPar
 
 /// The Transform's parent, or null at the scene's root. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Transform_get_parent{.key = "Transform.get_parent", .kind = pm::sdk::Kind::Method,
-                                                         .owner = "Transform", .name = "get_parent"};
+                                                         .owner = "Transform", .name = "get_parent",
+                                                         .type = "@Transform"};
 
 /// A UI object's transform (UnityEngine.CoreModule), a Transform. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc RectTransform{.key = "RectTransform", .name = "RectTransform",
@@ -278,7 +279,7 @@ struct Transform {
   /// get_childCount(transform). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::Transform_get_childCount, int32_t(pm::api::Ref<pm::map::Transform>)> get_childCount{};
   /// GetChild(transform, index). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Transform_GetChild, pm::api::Object(pm::api::Ref<pm::map::Transform>, int32_t)> GetChild{};
+  static constexpr pm::api::Method<pm::map::Transform_GetChild, pm::api::Ref<pm::map::Transform>(pm::api::Ref<pm::map::Transform>, int32_t)> GetChild{};
   /// GetSiblingIndex(transform). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::Transform_GetSiblingIndex, int32_t(pm::api::Ref<pm::map::Transform>)> GetSiblingIndex{};
   /// SetSiblingIndex(transform, index). Unresolved: does nothing.
@@ -300,7 +301,7 @@ struct Transform {
   /// SetParent(transform, parent, worldPositionStays). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Transform_SetParent, void(pm::api::Ref<pm::map::Transform>, pm::api::Ref<pm::map::Transform>, bool)> SetParent{};
   /// get_parent(transform): its parent, or null at the root. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Transform_get_parent, pm::api::Object(pm::api::Ref<pm::map::Transform>)> get_parent{};
+  static constexpr pm::api::Method<pm::map::Transform_get_parent, pm::api::Ref<pm::map::Transform>(pm::api::Ref<pm::map::Transform>)> get_parent{};
   /// get_rotation(t): its rotation in world space. Unresolved: all zero.
   static constexpr pm::api::Method<pm::map::Transform_get_rotation, Quaternion(pm::api::Ref<pm::map::Transform>)> get_rotation{};
   /// get_localPosition(t): its position relative to its parent. Unresolved: all zero.

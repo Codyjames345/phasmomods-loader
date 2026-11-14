@@ -164,7 +164,8 @@ inline constexpr pm::sdk::EntryDesc AudioClip{.key = "AudioClip", .name = "Audio
 /// Unity's documented API.
 inline constexpr pm::sdk::EntryDesc AudioClip_Create{.key = "AudioClip.Create", .kind = pm::sdk::Kind::Method,
                                                      .flags = pm::sdk::kStatic, .owner = "AudioClip",
-                                                     .name = "Create", .params = AudioClip_Create_params};
+                                                     .name = "Create", .type = "@AudioClip",
+                                                     .params = AudioClip_Create_params};
 
 /// Fills the clip with samples (a float[], -1 to 1) from a sample offset; false when it cannot.
 /// Inferred: Unity's documented API.
@@ -344,7 +345,7 @@ struct AudioClip {
   static constexpr pm::api::Type<pm::map::AudioClip> type{};
   /// Create(name, lengthSamples, channels, frequency, stream): a new clip, `name` a managed string
   /// (pm::api::make_string). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::AudioClip_Create, pm::api::Object(pm::api::Object, int32_t, int32_t, int32_t, bool)> Create{};
+  static constexpr pm::api::Method<pm::map::AudioClip_Create, pm::api::Ref<pm::map::AudioClip>(pm::api::Object, int32_t, int32_t, int32_t, bool)> Create{};
   /// SetData(clip, samples, offsetSamples): `samples` a float[] (Single::type.make_array). Unresolved:
   /// false.
   static constexpr pm::api::Method<pm::map::AudioClip_SetData, bool(pm::api::Ref<pm::map::AudioClip>, pm::api::Object, int32_t)> SetData{};

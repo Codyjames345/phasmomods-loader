@@ -20,7 +20,7 @@ inline constexpr pm::sdk::EntryDesc ConnectToServer{.key = "ConnectToServer", .n
 /// The main menu in this scene, or null. Static. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc ConnectToServer_get_Instance{
     .key = "ConnectToServer.get_Instance", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic,
-    .owner = "ConnectToServer", .name = "get_Instance"};
+    .owner = "ConnectToServer", .name = "get_Instance", .type = "@ConnectToServer"};
 
 /// The board's decoration, a List<GameObject>: what ConnectToServer.EnableMenuDecor switches. Decompiled.
 inline constexpr pm::sdk::EntryDesc ConnectToServer_menuDecor{
@@ -91,7 +91,7 @@ namespace phasmo {
 /// The main menu. `menu` below is the ConnectToServer.
 struct ConnectToServer {
   /// get_Instance(): the main menu in this scene, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::ConnectToServer_get_Instance, pm::api::Object()> get_Instance{};
+  static constexpr pm::api::Method<pm::map::ConnectToServer_get_Instance, pm::api::Ref<pm::map::ConnectToServer>()> get_Instance{};
   /// The board's decoration, a List<GameObject>: menuDecor.get(menu). Unresolved: null.
   static constexpr pm::api::Field<pm::map::ConnectToServer_menuDecor, pm::api::Object> menuDecor{};
   /// The menu's buttons and their reasons: menuObjects.get(menu). Unresolved: null.

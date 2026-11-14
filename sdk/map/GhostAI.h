@@ -11,6 +11,7 @@
 #include "entry.h"
 #include "game_api.h"
 #include "Animator.h"
+#include "Door.h"
 #include "Equipment.h"
 #include "GhostInfo.h"
 #include "GhostSenses.h"
@@ -680,7 +681,8 @@ inline constexpr pm::sdk::EntryDesc GhostActivity_NormalInteraction{
 inline constexpr pm::sdk::EntryDesc GhostActivity_GetDoorToOpen{.key = "GhostActivity.GetDoorToOpen",
                                                                 .kind = pm::sdk::Kind::Method,
                                                                 .confidence = pm::sdk::Confidence::Decompiled,
-                                                                .owner = "GhostActivity", .name = "GetDoorToOpen"};
+                                                                .owner = "GhostActivity", .name = "GetDoorToOpen",
+                                                                .type = "@Door"};
 
 // GhostActivity's private bool() methods roll its interactions. Two call GetDoorToOpen or a twin of it:
 // the door chance, which the sensor's pulse handlers call, and an uncalled copy of it.
@@ -730,7 +732,8 @@ inline constexpr pm::sdk::EntryDesc GhostActivity_GhostAbility{
 inline constexpr pm::sdk::EntryDesc GhostActivity_GetPropToThrow{.key = "GhostActivity.GetPropToThrow",
                                                                  .kind = pm::sdk::Kind::Method,
                                                                  .confidence = pm::sdk::Confidence::Decompiled,
-                                                                 .owner = "GhostActivity", .name = "GetPropToThrow"};
+                                                                 .owner = "GhostActivity", .name = "GetPropToThrow",
+                                                                 .type = "@Prop"};
 
 inline constexpr const char* GhostActivity_throwable_params[] = {"@Prop"};
 inline constexpr pm::sdk::Fact GhostActivity_throwable_facts[] = {
@@ -956,7 +959,7 @@ struct GhostActivity {
   /// Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::GhostActivity_NormalInteraction, void(pm::api::Ref<pm::map::GhostActivity>, bool)> NormalInteraction{};
   /// GetDoorToOpen(activity): a door, or null. A mod usually hooks it. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GhostActivity_GetDoorToOpen, pm::api::Object(pm::api::Ref<pm::map::GhostActivity>)> GetDoorToOpen{};
+  static constexpr pm::api::Method<pm::map::GhostActivity_GetDoorToOpen, pm::api::Ref<pm::map::Door>(pm::api::Ref<pm::map::GhostActivity>)> GetDoorToOpen{};
   /// The idle door chance: doorChance(activity). A mod usually hooks it. Unresolved: false.
   static constexpr pm::api::Method<pm::map::GhostActivity_doorChance, bool(pm::api::Ref<pm::map::GhostActivity>)> doorChance{};
   /// Its interaction sensor, a RangeSensor: interactionSensor.get(activity). Unresolved: null.
@@ -964,7 +967,7 @@ struct GhostActivity {
   /// The sensor's box half extents: sensorBox.get(activity). Unresolved: zeros.
   static constexpr pm::api::Field<pm::map::GhostActivity_sensorBox, Vector3> sensorBox{};
   /// GetPropToThrow(activity): the Prop the ghost would throw now, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GhostActivity_GetPropToThrow, pm::api::Object(pm::api::Ref<pm::map::GhostActivity>)> GetPropToThrow{};
+  static constexpr pm::api::Method<pm::map::GhostActivity_GetPropToThrow, pm::api::Ref<pm::map::Prop>(pm::api::Ref<pm::map::GhostActivity>)> GetPropToThrow{};
   /// throwable(activity, prop): GetPropToThrow's test of one Prop. Unresolved: false.
   static constexpr pm::api::Method<pm::map::GhostActivity_throwable, bool(pm::api::Ref<pm::map::GhostActivity>, pm::api::Ref<pm::map::Prop>)> throwable{};
   /// TwinInteraction(activity, flag): the Twins' second interaction, an IEnumerator to start with

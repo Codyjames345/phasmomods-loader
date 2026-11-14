@@ -19,8 +19,11 @@
 #include "PlayerSanity.h"
 #include "Props.h"
 #include "Transform.h"
+#include "UnityAudio.h"
+#include "UnityCloth.h"
 #include "UnityObject.h"
 #include "UnityUI.h"
+#include "UnityWorld.h"
 #include "entry.h"
 #include "game_api.h"
 
@@ -35,7 +38,7 @@ inline constexpr pm::sdk::EntryDesc Network{.key = "Network", .confidence = pm::
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc Network_get_Instance{
     .key = "Network.get_Instance", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
-    .flags = pm::sdk::kStatic, .owner = "Network", .name = "get_Instance"};
+    .flags = pm::sdk::kStatic, .owner = "Network", .name = "get_Instance", .type = "@Network"};
 
 /// The room's players, a List<PlayerSpot>, one spot each: Network's one list of them. Inferred: from
 /// the field's type.
@@ -314,13 +317,13 @@ inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_Move{
 /// The controller's Rigidbody: the body its physical step moves. Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_Rigidbody{
     .key = "PhysicsCharacterController.get_Rigidbody", .kind = pm::sdk::Kind::Method,
-    .owner = "PhysicsCharacterController", .name = "get_Rigidbody"};
+    .owner = "PhysicsCharacterController", .name = "get_Rigidbody", .type = "@Rigidbody"};
 
 /// The controller's CapsuleCollider: the investigator's body in the physics world, what walls and floors meet.
 /// Inferred: from its name.
 inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_CapsuleCollider{
     .key = "PhysicsCharacterController.get_CapsuleCollider", .kind = pm::sdk::Kind::Method,
-    .owner = "PhysicsCharacterController", .name = "get_CapsuleCollider"};
+    .owner = "PhysicsCharacterController", .name = "get_CapsuleCollider", .type = "@CapsuleCollider"};
 
 /// The player's journal: Player's one JournalController field. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc Player_journal{.key = "Player.journal", .kind = pm::sdk::Kind::Field, .owner = "Player",
@@ -669,7 +672,7 @@ inline constexpr pm::sdk::EntryDesc Network_GetPlayerFromPhotonPlayer{
 /// up to three callers up. Decompiled.
 inline constexpr pm::sdk::EntryDesc Network_GetSpotPlayerFromPhotonPlayer{
     .key = "Network.GetSpotPlayerFromPhotonPlayer", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
-    .owner = "Network", .name = "GetSpotPlayerFromPhotonPlayer"};
+    .owner = "Network", .name = "GetSpotPlayerFromPhotonPlayer", .type = "@PlayerSpot"};
 
 /// A Photon player's position in Network.playerSpots: it calls Network.GetSpotPlayerFromPhotonPlayer and answers 0
 /// when that answers null, otherwise the list's IndexOf of that spot, which is -1 for a spot not in the list.
@@ -1156,7 +1159,8 @@ inline constexpr pm::sdk::EntryDesc PlayerAudio_loudness{.key = "PlayerAudio.lou
 /// Decompiled.
 inline constexpr pm::sdk::EntryDesc PlayerAudio_GetPlayerVoiceAudioSource{
     .key = "PlayerAudio.GetPlayerVoiceAudioSource", .kind = pm::sdk::Kind::Method,
-    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PlayerAudio", .name = "GetPlayerVoiceAudioSource"};
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PlayerAudio", .name = "GetPlayerVoiceAudioSource",
+    .type = "@AudioSource"};
 
 /// The PC player's hands (Assembly-CSharp, global namespace): its input handlers for picking up, using, dropping and
 /// switching items, and the slot in front of the camera the held item hangs in on its own client. Inferred: from the
@@ -1168,7 +1172,7 @@ inline constexpr pm::sdk::EntryDesc PCPropGrab{.key = "PCPropGrab", .name = "PCP
 /// Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc PCPropGrab_GetItemInCameraSlot{
     .key = "PCPropGrab.GetItemInCameraSlot", .kind = pm::sdk::Kind::Method, .owner = "PCPropGrab",
-    .name = "GetItemInCameraSlot"};
+    .name = "GetItemInCameraSlot", .type = "@PhotonObjectInteract"};
 
 inline constexpr const char* PCPropGrab_PhotonObjectInteract[] = {"PhotonObjectInteract"};
 
@@ -1284,7 +1288,7 @@ namespace phasmo {
 /// The game's networking hub. `network` below is the Network.
 struct Network {
   /// The one Network: get_Instance(), or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Network_get_Instance, pm::api::Object()> get_Instance{};
+  static constexpr pm::api::Method<pm::map::Network_get_Instance, pm::api::Ref<pm::map::Network>()> get_Instance{};
   /// The room's players, a List<PlayerSpot>: playerSpots.get(network), read as a pm::api::List.
   /// Unresolved: null.
   static constexpr pm::api::Field<pm::map::Network_playerSpots, pm::api::Object> playerSpots{};
@@ -1302,7 +1306,8 @@ struct Network {
       GetPlayerFromPhotonPlayer{};
   /// GetSpotPlayerFromPhotonPlayer(network, photonPlayer): that Photon player's PlayerSpot, or null (map
   /// note). A mod hooks it: Network.GetPlayerFromPhotonPlayer calls it. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Network_GetSpotPlayerFromPhotonPlayer, pm::api::Object(pm::api::Ref<pm::map::Network>, pm::api::Object)>
+  static constexpr pm::api::Method<pm::map::Network_GetSpotPlayerFromPhotonPlayer,
+                                   pm::api::Ref<pm::map::PlayerSpot>(pm::api::Ref<pm::map::Network>, pm::api::Object)>
       GetSpotPlayerFromPhotonPlayer{};
   /// OnPlayerLeftRoom(network, photonPlayer): Photon's callback for a leaver (map note). A mod hooks it.
   /// Unresolved: does nothing.
@@ -1364,7 +1369,8 @@ struct PlayerAudio {
   /// How loud the player talks, the value IsTalkingLoudly compares: loudness.get(audio). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::PlayerAudio_loudness, float> loudness{};
   /// GetPlayerVoiceAudioSource(audio): the positional voice's AudioSource, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PlayerAudio_GetPlayerVoiceAudioSource, pm::api::Object(pm::api::Ref<pm::map::PlayerAudio>)>
+  static constexpr pm::api::Method<pm::map::PlayerAudio_GetPlayerVoiceAudioSource,
+                                   pm::api::Ref<pm::map::AudioSource>(pm::api::Ref<pm::map::PlayerAudio>)>
       GetPlayerVoiceAudioSource{};
 };
 
@@ -1500,9 +1506,11 @@ struct PhysicsCharacterController {
   /// hooks it to read or replace the walk. Local only. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PhysicsCharacterController_Move, void(pm::api::Ref<pm::map::PhysicsCharacterController>, Vector3)> Move{};
   /// get_Rigidbody(controller): the body its step moves. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_Rigidbody, pm::api::Object(pm::api::Ref<pm::map::PhysicsCharacterController>)> get_Rigidbody{};
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_Rigidbody,
+                                   pm::api::Ref<pm::map::Rigidbody>(pm::api::Ref<pm::map::PhysicsCharacterController>)> get_Rigidbody{};
   /// get_CapsuleCollider(controller): the investigator's collider. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_CapsuleCollider, pm::api::Object(pm::api::Ref<pm::map::PhysicsCharacterController>)>
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_CapsuleCollider,
+                                   pm::api::Ref<pm::map::CapsuleCollider>(pm::api::Ref<pm::map::PhysicsCharacterController>)>
       get_CapsuleCollider{};
   /// What blocks the player, as an int layer mask: collisionMask.get(controller). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::PhysicsCharacterController_collisionMask, int32_t> collisionMask{};
@@ -1542,7 +1550,7 @@ struct PCPropGrab {
   /// The camera the interact ray starts from: playerCam.get(grab). Unresolved: null.
   static constexpr pm::api::Field<pm::map::PCPropGrab_playerCam, pm::api::Ref<pm::map::Camera>> playerCam{};
   /// GetItemInCameraSlot(grab): the held item, a PhotonObjectInteract, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PCPropGrab_GetItemInCameraSlot, pm::api::Object(pm::api::Ref<pm::map::PCPropGrab>)> GetItemInCameraSlot{};
+  static constexpr pm::api::Method<pm::map::PCPropGrab_GetItemInCameraSlot, pm::api::Ref<pm::map::PhotonObjectInteract>(pm::api::Ref<pm::map::PCPropGrab>)> GetItemInCameraSlot{};
   /// ParentItemOnLocalPlayer(grab, item): puts the item back in the camera slot. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PCPropGrab_ParentItemOnLocalPlayer, void(pm::api::Ref<pm::map::PCPropGrab>, pm::api::Ref<pm::map::PhotonObjectInteract>)>
       ParentItemOnLocalPlayer{};

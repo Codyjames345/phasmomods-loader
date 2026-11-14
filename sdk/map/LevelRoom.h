@@ -7,6 +7,7 @@
 #include "game_api.h"
 #include "Transform.h"
 #include "UnityObject.h"
+#include "UnityWorld.h"
 
 namespace pm::map {
 
@@ -193,7 +194,7 @@ inline constexpr pm::sdk::EntryDesc Collider_get_enabled{.key = "Collider.get_en
 /// documented property getter.
 inline constexpr pm::sdk::EntryDesc Collider_get_attachedRigidbody{.key = "Collider.get_attachedRigidbody",
                                                                    .kind = pm::sdk::Kind::Method, .owner = "Collider",
-                                                                   .name = "get_attachedRigidbody"};
+                                                                   .name = "get_attachedRigidbody", .type = "@Rigidbody"};
 
 }  // namespace pm::map
 
@@ -274,7 +275,7 @@ struct Collider {
   /// get_enabled(collider): whether it takes part in physics. Unresolved: false.
   static constexpr pm::api::Method<pm::map::Collider_get_enabled, bool(pm::api::Ref<pm::map::Collider>)> get_enabled{};
   /// get_attachedRigidbody(collider): the Rigidbody it moves with. Unresolved or none: null.
-  static constexpr pm::api::Method<pm::map::Collider_get_attachedRigidbody, pm::api::Object(pm::api::Ref<pm::map::Collider>)> get_attachedRigidbody{};
+  static constexpr pm::api::Method<pm::map::Collider_get_attachedRigidbody, pm::api::Ref<pm::map::Rigidbody>(pm::api::Ref<pm::map::Collider>)> get_attachedRigidbody{};
 };
 
 /// @}

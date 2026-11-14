@@ -18,7 +18,7 @@ inline constexpr pm::sdk::EntryDesc LevelStats_get_Instance{.key = "LevelStats.g
                                                             .kind = pm::sdk::Kind::Method,
                                                             .confidence = pm::sdk::Confidence::Decompiled,
                                                             .flags = pm::sdk::kStatic, .owner = "LevelStats",
-                                                            .name = "get_Instance"};
+                                                            .name = "get_Instance", .type = "@LevelStats"};
 
 /// How many times the favourite room changed: GhostController.ChangeFavouriteRoomTo counts each move in it.
 /// Decompiled.
@@ -75,7 +75,7 @@ struct LevelStats {
   /// and false.
   static constexpr pm::api::Type<pm::map::LevelStats> type{};
   /// The statistics' instance: get_Instance(), or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::LevelStats_get_Instance, pm::api::Object()> get_Instance{};
+  static constexpr pm::api::Method<pm::map::LevelStats_get_Instance, pm::api::Ref<pm::map::LevelStats>()> get_Instance{};
   /// How many times the favourite room changed: roomsChanged.get(stats), .set(stats, n). Unresolved: 0,
   /// writes nothing.
   static constexpr pm::api::Field<pm::map::LevelStats_roomsChanged, int32_t> roomsChanged{};

@@ -28,13 +28,14 @@ inline constexpr pm::sdk::EntryDesc Renderer{.key = "Renderer", .name = "Rendere
 /// getter.
 inline constexpr pm::sdk::EntryDesc Renderer_get_sharedMaterial{
     .key = "Renderer.get_sharedMaterial", .kind = pm::sdk::Kind::Method, .owner = "Renderer",
-    .name = "get_sharedMaterial"};
+    .name = "get_sharedMaterial", .type = "@Material"};
 
 /// The renderer's own material: the first call gives the renderer a copy of the shared one, so a
 /// change shows on this renderer alone. Candle.Update melts the wax through it (read in its decompiled
 /// code). Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Renderer_get_material{.key = "Renderer.get_material", .kind = pm::sdk::Kind::Method,
-                                                          .owner = "Renderer", .name = "get_material"};
+                                                          .owner = "Renderer", .name = "get_material",
+                                                          .type = "@Material"};
 
 /// Whether the renderer draws. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Renderer_get_enabled{.key = "Renderer.get_enabled", .kind = pm::sdk::Kind::Method,
@@ -179,7 +180,7 @@ inline constexpr pm::sdk::EntryDesc Material{.key = "Material", .name = "Materia
 /// of Material.GetTexture. Inferred: from its name, beside Unity's documented GetTexture.
 inline constexpr pm::sdk::EntryDesc Material_GetTextureImpl{
     .key = "Material.GetTextureImpl", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kOptional, .owner = "Material",
-    .name = "GetTextureImpl", .params = UnityRendering_int};
+    .name = "GetTextureImpl", .type = "@Texture", .params = UnityRendering_int};
 
 inline constexpr const char* Material_SetTextureImpl_params[] = {"int", "Texture"};
 
@@ -395,7 +396,8 @@ inline constexpr const char* RenderTexture_GetTemporary_params[] = {"int", "int"
 /// give it back with ReleaseTemporary. Static. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc RenderTexture_GetTemporary{
     .key = "RenderTexture.GetTemporary", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic | pm::sdk::kOptional,
-    .owner = "RenderTexture", .name = "GetTemporary", .params = RenderTexture_GetTemporary_params};
+    .owner = "RenderTexture", .name = "GetTemporary", .type = "@RenderTexture",
+    .params = RenderTexture_GetTemporary_params};
 
 /// Gives a temporary render texture back to the pool. Static. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc RenderTexture_ReleaseTemporary{
@@ -406,7 +408,7 @@ inline constexpr pm::sdk::EntryDesc RenderTexture_ReleaseTemporary{
 /// documented property getter.
 inline constexpr pm::sdk::EntryDesc RenderTexture_get_active{
     .key = "RenderTexture.get_active", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic | pm::sdk::kOptional,
-    .owner = "RenderTexture", .name = "get_active"};
+    .owner = "RenderTexture", .name = "get_active", .type = "@RenderTexture"};
 
 /// Sets the active render texture. Static. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc RenderTexture_set_active{
@@ -614,9 +616,9 @@ struct Renderer {
   /// The Renderer type: type_object() for Component.GetComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Renderer> type{};
   /// get_sharedMaterial(renderer). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Renderer_get_sharedMaterial, pm::api::Object(pm::api::Ref<pm::map::Renderer>)> get_sharedMaterial{};
+  static constexpr pm::api::Method<pm::map::Renderer_get_sharedMaterial, pm::api::Ref<pm::map::Material>(pm::api::Ref<pm::map::Renderer>)> get_sharedMaterial{};
   /// get_material(renderer): its own material. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Renderer_get_material, pm::api::Object(pm::api::Ref<pm::map::Renderer>)> get_material{};
+  static constexpr pm::api::Method<pm::map::Renderer_get_material, pm::api::Ref<pm::map::Material>(pm::api::Ref<pm::map::Renderer>)> get_material{};
   /// get_enabled(renderer). Unresolved: false.
   static constexpr pm::api::Method<pm::map::Renderer_get_enabled, bool(pm::api::Ref<pm::map::Renderer>)> get_enabled{};
   /// set_enabled(renderer, on). Unresolved: does nothing.
@@ -741,7 +743,7 @@ inline constexpr pm::api::EnumValue<pm::map::LightType_Point> Point{};
 /// A material. `material` below is the Material, `id` a property id from Shader::PropertyToID.
 struct Material {
   /// GetTextureImpl(material, id). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Material_GetTextureImpl, pm::api::Object(pm::api::Ref<pm::map::Material>, int32_t)> GetTextureImpl{};
+  static constexpr pm::api::Method<pm::map::Material_GetTextureImpl, pm::api::Ref<pm::map::Texture>(pm::api::Ref<pm::map::Material>, int32_t)> GetTextureImpl{};
   /// SetTextureImpl(material, id, texture). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Material_SetTextureImpl, void(pm::api::Ref<pm::map::Material>, int32_t, pm::api::Ref<pm::map::Texture>)> SetTextureImpl{};
   /// HasProperty(material, id). Unresolved: false.
@@ -861,12 +863,12 @@ inline constexpr pm::api::EnumValue<pm::map::RenderTextureReadWrite_sRGB> sRGB{}
 struct RenderTexture {
   /// GetTemporary(width, height, depthBits, format, readWrite). Unresolved: null.
   static constexpr pm::api::Method<pm::map::RenderTexture_GetTemporary,
-                                   pm::api::Object(int32_t, int32_t, int32_t, int32_t, int32_t)>
+                                   pm::api::Ref<pm::map::RenderTexture>(int32_t, int32_t, int32_t, int32_t, int32_t)>
       GetTemporary{};
   /// ReleaseTemporary(renderTexture). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::RenderTexture_ReleaseTemporary, void(pm::api::Object)> ReleaseTemporary{};
   /// get_active(). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::RenderTexture_get_active, pm::api::Object()> get_active{};
+  static constexpr pm::api::Method<pm::map::RenderTexture_get_active, pm::api::Ref<pm::map::RenderTexture>()> get_active{};
   /// set_active(renderTexture), null for the screen. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::RenderTexture_set_active, void(pm::api::Object)> set_active{};
 };

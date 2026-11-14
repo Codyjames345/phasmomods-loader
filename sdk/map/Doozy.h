@@ -125,7 +125,7 @@ inline constexpr pm::sdk::EntryDesc ModyEvent_Event{.key = "ModyEvent.Event", .k
 /// selection and goes to normal instead. The Selectable's own transitions call it. Decompiled.
 inline constexpr pm::sdk::EntryDesc UISelectable_SetState{
     .key = "UISelectable.SetState", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
-    .owner = "UISelectable", .name = "SetState"};
+    .owner = "UISelectable", .name = "SetState", .type = "@UISelectable"};
 
 /// The colour animator of a taped button (DoozyRuntime, namespace Doozy.Runtime.UIManager.Animators), which holds its
 /// UISelectable: as it switches on, a coroutine adds a listener on the control's selection-state event, and the
@@ -211,7 +211,7 @@ struct UISelectable {
   static constexpr pm::api::Method<pm::map::UISelectable_GetBehaviour, pm::api::Object(pm::api::Ref<pm::map::UISelectable>, int32_t)> GetBehaviour{};
   /// SetState(control, state): 0 normal, 1 highlighted, 2 pressed, 3 selected, 4 disabled; returns the control.
   /// Unresolved: null.
-  static constexpr pm::api::Method<pm::map::UISelectable_SetState, pm::api::Object(pm::api::Ref<pm::map::UISelectable>, int32_t)> SetState{};
+  static constexpr pm::api::Method<pm::map::UISelectable_SetState, pm::api::Ref<pm::map::UISelectable>(pm::api::Ref<pm::map::UISelectable>, int32_t)> SetState{};
 };
 
 /// A control's list of behaviours. `behaviours` below is one.

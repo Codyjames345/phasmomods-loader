@@ -321,7 +321,7 @@ inline constexpr pm::sdk::EntryDesc RaycastHit{.key = "RaycastHit", .name = "Ray
 /// getter.
 inline constexpr pm::sdk::EntryDesc RaycastHit_get_transform{.key = "RaycastHit.get_transform",
                                                              .kind = pm::sdk::Kind::Method, .owner = "RaycastHit",
-                                                             .name = "get_transform"};
+                                                             .name = "get_transform", .type = "@Transform"};
 
 /// How far along the ray the hit lies, in metres. An instance method of the struct: it takes the struct's address.
 /// Inferred: Unity's documented property getter.
@@ -512,7 +512,7 @@ struct RaycastHit {
   /// The type: klass(), make_array(n) (an array's stride is the struct's size). Unresolved: null.
   static constexpr pm::api::Type<pm::map::RaycastHit> type{};
   /// get_transform(hit): the Transform of what it hit. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::RaycastHit_get_transform, pm::api::Object(pm::api::Ref<pm::map::RaycastHit>)> get_transform{};
+  static constexpr pm::api::Method<pm::map::RaycastHit_get_transform, pm::api::Ref<pm::map::Transform>(pm::api::Ref<pm::map::RaycastHit>)> get_transform{};
   /// get_distance(hit): metres along the ray. Unresolved: 0.
   static constexpr pm::api::Method<pm::map::RaycastHit_get_distance, float(pm::api::Ref<pm::map::RaycastHit>)> get_distance{};
 };

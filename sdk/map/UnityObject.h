@@ -188,7 +188,8 @@ inline constexpr pm::sdk::EntryDesc Component_get_tag{.key = "Component.get_tag"
 
 /// The component's GameObject. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Component_get_gameObject{
-    .key = "Component.get_gameObject", .kind = pm::sdk::Kind::Method, .owner = "Component", .name = "get_gameObject"};
+    .key = "Component.get_gameObject", .kind = pm::sdk::Kind::Method, .owner = "Component",
+    .name = "get_gameObject", .type = "@GameObject"};
 
 /// The GameObject's first component of the System.Type given, or null. Inferred: Unity's documented
 /// API (the overload taking a Type).
@@ -322,7 +323,7 @@ struct Component {
   /// get_tag(component): its GameObject's tag, a managed string (pm::api::to_utf8). Unresolved: null.
   static constexpr pm::api::Method<pm::map::Component_get_tag, pm::api::Object(pm::api::Ref<pm::map::Component>)> get_tag{};
   /// get_gameObject(component). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Component_get_gameObject, pm::api::Object(pm::api::Ref<pm::map::Component>)> get_gameObject{};
+  static constexpr pm::api::Method<pm::map::Component_get_gameObject, pm::api::Ref<pm::map::GameObject>(pm::api::Ref<pm::map::Component>)> get_gameObject{};
   /// GetComponent(component, systemType): systemType is a Type wrapper's type_object(). Unresolved: null.
   static constexpr pm::api::Method<pm::map::Component_GetComponent, pm::api::Object(pm::api::Ref<pm::map::Component>, pm::api::Object)> GetComponent{};
   /// GetComponentInChildren(component, systemType, includeInactive). Unresolved: null.

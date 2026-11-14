@@ -252,7 +252,7 @@ inline constexpr pm::sdk::EntryDesc LevelValues_get_Instance{.key = "LevelValues
                                                              .kind = pm::sdk::Kind::Method,
                                                              .confidence = pm::sdk::Confidence::Decompiled,
                                                              .flags = pm::sdk::kStatic, .owner = "LevelValues",
-                                                             .name = "get_Instance"};
+                                                             .name = "get_Instance", .type = "@LevelValues"};
 
 /// The one LevelValues: the class's one static field of its own type, which get_Instance returns
 /// (making one first when it is null or destroyed). Reading it makes nothing. Decompiled.
@@ -806,7 +806,7 @@ struct ES3UserType_Difficulty {
 struct LevelValues {
   /// The one LevelValues: get_Instance(). Reading it while no LevelValues exists makes one, so call it
   /// while the game plays. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::LevelValues_get_Instance, pm::api::Object()> get_Instance{};
+  static constexpr pm::api::Method<pm::map::LevelValues_get_Instance, pm::api::Ref<pm::map::LevelValues>()> get_Instance{};
   /// The contract's difficulty: difficulty.get(values). Unresolved: null.
   static constexpr pm::api::Field<pm::map::LevelValues_difficulty, pm::api::Ref<pm::map::Difficulty>> difficulty{};
   /// Whether the ghost's ability may not end in an event now: eventsBlocked.get(values). Unresolved:

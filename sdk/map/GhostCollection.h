@@ -31,7 +31,7 @@ inline constexpr pm::sdk::EntryDesc GhostCollection_ghosts{.key = "GhostCollecti
 inline constexpr pm::sdk::EntryDesc GhostCollection_GetGhostOfType{
     .key = "GhostCollection.GetGhostOfType", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostCollection", .name = "GetGhostOfType",
-    .params = GhostCollection_GetGhostOfType_params};
+    .type = "@GhostData", .params = GhostCollection_GetGhostOfType_params};
 
 /// The type roll's weights: a new Dictionary<GhostType, int> holding a weight of 1 for the type of every GhostData in
 /// ghosts, a custom ghost the host put there included. GhostController.Spawn takes some types out of it and lays
@@ -107,7 +107,7 @@ struct GhostCollection {
   /// The List<GhostData>, a managed reference: ghosts.get(collection). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GhostCollection_ghosts, pm::api::Object> ghosts{};
   /// The GhostData of a type, or null: GetGhostOfType(collection, type). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GhostCollection_GetGhostOfType, pm::api::Object(pm::api::Ref<pm::map::GhostCollection>, int32_t)> GetGhostOfType{};
+  static constexpr pm::api::Method<pm::map::GhostCollection_GetGhostOfType, pm::api::Ref<pm::map::GhostData>(pm::api::Ref<pm::map::GhostCollection>, int32_t)> GetGhostOfType{};
   /// The roll's default weights, a new Dictionary<GhostType, int> (a managed reference) with 1 for every type in the
   /// collection: GetDefaultWeightedGhostList(collection). Read its entries with pm::api::dictionary_entries. Main
   /// thread, any client. Unresolved: null.

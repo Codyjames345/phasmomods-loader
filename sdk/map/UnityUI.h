@@ -151,7 +151,8 @@ inline constexpr pm::sdk::EntryDesc Canvas_get_scaleFactor{.key = "Canvas.get_sc
 
 /// The camera a canvas that is not drawn over the screen is seen through. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Canvas_get_worldCamera{.key = "Canvas.get_worldCamera", .kind = pm::sdk::Kind::Method,
-                                                           .owner = "Canvas", .name = "get_worldCamera"};
+                                                           .owner = "Canvas", .name = "get_worldCamera",
+                                                           .type = "@Camera"};
 
 /// Whether the control takes input, virtual: Button.Press asks it after IsActive. Decompiled.
 inline constexpr pm::sdk::EntryDesc Selectable_IsInteractable{
@@ -174,7 +175,7 @@ inline constexpr pm::sdk::EntryDesc Selectable_set_interactable{
 /// The Graphic the control tints as its state changes. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Selectable_get_targetGraphic{
     .key = "Selectable.get_targetGraphic", .kind = pm::sdk::Kind::Method, .owner = "Selectable",
-    .name = "get_targetGraphic"};
+    .name = "get_targetGraphic", .type = "@Graphic"};
 
 /// Sets the Graphic the control tints. Inferred: Unity's documented property setter.
 inline constexpr pm::sdk::EntryDesc Selectable_set_targetGraphic{
@@ -242,7 +243,8 @@ inline constexpr pm::sdk::EntryDesc EventSystem{.key = "EventSystem", .name = "E
 /// The event system in use, or null. Static. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc EventSystem_get_current{.key = "EventSystem.get_current",
                                                             .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kStatic,
-                                                            .owner = "EventSystem", .name = "get_current"};
+                                                            .owner = "EventSystem", .name = "get_current",
+                                                            .type = "@EventSystem"};
 
 /// The input module the event system runs, a BaseInputModule (a Behaviour), or null. The game switches
 /// it on while a player's journal is open. Inferred: Unity's source.
@@ -258,7 +260,7 @@ inline constexpr const char* EventSystem_GameObject[] = {"GameObject"};
 /// getter.
 inline constexpr pm::sdk::EntryDesc EventSystem_get_currentSelectedGameObject{
     .key = "EventSystem.get_currentSelectedGameObject", .kind = pm::sdk::Kind::Method, .owner = "EventSystem",
-    .name = "get_currentSelectedGameObject"};
+    .name = "get_currentSelectedGameObject", .type = "@GameObject"};
 
 /// SetSelectedGameObject(go): moves the keyboard and gamepad selection to go, so the input module's
 /// navigation starts from it; null clears the selection. Inferred: Unity's documented method.
@@ -375,7 +377,8 @@ inline constexpr pm::sdk::EntryDesc Graphic_set_raycastTarget{.key = "Graphic.se
 /// The CanvasRenderer that draws the graphic. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Graphic_get_canvasRenderer{.key = "Graphic.get_canvasRenderer",
                                                                .kind = pm::sdk::Kind::Method, .owner = "Graphic",
-                                                               .name = "get_canvasRenderer"};
+                                                               .name = "get_canvasRenderer",
+                                                               .type = "@CanvasRenderer"};
 
 /// What draws a Graphic on its canvas (UnityEngine.UIModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc CanvasRenderer{.key = "CanvasRenderer", .name = "CanvasRenderer",
@@ -572,7 +575,8 @@ inline constexpr pm::sdk::EntryDesc TMP_Text_set_font{.key = "TMP_Text.set_font"
 inline constexpr pm::sdk::EntryDesc TMP_Text_get_fontSharedMaterial{.key = "TMP_Text.get_fontSharedMaterial",
                                                                     .kind = pm::sdk::Kind::Method,
                                                                     .owner = "TMP_Text",
-                                                                    .name = "get_fontSharedMaterial"};
+                                                                    .name = "get_fontSharedMaterial",
+                                                                    .type = "@Material"};
 
 /// Sets the material its font is drawn with. Inferred: TextMeshPro's documented property setter.
 inline constexpr pm::sdk::EntryDesc TMP_Text_set_fontSharedMaterial{.key = "TMP_Text.set_fontSharedMaterial",
@@ -691,7 +695,7 @@ struct Canvas {
   /// The type: type_object() (for AddComponent). Unresolved: null.
   static constexpr pm::api::Type<pm::map::Canvas> type{};
   /// get_worldCamera(canvas): the camera it is seen through, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Canvas_get_worldCamera, pm::api::Object(pm::api::Ref<pm::map::Canvas>)> get_worldCamera{};
+  static constexpr pm::api::Method<pm::map::Canvas_get_worldCamera, pm::api::Ref<pm::map::Camera>(pm::api::Ref<pm::map::Canvas>)> get_worldCamera{};
 };
 
 /// Unity's base of the controls. `control` below is one.
@@ -703,7 +707,7 @@ struct Selectable {
   /// set_interactable(control, on). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Selectable_set_interactable, void(pm::api::Ref<pm::map::Selectable>, bool)> set_interactable{};
   /// get_targetGraphic(control): the Graphic it tints, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Selectable_get_targetGraphic, pm::api::Object(pm::api::Ref<pm::map::Selectable>)> get_targetGraphic{};
+  static constexpr pm::api::Method<pm::map::Selectable_get_targetGraphic, pm::api::Ref<pm::map::Graphic>(pm::api::Ref<pm::map::Selectable>)> get_targetGraphic{};
   /// set_targetGraphic(control, graphic). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Selectable_set_targetGraphic, void(pm::api::Ref<pm::map::Selectable>, pm::api::Object)> set_targetGraphic{};
 
@@ -718,7 +722,7 @@ struct Selectable {
 /// Unity's UI event system.
 struct EventSystem {
   /// get_current(): the event system in use, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::EventSystem_get_current, pm::api::Object()> get_current{};
+  static constexpr pm::api::Method<pm::map::EventSystem_get_current, pm::api::Ref<pm::map::EventSystem>()> get_current{};
   /// Its input module, a Behaviour: currentInputModule.get(system), or null. Unresolved: null.
   static constexpr pm::api::Field<pm::map::EventSystem_currentInputModule, pm::api::Object> currentInputModule{};
   /// SetSelectedGameObject(system, go): moves the keyboard and gamepad selection to go; null clears it.
@@ -726,7 +730,8 @@ struct EventSystem {
   static constexpr pm::api::Method<pm::map::EventSystem_SetSelectedGameObject, void(pm::api::Ref<pm::map::EventSystem>, pm::api::Ref<pm::map::GameObject>)>
       SetSelectedGameObject{};
   /// get_currentSelectedGameObject(system): the GameObject the selection is on, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::EventSystem_get_currentSelectedGameObject, pm::api::Object(pm::api::Ref<pm::map::EventSystem>)>
+  static constexpr pm::api::Method<pm::map::EventSystem_get_currentSelectedGameObject,
+                                   pm::api::Ref<pm::map::GameObject>(pm::api::Ref<pm::map::EventSystem>)>
       get_currentSelectedGameObject{};
 };
 
@@ -812,7 +817,7 @@ struct Graphic {
   /// set_raycastTarget(graphic, on): whether it catches the pointer. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Graphic_set_raycastTarget, void(pm::api::Ref<pm::map::Graphic>, bool)> set_raycastTarget{};
   /// get_canvasRenderer(graphic): what draws it. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Graphic_get_canvasRenderer, pm::api::Object(pm::api::Ref<pm::map::Graphic>)> get_canvasRenderer{};
+  static constexpr pm::api::Method<pm::map::Graphic_get_canvasRenderer, pm::api::Ref<pm::map::CanvasRenderer>(pm::api::Ref<pm::map::Graphic>)> get_canvasRenderer{};
 };
 
 /// What draws a Graphic. `renderer` below is the CanvasRenderer.
@@ -931,7 +936,7 @@ struct TMP_Text {
   /// set_font(text, font). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::TMP_Text_set_font, void(pm::api::Ref<pm::map::TMP_Text>, pm::api::Object)> set_font{};
   /// get_fontSharedMaterial(text): its font's shared material. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::TMP_Text_get_fontSharedMaterial, pm::api::Object(pm::api::Ref<pm::map::TMP_Text>)> get_fontSharedMaterial{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_get_fontSharedMaterial, pm::api::Ref<pm::map::Material>(pm::api::Ref<pm::map::TMP_Text>)> get_fontSharedMaterial{};
   /// set_fontSharedMaterial(text, material). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::TMP_Text_set_fontSharedMaterial, void(pm::api::Ref<pm::map::TMP_Text>, pm::api::Object)>
       set_fontSharedMaterial{};

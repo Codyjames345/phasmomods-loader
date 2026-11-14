@@ -234,7 +234,7 @@ inline constexpr pm::sdk::EntryDesc Animator_Update{.key = "Animator.Update", .k
 /// Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Animator_GetBoneTransform{
     .key = "Animator.GetBoneTransform", .kind = pm::sdk::Kind::Method, .owner = "Animator",
-    .name = "GetBoneTransform", .params = Animator_HumanBodyBones};
+    .name = "GetBoneTransform", .type = "@Transform", .params = Animator_HumanBodyBones};
 
 /// Whether the clips' root motion moves the model's Transform. A mod that moves the model itself turns it off.
 /// Inferred: Unity's documented property setter.
@@ -398,7 +398,7 @@ struct Animator {
   /// get_isInitialized(animator). Unresolved: false.
   static constexpr pm::api::Icall<pm::map::Animator_get_isInitialized, bool(pm::api::Object)> get_isInitialized{};
   /// GetBoneTransform(animator, bone), a HumanBodyBones number. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Animator_GetBoneTransform, pm::api::Object(pm::api::Ref<pm::map::Animator>, int32_t)> GetBoneTransform{};
+  static constexpr pm::api::Method<pm::map::Animator_GetBoneTransform, pm::api::Ref<pm::map::Transform>(pm::api::Ref<pm::map::Animator>, int32_t)> GetBoneTransform{};
   /// set_applyRootMotion(animator, on). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Animator_set_applyRootMotion, void(pm::api::Ref<pm::map::Animator>, bool)> set_applyRootMotion{};
   /// set_cullingMode(animator, mode), an AnimatorCullingMode number. Unresolved: does nothing.

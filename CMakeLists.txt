@@ -686,6 +686,8 @@ target_include_directories(ref_test PRIVATE sdk/api sdk/map sdk/fake sdk/runtime
 pm_test(typed_wrapper sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp
   sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
 target_include_directories(typed_wrapper_test PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# Compile-time: each getter entry 0b-2c gave a `type` has a wrapper returning that handle.
+pm_test(getter_returns_are_typed)
 pm_test(content sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp host/content_types.cpp
   host/content_text.cpp host/content_evidence.cpp

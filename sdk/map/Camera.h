@@ -6,6 +6,7 @@
 #include "Transform.h"
 #include "game_api.h"
 #include "UnityObject.h"
+#include "UnityRendering.h"
 
 namespace pm::map {
 
@@ -63,7 +64,7 @@ inline constexpr pm::sdk::EntryDesc Camera_get_allCameras{.key = "Camera.get_all
 /// Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Camera_get_targetTexture{
     .key = "Camera.get_targetTexture", .kind = pm::sdk::Kind::Method, .flags = pm::sdk::kOptional, .owner = "Camera",
-    .name = "get_targetTexture"};
+    .name = "get_targetTexture", .type = "@RenderTexture"};
 
 /// The ray from the camera through a point of its viewport (x and y 0 to 1 from the bottom left), the
 /// overload without an eye. Optional. Inferred: Unity's documented API.
@@ -139,7 +140,7 @@ struct Camera {
   /// nothing.
   static constexpr pm::api::Method<pm::map::Camera_set_farClipPlane, void(pm::api::Ref<pm::map::Camera>, float)> set_farClipPlane{};
   /// The RenderTexture it draws into, or null: get_targetTexture(camera). Optional. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Camera_get_targetTexture, pm::api::Object(pm::api::Ref<pm::map::Camera>)> get_targetTexture{};
+  static constexpr pm::api::Method<pm::map::Camera_get_targetTexture, pm::api::Ref<pm::map::RenderTexture>(pm::api::Ref<pm::map::Camera>)> get_targetTexture{};
   /// The ray through a viewport point: ViewportPointToRay(camera, point). Optional. Unresolved: all zero.
   static constexpr pm::api::Method<pm::map::Camera_ViewportPointToRay, Ray(pm::api::Ref<pm::map::Camera>, Vector3)> ViewportPointToRay{};
   /// Where `world` lies in the viewport: WorldToViewportPoint(camera, world). Optional. Unresolved: all
