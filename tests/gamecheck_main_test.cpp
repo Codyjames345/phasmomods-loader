@@ -21,6 +21,15 @@ bool pm::sdk::load_dump(const std::filesystem::path&, std::span<const std::strin
   throw std::runtime_error("the disk went away");
 }
 
+// The method-table reader and applier of this test: the check always throws in load_dump above before
+// it reaches the method tables, so these are only what the link needs.
+bool pm::sdk::read_method_tables(std::span<const uint8_t>, std::span<const std::string>, MethodTables&, std::string&) {
+  throw std::runtime_error("the dump reader threw first");
+}
+void pm::sdk::apply_method_tables(const MethodTables&, GameModel&) {
+  throw std::runtime_error("the dump reader threw first");
+}
+
 namespace {
 
 std::filesystem::path scratch() { return std::filesystem::temp_directory_path() / "pm_gamecheck_main_test"; }
