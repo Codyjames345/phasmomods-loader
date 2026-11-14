@@ -26,7 +26,7 @@ phasmo::Vector3 position_of(void* transform) {
 void hear(void* ghost, std::vector<api::Held>& muted) {
   void* head = phasmo::GhostAI::head.get(ghost);
   const phasmo::Vector3 at =
-      position_of(head && api::alive(head) ? head : phasmo::Component::get_transform(ghost));
+      position_of(head && api::alive(head) ? head : phasmo::Component::get_transform(ghost).raw());
   void* level = phasmo::LevelController::instance.get();
   void* ghostRoom = level ? phasmo::LevelController::currentGhostRoom.get(level) : nullptr;
   const api::RefArray voices{phasmo::Object::FindObjectsOfType(phasmo::PlayerVoice::type.type_object())};

@@ -6,6 +6,7 @@
 
 #include "LevelRoom.h"
 #include "Transform.h"
+#include "UnityWorld.h"
 #include "game_api.h"
 
 namespace pm::map {
@@ -113,9 +114,9 @@ struct SoftJointLimit {
 /// Unity's joint. `joint` below is one, any kind.
 struct Joint {
   /// set_connectedBody(joint, body): the body it holds to; null for the world. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Joint_set_connectedBody, void(void*, void*)> set_connectedBody{};
+  static constexpr pm::api::Method<pm::map::Joint_set_connectedBody, void(pm::api::Ref<pm::map::Joint>, pm::api::Ref<pm::map::Rigidbody>)> set_connectedBody{};
   /// set_axis(joint, &axis): its primary axis in its body's space. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Joint_set_axis, void(void*, const Vector3*)> set_axis{};
+  static constexpr pm::api::Method<pm::map::Joint_set_axis, void(pm::api::Ref<pm::map::Joint>, const Vector3*)> set_axis{};
 };
 
 /// Unity's character joint. `joint` below is one.
@@ -123,18 +124,18 @@ struct CharacterJoint {
   /// The type: type_object() for GameObject.AddComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::CharacterJoint> type{};
   /// set_swingAxis(joint, &axis). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CharacterJoint_set_swingAxis, void(void*, const Vector3*)> set_swingAxis{};
+  static constexpr pm::api::Method<pm::map::CharacterJoint_set_swingAxis, void(pm::api::Ref<pm::map::CharacterJoint>, const Vector3*)> set_swingAxis{};
   /// set_lowTwistLimit(joint, &limit). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CharacterJoint_set_lowTwistLimit, void(void*, const SoftJointLimit*)>
+  static constexpr pm::api::Method<pm::map::CharacterJoint_set_lowTwistLimit, void(pm::api::Ref<pm::map::CharacterJoint>, const SoftJointLimit*)>
       set_lowTwistLimit{};
   /// set_highTwistLimit(joint, &limit). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CharacterJoint_set_highTwistLimit, void(void*, const SoftJointLimit*)>
+  static constexpr pm::api::Method<pm::map::CharacterJoint_set_highTwistLimit, void(pm::api::Ref<pm::map::CharacterJoint>, const SoftJointLimit*)>
       set_highTwistLimit{};
   /// set_swing1Limit(joint, &limit). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CharacterJoint_set_swing1Limit, void(void*, const SoftJointLimit*)>
+  static constexpr pm::api::Method<pm::map::CharacterJoint_set_swing1Limit, void(pm::api::Ref<pm::map::CharacterJoint>, const SoftJointLimit*)>
       set_swing1Limit{};
   /// set_swing2Limit(joint, &limit). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CharacterJoint_set_swing2Limit, void(void*, const SoftJointLimit*)>
+  static constexpr pm::api::Method<pm::map::CharacterJoint_set_swing2Limit, void(pm::api::Ref<pm::map::CharacterJoint>, const SoftJointLimit*)>
       set_swing2Limit{};
 };
 
@@ -143,9 +144,9 @@ struct BoxCollider {
   /// The type: type_object() for GameObject.AddComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::BoxCollider> type{};
   /// set_size(box, &size). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::BoxCollider_set_size, void(void*, const Vector3*)> set_size{};
+  static constexpr pm::api::Method<pm::map::BoxCollider_set_size, void(pm::api::Ref<pm::map::BoxCollider>, const Vector3*)> set_size{};
   /// set_center(box, &centre). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::BoxCollider_set_center, void(void*, const Vector3*)> set_center{};
+  static constexpr pm::api::Method<pm::map::BoxCollider_set_center, void(pm::api::Ref<pm::map::BoxCollider>, const Vector3*)> set_center{};
 };
 
 /// Unity's sphere collider. `sphere` below is one.
@@ -153,9 +154,9 @@ struct SphereCollider {
   /// The type: type_object() for GameObject.AddComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::SphereCollider> type{};
   /// set_radius(sphere, metres). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::SphereCollider_set_radius, void(void*, float)> set_radius{};
+  static constexpr pm::api::Method<pm::map::SphereCollider_set_radius, void(pm::api::Ref<pm::map::SphereCollider>, float)> set_radius{};
   /// set_center(sphere, &centre). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::SphereCollider_set_center, void(void*, const Vector3*)> set_center{};
+  static constexpr pm::api::Method<pm::map::SphereCollider_set_center, void(pm::api::Ref<pm::map::SphereCollider>, const Vector3*)> set_center{};
 };
 
 /// @}

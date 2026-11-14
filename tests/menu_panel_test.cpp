@@ -746,7 +746,7 @@ void entries_for_mods_reach_the_game() {
   CHECK(g_reached == 1 && g_reachedSelf == &self && g_reachedArgument == &eventData);
   phasmo::UIButton::OnSubmit(static_cast<void*>(&self), static_cast<void*>(&eventData));
   CHECK(g_reached == 2);
-  phasmo::UnityEvent::Invoke(&self);
+  phasmo::UnityEvent::Invoke(static_cast<void*>(&self));
   CHECK(g_reached == 3 && g_reachedSelf == &self);
   CHECK(phasmo::UISelectable::SetState(static_cast<void*>(&self), 2).raw() == &self && g_reached == 4 &&
         g_reachedState == 2);
@@ -757,7 +757,7 @@ void entries_for_mods_reach_the_game() {
       phasmo::UIButton::OnPointerClick(static_cast<void*>(&self), static_cast<void*>(&eventData));
     if (d == &m::UIButton_OnSubmit)
       phasmo::UIButton::OnSubmit(static_cast<void*>(&self), static_cast<void*>(&eventData));
-    if (d == &m::UnityEvent_Invoke) phasmo::UnityEvent::Invoke(&self);
+    if (d == &m::UnityEvent_Invoke) phasmo::UnityEvent::Invoke(static_cast<void*>(&self));
     if (d == &m::UISelectable_SetState) CHECK(!phasmo::UISelectable::SetState(static_cast<void*>(&self), 2));
     CHECK(g_reached == 0);
   }

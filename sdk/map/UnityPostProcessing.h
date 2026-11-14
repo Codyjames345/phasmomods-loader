@@ -211,23 +211,23 @@ struct UniversalAdditionalCameraData {
   /// The type: type_object() for GetComponent and AddComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::UniversalAdditionalCameraData> type{};
   /// get_renderPostProcessing(data). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::UniversalAdditionalCameraData_get_renderPostProcessing, bool(void*)>
+  static constexpr pm::api::Method<pm::map::UniversalAdditionalCameraData_get_renderPostProcessing, bool(pm::api::Ref<pm::map::UniversalAdditionalCameraData>)>
       get_renderPostProcessing{};
   /// set_renderPostProcessing(data, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UniversalAdditionalCameraData_set_renderPostProcessing, void(void*, bool)>
+  static constexpr pm::api::Method<pm::map::UniversalAdditionalCameraData_set_renderPostProcessing, void(pm::api::Ref<pm::map::UniversalAdditionalCameraData>, bool)>
       set_renderPostProcessing{};
   /// get_volumeLayerMask(data): a layer mask. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::UniversalAdditionalCameraData_get_volumeLayerMask, int32_t(void*)>
+  static constexpr pm::api::Method<pm::map::UniversalAdditionalCameraData_get_volumeLayerMask, int32_t(pm::api::Ref<pm::map::UniversalAdditionalCameraData>)>
       get_volumeLayerMask{};
   /// set_volumeLayerMask(data, mask). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UniversalAdditionalCameraData_set_volumeLayerMask, void(void*, int32_t)>
+  static constexpr pm::api::Method<pm::map::UniversalAdditionalCameraData_set_volumeLayerMask, void(pm::api::Ref<pm::map::UniversalAdditionalCameraData>, int32_t)>
       set_volumeLayerMask{};
 };
 
 /// Unity's ScriptableObject.
 struct ScriptableObject {
   /// CreateInstance(type): a new one of the System.Type given. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::ScriptableObject_CreateInstance, void*(void*)> CreateInstance{};
+  static constexpr pm::api::Method<pm::map::ScriptableObject_CreateInstance, pm::api::Object(pm::api::Object)> CreateInstance{};
 };
 
 /// A render volume.
@@ -241,7 +241,7 @@ struct Volume {
   /// How much applies: weight.set(volume, w). Unresolved: writes nothing.
   static constexpr pm::api::Field<pm::map::Volume_weight, float> weight{};
   /// Its VolumeProfile: sharedProfile.set(volume, profile). Unresolved: writes nothing.
-  static constexpr pm::api::Field<pm::map::Volume_sharedProfile, void*> sharedProfile{};
+  static constexpr pm::api::Field<pm::map::Volume_sharedProfile, pm::api::Object> sharedProfile{};
 };
 
 /// A volume's effects.
@@ -249,13 +249,13 @@ struct VolumeProfile {
   /// The type: type_object() for ScriptableObject::CreateInstance. Unresolved: null.
   static constexpr pm::api::Type<pm::map::VolumeProfile> type{};
   /// Add(profile, componentType, overrides): the new effect. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::VolumeProfile_Add, void*(void*, void*, bool)> Add{};
+  static constexpr pm::api::Method<pm::map::VolumeProfile_Add, pm::api::Object(pm::api::Ref<pm::map::VolumeProfile>, pm::api::Object, bool)> Add{};
 };
 
 /// A float parameter held to a range. Set a value by running its constructor on it again (the map's note says why).
 struct ClampedFloatParameter {
   /// ctor(parameter, value, min, max, overrideState). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ClampedFloatParameter_ctor, void(void*, float, float, float, bool)> ctor{};
+  static constexpr pm::api::Method<pm::map::ClampedFloatParameter_ctor, void(pm::api::Ref<pm::map::ClampedFloatParameter>, float, float, float, bool)> ctor{};
   /// Its lowest value: min.get(parameter). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::ClampedFloatParameter_min, float> min{};
   /// Its highest value: max.get(parameter). Unresolved: 0.
@@ -265,7 +265,7 @@ struct ClampedFloatParameter {
 /// A float parameter with a lowest value.
 struct MinFloatParameter {
   /// ctor(parameter, value, min, overrideState). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::MinFloatParameter_ctor, void(void*, float, float, bool)> ctor{};
+  static constexpr pm::api::Method<pm::map::MinFloatParameter_ctor, void(pm::api::Ref<pm::map::MinFloatParameter>, float, float, bool)> ctor{};
   /// Its lowest value: min.get(parameter). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::MinFloatParameter_min, float> min{};
 };
@@ -273,7 +273,7 @@ struct MinFloatParameter {
 /// URP's depth-of-field mode parameter.
 struct DepthOfFieldModeParameter {
   /// ctor(parameter, mode, overrideState): mode a DepthOfFieldMode number. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::DepthOfFieldModeParameter_ctor, void(void*, int32_t, bool)> ctor{};
+  static constexpr pm::api::Method<pm::map::DepthOfFieldModeParameter_ctor, void(pm::api::Ref<pm::map::DepthOfFieldModeParameter>, int32_t, bool)> ctor{};
 };
 
 /// URP's depth-of-field modes.
@@ -287,9 +287,9 @@ struct Vignette {
   /// The type: type_object() for VolumeProfile::Add. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Vignette> type{};
   /// Its intensity parameter: intensity.get(vignette). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Vignette_intensity, void*> intensity{};
+  static constexpr pm::api::Field<pm::map::Vignette_intensity, pm::api::Object> intensity{};
   /// Its smoothness parameter: smoothness.get(vignette). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Vignette_smoothness, void*> smoothness{};
+  static constexpr pm::api::Field<pm::map::Vignette_smoothness, pm::api::Object> smoothness{};
 };
 
 /// URP's depth of field.
@@ -297,13 +297,13 @@ struct DepthOfField {
   /// The type: type_object() for VolumeProfile::Add. Unresolved: null.
   static constexpr pm::api::Type<pm::map::DepthOfField> type{};
   /// Its mode parameter: mode.get(dof). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::DepthOfField_mode, void*> mode{};
+  static constexpr pm::api::Field<pm::map::DepthOfField_mode, pm::api::Object> mode{};
   /// Its Gaussian start parameter. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::DepthOfField_gaussianStart, void*> gaussianStart{};
+  static constexpr pm::api::Field<pm::map::DepthOfField_gaussianStart, pm::api::Object> gaussianStart{};
   /// Its Gaussian end parameter. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::DepthOfField_gaussianEnd, void*> gaussianEnd{};
+  static constexpr pm::api::Field<pm::map::DepthOfField_gaussianEnd, pm::api::Object> gaussianEnd{};
   /// Its Gaussian maximum radius parameter. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::DepthOfField_gaussianMaxRadius, void*> gaussianMaxRadius{};
+  static constexpr pm::api::Field<pm::map::DepthOfField_gaussianMaxRadius, pm::api::Object> gaussianMaxRadius{};
 };
 
 /// @}

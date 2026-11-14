@@ -106,7 +106,7 @@ void* game_object_of(void* object) {
   const int kind = kind_of(object);
   if (kind < 0) return nullptr;
   // A GameObject's own GameObject is itself: only a component has one to be asked for.
-  return kind == 1 ? object : phasmo::Component::get_gameObject(object);
+  return kind == 1 ? object : phasmo::Component::get_gameObject(object).raw();
 }
 void set_enabled(void* b, bool on) { phasmo::Behaviour::set_enabled(b, on); }
 bool enabled(void* b) { return phasmo::Behaviour::get_enabled(b); }
@@ -371,12 +371,16 @@ bool cast_into(unsigned char (&hit)[128], Vector3 origin, Vector3 direction, flo
 
 void* raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
   alignas(16) unsigned char hit[128] = {};
-  return cast_into(hit, origin, direction, maxDistance, layerMask) ? phasmo::RaycastHit::get_transform(hit) : nullptr;
+  return cast_into(hit, origin, direction, maxDistance, layerMask)
+             ? phasmo::RaycastHit::get_transform(static_cast<void*>(hit)).raw()
+             : nullptr;
 }
 
 float raycast_distance(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
   alignas(16) unsigned char hit[128] = {};
-  return cast_into(hit, origin, direction, maxDistance, layerMask) ? phasmo::RaycastHit::get_distance(hit) : -1.0f;
+  return cast_into(hit, origin, direction, maxDistance, layerMask)
+             ? phasmo::RaycastHit::get_distance(static_cast<void*>(hit))
+             : -1.0f;
 }
 bool is_child_of(void* transform, void* parent) { return phasmo::Transform::IsChildOf(transform, parent); }
 

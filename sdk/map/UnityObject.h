@@ -258,28 +258,28 @@ struct Object {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::UnityObject> type{};
   /// Its name, a System.String: get_name(object). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::UnityObject_get_name, void*(void*)> get_name{};
+  static constexpr pm::api::Method<pm::map::UnityObject_get_name, pm::api::Object(pm::api::Ref<pm::map::UnityObject>)> get_name{};
   /// Renames it: set_name(object, string). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UnityObject_set_name, void(void*, void*)> set_name{};
+  static constexpr pm::api::Method<pm::map::UnityObject_set_name, void(pm::api::Ref<pm::map::UnityObject>, pm::api::Object)> set_name{};
   /// A copy under the Transform `parent` (never null): Instantiate(original, parent, worldPositionStays).
   /// Unresolved: null.
-  static constexpr pm::api::Method<pm::map::UnityObject_Instantiate, void*(void*, void*, bool)> Instantiate{};
+  static constexpr pm::api::Method<pm::map::UnityObject_Instantiate, pm::api::Object(pm::api::Object, pm::api::Object, bool)> Instantiate{};
   /// Destroy(object, seconds): gone at the end of the frame (seconds 0). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::UnityObject_Destroy, void(void*, float)> Destroy{};
+  static constexpr pm::api::Icall<pm::map::UnityObject_Destroy, void(pm::api::Ref<pm::map::UnityObject>, float)> Destroy{};
   /// DestroyImmediate(object, allowDestroyingAssets): gone now. Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::UnityObject_DestroyImmediate, void(void*, bool)> DestroyImmediate{};
+  static constexpr pm::api::Icall<pm::map::UnityObject_DestroyImmediate, void(pm::api::Ref<pm::map::UnityObject>, bool)> DestroyImmediate{};
   /// The first loaded object of a System.Type, inactive ones too when asked:
   /// FindObjectOfType(type, includeInactive). It searches every loaded object, so call it sparingly.
   /// Unresolved: null.
-  static constexpr pm::api::Method<pm::map::UnityObject_FindObjectOfType, void*(void*, bool)> FindObjectOfType{};
+  static constexpr pm::api::Method<pm::map::UnityObject_FindObjectOfType, pm::api::Object(pm::api::Object, bool)> FindObjectOfType{};
   /// Every loaded, active object of a System.Type, an Object[]: FindObjectsOfType(type). It searches
   /// every loaded object, so call it sparingly. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::UnityObject_FindObjectsOfType, void*(void*)> FindObjectsOfType{};
+  static constexpr pm::api::Method<pm::map::UnityObject_FindObjectsOfType, pm::api::Object(pm::api::Object)> FindObjectsOfType{};
   /// Every loaded object of a System.Type, inactive ones too when asked, an Object[]: FindAllOfType(type,
   /// includeInactive). It searches every loaded object, so call it sparingly. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::UnityObject_FindObjectsOfType_inactive, void*(void*, bool)> FindAllOfType{};
+  static constexpr pm::api::Method<pm::map::UnityObject_FindObjectsOfType_inactive, pm::api::Object(pm::api::Object, bool)> FindAllOfType{};
   /// set_hideFlags(object, flags). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UnityObject_set_hideFlags, void(void*, int32_t)> set_hideFlags{};
+  static constexpr pm::api::Method<pm::map::UnityObject_set_hideFlags, void(pm::api::Ref<pm::map::UnityObject>, int32_t)> set_hideFlags{};
 };
 
 /// Unity's object flags: combine their numbers for Object::set_hideFlags.
@@ -293,24 +293,24 @@ struct GameObject {
   /// The type: klass(), is(obj), type_object(), make_array(n). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::GameObject> type{};
   /// SetActive(gameObject, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GameObject_SetActive, void(void*, bool)> SetActive{};
+  static constexpr pm::api::Method<pm::map::GameObject_SetActive, void(pm::api::Ref<pm::map::GameObject>, bool)> SetActive{};
   /// get_activeSelf(gameObject). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GameObject_get_activeSelf, bool(void*)> get_activeSelf{};
+  static constexpr pm::api::Method<pm::map::GameObject_get_activeSelf, bool(pm::api::Ref<pm::map::GameObject>)> get_activeSelf{};
   /// get_activeInHierarchy(gameObject). Optional. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GameObject_get_activeInHierarchy, bool(void*)> get_activeInHierarchy{};
+  static constexpr pm::api::Method<pm::map::GameObject_get_activeInHierarchy, bool(pm::api::Ref<pm::map::GameObject>)> get_activeInHierarchy{};
   /// get_transform(gameObject). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GameObject_get_transform, void*(void*)> get_transform{};
+  static constexpr pm::api::Method<pm::map::GameObject_get_transform, pm::api::Object(pm::api::Ref<pm::map::GameObject>)> get_transform{};
   /// ctor(gameObject, name): `gameObject` from type.make(), `name` a managed string. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::GameObject_ctor, void(void*, void*)> ctor{};
+  static constexpr pm::api::Method<pm::map::GameObject_ctor, void(pm::api::Ref<pm::map::GameObject>, pm::api::Object)> ctor{};
   /// set_layer(gameObject, layer). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GameObject_set_layer, void(void*, int32_t)> set_layer{};
+  static constexpr pm::api::Method<pm::map::GameObject_set_layer, void(pm::api::Ref<pm::map::GameObject>, int32_t)> set_layer{};
   /// GetComponents(gameObject, systemType): a Component[] (pm::api::RefArray). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GameObject_GetComponents, void*(void*, void*)> GetComponents{};
+  static constexpr pm::api::Method<pm::map::GameObject_GetComponents, pm::api::Object(pm::api::Ref<pm::map::GameObject>, pm::api::Object)> GetComponents{};
   /// AddComponent(gameObject, systemType): the new component. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GameObject_AddComponent, void*(void*, void*)> AddComponent{};
+  static constexpr pm::api::Method<pm::map::GameObject_AddComponent, pm::api::Object(pm::api::Ref<pm::map::GameObject>, pm::api::Object)> AddComponent{};
   /// get_layer(go): its layer, 0 to 31. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::GameObject_get_layer, int32_t(void*)> get_layer{};
+  static constexpr pm::api::Method<pm::map::GameObject_get_layer, int32_t(pm::api::Ref<pm::map::GameObject>)> get_layer{};
 };
 
 /// Unity's base class of a GameObject's components. `component` below is any component.
@@ -318,19 +318,19 @@ struct Component {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Component> type{};
   /// get_transform(component). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Component_get_transform, void*(void*)> get_transform{};
+  static constexpr pm::api::Method<pm::map::Component_get_transform, pm::api::Object(pm::api::Ref<pm::map::Component>)> get_transform{};
   /// get_tag(component): its GameObject's tag, a managed string (pm::api::to_utf8). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Component_get_tag, void*(void*)> get_tag{};
+  static constexpr pm::api::Method<pm::map::Component_get_tag, pm::api::Object(pm::api::Ref<pm::map::Component>)> get_tag{};
   /// get_gameObject(component). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Component_get_gameObject, void*(void*)> get_gameObject{};
+  static constexpr pm::api::Method<pm::map::Component_get_gameObject, pm::api::Object(pm::api::Ref<pm::map::Component>)> get_gameObject{};
   /// GetComponent(component, systemType): systemType is a Type wrapper's type_object(). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Component_GetComponent, void*(void*, void*)> GetComponent{};
+  static constexpr pm::api::Method<pm::map::Component_GetComponent, pm::api::Object(pm::api::Ref<pm::map::Component>, pm::api::Object)> GetComponent{};
   /// GetComponentInChildren(component, systemType, includeInactive). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Component_GetComponentInChildren, void*(void*, void*, bool)>
+  static constexpr pm::api::Method<pm::map::Component_GetComponentInChildren, pm::api::Object(pm::api::Ref<pm::map::Component>, pm::api::Object, bool)>
       GetComponentInChildren{};
   /// GetComponentInParent(c, type, includeInactive): the first component of the System.Type on c's
   /// GameObject or above it, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Component_GetComponentInParent, void*(void*, void*, bool)>
+  static constexpr pm::api::Method<pm::map::Component_GetComponentInParent, pm::api::Object(pm::api::Ref<pm::map::Component>, pm::api::Object, bool)>
       GetComponentInParent{};
 };
 
@@ -339,9 +339,9 @@ struct Behaviour {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Behaviour> type{};
   /// get_enabled(behaviour). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Behaviour_get_enabled, bool(void*)> get_enabled{};
+  static constexpr pm::api::Method<pm::map::Behaviour_get_enabled, bool(pm::api::Ref<pm::map::Behaviour>)> get_enabled{};
   /// set_enabled(behaviour, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Behaviour_set_enabled, void(void*, bool)> set_enabled{};
+  static constexpr pm::api::Method<pm::map::Behaviour_set_enabled, void(pm::api::Ref<pm::map::Behaviour>, bool)> set_enabled{};
 };
 
 /// Unity's base class of scripts.
@@ -350,7 +350,7 @@ struct MonoBehaviour {
   static constexpr pm::api::Type<pm::map::MonoBehaviour> type{};
   /// StartCoroutine(behaviour, routine): runs the IEnumerator as a coroutine on it; the Coroutine, or null.
   /// Unresolved: null, and nothing runs.
-  static constexpr pm::api::Method<pm::map::MonoBehaviour_StartCoroutine, void*(void*, void*)> StartCoroutine{};
+  static constexpr pm::api::Method<pm::map::MonoBehaviour_StartCoroutine, pm::api::Object(pm::api::Ref<pm::map::MonoBehaviour>, pm::api::Object)> StartCoroutine{};
 };
 
 /// @}

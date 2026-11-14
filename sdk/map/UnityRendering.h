@@ -614,21 +614,21 @@ struct Renderer {
   /// The Renderer type: type_object() for Component.GetComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Renderer> type{};
   /// get_sharedMaterial(renderer). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Renderer_get_sharedMaterial, void*(void*)> get_sharedMaterial{};
+  static constexpr pm::api::Method<pm::map::Renderer_get_sharedMaterial, pm::api::Object(pm::api::Ref<pm::map::Renderer>)> get_sharedMaterial{};
   /// get_material(renderer): its own material. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Renderer_get_material, void*(void*)> get_material{};
+  static constexpr pm::api::Method<pm::map::Renderer_get_material, pm::api::Object(pm::api::Ref<pm::map::Renderer>)> get_material{};
   /// get_enabled(renderer). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Renderer_get_enabled, bool(void*)> get_enabled{};
+  static constexpr pm::api::Method<pm::map::Renderer_get_enabled, bool(pm::api::Ref<pm::map::Renderer>)> get_enabled{};
   /// set_enabled(renderer, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Renderer_set_enabled, void(void*, bool)> set_enabled{};
+  static constexpr pm::api::Method<pm::map::Renderer_set_enabled, void(pm::api::Ref<pm::map::Renderer>, bool)> set_enabled{};
   /// get_sharedMaterials(renderer): a Material[] (pm::api::RefArray). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Renderer_get_sharedMaterials, void*(void*)> get_sharedMaterials{};
+  static constexpr pm::api::Method<pm::map::Renderer_get_sharedMaterials, pm::api::Object(pm::api::Ref<pm::map::Renderer>)> get_sharedMaterials{};
   /// set_sharedMaterials(renderer, materials), a Material[]. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Renderer_set_sharedMaterials, void(void*, void*)> set_sharedMaterials{};
+  static constexpr pm::api::Method<pm::map::Renderer_set_sharedMaterials, void(pm::api::Ref<pm::map::Renderer>, pm::api::Object)> set_sharedMaterials{};
   /// get_shadowCastingMode(renderer), a ShadowCastingMode. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Renderer_get_shadowCastingMode, int32_t(void*)> get_shadowCastingMode{};
+  static constexpr pm::api::Method<pm::map::Renderer_get_shadowCastingMode, int32_t(pm::api::Ref<pm::map::Renderer>)> get_shadowCastingMode{};
   /// set_shadowCastingMode(renderer, mode), a ShadowCastingMode. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Renderer_set_shadowCastingMode, void(void*, int32_t)>
+  static constexpr pm::api::Method<pm::map::Renderer_set_shadowCastingMode, void(pm::api::Ref<pm::map::Renderer>, int32_t)>
       set_shadowCastingMode{};
 };
 
@@ -642,18 +642,18 @@ struct Light {
   /// The Light type: type_object() for Component.GetComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Light> type{};
   /// get_color(light). Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::Light_get_color, Color(void*)> get_color{};
+  static constexpr pm::api::Method<pm::map::Light_get_color, Color(pm::api::Ref<pm::map::Light>)> get_color{};
   /// set_color(light, &colour): the Color passed by address, which the callee may change, so pass a
   /// copy. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Light_set_color, void(void*, Color*)> set_color{};
+  static constexpr pm::api::Method<pm::map::Light_set_color, void(pm::api::Ref<pm::map::Light>, Color*)> set_color{};
   /// get_intensity(light). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Light_get_intensity, float(void*)> get_intensity{};
+  static constexpr pm::api::Method<pm::map::Light_get_intensity, float(pm::api::Ref<pm::map::Light>)> get_intensity{};
   /// set_intensity(light, intensity). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Light_set_intensity, void(void*, float)> set_intensity{};
+  static constexpr pm::api::Method<pm::map::Light_set_intensity, void(pm::api::Ref<pm::map::Light>, float)> set_intensity{};
   /// set_type(light, kind), a LightType number. Optional: check available(). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Light_set_type, void(void*, int32_t)> set_type{};
+  static constexpr pm::api::Method<pm::map::Light_set_type, void(pm::api::Ref<pm::map::Light>, int32_t)> set_type{};
   /// set_range(light, metres). Optional: check available(). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Light_set_range, void(void*, float)> set_range{};
+  static constexpr pm::api::Method<pm::map::Light_set_range, void(pm::api::Ref<pm::map::Light>, float)> set_range{};
 };
 
 /// A mesh.
@@ -661,23 +661,23 @@ struct Mesh {
   /// The Mesh type: make() for a new one, then ctor. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Mesh> type{};
   /// ctor(mesh): runs Mesh() on an object Mesh::type made. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Mesh_ctor, void(void*)> ctor{};
+  static constexpr pm::api::Method<pm::map::Mesh_ctor, void(pm::api::Ref<pm::map::Mesh>)> ctor{};
   /// set_vertices(mesh, vertices), a Vector3[]. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Mesh_set_vertices, void(void*, void*)> set_vertices{};
+  static constexpr pm::api::Method<pm::map::Mesh_set_vertices, void(pm::api::Ref<pm::map::Mesh>, pm::api::Object)> set_vertices{};
   /// set_normals(mesh, normals), a Vector3[]. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Mesh_set_normals, void(void*, void*)> set_normals{};
+  static constexpr pm::api::Method<pm::map::Mesh_set_normals, void(pm::api::Ref<pm::map::Mesh>, pm::api::Object)> set_normals{};
   /// set_uv(mesh, uv), a Vector2[]. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Mesh_set_uv, void(void*, void*)> set_uv{};
+  static constexpr pm::api::Method<pm::map::Mesh_set_uv, void(pm::api::Ref<pm::map::Mesh>, pm::api::Object)> set_uv{};
   /// set_triangles(mesh, indices), an Int32[]. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Mesh_set_triangles, void(void*, void*)> set_triangles{};
+  static constexpr pm::api::Method<pm::map::Mesh_set_triangles, void(pm::api::Ref<pm::map::Mesh>, pm::api::Object)> set_triangles{};
   /// RecalculateBounds(mesh, flags): its bounds from its vertices again; flags 0. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Mesh_RecalculateBounds, void(void*, int32_t)> RecalculateBounds{};
+  static constexpr pm::api::Method<pm::map::Mesh_RecalculateBounds, void(pm::api::Ref<pm::map::Mesh>, int32_t)> RecalculateBounds{};
   /// MarkDynamic(mesh): it changes every frame. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Mesh_MarkDynamic, void(void*)> MarkDynamic{};
+  static constexpr pm::api::Method<pm::map::Mesh_MarkDynamic, void(pm::api::Ref<pm::map::Mesh>)> MarkDynamic{};
   /// set_boneWeights(mesh, weights), a BoneWeight[]. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Mesh_set_boneWeights, void(void*, void*)> set_boneWeights{};
+  static constexpr pm::api::Method<pm::map::Mesh_set_boneWeights, void(pm::api::Ref<pm::map::Mesh>, pm::api::Object)> set_boneWeights{};
   /// set_bindposes(mesh, poses), a Matrix4x4[]. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Mesh_set_bindposes, void(void*, void*)> set_bindposes{};
+  static constexpr pm::api::Method<pm::map::Mesh_set_bindposes, void(pm::api::Ref<pm::map::Mesh>, pm::api::Object)> set_bindposes{};
 };
 
 /// Four weights, then four bone indices, as Unity's BoneWeight.
@@ -706,15 +706,15 @@ struct SkinnedMeshRenderer {
   /// The type: type_object() for Component.GetComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::SkinnedMeshRenderer> type{};
   /// BakeMesh(skinned, mesh, useScale): writes the posed mesh into `mesh`. Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::SkinnedMeshRenderer_BakeMesh, void(void*, void*, bool)> BakeMesh{};
+  static constexpr pm::api::Icall<pm::map::SkinnedMeshRenderer_BakeMesh, void(pm::api::Object, pm::api::Ref<pm::map::Mesh>, bool)> BakeMesh{};
   /// set_sharedMesh(skinned, mesh). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_sharedMesh, void(void*, void*)> set_sharedMesh{};
+  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_sharedMesh, void(pm::api::Ref<pm::map::SkinnedMeshRenderer>, pm::api::Ref<pm::map::Mesh>)> set_sharedMesh{};
   /// set_bones(skinned, bones), a Transform[]. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_bones, void(void*, void*)> set_bones{};
+  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_bones, void(pm::api::Ref<pm::map::SkinnedMeshRenderer>, pm::api::Object)> set_bones{};
   /// set_rootBone(skinned, transform). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_rootBone, void(void*, void*)> set_rootBone{};
+  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_rootBone, void(pm::api::Ref<pm::map::SkinnedMeshRenderer>, pm::api::Ref<pm::map::Transform>)> set_rootBone{};
   /// set_updateWhenOffscreen(skinned, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_updateWhenOffscreen, void(void*, bool)>
+  static constexpr pm::api::Method<pm::map::SkinnedMeshRenderer_set_updateWhenOffscreen, void(pm::api::Ref<pm::map::SkinnedMeshRenderer>, bool)>
       set_updateWhenOffscreen{};
 };
 
@@ -723,7 +723,7 @@ struct MeshFilter {
   /// The type: type_object() for GameObject.AddComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::MeshFilter> type{};
   /// set_sharedMesh(filter, mesh). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::MeshFilter_set_sharedMesh, void(void*, void*)> set_sharedMesh{};
+  static constexpr pm::api::Method<pm::map::MeshFilter_set_sharedMesh, void(pm::api::Ref<pm::map::MeshFilter>, pm::api::Ref<pm::map::Mesh>)> set_sharedMesh{};
 };
 
 /// A renderer of a MeshFilter's mesh.
@@ -741,24 +741,24 @@ inline constexpr pm::api::EnumValue<pm::map::LightType_Point> Point{};
 /// A material. `material` below is the Material, `id` a property id from Shader::PropertyToID.
 struct Material {
   /// GetTextureImpl(material, id). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Material_GetTextureImpl, void*(void*, int32_t)> GetTextureImpl{};
+  static constexpr pm::api::Method<pm::map::Material_GetTextureImpl, pm::api::Object(pm::api::Ref<pm::map::Material>, int32_t)> GetTextureImpl{};
   /// SetTextureImpl(material, id, texture). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Material_SetTextureImpl, void(void*, int32_t, void*)> SetTextureImpl{};
+  static constexpr pm::api::Method<pm::map::Material_SetTextureImpl, void(pm::api::Ref<pm::map::Material>, int32_t, pm::api::Ref<pm::map::Texture>)> SetTextureImpl{};
   /// HasProperty(material, id). Unresolved: false.
-  static constexpr pm::api::Icall<pm::map::Material_HasProperty, bool(void*, int32_t)> HasProperty{};
+  static constexpr pm::api::Icall<pm::map::Material_HasProperty, bool(pm::api::Object, int32_t)> HasProperty{};
   /// GetColorImpl(material, id, &out). Unresolved: leaves `out` as it was.
-  static constexpr pm::api::Icall<pm::map::Material_GetColorImpl, void(void*, int32_t, Color*)> GetColorImpl{};
+  static constexpr pm::api::Icall<pm::map::Material_GetColorImpl, void(pm::api::Object, int32_t, Color*)> GetColorImpl{};
   /// SetColorImpl(material, id, &colour): the Color by reference, so pass a copy. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Icall<pm::map::Material_SetColorImpl, void(void*, int32_t, Color*)> SetColorImpl{};
+  static constexpr pm::api::Icall<pm::map::Material_SetColorImpl, void(pm::api::Object, int32_t, Color*)> SetColorImpl{};
   /// The type: make() for a new one, then ctor_Shader; make_array() for a Material[]. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Material> type{};
   /// ctor_Shader(material, shader): runs Material(Shader) on an object Material::type made. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Material_ctor_Shader, void(void*, void*)> ctor_Shader{};
+  static constexpr pm::api::Method<pm::map::Material_ctor_Shader, void(pm::api::Ref<pm::map::Material>, pm::api::Object)> ctor_Shader{};
   /// get_shader(material). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Material_get_shader, void*(void*)> get_shader{};
+  static constexpr pm::api::Method<pm::map::Material_get_shader, pm::api::Object(pm::api::Ref<pm::map::Material>)> get_shader{};
   /// SetFloatImpl(material, id, value). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Material_SetFloatImpl, void(void*, int32_t, float)> SetFloatImpl{};
+  static constexpr pm::api::Icall<pm::map::Material_SetFloatImpl, void(pm::api::Object, int32_t, float)> SetFloatImpl{};
 };
 
 /// Unity's face culling modes, for a shader's cull property.
@@ -781,7 +781,7 @@ struct LitShader {
 /// Shaders.
 struct Shader {
   /// PropertyToID(name), `name` a System.String (pm::api::make_string). Unresolved: 0.
-  static constexpr pm::api::Icall<pm::map::Shader_PropertyToID, int32_t(void*)> PropertyToID{};
+  static constexpr pm::api::Icall<pm::map::Shader_PropertyToID, int32_t(pm::api::Object)> PropertyToID{};
 };
 
 /// The Candle Flame shader's properties, for Material's by-id functions: TintColour.id(). Check
@@ -806,17 +806,17 @@ struct CandleMelt {
 /// A texture. `texture` below is one.
 struct Texture {
   /// get_width(texture). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Texture_get_width, int32_t(void*)> get_width{};
+  static constexpr pm::api::Method<pm::map::Texture_get_width, int32_t(pm::api::Ref<pm::map::Texture>)> get_width{};
   /// get_height(texture). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Texture_get_height, int32_t(void*)> get_height{};
+  static constexpr pm::api::Method<pm::map::Texture_get_height, int32_t(pm::api::Ref<pm::map::Texture>)> get_height{};
   /// get_wrapMode(texture). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Texture_get_wrapMode, int32_t(void*)> get_wrapMode{};
+  static constexpr pm::api::Method<pm::map::Texture_get_wrapMode, int32_t(pm::api::Ref<pm::map::Texture>)> get_wrapMode{};
   /// set_wrapMode(texture, mode). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Texture_set_wrapMode, void(void*, int32_t)> set_wrapMode{};
+  static constexpr pm::api::Method<pm::map::Texture_set_wrapMode, void(pm::api::Ref<pm::map::Texture>, int32_t)> set_wrapMode{};
   /// get_filterMode(texture). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Texture_get_filterMode, int32_t(void*)> get_filterMode{};
+  static constexpr pm::api::Method<pm::map::Texture_get_filterMode, int32_t(pm::api::Ref<pm::map::Texture>)> get_filterMode{};
   /// set_filterMode(texture, mode). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Texture_set_filterMode, void(void*, int32_t)> set_filterMode{};
+  static constexpr pm::api::Method<pm::map::Texture_set_filterMode, void(pm::api::Ref<pm::map::Texture>, int32_t)> set_filterMode{};
 };
 
 /// A 2D texture. `texture` below is the Texture2D.
@@ -824,20 +824,20 @@ struct Texture2D {
   /// The Texture2D type: make() a new one for ctor. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Texture2D> type{};
   /// ctor(texture, width, height). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Texture2D_ctor, void(void*, int32_t, int32_t)> ctor{};
+  static constexpr pm::api::Method<pm::map::Texture2D_ctor, void(pm::api::Ref<pm::map::Texture2D>, int32_t, int32_t)> ctor{};
   /// ctor_format(texture, width, height, format, mipChain): format a TextureFormat. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Texture2D_ctor_format, void(void*, int32_t, int32_t, int32_t, bool)>
+  static constexpr pm::api::Method<pm::map::Texture2D_ctor_format, void(pm::api::Ref<pm::map::Texture2D>, int32_t, int32_t, int32_t, bool)>
       ctor_format{};
   /// ReadPixels(texture, &rect, x, y): the Rect passed by address, which the callee may change, so pass
   /// a copy. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Texture2D_ReadPixels, void(void*, Rect*, int32_t, int32_t)>
+  static constexpr pm::api::Method<pm::map::Texture2D_ReadPixels, void(pm::api::Ref<pm::map::Texture2D>, Rect*, int32_t, int32_t)>
       ReadPixels{};
   /// GetPixels32(texture, level): a Color32[], read as a pm::api::Array<Color32>. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Texture2D_GetPixels32, void*(void*, int32_t)> GetPixels32{};
+  static constexpr pm::api::Method<pm::map::Texture2D_GetPixels32, pm::api::Object(pm::api::Ref<pm::map::Texture2D>, int32_t)> GetPixels32{};
   /// SetPixels32(texture, colours, level). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Texture2D_SetPixels32, void(void*, void*, int32_t)> SetPixels32{};
+  static constexpr pm::api::Method<pm::map::Texture2D_SetPixels32, void(pm::api::Ref<pm::map::Texture2D>, pm::api::Object, int32_t)> SetPixels32{};
   /// Apply(texture, updateMipmaps, makeNoLongerReadable). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Texture2D_Apply, void(void*, bool, bool)> Apply{};
+  static constexpr pm::api::Method<pm::map::Texture2D_Apply, void(pm::api::Ref<pm::map::Texture2D>, bool, bool)> Apply{};
 };
 
 /// A texture's pixel format. Unresolved: 0.
@@ -861,20 +861,20 @@ inline constexpr pm::api::EnumValue<pm::map::RenderTextureReadWrite_sRGB> sRGB{}
 struct RenderTexture {
   /// GetTemporary(width, height, depthBits, format, readWrite). Unresolved: null.
   static constexpr pm::api::Method<pm::map::RenderTexture_GetTemporary,
-                                   void*(int32_t, int32_t, int32_t, int32_t, int32_t)>
+                                   pm::api::Object(int32_t, int32_t, int32_t, int32_t, int32_t)>
       GetTemporary{};
   /// ReleaseTemporary(renderTexture). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RenderTexture_ReleaseTemporary, void(void*)> ReleaseTemporary{};
+  static constexpr pm::api::Method<pm::map::RenderTexture_ReleaseTemporary, void(pm::api::Object)> ReleaseTemporary{};
   /// get_active(). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::RenderTexture_get_active, void*()> get_active{};
+  static constexpr pm::api::Method<pm::map::RenderTexture_get_active, pm::api::Object()> get_active{};
   /// set_active(renderTexture), null for the screen. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RenderTexture_set_active, void(void*)> set_active{};
+  static constexpr pm::api::Method<pm::map::RenderTexture_set_active, void(pm::api::Object)> set_active{};
 };
 
 /// Drawing.
 struct Graphics {
   /// Blit(texture, renderTexture). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Graphics_Blit, void(void*, void*)> Blit{};
+  static constexpr pm::api::Method<pm::map::Graphics_Blit, void(pm::api::Ref<pm::map::Texture>, pm::api::Ref<pm::map::RenderTexture>)> Blit{};
 };
 
 /// @}

@@ -75,7 +75,7 @@ void* create_canvas(const char* name, int sortingOrder) {
   phasmo::Canvas::set_sortingOrder(canvas, sortingOrder);
   void* scaler = game::add_component(go, phasmo::CanvasScaler::type.type_object());
   phasmo::CanvasScaler::set_uiScaleMode(scaler, phasmo::CanvasScaler::ScaleWithScreenSize());
-  phasmo::CanvasScaler::set_referenceResolution(scaler, {1920, 1080});
+  phasmo::CanvasScaler::set_referenceResolution(scaler, phasmo::Vector2{1920, 1080});
   phasmo::CanvasScaler::set_matchWidthOrHeight(scaler, 0.5f);
   return canvas;
 }

@@ -160,7 +160,7 @@ Clone make_clone(void* source, void* sourceLabel, const ui::Color* textColour, v
       game::destroy(staging);
       return {};
     }
-    if (Toggle::onValueChanged.get(c.toggle) != fresh) {
+    if (Toggle::onValueChanged.get(c.toggle).raw() != fresh) {
       failure = "cloned ToggleEvent was not replaced"; game::destroy(staging); return {};
     }
     // Ready and its label are siblings centred on the board, so the label keeps its offset from Ready.

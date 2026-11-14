@@ -182,19 +182,19 @@ inline constexpr pm::api::EnumValue<pm::map::WeatherType_dead> dead{};
 /// The scene's weather. `weather` below is one.
 struct RandomWeather {
   /// The scene's RandomWeather: instance.get(). Check it with pm::api::alive. Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::RandomWeather_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::RandomWeather_instance, pm::api::Ref<pm::map::RandomWeather>> instance{};
   /// Its effects controller: effects.get(weather). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::RandomWeather_effects, void*> effects{};
+  static constexpr pm::api::Field<pm::map::RandomWeather_effects, pm::api::Object> effects{};
   /// TransitionWeatherProfile(weather, type, animate): the Monkey Paw's weather change on this client, local only:
   /// LevelValues.weather, the sky and the sound (map note). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RandomWeather_TransitionWeatherProfile, void(void*, int32_t, bool)>
+  static constexpr pm::api::Method<pm::map::RandomWeather_TransitionWeatherProfile, void(pm::api::Ref<pm::map::RandomWeather>, int32_t, bool)>
       TransitionWeatherProfile{};
 };
 
 /// The sky's effects. `effects` below is one.
 struct AzureEffectsController {
   /// The thunder strikes it can play, a List: thunderSettingsList.get(effects). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::AzureEffectsController_thunderSettingsList, void*> thunderSettingsList{};
+  static constexpr pm::api::Field<pm::map::AzureEffectsController_thunderSettingsList, pm::api::Object> thunderSettingsList{};
 };
 
 /// The scene's lightning. `controller` below is one.
@@ -203,12 +203,12 @@ struct LightningController {
   static constexpr pm::api::Type<pm::map::LightningController> type{};
   /// Its own effects controller: effects.get(controller), .set(controller, e) (through the GC write
   /// barrier). Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::LightningController_effects, void*> effects{};
+  static constexpr pm::api::Field<pm::map::LightningController_effects, pm::api::Object> effects{};
   /// PlayLocalLightning(controller): a strike on this client. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LightningController_PlayLocalLightning, void(void*)> PlayLocalLightning{};
+  static constexpr pm::api::Method<pm::map::LightningController_PlayLocalLightning, void(pm::api::Ref<pm::map::LightningController>)> PlayLocalLightning{};
   /// The storm strike RPC, PlayLightningNetworked(controller, &info). A mod hooks it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::LightningController_PlayLightningNetworked, void(void*, const void*)>
+  static constexpr pm::api::Method<pm::map::LightningController_PlayLightningNetworked, void(pm::api::Ref<pm::map::LightningController>, const void*)>
       PlayLightningNetworked{};
 };
 

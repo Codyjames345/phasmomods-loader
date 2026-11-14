@@ -284,7 +284,7 @@ void* toggle_row(void* parent) {
   void* copy = hostgame::instantiate(source, parent, false);
   void* copied = copy ? hostgame::get_component(copy, Toggle::type.type_object()) : nullptr;
   if (copied) Toggle::onValueChanged.set(copied, fresh);
-  if (!copied || Toggle::onValueChanged.get(copied) != fresh) {
+  if (!copied || Toggle::onValueChanged.get(copied).raw() != fresh) {
     if (copy) hostgame::destroy(hostgame::game_object_of(copy));
     return nullptr;
   }
@@ -556,19 +556,20 @@ bool add_row(Panel& p, int index, int count, const std::string& name, const std:
 
 void set_row_checked(Panel& p, size_t index, bool checked) {
   if (index >= p.rows.size() || !hostgame::alive(p.rows[index].toggle)) return;
-  Toggle::SetIsOnWithoutNotify(p.rows[index].toggle, checked);
+  Toggle::SetIsOnWithoutNotify(p.rows[index].toggle.get(), checked);
   p.rows[index].shownOn = checked;
 }
 
 void set_rows_interactable(Panel& p, bool on) {
   for (Row& row : p.rows)
-    if (hostgame::alive(row.toggle)) phasmo::Selectable::set_interactable(row.toggle, on && !row.locked);
+    if (hostgame::alive(row.toggle)) phasmo::Selectable::set_interactable(row.toggle.get(), on && !row.locked);
 }
 
 int row_clicked(const Panel& p) {
   if (!is_open(p) || !main_menu_visible() || !hostgame::active_in_hierarchy(hostgame::game_object_of(p.root))) return -1;
   for (size_t i = 0; i < p.rows.size(); ++i)
-    if (!p.rows[i].locked && hostgame::alive(p.rows[i].toggle) && Toggle::get_isOn(p.rows[i].toggle) != p.rows[i].shownOn)
+    if (!p.rows[i].locked && hostgame::alive(p.rows[i].toggle) &&
+        Toggle::get_isOn(p.rows[i].toggle.get()) != p.rows[i].shownOn)
       return static_cast<int>(i);
   return -1;
 }

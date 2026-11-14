@@ -6,6 +6,7 @@
 // Like every phasmo:: wrapper, these reach every mod.
 
 #include "Transform.h"
+#include "Camera.h"
 #include "UnityEvents.h"
 #include "UnityObject.h"
 #include "UnityRendering.h"
@@ -620,19 +621,19 @@ struct GridLayoutGroup {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::GridLayoutGroup> type{};
   /// get_cellSize(grid). Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::GridLayoutGroup_get_cellSize, Vector2(void*)> get_cellSize{};
+  static constexpr pm::api::Method<pm::map::GridLayoutGroup_get_cellSize, Vector2(pm::api::Ref<pm::map::GridLayoutGroup>)> get_cellSize{};
   /// set_cellSize(grid, size). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GridLayoutGroup_set_cellSize, void(void*, Vector2)> set_cellSize{};
+  static constexpr pm::api::Method<pm::map::GridLayoutGroup_set_cellSize, void(pm::api::Ref<pm::map::GridLayoutGroup>, Vector2)> set_cellSize{};
   /// get_spacing(grid). Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::GridLayoutGroup_get_spacing, Vector2(void*)> get_spacing{};
+  static constexpr pm::api::Method<pm::map::GridLayoutGroup_get_spacing, Vector2(pm::api::Ref<pm::map::GridLayoutGroup>)> get_spacing{};
   /// get_constraint(grid), a GridConstraint value. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::GridLayoutGroup_get_constraint, int32_t(void*)> get_constraint{};
+  static constexpr pm::api::Method<pm::map::GridLayoutGroup_get_constraint, int32_t(pm::api::Ref<pm::map::GridLayoutGroup>)> get_constraint{};
   /// set_constraint(grid, value). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GridLayoutGroup_set_constraint, void(void*, int32_t)> set_constraint{};
+  static constexpr pm::api::Method<pm::map::GridLayoutGroup_set_constraint, void(pm::api::Ref<pm::map::GridLayoutGroup>, int32_t)> set_constraint{};
   /// get_constraintCount(grid). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::GridLayoutGroup_get_constraintCount, int32_t(void*)> get_constraintCount{};
+  static constexpr pm::api::Method<pm::map::GridLayoutGroup_get_constraintCount, int32_t(pm::api::Ref<pm::map::GridLayoutGroup>)> get_constraintCount{};
   /// set_constraintCount(grid, count). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GridLayoutGroup_set_constraintCount, void(void*, int32_t)>
+  static constexpr pm::api::Method<pm::map::GridLayoutGroup_set_constraintCount, void(pm::api::Ref<pm::map::GridLayoutGroup>, int32_t)>
       set_constraintCount{};
 };
 
@@ -647,9 +648,9 @@ struct HorizontalOrVerticalLayoutGroup {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::HorizontalOrVerticalLayoutGroup> type{};
   /// get_spacing(layout). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::HorizontalOrVerticalLayoutGroup_get_spacing, float(void*)> get_spacing{};
+  static constexpr pm::api::Method<pm::map::HorizontalOrVerticalLayoutGroup_get_spacing, float(pm::api::Ref<pm::map::HorizontalOrVerticalLayoutGroup>)> get_spacing{};
   /// set_spacing(layout, spacing). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::HorizontalOrVerticalLayoutGroup_set_spacing, void(void*, float)>
+  static constexpr pm::api::Method<pm::map::HorizontalOrVerticalLayoutGroup_set_spacing, void(pm::api::Ref<pm::map::HorizontalOrVerticalLayoutGroup>, float)>
       set_spacing{};
 };
 
@@ -658,15 +659,15 @@ struct Button {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Button> type{};
   /// Press(button): hook it to follow clicks and submits. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Button_Press, void(void*)> Press{};
+  static constexpr pm::api::Method<pm::map::Button_Press, void(pm::api::Ref<pm::map::Button>)> Press{};
   /// get_onClick(button): its click event, a UnityEvent. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Button_get_onClick, void*(void*)> get_onClick{};
+  static constexpr pm::api::Method<pm::map::Button_get_onClick, pm::api::Object(pm::api::Ref<pm::map::Button>)> get_onClick{};
 };
 
 /// Unity's base of the UI's components. `component` below is one.
 struct UIBehaviour {
   /// IsActive.virtual_call(component). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::UIBehaviour_IsActive, bool(void*)> IsActive{};
+  static constexpr pm::api::Method<pm::map::UIBehaviour_IsActive, bool(pm::api::Ref<pm::map::UIBehaviour>)> IsActive{};
 };
 
 /// Unity UI's image.
@@ -674,58 +675,58 @@ struct Image {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Image> type{};
   /// get_sprite(image): the Sprite, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Image_get_sprite, void*(void*)> get_sprite{};
+  static constexpr pm::api::Method<pm::map::Image_get_sprite, pm::api::Object(pm::api::Ref<pm::map::Image>)> get_sprite{};
   /// set_sprite(image, sprite). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Image_set_sprite, void(void*, void*)> set_sprite{};
+  static constexpr pm::api::Method<pm::map::Image_set_sprite, void(pm::api::Ref<pm::map::Image>, pm::api::Object)> set_sprite{};
 };
 
 /// Unity's canvas component.
 struct Canvas {
   /// Screen pixels per canvas unit: get_scaleFactor(canvas). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Canvas_get_scaleFactor, float(void*)> get_scaleFactor{};
+  static constexpr pm::api::Method<pm::map::Canvas_get_scaleFactor, float(pm::api::Ref<pm::map::Canvas>)> get_scaleFactor{};
   /// set_renderMode(canvas, mode): how it is drawn, a RenderMode value. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Canvas_set_renderMode, void(void*, int32_t)> set_renderMode{};
+  static constexpr pm::api::Method<pm::map::Canvas_set_renderMode, void(pm::api::Ref<pm::map::Canvas>, int32_t)> set_renderMode{};
   /// set_sortingOrder(canvas, order): a higher order draws on top. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Canvas_set_sortingOrder, void(void*, int32_t)> set_sortingOrder{};
+  static constexpr pm::api::Method<pm::map::Canvas_set_sortingOrder, void(pm::api::Ref<pm::map::Canvas>, int32_t)> set_sortingOrder{};
   /// The type: type_object() (for AddComponent). Unresolved: null.
   static constexpr pm::api::Type<pm::map::Canvas> type{};
   /// get_worldCamera(canvas): the camera it is seen through, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Canvas_get_worldCamera, void*(void*)> get_worldCamera{};
+  static constexpr pm::api::Method<pm::map::Canvas_get_worldCamera, pm::api::Object(pm::api::Ref<pm::map::Canvas>)> get_worldCamera{};
 };
 
 /// Unity's base of the controls. `control` below is one.
 struct Selectable {
   /// IsInteractable.virtual_call(control). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Selectable_IsInteractable, bool(void*)> IsInteractable{};
+  static constexpr pm::api::Method<pm::map::Selectable_IsInteractable, bool(pm::api::Ref<pm::map::Selectable>)> IsInteractable{};
   /// get_interactable(control). Optional. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Selectable_get_interactable, bool(void*)> get_interactable{};
+  static constexpr pm::api::Method<pm::map::Selectable_get_interactable, bool(pm::api::Ref<pm::map::Selectable>)> get_interactable{};
   /// set_interactable(control, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Selectable_set_interactable, void(void*, bool)> set_interactable{};
+  static constexpr pm::api::Method<pm::map::Selectable_set_interactable, void(pm::api::Ref<pm::map::Selectable>, bool)> set_interactable{};
   /// get_targetGraphic(control): the Graphic it tints, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Selectable_get_targetGraphic, void*(void*)> get_targetGraphic{};
+  static constexpr pm::api::Method<pm::map::Selectable_get_targetGraphic, pm::api::Object(pm::api::Ref<pm::map::Selectable>)> get_targetGraphic{};
   /// set_targetGraphic(control, graphic). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Selectable_set_targetGraphic, void(void*, void*)> set_targetGraphic{};
+  static constexpr pm::api::Method<pm::map::Selectable_set_targetGraphic, void(pm::api::Ref<pm::map::Selectable>, pm::api::Object)> set_targetGraphic{};
 
   /// OnPointerEnter(control, eventData): highlighted, as when the pointer enters it; eventData may be
   /// null. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Selectable_OnPointerEnter, void(void*, void*)> OnPointerEnter{};
+  static constexpr pm::api::Method<pm::map::Selectable_OnPointerEnter, void(pm::api::Ref<pm::map::Selectable>, pm::api::Object)> OnPointerEnter{};
   /// OnPointerExit(control, eventData): no longer highlighted; eventData may be null. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Selectable_OnPointerExit, void(void*, void*)> OnPointerExit{};
+  static constexpr pm::api::Method<pm::map::Selectable_OnPointerExit, void(pm::api::Ref<pm::map::Selectable>, pm::api::Object)> OnPointerExit{};
 };
 
 /// Unity's UI event system.
 struct EventSystem {
   /// get_current(): the event system in use, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::EventSystem_get_current, void*()> get_current{};
+  static constexpr pm::api::Method<pm::map::EventSystem_get_current, pm::api::Object()> get_current{};
   /// Its input module, a Behaviour: currentInputModule.get(system), or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::EventSystem_currentInputModule, void*> currentInputModule{};
+  static constexpr pm::api::Field<pm::map::EventSystem_currentInputModule, pm::api::Object> currentInputModule{};
   /// SetSelectedGameObject(system, go): moves the keyboard and gamepad selection to go; null clears it.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::EventSystem_SetSelectedGameObject, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::EventSystem_SetSelectedGameObject, void(pm::api::Ref<pm::map::EventSystem>, pm::api::Ref<pm::map::GameObject>)>
       SetSelectedGameObject{};
   /// get_currentSelectedGameObject(system): the GameObject the selection is on, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::EventSystem_get_currentSelectedGameObject, void*(void*)>
+  static constexpr pm::api::Method<pm::map::EventSystem_get_currentSelectedGameObject, pm::api::Object(pm::api::Ref<pm::map::EventSystem>)>
       get_currentSelectedGameObject{};
 };
 
@@ -735,7 +736,7 @@ struct CanvasGroup {
   /// false.
   static constexpr pm::api::Type<pm::map::CanvasGroup> type{};
   /// set_blocksRaycasts(group, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CanvasGroup_set_blocksRaycasts, void(void*, bool)> set_blocksRaycasts{};
+  static constexpr pm::api::Method<pm::map::CanvasGroup_set_blocksRaycasts, void(pm::api::Ref<pm::map::CanvasGroup>, bool)> set_blocksRaycasts{};
 };
 
 /// TextMesh Pro's UI text.
@@ -749,16 +750,16 @@ struct Toggle {
   /// The type: type_object() for GetComponent, is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Toggle> type{};
   /// The Graphic shown while on: graphic.get(toggle). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Toggle_graphic, void*> graphic{};
+  static constexpr pm::api::Field<pm::map::Toggle_graphic, pm::api::Object> graphic{};
   /// Its ToggleGroup, or null: m_Group.get(toggle); a write sets the field alone, registering nothing
   /// with any group. Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::Toggle_m_Group, void*> m_Group{};
+  static constexpr pm::api::Field<pm::map::Toggle_m_Group, pm::api::Object> m_Group{};
   /// Its change event, a ToggleEvent: onValueChanged.get(toggle). Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::Toggle_onValueChanged, void*> onValueChanged{};
+  static constexpr pm::api::Field<pm::map::Toggle_onValueChanged, pm::api::Object> onValueChanged{};
   /// get_isOn(toggle). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Toggle_get_isOn, bool(void*)> get_isOn{};
+  static constexpr pm::api::Method<pm::map::Toggle_get_isOn, bool(pm::api::Ref<pm::map::Toggle>)> get_isOn{};
   /// SetIsOnWithoutNotify(toggle, on): no listener runs. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Toggle_SetIsOnWithoutNotify, void(void*, bool)> SetIsOnWithoutNotify{};
+  static constexpr pm::api::Method<pm::map::Toggle_SetIsOnWithoutNotify, void(pm::api::Ref<pm::map::Toggle>, bool)> SetIsOnWithoutNotify{};
 };
 
 /// A toggle's change event.
@@ -766,7 +767,7 @@ struct ToggleEvent {
   /// The type: make() for a new one, then ctor. Unresolved: null.
   static constexpr pm::api::Type<pm::map::ToggleEvent> type{};
   /// ctor(event): runs the constructor of an event made with type.make(). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ToggleEvent_ctor, void(void*)> ctor{};
+  static constexpr pm::api::Method<pm::map::ToggleEvent_ctor, void(pm::api::Ref<pm::map::ToggleEvent>)> ctor{};
 };
 
 /// How a Canvas is drawn. Unresolved: 0.
@@ -780,13 +781,13 @@ struct CanvasScaler {
   /// The type: klass(), is(obj), type_object() (for AddComponent). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::CanvasScaler> type{};
   /// set_uiScaleMode(scaler, mode): how it scales, a ScaleMode value. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CanvasScaler_set_uiScaleMode, void(void*, int32_t)> set_uiScaleMode{};
+  static constexpr pm::api::Method<pm::map::CanvasScaler_set_uiScaleMode, void(pm::api::Ref<pm::map::CanvasScaler>, int32_t)> set_uiScaleMode{};
   /// set_referenceResolution(scaler, size): the resolution laid out for. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CanvasScaler_set_referenceResolution, void(void*, Vector2)>
+  static constexpr pm::api::Method<pm::map::CanvasScaler_set_referenceResolution, void(pm::api::Ref<pm::map::CanvasScaler>, Vector2)>
       set_referenceResolution{};
   /// set_matchWidthOrHeight(scaler, match): 0 the width decides the scale, 1 the height. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::CanvasScaler_set_matchWidthOrHeight, void(void*, float)>
+  static constexpr pm::api::Method<pm::map::CanvasScaler_set_matchWidthOrHeight, void(pm::api::Ref<pm::map::CanvasScaler>, float)>
       set_matchWidthOrHeight{};
   /// How it scales. Unresolved: 0.
   static constexpr pm::api::EnumValue<pm::map::CanvasScaler_ScaleWithScreenSize> ScaleWithScreenSize{};
@@ -804,22 +805,22 @@ struct Graphic {
   /// whichever an object has. Unresolved: is() is false, type_object() null.
   static constexpr pm::api::Type<pm::map::Graphic> type{};
   /// get_color.virtual_call(graphic): its colour, TextMeshPro's own on a text. Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::Graphic_get_color, Color(void*)> get_color{};
+  static constexpr pm::api::Method<pm::map::Graphic_get_color, Color(pm::api::Ref<pm::map::Graphic>)> get_color{};
   /// set_color.virtual_call(graphic, &colour): sets it, TextMeshPro's own on a text. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Graphic_set_color, void(void*, const Color*)> set_color{};
+  static constexpr pm::api::Method<pm::map::Graphic_set_color, void(pm::api::Ref<pm::map::Graphic>, const Color*)> set_color{};
   /// set_raycastTarget(graphic, on): whether it catches the pointer. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Graphic_set_raycastTarget, void(void*, bool)> set_raycastTarget{};
+  static constexpr pm::api::Method<pm::map::Graphic_set_raycastTarget, void(pm::api::Ref<pm::map::Graphic>, bool)> set_raycastTarget{};
   /// get_canvasRenderer(graphic): what draws it. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Graphic_get_canvasRenderer, void*(void*)> get_canvasRenderer{};
+  static constexpr pm::api::Method<pm::map::Graphic_get_canvasRenderer, pm::api::Object(pm::api::Ref<pm::map::Graphic>)> get_canvasRenderer{};
 };
 
 /// What draws a Graphic. `renderer` below is the CanvasRenderer.
 struct CanvasRenderer {
   /// GetColor(renderer). Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::CanvasRenderer_GetColor, Color(void*)> GetColor{};
+  static constexpr pm::api::Method<pm::map::CanvasRenderer_GetColor, Color(pm::api::Ref<pm::map::CanvasRenderer>)> GetColor{};
   /// SetColor(renderer, &colour). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CanvasRenderer_SetColor, void(void*, const Color*)> SetColor{};
+  static constexpr pm::api::Method<pm::map::CanvasRenderer_SetColor, void(pm::api::Ref<pm::map::CanvasRenderer>, const Color*)> SetColor{};
 };
 
 /// A graphic that shows a Texture. `image` below is the RawImage.
@@ -827,21 +828,21 @@ struct RawImage {
   /// The type: type_object() (for AddComponent). Unresolved: null.
   static constexpr pm::api::Type<pm::map::RawImage> type{};
   /// set_texture(image, texture): the texture it shows, or null. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RawImage_set_texture, void(void*, void*)> set_texture{};
+  static constexpr pm::api::Method<pm::map::RawImage_set_texture, void(pm::api::Ref<pm::map::RawImage>, pm::api::Object)> set_texture{};
   /// set_uvRect(image, &rect): the part of the texture it shows, in 0..1. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RawImage_set_uvRect, void(void*, const Rect*)> set_uvRect{};
+  static constexpr pm::api::Method<pm::map::RawImage_set_uvRect, void(pm::api::Ref<pm::map::RawImage>, const Rect*)> set_uvRect{};
 };
 
 /// Unity UI's screen-space hit tests, a static class.
 struct RectTransformUtility {
   /// RectangleContainsScreenPoint(rect, point, camera): whether the screen point is inside. Unresolved: false.
   static constexpr pm::api::Method<pm::map::RectTransformUtility_RectangleContainsScreenPoint,
-                                   bool(void*, Vector2, void*)>
+                                   bool(pm::api::Ref<pm::map::RectTransform>, Vector2, pm::api::Ref<pm::map::Camera>)>
       RectangleContainsScreenPoint{};
   /// ScreenPointToLocalPointInRectangle(rect, point, camera, &local): the point in the rect's own space.
   /// Unresolved: false.
   static constexpr pm::api::Method<pm::map::RectTransformUtility_ScreenPointToLocalPointInRectangle,
-                                   bool(void*, Vector2, void*, Vector2*)>
+                                   bool(pm::api::Ref<pm::map::RectTransform>, Vector2, pm::api::Ref<pm::map::Camera>, Vector2*)>
       ScreenPointToLocalPointInRectangle{};
 };
 
@@ -855,10 +856,10 @@ struct ScrollRect {
   static constexpr pm::api::Type<pm::map::ScrollRect> type{};
   /// The content RectTransform it scrolls: content.get(scroll), content.set(scroll, rect) (through the GC
   /// write barrier). Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::ScrollRect_content, void*> content{};
+  static constexpr pm::api::Field<pm::map::ScrollRect_content, pm::api::Ref<pm::map::RectTransform>> content{};
   /// The viewport RectTransform it scrolls inside: viewport.get(scroll), viewport.set(scroll, rect).
   /// Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::ScrollRect_viewport, void*> viewport{};
+  static constexpr pm::api::Field<pm::map::ScrollRect_viewport, pm::api::Ref<pm::map::RectTransform>> viewport{};
   /// Whether it scrolls side to side: horizontal.get(scroll), .set(scroll, on). Unresolved: false, writes
   /// nothing.
   static constexpr pm::api::Field<pm::map::ScrollRect_horizontal, bool> horizontal{};
@@ -871,15 +872,15 @@ struct ScrollRect {
   static constexpr pm::api::Field<pm::map::ScrollRect_movementType, int32_t> movementType{};
   /// get_verticalNormalizedPosition(scroll): how far down the content sits, 0 at the bottom and 1 at the top
   /// of what it can scroll. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::ScrollRect_get_verticalNormalizedPosition, float(void*)>
+  static constexpr pm::api::Method<pm::map::ScrollRect_get_verticalNormalizedPosition, float(pm::api::Ref<pm::map::ScrollRect>)>
       get_verticalNormalizedPosition{};
   /// set_verticalNormalizedPosition(scroll, value): moves the content there, 1 at the top and 0 at the
   /// bottom; a value outside 0..1 is clamped by the game. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ScrollRect_set_verticalNormalizedPosition, void(void*, float)>
+  static constexpr pm::api::Method<pm::map::ScrollRect_set_verticalNormalizedPosition, void(pm::api::Ref<pm::map::ScrollRect>, float)>
       set_verticalNormalizedPosition{};
   /// StopMovement(scroll): drops the content's inertia, so a view released mid-drag stops where it is.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ScrollRect_StopMovement, void(void*)> StopMovement{};
+  static constexpr pm::api::Method<pm::map::ScrollRect_StopMovement, void(pm::api::Ref<pm::map::ScrollRect>)> StopMovement{};
 };
 
 /// Unity UI's rectangular clip. `object` below is the GameObject or any component of the one to clip.
@@ -905,34 +906,34 @@ inline constexpr pm::api::EnumValue<pm::map::ScrollMovementType_Clamped> Clamped
 /// TextMeshPro's base text. `text` below is the TMP_Text (a TextMeshProUGUI).
 struct TMP_Text {
   /// set_text(text, string): its text. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::TMP_Text_set_text, void(void*, void*)> set_text{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_set_text, void(pm::api::Ref<pm::map::TMP_Text>, pm::api::Object)> set_text{};
   /// get_text(text): its text, a managed string. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::TMP_Text_get_text, void*(void*)> get_text{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_get_text, pm::api::Object(pm::api::Ref<pm::map::TMP_Text>)> get_text{};
   /// get_fontSize(text). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::TMP_Text_get_fontSize, float(void*)> get_fontSize{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_get_fontSize, float(pm::api::Ref<pm::map::TMP_Text>)> get_fontSize{};
   /// set_fontSize(text, size). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::TMP_Text_set_fontSize, void(void*, float)> set_fontSize{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_set_fontSize, void(pm::api::Ref<pm::map::TMP_Text>, float)> set_fontSize{};
   /// get_fontSizeMax(text): auto-sizing's largest size as configured. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::TMP_Text_get_fontSizeMax, float(void*)> get_fontSizeMax{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_get_fontSizeMax, float(pm::api::Ref<pm::map::TMP_Text>)> get_fontSizeMax{};
   /// set_fontSizeMax(text, size). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::TMP_Text_set_fontSizeMax, void(void*, float)> set_fontSizeMax{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_set_fontSizeMax, void(pm::api::Ref<pm::map::TMP_Text>, float)> set_fontSizeMax{};
   /// set_fontSizeMin(text, size). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::TMP_Text_set_fontSizeMin, void(void*, float)> set_fontSizeMin{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_set_fontSizeMin, void(pm::api::Ref<pm::map::TMP_Text>, float)> set_fontSizeMin{};
   /// set_enableAutoSizing(text, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::TMP_Text_set_enableAutoSizing, void(void*, bool)> set_enableAutoSizing{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_set_enableAutoSizing, void(pm::api::Ref<pm::map::TMP_Text>, bool)> set_enableAutoSizing{};
   /// set_alignment(text, options): a TextAlignmentOptions value. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::TMP_Text_set_alignment, void(void*, int32_t)> set_alignment{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_set_alignment, void(pm::api::Ref<pm::map::TMP_Text>, int32_t)> set_alignment{};
   /// set_enableWordWrapping(text, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::TMP_Text_set_enableWordWrapping, void(void*, bool)>
+  static constexpr pm::api::Method<pm::map::TMP_Text_set_enableWordWrapping, void(pm::api::Ref<pm::map::TMP_Text>, bool)>
       set_enableWordWrapping{};
   /// get_font(text): its TMP_FontAsset. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::TMP_Text_get_font, void*(void*)> get_font{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_get_font, pm::api::Object(pm::api::Ref<pm::map::TMP_Text>)> get_font{};
   /// set_font(text, font). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::TMP_Text_set_font, void(void*, void*)> set_font{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_set_font, void(pm::api::Ref<pm::map::TMP_Text>, pm::api::Object)> set_font{};
   /// get_fontSharedMaterial(text): its font's shared material. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::TMP_Text_get_fontSharedMaterial, void*(void*)> get_fontSharedMaterial{};
+  static constexpr pm::api::Method<pm::map::TMP_Text_get_fontSharedMaterial, pm::api::Object(pm::api::Ref<pm::map::TMP_Text>)> get_fontSharedMaterial{};
   /// set_fontSharedMaterial(text, material). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::TMP_Text_set_fontSharedMaterial, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::TMP_Text_set_fontSharedMaterial, void(pm::api::Ref<pm::map::TMP_Text>, pm::api::Object)>
       set_fontSharedMaterial{};
 };
 

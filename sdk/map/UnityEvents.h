@@ -134,29 +134,29 @@ struct UnityEvent {
   /// The type: make() for a new event (then ctor), is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::UnityEvent> type{};
   /// ctor(event): makes a new event's listener lists. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UnityEvent_ctor, void(void*)> ctor{};
+  static constexpr pm::api::Method<pm::map::UnityEvent_ctor, void(pm::api::Ref<pm::map::UnityEvent>)> ctor{};
   /// AddListener(event, action): action a UnityAction. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UnityEvent_AddListener, void(void*, void*)> AddListener{};
+  static constexpr pm::api::Method<pm::map::UnityEvent_AddListener, void(pm::api::Ref<pm::map::UnityEvent>, pm::api::Object)> AddListener{};
   /// Invoke(event): runs its listeners. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UnityEvent_Invoke, void(void*)> Invoke{};
+  static constexpr pm::api::Method<pm::map::UnityEvent_Invoke, void(pm::api::Ref<pm::map::UnityEvent>)> Invoke{};
 };
 
 /// The base of Unity's events. `event` below is one.
 struct UnityEventBase {
   /// GetPersistentEventCount(event): its listeners saved with the scene. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::UnityEventBase_GetPersistentEventCount, int32_t(void*)>
+  static constexpr pm::api::Method<pm::map::UnityEventBase_GetPersistentEventCount, int32_t(pm::api::Ref<pm::map::UnityEventBase>)>
       GetPersistentEventCount{};
   /// Its saved listeners, a PersistentCallGroup: m_PersistentCalls.get(event). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::UnityEventBase_m_PersistentCalls, void*> m_PersistentCalls{};
+  static constexpr pm::api::Field<pm::map::UnityEventBase_m_PersistentCalls, pm::api::Ref<pm::map::PersistentCallGroup>> m_PersistentCalls{};
   /// Its listener lists, an InvokableCallList: m_Calls.get(event). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::UnityEventBase_m_Calls, void*> m_Calls{};
+  static constexpr pm::api::Field<pm::map::UnityEventBase_m_Calls, pm::api::Ref<pm::map::InvokableCallList>> m_Calls{};
 };
 
 /// An event's listener lists. `lists` below is one.
 struct InvokableCallList {
   /// The listeners added at run time, a List<BaseInvokableCall>: m_RuntimeCalls.get(lists), read as a
   /// pm::api::List. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InvokableCallList_m_RuntimeCalls, void*> m_RuntimeCalls{};
+  static constexpr pm::api::Field<pm::map::InvokableCallList_m_RuntimeCalls, pm::api::Object> m_RuntimeCalls{};
 };
 
 /// A run-time listener of no arguments. `call` below is one; check InvokableCall::type.is(call) first, since a list
@@ -165,25 +165,25 @@ struct InvokableCall {
   /// The type: klass(), is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::InvokableCall> type{};
   /// The UnityAction it calls: Delegate.get(call). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InvokableCall_Delegate, void*> Delegate{};
+  static constexpr pm::api::Field<pm::map::InvokableCall_Delegate, pm::api::Object> Delegate{};
 };
 
 /// .NET's delegate base. `d` below is any delegate.
 struct Delegate {
   /// The object it calls its method on, or null for a static method: m_target.get(d). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Delegate_m_target, void*> m_target{};
+  static constexpr pm::api::Field<pm::map::Delegate_m_target, pm::api::Object> m_target{};
 };
 
 /// An event's saved listeners. `group` below is one.
 struct PersistentCallGroup {
   /// The listeners, a List<PersistentCall>: m_Calls.get(group), read as a pm::api::List. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PersistentCallGroup_m_Calls, void*> m_Calls{};
+  static constexpr pm::api::Field<pm::map::PersistentCallGroup_m_Calls, pm::api::Object> m_Calls{};
 };
 
 /// One saved listener. `call` below is one.
 struct PersistentCall {
   /// The Unity object it calls its method on: m_Target.get(call). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PersistentCall_m_Target, void*> m_Target{};
+  static constexpr pm::api::Field<pm::map::PersistentCall_m_Target, pm::api::Object> m_Target{};
 };
 
 /// Unity's delegate with no arguments.
@@ -191,9 +191,9 @@ struct UnityAction {
   /// The type: klass(), is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::UnityAction> type{};
   /// ctor(action, target, method): as a delegate's, for a method the runtime made. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UnityAction_ctor, void(void*, void*, const void*)> ctor{};
+  static constexpr pm::api::Method<pm::map::UnityAction_ctor, void(pm::api::Ref<pm::map::UnityAction>, pm::api::Object, const void*)> ctor{};
   /// Invoke(action). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UnityAction_Invoke, void(void*)> Invoke{};
+  static constexpr pm::api::Method<pm::map::UnityAction_Invoke, void(pm::api::Ref<pm::map::UnityAction>)> Invoke{};
 };
 
 /// @}

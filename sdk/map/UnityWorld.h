@@ -364,22 +364,20 @@ struct NavMeshHit {
 struct Physics {
   /// Raycast(&origin, &direction, maxDistance, layerMask, triggers): whether anything is hit, the
   /// vectors passed by address as the x64 convention passes them. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Physics_Raycast, bool(const Vector3*, const Vector3*, float, int32_t,
-                                                                  int32_t)>
+  static constexpr pm::api::Method<pm::map::Physics_Raycast, bool(const Vector3*, const Vector3*, float, int32_t, int32_t)>
       Raycast{};
   /// RaycastHit(&ray, &hit, maxDistance, layerMask, queryTriggers): whether the ray hit a collider within
   /// maxDistance, filling `hit`. `hit` must be room for the game's RaycastHit: size it from the game
   /// (RaycastHit::type.make_array(1) and pm::api::ValueArray::stride). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Physics_RaycastHit, bool(const Ray*, void*, float, int32_t, int32_t)>
+  static constexpr pm::api::Method<pm::map::Physics_RaycastHit, bool(const Ray*, pm::api::Object, float, int32_t, int32_t)>
       RaycastHit{};
   /// CheckBox(&centre, &halfExtents, &rotation, layerMask, triggers): whether any collider on the mask's layers
   /// overlaps the box, the structs passed by address as the x64 convention passes them. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Physics_CheckBox, bool(const Vector3*, const Vector3*, const Quaternion*,
-                                                                   int32_t, int32_t)>
+  static constexpr pm::api::Method<pm::map::Physics_CheckBox, bool(const Vector3*, const Vector3*, const Quaternion*, int32_t, int32_t)>
       CheckBox{};
   /// OverlapSphere(&centre, radius, layerMask, triggers): every collider on the mask's layers touching the sphere, a
   /// new Collider[]. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Physics_OverlapSphere, void*(const Vector3*, float, int32_t, int32_t)>
+  static constexpr pm::api::Method<pm::map::Physics_OverlapSphere, pm::api::Object(const Vector3*, float, int32_t, int32_t)>
       OverlapSphere{};
 };
 
@@ -396,7 +394,7 @@ struct NavMesh {
   static constexpr pm::api::Method<pm::map::NavMesh_SamplePosition, bool(const Vector3*, NavMeshHit*, float, int32_t)>
       SamplePosition{};
   /// CalculatePath(&from, &to, areaMask, path): a path from `from` to `to` into `path`. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::NavMesh_CalculatePath, bool(const Vector3*, const Vector3*, int32_t, void*)>
+  static constexpr pm::api::Method<pm::map::NavMesh_CalculatePath, bool(const Vector3*, const Vector3*, int32_t, pm::api::Ref<pm::map::NavMeshPath>)>
       CalculatePath{};
 };
 
@@ -411,11 +409,11 @@ struct NavMeshPath {
   /// The type: make() for a new one, which ctor then sets up. Unresolved: null.
   static constexpr pm::api::Type<pm::map::NavMeshPath> type{};
   /// ctor(path). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::NavMeshPath_ctor, void(void*)> ctor{};
+  static constexpr pm::api::Method<pm::map::NavMeshPath_ctor, void(pm::api::Ref<pm::map::NavMeshPath>)> ctor{};
   /// get_status(path), a NavMeshPathStatus. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::NavMeshPath_get_status, int32_t(void*)> get_status{};
+  static constexpr pm::api::Method<pm::map::NavMeshPath_get_status, int32_t(pm::api::Ref<pm::map::NavMeshPath>)> get_status{};
   /// get_corners(path), a Vector3[] read as a pm::api::Array<Vector3>. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::NavMeshPath_get_corners, void*(void*)> get_corners{};
+  static constexpr pm::api::Method<pm::map::NavMeshPath_get_corners, pm::api::Object(pm::api::Ref<pm::map::NavMeshPath>)> get_corners{};
 };
 
 /// A NavMeshAgent. `agent` below is one.
@@ -427,34 +425,34 @@ struct NavMeshAgent {
   /// host does the work and needs entries of its own, which a mod never names or requires.
   static constexpr pm::api::AgentSteering steer{};
   /// SetDestination(agent, &target). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::NavMeshAgent_SetDestination, bool(void*, const Vector3*)> SetDestination{};
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_SetDestination, bool(pm::api::Ref<pm::map::NavMeshAgent>, const Vector3*)> SetDestination{};
   /// CalculatePath(agent, &target, path): the path the agent would walk from where it stands, into `path`, a
   /// NavMeshPath; false when it cannot. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::NavMeshAgent_CalculatePath, bool(void*, const Vector3*, void*)> CalculatePath{};
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_CalculatePath, bool(pm::api::Ref<pm::map::NavMeshAgent>, const Vector3*, pm::api::Ref<pm::map::NavMeshPath>)> CalculatePath{};
   /// get_velocity(agent). Unresolved: zeros.
-  static constexpr pm::api::Method<pm::map::NavMeshAgent_get_velocity, Vector3(void*)> get_velocity{};
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_get_velocity, Vector3(pm::api::Ref<pm::map::NavMeshAgent>)> get_velocity{};
   /// set_angularSpeed(agent, degreesPerSecond). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::NavMeshAgent_set_angularSpeed, void(void*, float)> set_angularSpeed{};
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_set_angularSpeed, void(pm::api::Ref<pm::map::NavMeshAgent>, float)> set_angularSpeed{};
   /// Warp(agent, &position): false when it cannot. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::NavMeshAgent_Warp, bool(void*, const Vector3*)> Warp{};
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_Warp, bool(pm::api::Ref<pm::map::NavMeshAgent>, const Vector3*)> Warp{};
   /// set_speed(agent, metresPerSecond). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::NavMeshAgent_set_speed, void(void*, float)> set_speed{};
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_set_speed, void(pm::api::Ref<pm::map::NavMeshAgent>, float)> set_speed{};
   /// set_acceleration(agent, metresPerSecondSquared). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::NavMeshAgent_set_acceleration, void(void*, float)> set_acceleration{};
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_set_acceleration, void(pm::api::Ref<pm::map::NavMeshAgent>, float)> set_acceleration{};
   /// get_desiredVelocity_Injected(agent, &out): the velocity it wants into `out`. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Icall<pm::map::NavMeshAgent_get_desiredVelocity_Injected, void(void*, Vector3*)>
+  static constexpr pm::api::Icall<pm::map::NavMeshAgent_get_desiredVelocity_Injected, void(pm::api::Object, Vector3*)>
       get_desiredVelocity_Injected{};
   /// get_angularSpeed(agent). Unresolved: 0.
-  static constexpr pm::api::Icall<pm::map::NavMeshAgent_get_angularSpeed, float(void*)> get_angularSpeed{};
+  static constexpr pm::api::Icall<pm::map::NavMeshAgent_get_angularSpeed, float(pm::api::Object)> get_angularSpeed{};
   /// get_speed(agent): its top speed in metres a second. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::NavMeshAgent_get_speed, float(void*)> get_speed{};
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_get_speed, float(pm::api::Ref<pm::map::NavMeshAgent>)> get_speed{};
   /// get_remainingDistance(agent): how far it still walks, Infinity while unknown. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::NavMeshAgent_get_remainingDistance, float(void*)> get_remainingDistance{};
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_get_remainingDistance, float(pm::api::Ref<pm::map::NavMeshAgent>)> get_remainingDistance{};
   /// get_pathPending(agent): whether its path is still being worked out. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::NavMeshAgent_get_pathPending, bool(void*)> get_pathPending{};
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_get_pathPending, bool(pm::api::Ref<pm::map::NavMeshAgent>)> get_pathPending{};
   /// get_destination(agent): where it walks to. Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::NavMeshAgent_get_destination, Vector3(void*)> get_destination{};
+  static constexpr pm::api::Method<pm::map::NavMeshAgent_get_destination, Vector3(pm::api::Ref<pm::map::NavMeshAgent>)> get_destination{};
 };
 
 /// Unity's rigid body. `body` below is one.
@@ -462,45 +460,45 @@ struct Rigidbody {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Rigidbody> type{};
   /// get_worldCenterOfMass(body). Unresolved: zeros.
-  static constexpr pm::api::Method<pm::map::Rigidbody_get_worldCenterOfMass, Vector3(void*)> get_worldCenterOfMass{};
+  static constexpr pm::api::Method<pm::map::Rigidbody_get_worldCenterOfMass, Vector3(pm::api::Ref<pm::map::Rigidbody>)> get_worldCenterOfMass{};
   /// get_isKinematic(body). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Rigidbody_get_isKinematic, bool(void*)> get_isKinematic{};
+  static constexpr pm::api::Method<pm::map::Rigidbody_get_isKinematic, bool(pm::api::Ref<pm::map::Rigidbody>)> get_isKinematic{};
   /// get_velocity(body). Unresolved: zeros.
-  static constexpr pm::api::Method<pm::map::Rigidbody_get_velocity, Vector3(void*)> get_velocity{};
+  static constexpr pm::api::Method<pm::map::Rigidbody_get_velocity, Vector3(pm::api::Ref<pm::map::Rigidbody>)> get_velocity{};
   /// set_velocity(body, &velocity). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Rigidbody_set_velocity, void(void*, const Vector3*)> set_velocity{};
+  static constexpr pm::api::Method<pm::map::Rigidbody_set_velocity, void(pm::api::Ref<pm::map::Rigidbody>, const Vector3*)> set_velocity{};
   /// set_angularVelocity(body, &spin). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Rigidbody_set_angularVelocity, void(void*, const Vector3*)>
+  static constexpr pm::api::Method<pm::map::Rigidbody_set_angularVelocity, void(pm::api::Ref<pm::map::Rigidbody>, const Vector3*)>
       set_angularVelocity{};
   /// set_position(body, &position). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Rigidbody_set_position, void(void*, const Vector3*)> set_position{};
+  static constexpr pm::api::Method<pm::map::Rigidbody_set_position, void(pm::api::Ref<pm::map::Rigidbody>, const Vector3*)> set_position{};
   /// AddForceAtPosition(body, &force, &worldPoint, mode). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Rigidbody_AddForceAtPosition, void(void*, const Vector3*, const Vector3*, int32_t)>
+  static constexpr pm::api::Method<pm::map::Rigidbody_AddForceAtPosition, void(pm::api::Ref<pm::map::Rigidbody>, const Vector3*, const Vector3*, int32_t)>
       AddForceAtPosition{};
   /// GetPointVelocity(body, &worldPoint): that point's velocity, metres a second. Unresolved: zeros.
-  static constexpr pm::api::Method<pm::map::Rigidbody_GetPointVelocity, Vector3(void*, const Vector3*)> GetPointVelocity{};
+  static constexpr pm::api::Method<pm::map::Rigidbody_GetPointVelocity, Vector3(pm::api::Ref<pm::map::Rigidbody>, const Vector3*)> GetPointVelocity{};
   /// ForceMode.VelocityChange, Unity's documented value: a change of velocity, whatever the mass.
   static constexpr int32_t kVelocityChange = 2;
   /// set_isKinematic(body, kinematic). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Rigidbody_set_isKinematic, void(void*, bool)> set_isKinematic{};
+  static constexpr pm::api::Method<pm::map::Rigidbody_set_isKinematic, void(pm::api::Ref<pm::map::Rigidbody>, bool)> set_isKinematic{};
   /// set_constraints(body, flags): Unity's RigidbodyConstraints flags. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Rigidbody_set_constraints, void(void*, int32_t)> set_constraints{};
+  static constexpr pm::api::Method<pm::map::Rigidbody_set_constraints, void(pm::api::Ref<pm::map::Rigidbody>, int32_t)> set_constraints{};
   /// RigidbodyConstraints.FreezeAll, Unity's documented value: no position or rotation change.
   static constexpr int32_t kFreezeAll = 126;
   /// RigidbodyConstraints.None.
   static constexpr int32_t kFreeNone = 0;
   /// set_mass(body, kilograms). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Rigidbody_set_mass, void(void*, float)> set_mass{};
+  static constexpr pm::api::Method<pm::map::Rigidbody_set_mass, void(pm::api::Ref<pm::map::Rigidbody>, float)> set_mass{};
   /// set_useGravity(body, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Rigidbody_set_useGravity, void(void*, bool)> set_useGravity{};
+  static constexpr pm::api::Method<pm::map::Rigidbody_set_useGravity, void(pm::api::Ref<pm::map::Rigidbody>, bool)> set_useGravity{};
   /// get_angularVelocity(body): radians a second about each world axis. Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::Rigidbody_get_angularVelocity, Vector3(void*)> get_angularVelocity{};
+  static constexpr pm::api::Method<pm::map::Rigidbody_get_angularVelocity, Vector3(pm::api::Ref<pm::map::Rigidbody>)> get_angularVelocity{};
 };
 
 /// DOTween's static API.
 struct DOTween {
   /// IsTweening(target, alsoCheckIfIsPlaying). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::DOTween_IsTweening, bool(void*, bool)> IsTweening{};
+  static constexpr pm::api::Method<pm::map::DOTween_IsTweening, bool(pm::api::Object, bool)> IsTweening{};
 };
 
 /// Unity's random numbers.
@@ -514,9 +512,9 @@ struct RaycastHit {
   /// The type: klass(), make_array(n) (an array's stride is the struct's size). Unresolved: null.
   static constexpr pm::api::Type<pm::map::RaycastHit> type{};
   /// get_transform(hit): the Transform of what it hit. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::RaycastHit_get_transform, void*(void*)> get_transform{};
+  static constexpr pm::api::Method<pm::map::RaycastHit_get_transform, pm::api::Object(pm::api::Ref<pm::map::RaycastHit>)> get_transform{};
   /// get_distance(hit): metres along the ray. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::RaycastHit_get_distance, float(void*)> get_distance{};
+  static constexpr pm::api::Method<pm::map::RaycastHit_get_distance, float(pm::api::Ref<pm::map::RaycastHit>)> get_distance{};
 };
 
 /// @}

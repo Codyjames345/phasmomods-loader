@@ -985,7 +985,7 @@ bool press(void* button) {
     for (size_t c = 0; c < calls.size(); ++c) {
       void* call = calls[c];
       void* action = call && InvokableCall::type.is(call) ? InvokableCall::Delegate.get(call) : nullptr;
-      if (action && Delegate::m_target.get(action) == button) {
+      if (action && Delegate::m_target.get(action).raw() == button) {
         UnityEvent::Invoke(events[i]);
         return true;
       }
