@@ -312,6 +312,11 @@ void the_shipped_catalogue_parses_with_a_label_for_each() {
   CHECK(named("forget-me-not").introClip.empty() && !named("forget-me-not").introSong.empty());
   for (const char* walker : {"get-griddy", "running-man", "stride"})
     CHECK(named(walker).moveClip == named(walker).clip);
+  // Sway, the synced one: the partner 1.3 m to the first dancer's left, and the pair faces each other (the user,
+  // 2026-11-14).
+  CHECK(named("sway").synced() && named("sway").partner && named("sway").partner->faceEachOther &&
+        std::fabs(named("sway").partner->offsetRight + 1.3f) < 1e-4f &&
+        std::fabs(named("sway").partner->offsetForward) < 1e-4f);
   for (const EmoteDef& e : cat.emotes) CHECK(e.songLoop.length > 0.0f);
   CHECK(bundle_path(named("take-the-l").clip) == "assets/emotes/clips/takethel.anim");
   // Each song's loop as the emote pack tool measured it, in samples at the song's own rate (the counts the songs were

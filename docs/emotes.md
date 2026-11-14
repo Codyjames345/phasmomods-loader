@@ -44,6 +44,8 @@ keyboard key does not talk while the wheel is open either.
   degrees either side your body keeps facing the way it started, and past that it turns to keep the camera 90 degrees
   behind. In VR the view never moves; your own body shows instead, so look down to watch.
 - What you hold stays in your hand.
+- Head-mounted gear (the head camera) rides the dancing head on every dancer's body, and goes back to where the game
+  hung it when the dance ends.
 - Moving more than half a metre, using, placing, picking up, dropping or throwing an item, opening a door, flipping a
   light switch, crouching, or dying ends the dance. Switching items does not.
 - Some dances walk while they dance. Hold forward and the dancer takes its walking clip, and the half-metre rule moves
@@ -65,17 +67,21 @@ Sway is a synced dance: a second player can join in and dance its other part bes
 `docs/superpowers/specs/2026-11-13-synced-emotes-design.md`.
 
 - **The prompt.** Stand within 3 metres of someone dancing Sway and look at them: "Join" shows over their head beside
-  the game's Interact button. That is E on a keyboard (or whatever you rebound Interact to), the game's own glyph for
-  your Interact button on a gamepad, and the right trigger's glyph in VR. It shows only while you could start a dance
+  the game's Pickup key. That is E on a keyboard (or whatever you rebound Pickup to), the game's own glyph for the
+  west button on a gamepad, and the right trigger's glyph in VR. It shows only while you could start a dance
   yourself, after the dancer's intro, while nobody has joined them yet, and while the spot beside them has room for you
-  on solid ground. It also hides while the game's own Interact would act on something in front of you, such as a door,
+  on solid ground. It also hides while the game's own Pickup would act on something in front of you, such as a door,
   a light switch or an item, so one press never does both.
-- **Joining.** Press Interact (the right trigger in VR). The dancer's game takes the first player to ask, and you glide
-  in 0.6 seconds to their left, 1.3 metres away, facing the way they face, then dance the second part from the point
-  they have reached. The first dancer carries on without a jump.
-- **Together.** Neither body turns with its camera while the two dance, so the pair stay side by side. One song plays,
-  the first dancer's, and that is the one the ghost hears. A synced dance may have a synced song of its own, which
-  replaces the first dancer's from the same point when someone joins; Sway has none.
+- **Joining.** Press E (the gamepad's west button, or the right trigger in VR). The dancer's game takes the first
+  player to ask, and you glide in 0.6 seconds to their left, 1.3 metres away, then dance the second part from the
+  point they have reached. The first dancer carries on without a jump.
+- **Facing.** A dance whose pack asks for it (Sway does) has the pair turn to face one another: you glide in looking
+  at the first dancer, and they turn to you over the same 0.6 seconds. The spot never moves, and neither body turns
+  with its camera afterwards. Other synced dances keep both facing the way the join was made at.
+- **Together.** Each dancer hears the pair's song as their own, from their own body; everyone else hears one copy from
+  the point between the dancers, moving as they move. The ghost still hears one song per pair, the first dancer's. A
+  synced dance may have a synced song of its own, which replaces the first dancer's from the same point when someone
+  joins; Sway has none.
 - **Stopping.** Whatever ends one dancer's dance (moving away, an action, the journal or pause screen, a death, leaving,
   or picking another dance) ends the other's too.
 

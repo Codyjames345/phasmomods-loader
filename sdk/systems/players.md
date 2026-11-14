@@ -233,12 +233,15 @@ What blocks a player is the controller's own collision mask (`PhysicsCharacterCo
 `get_radius`, `get_height` and `get_center` (local to the rig). A mod that wants to know whether a player fits at a
 point tests that capsule's space against that mask.
 
-## What Interact acts on
+## What Interact and Pickup act on
 
-The PC Interact (`PCPropGrab.OnInteract`) casts a ray 1.8 m from the centre of `PCPropGrab.playerCam` on
-`PCPropGrab.mask`, triggers ignored, and acts only on what it hits that has a `PhotonObjectInteract`, or a
-`ChildPhotonInteract` leading to one: a door, a light switch, an item. Another player's body gets nothing, so a mod may
-use Interact on a player, as long as it does not act while that ray would hit an interactable.
+The PC Interact (`PCPropGrab.OnInteract`, left mouse button and right trigger) and the PC Pickup
+(`PCPropGrab.OnPickup`, E and the west button) each cast a ray 1.8 m from the centre of `PCPropGrab.playerCam` on
+`PCPropGrab.mask`, triggers ignored, and the two rays are exactly the same. Both act only on what they hit that has a
+`PhotonObjectInteract`, or a `ChildPhotonInteract` leading to one: a door, a light switch, an item. Pickup takes that
+item when the interact allows being grabbed; Interact answers it. Neither acts on another player's body, which carries
+neither component, so a mod may use either action on a player, as long as it does not act while that ray would hit an
+interactable.
 
 ## The body
 
@@ -285,6 +288,22 @@ What a mod needs to animate an investigator's own body, as the Emotes mod does (
   toward where the camera looks. The body's facing reaches other clients with the root's rotation.
 - **VR.** A VR player's investigator is a `VRPlayer`. Its `VRPlayer.leftHandIK` and `VRPlayer.rightHandIK` are the IK
   targets that follow the controllers.
+
+### Head-mounted gear
+
+The head camera and similar gear, once worn, hangs from a fixed socket point rather than from the animated head.
+`NetworkedHeadMountedSocket` (map entries for `attachTransform`, `modelHeadSpot` and its one Equipment field) sits on
+the body's root and holds the two hang points and the one piece worn. `NetworkedHeadMountedSocket.MountEquipment` and
+`UnmountEquipment` send messages that hang the gear from one of the points and undo it; the hang also fixes the gear's
+local place and turn, freezes its Rigidbody and switches off its interact component (map notes). `attachTransform` is
+under the body's camera head, a node no body animation moves; `modelHeadSpot` hangs off the model's head bone, so an
+animation carries anything hung there. The socket has no per-frame placement (no method named Update, LateUpdate or
+FixedUpdate among its 98): the gear's transform is written only by the two mount and unmount messages and by a
+position setter of `attachTransform` that has no caller in the game's code. On a live PC test (2026-11-14) worn gear
+was hung from `attachTransform`, and it stayed at the standing head height while an emote clip moved the head bone.
+A mod animating the body can hang the worn gear from `modelHeadSpot` while its animation runs, keeping its local place
+and turn (the hang sets the same pair for either point), and put it back under the parent the game had it under
+afterwards; `mods/emotes/gear.h` does that for dances.
 
 ### What the player does, by input action
 

@@ -119,3 +119,32 @@ call, for the user to check:
    ends the emote.
 5. **The prompt is the local player's own.** Each client draws it only for itself, over the dancer it could join.
 
+## Changes after the first live test (user, 2026-11-14)
+
+These replace what the sections above say where they differ.
+
+1. **The button is the game's Grab action, not Interact.** The game names it `Pickup`: E on keyboard, the west button
+   on a gamepad (`sdk/systems/players.md`, "What the player does, by input action"). The user had asked for Interact
+   thinking it was E, but Interact is the left mouse button and the right trigger. Its keyboard binding is therefore no
+   key, so the keycap showed empty. Everything said above about Interact (the glyph, the bindings read with rebinding,
+   no prompt while the game's own action would act on something) now applies to Pickup. VR keeps the right trigger.
+   What Pickup does when pressed while looking at another player, and what its own ray reaches, is reverse engineered
+   before it is relied on. If the game acts on a player, the builder stops and asks.
+2. **The two dancers face each other.** The joiner's spot stays where the live test put it, about 1.3 m to the first
+   dancer's left, as the user's screenshot shows. On joining, both bodies turn to face each other: the joiner glides in
+   already facing the first dancer, and the first dancer turns toward the joiner over the same glide, never in a jump.
+   The spot is fixed at the moment of the join, so the first dancer's turn never moves it. This replaces "side by side,
+   facing the same way" above, and Claude's call 2 now keeps that facing each other for the rest of the dance. A pack
+   says this per synced emote in its catalogue, so other synced emotes may still face the same way.
+3. **Each dancer hears the song as their own.** A dancer's own emote song plays to them from their own body, as for
+   any emote: not positioned, in both ears. On the joiner's client, the joiner's body plays the pair's song as its own,
+   in step with the first dancer's, and the first dancer's copy is silent there, so the joiner no longer hears it from
+   one side. The first dancer's client plays it the same way, from their own body. Every other client hears one copy,
+   from the midpoint between the two dancers, moving as they move (the user, 2026-11-14), instead of from the first
+   dancer. Only one copy counts for the ghost, as before (Left to the builder, last item).
+4. **Head gear follows the head during an emote** (the user, 2026-11-14), for every emote, not only synced ones.
+   Whatever the player wears on their head stays on the dancing head on every client, then goes back to the game's own
+   placement when the emote ends. That covers cosmetic hats such as the antlers, and head equipment such as the head
+   torch or head camera. In the live test it stayed where the head would be without the dance. How the game attaches and
+   moves each kind is reverse engineered first, and the fix uses the game's own attachment where it can.
+
