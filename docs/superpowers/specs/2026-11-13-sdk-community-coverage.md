@@ -720,6 +720,8 @@ Checked against `core/mod_api.h` (contract 2.6) and `sdk/api`:
 | Data folder | Partly | `PmHostApi::dataDirectory` is `%LOCALAPPDATA%\PhasmoMods`, shared; mods build `<data>\<mod id>\` themselves (Dev Menu, Emotes) | a helper `pm::mod::data_folder()` giving `%LOCALAPPDATA%\PhasmoMods\data\<mod id>\`, made on first ask, as SMAPI's `DirectoryPath` (Decisions, 3); the Dev Menu and Emotes move their files there, with a one-time move of each player's existing files from `<data>\<mod id>\` |
 | Frame time | No | `pmmod_tick` takes no time; `Time.get_frameCount` and `Time.get_timeScale` are mapped, `Time.get_deltaTime` and `Time.get_unscaledDeltaTime` are not | map `Time.get_deltaTime`, `get_unscaledDeltaTime`, `get_time`, `get_unscaledTime` (Unity's documented API), and a helper `pm::api::frame_time()`; no contract member: the map gives it (Decisions, 4) |
 | Log levels | No | `PmHostApi::log(line)` and `log_exception` | a new contract member `log_level(level, line)` at the end of `PmHostApi`, levels trace, debug, info, warn, error, alert (SMAPI's `LogLevel`); `log` stays info |
+| Timers on the main thread | No | `core/game.h`'s `start_coroutine(behaviour, routine)`, raw; `pmmod_tick` every frame | "run next frame", "run in N seconds" and a hand-off from a worker thread to the game thread, run from the loader's own tick (section 18, Round 38) |
+| Text in the game's language | Partly | `core/text_table.h` reads `i18n/default.json`; `LocalisationSystem.get_language` and the language codes are mapped | the loader picks each table's `i18n/<code>.json` by the game's language, falling back to `default.json` per key, as SMAPI does (section 18, Round 40) |
 
 **The lobby rule** (the plan asked for the user's answer with this spec; the user chose A on 2026-11-14, Decisions, 1):
 a setting that changes game rules (a ghost's speed, a tell's strength) must agree across a lobby, or two clients play
@@ -1034,6 +1036,22 @@ surface the game has that each could use (the truck monitor, journal pages, the 
 game's popup) as options for the user. The warning investigators get when the ghost spends big (p04) is player-facing
 too, so it carries `PM_UI_TODO` the same way.
 
+## 18. Added on 2026-11-14
+
+Six gaps a community author would meet, found by checking this spec, `sdk/api` and `core` against what common mods
+need. The user asked for all six on 2026-11-14 (Decisions, 11). Each becomes a round (38 to 43). The round numbers are
+ids that keep the research notes' names stable; the list below places each where it runs. Every behaviour named here is
+still to prove by RE, as everywhere in this spec.
+
+| Gap | What exists | What the round adds | Round |
+| --- | --- | --- | --- |
+| The dump model and duplicated short names | A Method's `"@Key"` return is matched by identity only when the dump model knows the return's type index. The text dump spells a return unqualified, and the model gives no index to a short name that two game classes share (two `Sensor` classes), so the check falls back to the name and the entry is Ambiguous. `LOSSensor.get_InputSensor` stays untyped for this reason (stage 2b Task 14 Step 0b, part 2c). | The dump model recovers the qualified return type (from the declaring file's `using` lines and namespaces, or from the metadata), so any return whose class is mapped can be typed. Tooling only; no entry's meaning changes. `LOSSensor.get_InputSensor` is typed after it. | 43 |
+| Scene changes | Contract events in Rounds 2 and 3; nothing for the main menu, the lobby or the scenes' loading and unloading | An event when a scene loads and when one unloads, with the scene's name, built on the hook point the game's engine calls (to map; Unity's `SceneManager` is the documented API, and RE finds the method the engine calls). `sdk/api/events.h`, beside Round 2's events | 39 |
+| Timers on the main thread | Section 14's row | The service in section 14. Its shape follows an established loader (MelonLoader's coroutines, Unity's own coroutine model), researched in the round and given to the user as options where it is a matter of taste | 38 |
+| The game's language | Section 14's row; the language and its codes are mapped (`LocalisationSystem.get_language`, `GetLanguageAbbreviationText`) | The loader reads the game's language and loads a table's `i18n/<code>.json` beside `default.json`, falling back per key, as SMAPI does; an event when the player changes the language (the setter or the menu's change: to map). Translations are player-facing text, so the user or a mod's author writes them, never AI (AI_POLICY.md) | 40 |
+| Volume and the audio mixer | `GameMyAudioManager.masterVolumeSlider` and its text are mapped; `VoiceVolume` for voices | The player's volume values as the game applies them, and whether the game routes sound through an `AudioMixer`, with its groups (to map). If it does, a helper puts a mod's `AudioSource` on the group the game uses for the same kind of sound; if it does not, the round maps how the game applies the volume, and the helper follows that | 41 |
+| The player's own game settings | `GameSettings` and `GameplaySettings` (contract settings, section 12) | Read-only: field of view, mouse and controller sensitivity, and the other settings a mod's camera or aiming should respect, from wherever the game keeps them (to map). Nothing is written | 42 |
+
 ---
 
 ## Mapping rounds, in order
@@ -1125,6 +1143,19 @@ work stops and reports the split, rather than growing. Round 1 starts once Task 
 36. **Nice-to-haves.** Weather effects, the journal's remainder, UI widgets beyond the revamp's surfaces.
 37. **Navigation for Task 18.** Held until the user starts Task 18.
 
+**Rounds added on 2026-11-14** (section 18; Decisions, 11). Their numbers are ids, not order. Each runs at the place
+named:
+
+- **Round 43, duplicated short names in the dump model:** first, right after the typed handles land and before Round 1,
+  so every later round can type its returns.
+- **Round 39, scene changes:** right after Round 2, in `sdk/api/events.h`.
+- **Round 38, timers on the main thread:** right after Round 5, as a loader service.
+- **Round 40, text in the game's language:** right after Round 38.
+- **Round 41, volume and the audio mixer:** right after Round 10, so Round 11's sounds use it.
+- **Round 42, the player's own game settings:** right after Round 27.
+
+So the full order is 43, 1, 2, 39, 3, 4, 5, 38, 40, 6 to 10, 41, 11 to 27, 42, 28 to 37.
+
 Then Task 17's Steps 3 to 6: the coverage gate, the example and guide (if not done after Round 3), the smoke list, the
 commits.
 
@@ -1154,3 +1185,5 @@ The spec's questions, answered on 2026-11-14.
 10. **Breath on glass** (user): keep it. If RE finds no vanilla effect, it stays in the design and the user designs the
     effect's look later (art is the user's); Round 22 maps whatever surfaces exist (materials, decals) so the effect
     can be applied.
+11. **Six more gaps** (user, 2026-11-14): add all six of section 18 as Rounds 38 to 43, placed where they run (the
+    note after the round list). Their numbers are new ids, so no earlier round is renumbered.
