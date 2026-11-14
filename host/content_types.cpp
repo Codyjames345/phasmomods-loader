@@ -105,7 +105,7 @@ void detour_pick_evidence(pm::api::Original<phasmo::GhostController::PickEvidenc
 
 void* detour_evidence_list(pm::api::Original<phasmo::GhostData::GetEvidenceList> original, void* data) {
   static bool logged = false;
-  const auto list = api::Object::unchecked(original(data));  // the game's answer through the raw hook seam
+  const auto list = original(data);  // the game's answer, an Object (GhostData.GetEvidenceList)
   if (g_self) guarded(logged, "following an evidence pick", [] { g_self->after_evidence_list(); });
   return list.raw();
 }

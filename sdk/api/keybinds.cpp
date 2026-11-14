@@ -435,11 +435,13 @@ void ensure_rows() {
     void* first = nullptr;  // a row of this list, for the heading and the divider
     for (size_t d = 0; d < kDevices && !first; ++d)
       if (list_of(d) == list) first = templ[d];
-    void* divider = rows::divider_beside(first);
+    const auto divider = rows::divider_beside(first);
     float added = 0.0f;
     // A divider before each thing added, as the game's list puts one between rows.
     const auto add_divider = [&] {
-      const auto copy = divider ? phasmo::Object::Instantiate(divider, list, false) : nullptr;
+      // The raw bridge takes every handle argument of one call as raw or none, and list stays raw
+      // (rule 8), so the divider goes raw here.
+      const auto copy = divider ? phasmo::Object::Instantiate(divider.raw(), list, false) : nullptr;
       if (!copy) return;
       g.extras.push_back(copy);
       added += rows::taken_height(copy.raw(), list);
