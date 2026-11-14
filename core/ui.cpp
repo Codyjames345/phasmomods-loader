@@ -23,27 +23,28 @@ phasmo::Vector2 to_game(Vec2 v) { return {v.x, v.y}; }
 // screen. Which text the rest of the scene happens to hold is not something to depend on: an emote's name came out in
 // another font entirely (the user's report, 2026-11-10).
 void* game_text_sample() {
-  void* type = phasmo::TextMeshProUGUI::type.type_object();
+  void* type = phasmo::TextMeshProUGUI::type.type_object();  // a System.Type: raw by design
   if (!type) return nullptr;
-  void* rig = game::local_player_component();
-  if (void* own = rig ? phasmo::Component::GetComponentInChildren(rig, type, true) : nullptr; own && game::alive(own))
-    return own;
-  return phasmo::Object::FindObjectOfType(type, false);
+  const auto rig = game::local_player_component();
+  if (const auto own = rig ? phasmo::Component::GetComponentInChildren(rig, type, true) : nullptr;
+      own && game::alive(own.raw()))
+    return own.raw();
+  return phasmo::Object::FindObjectOfType(type, false).raw();
 }
 
 // Copy the game's own UI font and material from a text the game already shows.
 void style_like_game(void* text) {
-  void* sample = game_text_sample();
-  if (!sample || sample == text || !game::alive(sample)) return;
-  if (void* font = phasmo::TMP_Text::get_font(sample)) phasmo::TMP_Text::set_font(text, font);
-  if (void* material = phasmo::TMP_Text::get_fontSharedMaterial(sample))
-    phasmo::TMP_Text::set_fontSharedMaterial(text, material);
+  const auto sample = api::Object::unchecked(game_text_sample());  // still a void* return until 3c
+  if (!sample || sample.raw() == text || !game::alive(sample.raw())) return;
+  if (const auto font = phasmo::TMP_Text::get_font(sample)) phasmo::TMP_Text::set_font(text, font);
+  if (const auto material = phasmo::TMP_Text::get_fontSharedMaterial(sample))
+    phasmo::TMP_Text::set_fontSharedMaterial(text, material.raw());  // the still-void* text goes raw, so the material does too
 }
 
 void* child(void* parent, const char* name) {
-  void* go = game::new_game_object(name);
-  if (go && parent) phasmo::Transform::SetParent(game::object_transform(go), game::transform_of(parent), false);
-  return go;
+  const auto go = game::new_game_object(name);
+  if (go && parent) phasmo::Transform::SetParent(game::object_transform(go.raw()), game::transform_of(parent), false);
+  return go.raw();
 }
 
 // A problem named once, so a mod built wrong is in the log without the line filling it every frame.
@@ -68,12 +69,12 @@ int32_t alignment(Align align) {
 bool resolve() { return true; }
 
 api::Object create_canvas(const char* name, int sortingOrder) {
-  void* go = game::new_game_object(name);
+  const auto go = game::new_game_object(name);
   if (!go) return nullptr;
-  void* canvas = game::add_component(go, phasmo::Canvas::type.type_object());
+  const auto canvas = game::add_component(go.raw(), phasmo::Canvas::type.type_object());
   phasmo::Canvas::set_renderMode(canvas, phasmo::RenderMode::ScreenSpaceOverlay());
   phasmo::Canvas::set_sortingOrder(canvas, sortingOrder);
-  void* scaler = game::add_component(go, phasmo::CanvasScaler::type.type_object());
+  const auto scaler = game::add_component(go.raw(), phasmo::CanvasScaler::type.type_object());
   phasmo::CanvasScaler::set_uiScaleMode(scaler, phasmo::CanvasScaler::ScaleWithScreenSize());
   phasmo::CanvasScaler::set_referenceResolution(scaler, phasmo::Vector2{1920, 1080});
   phasmo::CanvasScaler::set_matchWidthOrHeight(scaler, 0.5f);
@@ -81,10 +82,10 @@ api::Object create_canvas(const char* name, int sortingOrder) {
 }
 
 api::Object create_text(void* parent, const char* name, float fontSize) {
-  void* go = child(parent, name);
-  void* text = game::add_component(go, phasmo::TextMeshProUGUI::type.type_object());
+  const auto go = api::Object::unchecked(child(parent, name));  // still a void* return until 3c
+  const auto text = game::add_component(go.raw(), phasmo::TextMeshProUGUI::type.type_object());
   if (!text) return nullptr;
-  style_like_game(text);
+  style_like_game(text.raw());
   phasmo::TMP_Text::set_fontSize(text, fontSize);
   phasmo::TMP_Text::set_alignment(text, alignment(Align::Center));
   phasmo::TMP_Text::set_enableWordWrapping(text, false);
@@ -95,14 +96,14 @@ api::Object create_text(void* parent, const char* name, float fontSize) {
 // A RawImage without a texture is a solid quad of its colour. (Plain Images created on the mod's
 // canvases set their colour but did not draw in game; RawImages do.)
 api::Object create_image(void* parent, const char* name, Color color) {
-  void* image = create_raw_image(parent, name, nullptr);
-  if (image) set_color(image, color);
+  const auto image = create_raw_image(parent, name, nullptr);
+  if (image) set_color(image.raw(), color);
   return image;
 }
 
 api::Object create_raw_image(void* parent, const char* name, void* texture) {
-  void* go = child(parent, name);
-  void* image = game::add_component(go, phasmo::RawImage::type.type_object());
+  const auto go = api::Object::unchecked(child(parent, name));  // still a void* return until 3c
+  const auto image = game::add_component(go.raw(), phasmo::RawImage::type.type_object());
   if (!image) return nullptr;
   phasmo::RawImage::set_texture(image, texture);
   phasmo::Graphic::set_raycastTarget(image, false);
@@ -112,8 +113,8 @@ api::Object create_raw_image(void* parent, const char* name, void* texture) {
 void set_texture(void* rawImage, void* texture) { phasmo::RawImage::set_texture(rawImage, texture); }
 
 api::Object create_sprite_image(void* parent, const char* name, void* sprite) {
-  void* go = child(parent, name);
-  void* image = game::add_component(go, phasmo::Image::type.type_object());
+  const auto go = api::Object::unchecked(child(parent, name));  // still a void* return until 3c
+  const auto image = game::add_component(go.raw(), phasmo::Image::type.type_object());
   if (!image) return nullptr;
   phasmo::Image::set_sprite(image, sprite);
   phasmo::Graphic::set_raycastTarget(image, false);
@@ -128,18 +129,18 @@ void set_uv_rect(void* rawImage, Rect uv) {
 
 bool contains(void* component, Vec2 screenPoint, void* camera) {
   if (!component || !game::alive(component)) return false;
-  void* rt = game::rect_transform_of(component);
-  return rt && phasmo::RectTransformUtility::RectangleContainsScreenPoint(rt, to_game(screenPoint), camera);
+  const auto rt = game::rect_transform_of(component);  // a RectTransform, checked by the helper
+  return rt && phasmo::RectTransformUtility::RectangleContainsScreenPoint(rt.raw(), to_game(screenPoint), camera);
 }
 
 bool normalized_point(void* component, Vec2 screenPoint, Vec2& out, void* camera) {
   if (!component || !game::alive(component)) return false;
-  void* rt = game::rect_transform_of(component);
+  const auto rt = game::rect_transform_of(component);  // a RectTransform, checked by the helper
   if (!rt) return false;
   phasmo::Vector2 local{};
-  if (!phasmo::RectTransformUtility::ScreenPointToLocalPointInRectangle(rt, to_game(screenPoint), camera, &local))
+  if (!phasmo::RectTransformUtility::ScreenPointToLocalPointInRectangle(rt.raw(), to_game(screenPoint), camera, &local))
     return false;
-  const phasmo::Rect r = phasmo::RectTransform::get_rect(rt);
+  const phasmo::Rect r = phasmo::RectTransform::get_rect(rt.raw());
   if (r.width <= 0 || r.height <= 0) return false;
   out = {(local.x - r.x) / r.width, (local.y - r.y) / r.height};
   return out.x >= 0 && out.x <= 1 && out.y >= 0 && out.y <= 1;
@@ -154,17 +155,17 @@ void set_active(void* component, bool on) {
 }
 
 void place(void* gameObjectOrComponent, Vec2 anchor, Vec2 pivot, Vec2 position, Vec2 size) {
-  void* rt = game::rect_transform_of(gameObjectOrComponent);
+  const auto rt = game::rect_transform_of(gameObjectOrComponent);  // a RectTransform, checked by the helper
   if (!rt) {
     static bool warned = false;
     warn_once(warned, "an object asked to be placed has no RectTransform; nothing is laid out");
     return;
   }
-  phasmo::RectTransform::set_anchorMin(rt, to_game(anchor));
-  phasmo::RectTransform::set_anchorMax(rt, to_game(anchor));
-  phasmo::RectTransform::set_pivot(rt, to_game(pivot));
-  phasmo::RectTransform::set_anchoredPosition(rt, to_game(position));
-  phasmo::RectTransform::set_sizeDelta(rt, to_game(size));
+  phasmo::RectTransform::set_anchorMin(rt.raw(), to_game(anchor));
+  phasmo::RectTransform::set_anchorMax(rt.raw(), to_game(anchor));
+  phasmo::RectTransform::set_pivot(rt.raw(), to_game(pivot));
+  phasmo::RectTransform::set_anchoredPosition(rt.raw(), to_game(position));
+  phasmo::RectTransform::set_sizeDelta(rt.raw(), to_game(size));
 }
 
 void set_alignment(void* text, Align align) { phasmo::TMP_Text::set_alignment(text, alignment(align)); }
@@ -201,17 +202,17 @@ Color color(void* graphic) {
 // the map sets for us.
 void stretch(void* gameObjectOrComponent, Vec2 anchorMin, Vec2 anchorMax, Vec2 pivot, Vec2 position,
              Vec2 sizeDelta) {
-  void* rt = game::rect_transform_of(gameObjectOrComponent);
+  const auto rt = game::rect_transform_of(gameObjectOrComponent);  // a RectTransform, checked by the helper
   if (!rt) {
     static bool warned = false;
     warn_once(warned, "an object asked to be stretched has no RectTransform; nothing is laid out");
     return;
   }
-  phasmo::RectTransform::set_anchorMin(rt, to_game(anchorMin));
-  phasmo::RectTransform::set_anchorMax(rt, to_game(anchorMax));
-  phasmo::RectTransform::set_pivot(rt, to_game(pivot));
-  phasmo::RectTransform::set_anchoredPosition(rt, to_game(position));
-  phasmo::RectTransform::set_sizeDelta(rt, to_game(sizeDelta));
+  phasmo::RectTransform::set_anchorMin(rt.raw(), to_game(anchorMin));
+  phasmo::RectTransform::set_anchorMax(rt.raw(), to_game(anchorMax));
+  phasmo::RectTransform::set_pivot(rt.raw(), to_game(pivot));
+  phasmo::RectTransform::set_anchoredPosition(rt.raw(), to_game(position));
+  phasmo::RectTransform::set_sizeDelta(rt.raw(), to_game(sizeDelta));
 }
 
 // Built the way Unity's own editor builds one: a viewport carrying the game's clip and its ScrollRect, a
@@ -238,11 +239,11 @@ ScrollView create_scroll_view(void* parent, const char* name, Vec2 position, Vec
   place(view.viewport, {0.5f, 0.5f}, {0.5f, 0.5f}, position, size);
   view.height = size.y;
   view.contentHeight = contentHeight;
-  if (void* back = create_raw_image(view.viewport, (base + " back").c_str(), nullptr)) {
-    stretch(back, {0.0f, 0.0f}, {1.0f, 1.0f}, {0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f});
+  if (const auto back = create_raw_image(view.viewport, (base + " back").c_str(), nullptr)) {
+    stretch(back.raw(), {0.0f, 0.0f}, {1.0f, 1.0f}, {0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f});
     // It is there only to catch a drag anywhere in the view, so it paints nothing: a RawImage left at its default
     // colour is a white sheet behind the rows (the dev menu's live test of 2026-11-12 showed it).
-    set_color(back, {0.0f, 0.0f, 0.0f, 0.0f});
+    set_color(back.raw(), {0.0f, 0.0f, 0.0f, 0.0f});
     phasmo::Graphic::set_raycastTarget(back, true);
   }
   view.content = child(view.viewport, (base + " content").c_str());
@@ -251,9 +252,11 @@ ScrollView create_scroll_view(void* parent, const char* name, Vec2 position, Vec
     stretch(view.content, {0.0f, 1.0f}, {1.0f, 1.0f}, {0.5f, 1.0f}, {0.0f, 0.0f}, {0.0f, contentHeight});
   }
   if (!view.scroll) return view;  // no ScrollRect: the rows still show, they just cannot move
-  if (void* contentRt = game::rect_transform_of(view.content)) phasmo::ScrollRect::content.set(view.scroll, contentRt);
-  if (void* viewportRt = game::rect_transform_of(view.viewport))
-    phasmo::ScrollRect::viewport.set(view.scroll, viewportRt);
+  // The content and viewport fields want a RectTransform, which rect_transform_of has already checked for.
+  if (const auto contentRt = game::rect_transform_of(view.content))
+    phasmo::ScrollRect::content.set(view.scroll, contentRt.raw());
+  if (const auto viewportRt = game::rect_transform_of(view.viewport))
+    phasmo::ScrollRect::viewport.set(view.scroll, viewportRt.raw());
   phasmo::ScrollRect::vertical.set(view.scroll, true);
   phasmo::ScrollRect::horizontal.set(view.scroll, false);
   // A ScrollRect made at run time holds the free-running mode (Unity's editor-only Reset never runs), which
@@ -269,14 +272,14 @@ void set_scroll_height(ScrollView& view, float contentHeight) {
                              : 1.0f;
   view.contentHeight = contentHeight;
   if (!view.content) return;
-  void* rt = game::rect_transform_of(view.content);
+  const auto rt = game::rect_transform_of(view.content);  // a RectTransform, checked by the helper
   if (!rt) {
     static bool warned = false;
     warn_once(warned, "a scroll view's content has no RectTransform: its height is not set");
     return;
   }
-  const phasmo::Vector2 size = phasmo::RectTransform::get_sizeDelta(rt);
-  phasmo::RectTransform::set_sizeDelta(rt, phasmo::Vector2{size.x, contentHeight});
+  const phasmo::Vector2 size = phasmo::RectTransform::get_sizeDelta(rt.raw());
+  phasmo::RectTransform::set_sizeDelta(rt.raw(), phasmo::Vector2{size.x, contentHeight});
   // After the new height, so the game clamps the position it is given against the bounds the list now has.
   if (view.scroll) phasmo::ScrollRect::set_verticalNormalizedPosition(view.scroll, fraction);
 }
@@ -297,26 +300,27 @@ namespace pm::ui {
 
 api::Object create_world_canvas(const char* name, void* follow, float metresPerUnit) {
   if (!follow || !game::alive(follow)) return nullptr;
-  void* go = game::new_game_object(name);
+  const auto go = game::new_game_object(name);
   if (!go) return nullptr;
-  void* canvas = game::add_component(go, phasmo::Canvas::type.type_object());
+  const auto canvas = game::add_component(go.raw(), phasmo::Canvas::type.type_object());
   if (!canvas) {
-    game::destroy(go);
+    game::destroy(go.raw());
     return nullptr;
   }
   phasmo::Canvas::set_renderMode(canvas, phasmo::RenderMode::WorldSpace());
-  void* t = game::object_transform(go);
-  phasmo::Transform::SetParent(t, follow, false);
-  game::set_local_position(t, {0.0f, 0.0f, 0.0f});
-  game::set_local_rotation(t, {0.0f, 0.0f, 0.0f, 1.0f});
-  game::set_local_scale(t, {metresPerUnit, metresPerUnit, metresPerUnit});
+  const auto t = game::object_transform(go.raw());
+  // The game's SetParent on a handle plus a still-void* follow: both raw through the bridge.
+  phasmo::Transform::SetParent(t.raw(), follow, false);
+  game::set_local_position(t.raw(), {0.0f, 0.0f, 0.0f});
+  game::set_local_rotation(t.raw(), {0.0f, 0.0f, 0.0f, 1.0f});
+  game::set_local_scale(t.raw(), {metresPerUnit, metresPerUnit, metresPerUnit});
   return canvas;
 }
 
 api::Object texture_from_rgba(int width, int height, const uint8_t* rgba, size_t bytes) {
   if (width <= 0 || height <= 0 || !rgba || bytes != static_cast<size_t>(width) * static_cast<size_t>(height) * 4)
     return nullptr;
-  void* texture = phasmo::Texture2D::type.make();
+  const auto texture = phasmo::Texture2D::type.make();
   if (!texture) return nullptr;
   // One level, no mip chain: the player's texture quality setting drops a texture's top mip levels, which made the
   // Emotes wheel's shapes blocky; and a texture with levels left unwritten shows the engine's grey fill.
@@ -325,10 +329,10 @@ api::Object texture_from_rgba(int width, int height, const uint8_t* rgba, size_t
   else
     phasmo::Texture2D::ctor(texture, width, height);
   phasmo::Object::set_hideFlags(texture, phasmo::HideFlags::DontUnloadUnusedAsset());
-  void* pixels = phasmo::Texture2D::GetPixels32(texture, 0);
-  const api::Array<phasmo::Color32> texels{pixels};
+  const auto pixels = phasmo::Texture2D::GetPixels32(texture, 0);
+  const api::Array<phasmo::Color32> texels{pixels.raw()};
   if (texels.size() * sizeof(phasmo::Color32) != bytes) {
-    game::destroy(texture);
+    game::destroy(texture.raw());
     return nullptr;
   }
   std::copy_n(rgba, bytes, reinterpret_cast<uint8_t*>(&texels[0]));

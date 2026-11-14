@@ -19,7 +19,7 @@ inline bool private_room() {
     return false;
   if (!Net::get_InRoom()) return false;
   if (Net::get_OfflineMode()) return true;  // single player
-  void* room = Net::get_CurrentRoom();
+  const auto room = Net::get_CurrentRoom();
   return room && !phasmo::PhotonRoom::get_IsVisible(room);  // not listed in the public lobby browser
 }
 
@@ -29,15 +29,15 @@ inline int actor_number(void* photonPlayer) { return phasmo::PhotonPlayer::get_A
 // This client's actor number; 0 when not in a room, or when the numbers cannot be read.
 inline int local_actor() {
   if (!phasmo::PhotonNetwork::get_InRoom()) return 0;
-  void* p = phasmo::PhotonNetwork::get_LocalPlayer();
-  return p ? actor_number(p) : 0;
+  const auto p = phasmo::PhotonNetwork::get_LocalPlayer();
+  return p ? actor_number(p.raw()) : 0;
 }
 
 // The room's master's actor number; 0 when not in a room, or when the numbers cannot be read.
 inline int master_actor() {
   if (!phasmo::PhotonNetwork::get_InRoom()) return 0;
-  void* p = phasmo::PhotonNetwork::get_MasterClient();
-  return p ? actor_number(p) : 0;
+  const auto p = phasmo::PhotonNetwork::get_MasterClient();
+  return p ? actor_number(p.raw()) : 0;
 }
 
 // The room's players by actor number; empty outside a room or when the list cannot be read. An actor number that cannot
@@ -50,8 +50,8 @@ inline bool room_actors(std::vector<int>& out) {
   const api::RefArray list{phasmo::PhotonNetwork::get_PlayerList()};
   bool whole = list.size() > 0;
   for (size_t i = 0; i < list.size(); ++i) {
-    void* p = list[i];
-    if (p) out.push_back(actor_number(p));
+    const auto p = api::Object::unchecked(list[i]);  // a RefArray element read
+    if (p) out.push_back(actor_number(p.raw()));
     if (!p || out.back() == 0) whole = false;
   }
   return whole || phasmo::PhotonNetwork::get_OfflineMode();

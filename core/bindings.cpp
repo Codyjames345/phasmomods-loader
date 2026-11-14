@@ -18,16 +18,17 @@ namespace {
 template <class Visit>
 void each_action(void* localPlayer, Visit visit) {
   if (!api::alive(localPlayer) || !phasmo::LocalPCPlayer::type.is(localPlayer)) return;
-  void* controls = phasmo::LocalPCPlayer::controls.get(localPlayer);
-  void* asset = controls ? phasmo::PCControls::actions.get(controls) : nullptr;
+  const auto controls = phasmo::LocalPCPlayer::controls.get(localPlayer);
+  const auto asset = controls ? phasmo::PCControls::actions.get(controls) : nullptr;
   const api::RefArray maps{asset ? phasmo::InputActionAsset::m_ActionMaps.get(asset) : nullptr};
   for (size_t i = 0; i < maps.size(); ++i) {
-    void* map = maps[i];
+    const auto map = api::Object::unchecked(maps[i]);  // a RefArray element read
     if (!map) continue;
     const std::string mapName = api::to_utf8(phasmo::InputActionMap::m_Name.get(map));
     const api::RefArray actions{phasmo::InputActionMap::m_Actions.get(map)};
     for (size_t j = 0; j < actions.size(); ++j)
-      if (void* action = actions[j]) visit(action, mapName, api::to_utf8(phasmo::InputAction::m_Name.get(action)));
+      if (const auto action = api::Object::unchecked(actions[j]))
+        visit(action, mapName, api::to_utf8(phasmo::InputAction::m_Name.get(action)));
   }
 }
 
@@ -71,14 +72,14 @@ Key key_for_path(const std::string& path) {
 
 Key for_action(void* localPlayer, const char* actionName, const char* part) {
   Key found;
-  each_action(localPlayer, [&](void* action, const std::string&, const std::string& name) {
+  each_action(localPlayer, [&](api::Object action, const std::string&, const std::string& name) {
     if (found.vk || name != actionName) return;
-    void* map = phasmo::InputAction::m_ActionMap.get(action);
+    const auto map = phasmo::InputAction::m_ActionMap.get(action);
     // The map's bindings, structs whose size the runtime gives (ValueArray's stride).
     const api::ValueArray list{map ? phasmo::InputActionMap::m_Bindings.get(map) : nullptr};
     const std::string id = api::to_utf8(phasmo::InputAction::m_Id.get(action));
     for (size_t i = 0; i < list.size() && !found.vk; ++i) {
-      void* b = list.at(i);
+      void* b = list.at(i);  // an InputBinding value's address in the array: not an object
       if (!b) break;
       const std::string target = api::to_utf8(phasmo::InputBinding::m_Action.get(b));  // name or ID
       if (target != actionName && (id.empty() || target != id)) continue;

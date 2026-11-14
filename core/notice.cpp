@@ -29,18 +29,18 @@ struct Popup {
 
 void build() {
   g = Popup{};
-  void* canvas = ui::create_canvas("PlayableGhostNotice", 60);
+  const auto canvas = ui::create_canvas("PlayableGhostNotice", 60);
   if (!canvas) return;
   g.canvas = api::Held(canvas);
-  void* panel = ui::create_image(canvas, "Panel", kPanel);
-  ui::place(panel, {0.5f, 0.5f}, {0.5f, 0.5f}, {0, -160}, {820, 120});
-  void* title = ui::create_text(canvas, "Title", 30);
-  ui::place(title, {0.5f, 0.5f}, {0.5f, 0.5f}, {0, -135}, {800, 40});
-  ui::set_color(title, kTitle);
+  const auto panel = ui::create_image(canvas.raw(), "Panel", kPanel);
+  ui::place(panel.raw(), {0.5f, 0.5f}, {0.5f, 0.5f}, {0, -160}, {820, 120});
+  const auto title = ui::create_text(canvas.raw(), "Title", 30);
+  ui::place(title.raw(), {0.5f, 0.5f}, {0.5f, 0.5f}, {0, -135}, {800, 40});
+  ui::set_color(title.raw(), kTitle);
   g.title = api::Held(title);
-  void* body = ui::create_text(canvas, "Body", 24);
-  ui::place(body, {0.5f, 0.5f}, {0.5f, 0.5f}, {0, -180}, {800, 36});
-  ui::set_color(body, kBody);
+  const auto body = ui::create_text(canvas.raw(), "Body", 24);
+  ui::place(body.raw(), {0.5f, 0.5f}, {0.5f, 0.5f}, {0, -180}, {800, 36});
+  ui::set_color(body.raw(), kBody);
   g.body = api::Held(body);
 }
 

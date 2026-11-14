@@ -96,7 +96,7 @@ void set_rotation(void* t, Quaternion r) {
 }
 
 api::Object new_game_object(const char* name) {
-  void* go = phasmo::GameObject::type.make();
+  const auto go = phasmo::GameObject::type.make();
   if (!go) return nullptr;
   phasmo::GameObject::ctor(go, api::make_string(name));
   return go;
@@ -214,7 +214,7 @@ api::Ref<pm::map::LevelController> level_controller() {
   return alive(lc) ? lc : nullptr;
 }
 api::Ref<pm::map::GhostAI> ghost_ai() {
-  void* lc = level_controller();
+  const auto lc = level_controller();
   const auto g = lc ? phasmo::LevelController::currentGhost.get(lc) : nullptr;
   return alive(g) ? g : nullptr;
 }
@@ -227,27 +227,28 @@ api::Ref<pm::map::NavMeshAgent> ghost_agent(void* g) {
 api::Ref<pm::map::Network> network() { return phasmo::Network::get_Instance(); }
 
 api::Object local_player() {
-  void* n = network();
-  void* p = n ? phasmo::Network::localPlayer.get(n) : nullptr;
-  return alive(p) ? p : nullptr;
+  const auto n = network();
+  const auto p = n ? phasmo::Network::localPlayer.get(n) : nullptr;
+  return alive(p.raw()) ? p : nullptr;
 }
 api::Object player_of_actor(int actor) {
-  void* n = network();
+  const auto n = network();
   const api::List spots{n ? phasmo::Network::playerSpots.get(n) : nullptr};
   for (size_t i = 0; i < spots.size(); ++i) {
-    void* spot = spots[i];
-    if (spot && actor_number(phasmo::PlayerSpot::photonPlayer.get(spot)) == actor) return phasmo::PlayerSpot::player.get(spot);
+    const auto spot = api::Object::unchecked(spots[i]);  // a List element read
+    if (spot && actor_number(phasmo::PlayerSpot::photonPlayer.get(spot).raw()) == actor)
+      return phasmo::PlayerSpot::player.get(spot);
   }
   return nullptr;
 }
 api::Ref<pm::map::Camera> local_camera() {
-  void* lp = local_player_component();
+  const auto lp = local_player_component();
   const auto cam = lp ? phasmo::LocalPlayer::camera.get(lp) : nullptr;
   return alive(cam) ? cam : nullptr;
 }
 
 api::Object ghost_state_object(void* g) {
-  void* machine = phasmo::GhostAI::stateMachine.get(g);
+  const auto machine = phasmo::GhostAI::stateMachine.get(g);
   return machine ? phasmo::GhostStateMachine::current.get(machine) : nullptr;
 }
 bool sensor_detects(void* sensor, void* gameObject) {
@@ -274,7 +275,7 @@ api::Ref<pm::map::GhostActivity> ghost_activity(void* g) {
 }
 
 api::Ref<pm::map::LocalPlayer> local_player_component() {
-  void* n = network();
+  const auto n = network();
   const auto lp = n ? phasmo::Network::localRig.get(n) : nullptr;
   return alive(lp) ? lp : nullptr;
 }
@@ -293,8 +294,8 @@ std::vector<Bounds> room_bounds(void* levelRoom) {
   std::vector<Bounds> out;
   const api::List list{levelRoom ? phasmo::LevelRoom::roomColliders.get(levelRoom) : nullptr};
   for (size_t i = 0; i < list.size(); ++i) {
-    void* collider = list[i];
-    if (!alive(collider)) continue;
+    const auto collider = api::Object::unchecked(list[i]);  // a List element read
+    if (!alive(collider.raw())) continue;
     out.push_back(phasmo::Collider::get_bounds(collider));
   }
   return out;
@@ -320,14 +321,14 @@ float distance_to_room(void* levelRoom, Vector3 p) {
 }
 
 api::RefArray level_rooms() {
-  void* level = level_controller();
-  return api::RefArray{level ? phasmo::LevelController::rooms.get(level) : nullptr};
+  const auto level = level_controller();
+  return api::RefArray{level ? phasmo::LevelController::rooms.get(level).raw() : nullptr};
 }
 
 api::Object room_at(Vector3 p, float margin) {
   const api::RefArray rooms = level_rooms();
   for (size_t i = 0; i < rooms.size(); ++i)
-    if (void* room = rooms[i]; alive(room) && in_room(room, p, margin)) return room;
+    if (const auto room = api::Object::unchecked(rooms[i]); alive(room.raw()) && in_room(room.raw(), p, margin)) return room;
   return nullptr;
 }
 
@@ -335,13 +336,13 @@ void each_running_camera(CameraScan& scan, uint64_t now, const std::function<boo
   if (now >= scan.nextScan) {
     scan.nextScan = now + kCameraScanMs;
     scan.cameras.clear();
-    const api::RefArray all{phasmo::Object::FindObjectsOfType(phasmo::CCTV::type.type_object())};
+    const api::RefArray all{phasmo::Object::FindObjectsOfType(phasmo::CCTV::type.type_object()).raw()};
     for (size_t i = 0; i < all.size(); ++i)
-      if (void* c = all[i]; alive(c)) scan.cameras.emplace_back(c);
+      if (const auto cam = api::Object::unchecked(all[i]); alive(cam.raw())) scan.cameras.emplace_back(cam);
   }
   for (const api::Held& c : scan.cameras) {
-    void* camera = c.get();
-    if (alive(camera) && phasmo::Equipment::isOn.get(camera) && visit(camera)) return;
+    const api::Object camera = api::Object::unchecked(c.get());
+    if (alive(camera.raw()) && phasmo::Equipment::isOn.get(camera) && visit(camera.raw())) return;
   }
 }
 
@@ -357,7 +358,7 @@ bool cast_into(unsigned char (&hit)[128], Vector3 origin, Vector3 direction, flo
   // Read once: a size that cannot be read or does not fit is remembered too, so no array is made per call.
   static size_t hitSize = 0;
   static bool sized = false;
-  if (!std::exchange(sized, true)) hitSize = api::ValueArray{phasmo::RaycastHit::type.make_array(1)}.stride();
+  if (!std::exchange(sized, true)) hitSize = api::ValueArray{phasmo::RaycastHit::type.make_array(1).raw()}.stride();
   if (!hitSize || hitSize > sizeof hit) {
     static bool logged = false;
     if (!std::exchange(logged, true)) PM_LOG("game: a RaycastHit of %zu bytes does not fit; no ray is cast", hitSize);
@@ -370,14 +371,14 @@ bool cast_into(unsigned char (&hit)[128], Vector3 origin, Vector3 direction, flo
 }  // namespace
 
 api::Ref<pm::map::Transform> raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
-  alignas(16) unsigned char hit[128] = {};
+  alignas(16) unsigned char hit[128] = {};  // the RaycastHit struct's storage: not an object
   return cast_into(hit, origin, direction, maxDistance, layerMask)
              ? phasmo::RaycastHit::get_transform(static_cast<void*>(hit))
              : nullptr;
 }
 
 float raycast_distance(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
-  alignas(16) unsigned char hit[128] = {};
+  alignas(16) unsigned char hit[128] = {};  // the RaycastHit struct's storage: not an object
   return cast_into(hit, origin, direction, maxDistance, layerMask)
              ? phasmo::RaycastHit::get_distance(static_cast<void*>(hit))
              : -1.0f;

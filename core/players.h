@@ -12,12 +12,12 @@ namespace pm::game {
 /** Visit each Player object that is still alive as a Unity object (dead investigators included). */
 template <class Visit>
 void each_player(Visit visit) {
-  void* net = network();
+  const auto net = network();
   const api::List spots{net ? phasmo::Network::playerSpots.get(net) : nullptr};
   for (size_t i = 0; i < spots.size(); ++i) {
-    void* spot = spots[i];
-    void* player = spot ? phasmo::PlayerSpot::player.get(spot) : nullptr;
-    if (player && alive(player)) visit(player);
+    const auto spot = api::Object::unchecked(spots[i]);  // a List element read
+    const auto player = spot ? phasmo::PlayerSpot::player.get(spot) : nullptr;
+    if (player && alive(player.raw())) visit(player.raw());
   }
 }
 
