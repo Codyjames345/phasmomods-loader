@@ -75,7 +75,7 @@ struct LevelStats {
   /// and false.
   static constexpr pm::api::Type<pm::map::LevelStats> type{};
   /// The statistics' instance: get_Instance(), or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::LevelStats_get_Instance, void*()> get_Instance{};
+  static constexpr pm::api::Method<pm::map::LevelStats_get_Instance, pm::api::Object()> get_Instance{};
   /// How many times the favourite room changed: roomsChanged.get(stats), .set(stats, n). Unresolved: 0,
   /// writes nothing.
   static constexpr pm::api::Field<pm::map::LevelStats_roomsChanged, int32_t> roomsChanged{};

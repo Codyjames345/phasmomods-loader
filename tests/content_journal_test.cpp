@@ -393,7 +393,7 @@ Node* g_journal = nullptr;  // the world's journal, whose sync controller Initia
 // List.Clear and Dictionary.Clear of the journal's two collections.
 bool clear(void* c) {
   if (c == g_engine.failClear) return false;
-  const bool list = c == phasmo::JournalController::allGhosts.get(g_journal);
+  const bool list = c == phasmo::JournalController::allGhosts.get(g_journal).raw();
   g_engine.calls.push_back(list ? "Clear list" : "Clear dictionary");
   if (list) g_engine.listed.clear();
   else g_engine.paired.clear();
@@ -738,12 +738,12 @@ struct World {
     for (size_t b = 0; b < buttons.size(); ++b) api::RefArray{buttonArray}.set(b, buttons[b]);
     phasmo::JournalController::allGhostTypeButtons.set(journal, buttonArray);
     phasmo::JournalController::allGhostsData.set(journal, collection);
-    phasmo::JournalController::ghostSync.set(journal, node("Evidence.2 sync"));
+    phasmo::JournalController::ghostSync.set(journal, static_cast<void*>(node("Evidence.2 sync")));
     phasmo::JournalController::evidenceButtons.set(journal, rowArray);
-    phasmo::JournalController::evidenceSync.set(journal, node("Evidence.1 sync"));
+    phasmo::JournalController::evidenceSync.set(journal, static_cast<void*>(node("Evidence.1 sync")));
     Node* view = node("PhotonView");
     phasmo::PhotonView::owner.set(view, node("Player 1"));  // the book's owner
-    phasmo::JournalController::photonView.set(journal, view);
+    phasmo::JournalController::photonView.set(journal, static_cast<void*>(view));
     phasmo::JournalController::allGhosts.set(journal, fake::list({}));
     phasmo::JournalController::ghostButtons.set(journal, fake::list({}));
     // Two tabs: the Ghosts tab covers the last page.
@@ -1021,7 +1021,7 @@ void a_reader_on_a_moved_page_is_turned_to_the_ghosts_tab() {
   start();
   World w;
   runs({ghost("a.lethe", "Lethe"), ghost("a.asterion", "Asterion")});
-  phasmo::JournalController::GoToPage(w.journal, w.page_number("Spirit"));
+  phasmo::JournalController::GoToPage(static_cast<void*>(w.journal), w.page_number("Spirit"));
   const int32_t tabFirst = static_cast<int32_t>(phasmo::JournalTab::min.get(w.ghostsTab));
   w.lobby();
   CHECK(phasmo::JournalController::currentPage.get(w.journal) == tabFirst);
@@ -1029,7 +1029,7 @@ void a_reader_on_a_moved_page_is_turned_to_the_ghosts_tab() {
   start();
   World other;
   runs({ghost("a.lethe", "Lethe")});
-  phasmo::JournalController::GoToPage(other.journal, 1);
+  phasmo::JournalController::GoToPage(static_cast<void*>(other.journal), 1);
   other.lobby();
   CHECK(phasmo::JournalController::currentPage.get(other.journal) == 1);
 }
@@ -1101,7 +1101,7 @@ void guess_button_crossed_out_by_filter() {
   CHECK(clear < rebuilt && rebuilt < filter && filter != c.end());
   // The sync controller read the buttons again; the game's own buttons keep their one subscription.
   CHECK(g_engine.initialised == 1);
-  for (Node* b : w.vanillaButtons) CHECK(phasmo::NetworkThreeStateButton::userStateChanged.get(b) == b);
+  for (Node* b : w.vanillaButtons) CHECK(phasmo::NetworkThreeStateButton::userStateChanged.get(b).raw() == b);
   CHECK(lethe && as(phasmo::NetworkThreeStateButton::userStateChanged.get(lethe))->name == "combined delegate");
   // The grid's rows are shorter: 8 buttons in 3 columns fill the height 6 did (2 rows to 3).
   CHECK(std::fabs(3 * (w.grid->cell.y + 2.5f) - 2 * (40 + 2.5f)) < 0.01f);
@@ -1547,7 +1547,7 @@ void evidence_button_filters_ghosts() {
   const api::RefArray buttons{phasmo::JournalController::evidenceButtons.get(w.journal)};
   CHECK(buttons.size() == 4 && buttons[3] == row);
   CHECK(std::count(g_engine.calls.begin(), g_engine.calls.end(), "Initialise evidence") == 1);
-  for (Node* r : w.vanillaRows) CHECK(phasmo::NetworkThreeStateButton::userStateChanged.get(r) == r);
+  for (Node* r : w.vanillaRows) CHECK(phasmo::NetworkThreeStateButton::userStateChanged.get(r).raw() == r);
   CHECK(row && as(phasmo::NetworkThreeStateButton::userStateChanged.get(row))->name == "combined delegate");
   // The column's spacing shrinks so four rows fill the height three did: 2 * 40 + 3 * 30 = 3 * s + 4 * 30.
   CHECK(std::fabs(w.evidenceRows->spacing - 50.0f / 3) < 0.01f);
@@ -1656,7 +1656,7 @@ void failed_evidence_row_leaves_the_page_intact() {
     CHECK(logged("custom evidence is missing from a journal, which stays as the game made it"));
     CHECK(api::RefArray{phasmo::JournalController::evidenceButtons.get(w.journal)}.size() == 3);
     CHECK(w.evidenceRows->spacing == 40);
-    for (Node* r : w.vanillaRows) CHECK(phasmo::NetworkThreeStateButton::userStateChanged.get(r) == r);
+    for (Node* r : w.vanillaRows) CHECK(phasmo::NetworkThreeStateButton::userStateChanged.get(r).raw() == r);
     for (const auto& n : g_nodes)
       if (n->name == "Spectral Flame") CHECK(n->destroyed && !n->active);
   }

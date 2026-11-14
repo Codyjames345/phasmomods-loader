@@ -123,13 +123,13 @@ namespace phasmo {
 struct GhostHearing {
   /// What it hears now, a List<HeardNoise>: read it with pm::api::List{heard.get(hearing)}.values(), each
   /// element's noise through HeardNoise::noise. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostHearing_heard, void*> heard{};
+  static constexpr pm::api::Field<pm::map::GhostHearing_heard, pm::api::Object> heard{};
 };
 
 /// A noise the ghost hears, read in place in a List's array (pm::api::ValueArray::at).
 struct HeardNoise {
   /// The PlayerNoise: noise.get(element). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::HeardNoise_noise, void*> noise{};
+  static constexpr pm::api::Field<pm::map::HeardNoise_noise, pm::api::Ref<pm::map::PlayerNoise>> noise{};
 };
 
 /// A player's footstep noise.
@@ -137,7 +137,7 @@ struct PlayerNoise {
   /// Its kind, a NoiseKind number: kind.get(noise). Unresolved: 0 (a walk).
   static constexpr pm::api::Field<pm::map::PlayerNoise_kind, int32_t> kind{};
   /// The player making it: player.get(noise). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PlayerNoise_player, void*> player{};
+  static constexpr pm::api::Field<pm::map::PlayerNoise_player, pm::api::Object> player{};
 };
 
 /// The kinds of footstep.
@@ -153,7 +153,7 @@ struct PlayerLOSTarget {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::PlayerLOSTarget> type{};
   /// Its player: player.get(target). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PlayerLOSTarget_player, void*> player{};
+  static constexpr pm::api::Field<pm::map::PlayerLOSTarget_player, pm::api::Object> player{};
 };
 
 /// A player's stamina and movement.

@@ -730,29 +730,29 @@ inline constexpr pm::api::EnumValue<pm::map::CursorLockMode_Locked> Locked{};  /
 /// A Vector2 control. `control` below is one (Pointer::get_delta, Pointer::get_position give one).
 struct Vector2Control {
   /// ReadValue(control): its value now, processors applied. Unresolved: the zero vector.
-  static constexpr pm::api::Method<pm::map::InputControl_Vector2_ReadValue, Vector2(void*)> ReadValue{};
+  static constexpr pm::api::Method<pm::map::InputControl_Vector2_ReadValue, Vector2(pm::api::Ref<pm::map::InputControlT>)> ReadValue{};
 };
 
 /// An input action. `action` below is the InputAction.
 struct InputAction {
   /// Its name, a string: m_Name.get(action). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputAction_m_Name, void*> m_Name{};
+  static constexpr pm::api::Field<pm::map::InputAction_m_Name, pm::api::Object> m_Name{};
   /// Its id, a string: m_Id.get(action). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputAction_m_Id, void*> m_Id{};
+  static constexpr pm::api::Field<pm::map::InputAction_m_Id, pm::api::Object> m_Id{};
   /// Its InputActionMap: m_ActionMap.get(action). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputAction_m_ActionMap, void*> m_ActionMap{};
+  static constexpr pm::api::Field<pm::map::InputAction_m_ActionMap, pm::api::Object> m_ActionMap{};
   /// get_enabled(action): whether it is enabled. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::InputAction_get_enabled, bool(void*)> get_enabled{};
+  static constexpr pm::api::Method<pm::map::InputAction_get_enabled, bool(pm::api::Ref<pm::map::InputAction>)> get_enabled{};
   /// Enable(action): enables it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::InputAction_Enable, void(void*)> Enable{};
+  static constexpr pm::api::Method<pm::map::InputAction_Enable, void(pm::api::Ref<pm::map::InputAction>)> Enable{};
   /// Disable(action): disables it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::InputAction_Disable, void(void*)> Disable{};
+  static constexpr pm::api::Method<pm::map::InputAction_Disable, void(pm::api::Ref<pm::map::InputAction>)> Disable{};
   /// WasPressedThisFrame(action). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::InputAction_WasPressedThisFrame, bool(void*)> WasPressedThisFrame{};
+  static constexpr pm::api::Method<pm::map::InputAction_WasPressedThisFrame, bool(pm::api::Ref<pm::map::InputAction>)> WasPressedThisFrame{};
   /// WasReleasedThisFrame(action). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::InputAction_WasReleasedThisFrame, bool(void*)> WasReleasedThisFrame{};
+  static constexpr pm::api::Method<pm::map::InputAction_WasReleasedThisFrame, bool(pm::api::Ref<pm::map::InputAction>)> WasReleasedThisFrame{};
   /// IsPressed(action). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::InputAction_IsPressed, bool(void*)> IsPressed{};
+  static constexpr pm::api::Method<pm::map::InputAction_IsPressed, bool(pm::api::Ref<pm::map::InputAction>)> IsPressed{};
 };
 
 /// What an action reads.
@@ -765,11 +765,11 @@ inline constexpr pm::api::EnumValue<pm::map::InputActionType_Button> Button{};
 struct InputActionRebindingExtensions {
   /// ApplyBindingOverride(action, newPath, group, path). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::InputActionRebindingExtensions_ApplyBindingOverride,
-                                   void(void*, void*, void*, void*)>
+                                   void(pm::api::Ref<pm::map::InputAction>, pm::api::Object, pm::api::Object, pm::api::Object)>
       ApplyBindingOverride{};
   /// RemoveAllBindingOverrides(actions): every override off an InputActionAsset's or map's bindings. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::InputActionRebindingExtensions_RemoveAllBindingOverrides, void(void*)>
+  static constexpr pm::api::Method<pm::map::InputActionRebindingExtensions_RemoveAllBindingOverrides, void(pm::api::Object)>
       RemoveAllBindingOverrides{};
 };
 
@@ -778,15 +778,15 @@ struct XRSlider {
   /// The type: type_object() for Component.GetComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::XRSlider> type{};
   /// get_value(slider). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::XRSlider_get_value, float(void*)> get_value{};
+  static constexpr pm::api::Method<pm::map::XRSlider_get_value, float(pm::api::Ref<pm::map::XRSlider>)> get_value{};
   /// SetValueWithoutNotify(slider, value). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::XRSlider_SetValueWithoutNotify, void(void*, float)> SetValueWithoutNotify{};
+  static constexpr pm::api::Method<pm::map::XRSlider_SetValueWithoutNotify, void(pm::api::Ref<pm::map::XRSlider>, float)> SetValueWithoutNotify{};
   /// set_minValue(slider, value). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::XRSlider_set_minValue, void(void*, float)> set_minValue{};
+  static constexpr pm::api::Method<pm::map::XRSlider_set_minValue, void(pm::api::Ref<pm::map::XRSlider>, float)> set_minValue{};
   /// set_maxValue(slider, value). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::XRSlider_set_maxValue, void(void*, float)> set_maxValue{};
+  static constexpr pm::api::Method<pm::map::XRSlider_set_maxValue, void(pm::api::Ref<pm::map::XRSlider>, float)> set_maxValue{};
   /// Its change event, a SliderEvent: m_OnValueChanged.get(slider). Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::XRSlider_m_OnValueChanged, void*> m_OnValueChanged{};
+  static constexpr pm::api::Field<pm::map::XRSlider_m_OnValueChanged, pm::api::Object> m_OnValueChanged{};
 };
 
 /// The slider's change event type.
@@ -794,7 +794,7 @@ struct SliderEvent {
   /// The type: make() and is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::SliderEvent> type{};
   /// ctor(event): runs the constructor of an event made with type.make(). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::SliderEvent_ctor, void(void*)> ctor{};
+  static constexpr pm::api::Method<pm::map::SliderEvent_ctor, void(pm::api::Ref<pm::map::SliderEvent>)> ctor{};
 };
 
 /// The journal's audio page. `page` below is the GameMyAudioManager.
@@ -802,48 +802,48 @@ struct GameMyAudioManager {
   /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::GameMyAudioManager> type{};
   /// The master volume's XRSlider: masterVolumeSlider.get(page). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GameMyAudioManager_masterVolumeSlider, void*> masterVolumeSlider{};
+  static constexpr pm::api::Field<pm::map::GameMyAudioManager_masterVolumeSlider, pm::api::Object> masterVolumeSlider{};
   /// The master volume's number text: masterVolumeValueText.get(page). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GameMyAudioManager_masterVolumeValueText, void*> masterVolumeValueText{};
+  static constexpr pm::api::Field<pm::map::GameMyAudioManager_masterVolumeValueText, pm::api::Object> masterVolumeValueText{};
   /// ApplyButton(page): stores the audio settings. A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GameMyAudioManager_ApplyButton, void(void*)> ApplyButton{};
+  static constexpr pm::api::Method<pm::map::GameMyAudioManager_ApplyButton, void(pm::api::Ref<pm::map::GameMyAudioManager>)> ApplyButton{};
   /// OnDisable(page): the page leaving the screen. A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GameMyAudioManager_OnDisable, void(void*)> OnDisable{};
+  static constexpr pm::api::Method<pm::map::GameMyAudioManager_OnDisable, void(pm::api::Ref<pm::map::GameMyAudioManager>)> OnDisable{};
 };
 
 /// The keybinds menu's page. `page` below is the ControlsManager.
 struct ControlsManager {
   /// ApplyButton(page): stores the game's overrides. A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ControlsManager_ApplyButton, void(void*)> ApplyButton{};
+  static constexpr pm::api::Method<pm::map::ControlsManager_ApplyButton, void(pm::api::Ref<pm::map::ControlsManager>)> ApplyButton{};
   /// ResetButton(page): every override off the game's controls, unstored. A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ControlsManager_ResetButton, void(void*)> ResetButton{};
+  static constexpr pm::api::Method<pm::map::ControlsManager_ResetButton, void(pm::api::Ref<pm::map::ControlsManager>)> ResetButton{};
   /// OnDisable(page): the stored overrides loaded back. A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ControlsManager_OnDisable, void(void*)> OnDisable{};
+  static constexpr pm::api::Method<pm::map::ControlsManager_OnDisable, void(pm::api::Ref<pm::map::ControlsManager>)> OnDisable{};
 };
 
 /// Building a mod's own actions.
 struct InputActionSetupExtensions {
   /// AddActionMap(asset, name): the new InputActionMap. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::InputActionSetupExtensions_AddActionMap, void*(void*, void*)> AddActionMap{};
+  static constexpr pm::api::Method<pm::map::InputActionSetupExtensions_AddActionMap, pm::api::Ref<pm::map::InputActionMap>(pm::api::Ref<pm::map::InputActionAsset>, pm::api::Object)> AddActionMap{};
   /// AddAction(map, name, type, binding, interactions, processors, groups, layout): the new InputAction. Unresolved:
   /// null.
   static constexpr pm::api::Method<pm::map::InputActionSetupExtensions_AddAction,
-                                   void*(void*, void*, int32_t, void*, void*, void*, void*, void*)>
+                                   pm::api::Object(pm::api::Ref<pm::map::InputActionMap>, pm::api::Object, int32_t, pm::api::Object, pm::api::Object, pm::api::Object, pm::api::Object, pm::api::Object)>
       AddAction{};
 };
 
 /// A reference to an action.
 struct InputActionReference {
   /// Create(action): a new reference to it. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::InputActionReference_Create, void*(void*)> Create{};
+  static constexpr pm::api::Method<pm::map::InputActionReference_Create, pm::api::Object(pm::api::Ref<pm::map::InputAction>)> Create{};
   /// get_action(reference): the InputAction, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::InputActionReference_get_action, void*(void*)> get_action{};
+  static constexpr pm::api::Method<pm::map::InputActionReference_get_action, pm::api::Object(pm::api::Ref<pm::map::InputActionReference>)> get_action{};
 };
 
 /// The game's checks of which input a player uses.
 struct InputDevices {
   /// UsesKeyboard(playerInput): whether that player uses keyboard and mouse (false while VR runs). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::InputDevices_UsesKeyboard, bool(void*)> UsesKeyboard{};
+  static constexpr pm::api::Method<pm::map::InputDevices_UsesKeyboard, bool(pm::api::Ref<pm::map::PlayerInput>)> UsesKeyboard{};
 };
 
 /// A widget showing one action's gamepad glyph. `button` below is the GamepadButton.
@@ -851,85 +851,85 @@ struct GamepadButton {
   /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::GamepadButton> type{};
   /// The action whose glyph it shows, an InputActionReference: action.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_action, void*> action{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_action, pm::api::Ref<pm::map::InputActionReference>> action{};
   /// The Image it shows the glyph on: image.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_image, void*> image{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_image, pm::api::Ref<pm::map::Image>> image{};
   /// The Xbox set's Sprite for the gamepad's buttonSouth control (GamepadIcons): xbox_buttonSouth.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonSouth, void*> xbox_buttonSouth{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonSouth, pm::api::Object> xbox_buttonSouth{};
   /// The Xbox set's Sprite for the gamepad's buttonNorth control (GamepadIcons): xbox_buttonNorth.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonNorth, void*> xbox_buttonNorth{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonNorth, pm::api::Object> xbox_buttonNorth{};
   /// The Xbox set's Sprite for the gamepad's buttonEast control (GamepadIcons): xbox_buttonEast.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonEast, void*> xbox_buttonEast{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonEast, pm::api::Object> xbox_buttonEast{};
   /// The Xbox set's Sprite for the gamepad's buttonWest control (GamepadIcons): xbox_buttonWest.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonWest, void*> xbox_buttonWest{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_buttonWest, pm::api::Object> xbox_buttonWest{};
   /// The Xbox set's Sprite for the gamepad's startButton control (GamepadIcons): xbox_startButton.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_startButton, void*> xbox_startButton{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_startButton, pm::api::Object> xbox_startButton{};
   /// The Xbox set's Sprite for the gamepad's selectButton control (GamepadIcons): xbox_selectButton.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_selectButton, void*> xbox_selectButton{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_selectButton, pm::api::Object> xbox_selectButton{};
   /// The Xbox set's Sprite for the gamepad's leftTrigger control (GamepadIcons): xbox_leftTrigger.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftTrigger, void*> xbox_leftTrigger{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftTrigger, pm::api::Object> xbox_leftTrigger{};
   /// The Xbox set's Sprite for the gamepad's rightTrigger control (GamepadIcons): xbox_rightTrigger.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightTrigger, void*> xbox_rightTrigger{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightTrigger, pm::api::Object> xbox_rightTrigger{};
   /// The Xbox set's Sprite for the gamepad's leftShoulder control (GamepadIcons): xbox_leftShoulder.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftShoulder, void*> xbox_leftShoulder{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftShoulder, pm::api::Object> xbox_leftShoulder{};
   /// The Xbox set's Sprite for the gamepad's rightShoulder control (GamepadIcons): xbox_rightShoulder.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightShoulder, void*> xbox_rightShoulder{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightShoulder, pm::api::Object> xbox_rightShoulder{};
   /// The Xbox set's Sprite for the gamepad's dpad control (GamepadIcons): xbox_dpad.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpad, void*> xbox_dpad{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpad, pm::api::Object> xbox_dpad{};
   /// The Xbox set's Sprite for the gamepad's dpadUp control (GamepadIcons): xbox_dpadUp.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadUp, void*> xbox_dpadUp{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadUp, pm::api::Object> xbox_dpadUp{};
   /// The Xbox set's Sprite for the gamepad's dpadDown control (GamepadIcons): xbox_dpadDown.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadDown, void*> xbox_dpadDown{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadDown, pm::api::Object> xbox_dpadDown{};
   /// The Xbox set's Sprite for the gamepad's dpadLeft control (GamepadIcons): xbox_dpadLeft.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadLeft, void*> xbox_dpadLeft{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadLeft, pm::api::Object> xbox_dpadLeft{};
   /// The Xbox set's Sprite for the gamepad's dpadRight control (GamepadIcons): xbox_dpadRight.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadRight, void*> xbox_dpadRight{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_dpadRight, pm::api::Object> xbox_dpadRight{};
   /// The Xbox set's Sprite for the gamepad's leftStick control (GamepadIcons): xbox_leftStick.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftStick, void*> xbox_leftStick{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftStick, pm::api::Object> xbox_leftStick{};
   /// The Xbox set's Sprite for the gamepad's rightStick control (GamepadIcons): xbox_rightStick.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightStick, void*> xbox_rightStick{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightStick, pm::api::Object> xbox_rightStick{};
   /// The Xbox set's Sprite for the gamepad's leftStickPress control (GamepadIcons): xbox_leftStickPress.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftStickPress, void*> xbox_leftStickPress{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_leftStickPress, pm::api::Object> xbox_leftStickPress{};
   /// The Xbox set's Sprite for the gamepad's rightStickPress control (GamepadIcons): xbox_rightStickPress.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightStickPress, void*> xbox_rightStickPress{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_xbox_rightStickPress, pm::api::Object> xbox_rightStickPress{};
   /// The PS5 set's Sprite for the gamepad's buttonSouth control (GamepadIcons): ps5_buttonSouth.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonSouth, void*> ps5_buttonSouth{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonSouth, pm::api::Object> ps5_buttonSouth{};
   /// The PS5 set's Sprite for the gamepad's buttonNorth control (GamepadIcons): ps5_buttonNorth.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonNorth, void*> ps5_buttonNorth{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonNorth, pm::api::Object> ps5_buttonNorth{};
   /// The PS5 set's Sprite for the gamepad's buttonEast control (GamepadIcons): ps5_buttonEast.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonEast, void*> ps5_buttonEast{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonEast, pm::api::Object> ps5_buttonEast{};
   /// The PS5 set's Sprite for the gamepad's buttonWest control (GamepadIcons): ps5_buttonWest.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonWest, void*> ps5_buttonWest{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_buttonWest, pm::api::Object> ps5_buttonWest{};
   /// The PS5 set's Sprite for the gamepad's startButton control (GamepadIcons): ps5_startButton.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_startButton, void*> ps5_startButton{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_startButton, pm::api::Object> ps5_startButton{};
   /// The PS5 set's Sprite for the gamepad's selectButton control (GamepadIcons): ps5_selectButton.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_selectButton, void*> ps5_selectButton{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_selectButton, pm::api::Object> ps5_selectButton{};
   /// The PS5 set's Sprite for the gamepad's leftTrigger control (GamepadIcons): ps5_leftTrigger.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftTrigger, void*> ps5_leftTrigger{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftTrigger, pm::api::Object> ps5_leftTrigger{};
   /// The PS5 set's Sprite for the gamepad's rightTrigger control (GamepadIcons): ps5_rightTrigger.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightTrigger, void*> ps5_rightTrigger{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightTrigger, pm::api::Object> ps5_rightTrigger{};
   /// The PS5 set's Sprite for the gamepad's leftShoulder control (GamepadIcons): ps5_leftShoulder.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftShoulder, void*> ps5_leftShoulder{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftShoulder, pm::api::Object> ps5_leftShoulder{};
   /// The PS5 set's Sprite for the gamepad's rightShoulder control (GamepadIcons): ps5_rightShoulder.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightShoulder, void*> ps5_rightShoulder{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightShoulder, pm::api::Object> ps5_rightShoulder{};
   /// The PS5 set's Sprite for the gamepad's dpad control (GamepadIcons): ps5_dpad.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpad, void*> ps5_dpad{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpad, pm::api::Object> ps5_dpad{};
   /// The PS5 set's Sprite for the gamepad's dpadUp control (GamepadIcons): ps5_dpadUp.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadUp, void*> ps5_dpadUp{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadUp, pm::api::Object> ps5_dpadUp{};
   /// The PS5 set's Sprite for the gamepad's dpadDown control (GamepadIcons): ps5_dpadDown.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadDown, void*> ps5_dpadDown{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadDown, pm::api::Object> ps5_dpadDown{};
   /// The PS5 set's Sprite for the gamepad's dpadLeft control (GamepadIcons): ps5_dpadLeft.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadLeft, void*> ps5_dpadLeft{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadLeft, pm::api::Object> ps5_dpadLeft{};
   /// The PS5 set's Sprite for the gamepad's dpadRight control (GamepadIcons): ps5_dpadRight.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadRight, void*> ps5_dpadRight{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_dpadRight, pm::api::Object> ps5_dpadRight{};
   /// The PS5 set's Sprite for the gamepad's leftStick control (GamepadIcons): ps5_leftStick.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftStick, void*> ps5_leftStick{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftStick, pm::api::Object> ps5_leftStick{};
   /// The PS5 set's Sprite for the gamepad's rightStick control (GamepadIcons): ps5_rightStick.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightStick, void*> ps5_rightStick{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightStick, pm::api::Object> ps5_rightStick{};
   /// The PS5 set's Sprite for the gamepad's leftStickPress control (GamepadIcons): ps5_leftStickPress.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftStickPress, void*> ps5_leftStickPress{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_leftStickPress, pm::api::Object> ps5_leftStickPress{};
   /// The PS5 set's Sprite for the gamepad's rightStickPress control (GamepadIcons): ps5_rightStickPress.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightStickPress, void*> ps5_rightStickPress{};
+  static constexpr pm::api::Field<pm::map::GamepadButton_ps5_rightStickPress, pm::api::Object> ps5_rightStickPress{};
 };
 
 /// A row of the game's keybinds menu.
@@ -937,39 +937,39 @@ struct RebindActionUI {
   /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::RebindActionUI> type{};
   /// Its InputActionReference: m_Action.get(row). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::RebindActionUI_m_Action, void*> m_Action{};
+  static constexpr pm::api::Field<pm::map::RebindActionUI_m_Action, pm::api::Object> m_Action{};
   /// The binding's id, a string: m_BindingId.get(row). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::RebindActionUI_m_BindingId, void*> m_BindingId{};
+  static constexpr pm::api::Field<pm::map::RebindActionUI_m_BindingId, pm::api::Object> m_BindingId{};
   /// Its label, a TMP_Text: m_ActionLabel.get(row). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::RebindActionUI_m_ActionLabel, void*> m_ActionLabel{};
+  static constexpr pm::api::Field<pm::map::RebindActionUI_m_ActionLabel, pm::api::Object> m_ActionLabel{};
   /// set_actionReference(row, reference). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RebindActionUI_set_actionReference, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::RebindActionUI_set_actionReference, void(pm::api::Ref<pm::map::RebindActionUI>, pm::api::Ref<pm::map::InputActionReference>)>
       set_actionReference{};
   /// set_bindingId(row, id): id a string. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RebindActionUI_set_bindingId, void(void*, void*)> set_bindingId{};
+  static constexpr pm::api::Method<pm::map::RebindActionUI_set_bindingId, void(pm::api::Ref<pm::map::RebindActionUI>, pm::api::Object)> set_bindingId{};
 };
 
 /// A gamepad.
 struct Gamepad {
   /// get_current(): the gamepad last used, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Gamepad_get_current, void*()> get_current{};
+  static constexpr pm::api::Method<pm::map::Gamepad_get_current, pm::api::Object()> get_current{};
   /// get_rightStick(pad): its right stick, a StickControl (read with Vector2Control::ReadValue). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Gamepad_get_rightStick, void*(void*)> get_rightStick{};
+  static constexpr pm::api::Method<pm::map::Gamepad_get_rightStick, pm::api::Object(pm::api::Ref<pm::map::Gamepad>)> get_rightStick{};
   /// get_leftShoulder(pad): LB, a ButtonControl. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Gamepad_get_leftShoulder, void*(void*)> get_leftShoulder{};
+  static constexpr pm::api::Method<pm::map::Gamepad_get_leftShoulder, pm::api::Object(pm::api::Ref<pm::map::Gamepad>)> get_leftShoulder{};
   /// get_rightShoulder(pad): RB, a ButtonControl. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Gamepad_get_rightShoulder, void*(void*)> get_rightShoulder{};
+  static constexpr pm::api::Method<pm::map::Gamepad_get_rightShoulder, pm::api::Object(pm::api::Ref<pm::map::Gamepad>)> get_rightShoulder{};
 };
 
 /// A group of input actions. `map` below is the InputActionMap.
 struct InputActionMap {
   /// Its name, a string: m_Name.get(map). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputActionMap_m_Name, void*> m_Name{};
+  static constexpr pm::api::Field<pm::map::InputActionMap_m_Name, pm::api::Object> m_Name{};
   /// Its actions, an InputAction[]: m_Actions.get(map). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputActionMap_m_Actions, void*> m_Actions{};
+  static constexpr pm::api::Field<pm::map::InputActionMap_m_Actions, pm::api::Object> m_Actions{};
   /// Its actions' bindings, an InputBinding[] of structs (read with pm::api::ValueArray): m_Bindings.get(map).
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputActionMap_m_Bindings, void*> m_Bindings{};
+  static constexpr pm::api::Field<pm::map::InputActionMap_m_Bindings, pm::api::Object> m_Bindings{};
 };
 
 /// A set of action maps. `asset` below is the InputActionAsset.
@@ -977,47 +977,47 @@ struct InputActionAsset {
   /// The type: type_object() for ScriptableObject::CreateInstance. Unresolved: null.
   static constexpr pm::api::Type<pm::map::InputActionAsset> type{};
   /// Its action maps, an InputActionMap[]: m_ActionMaps.get(asset). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputActionAsset_m_ActionMaps, void*> m_ActionMaps{};
+  static constexpr pm::api::Field<pm::map::InputActionAsset_m_ActionMaps, pm::api::Object> m_ActionMaps{};
 };
 
 /// One binding, a struct. `binding` below is its address (an element of a ValueArray).
 struct InputBinding {
   /// Its name, a composite's part, a string: m_Name.get(binding). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputBinding_m_Name, void*> m_Name{};
+  static constexpr pm::api::Field<pm::map::InputBinding_m_Name, pm::api::Object> m_Name{};
   /// The control's path, a string: m_Path.get(binding). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputBinding_m_Path, void*> m_Path{};
+  static constexpr pm::api::Field<pm::map::InputBinding_m_Path, pm::api::Object> m_Path{};
   /// Its action's name or id, a string: m_Action.get(binding). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputBinding_m_Action, void*> m_Action{};
+  static constexpr pm::api::Field<pm::map::InputBinding_m_Action, pm::api::Object> m_Action{};
   /// The player's rebind, a string path, or empty: m_OverridePath.get(binding). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputBinding_m_OverridePath, void*> m_OverridePath{};
+  static constexpr pm::api::Field<pm::map::InputBinding_m_OverridePath, pm::api::Object> m_OverridePath{};
   /// Its id, a string: m_Id.get(binding). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::InputBinding_m_Id, void*> m_Id{};
+  static constexpr pm::api::Field<pm::map::InputBinding_m_Id, pm::api::Object> m_Id{};
 };
 
 /// The mouse. `mouse` below is the Mouse.
 struct Mouse {
   /// get_current(): the mouse in use, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Mouse_get_current, void*()> get_current{};
+  static constexpr pm::api::Method<pm::map::Mouse_get_current, pm::api::Object()> get_current{};
   /// get_leftButton(mouse): its left button, a ButtonControl. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Mouse_get_leftButton, void*(void*)> get_leftButton{};
+  static constexpr pm::api::Method<pm::map::Mouse_get_leftButton, pm::api::Object(pm::api::Ref<pm::map::Mouse>)> get_leftButton{};
   /// get_scroll(mouse): its scroll wheel, a Vector2Control (read with Vector2Control::ReadValue). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Mouse_get_scroll, void*(void*)> get_scroll{};
+  static constexpr pm::api::Method<pm::map::Mouse_get_scroll, pm::api::Object(pm::api::Ref<pm::map::Mouse>)> get_scroll{};
 };
 
 /// A pointer device, the mouse's base. `pointer` below is the Pointer.
 struct Pointer {
   /// get_delta(pointer): its movement since the last frame, a Vector2 control. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Pointer_get_delta, void*(void*)> get_delta{};
+  static constexpr pm::api::Method<pm::map::Pointer_get_delta, pm::api::Object(pm::api::Ref<pm::map::Pointer>)> get_delta{};
   /// get_position(pointer): its screen position, a Vector2Control. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Pointer_get_position, void*(void*)> get_position{};
+  static constexpr pm::api::Method<pm::map::Pointer_get_position, pm::api::Object(pm::api::Ref<pm::map::Pointer>)> get_position{};
 };
 
 /// A button control. `button` below is the ButtonControl.
 struct ButtonControl {
   /// get_isPressed(button): whether it is held down. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::ButtonControl_get_isPressed, bool(void*)> get_isPressed{};
+  static constexpr pm::api::Method<pm::map::ButtonControl_get_isPressed, bool(pm::api::Ref<pm::map::ButtonControl>)> get_isPressed{};
   /// get_wasPressedThisFrame(button): whether it went down this frame. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::ButtonControl_get_wasPressedThisFrame, bool(void*)>
+  static constexpr pm::api::Method<pm::map::ButtonControl_get_wasPressedThisFrame, bool(pm::api::Ref<pm::map::ButtonControl>)>
       get_wasPressedThisFrame{};
 };
 

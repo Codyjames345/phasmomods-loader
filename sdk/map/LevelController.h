@@ -6,6 +6,8 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "GhostAI.h"
+#include "LevelRoom.h"
 #include "Photon.h"
 #include "Transform.h"
 #include "UnityObject.h"
@@ -271,9 +273,9 @@ struct SetupPhaseController {
   static constexpr pm::api::Field<pm::map::SetupPhaseController_mainDoorOpen, bool> mainDoorOpen{};
   /// UnlockMainDoor(setup): unlocks the truck's main door, as the end of the setup phase does.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::SetupPhaseController_UnlockMainDoor, void(void*)> UnlockMainDoor{};
+  static constexpr pm::api::Method<pm::map::SetupPhaseController_UnlockMainDoor, void(pm::api::Ref<pm::map::SetupPhaseController>)> UnlockMainDoor{};
   /// The contract's setup phase, or null: instance.get(). Check it with pm::api::alive. Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::SetupPhaseController_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::SetupPhaseController_instance, pm::api::Ref<pm::map::SetupPhaseController>> instance{};
 };
 
 /// A hiding place a difficulty may close. `zone` below is one.
@@ -284,7 +286,7 @@ struct BlockedZone {
   static constexpr pm::api::Field<pm::map::BlockedZone_blocked, bool> blocked{};
   /// BlockZone(zone, a, b): closes it on this client, as the master's RPC does on every client. A mod usually hooks it.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::BlockedZone_BlockZone, void(void*, int32_t, int32_t)> BlockZone{};
+  static constexpr pm::api::Method<pm::map::BlockedZone_BlockZone, void(pm::api::Ref<pm::map::BlockedZone>, int32_t, int32_t)> BlockZone{};
 };
 
 /// The controller of a contract's level.
@@ -295,39 +297,39 @@ struct LevelController {
   /// The current level's controller: instance.get(), or null. A destroyed one remains after a
   /// contract ends, so check it with pm::api::alive. Reading it may run the class's static
   /// constructor, so read it while the game plays, never at startup. Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::LevelController_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::LevelController_instance, pm::api::Ref<pm::map::LevelController>> instance{};
   /// The contract's ghost, its GhostAI: currentGhost.get(level), or null before it spawns. Check it with
   /// pm::api::alive. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelController_currentGhost, void*> currentGhost{};
+  static constexpr pm::api::Field<pm::map::LevelController_currentGhost, pm::api::Ref<pm::map::GhostAI>> currentGhost{};
   /// The room the ghost is in, a LevelRoom: currentGhostRoom.get(level), or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelController_currentGhostRoom, void*> currentGhostRoom{};
+  static constexpr pm::api::Field<pm::map::LevelController_currentGhostRoom, pm::api::Ref<pm::map::LevelRoom>> currentGhostRoom{};
   /// The contract's fuse box, a FuseBox: fuseBox.get(level). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelController_fuseBox, void*> fuseBox{};
+  static constexpr pm::api::Field<pm::map::LevelController_fuseBox, pm::api::Ref<pm::map::FuseBox>> fuseBox{};
   /// The level's rooms, a LevelRoom[]: rooms.get(level), read as a pm::api::RefArray. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelController_rooms, void*> rooms{};
+  static constexpr pm::api::Field<pm::map::LevelController_rooms, pm::api::Object> rooms{};
   /// The level's fire sources, a List<FireSource>: fireSources.get(level), read as a pm::api::List.
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelController_fireSources, void*> fireSources{};
+  static constexpr pm::api::Field<pm::map::LevelController_fireSources, pm::api::Object> fireSources{};
   /// The doors a hunt locks, a Door[]: huntingDoors.get(level), read as a pm::api::RefArray.
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelController_huntingDoors, void*> huntingDoors{};
+  static constexpr pm::api::Field<pm::map::LevelController_huntingDoors, pm::api::Object> huntingDoors{};
   /// The map variations, a SmallMapVariation[]: mapVariations.get(level), read as a pm::api::RefArray.
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelController_mapVariations, void*> mapVariations{};
+  static constexpr pm::api::Field<pm::map::LevelController_mapVariations, pm::api::Object> mapVariations{};
   /// The level's outdoors, a LevelRoom: outsideRoom.get(level), or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelController_outsideRoom, void*> outsideRoom{};
+  static constexpr pm::api::Field<pm::map::LevelController_outsideRoom, pm::api::Ref<pm::map::LevelRoom>> outsideRoom{};
   /// Its hiding places a difficulty may close, a BlockedZone[] read as a pm::api::RefArray: blockedZones.get(level).
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelController_blockedZones, void*> blockedZones{};
+  static constexpr pm::api::Field<pm::map::LevelController_blockedZones, pm::api::Object> blockedZones{};
   /// Whether `point` lies outdoors: IsPointInOutsideRoom(level, &point). It throws, as the game's code
   /// does, when outsideRoom or its roomColliders are null, so check both first. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::LevelController_IsPointInOutsideRoom, bool(void*, const Vector3*)>
+  static constexpr pm::api::Method<pm::map::LevelController_IsPointInOutsideRoom, bool(pm::api::Ref<pm::map::LevelController>, const Vector3*)>
       IsPointInOutsideRoom{};
   /// UnlockHuntingDoors(level): opens the exits again as a hunt's end does, Door.ToggleDoorLock(true, true) on every
   /// door of huntingDoors and of each variation's huntingDoorsToLock, which switches each back on for players and
   /// clears its lock on every client. Its RPCs check no sender. Call it on the master, outside a hunt: during one it
   /// opens the hunt's exits early. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LevelController_UnlockHuntingDoors, void(void*)> UnlockHuntingDoors{};
+  static constexpr pm::api::Method<pm::map::LevelController_UnlockHuntingDoors, void(pm::api::Ref<pm::map::LevelController>)> UnlockHuntingDoors{};
 };
 
 /// @}

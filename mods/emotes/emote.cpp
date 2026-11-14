@@ -510,7 +510,7 @@ void* pad_sprite(const std::string& control) {
   void* w = g.glyphWidget;
   if (!w || !game::alive(w)) return nullptr;
   void* shown = glyph_of(g.previousGlyph);
-  const bool ps5 = shown && shown == phasmo::GamepadButton::ps5_leftShoulder.get(w);
+  const bool ps5 = shown && shown == phasmo::GamepadButton::ps5_leftShoulder.get(w).raw();
   using B = phasmo::GamepadButton;
 #define PM_PAD(path, name) \
   if (control == path) return ps5 ? B::ps5_##name.get(w) : B::xbox_##name.get(w)
@@ -1380,7 +1380,7 @@ std::optional<int> wheel_input(void* player, bool vr) {
     if (game::mouse_delta(dx, dy)) add_capped(g.mouseX, g.mouseY, dx, dy);
     pickNow = segment_for(g.mouseX, g.mouseY, kPickDeadZone);
     if (void* pad = phasmo::Gamepad::get_current()) {
-      const phasmo::Vector2 stick = phasmo::Vector2Control::ReadValue(phasmo::Gamepad::get_rightStick(pad));
+      const phasmo::Vector2 stick = phasmo::Vector2Control::ReadValue(phasmo::Gamepad::get_rightStick(pad).raw());
       if (const int s = segment_for(stick.x, stick.y, kStickDeadZone); s >= 0) pickNow = s;
       void* lb = phasmo::Gamepad::get_leftShoulder(pad);
       void* rb = phasmo::Gamepad::get_rightShoulder(pad);

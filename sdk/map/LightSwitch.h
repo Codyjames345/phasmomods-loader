@@ -6,6 +6,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "LevelRoom.h"
 #include "Photon.h"
 #include "UnityObject.h"
 
@@ -117,24 +118,24 @@ struct LightSwitch {
   /// Whether it refuses the ghost's use now: ghostUseRefused.get(light). Unresolved: reads false.
   static constexpr pm::api::Field<pm::map::LightSwitch_ghostUseRefused, bool> ghostUseRefused{};
   /// get_IsSwitchOn(light). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::LightSwitch_get_IsSwitchOn, bool(void*)> get_IsSwitchOn{};
+  static constexpr pm::api::Method<pm::map::LightSwitch_get_IsSwitchOn, bool(pm::api::Ref<pm::map::LightSwitch>)> get_IsSwitchOn{};
   /// UseLightSwitch(light, use, deadMayUse, byGhost). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LightSwitch_UseLightSwitch, void(void*, bool, bool, bool)> UseLightSwitch{};
+  static constexpr pm::api::Method<pm::map::LightSwitch_UseLightSwitch, void(pm::api::Ref<pm::map::LightSwitch>, bool, bool, bool)> UseLightSwitch{};
   /// Use(lightSwitch, on, prints, byGhost, counted). A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LightSwitch_Use, void(void*, bool, bool, bool, bool)> Use{};
+  static constexpr pm::api::Method<pm::map::LightSwitch_Use, void(pm::api::Ref<pm::map::LightSwitch>, bool, bool, bool, bool)> Use{};
   /// Its room: room.get(lightSwitch). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LightSwitch_room, void*> room{};
+  static constexpr pm::api::Field<pm::map::LightSwitch_room, pm::api::Ref<pm::map::LevelRoom>> room{};
   /// The lights it controls, a List<LightSource>: sources.get(lightSwitch). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LightSwitch_sources, void*> sources{};
+  static constexpr pm::api::Field<pm::map::LightSwitch_sources, pm::api::Object> sources{};
   /// The flicker RPC, FlickerNetworked(lightSwitch, &info). A mod usually hooks it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::LightSwitch_FlickerNetworked, void(void*, const void*)> FlickerNetworked{};
+  static constexpr pm::api::Method<pm::map::LightSwitch_FlickerNetworked, void(pm::api::Ref<pm::map::LightSwitch>, const void*)> FlickerNetworked{};
 };
 
 /// A light a switch controls. `source` below is one.
 struct LightSource {
   /// Its Unity Light: lightSource.get(source). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LightSource_lightSource, void*> lightSource{};
+  static constexpr pm::api::Field<pm::map::LightSource_lightSource, pm::api::Object> lightSource{};
 };
 
 /// @}

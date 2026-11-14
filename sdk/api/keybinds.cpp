@@ -345,7 +345,7 @@ void* make_row(void* templ, Key& k, size_t d) {
   void* binding = binding_at(k.binding[d]);
   void* id = binding ? phasmo::InputBinding::m_Id.get(binding) : nullptr;
   phasmo::RebindActionUI::set_bindingId(copy, id);
-  phasmo::RebindActionUI::set_actionReference(copy, phasmo::InputActionReference::Create(k.actions[d]));
+  phasmo::RebindActionUI::set_actionReference(copy, phasmo::InputActionReference::Create(k.actions[d]).raw());
   rows::label(label_of(copy), k.desc.label);
   // Off and on, so the row shows the new binding as it does when the menu opens.
   const bool on = phasmo::GameObject::get_activeSelf(copyObject);

@@ -217,31 +217,31 @@ struct LevelRoom {
   /// Its floor, a FloorType number: floor.get(room). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::LevelRoom_floor, int32_t> floor{};
   /// Its name, a managed string: name.get(room). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelRoom_name, void*> name{};
+  static constexpr pm::api::Field<pm::map::LevelRoom_name, pm::api::Object> name{};
   /// The LevelRoom type. Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::LevelRoom> type{};
   /// Its colliders, a List<Collider>: roomColliders.get(room), read as a pm::api::List. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelRoom_roomColliders, void*> roomColliders{};
+  static constexpr pm::api::Field<pm::map::LevelRoom_roomColliders, pm::api::Object> roomColliders{};
   /// Its light switches, a List<LightSwitch>: lightSwitches.get(room), read as a pm::api::List.
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelRoom_lightSwitches, void*> lightSwitches{};
+  static constexpr pm::api::Field<pm::map::LevelRoom_lightSwitches, pm::api::Object> lightSwitches{};
   /// Its doors, a Door[]: doors.get(room), read as a pm::api::RefArray. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelRoom_doors, void*> doors{};
+  static constexpr pm::api::Field<pm::map::LevelRoom_doors, pm::api::Object> doors{};
   /// AreRoomLightsOn(room, &flickering): whether its lights are on. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::LevelRoom_AreRoomLightsOn, bool(void*, bool*)> AreRoomLightsOn{};
+  static constexpr pm::api::Method<pm::map::LevelRoom_AreRoomLightsOn, bool(pm::api::Ref<pm::map::LevelRoom>, bool*)> AreRoomLightsOn{};
   /// ArePlayersTalkingInRoom(room, loudness). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::LevelRoom_ArePlayersTalkingInRoom, bool(void*, float)>
+  static constexpr pm::api::Method<pm::map::LevelRoom_ArePlayersTalkingInRoom, bool(pm::api::Ref<pm::map::LevelRoom>, float)>
       ArePlayersTalkingInRoom{};
   /// Its kind, a RoomKind number: kind.get(room). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::LevelRoom_kind, int32_t> kind{};
   /// Update(room): one frame of its temperature system. A mod usually hooks it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::LevelRoom_Update, void(void*)> Update{};
+  static constexpr pm::api::Method<pm::map::LevelRoom_Update, void(pm::api::Ref<pm::map::LevelRoom>)> Update{};
   /// Its temperature in degrees Celsius: temperature.get(room), temperature.set(room, t). Unresolved:
   /// reads 0, writes nothing.
   static constexpr pm::api::Field<pm::map::LevelRoom_temperature, float> temperature{};
   /// AnyPlayersInRoom(room): whether any investigator is in it now. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::LevelRoom_AnyPlayersInRoom, bool(void*)> AnyPlayersInRoom{};
+  static constexpr pm::api::Method<pm::map::LevelRoom_AnyPlayersInRoom, bool(pm::api::Ref<pm::map::LevelRoom>)> AnyPlayersInRoom{};
 };
 
 /// What kind of room a LevelRoom is.
@@ -266,15 +266,15 @@ inline constexpr pm::api::EnumValue<pm::map::RoomKind_exteriorRoom> exteriorRoom
 /// Unity's collider. `collider` below is one.
 struct Collider {
   /// get_bounds(collider): its world-space box. Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::Collider_get_bounds, Bounds(void*)> get_bounds{};
+  static constexpr pm::api::Method<pm::map::Collider_get_bounds, Bounds(pm::api::Ref<pm::map::Collider>)> get_bounds{};
   /// set_enabled(collider, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Collider_set_enabled, void(void*, bool)> set_enabled{};
+  static constexpr pm::api::Method<pm::map::Collider_set_enabled, void(pm::api::Ref<pm::map::Collider>, bool)> set_enabled{};
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Collider> type{};
   /// get_enabled(collider): whether it takes part in physics. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Collider_get_enabled, bool(void*)> get_enabled{};
+  static constexpr pm::api::Method<pm::map::Collider_get_enabled, bool(pm::api::Ref<pm::map::Collider>)> get_enabled{};
   /// get_attachedRigidbody(collider): the Rigidbody it moves with. Unresolved or none: null.
-  static constexpr pm::api::Method<pm::map::Collider_get_attachedRigidbody, void*(void*)> get_attachedRigidbody{};
+  static constexpr pm::api::Method<pm::map::Collider_get_attachedRigidbody, pm::api::Object(pm::api::Ref<pm::map::Collider>)> get_attachedRigidbody{};
 };
 
 /// @}

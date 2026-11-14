@@ -5,6 +5,7 @@
 // exact shape and machine-code facts. Notes read from decompiled code are from build 25811160;
 // sdk/internals/ghost-ai.md, "The wander and the favourite room", ties them together.
 
+#include "GhostAI.h"
 #include "Transform.h"
 #include "entry.h"
 #include "game_api.h"
@@ -165,12 +166,12 @@ struct GhostWanderState {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::GhostWanderState> type{};
   /// The wandering ghost's GhostAI: ghost.get(wander). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostWanderState_ghost, void*> ghost{};
+  static constexpr pm::api::Field<pm::map::GhostWanderState_ghost, pm::api::Ref<pm::map::GhostAI>> ghost{};
   /// The exit of a wander: a mod asks pm::api::inside whether one is running, the host tracking it. Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::GhostWanderState_Exit, void(void*)> Exit{};
+  static constexpr pm::api::Method<pm::map::GhostWanderState_Exit, void(pm::api::Ref<pm::map::GhostWanderState>)> Exit{};
   /// PickDestination(wander, &point): picks its next point. A mod usually hooks it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GhostWanderState_PickDestination, bool(void*, Vector3*)> PickDestination{};
+  static constexpr pm::api::Method<pm::map::GhostWanderState_PickDestination, bool(pm::api::Ref<pm::map::GhostWanderState>, Vector3*)> PickDestination{};
   /// How far it may roam, in metres: radius.get(wander). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::GhostWanderState_radius, int32_t> radius{};
   /// Whether it has a point it walks to: hasDestination.get(wander). Unresolved: false.

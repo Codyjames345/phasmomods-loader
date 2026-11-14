@@ -642,7 +642,7 @@ void static_field_get_set() {
   CHECK(bound());
   int level = 0;
   CHECK(phasmo::LevelController::instance.get() == nullptr);
-  phasmo::LevelController::instance.set(&level);
+  phasmo::LevelController::instance.set(static_cast<void*>(&level));
   CHECK(g_levelInstance == &level);                         // in the class's static storage
   CHECK(fake::barrier_writes() == 1);                       // a reference goes through the write barrier
   CHECK(phasmo::LevelController::instance.get() == &level);

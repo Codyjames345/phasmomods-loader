@@ -9,7 +9,9 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Animator.h"
 #include "Photon.h"
+#include "Transform.h"
 #include "UnityObject.h"
 #include "UnityPostProcessing.h"
 
@@ -791,77 +793,77 @@ struct JournalController {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::JournalController> type{};
   /// Awake(journal): hook it to see each journal as it wakes. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_Awake, void(void*)> Awake{};
+  static constexpr pm::api::Method<pm::map::JournalController_Awake, void(pm::api::Ref<pm::map::JournalController>)> Awake{};
   /// The pages, a GameObject[]: pages.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_pages, void*> pages{};
+  static constexpr pm::api::Field<pm::map::JournalController_pages, pm::api::Object> pages{};
   /// The tabs, a JournalTab[]: journalTabs.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_journalTabs, void*> journalTabs{};
+  static constexpr pm::api::Field<pm::map::JournalController_journalTabs, pm::api::Object> journalTabs{};
   /// The GhostCollection it lists: allGhostsData.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_allGhostsData, void*> allGhostsData{};
+  static constexpr pm::api::Field<pm::map::JournalController_allGhostsData, pm::api::Object> allGhostsData{};
   /// The guess buttons, a GhostButton[]: allGhostTypeButtons.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_allGhostTypeButtons, void*> allGhostTypeButtons{};
+  static constexpr pm::api::Field<pm::map::JournalController_allGhostTypeButtons, pm::api::Object> allGhostTypeButtons{};
   /// The guess buttons' sync controller: ghostSync.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_ghostSync, void*> ghostSync{};
+  static constexpr pm::api::Field<pm::map::JournalController_ghostSync, pm::api::Ref<pm::map::JournalGhostSyncController>> ghostSync{};
   /// Every listed ghost, a List<Ghost>: allGhosts.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_allGhosts, void*> allGhosts{};
+  static constexpr pm::api::Field<pm::map::JournalController_allGhosts, pm::api::Object> allGhosts{};
   /// Each listed ghost's button, a Dictionary<Ghost, GhostButton>: ghostButtons.get(journal).
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_ghostButtons, void*> ghostButtons{};
+  static constexpr pm::api::Field<pm::map::JournalController_ghostButtons, pm::api::Object> ghostButtons{};
   /// RebuildGhosts(journal): adds to allGhosts and ghostButtons (empty them first). Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_RebuildGhosts, void(void*)> RebuildGhosts{};
+  static constexpr pm::api::Method<pm::map::JournalController_RebuildGhosts, void(pm::api::Ref<pm::map::JournalController>)> RebuildGhosts{};
   /// SetGhostTypes(journal): the evidence filter. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_SetGhostTypes, void(void*)> SetGhostTypes{};
+  static constexpr pm::api::Method<pm::map::JournalController_SetGhostTypes, void(pm::api::Ref<pm::map::JournalController>)> SetGhostTypes{};
   /// The evidence buttons, an EvidenceButton[]: evidenceButtons.get(journal), .set(journal, array).
   /// Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::JournalController_evidenceButtons, void*> evidenceButtons{};
+  static constexpr pm::api::Field<pm::map::JournalController_evidenceButtons, pm::api::Object> evidenceButtons{};
   /// The evidence buttons' sync controller: evidenceSync.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_evidenceSync, void*> evidenceSync{};
+  static constexpr pm::api::Field<pm::map::JournalController_evidenceSync, pm::api::Ref<pm::map::JournalEvidenceSyncController>> evidenceSync{};
   /// AddEvidence(journal, evidence): marks it found and filters. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_AddEvidence, void(void*, int32_t)> AddEvidence{};
+  static constexpr pm::api::Method<pm::map::JournalController_AddEvidence, void(pm::api::Ref<pm::map::JournalController>, int32_t)> AddEvidence{};
   /// FilterOutEvidence(journal, evidence): marks it ruled out and filters. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_FilterOutEvidence, void(void*, int32_t)>
+  static constexpr pm::api::Method<pm::map::JournalController_FilterOutEvidence, void(pm::api::Ref<pm::map::JournalController>, int32_t)>
       FilterOutEvidence{};
   /// RemoveEvidence(journal, evidence): unmarks it and filters. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_RemoveEvidence, void(void*, int32_t)> RemoveEvidence{};
+  static constexpr pm::api::Method<pm::map::JournalController_RemoveEvidence, void(pm::api::Ref<pm::map::JournalController>, int32_t)> RemoveEvidence{};
   /// GoToPage(journal, page). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_GoToPage, void(void*, int32_t)> GoToPage{};
+  static constexpr pm::api::Method<pm::map::JournalController_GoToPage, void(pm::api::Ref<pm::map::JournalController>, int32_t)> GoToPage{};
   /// PageSync(journal, page, &info), the page sync as the RPC runs it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_PageSync, void(void*, int32_t, const void*)> PageSync{};
+  static constexpr pm::api::Method<pm::map::JournalController_PageSync, void(pm::api::Ref<pm::map::JournalController>, int32_t, const void*)> PageSync{};
   /// The page the book is on. Unresolved: 0.
   static constexpr pm::api::Field<pm::map::JournalController_currentPage, int32_t> currentPage{};
   /// The journal's PhotonView. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_photonView, void*> photonView{};
+  static constexpr pm::api::Field<pm::map::JournalController_photonView, pm::api::Ref<pm::map::PhotonView>> photonView{};
   /// GetGhostType(journal): the player's guess, a ghost type. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::JournalController_GetGhostType, int32_t(void*)> GetGhostType{};
+  static constexpr pm::api::Method<pm::map::JournalController_GetGhostType, int32_t(pm::api::Ref<pm::map::JournalController>)> GetGhostType{};
   /// UnselectGhost(journal): clears the player's guess. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_UnselectGhost, void(void*)> UnselectGhost{};
+  static constexpr pm::api::Method<pm::map::JournalController_UnselectGhost, void(pm::api::Ref<pm::map::JournalController>)> UnselectGhost{};
   /// Whether the journal is open: open.get(journal). Unresolved: false.
   static constexpr pm::api::Field<pm::map::JournalController_open, bool> open{};
   /// Its media page, a Journal_PhotoPage: photoPage.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_photoPage, void*> photoPage{};
+  static constexpr pm::api::Field<pm::map::JournalController_photoPage, pm::api::Ref<pm::map::Journal_PhotoPage>> photoPage{};
   /// The pause menu's PlayersList: playersList.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_playersList, void*> playersList{};
+  static constexpr pm::api::Field<pm::map::JournalController_playersList, pm::api::Ref<pm::map::PlayersList>> playersList{};
   /// The JournalRigController that carries the book: rig.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_rig, void*> rig{};
+  static constexpr pm::api::Field<pm::map::JournalController_rig, pm::api::Ref<pm::map::JournalRigController>> rig{};
   /// The pages' GraphicRaycaster, a Behaviour: canvasRaycaster.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_canvasRaycaster, void*> canvasRaycaster{};
+  static constexpr pm::api::Field<pm::map::JournalController_canvasRaycaster, pm::api::Object> canvasRaycaster{};
   /// The book's AudioSource: openSource.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_openSource, void*> openSource{};
+  static constexpr pm::api::Field<pm::map::JournalController_openSource, pm::api::Object> openSource{};
   /// The opening sound, an AudioClip: openClip.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_openClip, void*> openClip{};
+  static constexpr pm::api::Field<pm::map::JournalController_openClip, pm::api::Object> openClip{};
   /// The closing sound, an AudioClip: closeClip.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_closeClip, void*> closeClip{};
+  static constexpr pm::api::Field<pm::map::JournalController_closeClip, pm::api::Object> closeClip{};
   /// The pause menu's tabs, a JournalTab[]: pauseMenuTabs.get(journal). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalController_pauseMenuTabs, void*> pauseMenuTabs{};
+  static constexpr pm::api::Field<pm::map::JournalController_pauseMenuTabs, pm::api::Object> pauseMenuTabs{};
   /// OpenCloseJournal(journal, pause): the player's own open or close of the book. A mod hooks it.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_OpenCloseJournal, void(void*, bool)> OpenCloseJournal{};
+  static constexpr pm::api::Method<pm::map::JournalController_OpenCloseJournal, void(pm::api::Ref<pm::map::JournalController>, bool)> OpenCloseJournal{};
   /// OpenEvidencePage(journal): the book turns to the evidence spread. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_OpenEvidencePage, void(void*)> OpenEvidencePage{};
+  static constexpr pm::api::Method<pm::map::JournalController_OpenEvidencePage, void(pm::api::Ref<pm::map::JournalController>)> OpenEvidencePage{};
   /// ShowCanvas(journal, open, pause): the canvas step of an open or close (see its entry). Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::JournalController_ShowCanvas, void(void*, bool, bool)> ShowCanvas{};
+  static constexpr pm::api::Method<pm::map::JournalController_ShowCanvas, void(pm::api::Ref<pm::map::JournalController>, bool, bool)> ShowCanvas{};
 };
 
 /// The rig that carries a player's book. `rig` below is the JournalRigController.
@@ -869,25 +871,25 @@ struct JournalRigController {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::JournalRigController> type{};
   /// The book's Animator: animator.get(rig). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalRigController_animator, void*> animator{};
+  static constexpr pm::api::Field<pm::map::JournalRigController_animator, pm::api::Ref<pm::map::Animator>> animator{};
   /// The Transform the book hangs from: constraintParent.get(rig). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalRigController_constraintParent, void*> constraintParent{};
+  static constexpr pm::api::Field<pm::map::JournalRigController_constraintParent, pm::api::Ref<pm::map::Transform>> constraintParent{};
   /// What the book follows each frame, a Transform, null while unhooked: followTarget.get(rig) (map note). Unresolved:
   /// null.
-  static constexpr pm::api::Field<pm::map::JournalRigController_followTarget, void*> followTarget{};
+  static constexpr pm::api::Field<pm::map::JournalRigController_followTarget, pm::api::Ref<pm::map::Transform>> followTarget{};
   /// The book's 3D tabs, a GameObject[]: allTabsObjects.get(rig). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalRigController_allTabsObjects, void*> allTabsObjects{};
+  static constexpr pm::api::Field<pm::map::JournalRigController_allTabsObjects, pm::api::Object> allTabsObjects{};
   /// Whether it holds the book open: opened.get(rig), .set(rig, open). Unresolved: false, writes nothing.
   static constexpr pm::api::Field<pm::map::JournalRigController_opened, bool> opened{};
   /// The layer number the tabs go back to as the book closes: closedLayer.get(rig). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::JournalRigController_closedLayer, int32_t> closedLayer{};
   /// UpdateJournalTabs(rig, pause): the pause menu's tabs or the journal's. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalRigController_UpdateJournalTabs, void(void*, bool)>
+  static constexpr pm::api::Method<pm::map::JournalRigController_UpdateJournalTabs, void(pm::api::Ref<pm::map::JournalRigController>, bool)>
       UpdateJournalTabs{};
   /// SelectTab(rig, tabGameObject). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalRigController_SelectTab, void(void*, void*)> SelectTab{};
+  static constexpr pm::api::Method<pm::map::JournalRigController_SelectTab, void(pm::api::Ref<pm::map::JournalRigController>, pm::api::Ref<pm::map::GameObject>)> SelectTab{};
   /// HideJournal(rig, hidden). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalRigController_HideJournal, void(void*, bool)> HideJournal{};
+  static constexpr pm::api::Method<pm::map::JournalRigController_HideJournal, void(pm::api::Ref<pm::map::JournalRigController>, bool)> HideJournal{};
 };
 
 /// The pause menu's player list. `list` below is the PlayersList.
@@ -898,34 +900,34 @@ struct PlayersList {
   /// nothing.
   static constexpr pm::api::Field<pm::map::PlayersList_isLocal, bool> isLocal{};
   /// RefreshUI(list, flag): fills it with the room's players. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PlayersList_RefreshUI, void(void*, bool)> RefreshUI{};
+  static constexpr pm::api::Method<pm::map::PlayersList_RefreshUI, void(pm::api::Ref<pm::map::PlayersList>, bool)> RefreshUI{};
 };
 
 /// The journal's media page. `page` below is one.
 struct Journal_PhotoPage {
   /// The photo slots, a JournalMedia[]: photos.get(page). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Journal_PhotoPage_photos, void*> photos{};
+  static constexpr pm::api::Field<pm::map::Journal_PhotoPage_photos, pm::api::Object> photos{};
   /// The video slots, a JournalMedia[]: videos.get(page). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Journal_PhotoPage_videos, void*> videos{};
+  static constexpr pm::api::Field<pm::map::Journal_PhotoPage_videos, pm::api::Object> videos{};
   /// The sound slots, a JournalMedia[]: sounds.get(page). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Journal_PhotoPage_sounds, void*> sounds{};
+  static constexpr pm::api::Field<pm::map::Journal_PhotoPage_sounds, pm::api::Object> sounds{};
 };
 
 /// A media slot. `slot` below is one.
 struct JournalMedia {
   /// The Media it shows: media.get(slot). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalMedia_media, void*> media{};
+  static constexpr pm::api::Field<pm::map::JournalMedia_media, pm::api::Ref<pm::map::Media>> media{};
   /// Whether it holds media: filled.get(slot). Unresolved: false.
   static constexpr pm::api::Field<pm::map::JournalMedia_filled, bool> filled{};
   /// RemoveMedia(slot, flag): the game's removal; call it with virtual_call, as the game does.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::JournalMedia_RemoveMedia, void(void*, bool)> RemoveMedia{};
+  static constexpr pm::api::Method<pm::map::JournalMedia_RemoveMedia, void(pm::api::Ref<pm::map::JournalMedia>, bool)> RemoveMedia{};
 };
 
 /// A piece of media. `media` below is one.
 struct Media {
   /// What it shows, a MediaValues: value.get(media). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Media_value, void*> value{};
+  static constexpr pm::api::Field<pm::map::Media_value, pm::api::Object> value{};
 };
 
 /// A kind of media. `values` below is one.
@@ -973,7 +975,7 @@ struct JournalTab {
   /// Its last page: max.get(tab), max.set(tab, page). Unresolved: 0, writes nothing.
   static constexpr pm::api::Field<pm::map::JournalTab_max, float> max{};
   /// Its Button: button.get(tab). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::JournalTab_button, void*> button{};
+  static constexpr pm::api::Field<pm::map::JournalTab_button, pm::api::Object> button{};
 };
 
 /// A guess button. `button` below is the GhostButton.
@@ -992,24 +994,24 @@ struct EvidenceButton {
   /// nothing.
   static constexpr pm::api::Field<pm::map::EvidenceButton_evidence, int32_t> evidence{};
   /// The line under its name, a TextMeshProUGUI: descriptionLabel.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::EvidenceButton_descriptionLabel, void*> descriptionLabel{};
+  static constexpr pm::api::Field<pm::map::EvidenceButton_descriptionLabel, pm::api::Object> descriptionLabel{};
 };
 
 /// A three-state journal button. `button` below is a ThreeStateButton (an EvidenceButton included).
 struct ThreeStateButton {
   /// Its own text, a TextMeshProUGUI: textLabel.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ThreeStateButton_textLabel, void*> textLabel{};
+  static constexpr pm::api::Field<pm::map::ThreeStateButton_textLabel, pm::api::Object> textLabel{};
   /// The image shown when ticked, a Behaviour: tickedImage.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ThreeStateButton_tickedImage, void*> tickedImage{};
+  static constexpr pm::api::Field<pm::map::ThreeStateButton_tickedImage, pm::api::Object> tickedImage{};
   /// The image shown when crossed out, a Behaviour: crossedOutImage.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ThreeStateButton_crossedOutImage, void*> crossedOutImage{};
+  static constexpr pm::api::Field<pm::map::ThreeStateButton_crossedOutImage, pm::api::Object> crossedOutImage{};
 };
 
 /// A shared journal button. `button` below is the NetworkThreeStateButton.
 struct NetworkThreeStateButton {
   /// The delegate raised on the player's change: userStateChanged.get(button), .set(button, delegate).
   /// Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::NetworkThreeStateButton_userStateChanged, void*> userStateChanged{};
+  static constexpr pm::api::Field<pm::map::NetworkThreeStateButton_userStateChanged, pm::api::Object> userStateChanged{};
 };
 
 /// A text object's localiser. `localiser` below is the TextLocaliserUI.
@@ -1017,9 +1019,9 @@ struct TextLocaliserUI {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::TextLocaliserUI> type{};
   /// Its key, a System.String: key.get(localiser). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::TextLocaliserUI_key, void*> key{};
+  static constexpr pm::api::Field<pm::map::TextLocaliserUI_key, pm::api::Object> key{};
   /// set_Key(localiser, string): sets the key and writes its text. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::TextLocaliserUI_set_Key, void(void*, void*)> set_Key{};
+  static constexpr pm::api::Method<pm::map::TextLocaliserUI_set_Key, void(pm::api::Ref<pm::map::TextLocaliserUI>, pm::api::Object)> set_Key{};
 };
 
 /// @}
