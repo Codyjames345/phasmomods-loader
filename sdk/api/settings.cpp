@@ -85,14 +85,14 @@ float clamped(const Slider& s, float v) { return std::clamp(v, s.min, std::max(s
 // The local player's audio page, and its master volume slider.
 void* audio_page(void*& masterSlider) {
   masterSlider = nullptr;
-  void* type = phasmo::GameMyAudioManager::type.type_object();
-  const RefArray pages{type ? phasmo::Object::FindAllOfType(type, true) : nullptr};
+  void* type = phasmo::GameMyAudioManager::type.type_object();  // a System.Type: raw by design
+  const RefArray pages{type ? phasmo::Object::FindAllOfType(type, true).raw() : nullptr};
   for (size_t i = 0; i < pages.size(); ++i) {
-    void* slider = pages[i] ? phasmo::GameMyAudioManager::masterVolumeSlider.get(pages[i]) : nullptr;
-    void* t = slider && alive(slider) ? phasmo::Component::get_transform(slider) : nullptr;
-    void* row = t ? phasmo::Transform::get_parent(t) : nullptr;
-    if (row && rows::journal_list(row)) {
-      masterSlider = slider;
+    const auto slider = pages[i] ? phasmo::GameMyAudioManager::masterVolumeSlider.get(pages[i]) : nullptr;
+    const auto t = slider && alive(slider.raw()) ? phasmo::Component::get_transform(slider) : nullptr;
+    const auto row = t ? phasmo::Transform::get_parent(t) : nullptr;
+    if (row && rows::journal_list(row.raw())) {
+      masterSlider = slider.raw();
       return pages[i];
     }
   }
@@ -120,11 +120,12 @@ std::string page_shape(void* list) {
   std::string out;
   const int32_t count = phasmo::Transform::get_childCount(list);
   for (int32_t i = 0; i < count; ++i) {
-    void* child = phasmo::Transform::GetChild(list, i);
-    void* go = child ? phasmo::Component::get_gameObject(child) : nullptr;
-    if (!go || ours(go)) continue;
+    const auto child = phasmo::Transform::GetChild(list, i);
+    const auto go = child ? phasmo::Component::get_gameObject(child) : nullptr;
+    if (!go || ours(go.raw())) continue;
     const bool oursOff =
-      std::any_of(g.lines.hidden.begin(), g.lines.hidden.end(), [&](const Held& h) { return h.get() == go; });
+      std::any_of(g.lines.hidden.begin(), g.lines.hidden.end(),
+                  [&](const Held& h) { return h.get() == go.raw(); });
     out += (oursOff || phasmo::GameObject::get_activeSelf(go)) ? '1' : '0';
   }
   return out;
@@ -156,62 +157,65 @@ void remove_rows() {
 void ensure_rows() {
   if (++g.ticks < kSearchTicks) return;
   g.ticks = 0;
-  void* masterSlider = nullptr;
-  void* page = audio_page(masterSlider);
+  void* masterSlider = nullptr;  // audio_page's void* out parameter: 3c will type it
+  const Object page = Object::unchecked(audio_page(masterSlider));
   if (!page) return;
-  void* sliderT = phasmo::Component::get_transform(masterSlider);
-  void* templ = phasmo::Transform::get_parent(sliderT);  // the master volume's row
-  void* list = rows::journal_list(templ);
-  void* number = phasmo::GameMyAudioManager::masterVolumeValueText.get(page);
-  void* numberT = number && alive(number) ? phasmo::Component::get_transform(number) : nullptr;
-  if (!list || !numberT || phasmo::Transform::get_parent(numberT).raw() != templ) {
+  const auto sliderT = phasmo::Component::get_transform(masterSlider);
+  const auto templ = phasmo::Transform::get_parent(sliderT);  // the master volume's row
+  const auto list = rows::journal_list(templ.raw());
+  const auto number = phasmo::GameMyAudioManager::masterVolumeValueText.get(page);
+  const auto numberT = number && alive(number.raw()) ? phasmo::Component::get_transform(number) : nullptr;
+  if (!list || !numberT || phasmo::Transform::get_parent(numberT).raw() != templ.raw()) {
     PM_LOG("settings: %s finds the audio page but not its master volume row as it expects", g.owner.c_str());
     return;
   }
   // The rows are already there and the page is the same shape as when they were laid out: nothing to do. The shape is
   // checked because the game switches its own rows on and off (the speaker mode row when there is one output device),
   // and the lines between rows have to follow.
-  const std::string shape = page_shape(list);
+  const std::string shape = page_shape(list.raw());
   if (!shape.empty() && shape == g.pageState &&
       std::all_of(g.rows.begin(), g.rows.end(), [](const Row& r) { return r.slider && alive(r.slider); }))
     return;
-  const std::string gameNumber = to_utf8(phasmo::TMP_Text::get_text(number));
+  const std::string gameNumber = to_utf8(phasmo::TMP_Text::get_text(number).raw());
   g.percentSign = !gameNumber.empty() && gameNumber.back() == '%';
   const int32_t sliderAt = phasmo::Transform::GetSiblingIndex(sliderT), numberAt = phasmo::Transform::GetSiblingIndex(numberT);
-  void* templObject = phasmo::Component::get_gameObject(templ);
+  const auto templObject = phasmo::Component::get_gameObject(templ);
   remove_rows();
   // One line between the rows, as on the keybinds page (the user, 2026-11-10): the audio page's own dividers are double
   // rules between its groups, too heavy between the mod's rows.
   bool fromOther = false;
-  void* divider = rows::line_divider(templ, &fromOther);
+  const auto divider = rows::line_divider(templ.raw(), &fromOther);
   PM_LOG("settings: %s divides its rows with %s", g.owner.c_str(),
          !divider ? "nothing: no line was found to copy"
                   : fromOther ? "a line taken from another journal menu"
                               : "the audio page's own divider");
   float added = 0.0f;
   const auto add = [&](void* original) -> void* {
-    void* copy = original ? phasmo::Object::Instantiate(original, list, false) : nullptr;
-    if (copy) added += rows::taken_height(copy, list);
+    const auto copy = original ? phasmo::Object::Instantiate(original, list, false) : nullptr;
+    if (copy) added += rows::taken_height(copy.raw(), list.raw());
     return copy;
   };
   if (!g.title.empty()) {
-    if (void* h = add(templObject)) {
-      g.extras.push_back(h);
-      void* root = phasmo::GameObject::get_transform(h);
-      void* name = rows::name_text(root);
-      rows::heading(name, g.title);
-      rows::show_only(root, name ? phasmo::Component::get_transform(name) : nullptr);
+    if (const Object h = Object::unchecked(add(templObject.raw()))) {
+      g.extras.push_back(h.raw());
+      const auto root = phasmo::GameObject::get_transform(h);
+      const auto name = rows::name_text(root.raw());
+      rows::heading(name.raw(), g.title);
+      rows::show_only(root.raw(), name ? phasmo::Component::get_transform(name).raw() : nullptr);
     }
   }
   for (Row& r : g.rows) {
-    void* copy = add(templObject);
-    void* root = copy ? phasmo::GameObject::get_transform(copy) : nullptr;
-    void* sliderChild = root ? phasmo::Transform::GetChild(root, sliderAt) : nullptr;
-    void* numberChild = root ? phasmo::Transform::GetChild(root, numberAt) : nullptr;
-    void* slider = sliderChild ? phasmo::Component::GetComponent(sliderChild, phasmo::XRSlider::type.type_object()) : nullptr;
-    void* text = numberChild ? phasmo::Component::GetComponent(numberChild, phasmo::TextMeshProUGUI::type.type_object()) : nullptr;
+    const Object copy = Object::unchecked(add(templObject.raw()));
+    const auto root = copy ? phasmo::GameObject::get_transform(copy) : nullptr;
+    const auto sliderChild = root ? phasmo::Transform::GetChild(root, sliderAt) : nullptr;
+    const auto numberChild = root ? phasmo::Transform::GetChild(root, numberAt) : nullptr;
+    const auto slider =
+        sliderChild ? phasmo::Component::GetComponent(sliderChild, phasmo::XRSlider::type.type_object()) : nullptr;
+    const auto text = numberChild ? phasmo::Component::GetComponent(numberChild,
+                                                                     phasmo::TextMeshProUGUI::type.type_object())
+                                  : nullptr;
     // A change event of its own: the copy's would run the game's master volume listeners.
-    void* fresh = phasmo::SliderEvent::type.make();
+    const auto fresh = phasmo::SliderEvent::type.make();
     if (fresh) phasmo::SliderEvent::ctor(fresh);
     if (!slider || !text || !fresh) {
       PM_LOG("settings: %s.%s gets no row: its copy of the master volume row is not as expected", g.owner.c_str(),
@@ -220,26 +224,26 @@ void ensure_rows() {
       continue;
     }
     phasmo::XRSlider::m_OnValueChanged.set(slider, fresh);
-    rows::label(rows::name_text(root), r.desc.label);
+    rows::label(rows::name_text(root.raw()).raw(), r.desc.label);
     phasmo::XRSlider::set_minValue(slider, r.desc.min);
     phasmo::XRSlider::set_maxValue(slider, r.desc.max);
     phasmo::XRSlider::SetValueWithoutNotify(slider, r.applied);
     phasmo::TMP_Text::set_text(text, make_string(shown(r, r.applied)));
     r.shownValue = r.applied;
-    r.row = copy;
-    r.slider = slider;
-    r.number = text;
+    r.row = copy.raw();
+    r.slider = slider.raw();
+    r.number = text.raw();
     PM_LOG("settings: %s.%s has its row on the audio page", g.owner.c_str(), r.desc.id.c_str());
   }
   // One line between every pair of rows the page shows (the user, 2026-11-10): the page's own dividers double up where it
   // hides a row between two of them, and it groups two rows with no divider between them at all. This lays out the whole
   // list, the game's rows as well as ours, so the page reads the same top to bottom.
-  g.lines = rows::space_out(list, divider);
+  g.lines = rows::space_out(list.raw(), divider.raw());
   added += g.lines.added;
   g.pageState = shape;
   PM_LOG("settings: %s lines the audio page with %zu copied and %zu put away", g.owner.c_str(), g.lines.made.size(),
          g.lines.hidden.size());
-  if (rows::Grown grown = rows::grow(list, added); grown.rect) g.grown.push_back(std::move(grown));
+  if (rows::Grown grown = rows::grow(list.raw(), added); grown.rect) g.grown.push_back(std::move(grown));
 }
 
 // The audio page decides when a setting counts, as it does for the game's master volume (sdk/map/Input.h,

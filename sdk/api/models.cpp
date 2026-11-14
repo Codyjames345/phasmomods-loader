@@ -61,9 +61,9 @@ bool strip(void* root) {
   for (int pass = 0; pass < 2; ++pass)
     for (void* kind : kinds)
       for (void* t : transforms) {
-        const RefArray parts{phasmo::GameObject::GetComponents(game_object_of(t), kind)};
+        const RefArray parts{phasmo::GameObject::GetComponents(game_object_of(t), kind).raw()};
         for (size_t i = 0; i < parts.size(); ++i)
-          if (void* part = parts[i]) phasmo::Object::DestroyImmediate(part, false);
+          if (const Object part = Object::unchecked(parts[i])) phasmo::Object::DestroyImmediate(part, false);
       }
   for (void* kind : kinds)
     if (count_of(transforms, kind)) return false;
@@ -73,22 +73,22 @@ bool strip(void* root) {
 // Removes the root's children that neither hold the skeleton nor draw anything: the prefab's rigs, aiming targets
 // and sockets, which mean nothing without their scripts.
 void prune(void* root, void* animator) {
-  void* hips = phasmo::Animator::GetBoneTransform(animator, phasmo::HumanBodyBones::Hips());
+  const auto hips = phasmo::Animator::GetBoneTransform(animator, phasmo::HumanBodyBones::Hips());
   if (!hips) return;
-  void* const drawn = phasmo::Renderer::type.type_object();
-  void* const top = phasmo::GameObject::get_transform(root);
-  std::vector<void*> unused;
+  void* const drawn = phasmo::Renderer::type.type_object();  // a System.Type: raw by design
+  const auto top = phasmo::GameObject::get_transform(root);
+  std::vector<Ref<pm::map::Transform>> unused;
   const int n = phasmo::Transform::get_childCount(top);
   for (int i = 0; i < n; ++i) {
-    void* child = phasmo::Transform::GetChild(top, i);
+    const auto child = phasmo::Transform::GetChild(top, i);
     if (!phasmo::Transform::IsChildOf(hips, child) && !phasmo::Component::GetComponentInChildren(child, drawn, true))
       unused.push_back(child);
   }
-  for (void* child : unused) phasmo::Object::DestroyImmediate(game_object_of(child), false);
+  for (const auto& child : unused) phasmo::Object::DestroyImmediate(game_object_of(child.raw()), false);
 }
 
 void* new_game_object(const char* name) {
-  void* go = phasmo::GameObject::type.make();
+  const auto go = phasmo::GameObject::type.make();
   if (!go) return nullptr;
   phasmo::GameObject::ctor(go, make_string(name));
   return go;
@@ -98,9 +98,9 @@ void* new_game_object(const char* name) {
 // runtime lays its elements out at another size than T.
 template <class T, class TypeWrapper>
 void* filled_array(const TypeWrapper& type, std::span<const T> values) {
-  void* raw = type.make_array(values.size());
-  if (!raw || ValueArray{raw}.stride() != sizeof(T)) return nullptr;
-  const Array<T> out{raw};
+  const auto raw = type.make_array(values.size());
+  if (!raw || ValueArray{raw.raw()}.stride() != sizeof(T)) return nullptr;
+  const Array<T> out{raw.raw()};
   for (size_t i = 0; i < values.size(); ++i) out[i] = values[i];
   return raw;
 }
@@ -108,25 +108,26 @@ void* filled_array(const TypeWrapper& type, std::span<const T> values) {
 }  // namespace
 
 Object copy_investigator_body(const char* name, std::string* why) {
-  void* prefab = phasmo::Resources::Load(make_string(kPlayerPrefab), phasmo::GameObject::type.type_object());
+  const auto prefab = phasmo::Resources::Load(make_string(kPlayerPrefab), phasmo::GameObject::type.type_object());
   if (!prefab || !phasmo::GameObject::type.is(prefab)) return fail(why, "the PCPlayer prefab did not load"), nullptr;
-  void* cosmetics = phasmo::Component::GetComponentInChildren(phasmo::GameObject::get_transform(prefab),
-                                                              phasmo::PlayerCosmetics::type.type_object(), true);
-  void* body = game_object_of(cosmetics ? phasmo::PlayerCosmetics::playerAnimator.get(cosmetics) : nullptr);
+  const auto cosmetics = phasmo::Component::GetComponentInChildren(phasmo::GameObject::get_transform(prefab),
+                                                                   phasmo::PlayerCosmetics::type.type_object(), true);
+  const Object body =
+      Object::unchecked(game_object_of(cosmetics ? phasmo::PlayerCosmetics::playerAnimator.get(cosmetics).raw() : nullptr));
   if (!body) return fail(why, "the prefab has no body (PlayerCosmetics.playerAnimator)"), nullptr;
   // Copied under an inactive holder, so nothing of it wakes before it is stripped.
-  void* holder = new_game_object(name);
+  const Object holder = Object::unchecked(new_game_object(name));
   if (!holder) return fail(why, "no GameObject could be made"), nullptr;
   phasmo::GameObject::SetActive(holder, false);
-  void* copy = phasmo::Object::Instantiate(body, phasmo::GameObject::get_transform(holder), false);
-  if (!copy || !strip(copy)) {
+  const auto copy = phasmo::Object::Instantiate(body, phasmo::GameObject::get_transform(holder), false);
+  if (!copy || !strip(copy.raw())) {
     phasmo::Object::Destroy(holder, 0.0f);
     return fail(why, copy ? "a component would not come off the copy" : "the body could not be copied"), nullptr;
   }
   phasmo::Object::set_name(copy, make_string(name));
-  void* transform = phasmo::GameObject::get_transform(copy);
-  if (void* animator = phasmo::Component::GetComponent(transform, phasmo::Animator::type.type_object())) {
-    prune(copy, animator);
+  const auto transform = phasmo::GameObject::get_transform(copy);
+  if (const auto animator = phasmo::Component::GetComponent(transform, phasmo::Animator::type.type_object())) {
+    prune(copy.raw(), animator.raw());
     // The game's controller carries state machine behaviours on the asset, which the strip cannot reach: take it off
     // while the copy is still inactive, so none of them is made for the copy.
     phasmo::Animator::set_runtimeAnimatorController(animator, nullptr);
@@ -170,14 +171,14 @@ int hide_renderers(void* gameObject, std::span<const char* const> keep) {
   each_transform(phasmo::GameObject::get_transform(gameObject), 0, transforms);
   int hidden = 0;
   for (void* t : transforms) {
-    void* go = game_object_of(t);
+    const Object go = Object::unchecked(game_object_of(t));
     if (!keep.empty()) {
-      const std::string name = to_utf8(phasmo::Object::get_name(go));
+      const std::string name = to_utf8(phasmo::Object::get_name(go).raw());
       if (std::any_of(keep.begin(), keep.end(), [&](const char* k) { return k && name == k; })) continue;
     }
-    const RefArray renderers{phasmo::GameObject::GetComponents(go, phasmo::Renderer::type.type_object())};
+    const RefArray renderers{phasmo::GameObject::GetComponents(go, phasmo::Renderer::type.type_object()).raw()};
     for (size_t i = 0; i < renderers.size(); ++i)
-      if (void* r = renderers[i]) {
+      if (const Object r = Object::unchecked(renderers[i])) {
         phasmo::Renderer::set_enabled(r, false);
         ++hidden;
       }
@@ -195,8 +196,8 @@ bool controller_has_states(void* controller, std::span<const char* const> states
   if (!alive(controller)) return fail(missing, "no controller");
   // These engine calls have not run in the game yet: each is logged before it runs, so a crash names its call.
   PM_LOG("controller check: making its Animator");
-  void* probe = new_game_object("Controller check");
-  void* animator = probe ? phasmo::GameObject::AddComponent(probe, phasmo::Animator::type.type_object()) : nullptr;
+  const Object probe = Object::unchecked(new_game_object("Controller check"));
+  const auto animator = probe ? phasmo::GameObject::AddComponent(probe, phasmo::Animator::type.type_object()) : nullptr;
   bool ok = animator != nullptr;
   if (!ok) fail(missing, "no Animator could be made to check it");
   if (ok) {
@@ -255,8 +256,8 @@ bool material_available(std::string* why) {
 Object two_sided_material(void* like, phasmo::Color colour, std::string* why) {
   if (!alive(like)) return fail(why, "no material to take the shader from"), nullptr;
   if (!material_available(why)) return nullptr;
-  void* shader = phasmo::Material::get_shader(like);
-  void* material = shader ? phasmo::Material::type.make() : nullptr;
+  const auto shader = phasmo::Material::get_shader(like);
+  const auto material = shader ? phasmo::Material::type.make() : nullptr;
   if (!material) return fail(why, "no material could be made"), nullptr;
   phasmo::Material::ctor_Shader(material, shader);
   if (!phasmo::Material::HasProperty(material, phasmo::LitShader::BaseColor.id()) ||
@@ -279,10 +280,10 @@ bool set_smoothness(void* material, float smoothness) {
 }
 
 Ref<pm::map::Material> lit_material_of(void* gameObject) {
-  void* renderer = alive(gameObject) ? phasmo::Component::GetComponentInChildren(
-                                           phasmo::GameObject::get_transform(gameObject),
-                                           phasmo::Renderer::type.type_object(), true)
-                                     : nullptr;
+  const auto renderer = alive(gameObject) ? phasmo::Component::GetComponentInChildren(
+                                               phasmo::GameObject::get_transform(gameObject),
+                                               phasmo::Renderer::type.type_object(), true)
+                                         : nullptr;
   return renderer ? phasmo::Renderer::get_sharedMaterial(renderer) : nullptr;
 }
 
@@ -292,7 +293,7 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
   if (!alive(gameObject) || !alive(material)) return fail(why, "no GameObject or no material");
   if (!cloth_available(why)) return false;
   for (const ClothSphere& s : spheres)
-    if (!alive(s.bone)) return fail(why, "a sphere has no bone");
+    if (!alive(s.bone.raw())) return fail(why, "a sphere has no bone");
   const size_t n = mesh.vertices.size();
   if (!n || mesh.normals.size() != n || mesh.uv.size() != n || mesh.coefficients.size() != n ||
       mesh.triangles.empty() || mesh.triangles.size() % 3)
@@ -300,14 +301,14 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
   for (const int32_t index : mesh.triangles)
     if (index < 0 || static_cast<size_t>(index) >= n) return fail(why, "a triangle indexes past the vertices");
 
-  void* const anchor = phasmo::GameObject::get_transform(gameObject);
+  const auto anchor = phasmo::GameObject::get_transform(gameObject);
   // The bones that carry the mesh: the GameObject itself alone, whose bind pose is the identity, or the given ones,
   // each with its bind pose where it stands now (bind_pose).
   const bool skinned = !mesh.bones.empty();
   if (skinned) {
     if (mesh.weights.size() != n) return fail(why, "the weights are not one per vertex");
-    for (void* const b : mesh.bones)
-      if (!alive(b)) return fail(why, "a bone is gone");
+    for (const auto& b : mesh.bones)
+      if (!alive(b.raw())) return fail(why, "a bone is gone");
     const int32_t count = static_cast<int32_t>(mesh.bones.size());
     for (const ClothWeight& w : mesh.weights)
       for (const int32_t b : w.bone)
@@ -326,31 +327,32 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
   };
   std::vector<phasmo::Matrix4x4> poses;
   if (skinned) {
-    const phasmo::Matrix4x4 own = matrix_of(anchor);
-    for (void* const b : mesh.bones) poses.push_back(bind_pose(matrix_of(b), own));
+    const phasmo::Matrix4x4 own = matrix_of(anchor.raw());
+    for (const auto& b : mesh.bones) poses.push_back(bind_pose(matrix_of(b.raw()), own));
   } else {
     phasmo::Matrix4x4 identity{};
     identity.m[0] = identity.m[5] = identity.m[10] = identity.m[15] = 1;
     poses.push_back(identity);
   }
-  void* const vertices = filled_array(phasmo::Vector3::type, mesh.vertices);
-  void* const normals = filled_array(phasmo::Vector3::type, mesh.normals);
-  void* const uv = filled_array(pm::api::Type<pm::map::Vector2>{}, mesh.uv);
-  void* const indices = filled_array(pm::api::Type<pm::map::Int32>{}, mesh.triangles);
-  void* const boneWeights = filled_array(phasmo::BoneWeight::type, std::span<const phasmo::BoneWeight>(weights));
-  void* const bindposes = filled_array(phasmo::Matrix4x4::type, std::span<const phasmo::Matrix4x4>(poses));
-  void* const coefficients = filled_array(pm::api::Type<pm::map::Vector2>{}, mesh.coefficients);
-  void* const bones = phasmo::Transform::type.make_array(skinned ? mesh.bones.size() : 1);
-  void* const materials = phasmo::Material::type.make_array(1);
+  const Object vertices = Object::unchecked(filled_array(phasmo::Vector3::type, mesh.vertices));
+  const Object normals = Object::unchecked(filled_array(phasmo::Vector3::type, mesh.normals));
+  const Object uv = Object::unchecked(filled_array(pm::api::Type<pm::map::Vector2>{}, mesh.uv));
+  const Object indices = Object::unchecked(filled_array(pm::api::Type<pm::map::Int32>{}, mesh.triangles));
+  const Object boneWeights =
+      Object::unchecked(filled_array(phasmo::BoneWeight::type, std::span<const phasmo::BoneWeight>(weights)));
+  const Object bindposes = Object::unchecked(filled_array(phasmo::Matrix4x4::type, std::span<const phasmo::Matrix4x4>(poses)));
+  const Object coefficients = Object::unchecked(filled_array(pm::api::Type<pm::map::Vector2>{}, mesh.coefficients));
+  const auto bones = phasmo::Transform::type.make_array(skinned ? mesh.bones.size() : 1);
+  const auto materials = phasmo::Material::type.make_array(1);
   if (!vertices || !normals || !uv || !indices || !boneWeights || !bindposes || !coefficients || !bones || !materials)
     return fail(why, "an array type did not resolve or has another layout");
   if (skinned)
-    for (size_t i = 0; i < mesh.bones.size(); ++i) RefArray{bones}.set(i, mesh.bones[i]);
+    for (size_t i = 0; i < mesh.bones.size(); ++i) RefArray{bones.raw()}.set(i, mesh.bones[i].raw());
   else
-    RefArray{bones}.set(0, anchor);
-  RefArray{materials}.set(0, material);
+    RefArray{bones.raw()}.set(0, anchor.raw());
+  RefArray{materials.raw()}.set(0, material);
 
-  void* built = phasmo::Mesh::type.make();
+  const auto built = phasmo::Mesh::type.make();
   if (!built) return fail(why, "no Mesh could be made");
   phasmo::Mesh::ctor(built);
   out.mesh = built;
@@ -361,8 +363,8 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
   phasmo::Mesh::set_bindposes(built, bindposes);
   phasmo::Mesh::set_triangles(built, indices);
 
-  void* renderer = phasmo::GameObject::AddComponent(gameObject, phasmo::SkinnedMeshRenderer::type.type_object());
-  void* cloth = nullptr;
+  const auto renderer = phasmo::GameObject::AddComponent(gameObject, phasmo::SkinnedMeshRenderer::type.type_object());
+  Object cloth = nullptr;
   // On a failure from here, nothing made stays: no sphere is dropped and nothing runs in part.
   const auto undo = [&](const char* reason) {
     if (cloth) phasmo::Object::Destroy(cloth, 0.0f);
@@ -372,14 +374,15 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
   };
   if (!renderer) return undo("no SkinnedMeshRenderer could be added");
   phasmo::SkinnedMeshRenderer::set_bones(renderer, bones);
-  phasmo::SkinnedMeshRenderer::set_rootBone(renderer, anchor);
-  phasmo::SkinnedMeshRenderer::set_sharedMesh(renderer, built);
+  // One raw-bridge call takes every handle argument raw, so both go raw where the other is Object.
+  phasmo::SkinnedMeshRenderer::set_rootBone(renderer.raw(), anchor.raw());
+  phasmo::SkinnedMeshRenderer::set_sharedMesh(renderer.raw(), built.raw());
   phasmo::SkinnedMeshRenderer::set_updateWhenOffscreen(renderer, true);
   phasmo::Renderer::set_sharedMaterials(renderer, materials);
 
   cloth = phasmo::GameObject::AddComponent(gameObject, phasmo::Cloth::type.type_object());
   if (!cloth) return undo("no Cloth could be added");
-  out.cloth = cloth;
+  out.cloth = cloth.raw();
   phasmo::Cloth::set_useGravity(cloth, settings.useGravity);
   phasmo::Cloth::set_bendingStiffness(cloth, settings.bendingStiffness);
   phasmo::Cloth::set_stretchingStiffness(cloth, settings.stretchingStiffness);
@@ -391,14 +394,14 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
   if (settings.virtualParticles) phasmo::Cloth::set_useVirtualParticles(cloth, *settings.virtualParticles ? 1.0f : 0.0f);
   phasmo::Cloth::set_coefficients(cloth, coefficients);
 
-  std::vector<void*> capsules;
+  std::vector<Object> capsules;
   for (const ClothSphere& s : spheres) {
-    void* go = new_game_object("Cloth collider");
-    if (go) out.colliders.emplace_back(go);
-    void* capsule = go ? phasmo::GameObject::AddComponent(go, phasmo::CapsuleCollider::type.type_object()) : nullptr;
+    const Object go = Object::unchecked(new_game_object("Cloth collider"));
+    if (go) out.colliders.emplace_back(go.raw());
+    const auto capsule = go ? phasmo::GameObject::AddComponent(go, phasmo::CapsuleCollider::type.type_object()) : nullptr;
     if (!capsule) return undo("a sphere collider could not be made");
     phasmo::GameObject::set_layer(go, phasmo::Layers::IgnoreRaycast.index());
-    void* t = phasmo::GameObject::get_transform(go);
+    const auto t = phasmo::GameObject::get_transform(go);
     phasmo::Transform::SetParent(t, s.bone, false);
     const phasmo::Vector3 at = phasmo::Transform::get_position(s.bone);
     phasmo::Vector3 there{at.x + s.offset.x, at.y + s.offset.y, at.z + s.offset.z};
@@ -407,7 +410,7 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
     if (s.length > 0.0f) {
       // The capsule runs along whichever of the bone's own axes points furthest along the direction it was given, so it
       // turns with the limb it covers. A CapsuleCollider is never shorter than its own diameter: that is its sphere.
-      const phasmo::Matrix4x4 bone = matrix_of(s.bone);
+      const phasmo::Matrix4x4 bone = matrix_of(s.bone.raw());
       const float dl =
           std::sqrt(s.direction.x * s.direction.x + s.direction.y * s.direction.y + s.direction.z * s.direction.z);
       int axis = 1;
@@ -429,9 +432,9 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
     }
     capsules.push_back(capsule);
   }
-  void* list = phasmo::CapsuleCollider::type.make_array(capsules.size());
+  const auto list = phasmo::CapsuleCollider::type.make_array(capsules.size());
   if (!list) return undo("no CapsuleCollider[] could be made");
-  for (size_t i = 0; i < capsules.size(); ++i) RefArray{list}.set(i, capsules[i]);
+  for (size_t i = 0; i < capsules.size(); ++i) RefArray{list.raw()}.set(i, capsules[i].raw());
   phasmo::Cloth::set_capsuleColliders(cloth, list);
 
   // Self-collision, for the points the mesh names. An extra: a build without its entries runs the cloth without it.
@@ -443,10 +446,11 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
     using Indices = std::remove_cvref_t<decltype(phasmo::Cloth::SetSelfAndInterCollisionIndices)>;
     using Ctor = std::remove_cvref_t<decltype(phasmo::ListUInt32::ctor)>;
     using Add = std::remove_cvref_t<decltype(phasmo::ListUInt32::Add)>;
-    void* points = Distance::use::resolved() && Stiffness::use::resolved() && Indices::use::resolved() &&
-                           Ctor::use::resolved() && Add::use::resolved()
-                       ? phasmo::ListUInt32::ctor.new_object()
-                       : nullptr;
+    const Object points = Object::unchecked(Distance::use::resolved() && Stiffness::use::resolved() &&
+                                                   Indices::use::resolved() && Ctor::use::resolved() &&
+                                                   Add::use::resolved()
+                                               ? phasmo::ListUInt32::ctor.new_object()
+                                               : nullptr);
     if (points) {
       phasmo::ListUInt32::ctor(points, static_cast<int32_t>(mesh.selfCollision.size()));
       for (const uint32_t v : mesh.selfCollision) phasmo::ListUInt32::Add(points, v);
@@ -465,7 +469,7 @@ bool add_cloth(void* gameObject, const ClothMesh& mesh, void* material, const Cl
 void destroy_cloth(ClothParts& parts) {
   for (Held& go : parts.colliders)
     if (alive(go)) phasmo::Object::Destroy(go, 0.0f);
-  if (alive(parts.mesh)) phasmo::Object::Destroy(parts.mesh, 0.0f);
+  if (alive(parts.mesh.get().raw())) phasmo::Object::Destroy(parts.mesh, 0.0f);
   parts = ClothParts{};
 }
 

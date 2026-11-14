@@ -18,45 +18,47 @@ void* transform_of(void* row) {
 }
 
 bool has_name(void* transform) {
-  void* type = phasmo::TextLocaliserUI::type.type_object();
+  void* type = phasmo::TextLocaliserUI::type.type_object();  // a System.Type: raw by design
   return type && phasmo::Component::GetComponentInChildren(transform, type, true) != nullptr;
 }
 
 }  // namespace
 
 Ref<pm::map::Transform> journal_list(void* row) {
-  void* t = transform_of(row);
-  Ref<pm::map::Transform> list = t ? phasmo::Transform::get_parent(t) : nullptr;
-  void* groupType = phasmo::HorizontalOrVerticalLayoutGroup::type.type_object();
+  const Object t = Object::unchecked(transform_of(row));
+  const auto list = t ? phasmo::Transform::get_parent(t) : nullptr;
+  void* groupType =
+      phasmo::HorizontalOrVerticalLayoutGroup::type.type_object();  // a System.Type: raw by design
   if (!list || !groupType || !phasmo::Component::GetComponent(list, groupType)) return nullptr;
-  void* net = phasmo::Network::get_Instance();
-  void* player = net ? phasmo::Network::localPlayer.get(net) : nullptr;
-  void* playerTransform = player && alive(player) ? phasmo::Component::get_transform(player) : nullptr;
-  if (playerTransform && !phasmo::Transform::IsChildOf(t, playerTransform)) return nullptr;
+  const auto net = phasmo::Network::get_Instance();
+  const auto player = net ? phasmo::Network::localPlayer.get(net) : nullptr;
+  const auto playerTransform = player && alive(player.raw()) ? phasmo::Component::get_transform(player) : nullptr;
+  // The raw bridge takes every handle argument of one call as raw, so both go raw here.
+  if (playerTransform && !phasmo::Transform::IsChildOf(t.raw(), playerTransform.raw())) return nullptr;
   return list;
 }
 
 Ref<pm::map::GameObject> divider_beside(void* row) {
-  void* t = transform_of(row);
-  void* list = t ? phasmo::Transform::get_parent(t) : nullptr;
+  const Object t = Object::unchecked(transform_of(row));
+  const auto list = t ? phasmo::Transform::get_parent(t) : nullptr;
   if (!list) return nullptr;
   const int32_t at = phasmo::Transform::GetSiblingIndex(t), count = phasmo::Transform::get_childCount(list);
   for (const int32_t i : {at + 1, at - 1}) {
     if (i < 0 || i >= count) continue;
-    void* sibling = phasmo::Transform::GetChild(list, i);
-    if (sibling && !has_name(sibling)) return phasmo::Component::get_gameObject(sibling);
+    const auto sibling = phasmo::Transform::GetChild(list, i);
+    if (sibling && !has_name(sibling.raw())) return phasmo::Component::get_gameObject(sibling);
   }
   return nullptr;
 }
 
 Ref<pm::map::GameObject> line_divider(void* row, bool* fromOtherPage) {
-  void* t = transform_of(row);
-  void* own = t ? phasmo::Transform::get_parent(t) : nullptr;
+  const Object t = Object::unchecked(transform_of(row));
+  const auto own = t ? phasmo::Transform::get_parent(t) : nullptr;
   // Another menu's line: the keybinds page's rows are `RebindActionUI`s, and the game puts a thin line between them.
-  void* type = phasmo::RebindActionUI::type.type_object();
-  const RefArray found{type ? phasmo::Object::FindAllOfType(type, true) : nullptr};
+  void* type = phasmo::RebindActionUI::type.type_object();  // a System.Type: raw by design
+  const RefArray found{type ? phasmo::Object::FindAllOfType(type, true).raw() : nullptr};
   for (size_t i = 0; i < found.size(); ++i) {
-    void* list = found[i] ? journal_list(found[i]) : nullptr;
+    const auto list = found[i] ? journal_list(found[i]) : nullptr;
     if (!list || list == own) continue;
     if (auto line = divider_beside(found[i])) {
       if (fromOtherPage) *fromOtherPage = true;
@@ -71,14 +73,14 @@ Lines space_out(void* list, void* line) {
   Lines out;
   if (!list) return out;
   // What the layout sees, in its own order. A switched-off child takes no room, so it divides nothing and needs no line.
-  std::vector<std::pair<void*, bool>> seq;  // each child, and whether it is a row rather than a divider
+  std::vector<std::pair<Ref<pm::map::GameObject>, bool>> seq;  // each child, and whether it is a row rather than a divider
   const int32_t count = phasmo::Transform::get_childCount(list);
   for (int32_t i = 0; i < count; ++i) {
-    void* child = phasmo::Transform::GetChild(list, i);
+    const auto child = phasmo::Transform::GetChild(list, i);
     if (!child) continue;
-    void* go = phasmo::Component::get_gameObject(child);
+    const auto go = phasmo::Component::get_gameObject(child);
     if (!phasmo::GameObject::get_activeSelf(go)) continue;
-    seq.emplace_back(go, has_name(child) || phasmo::Transform::get_childCount(child) > 0);
+    seq.emplace_back(go, has_name(child.raw()) || phasmo::Transform::get_childCount(child) > 0);
   }
   // The list's own dividers are put away and `line` goes between every pair of rows instead, one line to a line as on
   // the keybinds page (the user, 2026-11-10). With no line to copy, a run of dividers between two rows keeps its first, so the rows stay divided. One at either
@@ -92,15 +94,15 @@ Lines space_out(void* list, void* line) {
     while (j < seq.size() && !seq[j].second) ++j;
     const bool between = i > 0 && seq[i - 1].second && j < seq.size() && seq[j].second;
     for (size_t k = i + (between && !line ? 1 : 0); k < j; ++k) {
-      out.added -= taken_height(seq[k].first, list);
+      out.added -= taken_height(seq[k].first.raw(), list);
       phasmo::GameObject::SetActive(seq[k].first, false);
-      out.hidden.emplace_back(seq[k].first);
+      out.hidden.emplace_back(seq[k].first.raw());
     }
     i = j;
   }
   if (!line) return out;
   // A line before every row but the first. The copies go in last first, so the places still hold.
-  std::vector<void*> before;
+  std::vector<Ref<pm::map::GameObject>> before;
   bool first = true;
   for (const auto& [go, row] : seq) {
     if (!row) continue;
@@ -108,14 +110,14 @@ Lines space_out(void* list, void* line) {
     first = false;
   }
   for (auto it = before.rbegin(); it != before.rend(); ++it) {
-    void* copy = phasmo::Object::Instantiate(line, list, false);
+    const auto copy = phasmo::Object::Instantiate(line, list, false);
     if (!copy) continue;
     phasmo::GameObject::SetActive(copy, true);  // `line` may be one of the dividers just put away
-    void* row = *it;  // a GameObject, as seq holds them
+    const auto row = *it;  // a GameObject, as seq holds them
     phasmo::Transform::SetSiblingIndex(phasmo::GameObject::get_transform(copy),
                                        phasmo::Transform::GetSiblingIndex(phasmo::GameObject::get_transform(row)));
-    out.added += taken_height(copy, list);
-    out.made.emplace_back(copy);
+    out.added += taken_height(copy.raw(), list);
+    out.made.emplace_back(copy.raw());
   }
   return out;
 }
@@ -135,15 +137,15 @@ void lines_back(Lines& lines) {
 }
 
 Object name_text(void* row) {
-  void* t = transform_of(row);
-  void* type = phasmo::TextLocaliserUI::type.type_object();
-  void* localiser = t && type ? phasmo::Component::GetComponentInChildren(t, type, true) : nullptr;
+  const Object t = Object::unchecked(transform_of(row));
+  void* type = phasmo::TextLocaliserUI::type.type_object();  // a System.Type: raw by design
+  const auto localiser = t && type ? phasmo::Component::GetComponentInChildren(t, type, true) : nullptr;
   return localiser ? phasmo::Component::GetComponent(localiser, phasmo::TextMeshProUGUI::type.type_object()) : nullptr;
 }
 
 void label(void* text, const std::string& utf8) {
   if (!text) return;
-  if (void* localiser = phasmo::Component::GetComponent(text, phasmo::TextLocaliserUI::type.type_object()))
+  if (const auto localiser = phasmo::Component::GetComponent(text, phasmo::TextLocaliserUI::type.type_object()))
     phasmo::Object::DestroyImmediate(localiser, false);
   phasmo::TMP_Text::set_text(text, make_string(utf8));
 }
@@ -162,25 +164,26 @@ float heading(void* text, const std::string& title) {
 void show_only(void* root, void* keep) {
   const int32_t children = root ? phasmo::Transform::get_childCount(root) : 0;
   for (int32_t i = 0; i < children; ++i) {
-    void* child = phasmo::Transform::GetChild(root, i);
-    if (child && !(keep && phasmo::Transform::IsChildOf(keep, child)))
+    const auto child = phasmo::Transform::GetChild(root, i);
+    if (child && !(keep && phasmo::Transform::IsChildOf(keep, child.raw())))
       phasmo::GameObject::SetActive(phasmo::Component::get_gameObject(child), false);
   }
 }
 
 float taken_height(void* object, void* list) {
-  void* t = object ? phasmo::GameObject::get_transform(object) : nullptr;
+  const auto t = object ? phasmo::GameObject::get_transform(object) : nullptr;
   if (!t) return 0.0f;
-  void* group = list ? phasmo::Component::GetComponent(list, phasmo::HorizontalOrVerticalLayoutGroup::type.type_object())
-                     : nullptr;
+  const auto group =
+      list ? phasmo::Component::GetComponent(list, phasmo::HorizontalOrVerticalLayoutGroup::type.type_object())
+           : nullptr;
   const float spacing = group ? phasmo::HorizontalOrVerticalLayoutGroup::get_spacing(group) : 0.0f;
-  return phasmo::RectTransform::get_rect(t).height + spacing;
+  return phasmo::RectTransform::get_rect(t.raw()).height + spacing;
 }
 
 Grown grow(void* list, float by) {
   if (!list || by <= 0.0f) return {};
   const phasmo::Vector2 lo = phasmo::RectTransform::get_anchorMin(list), hi = phasmo::RectTransform::get_anchorMax(list);
-  void* target = lo.y != hi.y ? phasmo::Transform::get_parent(list).raw() : list;
+  const Object target = lo.y != hi.y ? phasmo::Transform::get_parent(list) : Object::unchecked(list);
   if (!target) return {};
   phasmo::Vector2 size = phasmo::RectTransform::get_sizeDelta(target);
   size.y += by;

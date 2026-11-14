@@ -89,6 +89,7 @@ void* go_new(const char* name) {
   node(go).name = name;
   return go;
 }
+api::Ref<pm::map::Transform> transform_ref(void* t) { return api::Ref<pm::map::Transform>::unchecked(t); }
 void* add(void* go, void* klass) {
   void* c = make_obj(klass);
   node(go).components.push_back(c);
@@ -801,11 +802,11 @@ void cloth_builds_the_mesh_and_its_colliders() {
   void* bone = go_new("Head");
   node(bone).position = {0, 2, 0};
   void* material = make_obj(&kMaterial);
-  const api::ClothSphere spheres[] = {{&node(bone).transform, 0.1f, {0, 0.05f, 0}}};
+  const api::ClothSphere spheres[] = {{transform_ref(&node(bone).transform), 0.1f, {0, 0.05f, 0}}};
   api::ClothParts parts;
   std::string why;
   CHECK(api::add_cloth(anchor, sheet.mesh(), material, {true, 0.3f, 0.9f, 0.1f}, spheres, parts, &why));
-  void* mesh = parts.mesh;
+  void* mesh = parts.mesh.get().raw();
   CHECK(mesh && g_meshCtor == mesh);
   const api::Array<Vector3> vertices{g_set[mesh]["vertices"]};
   CHECK(vertices.size() == 3 && vertices[1].x == 1 && vertices[2].z == 1);
@@ -910,7 +911,7 @@ void a_cloth_collider_can_run_along_a_limb() {
   void* bone = go_new("UpperArm");
   node(bone).position = {0, 1.5f, 0};
   void* material = make_obj(&kMaterial);
-  const api::ClothSphere limb[] = {{&node(bone).transform, 0.055f, {0.0f, -0.14f, 0.0f}, {0.0f, -1.0f, 0.0f}, 0.28f}};
+  const api::ClothSphere limb[] = {{transform_ref(&node(bone).transform), 0.055f, {0.0f, -0.14f, 0.0f}, {0.0f, -1.0f, 0.0f}, 0.28f}};
   api::ClothParts parts;
   std::string why;
   CHECK(api::add_cloth(anchor, sheet.mesh(), material, {}, limb, parts, &why));
@@ -923,7 +924,7 @@ void a_cloth_collider_can_run_along_a_limb() {
     CHECK(g_axis[capsule] == 1);  // the bone's axis nearest the direction it was given
   }
   // Unity's capsule is its own diameter at the shortest, which is a sphere: a length below it is raised to it.
-  const api::ClothSphere stub[] = {{&node(bone).transform, 0.2f, {}, {0, 1, 0}, 0.1f}};
+  const api::ClothSphere stub[] = {{transform_ref(&node(bone).transform), 0.2f, {}, {0, 1, 0}, 0.1f}};
   api::ClothParts stump;
   CHECK(api::add_cloth(go_new("Plain"), sheet.mesh(), material, {}, stub, stump, &why));
   void* stumpGo = stump.colliders.empty() ? nullptr : static_cast<void*>(stump.colliders[0]);
@@ -987,7 +988,8 @@ void cloth_follows_its_bones() {
   node(head).position = {0, 2, 0};
   void* hips = go_new("Hips");
   node(hips).position = {0, 1, 0};
-  void* const bones[] = {&node(head).transform, &node(hips).transform};
+  const api::Ref<pm::map::Transform> bones[] = {transform_ref(&node(head).transform),
+                                                transform_ref(&node(hips).transform)};
   const api::ClothWeight weights[] = {{{0, 0, 0, 0}, {1, 0, 0, 0}},
                                       {{0, 1, 0, 0}, {0.5f, 0.25f, 0.25f, 0}},
                                       {{1, 1, 0, 0}, {1, 0, 0, 0}}};
@@ -997,11 +999,11 @@ void cloth_follows_its_bones() {
   api::ClothParts parts;
   std::string why;
   CHECK(api::add_cloth(anchor, mesh, make_obj(&kMaterial), {}, {}, parts, &why));
-  const api::Array<phasmo::BoneWeight> w{g_set[parts.mesh]["boneWeights"]};
+  const api::Array<phasmo::BoneWeight> w{g_set[parts.mesh.get().raw()]["boneWeights"]};
   CHECK(w.size() == 3 && w[1].bone0 == 0 && w[1].bone1 == 1 && w[1].weight0 == 0.5f && w[1].weight1 == 0.25f &&
         w[1].weight2 == 0.25f && w[1].bone2 == 0);
   CHECK(w[2].bone0 == 1 && w[2].weight0 == 1);
-  const api::Array<phasmo::Matrix4x4> poses{g_set[parts.mesh]["bindposes"]};
+  const api::Array<phasmo::Matrix4x4> poses{g_set[parts.mesh.get().raw()]["bindposes"]};
   CHECK(poses.size() == 2 && poses[0].m[13] == -1.0f && poses[1].m[13] == 0.0f);
   void* renderer = find_in(anchor, &kSkinned);
   CHECK(renderer && api::RefArray{g_set[renderer]["bones"]}.size() == 2);
@@ -1045,7 +1047,7 @@ void cloth_refuses_a_sphere_it_cannot_make() {
   void* material = make_obj(&kMaterial);
   api::ClothParts parts;
   std::string why;
-  const api::ClothSphere noBone[] = {{&node(bone).transform, 0.1f, {}}, {nullptr, 0.2f, {}}};
+  const api::ClothSphere noBone[] = {{transform_ref(&node(bone).transform), 0.1f, {}}, {nullptr, 0.2f, {}}};
   CHECK(!api::add_cloth(anchor, Sheet{}.mesh(), material, {}, noBone, parts, &why));
   CHECK(why == "a sphere has no bone" && !find_in(anchor, &kSkinned) && !parts.mesh && parts.colliders.empty());
   // The engine refuses the second capsule: everything made so far goes.
@@ -1056,7 +1058,7 @@ void cloth_refuses_a_sphere_it_cannot_make() {
     return add(go, class_of_type(type));
   });
   api::bind(fake::host(), why);
-  const api::ClothSphere two[] = {{&node(bone).transform, 0.1f, {}}, {&node(bone).transform, 0.2f, {}}};
+  const api::ClothSphere two[] = {{transform_ref(&node(bone).transform), 0.1f, {}}, {transform_ref(&node(bone).transform), 0.2f, {}}};
   CHECK(!api::add_cloth(anchor, Sheet{}.mesh(), material, {}, two, parts, &why));
   CHECK(why == "a sphere collider could not be made");
   CHECK(!parts.mesh && !parts.cloth && parts.colliders.empty());

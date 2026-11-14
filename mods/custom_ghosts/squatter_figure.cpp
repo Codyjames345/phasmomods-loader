@@ -217,6 +217,9 @@ bool check() {
 }
 
 void* bone(int32_t which) { return phasmo::Animator::GetBoneTransform(g.animator.get(), which); }
+// The same bone as the Transform handle api::ClothSphere and ClothMesh take: the void* bone() answers is a Transform,
+// the class Animator::GetBoneTransform returns.
+api::Ref<pm::map::Transform> bone_ref(int32_t which) { return api::Ref<pm::map::Transform>::unchecked(bone(which)); }
 
 // How far out past the upper arms the sheet is cut to hang at the shoulders, the width it had before its spheres lost
 // their padding (2026-11-10), and at least as far out past the head: tied to the spheres, the sheet was cut tight to
@@ -236,7 +239,7 @@ struct Carrier {
 
 bool build_sheet() {
   namespace B = phasmo::HumanBodyBones;
-  void* head = bone(B::Head());
+  const auto head = bone_ref(B::Head());
   if (!head) return fail("sheet", "the body has no head bone"), false;
   std::string why;
   void* material = api::two_sided_material(api::lit_material_of(g.root), {1, 1, 1, 1}, &why);
@@ -266,12 +269,12 @@ bool build_sheet() {
   shape.side = 2.0f * (sheet::reach_distance(shape, crown.y - feet.y) + kHemOnFloor);
 
   // The sheet's crown sits on top of the head sphere, facing the way the body faces; it follows the head.
-  void* anchor = phasmo::GameObject::type.make();
+  const auto anchor = phasmo::GameObject::type.make();
   if (!anchor) return fail("sheet", "no GameObject could be made"), false;
   phasmo::GameObject::ctor(anchor, api::make_string("Squatter sheet"));
   g.sheet = anchor;
   phasmo::GameObject::set_layer(anchor, phasmo::GameObject::get_layer(g.root));
-  void* t = phasmo::GameObject::get_transform(anchor);
+  const auto t = phasmo::GameObject::get_transform(anchor);
   phasmo::Transform::SetParent(t, head, false);
   const phasmo::Quaternion facing = phasmo::Transform::get_rotation(phasmo::GameObject::get_transform(g.root));
   phasmo::Transform::set_position(t, &crown);
@@ -316,11 +319,11 @@ bool build_sheet() {
       {B::RightLowerLeg(), B::RightFoot(), 3},
       {B::LeftFoot(), -1, 2},
       {B::RightFoot(), -1, 3}};
-  std::vector<void*> bones;
+  std::vector<api::Ref<pm::map::Transform>> bones;
   std::vector<sheet::Segment> segments;
   for (const Carrier& c : carriers) {
-    void* from = bone(c.bone);
-    void* to = c.to >= 0 ? bone(c.to) : from;
+    const auto from = bone_ref(c.bone);
+    const auto to = c.to >= 0 ? bone_ref(c.to) : from;
     if (!from || !to) return fail("sheet", "the body lacks a bone the sheet follows"), false;
     bones.push_back(from);
     segments.push_back({on_sheet(phasmo::Transform::get_position(from)), on_sheet(phasmo::Transform::get_position(to))});
@@ -339,7 +342,7 @@ bool build_sheet() {
   const auto limb = [&](int32_t from, int32_t to, float radius) {
     const phasmo::Vector3 run = along(from, to, 1.0f);
     const float metres = std::sqrt(run.x * run.x + run.y * run.y + run.z * run.z);
-    return api::ClothSphere{bone(from), radius, {run.x * 0.5f, run.y * 0.5f, run.z * 0.5f}, run, metres};
+    return api::ClothSphere{bone_ref(from), radius, {run.x * 0.5f, run.y * 0.5f, run.z * 0.5f}, run, metres};
   };
   std::vector<int> chains;
   for (const Carrier& c : carriers) chains.push_back(c.chain);
@@ -363,19 +366,19 @@ bool build_sheet() {
   const api::ClothSphere colliders[] = {
       {head, shape.headRadius, {0, kHeadCentreAboveBone, 0}},
       limb(B::Hips(), B::Neck(), kTorso),
-      {bone(B::LeftShoulder()), kShoulder, phasmo::Vector3{}},
-      {bone(B::RightShoulder()), kShoulder, phasmo::Vector3{}},
+      {bone_ref(B::LeftShoulder()), kShoulder, phasmo::Vector3{}},
+      {bone_ref(B::RightShoulder()), kShoulder, phasmo::Vector3{}},
       limb(B::LeftUpperArm(), B::LeftLowerArm(), kArm),
       limb(B::RightUpperArm(), B::RightLowerArm(), kArm),
       limb(B::LeftLowerArm(), B::LeftHand(), kForearm),
       limb(B::RightLowerArm(), B::RightHand(), kForearm),
-      {bone(B::LeftHand()), kHand, along(B::LeftLowerArm(), B::LeftHand(), kPalmAlong)},
-      {bone(B::RightHand()), kHand, along(B::RightLowerArm(), B::RightHand(), kPalmAlong)},
+      {bone_ref(B::LeftHand()), kHand, along(B::LeftLowerArm(), B::LeftHand(), kPalmAlong)},
+      {bone_ref(B::RightHand()), kHand, along(B::RightLowerArm(), B::RightHand(), kPalmAlong)},
       limb(B::LeftUpperLeg(), B::LeftLowerLeg(), kThigh),
       limb(B::RightUpperLeg(), B::RightLowerLeg(), kThigh),
       limb(B::LeftLowerLeg(), B::LeftFoot(), kShin),
       limb(B::RightLowerLeg(), B::RightFoot(), kShin)};
-  if (!api::add_cloth(anchor, mesh, material, settings, colliders, g.cloth, &why)) return fail("cloth", why), false;
+  if (!api::add_cloth(anchor.raw(), mesh, material, settings, colliders, g.cloth, &why)) return fail("cloth", why), false;
   return true;
 }
 

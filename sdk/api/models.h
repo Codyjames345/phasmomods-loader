@@ -177,7 +177,7 @@ struct ClothMesh {
   std::span<const phasmo::Vector2> coefficients;
   /// The Transforms that carry the mesh, as worn cloth in games is skinned to a body: empty, and every vertex follows
   /// the GameObject itself. Each bone's bind pose is where it stands when add_cloth is called.
-  std::span<void* const> bones;
+  std::span<Ref<pm::map::Transform> const> bones;
   /// One per vertex when `bones` is not empty, naming bones by their index in it.
   std::span<const ClothWeight> weights;
   /// The vertices that take part in the cloth's self-collision (ClothSettings::selfCollisionDistance), by index. Empty:
@@ -268,7 +268,7 @@ struct ClothSettings {
  * covered by a line of spheres.
  */
 struct ClothSphere {
-  void* bone;              ///< A Transform (Animator.GetBoneTransform); a null one fails add_cloth.
+  Ref<pm::map::Transform> bone;  ///< A Transform (Animator.GetBoneTransform); a null one fails add_cloth.
   float radius;            ///< Metres.
   phasmo::Vector3 offset;  ///< From the bone, in world space when add_cloth is called; the collider's centre.
   /// With `length`: which way the capsule runs, in world space when add_cloth is called (its own length is what matters,
@@ -281,7 +281,7 @@ struct ClothSphere {
 
 /** What add_cloth made, for destroy_cloth. */
 struct ClothParts {
-  Held mesh;                    ///< The Mesh it built.
+  HeldRef<pm::map::Mesh> mesh;  ///< The Mesh it built.
   Held cloth;                   ///< The Cloth component.
   std::vector<Held> colliders;  ///< The spheres' GameObjects.
 };

@@ -37,20 +37,20 @@ struct State {
 State g;
 
 void* local_camera() {
-  void* net = phasmo::Network::get_Instance();
-  void* rig = net ? phasmo::Network::localRig.get(net) : nullptr;
-  void* cam = rig && alive(rig) ? phasmo::LocalPlayer::camera.get(rig) : nullptr;
-  return cam && alive(cam) ? cam : nullptr;
+  const auto net = phasmo::Network::get_Instance();
+  const auto rig = net ? phasmo::Network::localRig.get(net) : nullptr;
+  const auto cam = rig && alive(rig.raw()) ? phasmo::LocalPlayer::camera.get(rig) : nullptr;
+  return cam && alive(cam.raw()) ? cam : nullptr;
 }
 
 void* local_player() {
-  void* net = phasmo::Network::get_Instance();
-  void* player = net ? phasmo::Network::localPlayer.get(net) : nullptr;
-  return player && alive(player) ? player : nullptr;
+  const auto net = phasmo::Network::get_Instance();
+  const auto player = net ? phasmo::Network::localPlayer.get(net) : nullptr;
+  return player && alive(player.raw()) ? player : nullptr;
 }
 
 int32_t layer_bit(void* component) {
-  void* go = component && alive(component) ? phasmo::Component::get_gameObject(component) : nullptr;
+  const auto go = component && alive(component) ? phasmo::Component::get_gameObject(component) : nullptr;
   const int32_t layer = go ? phasmo::GameObject::get_layer(go) : -1;
   return layer >= 0 && layer < 32 ? 1 << layer : 0;
 }
@@ -58,9 +58,9 @@ int32_t layer_bit(void* component) {
 // The head's renderers (PlayerCharacter.headRenderersToTurnOff), which the game draws as shadows only on the player's
 // own client.
 void* head_renderers() {
-  void* player = local_player();
-  void* type = phasmo::PlayerCharacter::type.type_object();
-  void* character = player && type ? phasmo::Component::GetComponentInChildren(player, type, true) : nullptr;
+  const Object player = Object::unchecked(local_player());
+  void* type = phasmo::PlayerCharacter::type.type_object();  // a System.Type: raw by design
+  const auto character = player && type ? phasmo::Component::GetComponentInChildren(player, type, true) : nullptr;
   return character ? phasmo::PlayerCharacter::headRenderersToTurnOff.get(character) : nullptr;
 }
 
@@ -78,10 +78,10 @@ void move_to_alive(void* renderers, State::Moved& moved) {
   if (layer < 0) return;
   const RefArray list{renderers};
   for (size_t i = 0; i < list.size(); ++i) {
-    void* go = list[i] && alive(list[i]) ? phasmo::Component::get_gameObject(list[i]) : nullptr;
+    const auto go = list[i] && alive(list[i]) ? phasmo::Component::get_gameObject(list[i]) : nullptr;
     if (!go) continue;
-    if (std::any_of(moved.begin(), moved.end(), [&](const auto& m) { return m.first.get() == go; })) continue;
-    moved.emplace_back(go, phasmo::GameObject::get_layer(go));
+    if (std::any_of(moved.begin(), moved.end(), [&](const auto& m) { return m.first.get() == go.raw(); })) continue;
+    moved.emplace_back(go.raw(), phasmo::GameObject::get_layer(go));
     phasmo::GameObject::set_layer(go, layer);
   }
 }
@@ -91,11 +91,10 @@ void move_to_alive(void* renderers, State::Moved& moved) {
 void move_view_layer(void* transform, State::Moved& moved, int depth = 0) {
   const int32_t from = phasmo::Layers::PlayerView.index(), to = phasmo::Layers::AlivePlayer.index();
   if (!transform || from < 0 || to < 0 || depth > 32) return;
-  if (void* go = phasmo::Component::get_gameObject(transform); go && phasmo::GameObject::get_layer(go) == from &&
-                                                               std::none_of(moved.begin(), moved.end(), [&](const auto& m) {
-                                                                 return m.first.get() == go;
-                                                               })) {
-    moved.emplace_back(go, from);
+  if (const auto go = phasmo::Component::get_gameObject(transform);
+      go && phasmo::GameObject::get_layer(go) == from &&
+      std::none_of(moved.begin(), moved.end(), [&](const auto& m) { return m.first.get() == go.raw(); })) {
+    moved.emplace_back(go.raw(), from);
     phasmo::GameObject::set_layer(go, to);
   }
   const int32_t count = phasmo::Transform::get_childCount(transform);
@@ -117,9 +116,9 @@ void show_head() {
   const RefArray renderers{head_renderers()};
   const int32_t on = static_cast<int32_t>(phasmo::ShadowCastingMode::On());
   for (size_t i = 0; i < renderers.size(); ++i) {
-    void* r = renderers[i];
-    if (!r || !alive(r)) continue;
-    g.head.emplace_back(r, phasmo::Renderer::get_shadowCastingMode(r));
+    const Object r = Object::unchecked(renderers[i]);
+    if (!r || !alive(r.raw())) continue;
+    g.head.emplace_back(r.raw(), phasmo::Renderer::get_shadowCastingMode(r));
     phasmo::Renderer::set_shadowCastingMode(r, on);
   }
 }
@@ -148,19 +147,19 @@ void restore_head() {
 // The layers of the local player's own colliders and rig: the wall check passes through them. The head's colliders
 // follow the camera a frame late, so walking forward leaves them just behind it, where the check looks.
 int32_t own_layers() {
-  void* net = phasmo::Network::get_Instance();
-  void* rig = net ? phasmo::Network::localRig.get(net) : nullptr;
-  return layer_bit(local_player()) | layer_bit(rig);
+  const auto net = phasmo::Network::get_Instance();
+  const auto rig = net ? phasmo::Network::localRig.get(net) : nullptr;
+  return layer_bit(local_player()) | layer_bit(rig.raw());
 }
 
 // The layers of the local player's body's renderers, as a mask.
 int32_t body_layers() {
-  void* player = local_player();
+  const Object player = Object::unchecked(local_player());
   if (!player) return 0;
   const RefArray renderers{phasmo::Player::renderers.get(player)};
   int32_t mask = 0;
   for (size_t i = 0; i < renderers.size(); ++i) {
-    void* go = renderers[i] && alive(renderers[i]) ? phasmo::Component::get_gameObject(renderers[i]) : nullptr;
+    const auto go = renderers[i] && alive(renderers[i]) ? phasmo::Component::get_gameObject(renderers[i]) : nullptr;
     const int32_t layer = go ? phasmo::GameObject::get_layer(go) : -1;
     if (layer >= 0 && layer < 32) mask |= 1 << layer;
   }
@@ -171,7 +170,7 @@ Point to_point(phasmo::Vector3 v) { return {v.x, v.y, v.z}; }
 
 void finish() {
   if (g.camera) {
-    void* go = alive(g.camera) ? phasmo::Component::get_gameObject(g.camera) : nullptr;
+    const auto go = alive(g.camera) ? phasmo::Component::get_gameObject(g.camera) : nullptr;
     if (go) phasmo::Object::Destroy(go, 0.0f);
   }
   if (g.playerCamera && alive(g.playerCamera)) phasmo::Behaviour::set_enabled(g.playerCamera, true);
@@ -192,32 +191,33 @@ bool begin_third_person() {
     return true;
   }
   if (g.phase != Phase::Off) return false;
-  void* playerCam = local_camera();
+  const Object playerCam = Object::unchecked(local_camera());
   if (!playerCam) return false;
   if (!phasmo::Camera::CopyFrom.available() || !phasmo::GameObject::AddComponent.available()) {
     PM_LOG("view: the camera entries did not resolve in this game build: no third-person view");
     return false;
   }
-  void* go = phasmo::GameObject::type.make();
+  const auto go = phasmo::GameObject::type.make();
   if (!go) return false;
   phasmo::GameObject::ctor(go, make_string("pm third-person view"));
-  void* cam = phasmo::GameObject::AddComponent(go, phasmo::Camera::type.type_object());
+  const auto cam = phasmo::GameObject::AddComponent(go, phasmo::Camera::type.type_object());
   if (!cam) {
     phasmo::Object::Destroy(go, 0.0f);
     return false;
   }
   phasmo::Camera::CopyFrom(cam, playerCam);
   phasmo::Camera::set_cullingMask(cam, phasmo::Camera::get_cullingMask(cam) | alive_bit());
-  void* player = local_player();
+  const Object player = Object::unchecked(local_player());
   move_to_alive(player ? phasmo::Player::renderers.get(player) : nullptr, g.viewMoved);
   move_to_alive(head_renderers(), g.viewMoved);
-  void* animator = player ? phasmo::Player::animator.get(player) : nullptr;
-  move_view_layer(animator && alive(animator) ? phasmo::Component::get_transform(animator) : nullptr, g.viewMoved);
+  const auto animator = player ? phasmo::Player::animator.get(player) : nullptr;
+  move_view_layer(
+      animator && alive(animator.raw()) ? phasmo::Component::get_transform(animator).raw() : nullptr, g.viewMoved);
   show_head();
-  void* dataType = phasmo::UniversalAdditionalCameraData::type.type_object();
-  void* playerData = dataType ? phasmo::Component::GetComponent(playerCam, dataType) : nullptr;
+  void* dataType = phasmo::UniversalAdditionalCameraData::type.type_object();  // a System.Type: raw by design
+  const auto playerData = dataType ? phasmo::Component::GetComponent(playerCam, dataType) : nullptr;
   if (playerData) {
-    void* data = phasmo::GameObject::AddComponent(go, dataType);
+    const auto data = phasmo::GameObject::AddComponent(go, dataType);
     if (data) {
       phasmo::UniversalAdditionalCameraData::set_renderPostProcessing(
           data, phasmo::UniversalAdditionalCameraData::get_renderPostProcessing(playerData));
@@ -226,8 +226,8 @@ bool begin_third_person() {
     }
   }
   phasmo::Behaviour::set_enabled(playerCam, false);
-  g.playerCamera = playerCam;
-  g.camera = cam;
+  g.playerCamera = playerCam.raw();
+  g.camera = cam.raw();
   g.phase = Phase::Out;
   g.t = 0.0f;
   tick_third_person(0.0f);
@@ -260,16 +260,16 @@ void tick_third_person(float dt) {
       return;
     }
   }
-  void* from = phasmo::Component::get_transform(g.playerCamera);
-  void* to = phasmo::Component::get_transform(g.camera);
+  const auto from = phasmo::Component::get_transform(g.playerCamera);
+  const auto to = phasmo::Component::get_transform(g.camera);
   if (!from || !to) return;
   const Point head = to_point(phasmo::Transform::get_position(from));
   const Point forward = to_point(phasmo::Transform::get_forward(from));
   float distance = kOrbitDistance * amount;
   // A ray from the head toward the view: a wall within reach pulls it in.
   const phasmo::Ray ray{{head.x, head.y, head.z}, {-forward.x, -forward.y, -forward.z}};
-  pm::api::ValueArray hits{phasmo::RaycastHit::type.make_array(1)};
-  void* hit = hits.size() ? hits.at(0) : nullptr;
+  pm::api::ValueArray hits{phasmo::RaycastHit::type.make_array(1).raw()};
+  void* hit = hits.size() ? hits.at(0) : nullptr;  // a RaycastHit value's address in the array: not an object
   const int32_t notPlayer = ~(body_layers() | own_layers());
   if (hit && phasmo::Physics::RaycastHit(&ray, hit, distance + kWallMargin, notPlayer,
                                          static_cast<int32_t>(phasmo::QueryTriggerInteraction::Ignore())))
@@ -285,9 +285,9 @@ bool in_third_person() { return g.phase != Phase::Off; }
 
 void draw_as_seen(void* object) {
   if (g.phase == Phase::Off || !object || !alive(object)) return;
-  void* t = phasmo::GameObject::type.is(object) ? phasmo::GameObject::get_transform(object)
-                                                : phasmo::Component::get_transform(object);
-  move_view_layer(t, g.viewMoved);
+  const auto t = phasmo::GameObject::type.is(object) ? phasmo::GameObject::get_transform(object)
+                                                     : phasmo::Component::get_transform(object);
+  move_view_layer(t.raw(), g.viewMoved);
 }
 
 float seconds_until_out() {
@@ -305,8 +305,8 @@ float seconds_until_out() {
 }
 
 float view_yaw() {
-  void* cam = local_camera();
-  void* t = cam ? phasmo::Component::get_transform(cam) : nullptr;
+  const Object cam = Object::unchecked(local_camera());
+  const auto t = cam ? phasmo::Component::get_transform(cam) : nullptr;
   if (!t) return 0.0f;
   const phasmo::Vector3 f = phasmo::Transform::get_forward(t);
   return std::atan2(f.x, f.z) * 57.29577951f;
@@ -315,13 +315,13 @@ float view_yaw() {
 void show_own_body(bool on) {
   if (on) {
     if (g.shownOn && alive(g.shownOn)) return;
-    void* cam = local_camera();
+    const Object cam = Object::unchecked(local_camera());
     if (!cam) return;
     g.shownMask = phasmo::Camera::get_cullingMask(cam);
     phasmo::Camera::set_cullingMask(cam, g.shownMask | alive_bit());
-    void* player = local_player();
+    const Object player = Object::unchecked(local_player());
     move_to_alive(player ? phasmo::Player::renderers.get(player) : nullptr, g.shownMoved);
-    g.shownOn = cam;
+    g.shownOn = cam.raw();
     return;
   }
   if (g.shownOn && alive(g.shownOn)) phasmo::Camera::set_cullingMask(g.shownOn.get(), g.shownMask);
