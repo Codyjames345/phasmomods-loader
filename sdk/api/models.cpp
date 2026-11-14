@@ -107,7 +107,7 @@ void* filled_array(const TypeWrapper& type, std::span<const T> values) {
 
 }  // namespace
 
-void* copy_investigator_body(const char* name, std::string* why) {
+Object copy_investigator_body(const char* name, std::string* why) {
   void* prefab = phasmo::Resources::Load(make_string(kPlayerPrefab), phasmo::GameObject::type.type_object());
   if (!prefab || !phasmo::GameObject::type.is(prefab)) return fail(why, "the PCPlayer prefab did not load"), nullptr;
   void* cosmetics = phasmo::Component::GetComponentInChildren(phasmo::GameObject::get_transform(prefab),
@@ -252,7 +252,7 @@ bool material_available(std::string* why) {
   return true;
 }
 
-void* two_sided_material(void* like, phasmo::Color colour, std::string* why) {
+Object two_sided_material(void* like, phasmo::Color colour, std::string* why) {
   if (!alive(like)) return fail(why, "no material to take the shader from"), nullptr;
   if (!material_available(why)) return nullptr;
   void* shader = phasmo::Material::get_shader(like);
@@ -278,7 +278,7 @@ bool set_smoothness(void* material, float smoothness) {
   return true;
 }
 
-void* lit_material_of(void* gameObject) {
+Ref<pm::map::Material> lit_material_of(void* gameObject) {
   void* renderer = alive(gameObject) ? phasmo::Component::GetComponentInChildren(
                                            phasmo::GameObject::get_transform(gameObject),
                                            phasmo::Renderer::type.type_object(), true)

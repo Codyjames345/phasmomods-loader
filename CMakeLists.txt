@@ -691,6 +691,8 @@ pm_test(getter_returns_are_typed)
 # Compile-time: each map-header cycle (sdk/internals/mapping.md) compiles in both include orders;
 # one translation unit per cycle, each in the order opposite to what most code uses.
 pm_test(map_headers_compile_in_any_order tests/map_order_props_door.cpp tests/map_order_transform_unityobject.cpp)
+# Compile-time: each helper 0b-3a typed returns the handle its body's evidence names.
+pm_test(helper_returns_are_typed)
 pm_test(content sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp host/content_types.cpp
   host/content_text.cpp host/content_evidence.cpp

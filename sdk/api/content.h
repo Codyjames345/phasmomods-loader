@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "mod_api.h"
+#include "ref.h"
 
 namespace pm::api::content {
 
@@ -315,8 +316,8 @@ uint32_t player_view(float* xyz, uint32_t max);
 /// one of the `excludedCount` players at `excluded` (null and 0 for none), or null for no restriction.
 /// @param excluded Players (Player objects) the answer may not be; null for none.
 /// @param excludedCount How many `excluded` holds.
-/// @return A Player, valid this frame, or null.
-void* target(const void* const* excluded = nullptr, uint32_t excludedCount = 0);
+/// @return A Player as an Object handle, valid this frame, or null.
+Object target(const void* const* excluded = nullptr, uint32_t excludedCount = 0);
 /// Host only: the ghost's own limit (GhostDef::playerMove) on the direction (`dx`, `dz`) a player steers it
 /// in from `at` (x, y, z): it may shorten, turn or zero it; unchanged for no limit.
 /// @param at The ghost's position, world x, y, z in metres.

@@ -24,9 +24,9 @@ bool has_name(void* transform) {
 
 }  // namespace
 
-void* journal_list(void* row) {
+Ref<pm::map::Transform> journal_list(void* row) {
   void* t = transform_of(row);
-  void* list = t ? phasmo::Transform::get_parent(t) : nullptr;
+  Ref<pm::map::Transform> list = t ? phasmo::Transform::get_parent(t) : nullptr;
   void* groupType = phasmo::HorizontalOrVerticalLayoutGroup::type.type_object();
   if (!list || !groupType || !phasmo::Component::GetComponent(list, groupType)) return nullptr;
   void* net = phasmo::Network::get_Instance();
@@ -36,7 +36,7 @@ void* journal_list(void* row) {
   return list;
 }
 
-void* divider_beside(void* row) {
+Ref<pm::map::GameObject> divider_beside(void* row) {
   void* t = transform_of(row);
   void* list = t ? phasmo::Transform::get_parent(t) : nullptr;
   if (!list) return nullptr;
@@ -49,7 +49,7 @@ void* divider_beside(void* row) {
   return nullptr;
 }
 
-void* line_divider(void* row, bool* fromOtherPage) {
+Ref<pm::map::GameObject> line_divider(void* row, bool* fromOtherPage) {
   void* t = transform_of(row);
   void* own = t ? phasmo::Transform::get_parent(t) : nullptr;
   // Another menu's line: the keybinds page's rows are `RebindActionUI`s, and the game puts a thin line between them.
@@ -58,7 +58,7 @@ void* line_divider(void* row, bool* fromOtherPage) {
   for (size_t i = 0; i < found.size(); ++i) {
     void* list = found[i] ? journal_list(found[i]) : nullptr;
     if (!list || list == own) continue;
-    if (void* line = divider_beside(found[i])) {
+    if (auto line = divider_beside(found[i])) {
       if (fromOtherPage) *fromOtherPage = true;
       return line;
     }
@@ -134,7 +134,7 @@ void lines_back(Lines& lines) {
   lines.hidden.clear();
 }
 
-void* name_text(void* row) {
+Object name_text(void* row) {
   void* t = transform_of(row);
   void* type = phasmo::TextLocaliserUI::type.type_object();
   void* localiser = t && type ? phasmo::Component::GetComponentInChildren(t, type, true) : nullptr;

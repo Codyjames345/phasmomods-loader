@@ -167,7 +167,7 @@ uint32_t player_view(float* xyz, uint32_t max) {
   return h ? h->content_player_view(xyz, max) : 0;
 }
 
-void* target(const void* const* excluded, uint32_t excludedCount) {
+Object target(const void* const* excluded, uint32_t excludedCount) {
   const PmHostApi* h = detail::host();
   return h ? h->content_target(excluded, excludedCount) : nullptr;
 }

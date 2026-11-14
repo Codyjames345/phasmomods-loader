@@ -2048,10 +2048,10 @@ void controlled_ghost_answers_through_its_definition() {
   CHECK(content::hud_line(3).empty());
   CHECK(content::held_back(1) && !content::held_back(0) && !content::held_back(2));
   CHECK(content::player_view(xyz, 2) == 2 && xyz[5] == 5.0f);
-  CHECK(content::target() == &g_target && content::flags() == PM_GHOST_BLIND_IN_HUNTS);
+  CHECK(static_cast<void*>(content::target()) == &g_target && content::flags() == PM_GHOST_BLIND_IN_HUNTS);
   const void* const excluded[] = {nullptr, &g_target};
   CHECK(!content::target(excluded, 2));  // the players excluded are passed to the definition
-  CHECK(content::target(excluded, 1) == &g_target);
+  CHECK(static_cast<void*>(content::target(excluded, 1)) == &g_target);
   const float near[3] = {1, 0, 0}, far[3] = {6, 0, 0};
   float dx = 0.6f, dz = 0.8f;
   content::player_move(near, dx, dz);  // the definition's limit on where its player steers
@@ -2080,7 +2080,8 @@ void controlled_ghost_answers_through_its_definition() {
   CHECK(!content::target());
   phasmo::GhostInfo::behaviourType.set(w.world.info, w.hydra);
   w.types.after_mimic_copy(w.world.controller);
-  CHECK(content::acting_as() == w.hydra && content::target() == &g_target && content::hud_state() == 7);
+  CHECK(content::acting_as() == w.hydra && static_cast<void*>(content::target()) == &g_target &&
+        content::hud_state() == 7);
   // A vanilla type: only its rules' held-back check.
   w.world.ghost_is(6, 6);
   w.tick();

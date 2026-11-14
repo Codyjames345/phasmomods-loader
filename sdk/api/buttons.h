@@ -23,6 +23,7 @@
 /// @ingroup runtime
 /// @since Contract 2.4
 
+#include "UnityObject.h"
 #include "held.h"
 
 namespace pm::api::buttons {
@@ -33,14 +34,16 @@ namespace pm::api::buttons {
 /// actually hits the row (pm::ui::create_image makes pictures that do not catch the pointer, and one that
 /// does not catch it leaves the Button unhoverable and unclickable).
 /// @param gameObjectOrComponent The object to make a button: its GameObject, or a component on it.
-/// @return The Button component; null for null, or when the game's entries did not resolve.
-void* attach(void* gameObjectOrComponent);
+/// @return The Button component as an Object handle; null for null, or when the game's entries did not
+/// resolve.
+Object attach(void* gameObjectOrComponent);
 
 /// The GraphicRaycaster of the canvas: the one it already has, or a new one added to it. Pass the canvas's
 /// GameObject or its Canvas component (pm::ui::create_canvas hands back the component).
 /// @param canvasGameObjectOrComponent The canvas: its GameObject, or a component on it.
-/// @return The GraphicRaycaster; null for null, or when the game's entries did not resolve.
-void* catch_pointer(void* canvasGameObjectOrComponent);
+/// @return The GraphicRaycaster as an Object handle; null for null, or when the game's entries did not
+/// resolve.
+Object catch_pointer(void* canvasGameObjectOrComponent);
 
 /// Runs `fn(user)` when the game invokes that button's onClick: its own Press, or Enter or the gamepad A
 /// button on the selected button. Main thread, inside the game's managed call: `fn` must not let an exception
@@ -59,8 +62,9 @@ bool on_click(void* buttonOrGameObject, void (*fn)(void* user), void* user);
 void forget(void* buttonOrGameObject);
 
 /// Unity's UI input module, the EventSystem's one (a Behaviour).
-/// @return The module; null when no EventSystem is running or the game's entries did not resolve.
-void* input_module();
+/// @return The module as an Object handle; null when no EventSystem is running or the game's entries did
+/// not resolve.
+Object input_module();
 
 /// Whether that module takes input; the game runs it only while its journal is open.
 /// @param module The module from input_module().
@@ -82,8 +86,8 @@ bool select(void* gameObjectOrComponent);
 /// arrow-key and stick navigation has moved it. A mod with a scrolling list reads it each frame to follow
 /// the player's selection back into view (the arrow keys move the selection inside the game, which tells the
 /// mod nothing).
-/// @return The selected GameObject; null when no EventSystem is running, nothing is selected, or the game's
-/// entries did not resolve.
-void* selected();
+/// @return A Ref<GameObject> to the selected GameObject; null when no EventSystem is running, nothing is
+/// selected, or the game's entries did not resolve.
+Ref<pm::map::GameObject> selected();
 
 }  // namespace pm::api::buttons

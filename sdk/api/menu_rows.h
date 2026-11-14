@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+#include "Transform.h"
+#include "UnityObject.h"
 #include "held.h"
 
 namespace pm::api::rows {
@@ -30,14 +32,14 @@ inline constexpr float kHeadingScale = 1.25f;
 /// PCPlayer when there is one. Null for anything else: the training whiteboards' rows sit on no layout, and another
 /// player's journal holds a menu too.
 /// @param row A component or Transform of the row's root.
-/// @return The list's Transform, or null.
-void* journal_list(void* row);
+/// @return A Ref<Transform> to the list, or null.
+Ref<pm::map::Transform> journal_list(void* row);
 
 /// A divider beside `row` in its list: a sibling with no name text (no TextLocaliserUI under it). The game's lists put
 /// one between rows.
 /// @param row A component or Transform of the row's root.
-/// @return The divider's GameObject, or null.
-void* divider_beside(void* row);
+/// @return A Ref<GameObject> to the divider, or null.
+Ref<pm::map::GameObject> divider_beside(void* row);
 
 /// A divider to copy between a mod's rows, one line to a line: the keybinds page's rows sit one line apart, which is how
 /// the player wants a mod's rows on the audio page too (the user, 2026-11-10: the audio page's own dividers are double
@@ -45,8 +47,8 @@ void* divider_beside(void* row);
 /// when none is.
 /// @param row A component or Transform of a row of the list to divide.
 /// @param fromOtherPage Set to whether it came from another list, for the log; may be null.
-/// @return The divider's GameObject, or null.
-void* line_divider(void* row, bool* fromOtherPage = nullptr);
+/// @return A Ref<GameObject> to the divider, or null.
+Ref<pm::map::GameObject> line_divider(void* row, bool* fromOtherPage = nullptr);
 
 /// What space_out changed in a list, to give back with lines_back.
 struct Lines {
@@ -75,8 +77,8 @@ void lines_back(Lines& lines);
 
 /// A row's name text: the TextMeshProUGUI of its first TextLocaliserUI.
 /// @param row A component or Transform of the row's root.
-/// @return The text, or null.
-void* name_text(void* row);
+/// @return The text as an Object handle, or null.
+Object name_text(void* row);
 
 /// Writes `utf8` on a copied row's name text, taking its TextLocaliserUI off first: it writes the game's words for its
 /// key whenever it wakes, and a copy made while the menu is hidden wakes when the player opens it, after this.

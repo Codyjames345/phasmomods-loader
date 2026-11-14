@@ -9,7 +9,7 @@
 
 namespace pm::api {
 
-void* load_bundle(const std::filesystem::path& file, std::string* why) {
+Object load_bundle(const std::filesystem::path& file, std::string* why) {
   const auto fail = [&](const char* reason) -> void* {
     if (why) *why = reason;
     return nullptr;
@@ -25,7 +25,7 @@ void* load_bundle(const std::filesystem::path& file, std::string* why) {
   return bundle;
 }
 
-void* load_bundle_asset(void* bundle, const char* name, void* typeObject) {
+Object load_bundle_asset(void* bundle, const char* name, void* typeObject) {
   if (!bundle || !name || !typeObject) return nullptr;
   void* managedName = make_string(name);
   void* asset = managedName ? phasmo::AssetBundle::LoadAsset(bundle, managedName, typeObject) : nullptr;
@@ -35,7 +35,7 @@ void* load_bundle_asset(void* bundle, const char* name, void* typeObject) {
   return asset;
 }
 
-void* load_controller(void* bundle, const char* name) {
+Object load_controller(void* bundle, const char* name) {
   return load_bundle_asset(bundle, name, phasmo::RuntimeAnimatorController::type.type_object());
 }
 

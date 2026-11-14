@@ -81,7 +81,7 @@ void* button_of(void* object) {
 
 }  // namespace
 
-void* attach(void* gameObjectOrComponent) {
+Object attach(void* gameObjectOrComponent) {
   void* button = sibling_or_new(gameObjectOrComponent, phasmo::Button::type.type_object());
   if (!button) return nullptr;
   // The Button reacts only to what the raycaster hits, and the raycaster hits only a Graphic whose
@@ -92,7 +92,7 @@ void* attach(void* gameObjectOrComponent) {
   return button;
 }
 
-void* catch_pointer(void* canvasGameObjectOrComponent) {
+Object catch_pointer(void* canvasGameObjectOrComponent) {
   return sibling_or_new(canvasGameObjectOrComponent, phasmo::GraphicRaycaster::type.type_object());
 }
 
@@ -121,7 +121,7 @@ void forget(void* buttonOrGameObject) {
   std::erase_if(g_wiring, [button](const Wiring& w) { return w.target == button; });
 }
 
-void* input_module() {
+Object input_module() {
   void* system = phasmo::EventSystem::get_current();
   return system ? phasmo::EventSystem::currentInputModule.get(system) : nullptr;
 }
@@ -147,7 +147,7 @@ bool select(void* gameObjectOrComponent) {
 
 // The EventSystem's own selection. The game's arrow-key and gamepad navigation moves it without telling any
 // mod, which is why a scrolling list has to read it back to follow the player.
-void* selected() {
+Ref<pm::map::GameObject> selected() {
   if (!phasmo::EventSystem::get_current.available() ||
       !phasmo::EventSystem::get_currentSelectedGameObject.available())
     return nullptr;

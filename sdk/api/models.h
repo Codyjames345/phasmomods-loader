@@ -26,8 +26,9 @@ namespace pm::api {
  *        PCPlayer prefab (PlayerCosmetics.playerAnimator), the same model on every client whoever is in the room.
  * @param name The copy's GameObject name, for the game's hierarchy and logs.
  * @param why Set to the reason when it fails, if not null.
- * @return The copy's GameObject, active, at the world origin, with no parent; null on failure. It has the body's
- *         renderers and skeleton and its Animator, with no controller: the game's own is taken off while the copy is
+ * @return The copy's GameObject as an Object handle, active, at the world origin, with no parent; null on
+ *         failure. It has the body's renderers and skeleton and its Animator, with no controller: the game's
+ *         own is taken off while the copy is
  *         still inactive, since its state machine behaviours live on the controller asset, where no strip reaches
  *         them. Give it one with use_controller. Every MonoBehaviour, AudioSource, AudioListener, Camera, Light,
  *         Collider and Rigidbody is taken off while the copy is inactive too, so none of the game's scripts ever
@@ -37,7 +38,7 @@ namespace pm::api {
  * @note This client only: a local object, never a networked one. The prefab's own outfit, never a player's.
  * @since Contract 2.3 (a helper in the mod's own code; the host contract itself does not change)
  */
-void* copy_investigator_body(const char* name, std::string* why = nullptr);
+Object copy_investigator_body(const char* name, std::string* why = nullptr);
 
 /**
  * @brief Puts a controller on an Animator to play a mod's own states: replaces its controller, turns root motion off
@@ -104,11 +105,12 @@ bool controller_has_states(void* controller, std::span<const char* const> states
  *        `colour` and both sides of each triangle drawn. Not a copy of `like`: none of its textures or keywords.
  * @param like A material on URP's Lit shader, as every material of the investigator's body is (lit_material_of).
  * @param why Set to the reason when it fails, if not null.
- * @return The new material (keep it in a Held, and destroy it with Object.Destroy when done), or null when `like` is
- *         null, material_available() is false, or its shader has not the Lit shader's base colour and cull properties.
+ * @return The new material as an Object handle (keep it in a Held, and destroy it with Object.Destroy when
+ *         done), or null when `like` is null, material_available() is false, or its shader has not the Lit
+ *         shader's base colour and cull properties.
  * @since Contract 2.3 (a helper in the mod's own code)
  */
-void* two_sided_material(void* like, phasmo::Color colour, std::string* why = nullptr);
+Object two_sided_material(void* like, phasmo::Color colour, std::string* why = nullptr);
 
 /**
  * @brief Sets a Lit material's smoothness (ShaderProperty.Lit.Smoothness): 0 is matte, as the game's own untextured
@@ -147,10 +149,10 @@ bool cloth_available(std::string* why = nullptr);
 /**
  * @brief The shared material of the first renderer under a GameObject, inactive ones included: on
  *        copy_investigator_body's copy, a material on the game's Lit shader for two_sided_material.
- * @return The material, or null when nothing under it renders.
+ * @return A Ref<Material> to the shared material, or null when nothing under it renders.
  * @since Contract 2.3 (a helper in the mod's own code)
  */
-void* lit_material_of(void* gameObject);
+Ref<pm::map::Material> lit_material_of(void* gameObject);
 
 /**
  * Which of ClothMesh::bones carry a vertex, and how much: up to four, as Unity's BoneWeight holds them, heaviest first,
