@@ -163,7 +163,7 @@ void detour_change_state(api::Original<GhostAI::ChangeState> original, void* ai,
   // have made at its top.
   if (toHunting && bogeyman_steps_out(acts_as_bogeyman(), game::is_master(), true, wasHunting,
                                       game::ghost_state(ai) == hunting &&
-                                      static_cast<void*>(game::ghost_state_object(ai)) != stateBefore))
+                                      game::ghost_state_object(ai).raw() != stateBefore))
     bogeyman::hunt_begins(ai);
 }
 

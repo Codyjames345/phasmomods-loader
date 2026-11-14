@@ -564,7 +564,7 @@ void a_bundle_loads_from_its_file_and_not_without_one() {
   CHECK(!api::load_bundle(file, &why));
   CHECK(why == "the file is missing" && g_bundlePath.empty());  // the engine is never asked for a missing file
   std::ofstream(file) << "bundle";
-  CHECK(static_cast<void*>(api::load_bundle(file, &why)) == g_bundle);
+  CHECK(api::load_bundle(file, &why).raw() == g_bundle);
   CHECK(g_bundlePath == file.string());
   g_refuseBundle = true;
   CHECK(!api::load_bundle(file, &why));
@@ -573,7 +573,7 @@ void a_bundle_loads_from_its_file_and_not_without_one() {
 
 void a_controller_loads_by_its_name() {
   start();
-  CHECK(static_cast<void*>(api::load_controller(g_bundle, "assets/test.controller")) == g_controller);
+  CHECK(api::load_controller(g_bundle, "assets/test.controller").raw() == g_controller);
   // Kept from a scene load's unload of unused assets: an asset loaded at the menu is in no scene, and Unity would
   // destroy it before it is used (the Emotes mod's clips, songs and icons, 2026-11-10).
   CHECK(g_hideFlags[g_controller] == 32);

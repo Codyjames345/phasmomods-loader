@@ -171,9 +171,10 @@ constexpr T from_raw(raw_t<T> raw) {
 // pm::api::Object (named by is_same after stripping cv and reference, never any "class convertible
 // to void*": a HeldRef of an unrelated type, or a Ref of one, stays refused where A is another
 // handle - that is the point of the handles). The Object case is an unchecked downcast, present only
-// because many getters in the map record no return type (GameObject.get_transform,
-// Component.get_transform, Component.get_gameObject and others) and so answer Object while the next
-// wrapper names a handle. For any other A, anything convertible to A.
+// because some map entries answer Object while the next wrapper names a handle: their return is
+// recorded as Object (Network.localPlayer, PlayerSpot.player, AssetBundle.LoadAsset) or could not be
+// typed, the return class sharing its short name with another game class as
+// LOSSensor.get_InputSensor's Sensor does. For any other A, anything convertible to A.
 template <class P, class A>
 concept RawBridgeArg =
   (is_handle_v<A> && (std::is_same_v<std::remove_cvref_t<P>, void*> ||

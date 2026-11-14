@@ -98,7 +98,7 @@ uint64_t now_ms() {
 bool det_kill(api::Original<GhostHuntState::Kill> original, void* hunt, void* player, bool force, float reach,
               float slowReach) {
   if (dummy::on_kill(player)) return true;  // the dummy dies here: its Photon owner, which it lacks, is never asked
-  if (god_refuses_kill(g_switches.godMode, player && player == static_cast<void*>(game::local_player()))) return false;
+  if (god_refuses_kill(g_switches.godMode, player && player == game::local_player().raw())) return false;
   return original(hunt, player, force, reach, slowReach);
 }
 
@@ -107,9 +107,7 @@ bool det_kill(api::Original<GhostHuntState::Kill> original, void* hunt, void* pl
 // row sets g_menuKill around its call so it still kills.
 bool g_menuKill = false;
 void det_begin_death(api::Original<Player::BeginDeathSequence> original, void* player, int32_t deathType) {
-  if (god_refuses_death(g_switches.godMode, player && player == static_cast<void*>(game::local_player()),
-                        g_menuKill))
-    return;
+  if (god_refuses_death(g_switches.godMode, player && player == game::local_player().raw(), g_menuKill)) return;
   original(player, deathType);
 }
 
@@ -1609,7 +1607,7 @@ std::string type_dials() {
   out += ", dayan " + std::to_string(GhostController::dayanState.get(c));
   if (GhostAI::interactionBoost.get(ai)) out += ", boost";
   void* banshee = GhostAI::bansheeTarget.get(ai);
-  if (banshee) out += banshee == static_cast<void*>(game::local_player()) ? ", banshee: you" : ", banshee: other";
+  if (banshee) out += banshee == game::local_player().raw() ? ", banshee: you" : ", banshee: other";
   return out;
 }
 

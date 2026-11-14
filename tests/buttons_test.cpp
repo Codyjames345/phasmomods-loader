@@ -214,10 +214,10 @@ int main() {
   CHECK(button && g_goOf[button] == rowObject);
   CHECK(g_adds == 1);
   CHECK(g_raycast[row]);
-  CHECK(static_cast<void*>(buttons::attach(row)) == button);
+  CHECK(buttons::attach(row).raw() == button);
   CHECK(g_adds == 1);
   // The same row by its GameObject: the Button it already has.
-  CHECK(static_cast<void*>(buttons::attach(rowObject)) == button);
+  CHECK(buttons::attach(rowObject).raw() == button);
   CHECK(g_adds == 1);
   CHECK(buttons::attach(nullptr) == nullptr);
 
@@ -228,8 +228,8 @@ int main() {
   void* raycaster = buttons::catch_pointer(canvas);
   CHECK(raycaster && static_cast<Obj*>(raycaster)->klass == &g_raycasterClass);
   CHECK(raycaster && g_goOf[raycaster] == canvasObject);
-  CHECK(static_cast<void*>(buttons::catch_pointer(canvas)) == raycaster);
-  CHECK(static_cast<void*>(buttons::catch_pointer(canvasObject)) == raycaster);
+  CHECK(buttons::catch_pointer(canvas).raw() == raycaster);
+  CHECK(buttons::catch_pointer(canvasObject).raw() == raycaster);
   CHECK(g_adds == 2);
   CHECK(buttons::catch_pointer(nullptr) == nullptr);
 
@@ -285,7 +285,7 @@ int main() {
   g_system = make(&g_systemClass);
   Obj* module = make(&g_moduleClass);
   at<void*>(g_system, kModule) = module;
-  CHECK(static_cast<void*>(buttons::input_module()) == module);
+  CHECK(buttons::input_module().raw() == module);
   CHECK(!buttons::input_on(module));
   buttons::input_set(module, true);
   CHECK(g_enabled[module]);

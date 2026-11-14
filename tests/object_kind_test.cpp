@@ -112,9 +112,9 @@ void the_kind_is_not_guessed_when_it_cannot_be_read() {
 // accessor is not for it.
 void an_object_asked_for_its_game_object() {
   give_everything();
-  CHECK(static_cast<void*>(game::game_object_of(&g_go)) == &g_go);
+  CHECK(game::game_object_of(&g_go).raw() == &g_go);
   CHECK(gComponentGameObjectCalls == 0);
-  CHECK(static_cast<void*>(game::game_object_of(&g_canvas)) == g_canvasGameObject);
+  CHECK(game::game_object_of(&g_canvas).raw() == g_canvasGameObject);
   CHECK(gComponentGameObjectCalls == 1);
   CHECK(game::game_object_of(nullptr) == nullptr);
   CHECK(gComponentGameObjectCalls == 1);
