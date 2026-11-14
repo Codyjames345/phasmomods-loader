@@ -32,6 +32,9 @@ set(expect_15 "error C2664")
 # a plain Held for a handle, and no conversion gives the typed parameter. Measured codes.
 set(expect_16 "error C3889")
 set(expect_17 "error C2672")
+# A Ref of an unrelated type at a handle parameter, where the bridge now takes exactly an Object:
+# the exact-name rule still refuses it. Measured code.
+set(expect_18 "error C3889")
 
 execute_process(COMMAND "${CMAKE_COMMAND}" --build "${BUILD}" --target compile_fail_0
   RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE out)
@@ -39,7 +42,7 @@ if(NOT code EQUAL 0)
   message(FATAL_ERROR "the wrappers written right do not compile\n${out}")
 endif()
 
-foreach(case RANGE 1 17)
+foreach(case RANGE 1 18)
   execute_process(COMMAND "${CMAKE_COMMAND}" --build "${BUILD}" --target compile_fail_${case}
     RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE out)
   if(code EQUAL 0)

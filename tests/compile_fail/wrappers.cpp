@@ -4,15 +4,17 @@
 // 13), where the typed call and the transitional raw bridge (removed in part 5) each refuse them; a
 // field of a pointer type (14), still refused by game_api.h's static_assert; a hook's detour naming
 // the wrong handle (15), which neither hook<> overload takes; a HeldRef of an unrelated type given
-// for a handle parameter (16); and a Ref of an unrelated type stored into a handle field (17), both
-// refused by the bridge's exact-name rule. With PM_EXPECT_COMPILE_FAIL 0 the same code, written
-// right, must compile, so a failing case fails for its own error and never for a broken build.
-// Built by tests/compile_fail_test.cmake.
+// for a handle parameter (16); a Ref of an unrelated type stored into a handle field (17); and a
+// Ref of an unrelated type given to a handle parameter where the raw bridge now takes an Object
+// (18), the bridge's exact-name rule refusing it all the same. With PM_EXPECT_COMPILE_FAIL 0 the
+// same code, written right, must compile, so a failing case fails for its own error and never for a
+// broken build. Built by tests/compile_fail_test.cmake.
 #include <cstdint>
 
 #include "Animator.h"
 #include "Camera.h"
 #include "GhostAI.h"
+#include "Transform.h"
 #include "UnityObject.h"
 #include "entry.h"
 #include "game_api.h"
@@ -37,6 +39,10 @@ inline constexpr pm::api::Method<kSeeMethod, pm::api::Ref<pm::map::Camera>(pm::a
     seeHandle{};
 inline constexpr pm::api::Method<kTwoHandles, void(pm::api::Ref<pm::map::GhostAI>, pm::api::Ref<pm::map::Camera>)>
     twoHandles{};
+// A method whose object is a Transform handle (case 18 and the same written right).
+inline constexpr pm::sdk::EntryDesc kSetPos{.key = "Test.SetPos", .kind = pm::sdk::Kind::Method,
+                                            .owner = "Transform", .name = "SetPos", .params = kSeeParams};
+inline constexpr pm::api::Method<kSetPos, void(pm::api::Ref<pm::map::Transform>, int32_t)> setPos{};
 #if PM_EXPECT_COMPILE_FAIL == 8
 // A ghost is no camera: an unrelated handle is refused.
 inline void* wrong() { return camera_of(pm::api::Ref<pm::map::GhostAI>{}); }
@@ -79,6 +85,12 @@ inline void wrongHeldRef() { seeHandle(pm::api::HeldRef<pm::map::Camera>{}, 1); 
 // refused typed and through the bridge alike.
 inline constexpr pm::api::Field<kHolderField, pm::api::Ref<pm::map::GhostAI>> holderField{};
 inline void wrongSet(void* object) { holderField.set(object, pm::api::Ref<pm::map::Camera>{}); }
+#elif PM_EXPECT_COMPILE_FAIL == 18
+// The raw bridge takes an Object where a handle parameter sits (the transitional unchecked
+// downcast), yet a Ref of an unrelated type is not an Object by name: the same call with a
+// Ref<Camera> for the Transform handle stays refused, through the raw overload as through the
+// typed one.
+inline void wrongRefBridge(pm::api::Ref<pm::map::Camera> camera) { setPos(camera, 3); }
 #else
 inline void* right() { return camera_of(pm::api::Ref<pm::map::Camera>{}); }
 inline pm::api::Ref<pm::map::MonoBehaviour> up(pm::api::Ref<pm::map::GhostAI> ghost) { return ghost; }
@@ -125,6 +137,8 @@ inline bool heldFromHandle(pm::api::Ref<pm::map::GhostAI> ghost) {
 // given where a handle parameter sits, and raw references given where a handle field takes its value.
 inline void rightHeldArg(pm::api::Held held) { seeHandle(held, 1); }
 inline void rightSetRaw(void* object, void* value) { holderField.set(object, value); }
+// And the bridge's Object piece used right: the untyped handle given where a handle parameter sits.
+inline void rightObjectBridge(pm::api::Object transform) { setPos(transform, 3); }
 #endif
 }  // namespace handles
 

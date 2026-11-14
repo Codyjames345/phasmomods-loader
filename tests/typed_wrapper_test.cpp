@@ -265,8 +265,8 @@ void held_crosses_the_raw_bridge() {
   api::Held keeper = ghost;
   const Ref<map::Camera> given = seeHandle(keeper, 7);
   CHECK(g_sawGhost == ghost && g_sawCount == 7 && given.raw() == &g_cameraBody);
-  g_sawVirtual = nullptr;
-  CHECK(seeHandle.virtual_call(keeper, 7).raw() == &g_cameraBody && g_sawVirtual == ghost);
+  g_sawGhost = nullptr;
+  CHECK(seeHandle.virtual_call(keeper, 7).raw() == &g_cameraBody && g_sawGhost == ghost);
   g_sawGhost = reinterpret_cast<void*>(1);
   seeHandle(api::Held{}, 7);  // a Held holding nothing is a null handle, as its void* was
   CHECK(g_sawGhost == nullptr);
@@ -299,6 +299,26 @@ void static_field_reads_into_a_void_pointer() {
   CHECK(staticHolder.read(out) && out == nullptr);  // unset: null, and the read itself succeeded
   staticHolder.set(Ref<map::Camera>::unchecked(&g_cameraBody));
   CHECK(staticHolder.read(out) && out == &g_cameraBody);
+}
+
+// The bridge's Object piece (transitional, removed in part 5): an Object, the untyped handle,
+// crosses into a handle parameter at the wrapper's raw boundary, unchecked. It exists because many
+// map getters record no return type and so answer Object, while the next wrapper names a handle.
+// A Ref of another type stays refused, here and in compile_fail.
+void object_crosses_the_raw_bridge() {
+  bind_fake();
+  void* ghost[1] = {kGhostClass};
+  const Object object = Object::unchecked(ghost);
+  const Ref<map::Camera> given = seeHandle(object, 7);
+  CHECK(g_sawGhost == ghost && g_sawCount == 7 && given.raw() == &g_cameraBody);
+  g_sawGhost = nullptr;
+  CHECK(seeHandle.virtual_call(object, 7).raw() == &g_cameraBody && g_sawGhost == ghost);
+  FakeObject obj;
+  int agent = 0;
+  holderField.set(&obj, Object::unchecked(&agent));  // an Object stored into a Ref field
+  CHECK(fake::barrier_writes() == 1);
+  CHECK(*reinterpret_cast<void**>(obj.bytes + 0x10) == &agent);
+  CHECK(holderField.get(&obj).raw() == &agent);
 }
 
 // A typed hook's detour receives handles, calls its original, and the game side still sees raw
@@ -465,6 +485,10 @@ int main() {
   a_void_raw_detour_runs_the_body_once();
   original_takes_raw_arguments();
   held_takes_a_ref();
+  held_crosses_the_raw_bridge();
+  field_set_takes_a_raw_reference();
+  static_field_reads_into_a_void_pointer();
+  object_crosses_the_raw_bridge();
   type_make_gives_a_ref();
   bridge_keeps_comparisons_unambiguous();
   return g_failures ? 1 : 0;

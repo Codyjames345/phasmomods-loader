@@ -167,16 +167,20 @@ constexpr T from_raw(raw_t<T> raw) {
   else return raw;
 }
 // One argument the transitional raw overload of a handle-taking wrapper accepts where its parameter A
-// is a handle (removed in part 5): exactly void*, const void*, nullptr_t or pm::api::Held (named by
-// is_same after stripping cv and reference, never any "class convertible to void*": a HeldRef of an
-// unrelated type, or a Ref of one, stays refused where A is another handle - that is the point of the
-// handles). For any other A, anything convertible to A.
+// is a handle (removed in part 5): exactly void*, const void*, nullptr_t, pm::api::Held or
+// pm::api::Object (named by is_same after stripping cv and reference, never any "class convertible
+// to void*": a HeldRef of an unrelated type, or a Ref of one, stays refused where A is another
+// handle - that is the point of the handles). The Object case is an unchecked downcast, present only
+// because many getters in the map record no return type (GameObject.get_transform,
+// Component.get_transform, Component.get_gameObject and others) and so answer Object while the next
+// wrapper names a handle. For any other A, anything convertible to A.
 template <class P, class A>
 concept RawBridgeArg =
   (is_handle_v<A> && (std::is_same_v<std::remove_cvref_t<P>, void*> ||
                       std::is_same_v<std::remove_cvref_t<P>, const void*> ||
                       std::is_same_v<std::remove_cvref_t<P>, std::nullptr_t> ||
-                      std::is_same_v<std::remove_cvref_t<P>, Held>)) ||
+                      std::is_same_v<std::remove_cvref_t<P>, Held> ||
+                      std::is_same_v<std::remove_cvref_t<P>, Object>)) ||
   (!is_handle_v<A> && std::is_convertible_v<P, A>);
 // Converts one raw bridge argument to the wrapper's parameter type A. A forwarding reference because
 // a Held cannot be copied.
@@ -186,6 +190,7 @@ constexpr A raw_bridge_to(P&& p) {
     using Bare = std::remove_cvref_t<P>;
     if constexpr (std::is_same_v<Bare, std::nullptr_t>) return A{};
     else if constexpr (std::is_same_v<Bare, const void*>) return from_raw<A>(const_cast<void*>(p));
+    else if constexpr (std::is_same_v<Bare, Object>) return from_raw<A>(p.raw());  // transitional: unchecked
     else return from_raw<A>(static_cast<void*>(p));  // void* or Held (its operator void*)
   } else {
     return static_cast<A>(p);
@@ -293,7 +298,7 @@ struct Method<D, R(A...)> {
   }
 
   /// transitional: removed in part 5. The same call as code that still holds raw void* makes it: each
-  /// argument going to a handle parameter must be void*, const void*, nullptr or a pm::api::Held, and
+  /// argument going to a handle parameter must be void*, const void*, nullptr, a pm::api::Held or a pm::api::Object, and
   /// each argument is converted to its parameter's type (a handle with Ref::unchecked) before
   /// operator() runs. A Ref of another type is refused here too: the handles keep meaning what they
   /// say. The arguments are forwarding references because a Held cannot be copied.
@@ -348,9 +353,9 @@ struct Method<D, R(A...)> {
   }
 
   /// transitional: removed in part 5. virtual_call as code that still holds raw void* makes it,
-  /// converting each argument as operator()'s raw overload does (void*, const void*, nullptr or a
-  /// pm::api::Held for a handle parameter), and taking them as forwarding references because a Held
-  /// cannot be copied.
+  /// converting each argument as operator()'s raw overload does (void*, const void*, nullptr, a
+  /// pm::api::Held or a pm::api::Object for a handle parameter), and taking them as forwarding
+  /// references because a Held cannot be copied.
   /// @tparam P The arguments' types: raw references where the wrapper's parameter is a handle, and
   ///   anything convertible to a parameter otherwise.
   /// @param p The arguments, the object first.
@@ -430,7 +435,7 @@ struct Field {
   }
 
   /// transitional: removed in part 5. The same store where a mod still keeps the value as a raw
-  /// reference: only when T is a handle, taking void*, const void*, nullptr or a pm::api::Held for
+  /// reference: only when T is a handle, taking void*, const void*, nullptr, a pm::api::Held or a pm::api::Object for
   /// it (the same rule as a wrapper's raw call overload) and converting it before the typed store. A
   /// Ref of another type is refused. The object parameter is unchanged.
   /// @tparam P The value's type: a raw reference or Held.
@@ -534,7 +539,7 @@ struct StaticField {
   }
 
   /// transitional: removed in part 5. The same store where a mod still keeps the value as a raw
-  /// reference: only when T is a handle, taking void*, const void*, nullptr or a pm::api::Held (the
+  /// reference: only when T is a handle, taking void*, const void*, nullptr, a pm::api::Held or a pm::api::Object (the
   /// same rule as a wrapper's raw call overload) and converting it before the typed store. A Ref of
   /// another type is refused.
   /// @tparam P The value's type: a raw reference or Held.
@@ -598,7 +603,7 @@ struct Icall<D, R(A...)> {
   }
 
   /// transitional: removed in part 5. The same call as code that still holds raw void* makes it: each
-  /// argument going to a handle parameter must be void*, const void*, nullptr or a pm::api::Held, and
+  /// argument going to a handle parameter must be void*, const void*, nullptr, a pm::api::Held or a pm::api::Object, and
   /// each argument is converted to its parameter's type (a handle with Ref::unchecked) before
   /// operator() runs. A Ref of another type is refused here too. The arguments are forwarding
   /// references because a Held cannot be copied.
@@ -978,7 +983,7 @@ struct OriginalOf<Method<D, R(A...)>> {
 
   /// transitional: removed in part 5. The same call as raw code makes it, with the same rule as a
   /// wrapper's raw overload: each argument going to a handle parameter must be void*, const void*,
-  /// nullptr or a pm::api::Held, and each argument is converted to the wrapper's parameter type (a
+  /// nullptr, a pm::api::Held or a pm::api::Object, and each argument is converted to the wrapper's parameter type (a
   /// handle with Ref::unchecked) before the typed call runs. A Ref of another type is refused here
   /// too. The arguments are forwarding references because a Held cannot be copied.
   /// @tparam P The arguments' types: raw references where the wrapper's parameter is a handle, and

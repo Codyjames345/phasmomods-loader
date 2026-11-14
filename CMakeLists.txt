@@ -705,11 +705,11 @@ pm_test(content_difficulty sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runt
 # Before the mods' folders, so no mod's header stands for one of the map's on a file system that ignores
 # case.
 target_include_directories(content_difficulty_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime sdk/resolver)
-# Wrappers and handles that must not compile (PM_EXPECT_COMPILE_FAIL 1 to 17) and the same written right
+# Wrappers and handles that must not compile (PM_EXPECT_COMPILE_FAIL 1 to 18) and the same written right
 # (0), built only by the test, which expects each wrong one to fail with its own error. The test builds
 # them outside the developer environment validate.ps1 builds in, so it gets this configure's compiler
 # environment.
-foreach(case RANGE 0 17)
+foreach(case RANGE 0 18)
   add_library(compile_fail_${case} OBJECT EXCLUDE_FROM_ALL tests/compile_fail/wrappers.cpp)
   target_include_directories(compile_fail_${case} PRIVATE core sdk/api sdk/map)
   target_compile_definitions(compile_fail_${case} PRIVATE PM_EXPECT_COMPILE_FAIL=${case})
