@@ -1151,3 +1151,16 @@ should run at the regular hunt speed.
 - [ ] Walking, running, rolling and sitting, the sheet's folds do not pass through each other (no dark slivers of the inside showing), and the hem between the legs neither splits nor wraps each leg.
 - [ ] No arm, hand or leg comes out of the sheet in any move (it is carried less by the limbs now).
 - [ ] Frame rate with the Squatter in view is no worse than before (self-collision costs some each frame); the host's `mods.log` has no line saying the game build has no cloth self-collision.
+
+## Emotes: the arms after a dance
+
+The user's report of 2026-11-14: after a dance the arms kept a wrong pose. An empty hand stayed posed as holding,
+which switching items put right; a held smudge stick sat too high to see, which switching did not. Each body now gets
+its one emote output when it is first seen and keeps it, and a dance changes only weights.
+
+- [ ] Holding a smudge stick, dance and stop: in first person the stick is where it was before the dance, in view.
+- [ ] With empty hands, dance and stop: the hands are empty and relaxed, not posed as holding.
+- [ ] Repeat with the flashlight, the EMF reader and the journal, and with a dance that has an intro and one that walks.
+- [ ] A friend watching sees your arms back to the game's own pose after each dance, and you see theirs.
+- [ ] Before any dance, every player's arms look as in an unmodded game: nothing changes while no one dances.
+- [ ] Crossfades still look smooth: walk during a walking emote, stop, and pick a new emote mid-dance.

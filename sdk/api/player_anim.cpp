@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 #include <vector>
 
 #include "Playables.h"
@@ -14,32 +15,52 @@ namespace pm::api::anim {
 
 namespace {
 
-// One clip on a body: its own graph, output and clip playable, and its weight's blend.
-struct Layer {
-  phasmo::PlayableGraph graph;
-  phasmo::PlayableOutputHandle output;
-  phasmo::PlayableHandle clip;
-  float weight = 0.0f;
-  float target = 1.0f;
-  float rate = 0.0f;  // weight per second; 0 is at once
-  int order = 0;      // its output's sorting order
+// One clip a body has played: its clip playable, connected once to the body's mixer at the slot's index and kept.
+struct Slot {
+  Held clip;
+  phasmo::PlayableHandle playable;
+  float shown = 0.0f;  // the mixer input's weight as last set
 };
 
+// A body's one graph: a mixer as the source of one animation output on the body's Animator, made once and kept while
+// the body lives. The output's weight blends the dance in and out over the game's animation; the mixer's weights
+// crossfade from the clip before (`previous`) to the newest (`current`). In live tests (the user, 2026-11-14), a body
+// whose output was added and removed for each clip kept a wrong held-item pose after the dance: an empty hand posed
+// as holding, a held item too high. The game gives a player's Animator its outputs once, as the body is made, so this
+// API does the same and afterwards changes only weights.
 struct Body {
   Held player;
   HeldRef<pm::map::Animator> animator;
-  std::vector<Layer> layers;  // oldest first; the last is the newest, over the others
+  phasmo::PlayableGraph graph;
+  phasmo::PlayableOutputHandle output;
+  phasmo::PlayableHandle mixer;
+  std::vector<Slot> slots;
+  int current = -1;   // the newest clip's slot, -1 while none plays
+  int previous = -1;  // the slot it crossfades from, -1 for none
+  float mix = 1.0f;   // the newest clip's share of the mixer, 0 to 1; the previous one has the rest
+  float mixRate = 0.0f;
+  float weight = 0.0f;  // the output's weight
+  float target = 0.0f;
+  float rate = 0.0f;  // weight per second; 0 is at once
+  bool gone = false;  // its graph destroyed with the body, to be forgotten
 };
 
 std::vector<Body> g_bodies;
+bool g_loggedUnresolved = false;
 
-void destroy(Layer& l) {
-  if (phasmo::PlayableGraph::IsValid(&l.graph)) phasmo::PlayableGraph::Destroy(&l.graph);
+bool entries_resolved() {
+  if (phasmo::PlayableGraph::Create.available() && phasmo::AnimationPlayables::CreateOutput.available() &&
+      phasmo::AnimationPlayables::CreateClipPlayable.available() &&
+      phasmo::AnimationPlayables::CreateMixer.available() && phasmo::AnimationPlayables::Connect.available() &&
+      phasmo::PlayableHandle::SetInputCount.available() && phasmo::PlayableHandle::SetInputWeight.available())
+    return true;
+  if (!g_loggedUnresolved) PM_LOG("anim: the Playables entries did not resolve in this game build: no clip plays");
+  g_loggedUnresolved = true;
+  return false;
 }
 
-void set_weight(Layer& l, float w) {
-  l.weight = std::clamp(w, 0.0f, 1.0f);
-  phasmo::PlayableOutputHandle::SetWeight(&l.output, l.weight);
+void destroy(Body& b) {
+  if (phasmo::PlayableGraph::IsValid(&b.graph)) phasmo::PlayableGraph::Destroy(&b.graph);
 }
 
 Body* find(void* player) {
@@ -48,87 +69,137 @@ Body* find(void* player) {
   return nullptr;
 }
 
-void end_body(Body& b) {
-  for (Layer& l : b.layers) destroy(l);
-  b.layers.clear();
+// The body's graph, made now if it has none: a mixer with no inputs, the source of an output on the Animator above
+// the game's own and Animation Rigging's, at weight 0. Null when it cannot be made.
+Body* body_of(void* player) {
+  if (!player || !alive(player)) return nullptr;
+  const auto animator = phasmo::Player::animator.get(player);
+  if (!animator || !alive(animator.raw())) return nullptr;
+  if (Body* b = find(player)) return b;
+  if (!entries_resolved()) return nullptr;
+  Body b{player, animator};
+  phasmo::PlayableGraph::Create(make_string("pm emote"), &b.graph);
+  if (!phasmo::PlayableGraph::IsValid(&b.graph)) return nullptr;
+  if (!phasmo::AnimationPlayables::CreateMixer(&b.graph, &b.mixer) ||
+      !phasmo::AnimationPlayables::CreateOutput(&b.graph, make_string("pm emote"), &b.output)) {
+    destroy(b);
+    return nullptr;
+  }
+  phasmo::PlayableOutputHandle::SetWeight(&b.output, 0.0f);
+  phasmo::AnimationPlayables::SetSortingOrder(&b.output, kSortingOrder);
+  phasmo::PlayableOutputHandle::SetSourcePlayable(&b.output, &b.mixer, 0);
+  phasmo::AnimationPlayables::SetTarget(&b.output, animator);
+  phasmo::PlayableGraph::Play(&b.graph);
+  g_bodies.push_back(std::move(b));
+  return &g_bodies.back();
+}
+
+// The slot of `clip` on the body, connected to the next mixer input the first time. -1 when it cannot be made.
+int slot_of(Body& b, void* clip) {
+  for (size_t i = 0; i < b.slots.size(); ++i)
+    if (b.slots[i].clip.get() == clip) return static_cast<int>(i);
+  Slot s{clip};
+  if (!phasmo::AnimationPlayables::CreateClipPlayable(&b.graph, clip, &s.playable)) return -1;
+  phasmo::AnimationPlayables::SetApplyFootIK(&s.playable, true);
+  const int input = static_cast<int>(b.slots.size());
+  phasmo::PlayableHandle::SetInputCount(&b.mixer, input + 1);
+  if (!phasmo::AnimationPlayables::Connect(&b.graph, &s.playable, 0, &b.mixer, input)) {
+    phasmo::PlayableHandle::SetInputCount(&b.mixer, input);
+    return -1;
+  }
+  phasmo::PlayableHandle::SetInputWeight(&b.mixer, input, 0.0f);
+  b.slots.push_back(std::move(s));
+  return input;
+}
+
+// Sets each mixer input's weight from the crossfade, and the output's weight, calling the engine only for a change.
+void apply(Body& b) {
+  for (size_t i = 0; i < b.slots.size(); ++i) {
+    const int slot = static_cast<int>(i);
+    const float w = slot == b.current ? b.mix : slot == b.previous ? 1.0f - b.mix : 0.0f;
+    if (w == b.slots[i].shown) continue;
+    b.slots[i].shown = w;
+    phasmo::PlayableHandle::SetInputWeight(&b.mixer, slot, w);
+  }
+  phasmo::PlayableOutputHandle::SetWeight(&b.output, b.weight);
+}
+
+void step(float& value, float goal, float rate, float dt) {
+  if (value == goal) return;
+  const float by = rate > 0.0f ? rate * dt : 1.0f;
+  value = value < goal ? std::min(goal, value + by) : std::max(goal, value - by);
 }
 
 }  // namespace
 
 bool play_on_player(void* player, void* clip, float blendIn) {
   if (!player || !clip || !alive(player) || !alive(clip)) return false;
-  const auto animator = phasmo::Player::animator.get(player);
-  if (!animator || !alive(animator.raw())) return false;
-  if (!phasmo::PlayableGraph::Create.available() || !phasmo::AnimationPlayables::CreateOutput.available() ||
-      !phasmo::AnimationPlayables::CreateClipPlayable.available()) {
-    PM_LOG("anim: the Playables entries did not resolve in this game build: no clip plays");
-    return false;
+  Body* b = body_of(player);
+  if (!b) return false;
+  const int slot = slot_of(*b, clip);
+  if (slot < 0) return false;
+  phasmo::PlayableHandle::SetTime(&b->slots[slot].playable, 0.0);
+  const float rate = blendIn > 0.0f ? 1.0f / blendIn : 0.0f;
+  if (b->current < 0) {
+    b->current = slot;
+    b->previous = -1;
+    b->mix = 1.0f;
+  } else if (slot == b->previous) {
+    // Back to the clip still fading out: it goes on from the share it has.
+    std::swap(b->current, b->previous);
+    b->mix = 1.0f - b->mix;
+    b->mixRate = rate;
+  } else if (slot != b->current) {
+    // Over the newest; a clip still fading out under it stops showing at once, so two show at most.
+    b->previous = b->current;
+    b->current = slot;
+    b->mix = 0.0f;
+    b->mixRate = rate;
   }
-  Body* body = find(player);
-  if (!body) {
-    g_bodies.push_back(Body{player, animator, {}});
-    body = &g_bodies.back();
+  if (rate == 0.0f) {
+    b->mix = 1.0f;
+    b->previous = -1;
   }
-  // At most two clips: a third ends the older of the two at once.
-  while (body->layers.size() >= 2) {
-    destroy(body->layers.front());
-    body->layers.erase(body->layers.begin());
-  }
-  Layer l;
-  phasmo::PlayableGraph::Create(make_string("pm emote"), &l.graph);
-  if (!phasmo::PlayableGraph::IsValid(&l.graph)) return false;
-  if (!phasmo::AnimationPlayables::CreateOutput(&l.graph, make_string("pm emote"), &l.output) ||
-      !phasmo::AnimationPlayables::CreateClipPlayable(&l.graph, clip, &l.clip)) {
-    destroy(l);
-    return false;
-  }
-  phasmo::AnimationPlayables::SetApplyFootIK(&l.clip, true);
-  phasmo::AnimationPlayables::SetTarget(&l.output, animator);
-  // Over the clip still on the body, if any; a lone clip is at kSortingOrder (tick_player_anims), so at most two
-  // above it.
-  l.order = body->layers.empty() ? kSortingOrder : body->layers.back().order + 1;
-  phasmo::AnimationPlayables::SetSortingOrder(&l.output, l.order);
-  phasmo::PlayableOutputHandle::SetSourcePlayable(&l.output, &l.clip, 0);
-  l.target = 1.0f;
-  l.rate = blendIn > 0.0f ? 1.0f / blendIn : 0.0f;
-  set_weight(l, l.rate > 0.0f ? 0.0f : 1.0f);
-  phasmo::PlayableGraph::Play(&l.graph);
-  // The older clip, if any, stays at its weight under the new one until the new one is in.
-  for (Layer& old : body->layers) old.target = old.weight;
-  body->layers.push_back(l);
+  b->target = 1.0f;
+  b->rate = rate;
+  if (rate == 0.0f) b->weight = 1.0f;
+  apply(*b);
   return true;
 }
 
 bool play_on_player(void* player, void* clip, float blendIn, double startSeconds) {
   if (!play_on_player(player, clip, blendIn)) return false;
-  Body* body = find(player);
-  if (!body || body->layers.empty()) return false;
+  Body* b = find(player);
+  if (!b || b->current < 0) return false;
   const double length = static_cast<double>(clip_seconds(clip));
   double at = std::max(0.0, startSeconds);
   if (length > 0.0) at = clip_loops(clip) ? std::fmod(at, length) : std::min(at, length);
-  phasmo::PlayableHandle::SetTime(&body->layers.back().clip, at);
+  phasmo::PlayableHandle::SetTime(&b->slots[b->current].playable, at);
   return true;
 }
 
 void stop_on_player(void* player, float blendOut) {
   Body* b = player ? find(player) : nullptr;
-  if (!b) return;
-  for (Layer& l : b->layers) {
-    l.target = 0.0f;
-    l.rate = blendOut > 0.0f ? 1.0f / blendOut : 0.0f;
-    if (l.rate == 0.0f) set_weight(l, 0.0f);
+  if (!b || b->current < 0) return;
+  b->target = 0.0f;
+  b->rate = blendOut > 0.0f ? 1.0f / blendOut : 0.0f;
+  if (b->rate == 0.0f) {
+    b->weight = 0.0f;
+    b->current = b->previous = -1;
+    b->mix = 1.0f;
+    apply(*b);
   }
 }
 
 bool playing_on(void* player) {
   const Body* b = player ? find(player) : nullptr;
-  return b && !b->layers.empty();
+  return b && b->current >= 0;
 }
 
 double clip_time(void* player) {
   Body* b = player ? find(player) : nullptr;
-  if (!b || b->layers.empty()) return -1.0;
-  return phasmo::PlayableHandle::GetTime(&b->layers.back().clip);
+  if (!b || b->current < 0) return -1.0;
+  return phasmo::PlayableHandle::GetTime(&b->slots[b->current].playable);
 }
 
 float clip_seconds(void* clip) { return clip ? phasmo::AnimationClip::get_length(clip) : 0.0f; }
@@ -137,35 +208,33 @@ bool clip_loops(void* clip) { return clip && phasmo::AnimationClip::get_isLoopin
 
 void tick_player_anims(float dt) {
   for (Body& b : g_bodies) {
-    if (!alive(b.player) || !alive(b.animator.get().raw())) {
-      end_body(b);
+    // A body gone, or given another Animator, takes its graph with it; a new one is made at its next prepare or play.
+    const bool gone = !alive(b.player) || !alive(b.animator.get().raw()) ||
+                      phasmo::Player::animator.get(b.player.get()).raw() != b.animator.get().raw();
+    if (gone) {
+      destroy(b);
+      b.gone = true;
       continue;
     }
-    for (Layer& l : b.layers) {
-      if (l.weight == l.target) continue;
-      const float step = l.rate > 0.0f ? l.rate * dt : 1.0f;
-      set_weight(l, l.weight < l.target ? std::min(l.target, l.weight + step) : std::max(l.target, l.weight - step));
+    if (b.current < 0) continue;
+    step(b.weight, b.target, b.rate, dt);
+    if (b.previous >= 0) {
+      step(b.mix, 1.0f, b.mixRate, dt);
+      if (b.mix >= 1.0f) b.previous = -1;
     }
-    // The newest in fully ends the ones under it; a stop that reached 0 ends them all.
-    if (!b.layers.empty() && b.layers.back().target == 1.0f && b.layers.back().weight >= 1.0f)
-      while (b.layers.size() > 1) {
-        destroy(b.layers.front());
-        b.layers.erase(b.layers.begin());
-      }
-    // A lone clip goes back to the first order, so the orders never climb.
-    if (b.layers.size() == 1 && b.layers.front().order != kSortingOrder) {
-      b.layers.front().order = kSortingOrder;
-      phasmo::AnimationPlayables::SetSortingOrder(&b.layers.front().output, kSortingOrder);
+    if (b.target == 0.0f && b.weight <= 0.0f) {
+      b.current = b.previous = -1;
+      b.mix = 1.0f;
     }
-    if (!b.layers.empty() && std::all_of(b.layers.begin(), b.layers.end(),
-                                         [](const Layer& l) { return l.target == 0.0f && l.weight <= 0.0f; }))
-      end_body(b);
+    apply(b);
   }
-  std::erase_if(g_bodies, [](const Body& b) { return b.layers.empty(); });
+  std::erase_if(g_bodies, [](const Body& b) { return b.gone; });
 }
 
+bool prepare_player(void* player) { return body_of(player) != nullptr; }
+
 void stop_all_player_anims() {
-  for (Body& b : g_bodies) end_body(b);
+  for (Body& b : g_bodies) destroy(b);
   g_bodies.clear();
 }
 

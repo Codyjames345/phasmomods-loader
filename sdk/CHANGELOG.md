@@ -20,8 +20,17 @@ major version `PmHostApi` and every published struct only grow at the end, and e
 - **The frame's time.** `Time.get_deltaTime`, `Time.get_unscaledDeltaTime`, `Time.get_time` and
   `Time.get_unscaledTime` (Unity's documented getters), and `pm::api::frame_time()` (`sdk/api/frame_time.h`), which
   reads all four. The host contract does not change for it.
+- **A body's emote graph made ahead.** `pm::api::anim::prepare_player(player)` (`sdk/api/player_anim.h`) gives a
+  player's body its graph and output at weight 0, to call as soon as the body exists. New entries for Unity's
+  documented Playables: `AnimationMixerPlayable.CreateHandleInternal_Injected`, `PlayableGraph.ConnectInternal_Injected`,
+  `PlayableHandle.SetInputCount_Injected` and `PlayableHandle.SetInputWeightFromIndex_Injected`.
 
 ### Changed
+
+- **A clip on a player's body no longer adds and removes an output on its Animator.** Each body has one graph and one
+  output, kept while the body lives, with its clips on a mixer under it, each connected once, and only weights change
+  between dances. An output added for each clip and removed after the dance left the arms in a wrong held-item pose
+  afterwards (the user's live test, 2026-11-14). `play_on_player` now also needs the four new entries.
 
 - **`mods.log` shows each line's level** after the process and thread: `[pid=4 tid=8] INFO  ModHost loading`. The
   launcher reads lines with a level and without one.
