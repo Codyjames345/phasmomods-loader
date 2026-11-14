@@ -2107,6 +2107,8 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &PhysicsCharacterController_get_center,
     &PCPropGrab_mask,
     &PCPropGrab_playerCam,
+    &PCPropGrab_OnPickup,
+    &PCPropGrab_OnInteract,
     &ChildPhotonInteract,
     &PCLook,
     &VRPlayer,

@@ -1236,18 +1236,40 @@ inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_center{
     .key = "PhysicsCharacterController.get_center", .kind = pm::sdk::Kind::Method,
     .owner = "PhysicsCharacterController", .name = "get_center"};
 
-/// The PC interact's layer mask (read as its int): PCPropGrab.OnInteract's step casts a ray 1.8 m (a constant of its
-/// code) from the centre of PCPropGrab.playerCam on these layers, triggers ignored, and acts only on what it hits that
-/// has a PhotonObjectInteract, or a ChildPhotonInteract leading to one (a door, a light switch, an item). Anything
-/// else, such as another player, gets nothing. Decompiled.
+/// The PC interact's layer mask (read as its int): PCPropGrab.OnPickup and PCPropGrab.OnInteract each cast a ray
+/// 1.8 m (a constant of their code) from the centre of PCPropGrab.playerCam on these layers, triggers ignored, and
+/// act only on what they hit that has a PhotonObjectInteract, or a ChildPhotonInteract leading to one (a door, a
+/// light switch, an item). Anything else, such as another player, gets nothing. Decompiled.
 inline constexpr pm::sdk::EntryDesc PCPropGrab_mask{.key = "PCPropGrab.mask", .kind = pm::sdk::Kind::Field,
                                                     .confidence = pm::sdk::Confidence::Decompiled,
                                                     .owner = "PCPropGrab", .name = "mask", .type = "LayerMask"};
 
-/// The camera the PC interact casts from, a Camera. Decompiled.
+/// The camera the PC interact and Pickup cast from, a Camera. Decompiled.
 inline constexpr pm::sdk::EntryDesc PCPropGrab_playerCam{.key = "PCPropGrab.playerCam", .kind = pm::sdk::Kind::Field,
                                                          .confidence = pm::sdk::Confidence::Decompiled,
                                                          .owner = "PCPropGrab", .name = "playerCam", .type = "Camera"};
+
+inline constexpr const char* PCPropGrab_CallbackContext[] = {"CallbackContext"};
+
+/// The Pickup action's callback (the keyboard's E and the gamepad's west button: PCControls binds Pickup and
+/// PCPropGrab answers it, sdk/systems/players.md). Once the action is performed it casts a ray from the centre of
+/// PCPropGrab.playerCam, 1.8 m (a constant of its code), on PCPropGrab.mask, triggers ignored, and acts through what
+/// it hits that has a PhotonObjectInteract, or a ChildPhotonInteract leading to one: that interactable, if it can be
+/// grabbed, is picked up. The ray is exactly the one PCPropGrab.OnInteract's step casts, so the two actions answer
+/// for the same things in front of the player. A player's own body carries neither component, so Pickup never acts
+/// on an investigator. Decompiled.
+inline constexpr pm::sdk::EntryDesc PCPropGrab_OnPickup{
+    .key = "PCPropGrab.OnPickup", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PCPropGrab", .name = "OnPickup",
+    .params = PCPropGrab_CallbackContext};
+
+/// The Interact action's callback (the left mouse button and the gamepad's right trigger). It casts the same ray as
+/// PCPropGrab.OnPickup, on the same mask and reach, and acts through what it hits that has a PhotonObjectInteract,
+/// or a ChildPhotonInteract leading to one: doors, light switches and items answered by interacting. Decompiled.
+inline constexpr pm::sdk::EntryDesc PCPropGrab_OnInteract{
+    .key = "PCPropGrab.OnInteract", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PCPropGrab", .name = "OnInteract",
+    .params = PCPropGrab_CallbackContext};
 
 /// A collider's link to the interactable it belongs to (Assembly-CSharp, global namespace): the PC interact follows it
 /// to the PhotonObjectInteract. Decompiled.

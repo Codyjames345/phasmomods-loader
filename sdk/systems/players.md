@@ -233,12 +233,15 @@ What blocks a player is the controller's own collision mask (`PhysicsCharacterCo
 `get_radius`, `get_height` and `get_center` (local to the rig). A mod that wants to know whether a player fits at a
 point tests that capsule's space against that mask.
 
-## What Interact acts on
+## What Interact and Pickup act on
 
-The PC Interact (`PCPropGrab.OnInteract`) casts a ray 1.8 m from the centre of `PCPropGrab.playerCam` on
-`PCPropGrab.mask`, triggers ignored, and acts only on what it hits that has a `PhotonObjectInteract`, or a
-`ChildPhotonInteract` leading to one: a door, a light switch, an item. Another player's body gets nothing, so a mod may
-use Interact on a player, as long as it does not act while that ray would hit an interactable.
+The PC Interact (`PCPropGrab.OnInteract`, left mouse button and right trigger) and the PC Pickup
+(`PCPropGrab.OnPickup`, E and the west button) each cast a ray 1.8 m from the centre of `PCPropGrab.playerCam` on
+`PCPropGrab.mask`, triggers ignored, and the two rays are exactly the same. Both act only on what they hit that has a
+`PhotonObjectInteract`, or a `ChildPhotonInteract` leading to one: a door, a light switch, an item. Pickup takes that
+item when the interact allows being grabbed; Interact answers it. Neither acts on another player's body, which carries
+neither component, so a mod may use either action on a player, as long as it does not act while that ray would hit an
+interactable.
 
 ## The body
 
