@@ -154,28 +154,28 @@ bool read_vector2(void* control, float& x, float& y) {
 }
 
 void* left_button() {
-  void* mouse = phasmo::Mouse::get_current();
-  return mouse ? phasmo::Mouse::get_leftButton(mouse) : nullptr;
+  const auto mouse = phasmo::Mouse::get_current();
+  return (mouse ? phasmo::Mouse::get_leftButton(mouse) : nullptr).raw();
 }
 }  // namespace
 
 bool mouse_delta(float& dx, float& dy) {
-  void* mouse = phasmo::Mouse::get_current();
-  return read_vector2(mouse ? phasmo::Pointer::get_delta(mouse) : nullptr, dx, dy);
+  const auto mouse = phasmo::Mouse::get_current();
+  return read_vector2((mouse ? phasmo::Pointer::get_delta(mouse) : nullptr).raw(), dx, dy);
 }
 
 bool mouse_position(float& x, float& y) {
-  void* mouse = phasmo::Mouse::get_current();
-  return read_vector2(mouse ? phasmo::Pointer::get_position(mouse) : nullptr, x, y);
+  const auto mouse = phasmo::Mouse::get_current();
+  return read_vector2((mouse ? phasmo::Pointer::get_position(mouse) : nullptr).raw(), x, y);
 }
 
 bool mouse_left_pressed() {
-  void* button = left_button();
+  const auto button = api::Object::unchecked(left_button());  // the file-local finder answers void* until 3c
   return button && phasmo::ButtonControl::get_wasPressedThisFrame(button);
 }
 
 bool mouse_left_held() {
-  void* button = left_button();
+  const auto button = api::Object::unchecked(left_button());  // the file-local finder answers void* until 3c
   return button && phasmo::ButtonControl::get_isPressed(button);
 }
 
@@ -259,13 +259,13 @@ bool sensor_detects(void* sensor, void* gameObject) {
 // GameObject (sight_rule.h).
 bool ghost_sees(void* ghostAi, void* player) {
   if (!alive(ghostAi) || !living(player)) return false;
-  void* sensor = phasmo::GhostAI::vision.get(ghostAi);
+  const auto sensor = phasmo::GhostAI::vision.get(ghostAi);
   const api::RefArray parts{phasmo::Player::losTargets.get(player)};
   if (!parts.raw) return false;
-  std::vector<void*> list(parts.size());
+  std::vector<void*> list(parts.size());  // the parts go to sees_a_part's void* array until 3c
   for (size_t i = 0; i < list.size(); ++i) list[i] = parts[i];
   return sees_a_part(list.data(), list.size(),
-                     [&](void* part) { return alive(part) && sensor_detects(sensor, game_object_of(part)); });
+                     [&](void* part) { return alive(part) && sensor_detects(sensor.raw(), game_object_of(part)); });
 }
 Vector3 agent_destination(void* a) { return phasmo::NavMeshAgent::get_destination(a); }
 
