@@ -136,20 +136,20 @@ struct LocalisationSystem {
   static constexpr pm::api::Type<pm::map::LocalisationSystem> type{};
   /// GetLocalisedValue(key, fallback): the text of `key`, a System.String, in the player's language.
   /// Unresolved: null.
-  static constexpr pm::api::Method<pm::map::LocalisationSystem_GetLocalisedValue, void*(void*, bool)>
+  static constexpr pm::api::Method<pm::map::LocalisationSystem_GetLocalisedValue, pm::api::Object(pm::api::Object, bool)>
       GetLocalisedValue{};
   /// TryGetLocalisedValue(key, &text, current): writes the text (a System.String) and returns whether
   /// the key was found. Unresolved: false, writes nothing.
-  static constexpr pm::api::Method<pm::map::LocalisationSystem_TryGetLocalisedValue, bool(void*, void**, bool)>
+  static constexpr pm::api::Method<pm::map::LocalisationSystem_TryGetLocalisedValue, bool(pm::api::Object, void**, bool)>
       TryGetLocalisedValue{};
   /// LookUp(language, key, &text): the key's text in that language, else in English. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::LocalisationSystem_LookUp, bool(int32_t, void*, void**)> LookUp{};
+  static constexpr pm::api::Method<pm::map::LocalisationSystem_LookUp, bool(int32_t, pm::api::Object, void**)> LookUp{};
   /// get_language(): the player's language value. Unresolved: 0.
   static constexpr pm::api::Method<pm::map::LocalisationSystem_get_language, int32_t()> get_language{};
   /// get_voiceLanguage(): voice recognition's language value. Unresolved: 0.
   static constexpr pm::api::Method<pm::map::LocalisationSystem_get_voiceLanguage, int32_t()> get_voiceLanguage{};
   /// GetLanguageAbbreviationText(language): its abbreviation, a System.String. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::LocalisationSystem_GetLanguageAbbreviationText, void*(int32_t)>
+  static constexpr pm::api::Method<pm::map::LocalisationSystem_GetLanguageAbbreviationText, pm::api::Object(int32_t)>
       GetLanguageAbbreviationText{};
   /// GetNextOrPreviousLanguage(language, step, fromMinusOne). Unresolved: 0.
   static constexpr pm::api::Method<pm::map::LocalisationSystem_GetNextOrPreviousLanguage, int32_t(int32_t, int32_t, bool)>

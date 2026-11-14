@@ -174,11 +174,11 @@ struct PlayerVoice {
   /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::PlayerVoice> type{};
   /// Its Player: player.get(voice). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PlayerVoice_player, void*> player{};
+  static constexpr pm::api::Field<pm::map::PlayerVoice_player, pm::api::Object> player{};
   /// Its global voice tap, or null: globalTap.get(voice). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PlayerVoice_globalTap, void*> globalTap{};
+  static constexpr pm::api::Field<pm::map::PlayerVoice_globalTap, pm::api::Ref<pm::map::VivoxParticipantTap>> globalTap{};
   /// Its positional voice tap, or null: localTap.get(voice). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PlayerVoice_localTap, void*> localTap{};
+  static constexpr pm::api::Field<pm::map::PlayerVoice_localTap, pm::api::Ref<pm::map::VivoxParticipantTap>> localTap{};
 };
 
 /// A participant's audio tap. `tap` below is one.
@@ -186,40 +186,40 @@ struct VivoxParticipantTap {
   /// DoAudioFilterRead(tap, tapId, samples, frames, channels, sampleRate): `samples` a float[]. A mod
   /// usually hooks it. Unresolved: 0.
   static constexpr pm::api::Method<pm::map::VivoxParticipantTap_DoAudioFilterRead,
-                                   int32_t(void*, int32_t, void*, int32_t, int32_t, int32_t)>
+                                   int32_t(pm::api::Ref<pm::map::VivoxParticipantTap>, int32_t, pm::api::Object, int32_t, int32_t, int32_t)>
       DoAudioFilterRead{};
 };
 
 /// Vivox's service.
 struct VivoxService {
   /// The running service, a VivoxServiceInternal: get_Instance(), or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::VivoxService_get_Instance, void*()> get_Instance{};
+  static constexpr pm::api::Method<pm::map::VivoxService_get_Instance, pm::api::Object()> get_Instance{};
 };
 
 /// Vivox's implementation of the service. `vivox` below is VivoxService::get_Instance().
 struct VivoxServiceInternal {
   /// MuteInputDevice(vivox): mutes this client's microphone. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::VivoxServiceInternal_MuteInputDevice, void(void*)> MuteInputDevice{};
+  static constexpr pm::api::Method<pm::map::VivoxServiceInternal_MuteInputDevice, void(pm::api::Ref<pm::map::VivoxServiceInternal>)> MuteInputDevice{};
   /// UnmuteInputDevice(vivox): unmutes it. A mod hooks it to keep the microphone off. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::VivoxServiceInternal_UnmuteInputDevice, void(void*)>
+  static constexpr pm::api::Method<pm::map::VivoxServiceInternal_UnmuteInputDevice, void(pm::api::Ref<pm::map::VivoxServiceInternal>)>
       UnmuteInputDevice{};
 };
 
 /// How loud one player's voice plays here. `volume` below is the VoiceVolume.
 struct VoiceVolume {
   /// Update(volume): a mod hooks it to decide the death multiplier itself. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::VoiceVolume_Update, void(void*)> Update{};
+  static constexpr pm::api::Method<pm::map::VoiceVolume_Update, void(pm::api::Ref<pm::map::VoiceVolume>)> Update{};
   /// The Player whose voice it is: player.get(volume). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::VoiceVolume_player, void*> player{};
+  static constexpr pm::api::Field<pm::map::VoiceVolume_player, pm::api::Object> player{};
   /// Its death multiplier, a VolumeMultiplier: deathMultiplier.get(volume). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::VoiceVolume_deathMultiplier, void*> deathMultiplier{};
+  static constexpr pm::api::Field<pm::map::VoiceVolume_deathMultiplier, pm::api::Ref<pm::map::VolumeMultiplier>> deathMultiplier{};
 };
 
 /// One factor of a voice's volume. `multiplier` below is one.
 struct VolumeMultiplier {
   /// set_value(multiplier, value): sets it and tells its stacks. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::VolumeMultiplier_set_value, void(void*, float)> set_value{};
+  static constexpr pm::api::Method<pm::map::VolumeMultiplier_set_value, void(pm::api::Ref<pm::map::VolumeMultiplier>, float)> set_value{};
 };
 
 /// @}

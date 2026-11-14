@@ -166,39 +166,39 @@ struct MainManager {
   /// The menu scene's MainManager: instance.get(), or null; check it with pm::api::alive, since a
   /// destroyed one stays after the scene. Reading it may run the class's static constructor, so read it
   /// while the game plays. Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::MainManager_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::MainManager_instance, pm::api::Ref<pm::map::MainManager>> instance{};
   /// Its lobby computer, a GhostOS: ghostOS.get(main). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::MainManager_ghostOS, void*> ghostOS{};
+  static constexpr pm::api::Field<pm::map::MainManager_ghostOS, pm::api::Ref<pm::map::GhostOS>> ghostOS{};
 };
 
 /// The lobby computer. `os` below is the GhostOS.
 struct GhostOS {
   /// Its InventoryManager: inventory.get(os). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostOS_inventory, void*> inventory{};
+  static constexpr pm::api::Field<pm::map::GhostOS_inventory, pm::api::Ref<pm::map::InventoryManager>> inventory{};
   /// Its LoadoutManager: loadouts.get(os). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostOS_loadouts, void*> loadouts{};
+  static constexpr pm::api::Field<pm::map::GhostOS_loadouts, pm::api::Ref<pm::map::LoadoutManager>> loadouts{};
 };
 
 /// The lobby's shared equipment pool. `inventory` below is the InventoryManager.
 struct InventoryManager {
   /// AddLoadoutToLobby(inventory, loadout). A mod hooks it to refuse a loadout. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::InventoryManager_AddLoadoutToLobby, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::InventoryManager_AddLoadoutToLobby, void(pm::api::Ref<pm::map::InventoryManager>, pm::api::Object)>
       AddLoadoutToLobby{};
   /// AddLoadoutItemToLobby(inventory, item). A mod hooks it to refuse an item. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::InventoryManager_AddLoadoutItemToLobby, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::InventoryManager_AddLoadoutItemToLobby, void(pm::api::Ref<pm::map::InventoryManager>, pm::api::Object)>
       AddLoadoutItemToLobby{};
   /// RemoveMyEquipmentFromLobby(inventory): withdraws this player's contribution. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::InventoryManager_RemoveMyEquipmentFromLobby, void(void*)>
+  static constexpr pm::api::Method<pm::map::InventoryManager_RemoveMyEquipmentFromLobby, void(pm::api::Ref<pm::map::InventoryManager>)>
       RemoveMyEquipmentFromLobby{};
   /// ResetAllEquipment(inventory): the reward screen's loss of the brought equipment, on a death with the
   /// difficulty's lose-items set. Local, and saved. A mod hooks it to keep the equipment. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::InventoryManager_ResetAllEquipment, void(void*)> ResetAllEquipment{};
+  static constexpr pm::api::Method<pm::map::InventoryManager_ResetAllEquipment, void(pm::api::Ref<pm::map::InventoryManager>)> ResetAllEquipment{};
   /// ReturnItemstoInventory(inventory): the screen's return of the brought equipment to the player's stock, the
   /// branch the game takes when nothing is lost (and on leaving a room). Local, and saved. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::InventoryManager_ReturnItemstoInventory, void(void*)>
+  static constexpr pm::api::Method<pm::map::InventoryManager_ReturnItemstoInventory, void(pm::api::Ref<pm::map::InventoryManager>)>
       ReturnItemstoInventory{};
 };
 
@@ -207,14 +207,14 @@ struct EquipmentInfo {
   /// RemoveAmountOwned(info, amount): takes an amount off the saved stock of the item's current tier,
   /// kept between 0 and 1000, and saves it; a negative amount adds. A mod hooks it to refuse a
   /// decrement. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::EquipmentInfo_RemoveAmountOwned, void(void*, int32_t)>
+  static constexpr pm::api::Method<pm::map::EquipmentInfo_RemoveAmountOwned, void(pm::api::Ref<pm::map::EquipmentInfo>, int32_t)>
       RemoveAmountOwned{};
 };
 
 /// The player's saved loadouts. `loadouts` below is the LoadoutManager.
 struct LoadoutManager {
   /// CheckEquipped(loadouts): equips the saved loadout again. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LoadoutManager_CheckEquipped, void(void*)> CheckEquipped{};
+  static constexpr pm::api::Method<pm::map::LoadoutManager_CheckEquipped, void(pm::api::Ref<pm::map::LoadoutManager>)> CheckEquipped{};
 };
 
 /// @}

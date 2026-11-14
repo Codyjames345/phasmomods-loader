@@ -9,6 +9,7 @@
 #include "Photon.h"
 #include "Transform.h"
 #include "UnityObject.h"
+#include "UnityWorld.h"
 
 namespace pm::map {
 
@@ -246,15 +247,15 @@ struct PhotonObjectInteract {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::PhotonObjectInteract> type{};
   /// Its Rigidbody, or null: body.get(interact). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_body, void*> body{};
+  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_body, pm::api::Ref<pm::map::Rigidbody>> body{};
   /// Its Door, or null: door.get(interact). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_door, void*> door{};
+  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_door, pm::api::Object> door{};
   /// Its PhotonView: view.get(interact). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_view, void*> view{};
+  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_view, pm::api::Ref<pm::map::PhotonView>> view{};
   /// Its Prop, or null: prop.get(interact). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_prop, void*> prop{};
+  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_prop, pm::api::Ref<pm::map::Prop>> prop{};
   /// FreezeRigidbody(interact, freeze, networked). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PhotonObjectInteract_FreezeRigidbody, void(void*, bool, bool)>
+  static constexpr pm::api::Method<pm::map::PhotonObjectInteract_FreezeRigidbody, void(pm::api::Ref<pm::map::PhotonObjectInteract>, bool, bool)>
       FreezeRigidbody{};
   /// Whether a VR player may take it: grabbable.get(interact). Unresolved: false.
   static constexpr pm::api::Field<pm::map::PhotonObjectInteract_grabbable, bool> grabbable{};
@@ -271,7 +272,7 @@ struct VRGrabbable {
   static constexpr pm::api::Type<pm::map::VRGrabbable> type{};
   /// IsSelectableBy(grabbable, interactor): whether a VR hand may take it. A mod hooks it. Unresolved:
   /// false.
-  static constexpr pm::api::Method<pm::map::VRGrabbable_IsSelectableBy, bool(void*, void*)> IsSelectableBy{};
+  static constexpr pm::api::Method<pm::map::VRGrabbable_IsSelectableBy, bool(pm::api::Ref<pm::map::VRGrabbable>, pm::api::Object)> IsSelectableBy{};
 };
 
 /// A throwable. `prop` below is one.
@@ -279,14 +280,14 @@ struct Prop {
   /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Prop> type{};
   /// Its PhotonObjectInteract: interact.get(prop). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Prop_interact, void*> interact{};
+  static constexpr pm::api::Field<pm::map::Prop_interact, pm::api::Ref<pm::map::PhotonObjectInteract>> interact{};
   /// PlayImpactSound(prop, velocity, clips): its impact sound on this client; clips may be null. Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::Prop_PlayImpactSound, void(void*, float, void*)> PlayImpactSound{};
+  static constexpr pm::api::Method<pm::map::Prop_PlayImpactSound, void(pm::api::Ref<pm::map::Prop>, float, pm::api::Object)> PlayImpactSound{};
   /// The speed at or below which it plays its gentle clips: lowImpactVelocityCutoff.get(prop). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Prop_lowImpactVelocityCutoff, float> lowImpactVelocityCutoff{};
   /// TryThrow(prop, a, b). A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Prop_TryThrow, void(void*, bool, bool)> TryThrow{};
+  static constexpr pm::api::Method<pm::map::Prop_TryThrow, void(pm::api::Ref<pm::map::Prop>, bool, bool)> TryThrow{};
 };
 
 /// A sink. `sink` below is one.
@@ -294,7 +295,7 @@ struct Sink {
   /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Sink> type{};
   /// The water surface's Transform: water.get(sink). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Sink_water, void*> water{};
+  static constexpr pm::api::Field<pm::map::Sink_water, pm::api::Object> water{};
   /// Whether it has been used: used.get(sink). Unresolved: false.
   static constexpr pm::api::Field<pm::map::Sink_used, bool> used{};
 };
@@ -304,9 +305,9 @@ struct SaltSpot {
   /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::SaltSpot> type{};
   /// SyncSalt(salt, &info): the ghost's step in it. A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::SaltSpot_SyncSalt, void(void*, void*)> SyncSalt{};
+  static constexpr pm::api::Method<pm::map::SaltSpot_SyncSalt, void(pm::api::Ref<pm::map::SaltSpot>, pm::api::Object)> SyncSalt{};
   /// The flattened pile, a GameObject: flatSalt.get(salt). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::SaltSpot_flatSalt, void*> flatSalt{};
+  static constexpr pm::api::Field<pm::map::SaltSpot_flatSalt, pm::api::Object> flatSalt{};
 };
 
 /// @}

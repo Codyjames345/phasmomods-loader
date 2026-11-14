@@ -91,11 +91,11 @@ namespace phasmo {
 /// The main menu. `menu` below is the ConnectToServer.
 struct ConnectToServer {
   /// get_Instance(): the main menu in this scene, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::ConnectToServer_get_Instance, void*()> get_Instance{};
+  static constexpr pm::api::Method<pm::map::ConnectToServer_get_Instance, pm::api::Object()> get_Instance{};
   /// The board's decoration, a List<GameObject>: menuDecor.get(menu). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ConnectToServer_menuDecor, void*> menuDecor{};
+  static constexpr pm::api::Field<pm::map::ConnectToServer_menuDecor, pm::api::Object> menuDecor{};
   /// The menu's buttons and their reasons: menuObjects.get(menu). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ConnectToServer_menuObjects, void*> menuObjects{};
+  static constexpr pm::api::Field<pm::map::ConnectToServer_menuObjects, pm::api::Ref<pm::map::MenuObjects>> menuObjects{};
 };
 
 /// The menu's buttons and the reasons they are off. `objects` below is one.
@@ -109,7 +109,7 @@ struct ErrorManager {
   /// The type: type_object() for Object.FindObjectOfType, is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::ErrorManager> type{};
   /// The popup, a GameObject: errorParent.get(manager). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ErrorManager_errorParent, void*> errorParent{};
+  static constexpr pm::api::Field<pm::map::ErrorManager_errorParent, pm::api::Ref<pm::map::GameObject>> errorParent{};
 };
 
 /// A board the camera can look at. `board` below is the CameraFocusUI.
@@ -117,7 +117,7 @@ struct CameraFocusUI {
   /// The type: type_object() for GetComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::CameraFocusUI> type{};
   /// get_isFocused(board). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::CameraFocusUI_get_isFocused, bool(void*)> get_isFocused{};
+  static constexpr pm::api::Method<pm::map::CameraFocusUI_get_isFocused, bool(pm::api::Ref<pm::map::CameraFocusUI>)> get_isFocused{};
 };
 
 /// @}

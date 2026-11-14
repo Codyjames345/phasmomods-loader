@@ -129,7 +129,7 @@ struct PlayableGraph {
   uint32_t version = 0;    ///< the engine's version, which a destroyed one no longer matches
 
   /// Create_Injected(name, &graph). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::PlayableGraph_Create_Injected, void(void*, PlayableGraph*)> Create{};
+  static constexpr pm::api::Icall<pm::map::PlayableGraph_Create_Injected, void(pm::api::Object, PlayableGraph*)> Create{};
   /// Destroy_Injected(&graph). Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::PlayableGraph_Destroy_Injected, void(PlayableGraph*)> Destroy{};
   /// Play_Injected(&graph). Unresolved: does nothing.
@@ -170,11 +170,11 @@ struct PlayableOutputHandle {
 struct AnimationPlayables {
   /// InternalCreateAnimationOutput(&graph, name, &output): whether it was made. Unresolved: false.
   static constexpr pm::api::Icall<pm::map::AnimationPlayableGraphExtensions_InternalCreateAnimationOutput,
-                                  bool(PlayableGraph*, void*, PlayableOutputHandle*)>
+                                  bool(PlayableGraph*, pm::api::Object, PlayableOutputHandle*)>
       CreateOutput{};
   /// InternalSetTarget(&output, animator). Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::AnimationPlayableOutput_InternalSetTarget,
-                                  void(PlayableOutputHandle*, void*)>
+                                  void(PlayableOutputHandle*, pm::api::Object)>
       SetTarget{};
   /// InternalSetSortingOrder_Injected(&output, order). Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::AnimationPlayableOutputExtensions_InternalSetSortingOrder_Injected,
@@ -182,7 +182,7 @@ struct AnimationPlayables {
       SetSortingOrder{};
   /// CreateHandleInternal_Injected(&graph, clip, &playable): whether it was made. Unresolved: false.
   static constexpr pm::api::Icall<pm::map::AnimationClipPlayable_CreateHandleInternal_Injected,
-                                  bool(PlayableGraph*, void*, PlayableHandle*)>
+                                  bool(PlayableGraph*, pm::api::Object, PlayableHandle*)>
       CreateClipPlayable{};
   /// SetApplyFootIKInternal(&playable, on). Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::AnimationClipPlayable_SetApplyFootIKInternal, void(PlayableHandle*, bool)>
@@ -194,9 +194,9 @@ struct AnimationClip {
   /// The type: type_object() for AssetBundle.LoadAsset_Internal. Unresolved: null.
   static constexpr pm::api::Type<pm::map::AnimationClip> type{};
   /// get_length(clip): seconds. Unresolved: 0.
-  static constexpr pm::api::Icall<pm::map::AnimationClip_get_length, float(void*)> get_length{};
+  static constexpr pm::api::Icall<pm::map::AnimationClip_get_length, float(pm::api::Object)> get_length{};
   /// get_isLooping(clip): its Loop Time. Unresolved: false.
-  static constexpr pm::api::Icall<pm::map::Motion_get_isLooping, bool(void*)> get_isLooping{};
+  static constexpr pm::api::Icall<pm::map::Motion_get_isLooping, bool(pm::api::Object)> get_isLooping{};
 };
 
 /// @}

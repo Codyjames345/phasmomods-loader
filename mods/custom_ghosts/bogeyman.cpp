@@ -107,7 +107,7 @@ void* spot_of(void* player) {
   void* net = player ? phasmo::Network::get_Instance() : nullptr;
   const api::List spots{net ? phasmo::Network::playerSpots.get(net) : nullptr};
   for (size_t i = 0; i < spots.size(); ++i)
-    if (void* spot = spots[i]; spot && phasmo::PlayerSpot::player.get(spot) == player) return spot;
+    if (void* spot = spots[i]; spot && phasmo::PlayerSpot::player.get(spot).raw() == player) return spot;
   return nullptr;
 }
 

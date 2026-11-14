@@ -707,7 +707,7 @@ void* photon_player_of(void* player) {
   void* net = player ? game::network() : nullptr;
   const api::List spots{net ? phasmo::Network::playerSpots.get(net) : nullptr};
   for (size_t i = 0; i < spots.size(); ++i)
-    if (void* spot = spots[i]; spot && phasmo::PlayerSpot::player.get(spot) == player)
+    if (void* spot = spots[i]; spot && phasmo::PlayerSpot::player.get(spot).raw() == player)
       return phasmo::PlayerSpot::photonPlayer.get(spot);
   return nullptr;
 }

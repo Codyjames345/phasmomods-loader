@@ -8,9 +8,19 @@
 #include <bit>
 #include <cstdint>
 
+#include "Animator.h"
+#include "Camera.h"
+#include "ClosetZone.h"
+#include "GhostSenses.h"
+#include "Input.h"
+#include "JournalController.h"
+#include "LevelRoom.h"
 #include "Photon.h"
+#include "PlayerSanity.h"
+#include "Props.h"
 #include "Transform.h"
 #include "UnityObject.h"
+#include "UnityUI.h"
 #include "entry.h"
 #include "game_api.h"
 
@@ -1274,53 +1284,53 @@ namespace phasmo {
 /// The game's networking hub. `network` below is the Network.
 struct Network {
   /// The one Network: get_Instance(), or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Network_get_Instance, void*()> get_Instance{};
+  static constexpr pm::api::Method<pm::map::Network_get_Instance, pm::api::Object()> get_Instance{};
   /// The room's players, a List<PlayerSpot>: playerSpots.get(network), read as a pm::api::List.
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Network_playerSpots, void*> playerSpots{};
+  static constexpr pm::api::Field<pm::map::Network_playerSpots, pm::api::Object> playerSpots{};
   /// This client's investigator, a Player: localPlayer.get(network), or null. A write goes through the
   /// GC write barrier. Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::Network_localPlayer, void*> localPlayer{};
+  static constexpr pm::api::Field<pm::map::Network_localPlayer, pm::api::Object> localPlayer{};
   /// This client's player rig, a LocalPlayer: localRig.get(network). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Network_localRig, void*> localRig{};
+  static constexpr pm::api::Field<pm::map::Network_localRig, pm::api::Ref<pm::map::LocalPlayer>> localRig{};
   /// Set by every scene change the game makes on its way out of a level: sceneChanging.set(network, true).
   /// Unresolved: false, writes nothing.
   static constexpr pm::api::Field<pm::map::Network_sceneChanging, bool> sceneChanging{};
   /// GetPlayerFromPhotonPlayer(network, photonPlayer): the Player in that Photon player's spot, or
   /// Network.localPlayer when no spot holds them (map note). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Network_GetPlayerFromPhotonPlayer, void*(void*, void*)>
+  static constexpr pm::api::Method<pm::map::Network_GetPlayerFromPhotonPlayer, pm::api::Object(pm::api::Ref<pm::map::Network>, pm::api::Object)>
       GetPlayerFromPhotonPlayer{};
   /// GetSpotPlayerFromPhotonPlayer(network, photonPlayer): that Photon player's PlayerSpot, or null (map
   /// note). A mod hooks it: Network.GetPlayerFromPhotonPlayer calls it. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Network_GetSpotPlayerFromPhotonPlayer, void*(void*, void*)>
+  static constexpr pm::api::Method<pm::map::Network_GetSpotPlayerFromPhotonPlayer, pm::api::Object(pm::api::Ref<pm::map::Network>, pm::api::Object)>
       GetSpotPlayerFromPhotonPlayer{};
   /// OnPlayerLeftRoom(network, photonPlayer): Photon's callback for a leaver (map note). A mod hooks it.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Network_OnPlayerLeftRoom, void(void*, void*)> OnPlayerLeftRoom{};
+  static constexpr pm::api::Method<pm::map::Network_OnPlayerLeftRoom, void(pm::api::Ref<pm::map::Network>, pm::api::Object)> OnPlayerLeftRoom{};
 };
 
 /// The scene's multiplayer helper.
 struct MultiplayerController {
   /// The scene's controller: instance.get(), or null. Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::MultiplayerController_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::MultiplayerController_instance, pm::api::Ref<pm::map::MultiplayerController>> instance{};
   /// Where the local investigator starts a contract, a List<Transform>: spawnPoints.get(controller). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::MultiplayerController_spawnPoints, void*> spawnPoints{};
+  static constexpr pm::api::Field<pm::map::MultiplayerController_spawnPoints, pm::api::Object> spawnPoints{};
 };
 
 /// This client's player rig. `rig` below is the LocalPlayer.
 struct LocalPlayer {
   /// TeleportPlayer(rig, &position): the game's own move of the local investigator, by the rig's root; it switches
   /// the rig's PhysicsCharacterController back on. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LocalPlayer_TeleportPlayer, void(void*, const Vector3*)> TeleportPlayer{};
+  static constexpr pm::api::Method<pm::map::LocalPlayer_TeleportPlayer, void(pm::api::Ref<pm::map::LocalPlayer>, const Vector3*)> TeleportPlayer{};
   /// Its networked investigator, a Player: player.get(rig). A write goes through the GC write barrier.
   /// Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::LocalPlayer_player, void*> player{};
+  static constexpr pm::api::Field<pm::map::LocalPlayer_player, pm::api::Object> player{};
   /// Its Camera: camera.get(rig). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LocalPlayer_camera, void*> camera{};
+  static constexpr pm::api::Field<pm::map::LocalPlayer_camera, pm::api::Ref<pm::map::Camera>> camera{};
   /// Its journal page controller, a JournalController: journalController.get(rig). This is what
   /// PCCanvas.PausePlayerInPlace checks on release: a rig this answers null for has no journal, and the
   /// release throws there. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LocalPlayer_journalController, void*> journalController{};
+  static constexpr pm::api::Field<pm::map::LocalPlayer_journalController, pm::api::Ref<pm::map::JournalController>> journalController{};
   /// Its walking speed in metres a second, before the multiplier: walkSpeed.get(rig). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::LocalPlayer_walkSpeed, float> walkSpeed{};
   /// Its sprinting speed in metres a second, before the multiplier, whether sprinting is on or not:
@@ -1329,14 +1339,14 @@ struct LocalPlayer {
   /// The factor both speeds are multiplied by on this client: speedMultiplier.get(rig). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::LocalPlayer_speedMultiplier, float> speedMultiplier{};
   /// Its stamina, a PlayerStamina: stamina.get(rig). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LocalPlayer_stamina, void*> stamina{};
+  static constexpr pm::api::Field<pm::map::LocalPlayer_stamina, pm::api::Ref<pm::map::PlayerStamina>> stamina{};
   /// The rig's PlayerInput: playerInput.get(rig). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LocalPlayer_playerInput, void*> playerInput{};
+  static constexpr pm::api::Field<pm::map::LocalPlayer_playerInput, pm::api::Ref<pm::map::PlayerInput>> playerInput{};
   /// Whether its player has died, on this client only (others read Player.isDead): isDead.get(rig). Unresolved:
   /// false.
   static constexpr pm::api::Field<pm::map::LocalPlayer_isDead, bool> isDead{};
   /// The rig's PhysicsCharacterController: characterController.get(rig). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LocalPlayer_characterController, void*> characterController{};
+  static constexpr pm::api::Field<pm::map::LocalPlayer_characterController, pm::api::Ref<pm::map::PhysicsCharacterController>> characterController{};
 };
 
 /// A player's stamina on its own client. `stamina` below is the PlayerStamina.
@@ -1350,11 +1360,11 @@ struct PlayerStamina {
 struct PlayerAudio {
   /// IsTalkingLoudly(audio, loudness): whether the player talks above `loudness` (the game passes 0.1) or on a
   /// walkie-talkie. A true answer clears the loudness it read (map note). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::PlayerAudio_IsTalkingLoudly, bool(void*, float)> IsTalkingLoudly{};
+  static constexpr pm::api::Method<pm::map::PlayerAudio_IsTalkingLoudly, bool(pm::api::Ref<pm::map::PlayerAudio>, float)> IsTalkingLoudly{};
   /// How loud the player talks, the value IsTalkingLoudly compares: loudness.get(audio). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::PlayerAudio_loudness, float> loudness{};
   /// GetPlayerVoiceAudioSource(audio): the positional voice's AudioSource, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PlayerAudio_GetPlayerVoiceAudioSource, void*(void*)>
+  static constexpr pm::api::Method<pm::map::PlayerAudio_GetPlayerVoiceAudioSource, pm::api::Object(pm::api::Ref<pm::map::PlayerAudio>)>
       GetPlayerVoiceAudioSource{};
 };
 
@@ -1363,9 +1373,9 @@ struct PlayerSpot {
   /// The type: is(obj). Unresolved: false.
   static constexpr pm::api::Type<pm::map::PlayerSpot> type{};
   /// Its Photon player: photonPlayer.get(spot). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PlayerSpot_photonPlayer, void*> photonPlayer{};
+  static constexpr pm::api::Field<pm::map::PlayerSpot_photonPlayer, pm::api::Object> photonPlayer{};
   /// Its investigator, a Player: player.get(spot), or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PlayerSpot_player, void*> player{};
+  static constexpr pm::api::Field<pm::map::PlayerSpot_player, pm::api::Object> player{};
   /// The level the lobby board shows: level.get(spot). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::PlayerSpot_level, int32_t> level{};
   /// The prestige the lobby board shows: prestige.get(spot). Unresolved: 0.
@@ -1389,50 +1399,50 @@ struct Player {
   /// Whether a kill of it has started and not finished: dying.get(player). Unresolved: false.
   static constexpr pm::api::Field<pm::map::Player_dying, bool> dying{};
   /// The closet it hides in, or null: closet.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_closet, void*> closet{};
+  static constexpr pm::api::Field<pm::map::Player_closet, pm::api::Ref<pm::map::ClosetZone>> closet{};
   /// Its body object, a GameObject: body.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_body, void*> body{};
+  static constexpr pm::api::Field<pm::map::Player_body, pm::api::Ref<pm::map::GameObject>> body{};
   /// Whether a Monkey Paw wish marked it to be heard everywhere in hunts: wished.get(player).
   /// Unresolved: false.
   static constexpr pm::api::Field<pm::map::Player_wished, bool> wished{};
   /// Its stamina and movement, a NetworkedStamina: stamina.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_stamina, void*> stamina{};
+  static constexpr pm::api::Field<pm::map::Player_stamina, pm::api::Ref<pm::map::NetworkedStamina>> stamina{};
   /// The room it is in, or null: currentRoom.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_currentRoom, void*> currentRoom{};
+  static constexpr pm::api::Field<pm::map::Player_currentRoom, pm::api::Ref<pm::map::LevelRoom>> currentRoom{};
   /// The keys it holds, a List<KeyInfo> (Door.h): keys.get(player), read as a pm::api::List. Read it
   /// for the local player: Key.GrabbedKey fills that client's own. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_keys, void*> keys{};
+  static constexpr pm::api::Field<pm::map::Player_keys, pm::api::Object> keys{};
   /// The parts the ghost's sight looks for, a PlayerLOSTarget[], or null: losTargets.get(player).
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_losTargets, void*> losTargets{};
+  static constexpr pm::api::Field<pm::map::Player_losTargets, pm::api::Object> losTargets{};
   /// Its PlayerSanity: sanity.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_sanity, void*> sanity{};
+  static constexpr pm::api::Field<pm::map::Player_sanity, pm::api::Ref<pm::map::PlayerSanity>> sanity{};
   /// Its JournalController: journal.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_journal, void*> journal{};
+  static constexpr pm::api::Field<pm::map::Player_journal, pm::api::Ref<pm::map::JournalController>> journal{};
   /// Its NetworkedPropGrab, what it carries: propGrab.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_propGrab, void*> propGrab{};
+  static constexpr pm::api::Field<pm::map::Player_propGrab, pm::api::Ref<pm::map::NetworkedPropGrab>> propGrab{};
   /// Its PlayerAudio, its voice: audio.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_audio, void*> audio{};
+  static constexpr pm::api::Field<pm::map::Player_audio, pm::api::Ref<pm::map::PlayerAudio>> audio{};
   /// Its body's Animator: animator.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_animator, void*> animator{};
+  static constexpr pm::api::Field<pm::map::Player_animator, pm::api::Ref<pm::map::Animator>> animator{};
   /// Its body's Renderer[]: renderers.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_renderers, void*> renderers{};
+  static constexpr pm::api::Field<pm::map::Player_renderers, pm::api::Object> renderers{};
   /// Its PlayerCharacterAnimations: characterAnimations.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_characterAnimations, void*> characterAnimations{};
+  static constexpr pm::api::Field<pm::map::Player_characterAnimations, pm::api::Ref<pm::map::PlayerCharacterAnimations>> characterAnimations{};
   /// RevivePlayer(player, flag): revives it once it is marked dead, by RPC to every client. A mod hooks it.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Player_RevivePlayer, void(void*, bool)> RevivePlayer{};
+  static constexpr pm::api::Method<pm::map::Player_RevivePlayer, void(pm::api::Ref<pm::map::Player>, bool)> RevivePlayer{};
   /// BeginDeathSequence(player, deathType): starts a kill of it, by RPC. A mod hooks it; call it only as the
   /// game does (map note). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Player_BeginDeathSequence, void(void*, int32_t)> BeginDeathSequence{};
+  static constexpr pm::api::Method<pm::map::Player_BeginDeathSequence, void(pm::api::Ref<pm::map::Player>, int32_t)> BeginDeathSequence{};
   /// ToggleFreezePlayerMovement(player, frozen): freezes or frees its movement on this client. Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::Player_ToggleFreezePlayerMovement, void(void*, bool)>
+  static constexpr pm::api::Method<pm::map::Player_ToggleFreezePlayerMovement, void(pm::api::Ref<pm::map::Player>, bool)>
       ToggleFreezePlayerMovement{};
   /// NotifyOfDeathStart(player, info): the start of a kill, which the killer's client sends to every client. `info`
   /// is the message's PhotonMessageInfo, which the RPC system fills. A mod hooks it to see a death begin, before
   /// isDead is set; it never calls it (map note). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Player_NotifyOfDeathStart, void(void*, void*)> NotifyOfDeathStart{};
+  static constexpr pm::api::Method<pm::map::Player_NotifyOfDeathStart, void(pm::api::Ref<pm::map::Player>, pm::api::Object)> NotifyOfDeathStart{};
 };
 
 /// The local player on PC.
@@ -1440,21 +1450,21 @@ struct LocalPCPlayer {
   /// The type: klass(), is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::LocalPCPlayer> type{};
   /// Its HUD canvas, a PCCanvas: canvas.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LocalPCPlayer_canvas, void*> canvas{};
+  static constexpr pm::api::Field<pm::map::LocalPCPlayer_canvas, pm::api::Ref<pm::map::PCCanvas>> canvas{};
   /// Its PCControls: controls.get(localPlayer). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LocalPCPlayer_controls, void*> controls{};
+  static constexpr pm::api::Field<pm::map::LocalPCPlayer_controls, pm::api::Ref<pm::map::PCControls>> controls{};
   /// Its movement controller: firstPersonController.get(rig). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LocalPCPlayer_firstPersonController, void*> firstPersonController{};
+  static constexpr pm::api::Field<pm::map::LocalPCPlayer_firstPersonController, pm::api::Ref<pm::map::FirstPersonController>> firstPersonController{};
   /// UpdatePlayerSpeed(player): applies its walk or sprint speed. A mod usually hooks it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::LocalPCPlayer_UpdatePlayerSpeed, void(void*)> UpdatePlayerSpeed{};
+  static constexpr pm::api::Method<pm::map::LocalPCPlayer_UpdatePlayerSpeed, void(pm::api::Ref<pm::map::LocalPCPlayer>)> UpdatePlayerSpeed{};
   /// SetPlayerSpeedMultiplier(player, factor): sets its speed multiplier on this client. A mod usually hooks it.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LocalPCPlayer_SetPlayerSpeedMultiplier, void(void*, float)>
+  static constexpr pm::api::Method<pm::map::LocalPCPlayer_SetPlayerSpeedMultiplier, void(pm::api::Ref<pm::map::LocalPCPlayer>, float)>
       SetPlayerSpeedMultiplier{};
   /// ResetPlayerSpeedMultiplier(player): puts its speed multiplier back to the copy kept from the contract's
   /// difficulty and applies the speed again, on this client. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LocalPCPlayer_ResetPlayerSpeedMultiplier, void(void*)>
+  static constexpr pm::api::Method<pm::map::LocalPCPlayer_ResetPlayerSpeedMultiplier, void(pm::api::Ref<pm::map::LocalPCPlayer>)>
       ResetPlayerSpeedMultiplier{};
 };
 
@@ -1467,7 +1477,7 @@ struct FirstPersonController {
   /// Whether the player asks to sprint (Run held, or toggled on): running.get(rig). Unresolved: false.
   static constexpr pm::api::Field<pm::map::FirstPersonController_running, bool> running{};
   /// EnableMovement(rig, on): the walk-and-look switch. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::FirstPersonController_EnableMovement, void(void*, bool)> EnableMovement{};
+  static constexpr pm::api::Method<pm::map::FirstPersonController_EnableMovement, void(pm::api::Ref<pm::map::FirstPersonController>, bool)> EnableMovement{};
 };
 
 /// The local player's HUD.
@@ -1475,10 +1485,10 @@ struct PCCanvas {
   /// The type: klass(), is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::PCCanvas> type{};
   /// Its crosshair, an Image: crosshair.get(canvas). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PCCanvas_crosshair, void*> crosshair{};
+  static constexpr pm::api::Field<pm::map::PCCanvas_crosshair, pm::api::Ref<pm::map::Image>> crosshair{};
   /// PausePlayerInPlace(canvas, paused): holds the local player still while an overlay is up, or lets them
   /// go again; the game uses it for the journal and the voice overlay. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PCCanvas_PausePlayerInPlace, void(void*, bool)> PausePlayerInPlace{};
+  static constexpr pm::api::Method<pm::map::PCCanvas_PausePlayerInPlace, void(pm::api::Ref<pm::map::PCCanvas>, bool)> PausePlayerInPlace{};
 };
 
 /// The investigator's physical step on PC: walls, floors and gravity. `controller` below is the
@@ -1488,32 +1498,32 @@ struct PhysicsCharacterController {
   static constexpr pm::api::Type<pm::map::PhysicsCharacterController> type{};
   /// Move(controller, displacement): the frame's walk, in metres; the next physical step applies it. A mod
   /// hooks it to read or replace the walk. Local only. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_Move, void(void*, Vector3)> Move{};
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_Move, void(pm::api::Ref<pm::map::PhysicsCharacterController>, Vector3)> Move{};
   /// get_Rigidbody(controller): the body its step moves. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_Rigidbody, void*(void*)> get_Rigidbody{};
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_Rigidbody, pm::api::Object(pm::api::Ref<pm::map::PhysicsCharacterController>)> get_Rigidbody{};
   /// get_CapsuleCollider(controller): the investigator's collider. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_CapsuleCollider, void*(void*)>
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_CapsuleCollider, pm::api::Object(pm::api::Ref<pm::map::PhysicsCharacterController>)>
       get_CapsuleCollider{};
   /// What blocks the player, as an int layer mask: collisionMask.get(controller). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::PhysicsCharacterController_collisionMask, int32_t> collisionMask{};
   /// get_groundLayers(controller): what the player stands on, as an int layer mask. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_groundLayers, int32_t(void*)>
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_groundLayers, int32_t(pm::api::Ref<pm::map::PhysicsCharacterController>)>
       get_groundLayers{};
   /// get_radius(controller): the capsule's radius, metres. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_radius, float(void*)> get_radius{};
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_radius, float(pm::api::Ref<pm::map::PhysicsCharacterController>)> get_radius{};
   /// get_height(controller): the capsule's height, metres. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_height, float(void*)> get_height{};
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_height, float(pm::api::Ref<pm::map::PhysicsCharacterController>)> get_height{};
   /// get_center(controller): the capsule's centre, local to the rig. Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_center, Vector3(void*)> get_center{};
+  static constexpr pm::api::Method<pm::map::PhysicsCharacterController_get_center, Vector3(pm::api::Ref<pm::map::PhysicsCharacterController>)> get_center{};
 };
 
 /// The body's animation scripts.
 struct PlayerCharacterAnimations {
   /// The right hand's anchor, a Transform: parentingTargetRightHand.get(anims). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PlayerCharacterAnimations_parentingTargetRightHand, void*>
+  static constexpr pm::api::Field<pm::map::PlayerCharacterAnimations_parentingTargetRightHand, pm::api::Object>
       parentingTargetRightHand{};
   /// The left hand's anchor, a Transform: parentingTargetLeftHand.get(anims). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PlayerCharacterAnimations_parentingTargetLeftHand, void*>
+  static constexpr pm::api::Field<pm::map::PlayerCharacterAnimations_parentingTargetLeftHand, pm::api::Object>
       parentingTargetLeftHand{};
 };
 
@@ -1530,11 +1540,11 @@ struct PCPropGrab {
   /// The interact ray's layers, as an int: mask.get(grab). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::PCPropGrab_mask, int32_t> mask{};
   /// The camera the interact ray starts from: playerCam.get(grab). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PCPropGrab_playerCam, void*> playerCam{};
+  static constexpr pm::api::Field<pm::map::PCPropGrab_playerCam, pm::api::Ref<pm::map::Camera>> playerCam{};
   /// GetItemInCameraSlot(grab): the held item, a PhotonObjectInteract, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PCPropGrab_GetItemInCameraSlot, void*(void*)> GetItemInCameraSlot{};
+  static constexpr pm::api::Method<pm::map::PCPropGrab_GetItemInCameraSlot, pm::api::Object(pm::api::Ref<pm::map::PCPropGrab>)> GetItemInCameraSlot{};
   /// ParentItemOnLocalPlayer(grab, item): puts the item back in the camera slot. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PCPropGrab_ParentItemOnLocalPlayer, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::PCPropGrab_ParentItemOnLocalPlayer, void(pm::api::Ref<pm::map::PCPropGrab>, pm::api::Ref<pm::map::PhotonObjectInteract>)>
       ParentItemOnLocalPlayer{};
 };
 
@@ -1549,11 +1559,11 @@ struct VRPlayer {
   /// The type: is(player). Unresolved: false.
   static constexpr pm::api::Type<pm::map::VRPlayer> type{};
   /// The left hand's IK target, a Transform: leftHandIK.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::VRPlayer_leftHandIK, void*> leftHandIK{};
+  static constexpr pm::api::Field<pm::map::VRPlayer_leftHandIK, pm::api::Object> leftHandIK{};
   /// The right hand's IK target, a Transform: rightHandIK.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::VRPlayer_rightHandIK, void*> rightHandIK{};
+  static constexpr pm::api::Field<pm::map::VRPlayer_rightHandIK, pm::api::Object> rightHandIK{};
   /// Teleport(player, &point): moves the local VR rig there, on this client. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::VRPlayer_Teleport, void(void*, const Vector3*)> Teleport{};
+  static constexpr pm::api::Method<pm::map::VRPlayer_Teleport, void(pm::api::Ref<pm::map::VRPlayer>, const Vector3*)> Teleport{};
 };
 
 /// What an investigator carries. `grab` below is a NetworkedPropGrab.
@@ -1562,14 +1572,14 @@ struct NetworkedPropGrab {
   static constexpr pm::api::Type<pm::map::NetworkedPropGrab> type{};
   /// The items it carries, a List<PhotonObjectInteract>: inventory.get(grab), read as a pm::api::List.
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::NetworkedPropGrab_inventory, void*> inventory{};
+  static constexpr pm::api::Field<pm::map::NetworkedPropGrab_inventory, pm::api::Object> inventory{};
 };
 
 /// The Winter's Jest present. `present` below is the KrampusPresent.
 struct KrampusPresent {
   /// GetFurthestSpawnPositionFromPlayers(present): the spawn point furthest from the room's players (map note). A mod
   /// hooks it. Unresolved: the zero vector.
-  static constexpr pm::api::Method<pm::map::KrampusPresent_GetFurthestSpawnPositionFromPlayers, Vector3(void*)>
+  static constexpr pm::api::Method<pm::map::KrampusPresent_GetFurthestSpawnPositionFromPlayers, Vector3(pm::api::Ref<pm::map::KrampusPresent>)>
       GetFurthestSpawnPositionFromPlayers{};
 };
 
@@ -1578,14 +1588,14 @@ struct PlayerCosmetics {
   /// The type: type_object() for Component.GetComponentInChildren. Unresolved: null.
   static constexpr pm::api::Type<pm::map::PlayerCosmetics> type{};
   /// playerAnimator.get(cosmetics): the body's Animator. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PlayerCosmetics_playerAnimator, void*> playerAnimator{};
+  static constexpr pm::api::Field<pm::map::PlayerCosmetics_playerAnimator, pm::api::Ref<pm::map::Animator>> playerAnimator{};
 };
 
 /// This client's own journal input. `input` below is the LocalJournalController.
 struct LocalJournalController {
   /// OpenCloseJournal(input, flag): the journal key's open or close, through JournalController.OpenCloseJournal. A mod
   /// hooks it to act before the journal opens. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LocalJournalController_OpenCloseJournal, void(void*, bool)>
+  static constexpr pm::api::Method<pm::map::LocalJournalController_OpenCloseJournal, void(pm::api::Ref<pm::map::LocalJournalController>, bool)>
       OpenCloseJournal{};
 };
 
@@ -1593,16 +1603,16 @@ struct LocalJournalController {
 struct PlayerCharacter {
   /// SetPlayerBodyType(character, position): takes a body type from the player at that position, or with -1 from
   /// this client's own player (map note). A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PlayerCharacter_SetPlayerBodyType, void(void*, int32_t)>
+  static constexpr pm::api::Method<pm::map::PlayerCharacter_SetPlayerBodyType, void(pm::api::Ref<pm::map::PlayerCharacter>, int32_t)>
       SetPlayerBodyType{};
   /// The type: type_object() for Component.GetComponentInChildren. Unresolved: null.
   static constexpr pm::api::Type<pm::map::PlayerCharacter> type{};
   /// The head's Renderer[]: headRenderersToTurnOff.get(character). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PlayerCharacter_headRenderersToTurnOff, void*> headRenderersToTurnOff{};
+  static constexpr pm::api::Field<pm::map::PlayerCharacter_headRenderersToTurnOff, pm::api::Object> headRenderersToTurnOff{};
   /// ChangeHeadObjectsShadowCastingModeShadowsOnly(character, shadowsOnly): the head shadows only (true) or drawn
   /// (false), every head renderer (map note: what calls it). Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PlayerCharacter_ChangeHeadObjectsShadowCastingModeShadowsOnly,
-                                   void(void*, bool)>
+                                   void(pm::api::Ref<pm::map::PlayerCharacter>, bool)>
       ChangeHeadObjectsShadowCastingModeShadowsOnly{};
 };
 
@@ -1610,10 +1620,10 @@ struct PlayerCharacter {
 struct PhraseListenerController {
   /// OnPhraseRecognized(listener, phrase), `phrase` a System.String. A mod usually hooks it.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PhraseListenerController_OnPhraseRecognized, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::PhraseListenerController_OnPhraseRecognized, void(pm::api::Ref<pm::map::PhraseListenerController>, pm::api::Object)>
       OnPhraseRecognized{};
   /// NetworkedReaction(listener): the ghost reacts to its name. A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PhraseListenerController_NetworkedReaction, void(void*)>
+  static constexpr pm::api::Method<pm::map::PhraseListenerController_NetworkedReaction, void(pm::api::Ref<pm::map::PhraseListenerController>)>
       NetworkedReaction{};
 };
 
@@ -1622,7 +1632,7 @@ struct PCControls {
   /// The type: klass(), is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::PCControls> type{};
   /// The InputActionAsset its actions come from: actions.get(controls). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PCControls_actions, void*> actions{};
+  static constexpr pm::api::Field<pm::map::PCControls_actions, pm::api::Ref<pm::map::InputActionAsset>> actions{};
 };
 
 /// The level's sounds. `sounds` below is the SoundController.
@@ -1630,17 +1640,17 @@ struct SoundController {
   /// The type: klass(), is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::SoundController> type{};
   /// The level's one: instance.get(). Null outside a level. Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::SoundController_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::SoundController_instance, pm::api::Ref<pm::map::SoundController>> instance{};
   /// GetFloorAudioSnapshot(sounds, &position): the AudioMixerGroup a sound at `position` plays through, as the game's
   /// noises take theirs. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::SoundController_GetFloorAudioSnapshot, void*(void*, const Vector3*)>
+  static constexpr pm::api::Method<pm::map::SoundController_GetFloorAudioSnapshot, pm::api::Object(pm::api::Ref<pm::map::SoundController>, const Vector3*)>
       GetFloorAudioSnapshot{};
   /// GetPlayersAudioGroup(sounds, photonPlayer): the AudioMixerGroup that Photon player's own sounds play through, by
   /// the floor the game has them on (map note). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::SoundController_GetPlayersAudioGroup, void*(void*, void*)>
+  static constexpr pm::api::Method<pm::map::SoundController_GetPlayersAudioGroup, pm::api::Object(pm::api::Ref<pm::map::SoundController>, pm::api::Object)>
       GetPlayersAudioGroup{};
   /// The shared door slam clips, an AudioClip[]: doorSlamClips.get(sounds). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::SoundController_doorSlamClips, void*> doorSlamClips{};
+  static constexpr pm::api::Field<pm::map::SoundController_doorSlamClips, pm::api::Object> doorSlamClips{};
 };
 
 /// @}

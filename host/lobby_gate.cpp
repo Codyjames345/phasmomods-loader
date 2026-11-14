@@ -120,7 +120,9 @@ void detour_rpc(api::Original<phasmo::PhotonView::RPC> original, void* view, voi
       g_held.emplace(HeldSend{api::Held(view), api::Held(name), api::Held(parameters), target, original});
       return;
     case Send::NotBuffered: original(view, name, phasmo::RpcTarget::All(), parameters); return;
-    case Send::HereAlone: phasmo::PhotonView::RPC_toPlayer(view, name, phasmo::PhotonNetwork::get_LocalPlayer(), parameters); return;
+    case Send::HereAlone:
+      phasmo::PhotonView::RPC_toPlayer(view, name, phasmo::PhotonNetwork::get_LocalPlayer().raw(), parameters);
+      return;
   }
 }
 

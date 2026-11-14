@@ -464,12 +464,12 @@ struct PhotonNetwork {
   /// get_IsMasterClient(): whether this client is the room's master. Unresolved: false.
   static constexpr pm::api::Method<pm::map::PhotonNetwork_get_IsMasterClient, bool()> get_IsMasterClient{};
   /// get_MasterClient(): the room's master, a PhotonPlayer, or null outside a room. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_MasterClient, void*()> get_MasterClient{};
+  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_MasterClient, pm::api::Object()> get_MasterClient{};
   /// get_PlayerList(): the room's players, a PhotonPlayer[], read as a pm::api::RefArray. Unresolved:
   /// null.
-  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_PlayerList, void*()> get_PlayerList{};
+  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_PlayerList, pm::api::Object()> get_PlayerList{};
   /// get_LocalPlayer(): this client's PhotonPlayer. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_LocalPlayer, void*()> get_LocalPlayer{};
+  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_LocalPlayer, pm::api::Object()> get_LocalPlayer{};
   /// get_InRoom(): whether this client is in a room. Unresolved: false.
   static constexpr pm::api::Method<pm::map::PhotonNetwork_get_InRoom, bool()> get_InRoom{};
   /// get_OfflineMode(): whether PUN runs offline (single player). Unresolved: false.
@@ -480,26 +480,26 @@ struct PhotonNetwork {
   static constexpr pm::api::Method<pm::map::PhotonNetwork_Disconnect, void()> Disconnect{};
   /// get_PhotonViews(): the registered PhotonViews, a new PhotonView[] read as a pm::api::RefArray. An
   /// element may be a view whose engine object is gone: check it with pm::api::alive. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_PhotonViews, void*()> get_PhotonViews{};
+  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_PhotonViews, pm::api::Object()> get_PhotonViews{};
   /// get_CurrentRoom(): the room this client is in, a PhotonRoom, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_CurrentRoom, void*()> get_CurrentRoom{};
+  static constexpr pm::api::Method<pm::map::PhotonNetwork_get_CurrentRoom, pm::api::Object()> get_CurrentRoom{};
   /// RaiseEvent(code, content, options, sendOptions): raises an event with the room; `options` is a RaiseEventOptions and
   /// `sendOptions` a SendOptions, 8 bytes by value. False when PUN refuses it. Unresolved: false, nothing sent.
-  static constexpr pm::api::Method<pm::map::PhotonNetwork_RaiseEvent, bool(uint8_t, void*, void*, uint64_t)> RaiseEvent{};
+  static constexpr pm::api::Method<pm::map::PhotonNetwork_RaiseEvent, bool(uint8_t, pm::api::Object, pm::api::Ref<pm::map::RaiseEventOptions>, uint64_t)> RaiseEvent{};
 };
 
 /// A player of a Photon room. `player` below is the Photon.Realtime.Player.
 struct PhotonPlayer {
   /// get_ActorNumber(player). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::PhotonPlayer_get_ActorNumber, int32_t(void*)> get_ActorNumber{};
+  static constexpr pm::api::Method<pm::map::PhotonPlayer_get_ActorNumber, int32_t(pm::api::Ref<pm::map::PhotonPlayer>)> get_ActorNumber{};
   /// get_NickName(player): the name that player chose, a managed string. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::PhotonPlayer_get_NickName, void*(void*)> get_NickName{};
+  static constexpr pm::api::Method<pm::map::PhotonPlayer_get_NickName, pm::api::Object(pm::api::Ref<pm::map::PhotonPlayer>)> get_NickName{};
 };
 
 /// A networked MonoBehaviour. `behaviour` below is one.
 struct MonoBehaviourPun {
   /// get_photonView(behaviour): its PhotonView. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::MonoBehaviourPun_get_photonView, void*(void*)> get_photonView{};
+  static constexpr pm::api::Method<pm::map::MonoBehaviourPun_get_photonView, pm::api::Object(pm::api::Ref<pm::map::MonoBehaviourPun>)> get_photonView{};
 };
 
 /// A GameObject's network identity. `view` below is the PhotonView.
@@ -507,13 +507,13 @@ struct PhotonView {
   /// The type: klass(), is(obj), type_object() (for GetComponents). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::PhotonView> type{};
   /// get_ViewID(view). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::PhotonView_get_ViewID, int32_t(void*)> get_ViewID{};
+  static constexpr pm::api::Method<pm::map::PhotonView_get_ViewID, int32_t(pm::api::Ref<pm::map::PhotonView>)> get_ViewID{};
   /// get_IsMine(view). Unresolved: false.
-  static constexpr pm::api::Method<pm::map::PhotonView_get_IsMine, bool(void*)> get_IsMine{};
+  static constexpr pm::api::Method<pm::map::PhotonView_get_IsMine, bool(pm::api::Ref<pm::map::PhotonView>)> get_IsMine{};
   /// The owner, a PhotonPlayer, or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PhotonView_owner, void*> owner{};
+  static constexpr pm::api::Field<pm::map::PhotonView_owner, pm::api::Object> owner{};
   /// RequestOwnership(view). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PhotonView_RequestOwnership, void(void*)> RequestOwnership{};
+  static constexpr pm::api::Method<pm::map::PhotonView_RequestOwnership, void(pm::api::Ref<pm::map::PhotonView>)> RequestOwnership{};
   /// Its ViewSynchronization: Synchronization.get(view), .set(view, v). Unresolved: 0, writes nothing.
   static constexpr pm::api::Field<pm::map::PhotonView_Synchronization, int32_t> Synchronization{};
   /// Its OwnershipOption: OwnershipTransfer.get(view). Unresolved: 0.
@@ -524,10 +524,10 @@ struct PhotonView {
   /// RPC(view, methodName, target, parameters): methodName a managed string, target an RpcTarget
   /// number, parameters an object[]. A mod hooks it to see the RPCs a view sends. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::PhotonView_RPC, void(void*, void*, int32_t, void*)> RPC{};
+  static constexpr pm::api::Method<pm::map::PhotonView_RPC, void(pm::api::Ref<pm::map::PhotonView>, pm::api::Object, int32_t, pm::api::Object)> RPC{};
   /// RPC_toPlayer(view, methodName, player, parameters): to that player alone, never buffered; on this client when the player
   /// is this client, and then nothing goes out. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PhotonView_RPC_toPlayer, void(void*, void*, void*, void*)> RPC_toPlayer{};
+  static constexpr pm::api::Method<pm::map::PhotonView_RPC_toPlayer, void(pm::api::Ref<pm::map::PhotonView>, pm::api::Object, pm::api::Object, pm::api::Object)> RPC_toPlayer{};
 };
 
 /// Who an RPC goes to. Unresolved: 0.
@@ -550,15 +550,15 @@ inline constexpr pm::api::EnumValue<pm::map::OwnershipOption_Takeover> Takeover{
 /// address.
 struct PhotonMessageInfo {
   /// The sender, a PhotonPlayer, or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PhotonMessageInfo_Sender, void*> Sender{};
+  static constexpr pm::api::Field<pm::map::PhotonMessageInfo_Sender, pm::api::Object> Sender{};
 };
 
 /// A Photon room. `room` below is the PhotonRoom.
 struct PhotonRoom {
   /// get_IsVisible(room): whether the lobby's room browser lists it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::PhotonRoom_get_IsVisible, bool(void*)> get_IsVisible{};
+  static constexpr pm::api::Method<pm::map::PhotonRoom_get_IsVisible, bool(pm::api::Ref<pm::map::PhotonRoom>)> get_IsVisible{};
   /// set_IsOpen(room, open): opens or closes the room to joiners. The game closes it for a contract. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PhotonRoom_set_IsOpen, void(void*, bool)> set_IsOpen{};
+  static constexpr pm::api::Method<pm::map::PhotonRoom_set_IsOpen, void(pm::api::Ref<pm::map::PhotonRoom>, bool)> set_IsOpen{};
 };
 
 /// Who a raised event goes to. `options` below is the RaiseEventOptions.
@@ -566,9 +566,9 @@ struct RaiseEventOptions {
   /// The type: make() for a new one, then ctor. Unresolved: null.
   static constexpr pm::api::Type<pm::map::RaiseEventOptions> type{};
   /// ctor(options): runs the constructor of options made with type.make(). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RaiseEventOptions_ctor, void(void*)> ctor{};
+  static constexpr pm::api::Method<pm::map::RaiseEventOptions_ctor, void(pm::api::Ref<pm::map::RaiseEventOptions>)> ctor{};
   /// The actor numbers it goes to, an int[]: TargetActors.set(options, actors). Unresolved: writes nothing.
-  static constexpr pm::api::Field<pm::map::RaiseEventOptions_TargetActors, void*> TargetActors{};
+  static constexpr pm::api::Field<pm::map::RaiseEventOptions_TargetActors, pm::api::Object> TargetActors{};
   /// The group it goes to, a ReceiverGroup value: Receivers.set(options, group). Unresolved: writes nothing.
   static constexpr pm::api::Field<pm::map::RaiseEventOptions_Receivers, uint8_t> Receivers{};
 };
@@ -599,15 +599,15 @@ struct EventData {
   /// Its code: Code.get(event). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::EventData_Code, uint8_t> Code{};
   /// get_Sender(event): the actor that sent it. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::EventData_get_Sender, int32_t(void*)> get_Sender{};
+  static constexpr pm::api::Method<pm::map::EventData_get_Sender, int32_t(pm::api::Ref<pm::map::EventData>)> get_Sender{};
   /// get_CustomData(event): what it carries, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::EventData_get_CustomData, void*(void*)> get_CustomData{};
+  static constexpr pm::api::Method<pm::map::EventData_get_CustomData, pm::api::Object(pm::api::Ref<pm::map::EventData>)> get_CustomData{};
 };
 
 /// Photon Realtime's client. `client` below is the LoadBalancingClient.
 struct LoadBalancingClient {
   /// OnEvent(client, event): hook it to see every event first. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LoadBalancingClient_OnEvent, void(void*, void*)> OnEvent{};
+  static constexpr pm::api::Method<pm::map::LoadBalancingClient_OnEvent, void(pm::api::Ref<pm::map::LoadBalancingClient>, pm::api::Ref<pm::map::EventData>)> OnEvent{};
 };
 
 /// .NET's byte.

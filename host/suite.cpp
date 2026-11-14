@@ -531,7 +531,7 @@ bool start_allowed() {
 // room it joins. 0 outside one, or when it cannot be read.
 uint64_t current_room() {
   return phasmo::PhotonNetwork::get_CurrentRoom.available()
-             ? static_cast<uint64_t>(reinterpret_cast<uintptr_t>(phasmo::PhotonNetwork::get_CurrentRoom()))
+             ? static_cast<uint64_t>(reinterpret_cast<uintptr_t>(phasmo::PhotonNetwork::get_CurrentRoom().raw()))
              : 0;
 }
 

@@ -75,15 +75,15 @@ namespace phasmo {
 /// The truck's map monitor. `map` below is the MapController. Every member is optional.
 struct MapController {
   /// The level's MapController: instance.get(), or null; check it with pm::api::alive. Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::MapController_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::MapController_instance, pm::api::Ref<pm::map::MapController>> instance{};
   /// Its camera: mapCamera.get(map). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::MapController_mapCamera, void*> mapCamera{};
+  static constexpr pm::api::Field<pm::map::MapController_mapCamera, pm::api::Object> mapCamera{};
   /// Its floors, a MapController.Floor[] (pm::api::RefArray): allFloors.get(map). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::MapController_allFloors, void*> allFloors{};
+  static constexpr pm::api::Field<pm::map::MapController_allFloors, pm::api::Object> allFloors{};
   /// The index in allFloors of the shown floor: floorIndex.get(map). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::MapController_floorIndex, int32_t> floorIndex{};
   /// ChangeFloor(map, up): shows the next floor up or down. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::MapController_ChangeFloor, void(void*, bool)> ChangeFloor{};
+  static constexpr pm::api::Method<pm::map::MapController_ChangeFloor, void(pm::api::Ref<pm::map::MapController>, bool)> ChangeFloor{};
 };
 
 /// One floor of the map. `floor` below is a MapController.Floor.
@@ -91,7 +91,7 @@ struct MapFloor {
   /// Which floor, a FloorType number: floorType.get(floor). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::MapFloor_floorType, int32_t> floorType{};
   /// Its Transform: floor.get(floor). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::MapFloor_floor, void*> floor{};
+  static constexpr pm::api::Field<pm::map::MapFloor_floor, pm::api::Object> floor{};
 };
 
 /// @}
