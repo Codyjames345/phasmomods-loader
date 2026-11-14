@@ -734,16 +734,16 @@ void a_new_bogeymans_first_hunt_finds_its_closet() {
 namespace pm::game {
 bool alive(void* o) { return o != nullptr; }
 Vector3 forward(void*) { return {0, 0, 1}; }
-void* game_object_of(void* o) { return o; }
-void* ghost_activity(void*) { return nullptr; }
-void* ghost_agent(void*) { return &g_agent; }
+api::Object game_object_of(void* o) { return o; }
+api::Ref<pm::map::GhostActivity> ghost_activity(void*) { return nullptr; }
+api::Ref<pm::map::NavMeshAgent> ghost_agent(void*) { return api::Ref<pm::map::NavMeshAgent>::unchecked(&g_agent); }
 int ghost_state(void*) { return g_state; }
-void* ghost_state_object(void*) { return g_state == kHunting ? &g_hunt : nullptr; }
+api::Object ghost_state_object(void*) { return g_state == kHunting ? &g_hunt : nullptr; }
 bool in_room(void*, Vector3, float) { return false; }
 bool is_master() { return g_master; }
-void* level_controller() { return &g_level; }
+api::Ref<pm::map::LevelController> level_controller() { return api::Ref<pm::map::LevelController>::unchecked(&g_level); }
 int master_actor() { return 1; }
-void* network() { return &g_net; }
+api::Ref<pm::map::Network> network() { return api::Ref<pm::map::Network>::unchecked(&g_net); }
 Vector3 position(void* transform) {
   const auto it = g_at.find(transform);
   return it == g_at.end() ? Vector3{} : it->second;
@@ -768,7 +768,7 @@ bool set_destination(void*, Vector3 to) {
   g_lastDestination = to;
   return true;
 }
-void* transform_of(void* o) { return o; }
+api::Ref<pm::map::Transform> transform_of(void* o) { return api::Ref<pm::map::Transform>::unchecked(o); }
 }  // namespace pm::game
 // The rules that have nothing to do with these two ghosts.
 namespace pm::custom {

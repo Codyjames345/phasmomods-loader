@@ -520,8 +520,8 @@ std::atomic<int> g_inflight{0};
 }  // namespace pm::hooks
 namespace pm::game {
 bool private_room() { return privateRoom; }
-void* level_controller() { return &level; }
-void* ghost_ai() { return &ghost; }
+api::Ref<pm::map::LevelController> level_controller() { return api::Ref<pm::map::LevelController>::unchecked(&level); }
+api::Ref<pm::map::GhostAI> ghost_ai() { return api::Ref<pm::map::GhostAI>::unchecked(&ghost); }
 bool alive(void* o) { return o != nullptr; }
 int actor_number(void*) { return 2; }
 }  // namespace pm::game

@@ -4,8 +4,15 @@
 #include <functional>
 #include <vector>
 
+#include "Camera.h"
+#include "Difficulty.h"
+#include "GhostAI.h"
+#include "LevelController.h"
 #include "LevelRoom.h"
+#include "Player.h"
 #include "Transform.h"
+#include "UnityObject.h"
+#include "UnityWorld.h"
 #include "held.h"
 #include "runtime.h"
 
@@ -38,13 +45,13 @@ bool alive(void* unityObject);  // UnityEngine.Object implicit bool (not destroy
 // GameObject.get_transform, anything else through Component.get_transform. A GameObject is not a Component, so
 // the two accessors are not interchangeable, and the helper picks by the object's own class. Null when the object
 // is null or when its kind cannot be read: nothing is guessed. Main thread, any phase.
-void* transform_of(void* gameObjectOrComponent);
-void* object_transform(void* gameObject);  // GameObject.get_transform, for an object already known to be one
+api::Ref<pm::map::Transform> transform_of(void* gameObjectOrComponent);
+api::Ref<pm::map::Transform> object_transform(void* gameObject);  // GameObject.get_transform, for one known to be one
 // The RectTransform of a UI object, for the entries that set anchors, pivot, position and size: those read a
 // layout a plain Transform does not have. Null when the object's transform is a plain Transform, when the object
 // is null, or when the class cannot be read. An object made at run time has a RectTransform once it takes a
 // component whose class requires one; see sdk/systems/menus.md, "A list that scrolls".
-void* rect_transform_of(void* gameObjectOrComponent);
+api::Ref<pm::map::Transform> rect_transform_of(void* gameObjectOrComponent);
 Vector3 position(void* transform);
 inline float distance(Vector3 a, Vector3 b) { return std::hypot(a.x - b.x, a.y - b.y, a.z - b.z); }
 void set_position(void* transform, Vector3 p);
@@ -54,16 +61,16 @@ float agent_speed(void* agent);
 float agent_path_length(void* agent);  // NavMeshAgent.remainingDistance, negative while unknown
 Quaternion rotation(void* transform);
 void set_rotation(void* transform, Quaternion r);
-void* new_game_object(const char* name);
-void* add_component(void* gameObject, void* type);  // type: System.Type
+api::Object new_game_object(const char* name);
+api::Object add_component(void* gameObject, void* type);  // type: System.Type
 // The GameObject the object belongs to: a GameObject's own is itself, and a component's comes from
 // Component.get_gameObject. Null when the object is null or when its kind cannot be read.
-void* game_object_of(void* gameObjectOrComponent);
+api::Object game_object_of(void* gameObjectOrComponent);
 void set_enabled(void* behaviour, bool on);
 bool enabled(void* behaviour);
 void destroy(void* object);  // UnityEngine.Object.Destroy
 void set_active(void* gameObject, bool on);
-void* parent(void* transform);
+api::Ref<pm::map::Transform> parent(void* transform);
 void set_parent(void* transform, void* parent, bool worldPositionStays);
 Vector3 local_position(void* transform);
 void set_local_position(void* transform, Vector3 p);
@@ -76,9 +83,9 @@ Vector3 lossy_scale(void* transform);  // Transform.lossyScale: its scale in the
 // component (and its children) under parent; returns the copy of what was passed. Null, with nothing copied, for a
 // null or destroyed original or parent. Unity differs: it throws for a null original and clones a null parent's copy
 // at the scene root. Every caller passes a live parent.
-void* instantiate(void* original, void* parent, bool worldPositionStays);
+api::Object instantiate(void* original, void* parent, bool worldPositionStays);
 int child_count(void* transform);
-void* child(void* transform, int index);
+api::Ref<pm::map::Transform> child(void* transform, int index);
 // Input System mouse movement since the last frame, in pixels; false when there is no mouse.
 bool mouse_delta(float& dx, float& dy);
 void lock_cursor();  // CursorLockMode.Locked
@@ -98,16 +105,16 @@ bool collider_enabled(void* collider);
 void set_collider_enabled(void* collider, bool on);
 
 // Game singletons
-void* level_controller();          // LevelController static instance, null outside a contract
-void* ghost_ai();                  // phasmo::LevelController::currentGhost, alive
-int ghost_state(void* ghostAi);    // phasmo::GhostAI::state, a phasmo::GhostState value
-void* ghost_agent(void* ghostAi);  // phasmo::GhostAI::agent, a NavMeshAgent
-void* network();                   // Network.Instance
-void* local_player();              // phasmo::Network::localPlayer, this client's Player
-void* player_of_actor(int actor);  // the networked Player of a Photon actor (Network's spots), or null
-void* local_camera();              // phasmo::LocalPlayer::camera of local_player_component()
-void* ghost_activity(void* ghostAi);  // phasmo::GhostAI::activity
-void* ghost_state_object(void* ghostAi);  // the ghost state machine's current state object
+api::Ref<pm::map::LevelController> level_controller();  // LevelController static instance, null outside a contract
+api::Ref<pm::map::GhostAI> ghost_ai();               // phasmo::LevelController::currentGhost, alive
+int ghost_state(void* ghostAi);                       // phasmo::GhostAI::state, a phasmo::GhostState value
+api::Ref<pm::map::NavMeshAgent> ghost_agent(void* ghostAi);  // phasmo::GhostAI::agent, a NavMeshAgent
+api::Ref<pm::map::Network> network();                 // Network.Instance
+api::Object local_player();                           // phasmo::Network::localPlayer, this client's Player
+api::Object player_of_actor(int actor);  // the networked Player of a Photon actor (Network's spots), or null
+api::Ref<pm::map::Camera> local_camera();             // phasmo::LocalPlayer::camera of local_player_component()
+api::Ref<pm::map::GhostActivity> ghost_activity(void* ghostAi);  // phasmo::GhostAI::activity
+api::Object ghost_state_object(void* ghostAi);  // the ghost state machine's current state object
 /**
  * Whether the ghost's own vision sensor (phasmo::GhostAI::vision) detects a living player: any of the
  * player's PlayerLOSTarget objects (phasmo::Player::losTargets), as the hunt's sight test asks, without
@@ -123,9 +130,9 @@ bool sensor_detects(void* sensor, void* gameObject);
 Vector3 agent_destination(void* agent);
 void start_coroutine(void* behaviour, void* routine);  // MonoBehaviour.StartCoroutine(IEnumerator)
 bool any_players_in_room(void* levelRoom);            // LevelRoom.AnyPlayersInRoom
-void* level_values();                                 // LevelValues.Instance
-void* setup_phase();                                  // SetupPhaseController's instance, null outside a contract
-void* local_player_component();       // phasmo::Network::localRig, LocalPlayer (LocalPCPlayer on PC)
+api::Ref<pm::map::LevelValues> level_values();        // LevelValues.Instance
+api::Ref<pm::map::SetupPhaseController> setup_phase();  // SetupPhaseController's instance, null outside a contract
+api::Ref<pm::map::LocalPlayer> local_player_component();  // phasmo::Network::localRig, LocalPlayer (LocalPCPlayer on PC)
 
 // A LevelRoom's colliders' world bounds (empty when it has none), as the map's Bounds (centre and extents).
 using Bounds = phasmo::Bounds;
@@ -138,7 +145,7 @@ api::RefArray level_rooms();
 float distance_to_room(void* levelRoom, Vector3 p);
 /** The first of the level's rooms (LevelController.rooms, in its order) whose colliders, widened by `margin` metres,
  *  hold `p`; null outside a contract and outside every room. */
-void* room_at(Vector3 p, float margin = 0.0f);
+api::Object room_at(Vector3 p, float margin = 0.0f);
 
 // The placed video cameras (CCTV) a mod checks for what they film. A scan of every CCTV is costly, so `scan` keeps the
 // last one for kCameraScanMs; the caller owns it and clears it with its other state when it stops.
@@ -152,9 +159,9 @@ struct CameraScan {
 void each_running_camera(CameraScan& scan, uint64_t now, const std::function<bool(void* camera)>& visit);
 
 // First non-trigger collider hit along the ray, as its Transform, or null.
-void* raycast(Vector3 origin, Vector3 direction, float maxDistance);
+api::Ref<pm::map::Transform> raycast(Vector3 origin, Vector3 direction, float maxDistance);
 /** The same ray on the layers of `layerMask` only (a bit per layer), as a game script's own mask casts it. */
-void* raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask);
+api::Ref<pm::map::Transform> raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask);
 /** How far along the ray (`direction` of length 1) the first non-trigger collider on the layers of `layerMask` is,
  *  in metres; negative when nothing is hit within `maxDistance`. */
 float raycast_distance(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask);

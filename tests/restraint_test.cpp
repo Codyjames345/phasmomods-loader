@@ -469,9 +469,9 @@ void the_steered_squatter_only_idles() {
 
 // What restraint.cpp calls of the game.
 namespace pm::game {
-void* ghost_activity(void*) { return &g_activity; }
+api::Ref<pm::map::GhostActivity> ghost_activity(void*) { return api::Ref<pm::map::GhostActivity>::unchecked(&g_activity); }
 int ghost_state(void*) { return g_state; }
-void* ghost_state_object(void*) { return g_stateObject; }
+api::Object ghost_state_object(void*) { return g_stateObject; }
 bool is_master() { return g_master; }
 }  // namespace pm::game
 

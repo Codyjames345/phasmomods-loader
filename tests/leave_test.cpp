@@ -181,7 +181,7 @@ bool investigator_back() { return comesBack; }
 }  // namespace pm::body
 namespace pm::game {
 bool alive(void* o) { return o != nullptr; }
-void* level_controller() { return level; }
+api::Ref<pm::map::LevelController> level_controller() { return api::Ref<pm::map::LevelController>::unchecked(level); }
 }  // namespace pm::game
 
 int main() {

@@ -67,20 +67,20 @@ int kind_of(void* object) {
 }
 }  // namespace
 
-void* transform_of(void* object) {
+api::Ref<pm::map::Transform> transform_of(void* object) {
   const int kind = kind_of(object);
   if (kind < 0) return nullptr;
   return kind == 1 ? phasmo::GameObject::get_transform(object) : phasmo::Component::get_transform(object);
 }
-void* object_transform(void* go) { return go ? phasmo::GameObject::get_transform(go) : nullptr; }
+api::Ref<pm::map::Transform> object_transform(void* go) { return go ? phasmo::GameObject::get_transform(go) : nullptr; }
 // The layout entries (anchors, pivot, position, size) belong to RectTransform, a Transform subclass the game
 // only gives an object when something asks for it: every UI class in the game's own UnityEngine.UI carries
 // [RequireComponent(typeof(RectTransform))] (Graphic, RawImage's base, RectMask2D, ScrollRect, LayoutElement).
 // So an object made at run time can be a plain Transform, and running the layout entries on one reads a layout
 // it does not have. Asked and answered, never guessed: the type check answers false for a plain Transform and for a
 // class that cannot be read, and both mean the same thing here, that the layout entries are not for this object.
-void* rect_transform_of(void* object) {
-  void* t = transform_of(object);
+api::Ref<pm::map::Transform> rect_transform_of(void* object) {
+  const auto t = transform_of(object);
   return t && phasmo::RectTransform::type.is(t) ? t : nullptr;
 }
 Vector3 position(void* t) { return phasmo::Transform::get_position(t); }
@@ -95,14 +95,14 @@ void set_rotation(void* t, Quaternion r) {
   phasmo::Transform::set_rotation(t, &q);
 }
 
-void* new_game_object(const char* name) {
+api::Object new_game_object(const char* name) {
   void* go = phasmo::GameObject::type.make();
   if (!go) return nullptr;
   phasmo::GameObject::ctor(go, api::make_string(name));
   return go;
 }
-void* add_component(void* go, void* type) { return go && type ? phasmo::GameObject::AddComponent(go, type) : nullptr; }
-void* game_object_of(void* object) {
+api::Object add_component(void* go, void* type) { return go && type ? phasmo::GameObject::AddComponent(go, type) : nullptr; }
+api::Object game_object_of(void* object) {
   const int kind = kind_of(object);
   if (kind < 0) return nullptr;
   // A GameObject's own GameObject is itself: only a component has one to be asked for.
@@ -116,7 +116,7 @@ void destroy(void* o) {
 void set_active(void* go, bool on) {
   if (alive(go)) phasmo::GameObject::SetActive(go, on);
 }
-void* parent(void* t) { return phasmo::Transform::get_parent(t); }
+api::Ref<pm::map::Transform> parent(void* t) { return phasmo::Transform::get_parent(t); }
 void set_parent(void* t, void* p, bool worldPositionStays) { phasmo::Transform::SetParent(t, p, worldPositionStays); }
 Vector3 local_position(void* t) { return phasmo::Transform::get_localPosition(t); }
 void set_local_position(void* t, Vector3 p) {
@@ -136,12 +136,12 @@ Vector3 local_scale(void* t) { return phasmo::Transform::get_localScale(t); }
 Vector3 lossy_scale(void* t) { return phasmo::Transform::get_lossyScale(t); }
 // Object.Instantiate(original, parent, worldPositionStays) is the engine's clone after its null checks
 // (phasmo::Object::Instantiate), so they are made here: a missing original or parent copies nothing.
-void* instantiate(void* original, void* parent, bool worldPositionStays) {
+api::Object instantiate(void* original, void* parent, bool worldPositionStays) {
   if (!alive(original) || !alive(parent)) return nullptr;
   return phasmo::Object::Instantiate(original, parent, worldPositionStays);
 }
 int child_count(void* t) { return t ? phasmo::Transform::get_childCount(t) : 0; }
-void* child(void* t, int index) { return phasmo::Transform::GetChild(t, index); }
+api::Ref<pm::map::Transform> child(void* t, int index) { return phasmo::Transform::GetChild(t, index); }
 
 namespace {
 bool read_vector2(void* control, float& x, float& y) {
@@ -209,29 +209,29 @@ float agent_path_length(void* a) {
 
 // The static instance outlives its level: after leaving a contract it still points at the destroyed
 // controller, so only a live one counts as being in a contract.
-void* level_controller() {
-  void* lc = phasmo::LevelController::instance.get();
+api::Ref<pm::map::LevelController> level_controller() {
+  const auto lc = phasmo::LevelController::instance.get();
   return alive(lc) ? lc : nullptr;
 }
-void* ghost_ai() {
+api::Ref<pm::map::GhostAI> ghost_ai() {
   void* lc = level_controller();
-  void* g = lc ? phasmo::LevelController::currentGhost.get(lc) : nullptr;
+  const auto g = lc ? phasmo::LevelController::currentGhost.get(lc) : nullptr;
   return alive(g) ? g : nullptr;
 }
 int ghost_state(void* g) { return phasmo::GhostAI::state.get(g); }
-void* ghost_agent(void* g) {
-  void* a = phasmo::GhostAI::agent.get(g);
+api::Ref<pm::map::NavMeshAgent> ghost_agent(void* g) {
+  const auto a = phasmo::GhostAI::agent.get(g);
   return alive(a) ? a : nullptr;
 }
 
-void* network() { return phasmo::Network::get_Instance(); }
+api::Ref<pm::map::Network> network() { return phasmo::Network::get_Instance(); }
 
-void* local_player() {
+api::Object local_player() {
   void* n = network();
   void* p = n ? phasmo::Network::localPlayer.get(n) : nullptr;
   return alive(p) ? p : nullptr;
 }
-void* player_of_actor(int actor) {
+api::Object player_of_actor(int actor) {
   void* n = network();
   const api::List spots{n ? phasmo::Network::playerSpots.get(n) : nullptr};
   for (size_t i = 0; i < spots.size(); ++i) {
@@ -240,13 +240,13 @@ void* player_of_actor(int actor) {
   }
   return nullptr;
 }
-void* local_camera() {
+api::Ref<pm::map::Camera> local_camera() {
   void* lp = local_player_component();
-  void* cam = lp ? phasmo::LocalPlayer::camera.get(lp) : nullptr;
+  const auto cam = lp ? phasmo::LocalPlayer::camera.get(lp) : nullptr;
   return alive(cam) ? cam : nullptr;
 }
 
-void* ghost_state_object(void* g) {
+api::Object ghost_state_object(void* g) {
   void* machine = phasmo::GhostAI::stateMachine.get(g);
   return machine ? phasmo::GhostStateMachine::current.get(machine) : nullptr;
 }
@@ -268,14 +268,14 @@ bool ghost_sees(void* ghostAi, void* player) {
 }
 Vector3 agent_destination(void* a) { return phasmo::NavMeshAgent::get_destination(a); }
 
-void* ghost_activity(void* g) {
-  void* a = phasmo::GhostAI::activity.get(g);
+api::Ref<pm::map::GhostActivity> ghost_activity(void* g) {
+  const auto a = phasmo::GhostAI::activity.get(g);
   return alive(a) ? a : nullptr;
 }
 
-void* local_player_component() {
+api::Ref<pm::map::LocalPlayer> local_player_component() {
   void* n = network();
-  void* lp = n ? phasmo::Network::localRig.get(n) : nullptr;
+  const auto lp = n ? phasmo::Network::localRig.get(n) : nullptr;
   return alive(lp) ? lp : nullptr;
 }
 
@@ -283,9 +283,9 @@ void start_coroutine(void* behaviour, void* routine) {
   if (alive(behaviour) && routine) phasmo::MonoBehaviour::StartCoroutine(behaviour, routine);
 }
 bool any_players_in_room(void* levelRoom) { return alive(levelRoom) && phasmo::LevelRoom::AnyPlayersInRoom(levelRoom); }
-void* level_values() { return phasmo::LevelValues::get_Instance(); }
-void* setup_phase() {
-  void* s = phasmo::SetupPhaseController::instance.get();
+api::Ref<pm::map::LevelValues> level_values() { return phasmo::LevelValues::get_Instance(); }
+api::Ref<pm::map::SetupPhaseController> setup_phase() {
+  const auto s = phasmo::SetupPhaseController::instance.get();
   return alive(s) ? s : nullptr;
 }
 
@@ -324,7 +324,7 @@ api::RefArray level_rooms() {
   return api::RefArray{level ? phasmo::LevelController::rooms.get(level) : nullptr};
 }
 
-void* room_at(Vector3 p, float margin) {
+api::Object room_at(Vector3 p, float margin) {
   const api::RefArray rooms = level_rooms();
   for (size_t i = 0; i < rooms.size(); ++i)
     if (void* room = rooms[i]; alive(room) && in_room(room, p, margin)) return room;
@@ -345,7 +345,7 @@ void each_running_camera(CameraScan& scan, uint64_t now, const std::function<boo
   }
 }
 
-void* raycast(Vector3 origin, Vector3 direction, float maxDistance) {
+api::Ref<pm::map::Transform> raycast(Vector3 origin, Vector3 direction, float maxDistance) {
   // Physics.DefaultRaycastLayers: Unity's constant -5, every layer but Ignore Raycast.
   return raycast(origin, direction, maxDistance, -5);
 }
@@ -369,10 +369,10 @@ bool cast_into(unsigned char (&hit)[128], Vector3 origin, Vector3 direction, flo
 }
 }  // namespace
 
-void* raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
+api::Ref<pm::map::Transform> raycast(Vector3 origin, Vector3 direction, float maxDistance, int32_t layerMask) {
   alignas(16) unsigned char hit[128] = {};
   return cast_into(hit, origin, direction, maxDistance, layerMask)
-             ? phasmo::RaycastHit::get_transform(static_cast<void*>(hit)).raw()
+             ? phasmo::RaycastHit::get_transform(static_cast<void*>(hit))
              : nullptr;
 }
 

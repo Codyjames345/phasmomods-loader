@@ -55,9 +55,9 @@ bool alive(void* value) {
 }
 }  // namespace pm::game
 namespace pm::ui {
-void* create_canvas(const char* name, int) { return make(name, nullptr); }
-void* create_image(void* parent, const char* name, Color) { return make(name, parent); }
-void* create_text(void* parent, const char* name, float) { return make(name, parent); }
+api::Object create_canvas(const char* name, int) { return make(name, nullptr); }
+api::Object create_image(void* parent, const char* name, Color) { return make(name, parent); }
+api::Object create_text(void* parent, const char* name, float) { return make(name, parent); }
 void place(void*, Vec2, Vec2, Vec2, Vec2) {}
 void set_color(void*, Color) {}
 void set_text(void* text, const char* utf8) {

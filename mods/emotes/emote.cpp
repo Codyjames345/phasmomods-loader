@@ -768,7 +768,7 @@ void follow_settings() {
 void* song_source(void* parent, void* voice, void* clip, void* group, bool loop, bool own, float volume) {
   void* go = game::new_game_object("pm emote song");
   if (!go || !parent) return nullptr;
-  phasmo::Transform::SetParent(game::object_transform(go), parent, false);
+  phasmo::Transform::SetParent(game::object_transform(go).raw(), parent, false);
   game::set_local_position(game::object_transform(go), {0.0f, 0.0f, 0.0f});
   void* source = game::add_component(go, phasmo::AudioSource::type.type_object());
   if (!source) {

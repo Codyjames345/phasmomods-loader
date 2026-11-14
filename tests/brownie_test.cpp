@@ -507,8 +507,8 @@ void brownie_player_steps_follow_same_rule() {
 // What the Brownie calls of the game.
 namespace pm::game {
 bool alive(void* o) { return o != nullptr; }
-void* transform_of(void* o) { return o; }
-void* network() { return &g_net; }
+api::Ref<pm::map::Transform> transform_of(void* o) { return api::Ref<pm::map::Transform>::unchecked(o); }
+api::Ref<pm::map::Network> network() { return api::Ref<pm::map::Network>::unchecked(&g_net); }
 int master_actor() { return kMasterActor; }
 phasmo::Vector3 position(void* transform) {
   const auto it = g_at.find(transform);
@@ -518,7 +518,7 @@ phasmo::Vector3 forward(void* transform) {
   const auto it = g_facing.find(transform);
   return it == g_facing.end() ? phasmo::Vector3{0, 0, 1} : it->second;
 }
-void* raycast(phasmo::Vector3, phasmo::Vector3, float) { return nullptr; }  // nothing solid in the way
+api::Ref<pm::map::Transform> raycast(phasmo::Vector3, phasmo::Vector3, float) { return nullptr; }  // nothing solid
 void each_running_camera(CameraScan&, uint64_t, const std::function<bool(void*)>&) {}  // no video cameras
 }  // namespace pm::game
 namespace pm::net {

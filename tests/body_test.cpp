@@ -184,13 +184,13 @@ std::atomic<int> g_inflight{0};
 }  // namespace pm::hooks
 namespace pm::game {
 bool alive(void* o) { return o != nullptr; }
-void* network() { return &g_net; }
+api::Ref<pm::map::Network> network() { return api::Ref<pm::map::Network>::unchecked(&g_net); }
 int actor_number(void*) { return 0; }
-void* game_object_of(void* c) { return c; }
-void* transform_of(void* c) { return c; }
-void* object_transform(void* go) { return go; }
+api::Object game_object_of(void* c) { return c; }
+api::Ref<pm::map::Transform> transform_of(void* c) { return api::Ref<pm::map::Transform>::unchecked(c); }
+api::Ref<pm::map::Transform> object_transform(void* go) { return api::Ref<pm::map::Transform>::unchecked(go); }
 int child_count(void*) { return 0; }
-void* child(void*, int) { return nullptr; }
+api::Ref<pm::map::Transform> child(void*, int) { return nullptr; }
 bool is_child_of(void*, void*) { return false; }
 bool renderer_enabled(void*) { return g_rendererOn; }
 void set_renderer_enabled(void*, bool on) { g_rendererOn = on; }
@@ -198,7 +198,7 @@ bool collider_enabled(void*) { return false; }
 void set_collider_enabled(void*, bool) {}
 bool enabled(void*) { return false; }
 void set_enabled(void*, bool) {}
-void* parent(void*) { return g_cameraParentNow; }
+api::Ref<pm::map::Transform> parent(void*) { return api::Ref<pm::map::Transform>::unchecked(g_cameraParentNow); }
 void set_parent(void*, void* p, bool) { g_cameraParentNow = p; }
 phasmo::Vector3 local_position(void*) { return {}; }
 phasmo::Quaternion local_rotation(void*) { return {0, 0, 0, 1}; }
@@ -207,7 +207,7 @@ void set_local_rotation(void*, phasmo::Quaternion) {}
 void set_active(void* go, bool on) {
   if (go == &g_rig) g_rigActive = on;
 }
-void* level_controller() { return g_levelNow; }
+api::Ref<pm::map::LevelController> level_controller() { return api::Ref<pm::map::LevelController>::unchecked(g_levelNow); }
 bool private_room() { return g_privateRoom; }
 }  // namespace pm::game
 namespace pm::journal {

@@ -21,13 +21,14 @@ struct Rect {
 
 bool resolve();
 
-// A root overlay canvas, scaled like the game's 1920x1080 UI.
-void* create_canvas(const char* name, int sortingOrder);
-void* create_text(void* parent, const char* name, float fontSize);  // TextMeshProUGUI
-void* create_image(void* parent, const char* name, Color color);    // a solid colour (a RawImage)
-void* create_raw_image(void* parent, const char* name, void* texture);  // UnityEngine.UI.RawImage
+// A root overlay canvas, scaled like the game's 1920x1080 UI. Each returns its component as an Object
+// handle, or null when the entries did not resolve.
+api::Object create_canvas(const char* name, int sortingOrder);
+api::Object create_text(void* parent, const char* name, float fontSize);  // TextMeshProUGUI
+api::Object create_image(void* parent, const char* name, Color color);  // a solid colour (a RawImage)
+api::Object create_raw_image(void* parent, const char* name, void* texture);  // UnityEngine.UI.RawImage
 void set_texture(void* rawImage, void* texture);
-void* create_sprite_image(void* parent, const char* name, void* sprite);  // UnityEngine.UI.Image showing a Sprite
+api::Object create_sprite_image(void* parent, const char* name, void* sprite);  // UnityEngine.UI.Image showing a Sprite
 void set_sprite(void* image, void* sprite);  // an Image's Sprite, or null
 void set_uv_rect(void* rawImage, Rect uv);  // the part of the texture shown, 0..1
 void destroy(void* gameObjectOrComponent);
@@ -111,10 +112,10 @@ bool normalized_point(void* component, Vec2 screenPoint, Vec2& out, void* camera
 // A canvas drawn in the world (RenderMode.WorldSpace), as a flat object under the Transform `follow`, at its origin and
 // turned with it: one canvas unit is `metresPerUnit` metres. For a VR player, whose screen is the world. Lay out its
 // children with place() as on an overlay canvas, centred on (0, 0) with a size in canvas units.
-void* create_world_canvas(const char* name, void* follow, float metresPerUnit);
+api::Object create_world_canvas(const char* name, void* follow, float metresPerUnit);
 
 // A Texture2D of `width` by `height` RGBA texels (row by row from the bottom, 4 bytes each), kept until destroyed:
 // for shapes a mod draws in code. Null when `rgba` is not width * height * 4 bytes or the entries did not resolve.
-void* texture_from_rgba(int width, int height, const uint8_t* rgba, size_t bytes);
+api::Object texture_from_rgba(int width, int height, const uint8_t* rgba, size_t bytes);
 
 }  // namespace pm::ui

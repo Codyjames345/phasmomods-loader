@@ -269,11 +269,11 @@ uint32_t roll() { return static_cast<uint32_t>(g.chase.rng()); }
 
 // A player's id for the chase: their Photon actor, the local player's own (0 in single player, the one player there).
 int id_of(void* player) {
-  if (player == game::local_player()) return game::local_actor();
+  if (player == static_cast<void*>(game::local_player())) return game::local_actor();
   std::vector<int> actors;
   game::room_actors(actors);
   for (int a : actors)
-    if (game::player_of_actor(a) == player) return a;
+    if (static_cast<void*>(game::player_of_actor(a)) == player) return a;
   return -1;
 }
 

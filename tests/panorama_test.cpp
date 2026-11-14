@@ -145,13 +145,13 @@ bool room_center(int index, phasmo::Vector3& out) {
 }  // namespace pm::mapview
 namespace pm::game {
 bool alive(void* o) { return o != nullptr; }
-void* new_game_object(const char*) {
+api::Object new_game_object(const char*) {
   ++g_lightsMade;
   return &g_lightObject;
 }
 void destroy(void*) { ++g_destroyed; }
-void* object_transform(void* go) { return go; }
-void* transform_of(void* c) { return c; }
+api::Ref<pm::map::Transform> object_transform(void* go) { return api::Ref<pm::map::Transform>::unchecked(go); }
+api::Ref<pm::map::Transform> transform_of(void* c) { return api::Ref<pm::map::Transform>::unchecked(c); }
 void set_position(void* t, phasmo::Vector3 p) {
   if (t == &g_lightObject) g_lastPosition = p;
   if (t == &g_camera) g_cameraPosition = p;
@@ -159,11 +159,11 @@ void set_position(void* t, phasmo::Vector3 p) {
 void set_rotation(void*, phasmo::Quaternion q) { g_lastRotation = q; }
 }  // namespace pm::game
 namespace pm::ui {
-void* create_canvas(const char*, int) {
+api::Object create_canvas(const char*, int) {
   ++g_canvases;
   return &g_canvas;
 }
-void* create_image(void*, const char*, Color) { return &g_image; }
+api::Object create_image(void*, const char*, Color) { return &g_image; }
 void place(void*, Vec2, Vec2, Vec2, Vec2) {}
 void destroy(void*) { ++g_uiDestroyed; }
 }  // namespace pm::ui

@@ -77,7 +77,7 @@ int actor_of(void* player) {
   std::vector<int> actors;
   game::room_actors(actors);
   for (int a : actors)
-    if (game::player_of_actor(a) == player) return a;
+    if (static_cast<void*>(game::player_of_actor(a)) == player) return a;
   return 0;
 }
 

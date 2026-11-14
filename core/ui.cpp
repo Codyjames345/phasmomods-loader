@@ -67,7 +67,7 @@ int32_t alignment(Align align) {
 // Every member is reached through the map, so there is nothing to bind: a missing one fails closed where it is used.
 bool resolve() { return true; }
 
-void* create_canvas(const char* name, int sortingOrder) {
+api::Object create_canvas(const char* name, int sortingOrder) {
   void* go = game::new_game_object(name);
   if (!go) return nullptr;
   void* canvas = game::add_component(go, phasmo::Canvas::type.type_object());
@@ -80,7 +80,7 @@ void* create_canvas(const char* name, int sortingOrder) {
   return canvas;
 }
 
-void* create_text(void* parent, const char* name, float fontSize) {
+api::Object create_text(void* parent, const char* name, float fontSize) {
   void* go = child(parent, name);
   void* text = game::add_component(go, phasmo::TextMeshProUGUI::type.type_object());
   if (!text) return nullptr;
@@ -94,13 +94,13 @@ void* create_text(void* parent, const char* name, float fontSize) {
 
 // A RawImage without a texture is a solid quad of its colour. (Plain Images created on the mod's
 // canvases set their colour but did not draw in game; RawImages do.)
-void* create_image(void* parent, const char* name, Color color) {
+api::Object create_image(void* parent, const char* name, Color color) {
   void* image = create_raw_image(parent, name, nullptr);
   if (image) set_color(image, color);
   return image;
 }
 
-void* create_raw_image(void* parent, const char* name, void* texture) {
+api::Object create_raw_image(void* parent, const char* name, void* texture) {
   void* go = child(parent, name);
   void* image = game::add_component(go, phasmo::RawImage::type.type_object());
   if (!image) return nullptr;
@@ -111,7 +111,7 @@ void* create_raw_image(void* parent, const char* name, void* texture) {
 
 void set_texture(void* rawImage, void* texture) { phasmo::RawImage::set_texture(rawImage, texture); }
 
-void* create_sprite_image(void* parent, const char* name, void* sprite) {
+api::Object create_sprite_image(void* parent, const char* name, void* sprite) {
   void* go = child(parent, name);
   void* image = game::add_component(go, phasmo::Image::type.type_object());
   if (!image) return nullptr;
@@ -295,7 +295,7 @@ void scroll_reveal(const ScrollView& view, float fromTop, float band) {
 
 namespace pm::ui {
 
-void* create_world_canvas(const char* name, void* follow, float metresPerUnit) {
+api::Object create_world_canvas(const char* name, void* follow, float metresPerUnit) {
   if (!follow || !game::alive(follow)) return nullptr;
   void* go = game::new_game_object(name);
   if (!go) return nullptr;
@@ -313,7 +313,7 @@ void* create_world_canvas(const char* name, void* follow, float metresPerUnit) {
   return canvas;
 }
 
-void* texture_from_rgba(int width, int height, const uint8_t* rgba, size_t bytes) {
+api::Object texture_from_rgba(int width, int height, const uint8_t* rgba, size_t bytes) {
   if (width <= 0 || height <= 0 || !rgba || bytes != static_cast<size_t>(width) * static_cast<size_t>(height) * 4)
     return nullptr;
   void* texture = phasmo::Texture2D::type.make();

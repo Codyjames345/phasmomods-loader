@@ -97,21 +97,21 @@ bool Session::take_form(Form& out) {
 namespace pm::game {
 bool alive(void* value) { return value != nullptr; }
 void destroy(void*) { ++destroyed; }
-void* player_of_actor(int actor) { return actor == 7 ? &player : nullptr; }
-void* transform_of(void* value) { return value; }
-void* object_transform(void* value) { return value; }
-void* game_object_of(void* value) { return value; }
+api::Object player_of_actor(int actor) { return actor == 7 ? &player : nullptr; }
+api::Ref<pm::map::Transform> transform_of(void* value) { return api::Ref<pm::map::Transform>::unchecked(value); }
+api::Ref<pm::map::Transform> object_transform(void* value) { return api::Ref<pm::map::Transform>::unchecked(value); }
+api::Object game_object_of(void* value) { return value; }
 bool active_in_hierarchy(void*) { return true; }
 int layer(void*) { return 0; }
 int child_count(void*) { return 0; }
-void* child(void*, int) { return nullptr; }
-void* new_game_object(const char* name) { return !std::strcmp(name, "Ghost form") ? &root : &part; }
+api::Ref<pm::map::Transform> child(void*, int) { return nullptr; }
+api::Object new_game_object(const char* name) { return !std::strcmp(name, "Ghost form") ? &root : &part; }
 Vector3 position(void*) { return {}; }
 Quaternion rotation(void*) { return {}; }
 void set_position(void*, Vector3) {}
 void set_rotation(void*, Quaternion) {}
 void set_parent(void*, void*, bool) {}
-void* level_controller() { return &ghost; }
+api::Ref<pm::map::LevelController> level_controller() { return api::Ref<pm::map::LevelController>::unchecked(&ghost); }
 }  // namespace pm::game
 
 /** Exercise binding, a visible baked figure, and cleanup through the public API. */

@@ -88,7 +88,9 @@ namespace pm::hooks {
 std::atomic<int> g_inflight{0};
 }  // namespace pm::hooks
 namespace pm::game {
-void* level_controller() { return &fixtureLevel; }
+api::Ref<pm::map::LevelController> level_controller() {
+  return api::Ref<pm::map::LevelController>::unchecked(&fixtureLevel);
+}
 bool alive(void* object) { return object != nullptr; }
 }  // namespace pm::game
 namespace il2cpp {

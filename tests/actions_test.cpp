@@ -410,17 +410,21 @@ namespace pm::game {
 bool alive(void* o) { return o != nullptr; }
 int actor_number(void*) { return 0; }
 bool any_players_in_room(void*) { return false; }
-void* ghost_activity(void*) { return &g_activity; }
+api::Ref<pm::map::GhostActivity> ghost_activity(void*) { return api::Ref<pm::map::GhostActivity>::unchecked(&g_activity); }
 int ghost_state(void*) { return g_state; }
 bool is_child_of(void* transform, void* parent) { return transform == parent; }
-void* level_controller() { return &g_level; }
-void* level_values() { return nullptr; }
-void* network() { return &g_net; }
+api::Ref<pm::map::LevelController> level_controller() { return api::Ref<pm::map::LevelController>::unchecked(&g_level); }
+api::Ref<pm::map::LevelValues> level_values() { return nullptr; }
+api::Ref<pm::map::Network> network() { return api::Ref<pm::map::Network>::unchecked(&g_net); }
 phasmo::Vector3 position(void*) { return {}; }
-void* raycast(phasmo::Vector3, phasmo::Vector3, float) { return g_hit; }
-void* setup_phase() { return &g_setup; }
+api::Ref<pm::map::Transform> raycast(phasmo::Vector3, phasmo::Vector3, float) {
+  return api::Ref<pm::map::Transform>::unchecked(g_hit);
+}
+api::Ref<pm::map::SetupPhaseController> setup_phase() {
+  return api::Ref<pm::map::SetupPhaseController>::unchecked(&g_setup);
+}
 void start_coroutine(void*, void*) {}
-void* transform_of(void* o) { return o; }
+api::Ref<pm::map::Transform> transform_of(void* o) { return api::Ref<pm::map::Transform>::unchecked(o); }
 }  // namespace pm::game
 
 int main() {

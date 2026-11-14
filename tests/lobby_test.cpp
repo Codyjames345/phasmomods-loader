@@ -182,7 +182,7 @@ void* add_component(void* value, void* type, const void*) {
 #undef GetTickCount64
 
 namespace pm::game {
-void* instantiate(void* original, void* parent, bool world) { return ::instantiate(original, parent, world, nullptr); }
+api::Object instantiate(void* original, void* parent, bool world) { return ::instantiate(original, parent, world, nullptr); }
 void set_local_scale(void* value, Vector3 scale) { set_scale(value, scale, nullptr); }
 bool private_room() { return privateRoom; }
 int local_actor() { return localActor; }
@@ -195,18 +195,18 @@ bool alive(void* value) {
   return found != nodes.end() && found->second->alive;
 }
 /** Components share an identity with their fake transform. */
-void* transform_of(void* value) {
+api::Ref<pm::map::Transform> transform_of(void* value) {
   if (!value) return nullptr;
   CHECK(!static_cast<Node*>(value)->isGameObject);
-  return static_cast<Node*>(value)->isGameObject ? nullptr : value;
+  return static_cast<Node*>(value)->isGameObject ? nullptr : api::Ref<pm::map::Transform>::unchecked(value);
 }
-void* game_object_of(void* value) { auto* item = static_cast<Node*>(value); return item->gameObject ? item->gameObject : item; }
+api::Object game_object_of(void* value) { auto* item = static_cast<Node*>(value); return item->gameObject ? item->gameObject : item; }
 /** Unity IsChildOf includes the queried transform itself. */
 bool is_child_of(void* value, void* ancestor) {
   for (auto* item = static_cast<Node*>(value); item; item = item->parent) if (item == ancestor) return true;
   return false;
 }
-void* new_game_object(const char*) { auto* result = node(); result->owned = true; result->isGameObject = true; return result; }
+api::Object new_game_object(const char*) { auto* result = node(); result->owned = true; result->isGameObject = true; return result; }
 /** Reparenting can activate a checkbox and therefore must happen after isolation. */
 void set_parent(void* value, void* parent, bool) {
   if (!value) return;

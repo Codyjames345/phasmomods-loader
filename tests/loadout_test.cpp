@@ -111,7 +111,9 @@ std::atomic<int> g_inflight{0};
 }  // namespace pm::hooks
 namespace pm::game {
 bool private_room() { return privateRoom; }
-void* level_controller() { return inLevel ? &level : nullptr; }
+api::Ref<pm::map::LevelController> level_controller() {
+  return inLevel ? api::Ref<pm::map::LevelController>::unchecked(&level) : nullptr;
+}
 }  // namespace pm::game
 
 int main() {
