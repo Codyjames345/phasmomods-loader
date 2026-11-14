@@ -26,23 +26,23 @@ void* manager() {
   const ULONGLONG now = GetTickCount64();
   if (now < g_nextSearch) return nullptr;
   g_nextSearch = now + 1000;
-  void* type = phasmo::ServerManager::type.type_object();
-  void* found = type ? phasmo::Object::FindObjectOfType(type, false) : nullptr;
-  g_manager = il2cpp::Held(hostgame::alive(found) ? found : nullptr);
+  void* type = phasmo::ServerManager::type.type_object();  // the System.Type from the raw runtime: not a game object
+  const auto found = type ? phasmo::Object::FindObjectOfType(type, false) : nullptr;
+  g_manager = il2cpp::Held(hostgame::alive(found.raw()) ? found.raw() : nullptr);
   return g_manager.get();
 }
 
 /** Find an actor's ID card: a card that cannot be proved to be theirs is no card, so nobody else is kicked. */
 void* card_of(void* manager, int actor) {
   if (actor == 0) return nullptr;  // a number that could not be read: every card would match
-  const api::List cards{phasmo::ServerManager::cards.get(manager)};
+  const api::List cards{phasmo::ServerManager::cards.get(manager).raw()};  // the list's array goes to the raw List
   for (size_t i = 0, n = cards.size(); i < n; ++i) {
-    void* card = cards[i];
-    if (!hostgame::alive(card) || !phasmo::MultiplayerProfile::type.is(card)) continue;
-    void* spot = phasmo::ProfileCard::spot.get(card);
+    const auto card = api::Object::unchecked(cards[i]);  // a List element read
+    if (!hostgame::alive(card.raw()) || !phasmo::MultiplayerProfile::type.is(card)) continue;
+    const auto spot = phasmo::ProfileCard::spot.get(card);
     if (!spot || !phasmo::PlayerSpot::type.is(spot)) continue;
-    void* player = phasmo::PlayerSpot::photonPlayer.get(spot);
-    if (player && hostgame::actor_number(player) == actor) return card;
+    const auto player = phasmo::PlayerSpot::photonPlayer.get(spot);
+    if (player && hostgame::actor_number(player.raw()) == actor) return card.raw();
   }
   return nullptr;
 }
@@ -70,19 +70,22 @@ bool available() { return missing().empty(); }
 bool lobby_open() { return phasmo::PhotonNetwork::get_IsMessageQueueRunning() && manager() != nullptr; }
 
 bool is_start_button(void* button) {
-  void* lobby = button ? manager() : nullptr;
+  const auto lobby = button ? api::Object::unchecked(manager()) : nullptr;  // the finder answers void* until 3c
   return lobby && phasmo::ServerManager::startGameButton.get(lobby).raw() == button;
 }
 
 std::string player_name(int actor) {
   const api::RefArray list{phasmo::PhotonNetwork::get_PlayerList()};
   for (size_t i = 0; i < list.size(); ++i)
-    if (void* p = list[i]; p && hostgame::actor_number(p) == actor) return api::to_utf8(phasmo::PhotonPlayer::get_NickName(p));
+    if (const auto p = api::Object::unchecked(list[i]);  // a RefArray element read
+        p && hostgame::actor_number(p.raw()) == actor)
+      return api::to_utf8(phasmo::PhotonPlayer::get_NickName(p).raw());
   return {};
 }
 
 bool leave_lobby() {
-  void* lobby = phasmo::ServerManager::LeaveServer.available() ? manager() : nullptr;
+  const auto lobby = phasmo::ServerManager::LeaveServer.available() ? api::Object::unchecked(manager())
+                                                                    : nullptr;  // the finder answers void* until 3c
   if (!lobby) {
     PM_LOG("room: no lobby to leave");
     return false;
@@ -98,8 +101,9 @@ bool leave_lobby() {
 }
 
 bool kick(int actor) {
-  void* lobby = phasmo::ServerManager::KickPlayer.available() ? manager() : nullptr;
-  void* card = lobby ? card_of(lobby, actor) : nullptr;
+  const auto lobby = phasmo::ServerManager::KickPlayer.available() ? api::Object::unchecked(manager())
+                                                                   : nullptr;  // the finder answers void* until 3c
+  const auto card = lobby ? api::Object::unchecked(card_of(lobby.raw(), actor)) : nullptr;  // the card finder, the same
   if (!card) {
     PM_LOG("room: actor %d has no ID card to kick yet", actor);
     return false;

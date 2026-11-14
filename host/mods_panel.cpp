@@ -60,16 +60,18 @@ bool same_choice(std::vector<std::string> a, std::vector<std::string> b) {
 
 // The Mods tape: a copy of the game's News tape, beside it in the main menu's buttons.
 void make_tape(void* menu) {
-  void* news = hostgame::alive(menu) ? host::find_child(hostgame::transform_of(menu), "Buttons/News") : nullptr;
+  const auto news = hostgame::alive(menu)
+                        ? api::Object::unchecked(host::find_child(hostgame::transform_of(menu), "Buttons/News"))
+                        : nullptr;  // the raw finders until 3c
   if (!news) return;
-  void* copy = hostgame::instantiate(news, hostgame::parent(news), false);
+  const auto copy = api::Object::unchecked(hostgame::instantiate(news.raw(), hostgame::parent(news.raw()), false));  // hostgame's helpers, the same
   if (!copy) return;
-  menu_panel::make_inert(copy);
+  menu_panel::make_inert(copy.raw());
   // News's own click starts the training: the copy keeps the game's button with that listener taken off and the
   // loader's on (sdk/systems/menus.md).
   menu_panel::Control control;
-  if (!menu_panel::clickable(control, copy)) {
-    hostgame::destroy(hostgame::game_object_of(copy));
+  if (!menu_panel::clickable(control, copy.raw())) {
+    hostgame::destroy(hostgame::game_object_of(copy.raw()));
     PM_LOG("mods panel: the News button could not take the mod's listener; no Mods button");
     g.refusedBy = il2cpp::Held(menu);
     return;
@@ -77,16 +79,17 @@ void make_tape(void* menu) {
   // News is never shown, and the disabled colour it saves is see-through: the tape is disabled while the board is not
   // focused, so it would fade beside the picture tapes. It takes Training's, the picture tape it sits by, before it
   // wakes; without it, it keeps News's.
-  void* training = host::find_child(hostgame::transform_of(menu), "Buttons/Training button");
-  if (!menu_panel::match_disabled_look(copy, training)) PM_LOG("mods panel: the Mods button keeps News's disabled colour");
-  hostgame::set_active(hostgame::game_object_of(copy), true);
+  const auto training = api::Object::unchecked(host::find_child(hostgame::transform_of(menu), "Buttons/Training button"));  // the raw finder until 3c
+  if (!menu_panel::match_disabled_look(copy.raw(), training.raw())) PM_LOG("mods panel: the Mods button keeps News's disabled colour");
+  hostgame::set_active(hostgame::game_object_of(copy.raw()), true);
   phasmo::Vector2 at = RectTransform::get_anchoredPosition(news);
-  if (hostgame::active_self(hostgame::game_object_of(news))) at.y += RectTransform::get_sizeDelta(news).y * kAboveNews;
+  if (hostgame::active_self(hostgame::game_object_of(news.raw()))) at.y += RectTransform::get_sizeDelta(news).y * kAboveNews;
   RectTransform::set_anchoredPosition(copy, at);
-  void* label = host::find_child(copy, "Text (TMP)");
-  void* text = label ? hostgame::get_component(label, phasmo::TextMeshProUGUI::type.type_object()) : nullptr;
-  if (text) ui::set_text(text, i18n::text("panel.button").c_str());
-  g.tape = il2cpp::Held(copy);
+  const auto label = api::Object::unchecked(host::find_child(copy.raw(), "Text (TMP)"));  // the raw finder until 3c
+  const auto text = label ? api::Object::unchecked(hostgame::get_component(label.raw(), phasmo::TextMeshProUGUI::type.type_object()))
+                          : nullptr;  // hostgame's helper, the same
+  if (text) ui::set_text(text.raw(), i18n::text("panel.button").c_str());
+  g.tape = il2cpp::Held(copy.raw());
   g.owner = il2cpp::Held(menu);
   g.control = std::move(control);
   PM_LOG("mods panel: Mods button added to the main menu");
@@ -190,8 +193,8 @@ void report() {
 
 void tick(bool canChange) {
   if (!available()) return;
-  void* menu = phasmo::ConnectToServer::get_Instance();
-  if (g.tape.get() && (!hostgame::alive(g.tape.get()) || g.owner.get() != menu)) {
+  const auto menu = phasmo::ConnectToServer::get_Instance();
+  if (g.tape.get() && (!hostgame::alive(g.tape.get()) || g.owner.get() != menu.raw())) {
     if (hostgame::alive(g.tape.get())) hostgame::destroy(hostgame::game_object_of(g.tape.get()));
     menu_panel::close(g.panel);
     g.tape = nullptr;
@@ -199,7 +202,7 @@ void tick(bool canChange) {
     g.owner = nullptr;
     g.nextSearch = 0;
   }
-  if (!hostgame::alive(menu)) {  // between scenes
+  if (!hostgame::alive(menu.raw())) {  // between scenes
     menu_panel::close(g.panel);
     return;
   }
@@ -207,9 +210,9 @@ void tick(bool canChange) {
   // looks at another one (the map, the shop); it is clicked only on the focused board.
   const bool shown = menu_panel::menu_buttons_shown();
   const ULONGLONG now = GetTickCount64();
-  if (shown && !g.tape.get() && g.refusedBy.get() != menu && now >= g.nextSearch) {
+  if (shown && !g.tape.get() && g.refusedBy.get() != menu.raw() && now >= g.nextSearch) {
     g.nextSearch = now + kSearchMs;
-    make_tape(menu);
+    make_tape(menu.raw());
   }
   if (hostgame::alive(g.tape.get())) hostgame::set_active(hostgame::game_object_of(g.tape.get()), shown);
   // Taken every frame, so a click the game gave while the panel was open or the board out of view opens nothing later.

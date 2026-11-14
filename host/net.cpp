@@ -36,9 +36,9 @@ void detour_on_event(void* client, void* eventData, const void* method) {
   // Before the host's bind, and in a build without the field, the code cannot be read: the event is the game's.
   if (eventData && api::all_resolved<EventData::Code>() && EventData::Code.get(eventData) == kEventCode) {
     try {
-      void* data = can_read() ? EventData::get_CustomData(eventData) : nullptr;
-      if (data && runtime_services::is_array_of(data, phasmo::Byte::type.desc.key)) {
-        const api::Array<uint8_t> payload{data};
+      const auto data = can_read() ? EventData::get_CustomData(eventData) : nullptr;
+      if (data && runtime_services::is_array_of(data.raw(), phasmo::Byte::type.desc.key)) {
+        const api::Array<uint8_t> payload{data.raw()};  // the array's address goes to the raw Array
         const size_t length = payload.size();
         if (length >= 1 && length <= kMaxPayload) {
           const uint8_t* bytes = &payload[0];
@@ -94,16 +94,16 @@ template <typename Address>
 bool raise(uint8_t channel, const uint8_t* data, size_t size, bool reliable, Address address) {
   // Who it goes to is written by `address`, and a default standing in for an entry that did not resolve would send it elsewhere.
   if (size > PM_MAX_MESSAGE || !available()) return false;
-  void* payload = phasmo::Byte::type.make_array(size + 1);
-  void* options = RaiseEventOptions::type.make();
+  const auto payload = phasmo::Byte::type.make_array(size + 1);
+  const auto options = RaiseEventOptions::type.make();
   if (!payload || !options) return false;
-  const api::Array<uint8_t> bytes{payload};
+  const api::Array<uint8_t> bytes{payload.raw()};  // the array's address goes to the raw Array
   if (bytes.size() != size + 1) return false;
   uint8_t* out = &bytes[0];
   out[0] = channel;
   if (size) std::memcpy(out + 1, data, size);
   RaiseEventOptions::ctor(options);
-  if (!address(options)) return false;
+  if (!address(options.raw())) return false;
   // SendOptions is 8 bytes (its entry's exact fields) and passed by value, its other fields zero.
   uint64_t sendOptions = 0;
   phasmo::SendOptions::DeliveryMode.set(&sendOptions,
@@ -116,9 +116,9 @@ bool raise(uint8_t channel, const uint8_t* data, size_t size, bool reliable, Add
 bool send(uint8_t channel, const uint8_t* data, size_t size, int32_t to, bool reliable, int32_t actor) {
   return raise(channel, data, size, reliable, [&](void* options) {
     if (to == PM_TO_ACTOR) {
-      void* targets = phasmo::Int32::type.make_array(1);
+      const auto targets = phasmo::Int32::type.make_array(1);
       if (!targets) return false;
-      api::Array<int32_t>{targets}[0] = actor;
+      api::Array<int32_t>{targets.raw()}[0] = actor;  // the array's address goes to the raw Array
       RaiseEventOptions::TargetActors.set(options, targets);
     } else {
       const int32_t group = to == PM_TO_MASTER ? phasmo::ReceiverGroup::MasterClient() : phasmo::ReceiverGroup::Others();

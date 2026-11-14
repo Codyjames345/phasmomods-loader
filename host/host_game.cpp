@@ -26,8 +26,8 @@ bool out_of_room() { return phasmo::PhotonNetwork::get_InRoom.available() && !ph
 // The static instance outlives its level: after leaving a contract it still points at the destroyed controller, so only a
 // live one counts as being in a contract.
 bool out_of_contract() {
-  void* controller = nullptr;  // read, not get, which answers null for a refused read too
-  return phasmo::LevelController::instance.read(controller) && !alive(controller);
+  api::Ref<pm::map::LevelController> controller = nullptr;  // read, not get, which answers null for a refused read too
+  return phasmo::LevelController::instance.read(controller) && !alive(controller.raw());
 }
 
 bool alive(void* o) { return o && api::alive(o); }

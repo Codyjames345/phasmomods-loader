@@ -538,7 +538,7 @@ uint64_t current_room() {
 // Opens or closes the room this client is in, as ServerManager.LoadScene and the lobby's return do (PhotonRoom.set_IsOpen). False
 // when there is no room or the setter did not resolve.
 bool set_room_open(bool open) {
-  void* room = phasmo::PhotonNetwork::get_CurrentRoom.available() ? phasmo::PhotonNetwork::get_CurrentRoom() : nullptr;
+  const auto room = phasmo::PhotonNetwork::get_CurrentRoom.available() ? phasmo::PhotonNetwork::get_CurrentRoom() : nullptr;
   if (!room || !phasmo::PhotonRoom::set_IsOpen.available()) return false;
   phasmo::PhotonRoom::set_IsOpen(room, open);
   return true;

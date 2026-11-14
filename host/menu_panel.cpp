@@ -91,7 +91,7 @@ void on_click(void* target, const void*) noexcept {
 
 /** Read the same aggregate that drives the native menu's explicit control list. */
 bool menu_enabled(void* menu) {
-  void* objects = hostgame::alive(menu) ? ConnectToServer::menuObjects.get(menu) : nullptr;
+  const auto objects = hostgame::alive(menu) ? ConnectToServer::menuObjects.get(menu) : nullptr;
   return objects && phasmo::MenuObjects::enabled.get(objects);
 }
 
@@ -109,10 +109,10 @@ void release_decor(void* closing = nullptr) {
 }
 
 void* error_popup() {
-  void* manager = phasmo::Object::FindObjectOfType(ErrorManager::type.type_object(), false);
-  void* popup = hostgame::alive(manager) ? ErrorManager::errorParent.get(manager) : nullptr;
-  if (!hostgame::alive(popup)) return nullptr;
-  return phasmo::GameObject::type.is(popup) ? hostgame::object_transform(popup) : hostgame::transform_of(popup);
+  const auto manager = phasmo::Object::FindObjectOfType(ErrorManager::type.type_object(), false);
+  const auto popup = hostgame::alive(manager.raw()) ? ErrorManager::errorParent.get(manager) : nullptr;
+  if (!hostgame::alive(popup.raw())) return nullptr;
+  return phasmo::GameObject::type.is(popup) ? hostgame::object_transform(popup.raw()) : hostgame::transform_of(popup.raw());
 }
 
 template <typename F>
@@ -124,21 +124,22 @@ void each_object(void* transform, const F& fn) {
 
 // A new UnityEvent with no listeners, or null.
 void* new_event() {
-  void* event = phasmo::UnityEvent::type.make();
+  const auto event = phasmo::UnityEvent::type.make();
   if (event) phasmo::UnityEvent::ctor(event);
-  return event;
+  return event.raw();
 }
 
 // Puts the loader's listener on `event`, bound to `target`, and counts its clicks for `c`. Refused for an event with a
 // listener of the game's (persistent, so it cannot be taken off): it would run as well.
 bool listen(Control& c, void* target, void* event) {
   if (!target || !event || phasmo::UnityEventBase::GetPersistentEventCount(event) != 0) return false;
-  void* action = runtime_services::delegate_new(map::UnityAction_ctor.key, map::UnityAction_Invoke.key, target, &on_click);
+  const auto action = api::Object::unchecked(
+      runtime_services::delegate_new(map::UnityAction_ctor.key, map::UnityAction_Invoke.key, target, &on_click));
   if (!action) return false;
   std::erase_if(g_listening, [target](const Listening& l) {
     return l.target.get() == target || !hostgame::alive(l.target.get());  // a destroyed copy counts no more clicks
   });
-  phasmo::UnityEvent::AddListener(event, action);
+  phasmo::UnityEvent::AddListener(event, action.raw());
   g_listening.push_back({il2cpp::Held(target), 0});
   c.button = il2cpp::Held(target);
   return true;
@@ -147,7 +148,7 @@ bool listen(Control& c, void* target, void* event) {
 // Takes Doozy's own actions off a copied event (ModyEventBase.Runners), as its listeners are. False when the list does
 // not empty.
 bool clear_runners(void* event) {
-  const api::List runners{phasmo::ModyEventBase::Runners.get(event)};
+  const api::List runners{phasmo::ModyEventBase::Runners.get(event).raw()};  // the list's array goes to the raw List
   for (size_t n = runners.size(); n > 0; --n)
     if (!runners.remove_at(0)) return false;
   return runners.size() == 0;
@@ -159,31 +160,32 @@ void make_inert(void* root) {
   each_object(root, [](void* go) {
     const api::RefArray scripts{hostgame::components(go, phasmo::Behaviour::type.type_object())};
     for (size_t i = 0, n = scripts.size(); i < n; ++i) {
-      void* s = scripts[i];
-      if (s && hostgame::alive(s) && acts_for_the_game(s)) hostgame::set_enabled(s, false);
+      const auto s = api::Object::unchecked(scripts[i]);  // a RefArray element read
+      if (s && hostgame::alive(s.raw()) && acts_for_the_game(s.raw())) hostgame::set_enabled(s.raw(), false);
     }
   });
 }
 
 bool clickable(Control& c, void* root) {
-  void* button = root && can_copy() ? hostgame::get_component(root, phasmo::UIButton::type.type_object()) : nullptr;
-  void* behaviours = button ? phasmo::UISelectable::Behaviours.get(button) : nullptr;
-  void* list = behaviours ? phasmo::DoozyBehaviours::Behaviours.get(behaviours) : nullptr;
+  const auto button = api::Object::unchecked(
+      root && can_copy() ? hostgame::get_component(root, phasmo::UIButton::type.type_object()) : nullptr);
+  const auto behaviours = button ? phasmo::UISelectable::Behaviours.get(button) : nullptr;
+  const auto list = behaviours ? phasmo::DoozyBehaviours::Behaviours.get(behaviours) : nullptr;
   if (!list) return false;
   // Every behaviour, not the click's alone: a copy runs none of its original's listeners, on an enter or a selection
   // either.
-  const api::List each{list};
+  const api::List each{list.raw()};
   for (size_t i = 0, n = each.size(); i < n; ++i) {
-    void* behaviour = each[i];
+    const auto behaviour = api::Object::unchecked(each[i]);  // a List element read
     if (!behaviour) continue;
-    void* fresh = phasmo::ModyEvent::type.is(behaviour) ? new_event() : nullptr;
-    if (!fresh || !clear_runners(behaviour)) return false;
+    const auto fresh = phasmo::ModyEvent::type.is(behaviour) ? api::Object::unchecked(new_event()) : nullptr;
+    if (!fresh || !clear_runners(behaviour.raw())) return false;
     phasmo::ModyEvent::Event.set(behaviour, fresh);
-    if (phasmo::ModyEvent::Event.get(behaviour).raw() != fresh) return false;
+    if (phasmo::ModyEvent::Event.get(behaviour) != fresh) return false;
   }
-  void* click = phasmo::UISelectable::GetBehaviour(button, phasmo::DoozyBehaviourName::PointerClick());
-  if (!click || !listen(c, button, phasmo::ModyEvent::Event.get(click))) return false;
-  hostgame::set_enabled(button, true);
+  const auto click = phasmo::UISelectable::GetBehaviour(button, phasmo::DoozyBehaviourName::PointerClick());
+  if (!click || !listen(c, button.raw(), phasmo::ModyEvent::Event.get(click).raw())) return false;
+  hostgame::set_enabled(button.raw(), true);
   return true;
 }
 
@@ -191,9 +193,10 @@ namespace {
 
 // The reaction behind the disabled colour of the tape on root's GameObject, or null.
 void* disabled_reaction(void* root) {
-  void* animator = root ? hostgame::get_component(root, phasmo::UISelectableColorAnimator::type.type_object()) : nullptr;
-  void* animation = animator ? phasmo::UISelectableColorAnimator::DisabledAnimation.get(animator) : nullptr;
-  return animation ? phasmo::ColorAnimation::Animation.get(animation) : nullptr;
+  const auto animator =
+      api::Object::unchecked(root ? hostgame::get_component(root, phasmo::UISelectableColorAnimator::type.type_object()) : nullptr);
+  const auto animation = animator ? phasmo::UISelectableColorAnimator::DisabledAnimation.get(animator) : nullptr;
+  return animation ? phasmo::ColorAnimation::Animation.get(animation).raw() : nullptr;
 }
 
 }  // namespace
@@ -202,8 +205,8 @@ bool match_disabled_look(void* root, void* like) {
   if (!api::all_resolved<phasmo::UISelectableColorAnimator::type, phasmo::UISelectableColorAnimator::DisabledAnimation,
                          phasmo::ColorAnimation::Animation, phasmo::ColorTargetReaction::ToCustomValue>())
     return false;
-  void* copied = disabled_reaction(root);
-  void* game = hostgame::alive(like) ? disabled_reaction(like) : nullptr;
+  const auto copied = api::Object::unchecked(disabled_reaction(root));  // still a void* return until 3c
+  const auto game = hostgame::alive(like) ? api::Object::unchecked(disabled_reaction(like)) : nullptr;
   if (!copied || !game) return false;
   phasmo::ColorTargetReaction::ToCustomValue.set(copied, phasmo::ColorTargetReaction::ToCustomValue.get(game));
   return true;
@@ -216,16 +219,16 @@ bool clicked(Control& c) {
 }
 
 void release(Control& c) {
-  void* target = c.button.get();
-  if (target) std::erase_if(g_listening, [target](const Listening& l) { return l.target.get() == target; });
+  const auto target = api::Object::unchecked(c.button.get());  // a Held's raw side
+  if (target) std::erase_if(g_listening, [target](const Listening& l) { return l.target.get() == target.raw(); });
   c.button = nullptr;
 }
 
 namespace {
 
 void* text_at(void* root, const char* path) {
-  void* t = host::find_child(root, path);
-  return t ? hostgame::get_component(t, TextMeshProUGUI::type.type_object()) : nullptr;
+  const auto t = api::Object::unchecked(host::find_child(root, path));  // still a void* return until 3c
+  return t ? hostgame::get_component(t.raw(), TextMeshProUGUI::type.type_object()) : nullptr;
 }
 
 void fit(void* text) {
@@ -236,20 +239,22 @@ void fit(void* text) {
 
 /** Resolve the active main-menu component without searching the scene each frame. */
 void* main_menu() {
-  void* menu = menu_available() ? ConnectToServer::get_Instance() : nullptr;
-  return hostgame::alive(menu) && hostgame::active_in_hierarchy(hostgame::game_object_of(menu)) ? menu : nullptr;
+  const auto menu = menu_available() ? ConnectToServer::get_Instance() : nullptr;
+  return hostgame::alive(menu.raw()) && hostgame::active_in_hierarchy(hostgame::game_object_of(menu.raw()))
+             ? menu.raw()
+             : nullptr;
 }
 
 /** Hide the game's curated decoration list without losing its pre-popup visibility states. */
 void hide_decor(void* root) {
   release_decor();
   if (g_decorPanels.empty()) {
-    void* menu = main_menu();
-    g_decorMenu = il2cpp::Held(menu);
-    const api::List list{menu ? ConnectToServer::menuDecor.get(menu) : nullptr};
+    const auto menu = api::Object::unchecked(main_menu());  // still a void* return until 3c
+    g_decorMenu = il2cpp::Held(menu.raw());
+    const api::List list{menu ? ConnectToServer::menuDecor.get(menu).raw() : nullptr};
     for (size_t i = 0, n = list.size(); i < n; ++i) {
-      void* object = list[i];
-      if (hostgame::alive(object)) g_decor.push_back({il2cpp::Held(object), hostgame::active_self(object)});
+      const auto object = api::Object::unchecked(list[i]);  // a List element read
+      if (hostgame::alive(object.raw())) g_decor.push_back({il2cpp::Held(object.raw()), hostgame::active_self(object.raw())});
     }
     for (const Decoration& decor : g_decor) hostgame::set_active(decor.object.get(), false);
   }
@@ -258,37 +263,40 @@ void hide_decor(void* root) {
 
 /** Copy only the paper's text style; each column has its own fixed size and rectangle. */
 void* text_cell(Panel& p, void* parent, float x, float width, float height, float size) {
-  void* copy = hostgame::instantiate(hostgame::transform_of(p.body), parent, false);
-  void* text = copy ? hostgame::get_component(copy, TextMeshProUGUI::type.type_object()) : nullptr;
+  const auto copy = api::Object::unchecked(hostgame::instantiate(hostgame::transform_of(p.body), parent, false));
+  const auto text = copy ? api::Object::unchecked(hostgame::get_component(copy.raw(), TextMeshProUGUI::type.type_object()))
+                         : nullptr;
   if (!text) return nullptr;
-  ui::place(text, {0, 0.5f}, {0, 0.5f}, {x, 0}, {width, height});
-  ui::set_alignment(text, ui::Align::Left);
-  ui::set_word_wrap(text, true);
-  ui::set_fixed_font_size(text, size);
-  return text;
+  ui::place(text.raw(), {0, 0.5f}, {0, 0.5f}, {x, 0}, {width, height});
+  ui::set_alignment(text.raw(), ui::Align::Left);
+  ui::set_word_wrap(text.raw(), true);
+  ui::set_fixed_font_size(text.raw(), size);
+  return text.raw();
 }
 
 /** A copy of the lobby paper's checkbox (Create Lobby's Toggle.1, a Toggle) under `parent`, with a new change event
  *  and no group, so none of the game's listeners runs for it. Null, with nothing left behind, when it cannot be made. */
 void* toggle_row(void* parent) {
-  void* menu = main_menu();
-  void* board = menu ? hostgame::parent(hostgame::transform_of(menu)) : nullptr;
-  void* source = host::find_child(board, "Create Lobby/Hardware/Toggle.1");
-  void* toggle = source && can_copy_rows() ? hostgame::get_component(source, Toggle::type.type_object()) : nullptr;
+  const auto menu = api::Object::unchecked(main_menu());  // still a void* return until 3c
+  const auto board = menu ? api::Object::unchecked(hostgame::parent(hostgame::transform_of(menu.raw()))) : nullptr;
+  const auto source = api::Object::unchecked(host::find_child(board.raw(), "Create Lobby/Hardware/Toggle.1"));
+  const auto toggle = source && can_copy_rows()
+                          ? api::Object::unchecked(hostgame::get_component(source.raw(), Toggle::type.type_object()))
+                          : nullptr;
   // A toggle in a group registers its copy with it as the copy switches on, and the group would then switch the game's
   // own toggles off.
-  if (!toggle || Toggle::m_Group.get(toggle) || !host::find_child(source, "Background/Checkmark")) return nullptr;
-  void* fresh = phasmo::ToggleEvent::type.make();
+  if (!toggle || Toggle::m_Group.get(toggle) || !host::find_child(source.raw(), "Background/Checkmark")) return nullptr;
+  const auto fresh = phasmo::ToggleEvent::type.make();
   if (!fresh) return nullptr;
   phasmo::ToggleEvent::ctor(fresh);
-  void* copy = hostgame::instantiate(source, parent, false);
-  void* copied = copy ? hostgame::get_component(copy, Toggle::type.type_object()) : nullptr;
+  const auto copy = api::Object::unchecked(hostgame::instantiate(source.raw(), parent, false));
+  const auto copied = copy ? api::Object::unchecked(hostgame::get_component(copy.raw(), Toggle::type.type_object())) : nullptr;
   if (copied) Toggle::onValueChanged.set(copied, fresh);
-  if (!copied || Toggle::onValueChanged.get(copied).raw() != fresh) {
-    if (copy) hostgame::destroy(hostgame::game_object_of(copy));
+  if (!copied || Toggle::onValueChanged.get(copied) != fresh) {
+    if (copy) hostgame::destroy(hostgame::game_object_of(copy.raw()));
     return nullptr;
   }
-  return copied;
+  return copied.raw();
 }
 
 }  // namespace
@@ -304,26 +312,30 @@ bool listeners_available() {
 }
 
 void* menu_camera() {
-  void* menu = main_menu();
-  void* canvas = menu ? hostgame::get_component(menu, Canvas::type.type_object()) : nullptr;
-  void* camera = hostgame::alive(canvas) ? Canvas::get_worldCamera(canvas) : nullptr;
-  return hostgame::alive(camera) && hostgame::enabled(camera) &&
-         hostgame::active_in_hierarchy(hostgame::game_object_of(camera)) ? camera : nullptr;
+  const auto menu = api::Object::unchecked(main_menu());  // still a void* return until 3c
+  const auto canvas = menu ? api::Object::unchecked(hostgame::get_component(menu.raw(), Canvas::type.type_object())) : nullptr;
+  const auto camera = hostgame::alive(canvas.raw()) ? Canvas::get_worldCamera(canvas) : nullptr;
+  return hostgame::alive(camera.raw()) && hostgame::enabled(camera.raw()) &&
+                 hostgame::active_in_hierarchy(hostgame::game_object_of(camera.raw()))
+             ? camera.raw()
+             : nullptr;
 }
 
 bool menu_buttons_shown() {
-  void* menu = main_menu();
-  return menu && menu_enabled(menu);
+  const auto menu = api::Object::unchecked(main_menu());  // still a void* return until 3c
+  return menu && menu_enabled(menu.raw());
 }
 
 const char* why_menu_hidden() {
-  void* menu = main_menu();
+  const auto menu = api::Object::unchecked(main_menu());  // still a void* return until 3c
   if (!menu) return "no main menu is active";
-  if (!menu_enabled(menu)) return "the menu's buttons are off";
+  if (!menu_enabled(menu.raw())) return "the menu's buttons are off";
   if (!menu_camera()) return "the menu's camera is off";
-  for (void* transform = hostgame::transform_of(menu); transform; transform = hostgame::parent(transform)) {
-    void* focus = hostgame::get_component(transform, CameraFocusUI::type.type_object());
-    if (hostgame::alive(focus)) return CameraFocusUI::get_isFocused(focus) ? nullptr : "the camera is on another board";
+  for (auto transform = api::Object::unchecked(hostgame::transform_of(menu.raw())); transform;
+       transform = api::Object::unchecked(hostgame::parent(transform.raw()))) {
+    const auto focus = api::Object::unchecked(hostgame::get_component(transform.raw(), CameraFocusUI::type.type_object()));
+    if (hostgame::alive(focus.raw()))
+      return CameraFocusUI::get_isFocused(focus) ? nullptr : "the camera is on another board";
   }
   return "the menu's board has no camera focus";
 }
@@ -378,9 +390,9 @@ bool open(Panel& p, const std::string& title, const std::string& body, const std
   if (!can_copy()) return fail(true, "this game build lacks an entry a copy of the menu's popup needs");
   if (buttons.empty()) return fail(true, "a popup needs a button");
   if (!main_menu_visible()) return fail(false, "the main menu is out of view");
-  void* source = error_popup();
+  const auto source = api::Object::unchecked(error_popup());  // still a void* return until 3c
   if (!source) return fail(false, "the game's popup is not in the scene");
-  return build_popup(p, source, title, body, buttons, failure);
+  return build_popup(p, source.raw(), title, body, buttons, failure);
 }
 
 namespace {
@@ -390,9 +402,9 @@ namespace {
 const char* why_board_hidden(void* transform) {
   if (!transform) return "the game's popup is not in the scene";
   if (!api::all_resolved<CameraFocusUI::type, CameraFocusUI::get_isFocused>()) return "the board's focus cannot be read";
-  for (void* t = transform; t; t = hostgame::parent(t)) {
-    void* focus = hostgame::get_component(t, CameraFocusUI::type.type_object());
-    if (hostgame::alive(focus)) return CameraFocusUI::get_isFocused(focus) ? nullptr : "the board is not focused";
+  for (auto t = api::Object::unchecked(transform); t; t = api::Object::unchecked(hostgame::parent(t.raw()))) {
+    const auto focus = api::Object::unchecked(hostgame::get_component(t.raw(), CameraFocusUI::type.type_object()));
+    if (hostgame::alive(focus.raw())) return CameraFocusUI::get_isFocused(focus) ? nullptr : "the board is not focused";
   }
   return "the popup's board has no camera focus";
 }
@@ -404,14 +416,14 @@ bool open_on_board(Panel& p, const std::string& title, const std::string& body, 
     failure = {true, "this game build lacks an entry a copy of the menu's popup needs"};
     return false;
   }
-  void* source = error_popup();
-  const char* hidden = why_board_hidden(source);
+  const auto source = api::Object::unchecked(error_popup());  // still a void* return until 3c
+  const char* hidden = why_board_hidden(source.raw());
   if (hidden) {
     failure = {false, hidden};
     failure.noPopup = !source;
     return false;
   }
-  if (!build_popup(p, source, title, body, {"OK"}, &failure)) return false;
+  if (!build_popup(p, source.raw(), title, body, {"OK"}, &failure)) return false;
   p.anyPaper = true;
   return true;
 }
@@ -423,20 +435,21 @@ bool build_popup(Panel& p, void* source, const std::string& title, const std::st
     close(p);
     return false;
   };
-  void* copy = hostgame::instantiate(source, hostgame::parent(source), false);
-  void* root = copy && phasmo::GameObject::type.is(copy) ? hostgame::object_transform(copy) : copy;
+  const auto copy = api::Object::unchecked(hostgame::instantiate(source, hostgame::parent(source), false));
+  const auto root = copy && phasmo::GameObject::type.is(copy) ? api::Object::unchecked(hostgame::object_transform(copy.raw()))
+                                                              : copy;
   if (!root) return fail(false, "the game's popup could not be copied");
-  p.root = root;  // from here on close can take it away, whatever throws below
-  make_inert(root);
-  hostgame::set_active(hostgame::game_object_of(root), true);
-  p.title = text_at(root, "Error Title tape/Error Title Text (TMP)");
-  p.body = text_at(root, "Error_Text box/Background/Error Message");
-  p.paper = host::find_child(root, "Error_Text box/Background");
-  void* button = host::find_child(root, "Error Accept Button");
+  p.root = root.raw();  // from here on close can take it away, whatever throws below
+  make_inert(root.raw());
+  hostgame::set_active(hostgame::game_object_of(root.raw()), true);
+  p.title = text_at(root.raw(), "Error Title tape/Error Title Text (TMP)");
+  p.body = text_at(root.raw(), "Error_Text box/Background/Error Message");
+  p.paper = host::find_child(root.raw(), "Error_Text box/Background");
+  const auto button = api::Object::unchecked(host::find_child(root.raw(), "Error Accept Button"));
   if (!p.title || !p.body || !p.paper || !button) return fail(true, "the game's popup no longer has its title, paper or button");
   set_text(p.title, title);
   p.rowFontSize = ui::font_size_max(p.body) * kPaperTextScale;
-  const ui::Vec2 paper = to_ui(RectTransform::get_sizeDelta(static_cast<void*>(p.paper)));
+  const ui::Vec2 paper = to_ui(RectTransform::get_sizeDelta(p.paper.get()));
   ui::place(p.body, {0, 1}, {0, 1}, {kMargin, -kMargin}, {paper.x - 2 * kMargin, paper.y - 2 * kMargin});
   ui::set_alignment(p.body, ui::Align::TopLeft);
   ui::set_word_wrap(p.body, true);
@@ -446,21 +459,21 @@ bool build_popup(Panel& p, void* source, const std::string& title, const std::st
   const ui::Vec2 at = to_ui(RectTransform::get_anchoredPosition(button));
   const float width = size.x * (buttons.size() > 1 ? 1.6f : 1.0f);
   for (size_t i = 0; i < buttons.size(); ++i) {
-    void* b = i == 0 ? button : hostgame::instantiate(button, root, false);
+    const auto b = i == 0 ? button : api::Object::unchecked(hostgame::instantiate(button.raw(), root.raw(), false));
     const float x = (static_cast<float>(i) - (static_cast<float>(buttons.size()) - 1) / 2) * width * 1.15f;
-    ui::place(b, {0.5f, 0.5f}, {0.5f, 0.5f}, {x, at.y}, {width, size.y});
-    void* image = hostgame::get_component(b, Image::type.type_object());
-    void* label = text_at(b, "Accept Text (TMP)");
+    ui::place(b.raw(), {0.5f, 0.5f}, {0.5f, 0.5f}, {x, at.y}, {width, size.y});
+    const auto image = api::Object::unchecked(hostgame::get_component(b.raw(), Image::type.type_object()));
+    const auto label = api::Object::unchecked(text_at(b.raw(), "Accept Text (TMP)"));
     if (!image || !label) break;
-    fit(label);
-    set_text(label, buttons[i]);
+    fit(label.raw());
+    set_text(label.raw(), buttons[i]);
     Control c;
-    if (!clickable(c, b)) return fail(true, "the game's button could not take the mod's listener");
+    if (!clickable(c, b.raw())) return fail(true, "the game's button could not take the mod's listener");
     p.buttons.push_back(std::move(c));
-    p.buttonTexts.emplace_back(label);
+    p.buttonTexts.emplace_back(label.raw());
   }
   if (p.buttons.size() != buttons.size()) return fail(true, "the game's button has no image or label");
-  hide_decor(root);
+  hide_decor(root.raw());
   return true;
 }
 
@@ -482,10 +495,11 @@ void close(Panel& p) {
 bool is_open(const Panel& p) { return p.root && hostgame::alive(p.root); }
 
 bool drawn(const Panel& p) {
-  void* root = p.root.get();
-  if (!hostgame::alive(root) || !hostgame::active_in_hierarchy(hostgame::game_object_of(root))) return false;
-  void* canvas = hostgame::get_component(hostgame::parent(root), Canvas::type.type_object());  // the error popup's own canvas
-  return !hostgame::alive(canvas) || hostgame::enabled(canvas);
+  const auto root = api::Object::unchecked(p.root.get());  // a Held's raw side
+  if (!hostgame::alive(root.raw()) || !hostgame::active_in_hierarchy(hostgame::game_object_of(root.raw()))) return false;
+  const auto canvas = api::Object::unchecked(
+      hostgame::get_component(hostgame::parent(root.raw()), Canvas::type.type_object()));  // the error popup's own canvas
+  return !hostgame::alive(canvas.raw()) || hostgame::enabled(canvas.raw());
 }
 
 int tick(Panel& p) {
@@ -504,45 +518,45 @@ int tick(Panel& p) {
 
 bool add_row(Panel& p, int index, int count, const std::string& name, const std::string& description, bool locked) {
   if (!is_open(p) || count <= 0 || index < 0 || index >= count) return false;
-  const ui::Vec2 paper = to_ui(RectTransform::get_sizeDelta(static_cast<void*>(p.paper)));
+  const ui::Vec2 paper = to_ui(RectTransform::get_sizeDelta(p.paper.get()));
   const float inner = paper.x - 2 * kMargin;
   const float height = (paper.y * kRowsShare - kMargin) / static_cast<float>(count);
   if (p.rows.empty())
     ui::place(p.body, {0, 0}, {0, 0}, {kMargin, kMargin}, {inner, paper.y * (1 - kRowsShare) - kMargin});
-  void* toggle = toggle_row(p.paper);
-  void* root = toggle ? hostgame::transform_of(toggle) : nullptr;
-  void* box = root ? host::find_child(root, "Background") : nullptr;
-  void* mark = box ? host::find_child(box, "Checkmark") : nullptr;
+  const auto toggle = api::Object::unchecked(toggle_row(p.paper));  // still a void* return until 3c
+  const auto root = toggle ? api::Object::unchecked(hostgame::transform_of(toggle.raw())) : nullptr;
+  const auto box = root ? api::Object::unchecked(host::find_child(root.raw(), "Background")) : nullptr;
+  const auto mark = box ? api::Object::unchecked(host::find_child(box.raw(), "Checkmark")) : nullptr;
   if (!mark) {
-    if (root) hostgame::destroy(hostgame::game_object_of(root));
+    if (root) hostgame::destroy(hostgame::game_object_of(root.raw()));
     return false;
   }
   // The row is the toggle, its texts its children, so the game's toggle is what the row's clicks reach.
   const float boxSize = std::min(p.rowFontSize * 0.9f, height * 0.6f);
   const float rowText = std::min(p.rowFontSize, height * kRowTextMostShare);
-  for (void* t : {root, box, mark}) {
-    hostgame::set_local_scale(t, {1, 1, 1});
-    hostgame::set_active(hostgame::game_object_of(t), true);  // whatever the lobby's own are at this moment
+  for (const auto t : {root, box, mark}) {
+    hostgame::set_local_scale(t.raw(), {1, 1, 1});
+    hostgame::set_active(hostgame::game_object_of(t.raw()), true);  // whatever the lobby's own are at this moment
   }
   // The toggle fades the tick by its alpha, so both images stay on whichever way it is set.
-  for (void* t : {box, mark}) {
-    void* image = hostgame::get_component(t, Image::type.type_object());
+  for (const auto t : {box, mark}) {
+    const auto image = api::Object::unchecked(hostgame::get_component(t.raw(), Image::type.type_object()));
     if (!image) {
-      hostgame::destroy(hostgame::game_object_of(root));
+      hostgame::destroy(hostgame::game_object_of(root.raw()));
       return false;
     }
-    hostgame::set_enabled(image, true);
+    hostgame::set_enabled(image.raw(), true);
   }
-  ui::place(root, {0, 1}, {0, 1}, {kMargin, -kMargin - height * static_cast<float>(index)}, {inner, height});
-  ui::place(box, {0, 0.5f}, {0, 0.5f}, {0, 0}, {boxSize, boxSize});
-  ui::place(mark, {0.5f, 0.5f}, {0.5f, 0.5f}, {0, 0}, {boxSize, boxSize});
+  ui::place(root.raw(), {0, 1}, {0, 1}, {kMargin, -kMargin - height * static_cast<float>(index)}, {inner, height});
+  ui::place(box.raw(), {0, 0.5f}, {0, 0.5f}, {0, 0}, {boxSize, boxSize});
+  ui::place(mark.raw(), {0.5f, 0.5f}, {0.5f, 0.5f}, {0, 0}, {boxSize, boxSize});
   const float nameX = inner * kCheckboxShare;
   const float descriptionX = nameX + inner * kNameShare;
-  Row row{toggle,
-          text_cell(p, root, nameX, inner * kNameShare - kMargin, height, rowText),
-          text_cell(p, root, descriptionX, inner - descriptionX, height, rowText * kBodyTextShare)};
+  Row row{toggle.raw(),
+          text_cell(p, root.raw(), nameX, inner * kNameShare - kMargin, height, rowText),
+          text_cell(p, root.raw(), descriptionX, inner - descriptionX, height, rowText * kBodyTextShare)};
   if (!row.name || !row.description) {
-    hostgame::destroy(hostgame::game_object_of(root));
+    hostgame::destroy(hostgame::game_object_of(root.raw()));
     return false;
   }
   set_text(row.name, name);

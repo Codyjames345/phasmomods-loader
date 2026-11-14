@@ -28,8 +28,8 @@ size_t log_dead_views() {
   const api::RefArray views{phasmo::PhotonNetwork::get_PhotonViews()};
   size_t dead = 0;
   for (size_t i = 0, n = views.size(); i < n; ++i) {
-    void* view = views[i];
-    if (view && api::alive(view)) continue;
+    const auto view = api::Object::unchecked(views[i]);  // a RefArray element read
+    if (view && api::alive(view.raw())) continue;
     ++dead;
     // ViewID reads the view's own field, which stays readable after its engine object is gone.
     if (view) PM_LOG("net:   PhotonView %d is registered but its object is gone", phasmo::PhotonView::get_ViewID(view));
