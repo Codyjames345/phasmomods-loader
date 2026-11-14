@@ -44,6 +44,8 @@ keyboard key does not talk while the wheel is open either.
   degrees either side your body keeps facing the way it started, and past that it turns to keep the camera 90 degrees
   behind. In VR the view never moves; your own body shows instead, so look down to watch.
 - What you hold stays in your hand.
+- Head-mounted gear (the head camera) rides the dancing head on every dancer's body, and goes back to where the game
+  hung it when the dance ends.
 - Moving more than half a metre, using, placing, picking up, dropping or throwing an item, opening a door, flipping a
   light switch, crouching, or dying ends the dance. Switching items does not.
 - Some dances walk while they dance. Hold forward and the dancer takes its walking clip, and the half-metre rule moves

@@ -1161,3 +1161,9 @@ The four fixes from the first live test of joining (docs/superpowers/specs/2026-
 - [ ] The Sway pair face each other: the joiner glides in facing the first dancer, and the first dancer turns to the joiner over the same glide, smoothly, never a jump or a spin the long way round; both hold the new facing against the camera afterwards, and the second dancer's spot never moves. A pack without `faceEachOther` still dances side by side.
 - [ ] The song, three clients: each dancer hears the pair's song as their own, flat in both ears from their own body, in step with the other dancer; on the joiner's client the first dancer's copy plays no sound; a third client hears one copy from the point between the dancers, moving as they move; after the pair ends, the lone dancer's next song is back at their body.
 - [ ] The ghost hears one song per pair, not two: with a ghost that hunts on sound, the pair lures it as one singer does (the joiner's own copy adds no loudness).
+
+## Emotes: head-mounted gear during an emote
+
+The fifth fix from the live test (the user, 2026-11-15: the worn head camera stayed where the standing head is while the dance moved the head). Two clients, one wearing the head camera.
+
+- [ ] With the head camera worn, a dance moves it with the head: on the dancer's own client and on the other client, the camera rides the animated head through the dance (no lag at the standing head height), keeps its local place on the head (no tilt or offset), comes back to where the game hung it when the dance ends, and stays put when the game takes it off or mounts fresh gear mid-dance.

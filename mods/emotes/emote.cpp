@@ -37,6 +37,7 @@
 #include "emote_rule.h"
 #include "emote_session.h"
 #include "game.h"
+#include "gear.h"
 #include "held.h"
 #include "hooks.h"
 #include "keybinds.h"
@@ -215,6 +216,8 @@ struct State {
   std::set<int> syncedSongs;
   std::map<int, Turn> turns;  // by actor: a remote dancer easing to face their partner; the local dancer's session
                               // turns itself, so this client never turns its own body from here
+  std::map<int, gear::Watch> gears;  // by actor: a dancer's worn head gear, put onto the game's point under the
+                                     // head bone while that body dances (mods/emotes/gear.h, the user, 2026-11-15)
   bool loggedNoCapsule = false;
 };
 State g;
@@ -963,6 +966,23 @@ void send(const std::vector<EmoteMsg>& msgs) {
   }
 }
 
+// Head-mounted gear (the head camera and similar): while a body dances here, that body's worn gear rides the
+// animated head, and back to the parent the game had it under when the dance ends (the user, 2026-11-15, from the
+// live run: the head camera stayed where the standing head is while the dance moved the head; the game's own hang
+// is in sdk/systems/players.md, "Head-mounted gear", and the rule in mods/emotes/gear.h).
+void begin_gear(int actor, void* player) {
+  if (g.gears.count(actor)) return;  // a fresh dance on a body already dancing: keep the parent first remembered
+  gear::Watch w;
+  if (gear::begin(w, player)) g.gears[actor] = std::move(w);
+}
+
+void end_gear(int actor) {
+  auto it = g.gears.find(actor);
+  if (it == g.gears.end()) return;
+  gear::end(it->second);
+  g.gears.erase(it);
+}
+
 // A dancer whose death has begun, let go of at once: their clip off with nothing blending, their song off, their body
 // turned back as it was. The game's death animation has the body from the first frame of the kill, so a dance blending
 // out over it hides the death (the user, 2026-11-10).
@@ -970,6 +990,7 @@ void release_body(int actor, void* player) {
   if (player && game::alive(player)) api::anim::stop_on_player(player, 0.0f);
   stop_song(actor);
   g.turns.erase(actor);
+  end_gear(actor);
   auto it = g.facings.find(actor);
   if (it == g.facings.end()) return;
   if (it->second.model && game::alive(it->second.model)) game::set_local_rotation(it->second.model, it->second.original);
@@ -1103,6 +1124,7 @@ void apply_local(const LocalOut& o, void* player, bool vr) {
            song != g.songs.end() && song->second.source ? "playing" : "no source");
     begin_local_body(player, vr);
     begin_facing(me, player, o.bodyYaw.value_or(0.0f));
+    begin_gear(me, player);
   }
   // A walking emote's walk, a stop, or an intro's end: the phase's clip blends in over the one playing.
   if (o.phase && o.start < 0 && !o.stop && g.local->active() && g.local->role() == Role::First) {
@@ -1125,6 +1147,7 @@ void apply_local(const LocalOut& o, void* player, bool vr) {
       stop_song(me);
       end_local_body();
       end_facing(me);
+      end_gear(me);
     }
   }
   if (o.bodyYaw && !o.stop) {
@@ -1598,6 +1621,7 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
                                     second_part_start(first, o.emote, g.remote->partner_time(o.actor)));
           g.playing[o.actor] = clip;
           begin_facing(o.actor, player, o.yaw);
+          begin_gear(o.actor, player);
           switch_to_synced_song(first, o.emote,
                                 first == game::local_actor() ? g.local->elapsed() : g.remote->elapsed(first));
           // On a client that is neither dancer, the pair's one copy sits between the dancers and moves with them
@@ -1615,6 +1639,7 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
           g.playing[o.actor] = clip;
           start_song(o.actor, player, o.emote);
           begin_facing(o.actor, player, o.yaw);
+          begin_gear(o.actor, player);
         }
         break;
       case RemoteOut::Phase:
@@ -1633,6 +1658,7 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
         if (player) api::anim::stop_on_player(player, kBlendOut);
         stop_song(o.actor);
         end_facing(o.actor);
+        end_gear(o.actor);
         break;
       case RemoteOut::Yaw: {
         auto it = g.facings.find(o.actor);
@@ -1786,6 +1812,7 @@ void tick() {
   apply_local(g.local->tick(f), player, vr);
   step_glide(player, dt);
   if (g.local->active() && !vr) hold_items_in_hand();
+  for (auto& [actor, w] : g.gears) gear::follow(w);  // gear mounted fresh during a dance comes back onto the head
   if (g.logItemAfterView && !api::view::in_third_person()) {
     g.logItemAfterView = false;
     void* grab = component_in_rig(phasmo::PCPropGrab::type.type_object());
@@ -1881,6 +1908,8 @@ void stop() {
   // The engine loads a bundle once, so each is unloaded here for the mod's next start (the lobby's rules restart mods).
   for (api::Held& b : g.a.bundles)
     if (b && game::alive(b)) api::unload_bundle(b, true);
+  for (auto& [actor, w] : g.gears) gear::end(w);  // worn gear comes off the dancing head before the mod lets go
+  g.gears.clear();
   keys::clear_keys();
   api::settings::clear_settings();
   g = State{};

@@ -284,6 +284,22 @@ What a mod needs to animate an investigator's own body, as the Emotes mod does (
 - **VR.** A VR player's investigator is a `VRPlayer`. Its `VRPlayer.leftHandIK` and `VRPlayer.rightHandIK` are the IK
   targets that follow the controllers.
 
+### Head-mounted gear
+
+The head camera and similar gear, once worn, hangs from a fixed socket point rather than from the animated head.
+`NetworkedHeadMountedSocket` (map entries for `attachTransform`, `modelHeadSpot` and its one Equipment field) sits on
+the body's root and holds the two hang points and the one piece worn. `NetworkedHeadMountedSocket.MountEquipment` and
+`UnmountEquipment` send messages that hang the gear from one of the points and undo it; the hang also fixes the gear's
+local place and turn, freezes its Rigidbody and switches off its interact component (map notes). `attachTransform` is
+under the body's camera head, a node no body animation moves; `modelHeadSpot` hangs off the model's head bone, so an
+animation carries anything hung there. The socket has no per-frame placement (no method named Update, LateUpdate or
+FixedUpdate among its 98): the gear's transform is written only by the two mount and unmount messages and by a
+position setter of `attachTransform` that has no caller in the game's code. On a live PC test (2026-11-14) worn gear
+was hung from `attachTransform`, and it stayed at the standing head height while an emote clip moved the head bone.
+A mod animating the body can hang the worn gear from `modelHeadSpot` while its animation runs, keeping its local place
+and turn (the hang sets the same pair for either point), and put it back under the parent the game had it under
+afterwards; `mods/emotes/gear.h` does that for dances.
+
 ### What the player does, by input action
 
 The game's input actions (`PCControls.actions`, the `InputActionAsset` of `LocalPCPlayer.controls`) are named, with their

@@ -211,7 +211,8 @@ target_link_libraries(GhostTells PRIVATE pmmod)
 pm_options(GhostTells)
 
 # Emotes: an eight-dance wheel on a rebindable key (docs/superpowers/specs/2026-11-10-emotes-design.md).
-add_library(Emotes SHARED mods/emotes/mod.cpp mods/emotes/wheel.cpp mods/emotes/emote.cpp mods/emotes/join_prompt.cpp)
+add_library(Emotes SHARED mods/emotes/mod.cpp mods/emotes/wheel.cpp mods/emotes/emote.cpp mods/emotes/join_prompt.cpp
+  mods/emotes/gear.cpp)
 target_include_directories(Emotes PRIVATE mods/emotes mods/custom_ghosts)
 target_include_directories(Emotes BEFORE PRIVATE sdk/api sdk/map)
 target_link_libraries(Emotes PRIVATE pmmod)
@@ -387,6 +388,10 @@ pm_test(emotes_pages)
 target_include_directories(emotes_pages_test PRIVATE mods/emotes)
 pm_test(emotes_catalogue)
 target_include_directories(emotes_catalogue_test PRIVATE mods/emotes)
+# Head-mounted gear worn on a body while it dances (mods/emotes/gear.h).
+pm_test(emotes_gear mods/emotes/gear.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
+  sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
+target_include_directories(emotes_gear_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime mods/emotes)
 # Playing a clip on a player's own body (sdk/api/player_anim.h).
 pm_test(player_anim sdk/api/player_anim.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp core/log.cpp)
