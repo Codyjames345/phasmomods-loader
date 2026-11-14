@@ -21,4 +21,6 @@ if ($LASTEXITCODE -ne 0) { throw 'The API reference failed.' }
 & (Join-Path $PSScriptRoot 'tools/style_check.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'The style check found whitespace to fix.' }
 & (Join-Path $PSScriptRoot 'tests/style_check_test.ps1')
+& (Join-Path $PSScriptRoot 'tests/cycles_test.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'The map header cycle check failed.' }
 & (Join-Path $PSScriptRoot 'tests/release_test.ps1')
