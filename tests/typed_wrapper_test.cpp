@@ -133,6 +133,19 @@ Ref<map::Camera> late_typed_detour(api::Original<rawHook> original, Ref<map::Gho
   return original(ghost, count);
 }
 
+// A void-returning method hooked the same raw way: run gives the raw detour the whole call, so a
+// void method must not also reach the game's body behind it (a fall-through ran it twice).
+inline constexpr sdk::EntryDesc kRawHookVoid{.key = "Test.rawHookVoid", .kind = sdk::Kind::Method,
+                                             .flags = sdk::kOptional, .owner = "GhostAI", .name = "RawHookVoid"};
+constexpr api::Method<kRawHookVoid, void(Ref<map::GhostAI>)> rawHookVoid{};
+int g_rawVoidBodies = 0;
+void fake_raw_hook_void(void*, const void*) { ++g_rawVoidBodies; }
+int g_rawVoidDetours = 0;
+void raw_hook_void_detour(api::Original<rawHookVoid> original, void* ghost) {
+  ++g_rawVoidDetours;
+  original(ghost);
+}
+
 // Every entry this binary calls, then bind. The optional Test entries resolve because the fake is
 // given them here.
 void bind_fake() {
@@ -148,12 +161,14 @@ void bind_fake() {
   g_rawSawGhost = g_rawDetourGhost = nullptr;
   g_rawSawCount = g_rawDetourCount = 0;
   g_rawDetours = g_lateDetours = 0;
+  g_rawVoidBodies = g_rawVoidDetours = 0;
   fake::method(kSeeHandle, reinterpret_cast<void*>(&fake_see_handle), kGhostClass);
   fake::override_method(kSeeHandle, kDerivedClass, reinterpret_cast<void*>(&fake_see_handle_override));
   fake::field(kHolderField, 0x10);
   fake::static_field(kStaticHolder, &g_staticHolder, sizeof g_staticHolder, true);
   fake::method(kTypedHook, reinterpret_cast<void*>(&fake_typed_hook), kGhostClass);
   fake::method(kRawHook, reinterpret_cast<void*>(&fake_raw_hook), kGhostClass);
+  fake::method(kRawHookVoid, reinterpret_cast<void*>(&fake_raw_hook_void), kGhostClass);
   std::string missing;
   CHECK(api::bind(fake::host(), missing));
   CHECK(missing.empty());
@@ -283,6 +298,17 @@ void raw_detour_still_hooks_a_typed_method() {
   CHECK(g_rawDetours == 2 && g_lateDetours == 0);
 }
 
+// A void method with a raw detour: the body runs exactly once, through the detour's original.
+void a_void_raw_detour_runs_the_body_once() {
+  bind_fake();
+  CHECK(api::hook<rawHookVoid>(&raw_hook_void_detour, "void raw handles"));
+  using WV = std::remove_cvref_t<decltype(rawHookVoid)>;
+  using Entry = void (*)(void*, const void*);
+  void* ghost[1] = {kGhostClass};
+  reinterpret_cast<Entry>(api::detail::Bodies<WV, api::detail::Hooked<WV>>::entry(0))(ghost, nullptr);
+  CHECK(g_rawVoidDetours == 1 && g_rawVoidBodies == 1);
+}
+
 // OriginalOf's raw overload, the same bridge rule as a wrapper's call (removed in part 5): an
 // original called with void* arguments where the wrapper's parameters are handles still compiles and
 // means the same. below_hook hands one out to call outside a detour.
@@ -391,6 +417,7 @@ int main() {
   held_bridge_feeds_the_object_parameter();
   hook_detour_gets_handles();
   raw_detour_still_hooks_a_typed_method();
+  a_void_raw_detour_runs_the_body_once();
   original_takes_raw_arguments();
   held_takes_a_ref();
   type_make_gives_a_ref();

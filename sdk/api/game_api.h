@@ -1006,8 +1006,14 @@ struct Hooked<Method<D, R(A...)>> {
     if (d) return d(original, a...);
     const RawDetour rd = raw_detour;
     if (rd) {
-      if constexpr (std::is_void_v<R>) rd(original, to_raw(a)...);
-      else return from_raw<R>(rd(original, to_raw(a)...));
+      // The detour stands in for the game's body, so nothing may follow it: for a void method a
+      // fall-through past the call would run the game's body a second time.
+      if constexpr (std::is_void_v<R>) {
+        rd(original, to_raw(a)...);
+        return;
+      } else {
+        return from_raw<R>(rd(original, to_raw(a)...));
+      }
     }
     return original(a...);
   }
