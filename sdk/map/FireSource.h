@@ -7,6 +7,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Equipment.h"
 #include "Photon.h"
 
 namespace pm::map {
@@ -115,20 +116,20 @@ struct FireSource {
   /// The FireSource type. Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::FireSource> type{};
   /// Its flame's GameObject: flame.get(fire). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::FireSource_flame, void*> flame{};
+  static constexpr pm::api::Field<pm::map::FireSource_flame, pm::api::Object> flame{};
   /// Its Light: flameLight.get(fire). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::FireSource_flameLight, void*> flameLight{};
+  static constexpr pm::api::Field<pm::map::FireSource_flameLight, pm::api::Object> flameLight{};
   /// The Equipment it belongs to: equipment.get(fire). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::FireSource_equipment, void*> equipment{};
+  static constexpr pm::api::Field<pm::map::FireSource_equipment, pm::api::Ref<pm::map::Equipment>> equipment{};
   /// Whether it burns: isOn.get(fire). Unresolved: false.
   static constexpr pm::api::Field<pm::map::FireSource_isOn, bool> isOn{};
   /// BlowOutFire(fire, byGhost). A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::FireSource_BlowOutFire, void(void*, bool)> BlowOutFire{};
+  static constexpr pm::api::Method<pm::map::FireSource_BlowOutFire, void(pm::api::Ref<pm::map::FireSource>, bool)> BlowOutFire{};
   /// IgniteFire(fire, byGhost). A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::FireSource_IgniteFire, void(void*, bool)> IgniteFire{};
+  static constexpr pm::api::Method<pm::map::FireSource_IgniteFire, void(pm::api::Ref<pm::map::FireSource>, bool)> IgniteFire{};
   /// The RPC's body on this client: IgniteFireNetworked(fire, byGhost, info), `info` pointing at a
   /// PhotonMessageInfo. A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::FireSource_IgniteFireNetworked, void(void*, bool, void*)>
+  static constexpr pm::api::Method<pm::map::FireSource_IgniteFireNetworked, void(pm::api::Ref<pm::map::FireSource>, bool, pm::api::Object)>
       IgniteFireNetworked{};
 };
 

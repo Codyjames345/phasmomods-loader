@@ -7,6 +7,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "LevelRoom.h"
 #include "Photon.h"
 
 namespace pm::map {
@@ -147,23 +148,22 @@ struct GhostInfo {
   /// The given evidence, a List<EvidenceType>: givenEvidence.get(info). Read it as
   /// pm::api::Array<int32_t>{pm::api::List{list}.items()}, indexes below the List's size() only.
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostInfo_givenEvidence, void*> givenEvidence{};
+  static constexpr pm::api::Field<pm::map::GhostInfo_givenEvidence, pm::api::Object> givenEvidence{};
   /// The host's sync of the traits to every client: SyncValues(info, traits), `traits` pointing at a
   /// GhostTraits (passed by address, as the x64 convention passes a struct). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostInfo_SyncValues, void(void*, const void*)> SyncValues{};
+  static constexpr pm::api::Method<pm::map::GhostInfo_SyncValues, void(pm::api::Ref<pm::map::GhostInfo>, const void*)> SyncValues{};
   /// Whether this client has taken the given evidence: evidenceSynced.get(info); GhostInfo.SyncEvidence runs once
   /// while it is clear. Unresolved: false.
   static constexpr pm::api::Field<pm::map::GhostInfo_evidenceSynced, bool> evidenceSynced{};
   /// The RPC's body on this client: SyncValuesNetworked(info, type, ...seven more values..., message),
   /// `message` pointing at a PhotonMessageInfo. A mod usually hooks it. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::GhostInfo_SyncValuesNetworked,
-                                   void(void*, int32_t, int32_t, bool, int32_t, int32_t, bool, int32_t, int32_t,
-                                        bool, void*)>
+                                   void(pm::api::Ref<pm::map::GhostInfo>, int32_t, int32_t, bool, int32_t, int32_t, bool, int32_t, int32_t, bool, pm::api::Object)>
       SyncValuesNetworked{};
   /// The ghost's name, a System.String: name.get(info). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostInfo_name, void*> name{};
+  static constexpr pm::api::Field<pm::map::GhostInfo_name, pm::api::Object> name{};
   /// Its favourite room, a LevelRoom: favouriteRoom.get(info). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostInfo_favouriteRoom, void*> favouriteRoom{};
+  static constexpr pm::api::Field<pm::map::GhostInfo_favouriteRoom, pm::api::Ref<pm::map::LevelRoom>> favouriteRoom{};
 };
 
 /// @}

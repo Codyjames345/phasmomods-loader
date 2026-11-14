@@ -10,6 +10,7 @@
 #include "entry.h"
 #include "game_api.h"
 #include "Photon.h"
+#include "UnityAudio.h"
 #include "UnityObject.h"
 
 namespace pm::map {
@@ -312,26 +313,26 @@ namespace phasmo {
 /// A ghost's footstep. `footstep` below is one.
 struct Footstep {
   /// Its Noise: noise.get(footstep). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Footstep_noise, void*> noise{};
+  static constexpr pm::api::Field<pm::map::Footstep_noise, pm::api::Object> noise{};
   /// Its ghost's GhostAI: ghost.get(footstep). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Footstep_ghost, void*> ghost{};
+  static constexpr pm::api::Field<pm::map::Footstep_ghost, pm::api::Object> ghost{};
   /// Its reach in metres: reach.get(footstep). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Footstep_reach, float> reach{};
   /// Play(footstep, volume, name): `name` a managed string. A mod usually hooks it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Footstep_Play, void(void*, float, void*)> Play{};
+  static constexpr pm::api::Method<pm::map::Footstep_Play, void(pm::api::Ref<pm::map::Footstep>, float, pm::api::Object)> Play{};
 };
 
 /// A sound in the world. `noise` below is one.
 struct Noise {
   /// Its AudioSource: source.get(noise). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Noise_source, void*> source{};
+  static constexpr pm::api::Field<pm::map::Noise_source, pm::api::Ref<pm::map::AudioSource>> source{};
   /// PlaySound(noise, clip, volume, a, b): plays `clip` through its AudioSource on this client only, at `volume`
   /// (-1 for Noise.volume). The two flags are the game's own; its door sounds pass false for both. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Noise_PlaySound, void(void*, void*, float, bool, bool)> PlaySound{};
+  static constexpr pm::api::Method<pm::map::Noise_PlaySound, void(pm::api::Ref<pm::map::Noise>, pm::api::Ref<pm::map::AudioClip>, float, bool, bool)> PlaySound{};
   /// SetMaxDistance(noise, metres). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Noise_SetMaxDistance, void(void*, float)> SetMaxDistance{};
+  static constexpr pm::api::Method<pm::map::Noise_SetMaxDistance, void(pm::api::Ref<pm::map::Noise>, float)> SetMaxDistance{};
   /// The volume of its last play: volume.get(noise), volume.set(noise, v). What the sound sensor reads
   /// and replays at. Unresolved: 0, and a set does nothing.
   static constexpr pm::api::Field<pm::map::Noise_volume, float> volume{};
@@ -345,40 +346,40 @@ struct FootstepController {
   /// The type. Unresolved: null.
   static constexpr pm::api::Type<pm::map::FootstepController> type{};
   /// The player's PlayerNoise its steps play through: noise.get(steps). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::FootstepController_noise, void*> noise{};
+  static constexpr pm::api::Field<pm::map::FootstepController_noise, pm::api::Object> noise{};
   /// The layers its downward line hits, a bit per layer: mask.get(steps). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::FootstepController_mask, int32_t> mask{};
   /// Each surface's step clips, an AudioClip[]: carpetAudioClips and the rest walking, runCarpetAudioClips and the
   /// rest sprinting, stairsAudioClips for both. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::FootstepController_carpetAudioClips, void*> carpetAudioClips{};  ///< walking on carpet
-  static constexpr pm::api::Field<pm::map::FootstepController_runCarpetAudioClips, void*> runCarpetAudioClips{};  ///< sprinting on carpet
-  static constexpr pm::api::Field<pm::map::FootstepController_concreteAudioClips, void*> concreteAudioClips{};  ///< walking on concrete
-  static constexpr pm::api::Field<pm::map::FootstepController_runConcreteAudioClips, void*> runConcreteAudioClips{};  ///< sprinting on concrete
-  static constexpr pm::api::Field<pm::map::FootstepController_woodAudioClips, void*> woodAudioClips{};  ///< walking on wood
-  static constexpr pm::api::Field<pm::map::FootstepController_runWoodAudioClips, void*> runWoodAudioClips{};  ///< sprinting on wood
-  static constexpr pm::api::Field<pm::map::FootstepController_stairsAudioClips, void*> stairsAudioClips{};  ///< on stairs, walking or sprinting
-  static constexpr pm::api::Field<pm::map::FootstepController_oldwoodAudioClips, void*> oldwoodAudioClips{};  ///< walking on old wood
-  static constexpr pm::api::Field<pm::map::FootstepController_runOldWoodAudioClips, void*> runOldWoodAudioClips{};  ///< sprinting on old wood
-  static constexpr pm::api::Field<pm::map::FootstepController_grassAudioClips, void*> grassAudioClips{};  ///< walking on grass
-  static constexpr pm::api::Field<pm::map::FootstepController_runGrassAudioClips, void*> runGrassAudioClips{};  ///< sprinting on grass
-  static constexpr pm::api::Field<pm::map::FootstepController_snowAudioClips, void*> snowAudioClips{};  ///< walking on snow
-  static constexpr pm::api::Field<pm::map::FootstepController_runSnowAudioClips, void*> runSnowAudioClips{};  ///< sprinting on snow
-  static constexpr pm::api::Field<pm::map::FootstepController_truckAudioClips, void*> truckAudioClips{};  ///< walking on truck
-  static constexpr pm::api::Field<pm::map::FootstepController_runTruckAudioClips, void*> runTruckAudioClips{};  ///< sprinting on truck
-  static constexpr pm::api::Field<pm::map::FootstepController_wetAudioClips, void*> wetAudioClips{};  ///< walking on wet
-  static constexpr pm::api::Field<pm::map::FootstepController_runWetAudioClips, void*> runWetAudioClips{};  ///< sprinting on wet
-  static constexpr pm::api::Field<pm::map::FootstepController_glassAudioClips, void*> glassAudioClips{};  ///< walking on glass
-  static constexpr pm::api::Field<pm::map::FootstepController_runGlassAudioClips, void*> runGlassAudioClips{};  ///< sprinting on glass
-  static constexpr pm::api::Field<pm::map::FootstepController_metalAudioClips, void*> metalAudioClips{};  ///< walking on metal
-  static constexpr pm::api::Field<pm::map::FootstepController_runMetalAudioClips, void*> runMetalAudioClips{};  ///< sprinting on metal
-  static constexpr pm::api::Field<pm::map::FootstepController_gravelAudioClips, void*> gravelAudioClips{};  ///< walking on gravel
-  static constexpr pm::api::Field<pm::map::FootstepController_runGravelAudioClips, void*> runGravelAudioClips{};  ///< sprinting on gravel
-  static constexpr pm::api::Field<pm::map::FootstepController_vinylAudioClips, void*> vinylAudioClips{};  ///< walking on vinyl
-  static constexpr pm::api::Field<pm::map::FootstepController_runVinylAudioClips, void*> runVinylAudioClips{};  ///< sprinting on vinyl
-  static constexpr pm::api::Field<pm::map::FootstepController_heavyconcreteAudioClips, void*> heavyconcreteAudioClips{};  ///< walking on heavy concrete
-  static constexpr pm::api::Field<pm::map::FootstepController_runHeavyconcreteAudioClips, void*> runHeavyconcreteAudioClips{};  ///< sprinting on heavy concrete
+  static constexpr pm::api::Field<pm::map::FootstepController_carpetAudioClips, pm::api::Object> carpetAudioClips{};  ///< walking on carpet
+  static constexpr pm::api::Field<pm::map::FootstepController_runCarpetAudioClips, pm::api::Object> runCarpetAudioClips{};  ///< sprinting on carpet
+  static constexpr pm::api::Field<pm::map::FootstepController_concreteAudioClips, pm::api::Object> concreteAudioClips{};  ///< walking on concrete
+  static constexpr pm::api::Field<pm::map::FootstepController_runConcreteAudioClips, pm::api::Object> runConcreteAudioClips{};  ///< sprinting on concrete
+  static constexpr pm::api::Field<pm::map::FootstepController_woodAudioClips, pm::api::Object> woodAudioClips{};  ///< walking on wood
+  static constexpr pm::api::Field<pm::map::FootstepController_runWoodAudioClips, pm::api::Object> runWoodAudioClips{};  ///< sprinting on wood
+  static constexpr pm::api::Field<pm::map::FootstepController_stairsAudioClips, pm::api::Object> stairsAudioClips{};  ///< on stairs, walking or sprinting
+  static constexpr pm::api::Field<pm::map::FootstepController_oldwoodAudioClips, pm::api::Object> oldwoodAudioClips{};  ///< walking on old wood
+  static constexpr pm::api::Field<pm::map::FootstepController_runOldWoodAudioClips, pm::api::Object> runOldWoodAudioClips{};  ///< sprinting on old wood
+  static constexpr pm::api::Field<pm::map::FootstepController_grassAudioClips, pm::api::Object> grassAudioClips{};  ///< walking on grass
+  static constexpr pm::api::Field<pm::map::FootstepController_runGrassAudioClips, pm::api::Object> runGrassAudioClips{};  ///< sprinting on grass
+  static constexpr pm::api::Field<pm::map::FootstepController_snowAudioClips, pm::api::Object> snowAudioClips{};  ///< walking on snow
+  static constexpr pm::api::Field<pm::map::FootstepController_runSnowAudioClips, pm::api::Object> runSnowAudioClips{};  ///< sprinting on snow
+  static constexpr pm::api::Field<pm::map::FootstepController_truckAudioClips, pm::api::Object> truckAudioClips{};  ///< walking on truck
+  static constexpr pm::api::Field<pm::map::FootstepController_runTruckAudioClips, pm::api::Object> runTruckAudioClips{};  ///< sprinting on truck
+  static constexpr pm::api::Field<pm::map::FootstepController_wetAudioClips, pm::api::Object> wetAudioClips{};  ///< walking on wet
+  static constexpr pm::api::Field<pm::map::FootstepController_runWetAudioClips, pm::api::Object> runWetAudioClips{};  ///< sprinting on wet
+  static constexpr pm::api::Field<pm::map::FootstepController_glassAudioClips, pm::api::Object> glassAudioClips{};  ///< walking on glass
+  static constexpr pm::api::Field<pm::map::FootstepController_runGlassAudioClips, pm::api::Object> runGlassAudioClips{};  ///< sprinting on glass
+  static constexpr pm::api::Field<pm::map::FootstepController_metalAudioClips, pm::api::Object> metalAudioClips{};  ///< walking on metal
+  static constexpr pm::api::Field<pm::map::FootstepController_runMetalAudioClips, pm::api::Object> runMetalAudioClips{};  ///< sprinting on metal
+  static constexpr pm::api::Field<pm::map::FootstepController_gravelAudioClips, pm::api::Object> gravelAudioClips{};  ///< walking on gravel
+  static constexpr pm::api::Field<pm::map::FootstepController_runGravelAudioClips, pm::api::Object> runGravelAudioClips{};  ///< sprinting on gravel
+  static constexpr pm::api::Field<pm::map::FootstepController_vinylAudioClips, pm::api::Object> vinylAudioClips{};  ///< walking on vinyl
+  static constexpr pm::api::Field<pm::map::FootstepController_runVinylAudioClips, pm::api::Object> runVinylAudioClips{};  ///< sprinting on vinyl
+  static constexpr pm::api::Field<pm::map::FootstepController_heavyconcreteAudioClips, pm::api::Object> heavyconcreteAudioClips{};  ///< walking on heavy concrete
+  static constexpr pm::api::Field<pm::map::FootstepController_runHeavyconcreteAudioClips, pm::api::Object> runHeavyconcreteAudioClips{};  ///< sprinting on heavy concrete
   /// The player's own: footstepController.get(player). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Player_footstepController, void*> footstepController{};
+  static constexpr pm::api::Field<pm::map::Player_footstepController, pm::api::Ref<pm::map::FootstepController>> footstepController{};
 };
 
 /// @}

@@ -10,9 +10,16 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "Animator.h"
+#include "Equipment.h"
+#include "GhostInfo.h"
+#include "GhostSenses.h"
 #include "Photon.h"
+#include "Props.h"
+#include "Sensor.h"
 #include "Transform.h"
 #include "UnityObject.h"
+#include "UnityWorld.h"
 
 namespace pm::map {
 
@@ -798,11 +805,11 @@ struct GhostAI {
   static constexpr pm::api::Field<pm::map::GhostAI_obamboAggressive, bool> obamboAggressive{};
   /// The props the Deildegast has moved, a HashSet (count them with pm::api::count): movedProps.get(ghost).
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostAI_movedProps, void*> movedProps{};
+  static constexpr pm::api::Field<pm::map::GhostAI_movedProps, pm::api::Object> movedProps{};
   /// Where it hears from, a Transform: head.get(ghost). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostAI_head, void*> head{};
+  static constexpr pm::api::Field<pm::map::GhostAI_head, pm::api::Ref<pm::map::Transform>> head{};
   /// A Banshee's target, or null: bansheeTarget.get(ghost). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostAI_bansheeTarget, void*> bansheeTarget{};
+  static constexpr pm::api::Field<pm::map::GhostAI_bansheeTarget, pm::api::Object> bansheeTarget{};
   /// Whether it may wander: canWander.get(ghost). Unresolved: false.
   static constexpr pm::api::Field<pm::map::GhostAI_canWander, bool> canWander{};
   /// Whether its roll and wanders go to its favourite room instead: stayHome.get(ghost). Unresolved: false.
@@ -814,10 +821,10 @@ struct GhostAI {
   /// Unresolved: false.
   static constexpr pm::api::Field<pm::map::GhostAI_interactionBoost, bool> interactionBoost{};
   /// Its hearing, a GhostHearing: hearing.get(ghost). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostAI_hearing, void*> hearing{};
+  static constexpr pm::api::Field<pm::map::GhostAI_hearing, pm::api::Ref<pm::map::GhostHearing>> hearing{};
   /// The parts of players its sight keeps, nearest first, a List<PlayerLOSTarget>: sightTargets.get(ghost).
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostAI_sightTargets, void*> sightTargets{};
+  static constexpr pm::api::Field<pm::map::GhostAI_sightTargets, pm::api::Object> sightTargets{};
   /// The GhostAI type: klass(), is(obj), type_object(), make() and make_array(n). Unresolved: null
   /// and false.
   static constexpr pm::api::Type<pm::map::GhostAI> type{};
@@ -826,16 +833,16 @@ struct GhostAI {
   static constexpr pm::api::Field<pm::map::GhostAI_state, int32_t> state{};
   /// The ghost's NavMeshAgent, a managed reference: agent.get(ghost); agent.set goes through the GC
   /// write barrier. Unresolved: reads null, writes nothing.
-  static constexpr pm::api::Field<pm::map::GhostAI_agent, void*> agent{};
+  static constexpr pm::api::Field<pm::map::GhostAI_agent, pm::api::Ref<pm::map::NavMeshAgent>> agent{};
   /// Its state machine: stateMachine.get(ghost), for GhostStateMachine::current. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostAI_stateMachine, void*> stateMachine{};
+  static constexpr pm::api::Field<pm::map::GhostAI_stateMachine, pm::api::Ref<pm::map::GhostStateMachine>> stateMachine{};
   /// Whether a hunt is on: isHunting.get(ghost). Unresolved: reads false, writes nothing.
   static constexpr pm::api::Field<pm::map::GhostAI_isHunting, bool> isHunting{};
   /// Set when a hunt starts, cleared by Awake (the post-hunt cooldown): postHuntCooldown.get(ghost).
   /// Unresolved: reads false, writes nothing.
   static constexpr pm::api::Field<pm::map::GhostAI_postHuntCooldown, bool> postHuntCooldown{};
   /// The ghost's GhostInfo, a managed reference: info.get(ghost). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostAI_info, void*> info{};
+  static constexpr pm::api::Field<pm::map::GhostAI_info, pm::api::Ref<pm::map::GhostInfo>> info{};
   /// The ghost's base hunt speed in metres a second (1.7 from Awake): baseSpeed.get(ghost).
   /// Unresolved: 0.
   static constexpr pm::api::Field<pm::map::GhostAI_baseSpeed, float> baseSpeed{};
@@ -849,39 +856,39 @@ struct GhostAI {
   /// Sets the ghost up from the host's traits: Init(ghost, traits), `traits` pointing at a GhostTraits
   /// (passed by address, as the x64 convention passes a struct). A mod usually hooks it. Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::GhostAI_Init, void(void*, void*)> Init{};
+  static constexpr pm::api::Method<pm::map::GhostAI_Init, void(pm::api::Ref<pm::map::GhostAI>, void*)> Init{};
   /// Unity's Awake: Awake(ghost). The game calls it once; a mod usually hooks it rather than calls
   /// it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostAI_Awake, void(void*)> Awake{};
+  static constexpr pm::api::Method<pm::map::GhostAI_Awake, void(pm::api::Ref<pm::map::GhostAI>)> Awake{};
   /// The Photon RPC that starts (true) or ends (false) a hunt on this client, its body run directly:
   /// Hunting(ghost, start, number, info), `info` pointing at a PhotonMessageInfo. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::GhostAI_Hunting, void(void*, bool, int32_t, const void*)> Hunting{};
+  static constexpr pm::api::Method<pm::map::GhostAI_Hunting, void(pm::api::Ref<pm::map::GhostAI>, bool, int32_t, const void*)> Hunting{};
   /// Changes the ghost's state: ChangeState(ghost, state, interact, force), with a GhostState number,
   /// a PhotonObjectInteract or null, and whether to force the change. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostAI_ChangeState, void(void*, int32_t, void*, bool)> ChangeState{};
+  static constexpr pm::api::Method<pm::map::GhostAI_ChangeState, void(pm::api::Ref<pm::map::GhostAI>, int32_t, pm::api::Ref<pm::map::PhotonObjectInteract>, bool)> ChangeState{};
   /// Ends an appearance on every client (an RPC) when the ghost is showing itself: UnAppear(ghost).
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostAI_UnAppear, void(void*)> UnAppear{};
+  static constexpr pm::api::Method<pm::map::GhostAI_UnAppear, void(pm::api::Ref<pm::map::GhostAI>)> UnAppear{};
   /// Turns the ghost to face a player, on this client only: LookAtPlayer(ghost, player). Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::GhostAI_LookAtPlayer, void(void*, void*)> LookAtPlayer{};
+  static constexpr pm::api::Method<pm::map::GhostAI_LookAtPlayer, void(pm::api::Ref<pm::map::GhostAI>, pm::api::Object)> LookAtPlayer{};
   /// Stops the ghost wandering for `seconds`: TemporarilyStopWander(ghost, seconds). Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::GhostAI_TemporarilyStopWander, void(void*, float)> TemporarilyStopWander{};
+  static constexpr pm::api::Method<pm::map::GhostAI_TemporarilyStopWander, void(pm::api::Ref<pm::map::GhostAI>, float)> TemporarilyStopWander{};
   /// The Banshee's new target, other than `player`: SetNewBansheeTarget(ghost, player), on the master.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostAI_SetNewBansheeTarget, void(void*, void*)> SetNewBansheeTarget{};
+  static constexpr pm::api::Method<pm::map::GhostAI_SetNewBansheeTarget, void(pm::api::Ref<pm::map::GhostAI>, pm::api::Object)> SetNewBansheeTarget{};
   /// Shows the ghost on every client unless it shows itself already: Appear(ghost, form), -1 for the
   /// game's pick of form. A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostAI_Appear, void(void*, int32_t)> Appear{};
+  static constexpr pm::api::Method<pm::map::GhostAI_Appear, void(pm::api::Ref<pm::map::GhostAI>, int32_t)> Appear{};
   /// The RPC that shows or hides the ghost, its body run directly: MakeGhostAppear(ghost, show, form,
   /// info), `info` pointing at a PhotonMessageInfo. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostAI_MakeGhostAppear, void(void*, bool, int32_t, const void*)>
+  static constexpr pm::api::Method<pm::map::GhostAI_MakeGhostAppear, void(pm::api::Ref<pm::map::GhostAI>, bool, int32_t, const void*)>
       MakeGhostAppear{};
   /// Makes the coroutine that holds the ghost's hunts off for a while: StopGhostFromHunting(ghost), an
   /// IEnumerator its caller starts. A mod usually hooks it. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GhostAI_StopGhostFromHunting, void*(void*)> StopGhostFromHunting{};
+  static constexpr pm::api::Method<pm::map::GhostAI_StopGhostFromHunting, pm::api::Object(pm::api::Ref<pm::map::GhostAI>)> StopGhostFromHunting{};
   /// Whether the ghost shows itself: isAppeared.get(ghost). Unresolved: reads false, writes nothing.
   static constexpr pm::api::Field<pm::map::GhostAI_isAppeared, bool> isAppeared{};
   /// Whether the ghost's hunts are held off (incense, a Monkey Paw wish): huntsHeldOff.get(ghost).
@@ -889,24 +896,24 @@ struct GhostAI {
   static constexpr pm::api::Field<pm::map::GhostAI_huntsHeldOff, bool> huntsHeldOff{};
   /// The incense that smudged it in this hunt, a WhiteSage, or null: smudge.get(ghost). Unresolved:
   /// null.
-  static constexpr pm::api::Field<pm::map::GhostAI_smudge, void*> smudge{};
+  static constexpr pm::api::Field<pm::map::GhostAI_smudge, pm::api::Ref<pm::map::WhiteSage>> smudge{};
   /// The Onryo's count of flames blown out; at 3 the idle state starts a hunt (see
   /// GhostIdleState.Execute): flamesBlownOut.get(ghost). Unresolved: reads 0, writes nothing.
   static constexpr pm::api::Field<pm::map::GhostAI_flamesBlownOut, int32_t> flamesBlownOut{};
   /// Its GhostActivity: activity.get(ghost). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostAI_activity, void*> activity{};
+  static constexpr pm::api::Field<pm::map::GhostAI_activity, pm::api::Ref<pm::map::GhostActivity>> activity{};
   /// The model it wears now, a GhostModel: model.get(ghost). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostAI_model, void*> model{};
+  static constexpr pm::api::Field<pm::map::GhostAI_model, pm::api::Ref<pm::map::GhostModel>> model{};
   /// Its GhostInteraction: interaction.get(ghost). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostAI_interaction, void*> interaction{};
+  static constexpr pm::api::Field<pm::map::GhostAI_interaction, pm::api::Ref<pm::map::GhostInteraction>> interaction{};
   /// Its vision, a LOSSensor: vision.get(ghost). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostAI_vision, void*> vision{};
+  static constexpr pm::api::Field<pm::map::GhostAI_vision, pm::api::Ref<pm::map::LOSSensor>> vision{};
 };
 
 /// What the ghost leaves where it touches things. `interaction` below is the GhostInteraction.
 struct GhostInteraction {
   /// CreateThrowingEMF(interaction, objectInteract, emfType, flag, range). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostInteraction_CreateThrowingEMF, void(void*, void*, int32_t, bool, float)>
+  static constexpr pm::api::Method<pm::map::GhostInteraction_CreateThrowingEMF, void(pm::api::Ref<pm::map::GhostInteraction>, pm::api::Object, int32_t, bool, float)>
       CreateThrowingEMF{};
 };
 
@@ -922,47 +929,47 @@ struct GhostModel {
   /// Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::GhostModel> type{};
   /// The model's Animator: animator.get(model). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostModel_animator, void*> animator{};
+  static constexpr pm::api::Field<pm::map::GhostModel_animator, pm::api::Ref<pm::map::Animator>> animator{};
   /// Its renderers, a Renderer[]: renderers.get(model). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostModel_renderers, void*> renderers{};
+  static constexpr pm::api::Field<pm::map::GhostModel_renderers, pm::api::Object> renderers{};
   /// Its own sounds, a List<AudioClip>: sounds.get(model). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostModel_sounds, void*> sounds{};
+  static constexpr pm::api::Field<pm::map::GhostModel_sounds, pm::api::Object> sounds{};
 };
 
 /// The ghost's interactions. `activity` below is the GhostActivity.
 struct GhostActivity {
   /// The light chance: lightChance(activity, force). A mod usually hooks it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GhostActivity_lightChance, bool(void*, bool)> lightChance{};
+  static constexpr pm::api::Method<pm::map::GhostActivity_lightChance, bool(pm::api::Ref<pm::map::GhostActivity>, bool)> lightChance{};
   /// The prop chance: InteractWithARandomProp(activity, force). A mod usually hooks it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GhostActivity_InteractWithARandomProp, bool(void*, bool)>
+  static constexpr pm::api::Method<pm::map::GhostActivity_InteractWithARandomProp, bool(pm::api::Ref<pm::map::GhostActivity>, bool)>
       InteractWithARandomProp{};
   /// Whether the Raiju's sensor finds running electronics: nearElectronics.get(activity). Unresolved: false.
   static constexpr pm::api::Field<pm::map::GhostActivity_nearElectronics, bool> nearElectronics{};
   /// The Raiju's electronics sensor, a RangeSensor: electronicsSensor.get(activity). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostActivity_electronicsSensor, void*> electronicsSensor{};
+  static constexpr pm::api::Field<pm::map::GhostActivity_electronicsSensor, pm::api::Object> electronicsSensor{};
   /// UpdateElectronics(activity): pulses the electronics sensor, as a hunt's start and the idle state do. A mod
   /// usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostActivity_UpdateElectronics, void(void*)> UpdateElectronics{};
+  static constexpr pm::api::Method<pm::map::GhostActivity_UpdateElectronics, void(pm::api::Ref<pm::map::GhostActivity>)> UpdateElectronics{};
   /// One interaction attempt of the ghost's own: TryInteract(activity). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostActivity_TryInteract, void(void*)> TryInteract{};
+  static constexpr pm::api::Method<pm::map::GhostActivity_TryInteract, void(pm::api::Ref<pm::map::GhostActivity>)> TryInteract{};
   /// One pulse of its interaction sensor: NormalInteraction(activity, force). A mod usually hooks it.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostActivity_NormalInteraction, void(void*, bool)> NormalInteraction{};
+  static constexpr pm::api::Method<pm::map::GhostActivity_NormalInteraction, void(pm::api::Ref<pm::map::GhostActivity>, bool)> NormalInteraction{};
   /// GetDoorToOpen(activity): a door, or null. A mod usually hooks it. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GhostActivity_GetDoorToOpen, void*(void*)> GetDoorToOpen{};
+  static constexpr pm::api::Method<pm::map::GhostActivity_GetDoorToOpen, pm::api::Object(pm::api::Ref<pm::map::GhostActivity>)> GetDoorToOpen{};
   /// The idle door chance: doorChance(activity). A mod usually hooks it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GhostActivity_doorChance, bool(void*)> doorChance{};
+  static constexpr pm::api::Method<pm::map::GhostActivity_doorChance, bool(pm::api::Ref<pm::map::GhostActivity>)> doorChance{};
   /// Its interaction sensor, a RangeSensor: interactionSensor.get(activity). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostActivity_interactionSensor, void*> interactionSensor{};
+  static constexpr pm::api::Field<pm::map::GhostActivity_interactionSensor, pm::api::Ref<pm::map::RangeSensor>> interactionSensor{};
   /// The sensor's box half extents: sensorBox.get(activity). Unresolved: zeros.
   static constexpr pm::api::Field<pm::map::GhostActivity_sensorBox, Vector3> sensorBox{};
   /// GetPropToThrow(activity): the Prop the ghost would throw now, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GhostActivity_GetPropToThrow, void*(void*)> GetPropToThrow{};
+  static constexpr pm::api::Method<pm::map::GhostActivity_GetPropToThrow, pm::api::Object(pm::api::Ref<pm::map::GhostActivity>)> GetPropToThrow{};
   /// throwable(activity, prop): GetPropToThrow's test of one Prop. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GhostActivity_throwable, bool(void*, void*)> throwable{};
+  static constexpr pm::api::Method<pm::map::GhostActivity_throwable, bool(pm::api::Ref<pm::map::GhostActivity>, pm::api::Ref<pm::map::Prop>)> throwable{};
   /// TwinInteraction(activity, flag): the Twins' second interaction, an IEnumerator to start with
   /// phasmo::MonoBehaviour::StartCoroutine. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GhostActivity_TwinInteraction, void*(void*, bool)> TwinInteraction{};
+  static constexpr pm::api::Method<pm::map::GhostActivity_TwinInteraction, pm::api::Object(pm::api::Ref<pm::map::GhostActivity>, bool)> TwinInteraction{};
 };
 
 /// The ghost's states: the numbers GhostAI::state holds and GhostAI::ChangeState takes.

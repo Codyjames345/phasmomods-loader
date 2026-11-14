@@ -69,7 +69,7 @@ struct Resuming {
 // Runs the held spawn through, as the game's own spawn.
 void run_held_spawn() {
   const Resuming resuming;
-  GhostController::Spawn(g_heldController);
+  GhostController::Spawn(g_heldController.get());
 }
 
 Clock g_clock = &GetTickCount64;

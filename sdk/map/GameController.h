@@ -8,6 +8,7 @@
 
 #include "LocalisationSystem.h"
 #include "Photon.h"
+#include "Props.h"
 #include "UnityObject.h"
 #include "entry.h"
 #include "game_api.h"
@@ -497,18 +498,18 @@ namespace phasmo {
 struct GameController {
   /// The level's GameController: instance.get(), or null; check it with pm::api::alive, since a
   /// destroyed one stays after the level. Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::GameController_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::GameController_instance, pm::api::Ref<pm::map::GameController>> instance{};
   /// GetAveragePlayerInsanity(controller): the players' average insanity (100 less sanity), the number the
   /// ghost's idle hunt check starts from when no player is its own. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::GameController_GetAveragePlayerInsanity, float(void*)>
+  static constexpr pm::api::Method<pm::map::GameController_GetAveragePlayerInsanity, float(pm::api::Ref<pm::map::GameController>)>
       GetAveragePlayerInsanity{};
   /// LoadBackToMenu(controller): back to the menu scene. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GameController_LoadBackToMenu, void(void*)> LoadBackToMenu{};
+  static constexpr pm::api::Method<pm::map::GameController_LoadBackToMenu, void(pm::api::Ref<pm::map::GameController>)> LoadBackToMenu{};
   /// Exit(controller, &info): the contract's end when every player has died, on every client. A mod hooks
   /// it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GameController_Exit, void(void*, void*)> Exit{};
+  static constexpr pm::api::Method<pm::map::GameController_Exit, void(pm::api::Ref<pm::map::GameController>, pm::api::Object)> Exit{};
   /// AmountOfDeadPlayers(controller): how many players are dead. A mod hooks it. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::GameController_AmountOfDeadPlayers, int32_t(void*)> AmountOfDeadPlayers{};
+  static constexpr pm::api::Method<pm::map::GameController_AmountOfDeadPlayers, int32_t(pm::api::Ref<pm::map::GameController>)> AmountOfDeadPlayers{};
   /// Whether every player has loaded: allPlayersLoaded.get(controller). Unresolved: false.
   static constexpr pm::api::Field<pm::map::GameController_allPlayersLoaded, bool> allPlayersLoaded{};
 };
@@ -520,10 +521,10 @@ struct ExitLevel {
   static constexpr pm::api::Type<pm::map::ExitLevel> type{};
   /// ThereAreAlivePlayersOutsideTheTruck(exitLevel): whether a living player stands outside the truck. Unresolved:
   /// false.
-  static constexpr pm::api::Method<pm::map::ExitLevel_ThereAreAlivePlayersOutsideTheTruck, bool(void*)>
+  static constexpr pm::api::Method<pm::map::ExitLevel_ThereAreAlivePlayersOutsideTheTruck, bool(pm::api::Ref<pm::map::ExitLevel>)>
       ThereAreAlivePlayersOutsideTheTruck{};
   /// The truck's inside, an ExitLevelTrigger: trigger.get(exitLevel). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ExitLevel_trigger, void*> trigger{};
+  static constexpr pm::api::Field<pm::map::ExitLevel_trigger, pm::api::Ref<pm::map::ExitLevelTrigger>> trigger{};
   /// StartAttemptExitLevel(exit): the master's own starter for the truck leaving, what
   /// LiftButton.NetworkedUse calls on it. StopAllCoroutines first; with the object's serialized ready
   /// bool set (the editor writes it, no code does), it sets Network.sceneChanging, sends the truck's
@@ -531,9 +532,9 @@ struct ExitLevel {
   /// finishes the wait), checks that bool again and sends ExitLevel.Exit by RPC - the game's own path,
   /// with the game's own sender; with the bool clear it sends the stop sound and clears sceneChanging
   /// instead. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ExitLevel_StartAttemptExitLevel, void(void*)> StartAttemptExitLevel{};
+  static constexpr pm::api::Method<pm::map::ExitLevel_StartAttemptExitLevel, void(pm::api::Ref<pm::map::ExitLevel>)> StartAttemptExitLevel{};
   /// Exit(exit, &info): the contract's end on every client. A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ExitLevel_Exit, void(void*, void*)> Exit{};
+  static constexpr pm::api::Method<pm::map::ExitLevel_Exit, void(pm::api::Ref<pm::map::ExitLevel>, pm::api::Object)> Exit{};
   /// CheckMissions(): the main objective's check at the contract's end. A mod hooks it. Unresolved: does
   /// nothing.
   static constexpr pm::api::Method<pm::map::ExitLevel_CheckMissions, void()> CheckMissions{};
@@ -545,12 +546,12 @@ struct ExitLevel {
 /// The loading screen's controller. `loading` below is the LoadingController.
 struct LoadingController {
   /// The one LoadingController: instance.get(), or null. Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::LoadingController_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::LoadingController_instance, pm::api::Ref<pm::map::LoadingController>> instance{};
   /// Whether the loading screen is ready: ready.get(loading). Unresolved: false.
   static constexpr pm::api::Field<pm::map::LoadingController_ready, bool> ready{};
   /// LoadScene(loading, flag, scene, sceneName, flag2): shows the loading screen and loads a scene.
   /// sceneName is a managed string. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LoadingController_LoadScene, void(void*, bool, int32_t, void*, bool)>
+  static constexpr pm::api::Method<pm::map::LoadingController_LoadScene, void(pm::api::Ref<pm::map::LoadingController>, bool, int32_t, pm::api::Object, bool)>
       LoadScene{};
 };
 
@@ -560,27 +561,27 @@ struct PauseMenuController {
   /// Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::PauseMenuController> type{};
   /// Leave(menu): the game's own leave. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PauseMenuController_Leave, void(void*)> Leave{};
+  static constexpr pm::api::Method<pm::map::PauseMenuController_Leave, void(pm::api::Ref<pm::map::PauseMenuController>)> Leave{};
   /// Quit(menu): the game's own quit. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::PauseMenuController_Quit, void(void*)> Quit{};
+  static constexpr pm::api::Method<pm::map::PauseMenuController_Quit, void(pm::api::Ref<pm::map::PauseMenuController>)> Quit{};
 };
 
 /// The truck's door button. `button` below is the LiftButton.
 struct LiftButton {
   /// AttemptUse(button, &info), an RPC the master runs: a press of the button. A mod hooks it. Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::LiftButton_AttemptUse, void(void*, void*)> AttemptUse{};
+  static constexpr pm::api::Method<pm::map::LiftButton_AttemptUse, void(pm::api::Ref<pm::map::LiftButton>, pm::api::Object)> AttemptUse{};
   /// NetworkedUse(button, flag, &info), by RPC on every client: a mod asks pm::api::inside whether one is
   /// running, the host tracking it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LiftButton_NetworkedUse, void(void*, bool, void*)> NetworkedUse{};
+  static constexpr pm::api::Method<pm::map::LiftButton_NetworkedUse, void(pm::api::Ref<pm::map::LiftButton>, bool, pm::api::Object)> NetworkedUse{};
   /// Whether the doors are closed: isClosed.get(button). Unresolved: false.
   static constexpr pm::api::Field<pm::map::LiftButton_isClosed, bool> isClosed{};
   /// The LiftButton type: type_object() for Object.FindObjectOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::LiftButton> type{};
   /// The truck's ExitLevel this button starts: exitLevel.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LiftButton_exitLevel, void*> exitLevel{};
+  static constexpr pm::api::Field<pm::map::LiftButton_exitLevel, pm::api::Ref<pm::map::ExitLevel>> exitLevel{};
   /// The button's interaction component, a PhotonObjectInteract: photonInteract.get(button). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LiftButton_photonInteract, void*> photonInteract{};
+  static constexpr pm::api::Field<pm::map::LiftButton_photonInteract, pm::api::Ref<pm::map::PhotonObjectInteract>> photonInteract{};
 };
 
 /// What RewardManager.EventRow answers: a Nullable of the score to send, 32 bytes in this build. All zero is no event.
@@ -591,32 +592,32 @@ struct RewardEventRow {
 /// The reward screen. `screen` below is the RewardManager. A mod hooks these to act around the screen's own work.
 struct RewardManager {
   /// StartResults(screen): starts the results, running their first step. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RewardManager_StartResults, void(void*)> StartResults{};
+  static constexpr pm::api::Method<pm::map::RewardManager_StartResults, void(pm::api::Ref<pm::map::RewardManager>)> StartResults{};
   /// BuildRows(screen): builds the rows and their totals. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RewardManager_BuildRows, void(void*)> BuildRows{};
+  static constexpr pm::api::Method<pm::map::RewardManager_BuildRows, void(pm::api::Ref<pm::map::RewardManager>)> BuildRows{};
   /// SetTotals(screen, money, experience): sets the totals, and the shown total counts to them. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::RewardManager_SetTotals, void(void*, int32_t, int32_t)> SetTotals{};
+  static constexpr pm::api::Method<pm::map::RewardManager_SetTotals, void(pm::api::Ref<pm::map::RewardManager>, int32_t, int32_t)> SetTotals{};
   /// EventRow(screen): the seasonal event's row and the score to send, or all zero with no event. Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::RewardManager_EventRow, RewardEventRow(void*)> EventRow{};
+  static constexpr pm::api::Method<pm::map::RewardManager_EventRow, RewardEventRow(pm::api::Ref<pm::map::RewardManager>)> EventRow{};
   /// Skip(screen): the skip button. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RewardManager_Skip, void(void*)> Skip{};
+  static constexpr pm::api::Method<pm::map::RewardManager_Skip, void(pm::api::Ref<pm::map::RewardManager>)> Skip{};
   /// Next(screen): the next button. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RewardManager_Next, void(void*)> Next{};
+  static constexpr pm::api::Method<pm::map::RewardManager_Next, void(pm::api::Ref<pm::map::RewardManager>)> Next{};
 };
 
 /// The reward screen's results. `machine` below is the state machine's own data.
 struct RewardResults {
   /// MoveNext(machine): runs the results on from where they last waited. A mod hooks it to act around the
   /// screen's own reward work. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RewardManager_Results_MoveNext, void(void*)> MoveNext{};
+  static constexpr pm::api::Method<pm::map::RewardManager_Results_MoveNext, void(pm::api::Ref<pm::map::RewardManager_Results>)> MoveNext{};
 };
 
 /// The seasonal event's part of the reward screen's results. `machine` below is the state machine's own data.
 struct RewardEventResults {
   /// MoveNext(machine): runs it on from where it last waited, once a server answer has come. A mod hooks
   /// it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RewardManager_EventRewards_MoveNext, void(void*)> MoveNext{};
+  static constexpr pm::api::Method<pm::map::RewardManager_EventRewards_MoveNext, void(pm::api::Ref<pm::map::RewardManager_EventRewards>)> MoveNext{};
 };
 
 /// The player's challenges. `controller` below is the ChallengesController.
@@ -624,14 +625,14 @@ struct ChallengesController {
   /// ChangeChallengeProgression(controller, type, amount): adds amount to every challenge of that type. A mod
   /// hooks it to keep progress from a player. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::ChallengesController_ChangeChallengeProgression,
-                                   void(void*, int32_t, int32_t)>
+                                   void(pm::api::Ref<pm::map::ChallengesController>, int32_t, int32_t)>
       ChangeChallengeProgression{};
 };
 
 /// The settings a level's end leaves for the reward screen. `settings` below is a GameplaySettings.
 struct GameplaySettings {
   /// The GameplaySettings the game uses: get(), or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GameSettings_gameplay, void*()> get{};
+  static constexpr pm::api::Method<pm::map::GameSettings_gameplay, pm::api::Ref<pm::map::GameplaySettings>()> get{};
   /// The death status: PlayerDied.get(settings), set(settings, value). Unresolved: reads false, writes nothing.
   static constexpr pm::api::Field<pm::map::GameplaySettings_PlayerDied, bool> PlayerDied{};
 };

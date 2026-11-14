@@ -7,6 +7,10 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "GhostAI.h"
+#include "LevelController.h"
+#include "LocalisationSystem.h"
+#include "Player.h"
 
 namespace pm::map {
 
@@ -175,29 +179,29 @@ struct GhostIdleState {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::GhostIdleState> type{};
   /// ctor(idle, ghostAI): constructs an object from type.make(); see the entry's note. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostIdleState_ctor, void(void*, void*)> ctor{};
+  static constexpr pm::api::Method<pm::map::GhostIdleState_ctor, void(pm::api::Ref<pm::map::GhostIdleState>, pm::api::Ref<pm::map::GhostAI>)> ctor{};
   /// The scene's LevelController its enter copies: levelController.get(idle), .set(idle, controller).
   /// Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::GhostIdleState_levelController, void*> levelController{};
+  static constexpr pm::api::Field<pm::map::GhostIdleState_levelController, pm::api::Ref<pm::map::LevelController>> levelController{};
   /// The scene's GameController its enter copies: gameController.get(idle), .set(idle, controller).
   /// Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::GhostIdleState_gameController, void*> gameController{};
+  static constexpr pm::api::Field<pm::map::GhostIdleState_gameController, pm::api::Ref<pm::map::GameController>> gameController{};
   /// The scene's SoundController its enter copies: soundController.get(idle), .set(idle, controller).
   /// Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::GhostIdleState_soundController, void*> soundController{};
+  static constexpr pm::api::Field<pm::map::GhostIdleState_soundController, pm::api::Ref<pm::map::SoundController>> soundController{};
   /// The idling ghost's GhostAI: ghost.get(idle). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostIdleState_ghost, void*> ghost{};
+  static constexpr pm::api::Field<pm::map::GhostIdleState_ghost, pm::api::Ref<pm::map::GhostAI>> ghost{};
   /// The insanity its hunt check uses: insanity.get(idle), insanity.set(idle, value). Unresolved: 0,
   /// writes nothing.
   static constexpr pm::api::Field<pm::map::GhostIdleState_insanity, int32_t> insanity{};
   /// HuntInsanity(idle). A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostIdleState_HuntInsanity, void(void*)> HuntInsanity{};
+  static constexpr pm::api::Method<pm::map::GhostIdleState_HuntInsanity, void(pm::api::Ref<pm::map::GhostIdleState>)> HuntInsanity{};
   /// Execute(idle): its step, the idle roll. A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostIdleState_Execute, void(void*)> Execute{};
+  static constexpr pm::api::Method<pm::map::GhostIdleState_Execute, void(pm::api::Ref<pm::map::GhostIdleState>)> Execute{};
   /// TypeHuntRules(idle): writes the type's offset to the hunt insanity (and grows the Shade's
   /// `rollRange`) from the contract as it stands now. A mod usually hooks it. Only on the running idle
   /// state, on the master; it throws on a state that has not entered. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostIdleState_TypeHuntRules, void(void*)> TypeHuntRules{};
+  static constexpr pm::api::Method<pm::map::GhostIdleState_TypeHuntRules, void(pm::api::Ref<pm::map::GhostIdleState>)> TypeHuntRules{};
   /// The top of the activity roll: rollRange.get(idle), rollRange.set(idle, n). Unresolved: 0, writes
   /// nothing.
   static constexpr pm::api::Field<pm::map::GhostIdleState_rollRange, int32_t> rollRange{};

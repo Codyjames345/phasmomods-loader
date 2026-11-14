@@ -884,9 +884,9 @@ struct GameWorld {
     levelInstance = level;
     controllerInstance = controller;
     phasmo::LevelController::currentGhost.set(level, ghostAi);
-    phasmo::GhostAI::info.set(ghostAi, info);
+    phasmo::GhostAI::info.set(ghostAi, pm::api::Ref<pm::map::GhostInfo>::unchecked(info));
     phasmo::GhostController::allGhostsCollection.set(controller, collection);
-    phasmo::GhostHuntState::ghost.set(hunt, ghostAi);
+    phasmo::GhostHuntState::ghost.set(hunt, pm::api::Ref<pm::map::GhostAI>::unchecked(ghostAi));
     // The game's ghosts as its collection holds them, sorted by the names in their keys.
     std::vector<void*> ghosts;
     for (const auto& [type, name] : std::vector<std::pair<int32_t, std::string>>{

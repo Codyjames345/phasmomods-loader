@@ -137,7 +137,8 @@ void launch(void* ghost) {
   const phasmo::Vector3 velocity{aim.x, aim.y, aim.z};
   phasmo::Rigidbody::set_velocity(rb, &velocity);
   if (void* interaction = phasmo::GhostAI::interaction.get(ghost))
-    phasmo::GhostInteraction::CreateThrowingEMF(interaction, g.item, phasmo::EMFType::objectMoved(), false, 20.0f);
+    phasmo::GhostInteraction::CreateThrowingEMF(interaction, g.item.get(), phasmo::EMFType::objectMoved(), false,
+                                                20.0f);
   g.landed = GetTickCount64() + static_cast<ULONGLONG>(kLithoboliaFlight * 1000);
   PM_LOG("lithobolia: launched at a player (kinematic before %d, after %d; aimed %.1f m/s, has %.1f m/s)",
          wasKinematic ? 1 : 0, phasmo::Rigidbody::get_isKinematic(rb) ? 1 : 0, length(aim),

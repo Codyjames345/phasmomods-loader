@@ -116,7 +116,7 @@ bool on_the_monitor(Vector3 target) {
  */
 void detour_footstep_play(api::Original<phasmo::Footstep::Play> original, void* footstep, float volume, void* name) {
   void* ghost = g.haunting.get();
-  const bool its = footstep && ghost && phasmo::Footstep::ghost.get(footstep) == ghost;
+  const bool its = footstep && ghost && phasmo::Footstep::ghost.get(footstep).raw() == ghost;
   const BrownieStep step = its ? brownie_step(phasmo::GhostAI::isHunting.get(ghost), seen_now()) : BrownieStep::Vanilla;
   void* noise = footstep ? phasmo::Footstep::noise.get(footstep) : nullptr;
   if (noise) {

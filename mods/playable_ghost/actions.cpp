@@ -152,7 +152,9 @@ bool intercepting() {
   return g_ghost && g_inIdleRoll && !g_replaying && !restless() && !GhostAI::interactionBoost.get(g_ghost);
 }
 
-void restart_idle() { api::below_hook<GhostAI::ChangeState>()(g_ghost, phasmo::GhostState::idle(), nullptr, false); }
+void restart_idle() {
+  api::below_hook<GhostAI::ChangeState>()(g_ghost.get(), phasmo::GhostState::idle(), nullptr, false);
+}
 
 void grant(int kind) {
   switch (kind) {
@@ -386,7 +388,7 @@ tether::HuntGate hunt_gate() {
 // first (a Bogeyman's hunt steps out of its closet there); this mod's own hook passes it straight on.
 void run_native(int state) {
   g_replaying = true;
-  GhostAI::ChangeState(g_ghost, state, nullptr, false);
+  GhostAI::ChangeState(g_ghost.get(), state, nullptr, false);
   g_replaying = false;
 }
 

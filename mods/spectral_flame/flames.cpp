@@ -587,7 +587,7 @@ void host_step(void* level, float dt, ULONGLONG now) {
     f.full = next.full;
     // Now and then the calm ghost in its room puts out a fully blue flame (BlowOutFire, as the game's own).
     if (in.ghostInRoom && ghost.calm && roll(g_random) < blow_out_chance(f.blueness, dt)) {
-      phasmo::FireSource::BlowOutFire(f.fire, true);
+      phasmo::FireSource::BlowOutFire(f.fire.get(), true);
       PM_LOG("flames: the ghost blew out a flame %.0f%% blue", f.blueness * 100);
     }
   }

@@ -8,6 +8,7 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "LevelRoom.h"
 #include "UnityObject.h"
 
 namespace pm::map {
@@ -341,7 +342,7 @@ struct GhostController {
   /// The current contract's controller: instance.get(), or null. A destroyed one remains after a
   /// contract, so check it with pm::api::alive. Reading it may run the class's static constructor, so
   /// read it while the game plays, never at startup. Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::GhostController_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::GhostController_instance, pm::api::Ref<pm::map::GhostController>> instance{};
   /// The rolled ghost's identity, a GhostType number: ghostType.get(controller). Unresolved: reads 0
   /// (Spirit, so check use::resolved()), writes nothing.
   static constexpr pm::api::Field<pm::map::GhostController_ghostType, int32_t> ghostType{};
@@ -352,17 +353,17 @@ struct GhostController {
   /// The given evidence, a List<EvidenceType>, on the master: givenEvidence.get(controller). Read it as
   /// pm::api::Array<int32_t>{pm::api::List{list}.items()}, indexes below the List's size() only.
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostController_givenEvidence, void*> givenEvidence{};
+  static constexpr pm::api::Field<pm::map::GhostController_givenEvidence, pm::api::Object> givenEvidence{};
   /// The evidence pick: PickEvidence(controller). A mod hooks it rather than calls it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::GhostController_PickEvidence, void(void*)> PickEvidence{};
+  static constexpr pm::api::Method<pm::map::GhostController_PickEvidence, void(pm::api::Ref<pm::map::GhostController>)> PickEvidence{};
   /// The contract's GhostCollection, a managed reference: allGhostsCollection.get(controller).
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostController_allGhostsCollection, void*> allGhostsCollection{};
+  static constexpr pm::api::Field<pm::map::GhostController_allGhostsCollection, pm::api::Object> allGhostsCollection{};
   /// The List<GhostType> the Mimic copies from, or null before its first copy: mimicCopies.get(
   /// controller). Read it as pm::api::Array<int32_t>{pm::api::List{list}.items()}, indexes below the
   /// List's size() only. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostController_mimicCopies, void*> mimicCopies{};
+  static constexpr pm::api::Field<pm::map::GhostController_mimicCopies, pm::api::Object> mimicCopies{};
   /// The Mimic's next copy, chosen ahead: mimicNext.get(controller), mimicNext.set(controller, v).
   /// Unresolved: reads no value, writes nothing.
   static constexpr pm::api::Field<pm::map::GhostController_mimicNext, NullableGhostType> mimicNext{};
@@ -378,35 +379,35 @@ struct GhostController {
   static constexpr pm::api::Field<pm::map::GhostController_thayeThreshold, int32_t> thayeThreshold{};
   /// The game's moment to change the ghost's type: AttemptGhostTypeStateChange(controller). A mod
   /// usually hooks it rather than calls it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostController_AttemptGhostTypeStateChange, void(void*)>
+  static constexpr pm::api::Method<pm::map::GhostController_AttemptGhostTypeStateChange, void(pm::api::Ref<pm::map::GhostController>)>
       AttemptGhostTypeStateChange{};
   /// The Mimic's copy: MimicCopy(controller). Hook it to see each copy; calling it copies at once.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostController_MimicCopy, void(void*)> MimicCopy{};
+  static constexpr pm::api::Method<pm::map::GhostController_MimicCopy, void(pm::api::Ref<pm::map::GhostController>)> MimicCopy{};
   /// Builds mimicCopies: BuildMimicCopies(controller). Hook it to add types after the game's own.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostController_BuildMimicCopies, void(void*)> BuildMimicCopies{};
+  static constexpr pm::api::Method<pm::map::GhostController_BuildMimicCopies, void(pm::api::Ref<pm::map::GhostController>)> BuildMimicCopies{};
   /// Moves the ghost's favourite room: ChangeFavouriteRoomTo(controller, room), on the master. A mod
   /// usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostController_ChangeFavouriteRoomTo, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::GhostController_ChangeFavouriteRoomTo, void(pm::api::Ref<pm::map::GhostController>, pm::api::Ref<pm::map::LevelRoom>)>
       ChangeFavouriteRoomTo{};
   /// The level's LevelController: levelController.get(controller). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostController_levelController, void*> levelController{};
+  static constexpr pm::api::Field<pm::map::GhostController_levelController, pm::api::Object> levelController{};
   /// PickType(weights): the weighted roll of the ghost's type, on a Dictionary<GhostType, int>. A mod hooks
   /// it. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::GhostController_PickType, int32_t(void*)> PickType{};
+  static constexpr pm::api::Method<pm::map::GhostController_PickType, int32_t(pm::api::Object)> PickType{};
   /// Spawn(controller): the ghost's setup on the master. A mod hooks it, and pm::api::inside says whether it
   /// is running. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostController_Spawn, void(void*)> Spawn{};
+  static constexpr pm::api::Method<pm::map::GhostController_Spawn, void(pm::api::Ref<pm::map::GhostController>)> Spawn{};
   /// WarpGhostToFavouriteRoom(controller). Optional. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostController_WarpGhostToFavouriteRoom, void(void*)>
+  static constexpr pm::api::Method<pm::map::GhostController_WarpGhostToFavouriteRoom, void(pm::api::Ref<pm::map::GhostController>)>
       WarpGhostToFavouriteRoom{};
   /// The favourite room's index among LevelController.rooms: favouriteRoomIndex.get(controller),
   /// favouriteRoomIndex.set(controller, i). Unresolved: reads 0, writes nothing.
   static constexpr pm::api::Field<pm::map::GhostController_favouriteRoomIndex, int32_t> favouriteRoomIndex{};
   /// CreateGhost(controller, flag, model, info): the ghost's creation RPC, info a PhotonMessageInfo passed by
   /// address. A mod hooks it rather than calls it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostController_CreateGhost, void(void*, bool, int32_t, void*)>
+  static constexpr pm::api::Method<pm::map::GhostController_CreateGhost, void(pm::api::Ref<pm::map::GhostController>, bool, int32_t, pm::api::Object)>
       CreateGhost{};
   /// The effect that unwinds the running GhostController.Spawn: abandon_spawn().
   static constexpr pm::api::GhostSpawnAbandon abandon_spawn{};

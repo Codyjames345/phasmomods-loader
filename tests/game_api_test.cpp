@@ -221,7 +221,7 @@ void call_reaches_fake() {
   fake_everything_but("");
   CHECK(bound());
   int ghost = 0;
-  phasmo::GhostAI::UnAppear(&ghost);
+  phasmo::GhostAI::UnAppear(static_cast<void*>(&ghost));
   CHECK(g_sawGhost == &ghost);
   CHECK(g_sawMethod == nullptr);  // the fake's method info
   CHECK(phasmo::GhostAI::UnAppear.available());
@@ -242,7 +242,7 @@ void reference_set_uses_barrier() {
   CHECK(bound());
   FakeObject obj;
   int agent = 0;
-  phasmo::GhostAI::agent.set(&obj, &agent);
+  phasmo::GhostAI::agent.set(&obj, pm::api::Ref<pm::map::NavMeshAgent>::unchecked(&agent));
   CHECK(fake::barrier_writes() == 1);
   CHECK(phasmo::GhostAI::agent.get(&obj) == &agent);
 }
@@ -332,7 +332,7 @@ void unresolved_required_call_does_nothing() {
   g_lines.clear();
   g_sawGhost = nullptr;
   int ghost = 0;
-  phasmo::GhostAI::UnAppear(&ghost);
+  phasmo::GhostAI::UnAppear(static_cast<void*>(&ghost));
   CHECK(g_sawGhost == nullptr);
   CHECK(count_logged("GhostAI.UnAppear is not available in this game build") == 1);
 }
@@ -560,14 +560,14 @@ void virtual_call_reaches_override() {
   void* derived[1] = {kDerivedClass};
   void* base[1] = {kGhostClass};
   g_sawGhost = g_overrideGhost = nullptr;
-  phasmo::GhostAI::UnAppear.virtual_call(derived);
+  phasmo::GhostAI::UnAppear.virtual_call(static_cast<void*>(derived));
   CHECK(g_overrideGhost == derived && g_sawGhost == nullptr);
   CHECK(g_overrideMethod != nullptr);  // the override's own method info
   g_overrideGhost = nullptr;
-  phasmo::GhostAI::UnAppear.virtual_call(base);  // no override: the declared body
+  phasmo::GhostAI::UnAppear.virtual_call(static_cast<void*>(base));  // no override: the declared body
   CHECK(g_sawGhost == base && g_overrideGhost == nullptr);
   g_sawGhost = nullptr;
-  phasmo::GhostAI::UnAppear(derived);  // a plain call is never virtual
+  phasmo::GhostAI::UnAppear(static_cast<void*>(derived));  // a plain call is never virtual
   CHECK(g_sawGhost == derived && g_overrideGhost == nullptr);
 }
 

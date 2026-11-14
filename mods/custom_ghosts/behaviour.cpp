@@ -541,9 +541,9 @@ void record_trails(ULONGLONG now) {
  * player, then the closet its search was for).
  */
 void forget_in(void* hunt, void* player) {
-  if (GhostHuntState::target.get(hunt) == player) GhostHuntState::target.set(hunt, nullptr);
-  if (GhostHuntState::lastPlayer.get(hunt) == player) GhostHuntState::lastPlayer.set(hunt, nullptr);
-  if (GhostHuntState::searchTarget.get(hunt) == player) {
+  if (GhostHuntState::target.get(hunt).raw() == player) GhostHuntState::target.set(hunt, nullptr);
+  if (GhostHuntState::lastPlayer.get(hunt).raw() == player) GhostHuntState::lastPlayer.set(hunt, nullptr);
+  if (GhostHuntState::searchTarget.get(hunt).raw() == player) {
     GhostHuntState::searchTarget.set(hunt, nullptr);
     GhostHuntState::SetCloset(hunt, nullptr);
   }
@@ -649,7 +649,7 @@ void tick_shuck(bool hunting, bool steered, ULONGLONG now) {
   hold_kill(state, g.move == ShuckMove::Follow && !hunt_sees(g.ghost, prey));
   switch (g.move) {
     case ShuckMove::Follow:
-      if (GhostHuntState::target.get(state) != prey) GhostHuntState::SetTarget(state, prey);
+      if (GhostHuntState::target.get(state).raw() != prey) GhostHuntState::SetTarget(state, prey);
       g.steer = toPrey;
       if (!steered) go_to(g.agent, toPrey);
       break;

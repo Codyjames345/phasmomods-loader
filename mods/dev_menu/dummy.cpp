@@ -106,7 +106,7 @@ bool det_sight_pick(api::Original<GhostHuntState::SightPick> original, void* sta
   if (!available() || !found) return false;
   void* ai = game::ghost_ai();
   if (ai && GhostAI::bansheeTarget.get(ai)) return false;  // the Banshee's sight goes only for its own target
-  if (!GhostHuntState::Sees(state, g_player, false)) return false;
+  if (!GhostHuntState::Sees(state, static_cast<void*>(g_player), false)) return false;
   *found = g_player;
   return true;
 }
@@ -149,7 +149,7 @@ bool spawn() {
 
 void despawn() {
   void* ai = game::ghost_ai();
-  if (ai && g_player && GhostAI::bansheeTarget.get(ai) == static_cast<void*>(g_player))
+  if (ai && g_player && GhostAI::bansheeTarget.get(ai).raw() == static_cast<void*>(g_player))
     GhostAI::bansheeTarget.set(ai, nullptr);
   if (g_body && api::alive(g_body)) Object::Destroy(g_body, 0.0f);
   g_body = nullptr;

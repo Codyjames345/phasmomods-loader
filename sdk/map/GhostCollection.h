@@ -105,13 +105,13 @@ struct GhostCollection {
   /// null and false.
   static constexpr pm::api::Type<pm::map::GhostCollection> type{};
   /// The List<GhostData>, a managed reference: ghosts.get(collection). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostCollection_ghosts, void*> ghosts{};
+  static constexpr pm::api::Field<pm::map::GhostCollection_ghosts, pm::api::Object> ghosts{};
   /// The GhostData of a type, or null: GetGhostOfType(collection, type). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GhostCollection_GetGhostOfType, void*(void*, int32_t)> GetGhostOfType{};
+  static constexpr pm::api::Method<pm::map::GhostCollection_GetGhostOfType, pm::api::Object(pm::api::Ref<pm::map::GhostCollection>, int32_t)> GetGhostOfType{};
   /// The roll's default weights, a new Dictionary<GhostType, int> (a managed reference) with 1 for every type in the
   /// collection: GetDefaultWeightedGhostList(collection). Read its entries with pm::api::dictionary_entries. Main
   /// thread, any client. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GhostCollection_GetDefaultWeightedGhostList, void*(void*)>
+  static constexpr pm::api::Method<pm::map::GhostCollection_GetDefaultWeightedGhostList, pm::api::Object(pm::api::Ref<pm::map::GhostCollection>)>
       GetDefaultWeightedGhostList{};
 };
 
@@ -125,7 +125,7 @@ struct GhostData {
   static constexpr pm::api::Field<pm::map::GhostData_type, int32_t> ghostType{};
   /// The name's localisation key, a managed string: ghostNameLocalisationKey.get(data). Unresolved:
   /// null.
-  static constexpr pm::api::Field<pm::map::GhostData_ghostNameLocalisationKey, void*> ghostNameLocalisationKey{};
+  static constexpr pm::api::Field<pm::map::GhostData_ghostNameLocalisationKey, pm::api::Object> ghostNameLocalisationKey{};
   /// The first evidence, an EvidenceType number. Unresolved: 0.
   static constexpr pm::api::Field<pm::map::GhostData_evidence1, int32_t> evidence1{};
   /// The second evidence. Unresolved: 0.
@@ -133,7 +133,7 @@ struct GhostData {
   /// The third evidence. Unresolved: 0.
   static constexpr pm::api::Field<pm::map::GhostData_evidence3, int32_t> evidence3{};
   /// A new List<EvidenceType> of the three: GetEvidenceList(data). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GhostData_GetEvidenceList, void*(void*)> GetEvidenceList{};
+  static constexpr pm::api::Method<pm::map::GhostData_GetEvidenceList, pm::api::Object(pm::api::Ref<pm::map::GhostData>)> GetEvidenceList{};
 };
 
 /// @}

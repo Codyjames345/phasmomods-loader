@@ -286,7 +286,7 @@ namespace phasmo {
 /// Any Final IK solver. `solver` below is one.
 struct IKSolver {
   /// Initiate(solver, root): starts it on the model whose root Transform this is. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::IKSolver_Initiate, void(void*, void*)> Initiate{};
+  static constexpr pm::api::Method<pm::map::IKSolver_Initiate, void(pm::api::Ref<pm::map::IKSolver>, pm::api::Ref<pm::map::Transform>)> Initiate{};
   /// The point it reaches for, world space: IKPosition.get(solver), IKPosition.set(solver, at). Unresolved: zero.
   static constexpr pm::api::Field<pm::map::IKSolver_IKPosition, Vector3> IKPosition{};
   /// How much it counts, 0 to 1. Unresolved: 0.
@@ -296,7 +296,7 @@ struct IKSolver {
 /// A three-bone solver. `solver` below is one.
 struct IKSolverTrigonometric {
   /// SetChain(solver, upper, lower, end, root): true when the chain is valid. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::IKSolverTrigonometric_SetChain, bool(void*, void*, void*, void*, void*)>
+  static constexpr pm::api::Method<pm::map::IKSolverTrigonometric_SetChain, bool(pm::api::Ref<pm::map::IKSolverTrigonometric>, pm::api::Ref<pm::map::Transform>, pm::api::Ref<pm::map::Transform>, pm::api::Ref<pm::map::Transform>, pm::api::Ref<pm::map::Transform>)>
       SetChain{};
   /// How much the end bone turns to the solver's rotation, 0 to 1. Unresolved: 0.
   static constexpr pm::api::Field<pm::map::IKSolverTrigonometric_IKRotationWeight, float> IKRotationWeight{};
@@ -313,13 +313,13 @@ struct LimbIK {
   /// The type: type_object() for GameObject.AddComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::LimbIK> type{};
   /// Its solver: solver.get(limb). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LimbIK_solver, void*> solver{};
+  static constexpr pm::api::Field<pm::map::LimbIK_solver, pm::api::Object> solver{};
 };
 
 /// A look-at solver. `solver` below is one.
 struct IKSolverLookAt {
   /// SetChain(solver, spine, head, eyes, root): spine and eyes are Transform[]. True when valid. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::IKSolverLookAt_SetChain, bool(void*, void*, void*, void*, void*)> SetChain{};
+  static constexpr pm::api::Method<pm::map::IKSolverLookAt_SetChain, bool(pm::api::Ref<pm::map::IKSolverLookAt>, pm::api::Object, pm::api::Ref<pm::map::Transform>, pm::api::Object, pm::api::Ref<pm::map::Transform>)> SetChain{};
   /// How much the spine turns, 0 to 1. Unresolved: 0.
   static constexpr pm::api::Field<pm::map::IKSolverLookAt_bodyWeight, float> bodyWeight{};
   /// How much the head turns, 0 to 1. Unresolved: 0.
@@ -333,7 +333,7 @@ struct LookAtIK {
   /// The type: type_object() for GameObject.AddComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::LookAtIK> type{};
   /// Its solver: solver.get(lookAt). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LookAtIK_solver, void*> solver{};
+  static constexpr pm::api::Field<pm::map::LookAtIK_solver, pm::api::Object> solver{};
 };
 
 /// The bones of a two-legged body. `refs` below is one: type.make(), then ctor(refs), then each field.
@@ -341,25 +341,25 @@ struct BipedReferences {
   /// The type: make() for a new one. Unresolved: null.
   static constexpr pm::api::Type<pm::map::BipedReferences> type{};
   /// ctor(refs). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::BipedReferences_ctor, void(void*)> ctor{};
+  static constexpr pm::api::Method<pm::map::BipedReferences_ctor, void(pm::api::Ref<pm::map::BipedReferences>)> ctor{};
   /// A Transform each; spine and eyes a Transform[]. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::BipedReferences_root, void*> root{};
-  static constexpr pm::api::Field<pm::map::BipedReferences_pelvis, void*> pelvis{};  ///< the pelvis, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftThigh, void*> leftThigh{};  ///< the left thigh, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftCalf, void*> leftCalf{};  ///< the left calf, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftFoot, void*> leftFoot{};  ///< the left foot, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightThigh, void*> rightThigh{};  ///< the right thigh, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightCalf, void*> rightCalf{};  ///< the right calf, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightFoot, void*> rightFoot{};  ///< the right foot, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftUpperArm, void*> leftUpperArm{};  ///< the left upper arm, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftForearm, void*> leftForearm{};  ///< the left forearm, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_leftHand, void*> leftHand{};  ///< the left hand, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightUpperArm, void*> rightUpperArm{};  ///< the right upper arm, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightForearm, void*> rightForearm{};  ///< the right forearm, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_rightHand, void*> rightHand{};  ///< the right hand, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_head, void*> head{};  ///< the head, a Transform
-  static constexpr pm::api::Field<pm::map::BipedReferences_spine, void*> spine{};  ///< the spine, a Transform[]
-  static constexpr pm::api::Field<pm::map::BipedReferences_eyes, void*> eyes{};  ///< the eyes, a Transform[]
+  static constexpr pm::api::Field<pm::map::BipedReferences_root, pm::api::Object> root{};
+  static constexpr pm::api::Field<pm::map::BipedReferences_pelvis, pm::api::Object> pelvis{};  ///< the pelvis, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftThigh, pm::api::Object> leftThigh{};  ///< the left thigh, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftCalf, pm::api::Object> leftCalf{};  ///< the left calf, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftFoot, pm::api::Object> leftFoot{};  ///< the left foot, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightThigh, pm::api::Object> rightThigh{};  ///< the right thigh, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightCalf, pm::api::Object> rightCalf{};  ///< the right calf, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightFoot, pm::api::Object> rightFoot{};  ///< the right foot, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftUpperArm, pm::api::Object> leftUpperArm{};  ///< the left upper arm, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftForearm, pm::api::Object> leftForearm{};  ///< the left forearm, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_leftHand, pm::api::Object> leftHand{};  ///< the left hand, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightUpperArm, pm::api::Object> rightUpperArm{};  ///< the right upper arm, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightForearm, pm::api::Object> rightForearm{};  ///< the right forearm, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_rightHand, pm::api::Object> rightHand{};  ///< the right hand, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_head, pm::api::Object> head{};  ///< the head, a Transform
+  static constexpr pm::api::Field<pm::map::BipedReferences_spine, pm::api::Object> spine{};  ///< the spine, a Transform[]
+  static constexpr pm::api::Field<pm::map::BipedReferences_eyes, pm::api::Object> eyes{};  ///< the eyes, a Transform[]
 };
 
 /// Final IK's full-body solver for a two-legged body. `ik` below is one.
@@ -367,17 +367,17 @@ struct FullBodyBipedIK {
   /// The type: type_object() for GameObject.AddComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::FullBodyBipedIK> type{};
   /// Its solver, an IKSolverFullBodyBiped. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::FullBodyBipedIK_solver, void*> solver{};
+  static constexpr pm::api::Field<pm::map::FullBodyBipedIK_solver, pm::api::Object> solver{};
   /// SetReferences(ik, refs, rootNode): rootNode null lets Final IK find it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::FullBodyBipedIK_SetReferences, void(void*, void*, void*)> SetReferences{};
+  static constexpr pm::api::Method<pm::map::FullBodyBipedIK_SetReferences, void(pm::api::Ref<pm::map::FullBodyBipedIK>, pm::api::Ref<pm::map::BipedReferences>, pm::api::Ref<pm::map::Transform>)> SetReferences{};
 };
 
 /// The full-body solver. `solver` below is one.
 struct IKSolverFullBodyBiped {
   /// get_leftHandEffector(solver), get_rightHandEffector(solver): an IKEffector. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::IKSolverFullBodyBiped_get_leftHandEffector, void*(void*)>
+  static constexpr pm::api::Method<pm::map::IKSolverFullBodyBiped_get_leftHandEffector, pm::api::Object(pm::api::Ref<pm::map::IKSolverFullBodyBiped>)>
       get_leftHandEffector{};
-  static constexpr pm::api::Method<pm::map::IKSolverFullBodyBiped_get_rightHandEffector, void*(void*)>
+  static constexpr pm::api::Method<pm::map::IKSolverFullBodyBiped_get_rightHandEffector, pm::api::Object(pm::api::Ref<pm::map::IKSolverFullBodyBiped>)>
       get_rightHandEffector{};  ///< the right hand's IKEffector
 };
 
@@ -400,15 +400,15 @@ struct IKExecutionOrder {
   /// The type: type_object() for GameObject.AddComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::IKExecutionOrder> type{};
   /// The components it runs, an IK[]. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::IKExecutionOrder_IKComponents, void*> IKComponents{};
+  static constexpr pm::api::Field<pm::map::IKExecutionOrder_IKComponents, pm::api::Object> IKComponents{};
   /// The model's Animator. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::IKExecutionOrder_animator, void*> animator{};
+  static constexpr pm::api::Field<pm::map::IKExecutionOrder_animator, pm::api::Object> animator{};
   /// LateUpdate(order): runs the components' solvers, after the Animator. For pm::api::hook: a detour sees the
   /// animated pose before the IK; skipping `original` runs no IK on that model this frame. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::IKExecutionOrder_LateUpdate, void(void*)> LateUpdate{};
+  static constexpr pm::api::Method<pm::map::IKExecutionOrder_LateUpdate, void(pm::api::Ref<pm::map::IKExecutionOrder>)> LateUpdate{};
   /// Update(order): puts each solver's bones back in their stored pose, before the Animator. For pm::api::hook: skipping
   /// `original` leaves the bones where they are this frame. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::IKExecutionOrder_Update, void(void*)> Update{};
+  static constexpr pm::api::Method<pm::map::IKExecutionOrder_Update, void(pm::api::Ref<pm::map::IKExecutionOrder>)> Update{};
 };
 
 /// A grounder's solver. `grounding` below is one.
@@ -420,7 +420,7 @@ struct Grounding {
 /// Any Final IK grounder. `grounder` below is one.
 struct Grounder {
   /// Its solver, a Grounding. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Grounder_solver, void*> solver{};
+  static constexpr pm::api::Field<pm::map::Grounder_solver, pm::api::Object> solver{};
 };
 
 /// The grounder for a FullBodyBipedIK body. `grounder` below is one.
@@ -428,7 +428,7 @@ struct GrounderFBBIK {
   /// The type: type_object() for GameObject.AddComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::GrounderFBBIK> type{};
   /// The FullBodyBipedIK it grounds. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GrounderFBBIK_ik, void*> ik{};
+  static constexpr pm::api::Field<pm::map::GrounderFBBIK_ik, pm::api::Object> ik{};
 };
 
 /// Unity's IK goals.

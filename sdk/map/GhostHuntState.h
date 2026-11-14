@@ -10,6 +10,8 @@
 
 #include "entry.h"
 #include "game_api.h"
+#include "ClosetZone.h"
+#include "GhostAI.h"
 
 namespace pm::map {
 
@@ -458,7 +460,7 @@ struct GhostHuntState {
   /// The type: klass(), is(obj), type_object(), make() and make_array(n). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::GhostHuntState> type{};
   /// The hunting ghost's GhostAI: ghost.get(hunt). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostHuntState_ghost, void*> ghost{};
+  static constexpr pm::api::Field<pm::map::GhostHuntState_ghost, pm::api::Ref<pm::map::GhostAI>> ghost{};
   /// The base speed: baseSpeed.get(hunt), baseSpeed.set(hunt, metresPerSecond). Unresolved: 0, writes
   /// nothing.
   static constexpr pm::api::Field<pm::map::GhostHuntState_baseSpeed, float> baseSpeed{};
@@ -466,25 +468,25 @@ struct GhostHuntState {
   /// 0, writes nothing.
   static constexpr pm::api::Field<pm::map::GhostHuntState_sightSpeedUp, float> sightSpeedUp{};
   /// RefreshBase(hunt). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_RefreshBase, void(void*)> RefreshBase{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_RefreshBase, void(pm::api::Ref<pm::map::GhostHuntState>)> RefreshBase{};
   /// UpdateSpeed(hunt). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_UpdateSpeed, void(void*)> UpdateSpeed{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_UpdateSpeed, void(pm::api::Ref<pm::map::GhostHuntState>)> UpdateSpeed{};
   /// The player the hunt follows first, a Player: target.get(hunt), or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostHuntState_target, void*> target{};
+  static constexpr pm::api::Field<pm::map::GhostHuntState_target, pm::api::Object> target{};
   /// The player it falls back on, a Player: searchTarget.get(hunt), or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostHuntState_searchTarget, void*> searchTarget{};
+  static constexpr pm::api::Field<pm::map::GhostHuntState_searchTarget, pm::api::Object> searchTarget{};
   /// The player it last went for, a Player: lastPlayer.get(hunt), or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostHuntState_lastPlayer, void*> lastPlayer{};
+  static constexpr pm::api::Field<pm::map::GhostHuntState_lastPlayer, pm::api::Object> lastPlayer{};
   /// The player the hunt keeps (StartPick, then KeepNearest): kept.get(state). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostHuntState_kept, void*> kept{};
+  static constexpr pm::api::Field<pm::map::GhostHuntState_kept, pm::api::Object> kept{};
   /// The players it has seen, a List<Player>: seen.get(hunt), read as a pm::api::List. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GhostHuntState_seen, void*> seen{};
+  static constexpr pm::api::Field<pm::map::GhostHuntState_seen, pm::api::Object> seen{};
   /// The players it has killed, a List<Player>: killed.get(hunt), read as a pm::api::List. Unresolved:
   /// null.
-  static constexpr pm::api::Field<pm::map::GhostHuntState_killed, void*> killed{};
+  static constexpr pm::api::Field<pm::map::GhostHuntState_killed, pm::api::Object> killed{};
   /// The closet its closet search is for, a ClosetZone: searchCloset.get(hunt), or null. Unresolved:
   /// null.
-  static constexpr pm::api::Field<pm::map::GhostHuntState_searchCloset, void*> searchCloset{};
+  static constexpr pm::api::Field<pm::map::GhostHuntState_searchCloset, pm::api::Ref<pm::map::ClosetZone>> searchCloset{};
   /// Seconds left of its start delay: startDelay.get(hunt). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::GhostHuntState_startDelay, float> startDelay{};
   /// Its kill reach in metres: killReach.get(hunt), killReach.set(hunt, metres). Unresolved: 0, writes
@@ -499,31 +501,31 @@ struct GhostHuntState {
   static constexpr pm::api::Field<pm::map::GhostHuntState_ghostType, int32_t> ghostType{};
   /// Sees(hunt, player, skipDeogen): the sight test, which records a player it passes in seen. A mod
   /// usually hooks it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_Sees, bool(void*, void*, bool)> Sees{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_Sees, bool(pm::api::Ref<pm::map::GhostHuntState>, pm::api::Object, bool)> Sees{};
   /// Hears(hunt, player): the voice test. A mod usually hooks it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_Hears, bool(void*, void*)> Hears{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_Hears, bool(pm::api::Ref<pm::map::GhostHuntState>, pm::api::Object)> Hears{};
   /// SensesGear(hunt, player): the electronics test. A mod usually hooks it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_SensesGear, bool(void*, void*)> SensesGear{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_SensesGear, bool(pm::api::Ref<pm::map::GhostHuntState>, pm::api::Object)> SensesGear{};
   /// SetTarget(hunt, player): makes the player its target and searches the closet they hide in.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_SetTarget, void(void*, void*)> SetTarget{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_SetTarget, void(pm::api::Ref<pm::map::GhostHuntState>, pm::api::Object)> SetTarget{};
   /// SetCloset(hunt, closet): the closet its closet search is for, null for none. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_SetCloset, void(void*, void*)> SetCloset{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_SetCloset, void(pm::api::Ref<pm::map::GhostHuntState>, pm::api::Ref<pm::map::ClosetZone>)> SetCloset{};
   /// Kill(hunt, player, force, reach, slowReach): the hunt's kill of `player`, true when it killed. A mod
   /// usually hooks it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_Kill, bool(void*, void*, bool, float, float)> Kill{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_Kill, bool(pm::api::Ref<pm::map::GhostHuntState>, pm::api::Object, bool, float, float)> Kill{};
   /// SightPick(hunt, &player): the player its sight finds, as the target pick asks. A mod usually hooks
   /// it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_SightPick, bool(void*, void**)> SightPick{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_SightPick, bool(pm::api::Ref<pm::map::GhostHuntState>, void**)> SightPick{};
   /// StartPick(hunt): the start pick, which keeps the ghost's Banshee target as the hunt's player. A mod
   /// usually hooks it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_StartPick, bool(void*)> StartPick{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_StartPick, bool(pm::api::Ref<pm::map::GhostHuntState>)> StartPick{};
   /// KeepNearest(hunt): moves the hunt's kept player to the nearest it may go for. A mod usually hooks
   /// it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_KeepNearest, void(void*)> KeepNearest{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_KeepNearest, void(pm::api::Ref<pm::map::GhostHuntState>)> KeepNearest{};
   /// Exit(hunt): the hunt's end. A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::GhostHuntState_Exit, void(void*)> Exit{};
+  static constexpr pm::api::Method<pm::map::GhostHuntState_Exit, void(pm::api::Ref<pm::map::GhostHuntState>)> Exit{};
 };
 
 /// @}

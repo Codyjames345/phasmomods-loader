@@ -408,9 +408,9 @@ void* scratch_idle(void* ai) {
   void* game = GameController::instance.get();
   void* sound = SoundController::instance.get();
   if (!level || !game || !sound || !api::alive(level) || !api::alive(game) || !api::alive(sound)) return nullptr;
-  GhostIdleState::levelController.set(g_scratchIdle, level);
-  GhostIdleState::gameController.set(g_scratchIdle, game);
-  GhostIdleState::soundController.set(g_scratchIdle, sound);
+  GhostIdleState::levelController.set(g_scratchIdle, pm::api::Ref<pm::map::LevelController>::unchecked(level));
+  GhostIdleState::gameController.set(g_scratchIdle, pm::api::Ref<pm::map::GameController>::unchecked(game));
+  GhostIdleState::soundController.set(g_scratchIdle, pm::api::Ref<pm::map::SoundController>::unchecked(sound));
   return g_scratchIdle;
 }
 
