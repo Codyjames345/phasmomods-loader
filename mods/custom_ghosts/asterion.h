@@ -14,6 +14,9 @@ bool resolve();
 // Every frame on the host: ghost is the custom ghost's GhostAI (null for none), type its type.
 void tick(void* ghost, int type);
 // Every frame on every client: broken doors swing open and lock. type is the haunting custom ghost's.
+// Once it is no longer the Asterion, each door still broken here goes back to the game's own state:
+// unlocked and its own kind as before the break, its body free, the occlusion portal updated, the leaf
+// left open where it stands.
 void tick_doors(int type);
 // The host's message naming the doors it broke (net_msg::kDoors).
 void receive(int sender, const uint8_t* data, size_t size);

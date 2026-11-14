@@ -361,6 +361,12 @@ pm_test(squatter_ragdoll mods/custom_ghosts/squatter_ragdoll.cpp sdk/api/game_ap
   core/log.cpp)
 # Before the mods' folders, as for content_difficulty_test below.
 target_include_directories(squatter_ragdoll_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# The Asterion's broken doors and what a re-type gives back (mods/custom_ghosts/asterion.cpp). Its source is
+# not listed: the test includes it, so its clock can be the test's.
+pm_test(asterion sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp
+  sdk/runtime/content_acting.cpp)
+target_link_libraries(asterion_test PRIVATE pmmod)
+target_include_directories(asterion_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 # A mod's rebindable keys (sdk/api/keybinds.h).
 pm_test(keybinds sdk/api/keybinds.cpp sdk/api/menu_rows.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp
   sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp

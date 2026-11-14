@@ -46,6 +46,11 @@ struct Swing {
   float from = 0, to = 0;  // its angle as it broke, and its open angle (HingeDoor.openAngle)
   ULONGLONG start = 0;
   bool locked = false;
+  // The door's own state before the break, kept so a re-type can give it back (mend).
+  bool wasLocked = false;
+  int32_t wasKind = 0;
+  bool wasKinematic = false;
+  int32_t wasConstraints = 0;
 };
 
 struct State {
@@ -109,6 +114,12 @@ void break_open(void* door) {
   s.from = leaf_angle(door, s.leaf);
   s.to = phasmo::HingeDoor::openAngle.get(door);
   s.start = GetTickCount64();
+  // Keep what the break and lock_open will change, so the door can go back to the game's own state if
+  // the type changes away mid-contract (tick_doors, mend).
+  s.wasLocked = phasmo::Door::locked.get(door);
+  s.wasKind = phasmo::Door::kind.get(door);
+  s.wasKinematic = phasmo::Rigidbody::get_isKinematic(body);
+  s.wasConstraints = phasmo::Rigidbody::get_constraints(body);
   phasmo::Rigidbody::set_isKinematic(body, true);
   PM_LOG("asterion: %s is broken open (from %.0f to %.0f degrees)", name_of(door).c_str(), s.from, s.to);
   g.swings.push_back(std::move(s));
@@ -138,6 +149,27 @@ void lock_open(Swing& s) {
   phasmo::Door::CheckOcclusionPortal(s.door.get());
   s.locked = true;
   PM_LOG("asterion: %s is locked open at %.0f degrees", name_of(s.door).c_str(), leaf_angle(s.door, s.leaf));
+}
+
+/**
+ * Gives a broken door back to the game (the rule for lasting effects, the user, 2026-11-14: a ghost's
+ * effect lasts while the ghost is that type, and what it changed goes back to the game's own state when
+ * the type changes away mid-contract). Everything break_open and lock_open changed - Door.locked,
+ * Door.kind, and the body's kinematic flag and constraints - returns to what this door had before it
+ * broke, and the occlusion portal is updated as lock_open updates it. A door that was locked when it
+ * broke (a PermanentLock door, like a shed) goes back locked, not open. The leaf stays where it stands,
+ * open, as any door a ghost opened is: nothing here shuts it, and the game's own door script runs the
+ * door again from there. A door whose level is gone is skipped (its contract ended, so its effect ended
+ * with it). Each client mends its own copy, as it locked its own copy (the user's ruling, 2026-11-06).
+ */
+void mend(Swing& s) {
+  if (!api::alive(s.door) || !api::alive(s.body)) return;
+  phasmo::Rigidbody::set_isKinematic(s.body, s.wasKinematic);
+  phasmo::Rigidbody::set_constraints(s.body, s.wasConstraints);
+  phasmo::Door::locked.set(s.door, s.wasLocked);
+  phasmo::Door::kind.set(s.door, s.wasKind);
+  phasmo::Door::CheckOcclusionPortal(s.door.get());
+  PM_LOG("asterion: %s is given back (the contract's ghost changed type)", name_of(s.door).c_str());
 }
 
 /** The host: break these leaves open here and on every other client. */
@@ -222,6 +254,10 @@ void tick(void* ghost, int type) {
 
 void tick_doors(int type) {
   if (type != kAsterion) {
+    // The contract's ghost is no longer the Asterion (the Dev Menu's re-type, or its rules stopping):
+    // every broken door this client still holds goes back to the game's own state (mend), once. In a
+    // new level the doors are gone and mend skips them.
+    for (Swing& s : g.swings) mend(s);
     g.swings.clear();
     return;
   }
