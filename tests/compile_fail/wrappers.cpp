@@ -2,10 +2,12 @@
 // its own static_assert in sdk/api/game_api.h; typed handles used wrongly (8 to 10), each stopped by
 // a conversion sdk/api/ref.h does not give; a handle-taking wrapper's arguments used wrongly (11 to
 // 13), where the typed call and the transitional raw bridge (removed in part 5) each refuse them; a
-// field of a pointer type (14), still refused by game_api.h's static_assert; and a hook's detour
-// naming the wrong handle (15), which neither hook<> overload takes. With PM_EXPECT_COMPILE_FAIL 0
-// the same code, written right, must compile, so a failing case fails for its own error and never
-// for a broken build. Built by tests/compile_fail_test.cmake.
+// field of a pointer type (14), still refused by game_api.h's static_assert; a hook's detour naming
+// the wrong handle (15), which neither hook<> overload takes; a HeldRef of an unrelated type given
+// for a handle parameter (16); and a Ref of an unrelated type stored into a handle field (17), both
+// refused by the bridge's exact-name rule. With PM_EXPECT_COMPILE_FAIL 0 the same code, written
+// right, must compile, so a failing case fails for its own error and never for a broken build.
+// Built by tests/compile_fail_test.cmake.
 #include <cstdint>
 
 #include "Animator.h"
@@ -68,6 +70,15 @@ inline pm::api::Ref<pm::map::Camera> wrongDetour(pm::api::Original<seeHandle>, p
   return pm::api::Ref<pm::map::Camera>{};
 }
 inline bool wrongHook() { return pm::api::hook<seeHandle>(&wrongDetour, "wrong detour"); }
+#elif PM_EXPECT_COMPILE_FAIL == 16
+// A HeldRef of a type the parameter does not name: it converts to no handle of the parameter's
+// type, and the bridge takes only raw references and a plain Held, never a HeldRef.
+inline void wrongHeldRef() { seeHandle(pm::api::HeldRef<pm::map::Camera>{}, 1); }
+#elif PM_EXPECT_COMPILE_FAIL == 17
+// A handle field's set takes its own handle or a raw reference; a Ref of an unrelated type is
+// refused typed and through the bridge alike.
+inline constexpr pm::api::Field<kHolderField, pm::api::Ref<pm::map::GhostAI>> holderField{};
+inline void wrongSet(void* object) { holderField.set(object, pm::api::Ref<pm::map::Camera>{}); }
 #else
 inline void* right() { return camera_of(pm::api::Ref<pm::map::Camera>{}); }
 inline pm::api::Ref<pm::map::MonoBehaviour> up(pm::api::Ref<pm::map::GhostAI> ghost) { return ghost; }
@@ -110,6 +121,10 @@ inline bool heldFromHandle(pm::api::Ref<pm::map::GhostAI> ghost) {
   keeper = asObject;
   return keeper != nullptr;
 }
+// The bridge's pieces for code that keeps raw references (transitional, removed in part 5): a Held
+// given where a handle parameter sits, and raw references given where a handle field takes its value.
+inline void rightHeldArg(pm::api::Held held) { seeHandle(held, 1); }
+inline void rightSetRaw(void* object, void* value) { holderField.set(object, value); }
 #endif
 }  // namespace handles
 

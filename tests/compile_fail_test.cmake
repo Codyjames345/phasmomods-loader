@@ -27,6 +27,11 @@ set(expect_14 "a managed reference field is Field<D, void*>")
 # takes exactly RawDetour) and the typed overload cannot convert it, which MSVC reports as cannot
 # convert argument.
 set(expect_15 "error C2664")
+# A HeldRef of an unrelated type for a handle parameter (16), and a Ref of an unrelated type stored
+# into a handle field (17): the bridge's exact-name rule takes only void*, const void*, nullptr and
+# a plain Held for a handle, and no conversion gives the typed parameter. Measured codes.
+set(expect_16 "error C3889")
+set(expect_17 "error C2672")
 
 execute_process(COMMAND "${CMAKE_COMMAND}" --build "${BUILD}" --target compile_fail_0
   RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE out)
@@ -34,7 +39,7 @@ if(NOT code EQUAL 0)
   message(FATAL_ERROR "the wrappers written right do not compile\n${out}")
 endif()
 
-foreach(case RANGE 1 15)
+foreach(case RANGE 1 17)
   execute_process(COMMAND "${CMAKE_COMMAND}" --build "${BUILD}" --target compile_fail_${case}
     RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE out)
   if(code EQUAL 0)

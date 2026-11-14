@@ -256,6 +256,51 @@ void held_bridge_feeds_the_object_parameter() {
   CHECK(!holderField.get(api::Held{}));  // a Held holding nothing reads as null
 }
 
+// The bridge's Held piece for call parameters (transitional, removed in part 5): a Held given where
+// a handle parameter sits crosses like the raw void* it reads as, the fake seeing the raw pointer.
+// Held cannot be copied, so the raw overloads take their arguments by reference.
+void held_crosses_the_raw_bridge() {
+  bind_fake();
+  void* ghost[1] = {kGhostClass};
+  api::Held keeper = ghost;
+  const Ref<map::Camera> given = seeHandle(keeper, 7);
+  CHECK(g_sawGhost == ghost && g_sawCount == 7 && given.raw() == &g_cameraBody);
+  g_sawVirtual = nullptr;
+  CHECK(seeHandle.virtual_call(keeper, 7).raw() == &g_cameraBody && g_sawVirtual == ghost);
+  g_sawGhost = reinterpret_cast<void*>(1);
+  seeHandle(api::Held{}, 7);  // a Held holding nothing is a null handle, as its void* was
+  CHECK(g_sawGhost == nullptr);
+}
+
+// The bridge's raw-reference piece for stores (transitional, removed in part 5): a handle field's
+// set takes the void* or Held a mod still keeps, and the write still goes through set_reference.
+void field_set_takes_a_raw_reference() {
+  bind_fake();
+  FakeObject obj;
+  int agent = 0;
+  void* kept = &agent;
+  holderField.set(&obj, kept);  // void* where the field is a handle
+  CHECK(fake::barrier_writes() == 1);
+  CHECK(*reinterpret_cast<void**>(obj.bytes + 0x10) == &agent);
+  api::Held keeper = &agent;
+  holderField.set(&obj, keeper);  // a Held, too
+  CHECK(fake::barrier_writes() == 2);
+  holderField.set(&obj, nullptr);  // nullptr clears it
+  CHECK(*reinterpret_cast<void**>(obj.bytes + 0x10) == nullptr);
+  staticHolder.set(kept);  // the static field takes the same raw reference
+  CHECK(g_staticHolder == &agent);
+}
+
+// The bridge's read piece (transitional, removed in part 5): a handle StaticField reads into the
+// void* a mod still keeps its reference in.
+void static_field_reads_into_a_void_pointer() {
+  bind_fake();
+  void* out = reinterpret_cast<void*>(1);
+  CHECK(staticHolder.read(out) && out == nullptr);  // unset: null, and the read itself succeeded
+  staticHolder.set(Ref<map::Camera>::unchecked(&g_cameraBody));
+  CHECK(staticHolder.read(out) && out == &g_cameraBody);
+}
+
 // A typed hook's detour receives handles, calls its original, and the game side still sees raw
 // pointers: body_entry takes and returns them, and the wrapper converts at its boundary.
 void hook_detour_gets_handles() {
