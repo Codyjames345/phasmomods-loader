@@ -23,6 +23,9 @@ set(expect_11 "error C3889")
 set(expect_12 "error C3889")
 set(expect_13 "error C2440")
 set(expect_14 "a managed reference field is Field<D, void*>")
+# A hook's detour naming a handle of the wrong type: neither hook<> overload converts the function
+# pointer, which MSVC reports as no overload fitting the call.
+set(expect_15 "error C2665")
 
 execute_process(COMMAND "${CMAKE_COMMAND}" --build "${BUILD}" --target compile_fail_0
   RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE out)
@@ -30,7 +33,7 @@ if(NOT code EQUAL 0)
   message(FATAL_ERROR "the wrappers written right do not compile\n${out}")
 endif()
 
-foreach(case RANGE 1 14)
+foreach(case RANGE 1 15)
   execute_process(COMMAND "${CMAKE_COMMAND}" --build "${BUILD}" --target compile_fail_${case}
     RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE out)
   if(code EQUAL 0)

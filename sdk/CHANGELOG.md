@@ -53,9 +53,10 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   (`detail::Bodies::body_entry`, `OriginalOf::code` name the raw signature). `Type::make()` gives a `Ref<D>` and
   `make_array()` an `Object`; `type_object()` and `klass()` stay raw `void*`, a System.Type never being used as a
   handle. A transitional bridge keeps every existing `void*` caller compiling: `Object` constructors from `void*`,
-  `const void*` and any class that reads as a `void*` such as `Held`, an `operator void*` on both handle types, and
-  a raw overload on each handle-taking wrapper. It leaves in part 5 of the migration, when the map declarations and
-  the callers name handles.
+  `const void*` and any class that reads as a `void*` such as `Held`, an `operator void*` on both handle types, a
+  raw overload on each handle-taking wrapper, a `hook` overload for a detour written in the game's own raw shape
+  (whose `original` takes raw arguments back), and a `Held` that takes a handle as it took the `void*`. It leaves
+  in part 5 of the migration, when the map declarations and the callers name handles.
 
 - **Every installed mod, read-only.** `PmHostApi::mod_entry(index, out)` gives the installed mod at an index (id, name,
   version, author, whether it runs, whether it is developer-only or records voice, and why it is off), filling a

@@ -105,6 +105,34 @@ Ref<map::Camera> typed_hook_detour(api::Original<typedHook> original, Ref<map::G
   return original(ghost, count);
 }
 
+// The same handle signature hooked with a raw detour: the mod writes the game's own void* shape,
+// Hooked keeps that slot, and run converts at the body boundary (transitional bridge, part 5).
+inline constexpr sdk::EntryDesc kRawHook{.key = "Test.rawHook", .kind = sdk::Kind::Method,
+                                         .flags = sdk::kOptional, .owner = "GhostAI", .name = "RawHook",
+                                         .params = kSeeParams};
+constexpr api::Method<kRawHook, Ref<map::Camera>(Ref<map::GhostAI>, int32_t)> rawHook{};
+void* g_rawSawGhost = nullptr;
+int32_t g_rawSawCount = 0;
+void* fake_raw_hook(void* ghost, int32_t count, const void*) {
+  g_rawSawGhost = ghost;
+  g_rawSawCount = count;
+  return &g_cameraBody;
+}
+int g_rawDetours = 0;
+void* g_rawDetourGhost = nullptr;
+int32_t g_rawDetourCount = 0;
+void* raw_hook_detour(api::Original<rawHook> original, void* ghost, int32_t count) {
+  ++g_rawDetours;
+  g_rawDetourGhost = ghost;
+  g_rawDetourCount = count;
+  return original(ghost, count);  // raw arguments back into the original (the bridge, part 5)
+}
+int g_lateDetours = 0;
+Ref<map::Camera> late_typed_detour(api::Original<rawHook> original, Ref<map::GhostAI> ghost, int32_t count) {
+  ++g_lateDetours;
+  return original(ghost, count);
+}
+
 // Every entry this binary calls, then bind. The optional Test entries resolve because the fake is
 // given them here.
 void bind_fake() {
@@ -117,11 +145,15 @@ void bind_fake() {
   g_sawCount = g_hookSawCount = g_detourCount = 0;
   g_sawMethod = nullptr;
   g_detours = 0;
+  g_rawSawGhost = g_rawDetourGhost = nullptr;
+  g_rawSawCount = g_rawDetourCount = 0;
+  g_rawDetours = g_lateDetours = 0;
   fake::method(kSeeHandle, reinterpret_cast<void*>(&fake_see_handle), kGhostClass);
   fake::override_method(kSeeHandle, kDerivedClass, reinterpret_cast<void*>(&fake_see_handle_override));
   fake::field(kHolderField, 0x10);
   fake::static_field(kStaticHolder, &g_staticHolder, sizeof g_staticHolder, true);
   fake::method(kTypedHook, reinterpret_cast<void*>(&fake_typed_hook), kGhostClass);
+  fake::method(kRawHook, reinterpret_cast<void*>(&fake_raw_hook), kGhostClass);
   std::string missing;
   CHECK(api::bind(fake::host(), missing));
   CHECK(missing.empty());
@@ -226,6 +258,74 @@ void hook_detour_gets_handles() {
   CHECK(result == &g_cameraBody);                         // the fake's raw result comes back untouched
 }
 
+// The transitional raw detour overload of hook<M> (removed in part 5): a detour written with the
+// game's own void* shape still hooks a wrapper whose parameters and return are handles. body_entry
+// converts at its boundary, the detour keeps raw pointers, and its original takes them back. A mod
+// still hooks a method once: the second hook of either kind is refused, and the first keeps its slot.
+void raw_detour_still_hooks_a_typed_method() {
+  bind_fake();
+  CHECK(api::hook<rawHook>(&raw_hook_detour, "raw handles"));
+  CHECK(fake::hooked() == std::vector<std::string>{"Test.rawHook"});
+  using W = std::remove_cvref_t<decltype(rawHook)>;
+  using Entry = void* (*)(void*, int32_t, const void*);  // what the game calls: raw in, raw out
+  void* ghost[1] = {kGhostClass};
+  void* const result = reinterpret_cast<Entry>(api::detail::Bodies<W, api::detail::Hooked<W>>::entry(0))(ghost, 3,
+                                                                                                        nullptr);
+  CHECK(g_rawDetours == 1);
+  CHECK(g_rawDetourGhost == ghost && g_rawDetourCount == 3);    // the detour kept the game's raw pointers
+  CHECK(g_rawSawGhost == ghost && g_rawSawCount == 3);          // its original reached the fake raw
+  CHECK(result == &g_cameraBody);                              // the fake's raw result comes back untouched
+  // The same method is hooked once: a typed hook over a raw one is refused, and the raw detour keeps
+  // its place (the host's existing refusal, through hook_bodies).
+  CHECK(!api::hook<rawHook>(&late_typed_detour, "second"));
+  CHECK(reinterpret_cast<Entry>(api::detail::Bodies<W, api::detail::Hooked<W>>::entry(0))(ghost, 4, nullptr) ==
+        &g_cameraBody);
+  CHECK(g_rawDetours == 2 && g_lateDetours == 0);
+}
+
+// OriginalOf's raw overload, the same bridge rule as a wrapper's call (removed in part 5): an
+// original called with void* arguments where the wrapper's parameters are handles still compiles and
+// means the same. below_hook hands one out to call outside a detour.
+void original_takes_raw_arguments() {
+  bind_fake();
+  CHECK(api::hook<typedHook>(&typed_hook_detour, "typed handles"));
+  const api::Original<typedHook> under = api::below_hook<typedHook>();
+  void* ghost[1] = {kGhostClass};
+  void* object = ghost;
+  const Ref<map::Camera> given = under(object, 4);
+  CHECK(g_detours == 0);                                        // below_hook runs under this mod's detour
+  CHECK(g_hookSawGhost == ghost && g_hookSawCount == 4);        // the fake saw the raw reference
+  CHECK(given.raw() == &g_cameraBody);
+  CHECK(under(nullptr, 5).raw() == &g_cameraBody);              // nullptr for a handle parameter, too
+  const void* constRaw = object;
+  CHECK(under(constRaw, 6).raw() == &g_cameraBody);             // and const void*
+}
+
+// The bridge's Held piece (transitional, removed in part 5): a wrapper's handle answer goes straight
+// into a Held, as the void* it used to give did: a Ref through the Object it converts to, an Object
+// directly, with assignment as well as construction. Assigning the object already held keeps its
+// GC handle, as the void* assignment does.
+void held_takes_a_ref() {
+  bind_fake();
+  const Ref<map::GhostAI> made = phasmo::GhostAI::type.make();
+  api::Held keeper = made;  // a handle, where the Held used to take a void*
+  CHECK(keeper && phasmo::GhostAI::type.is(keeper));
+  CHECK(fake::held(made.raw()));
+  api::Held reassigned;
+  reassigned = made;  // assignment from a handle
+  CHECK(reassigned && reassigned.get() == made.raw());
+  const Object asObject = made;  // the Ref converts to Object once
+  reassigned = asObject;         // and from an Object
+  CHECK(reassigned.get() == made.raw());
+  const int holdsBefore = fake::held();
+  reassigned = asObject;  // the object it already holds: its handle stays
+  CHECK(fake::held() == holdsBefore);
+  reassigned = nullptr;
+  CHECK(!reassigned && fake::held() == holdsBefore - 1);
+  static_assert(std::is_convertible_v<Ref<map::GhostAI>, api::Held>);      // transitional (part 5)
+  static_assert(std::is_convertible_v<Object, api::Held>);                // transitional (part 5)
+}
+
 // Type<D>::make() gives a Ref<D>; make_array() gives an Object; type_object() and klass() stay raw
 // void*s (a System.Type is untyped either way). The bridge keeps callers that kept these as void*
 // compiling.
@@ -290,6 +390,9 @@ int main() {
   static_field_of_a_handle();
   held_bridge_feeds_the_object_parameter();
   hook_detour_gets_handles();
+  raw_detour_still_hooks_a_typed_method();
+  original_takes_raw_arguments();
+  held_takes_a_ref();
   type_make_gives_a_ref();
   bridge_keeps_comparisons_unambiguous();
   return g_failures ? 1 : 0;

@@ -1,10 +1,11 @@
 // Wrappers that must not compile, one per value of PM_EXPECT_COMPILE_FAIL (1 to 7), each stopped by
 // its own static_assert in sdk/api/game_api.h; typed handles used wrongly (8 to 10), each stopped by
 // a conversion sdk/api/ref.h does not give; a handle-taking wrapper's arguments used wrongly (11 to
-// 13), where the typed call and the transitional raw bridge (removed in part 5) each refuse them;
-// and a field of a pointer type (14), still refused by game_api.h's static_assert. With
-// PM_EXPECT_COMPILE_FAIL 0 the same code, written right, must compile, so a failing case fails for
-// its own error and never for a broken build. Built by tests/compile_fail_test.cmake.
+// 13), where the typed call and the transitional raw bridge (removed in part 5) each refuse them; a
+// field of a pointer type (14), still refused by game_api.h's static_assert; and a hook's detour
+// naming the wrong handle (15), which neither hook<> overload takes. With PM_EXPECT_COMPILE_FAIL 0
+// the same code, written right, must compile, so a failing case fails for its own error and never
+// for a broken build. Built by tests/compile_fail_test.cmake.
 #include <cstdint>
 
 #include "Animator.h"
@@ -59,6 +60,14 @@ inline void* wrongWrap(void* object, void* camera) {
 #elif PM_EXPECT_COMPILE_FAIL == 14
 // A field's parameter is still refused: a managed reference is a handle or void*, never int*.
 constexpr pm::api::Field<kHolderField, int*> badField{};
+#elif PM_EXPECT_COMPILE_FAIL == 15
+// A hook's detour written with a handle of the wrong type: seeHandle's first parameter is a GhostAI
+// handle, and neither hook<> overload takes a detour naming a Camera one there.
+inline pm::api::Ref<pm::map::Camera> wrongDetour(pm::api::Original<seeHandle>, pm::api::Ref<pm::map::Camera>,
+                                                 int32_t) {
+  return pm::api::Ref<pm::map::Camera>{};
+}
+inline bool wrongHook() { return pm::api::hook<seeHandle>(&wrongDetour, "wrong detour"); }
 #else
 inline void* right() { return camera_of(pm::api::Ref<pm::map::Camera>{}); }
 inline pm::api::Ref<pm::map::MonoBehaviour> up(pm::api::Ref<pm::map::GhostAI> ghost) { return ghost; }
@@ -81,6 +90,26 @@ inline void* rightRaw(void* object, void* camera) {
 // A Held, which reads as a raw void*, reaches an Object parameter through the bridge's one
 // class-type constructor (ruling 4b).
 inline pm::api::Object heldAsObject(pm::api::Held held) { return held; }
+// A hook's detours, written right: one typed, one in the game's own raw shape (the transitional hook
+// overload, removed in part 5), whose original takes the raw arguments back.
+inline pm::api::Ref<pm::map::Camera> rightTypedDetour(pm::api::Original<seeHandle> original,
+                                                      pm::api::Ref<pm::map::GhostAI> ghost, int32_t count) {
+  return original(ghost, count);
+}
+inline void* rightRawDetour(pm::api::Original<seeHandle> original, void* ghost, int32_t count) {
+  return original(ghost, count);
+}
+inline bool rightHooks() {
+  return pm::api::hook<seeHandle>(&rightTypedDetour, "typed detour") &&
+         pm::api::hook<seeHandle>(&rightRawDetour, "raw detour");
+}
+// A Held takes a handle straight in, as it took the void* (transitional, removed in part 5).
+inline bool heldFromHandle(pm::api::Ref<pm::map::GhostAI> ghost) {
+  pm::api::Held keeper = ghost;
+  const pm::api::Object asObject = ghost;  // the Ref converts to Object once
+  keeper = asObject;
+  return keeper != nullptr;
+}
 #endif
 }  // namespace handles
 

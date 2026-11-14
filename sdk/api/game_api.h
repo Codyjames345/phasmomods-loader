@@ -925,6 +925,21 @@ struct OriginalOf<Method<D, R(A...)>> {
       else return detail::from_raw<R>(code(detail::to_raw(a)..., method));
     } else if constexpr (!std::is_void_v<R>) return R{};
   }
+
+  /// transitional: removed in part 5. The same call as raw code makes it, with the same rule as a
+  /// wrapper's raw overload: each argument going to a handle parameter must be void*, const void* or
+  /// nullptr, and each argument is converted to the wrapper's parameter type (a handle with
+  /// Ref::unchecked) before the typed call runs. A Ref of another type is refused here too.
+  /// @tparam P The arguments' types: raw references where the wrapper's parameter is a handle, and
+  ///   anything convertible to a parameter otherwise.
+  /// @param p The call's arguments, as the detour received them or changed.
+  /// @return What the rest of the chain returns; R{} when `code` is null.
+  template <class... P>
+    requires((detail::is_handle_v<A> || ...) && sizeof...(P) == sizeof...(A) && (detail::RawBridgeArg<P, A> && ...))
+  R operator()(P... p) const {
+    R (OriginalOf::*typed)(A...) const = &OriginalOf::operator();
+    return (this->*typed)(detail::raw_bridge_to<A, P>(p)...);
+  }
 };
 
 /// The `original` a detour of a hook on M (a Method wrapper) receives.
@@ -968,19 +983,33 @@ struct Bodies<Method<D, R(A...)>, H> {
   static void* entry(uint32_t i) { return reinterpret_cast<void*>(entries[i]); }
 };
 
-// The handler of hook<M>: the mod's detour, given the body's original. One per wrapper, so a mod
-// hooks a method once.
+// The handler of hook<M>: the mod's detour (typed, or raw through the transitional bridge), given the
+// body's original. One per wrapper, and only one slot is ever set (a second hook<M> of either kind
+// meets the host's existing refusal), so a mod hooks a method once.
 template <class W>
 struct Hooked;
 
 template <const sdk::EntryDesc& D, class R, class... A>
 struct Hooked<Method<D, R(A...)>> {
   using Detour = R (*)(OriginalOf<Method<D, R(A...)>>, A...);
+  // transitional: removed in part 5. The same detour in the game's raw types (a void* for every
+  // handle in R and A...): a mod whose detour still names void* keeps hooking. It is only a separate
+  // type where some A is a handle: otherwise it is Detour itself, and hook<> offers no raw overload.
+  using RawDetour = raw_t<R> (*)(OriginalOf<Method<D, R(A...)>>, raw_t<A>...);
   static inline Detour detour = nullptr;
+  static inline RawDetour raw_detour = nullptr;
+  // Whether hook<> offers the raw overload at all: true when at least one parameter is a handle.
+  static constexpr bool takes_handles = (is_handle_v<A> || ...);
 
   static R run(OriginalOf<Method<D, R(A...)>> original, A... a) {
     const Detour d = detour;
-    return d ? d(original, a...) : original(a...);
+    if (d) return d(original, a...);
+    const RawDetour rd = raw_detour;
+    if (rd) {
+      if constexpr (std::is_void_v<R>) rd(original, to_raw(a)...);
+      else return from_raw<R>(rd(original, to_raw(a)...));
+    }
+    return original(a...);
   }
 };
 
@@ -1030,6 +1059,47 @@ bool hook(typename detail::Hooked<std::remove_cvref_t<decltype(M)>>::Detour deto
   // Before anything enables the new hooks. A partial hook runs no detour, and any detour left from
   // an earlier attempt goes with it.
   if (created > 0) detail::Hooked<W>::detour = ok ? detour : nullptr;
+  return ok;
+}
+
+/// transitional: removed in part 5. hook<M> for a detour written the way the game names it,
+///
+///   detail::raw_t<R> detour(pm::api::Original<M> original, detail::raw_t<A>... args)
+///
+/// where each handle in M's R and A... appears as the void* the game passes: code that still keeps
+/// game objects as raw pointers hooks a handle wrapper unchanged. The bodies convert at their own
+/// boundary, so the detour receives the game's raw arguments and `original(args...)` takes them back
+/// (OriginalOf's raw overload). It exists only where some parameter of M is a handle: otherwise the
+/// raw signature is the typed one and the overload above already takes this detour. A mod hooks a
+/// method once whichever way it writes the detour: a second hook<M> of either kind is refused (the
+/// host logs it) and the first keeps its detour. The same terms as the typed hook<M> otherwise.
+/// @tparam M The Method wrapper to hook, for example phasmo::GhostAI::ChangeState.
+/// @param detour The detour in the game's raw types, called for every call of the method on this
+///   client, on the thread the game calls it on (the main thread for the game's own code).
+/// @param name What the log calls the hook; null for the entry's key.
+/// @param twins Twins::All (the default) to cover every body the obfuscator made, so the detour runs
+///   whichever body the game calls; Twins::CanonicalOnly for the canonical body alone.
+/// @return True when every body was hooked; enable it with the host contract's enable_hooks.
+/// @code
+/// void* on_unappear_raw(pm::api::Original<phasmo::GhostAI::UnAppear> original, void* ghost) {
+///   original(ghost);  // the game's own UnAppear first
+/// }
+/// pm::api::hook<phasmo::GhostAI::UnAppear>(&on_unappear_raw, "my mod: UnAppear");
+/// @endcode
+template <auto& M>
+  requires(detail::Hooked<std::remove_cvref_t<decltype(M)>>::takes_handles)
+bool hook(typename detail::Hooked<std::remove_cvref_t<decltype(M)>>::RawDetour detour, const char* name,
+          Twins twins = Twins::All) {
+  using W = std::remove_cvref_t<decltype(M)>;
+  static_assert(W::desc.kind == sdk::Kind::Method || W::desc.kind == sdk::Kind::Inflated, "hook takes a Method wrapper");
+  if (!W::use::entry()) return false;
+  using B = detail::Bodies<W, detail::Hooked<W>>;
+  uint32_t created = 0;
+  const bool ok = detail::hook_bodies(W::desc.key, detour != nullptr, &B::entry, reinterpret_cast<void**>(B::original),
+                                      name ? name : W::desc.key, twins == Twins::All, created);
+  // Before anything enables the new hooks. A partial hook runs no detour, and any raw detour left
+  // from an earlier attempt goes with it.
+  if (created > 0) detail::Hooked<W>::raw_detour = ok ? detour : nullptr;
   return ok;
 }
 

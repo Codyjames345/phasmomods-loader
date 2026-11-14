@@ -43,6 +43,20 @@ class Held {
   /// Holds `object` with a strong GC handle.
   /// @param object The managed object to keep; null holds nothing.
   Held(void* object) : object_(object), handle_(detail::gc_hold(object)) {}
+  /// transitional: removed in part 5. Holds the object `object` handles (ref.h), so code that keeps a
+  /// wrapper's object in a Held compiles when the wrapper gives a handle instead of the void*. A Ref
+  /// comes this way through the Object it converts to. New code names a HeldRef<D> instead.
+  /// @param object The managed object to keep; a null handle holds nothing.
+  Held(Object object) : Held(object.raw()) {}
+  /// transitional: removed in part 5. Holds the object a handle names (ref.h), as the Object one, for
+  /// a Ref<D> of any map type D: the handle matches directly, where the void* one needs a conversion.
+  /// The Object one alone is not enough: a Ref reaches both it (through operator Object) and the
+  /// void* one (through operator void*), equally, so a handle would not compile at all. New code
+  /// names a HeldRef<D> instead.
+  /// @tparam S The handle's Type entry.
+  /// @param object The managed object to keep; a null handle holds nothing.
+  template <const sdk::EntryDesc& S>
+  Held(Ref<S> object) : Held(object.raw()) {}
   /// Takes over `other`'s object and handle; `other` then holds nothing.
   /// @param other The Held to move from.
   Held(Held&& other) noexcept : object_(other.object_), handle_(other.handle_) {
@@ -73,6 +87,20 @@ class Held {
     }
     return *this;
   }
+  /// transitional: removed in part 5. Holds the object `object` handles (ref.h) instead, as the void*
+  /// assignment does, so code that assigns a wrapper's object to a Held compiles when the wrapper
+  /// gives a handle. A Ref comes this way through the Object it converts to.
+  /// @param object The managed object to keep; a null handle holds nothing.
+  /// @return This Held.
+  Held& operator=(Object object) { return *this = object.raw(); }
+  /// transitional: removed in part 5. Holds the object a handle names (ref.h), as the Object one, for
+  /// a Ref<D> of any map type D: the handle matches directly, where the void* assignment needs a
+  /// conversion.
+  /// @tparam S The handle's Type entry.
+  /// @param object The managed object to keep; a null handle holds nothing.
+  /// @return This Held.
+  template <const sdk::EntryDesc& S>
+  Held& operator=(Ref<S> object) { return *this = object.raw(); }
   /// Releases what this holds, and holds nothing.
   /// @return This Held.
   Held& operator=(std::nullptr_t) { return *this = static_cast<void*>(nullptr); }
