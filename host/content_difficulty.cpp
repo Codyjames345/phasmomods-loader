@@ -38,13 +38,14 @@ void detour_write(pm::api::Original<phasmo::ES3UserType_Difficulty::WriteScripta
   if (g_self && d) guarded(logged, "keeping a custom ghost out of a save", [&] { put = g_self->before_write(d); });
   // What was changed is put back whatever the write does, a managed exception included.
   struct Restore {
-    void* d;
+    api::Object d;  // the Difficulty whose save is being written
     int32_t put;
     ~Restore() {
       static bool restoreLogged = false;
-      if (g_self && put >= 0) guarded(restoreLogged, "putting a difficulty's ghost back", [&] { g_self->after_write(d, put); });
+      if (g_self && put >= 0)
+        guarded(restoreLogged, "putting a difficulty's ghost back", [&] { g_self->after_write(d.raw(), put); });
     }
-  } restore{d, put};
+  } restore{api::Object::unchecked(d), put};
   original(es3type, d, writer);
 }
 
@@ -62,12 +63,12 @@ void* detour_summary(pm::api::Original<phasmo::DifficultyUIManager::SummaryText>
 
 void* detour_enum_name(pm::api::Original<phasmo::Enum::ToString> original, void* boxed) {
   static bool logged = false;
-  void* name = nullptr;
+  api::Object name = nullptr;  // a System.String from pm::api::make_string (the raw runtime)
   if (g_self && boxed)
     guarded(logged, "naming a custom ghost in the summary", [&] {
-      if (const auto n = g_self->enum_name(boxed)) name = pm::api::make_string(*n);
+      if (const auto n = g_self->enum_name(boxed)) name = api::Object::unchecked(pm::api::make_string(*n));
     });
-  return name ? name : static_cast<void*>(original(boxed));
+  return name ? name.raw() : original(boxed).raw();
 }
 
 const pm::sdk::EntryDesc* const kNeeded[] = {
@@ -88,8 +89,8 @@ void set_ghost(void* d, int32_t type) { phasmo::Difficulty::ghostTypeOverride.se
 int32_t preset_of(void* d) { return phasmo::Difficulty::difficulty.get(d); }
 
 void* level_difficulty() {
-  void* values = phasmo::LevelValues::get_Instance();
-  return values ? phasmo::LevelValues::difficulty.get(values) : nullptr;
+  const auto values = phasmo::LevelValues::get_Instance();
+  return values ? phasmo::LevelValues::difficulty.get(values).raw() : nullptr;
 }
 
 }  // namespace
@@ -212,23 +213,23 @@ void* ContentDifficulty::find_menu(uint64_t nowMs) {
   nextSearch_ = nowMs + kSearchMs;
   // Inactive ones too: the game hides the board, menu and all, unless the player is on it, and a
   // contract started without opening it must still get the pick.
-  void* menu = phasmo::Object::FindObjectOfType(phasmo::DifficultyUIManager::type.type_object(), true);
-  if (!pm::api::alive(menu)) return nullptr;
+  const auto menu = phasmo::Object::FindObjectOfType(phasmo::DifficultyUIManager::type.type_object(), true);
+  if (!pm::api::alive(menu.raw())) return nullptr;
   menu_ = menu;
-  return menu;
+  return menu.raw();
 }
 
 void* ContentDifficulty::menu_list(void* menu) const {
-  void* collection = phasmo::DifficultyUIManager::allGhostsData.get(menu);
-  return collection ? phasmo::GhostCollection::ghosts.get(collection) : nullptr;
+  const auto collection = phasmo::DifficultyUIManager::allGhostsData.get(menu);
+  return collection ? phasmo::GhostCollection::ghosts.get(collection).raw() : nullptr;
 }
 
 void ContentDifficulty::fit_option(void* menu) {
-  void* option = phasmo::DifficultyUIManager::ghostType.get(menu);
-  void* list = menu_list(menu);
+  const auto option = phasmo::DifficultyUIManager::ghostType.get(menu);
+  const auto list = api::Object::unchecked(menu_list(menu));  // still a void* return until 3c
   if (!option || !list) return;
   // The handler's choices: index 0 Random, index i the collection's ghost i - 1.
-  const int32_t count = static_cast<int32_t>(pm::api::List{list}.size()) + 1;
+  const int32_t count = static_cast<int32_t>(pm::api::List{list.raw()}.size()) + 1;
   if (phasmo::DifficultyOption::count.get(option) == count) return;
   phasmo::DifficultyOption::count.set(option, count);
   const int32_t index = phasmo::DifficultyOption::index.get(option);
@@ -251,8 +252,8 @@ bool ContentDifficulty::give_back(void* menu, bool master) {
   // hide that the lobby's difficulty changed, so it would never be sent.
   bool changed = false;
   if (master)
-    for (void* d : {static_cast<void*>(phasmo::DifficultyUIManager::current.get(menu)),
-                    static_cast<void*>(phasmo::DifficultyUIManager::applied.get(menu)), level_difficulty()})
+    for (void* d : {phasmo::DifficultyUIManager::current.get(menu).raw(),
+                    phasmo::DifficultyUIManager::applied.get(menu).raw(), level_difficulty()})
       changed = take(d) || changed;
   const pm::api::RefArray presets{phasmo::DifficultyUIManager::presets.get(menu)};
   for (size_t i = 0; i < presets.size(); ++i) take(presets[i]);
@@ -261,8 +262,8 @@ bool ContentDifficulty::give_back(void* menu, bool master) {
 }
 
 void ContentDifficulty::send(void* menu) {
-  void* d = phasmo::DifficultyUIManager::current.get(menu);
-  if (!d) d = level_difficulty();
+  api::Object d = phasmo::DifficultyUIManager::current.get(menu);
+  if (!d) d = api::Object::unchecked(level_difficulty());  // still a void* return until 3c
   if (!d) return;
   // The RPC runs on this client at once too: SyncDifficultyValues makes the lobby's difficulty, its
   // settled copy and LevelValues.difficulty from what is sent.
@@ -275,17 +276,17 @@ void ContentDifficulty::send(void* menu) {
 }
 
 void ContentDifficulty::show_pick(void* menu) {
-  void* d = phasmo::DifficultyUIManager::current.get(menu);
-  void* option = phasmo::DifficultyUIManager::ghostType.get(menu);
-  void* list = menu_list(menu);
+  const auto d = phasmo::DifficultyUIManager::current.get(menu);
+  const auto option = phasmo::DifficultyUIManager::ghostType.get(menu);
+  const auto list = api::Object::unchecked(menu_list(menu));  // still a void* return until 3c
   if (!d || !option || !list) return;
   // The game shows a loaded or synced difficulty by writing the option's index alone, Random when the
   // collection lacks its ghost, and offering or withdrawing the custom ghosts moves the ghosts after
   // their places: the option shows the lobby's ghost again, named by the game's own handler.
-  const int32_t type = ghost_of(d);
+  const int32_t type = ghost_of(d.raw());
   int32_t index = -1;
   if (type == registry_.game_enums().noGhostType) index = 0;
-  const pm::api::List ghosts{list};
+  const pm::api::List ghosts{list.raw()};
   for (size_t i = 0; index < 0 && i < ghosts.size(); ++i)
     if (ghosts[i] && phasmo::GhostData::ghostType.get(ghosts[i]) == type) index = static_cast<int32_t>(i) + 1;
   if (index < 0 || phasmo::DifficultyOption::index.get(option) == index) return;
@@ -301,23 +302,23 @@ void ContentDifficulty::show_pick(void* menu) {
 
 void ContentDifficulty::set_aside(void* menu, bool master) {
   const int32_t none = registry_.game_enums().noGhostType;
-  void* current = phasmo::DifficultyUIManager::current.get(menu);
-  void* contract = level_difficulty();
+  const auto current = phasmo::DifficultyUIManager::current.get(menu);
+  const auto contract = api::Object::unchecked(level_difficulty());  // still a void* return until 3c
   bool changed = false;
   const auto aside = [&](void* d) {
     if (!d || !ours(ghost_of(d))) return;
     set_ghost(d, none);
-    changed = changed || d == current || d == contract;
+    changed = changed || d == current.raw() || d == contract.raw();
   };
   const pm::api::RefArray presets{phasmo::DifficultyUIManager::presets.get(menu)};
   for (size_t i = 0; i < presets.size(); ++i) aside(presets[i]);
-  for (void* d : {current, static_cast<void*>(phasmo::DifficultyUIManager::applied.get(menu)), contract}) aside(d);
+  for (void* d : {current.raw(), phasmo::DifficultyUIManager::applied.get(menu).raw(), contract.raw()}) aside(d);
   if (master && changed) send(menu);
 }
 
 void ContentDifficulty::withdraw_menu(void* menu, bool master) {
   set_aside(menu, master);
-  if (void* list = menu_list(menu)) types_.withdraw_offer(list);
+  if (const auto list = api::Object::unchecked(menu_list(menu))) types_.withdraw_offer(list.raw());
   fit_option(menu);
   show_pick(menu);
   offeredTo_ = nullptr;
@@ -328,9 +329,9 @@ void ContentDifficulty::keep_contract_vanilla() {
   // A contract the custom ghosts stay out of must not force one: its spawn would make a ghost the game
   // has no data for.
   if (!types_.decided() || !types_.held().empty()) return;
-  void* d = level_difficulty();
-  if (!d || !ours(ghost_of(d))) return;
-  set_ghost(d, registry_.game_enums().noGhostType);
+  const auto d = api::Object::unchecked(level_difficulty());  // still a void* return until 3c
+  if (!d || !ours(ghost_of(d.raw()))) return;
+  set_ghost(d.raw(), registry_.game_enums().noGhostType);
   if (!vanillaLogged_) PM_LOG("content: this contract has no custom ghosts; its ghost is rolled instead");
   vanillaLogged_ = true;
 }
@@ -343,35 +344,35 @@ void ContentDifficulty::tick(content::State state, bool privateRoom, bool master
     return;
   }
   vanillaLogged_ = false;
-  void* menu = find_menu(nowMs);
+  const auto menu = api::Object::unchecked(find_menu(nowMs));  // still a void* return until 3c
   if (!menu) return;
   if (state_ == content::State::Active) {
-    if (void* list = menu_list(menu)) types_.offer(list);
-    fit_option(menu);
-    if (offeredTo_.get() != menu) PM_LOG("content: the difficulty's Ghost Type option offers the custom ghosts");
+    if (const auto list = api::Object::unchecked(menu_list(menu))) types_.offer(list.raw());
+    fit_option(menu.raw());
+    if (offeredTo_.get() != menu.raw()) PM_LOG("content: the difficulty's Ghost Type option offers the custom ghosts");
     offeredTo_ = menu;
-    const bool changed = give_back(menu, master);
+    const bool changed = give_back(menu.raw(), master);
     // A player who joined was sent Random: a pick is due again once they are verified.
     const bool verified = agreed_room();
     if (!verified) sentActive_ = false;
     if (master && (changed || !sentActive_)) {
-      void* d = phasmo::DifficultyUIManager::current.get(menu);
-      if (!d) d = level_difficulty();
+      api::Object d = phasmo::DifficultyUIManager::current.get(menu);
+      if (!d) d = api::Object::unchecked(level_difficulty());  // still a void* return until 3c
       // A custom pick goes only to verified players, and waits while anyone in the room now is not.
-      if (!d || !registry_.is_custom(ghost_of(d))) sentActive_ = true;
+      if (!d || !registry_.is_custom(ghost_of(d.raw()))) sentActive_ = true;
       else if (verified) {
-        send(menu);
+        send(menu.raw());
         sentActive_ = true;
       }
     }
-    show_pick(menu);
+    show_pick(menu.raw());
   } else {
     // Not active (off, or pending: the host not heard from yet, or this client's mods not matching its list):
     // the menu offers the game's ghosts only, as a contract loading now would play
     // none of the custom ones, and every custom type comes out of the lobby the menu was found in,
     // offered to it or not (a sync may have brought one). Each pick comes back once content is active.
-    if (offeredTo_.get() == menu) withdraw_menu(menu, master);
-    else set_aside(menu, master);
+    if (offeredTo_.get() == menu.raw()) withdraw_menu(menu.raw(), master);
+    else set_aside(menu.raw(), master);
   }
 }
 
@@ -386,11 +387,11 @@ void ContentDifficulty::withdraw(bool master) {
 
 void ContentDifficulty::after_choice(void* menu) {
   if (showing_ || !registry_.own_range(registry_.game_enums().firstGhostType)) return;  // no content ghosts
-  void* d = phasmo::DifficultyUIManager::current.get(menu);
-  if (!d || !custom_preset(menu, preset_of(d))) return;
-  const int32_t type = ghost_of(d);
+  const auto d = phasmo::DifficultyUIManager::current.get(menu);
+  if (!d || !custom_preset(menu, preset_of(d.raw()))) return;
+  const int32_t type = ghost_of(d.raw());
   const char* id = registry_.is_custom(type) ? registry_.id_of(type) : nullptr;
-  const int32_t preset = preset_of(d);
+  const int32_t preset = preset_of(d.raw());
   if (!picks_.choose(preset, id ? id : "")) return;
   PM_LOG("content: custom difficulty preset %d now forces %s", preset, id ? id : "no custom ghost");
   save();

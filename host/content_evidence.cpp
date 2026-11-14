@@ -143,10 +143,10 @@ bool ContentEvidence::learn(void* journal) {
   std::vector<std::string> names;
   std::set<std::string> suffixes;
   for (size_t i = 0; i < buttons.size(); ++i) {
-    void* b = buttons[i];
+    const auto b = api::Object::unchecked(buttons[i]);  // a RefArray element read
     if (!b) continue;
-    const std::string name = key_of(localiser_of(phasmo::ThreeStateButton::textLabel.get(b)));
-    const std::string line = key_of(localiser_of(phasmo::EvidenceButton::descriptionLabel.get(b)));
+    const std::string name = key_of(localiser_of(phasmo::ThreeStateButton::textLabel.get(b).raw()));
+    const std::string line = key_of(localiser_of(phasmo::EvidenceButton::descriptionLabel.get(b).raw()));
     const bool added = !name.empty() && line.size() > name.size() && line.starts_with(name);
     suffixes.insert(added ? line.substr(name.size()) : std::string());
     names.push_back(name);
@@ -167,33 +167,33 @@ bool ContentEvidence::learn(void* journal) {
 }
 
 bool ContentEvidence::extend(Journal& j, unsigned under) {
-  void* journal = j.journal.get();
-  void* root = transform_of(journal);
-  void* rows = phasmo::Journal::EvidenceRows.find(root);
-  void* templateRow = phasmo::Journal::EvidenceButton.find(root);
-  void* templateButton =
+  const auto journal = api::Object::unchecked(j.journal.get());  // a Held's raw side
+  const auto root = api::Object::unchecked(transform_of(journal.raw()));  // a still-void* helper until 3c
+  const auto rows = api::Object::unchecked(phasmo::Journal::EvidenceRows.find(root.raw()));
+  const auto templateRow = api::Object::unchecked(phasmo::Journal::EvidenceButton.find(root.raw()));
+  const auto templateButton =
       templateRow ? phasmo::Component::GetComponent(templateRow, phasmo::EvidenceButton::type.type_object()) : nullptr;
-  void* layout = rows ? phasmo::Component::GetComponent(rows, phasmo::HorizontalOrVerticalLayoutGroup::type.type_object())
-                      : nullptr;
-  void* buttons = phasmo::JournalController::evidenceButtons.get(journal);
-  void* sync = phasmo::JournalController::evidenceSync.get(journal);
+  const auto layout = rows ? phasmo::Component::GetComponent(rows, phasmo::HorizontalOrVerticalLayoutGroup::type.type_object())
+                           : nullptr;
+  const auto buttons = phasmo::JournalController::evidenceButtons.get(journal);
+  const auto sync = phasmo::JournalController::evidenceSync.get(journal);
   if (!rows || !templateButton || !layout || !buttons || !sync) return false;
   // Every operation the change needs is found before anything changes.
-  if (!ops_.initialise || !ops_.has_initialise || !ops_.has_initialise(sync)) {
+  if (!ops_.initialise || !ops_.has_initialise || !ops_.has_initialise(sync.raw())) {
     PM_LOG("content: the journal's evidence sync lacks the method the custom evidence needs");
     return false;
   }
   std::set<int32_t> there;  // the rows' numbers: none is added twice
-  const pm::api::RefArray old{buttons};
+  const pm::api::RefArray old{buttons.raw()};
   for (size_t i = 0; i < old.size(); ++i)
     if (old[i]) there.insert(phasmo::EvidenceButton::evidence.get(old[i]));
-  const int32_t before = static_cast<int32_t>(active_children(rows).size());
-  std::vector<void*> added;
+  const int32_t before = static_cast<int32_t>(active_children(rows.raw()).size());
+  std::vector<void*> added;  // the rows stay void*: the array of copies is grown by a void* helper until 3c
   std::vector<pm::api::Held> made;  // every copy, held until the array holds it or it is taken out
   // Takes the copies out again: off at once, destroyed at the frame's end.
   const auto take_out = [&] {
     for (const pm::api::Held& object : made) {
-      void* go = game_object_of(object.get());
+      const auto go = api::Object::unchecked(game_object_of(object.get()));
       phasmo::GameObject::SetActive(go, false);
       phasmo::Object::Destroy(go, 0.0f);
     }
@@ -202,17 +202,17 @@ bool ContentEvidence::extend(Journal& j, unsigned under) {
     if (there.count(value)) continue;
     // The Spirit Box's row, copied with its children (the other players' marks included), after the
     // game's rows; its name and line are its own copies, each with the game's localiser.
-    void* row = phasmo::Object::Instantiate(templateButton, rows, false);
+    const auto row = phasmo::Object::Instantiate(templateButton, rows, false);
     if (!row) return take_out(), false;
     made.emplace_back(row);
     phasmo::Object::set_name(row, pm::api::make_string(pick(e.def->name, "en")));
     phasmo::EvidenceButton::evidence.set(row, value);
-    set_key(localiser_of(phasmo::ThreeStateButton::textLabel.get(row)), namePrefix_ + e.id);
-    set_key(localiser_of(phasmo::EvidenceButton::descriptionLabel.get(row)), line_key(e.id));
-    added.push_back(row);
+    set_key(localiser_of(phasmo::ThreeStateButton::textLabel.get(row).raw()), namePrefix_ + e.id);
+    set_key(localiser_of(phasmo::EvidenceButton::descriptionLabel.get(row).raw()), line_key(e.id));
+    added.push_back(row.raw());
   }
   if (added.empty()) return true;
-  void* all = appended(buttons, phasmo::EvidenceButton::type, added);
+  const auto all = api::Object::unchecked(appended(buttons.raw(), phasmo::EvidenceButton::type, added));
   if (!all) return take_out(), false;
   const pm::api::Held keep(all);
 
@@ -227,11 +227,11 @@ bool ContentEvidence::extend(Journal& j, unsigned under) {
   phasmo::JournalController::evidenceButtons.set(journal, all);
   // The evidence sync reads the rows again and subscribes to each; the game's rows keep the one
   // subscription they had (sdk/systems/journal.md, as for the guess sync).
-  if (!ops_.initialise(sync)) {
+  if (!ops_.initialise(sync.raw())) {
     restore_delegates();
     phasmo::JournalController::evidenceButtons.set(journal, buttons);
     take_out();
-    const bool reread = ops_.initialise(sync);  // reads the game's own rows again
+    const bool reread = ops_.initialise(sync.raw());  // reads the game's own rows again
     restore_delegates();
     PM_LOG("content: the journal's evidence sync could not read the custom evidence's rows; the journal is put "
            "back, and its evidence sync %s",
@@ -244,7 +244,7 @@ bool ContentEvidence::extend(Journal& j, unsigned under) {
   const int32_t n = static_cast<int32_t>(added.size());
   const float s = phasmo::HorizontalOrVerticalLayoutGroup::get_spacing(layout);
   if (before > 0) {
-    const float h = phasmo::RectTransform::get_rect(transform_of(templateButton)).height;
+    const float h = phasmo::RectTransform::get_rect(transform_of(templateButton.raw())).height;
     phasmo::HorizontalOrVerticalLayoutGroup::set_spacing(layout,
                                                          std::max(0.0f, ((before - 1) * s - n * h) / (before + n - 1)));
   }
@@ -256,7 +256,7 @@ bool ContentEvidence::extend(Journal& j, unsigned under) {
 }
 
 void ContentEvidence::restore(Journal& j) {
-  void* journal = j.journal.get();
+  const auto journal = api::Object::unchecked(j.journal.get());  // a Held's raw side
   Extension& e = *j.extension;
   // The game's rows as they were, each keeping the one subscription it has; the evidence sync reads
   // them again.
@@ -265,13 +265,13 @@ void ContentEvidence::restore(Journal& j) {
   for (size_t i = 0; i < old.size(); ++i)
     delegates.emplace_back(old[i] ? phasmo::NetworkThreeStateButton::userStateChanged.get(old[i]) : nullptr);
   phasmo::JournalController::evidenceButtons.set(journal, e.buttons.get());
-  void* sync = phasmo::JournalController::evidenceSync.get(journal);
-  const bool reread = sync && ops_.initialise && ops_.initialise(sync);
+  const auto sync = phasmo::JournalController::evidenceSync.get(journal);
+  const bool reread = sync && ops_.initialise && ops_.initialise(sync.raw());
   for (size_t i = 0; i < old.size(); ++i)
     if (old[i]) phasmo::NetworkThreeStateButton::userStateChanged.set(old[i], delegates[i].get());
   // The copies: off at once, destroyed at the frame's end; the column's spacing as it was.
   for (const pm::api::Held& object : e.made) {
-    void* go = game_object_of(object.get());
+    const auto go = api::Object::unchecked(game_object_of(object.get()));
     phasmo::GameObject::SetActive(go, false);
     phasmo::Object::Destroy(go, 0.0f);
   }

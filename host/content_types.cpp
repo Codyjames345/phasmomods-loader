@@ -35,16 +35,16 @@ std::string lower(std::string_view text) {
 
 // The contract's ghost, its GhostAI, or null outside a contract and before it spawns.
 void* current_ghost() {
-  void* level = phasmo::LevelController::instance.get();
-  if (!pm::api::alive(level)) return nullptr;
-  void* ghost = phasmo::LevelController::currentGhost.get(level);
-  return pm::api::alive(ghost) ? ghost : nullptr;
+  const auto level = phasmo::LevelController::instance.get();
+  if (!pm::api::alive(level.raw())) return nullptr;
+  const auto ghost = phasmo::LevelController::currentGhost.get(level);
+  return pm::api::alive(ghost.raw()) ? ghost.raw() : nullptr;
 }
 
 // The contract's GhostController, or null.
 void* current_controller() {
-  void* controller = phasmo::GhostController::instance.get();
-  return pm::api::alive(controller) ? controller : nullptr;
+  const auto controller = phasmo::GhostController::instance.get();
+  return pm::api::alive(controller.raw()) ? controller.raw() : nullptr;
 }
 
 int32_t read_int(const void* at) {
@@ -65,7 +65,7 @@ void detour_sync_send(pm::api::Original<phasmo::GhostInfo::SyncValues> original,
   static bool logged = false;
   // The x64 convention passes the traits as the caller's own copy, so changing them in place is the
   // callee's right; what changes is put back after the call all the same.
-  void* const t = const_cast<void*>(traits);
+  void* const t = const_cast<void*>(traits);  // the traits struct's address (a byref argument): not an object
   int32_t put = -1;
   if (g_self && t) guarded(logged, "sending a custom ghost's type", [&] { put = g_self->before_sync_send(t); });
   original(info, traits);
@@ -105,9 +105,9 @@ void detour_pick_evidence(pm::api::Original<phasmo::GhostController::PickEvidenc
 
 void* detour_evidence_list(pm::api::Original<phasmo::GhostData::GetEvidenceList> original, void* data) {
   static bool logged = false;
-  void* list = original(data);
+  const auto list = api::Object::unchecked(original(data));  // the game's answer through the raw hook seam
   if (g_self) guarded(logged, "following an evidence pick", [] { g_self->after_evidence_list(); });
-  return list;
+  return list.raw();
 }
 
 void detour_update_speed(pm::api::Original<phasmo::GhostHuntState::UpdateSpeed> original, void* hunt) {
@@ -175,24 +175,24 @@ bool ContentTypes::create_hooks() {
 }
 
 void ContentTypes::tick(content::State state, bool privateRoom, bool master, bool roomVerified) {
-  void* controller = current_controller();
-  if (decided_ && controller != contract_.get()) end_contract();  // it ended, or another loaded
+  const auto controller = api::Object::unchecked(current_controller());  // a still-void* file-local until 3c
+  if (decided_ && controller.raw() != contract_.get()) end_contract();  // it ended, or another loaded
   // The lobby offers the custom ghosts while content is active in a private room; a contract loading,
   // or content that stops being active, ends the offer.
   const bool lobby = !controller && privateRoom && state == content::State::Active;
   if (offering_ && !lobby) end_offer();
-  if (controller && !decided_) begin_contract(controller, state == content::State::Active && roomVerified);
+  if (controller && !decided_) begin_contract(controller.raw(), state == content::State::Active && roomVerified);
   if (lobby && !offering_) begin_offer();
   if (decided_ && !held_.empty()) {
-    if (void* list = collection_list()) place(list, held_);
-    add_to_mimic_list(controller);
+    if (const auto list = api::Object::unchecked(collection_list())) place(list.raw(), held_);
+    add_to_mimic_list(controller.raw());
   }
   // A withdrawal a List operation refused is tried again whenever no contract holds content: in the
   // lobby, and in a contract without custom ghosts.
   if (held_.empty()) retry_pending();
   // Outside a private room the suite behaves as if it were not installed: no rules run there.
-  void* ghost = privateRoom ? current_ghost() : nullptr;
-  void* info = ghost ? phasmo::GhostAI::info.get(ghost) : nullptr;
+  const auto ghost = privateRoom ? api::Object::unchecked(current_ghost()) : nullptr;
+  const auto info = ghost ? phasmo::GhostAI::info.get(ghost) : nullptr;
   const int32_t identity = info ? phasmo::GhostInfo::identityType.get(info) : -1;
   const int32_t behaviour = info ? phasmo::GhostInfo::behaviourType.get(info) : -1;
   acting_.observe(identity, behaviour, master);
@@ -208,13 +208,13 @@ void ContentTypes::begin_contract(void* controller, bool active) {
   // keys answered.
   if (offering_) end_offer();
   keys_.clear();
-  void* list = collection_list();
+  const auto list = api::Object::unchecked(collection_list());
   // Any of this client's numbers a lobby left in the collection (a withdrawal a List operation refused,
   // or a menu that shares the collection) come out first, so an entry with another contract's data is
   // never taken for this one's.
   if (list) {
     const auto [first, end] = own_numbers();
-    take_out(list, first, end, false);
+    take_out(list.raw(), first, end, false);
   }
   if (!active) {
     PM_LOG("content: this contract has no custom ghosts");
@@ -306,10 +306,10 @@ void ContentTypes::end_contract() {
 void ContentTypes::withdraw() {
   if (offering_) end_offer();
   const auto [first, end] = own_numbers();
-  if (void* list = collection_list()) take_out(list, first, end, false);
+  if (const auto list = api::Object::unchecked(collection_list())) take_out(list.raw(), first, end, false);
   if (placed_.get() && placed_.get() != collection_list()) take_out(placed_.get(), first, end, false);
-  if (void* controller = current_controller())
-    if (void* mimic = phasmo::GhostController::mimicCopies.get(controller)) take_out(mimic, first, end, true);
+  if (const auto controller = api::Object::unchecked(current_controller()))
+    if (const auto mimic = phasmo::GhostController::mimicCopies.get(controller)) take_out(mimic.raw(), first, end, true);
   placed_ = nullptr;
   held_.clear();
   keys_.clear();
@@ -338,9 +338,9 @@ std::optional<std::string> ContentTypes::name_key(int32_t type) const {
 }
 
 void* ContentTypes::collection() const {
-  void* controller = current_controller();
-  void* collection = controller ? phasmo::GhostController::allGhostsCollection.get(controller) : nullptr;
-  return collection && pm::api::alive(collection) ? collection : nullptr;
+  const auto controller = api::Object::unchecked(current_controller());  // a still-void* file-local until 3c
+  const auto collection = controller ? phasmo::GhostController::allGhostsCollection.get(controller) : nullptr;
+  return collection && pm::api::alive(collection.raw()) ? collection.raw() : nullptr;
 }
 
 bool ContentTypes::custom(int32_t type) const {
@@ -397,8 +397,8 @@ void ContentTypes::after_build_mimic_copies(void* controller) {
 }
 
 void ContentTypes::after_mimic_copy(void*) {
-  void* ghost = current_ghost();
-  void* info = ghost ? phasmo::GhostAI::info.get(ghost) : nullptr;
+  const auto ghost = api::Object::unchecked(current_ghost());  // a still-void* file-local until 3c
+  const auto info = ghost ? phasmo::GhostAI::info.get(ghost) : nullptr;
   if (!info) return;
   const int32_t copied = phasmo::GhostInfo::behaviourType.get(info);
   // The generic AI runs a custom ghost: its behaviour type is the game's "no type", as for one of its own.
@@ -447,7 +447,7 @@ void ContentTypes::after_pick_evidence() {
 }
 
 void ContentTypes::before_update_speed(void* hunt) {
-  void* ghost = current_ghost();
+  const auto ghost = api::Object::unchecked(current_ghost());  // a still-void* file-local until 3c
   if (!ghost || phasmo::GhostHuntState::ghost.get(hunt) != ghost) return;
   const float current = phasmo::GhostHuntState::baseSpeed.get(hunt);
   // The game writes its own base from time to time (RefreshBase, every two seconds): whatever differs
@@ -466,9 +466,9 @@ void ContentTypes::before_update_speed(void* hunt) {
 }
 
 void* ContentTypes::collection_list() const {
-  void* controller = current_controller();
-  void* collection = controller ? phasmo::GhostController::allGhostsCollection.get(controller) : nullptr;
-  return collection && pm::api::alive(collection) ? phasmo::GhostCollection::ghosts.get(collection) : nullptr;
+  const auto controller = api::Object::unchecked(current_controller());  // a still-void* file-local until 3c
+  const auto collection = controller ? phasmo::GhostController::allGhostsCollection.get(controller) : nullptr;
+  return collection && pm::api::alive(collection.raw()) ? phasmo::GhostCollection::ghosts.get(collection).raw() : nullptr;
 }
 
 bool ContentTypes::learn_key_form(void* list) {
@@ -482,7 +482,7 @@ bool ContentTypes::learn_key_form(void* list) {
   std::vector<std::pair<std::string, std::string>> forms;
   bool first = true;
   for (size_t i = 0; i < ghosts.size(); ++i) {
-    void* data = ghosts[i];
+    const auto data = api::Object::unchecked(ghosts[i]);  // a List element read
     const char* id = data ? enums.ghost_id(phasmo::GhostData::ghostType.get(data)) : nullptr;
     if (!id) continue;
     const std::string key = pm::api::to_utf8(phasmo::GhostData::ghostNameLocalisationKey.get(data));
@@ -526,7 +526,7 @@ void ContentTypes::place(void* list, const std::map<int32_t, HeldGhost>& wanted)
       there = ghosts[i] && phasmo::GhostData::ghostType.get(ghosts[i]) == type;
     const std::string key = keyPrefix_ + std::to_string(type) + keySuffix_;
     if (!there) {
-      void* data = phasmo::GhostData::type.make();
+      const auto data = phasmo::GhostData::type.make();
       if (!data) continue;
       phasmo::GhostData::ghostType.set(data, type);
       phasmo::GhostData::ghostNameLocalisationKey.set(data, pm::api::make_string(key));
@@ -534,10 +534,10 @@ void ContentTypes::place(void* list, const std::map<int32_t, HeldGhost>& wanted)
       phasmo::GhostData::evidence2.set(data, h.evidence[1]);
       phasmo::GhostData::evidence3.set(data, h.evidence[2]);
       // Its alphabetical place among the entries, as the game sorts its own.
-      const std::string name = sort_name(data);
+      const std::string name = sort_name(data.raw());
       size_t at = 0;
       while (at < ghosts.size() && ghosts[at] && sort_name(ghosts[at]) <= name) ++at;
-      if (!lists_.insert(list, static_cast<int32_t>(at), data)) {
+      if (!lists_.insert(list, static_cast<int32_t>(at), data.raw())) {
         if (!insertLogged_) PM_LOG("content: the ghost \"%s\" could not join the ghost collection; tried again", h.id.c_str());
         insertLogged_ = true;
         continue;
@@ -569,7 +569,7 @@ bool ContentTypes::remove_types(void* list, int32_t first, int32_t end, bool val
   for (size_t i = l.size(); i-- > 0;) {
     int32_t type = -1;
     if (values) type = pm::api::Array<int32_t>{l.items()}[i];
-    else if (void* data = l[i]) type = phasmo::GhostData::ghostType.get(data);
+    else if (const auto data = api::Object::unchecked(l[i])) type = phasmo::GhostData::ghostType.get(data);
     if (type < first || type >= end) continue;
     if (lists_.removeAt(list, static_cast<int32_t>(i))) ++taken;
     else clean = false;
@@ -588,16 +588,16 @@ void ContentTypes::retry_pending() {
 }
 
 void ContentTypes::add_to_mimic_list(void* controller) {
-  void* list = controller ? phasmo::GhostController::mimicCopies.get(controller) : nullptr;
+  const auto list = controller ? phasmo::GhostController::mimicCopies.get(controller) : nullptr;
   if (!list) return;  // the game builds it at the Mimic's first copy
-  const pm::api::List l{list};
+  const pm::api::List l{list.raw()};
   const pm::api::Array<int32_t> items{l.items()};
   std::vector<int32_t> there;
   for (size_t i = 0; i < l.size(); ++i) there.push_back(items[i]);
   for (const auto& [type, h] : held_) {
     if (std::find(there.begin(), there.end(), type) != there.end()) continue;
     if (h.noMimicCopy) continue;  // never copied (PM_GHOST_NO_MIMIC_COPY)
-    if (lists_.addValue(list, type)) {
+    if (lists_.addValue(list.raw(), type)) {
       addLogged_ = false;  // a later refusal is news again
       continue;
     }

@@ -83,9 +83,9 @@ int32_t alphabetical_index(void* parent, const std::string& name) {
   const int32_t n = phasmo::Transform::get_childCount(parent);
   int32_t last = -1;
   for (int32_t i = 0; i < n; ++i) {
-    void* child = phasmo::Transform::GetChild(parent, i);
-    if (!child || !phasmo::GameObject::get_activeSelf(game_object_of(child))) continue;
-    if (lower(name_of(child)) > key) return i;
+    const auto child = phasmo::Transform::GetChild(parent, i);
+    if (!child || !phasmo::GameObject::get_activeSelf(game_object_of(child.raw()))) continue;
+    if (lower(name_of(child.raw())) > key) return i;
     last = i;
   }
   return last + 1;
@@ -111,7 +111,7 @@ GhostRows ghost_rows(void* parent, const std::set<std::string>& ghostKeys) {
   GhostRows out;
   const int32_t n = phasmo::Transform::get_childCount(parent);
   for (int32_t i = 0; i < n; ++i)
-    if (void* row = phasmo::Transform::GetChild(parent, i); is_ghost_row(row, ghostKeys)) {
+    if (const auto row = phasmo::Transform::GetChild(parent, i); is_ghost_row(row.raw(), ghostKeys)) {
       out.rows.emplace_back(row);
       out.places.push_back(i);
     }
@@ -123,15 +123,15 @@ GhostRows ghost_rows(void* parent, const std::set<std::string>& ghostKeys) {
 
 // A contents row's page number as a text: null when it has none.
 void* number_text(void* row) {
-  void* number = row_number(row);
-  return number ? phasmo::Component::GetComponent(number, phasmo::TextMeshProUGUI::type.type_object()) : nullptr;
+  const auto number = api::Object::unchecked(row_number(row));  // still a void* return until 3c
+  return number ? phasmo::Component::GetComponent(number, phasmo::TextMeshProUGUI::type.type_object()).raw() : nullptr;
 }
 
 // The local player's own book on a page whose number has changed: the page turns would step from a number that means another page,
 // or none. It turns to the page its Ghosts tab opens (the tab's first, the page the tab's own button names), as the player's press
 // of the tab does; the page sync tells every copy.
 void turn_reader_back(void* journal, int32_t firstMoved, void* ghostsTab) {
-  void* view = phasmo::JournalController::photonView.get(journal);
+  const auto view = phasmo::JournalController::photonView.get(journal);
   if (view && ghostsTab && phasmo::PhotonView::get_IsMine(view) &&
       phasmo::JournalController::currentPage.get(journal) >= firstMoved)
     phasmo::JournalController::GoToPage(journal, static_cast<int32_t>(phasmo::JournalTab::min.get(ghostsTab)));
@@ -156,7 +156,7 @@ void fit_contents(void* first, int32_t firstBefore, void* second, int32_t second
   for (const std::vector<void*>* rows : {&firstRows, &secondRows})
     for (void* row : *rows) {
       shorter(row);
-      if (void* number = row_number(row)) shorter(number);
+      if (const auto number = api::Object::unchecked(row_number(row))) shorter(number.raw());
     }
 }
 
@@ -184,7 +184,7 @@ void* grid_of(void* transform) {
 // A list placed by hand whose GridLayoutGroup is switched off: the grid of that placement, measured
 // before copies join it (each lies on the entry it was copied from); none for a grid already on.
 std::optional<GridShape> placed_shape(void* transform) {
-  void* grid = grid_of(transform);
+  const auto grid = api::Object::unchecked(grid_of(transform));  // still a void* return until 3c
   if (!grid || phasmo::Behaviour::get_enabled(grid)) return std::nullopt;
   const GridShape shape = placed_grid(active_children(transform));
   if (shape.columns <= 0) return std::nullopt;
@@ -193,7 +193,7 @@ std::optional<GridShape> placed_shape(void* transform) {
 
 // Sets the list's grid to that placement and switches it on, so the copies take their own cells.
 void use_grid(void* transform, const GridShape& shape) {
-  void* grid = grid_of(transform);
+  const auto grid = api::Object::unchecked(grid_of(transform));  // still a void* return until 3c
   if (!grid) return;
   phasmo::GridLayoutGroup::set_cellSize(grid, shape.cell);
   phasmo::GridLayoutGroup::set_constraint(grid, phasmo::GridConstraint::FixedColumnCount());
@@ -203,7 +203,7 @@ void use_grid(void* transform, const GridShape& shape) {
 
 // Shortens a grid's rows so `after` children fit in the height `before` filled.
 void fit_grid(void* transform, int32_t before, int32_t after) {
-  void* grid = grid_of(transform);
+  const auto grid = api::Object::unchecked(grid_of(transform));  // still a void* return until 3c
   if (!grid || before <= 0 || after <= before) return;
   phasmo::Vector2 cell = phasmo::GridLayoutGroup::get_cellSize(grid);
   const phasmo::Vector2 spacing = phasmo::GridLayoutGroup::get_spacing(grid);
@@ -359,8 +359,9 @@ bool ContentJournal::custom_page(void* journal, int32_t page) const {
 bool ContentJournal::custom_page_on(void* view, int32_t page) const {
   if (!view) return false;
   for (const Journal& j : journals_) {
-    void* journal = j.journal.get();
-    if (pm::api::alive(journal) && phasmo::JournalController::photonView.get(journal) == view) return custom_page(journal, page);
+    const auto journal = api::Object::unchecked(j.journal.get());  // a Held's raw side
+    if (pm::api::alive(journal.raw()) && phasmo::JournalController::photonView.get(journal).raw() == view)
+      return custom_page(journal.raw(), page);
   }
   return false;
 }
@@ -372,9 +373,9 @@ bool ContentJournal::page_syncs(void* journal, int32_t page, const void* info) {
   // such a call, and any whose sender or owner is not known here, goes to the game untouched. Only the
   // owner's own sync, which the game would take as far as its throw, is skipped.
   if (!privateRoom_ || !info) return true;
-  void* view = phasmo::JournalController::photonView.get(journal);
-  void* owner = view ? phasmo::PhotonView::owner.get(view) : nullptr;
-  void* sender = phasmo::PhotonMessageInfo::Sender.get(info);
+  const auto view = phasmo::JournalController::photonView.get(journal);
+  const auto owner = view ? phasmo::PhotonView::owner.get(view) : nullptr;
+  const auto sender = phasmo::PhotonMessageInfo::Sender.get(info);
   if (!owner || !sender || sender != owner) return true;
   if (!pageSkipLogged_)
     PM_LOG("content: a page sync beyond this client's journal (page %d of %zu) was skipped; the copy keeps its page",
@@ -386,7 +387,7 @@ bool ContentJournal::page_syncs(void* journal, int32_t page, const void* info) {
 void ContentJournal::note_existing() {
   const pm::api::RefArray found{phasmo::Object::FindAllOfType(phasmo::JournalController::type.type_object(), true)};
   for (size_t i = 0; i < found.size(); ++i)
-    if (found[i] && pm::api::alive(found[i])) after_awake(found[i]);
+    if (const auto f = api::Object::unchecked(found[i]); pm::api::alive(f.raw())) after_awake(f.raw());
 }
 
 void ContentJournal::after_awake(void* journal) {
@@ -431,17 +432,17 @@ void ContentJournal::tick(bool privateRoom) {
     }
     // Once per decision, and only with custom ghosts shown: lines only otherwise.
     if (!j.fit || ghosts.empty() || j.tried == shown) continue;
-    void* collection = phasmo::JournalController::allGhostsData.get(j.journal.get());
+    const auto collection = phasmo::JournalController::allGhostsData.get(j.journal.get());
     if (types_.decided()) {
       bool placed = true;
       for (const auto& [type, h] : ghosts) placed = placed && types_.name_key(type).has_value();
       if (!placed) continue;  // the contract's collection does not hold them all yet
-      if (collection != types_.collection()) {
+      if (collection.raw() != types_.collection()) {
         j.tried = shown;
         PM_LOG("content: a journal lists another collection than the contract's; it gets no custom ghosts");
         continue;
       }
-    } else if (!types_.offer(collection ? phasmo::GhostCollection::ghosts.get(collection) : nullptr)) {
+    } else if (!types_.offer(collection ? phasmo::GhostCollection::ghosts.get(collection).raw() : nullptr)) {
       continue;  // the lobby: the collection the journal lists does not hold them all yet
     }
     j.tried = shown;
@@ -530,13 +531,14 @@ std::vector<void*> ContentJournal::journals() const {
 }
 
 bool ContentJournal::learn(void* journal) {
-  void* root = transform_of(journal);
+  const auto root = api::Object::unchecked(transform_of(journal));  // a still-void* helper until 3c
   // Where a ghost page's texts are among its children: every page of the game's has them at the
   // Spirit's places (read from the PCPlayer prefab, sdk/systems/journal.md).
-  void* title = phasmo::Journal::GhostPageTitle.find(root);
-  void* description = phasmo::Journal::GhostPageDescription.find(root);
-  void* evidence[3] = {phasmo::Journal::GhostPageEvidence1.find(root), phasmo::Journal::GhostPageEvidence2.find(root),
-                       phasmo::Journal::GhostPageEvidence3.find(root)};
+  const auto title = api::Object::unchecked(phasmo::Journal::GhostPageTitle.find(root.raw()));
+  const auto description = api::Object::unchecked(phasmo::Journal::GhostPageDescription.find(root.raw()));
+  api::Object evidence[3] = {api::Object::unchecked(phasmo::Journal::GhostPageEvidence1.find(root.raw())),
+                             api::Object::unchecked(phasmo::Journal::GhostPageEvidence2.find(root.raw())),
+                             api::Object::unchecked(phasmo::Journal::GhostPageEvidence3.find(root.raw()))};
   if (!title || !description || !evidence[0] || !evidence[1] || !evidence[2]) {
     PM_LOG("content: a journal has no ghost page where the game's are; it gets no custom ghosts");
     return false;
@@ -554,10 +556,10 @@ bool ContentJournal::learn(void* journal) {
   };
   std::map<std::string, Vanilla> byNameKey;
   ghostNameKeys_.clear();
-  void* collection = phasmo::JournalController::allGhostsData.get(journal);
+  const auto collection = phasmo::JournalController::allGhostsData.get(journal);
   const pm::api::List ghosts{collection ? phasmo::GhostCollection::ghosts.get(collection) : nullptr};
   for (size_t i = 0; i < ghosts.size(); ++i) {
-    void* data = ghosts[i];
+    const auto data = api::Object::unchecked(ghosts[i]);  // a List element read
     const int32_t type = data ? phasmo::GhostData::ghostType.get(data) : -1;
     if (!data || !enums.ghost_id(type)) continue;
     byNameKey[pm::api::to_utf8(phasmo::GhostData::ghostNameLocalisationKey.get(data))] = {
@@ -573,7 +575,7 @@ bool ContentJournal::learn(void* journal) {
   std::map<std::pair<std::string, std::string>, int> forms;  // each form a description key's name allows -> pages that allow it
   const pm::api::RefArray pages{phasmo::JournalController::pages.get(journal)};
   for (size_t p = 0; p < pages.size(); ++p) {
-    void* page = transform_of_object(pages[p]);
+    const auto page = api::Object::unchecked(transform_of_object(pages[p]));  // a still-void* helper until 3c
     if (!page || phasmo::Transform::get_childCount(page) <= lastAt) continue;
     const auto it = byNameKey.find(key_of(localiser_of(phasmo::Transform::GetChild(page, titleAt_))));
     if (it == byNameKey.end()) continue;
@@ -629,13 +631,13 @@ void ContentJournal::refresh_lines(void* journal) {
   const int32_t lastAt = std::max({titleAt_, descriptionAt_, evidenceAt_[0], evidenceAt_[1], evidenceAt_[2]});
   const pm::api::RefArray pages{phasmo::JournalController::pages.get(journal)};
   for (size_t p = 0; p < pages.size(); ++p) {
-    void* page = transform_of_object(pages[p]);
+    const auto page = api::Object::unchecked(transform_of_object(pages[p]));  // a still-void* helper until 3c
     if (!page || phasmo::Transform::get_childCount(page) <= lastAt) continue;
-    void* localiser = localiser_of(phasmo::Transform::GetChild(page, descriptionAt_));
-    const std::string key = key_of(localiser);
+    const auto localiser = api::Object::unchecked(localiser_of(phasmo::Transform::GetChild(page, descriptionAt_)));
+    const std::string key = key_of(localiser.raw());
     for (const auto& [type, k] : vanillaDescriptions_) {
       const char* id = k == key ? enums.ghost_id(type) : nullptr;
-      if (id && registry_.has_lines_for(id)) set_key(localiser, key);  // shown or not: written again
+      if (id && registry_.has_lines_for(id)) set_key(localiser.raw(), key);  // shown or not: written again
     }
   }
 }
@@ -645,38 +647,39 @@ bool ContentJournal::extend(Journal& j, const std::map<int32_t, ContentTypes::He
     PM_LOG("content: the game's ghost pages show no one description key form; no custom ghost pages");
     return false;
   }
-  void* journal = j.journal.get();
-  void* root = transform_of(journal);
-  void* book = phasmo::Journal::BookContent.find(root);
-  void* grid = phasmo::Journal::GhostGrid.find(root);
-  void* list = phasmo::Journal::GhostList.find(root);
-  void* buttonAt = phasmo::Journal::GhostButton.find(root);
-  void* entryAt = phasmo::Journal::GhostEntry.find(root);
-  void* pageAt = phasmo::Journal::GhostPage.find(root);
-  void* contentsFirst = phasmo::Journal::ContentsRows.find(root);
-  void* contentsSecond = phasmo::Journal::ContentsGhostRows.find(root);
-  void* rowAt = phasmo::Journal::ContentsGhostRow.find(root);
-  void* templateButton = buttonAt ? phasmo::Component::GetComponent(buttonAt, phasmo::GhostButton::type.type_object()) : nullptr;
-  void* pages = phasmo::JournalController::pages.get(journal);
-  void* buttons = phasmo::JournalController::allGhostTypeButtons.get(journal);
-  void* sync = phasmo::JournalController::ghostSync.get(journal);
-  void* allGhosts = phasmo::JournalController::allGhosts.get(journal);
-  void* ghostButtons = phasmo::JournalController::ghostButtons.get(journal);
+  const auto journal = api::Object::unchecked(j.journal.get());  // a Held's raw side
+  const auto root = api::Object::unchecked(transform_of(journal.raw()));  // a still-void* helper until 3c
+  const auto book = api::Object::unchecked(phasmo::Journal::BookContent.find(root.raw()));
+  const auto grid = api::Object::unchecked(phasmo::Journal::GhostGrid.find(root.raw()));
+  const auto list = api::Object::unchecked(phasmo::Journal::GhostList.find(root.raw()));
+  const auto buttonAt = api::Object::unchecked(phasmo::Journal::GhostButton.find(root.raw()));
+  const auto entryAt = api::Object::unchecked(phasmo::Journal::GhostEntry.find(root.raw()));
+  const auto pageAt = api::Object::unchecked(phasmo::Journal::GhostPage.find(root.raw()));
+  const auto contentsFirst = api::Object::unchecked(phasmo::Journal::ContentsRows.find(root.raw()));
+  const auto contentsSecond = api::Object::unchecked(phasmo::Journal::ContentsGhostRows.find(root.raw()));
+  const auto rowAt = api::Object::unchecked(phasmo::Journal::ContentsGhostRow.find(root.raw()));
+  const auto templateButton = buttonAt ? phasmo::Component::GetComponent(buttonAt, phasmo::GhostButton::type.type_object())
+                                       : nullptr;
+  const auto pages = phasmo::JournalController::pages.get(journal);
+  const auto buttons = phasmo::JournalController::allGhostTypeButtons.get(journal);
+  const auto sync = phasmo::JournalController::ghostSync.get(journal);
+  const auto allGhosts = phasmo::JournalController::allGhosts.get(journal);
+  const auto ghostButtons = phasmo::JournalController::ghostButtons.get(journal);
   if (!book || !grid || !list || !templateButton || !entryAt || !pageAt || !contentsFirst || !contentsSecond || !rowAt ||
       !pages || !buttons || !sync || !allGhosts || !ghostButtons)
     return false;
   // Every operation the change needs is found before anything changes.
-  if (!ops_.has_clear(allGhosts) || !ops_.has_clear(ghostButtons) || !ops_.has_initialise(sync)) {
+  if (!ops_.has_clear(allGhosts.raw()) || !ops_.has_clear(ghostButtons.raw()) || !ops_.has_initialise(sync.raw())) {
     PM_LOG("content: the journal's lists or guess sync lack the methods the custom ghosts need");
     return false;
   }
   // The Ghosts tab: the tab the game selects for the last page (min <= page <= max, the first such in
   // order). The PCPlayer prefab's covers 24 to 55 for 55 pages (0 to 54).
-  const int32_t firstPage = static_cast<int32_t>(pm::api::RefArray{pages}.size());
+  const int32_t firstPage = static_cast<int32_t>(pm::api::RefArray{pages.raw()}.size());
   const pm::api::RefArray tabs{phasmo::JournalController::journalTabs.get(journal)};
-  void* ghostsTab = nullptr;
+  api::Object ghostsTab = nullptr;
   for (size_t i = 0; i < tabs.size() && !ghostsTab; ++i)
-    if (void* tab = tabs[i]; tab && phasmo::JournalTab::min.get(tab) <= static_cast<float>(firstPage - 1) &&
+    if (const auto tab = api::Object::unchecked(tabs[i]); tab && phasmo::JournalTab::min.get(tab) <= static_cast<float>(firstPage - 1) &&
                              static_cast<float>(firstPage - 1) <= phasmo::JournalTab::max.get(tab))
       ghostsTab = tab;
   if (!ghostsTab) {
@@ -695,13 +698,13 @@ bool ContentJournal::extend(Journal& j, const std::map<int32_t, ContentTypes::He
     languagesLogged_ = true;
   }
 
-  const int32_t gridBefore = static_cast<int32_t>(active_children(grid).size());
-  const std::vector<void*> listEntries = active_children(list);
+  const int32_t gridBefore = static_cast<int32_t>(active_children(grid.raw()).size());
+  const std::vector<void*> listEntries = active_children(list.raw());
   const int32_t listBefore = static_cast<int32_t>(listEntries.size());
-  const std::optional<GridShape> listShape = placed_shape(list);  // before the copies join it
+  const std::optional<GridShape> listShape = placed_shape(list.raw());  // before the copies join it
   // What changes, to put back when what the journals show changes (restore).
-  void* gridLayout = grid_of(grid);
-  void* listLayout = grid_of(list);
+  const auto gridLayout = api::Object::unchecked(grid_of(grid.raw()));  // a still-void* helper until 3c
+  const auto listLayout = api::Object::unchecked(grid_of(list.raw()));
   Extension ext{under,
                 pm::api::Held(phasmo::JournalController::allGhostTypeButtons.get(journal)),
                 pm::api::Held(phasmo::JournalController::pages.get(journal)),
@@ -729,18 +732,18 @@ bool ContentJournal::extend(Journal& j, const std::map<int32_t, ContentTypes::He
   for (const std::vector<void*>* rows : {&firstRows, &secondRows})
     for (void* row : *rows) {
       keep_placement(row);
-      if (void* number = row_number(row)) keep_placement(number);
+      if (const auto number = api::Object::unchecked(row_number(row))) keep_placement(number.raw());
     }
   std::set<std::string> ghostKeys = ghostNameKeys_;
   // A name goes on the first page when it comes before the second's first ghost, as the game divides them.
-  const GhostRows gameSecond = ghost_rows(contentsSecond, ghostKeys);
+  const GhostRows gameSecond = ghost_rows(contentsSecond.raw(), ghostKeys);
   const std::string secondStarts = gameSecond.rows.empty() ? std::string() : lower(name_of(gameSecond.rows.front().get()));
   // The book's ghost pages by the name key their titles show, and where the first of them lies.
-  const pm::api::RefArray gamePages{pages};
-  std::map<std::string, void*> pageOfKey;
+  const pm::api::RefArray gamePages{pages.raw()};
+  std::map<std::string, void*> pageOfKey;  // the pages stay void*: GoToPage names its page by object until 3c
   size_t firstGhostPage = gamePages.size();
   for (size_t p = 0; p < gamePages.size(); ++p) {
-    void* t = transform_of_object(gamePages[p]);
+    const auto t = api::Object::unchecked(transform_of_object(gamePages[p]));  // a still-void* helper until 3c
     if (!t || phasmo::Transform::get_childCount(t) <= titleAt_) continue;
     const std::string key = key_of(localiser_of(phasmo::Transform::GetChild(t, titleAt_)));
     if (!ghostNameKeys_.count(key)) continue;
@@ -754,7 +757,7 @@ bool ContentJournal::extend(Journal& j, const std::map<int32_t, ContentTypes::He
   // Takes the copies out again: off at once, destroyed at the frame's end, forgotten here.
   const auto take_out = [&] {
     for (const pm::api::Held& object : made) {
-      void* go = game_object_of(object.get());
+      const auto go = api::Object::unchecked(game_object_of(object.get()));
       phasmo::GameObject::SetActive(go, false);
       phasmo::Object::Destroy(go, 0.0f);
     }
@@ -765,57 +768,57 @@ bool ContentJournal::extend(Journal& j, const std::map<int32_t, ContentTypes::He
   for (const auto& [type, h] : ghosts) {
     const std::string name = pick(h.name, "en");
     const std::optional<std::string> nameKey = types_.name_key(type);
-    void* nameString = pm::api::make_string(name);
+    const auto nameString = api::Object::unchecked(pm::api::make_string(name));  // a System.String from the raw runtime
     // The guess button, copied with its children (the other players' marks included).
-    void* button = phasmo::Object::Instantiate(templateButton, grid, false);
+    const auto button = phasmo::Object::Instantiate(templateButton, grid, false);
     if (!button) return take_out(), false;
     made.emplace_back(button);
     phasmo::Object::set_name(button, nameString);
     phasmo::GhostButton::ghostType.set(button, type);
-    set_key(localiser_in(button), *nameKey);
-    phasmo::Transform::SetSiblingIndex(transform_of(button), alphabetical_index(grid, name));
-    newButtons.push_back(button);
+    set_key(localiser_in(button.raw()), *nameKey);
+    phasmo::Transform::SetSiblingIndex(transform_of(button.raw()), alphabetical_index(grid.raw(), name));
+    newButtons.push_back(button.raw());
     // Its page: the name, the text and the evidence, each a key the game writes.
-    void* pageCopy = phasmo::Object::Instantiate(pageAt, book, false);
+    const auto pageCopy = phasmo::Object::Instantiate(pageAt, book, false);
     if (!pageCopy) return take_out(), false;
     made.emplace_back(pageCopy);
     phasmo::Object::set_name(pageCopy, nameString);
-    set_key(localiser_of(phasmo::Transform::GetChild(pageCopy, titleAt_)), *nameKey);
+    set_key(localiser_of(phasmo::Transform::GetChild(pageCopy, titleAt_).raw()), *nameKey);
     const std::string descKey = description_key(type);
     customKeys_[descKey] = type;
     keysAdded.push_back(descKey);
-    set_key(localiser_of(phasmo::Transform::GetChild(pageCopy, descriptionAt_)), descKey);
+    set_key(localiser_of(phasmo::Transform::GetChild(pageCopy, descriptionAt_).raw()), descKey);
     for (int i = 0; i < 3; ++i) {
-      void* child = phasmo::Transform::GetChild(pageCopy, evidenceAt_[i]);
+      const auto child = phasmo::Transform::GetChild(pageCopy, evidenceAt_[i]);
       // The game's own evidence by the key its pages show, a custom one by its row's name key.
       const auto key = evidenceKeys_.find(h.evidence[i]);
       const std::optional<std::string> custom = evidence_ ? evidence_->name_key(h.evidence[i]) : std::nullopt;
-      if (key != evidenceKeys_.end()) set_key(localiser_of(child), key->second);
-      else if (custom) set_key(localiser_of(child), *custom);
-      else phasmo::GameObject::SetActive(game_object_of(child), false);  // no evidence there, or none named
+      if (key != evidenceKeys_.end()) set_key(localiser_of(child.raw()), key->second);
+      else if (custom) set_key(localiser_of(child.raw()), *custom);
+      else phasmo::GameObject::SetActive(game_object_of(child.raw()), false);  // no evidence there, or none named
     }
-    void* pageObject = game_object_of(pageCopy);
+    const auto pageObject = api::Object::unchecked(game_object_of(pageCopy.raw()));
     phasmo::GameObject::SetActive(pageObject, false);
-    newPages.push_back(pageObject);
-    pageOfKey[*nameKey] = pageObject;
+    newPages.push_back(pageObject.raw());
+    pageOfKey[*nameKey] = pageObject.raw();
     // Its entry in the Ghosts tab's list.
-    void* entry = phasmo::Object::Instantiate(entryAt, list, false);
+    const auto entry = phasmo::Object::Instantiate(entryAt, list, false);
     if (!entry) return take_out(), false;
     made.emplace_back(entry);
     phasmo::Object::set_name(entry, nameString);
-    set_key(localiser_in(entry), *nameKey);
-    phasmo::Transform::SetSiblingIndex(entry, alphabetical_index(list, name));
-    void* entryButton = phasmo::Component::GetComponent(entry, phasmo::Button::type.type_object());
+    set_key(localiser_in(entry.raw()), *nameKey);
+    phasmo::Transform::SetSiblingIndex(entry, alphabetical_index(list.raw(), name));
+    const auto entryButton = phasmo::Component::GetComponent(entry, phasmo::Button::type.type_object());
     if (!entryButton) return take_out(), false;
     // Its row on the Home tab's contents, put in order and given its number below.
-    void* contents = lower(name) < secondStarts ? contentsFirst : contentsSecond;
-    void* row = phasmo::Object::Instantiate(rowAt, contents, false);
+    const auto contents = lower(name) < secondStarts ? contentsFirst : contentsSecond;
+    const auto row = phasmo::Object::Instantiate(rowAt, contents, false);
     if (!row) return take_out(), false;
     made.emplace_back(row);
     phasmo::Object::set_name(row, nameString);
-    set_key(localiser_in(row), *nameKey);
+    set_key(localiser_in(row.raw()), *nameKey);
     ghostKeys.insert(*nameKey);
-    if (!number_text(row)) return take_out(), false;
+    if (!number_text(row.raw())) return take_out(), false;
     newEntries.emplace_back(pm::api::Held(entryButton), pm::api::Held(pageObject));
   }
   // The book's ghost pages, from where the first lay, in the order the contents list them, so the numbers count up. The pages before
@@ -840,10 +843,10 @@ bool ContentJournal::extend(Journal& j, const std::map<int32_t, ContentTypes::He
   int32_t firstMoved = 0;
   while (static_cast<size_t>(firstMoved) < gamePages.size() && gamePages[static_cast<size_t>(firstMoved)] == newBook[static_cast<size_t>(firstMoved)])
     ++firstMoved;
-  void* allButtons = appended(buttons, phasmo::GhostButton::type, newButtons);
-  void* allPages = phasmo::GameObject::type.make_array(newBook.size());
+  const auto allButtons = api::Object::unchecked(appended(buttons.raw(), phasmo::GhostButton::type, newButtons));
+  const auto allPages = phasmo::GameObject::type.make_array(newBook.size());
   if (!allButtons || !allPages) return take_out(), false;
-  const pm::api::RefArray bookArray{allPages};
+  const pm::api::RefArray bookArray{allPages.raw()};
   for (size_t p = 0; p < newBook.size(); ++p) bookArray.set(p, newBook[p]);
   for (const auto& [entryButton, pageObject] : newEntries)
     entries_.push_back({pm::api::Held(entryButton.get()), pm::api::Held(journal),
@@ -852,7 +855,7 @@ bool ContentJournal::extend(Journal& j, const std::map<int32_t, ContentTypes::He
 
   // From here the journal changes; a failure puts it back as it was.
   const float tabMax = phasmo::JournalTab::max.get(ghostsTab);
-  const pm::api::RefArray old{buttons};
+  const pm::api::RefArray old{buttons.raw()};
   std::vector<pm::api::Held> delegates;  // each game button's subscriptions, as Initialise made them
   for (size_t i = 0; i < old.size(); ++i)
     delegates.emplace_back(old[i] ? phasmo::NetworkThreeStateButton::userStateChanged.get(old[i]) : nullptr);
@@ -873,12 +876,12 @@ bool ContentJournal::extend(Journal& j, const std::map<int32_t, ContentTypes::He
   // The journal's lists, made again by its own builder from its collection (which holds the custom
   // ghosts) and its buttons. The dictionary goes first: its builder adds with Add, which throws on a
   // ghost already there, while the list takes a ghost again without complaint.
-  if (!ops_.clear(ghostButtons)) {
+  if (!ops_.clear(ghostButtons.raw())) {
     put_back();
     PM_LOG("content: the journal's ghost buttons could not be emptied");
     return false;
   }
-  if (!ops_.clear(allGhosts)) {
+  if (!ops_.clear(allGhosts.raw())) {
     put_back();
     phasmo::JournalController::RebuildGhosts(journal);  // the buttons paired again, with the game's own
     PM_LOG("content: the journal's ghost list could not be emptied; it holds its old ghosts and then the whole "
@@ -888,13 +891,13 @@ bool ContentJournal::extend(Journal& j, const std::map<int32_t, ContentTypes::He
   phasmo::JournalController::RebuildGhosts(journal);
   // The sync controller reads the buttons again and subscribes to each; the game's buttons keep the one
   // subscription they had.
-  if (!ops_.initialise(sync)) {
+  if (!ops_.initialise(sync.raw())) {
     restore_delegates();
     put_back();
-    const bool clearedButtons = ops_.clear(ghostButtons);
-    const bool clearedList = ops_.clear(allGhosts);
+    const bool clearedButtons = ops_.clear(ghostButtons.raw());
+    const bool clearedList = ops_.clear(allGhosts.raw());
     phasmo::JournalController::RebuildGhosts(journal);
-    const bool reread = ops_.initialise(sync);  // reads the game's own buttons again
+    const bool reread = ops_.initialise(sync.raw());  // reads the game's own buttons again
     restore_delegates();
     PM_LOG("content: the journal's guess sync could not read the custom ghosts' buttons; putting the journal back, "
            "its buttons were %s, its list %s, and its guess sync %s",
@@ -903,16 +906,17 @@ bool ContentJournal::extend(Journal& j, const std::map<int32_t, ContentTypes::He
     return false;
   }
   restore_delegates();
-  if (listShape) use_grid(list, *listShape);
-  fit_grid(grid, gridBefore, gridBefore + static_cast<int32_t>(newButtons.size()));
-  fit_grid(list, listBefore, listBefore + static_cast<int32_t>(newButtons.size()));
-  fit_contents(contentsFirst, static_cast<int32_t>(firstRows.size()), contentsSecond, static_cast<int32_t>(secondRows.size()));
+  if (listShape) use_grid(list.raw(), *listShape);
+  fit_grid(grid.raw(), gridBefore, gridBefore + static_cast<int32_t>(newButtons.size()));
+  fit_grid(list.raw(), listBefore, listBefore + static_cast<int32_t>(newButtons.size()));
+  fit_contents(contentsFirst.raw(), static_cast<int32_t>(firstRows.size()), contentsSecond.raw(),
+               static_cast<int32_t>(secondRows.size()));
   // The contents in order, each ghost's number the one its page shows.
   for (const GhostRows* ghostRows : {&firstGhosts, &secondGhosts})
     for (size_t i = 0; i < ghostRows->rows.size(); ++i)
       phasmo::Transform::SetSiblingIndex(ghostRows->rows[i].get(), ghostRows->places[i]);
   for (const auto& [row, number] : rowPages) {
-    void* text = number_text(row.get());
+    const auto text = api::Object::unchecked(number_text(row.get()));  // still a void* return until 3c
     if (!text) continue;
     ext.numbers.push_back({pm::api::Held(text), pm::api::Held(phasmo::TMP_Text::get_text(text))});
     phasmo::TMP_Text::set_text(text, pm::api::make_string(std::to_string(number + kShownPageNumber)));
@@ -924,12 +928,12 @@ bool ContentJournal::extend(Journal& j, const std::map<int32_t, ContentTypes::He
   for (const auto& [type, h] : ghosts) ext.types.push_back(type);
   ext.firstMoved = firstMoved;
   j.extension = std::move(ext);
-  turn_reader_back(journal, firstMoved, ghostsTab);
+  turn_reader_back(journal.raw(), firstMoved, ghostsTab.raw());
   return true;
 }
 
 void ContentJournal::restore(Journal& j) {
-  void* journal = j.journal.get();
+  const auto journal = api::Object::unchecked(j.journal.get());  // a Held's raw side
   Extension& e = *j.extension;
   // The game's arrays and tab as they were; each game button keeps the one subscription it has.
   const pm::api::RefArray old{e.buttons.get()};
@@ -941,19 +945,19 @@ void ContentJournal::restore(Journal& j) {
   if (e.ghostsTab.get()) phasmo::JournalTab::max.set(e.ghostsTab.get(), e.tabMax);
   // The copies: off at once, destroyed at the frame's end.
   for (const pm::api::Held& object : e.made) {
-    void* go = game_object_of(object.get());
+    const auto go = api::Object::unchecked(game_object_of(object.get()));
     phasmo::GameObject::SetActive(go, false);
     phasmo::Object::Destroy(go, 0.0f);
   }
-  std::erase_if(entries_, [&](const Entry& entry) { return entry.journal.get() == journal; });
+  std::erase_if(entries_, [&](const Entry& entry) { return entry.journal.get() == journal.raw(); });
   // The journal's lists, made again by its own builder from its collection, which no longer holds the
   // custom ghosts, and its guess sync reading the game's buttons again.
-  void* ghostButtons = phasmo::JournalController::ghostButtons.get(journal);
-  void* allGhosts = phasmo::JournalController::allGhosts.get(journal);
-  const bool cleared = ghostButtons && allGhosts && ops_.clear(ghostButtons) && ops_.clear(allGhosts);
+  const auto ghostButtons = phasmo::JournalController::ghostButtons.get(journal);
+  const auto allGhosts = phasmo::JournalController::allGhosts.get(journal);
+  const bool cleared = ghostButtons && allGhosts && ops_.clear(ghostButtons.raw()) && ops_.clear(allGhosts.raw());
   if (cleared) phasmo::JournalController::RebuildGhosts(journal);
-  void* sync = phasmo::JournalController::ghostSync.get(journal);
-  const bool reread = sync && ops_.initialise && ops_.initialise(sync);
+  const auto sync = phasmo::JournalController::ghostSync.get(journal);
+  const bool reread = sync && ops_.initialise && ops_.initialise(sync.raw());
   for (size_t i = 0; i < old.size(); ++i)
     if (old[i]) phasmo::NetworkThreeStateButton::userStateChanged.set(old[i], delegates[i].get());
   // A guess on a custom ghost (SelectGhost keeps the ghost's type in the journal) has no button now.
@@ -962,16 +966,16 @@ void ContentJournal::restore(Journal& j) {
     phasmo::JournalController::UnselectGhost(journal);
   // The grids as they were. A list whose grid was off gets it off again, then each entry the hand
   // placement the grid replaced.
-  if (void* grid = grid_of(e.grid.get())) phasmo::GridLayoutGroup::set_cellSize(grid, e.gridCell);
-  if (void* list = grid_of(e.list.get())) {
+  if (const auto grid = api::Object::unchecked(grid_of(e.grid.get()))) phasmo::GridLayoutGroup::set_cellSize(grid, e.gridCell);
+  if (const auto list = api::Object::unchecked(grid_of(e.list.get()))) {
     phasmo::Behaviour::set_enabled(list, e.listOn);
     phasmo::GridLayoutGroup::set_constraint(list, e.listConstraint);
     phasmo::GridLayoutGroup::set_constraintCount(list, e.listCount);
     phasmo::GridLayoutGroup::set_cellSize(list, e.listCell);
   }
   for (const Placement& p : e.placements) {
-    void* entry = p.entry.get();
-    if (!pm::api::alive(entry)) continue;
+    const auto entry = api::Object::unchecked(p.entry.get());  // a Held's raw side
+    if (!pm::api::alive(entry.raw())) continue;
     phasmo::RectTransform::set_anchorMin(entry, p.anchorMin);
     phasmo::RectTransform::set_anchorMax(entry, p.anchorMax);
     phasmo::RectTransform::set_sizeDelta(entry, p.sizeDelta);
@@ -981,7 +985,7 @@ void ContentJournal::restore(Journal& j) {
   for (const ContentsNumber& n : e.numbers)
     if (pm::api::alive(n.text.get())) phasmo::TMP_Text::set_text(n.text.get(), n.said.get());
   phasmo::JournalController::SetGhostTypes(journal);
-  turn_reader_back(journal, e.firstMoved, e.ghostsTab.get());
+  turn_reader_back(journal.raw(), e.firstMoved, e.ghostsTab.get());
   if (cleared && reread) PM_LOG("content: a journal's custom ghosts were taken out; it is as the game made it");
   else
     PM_LOG("content: a journal's custom ghosts were taken out, but its lists %s and its guess sync %s",

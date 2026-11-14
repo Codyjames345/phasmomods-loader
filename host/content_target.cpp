@@ -79,7 +79,7 @@ bool ContentTarget::create_hooks() {
          hook<GhostHuntState::Exit>(&detour_exit, "content: a held hunt's end");
 }
 
-bool ContentTarget::held(void* hunt) const { return hunt && set_ && GhostHuntState::ghost.get(hunt) == set_.get(); }
+bool ContentTarget::held(void* hunt) const { return hunt && set_ && GhostHuntState::ghost.get(hunt).raw() == set_.get(); }
 
 bool ContentTarget::holds(const void* ghost) const { return ghost && ghost == set_.get(); }
 
@@ -90,10 +90,10 @@ void ContentTarget::release() {
 }
 
 void ContentTarget::before_start_pick(void* hunt) {
-  void* ghost = GhostHuntState::ghost.get(hunt);
+  const auto ghost = GhostHuntState::ghost.get(hunt);
   if (!ghost) return;
-  if (ghost == set_.get()) release();  // a hunt that ended without its exit
-  if (void* target = acting_.target(nullptr, 0)) {
+  if (ghost.raw() == set_.get()) release();  // a hunt that ended without its exit
+  if (const auto target = api::Object::unchecked(acting_.target(nullptr, 0))) {  // the acting-target service answers void*
     // The hunt's ghostType stays the ghost's own (no type swap): every other reader of the field acts only
     // for the Banshee's type, so the field reaches nothing but the hunt's own steps.
     GhostAI::bansheeTarget.set(ghost, target);
@@ -114,8 +114,8 @@ bool ContentTarget::sight_picks(void* hunt) const { return !held(hunt); }
 bool ContentTarget::new_target(void* ghost, void* dying) {
   if (!ghost || ghost != set_.get()) return false;
   const void* const excluded[] = {dying};
-  void* next = acting_.target(excluded, 1);
-  if (next && next != dying) GhostAI::bansheeTarget.set(ghost, next);
+  const auto next = api::Object::unchecked(acting_.target(excluded, 1));  // the acting-target service answers void*
+  if (next && next.raw() != dying) GhostAI::bansheeTarget.set(ghost, next);
   return true;
 }
 
@@ -138,9 +138,9 @@ void ContentTarget::tick() {
   }
   // The target left the game mid-hunt: as the game re-targets a Banshee whose target is gone, the definition
   // names the next one, with nobody left out; nobody, and the field stays.
-  void* target = GhostAI::bansheeTarget.get(set_.get());
-  if (target && !pm::api::alive(target))
-    if (void* next = acting_.target(nullptr, 0)) GhostAI::bansheeTarget.set(set_.get(), next);
+  const auto target = GhostAI::bansheeTarget.get(set_.get());
+  if (target && !pm::api::alive(target.raw()))
+    if (const auto next = api::Object::unchecked(acting_.target(nullptr, 0))) GhostAI::bansheeTarget.set(set_.get(), next);
 }
 
 void ContentTarget::withdraw() { release(); }

@@ -47,8 +47,8 @@ inline std::vector<void*> active_children(void* parent) {
   std::vector<void*> out;
   const int32_t n = phasmo::Transform::get_childCount(parent);
   for (int32_t i = 0; i < n; ++i) {
-    void* child = phasmo::Transform::GetChild(parent, i);
-    if (child && phasmo::GameObject::get_activeSelf(game_object_of(child))) out.push_back(child);
+    const auto child = phasmo::Transform::GetChild(parent, i);
+    if (child && phasmo::GameObject::get_activeSelf(game_object_of(child.raw()))) out.push_back(child.raw());
   }
   return out;
 }
@@ -58,12 +58,12 @@ inline std::vector<void*> active_children(void* parent) {
 template <class T>
 void* appended(void* array, const T& type, const std::vector<void*>& extra) {
   const pm::api::RefArray from{array};
-  void* out = type.make_array(from.size() + extra.size());
+  const auto out = type.make_array(from.size() + extra.size());
   if (!out) return nullptr;
-  const pm::api::RefArray to{out};
+  const pm::api::RefArray to{out.raw()};
   for (size_t i = 0; i < from.size(); ++i) to.set(i, from[i]);
   for (size_t i = 0; i < extra.size(); ++i) to.set(from.size() + i, extra[i]);
-  return out;
+  return out.raw();
 }
 
 }  // namespace pm::host::widgets
