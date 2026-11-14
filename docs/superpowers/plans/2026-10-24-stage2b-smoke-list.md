@@ -1151,3 +1151,13 @@ should run at the regular hunt speed.
 - [ ] Walking, running, rolling and sitting, the sheet's folds do not pass through each other (no dark slivers of the inside showing), and the hem between the legs neither splits nor wraps each leg.
 - [ ] No arm, hand or leg comes out of the sheet in any move (it is carried less by the limbs now).
 - [ ] Frame rate with the Squatter in view is no worse than before (self-collision costs some each frame); the host's `mods.log` has no line saying the game build has no cloth self-collision.
+
+## Emotes: joining a synced emote
+
+The four fixes from the first live test of joining (docs/superpowers/specs/2026-11-13-synced-emotes-design.md, the user, 2026-11-14). Two clients, plus a third for the song.
+
+- [ ] The join prompt's keycap shows the player's Pickup key: E on keyboard, and after rebinding Pickup in the game's menu the new key's name; on a gamepad the west-button glyph. A mouse-only Pickup leaves the keycap blank (the pad sprite empty): report it, a mouse glyph is the user's call.
+- [ ] Pressing E (or the west button, or the right trigger in VR) by a dancer of a synced emote joins them; with a door, switch or item under the crosshair within 1.8 m the prompt hides, and one press never both joins and picks up or interacts. The joiner's press and the dancers' emotes survive the frame.
+- [ ] The Sway pair face each other: the joiner glides in facing the first dancer, and the first dancer turns to the joiner over the same glide, smoothly, never a jump or a spin the long way round; both hold the new facing against the camera afterwards, and the second dancer's spot never moves. A pack without `faceEachOther` still dances side by side.
+- [ ] The song, three clients: each dancer hears the pair's song as their own, flat in both ears from their own body, in step with the other dancer; on the joiner's client the first dancer's copy plays no sound; a third client hears one copy from the point between the dancers, moving as they move; after the pair ends, the lone dancer's next song is back at their body.
+- [ ] The ghost hears one song per pair, not two: with a ghost that hunts on sound, the pair lures it as one singer does (the joiner's own copy adds no loudness).

@@ -91,12 +91,14 @@ constexpr const char* kEndActions[] = {"Pickup", "Primary Use", "Secondary Use",
                                        "Crouch"};
 constexpr const char* kLookAction = "Look";
 
-// Joining a synced emote (docs/superpowers/specs/2026-11-13-synced-emotes-design.md). The game's own Interact action
-// asks to join (the user, 2026-11-13: "default to the interact button"); in VR, whose Interact this mod has not found,
-// the right trigger the wheel picks with. The game's Interact ray reaches 1.8 m (PCPropGrab.OnInteract,
-// sdk/systems/players.md): no prompt while it would act on something, so one press never does both.
-constexpr const char* kInteractAction = "Interact";
-constexpr float kInteractReach = 1.8f;
+// Joining a synced emote (docs/superpowers/specs/2026-11-13-synced-emotes-design.md). The game's own Pickup action
+// asks to join (the user, 2026-11-14: the "grab" key, E and the west button; the live test showed Interact is the
+// left mouse button, whose keycap would be no key); in VR, whose Pickup this mod has not found, the right trigger
+// the wheel picks with. The game's Pickup ray reaches 1.8 m on its own mask (PCPropGrab.OnPickup casts exactly the
+// ray PCPropGrab.OnInteract's does, sdk/systems/players.md): no prompt while it would act on something, so one
+// press never does both.
+constexpr const char* kPickupAction = "Pickup";
+constexpr float kPickupReach = 1.8f;
 constexpr float kChestBelowHead = 0.25f;  // the prompt's look test aims this far below the head bone, metres
 constexpr float kFloorSkin = 0.05f;       // the spot's test lifts the capsule this far, so the floor is not in the way
 constexpr float kPartLengthTolerance = 1.0f / 60.0f;  // a synced emote's two parts are one length within this, seconds
@@ -152,6 +154,11 @@ struct Song {
   api::Held group;   // the mixer group both play through, or null before one is found
   float volume = 0.0f;  // the volume it plays at
   float gain = 1.0f;    // its song's gain to the one loudness every song plays at (song_gain)
+  // While two dance a synced emote (the user, 2026-11-14): `silent` holds this copy at no sound, on the joiner's
+  // client, where they hear their own copy of the pair's song instead; `pairOther` is the other dancer's actor on a
+  // client that is neither dancer, where this one copy plays from the point between the two, moving as they move.
+  bool silent = false;
+  int pairOther = 0;
 };
 
 // Every emote on the wheel, in wheel order (catalogue.h wheel_order): the mod's own, then each content pack's.
@@ -199,12 +206,15 @@ struct State {
   ULONGLONG lastTick = 0;
   ULONGLONG startTick = 0;  // the mod's start: its clock counts from here, so a float keeps its precision
   bool loggedRoot = false;
-  // Joining a synced emote: the game's Interact action, the shoulder glyph's widget (whose Xbox and PS5 sets give
-  // Interact's glyph), this client's glide into a partner's spot, and the first dancers whose song is the synced one.
-  api::Held interactAction;
+  // Joining a synced emote: the game's Pickup action, the shoulder glyph's widget (whose Xbox and PS5 sets give
+  // the west button's glyph), this client's glide into a partner's spot, the first dancers whose song is the synced
+  // one, and the one turn of a pair that faces each other, by dancer (the user, 2026-11-14).
+  api::Held pickupAction;
   api::Held glyphWidget;
   std::optional<Glide> glide;
   std::set<int> syncedSongs;
+  std::map<int, Turn> turns;  // by actor: a remote dancer easing to face their partner; the local dancer's session
+                              // turns itself, so this client never turns its own body from here
   bool loggedNoCapsule = false;
 };
 State g;
@@ -418,7 +428,7 @@ void read_actions() {
   g.wheelActions.clear();
   g.previousGlyph = nullptr;
   g.nextGlyph = nullptr;
-  g.interactAction = nullptr;
+  g.pickupAction = nullptr;
   g.glyphWidget = nullptr;
   std::set<std::string> paging;  // the names of the actions bound to a page control
   void* asset = game_actions_asset();
@@ -438,7 +448,7 @@ void read_actions() {
       for (const char* end : kEndActions)
         if (name == end) g.endActions.emplace_back(actions[i]);
       if (name == kLookAction || paging.count(name)) g.wheelActions.emplace_back(actions[i]);
-      if (name == kInteractAction && !g.interactAction) g.interactAction = actions[i];
+      if (name == kPickupAction && !g.pickupAction) g.pickupAction = actions[i];
     }
   }
   // The game's glyph widgets for the shoulder buttons, by the bindings of the action each shows.
@@ -461,9 +471,9 @@ void read_actions() {
       if (path == "<Gamepad>/rightShoulder" && !g.nextGlyph) g.nextGlyph = image;
     }
   }
-  PM_LOG("Emotes: the wheel pauses %zu of the game's actions while open; the shoulder glyphs %s; Interact %s",
+  PM_LOG("Emotes: the wheel pauses %zu of the game's actions while open; the shoulder glyphs %s; Pickup %s",
          g.wheelActions.size(), g.previousGlyph && g.nextGlyph ? "were found" : "were not found",
-         g.interactAction ? "was found" : "was not found");
+         g.pickupAction ? "was found" : "was not found");
 }
 
 // The sprite the game's glyph widget for a shoulder button holds (the Xbox or PS5 one it picked for the pad), or null
@@ -481,26 +491,22 @@ void show_screen_glyphs() {
   wheel::show_glyphs(pad ? glyph_of(g.previousGlyph) : nullptr, pad ? glyph_of(g.nextGlyph) : nullptr, !pad);
 }
 
-// A keyboard control's name as the join prompt's keycap shows it: "e" is E, "space" is Space.
-std::string key_name(std::string control) {
-  if (!control.empty()) control[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(control[0])));
-  return control;
-}
-
-// Interact's bindings as the player has them now, a rebinding in the game's menu included (its override path): its
-// gamepad control ("buttonWest") and its keyboard key's name ("E"), each empty when it has none.
-void read_interact_binding(std::string& pad, std::string& key) {
-  pad.clear();
-  key.clear();
-  void* map = g.interactAction ? phasmo::InputAction::m_ActionMap.get(g.interactAction) : nullptr;
+// Pickup's bindings as the player has them now, a rebinding in the game's menu included (its override path): its
+// gamepad control ("buttonWest") and its keyboard key's name ("E"), each empty when it has none. The pure reader
+// (sync_rule.h read_binding_keys) picks them out of the paths; a mouse-only binding leaves both empty.
+void read_pickup_binding(std::string& pad, std::string& key) {
+  std::vector<std::string> paths;
+  void* map = g.pickupAction ? phasmo::InputAction::m_ActionMap.get(g.pickupAction) : nullptr;
   const api::ValueArray bindings{map ? phasmo::InputActionMap::m_Bindings.get(map) : nullptr};
   for (size_t b = 0; b < bindings.size(); ++b) {
-    if (api::to_utf8(phasmo::InputBinding::m_Action.get(bindings.at(b))) != kInteractAction) continue;
+    if (api::to_utf8(phasmo::InputBinding::m_Action.get(bindings.at(b))) != kPickupAction) continue;
     std::string path = api::to_utf8(phasmo::InputBinding::m_OverridePath.get(bindings.at(b)));
     if (path.empty()) path = api::to_utf8(phasmo::InputBinding::m_Path.get(bindings.at(b)));
-    if (pad.empty() && path.rfind("<Gamepad>/", 0) == 0) pad = path.substr(10);
-    if (key.empty() && path.rfind("<Keyboard>/", 0) == 0) key = key_name(path.substr(11));
+    paths.push_back(std::move(path));
   }
+  const ActionKeys out = read_binding_keys(paths);
+  pad = out.pad;
+  key = out.key;
 }
 
 // The game's sprite for a gamepad control (its Input System path below <Gamepad>/), from the set the game picked for
@@ -742,13 +748,17 @@ void stop_song(int actor) {
 float song_volume(float gain) { return kSongVolume * gain * api::settings::value(kVolumeSetting); }
 
 // Each song follows the setting as the player applies it, and the dancer's mixer group as the game moves them between
-// floors (a walking emote can take them up the stairs).
+// floors (a walking emote can take them up the stairs). A silent copy, the first dancer's on the joiner's client,
+// stays at no volume whatever the setting does. On a client that is neither dancer, the pair's one copy sits at the
+// point between the two dancers, moving as they move (the user, 2026-11-14); when the pair ends the copy ends with
+// it, so the lone dancer's song is back at their body from their next dance.
 void follow_settings() {
   for (auto& [actor, s] : g.songs) {
     if (!s.source || !game::alive(s.source)) continue;
     const bool introAlive = s.intro && game::alive(s.intro);
-    if (s.volume != song_volume(s.gain)) {
-      s.volume = song_volume(s.gain);
+    const float want = s.silent ? 0.0f : song_volume(s.gain);
+    if (s.volume != want) {
+      s.volume = want;
       phasmo::AudioSource::set_volume(s.source, s.volume);
       if (introAlive) phasmo::AudioSource::set_volume(s.intro, s.volume);
     }
@@ -757,6 +767,15 @@ void follow_settings() {
       phasmo::AudioSource::set_outputAudioMixerGroup(s.source, group);
       if (introAlive) phasmo::AudioSource::set_outputAudioMixerGroup(s.intro, group);
       s.group = group;
+    }
+    if (s.pairOther) {
+      void* a = game::player_of_actor(actor), * b = game::player_of_actor(s.pairOther);
+      if (a && b && game::alive(a) && game::alive(b)) {
+        const Vector3 pa = game::position(game::transform_of(a)), pb = game::position(game::transform_of(b));
+        const Vector3 mid{(pa.x + pb.x) * 0.5f, (pa.y + pb.y) * 0.5f, (pa.z + pb.z) * 0.5f};
+        for (const api::Held* src : {&s.source, &s.intro})
+          if (*src && game::alive(*src)) game::set_position(game::transform_of(*src), mid);
+      }
     }
   }
 }
@@ -860,6 +879,67 @@ void switch_to_synced_song(int first, int emote, double elapsed) {
   g.syncedSongs.insert(first);
 }
 
+// The joiner's own copy of the pair's song (the user, 2026-11-14): the joiner hears the song as their own, from their
+// own body in both ears, exactly as a lone dancer does, and in step with the pair's copy. It is built from the same
+// table and the same elapsed clock switch_to_synced_song uses, so it starts at the point the pair's song has reached
+// (the game's AudioSource.get_clip and get_time are not in the map, and this needs neither). The first dancer's copy
+// on this client then holds silent while the pair dances, so the song plays once for the joiner; the ghost still
+// counts only the first dancer's copy.
+void start_pair_song(int first, void* player, int emote, double elapsed) {
+  const int me = game::local_actor();
+  stop_song(me);
+  auto src = g.songs.find(first);
+  if (src == g.songs.end() || !src->second.source || !game::alive(src->second.source) || !player || emote < 0 ||
+      emote >= static_cast<int>(g.a.table.size()))
+    return;
+  const EmoteInfo& info = g.a.table[static_cast<size_t>(emote)];
+  const SongAt at = song_position(elapsed, info.introSongSeconds, info.song);
+  // From where this client's voice plays, like any lone dancer's song.
+  void* audio = phasmo::Player::audio.get(player);
+  void* voice = audio ? phasmo::PlayerAudio::GetPlayerVoiceAudioSource(audio) : nullptr;
+  if (voice && !game::alive(voice)) voice = nullptr;
+  void* parent = voice ? game::transform_of(voice) : game::transform_of(player);
+  void* group = players_group(player);
+  // The clip the pair's copy plays here, and its gain: the synced song once the switch above took it, else the
+  // emote's own.
+  const bool synced = g.syncedSongs.count(first) != 0;
+  void* clip = synced ? g.a.partnerSongs[emote].get() : g.a.songs[emote].get();
+  if (!clip) return;
+  const float gain = synced ? g.a.partnerGains[emote] : g.a.gains[emote];
+  const float volume = song_volume(gain);
+  void* source = song_source(parent, voice, clip, group, true, true, volume);
+  if (!source) return;
+  Song& song = g.songs[me];
+  song.source = source;
+  song.group = group;
+  song.gain = gain;
+  song.volume = volume;
+  if (at.intro && src->second.intro && game::alive(src->second.intro)) {
+    // The pair formed mid intro song and kept it: join in where it stands, and start the loop on the sample the
+    // intro ends, as start_song schedules it.
+    void* introClip = g.a.introSongs[emote].get();
+    void* introSource = introClip ? song_source(parent, voice, introClip, group, false, true, volume) : nullptr;
+    if (introSource) {
+      song.intro = introSource;
+      phasmo::AudioSource::set_time(introSource, static_cast<float>(at.seconds));
+      phasmo::AudioSource::Play(introSource, 0);
+      const double left = std::max(0.0, static_cast<double>(info.introSongSeconds) - at.seconds);
+      phasmo::AudioSource::Play(source, static_cast<uint64_t>(std::llround(left * kPlayDelayRate)));
+    } else {
+      phasmo::AudioSource::Play(source, 0);
+    }
+  } else {
+    const float length = phasmo::AudioClip::get_length(clip);
+    const double t = length > 0.0f ? std::fmod(at.seconds, static_cast<double>(length)) : at.seconds;
+    phasmo::AudioSource::set_time(source, static_cast<float>(t));
+    phasmo::AudioSource::Play(source, 0);
+  }
+  // The first dancer's copy plays no sound on this client while the pair dances.
+  src->second.silent = true;
+  phasmo::AudioSource::set_volume(src->second.source, 0.0f);
+  if (src->second.intro && game::alive(src->second.intro)) phasmo::AudioSource::set_volume(src->second.intro, 0.0f);
+}
+
 // Where a synced emote's second part starts on this client: where the first dancer's loop clip is on their body here
 // (its Playable's own time, which the session's summed clock can trail after a long frame, and which counts from the
 // end of any intro), wrapped to the second part's length; the session's clock when that clip is not on their body.
@@ -889,6 +969,7 @@ void send(const std::vector<EmoteMsg>& msgs) {
 void release_body(int actor, void* player) {
   if (player && game::alive(player)) api::anim::stop_on_player(player, 0.0f);
   stop_song(actor);
+  g.turns.erase(actor);
   auto it = g.facings.find(actor);
   if (it == g.facings.end()) return;
   if (it->second.model && game::alive(it->second.model)) game::set_local_rotation(it->second.model, it->second.original);
@@ -1089,15 +1170,16 @@ void step_glide(void* player, float dt) {
   if (g.glide->done()) g.glide.reset();
 }
 
-// Whether the game's own Interact would act on something now: its ray from the centre of the rig's camera, on its
-// mask, hitting a PhotonObjectInteract or a ChildPhotonInteract (PCPropGrab.OnInteract, sdk/systems/players.md).
-// True when that cannot be read, so the prompt fails closed.
-bool interactable_ahead() {
+// Whether the game's own Pickup would act on something now: its ray from the centre of the rig's camera, on its
+// mask, hitting a PhotonObjectInteract or a ChildPhotonInteract (PCPropGrab.OnPickup casts exactly the ray
+// PCPropGrab.OnInteract's does, sdk/systems/players.md). A player's body carries neither component, so Pickup never
+// acts on an investigator. True when that cannot be read, so the prompt fails closed.
+bool pickup_ahead() {
   void* grab = component_in_rig(phasmo::PCPropGrab::type.type_object());
   void* cam = grab ? phasmo::PCPropGrab::playerCam.get(grab) : nullptr;
   void* t = cam && game::alive(cam) ? game::transform_of(cam) : nullptr;
   if (!t) return true;
-  void* hit = game::raycast(game::position(t), game::forward(t), kInteractReach, phasmo::PCPropGrab::mask.get(grab));
+  void* hit = game::raycast(game::position(t), game::forward(t), kPickupReach, phasmo::PCPropGrab::mask.get(grab));
   if (!hit) return false;
   for (void* type : {phasmo::PhotonObjectInteract::type.type_object(), phasmo::ChildPhotonInteract::type.type_object()})
     if (type && phasmo::Component::GetComponent(hit, type)) return true;
@@ -1204,8 +1286,28 @@ int index_of_key(uint32_t key) {
   return -1;
 }
 
-// The join prompt over the nearest dancer of a synced emote this client may join now, and a press of Interact (the
-// right trigger in VR) to ask (the user's design, 2026-11-13). Each client draws only its own prompt.
+// The pair's one turn, on this client (the user, 2026-11-14): the yaw each dancer ends facing, from the facing locked
+// at the Join, the first dancer's body and the second dancer's spot. `locked` is that facing, the same number on
+// every client, so all three kinds of client land on the same yaws. Dancers this client only shows ease there
+// through `g.turns`, over the joining glide's seconds; a dancer of its own is left to its session, which the caller
+// turns with start_pair_turn. A pack that asks for no facing change turns nothing.
+PairFacing begin_pair_turn(int first, int joiner, float locked, const PartnerDef& def) {
+  if (!def.faceEachOther) return {locked, locked};
+  PairFacing facing = {locked, locked};
+  void* p = game::player_of_actor(first);
+  if (!p || !game::alive(p)) return facing;
+  const Vector3 at = game::position(game::transform_of(p));
+  const Point firstAt{at.x, at.y, at.z};
+  const Point spot = partner_spot(firstAt, locked, def.offsetRight, def.offsetForward);
+  facing = pair_facing(firstAt, locked, spot, true);
+  if (first != game::local_actor()) g.turns[first] = Turn{locked, facing.first, kGlideSeconds, 0.0f};
+  if (joiner != game::local_actor()) g.turns[joiner] = Turn{locked, facing.joiner, kGlideSeconds, 0.0f};
+  return facing;
+}
+
+// The join prompt over the nearest dancer of a synced emote this client may join now, and a press of Pickup (the
+// right trigger in VR) to ask (the user's design, 2026-11-13, the key the user fixed on 2026-11-14). Each client
+// draws only its own prompt.
 void update_join(void* player, bool vr, const LocalFrame& f) {
   const bool canDance = f.present && !f.dying && !g.local->active() && !g.local->waiting() && !wheel::is_open() &&
                         !g.wheelIn.open && !journal_open() && keys::keys_ready();
@@ -1221,7 +1323,7 @@ void update_join(void* player, bool vr, const LocalFrame& f) {
   c.canDance = true;
   c.targetSynced = true;
   c.spotClear = true;  // tested below for the one dancer the prompt would show over
-  c.interactableInWay = !vr && interactable_ahead();
+  c.pickupInWay = !vr && pickup_ahead();
   const bool meDown = f.dead || f.dying;
   int best = 0, bestEmote = -1;
   float bestDistance = 0.0f;
@@ -1252,14 +1354,14 @@ void update_join(void* player, bool vr, const LocalFrame& f) {
   const std::optional<Point> spot = best ? spot_beside(best, bestEmote) : std::nullopt;
   if (!spot || !spot_clear(*spot, *k) || !spot_reachable(*spot, game::player_of_actor(best), *k)) return join::hide();
   std::string pad, key;
-  read_interact_binding(pad, key);
+  read_pickup_binding(pad, key);
   // In VR the glyph is the game's sprite for the trigger that joins there, as the VR wheel shows the game's shoulder
   // glyphs (the user's choice for the wheel, 2026-11-13); on screen the pad's sprite while the game says a pad is in
   // use, else the keycap with the key's name.
   void* sprite = vr ? pad_sprite("rightTrigger") : !input::keyboard_in_use().value_or(true) ? pad_sprite(pad) : nullptr;
   join::show(bestHead, camT, sprite, key);
   const bool pressed = vr ? keys::key_state(kVrPickKey).pressed
-                          : g.interactAction && phasmo::InputAction::WasPressedThisFrame(g.interactAction);
+                          : g.pickupAction && phasmo::InputAction::WasPressedThisFrame(g.pickupAction);
   if (!pressed) return;
   join::hide();
   PM_LOG("Emotes: asks actor %d to dance %s together", best, g.a.defs[bestEmote].id.c_str());
@@ -1302,18 +1404,26 @@ void accept_from(int first, const EmoteMsg& m) {
   const LocalOut o =
       g.local->accepted(first, m.key, elapsed, spot.value_or(Point{from.x, from.y, from.z}), yaw, standing);
   if (o.start >= 0 && spot) {
+    // A pair that faces each other ends the glide looking at one another: the spot, the first dancer's body and the
+    // facing locked at the Join give both bodies their yaw, and the joiner's glide turns to theirs (the user,
+    // 2026-11-14). A pack that says nothing keeps the joined facing, as before. The first dancer's body, remote on
+    // this client, turns beside the glide over the same seconds.
+    const PartnerDef& def = *g.a.defs[o.start].partner;
+    const PairFacing facing = begin_pair_turn(first, game::local_actor(), yaw, def);
     Glide glide;
     glide.from = {from.x, from.y, from.z};
     glide.to = *spot;
     glide.fromYaw = fromYaw;
-    glide.toYaw = yaw;
+    glide.toYaw = facing.joiner;
     g.glide = glide;
+    if (def.faceEachOther) g.local->start_pair_turn(facing.joiner);
     PM_LOG("Emotes: joins actor %d in %s", first, g.a.defs[o.start].id.c_str());
   }
   apply_local(o, player, vr);
   if (o.start >= 0) {
     if (auto it = g.facings.find(game::local_actor()); it != g.facings.end() && g.glide) it->second.bodyYaw = fromYaw;
     switch_to_synced_song(first, o.start, elapsed);
+    start_pair_song(first, player, o.start, elapsed);
   }
 }
 
@@ -1490,6 +1600,15 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
           begin_facing(o.actor, player, o.yaw);
           switch_to_synced_song(first, o.emote,
                                 first == game::local_actor() ? g.local->elapsed() : g.remote->elapsed(first));
+          // On a client that is neither dancer, the pair's one copy sits between the dancers and moves with them
+          // (the user, 2026-11-14); and a pair that faces each other turns here too, both dancers eased by
+          // `g.turns`. The dancers' own clients set their turns where their own body is driven instead.
+          if (first && first != game::local_actor() && o.actor != game::local_actor()) {
+            if (auto it = g.songs.find(first); it != g.songs.end()) it->second.pairOther = o.actor;
+            if (o.emote >= 0 && o.emote < static_cast<int>(g.a.defs.size()) && g.a.defs[o.emote].partner &&
+                g.a.defs[o.emote].partner->faceEachOther)
+              begin_pair_turn(first, o.actor, o.yaw, *g.a.defs[o.emote].partner);
+          }
         } else if (player) {
           void* clip = clip_of(o.emote, first_phase(o.emote));
           api::anim::play_on_player(player, clip, kBlendIn);
@@ -1504,6 +1623,7 @@ void apply_remote(const std::vector<RemoteOut>& outs) {
         break;
       case RemoteOut::Stop:
         g.playing.erase(o.actor);
+        g.turns.erase(o.actor);
         if (o.atOnce) {
           // Their death animation is the game's own: their dance comes off at once rather than blending out over it
           // (the user, 2026-11-10).
@@ -1687,6 +1807,16 @@ void tick() {
   }
   apply_remote(g.remote->tick(frames, f.dead || f.dying, dt));
   end_with_partner();
+  // The one turn of a pair that faces each other: each dancer this client only shows eases to face the other, over
+  // the joining glide's seconds and its easing, while the pair's facing stays unsent (the user, 2026-11-14).
+  for (auto it = g.turns.begin(); it != g.turns.end();) {
+    it->second.t += dt;
+    if (auto f2 = g.facings.find(it->first); f2 != g.facings.end()) f2->second.bodyYaw = it->second.yaw();
+    if (it->second.done())
+      it = g.turns.erase(it);
+    else
+      ++it;
+  }
   apply_facings(dt);
 
   // The ghost hears the songs as the dancers talking, on the master, where it runs.
@@ -1712,7 +1842,17 @@ void receive(int sender, const uint8_t* data, size_t size) {
   // Joining: a Join is this client's to answer as a first dancer; an Accept naming this client is its answer as a
   // joiner (and goes on to the pairing below, as every client's does).
   if (m->kind == Kind::Join) {
-    if (local && game::alive(local)) apply_local(g.local->on_join(sender, m->key), local, is_vr(local));
+    if (local && game::alive(local)) {
+      const LocalOut o = g.local->on_join(sender, m->key);
+      apply_local(o, local, is_vr(local));
+      // This client is the first dancer of a pair that faces each other: its own body turns under its session, over
+      // the joining glide's seconds, and the joiner's body, remote here, turns through `g.turns` (the user,
+      // 2026-11-14). apply_local above paired them and put the joiner's facing out; nothing here moves the spot.
+      if (o.acceptedActor && g.local->active() && g.local->emote() >= 0 && g.local->emote() < static_cast<int>(g.a.defs.size()) &&
+          g.a.defs[g.local->emote()].partner && g.a.defs[g.local->emote()].partner->faceEachOther)
+        g.local->start_pair_turn(
+            begin_pair_turn(game::local_actor(), sender, g.local->yaw(), *g.a.defs[g.local->emote()].partner).first);
+    }
     return;
   }
   if (m->kind == Kind::Accept && static_cast<int>(m->x) == game::local_actor()) accept_from(sender, *m);

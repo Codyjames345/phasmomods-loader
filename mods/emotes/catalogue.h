@@ -34,6 +34,8 @@ struct PartnerDef {
   std::string loudness;   ///< the synced song's loudness table; set exactly when song is
   float offsetRight = 0.0f;    ///< where the second dancer stands, metres to the first dancer's right
   float offsetForward = 0.0f;  ///< and metres in front of them
+  bool faceEachOther = false;  ///< the pair turns to face one another once joined, over the joining glide; false, so
+                               ///< a pack that says nothing dances side by side as before (the user, 2026-11-14)
 };
 
 /// One emote as its pack's file describes it.
@@ -285,10 +287,18 @@ inline bool parse_catalogue(std::string_view json, std::string_view packId, Cata
         }
         for (auto item = partner->begin(); item != partner->end(); ++item) {
           const std::string_view field = item.key();
-          if (field != "clip" && field != "introClip" && field != "song" && field != "loudness" && field != "offset")
+          if (field != "clip" && field != "introClip" && field != "song" && field != "loudness" &&
+              field != "offset" && field != "faceEachOther")
             result.warnings.push_back(who + "." + item.key());
         }
         PartnerDef part;
+        if (const auto face = partner->find("faceEachOther"); face != partner->end()) {
+          if (!face->is_boolean()) {
+            why = who + " has a faceEachOther that is not true or false";
+            return false;
+          }
+          part.faceEachOther = face->get<bool>();
+        }
         if (!detail::read_string(*partner, "clip", part.clip, why, true, who)) return false;
         if (!detail::read_string(*partner, "introClip", part.introClip, why, false, who)) return false;
         if (!detail::read_string(*partner, "song", part.song, why, false, who)) return false;

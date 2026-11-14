@@ -792,6 +792,7 @@ void the_joiner_tells_everyone_it_joined() {
 
 // ---- Joining: the prompt, the spot and the glide (sync_rule.h) ----
 
+bool yaw_close(float a, float b, float tol = 1e-3f) { return std::fabs(wrap_degrees(a - b)) <= tol; }
 bool close_to(Point a, Point b, float tol = 1e-4f) {
   return std::fabs(a.x - b.x) < tol && std::fabs(a.y - b.y) < tol && std::fabs(a.z - b.z) < tol;
 }
@@ -814,7 +815,7 @@ PromptCheck a_good_check() {
   c.partFree = true;
   c.targetInIntro = false;
   c.spotClear = true;
-  c.interactableInWay = false;
+  c.pickupInWay = false;
   return c;
 }
 
@@ -839,8 +840,107 @@ void a_blocked_spot_shows_no_prompt() {
   c.spotClear = false;
   CHECK(!shows_prompt(c));
   PromptCheck behind = a_good_check();
-  behind.interactableInWay = true;  // the press would also act on a door or switch under the crosshair
+  behind.pickupInWay = true;  // the press would also act on a door or switch under the crosshair
   CHECK(!shows_prompt(behind));
+}
+
+// The prompt's glyphs, from one action's binding paths as Unity writes them (sync_rule.h): the keyboard binding gives
+// the keycap's letter, the gamepad binding the pad's glyph, and a mouse-only action neither (the game's Interact,
+// left mouse and right trigger: the keycap is then blank, since a mouse glyph would be a new UI piece for the user).
+void the_binding_paths_give_the_keycap_and_the_pad_glyph() {
+  const ActionKeys pickup = read_binding_keys({"<Keyboard>/e", "<Gamepad>/buttonWest", "<Mouse>/leftButton"});
+  CHECK(pickup.pad == "buttonWest" && pickup.key == "E");
+  const ActionKeys interact = read_binding_keys({"<Mouse>/leftButton", "<Gamepad>/rightTrigger"});
+  CHECK(interact.pad == "rightTrigger" && interact.key.empty());
+  const ActionKeys padOnly = read_binding_keys({"<Gamepad>/buttonWest"});
+  CHECK(padOnly.pad == "buttonWest" && padOnly.key.empty());
+  CHECK(read_binding_keys({}).pad.empty() && read_binding_keys({}).key.empty());
+  CHECK(read_binding_keys({"<Keyboard>/space"}).key == "Space");
+}
+
+// A pair that faces each other (the user, 2026-11-14): each body ends facing the other; without it both keep the
+// facing the join was made at.
+void the_pair_facing_turns_each_body_to_the_other() {
+  const Point first{0.0f, 0.0f, 0.0f}, spot{1.3f, 0.0f, 0.0f};  // the spot 1.3 m to the first dancer's right
+  const PairFacing sameWay = pair_facing(first, 0.0f, spot, false);
+  CHECK(yaw_close(sameWay.first, 0.0f) && yaw_close(sameWay.joiner, 0.0f));
+  const PairFacing each = pair_facing(first, 0.0f, spot, true);
+  CHECK(yaw_close(each.first, 90.0f));    // the first dancer turns right, to the joiner
+  CHECK(yaw_close(each.joiner, -90.0f));  // the joiner glides in facing them back
+  CHECK(yaw_close(std::fabs(wrap_degrees(each.first - each.joiner)), 180.0f));
+  // The look-at sets it, not the facing the join was made at: a dancer facing west with their joiner to the south
+  // turns south, and the joiner looks back north.
+  const PairFacing west = pair_facing(Point{0.0f, 0.0f, 0.0f}, -90.0f, Point{0.0f, 0.0f, -1.3f}, true);
+  CHECK(yaw_close(west.first, 180.0f) && yaw_close(west.joiner, 0.0f));
+}
+
+// Over the joining glide both dancers of a facing pair turn: the first dancer's own client eases their locked facing
+// to the new one, never in a jump, and keeps it against the view afterwards (the user, 2026-11-14).
+void the_dancers_turn_to_each_other_over_the_glide() {
+  const EmoteTable t = synced_table();
+  const auto smoothTo = [](LocalSession& s, float to, Point at) {
+    s.start_pair_turn(to, kGlideSeconds);
+    float prev = s.yaw();
+    for (int i = 0; i < 40; ++i) {  // 0.66 s at 60 fps
+      LocalFrame f = here(0.0);
+      f.pos = at;  // the dancer stands where it dances: for a joiner, its partner's spot, which the rule measures from
+      f.dt = 1.0f / 60.0f;
+      const LocalOut o = s.tick(f);
+      CHECK(o.bodyYaw.has_value());
+      CHECK(std::fabs(wrap_degrees(*o.bodyYaw - prev)) < 5.0f);  // the eased turn's fastest step here is 3.75 degrees
+      prev = *o.bodyYaw;
+    }
+    CHECK(yaw_close(s.yaw(), to));
+  };
+  LocalSession first = first_dancer(t);
+  first.on_join(7, 1000u);
+  smoothTo(first, 90.0f, here(0.0).pos);
+  LocalFrame look = here(0.0);
+  look.viewYaw = -100.0f;  // the turn done, the facing holds at the new yaw: the view never swings it back
+  look.dt = 0.5f;
+  CHECK(yaw_close(*first.tick(look).bodyYaw, 90.0f));
+  LocalSession joiner(t);
+  joiner.join_request(4, 0, here(-1.0));
+  joiner.accepted(4, 1000u, 3.0, Point{1.3f, 0.0f, 0.0f}, 0.0f, here(-1.0));
+  smoothTo(joiner, -90.0f, Point{1.3f, 0.0f, 0.0f});
+}
+
+// The turn goes out to no one: the spot every client put at the fixed yaw, and the facing it holds for the first
+// dancer, stay put while the body turns (the user, 2026-11-14).
+void the_pair_turn_sends_no_facing_and_the_spot_stays() {
+  const EmoteTable t = synced_table();
+  LocalSession s = first_dancer(t);
+  const float locked = s.yaw();
+  s.on_join(7, 1000u);
+  s.start_pair_turn(-120.0f, kGlideSeconds);
+  LocalFrame f = here(0.0);
+  f.dt = 0.1f;
+  for (int i = 0; i < 8; ++i) CHECK(!sent(s.tick(f).send, Kind::Facing));
+  // What every other client holds for the first dancer is still the locked yaw, so a spot re-derived from it after
+  // the turn lands where the join put it.
+  RemoteSessions r(t);
+  r.receive(4, EmoteMsg{Kind::Start, 1000u, false, 0, 0, 0, locked}, false, false);
+  pair_up(r, 4, 7);
+  const Point spot = partner_spot(Point{0.0f, 0.0f, 0.0f}, r.yaw(4), -1.3f, 0.0f);
+  std::vector<RemoteFrame> frames(2);
+  frames[0].actor = 4;
+  frames[1].actor = 7;
+  for (RemoteFrame& fr : frames) fr.present = true;
+  for (int i = 0; i < 60; ++i) r.tick(frames, false, 0.02f);
+  CHECK(yaw_close(r.yaw(4), locked));
+  CHECK(close_to(partner_spot(Point{0.0f, 0.0f, 0.0f}, r.yaw(4), -1.3f, 0.0f), spot));
+}
+
+// Which copy of the pair's song plays on this client (the user, 2026-11-14): each dancer hears their own body's copy
+// as their own, the other dancer's copy is silent there, and every other client hears one copy from between the
+// dancers. The ghost counts one copy per pair, the first dancer's.
+void each_dancer_hears_the_pairs_song_as_their_own() {
+  CHECK(pair_song_copy(4, 4, 7, 4) == SongCopy::Own);       // the first dancer's copy, on their own client
+  CHECK(pair_song_copy(7, 4, 7, 7) == SongCopy::Own);       // the joiner's own copy, on the joiner's client
+  CHECK(pair_song_copy(7, 4, 7, 4) == SongCopy::Silent);    // the first dancer's copy, silent there
+  CHECK(pair_song_copy(9, 4, 7, 4) == SongCopy::Midpoint);  // the one copy a third client hears, between them
+  CHECK(pair_song_copy(9, 4, 7, 7) == SongCopy::Absent);    // the joiner's copy exists only on their own client
+  CHECK(counts_for_ghost(4, 4) && !counts_for_ghost(4, 7));
 }
 
 void no_prompt_during_the_intro() {
@@ -969,6 +1069,11 @@ void the_second_part_counts_from_the_intro_end() {
 }  // namespace
 
 int main() {
+  the_binding_paths_give_the_keycap_and_the_pad_glyph();
+  the_pair_facing_turns_each_body_to_the_other();
+  the_dancers_turn_to_each_other_over_the_glide();
+  the_pair_turn_sends_no_facing_and_the_spot_stays();
+  each_dancer_hears_the_pairs_song_as_their_own();
   a_dead_joiner_dances_on();
   the_second_part_counts_from_the_intro_end();
   leaving_a_pair_names_the_partner();
