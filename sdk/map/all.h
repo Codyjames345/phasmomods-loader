@@ -563,6 +563,7 @@ inline constexpr const pm::sdk::EntryDesc* kAllEntries[] = {
     &NavMesh_CalculatePath,
     &Rigidbody_set_isKinematic,
     &Rigidbody_set_constraints,
+    &Rigidbody_get_constraints,
     &Transform_set_localEulerAngles,
     &Door_forceRoutine,
     &Door_useForceInsteadOfAnimations,
