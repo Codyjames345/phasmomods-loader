@@ -158,7 +158,8 @@ inline constexpr pm::sdk::EntryDesc GameObject_SetActive{.key = "GameObject.SetA
 
 /// The GameObject's Transform. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc GameObject_get_transform{
-    .key = "GameObject.get_transform", .kind = pm::sdk::Kind::Method, .owner = "GameObject", .name = "get_transform"};
+    .key = "GameObject.get_transform", .kind = pm::sdk::Kind::Method, .owner = "GameObject", .name = "get_transform",
+    .type = "@Transform"};
 
 /// Whether the GameObject itself is switched on (its parents aside). Inferred: Unity's documented
 /// property getter.
@@ -179,7 +180,8 @@ inline constexpr pm::sdk::EntryDesc Component{.key = "Component", .name = "Compo
 
 /// The component's Transform. Inferred: Unity's documented property getter.
 inline constexpr pm::sdk::EntryDesc Component_get_transform{
-    .key = "Component.get_transform", .kind = pm::sdk::Kind::Method, .owner = "Component", .name = "get_transform"};
+    .key = "Component.get_transform", .kind = pm::sdk::Kind::Method, .owner = "Component", .name = "get_transform",
+    .type = "@Transform"};
 
 /// The tag of the component's GameObject, a string ("Untagged" when it has none). Inferred: Unity's documented property
 /// getter.
@@ -244,6 +246,9 @@ inline constexpr pm::sdk::EntryDesc MonoBehaviour_StartCoroutine{
 
 }  // namespace pm::map
 
+// After the entries: Transform.h includes this header too (a cycle the map's layout allows; sdk/internals/mapping.md)
+#include "Transform.h"
+
 /// @file
 /// @brief The game API for Unity's base classes (sdk/api/game_api.h).
 ///
@@ -300,7 +305,8 @@ struct GameObject {
   /// get_activeInHierarchy(gameObject). Optional. Unresolved: false.
   static constexpr pm::api::Method<pm::map::GameObject_get_activeInHierarchy, bool(pm::api::Ref<pm::map::GameObject>)> get_activeInHierarchy{};
   /// get_transform(gameObject). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::GameObject_get_transform, pm::api::Object(pm::api::Ref<pm::map::GameObject>)> get_transform{};
+  static constexpr pm::api::Method<pm::map::GameObject_get_transform,
+                                   pm::api::Ref<pm::map::Transform>(pm::api::Ref<pm::map::GameObject>)> get_transform{};
   /// ctor(gameObject, name): `gameObject` from type.make(), `name` a managed string. Unresolved: does
   /// nothing.
   static constexpr pm::api::Method<pm::map::GameObject_ctor, void(pm::api::Ref<pm::map::GameObject>, pm::api::Object)> ctor{};
@@ -319,7 +325,8 @@ struct Component {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Component> type{};
   /// get_transform(component). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Component_get_transform, pm::api::Object(pm::api::Ref<pm::map::Component>)> get_transform{};
+  static constexpr pm::api::Method<pm::map::Component_get_transform,
+                                   pm::api::Ref<pm::map::Transform>(pm::api::Ref<pm::map::Component>)> get_transform{};
   /// get_tag(component): its GameObject's tag, a managed string (pm::api::to_utf8). Unresolved: null.
   static constexpr pm::api::Method<pm::map::Component_get_tag, pm::api::Object(pm::api::Ref<pm::map::Component>)> get_tag{};
   /// get_gameObject(component). Unresolved: null.

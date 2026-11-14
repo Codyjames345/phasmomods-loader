@@ -232,6 +232,9 @@ inline constexpr pm::sdk::EntryDesc SaltSpot_SyncSalt{.key = "SaltSpot.SyncSalt"
 
 }  // namespace pm::map
 
+// After the entries: Door.h includes this header too (a cycle the map's layout allows; sdk/internals/mapping.md)
+#include "Door.h"
+
 /// @file
 /// @brief The game API for the world's props (sdk/api/game_api.h).
 ///
@@ -249,7 +252,7 @@ struct PhotonObjectInteract {
   /// Its Rigidbody, or null: body.get(interact). Unresolved: null.
   static constexpr pm::api::Field<pm::map::PhotonObjectInteract_body, pm::api::Ref<pm::map::Rigidbody>> body{};
   /// Its Door, or null: door.get(interact). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_door, pm::api::Object> door{};
+  static constexpr pm::api::Field<pm::map::PhotonObjectInteract_door, pm::api::Ref<pm::map::Door>> door{};
   /// Its PhotonView: view.get(interact). Unresolved: null.
   static constexpr pm::api::Field<pm::map::PhotonObjectInteract_view, pm::api::Ref<pm::map::PhotonView>> view{};
   /// Its Prop, or null: prop.get(interact). Unresolved: null.

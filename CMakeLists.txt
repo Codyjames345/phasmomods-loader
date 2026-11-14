@@ -688,6 +688,9 @@ pm_test(typed_wrapper sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_gam
 target_include_directories(typed_wrapper_test PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 # Compile-time: each getter entry 0b-2c gave a `type` has a wrapper returning that handle.
 pm_test(getter_returns_are_typed)
+# Compile-time: each map-header cycle (sdk/internals/mapping.md) compiles in both include orders;
+# one translation unit per cycle, each in the order opposite to what most code uses.
+pm_test(map_headers_compile_in_any_order tests/map_order_props_door.cpp tests/map_order_transform_unityobject.cpp)
 pm_test(content sdk/api/content.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp sdk/fake/fake_game.cpp
   sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp host/content_types.cpp
   host/content_text.cpp host/content_evidence.cpp

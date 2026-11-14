@@ -14,7 +14,6 @@
 #include "Door.h"
 #include "Equipment.h"
 #include "GhostInfo.h"
-#include "GhostSenses.h"
 #include "Photon.h"
 #include "Props.h"
 #include "Sensor.h"
@@ -782,6 +781,9 @@ inline constexpr pm::sdk::EntryDesc GhostActivity_TwinInteraction{
     .owner = "GhostActivity", .name = "TwinInteraction", .params = GhostActivity_bool};
 
 }  // namespace pm::map
+
+// After the entries: GhostSenses.h reaches this header too, through Footstep.h (a cycle the map's layout allows; sdk/internals/mapping.md)
+#include "GhostSenses.h"
 
 /// @file
 /// @brief The game API for GhostAI (sdk/api/game_api.h).

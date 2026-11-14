@@ -8,12 +8,13 @@
 
 #include "entry.h"
 #include "game_api.h"
-#include "UnityObject.h"
 
 namespace pm::map {
 
 inline constexpr const char* Transform_string[] = {"string"};
 inline constexpr const char* Transform_int[] = {"int"};
+
+extern const pm::sdk::EntryDesc Component;  // defined in UnityObject.h
 
 /// Unity's transform component (UnityEngine.CoreModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Transform{.key = "Transform", .name = "Transform",
@@ -230,6 +231,9 @@ inline constexpr pm::sdk::EntryDesc Transform_IsChildOf{.key = "Transform.IsChil
                                                         .params = Transform_Transform};
 
 }  // namespace pm::map
+
+// After the entries: UnityObject.h includes this header too (a cycle the map's layout allows; sdk/internals/mapping.md)
+#include "UnityObject.h"
 
 /// @file
 /// @brief The game API for the hierarchy (sdk/api/game_api.h), but Find, which only the host's scene facts use.

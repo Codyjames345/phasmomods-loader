@@ -61,6 +61,9 @@ static_assert(std::is_same_v<wrapper_return_t<decltype(phasmo::Collider::get_att
 static_assert(std::is_same_v<wrapper_return_t<decltype(phasmo::Component::get_gameObject)>,
                              pm::api::Ref<map::GameObject>>,
               "Component.get_gameObject must return Ref<GameObject>");
+static_assert(std::is_same_v<wrapper_return_t<decltype(phasmo::Component::get_transform)>,
+                             pm::api::Ref<map::Transform>>,
+              "Component.get_transform must return Ref<Transform>");
 static_assert(std::is_same_v<wrapper_return_t<decltype(phasmo::ConnectToServer::get_Instance)>,
                              pm::api::Ref<map::ConnectToServer>>,
               "ConnectToServer.get_Instance must return Ref<ConnectToServer>");
@@ -79,6 +82,9 @@ static_assert(std::is_same_v<wrapper_return_t<decltype(phasmo::Gamepad::get_left
 static_assert(std::is_same_v<wrapper_return_t<decltype(phasmo::Gamepad::get_rightShoulder)>,
                              pm::api::Ref<map::ButtonControl>>,
               "Gamepad.get_rightShoulder must return Ref<ButtonControl>");
+static_assert(std::is_same_v<wrapper_return_t<decltype(phasmo::GameObject::get_transform)>,
+                             pm::api::Ref<map::Transform>>,
+              "GameObject.get_transform must return Ref<Transform>");
 static_assert(std::is_same_v<wrapper_return_t<decltype(phasmo::GhostActivity::GetDoorToOpen)>,
                              pm::api::Ref<map::Door>>,
               "GhostActivity.GetDoorToOpen must return Ref<Door>");

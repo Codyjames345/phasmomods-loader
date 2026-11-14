@@ -51,6 +51,17 @@ mapped, from the next class up. Leave it null when no class it derives from is m
 an enum. Typed handles convert to a base type's handle by it (`sdk/api/ref.h`), and the resolver never reads it. The
 base must be declared before the entry, so include its header, or move its declaration up in the same header.
 
+Two headers may need each other, and that is not a reason to leave a wrapper untyped: `Footstep.h`,
+`GhostAI.h` and `GhostSenses.h`, `Door.h` and `Props.h`, and `UnityObject.h` and `Transform.h` do. In
+each, both directions of the pair `#include` the other not at the top of the file but after the
+`pm::map` entries close and before the `phasmo` wrappers, so each header's entries are all defined
+before either header's wrappers (where a `pm::api::Ref` to the partner's Type entry lives) are seen,
+in either include order. An entry that needs a partner entry itself (a `.base` or `within` pointer to
+it) gets a forward declaration just above it in its own `pm::map` section (`extern const
+pm::sdk::EntryDesc Component;  // defined in UnityObject.h`); the definition stays `inline constexpr`
+in its own header. `tools/cycles.py` reports such a cycle as allowed and only flags one whose include
+sits at the top of a file; `map_headers_compile_in_any_order` proves both orders compile.
+
 The model is read from every assembly a Type entry names, and a build that lacks a required one
 cannot be resolved at all, for every mod. An assembly that only `kOptional` Type entries name is
 optional: a build without it is read without it, and those entries stay unresolved. Give a type in a

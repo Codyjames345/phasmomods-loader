@@ -301,6 +301,9 @@ inline constexpr pm::sdk::EntryDesc Player_footstepController{
 
 }  // namespace pm::map
 
+// After the entries: GhostAI.h reaches this header too, through GhostSenses.h (a cycle the map's layout allows; sdk/internals/mapping.md)
+#include "GhostAI.h"
+
 /// @file
 /// @brief The game API for footsteps (sdk/api/game_api.h).
 ///
@@ -315,7 +318,7 @@ struct Footstep {
   /// Its Noise: noise.get(footstep). Unresolved: null.
   static constexpr pm::api::Field<pm::map::Footstep_noise, pm::api::Object> noise{};
   /// Its ghost's GhostAI: ghost.get(footstep). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Footstep_ghost, pm::api::Object> ghost{};
+  static constexpr pm::api::Field<pm::map::Footstep_ghost, pm::api::Ref<pm::map::GhostAI>> ghost{};
   /// Its reach in metres: reach.get(footstep). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Footstep_reach, float> reach{};
   /// Play(footstep, volume, name): `name` a managed string. A mod usually hooks it. Unresolved: does

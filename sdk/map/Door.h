@@ -9,7 +9,6 @@
 #include "entry.h"
 #include "game_api.h"
 #include "Photon.h"
-#include "Props.h"
 #include "Sensor.h"
 #include "UnityAudio.h"
 #include "UnityObject.h"
@@ -651,6 +650,9 @@ inline constexpr pm::sdk::EntryDesc SmallMapVariation_huntingRooms{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "SmallMapVariation", .name = "huntingRooms"};
 
 }  // namespace pm::map
+
+// After the entries: Props.h includes this header too (a cycle the map's layout allows; sdk/internals/mapping.md)
+#include "Props.h"
 
 /// @file
 /// @brief The game API for doors (sdk/api/game_api.h).

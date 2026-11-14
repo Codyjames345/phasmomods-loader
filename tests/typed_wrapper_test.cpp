@@ -10,7 +10,9 @@
 #include <vector>
 
 #include "Camera.h"
+#include "Footstep.h"
 #include "GhostAI.h"
+#include "Props.h"
 #include "UnityObject.h"
 #include "check.h"
 #include "fake_game.h"
@@ -33,6 +35,14 @@ namespace sdk = pm::sdk;
 
 using api::Object;
 using api::Ref;
+
+// The two field positions 0b-2b left as Object because typing them closed a map-header cycle;
+// 0b-2d broke the cycles (sdk/internals/mapping.md), so each field now reads a typed handle.
+static_assert(std::is_same_v<decltype(phasmo::Footstep::ghost), const api::Field<map::Footstep_ghost, Ref<map::GhostAI>>>,
+              "Footstep.ghost must read a Ref<GhostAI>");
+static_assert(std::is_same_v<decltype(phasmo::PhotonObjectInteract::door),
+                             const api::Field<map::PhotonObjectInteract_door, Ref<map::Door>>>,
+              "PhotonObjectInteract.door must read a Ref<Door>");
 
 // Class pointers for the fake: GhostAI, a class derived from it, and Camera.
 int g_ghostClass = 0, g_derivedClass = 0, g_cameraClass = 0;

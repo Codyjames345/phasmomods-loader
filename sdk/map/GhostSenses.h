@@ -6,7 +6,6 @@
 // code of build 25811160.
 
 #include "entry.h"
-#include "Footstep.h"
 #include "game_api.h"
 #include "Photon.h"
 #include "UnityObject.h"
@@ -40,6 +39,8 @@ inline constexpr pm::sdk::EntryDesc GhostHearing_heard{.key = "GhostHearing.hear
 inline constexpr pm::sdk::EntryDesc HeardNoise_noise{.key = "HeardNoise.noise", .kind = pm::sdk::Kind::Field,
                                                      .owner = "HeardNoise",
                                                      .type = "PlayerNoise"};
+
+extern const pm::sdk::EntryDesc Noise;  // defined in Footstep.h
 
 /// A player's footstep noise (Assembly-CSharp, global namespace), a Noise. Inferred: from the class dump.
 inline constexpr pm::sdk::EntryDesc PlayerNoise{.key = "PlayerNoise", .name = "PlayerNoise",
@@ -108,6 +109,9 @@ inline constexpr pm::sdk::EntryDesc NetworkedStamina_ForceOutOfBreatheLocal{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "NetworkedStamina", .name = "ForceOutOfBreatheLocal"};
 
 }  // namespace pm::map
+
+// After the entries: Footstep.h reaches this header too, through GhostAI.h (a cycle the map's layout allows; sdk/internals/mapping.md)
+#include "Footstep.h"
 
 /// @file
 /// @brief The game API for what a ghost senses (sdk/api/game_api.h).
