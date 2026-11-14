@@ -1086,16 +1086,18 @@ bool hook(typename detail::Hooked<std::remove_cvref_t<decltype(M)>>::Detour deto
 /// @param twins Twins::All (the default) to cover every body the obfuscator made, so the detour runs
 ///   whichever body the game calls; Twins::CanonicalOnly for the canonical body alone.
 /// @return True when every body was hooked; enable it with the host contract's enable_hooks.
+/// @tparam Detour Must be exactly the wrapper's RawDetour, so a literal nullptr is never this
+///   overload's: the typed hook<M> above is the one that refuses a null detour.
 /// @code
 /// void* on_unappear_raw(pm::api::Original<phasmo::GhostAI::UnAppear> original, void* ghost) {
 ///   original(ghost);  // the game's own UnAppear first
 /// }
 /// pm::api::hook<phasmo::GhostAI::UnAppear>(&on_unappear_raw, "my mod: UnAppear");
 /// @endcode
-template <auto& M>
-  requires(detail::Hooked<std::remove_cvref_t<decltype(M)>>::takes_handles)
-bool hook(typename detail::Hooked<std::remove_cvref_t<decltype(M)>>::RawDetour detour, const char* name,
-          Twins twins = Twins::All) {
+template <auto& M, class Detour>
+  requires(detail::Hooked<std::remove_cvref_t<decltype(M)>>::takes_handles &&
+           std::is_same_v<Detour, typename detail::Hooked<std::remove_cvref_t<decltype(M)>>::RawDetour>)
+bool hook(Detour detour, const char* name, Twins twins = Twins::All) {
   using W = std::remove_cvref_t<decltype(M)>;
   static_assert(W::desc.kind == sdk::Kind::Method || W::desc.kind == sdk::Kind::Inflated, "hook takes a Method wrapper");
   if (!W::use::entry()) return false;
