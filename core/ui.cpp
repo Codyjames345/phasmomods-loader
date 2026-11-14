@@ -276,7 +276,7 @@ void set_scroll_height(ScrollView& view, float contentHeight) {
     return;
   }
   const phasmo::Vector2 size = phasmo::RectTransform::get_sizeDelta(rt);
-  phasmo::RectTransform::set_sizeDelta(rt, {size.x, contentHeight});
+  phasmo::RectTransform::set_sizeDelta(rt, phasmo::Vector2{size.x, contentHeight});
   // After the new height, so the game clamps the position it is given against the bounds the list now has.
   if (view.scroll) phasmo::ScrollRect::set_verticalNormalizedPosition(view.scroll, fraction);
 }

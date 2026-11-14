@@ -285,45 +285,45 @@ struct AudioSource {
   /// The type: klass(), is(obj), type_object() (for GameObject.AddComponent). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::AudioSource> type{};
   /// get_rolloffMode(source): an AudioRolloffMode number. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::AudioSource_get_rolloffMode, int32_t(void*)> get_rolloffMode{};
+  static constexpr pm::api::Method<pm::map::AudioSource_get_rolloffMode, int32_t(pm::api::Ref<pm::map::AudioSource>)> get_rolloffMode{};
   /// get_minDistance(source): metres. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::AudioSource_get_minDistance, float(void*)> get_minDistance{};
+  static constexpr pm::api::Method<pm::map::AudioSource_get_minDistance, float(pm::api::Ref<pm::map::AudioSource>)> get_minDistance{};
   /// get_maxDistance(source): metres. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::AudioSource_get_maxDistance, float(void*)> get_maxDistance{};
+  static constexpr pm::api::Method<pm::map::AudioSource_get_maxDistance, float(pm::api::Ref<pm::map::AudioSource>)> get_maxDistance{};
   /// GetCustomCurve(source, type): a copy of the curve, an AnimationCurve (type an AudioSourceCurveType). Unresolved:
   /// null.
-  static constexpr pm::api::Method<pm::map::AudioSource_GetCustomCurve, void*(void*, int32_t)> GetCustomCurve{};
+  static constexpr pm::api::Method<pm::map::AudioSource_GetCustomCurve, pm::api::Object(pm::api::Ref<pm::map::AudioSource>, int32_t)> GetCustomCurve{};
   /// SetCustomCurve(source, type, curve). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_SetCustomCurve, void(void*, int32_t, void*)> SetCustomCurve{};
+  static constexpr pm::api::Method<pm::map::AudioSource_SetCustomCurve, void(pm::api::Ref<pm::map::AudioSource>, int32_t, pm::api::Object)> SetCustomCurve{};
   /// set_clip(source, clip). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_set_clip, void(void*, void*)> set_clip{};
+  static constexpr pm::api::Method<pm::map::AudioSource_set_clip, void(pm::api::Ref<pm::map::AudioSource>, pm::api::Ref<pm::map::AudioClip>)> set_clip{};
   /// set_spatialBlend(source, blend). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_set_spatialBlend, void(void*, float)> set_spatialBlend{};
+  static constexpr pm::api::Method<pm::map::AudioSource_set_spatialBlend, void(pm::api::Ref<pm::map::AudioSource>, float)> set_spatialBlend{};
   /// set_mute(source, muted). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_set_mute, void(void*, bool)> set_mute{};
+  static constexpr pm::api::Method<pm::map::AudioSource_set_mute, void(pm::api::Ref<pm::map::AudioSource>, bool)> set_mute{};
   /// set_loop(source, loops). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_set_loop, void(void*, bool)> set_loop{};
+  static constexpr pm::api::Method<pm::map::AudioSource_set_loop, void(pm::api::Ref<pm::map::AudioSource>, bool)> set_loop{};
   /// set_time(source, seconds): where it plays in its clip. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_set_time, void(void*, float)> set_time{};
+  static constexpr pm::api::Method<pm::map::AudioSource_set_time, void(pm::api::Ref<pm::map::AudioSource>, float)> set_time{};
   /// set_volume(source, volume). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_set_volume, void(void*, float)> set_volume{};
+  static constexpr pm::api::Method<pm::map::AudioSource_set_volume, void(pm::api::Ref<pm::map::AudioSource>, float)> set_volume{};
   /// set_minDistance(source, metres). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_set_minDistance, void(void*, float)> set_minDistance{};
+  static constexpr pm::api::Method<pm::map::AudioSource_set_minDistance, void(pm::api::Ref<pm::map::AudioSource>, float)> set_minDistance{};
   /// set_maxDistance(source, metres). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_set_maxDistance, void(void*, float)> set_maxDistance{};
+  static constexpr pm::api::Method<pm::map::AudioSource_set_maxDistance, void(pm::api::Ref<pm::map::AudioSource>, float)> set_maxDistance{};
   /// set_pitch(source, pitch). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_set_pitch, void(void*, float)> set_pitch{};
+  static constexpr pm::api::Method<pm::map::AudioSource_set_pitch, void(pm::api::Ref<pm::map::AudioSource>, float)> set_pitch{};
   /// Play(source, delaySamples): 0 plays now. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_Play, void(void*, uint64_t)> Play{};
+  static constexpr pm::api::Method<pm::map::AudioSource_Play, void(pm::api::Ref<pm::map::AudioSource>, uint64_t)> Play{};
   /// Stop(source, stopOneShots): Stop(source, true) is Unity's Stop(). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_Stop, void(void*, bool)> Stop{};
+  static constexpr pm::api::Method<pm::map::AudioSource_Stop, void(pm::api::Ref<pm::map::AudioSource>, bool)> Stop{};
   /// PlayOneShot(source, clip). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_PlayOneShot, void(void*, void*)> PlayOneShot{};
+  static constexpr pm::api::Method<pm::map::AudioSource_PlayOneShot, void(pm::api::Ref<pm::map::AudioSource>, pm::api::Ref<pm::map::AudioClip>)> PlayOneShot{};
   /// set_outputAudioMixerGroup(source, group): the mixer group it plays through. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_set_outputAudioMixerGroup, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::AudioSource_set_outputAudioMixerGroup, void(pm::api::Ref<pm::map::AudioSource>, pm::api::Object)>
       set_outputAudioMixerGroup{};
   /// set_rolloffMode(source, mode): how its volume falls with distance, an AudioRolloffMode. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::AudioSource_set_rolloffMode, void(void*, int32_t)> set_rolloffMode{};
+  static constexpr pm::api::Method<pm::map::AudioSource_set_rolloffMode, void(pm::api::Ref<pm::map::AudioSource>, int32_t)> set_rolloffMode{};
 };
 
 /// How a 3D source's volume falls with distance.
@@ -344,12 +344,12 @@ struct AudioClip {
   static constexpr pm::api::Type<pm::map::AudioClip> type{};
   /// Create(name, lengthSamples, channels, frequency, stream): a new clip, `name` a managed string
   /// (pm::api::make_string). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::AudioClip_Create, void*(void*, int32_t, int32_t, int32_t, bool)> Create{};
+  static constexpr pm::api::Method<pm::map::AudioClip_Create, pm::api::Object(pm::api::Object, int32_t, int32_t, int32_t, bool)> Create{};
   /// SetData(clip, samples, offsetSamples): `samples` a float[] (Single::type.make_array). Unresolved:
   /// false.
-  static constexpr pm::api::Method<pm::map::AudioClip_SetData, bool(void*, void*, int32_t)> SetData{};
+  static constexpr pm::api::Method<pm::map::AudioClip_SetData, bool(pm::api::Ref<pm::map::AudioClip>, pm::api::Object, int32_t)> SetData{};
   /// get_length(clip): seconds. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::AudioClip_get_length, float(void*)> get_length{};
+  static constexpr pm::api::Method<pm::map::AudioClip_get_length, float(pm::api::Ref<pm::map::AudioClip>)> get_length{};
 };
 
 /// .NET's float.

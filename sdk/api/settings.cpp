@@ -164,7 +164,7 @@ void ensure_rows() {
   void* list = rows::journal_list(templ);
   void* number = phasmo::GameMyAudioManager::masterVolumeValueText.get(page);
   void* numberT = number && alive(number) ? phasmo::Component::get_transform(number) : nullptr;
-  if (!list || !numberT || phasmo::Transform::get_parent(numberT) != templ) {
+  if (!list || !numberT || phasmo::Transform::get_parent(numberT).raw() != templ) {
     PM_LOG("settings: %s finds the audio page but not its master volume row as it expects", g.owner.c_str());
     return;
   }

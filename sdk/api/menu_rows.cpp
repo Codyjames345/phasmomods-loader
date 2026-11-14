@@ -180,7 +180,7 @@ float taken_height(void* object, void* list) {
 Grown grow(void* list, float by) {
   if (!list || by <= 0.0f) return {};
   const phasmo::Vector2 lo = phasmo::RectTransform::get_anchorMin(list), hi = phasmo::RectTransform::get_anchorMax(list);
-  void* target = lo.y != hi.y ? phasmo::Transform::get_parent(list) : list;
+  void* target = lo.y != hi.y ? phasmo::Transform::get_parent(list).raw() : list;
   if (!target) return {};
   phasmo::Vector2 size = phasmo::RectTransform::get_sizeDelta(target);
   size.y += by;

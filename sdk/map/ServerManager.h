@@ -6,6 +6,7 @@
 // types. Notes read from decompiled code are from build 25811160.
 
 #include "Photon.h"
+#include "Player.h"
 #include "UnityRendering.h"
 #include "entry.h"
 #include "game_api.h"
@@ -175,29 +176,29 @@ struct ServerManager {
   /// The type: type_object() for Object.FindObjectOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::ServerManager> type{};
   /// The Ready button, a Toggle: readyToggle.get(manager). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ServerManager_readyToggle, void*> readyToggle{};
+  static constexpr pm::api::Field<pm::map::ServerManager_readyToggle, pm::api::Object> readyToggle{};
   /// The Ready label: readyText.get(manager). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ServerManager_readyText, void*> readyText{};
+  static constexpr pm::api::Field<pm::map::ServerManager_readyText, pm::api::Object> readyText{};
   /// The Ready label's clickable colour: enabledColour.get(manager). Optional; check it with
   /// pm::api::all_resolved. Unresolved: all zero.
   static constexpr pm::api::Field<pm::map::ServerManager_enabledColour, Color> enabledColour{};
   /// The ID cards, a List<MultiplayerProfile>: cards.get(manager), read as a pm::api::List, or null
   /// before the lobby lists any. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ServerManager_cards, void*> cards{};
+  static constexpr pm::api::Field<pm::map::ServerManager_cards, pm::api::Object> cards{};
   /// LeaveServer(manager): the lobby's own Leave. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ServerManager_LeaveServer, void(void*)> LeaveServer{};
+  static constexpr pm::api::Method<pm::map::ServerManager_LeaveServer, void(pm::api::Ref<pm::map::ServerManager>)> LeaveServer{};
   /// KickPlayer(manager, card): the lobby's kick; the game itself refuses it on a client that is not the master.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ServerManager_KickPlayer, void(void*, void*)> KickPlayer{};
+  static constexpr pm::api::Method<pm::map::ServerManager_KickPlayer, void(pm::api::Ref<pm::map::ServerManager>, pm::api::Ref<pm::map::MultiplayerProfile>)> KickPlayer{};
   /// The Start button, a Button: startGameButton.get(manager). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ServerManager_startGameButton, void*> startGameButton{};
+  static constexpr pm::api::Field<pm::map::ServerManager_startGameButton, pm::api::Object> startGameButton{};
   /// A contract's start: hook nothing here for a click, which runs an inlined copy. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ServerManager_StartGame, void*(void*)> StartGame{};
+  static constexpr pm::api::Method<pm::map::ServerManager_StartGame, pm::api::Object(pm::api::Ref<pm::map::ServerManager>)> StartGame{};
   /// Ready(manager, ready): this client's Ready, sent to everyone. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ServerManager_Ready, void(void*, bool)> Ready{};
+  static constexpr pm::api::Method<pm::map::ServerManager_Ready, void(pm::api::Ref<pm::map::ServerManager>, bool)> Ready{};
   /// UpdateUI(manager, reset): refreshes the lobby's Ready and Start state, clearing every player's Ready when `reset`.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ServerManager_UpdateUI, void(void*, bool)> UpdateUI{};
+  static constexpr pm::api::Method<pm::map::ServerManager_UpdateUI, void(pm::api::Ref<pm::map::ServerManager>, bool)> UpdateUI{};
 };
 
 /// A player's lobby ID card.
@@ -209,7 +210,7 @@ struct MultiplayerProfile {
 /// A player's card. `card` below is the ProfileCard.
 struct ProfileCard {
   /// The room's player it shows, a PlayerSpot: spot.get(card), or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ProfileCard_spot, void*> spot{};
+  static constexpr pm::api::Field<pm::map::ProfileCard_spot, pm::api::Ref<pm::map::PlayerSpot>> spot{};
 };
 
 /// @}

@@ -70,19 +70,19 @@ namespace phasmo {
 /// Unity's Resources.
 struct Resources {
   /// Load(path, type): the asset or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Resources_Load, void*(void*, void*)> Load{};
+  static constexpr pm::api::Method<pm::map::Resources_Load, pm::api::Object(pm::api::Object, pm::api::Object)> Load{};
 };
 
 /// Unity's AssetBundle, by its engine functions. `bundle` below is one LoadFromFile gave.
 struct AssetBundle {
   /// LoadFromFile(path, crc, offset): the bundle or null. Unresolved: null.
-  static constexpr pm::api::Icall<pm::map::AssetBundle_LoadFromFile, void*(void*, uint32_t, uint64_t)> LoadFromFile{};
+  static constexpr pm::api::Icall<pm::map::AssetBundle_LoadFromFile, pm::api::Object(pm::api::Object, uint32_t, uint64_t)> LoadFromFile{};
   /// LoadAsset(bundle, name, type): the asset or null. Unresolved: null.
-  static constexpr pm::api::Icall<pm::map::AssetBundle_LoadAsset, void*(void*, void*, void*)> LoadAsset{};
+  static constexpr pm::api::Icall<pm::map::AssetBundle_LoadAsset, pm::api::Object(pm::api::Object, pm::api::Object, pm::api::Object)> LoadAsset{};
   /// GetAllAssetNames(bundle): a string[] (pm::api::RefArray). Unresolved: null.
-  static constexpr pm::api::Icall<pm::map::AssetBundle_GetAllAssetNames, void*(void*)> GetAllAssetNames{};
+  static constexpr pm::api::Icall<pm::map::AssetBundle_GetAllAssetNames, pm::api::Object(pm::api::Object)> GetAllAssetNames{};
   /// Unload(bundle, unloadAllLoadedObjects). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::AssetBundle_Unload, void(void*, bool)> Unload{};
+  static constexpr pm::api::Icall<pm::map::AssetBundle_Unload, void(pm::api::Object, bool)> Unload{};
 };
 
 /// @}

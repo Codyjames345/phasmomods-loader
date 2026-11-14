@@ -198,43 +198,43 @@ struct Cloth {
     return decltype(type)::use::resolved();
   }
   /// set_capsuleColliders(cloth, capsules), a CapsuleCollider[]. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Cloth_set_capsuleColliders, void(void*, void*)> set_capsuleColliders{};
+  static constexpr pm::api::Method<pm::map::Cloth_set_capsuleColliders, void(pm::api::Ref<pm::map::Cloth>, pm::api::Object)> set_capsuleColliders{};
   /// set_coefficients(cloth, coefficients), a Vector2[] as long as the mesh's vertices (map note). Unresolved: does
   /// nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_set_coefficients, void(void*, void*)> set_coefficients{};
+  static constexpr pm::api::Icall<pm::map::Cloth_set_coefficients, void(pm::api::Object, pm::api::Object)> set_coefficients{};
   /// set_useGravity(cloth, on). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_set_useGravity, void(void*, bool)> set_useGravity{};
+  static constexpr pm::api::Icall<pm::map::Cloth_set_useGravity, void(pm::api::Object, bool)> set_useGravity{};
   /// set_bendingStiffness(cloth, stiffness). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_set_bendingStiffness, void(void*, float)> set_bendingStiffness{};
+  static constexpr pm::api::Icall<pm::map::Cloth_set_bendingStiffness, void(pm::api::Object, float)> set_bendingStiffness{};
   /// set_stretchingStiffness(cloth, stiffness). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_set_stretchingStiffness, void(void*, float)> set_stretchingStiffness{};
+  static constexpr pm::api::Icall<pm::map::Cloth_set_stretchingStiffness, void(pm::api::Object, float)> set_stretchingStiffness{};
   /// set_damping(cloth, damping). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_set_damping, void(void*, float)> set_damping{};
+  static constexpr pm::api::Icall<pm::map::Cloth_set_damping, void(pm::api::Object, float)> set_damping{};
   /// set_worldVelocityScale(cloth, share), 0 to 1. Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_set_worldVelocityScale, void(void*, float)> set_worldVelocityScale{};
+  static constexpr pm::api::Icall<pm::map::Cloth_set_worldVelocityScale, void(pm::api::Object, float)> set_worldVelocityScale{};
   /// set_worldAccelerationScale(cloth, share), 0 to 1. Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_set_worldAccelerationScale, void(void*, float)>
+  static constexpr pm::api::Icall<pm::map::Cloth_set_worldAccelerationScale, void(pm::api::Object, float)>
       set_worldAccelerationScale{};
   /// set_useVirtualParticles(cloth, 0 or 1). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_set_useVirtualParticles, void(void*, float)> set_useVirtualParticles{};
+  static constexpr pm::api::Icall<pm::map::Cloth_set_useVirtualParticles, void(pm::api::Object, float)> set_useVirtualParticles{};
   /// ClearTransformMotion(cloth): forgets the motion the cloth has accumulated from its GameObject moving through the
   /// world. Call it right after moving that GameObject a long way in one frame (a teleport, a warp), so the cloth goes
   /// with it instead of being dragged after it. Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_ClearTransformMotion, void(void*)> ClearTransformMotion{};
+  static constexpr pm::api::Icall<pm::map::Cloth_ClearTransformMotion, void(pm::api::Object)> ClearTransformMotion{};
   /// get_vertices(cloth): its simulated points, a new Vector3[]. Unresolved: null.
-  static constexpr pm::api::Icall<pm::map::Cloth_get_vertices, void*(void*)> get_vertices{};
+  static constexpr pm::api::Icall<pm::map::Cloth_get_vertices, pm::api::Object(pm::api::Object)> get_vertices{};
   /// get_normals(cloth): its simulated normals, a new Vector3[]. Unresolved: null.
-  static constexpr pm::api::Icall<pm::map::Cloth_get_normals, void*(void*)> get_normals{};
+  static constexpr pm::api::Icall<pm::map::Cloth_get_normals, pm::api::Object(pm::api::Object)> get_normals{};
   /// set_selfCollisionDistance(cloth, metres): how close two of the points SetSelfAndInterCollisionIndices names may
   /// come; 0 is off. Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_set_selfCollisionDistance, void(void*, float)>
+  static constexpr pm::api::Icall<pm::map::Cloth_set_selfCollisionDistance, void(pm::api::Object, float)>
       set_selfCollisionDistance{};
   /// set_selfCollisionStiffness(cloth, stiffness), 0 to 1. Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_set_selfCollisionStiffness, void(void*, float)>
+  static constexpr pm::api::Icall<pm::map::Cloth_set_selfCollisionStiffness, void(pm::api::Object, float)>
       set_selfCollisionStiffness{};
   /// SetSelfAndInterCollisionIndices(cloth, list), a List<UInt32> of mesh vertex indices (ListUInt32 below makes one).
   /// Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Cloth_SetSelfAndInterCollisionIndices, void(void*, void*)>
+  static constexpr pm::api::Icall<pm::map::Cloth_SetSelfAndInterCollisionIndices, void(pm::api::Object, pm::api::Object)>
       SetSelfAndInterCollisionIndices{};
 };
 
@@ -243,9 +243,9 @@ struct Cloth {
 struct ListUInt32 {
   /// The constructor, ctor(list, capacity), and new_object() for the list it runs on. Unresolved: does nothing, and
   /// new_object() gives null.
-  static constexpr pm::api::Method<pm::map::List_UInt32_ctor, void(void*, int32_t)> ctor{};
+  static constexpr pm::api::Method<pm::map::List_UInt32_ctor, void(pm::api::Ref<pm::map::ListT>, int32_t)> ctor{};
   /// Add(list, value). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::List_UInt32_Add, void(void*, uint32_t)> Add{};
+  static constexpr pm::api::Method<pm::map::List_UInt32_Add, void(pm::api::Ref<pm::map::ListT>, uint32_t)> Add{};
 };
 
 /// Unity's capsule collider. `capsule` below is one.
@@ -253,13 +253,13 @@ struct CapsuleCollider {
   /// The type: type_object() for GameObject.AddComponent, make_array() for a CapsuleCollider[]. Unresolved: null.
   static constexpr pm::api::Type<pm::map::CapsuleCollider> type{};
   /// set_radius(capsule, metres). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CapsuleCollider_set_radius, void(void*, float)> set_radius{};
+  static constexpr pm::api::Method<pm::map::CapsuleCollider_set_radius, void(pm::api::Ref<pm::map::CapsuleCollider>, float)> set_radius{};
   /// set_height(capsule, metres). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CapsuleCollider_set_height, void(void*, float)> set_height{};
+  static constexpr pm::api::Method<pm::map::CapsuleCollider_set_height, void(pm::api::Ref<pm::map::CapsuleCollider>, float)> set_height{};
   /// set_center(capsule, &centre). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CapsuleCollider_set_center, void(void*, const Vector3*)> set_center{};
+  static constexpr pm::api::Method<pm::map::CapsuleCollider_set_center, void(pm::api::Ref<pm::map::CapsuleCollider>, const Vector3*)> set_center{};
   /// set_direction(capsule, axis): 0 X, 1 Y, 2 Z. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::CapsuleCollider_set_direction, void(void*, int32_t)> set_direction{};
+  static constexpr pm::api::Method<pm::map::CapsuleCollider_set_direction, void(pm::api::Ref<pm::map::CapsuleCollider>, int32_t)> set_direction{};
 };
 
 /// @}

@@ -71,7 +71,7 @@ bool lobby_open() { return phasmo::PhotonNetwork::get_IsMessageQueueRunning() &&
 
 bool is_start_button(void* button) {
   void* lobby = button ? manager() : nullptr;
-  return lobby && phasmo::ServerManager::startGameButton.get(lobby) == button;
+  return lobby && phasmo::ServerManager::startGameButton.get(lobby).raw() == button;
 }
 
 std::string player_name(int actor) {

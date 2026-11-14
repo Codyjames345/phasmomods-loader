@@ -156,7 +156,7 @@ struct ObjectiveValues {
 /// One of the contract's objectives. `objective` below is the Objective.
 struct Objective {
   /// Its ObjectiveValues: values.get(objective). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Objective_values, void*> values{};
+  static constexpr pm::api::Field<pm::map::Objective_values, pm::api::Ref<pm::map::ObjectiveValues>> values{};
   /// How far it has got, ObjectiveState read as an int: state.get(objective) — 0 open, 1 complete,
   /// 2 failed. Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Objective_state, int32_t> state{};
@@ -168,14 +168,14 @@ struct ObjectiveManager {
   static constexpr pm::api::Type<pm::map::ObjectiveManager> type{};
   /// HasSetupObjectives(manager): whether this contract's objectives have been chosen and wired; the two
   /// below do nothing before they have. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::ObjectiveManager_HasSetupObjectives, bool(void*)>
+  static constexpr pm::api::Method<pm::map::ObjectiveManager_HasSetupObjectives, bool(pm::api::Ref<pm::map::ObjectiveManager>)>
       HasSetupObjectives{};
   /// CompleteObjective(manager, kind): finishes on this client alone the open objective of that kind, with
   /// no RPC sent. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ObjectiveManager_CompleteObjective, void(void*, int32_t)>
+  static constexpr pm::api::Method<pm::map::ObjectiveManager_CompleteObjective, void(pm::api::Ref<pm::map::ObjectiveManager>, int32_t)>
       CompleteObjective{};
   /// FailObjective(manager, kind): the mirror of CompleteObjective. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ObjectiveManager_FailObjective, void(void*, int32_t)> FailObjective{};
+  static constexpr pm::api::Method<pm::map::ObjectiveManager_FailObjective, void(pm::api::Ref<pm::map::ObjectiveManager>, int32_t)> FailObjective{};
 };
 
 /// EasySave3's file helpers.
@@ -183,7 +183,7 @@ struct ES3IO {
   /// CommitBackup(settings): replaces the real save with the copy just written. A mod hooks it to keep the save as
   /// it is (the dev menu's dev session); skipping `original` leaves the save untouched. Main thread. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::ES3IO_CommitBackup, void(void*)> CommitBackup{};
+  static constexpr pm::api::Method<pm::map::ES3IO_CommitBackup, void(pm::api::Object)> CommitBackup{};
 };
 
 /// The local player's saved progress. `profile` below is the SingleplayerProfile.
@@ -191,7 +191,7 @@ struct SingleplayerProfile {
   /// AddXPAndFunds(profile, xp, money): adds xp to the player's level and saves it; money is stored on the
   /// card and pays nothing (see the entry). A mod hooks it to change the experience a contract pays.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::SingleplayerProfile_AddXPAndFunds, void(void*, int32_t, int32_t)>
+  static constexpr pm::api::Method<pm::map::SingleplayerProfile_AddXPAndFunds, void(pm::api::Ref<pm::map::SingleplayerProfile>, int32_t, int32_t)>
       AddXPAndFunds{};
 };
 

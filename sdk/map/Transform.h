@@ -276,54 +276,54 @@ struct Transform {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Transform> type{};
   /// get_childCount(transform). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Transform_get_childCount, int32_t(void*)> get_childCount{};
+  static constexpr pm::api::Method<pm::map::Transform_get_childCount, int32_t(pm::api::Ref<pm::map::Transform>)> get_childCount{};
   /// GetChild(transform, index). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Transform_GetChild, void*(void*, int32_t)> GetChild{};
+  static constexpr pm::api::Method<pm::map::Transform_GetChild, pm::api::Object(pm::api::Ref<pm::map::Transform>, int32_t)> GetChild{};
   /// GetSiblingIndex(transform). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Transform_GetSiblingIndex, int32_t(void*)> GetSiblingIndex{};
+  static constexpr pm::api::Method<pm::map::Transform_GetSiblingIndex, int32_t(pm::api::Ref<pm::map::Transform>)> GetSiblingIndex{};
   /// SetSiblingIndex(transform, index). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Transform_SetSiblingIndex, void(void*, int32_t)> SetSiblingIndex{};
+  static constexpr pm::api::Method<pm::map::Transform_SetSiblingIndex, void(pm::api::Ref<pm::map::Transform>, int32_t)> SetSiblingIndex{};
   /// get_position(transform): its world position. Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::Transform_get_position, Vector3(void*)> get_position{};
+  static constexpr pm::api::Method<pm::map::Transform_get_position, Vector3(pm::api::Ref<pm::map::Transform>)> get_position{};
   /// get_forward(transform): its forward direction. Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::Transform_get_forward, Vector3(void*)> get_forward{};
+  static constexpr pm::api::Method<pm::map::Transform_get_forward, Vector3(pm::api::Ref<pm::map::Transform>)> get_forward{};
   /// get_localEulerAngles(transform): its local rotation in degrees. Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::Transform_get_localEulerAngles, Vector3(void*)> get_localEulerAngles{};
+  static constexpr pm::api::Method<pm::map::Transform_get_localEulerAngles, Vector3(pm::api::Ref<pm::map::Transform>)> get_localEulerAngles{};
   /// get_localScale(transform). Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::Transform_get_localScale, Vector3(void*)> get_localScale{};
+  static constexpr pm::api::Method<pm::map::Transform_get_localScale, Vector3(pm::api::Ref<pm::map::Transform>)> get_localScale{};
   /// set_localScale(transform, &scale), the Vector3 passed by address. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Transform_set_localScale, void(void*, const Vector3*)> set_localScale{};
+  static constexpr pm::api::Method<pm::map::Transform_set_localScale, void(pm::api::Ref<pm::map::Transform>, const Vector3*)> set_localScale{};
   /// set_position(transform, &position). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Transform_set_position, void(void*, const Vector3*)> set_position{};
+  static constexpr pm::api::Method<pm::map::Transform_set_position, void(pm::api::Ref<pm::map::Transform>, const Vector3*)> set_position{};
   /// set_rotation(transform, &rotation). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Transform_set_rotation, void(void*, const Quaternion*)> set_rotation{};
+  static constexpr pm::api::Method<pm::map::Transform_set_rotation, void(pm::api::Ref<pm::map::Transform>, const Quaternion*)> set_rotation{};
   /// SetParent(transform, parent, worldPositionStays). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Transform_SetParent, void(void*, void*, bool)> SetParent{};
+  static constexpr pm::api::Method<pm::map::Transform_SetParent, void(pm::api::Ref<pm::map::Transform>, pm::api::Ref<pm::map::Transform>, bool)> SetParent{};
   /// get_parent(transform): its parent, or null at the root. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Transform_get_parent, void*(void*)> get_parent{};
+  static constexpr pm::api::Method<pm::map::Transform_get_parent, pm::api::Object(pm::api::Ref<pm::map::Transform>)> get_parent{};
   /// get_rotation(t): its rotation in world space. Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::Transform_get_rotation, Quaternion(void*)> get_rotation{};
+  static constexpr pm::api::Method<pm::map::Transform_get_rotation, Quaternion(pm::api::Ref<pm::map::Transform>)> get_rotation{};
   /// get_localPosition(t): its position relative to its parent. Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::Transform_get_localPosition, Vector3(void*)> get_localPosition{};
+  static constexpr pm::api::Method<pm::map::Transform_get_localPosition, Vector3(pm::api::Ref<pm::map::Transform>)> get_localPosition{};
   /// set_localPosition(t, &p): sets its position relative to its parent. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Transform_set_localPosition, void(void*, const Vector3*)> set_localPosition{};
+  static constexpr pm::api::Method<pm::map::Transform_set_localPosition, void(pm::api::Ref<pm::map::Transform>, const Vector3*)> set_localPosition{};
   /// get_localRotation(t): its rotation relative to its parent. Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::Transform_get_localRotation, Quaternion(void*)> get_localRotation{};
+  static constexpr pm::api::Method<pm::map::Transform_get_localRotation, Quaternion(pm::api::Ref<pm::map::Transform>)> get_localRotation{};
   /// TransformPoint(t, &local): a point of its own space in world space. Unresolved: zeros.
-  static constexpr pm::api::Method<pm::map::Transform_TransformPoint, Vector3(void*, const Vector3*)> TransformPoint{};
+  static constexpr pm::api::Method<pm::map::Transform_TransformPoint, Vector3(pm::api::Ref<pm::map::Transform>, const Vector3*)> TransformPoint{};
   /// InverseTransformPoint(t, &world): a world point in its own space. Unresolved: zeros.
-  static constexpr pm::api::Method<pm::map::Transform_InverseTransformPoint, Vector3(void*, const Vector3*)>
+  static constexpr pm::api::Method<pm::map::Transform_InverseTransformPoint, Vector3(pm::api::Ref<pm::map::Transform>, const Vector3*)>
       InverseTransformPoint{};
   /// set_localEulerAngles(t, &e): sets its rotation relative to its parent, in degrees. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Transform_set_localEulerAngles, void(void*, const Vector3*)>
+  static constexpr pm::api::Method<pm::map::Transform_set_localEulerAngles, void(pm::api::Ref<pm::map::Transform>, const Vector3*)>
       set_localEulerAngles{};
   /// set_localRotation(t, &r): sets its rotation relative to its parent. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Transform_set_localRotation, void(void*, const Quaternion*)>
+  static constexpr pm::api::Method<pm::map::Transform_set_localRotation, void(pm::api::Ref<pm::map::Transform>, const Quaternion*)>
       set_localRotation{};
   /// get_lossyScale(t): its scale in the world. Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::Transform_get_lossyScale, Vector3(void*)> get_lossyScale{};
+  static constexpr pm::api::Method<pm::map::Transform_get_lossyScale, Vector3(pm::api::Ref<pm::map::Transform>)> get_lossyScale{};
   /// IsChildOf(t, parent): whether t is parent or lies under it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Transform_IsChildOf, bool(void*, void*)> IsChildOf{};
+  static constexpr pm::api::Method<pm::map::Transform_IsChildOf, bool(pm::api::Ref<pm::map::Transform>, pm::api::Ref<pm::map::Transform>)> IsChildOf{};
 };
 
 /// A UI object's transform. `rect` below is the RectTransform.
@@ -331,26 +331,26 @@ struct RectTransform {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::RectTransform> type{};
   /// get_rect(rect). Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::RectTransform_get_rect, Rect(void*)> get_rect{};
+  static constexpr pm::api::Method<pm::map::RectTransform_get_rect, Rect(pm::api::Ref<pm::map::RectTransform>)> get_rect{};
   /// get_anchoredPosition(rect). Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::RectTransform_get_anchoredPosition, Vector2(void*)> get_anchoredPosition{};
+  static constexpr pm::api::Method<pm::map::RectTransform_get_anchoredPosition, Vector2(pm::api::Ref<pm::map::RectTransform>)> get_anchoredPosition{};
   /// set_anchoredPosition(rect, position). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RectTransform_set_anchoredPosition, void(void*, Vector2)>
+  static constexpr pm::api::Method<pm::map::RectTransform_set_anchoredPosition, void(pm::api::Ref<pm::map::RectTransform>, Vector2)>
       set_anchoredPosition{};
   /// get_anchorMin(rect). Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::RectTransform_get_anchorMin, Vector2(void*)> get_anchorMin{};
+  static constexpr pm::api::Method<pm::map::RectTransform_get_anchorMin, Vector2(pm::api::Ref<pm::map::RectTransform>)> get_anchorMin{};
   /// set_anchorMin(rect, anchor). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RectTransform_set_anchorMin, void(void*, Vector2)> set_anchorMin{};
+  static constexpr pm::api::Method<pm::map::RectTransform_set_anchorMin, void(pm::api::Ref<pm::map::RectTransform>, Vector2)> set_anchorMin{};
   /// get_anchorMax(rect). Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::RectTransform_get_anchorMax, Vector2(void*)> get_anchorMax{};
+  static constexpr pm::api::Method<pm::map::RectTransform_get_anchorMax, Vector2(pm::api::Ref<pm::map::RectTransform>)> get_anchorMax{};
   /// set_anchorMax(rect, anchor). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RectTransform_set_anchorMax, void(void*, Vector2)> set_anchorMax{};
+  static constexpr pm::api::Method<pm::map::RectTransform_set_anchorMax, void(pm::api::Ref<pm::map::RectTransform>, Vector2)> set_anchorMax{};
   /// get_sizeDelta(rect). Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::RectTransform_get_sizeDelta, Vector2(void*)> get_sizeDelta{};
+  static constexpr pm::api::Method<pm::map::RectTransform_get_sizeDelta, Vector2(pm::api::Ref<pm::map::RectTransform>)> get_sizeDelta{};
   /// set_sizeDelta(rect, size). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RectTransform_set_sizeDelta, void(void*, Vector2)> set_sizeDelta{};
+  static constexpr pm::api::Method<pm::map::RectTransform_set_sizeDelta, void(pm::api::Ref<pm::map::RectTransform>, Vector2)> set_sizeDelta{};
   /// set_pivot(rect, pivot): the point it is placed about, in 0..1 of itself. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RectTransform_set_pivot, void(void*, Vector2)> set_pivot{};
+  static constexpr pm::api::Method<pm::map::RectTransform_set_pivot, void(pm::api::Ref<pm::map::RectTransform>, Vector2)> set_pivot{};
 };
 
 /// @}

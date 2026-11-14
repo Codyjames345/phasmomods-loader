@@ -57,11 +57,11 @@ namespace phasmo {
 /// Steam's achievements, as the game's unlock reaches them (sdk/systems/achievements.md). The loader leaves them alone.
 struct SteamUserStats {
   /// SetAchievement(name): marks it unlocked, name an il2cpp string. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::SteamUserStats_SetAchievement, bool(void*)> SetAchievement{};
+  static constexpr pm::api::Method<pm::map::SteamUserStats_SetAchievement, bool(pm::api::Object)> SetAchievement{};
   /// StoreStats(): sends what was marked. Unresolved: false.
   static constexpr pm::api::Method<pm::map::SteamUserStats_StoreStats, bool()> StoreStats{};
   /// GetAchievement(name, unlocked): reads one into *unlocked. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::SteamUserStats_GetAchievement, bool(void*, bool*)> GetAchievement{};
+  static constexpr pm::api::Method<pm::map::SteamUserStats_GetAchievement, bool(pm::api::Object, bool*)> GetAchievement{};
   /// RequestCurrentStats(): asks Steam for the player's achievements. Unresolved: false.
   static constexpr pm::api::Method<pm::map::SteamUserStats_RequestCurrentStats, bool()> RequestCurrentStats{};
 };

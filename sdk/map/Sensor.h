@@ -275,7 +275,7 @@ namespace phasmo {
 /// A pulsable sensor. `sensor` below is one.
 struct BasePulsableSensor {
   /// Pulse(sensor). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::BasePulsableSensor_Pulse, void(void*)> Pulse{};
+  static constexpr pm::api::Method<pm::map::BasePulsableSensor_Pulse, void(pm::api::Ref<pm::map::BasePulsableSensor>)> Pulse{};
 };
 
 /// A range sensor. `sensor` below is one.
@@ -283,36 +283,36 @@ struct RangeSensor {
   /// The type: is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::RangeSensor> type{};
   /// SetBoxShape(sensor, &halfExtents). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RangeSensor_SetBoxShape, void(void*, const Vector3*)> SetBoxShape{};
+  static constexpr pm::api::Method<pm::map::RangeSensor_SetBoxShape, void(pm::api::Ref<pm::map::RangeSensor>, const Vector3*)> SetBoxShape{};
   /// Its OnPulsed delegate: onPulsed.get(sensor), onPulsed.set(sensor, action) (through the GC write
   /// barrier). Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::RangeSensor_onPulsed, void*> onPulsed{};
+  static constexpr pm::api::Field<pm::map::RangeSensor_onPulsed, pm::api::Object> onPulsed{};
   /// Its shape, a RangeShape number: shape.get(sensor). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::RangeSensor_shape, int32_t> shape{};
   /// The layers it detects on, a LayerMask's bits: layers.get(sensor). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::RangeSensor_layers, int32_t> layers{};
   /// PulseAll(sensor): RangeSensor's pulse, as the game's virtual call reaches it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::RangeSensor_PulseAll, void(void*)> PulseAll{};
+  static constexpr pm::api::Method<pm::map::RangeSensor_PulseAll, void(pm::api::Ref<pm::map::RangeSensor>)> PulseAll{};
   /// set_PulseMode(sensor, mode), a PulseMode number. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::RangeSensor_set_PulseMode, void(void*, int32_t)> set_PulseMode{};
+  static constexpr pm::api::Method<pm::map::RangeSensor_set_PulseMode, void(pm::api::Ref<pm::map::RangeSensor>, int32_t)> set_PulseMode{};
 };
 
 /// A sensor. `sensor` below is one.
 struct Sensor {
   /// The components it detects: GetDetectedComponents(sensor, list), the list holding the T the call was made for and
   /// null for a new list. The code every reference type's T shares, for a hook on all of them. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Sensor_GetDetectedComponents, void*(void*, void*)> GetDetectedComponents{};
+  static constexpr pm::api::Method<pm::map::Sensor_GetDetectedComponents, pm::api::Object(pm::api::Ref<pm::map::Sensor>, pm::api::Object)> GetDetectedComponents{};
   /// The GameObjects it detects now, a List<GameObject>: GetDetections(sensor, list), null for a new
   /// list. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Sensor_GetDetections, void*(void*, void*)> GetDetections{};
+  static constexpr pm::api::Method<pm::map::Sensor_GetDetections, pm::api::Object(pm::api::Ref<pm::map::Sensor>, pm::api::Object)> GetDetections{};
   /// Its signal processors, a List<SignalProcessor>: signalProcessors.get(sensor), .set(sensor, list)
   /// (through the GC write barrier). Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::Sensor_signalProcessors, void*> signalProcessors{};
+  static constexpr pm::api::Field<pm::map::Sensor_signalProcessors, pm::api::Object> signalProcessors{};
   /// Its SignalFilter: filter.get(sensor), filter.set(sensor, f). Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::Sensor_filter, void*> filter{};
+  static constexpr pm::api::Field<pm::map::Sensor_filter, pm::api::Object> filter{};
   /// IsDetected(sensor, gameObject): whether it detects the GameObject now. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::Sensor_IsDetected, bool(void*, void*)> IsDetected{};
+  static constexpr pm::api::Method<pm::map::Sensor_IsDetected, bool(pm::api::Ref<pm::map::Sensor>, pm::api::Ref<pm::map::GameObject>)> IsDetected{};
 };
 
 /// A volume sensor. `sensor` below is one.
@@ -320,7 +320,7 @@ struct BaseVolumeSensor {
   /// The type: copy_settings(dst, src) copies its detection mode. Unresolved: false.
   static constexpr pm::api::Type<pm::map::BaseVolumeSensor> type{};
   /// Its own SignalFilter: signalFilter.get(sensor), .set(sensor, f). Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::BaseVolumeSensor_signalFilter, void*> signalFilter{};
+  static constexpr pm::api::Field<pm::map::BaseVolumeSensor_signalFilter, pm::api::Object> signalFilter{};
   /// Its detection mode, a DetectionMode number: detectionMode.get(sensor). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::BaseVolumeSensor_detectionMode, int32_t> detectionMode{};
 };
@@ -337,13 +337,13 @@ struct LOSSensor {
   static constexpr pm::api::Type<pm::map::LOSSensor> type{};
   /// PulseAll(sensor): pulses its input sensor, then tests the input's signals. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::LOSSensor_PulseAll, void(void*)> PulseAll{};
+  static constexpr pm::api::Method<pm::map::LOSSensor_PulseAll, void(pm::api::Ref<pm::map::LOSSensor>)> PulseAll{};
   /// get_InputSensor(sensor): the sensor it tests. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::LOSSensor_get_InputSensor, void*(void*)> get_InputSensor{};
+  static constexpr pm::api::Method<pm::map::LOSSensor_get_InputSensor, pm::api::Object(pm::api::Ref<pm::map::LOSSensor>)> get_InputSensor{};
   /// set_InputSensor(sensor, input). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LOSSensor_set_InputSensor, void(void*, void*)> set_InputSensor{};
+  static constexpr pm::api::Method<pm::map::LOSSensor_set_InputSensor, void(pm::api::Ref<pm::map::LOSSensor>, pm::api::Object)> set_InputSensor{};
   /// set_PulseMode(sensor, mode), a PulseMode number. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::LOSSensor_set_PulseMode, void(void*, int32_t)> set_PulseMode{};
+  static constexpr pm::api::Method<pm::map::LOSSensor_set_PulseMode, void(pm::api::Ref<pm::map::LOSSensor>, int32_t)> set_PulseMode{};
   /// The window of its moving-average visibility: window.get(sensor). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::LOSSensor_window, int32_t> window{};
 };

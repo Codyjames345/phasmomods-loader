@@ -436,7 +436,7 @@ bool build_popup(Panel& p, void* source, const std::string& title, const std::st
   if (!p.title || !p.body || !p.paper || !button) return fail(true, "the game's popup no longer has its title, paper or button");
   set_text(p.title, title);
   p.rowFontSize = ui::font_size_max(p.body) * kPaperTextScale;
-  const ui::Vec2 paper = to_ui(RectTransform::get_sizeDelta(p.paper));
+  const ui::Vec2 paper = to_ui(RectTransform::get_sizeDelta(static_cast<void*>(p.paper)));
   ui::place(p.body, {0, 1}, {0, 1}, {kMargin, -kMargin}, {paper.x - 2 * kMargin, paper.y - 2 * kMargin});
   ui::set_alignment(p.body, ui::Align::TopLeft);
   ui::set_word_wrap(p.body, true);
@@ -504,7 +504,7 @@ int tick(Panel& p) {
 
 bool add_row(Panel& p, int index, int count, const std::string& name, const std::string& description, bool locked) {
   if (!is_open(p) || count <= 0 || index < 0 || index >= count) return false;
-  const ui::Vec2 paper = to_ui(RectTransform::get_sizeDelta(p.paper));
+  const ui::Vec2 paper = to_ui(RectTransform::get_sizeDelta(static_cast<void*>(p.paper)));
   const float inner = paper.x - 2 * kMargin;
   const float height = (paper.y * kRowsShare - kMargin) / static_cast<float>(count);
   if (p.rows.empty())
