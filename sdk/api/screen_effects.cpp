@@ -28,10 +28,10 @@ struct State {
 State g;
 
 void* local_camera() {
-  void* net = phasmo::Network::get_Instance();
-  void* rig = net ? phasmo::Network::localRig.get(net) : nullptr;
-  void* cam = rig && alive(rig) ? phasmo::LocalPlayer::camera.get(rig) : nullptr;
-  return cam && alive(cam) ? cam : nullptr;
+  const auto net = phasmo::Network::get_Instance();
+  const auto rig = net ? phasmo::Network::localRig.get(net) : nullptr;
+  const auto cam = rig && alive(rig.raw()) ? phasmo::LocalPlayer::camera.get(rig) : nullptr;
+  return cam && alive(cam.raw()) ? cam : nullptr;
 }
 
 // The lowest layer the camera takes volumes from; 0 (Default) when it says none.
@@ -52,8 +52,8 @@ void set_mode(void* param, int32_t mode) {
 }
 
 int32_t volume_layer(void* camera) {
-  void* dataType = phasmo::UniversalAdditionalCameraData::type.type_object();
-  void* data = dataType ? phasmo::Component::GetComponent(camera, dataType) : nullptr;
+  void* dataType = phasmo::UniversalAdditionalCameraData::type.type_object();  // a System.Type: raw by design
+  const auto data = dataType ? phasmo::Component::GetComponent(camera, dataType) : nullptr;
   const int32_t mask = data ? phasmo::UniversalAdditionalCameraData::get_volumeLayerMask(data) : 0;
   for (int32_t layer = 0; layer < 32; ++layer)
     if (mask & (1 << layer)) return layer;
@@ -65,15 +65,16 @@ bool make_volume(void* camera) {
     PM_LOG("fx: the URP volume entries did not resolve in this game build: no blur or vignette");
     return false;
   }
-  void* go = phasmo::GameObject::type.make();
+  const auto go = phasmo::GameObject::type.make();
   if (!go) return false;
   phasmo::GameObject::ctor(go, make_string("pm screen effects"));
   phasmo::GameObject::set_layer(go, volume_layer(camera));
-  void* volume = phasmo::GameObject::AddComponent(go, phasmo::Volume::type.type_object());
-  void* profileType = phasmo::VolumeProfile::type.type_object();
-  void* profile = profileType ? phasmo::ScriptableObject::CreateInstance(profileType) : nullptr;
-  void* dof = profile ? phasmo::VolumeProfile::Add(profile, phasmo::DepthOfField::type.type_object(), true) : nullptr;
-  void* vignette = profile ? phasmo::VolumeProfile::Add(profile, phasmo::Vignette::type.type_object(), true) : nullptr;
+  const auto volume = phasmo::GameObject::AddComponent(go, phasmo::Volume::type.type_object());
+  void* profileType = phasmo::VolumeProfile::type.type_object();  // a System.Type: raw by design
+  const auto profile = profileType ? phasmo::ScriptableObject::CreateInstance(profileType) : nullptr;
+  const auto dof = profile ? phasmo::VolumeProfile::Add(profile, phasmo::DepthOfField::type.type_object(), true) : nullptr;
+  const auto vignette =
+      profile ? phasmo::VolumeProfile::Add(profile, phasmo::Vignette::type.type_object(), true) : nullptr;
   if (!volume || !dof || !vignette) {
     phasmo::Object::Destroy(go, 0.0f);
     return false;
@@ -82,13 +83,13 @@ bool make_volume(void* camera) {
   phasmo::Volume::priority.set(volume, kPriority);
   phasmo::Volume::weight.set(volume, 1.0f);
   phasmo::Volume::sharedProfile.set(volume, profile);
-  set_mode(phasmo::DepthOfField::mode.get(dof), static_cast<int32_t>(phasmo::DepthOfFieldMode::Gaussian()));
-  set_min(phasmo::DepthOfField::gaussianStart.get(dof), kBlurStart);
-  set_min(phasmo::DepthOfField::gaussianEnd.get(dof), kBlurEnd);
-  set_clamped(phasmo::Vignette::smoothness.get(vignette), kVignetteSmoothness);
-  g.volume = volume;
-  g.dof = dof;
-  g.vignette = vignette;
+  set_mode(phasmo::DepthOfField::mode.get(dof).raw(), static_cast<int32_t>(phasmo::DepthOfFieldMode::Gaussian()));
+  set_min(phasmo::DepthOfField::gaussianStart.get(dof).raw(), kBlurStart);
+  set_min(phasmo::DepthOfField::gaussianEnd.get(dof).raw(), kBlurEnd);
+  set_clamped(phasmo::Vignette::smoothness.get(vignette).raw(), kVignetteSmoothness);
+  g.volume = volume.raw();
+  g.dof = dof.raw();
+  g.vignette = vignette.raw();
   return true;
 }
 
@@ -102,8 +103,8 @@ bool set_screen_effects(float blur, float vignette) {
     return true;
   }
   if (!g.volume || !alive(g.volume)) {
-    void* camera = local_camera();
-    if (!camera || !make_volume(camera)) return false;
+    const Object camera = Object::unchecked(local_camera());
+    if (!camera || !make_volume(camera.raw())) return false;
   }
   // No blur at all is the Gaussian off: its radius at the low end and a start beyond reach.
   set_clamped(phasmo::DepthOfField::gaussianMaxRadius.get(g.dof),
@@ -117,7 +118,7 @@ bool screen_effects_on() { return g.volume && alive(g.volume); }
 
 void clear_screen_effects() {
   if (g.volume && alive(g.volume))
-    if (void* go = phasmo::Component::get_gameObject(g.volume)) phasmo::Object::Destroy(go, 0.0f);
+    if (const auto go = phasmo::Component::get_gameObject(g.volume)) phasmo::Object::Destroy(go, 0.0f);
   g = State{};
 }
 

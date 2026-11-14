@@ -61,15 +61,15 @@ void* component_on(void* object) {
 
 // The object's component of `type` (a System.Type), or null.
 void* sibling(void* object, void* type) {
-  void* on = component_on(object);
+  const Object on = Object::unchecked(component_on(object));
   return on && type ? phasmo::Component::GetComponent(on, type) : nullptr;
 }
 
 // The object's component of `type`: the one it has, or a new one on its GameObject.
 void* sibling_or_new(void* object, void* type) {
   if (!type) return nullptr;
-  if (void* existing = sibling(object, type)) return existing;
-  void* gameObject = game_object_of(object);
+  if (const Object existing = Object::unchecked(sibling(object, type))) return existing;
+  const Object gameObject = Object::unchecked(game_object_of(object));
   return gameObject ? phasmo::GameObject::AddComponent(gameObject, type) : nullptr;
 }
 
@@ -82,12 +82,12 @@ void* button_of(void* object) {
 }  // namespace
 
 Object attach(void* gameObjectOrComponent) {
-  void* button = sibling_or_new(gameObjectOrComponent, phasmo::Button::type.type_object());
+  const Object button = Object::unchecked(sibling_or_new(gameObjectOrComponent, phasmo::Button::type.type_object()));
   if (!button) return nullptr;
   // The Button reacts only to what the raycaster hits, and the raycaster hits only a Graphic whose
   // raycastTarget is on. pm::ui::create_image makes its pictures with it off, so a plain picture never
   // takes a click meant for what is behind it; a picture that becomes a button must take them.
-  if (void* graphic = sibling(gameObjectOrComponent, phasmo::Graphic::type.type_object()))
+  if (const Object graphic = Object::unchecked(sibling(gameObjectOrComponent, phasmo::Graphic::type.type_object())))
     phasmo::Graphic::set_raycastTarget(graphic, true);
   return button;
 }
@@ -97,32 +97,32 @@ Object catch_pointer(void* canvasGameObjectOrComponent) {
 }
 
 bool on_click(void* buttonOrGameObject, void (*fn)(void* user), void* user) {
-  void* button = button_of(buttonOrGameObject);
+  const Object button = Object::unchecked(button_of(buttonOrGameObject));
   if (!button || !fn) return false;
   const PmHostApi* h = detail::host();
   if (!h || !h->unity_action_new) return false;
-  void* event = phasmo::Button::get_onClick(button);
+  const auto event = phasmo::Button::get_onClick(button);
   if (!event) return false;
-  void* action = h->unity_action_new(button, &clicked);
+  const Object action = Object::unchecked(h->unity_action_new(button.raw(), &clicked));
   if (!action) return false;
   // Drop this button's old wiring and any whose object the game has destroyed, so a pointer cannot be
   // read after its object went, and a re-wired button calls its handler once.
   std::erase_if(g_wiring, [button](const Wiring& w) {
-    return w.target == button || !alive(w.target);
+    return w.target.get() == button.raw() || !alive(w.target);
   });
   phasmo::UnityEvent::AddListener(event, action);
-  g_wiring.push_back({Held(button), fn, user});
+  g_wiring.push_back({Held(button.raw()), fn, user});
   return true;
 }
 
 void forget(void* buttonOrGameObject) {
-  void* button = button_of(buttonOrGameObject);
+  const Object button = Object::unchecked(button_of(buttonOrGameObject));
   if (!button) return;
-  std::erase_if(g_wiring, [button](const Wiring& w) { return w.target == button; });
+  std::erase_if(g_wiring, [button](const Wiring& w) { return w.target.get() == button.raw(); });
 }
 
 Object input_module() {
-  void* system = phasmo::EventSystem::get_current();
+  const auto system = phasmo::EventSystem::get_current();
   return system ? phasmo::EventSystem::currentInputModule.get(system) : nullptr;
 }
 
@@ -136,12 +136,14 @@ bool select(void* gameObjectOrComponent) {
   if (!phasmo::EventSystem::get_current.available() ||
       !phasmo::EventSystem::SetSelectedGameObject.available())
     return false;
-  void* system = phasmo::EventSystem::get_current();
+  const auto system = phasmo::EventSystem::get_current();
   if (!system) return false;
-  void* gameObject = gameObjectOrComponent;
+  Object gameObject = Object::unchecked(gameObjectOrComponent);
   if (gameObject && !phasmo::GameObject::type.is(gameObject))
     gameObject = phasmo::Component::get_gameObject(gameObject);
-  phasmo::EventSystem::SetSelectedGameObject(system, gameObject);
+  // The raw bridge takes every handle argument of one call as raw or none, and gameObject's type is
+  // settled by 3c, so both go raw here.
+  phasmo::EventSystem::SetSelectedGameObject(system.raw(), gameObject.raw());
   return true;
 }
 
@@ -151,7 +153,7 @@ Ref<pm::map::GameObject> selected() {
   if (!phasmo::EventSystem::get_current.available() ||
       !phasmo::EventSystem::get_currentSelectedGameObject.available())
     return nullptr;
-  void* system = phasmo::EventSystem::get_current();
+  const auto system = phasmo::EventSystem::get_current();
   return system ? phasmo::EventSystem::get_currentSelectedGameObject(system) : nullptr;
 }
 

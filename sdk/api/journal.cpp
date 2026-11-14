@@ -11,10 +11,10 @@ std::optional<bool> open() {
   if (!all_resolved<phasmo::Network::get_Instance, phasmo::Network::localPlayer, phasmo::Player::journal,
                     phasmo::JournalController::open>())
     return std::nullopt;
-  void* net = phasmo::Network::get_Instance();
-  void* player = net && alive(net) ? phasmo::Network::localPlayer.get(net) : nullptr;
-  void* journal = player && alive(player) ? phasmo::Player::journal.get(player) : nullptr;
-  if (!journal || !alive(journal)) return std::nullopt;
+  const auto net = phasmo::Network::get_Instance();
+  const auto player = net && alive(net.raw()) ? phasmo::Network::localPlayer.get(net) : nullptr;
+  const auto journal = player && alive(player.raw()) ? phasmo::Player::journal.get(player) : nullptr;
+  if (!journal || !alive(journal.raw())) return std::nullopt;
   return phasmo::JournalController::open.get(journal);
 }
 

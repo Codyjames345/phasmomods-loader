@@ -57,7 +57,7 @@ Envelope envelope_of(std::span<const float> samples, int sampleRate) {
 
 void add_talk_loudness(void* player, float loudness) {
   if (!player || !alive(player)) return;
-  void* audio = phasmo::Player::audio.get(player);
+  const auto audio = phasmo::Player::audio.get(player);
   if (!audio) return;
   if (phasmo::PlayerAudio::loudness.get(audio) < loudness) phasmo::PlayerAudio::loudness.set(audio, loudness);
 }

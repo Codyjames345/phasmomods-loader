@@ -27,7 +27,7 @@ struct Layer {
 
 struct Body {
   Held player;
-  Held animator;
+  HeldRef<pm::map::Animator> animator;
   std::vector<Layer> layers;  // oldest first; the last is the newest, over the others
 };
 
@@ -57,8 +57,8 @@ void end_body(Body& b) {
 
 bool play_on_player(void* player, void* clip, float blendIn) {
   if (!player || !clip || !alive(player) || !alive(clip)) return false;
-  void* animator = phasmo::Player::animator.get(player);
-  if (!animator || !alive(animator)) return false;
+  const auto animator = phasmo::Player::animator.get(player);
+  if (!animator || !alive(animator.raw())) return false;
   if (!phasmo::PlayableGraph::Create.available() || !phasmo::AnimationPlayables::CreateOutput.available() ||
       !phasmo::AnimationPlayables::CreateClipPlayable.available()) {
     PM_LOG("anim: the Playables entries did not resolve in this game build: no clip plays");
@@ -137,7 +137,7 @@ bool clip_loops(void* clip) { return clip && phasmo::AnimationClip::get_isLoopin
 
 void tick_player_anims(float dt) {
   for (Body& b : g_bodies) {
-    if (!alive(b.player) || !alive(b.animator)) {
+    if (!alive(b.player) || !alive(b.animator.get().raw())) {
       end_body(b);
       continue;
     }

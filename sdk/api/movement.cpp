@@ -15,24 +15,24 @@ std::optional<bool> sprinting() {
                     LocalPlayer::stamina, phasmo::PlayerStamina::canSprint, phasmo::GameController::instance,
                     phasmo::LevelValues::instance, phasmo::LevelValues::difficulty, phasmo::Difficulty::sprinting>())
     return std::nullopt;
-  void* net = phasmo::Network::get_Instance();
-  void* rig = net && alive(net) ? phasmo::Network::localRig.get(net) : nullptr;
+  const auto net = phasmo::Network::get_Instance();
+  const auto rig = net && alive(net.raw()) ? phasmo::Network::localRig.get(net) : nullptr;
   // The VR rig's stamina applies its speed another way (VRStamina.Update), not traced.
-  if (!rig || !alive(rig) || !phasmo::LocalPCPlayer::type.is(rig)) return std::nullopt;
-  void* controller = phasmo::LocalPCPlayer::firstPersonController.get(rig);
-  void* stamina = LocalPlayer::stamina.get(rig);
-  if (!controller || !alive(controller) || !stamina || !alive(stamina)) return std::nullopt;
+  if (!rig || !alive(rig.raw()) || !phasmo::LocalPCPlayer::type.is(rig)) return std::nullopt;
+  const auto controller = phasmo::LocalPCPlayer::firstPersonController.get(rig);
+  const auto stamina = LocalPlayer::stamina.get(rig);
+  if (!controller || !alive(controller.raw()) || !stamina || !alive(stamina.raw())) return std::nullopt;
   const bool running = phasmo::FirstPersonController::running.get(controller);
   const bool canSprint = phasmo::PlayerStamina::canSprint.get(stamina);
   // In a contract (a GameController exists) the difficulty's setting decides too. LocalPCPlayer.UpdatePlayerSpeed
   // reads it through LevelValues.get_Instance, which makes a LevelValues where none exists; the static is read here
   // instead, so asking never makes one.
-  void* game = phasmo::GameController::instance.get();
-  const bool inContract = game && alive(game);
+  const auto game = phasmo::GameController::instance.get();
+  const bool inContract = game && alive(game.raw());
   int setting = 0;
   if (inContract) {
-    void* values = phasmo::LevelValues::instance.get();
-    void* difficulty = values && alive(values) ? phasmo::LevelValues::difficulty.get(values) : nullptr;
+    const auto values = phasmo::LevelValues::instance.get();
+    const auto difficulty = values && alive(values.raw()) ? phasmo::LevelValues::difficulty.get(values) : nullptr;
     if (!difficulty) return std::nullopt;
     setting = phasmo::Difficulty::sprinting.get(difficulty);
   }

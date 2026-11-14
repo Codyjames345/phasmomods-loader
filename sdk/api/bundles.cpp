@@ -18,17 +18,17 @@ Object load_bundle(const std::filesystem::path& file, std::string* why) {
   if (file.empty() || !std::filesystem::is_regular_file(file, error)) return fail("the file is missing");
   if (!phasmo::AssetBundle::LoadFromFile.available()) return fail("AssetBundle.LoadFromFile_Internal did not resolve");
   const std::u8string utf8 = file.u8string();
-  void* path = make_string(std::string_view(reinterpret_cast<const char*>(utf8.data()), utf8.size()));
+  const Object path = Object::unchecked(make_string(std::string_view(reinterpret_cast<const char*>(utf8.data()), utf8.size())));
   if (!path) return fail("the path could not be made a managed string");
-  void* bundle = phasmo::AssetBundle::LoadFromFile(path, 0, 0);
+  const auto bundle = phasmo::AssetBundle::LoadFromFile(path, 0, 0);
   if (!bundle) return fail("the engine refused the file; the game's own log says why");
   return bundle;
 }
 
 Object load_bundle_asset(void* bundle, const char* name, void* typeObject) {
   if (!bundle || !name || !typeObject) return nullptr;
-  void* managedName = make_string(name);
-  void* asset = managedName ? phasmo::AssetBundle::LoadAsset(bundle, managedName, typeObject) : nullptr;
+  const Object managedName = Object::unchecked(make_string(name));
+  const auto asset = managedName ? phasmo::AssetBundle::LoadAsset(bundle, managedName, typeObject) : nullptr;
   // An asset a mod loads is in no scene, so a scene load's unload of unused assets would destroy it (mods start at the
   // menu, before any lobby): keep it, as Unity's own HideFlags.DontUnloadUnusedAsset is for.
   if (asset) phasmo::Object::set_hideFlags(asset, phasmo::HideFlags::DontUnloadUnusedAsset());
@@ -42,7 +42,7 @@ Object load_controller(void* bundle, const char* name) {
 std::vector<std::string> bundle_asset_names(void* bundle) {
   std::vector<std::string> out;
   if (!bundle) return out;
-  const RefArray names{phasmo::AssetBundle::GetAllAssetNames(bundle)};
+  const RefArray names{phasmo::AssetBundle::GetAllAssetNames(bundle).raw()};
   for (size_t i = 0; i < names.size(); ++i) out.push_back(to_utf8(names[i]));
   return out;
 }
