@@ -124,26 +124,26 @@ struct ClosetZone {
   /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::ClosetZone> type{};
   /// Its left door, or null: leftClosetDoor.get(closet). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ClosetZone_leftClosetDoor, void*> leftClosetDoor{};
+  static constexpr pm::api::Field<pm::map::ClosetZone_leftClosetDoor, pm::api::Object> leftClosetDoor{};
   /// Its right door, or null: rightClosetDoor.get(closet). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ClosetZone_rightClosetDoor, void*> rightClosetDoor{};
+  static constexpr pm::api::Field<pm::map::ClosetZone_rightClosetDoor, pm::api::Object> rightClosetDoor{};
   /// Where a searcher stands, a Transform: navSpot.get(closet). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ClosetZone_navSpot, void*> navSpot{};
+  static constexpr pm::api::Field<pm::map::ClosetZone_navSpot, pm::api::Object> navSpot{};
   /// Where a ghost stands outside its entrance, a Transform: standOutsideEntrancePoint.get(closet).
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ClosetZone_standOutsideEntrancePoint, void*> standOutsideEntrancePoint{};
+  static constexpr pm::api::Field<pm::map::ClosetZone_standOutsideEntrancePoint, pm::api::Object> standOutsideEntrancePoint{};
   /// The players hiding in it, a List<Player>: occupants.get(closet), read as a pm::api::List. Unresolved:
   /// null.
-  static constexpr pm::api::Field<pm::map::ClosetZone_occupants, void*> occupants{};
+  static constexpr pm::api::Field<pm::map::ClosetZone_occupants, pm::api::Object> occupants{};
   /// CheckCloset(closet): the hunt's check, which moves its doors as a ghost does. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ClosetZone_CheckCloset, void(void*)> CheckCloset{};
+  static constexpr pm::api::Method<pm::map::ClosetZone_CheckCloset, void(pm::api::Ref<pm::map::ClosetZone>)> CheckCloset{};
   /// ArePlayersInside(closet): whether anyone hides in it. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::ClosetZone_ArePlayersInside, bool(void*)> ArePlayersInside{};
+  static constexpr pm::api::Method<pm::map::ClosetZone_ArePlayersInside, bool(pm::api::Ref<pm::map::ClosetZone>)> ArePlayersInside{};
   /// OpenCloseClosetDoors(closet): forces its doors as a ghost does. A mod usually hooks it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::ClosetZone_OpenCloseClosetDoors, void(void*)> OpenCloseClosetDoors{};
+  static constexpr pm::api::Method<pm::map::ClosetZone_OpenCloseClosetDoors, void(pm::api::Ref<pm::map::ClosetZone>)> OpenCloseClosetDoors{};
   /// The obstacle over its inside, a DynamicNavMeshObstacle: internalAreaObstacle.get(closet). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ClosetZone_internalAreaObstacle, void*> internalAreaObstacle{};
+  static constexpr pm::api::Field<pm::map::ClosetZone_internalAreaObstacle, pm::api::Ref<pm::map::DynamicNavMeshObstacle>> internalAreaObstacle{};
 };
 
 /// A NavMeshObstacle the game switches on and off. `obstacle` below is one.
@@ -153,7 +153,7 @@ struct DynamicNavMeshObstacle {
   /// nothing.
   static constexpr pm::api::Field<pm::map::DynamicNavMeshObstacle_targetActivity, bool> targetActivity{};
   /// Its NavMeshObstacle: navMeshObstacle.get(obstacle). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::DynamicNavMeshObstacle_navMeshObstacle, void*> navMeshObstacle{};
+  static constexpr pm::api::Field<pm::map::DynamicNavMeshObstacle_navMeshObstacle, pm::api::Object> navMeshObstacle{};
 };
 
 /// A hiding place that is not a closet.

@@ -350,59 +350,59 @@ struct Animator {
   /// The type: klass(), is(obj), type_object() (for GetComponent). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Animator> type{};
   /// get_parameters(animator): an AnimatorControllerParameter[] (pm::api::RefArray). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Animator_get_parameters, void*(void*)> get_parameters{};
+  static constexpr pm::api::Method<pm::map::Animator_get_parameters, pm::api::Object(pm::api::Ref<pm::map::Animator>)> get_parameters{};
   /// StringToHash(name): the id of a parameter's name, a managed string. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Animator_StringToHash, int32_t(void*)> StringToHash{};
+  static constexpr pm::api::Method<pm::map::Animator_StringToHash, int32_t(pm::api::Object)> StringToHash{};
   /// get_speed(animator). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Animator_get_speed, float(void*)> get_speed{};
+  static constexpr pm::api::Method<pm::map::Animator_get_speed, float(pm::api::Ref<pm::map::Animator>)> get_speed{};
   /// set_speed(animator, speed). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Animator_set_speed, void(void*, float)> set_speed{};
+  static constexpr pm::api::Method<pm::map::Animator_set_speed, void(pm::api::Ref<pm::map::Animator>, float)> set_speed{};
   /// Sets the bool parameter whose hashed id is `id`: SetBoolID(animator, id, value). Unresolved:
   /// does nothing.
-  static constexpr pm::api::Icall<pm::map::Animator_SetBoolID, void(void*, int32_t, bool)> SetBoolID{};
+  static constexpr pm::api::Icall<pm::map::Animator_SetBoolID, void(pm::api::Object, int32_t, bool)> SetBoolID{};
   /// GetBoolID(animator, id). Unresolved: false.
-  static constexpr pm::api::Icall<pm::map::Animator_GetBoolID, bool(void*, int32_t)> GetBoolID{};
+  static constexpr pm::api::Icall<pm::map::Animator_GetBoolID, bool(pm::api::Object, int32_t)> GetBoolID{};
   /// SetFloatID(animator, id, value). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Animator_SetFloatID, void(void*, int32_t, float)> SetFloatID{};
+  static constexpr pm::api::Icall<pm::map::Animator_SetFloatID, void(pm::api::Object, int32_t, float)> SetFloatID{};
   /// GetFloatID(animator, id). Unresolved: 0.
-  static constexpr pm::api::Icall<pm::map::Animator_GetFloatID, float(void*, int32_t)> GetFloatID{};
+  static constexpr pm::api::Icall<pm::map::Animator_GetFloatID, float(pm::api::Object, int32_t)> GetFloatID{};
   /// SetIntegerID(animator, id, value). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Animator_SetIntegerID, void(void*, int32_t, int32_t)> SetIntegerID{};
+  static constexpr pm::api::Icall<pm::map::Animator_SetIntegerID, void(pm::api::Object, int32_t, int32_t)> SetIntegerID{};
   /// GetIntegerID(animator, id). Unresolved: 0.
-  static constexpr pm::api::Icall<pm::map::Animator_GetIntegerID, int32_t(void*, int32_t)> GetIntegerID{};
+  static constexpr pm::api::Icall<pm::map::Animator_GetIntegerID, int32_t(pm::api::Object, int32_t)> GetIntegerID{};
   /// SetBool(animator, name, value), with name a managed string. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Animator_SetBool, void(void*, void*, bool)> SetBool{};
+  static constexpr pm::api::Method<pm::map::Animator_SetBool, void(pm::api::Ref<pm::map::Animator>, pm::api::Object, bool)> SetBool{};
   /// set_runtimeAnimatorController(animator, controller). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Animator_set_runtimeAnimatorController, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::Animator_set_runtimeAnimatorController, void(pm::api::Ref<pm::map::Animator>, pm::api::Ref<pm::map::RuntimeAnimatorController>)>
       set_runtimeAnimatorController{};
   /// Play(animator, stateHash, layer, normalizedTime). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Animator_Play, void(void*, int32_t, int32_t, float)> Play{};
+  static constexpr pm::api::Method<pm::map::Animator_Play, void(pm::api::Ref<pm::map::Animator>, int32_t, int32_t, float)> Play{};
   /// HasState(animator, layer, stateHash). Unresolved: false.
-  static constexpr pm::api::Icall<pm::map::Animator_HasState, bool(void*, int32_t, int32_t)> HasState{};
+  static constexpr pm::api::Icall<pm::map::Animator_HasState, bool(pm::api::Object, int32_t, int32_t)> HasState{};
   /// Rebind(animator, writeDefaultValues). Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Animator_Rebind, void(void*, bool)> Rebind{};
+  static constexpr pm::api::Icall<pm::map::Animator_Rebind, void(pm::api::Object, bool)> Rebind{};
   /// CrossFade(animator, stateHash, blend, layer, startAt, blendStartAt): blend is a fraction of the playing state's
   /// length. Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Animator_CrossFade, void(void*, int32_t, float, int32_t, float, float)>
+  static constexpr pm::api::Icall<pm::map::Animator_CrossFade, void(pm::api::Object, int32_t, float, int32_t, float, float)>
       CrossFade{};
   /// get_deltaRotation(animator): how far its clips turned the root last update (root motion). Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::Animator_get_deltaRotation, Quaternion(void*)> get_deltaRotation{};
+  static constexpr pm::api::Method<pm::map::Animator_get_deltaRotation, Quaternion(pm::api::Ref<pm::map::Animator>)> get_deltaRotation{};
   /// get_bodyRotationInternal_Injected(animator, &out): the humanoid body's world rotation as last posed. Unresolved:
   /// does nothing.
-  static constexpr pm::api::Icall<pm::map::Animator_get_bodyRotationInternal_Injected, void(void*, Quaternion*)>
+  static constexpr pm::api::Icall<pm::map::Animator_get_bodyRotationInternal_Injected, void(pm::api::Object, Quaternion*)>
       get_bodyRotationInternal_Injected{};
   /// get_deltaPosition(animator): how far its clips moved the root last update (root motion). Unresolved: zero.
-  static constexpr pm::api::Method<pm::map::Animator_get_deltaPosition, Vector3(void*)> get_deltaPosition{};
+  static constexpr pm::api::Method<pm::map::Animator_get_deltaPosition, Vector3(pm::api::Ref<pm::map::Animator>)> get_deltaPosition{};
   /// Update(animator, seconds): steps it now; 0 poses the model in its state. Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Animator_Update, void(void*, float)> Update{};
+  static constexpr pm::api::Icall<pm::map::Animator_Update, void(pm::api::Object, float)> Update{};
   /// get_isInitialized(animator). Unresolved: false.
-  static constexpr pm::api::Icall<pm::map::Animator_get_isInitialized, bool(void*)> get_isInitialized{};
+  static constexpr pm::api::Icall<pm::map::Animator_get_isInitialized, bool(pm::api::Object)> get_isInitialized{};
   /// GetBoneTransform(animator, bone), a HumanBodyBones number. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Animator_GetBoneTransform, void*(void*, int32_t)> GetBoneTransform{};
+  static constexpr pm::api::Method<pm::map::Animator_GetBoneTransform, pm::api::Object(pm::api::Ref<pm::map::Animator>, int32_t)> GetBoneTransform{};
   /// set_applyRootMotion(animator, on). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Animator_set_applyRootMotion, void(void*, bool)> set_applyRootMotion{};
+  static constexpr pm::api::Method<pm::map::Animator_set_applyRootMotion, void(pm::api::Ref<pm::map::Animator>, bool)> set_applyRootMotion{};
   /// set_cullingMode(animator, mode), an AnimatorCullingMode number. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Animator_set_cullingMode, void(void*, int32_t)> set_cullingMode{};
+  static constexpr pm::api::Method<pm::map::Animator_set_cullingMode, void(pm::api::Ref<pm::map::Animator>, int32_t)> set_cullingMode{};
 };
 
 /// An animator controller asset.
@@ -462,7 +462,7 @@ inline constexpr pm::api::EnumValue<pm::map::HumanBodyBones_RightFoot> RightFoot
 /// One parameter of an Animator's controller. `parameter` below is one.
 struct AnimatorControllerParameter {
   /// Its name, a managed string: m_Name.get(parameter). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::AnimatorControllerParameter_m_Name, void*> m_Name{};
+  static constexpr pm::api::Field<pm::map::AnimatorControllerParameter_m_Name, pm::api::Object> m_Name{};
   /// Its type, an AnimatorControllerParameterType number: m_Type.get(parameter). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::AnimatorControllerParameter_m_Type, int32_t> m_Type{};
 };

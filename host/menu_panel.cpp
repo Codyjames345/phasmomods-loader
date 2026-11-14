@@ -179,7 +179,7 @@ bool clickable(Control& c, void* root) {
     void* fresh = phasmo::ModyEvent::type.is(behaviour) ? new_event() : nullptr;
     if (!fresh || !clear_runners(behaviour)) return false;
     phasmo::ModyEvent::Event.set(behaviour, fresh);
-    if (phasmo::ModyEvent::Event.get(behaviour) != fresh) return false;
+    if (phasmo::ModyEvent::Event.get(behaviour).raw() != fresh) return false;
   }
   void* click = phasmo::UISelectable::GetBehaviour(button, phasmo::DoozyBehaviourName::PointerClick());
   if (!click || !listen(c, button, phasmo::ModyEvent::Event.get(click))) return false;

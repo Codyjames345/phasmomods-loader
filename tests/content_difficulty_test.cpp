@@ -177,7 +177,7 @@ struct Lobby {
     phasmo::GhostCollection::ghosts.set(collection, fake::list(ghosts));
     phasmo::DifficultyOption::count.set(option, 5);  // as the scene ships it: Random and the game's ghosts
     load_menu();
-    phasmo::LevelValues::difficulty.set(values, difficulty(7, kRandom));
+    phasmo::LevelValues::difficulty.set(values, pm::api::Ref<pm::map::Difficulty>::unchecked(difficulty(7, kRandom)));
   }
   ~Lobby() { g_lobby = nullptr; }
 
@@ -221,8 +221,9 @@ struct Lobby {
   // The preset choice (0x96DE70): the lobby's difficulty is a copy of the preset (Clone(false)); then
   // the display is refreshed, nothing applied.
   void choose_preset(size_t i) {
-    phasmo::DifficultyUIManager::current.set(menu, difficulty(phasmo::Difficulty::difficulty.get(preset(i)),
-                                                             type_of(preset(i))));
+    phasmo::DifficultyUIManager::current.set(
+        menu, pm::api::Ref<pm::map::Difficulty>::unchecked(difficulty(phasmo::Difficulty::difficulty.get(preset(i)),
+                                                                      type_of(preset(i)))));
   }
   // The custom preset's save button (0x9718D0): ES3.Save("CustomDifficulty{i}", current), then that very
   // object is the preset.
@@ -251,10 +252,10 @@ struct Lobby {
   void sync(void* d) {
     sent.push_back(write(d));
     set_type(d, sent.back());
-    phasmo::DifficultyUIManager::current.set(menu, d);
+    phasmo::DifficultyUIManager::current.set(menu, pm::api::Ref<pm::map::Difficulty>::unchecked(d));
     void* copy = difficulty(phasmo::Difficulty::difficulty.get(d), type_of(d));
-    phasmo::DifficultyUIManager::applied.set(menu, copy);
-    phasmo::LevelValues::difficulty.set(values, copy);
+    phasmo::DifficultyUIManager::applied.set(menu, pm::api::Ref<pm::map::Difficulty>::unchecked(copy));
+    phasmo::LevelValues::difficulty.set(values, pm::api::Ref<pm::map::Difficulty>::unchecked(copy));
   }
   // The board's one-shot visible handler, the master in a room (0x969670): the lobby's difficulty is
   // ES3.Load("LastDifficulty"), read into the live object its reference names (a preset Awake loaded
@@ -265,7 +266,7 @@ struct Lobby {
       if (lastRef && presetRef[i] == lastRef) d = preset(i);
     if (!d) d = difficulty(lastPreset, kRandom);
     set_type(d, kRandom);
-    phasmo::DifficultyUIManager::current.set(menu, d);
+    phasmo::DifficultyUIManager::current.set(menu, pm::api::Ref<pm::map::Difficulty>::unchecked(d));
     apply();
   }
   // The master's join sender (0x968ED0): LevelValues.difficulty written for the player who joined.
@@ -470,7 +471,8 @@ void a_pick_comes_back_with_the_board_hidden() {
   Lobby l;
   l.boardShown = false;
   l.side.load(picks_file());
-  phasmo::DifficultyUIManager::current.set(l.menu, Lobby::difficulty(7, kRandom));  // as a sync left it
+  phasmo::DifficultyUIManager::current.set(l.menu,
+                                          pm::api::Ref<pm::map::Difficulty>::unchecked(Lobby::difficulty(7, kRandom)));  // as a sync left it
   l.tick();
   CHECK(type_of(l.current()) == kAsterion);
   CHECK(l.sent.size() == 1 && l.last_sent() == kAsterion);
@@ -520,7 +522,8 @@ void a_client_leaves_the_lobby_difficulty_to_the_host() {
   start(some(), "7=a.asterion\n");
   Lobby l;
   l.side.load(picks_file());
-  phasmo::DifficultyUIManager::current.set(l.menu, Lobby::difficulty(7, kRandom));
+  phasmo::DifficultyUIManager::current.set(l.menu,
+                                          pm::api::Ref<pm::map::Difficulty>::unchecked(Lobby::difficulty(7, kRandom)));
   l.tick(fake::content_state(), false);
   CHECK(type_of(l.current()) == kRandom && l.sent.empty());
   set_type(l.current(), kAsterion);  // the host sent its pick
@@ -536,7 +539,8 @@ void the_option_shows_the_lobby_ghost() {
   start(some(), nullptr);
   Lobby l;
   l.side.load(picks_file());
-  phasmo::DifficultyUIManager::current.set(l.menu, Lobby::difficulty(7, kEcho));  // the host's sync
+  phasmo::DifficultyUIManager::current.set(l.menu,
+                                          pm::api::Ref<pm::map::Difficulty>::unchecked(Lobby::difficulty(7, kEcho)));  // the host's sync
   l.tick(fake::content_state(), false);
   CHECK(l.index() == l.choice_of(kEcho) && l.index() > 0);
   CHECK(l.handlerRuns == 1 && type_of(l.current()) == kEcho);  // the game's handler named it
@@ -550,7 +554,8 @@ void the_option_keeps_showing_a_game_ghost() {
   start(some(), nullptr);
   Lobby l;
   l.side.load(picks_file());
-  phasmo::DifficultyUIManager::current.set(l.menu, Lobby::difficulty(7, 1));  // Wraith
+  phasmo::DifficultyUIManager::current.set(l.menu,
+                                          pm::api::Ref<pm::map::Difficulty>::unchecked(Lobby::difficulty(7, 1)));  // Wraith
   phasmo::DifficultyOption::index.set(l.option, l.choice_of(1));
   l.tick();
   CHECK(l.index() == l.choice_of(1) && type_of(l.current()) == 1);
@@ -575,7 +580,8 @@ void the_summary_names_the_ghost() {
   // Through the host's hooks as the game calls them: the builder names it whichever method asks, the
   // summary panel's toggle and the display's refresh, and Enum.ToString anywhere else keeps the number.
   CHECK(l.side.create_hooks());
-  phasmo::DifficultyUIManager::current.set(l.menu, Lobby::difficulty(7, kEcho));
+  phasmo::DifficultyUIManager::current.set(l.menu,
+                                          pm::api::Ref<pm::map::Difficulty>::unchecked(Lobby::difficulty(7, kEcho)));
   CHECK(l.toggle_summary() == "Ghost: Echo");
   CHECK(l.refresh_display() == "Ghost: Echo");
   using Name = void* (*)(void*, const void*);
@@ -831,7 +837,8 @@ void off_sets_aside_a_menu_never_offered() {
   fake::room(1, {1, 2}, 120000, 2);
   Lobby l;
   l.side.load(picks_file());
-  phasmo::DifficultyUIManager::current.set(l.menu, Lobby::difficulty(7, kEcho));  // a sync brought one
+  phasmo::DifficultyUIManager::current.set(l.menu,
+                                          pm::api::Ref<pm::map::Difficulty>::unchecked(Lobby::difficulty(7, kEcho)));  // a sync brought one
   set_type(l.contract_difficulty(), kEcho);
   l.tick();
   CHECK(type_of(l.current()) == kRandom && type_of(l.contract_difficulty()) == kRandom);

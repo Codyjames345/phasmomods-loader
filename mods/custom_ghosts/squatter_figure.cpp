@@ -216,7 +216,7 @@ bool check() {
   return api::alive(g.root) && api::alive(g.animator);
 }
 
-void* bone(int32_t which) { return phasmo::Animator::GetBoneTransform(g.animator, which); }
+void* bone(int32_t which) { return phasmo::Animator::GetBoneTransform(g.animator.get(), which); }
 
 // How far out past the upper arms the sheet is cut to hang at the shoulders, the width it had before its spheres lost
 // their padding (2026-11-10), and at least as far out past the head: tied to the spheres, the sheet was cut tight to
@@ -547,7 +547,7 @@ void create(phasmo::Vector3 at) {
   // Root motion on, so the Animator works out each clip's own step and turn (clip_step, clip_turn), which a roll, a trip
   // and a turn on the spot move the Squatter by (user, 2026-11-09: it rolled in place). Every client puts the figure back
   // where the ghost is, facing its own way, each frame (place), so the Animator's own move of it never shows.
-  phasmo::Animator::set_applyRootMotion(g.animator, true);
+  phasmo::Animator::set_applyRootMotion(g.animator.get(), true);
   place(at, 0.0f);
   // The sheet is laid over the body as it stands: the standing clip's first pose, posed now, not whatever pose the copy
   // was taken in (user, 2026-11-09: the sheet sat off the head and the arms came out of it).
@@ -653,11 +653,11 @@ void snap_to(const char* state) {
 
 float clip_turn() {
   if (!check()) return 0.0f;
-  const phasmo::Quaternion q = phasmo::Animator::get_deltaRotation(g.animator);
+  const phasmo::Quaternion q = phasmo::Animator::get_deltaRotation(g.animator.get());
   return 2.0f * std::atan2(q.y, q.w);
 }
 
-phasmo::Vector3 clip_step() { return check() ? phasmo::Animator::get_deltaPosition(g.animator) : phasmo::Vector3{}; }
+phasmo::Vector3 clip_step() { return check() ? phasmo::Animator::get_deltaPosition(g.animator.get()) : phasmo::Vector3{}; }
 
 void* head() { return check() ? bone(phasmo::HumanBodyBones::Head()) : nullptr; }
 

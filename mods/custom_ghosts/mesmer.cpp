@@ -62,7 +62,7 @@ struct State {
 } g;
 
 void restore_camera() {
-  if (api::alive(g.camera)) phasmo::Camera::set_cullingMask(g.camera, g.savedMask);
+  if (api::alive(g.camera)) phasmo::Camera::set_cullingMask(g.camera.get(), g.savedMask);
   g.camera = nullptr;
 }
 

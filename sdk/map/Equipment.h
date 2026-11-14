@@ -11,6 +11,7 @@
 #include "MainManager.h"
 #include "Photon.h"
 #include "Props.h"
+#include "Sensor.h"
 #include "Transform.h"
 #include "UnityPostProcessing.h"
 
@@ -405,13 +406,13 @@ struct Equipment {
   /// The Equipment type. Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Equipment> type{};
   /// Its StoreItem, or null: storeItem.get(item). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Equipment_storeItem, void*> storeItem{};
+  static constexpr pm::api::Field<pm::map::Equipment_storeItem, pm::api::Ref<pm::map::StoreItem>> storeItem{};
   /// Whether it is set down: placed.get(item). Unresolved: false.
   static constexpr pm::api::Field<pm::map::Equipment_placed, bool> placed{};
   /// Whether it is switched on: isOn.get(item). Unresolved: false.
   static constexpr pm::api::Field<pm::map::Equipment_isOn, bool> isOn{};
   /// Use(item), as the item's class runs it: call Use.virtual_call(item). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Equipment_Use, void(void*)> Use{};
+  static constexpr pm::api::Method<pm::map::Equipment_Use, void(pm::api::Ref<pm::map::Equipment>)> Use{};
 };
 
 /// A video camera.
@@ -423,12 +424,12 @@ struct CCTV {
 /// The truck's monitor.
 struct CCTVController {
   /// The one controller, or null. Reading it makes nothing. Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::CCTVController_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::CCTVController_instance, pm::api::Ref<pm::map::CCTVController>> instance{};
   /// A List<Player> of who is actively viewing the monitor, on every client. Read it as pm::api::List.
-  static constexpr pm::api::Field<pm::map::CCTVController_viewers, void*> viewers{};
+  static constexpr pm::api::Field<pm::map::CCTVController_viewers, pm::api::Object> viewers{};
   /// GetCCTVCamerasByCurrentCameraType(controller): a new List<CCTV> of the switched-on cameras of the kind the monitor
   /// shows. Every client. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::CCTVController_GetCCTVCamerasByCurrentCameraType, void*(void*)>
+  static constexpr pm::api::Method<pm::map::CCTVController_GetCCTVCamerasByCurrentCameraType, pm::api::Object(pm::api::Ref<pm::map::CCTVController>)>
       GetCCTVCamerasByCurrentCameraType{};
 };
 
@@ -462,12 +463,12 @@ struct Thermometer {
 struct EVPRecorder {
   static constexpr pm::api::Type<pm::map::EVPRecorder> type{};  ///< The type: klass(), is(obj), type_object(). Unresolved: null and false.
   /// PlayLocationSound(box, a, b). A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::EVPRecorder_PlayLocationSound, void(void*, int32_t, int32_t)>
+  static constexpr pm::api::Method<pm::map::EVPRecorder_PlayLocationSound, void(pm::api::Ref<pm::map::EVPRecorder>, int32_t, int32_t)>
       PlayLocationSound{};
   /// PlayAboutSound(box, a, b). A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::EVPRecorder_PlayAboutSound, void(void*, int32_t, int32_t)> PlayAboutSound{};
+  static constexpr pm::api::Method<pm::map::EVPRecorder_PlayAboutSound, void(pm::api::Ref<pm::map::EVPRecorder>, int32_t, int32_t)> PlayAboutSound{};
   /// PlayDifficultySound(box, a, b). A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::EVPRecorder_PlayDifficultySound, void(void*, int32_t, int32_t)>
+  static constexpr pm::api::Method<pm::map::EVPRecorder_PlayDifficultySound, void(pm::api::Ref<pm::map::EVPRecorder>, int32_t, int32_t)>
       PlayDifficultySound{};
 };
 /// The D.O.T.S. projector (IRLightSensor).
@@ -483,7 +484,7 @@ struct Crucifix {
   /// The type: type_object() for Object.FindObjectsOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Crucifix> type{};
   /// CrucifixUseNetworked(crucifix, flag, &info). A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Crucifix_CrucifixUseNetworked, void(void*, bool, void*)>
+  static constexpr pm::api::Method<pm::map::Crucifix_CrucifixUseNetworked, void(pm::api::Ref<pm::map::Crucifix>, bool, pm::api::Object)>
       CrucifixUseNetworked{};
   /// How many times it has been used: useCount.get(crucifix). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Crucifix_useCount, int32_t> useCount{};
@@ -492,10 +493,10 @@ struct Crucifix {
 /// Incense. `sage` below is the WhiteSage.
 struct WhiteSage {
   /// UseNetworked(sage, flag, &info). A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::WhiteSage_UseNetworked, void(void*, bool, void*)> UseNetworked{};
+  static constexpr pm::api::Method<pm::map::WhiteSage_UseNetworked, void(pm::api::Ref<pm::map::WhiteSage>, bool, pm::api::Object)> UseNetworked{};
   /// The handler that traps the Yurei: YureiTrap(sage, gameObject, sensor). A mod hooks it.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::WhiteSage_YureiTrap, void(void*, void*, void*)> YureiTrap{};
+  static constexpr pm::api::Method<pm::map::WhiteSage_YureiTrap, void(pm::api::Ref<pm::map::WhiteSage>, pm::api::Ref<pm::map::GameObject>, pm::api::Ref<pm::map::Sensor>)> YureiTrap{};
 };
 
 /// The store's description of an item. `storeItem` below is the StoreItem.
@@ -503,25 +504,25 @@ struct StoreItem {
   /// Its tier, a StoreItemTier number: tier.get(storeItem). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::StoreItem_tier, int32_t> tier{};
   /// Its name, the game's own string: itemName.get(storeItem), or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::StoreItem_itemName, void*> itemName{};
+  static constexpr pm::api::Field<pm::map::StoreItem_itemName, pm::api::Object> itemName{};
   /// IsUnlocked(item): the store's unlock check. A mod hooks it. Unresolved: does nothing, false.
-  static constexpr pm::api::Method<pm::map::StoreItem_IsUnlocked, bool(void*)> IsUnlocked{};
+  static constexpr pm::api::Method<pm::map::StoreItem_IsUnlocked, bool(pm::api::Ref<pm::map::StoreItem>)> IsUnlocked{};
   /// MeetsLevel(item): the level check. A mod hooks it. Unresolved: does nothing, false.
-  static constexpr pm::api::Method<pm::map::StoreItem_MeetsLevel, bool(void*)> MeetsLevel{};
+  static constexpr pm::api::Method<pm::map::StoreItem_MeetsLevel, bool(pm::api::Ref<pm::map::StoreItem>)> MeetsLevel{};
   /// CanAfford(item, amount): the purchase's own money check. A mod hooks it. Unresolved: does nothing, false.
-  static constexpr pm::api::Method<pm::map::StoreItem_CanAfford, bool(void*, int32_t)> CanAfford{};
+  static constexpr pm::api::Method<pm::map::StoreItem_CanAfford, bool(pm::api::Ref<pm::map::StoreItem>, int32_t)> CanAfford{};
 };
 
 /// One item's place in the store's screen. `entry` below is the StoreEquipment.
 struct StoreEquipment {
   /// CanBuy(entry, amount): whether the buy button may be pressed. A mod hooks it. Unresolved: does nothing, false.
-  static constexpr pm::api::Method<pm::map::StoreEquipment_CanBuy, bool(void*, int32_t)> CanBuy{};
+  static constexpr pm::api::Method<pm::map::StoreEquipment_CanBuy, bool(pm::api::Ref<pm::map::StoreEquipment>, int32_t)> CanBuy{};
 };
 
 /// One entry of the truck's starting equipment loadout. `loadout` below is the GameEquipmentLoadout.
 struct GameEquipmentLoadout {
   /// The item, a StoreItem: equipment.get(loadout), or null. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::GameEquipmentLoadout_equipment, void*> equipment{};
+  static constexpr pm::api::Field<pm::map::GameEquipmentLoadout_equipment, pm::api::Ref<pm::map::StoreItem>> equipment{};
   /// How many of it the contract starts with: amount.get(loadout). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::GameEquipmentLoadout_amount, int32_t> amount{};
 };
@@ -534,25 +535,25 @@ struct ObjectPooler {
   /// the position and rotation given, or null if the pool has no entry for the item. No RPC is sent.
   /// Unresolved: null.
   static constexpr pm::api::Method<pm::map::ObjectPooler_SpawnFromEquipmentPool,
-                                   void*(void*, void*, const Vector3*, const Quaternion*)>
+                                   pm::api::Ref<pm::map::GameObject>(pm::api::Ref<pm::map::ObjectPooler>, pm::api::Ref<pm::map::StoreItem>, const Vector3*, const Quaternion*)>
       SpawnFromEquipmentPool{};
   /// Every tier's equipment copies, a List of TierEquipmentPool: tierPools.get(pooler). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ObjectPooler_tierPools, void*> tierPools{};
+  static constexpr pm::api::Field<pm::map::ObjectPooler_tierPools, pm::api::Object> tierPools{};
 };
 
 /// One tier's equipment copies. `tier` below is one.
 struct TierEquipmentPool {
   /// Its pools, an EquipmentPool array: equipmentPools.get(tier). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::TierEquipmentPool_equipmentPools, void*> equipmentPools{};
+  static constexpr pm::api::Field<pm::map::TierEquipmentPool_equipmentPools, pm::api::Object> equipmentPools{};
 };
 
 /// One store item's copies in the scene. `pool` below is one.
 struct EquipmentPool {
   /// The StoreItem: item.get(pool). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::EquipmentPool_item, void*> item{};
+  static constexpr pm::api::Field<pm::map::EquipmentPool_item, pm::api::Ref<pm::map::StoreItem>> item{};
   /// The copies, a GameObject array; one switched off was never handed out: objects.get(pool).
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::EquipmentPool_objects, void*> objects{};
+  static constexpr pm::api::Field<pm::map::EquipmentPool_objects, pm::api::Object> objects{};
 };
 
 /// The tiers of a store item: compare StoreItem::tier with them.

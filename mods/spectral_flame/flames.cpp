@@ -388,7 +388,7 @@ void collect_glows(Flame& f) {
   const api::RefArray objects{phasmo::Candle::candleObjects.get(f.candle)};
   for (size_t i = 0; i < objects.size(); ++i) {
     void* o = objects[i];
-    if (!o || phasmo::CandleObject::fireSource.get(o) != f.fire.get()) continue;
+    if (!o || phasmo::CandleObject::fireSource.get(o).raw() != f.fire.get()) continue;
     const api::RefArray wax{phasmo::CandleObject::candleRend.get(o)};
     for (size_t k = 0; k < wax.size(); ++k) {
       void* renderer = wax[k];

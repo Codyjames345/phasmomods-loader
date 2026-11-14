@@ -129,7 +129,7 @@ void* label(size_t i) {
 // the label lands on the point whatever the window size (the pattern in perceive_view.cpp).
 void place_label(void* camera, float scale, const Vector3& world, float above, float width, float height,
                  const std::string& text, const ui::Color& colour, size_t& used) {
-  const Vector3 screen = phasmo::Camera::WorldToScreenPoint(camera, {world.x, world.y + above, world.z});
+  const Vector3 screen = phasmo::Camera::WorldToScreenPoint(camera, phasmo::Vector3{world.x, world.y + above, world.z});
   if (screen.z <= 0.1f) return;  // behind the camera, or the entry did not answer
   void* t = label(used++);
   if (!t) return;

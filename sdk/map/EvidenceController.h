@@ -88,19 +88,19 @@ struct EvidenceController {
   static constexpr pm::api::Type<pm::map::EvidenceController> type{};
   /// Moves the ghost orb to the favourite room when the ghost gives orbs or is acting as the Mimic:
   /// ForceRespawnGhostOrb(controller). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::EvidenceController_ForceRespawnGhostOrb, void(void*)> ForceRespawnGhostOrb{};
+  static constexpr pm::api::Method<pm::map::EvidenceController_ForceRespawnGhostOrb, void(pm::api::Ref<pm::map::EvidenceController>)> ForceRespawnGhostOrb{};
   /// The ghost orb's Transform: ghostOrb.get(controller). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::EvidenceController_ghostOrb, void*> ghostOrb{};
+  static constexpr pm::api::Field<pm::map::EvidenceController_ghostOrb, pm::api::Object> ghostOrb{};
   /// Whether the ghost gives Freezing Temperatures, as the setup left it: freezing.get(controller). Unresolved: false.
   static constexpr pm::api::Field<pm::map::EvidenceController_freezing, bool> freezing{};
   /// Sets up the ghost's evidence in the world from its traits (a GhostTraits by address):
   /// SpawnAllGhostTypeEvidence(controller, traits). The game calls it once per contract on every client; a mod hooks
   /// it to follow that moment. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::EvidenceController_SpawnAllGhostTypeEvidence, void(void*, const void*)>
+  static constexpr pm::api::Method<pm::map::EvidenceController_SpawnAllGhostTypeEvidence, void(pm::api::Ref<pm::map::EvidenceController>, const void*)>
       SpawnAllGhostTypeEvidence{};
   /// Whether the contract's ghost gives fingerprints (Ultraviolet): IsFingerPrintEvidence(controller). Main thread,
   /// any client once the given evidence has arrived. Unresolved: false.
-  static constexpr pm::api::Method<pm::map::EvidenceController_IsFingerPrintEvidence, bool(void*)> IsFingerPrintEvidence{};
+  static constexpr pm::api::Method<pm::map::EvidenceController_IsFingerPrintEvidence, bool(pm::api::Ref<pm::map::EvidenceController>)> IsFingerPrintEvidence{};
 };
 
 /// @}

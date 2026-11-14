@@ -324,7 +324,7 @@ void show_own_body(bool on) {
     g.shownOn = cam;
     return;
   }
-  if (g.shownOn && alive(g.shownOn)) phasmo::Camera::set_cullingMask(g.shownOn, g.shownMask);
+  if (g.shownOn && alive(g.shownOn)) phasmo::Camera::set_cullingMask(g.shownOn.get(), g.shownMask);
   restore_layers(g.shownMoved);
   g.shownOn = nullptr;
 }

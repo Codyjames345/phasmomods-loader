@@ -9,8 +9,12 @@
 #include "entry.h"
 #include "game_api.h"
 #include "Photon.h"
+#include "Props.h"
+#include "Sensor.h"
+#include "UnityAudio.h"
 #include "UnityObject.h"
 #include "UnityPostProcessing.h"
+#include "UnityWorld.h"
 
 namespace pm::map {
 
@@ -662,7 +666,7 @@ struct Door {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Door> type{};
   /// The leaf's Rigidbody: body.get(door). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Door_body, void*> body{};
+  static constexpr pm::api::Field<pm::map::Door_body, pm::api::Ref<pm::map::Rigidbody>> body{};
   /// The leaf's closed angle in degrees: closedAngle.get(door). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Door_closedAngle, float> closedAngle{};
   /// Whether the ghost moves it by force (its leaf's physics) rather than by its animated turn:
@@ -670,90 +674,90 @@ struct Door {
   static constexpr pm::api::Field<pm::map::Door_useForceInsteadOfAnimations, bool> useForceInsteadOfAnimations{};
   /// Its looping creak, an AudioSource: loopSource.get(door). Its hinge door sets the volume from how fast the
   /// leaf turns, only while unlocked. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Door_loopSource, void*> loopSource{};
+  static constexpr pm::api::Field<pm::map::Door_loopSource, pm::api::Ref<pm::map::AudioSource>> loopSource{};
   /// Whether it is locked on this client (the padlock): locked.get(door), .set(door, v). Unresolved: false,
   /// writes nothing.
   static constexpr pm::api::Field<pm::map::Door_locked, bool> locked{};
   /// CheckOcclusionPortal(door): updates whether the camera sees through the doorway. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_CheckOcclusionPortal, void(void*)> CheckOcclusionPortal{};
+  static constexpr pm::api::Method<pm::map::Door_CheckOcclusionPortal, void(pm::api::Ref<pm::map::Door>)> CheckOcclusionPortal{};
   /// A double door's other leaf, when the level keeps it here rather than in otherDoor: pairedDoor.get(door).
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Door_pairedDoor, void*> pairedDoor{};
+  static constexpr pm::api::Field<pm::map::Door_pairedDoor, pm::api::Ref<pm::map::Door>> pairedDoor{};
   /// A double door's other leaf: otherDoor.get(door), null for a single door. It may be set on one leaf
   /// only. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Door_otherDoor, void*> otherDoor{};
+  static constexpr pm::api::Field<pm::map::Door_otherDoor, pm::api::Ref<pm::map::Door>> otherDoor{};
   /// The door's running push: forceRoutine.get(door), null when none runs. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Door_forceRoutine, void*> forceRoutine{};
+  static constexpr pm::api::Field<pm::map::Door_forceRoutine, pm::api::Object> forceRoutine{};
   /// GhostForceDoor(door, open, strength, skipRattle). A mod may hook it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_GhostForceDoor, void(void*, bool, float, bool)> GhostForceDoor{};
+  static constexpr pm::api::Method<pm::map::Door_GhostForceDoor, void(pm::api::Ref<pm::map::Door>, bool, float, bool)> GhostForceDoor{};
   /// HuntingCloseDoor(door): shuts, switches off and locks the door on every client, as a hunt locks its
   /// exits. Call it on the master only, as LevelController.LockHuntingDoors does: its RPC refuses any other
   /// sender, and refuses on a friendly ghost's difficulty, which this method itself skips. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Door_HuntingCloseDoor, void(void*)> HuntingCloseDoor{};
+  static constexpr pm::api::Method<pm::map::Door_HuntingCloseDoor, void(pm::api::Ref<pm::map::Door>)> HuntingCloseDoor{};
   /// HuntingCloseDoorNetworked(door, &info), an RPC. A mod hooks it; never calls it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Door_HuntingCloseDoorNetworked, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::Door_HuntingCloseDoorNetworked, void(pm::api::Ref<pm::map::Door>, pm::api::Object)>
       HuntingCloseDoorNetworked{};
   /// ToggleDoorLock(door, on, b): `on` false switches the door off, unlocks it, and on its view's owner shuts and
   /// locks it again; true switches it back on and unlocks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_ToggleDoorLock, void(void*, bool, bool)> ToggleDoorLock{};
+  static constexpr pm::api::Method<pm::map::Door_ToggleDoorLock, void(pm::api::Ref<pm::map::Door>, bool, bool)> ToggleDoorLock{};
   /// LockDoor(door, force): locks the door, shutting it first with `force`; the lock reaches every client
   /// only when the master calls it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_LockDoor, void(void*, bool)> LockDoor{};
+  static constexpr pm::api::Method<pm::map::Door_LockDoor, void(pm::api::Ref<pm::map::Door>, bool)> LockDoor{};
   /// UnlockDoor(door, sound): unlocks it on every client, with its unlock sound when `sound`. Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::Door_UnlockDoor, void(void*, bool)> UnlockDoor{};
+  static constexpr pm::api::Method<pm::map::Door_UnlockDoor, void(pm::api::Ref<pm::map::Door>, bool)> UnlockDoor{};
   /// SyncLockState(door, locked, &info), an RPC. A mod hooks it; never calls it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Door_SyncLockState, void(void*, bool, void*)> SyncLockState{};
+  static constexpr pm::api::Method<pm::map::Door_SyncLockState, void(pm::api::Ref<pm::map::Door>, bool, pm::api::Object)> SyncLockState{};
   /// Whether players may grab it on this client: grabbable.get(door). Unresolved: false.
   static constexpr pm::api::Field<pm::map::Door_grabbable, bool> grabbable{};
   /// ForceDropDoorNetworked(door, off, b), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_ForceDropDoorNetworked, void(void*, bool, bool)>
+  static constexpr pm::api::Method<pm::map::Door_ForceDropDoorNetworked, void(pm::api::Ref<pm::map::Door>, bool, bool)>
       ForceDropDoorNetworked{};
   /// AttemptToUnlockDoor(door): the local player tries the door. A mod usually hooks it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Door_AttemptToUnlockDoor, void(void*)> AttemptToUnlockDoor{};
+  static constexpr pm::api::Method<pm::map::Door_AttemptToUnlockDoor, void(pm::api::Ref<pm::map::Door>)> AttemptToUnlockDoor{};
   /// GrabbedDoor(door): the local player grabbed the door. A mod usually hooks it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Door_GrabbedDoor, void(void*)> GrabbedDoor{};
+  static constexpr pm::api::Method<pm::map::Door_GrabbedDoor, void(pm::api::Ref<pm::map::Door>)> GrabbedDoor{};
   /// NetworkedPlayLockSound(door), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_NetworkedPlayLockSound, void(void*)> NetworkedPlayLockSound{};
+  static constexpr pm::api::Method<pm::map::Door_NetworkedPlayLockSound, void(pm::api::Ref<pm::map::Door>)> NetworkedPlayLockSound{};
   /// ForceToggleHuntCollider(door, on): its hunt collider, on this client. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_ForceToggleHuntCollider, void(void*, bool)>
+  static constexpr pm::api::Method<pm::map::Door_ForceToggleHuntCollider, void(pm::api::Ref<pm::map::Door>, bool)>
       ForceToggleHuntCollider{};
   /// LockDoorForTime(door, seconds, takeOwnership). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_LockDoorForTime, void(void*, float, bool)> LockDoorForTime{};
+  static constexpr pm::api::Method<pm::map::Door_LockDoorForTime, void(pm::api::Ref<pm::map::Door>, float, bool)> LockDoorForTime{};
   /// Its kind, a DoorKind number: kind.get(door). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Door_kind, int32_t> kind{};
   /// Its PhotonObjectInteract: interact.get(door). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Door_interact, void*> interact{};
+  static constexpr pm::api::Field<pm::map::Door_interact, pm::api::Ref<pm::map::PhotonObjectInteract>> interact{};
   /// CreateDoorSlamNoise(door, otherDoor): the slam sound on every client, by RPC. `otherDoor` is never read and may
   /// be null. Call it only on the room's first actor, whom its RPC alone accepts. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_CreateDoorSlamNoise, void(void*, void*)> CreateDoorSlamNoise{};
+  static constexpr pm::api::Method<pm::map::Door_CreateDoorSlamNoise, void(pm::api::Ref<pm::map::Door>, pm::api::Object)> CreateDoorSlamNoise{};
   /// PlayDoorSlamNoise(door, &info), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_PlayDoorSlamNoise, void(void*, void*)> PlayDoorSlamNoise{};
+  static constexpr pm::api::Method<pm::map::Door_PlayDoorSlamNoise, void(pm::api::Ref<pm::map::Door>, pm::api::Object)> PlayDoorSlamNoise{};
   /// Its slam clips, an AudioClip[] (empty when it has none of its own): slamClips.get(door). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Door_slamClips, void*> slamClips{};
+  static constexpr pm::api::Field<pm::map::Door_slamClips, pm::api::Object> slamClips{};
   /// Its Noise, at the door: noise.get(door). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Door_noise, void*> noise{};
+  static constexpr pm::api::Field<pm::map::Door_noise, pm::api::Object> noise{};
   /// DisableOrEnableDoor(door, enable, flag). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_DisableOrEnableDoor, void(void*, bool, bool)> DisableOrEnableDoor{};
+  static constexpr pm::api::Method<pm::map::Door_DisableOrEnableDoor, void(pm::api::Ref<pm::map::Door>, bool, bool)> DisableOrEnableDoor{};
   /// NetworkedGrabbedDoor(door). A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_NetworkedGrabbedDoor, void(void*)> NetworkedGrabbedDoor{};
+  static constexpr pm::api::Method<pm::map::Door_NetworkedGrabbedDoor, void(pm::api::Ref<pm::map::Door>)> NetworkedGrabbedDoor{};
   /// SetDoorAndOcclusionOpen(door), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_SetDoorAndOcclusionOpen, void(void*)> SetDoorAndOcclusionOpen{};
+  static constexpr pm::api::Method<pm::map::Door_SetDoorAndOcclusionOpen, void(pm::api::Ref<pm::map::Door>)> SetDoorAndOcclusionOpen{};
   /// Whether it reads shut on this client: closed.get(door). Unresolved: false.
   static constexpr pm::api::Field<pm::map::Door_closed, bool> closed{};
   /// Its PhotonView: view.get(door). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Door_view, void*> view{};
+  static constexpr pm::api::Field<pm::map::Door_view, pm::api::Ref<pm::map::PhotonView>> view{};
   /// ResetRigidbody(door, flag): the wait after a move, then UnGrabbedDoor(door, flag). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_ResetRigidbody, void(void*, bool)> ResetRigidbody{};
+  static constexpr pm::api::Method<pm::map::Door_ResetRigidbody, void(pm::api::Ref<pm::map::Door>, bool)> ResetRigidbody{};
   /// UnGrabbedDoor(door, flag): lets the door go on every client. A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_UnGrabbedDoor, void(void*, bool)> UnGrabbedDoor{};
+  static constexpr pm::api::Method<pm::map::Door_UnGrabbedDoor, void(pm::api::Ref<pm::map::Door>, bool)> UnGrabbedDoor{};
   /// NetworkedUngrabbedDoor(door), an RPC. A mod hooks it; never calls it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Door_NetworkedUngrabbedDoor, void(void*)> NetworkedUngrabbedDoor{};
+  static constexpr pm::api::Method<pm::map::Door_NetworkedUngrabbedDoor, void(pm::api::Ref<pm::map::Door>)> NetworkedUngrabbedDoor{};
 };
 
 /// What kind of door a Door is.
@@ -781,7 +785,7 @@ struct Key {
   /// The type: klass(), is(obj), type_object(). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::Key> type{};
   /// GrabbedKey(key): the local player picked it up. A mod usually hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::Key_GrabbedKey, void(void*)> GrabbedKey{};
+  static constexpr pm::api::Method<pm::map::Key_GrabbedKey, void(pm::api::Ref<pm::map::Key>)> GrabbedKey{};
 };
 
 /// A hinged door. `door` below is the HingeDoor.
@@ -792,21 +796,21 @@ struct HingeDoor {
   static constexpr pm::api::Field<pm::map::HingeDoor_hingeAxis, int32_t> hingeAxis{};
   /// LevelControllerOpenDoor(door, flip, unused): opens it part of the way with no ghost's trace, on this client;
   /// other clients see it only when this client owns the door's view (Door::view). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::HingeDoor_LevelControllerOpenDoor, void(void*, bool, float)>
+  static constexpr pm::api::Method<pm::map::HingeDoor_LevelControllerOpenDoor, void(pm::api::Ref<pm::map::HingeDoor>, bool, float)>
       LevelControllerOpenDoor{};
   /// OpenDoor(door, close, strength, buffered): swings it with its leaf's physics, open or shut, with no ghost's trace,
   /// on the view's owner (strength -1 for the game's random push). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::HingeDoor_OpenDoor, void(void*, bool, float, bool)> OpenDoor{};
+  static constexpr pm::api::Method<pm::map::HingeDoor_OpenDoor, void(pm::api::Ref<pm::map::HingeDoor>, bool, float, bool)> OpenDoor{};
   /// Whether its open angle lies the other way from its push: openAngleReversed.get(door). Unresolved: false.
   static constexpr pm::api::Field<pm::map::HingeDoor_openAngleReversed, bool> openAngleReversed{};
   /// The leaf's open angle in degrees: openAngle.get(door). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::HingeDoor_openAngle, float> openAngle{};
   /// SwingDoor(door, close, seconds, fraction, buffered): turns the leaf toward its open angle (or shut) with no ghost's
   /// trace, on the view's owner. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::HingeDoor_SwingDoor, void(void*, bool, float, float, bool)> SwingDoor{};
+  static constexpr pm::api::Method<pm::map::HingeDoor_SwingDoor, void(pm::api::Ref<pm::map::HingeDoor>, bool, float, float, bool)> SwingDoor{};
   /// LockDoor(door, force): locks a shut door (force: snaps it shut first), on every client when the master
   /// calls it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::HingeDoor_LockDoor, void(void*, bool)> LockDoor{};
+  static constexpr pm::api::Method<pm::map::HingeDoor_LockDoor, void(pm::api::Ref<pm::map::HingeDoor>, bool)> LockDoor{};
 };
 
 /// Unity's axis flags, the values HingeDoor::hingeAxis holds.
@@ -820,10 +824,10 @@ inline constexpr pm::api::EnumValue<pm::map::Axis_Z> Z{};  ///< Z(): the value's
 struct SmallMapVariation {
   /// Its hunts' doors, a Door[]: huntingDoorsToLock.get(variation), read as a pm::api::RefArray.
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::SmallMapVariation_huntingDoorsToLock, void*> huntingDoorsToLock{};
+  static constexpr pm::api::Field<pm::map::SmallMapVariation_huntingDoorsToLock, pm::api::Object> huntingDoorsToLock{};
   /// Its hunts' rooms, a LevelRoom[]: huntingRooms.get(variation), read as a pm::api::RefArray.
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::SmallMapVariation_huntingRooms, void*> huntingRooms{};
+  static constexpr pm::api::Field<pm::map::SmallMapVariation_huntingRooms, pm::api::Object> huntingRooms{};
 };
 
 /// @}

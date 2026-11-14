@@ -64,7 +64,7 @@ std::vector<ui::Rect> texture_outline(int index) {
     for (float sx : {-1.0f, 1.0f}) {
       for (float sz : {-1.0f, 1.0f}) {
         const phasmo::Vector3 v = Camera::WorldToViewportPoint(
-            g.camera, {b.center.x + sx * b.extents.x, b.center.y, b.center.z + sz * b.extents.z});
+            g.camera.get(), phasmo::Vector3{b.center.x + sx * b.extents.x, b.center.y, b.center.z + sz * b.extents.z});
         x0 = std::min(x0, v.x), x1 = std::max(x1, v.x), y0 = std::min(y0, v.y), y1 = std::max(y1, v.y);
       }
     }
@@ -139,7 +139,7 @@ std::string floor_name() {
 int room_at(ui::Vec2 screenPoint) {
   ui::Vec2 uv{};
   if (!game::alive(g.camera) || !ui::normalized_point(g.image, screenPoint, uv, g.eventCamera)) return -1;
-  const phasmo::Ray ray = Camera::ViewportPointToRay(g.camera, {uv.x, uv.y, 0});
+  const phasmo::Ray ray = Camera::ViewportPointToRay(g.camera.get(), phasmo::Vector3{uv.x, uv.y, 0});
   // Where the ray meets the shown floor's level (a top-down map camera, orthographic or not).
   void* floor = floor_at(shown_floor_index());
   void* floorTransform = floor ? phasmo::MapFloor::floor.get(floor) : nullptr;

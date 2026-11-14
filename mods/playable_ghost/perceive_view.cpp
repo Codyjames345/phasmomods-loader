@@ -84,7 +84,8 @@ void draw_marks(const session::Session& s, void* camera, bool darkened, ULONGLON
   const float pulse = 0.5f + 0.5f * std::sin(static_cast<float>(now % 100000) / 160.0f);
   size_t used = 0;
   for (const Mark& m : marks) {
-    const phasmo::Vector3 screen = phasmo::Camera::WorldToScreenPoint(camera, {m.x, m.y + 0.2f, m.z});
+    const phasmo::Vector3 screen =
+        phasmo::Camera::WorldToScreenPoint(camera, phasmo::Vector3{m.x, m.y + 0.2f, m.z});
     if (screen.z <= 0.1f) continue;  // behind the ghost
     void* d = dot(used++);
     const float size = size_of(m.kind);

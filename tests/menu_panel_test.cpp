@@ -742,26 +742,29 @@ void entries_for_mods_reach_the_game() {
   };
   int self = 0, eventData = 0;
   give_them(nullptr);
-  phasmo::UIButton::OnPointerClick(&self, &eventData);
+  phasmo::UIButton::OnPointerClick(static_cast<void*>(&self), static_cast<void*>(&eventData));
   CHECK(g_reached == 1 && g_reachedSelf == &self && g_reachedArgument == &eventData);
-  phasmo::UIButton::OnSubmit(&self, &eventData);
+  phasmo::UIButton::OnSubmit(static_cast<void*>(&self), static_cast<void*>(&eventData));
   CHECK(g_reached == 2);
   phasmo::UnityEvent::Invoke(&self);
   CHECK(g_reached == 3 && g_reachedSelf == &self);
-  CHECK(phasmo::UISelectable::SetState(&self, 2) == &self && g_reached == 4 && g_reachedState == 2);
+  CHECK(phasmo::UISelectable::SetState(static_cast<void*>(&self), 2).raw() == &self && g_reached == 4 &&
+        g_reachedState == 2);
   for (const pm::sdk::EntryDesc* d : {&m::UIButton_OnPointerClick, &m::UIButton_OnSubmit, &m::UnityEvent_Invoke,
                                       &m::UISelectable_SetState}) {
     give_them(d);
-    if (d == &m::UIButton_OnPointerClick) phasmo::UIButton::OnPointerClick(&self, &eventData);
-    if (d == &m::UIButton_OnSubmit) phasmo::UIButton::OnSubmit(&self, &eventData);
+    if (d == &m::UIButton_OnPointerClick)
+      phasmo::UIButton::OnPointerClick(static_cast<void*>(&self), static_cast<void*>(&eventData));
+    if (d == &m::UIButton_OnSubmit)
+      phasmo::UIButton::OnSubmit(static_cast<void*>(&self), static_cast<void*>(&eventData));
     if (d == &m::UnityEvent_Invoke) phasmo::UnityEvent::Invoke(&self);
-    if (d == &m::UISelectable_SetState) CHECK(!phasmo::UISelectable::SetState(&self, 2));
+    if (d == &m::UISelectable_SetState) CHECK(!phasmo::UISelectable::SetState(static_cast<void*>(&self), 2));
     CHECK(g_reached == 0);
   }
   // Play stays the game's, for a mod: the fixture's animator notes the state.
   reset();
   auto* animator = ui_fixture::make_node(nodes, "UISelectableColorAnimator");
-  phasmo::UISelectableColorAnimator::Play(animator, 2);
+  phasmo::UISelectableColorAnimator::Play(static_cast<void*>(animator), 2);
   CHECK((animator->played == std::vector<int>{2}));
 }
 /** Visibility requires the focused menu and its live, enabled canvas camera. */

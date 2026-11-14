@@ -196,9 +196,9 @@ struct UIButton {
   /// The type: type_object() for GetComponent, is(obj). Unresolved: null and false.
   static constexpr pm::api::Type<pm::map::UIButton> type{};
   /// OnPointerClick(button, eventData): hook it to follow clicks. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UIButton_OnPointerClick, void(void*, void*)> OnPointerClick{};
+  static constexpr pm::api::Method<pm::map::UIButton_OnPointerClick, void(pm::api::Ref<pm::map::UIButton>, pm::api::Object)> OnPointerClick{};
   /// OnSubmit(button, eventData): hook it to follow submits. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UIButton_OnSubmit, void(void*, void*)> OnSubmit{};
+  static constexpr pm::api::Method<pm::map::UIButton_OnSubmit, void(pm::api::Ref<pm::map::UIButton>, pm::api::Object)> OnSubmit{};
 };
 
 /// Doozy's base of its controls. `control` below is one, a UIButton for example.
@@ -206,18 +206,18 @@ struct UISelectable {
   /// The type: is(obj). Unresolved: false.
   static constexpr pm::api::Type<pm::map::UISelectable> type{};
   /// Its behaviours, a DoozyBehaviours: Behaviours.get(control). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::UISelectable_Behaviours, void*> Behaviours{};
+  static constexpr pm::api::Field<pm::map::UISelectable_Behaviours, pm::api::Ref<pm::map::DoozyBehaviours>> Behaviours{};
   /// GetBehaviour(control, name): its behaviour of that DoozyBehaviourName, or null. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::UISelectable_GetBehaviour, void*(void*, int32_t)> GetBehaviour{};
+  static constexpr pm::api::Method<pm::map::UISelectable_GetBehaviour, pm::api::Object(pm::api::Ref<pm::map::UISelectable>, int32_t)> GetBehaviour{};
   /// SetState(control, state): 0 normal, 1 highlighted, 2 pressed, 3 selected, 4 disabled; returns the control.
   /// Unresolved: null.
-  static constexpr pm::api::Method<pm::map::UISelectable_SetState, void*(void*, int32_t)> SetState{};
+  static constexpr pm::api::Method<pm::map::UISelectable_SetState, pm::api::Object(pm::api::Ref<pm::map::UISelectable>, int32_t)> SetState{};
 };
 
 /// A control's list of behaviours. `behaviours` below is one.
 struct DoozyBehaviours {
   /// The list, a List<UIBehaviour>: Behaviours.get(behaviours). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::DoozyBehaviours_Behaviours, void*> Behaviours{};
+  static constexpr pm::api::Field<pm::map::DoozyBehaviours_Behaviours, pm::api::Object> Behaviours{};
 };
 
 /// One behaviour of a control, a ModyEvent.
@@ -235,7 +235,7 @@ inline constexpr pm::api::EnumValue<pm::map::DoozyBehaviourName_PointerClick> Po
 /// Doozy's base of its events. `event` below is one.
 struct ModyEventBase {
   /// Its runners, a List<ModyActionRunner>: Runners.get(event). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ModyEventBase_Runners, void*> Runners{};
+  static constexpr pm::api::Field<pm::map::ModyEventBase_Runners, pm::api::Object> Runners{};
 };
 
 /// Doozy's event. `event` below is one, a DoozyBehaviour for example.
@@ -243,7 +243,7 @@ struct ModyEvent {
   /// The type: is(obj). Unresolved: false.
   static constexpr pm::api::Type<pm::map::ModyEvent> type{};
   /// Its UnityEvent: Event.get(event), Event.set(event, unityEvent). Unresolved: null, writes nothing.
-  static constexpr pm::api::Field<pm::map::ModyEvent_Event, void*> Event{};
+  static constexpr pm::api::Field<pm::map::ModyEvent_Event, pm::api::Object> Event{};
 };
 
 /// A taped button's colour animator. `animator` below is one. Optional.
@@ -251,15 +251,15 @@ struct UISelectableColorAnimator {
   /// The type: type_object() for GetComponent. Unresolved: null.
   static constexpr pm::api::Type<pm::map::UISelectableColorAnimator> type{};
   /// Play(animator, state): state 0 normal, 1 highlighted, 2 pressed, 3 selected, 4 disabled. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::UISelectableColorAnimator_Play, void(void*, int32_t)> Play{};
+  static constexpr pm::api::Method<pm::map::UISelectableColorAnimator_Play, void(pm::api::Ref<pm::map::UISelectableColorAnimator>, int32_t)> Play{};
   /// The disabled state's colour animation: DisabledAnimation.get(animator). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::UISelectableColorAnimator_DisabledAnimation, void*> DisabledAnimation{};
+  static constexpr pm::api::Field<pm::map::UISelectableColorAnimator_DisabledAnimation, pm::api::Ref<pm::map::ColorAnimation>> DisabledAnimation{};
 };
 
 /// A Doozy colour animation. `animation` below is one, as UISelectableColorAnimator.DisabledAnimation gives it.
 struct ColorAnimation {
   /// Its reaction: Animation.get(animation). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::ColorAnimation_Animation, void*> Animation{};
+  static constexpr pm::api::Field<pm::map::ColorAnimation_Animation, pm::api::Ref<pm::map::ColorTargetReaction>> Animation{};
 };
 
 /// A Doozy colour reaction. `reaction` below is one, as ColorAnimation.Animation gives it.

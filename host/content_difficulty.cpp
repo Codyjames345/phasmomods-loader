@@ -67,7 +67,7 @@ void* detour_enum_name(pm::api::Original<phasmo::Enum::ToString> original, void*
     guarded(logged, "naming a custom ghost in the summary", [&] {
       if (const auto n = g_self->enum_name(boxed)) name = pm::api::make_string(*n);
     });
-  return name ? name : original(boxed);
+  return name ? name : static_cast<void*>(original(boxed));
 }
 
 const pm::sdk::EntryDesc* const kNeeded[] = {
@@ -251,8 +251,8 @@ bool ContentDifficulty::give_back(void* menu, bool master) {
   // hide that the lobby's difficulty changed, so it would never be sent.
   bool changed = false;
   if (master)
-    for (void* d : {phasmo::DifficultyUIManager::current.get(menu), phasmo::DifficultyUIManager::applied.get(menu),
-                    level_difficulty()})
+    for (void* d : {static_cast<void*>(phasmo::DifficultyUIManager::current.get(menu)),
+                    static_cast<void*>(phasmo::DifficultyUIManager::applied.get(menu)), level_difficulty()})
       changed = take(d) || changed;
   const pm::api::RefArray presets{phasmo::DifficultyUIManager::presets.get(menu)};
   for (size_t i = 0; i < presets.size(); ++i) take(presets[i]);
@@ -311,7 +311,7 @@ void ContentDifficulty::set_aside(void* menu, bool master) {
   };
   const pm::api::RefArray presets{phasmo::DifficultyUIManager::presets.get(menu)};
   for (size_t i = 0; i < presets.size(); ++i) aside(presets[i]);
-  for (void* d : {current, phasmo::DifficultyUIManager::applied.get(menu), contract}) aside(d);
+  for (void* d : {current, static_cast<void*>(phasmo::DifficultyUIManager::applied.get(menu)), contract}) aside(d);
   if (master && changed) send(menu);
 }
 

@@ -117,41 +117,41 @@ struct Camera {
   static constexpr pm::api::Type<pm::map::Camera> type{};
   /// Where `world` lies on the screen: WorldToScreenPoint(camera, world), z behind the camera
   /// negative. Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::Camera_WorldToScreenPoint, Vector3(void*, Vector3)> WorldToScreenPoint{};
+  static constexpr pm::api::Method<pm::map::Camera_WorldToScreenPoint, Vector3(pm::api::Ref<pm::map::Camera>, Vector3)> WorldToScreenPoint{};
   /// Sets the vertical field of view in degrees: set_fieldOfView(camera, degrees). Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Camera_set_fieldOfView, void(void*, float)> set_fieldOfView{};
+  static constexpr pm::api::Method<pm::map::Camera_set_fieldOfView, void(pm::api::Ref<pm::map::Camera>, float)> set_fieldOfView{};
   /// The layer mask of what the camera renders: get_cullingMask(camera). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Camera_get_cullingMask, int32_t(void*)> get_cullingMask{};
+  static constexpr pm::api::Method<pm::map::Camera_get_cullingMask, int32_t(pm::api::Ref<pm::map::Camera>)> get_cullingMask{};
   /// Every enabled camera, a Camera[]: get_allCameras(). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Camera_get_allCameras, void*()> get_allCameras{};
+  static constexpr pm::api::Method<pm::map::Camera_get_allCameras, pm::api::Object()> get_allCameras{};
   /// Sets the layer mask of what the camera renders: set_cullingMask(camera, mask). Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Camera_set_cullingMask, void(void*, int32_t)> set_cullingMask{};
+  static constexpr pm::api::Method<pm::map::Camera_set_cullingMask, void(pm::api::Ref<pm::map::Camera>, int32_t)> set_cullingMask{};
   /// The near clipping plane's distance: get_nearClipPlane(camera). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Camera_get_nearClipPlane, float(void*)> get_nearClipPlane{};
+  static constexpr pm::api::Method<pm::map::Camera_get_nearClipPlane, float(pm::api::Ref<pm::map::Camera>)> get_nearClipPlane{};
   /// Sets the near clipping plane's distance: set_nearClipPlane(camera, distance). Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Camera_set_nearClipPlane, void(void*, float)> set_nearClipPlane{};
+  static constexpr pm::api::Method<pm::map::Camera_set_nearClipPlane, void(pm::api::Ref<pm::map::Camera>, float)> set_nearClipPlane{};
   /// The far clipping plane's distance: get_farClipPlane(camera). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Camera_get_farClipPlane, float(void*)> get_farClipPlane{};
+  static constexpr pm::api::Method<pm::map::Camera_get_farClipPlane, float(pm::api::Ref<pm::map::Camera>)> get_farClipPlane{};
   /// Sets the far clipping plane's distance: set_farClipPlane(camera, distance). Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::Camera_set_farClipPlane, void(void*, float)> set_farClipPlane{};
+  static constexpr pm::api::Method<pm::map::Camera_set_farClipPlane, void(pm::api::Ref<pm::map::Camera>, float)> set_farClipPlane{};
   /// The RenderTexture it draws into, or null: get_targetTexture(camera). Optional. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::Camera_get_targetTexture, void*(void*)> get_targetTexture{};
+  static constexpr pm::api::Method<pm::map::Camera_get_targetTexture, pm::api::Object(pm::api::Ref<pm::map::Camera>)> get_targetTexture{};
   /// The ray through a viewport point: ViewportPointToRay(camera, point). Optional. Unresolved: all zero.
-  static constexpr pm::api::Method<pm::map::Camera_ViewportPointToRay, Ray(void*, Vector3)> ViewportPointToRay{};
+  static constexpr pm::api::Method<pm::map::Camera_ViewportPointToRay, Ray(pm::api::Ref<pm::map::Camera>, Vector3)> ViewportPointToRay{};
   /// Where `world` lies in the viewport: WorldToViewportPoint(camera, world). Optional. Unresolved: all
   /// zero.
-  static constexpr pm::api::Method<pm::map::Camera_WorldToViewportPoint, Vector3(void*, Vector3)>
+  static constexpr pm::api::Method<pm::map::Camera_WorldToViewportPoint, Vector3(pm::api::Ref<pm::map::Camera>, Vector3)>
       WorldToViewportPoint{};
   /// get_fieldOfView(camera): its vertical field of view in degrees. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Camera_get_fieldOfView, float(void*)> get_fieldOfView{};
+  static constexpr pm::api::Method<pm::map::Camera_get_fieldOfView, float(pm::api::Ref<pm::map::Camera>)> get_fieldOfView{};
   /// get_aspect(camera): its width over its height. Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Camera_get_aspect, float(void*)> get_aspect{};
+  static constexpr pm::api::Method<pm::map::Camera_get_aspect, float(pm::api::Ref<pm::map::Camera>)> get_aspect{};
   /// CopyFrom(camera, other): every setting of `other`, and its place. Unresolved: does nothing.
-  static constexpr pm::api::Icall<pm::map::Camera_CopyFrom, void(void*, void*)> CopyFrom{};
+  static constexpr pm::api::Icall<pm::map::Camera_CopyFrom, void(pm::api::Object, pm::api::Ref<pm::map::Camera>)> CopyFrom{};
 };
 
 /// @}

@@ -135,7 +135,7 @@ void lock_open(Swing& s) {
   phasmo::Rigidbody::set_constraints(s.body, phasmo::Rigidbody::kFreezeAll);
   phasmo::Door::locked.set(s.door, true);
   phasmo::Door::kind.set(s.door, phasmo::DoorKind::PermanentLock());
-  phasmo::Door::CheckOcclusionPortal(s.door);
+  phasmo::Door::CheckOcclusionPortal(s.door.get());
   s.locked = true;
   PM_LOG("asterion: %s is locked open at %.0f degrees", name_of(s.door).c_str(), leaf_angle(s.door, s.leaf));
 }
@@ -202,7 +202,7 @@ void tick(void* ghost, int type) {
     const bool closed = door_closed(leaf_angle(t.door, t.leaf), phasmo::Door::closedAngle.get(t.door));
     const bool towards = door_ahead(heading.x, heading.z, dx, dz, centre.x - hinge.x, centre.z - hinge.z);
     switch (t.track.step(hunting, distance, closed, towards, dt)) {
-      case DoorAction::Bang: phasmo::Door::CreateDoorSlamNoise(t.door, nullptr); break;
+      case DoorAction::Bang: phasmo::Door::CreateDoorSlamNoise(t.door.get(), nullptr); break;
       case DoorAction::Burst: {
         // A double door gives way as one: its other leaf breaks open with it.
         std::vector<void*> leaves{t.door.get()};

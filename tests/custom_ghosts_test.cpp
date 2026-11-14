@@ -2189,7 +2189,7 @@ void the_squatter_begins_lurking_or_moping() {
   // Until the difficulty can be read the Squatter holds no phase, rather than one guessed for the whole contract.
   squatter::tick(&ghost, kSquatter, false);
   CHECK(!squatter::phase());
-  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  phasmo::LevelValues::difficulty.set(&values, pm::api::Ref<pm::map::Difficulty>::unchecked(&difficulty));
   phasmo::Difficulty::friendlyGhost.set(&difficulty, true);
   squatter::tick(&ghost, kSquatter, false);
   CHECK(squatter::phase() == squatter::Phase::Moping);
@@ -2241,7 +2241,7 @@ void the_squatter_follows_the_masters_shown() {
   fake::method(map::PhotonPlayer_get_ActorNumber, reinterpret_cast<void*>(&fake_actor));
   std::string missing;
   pm::api::bind(fake::host(), missing);
-  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  phasmo::LevelValues::difficulty.set(&values, pm::api::Ref<pm::map::Difficulty>::unchecked(&difficulty));
   g_isMaster = false;
   squatter::reset();
   squatter::tick(&ghost, kSquatter, false);
@@ -2309,7 +2309,7 @@ void the_squatters_kick_kills_once_and_never_wrongly() {
   squatter::reset();
   // Unreadable difficulty: no kill.
   CHECK(!squatter::kick(&victim, 3) && g_kills.empty());
-  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  phasmo::LevelValues::difficulty.set(&values, pm::api::Ref<pm::map::Difficulty>::unchecked(&difficulty));
   // kick_calls_the_kill_once
   CHECK(squatter::kick(&victim, 3));
   CHECK(g_kills.size() == 1 && g_kills[0].first == &victim && g_kills[0].second == kSnappedNeck);
@@ -2356,7 +2356,7 @@ void the_master_idles_the_squatter_once_as_steering_begins() {
   fake::value(map::GhostState_idle, kIdle);
   std::string missing;
   pm::api::bind(fake::host(), missing);
-  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  phasmo::LevelValues::difficulty.set(&values, pm::api::Ref<pm::map::Difficulty>::unchecked(&difficulty));
   g_stateChanges.clear();
   g_kills.clear();
   g_exitsClosed = 0;
@@ -2413,7 +2413,7 @@ void the_squatters_lock_survives_a_tick_without_it() {
   fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_master));
   std::string missing;
   pm::api::bind(fake::host(), missing);
-  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  phasmo::LevelValues::difficulty.set(&values, pm::api::Ref<pm::map::Difficulty>::unchecked(&difficulty));
   for (Obj* l : {&level, &nextLevel}) {
     void* exits = fake::array(sizeof(void*), 1);
     pm::api::RefArray{exits}.set(0, &door);
@@ -2457,7 +2457,7 @@ void another_type_lets_the_squatters_exits_go() {
   fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_master));
   std::string missing;
   pm::api::bind(fake::host(), missing);
-  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  phasmo::LevelValues::difficulty.set(&values, pm::api::Ref<pm::map::Difficulty>::unchecked(&difficulty));
   void* exits = fake::array(sizeof(void*), 1);
   pm::api::RefArray{exits}.set(0, &door);
   phasmo::LevelController::huntingDoors.set(&level, exits);
@@ -2498,7 +2498,7 @@ void the_masters_tick_relocks_a_reopened_exit() {
   fake::method(map::PhotonNetwork_get_IsMasterClient, reinterpret_cast<void*>(&fake_is_master));
   std::string missing;
   pm::api::bind(fake::host(), missing);
-  phasmo::LevelValues::difficulty.set(&values, &difficulty);
+  phasmo::LevelValues::difficulty.set(&values, pm::api::Ref<pm::map::Difficulty>::unchecked(&difficulty));
   void* exits = fake::array(sizeof(void*), 1);
   pm::api::RefArray{exits}.set(0, &door);
   phasmo::LevelController::huntingDoors.set(&level, exits);

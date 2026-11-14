@@ -15,6 +15,7 @@
 #include "Photon.h"
 #include "UnityObject.h"
 #include "UnityPostProcessing.h"
+#include "Weather.h"
 
 namespace pm::map {
 
@@ -680,7 +681,7 @@ struct Difficulty {
   static constexpr pm::api::Type<pm::map::Difficulty> type{};
   /// The contract's cursed possessions, a CursedItemType[]: actualCursedItems.get(d), read as a
   /// pm::api::Array<int32_t>. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Difficulty_actualCursedItems, void*> actualCursedItems{};
+  static constexpr pm::api::Field<pm::map::Difficulty_actualCursedItems, pm::api::Object> actualCursedItems{};
   /// The weather as it is played, a WeatherValueType number: actualWeather.get(d). The hunt's Blood Moon branch
   /// reads it each time (GhostAI.speedFlag's note). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Difficulty_actualWeather, int32_t> actualWeather{};
@@ -754,7 +755,7 @@ struct Difficulty {
   /// The override multiplier: overrideMultiplier.get(d). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::Difficulty_overrideMultiplier, float> overrideMultiplier{};
   /// What it multiplies a contract's reward by: GetRewardMultiplier(d). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::Difficulty_GetRewardMultiplier, float(void*)> GetRewardMultiplier{};
+  static constexpr pm::api::Method<pm::map::Difficulty_GetRewardMultiplier, float(pm::api::Ref<pm::map::Difficulty>)> GetRewardMultiplier{};
 };
 
 /// One option of the difficulty menu. `option` below is the DifficultyOption.
@@ -766,7 +767,7 @@ struct DifficultyOption {
   /// How many choices: count.get(option), count.set(option, n). Unresolved: 0.
   static constexpr pm::api::Field<pm::map::DifficultyOption_count, int32_t> count{};
   /// Sets the arrows for the index: ButtonCheck(option). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::DifficultyOption_ButtonCheck, void(void*)> ButtonCheck{};
+  static constexpr pm::api::Method<pm::map::DifficultyOption_ButtonCheck, void(pm::api::Ref<pm::map::DifficultyOption>)> ButtonCheck{};
 };
 
 /// The lobby's difficulty menu. `menu` below is the DifficultyUIManager.
@@ -774,30 +775,30 @@ struct DifficultyUIManager {
   /// The DifficultyUIManager type: type_object() for Object.FindObjectOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::DifficultyUIManager> type{};
   /// The Ghost Type DifficultyOption: ghostType.get(menu). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::DifficultyUIManager_ghostType, void*> ghostType{};
+  static constexpr pm::api::Field<pm::map::DifficultyUIManager_ghostType, pm::api::Object> ghostType{};
   /// The GhostCollection the option offers: allGhostsData.get(menu). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::DifficultyUIManager_allGhostsData, void*> allGhostsData{};
+  static constexpr pm::api::Field<pm::map::DifficultyUIManager_allGhostsData, pm::api::Object> allGhostsData{};
   /// The custom presets, a Difficulty[]: presets.get(menu). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::DifficultyUIManager_presets, void*> presets{};
+  static constexpr pm::api::Field<pm::map::DifficultyUIManager_presets, pm::api::Object> presets{};
   /// The lobby's difficulty, or null: current.get(menu). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::DifficultyUIManager_current, void*> current{};
+  static constexpr pm::api::Field<pm::map::DifficultyUIManager_current, pm::api::Ref<pm::map::Difficulty>> current{};
   /// Its settled copy, or null: applied.get(menu). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::DifficultyUIManager_applied, void*> applied{};
+  static constexpr pm::api::Field<pm::map::DifficultyUIManager_applied, pm::api::Ref<pm::map::Difficulty>> applied{};
   /// Sends a difficulty to every player, this one included: ForceSyncDifficulty(menu, d). Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::DifficultyUIManager_ForceSyncDifficulty, void(void*, void*)>
+  static constexpr pm::api::Method<pm::map::DifficultyUIManager_ForceSyncDifficulty, void(pm::api::Ref<pm::map::DifficultyUIManager>, pm::api::Ref<pm::map::Difficulty>)>
       ForceSyncDifficulty{};
   /// The Ghost Type option's change handler: GhostTypeChosen(menu). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::DifficultyUIManager_GhostTypeChosen, void(void*)> GhostTypeChosen{};
+  static constexpr pm::api::Method<pm::map::DifficultyUIManager_GhostTypeChosen, void(pm::api::Ref<pm::map::DifficultyUIManager>)> GhostTypeChosen{};
   /// The custom difficulty's summary text of `d`, a System.String: SummaryText(menu, d). Unresolved:
   /// null.
-  static constexpr pm::api::Method<pm::map::DifficultyUIManager_SummaryText, void*(void*, void*)> SummaryText{};
+  static constexpr pm::api::Method<pm::map::DifficultyUIManager_SummaryText, pm::api::Object(pm::api::Ref<pm::map::DifficultyUIManager>, pm::api::Ref<pm::map::Difficulty>)> SummaryText{};
 };
 
 /// EasySave3's type for Difficulty. `es3type` below is the type object, `writer` an ES3Writer.
 struct ES3UserType_Difficulty {
   /// Writes the difficulty `d`: WriteScriptableObject(es3type, d, writer). Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::ES3UserType_Difficulty_WriteScriptableObject, void(void*, void*, void*)>
+  static constexpr pm::api::Method<pm::map::ES3UserType_Difficulty_WriteScriptableObject, void(pm::api::Ref<pm::map::ES3UserType_Difficulty>, pm::api::Object, pm::api::Object)>
       WriteScriptableObject{};
 };
 
@@ -805,31 +806,31 @@ struct ES3UserType_Difficulty {
 struct LevelValues {
   /// The one LevelValues: get_Instance(). Reading it while no LevelValues exists makes one, so call it
   /// while the game plays. Unresolved: null.
-  static constexpr pm::api::Method<pm::map::LevelValues_get_Instance, void*()> get_Instance{};
+  static constexpr pm::api::Method<pm::map::LevelValues_get_Instance, pm::api::Object()> get_Instance{};
   /// The contract's difficulty: difficulty.get(values). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelValues_difficulty, void*> difficulty{};
+  static constexpr pm::api::Field<pm::map::LevelValues_difficulty, pm::api::Ref<pm::map::Difficulty>> difficulty{};
   /// Whether the ghost's ability may not end in an event now: eventsBlocked.get(values). Unresolved:
   /// false.
   static constexpr pm::api::Field<pm::map::LevelValues_eventsBlocked, bool> eventsBlocked{};
   /// The contract's weather, a WeatherProfile (Weather.h): weather.get(values), or null. Unresolved:
   /// null.
-  static constexpr pm::api::Field<pm::map::LevelValues_weather, void*> weather{};
+  static constexpr pm::api::Field<pm::map::LevelValues_weather, pm::api::Ref<pm::map::WeatherProfile>> weather{};
   /// The one LevelValues: instance.get(), or null (or a destroyed one) when there is none; reading it
   /// makes nothing. Reading it may run the class's static constructor, so read it while the game plays.
   /// Unresolved: null.
-  static constexpr pm::api::StaticField<pm::map::LevelValues_instance, void*> instance{};
+  static constexpr pm::api::StaticField<pm::map::LevelValues_instance, pm::api::Ref<pm::map::LevelValues>> instance{};
   /// The contract's main objective, an Objective (Rewards.h): mainObjective.get(values), or null.
   /// Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelValues_mainObjective, void*> mainObjective{};
+  static constexpr pm::api::Field<pm::map::LevelValues_mainObjective, pm::api::Ref<pm::map::Objective>> mainObjective{};
   /// The contract's side objectives, a List of the Objective (Rewards.h): sideObjectives.get(values).
   /// Read the list as pm::api::List. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelValues_sideObjectives, void*> sideObjectives{};
+  static constexpr pm::api::Field<pm::map::LevelValues_sideObjectives, pm::api::Object> sideObjectives{};
   /// The equipment the truck starts the contract with, a List of the GameEquipmentLoadout (Equipment.h):
   /// equipmentLoadout.get(values). Read the list as pm::api::List. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::LevelValues_equipmentLoadout, void*> equipmentLoadout{};
+  static constexpr pm::api::Field<pm::map::LevelValues_equipmentLoadout, pm::api::Object> equipmentLoadout{};
   /// The money the contract's objectives pay, the main one's and the side ones':
   /// GetInvestigationBonusReward(values). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::LevelValues_GetInvestigationBonusReward, int32_t(void*)>
+  static constexpr pm::api::Method<pm::map::LevelValues_GetInvestigationBonusReward, int32_t(pm::api::Ref<pm::map::LevelValues>)>
       GetInvestigationBonusReward{};
   /// Whether the contract ended the game's own way: completed.get(values); a mod's own end of the
   /// contract writes it as ExitLevel.Exit does. Unresolved: false, writes nothing.
@@ -842,18 +843,18 @@ struct DifficultySettings {
   static constexpr pm::api::Type<pm::map::DifficultySettings> type{};
   /// AddHuntDuration(settings, amount): adds `amount` to the hunt's duration on every client, once a contract; it
   /// sends an RPC (sdk/systems/photon.md). A mod hooks it, never calls it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::DifficultySettings_AddHuntDuration, void(void*, int32_t)> AddHuntDuration{};
+  static constexpr pm::api::Method<pm::map::DifficultySettings_AddHuntDuration, void(pm::api::Ref<pm::map::DifficultySettings>, int32_t)> AddHuntDuration{};
   /// ResetHuntGracePeriod(settings): the hunt's grace period goes back to its own value, on this client. Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::DifficultySettings_ResetHuntGracePeriod, void(void*)> ResetHuntGracePeriod{};
+  static constexpr pm::api::Method<pm::map::DifficultySettings_ResetHuntGracePeriod, void(pm::api::Ref<pm::map::DifficultySettings>)> ResetHuntGracePeriod{};
 };
 
 /// System.Enum. `boxed` below is a boxed enum value.
 struct Enum {
   /// The value's name, its number when it has none: ToString(boxed). Unresolved: null.
-  static constexpr pm::api::Method<pm::map::SystemEnum_ToString, void*(void*)> ToString{};
+  static constexpr pm::api::Method<pm::map::SystemEnum_ToString, pm::api::Object(pm::api::Ref<pm::map::SystemEnum>)> ToString{};
   /// For an enum stored as an int, its value: GetHashCode(boxed). Unresolved: 0.
-  static constexpr pm::api::Method<pm::map::SystemEnum_GetHashCode, int32_t(void*)> GetHashCode{};
+  static constexpr pm::api::Method<pm::map::SystemEnum_GetHashCode, int32_t(pm::api::Ref<pm::map::SystemEnum>)> GetHashCode{};
 };
 
 /// The cursed possessions a contract can carry: the numbers Difficulty.actualCursedItems holds.

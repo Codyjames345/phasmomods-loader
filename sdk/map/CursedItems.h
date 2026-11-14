@@ -202,63 +202,63 @@ namespace phasmo {
 struct OuijaBoard {
   /// PlayMessageSequence(board, message, &info): `message` a System.String. A mod hooks it. Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::OuijaBoard_PlayMessageSequence, void(void*, void*, void*)>
+  static constexpr pm::api::Method<pm::map::OuijaBoard_PlayMessageSequence, void(pm::api::Ref<pm::map::OuijaBoard>, pm::api::Object, pm::api::Object)>
       PlayMessageSequence{};
   /// BreakBoard(board): the board breaks and, on the master, the ghost hunts. A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::OuijaBoard_BreakBoard, void(void*)> BreakBoard{};
+  static constexpr pm::api::Method<pm::map::OuijaBoard_BreakBoard, void(pm::api::Ref<pm::map::OuijaBoard>)> BreakBoard{};
 };
 
 /// The haunted mirror.
 struct HauntedMirror {
   /// UseNetworked(mirror, on, &info). A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::HauntedMirror_UseNetworked, void(void*, bool, void*)> UseNetworked{};
+  static constexpr pm::api::Method<pm::map::HauntedMirror_UseNetworked, void(pm::api::Ref<pm::map::HauntedMirror>, bool, pm::api::Object)> UseNetworked{};
   /// BreakItem(mirror): the mirror breaks and, on the master, the ghost hunts. A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::HauntedMirror_BreakItem, void(void*)> BreakItem{};
+  static constexpr pm::api::Method<pm::map::HauntedMirror_BreakItem, void(pm::api::Ref<pm::map::HauntedMirror>)> BreakItem{};
 };
 
 /// The music box. `box` below is one.
 struct MusicBox {
   /// UseNetworked(box, flag, &info). A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::MusicBox_UseNetworked, void(void*, bool, void*)> UseNetworked{};
+  static constexpr pm::api::Method<pm::map::MusicBox_UseNetworked, void(pm::api::Ref<pm::map::MusicBox>, bool, pm::api::Object)> UseNetworked{};
   /// Its tween, a DOTween Sequence, or null: tween.get(box). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::MusicBox_tween, void*> tween{};
+  static constexpr pm::api::Field<pm::map::MusicBox_tween, pm::api::Object> tween{};
   /// BreakMusicBox(box, flag): the box breaks and, on the master, the ghost hunts. A mod hooks it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::MusicBox_BreakMusicBox, void(void*, bool)> BreakMusicBox{};
+  static constexpr pm::api::Method<pm::map::MusicBox_BreakMusicBox, void(pm::api::Ref<pm::map::MusicBox>, bool)> BreakMusicBox{};
   /// EnterMusicBoxState(box, &info), an RPC: the ghost is called to the box. A mod hooks it; never calls it.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::MusicBox_EnterMusicBoxState, void(void*, void*)> EnterMusicBoxState{};
+  static constexpr pm::api::Method<pm::map::MusicBox_EnterMusicBoxState, void(pm::api::Ref<pm::map::MusicBox>, pm::api::Object)> EnterMusicBoxState{};
 };
 
 /// The tarot cards.
 struct TarotCards {
   /// ChangeState(cards, card, flag, &info). A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::TarotCards_ChangeState, void(void*, int32_t, bool, void*)> ChangeState{};
+  static constexpr pm::api::Method<pm::map::TarotCards_ChangeState, void(pm::api::Ref<pm::map::TarotCards>, int32_t, bool, pm::api::Object)> ChangeState{};
   /// HighPriestess(cards, &info), an RPC: the High Priestess card's revive. A mod hooks it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::TarotCards_HighPriestess, void(void*, void*)> HighPriestess{};
+  static constexpr pm::api::Method<pm::map::TarotCards_HighPriestess, void(pm::api::Ref<pm::map::TarotCards>, pm::api::Object)> HighPriestess{};
 };
 
 /// The voodoo doll.
 struct VoodooDoll {
   /// NetworkedUse(doll, pin, &info). A mod hooks it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::VoodooDoll_NetworkedUse, void(void*, int32_t, void*)> NetworkedUse{};
+  static constexpr pm::api::Method<pm::map::VoodooDoll_NetworkedUse, void(pm::api::Ref<pm::map::VoodooDoll>, int32_t, pm::api::Object)> NetworkedUse{};
   /// StartHunt(doll, &info), an RPC: the doll's hunt. A mod hooks it; never calls it. Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::VoodooDoll_StartHunt, void(void*, void*)> StartHunt{};
+  static constexpr pm::api::Method<pm::map::VoodooDoll_StartHunt, void(pm::api::Ref<pm::map::VoodooDoll>, pm::api::Object)> StartHunt{};
 };
 
 /// The monkey paw.
 struct MonkeyPaw {
   /// MakeWishNetworked(paw, wish, a, text, &info): the wish's IEnumerator. A mod hooks it. Unresolved:
   /// null.
-  static constexpr pm::api::Method<pm::map::MonkeyPaw_MakeWishNetworked, void*(void*, int32_t, int32_t, void*, void*)>
+  static constexpr pm::api::Method<pm::map::MonkeyPaw_MakeWishNetworked, pm::api::Object(pm::api::Ref<pm::map::MonkeyPaw>, int32_t, int32_t, pm::api::Object, pm::api::Object)>
       MakeWishNetworked{};
   /// ReviveWish(paw, wisher): the revive wish, `wisher` a Photon player. A mod hooks it. Unresolved: does
   /// nothing.
-  static constexpr pm::api::Method<pm::map::MonkeyPaw_ReviveWish, void(void*, void*)> ReviveWish{};
+  static constexpr pm::api::Method<pm::map::MonkeyPaw_ReviveWish, void(pm::api::Ref<pm::map::MonkeyPaw>, pm::api::Object)> ReviveWish{};
   /// OpenExitsWish(paw, wisher): the wish that opens every exit, `wisher` a Photon player. A mod hooks it.
   /// Unresolved: does nothing.
-  static constexpr pm::api::Method<pm::map::MonkeyPaw_OpenExitsWish, void(void*, void*)> OpenExitsWish{};
+  static constexpr pm::api::Method<pm::map::MonkeyPaw_OpenExitsWish, void(pm::api::Ref<pm::map::MonkeyPaw>, pm::api::Object)> OpenExitsWish{};
 };
 
 /// The jackalope, a seasonal item.
@@ -267,7 +267,7 @@ struct Jackalope {
   static constexpr pm::api::Type<pm::map::Jackalope> type{};
   /// TriggerHunt(jackalope, actor, &info), an RPC: the jackalope's hunt. A mod hooks it; never calls it. Unresolved:
   /// does nothing.
-  static constexpr pm::api::Method<pm::map::Jackalope_TriggerHunt, void(void*, int32_t, void*)> TriggerHunt{};
+  static constexpr pm::api::Method<pm::map::Jackalope_TriggerHunt, void(pm::api::Ref<pm::map::Jackalope>, int32_t, pm::api::Object)> TriggerHunt{};
 };
 
 /// A summoning circle.

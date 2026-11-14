@@ -87,7 +87,7 @@ struct Candle {
   static constexpr pm::api::Type<pm::map::Candle> type{};
   /// Its flames, a CandleObject[]: candleObjects.get(candle), read as a pm::api::RefArray. Unresolved:
   /// null.
-  static constexpr pm::api::Field<pm::map::Candle_candleObjects, void*> candleObjects{};
+  static constexpr pm::api::Field<pm::map::Candle_candleObjects, pm::api::Object> candleObjects{};
   /// The wax's glow while lit: candleEmissionColor.get(candle). Unresolved: all zero.
   static constexpr pm::api::Field<pm::map::Candle_candleEmissionColor, Color> candleEmissionColor{};
   /// Seconds left to burn: candleDuration.get(candle), .set(candle, s). Unresolved: 0.
@@ -97,9 +97,9 @@ struct Candle {
 /// One flame of a candle. `object` below is the CandleObject.
 struct CandleObject {
   /// Its wax, a MeshRenderer[]: candleRend.get(object), read as a pm::api::RefArray. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::CandleObject_candleRend, void*> candleRend{};
+  static constexpr pm::api::Field<pm::map::CandleObject_candleRend, pm::api::Object> candleRend{};
   /// Its FireSource: fireSource.get(object). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::CandleObject_fireSource, void*> fireSource{};
+  static constexpr pm::api::Field<pm::map::CandleObject_fireSource, pm::api::Object> fireSource{};
 };
 
 /// A candelabra. `candelabra` below is the Candlebra.
@@ -107,9 +107,9 @@ struct Candlebra {
   /// The Candlebra type: type_object() for Object.FindObjectsOfType. Unresolved: null.
   static constexpr pm::api::Type<pm::map::Candlebra> type{};
   /// Its candles, a Candle[]: allCandles.get(candelabra), read as a pm::api::RefArray. Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Candlebra_allCandles, void*> allCandles{};
+  static constexpr pm::api::Field<pm::map::Candlebra_allCandles, pm::api::Object> allCandles{};
   /// Its Light: lightSource.get(candelabra). Unresolved: null.
-  static constexpr pm::api::Field<pm::map::Candlebra_lightSource, void*> lightSource{};
+  static constexpr pm::api::Field<pm::map::Candlebra_lightSource, pm::api::Object> lightSource{};
 };
 
 /// @}

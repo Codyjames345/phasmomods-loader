@@ -82,7 +82,7 @@ void detour_music_box(api::Original<phasmo::MusicBox::UseNetworked> original, vo
   void* before = self ? phasmo::MusicBox::tween.get(self) : nullptr;
   original(self, flag, info);
   // An accepted use starts a new tween (a call the game rejects returns before it).
-  if (self && phasmo::MusicBox::tween.get(self) != before) raise_at(perceive::kMusicBox, self);
+  if (self && phasmo::MusicBox::tween.get(self).raw() != before) raise_at(perceive::kMusicBox, self);
 }
 
 void detour_tarot(api::Original<phasmo::TarotCards::ChangeState> original, void* self, int32_t card, bool flag,
