@@ -83,6 +83,7 @@ try {
         Set-Content -LiteralPath (Join-Path $fixture 'tests/docs_test.ps1') -Value 'exit 0 # Fixture docs tests run on their own.'
         Set-Content -LiteralPath (Join-Path $fixture 'tests/dev_release_test.ps1') -Value 'exit 0 # Fixture development build tests run on their own.'
         Set-Content -LiteralPath (Join-Path $fixture 'tests/style_check_test.ps1') -Value 'exit 0 # Fixture style checks run on their own.'
+        Set-Content -LiteralPath (Join-Path $fixture 'tests/cycles_test.ps1') -Value 'exit 0 # Fixture cycle checks run on their own.'
         Set-Content -LiteralPath (Join-Path $fixture 'tools/gamecheck.ps1') -Value 'exit 0 # The fixture has no game to check.'
         Set-Content -LiteralPath (Join-Path $fixture 'tools/docs.ps1') -Value 'exit 0 # The fixture has no reference to build.'
         Set-Content -LiteralPath (Join-Path $fixture 'tools/style_check.ps1') -Value 'exit 0 # The fixture tree is not the project source.'
