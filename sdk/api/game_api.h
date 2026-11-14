@@ -1047,7 +1047,8 @@ struct Hooked<Method<D, R(A...)>> {
 /// @note A detour that does not call `original` skips the game's method and every older detour on
 ///   that body: the game then does not do what the method does, on this client.
 /// @code
-/// void on_unappear(pm::api::Original<phasmo::GhostAI::UnAppear> original, void* ghost) {
+/// void on_unappear(pm::api::Original<phasmo::GhostAI::UnAppear> original,
+///                  pm::api::Ref<pm::map::GhostAI> ghost) {
 ///   original(ghost);  // the game's own UnAppear first
 /// }
 /// pm::api::hook<phasmo::GhostAI::UnAppear>(&on_unappear, "my mod: UnAppear");
@@ -1089,7 +1090,7 @@ bool hook(typename detail::Hooked<std::remove_cvref_t<decltype(M)>>::Detour deto
 /// @tparam Detour Must be exactly the wrapper's RawDetour, so a literal nullptr is never this
 ///   overload's: the typed hook<M> above is the one that refuses a null detour.
 /// @code
-/// void* on_unappear_raw(pm::api::Original<phasmo::GhostAI::UnAppear> original, void* ghost) {
+/// void on_unappear_raw(pm::api::Original<phasmo::GhostAI::UnAppear> original, void* ghost) {
 ///   original(ghost);  // the game's own UnAppear first
 /// }
 /// pm::api::hook<phasmo::GhostAI::UnAppear>(&on_unappear_raw, "my mod: UnAppear");
