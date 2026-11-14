@@ -4,7 +4,8 @@
 // Not obfuscated. Their managed wrappers take structs, so the map holds the engine functions behind them by their
 // icall names, which resolve only in the running game. A graph, a playable handle and an output handle are each a
 // pointer and a version (phasmo::PlayableGraph and friends below), passed by address. How the investigator's body is
-// animated, and why a second graph is how a clip plays over it, is in sdk/systems/players.md, "The body".
+// animated, why a second graph is how a clip plays over it, and why its output is made once per body and kept, is in
+// sdk/systems/players.md, "The body".
 
 #include <cstdint>
 
@@ -17,6 +18,7 @@ namespace pm::map {
 inline constexpr const char* Playables_two[] = {"a", "b"};
 inline constexpr const char* Playables_three[] = {"a", "b", "c"};
 inline constexpr const char* Playables_one[] = {"a"};
+inline constexpr const char* Playables_five[] = {"a", "b", "c", "d", "e"};
 
 /// Unity's animation clip (UnityEngine.AnimationModule). Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc AnimationClip{.key = "AnimationClip", .name = "AnimationClip",
@@ -113,6 +115,30 @@ inline constexpr pm::sdk::EntryDesc PlayableHandle_SetTime_Injected{
     .key = "PlayableHandle.SetTime_Injected", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kStatic,
     .name = "UnityEngine.Playables.PlayableHandle::SetTime_Injected", .params = Playables_two};
 
+/// A new animation mixer playable in a graph, written to the PlayableHandle given; whether it was made. It has no
+/// inputs until PlayableHandle.SetInputCount_Injected gives it some, and it blends what is connected to them by each
+/// input's weight. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc AnimationMixerPlayable_CreateHandleInternal_Injected{
+    .key = "AnimationMixerPlayable.CreateHandleInternal_Injected", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kStatic,
+    .name = "UnityEngine.Animations.AnimationMixerPlayable::CreateHandleInternal_Injected", .params = Playables_two};
+
+/// Connects a playable's output port to an input of another playable in the same graph; whether it was connected (an
+/// input already in use, or a port out of range, is refused). Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc PlayableGraph_ConnectInternal_Injected{
+    .key = "PlayableGraph.ConnectInternal_Injected", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kStatic,
+    .name = "UnityEngine.Playables.PlayableGraph::ConnectInternal_Injected", .params = Playables_five};
+
+/// Sets how many inputs a playable has; inputs beyond a smaller count are disconnected. Inferred: Unity's documented
+/// API.
+inline constexpr pm::sdk::EntryDesc PlayableHandle_SetInputCount_Injected{
+    .key = "PlayableHandle.SetInputCount_Injected", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kStatic,
+    .name = "UnityEngine.Playables.PlayableHandle::SetInputCount_Injected", .params = Playables_two};
+
+/// Sets the weight of a playable's input by its index, 0 to 1. Inferred: Unity's documented API.
+inline constexpr pm::sdk::EntryDesc PlayableHandle_SetInputWeightFromIndex_Injected{
+    .key = "PlayableHandle.SetInputWeightFromIndex_Injected", .kind = pm::sdk::Kind::Icall, .flags = pm::sdk::kStatic,
+    .name = "UnityEngine.Playables.PlayableHandle::SetInputWeightFromIndex_Injected", .params = Playables_three};
+
 }  // namespace pm::map
 
 /// @file
@@ -150,6 +176,13 @@ struct PlayableHandle {
   static constexpr pm::api::Icall<pm::map::PlayableHandle_GetTime_Injected, double(PlayableHandle*)> GetTime{};
   /// SetTime_Injected(&playable, seconds). Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::PlayableHandle_SetTime_Injected, void(PlayableHandle*, double)> SetTime{};
+  /// SetInputCount_Injected(&playable, count). Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::PlayableHandle_SetInputCount_Injected, void(PlayableHandle*, int32_t)>
+      SetInputCount{};
+  /// SetInputWeightFromIndex_Injected(&playable, input, weight). Unresolved: does nothing.
+  static constexpr pm::api::Icall<pm::map::PlayableHandle_SetInputWeightFromIndex_Injected,
+                                  void(PlayableHandle*, int32_t, float)>
+      SetInputWeight{};
 };
 
 /// An output of a graph: the engine's pointer and a version.
@@ -187,6 +220,15 @@ struct AnimationPlayables {
   /// SetApplyFootIKInternal(&playable, on). Unresolved: does nothing.
   static constexpr pm::api::Icall<pm::map::AnimationClipPlayable_SetApplyFootIKInternal, void(PlayableHandle*, bool)>
       SetApplyFootIK{};
+  /// AnimationMixerPlayable.CreateHandleInternal_Injected(&graph, &playable): whether it was made. Unresolved: false.
+  static constexpr pm::api::Icall<pm::map::AnimationMixerPlayable_CreateHandleInternal_Injected,
+                                  bool(PlayableGraph*, PlayableHandle*)>
+      CreateMixer{};
+  /// PlayableGraph.ConnectInternal_Injected(&graph, &source, sourcePort, &destination, destinationInput): whether it
+  /// was connected. Unresolved: false.
+  static constexpr pm::api::Icall<pm::map::PlayableGraph_ConnectInternal_Injected,
+                                  bool(PlayableGraph*, PlayableHandle*, int32_t, PlayableHandle*, int32_t)>
+      Connect{};
 };
 
 /// An animation clip.

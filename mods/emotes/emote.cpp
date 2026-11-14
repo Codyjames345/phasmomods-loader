@@ -1597,6 +1597,9 @@ void tick() {
   api::settings::tick_settings();
   follow_settings();
   api::anim::tick_player_anims(dt);
+  // Every body gets its emote graph as soon as it is seen, before its player holds anything, and keeps it, so a dance
+  // later changes only weights on its Animator (sdk/api/player_anim.h; the user's live test of 2026-11-14).
+  game::each_player([](void* p) { api::anim::prepare_player(p); });
   api::view::tick_third_person(dt);
 
   // This client's investigator: none in the menus, and none for Playable Ghost's ghost player.

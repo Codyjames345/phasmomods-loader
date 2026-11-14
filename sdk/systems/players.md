@@ -248,9 +248,14 @@ What a mod needs to animate an investigator's own body, as the Emotes mod does (
 - **Its Animator** is `Player.animator`, on every client. The game drives it with its own controller, swaps override
   controllers for the held item (`Player.characterAnimations`, a `PlayerCharacterAnimations`), syncs its parameters
   with a PhotonAnimatorView and bends the hands and arms with Animation Rigging (a RigBuilder, whose graph runs at
-  sorting order 1000). Unity's Playables are all in the build (`sdk/map/Playables.h`): a second graph with an animation
-  output on the same Animator, at a higher sorting order and a weight from 0 to 1, plays a clip over all of that and
-  gives the body back untouched when it is destroyed. Under the rig, the clip would be bent by its aims: `Head Rig`
+  sorting order 1000; Animation Rigging builds that graph only as the RigBuilder is enabled, `RigBuilder.Build`'s one
+  caller in the build being `RigBuilder.OnEnable`). Unity's Playables are all in the build (`sdk/map/Playables.h`): a
+  second graph with an animation output on the same Animator, at a higher sorting order and a weight from 0 to 1, plays
+  a clip over all of that. Give the body that output once, as soon as the body exists, keep it, and change only its
+  weight: in a live test (2026-11-14), an output added for each clip and removed after the dance left the arms in a
+  wrong held-item pose afterwards (an empty hand posed as holding, which switching items put right, and a held smudge
+  stick too high to see, which it did not). `sdk/api/player_anim.h` keeps one per body. Under the rig, the clip would
+  be bent by its aims: `Head Rig`
   turns the head toward where the camera looks, and aiming rigs (equipment, torch, watch, lantern, the journal's
   hands) turn the arms. Over it, what the rig places rather than animates keeps the game's pose: the journal hangs from
   the rig's `JournalParent` (`JournalRigController.constraintParent`), which `Journal Parent Rig` puts between a socket
