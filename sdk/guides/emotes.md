@@ -130,7 +130,8 @@ and dance the partner's clip beside them (`docs/emotes.md`, "Dancing together").
 | Field | Required | What it is, and its rule |
 | --- | --- | --- |
 | `clip` | yes | the second dancer's clip: a `.anim` under `Assets/`. It loops as the emote does, and every client starts it at the first dancer's point, wrapped to its own length. |
-| `offset` | yes | `{ "right": ..., "forward": ... }`, two numbers of metres: where the second dancer stands, to the first dancer's right (negative for their left) and in front of them, facing the same way. Sway's is `-1.3` and `0`. |
+| `offset` | yes | `{ "right": ..., "forward": ... }`, two numbers of metres: where the second dancer stands, to the first dancer's right (negative for their left) and in front of them. Sway's is `-1.3` and `0`. |
+| `faceEachOther` | no | `true` or `false`: with `true` the pair turns to face one another when the join lands, both eased over the joining glide's moment, and the spot never moves; the default `false` leaves both facing the way the join was made at. Sway sets `true`. Anything that is not `true` or `false` is refused. |
 | `song` | no | a synced song under `Assets/` (`.wav`, `.ogg` or `.mp3`), which replaces the emote's song from the same point when someone joins. |
 | `loudness` | no | the synced song's loudness file: set it exactly when `song` is set. The ghost hears the synced song from it. |
 | `introClip` | no | a `.anim` under `Assets/`, allowed only when the emote has its own `introClip`. The mod reads it but does not play it yet: a join waits for the first dancer's intro to end. |

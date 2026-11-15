@@ -409,6 +409,23 @@ void a_partner_song_needs_its_loudness() {
   CHECK(!cat.emotes.empty() && cat.emotes[0].partner && cat.emotes[0].partner->song == "Assets/Emotes/Loops/sway_sync.wav");
 }
 
+// A partner part can ask the dancers to face each other once the join lands (the user, 2026-11-14). Off unless the
+// pack says so, and only ever true or false.
+void a_partner_can_ask_the_dancers_to_face_each_other() {
+  Catalogue cat;
+  std::string why;
+  CHECK(parse_catalogue(synced().dump(), "p.x", cat, why));
+  CHECK(!cat.emotes.empty() && cat.emotes[0].partner && !cat.emotes[0].partner->faceEachOther);
+  nlohmann::json on = synced();
+  on["emotes"][0]["partner"]["faceEachOther"] = true;
+  CHECK(parse_catalogue(on.dump(), "p.x", cat, why));
+  CHECK(cat.warnings.empty());  // a known field, so no warning
+  CHECK(!cat.emotes.empty() && cat.emotes[0].partner && cat.emotes[0].partner->faceEachOther);
+  nlohmann::json text = synced();
+  text["emotes"][0]["partner"]["faceEachOther"] = "yes";
+  refused(text.dump());
+}
+
 void a_synced_emote_cannot_walk() {
   nlohmann::json doc = synced();
   doc["emotes"][0]["moveClip"] = "Assets/Emotes/Clips/SwayWalk.anim";
@@ -461,6 +478,7 @@ int main() {
   a_partner_part_is_read();
   a_partner_needs_a_clip_and_an_offset();
   a_partner_song_needs_its_loudness();
+  a_partner_can_ask_the_dancers_to_face_each_other();
   a_synced_emote_cannot_walk();
   a_partner_intro_needs_the_first_dancers_intro();
   partner_paths_obey_the_path_rules();

@@ -11,6 +11,7 @@
 #include "Animator.h"
 #include "Camera.h"
 #include "ClosetZone.h"
+#include "Equipment.h"
 #include "GhostSenses.h"
 #include "Input.h"
 #include "JournalController.h"
@@ -1184,7 +1185,70 @@ inline constexpr pm::sdk::EntryDesc PCPropGrab_ParentItemOnLocalPlayer{
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "PCPropGrab", .name = "ParentItemOnLocalPlayer",
     .params = PCPropGrab_PhotonObjectInteract};
 
+// Head-mounted gear (the head camera and similar): the socket that wears it, on the body's root. How the game
+// hangs it there, and which of the socket's two points a contract actually uses, is in sdk/systems/players.md,
+// "Head-mounted gear".
+
+/// The socket that wears head-mounted gear on a body (Assembly-CSharp, global namespace), on the body's root
+/// GameObject. Inferred: from the class dump.
+inline constexpr pm::sdk::EntryDesc NetworkedHeadMountedSocket{.key = "NetworkedHeadMountedSocket",
+                                                               .name = "NetworkedHeadMountedSocket",
+                                                               .assembly = "Assembly-CSharp", .ns = "",
+                                                               .base = &MonoBehaviourPun};
+
+/// One of the socket's two hang points, a Transform: its field named attachTransform, a point under the body's
+/// camera head ("PC Head Gear Attach" in the body's hierarchy), not on a bone the body's animation moves. One
+/// branch of NetworkedHeadMountedSocket.MountEquipmentNetworked hangs the gear here; what a PC contract reaches
+/// is this one (sdk/systems/players.md). ChangeHeadgearPosition moves this point's local place. Decompiled.
+inline constexpr pm::sdk::EntryDesc NetworkedHeadMountedSocket_attachTransform{
+    .key = "NetworkedHeadMountedSocket.attachTransform", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "NetworkedHeadMountedSocket",
+    .name = "attachTransform", .type = "Transform"};
+
+/// The other hang point, a Transform: the socket's field named modelHeadSpot, a point under the body's head bone
+/// ("Model Head Gear Attach", a child of the model's Head bone), so whatever animates the body's head carries
+/// gear hung here. The MountEquipmentNetworked branch that also hands the point to the socket's VR hang point
+/// hangs the gear here. Decompiled.
+inline constexpr pm::sdk::EntryDesc NetworkedHeadMountedSocket_modelHeadSpot{
+    .key = "NetworkedHeadMountedSocket.modelHeadSpot", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "NetworkedHeadMountedSocket",
+    .name = "modelHeadSpot", .type = "Transform"};
+
+/// The gear worn on the head, an Equipment, or null: the socket's one Equipment field (the game's own name for
+/// it is obfuscated, so the entry resolves by shape). MountEquipment fills it in as it sends the hang;
+/// UnmountEquipment clears it once the un-hang is sent. Decompiled.
+inline constexpr pm::sdk::EntryDesc NetworkedHeadMountedSocket_mountedEquipment{
+    .key = "NetworkedHeadMountedSocket.mountedEquipment", .kind = pm::sdk::Kind::Field,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "NetworkedHeadMountedSocket", .type = "@Equipment"};
+
 inline constexpr const char* Player_Vector3[] = {"Vector3"};
+inline constexpr const char* NetworkedHeadMountedSocket_Equipment[] = {"Equipment"};
+
+/// MountEquipment(socket, gear): when nothing is worn yet, sends the hang out. The game's own message, on every
+/// client, parents the gear's transform to one of the socket's two hang points and gives it a fixed local place
+/// and turn (the same pair of constants for either point), freezes its rigidbody, switches off its own interact
+/// behaviour, stores it in mountedEquipment, and - on the branch that hangs from attachTransform - switches off
+/// its renderers' shadows and its colliders as well. A mod wears by calling this; it never sends the game's
+/// message itself. Decompiled.
+inline constexpr pm::sdk::EntryDesc NetworkedHeadMountedSocket_MountEquipment{
+    .key = "NetworkedHeadMountedSocket.MountEquipment", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "NetworkedHeadMountedSocket",
+    .name = "MountEquipment", .params = NetworkedHeadMountedSocket_Equipment};
+
+/// UnmountEquipment(socket): when gear is worn, sends the un-hang. The message, on every client, drops the gear's
+/// parent to none, switches its interact behaviour back on, frees its rigidbody on the client that owns the
+/// player, switches its colliders back on, and clears mountedEquipment. Decompiled.
+inline constexpr pm::sdk::EntryDesc NetworkedHeadMountedSocket_UnmountEquipment{
+    .key = "NetworkedHeadMountedSocket.UnmountEquipment", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "NetworkedHeadMountedSocket",
+    .name = "UnmountEquipment"};
+
+/// CanMount(socket): true while nothing is worn; with gear worn, the answer of a state check on the worn item.
+/// Decompiled (the item's own check is not mapped).
+inline constexpr pm::sdk::EntryDesc NetworkedHeadMountedSocket_CanMount{
+    .key = "NetworkedHeadMountedSocket.CanMount", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "NetworkedHeadMountedSocket", .name = "CanMount",
+    .type = "bool"};
 
 /// Moves the local VR rig to a point, on this client only: it sets the position of the player's own LocalPlayer (the
 /// rig's transform, as LocalPlayer.TeleportPlayer does on PC, without switching the controller off). No RPC.
@@ -1236,18 +1300,40 @@ inline constexpr pm::sdk::EntryDesc PhysicsCharacterController_get_center{
     .key = "PhysicsCharacterController.get_center", .kind = pm::sdk::Kind::Method,
     .owner = "PhysicsCharacterController", .name = "get_center"};
 
-/// The PC interact's layer mask (read as its int): PCPropGrab.OnInteract's step casts a ray 1.8 m (a constant of its
-/// code) from the centre of PCPropGrab.playerCam on these layers, triggers ignored, and acts only on what it hits that
-/// has a PhotonObjectInteract, or a ChildPhotonInteract leading to one (a door, a light switch, an item). Anything
-/// else, such as another player, gets nothing. Decompiled.
+/// The PC interact's layer mask (read as its int): PCPropGrab.OnPickup and PCPropGrab.OnInteract each cast a ray
+/// 1.8 m (a constant of their code) from the centre of PCPropGrab.playerCam on these layers, triggers ignored, and
+/// act only on what they hit that has a PhotonObjectInteract, or a ChildPhotonInteract leading to one (a door, a
+/// light switch, an item). Anything else, such as another player, gets nothing. Decompiled.
 inline constexpr pm::sdk::EntryDesc PCPropGrab_mask{.key = "PCPropGrab.mask", .kind = pm::sdk::Kind::Field,
                                                     .confidence = pm::sdk::Confidence::Decompiled,
                                                     .owner = "PCPropGrab", .name = "mask", .type = "LayerMask"};
 
-/// The camera the PC interact casts from, a Camera. Decompiled.
+/// The camera the PC interact and Pickup cast from, a Camera. Decompiled.
 inline constexpr pm::sdk::EntryDesc PCPropGrab_playerCam{.key = "PCPropGrab.playerCam", .kind = pm::sdk::Kind::Field,
                                                          .confidence = pm::sdk::Confidence::Decompiled,
                                                          .owner = "PCPropGrab", .name = "playerCam", .type = "Camera"};
+
+inline constexpr const char* PCPropGrab_CallbackContext[] = {"CallbackContext"};
+
+/// The Pickup action's callback (the keyboard's E and the gamepad's west button: PCControls binds Pickup and
+/// PCPropGrab answers it, sdk/systems/players.md). Once the action is performed it casts a ray from the centre of
+/// PCPropGrab.playerCam, 1.8 m (a constant of its code), on PCPropGrab.mask, triggers ignored, and acts through what
+/// it hits that has a PhotonObjectInteract, or a ChildPhotonInteract leading to one: that interactable, if it can be
+/// grabbed, is picked up. The ray is exactly the one PCPropGrab.OnInteract's step casts, so the two actions answer
+/// for the same things in front of the player. A player's own body carries neither component, so Pickup never acts
+/// on an investigator. Decompiled.
+inline constexpr pm::sdk::EntryDesc PCPropGrab_OnPickup{
+    .key = "PCPropGrab.OnPickup", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PCPropGrab", .name = "OnPickup",
+    .params = PCPropGrab_CallbackContext};
+
+/// The Interact action's callback (the left mouse button and the gamepad's right trigger). It casts the same ray as
+/// PCPropGrab.OnPickup, on the same mask and reach, and acts through what it hits that has a PhotonObjectInteract,
+/// or a ChildPhotonInteract leading to one: doors, light switches and items answered by interacting. Decompiled.
+inline constexpr pm::sdk::EntryDesc PCPropGrab_OnInteract{
+    .key = "PCPropGrab.OnInteract", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "PCPropGrab", .name = "OnInteract",
+    .params = PCPropGrab_CallbackContext};
 
 /// A collider's link to the interactable it belongs to (Assembly-CSharp, global namespace): the PC interact follows it
 /// to the PhotonObjectInteract. Decompiled.
@@ -1554,6 +1640,32 @@ struct PCPropGrab {
   /// ParentItemOnLocalPlayer(grab, item): puts the item back in the camera slot. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::PCPropGrab_ParentItemOnLocalPlayer, void(pm::api::Ref<pm::map::PCPropGrab>, pm::api::Ref<pm::map::PhotonObjectInteract>)>
       ParentItemOnLocalPlayer{};
+};
+
+/// The socket that wears head-mounted gear on a body. `socket` below is the NetworkedHeadMountedSocket, on the
+/// body's root: Component.GetComponentInChildren(player, NetworkedHeadMountedSocket::type.type_object(), true).
+struct NetworkedHeadMountedSocket {
+  /// The type: type_object() for GetComponentInChildren. Unresolved: null.
+  static constexpr pm::api::Type<pm::map::NetworkedHeadMountedSocket> type{};
+  /// One hang point, a Transform under the body's camera head: attachTransform.get(socket). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::NetworkedHeadMountedSocket_attachTransform, pm::api::Object>
+      attachTransform{};
+  /// The other hang point, a Transform under the body's head bone: modelHeadSpot.get(socket). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::NetworkedHeadMountedSocket_modelHeadSpot, pm::api::Object>
+      modelHeadSpot{};
+  /// The gear worn on the head, an Equipment, or null: mountedEquipment.get(socket). Unresolved: null.
+  static constexpr pm::api::Field<pm::map::NetworkedHeadMountedSocket_mountedEquipment,
+                                  pm::api::Ref<pm::map::Equipment>> mountedEquipment{};
+  /// CanMount(socket): whether gear may be worn now. Unresolved: false.
+  static constexpr pm::api::Method<pm::map::NetworkedHeadMountedSocket_CanMount,
+                                   bool(pm::api::Ref<pm::map::NetworkedHeadMountedSocket>)> CanMount{};
+  /// MountEquipment(socket, gear): wear the gear on the head, networked (map note). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::NetworkedHeadMountedSocket_MountEquipment,
+                                   void(pm::api::Ref<pm::map::NetworkedHeadMountedSocket>,
+                                        pm::api::Ref<pm::map::Equipment>)> MountEquipment{};
+  /// UnmountEquipment(socket): take the worn gear off, networked (map note). Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::NetworkedHeadMountedSocket_UnmountEquipment,
+                                   void(pm::api::Ref<pm::map::NetworkedHeadMountedSocket>)> UnmountEquipment{};
 };
 
 /// The PC player's look on its own body.

@@ -1164,3 +1164,19 @@ its one emote output when it is first seen and keeps it, and a dance changes onl
 - [ ] A friend watching sees your arms back to the game's own pose after each dance, and you see theirs.
 - [ ] Before any dance, every player's arms look as in an unmodded game: nothing changes while no one dances.
 - [ ] Crossfades still look smooth: walk during a walking emote, stop, and pick a new emote mid-dance.
+
+## Emotes: joining a synced emote
+
+The four fixes from the first live test of joining (docs/superpowers/specs/2026-11-13-synced-emotes-design.md, the user, 2026-11-14). Two clients, plus a third for the song.
+
+- [ ] The join prompt's keycap shows the player's Pickup key: E on keyboard, and after rebinding Pickup in the game's menu the new key's name; on a gamepad the west-button glyph. A mouse-only Pickup leaves the keycap blank (the pad sprite empty): report it, a mouse glyph is the user's call.
+- [ ] Pressing E (or the west button, or the right trigger in VR) by a dancer of a synced emote joins them; with a door, switch or item under the crosshair within 1.8 m the prompt hides, and one press never both joins and picks up or interacts. The joiner's press and the dancers' emotes survive the frame.
+- [ ] The Sway pair face each other: the joiner glides in facing the first dancer, and the first dancer turns to the joiner over the same glide, smoothly, never a jump or a spin the long way round; both hold the new facing against the camera afterwards, and the second dancer's spot never moves. A pack without `faceEachOther` still dances side by side.
+- [ ] The song, three clients: each dancer hears the pair's song as their own, flat in both ears from their own body, in step with the other dancer; on the joiner's client the first dancer's copy plays no sound; a third client hears one copy from the point between the dancers, moving as they move; after the pair ends, the lone dancer's next song is back at their body.
+- [ ] The ghost hears one song per pair, not two: with a ghost that hunts on sound, the pair lures it as one singer does (the joiner's own copy adds no loudness).
+
+## Emotes: head-mounted gear during an emote
+
+The fifth fix from the live test (the user, 2026-11-15: the worn head camera stayed where the standing head is while the dance moved the head). Two clients, one wearing the head camera.
+
+- [ ] With the head camera worn, a dance moves it with the head: on the dancer's own client and on the other client, the camera rides the animated head through the dance (no lag at the standing head height), keeps its local place on the head (no tilt or offset), comes back to where the game hung it when the dance ends, and stays put when the game takes it off or mounts fresh gear mid-dance.

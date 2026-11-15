@@ -24,6 +24,12 @@ major version `PmHostApi` and every published struct only grow at the end, and e
   player's body its graph and output at weight 0, to call as soon as the body exists. New entries for Unity's
   documented Playables: `AnimationMixerPlayable.CreateHandleInternal_Injected`, `PlayableGraph.ConnectInternal_Injected`,
   `PlayableHandle.SetInputCount_Injected` and `PlayableHandle.SetInputWeightFromIndex_Injected`.
+- **Head-mounted gear.** `NetworkedHeadMountedSocket`, the component on an investigator that holds worn head gear:
+  its two hang points `attachTransform` and `modelHeadSpot`, the worn item `mountedEquipment`, and `MountEquipment`,
+  `UnmountEquipment` and `CanMount` (sdk/systems/players.md, "Head-mounted gear").
+- **The PC's pickup and interact callbacks.** `PCPropGrab.OnPickup` (the Pickup action) and `PCPropGrab.OnInteract`
+  (the Interact action: the left mouse button and the gamepad's right trigger). Both cast the same ray, so the two
+  answer for the same things in front of the player.
 
 ### Changed
 

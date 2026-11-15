@@ -14,6 +14,7 @@
 
 #include "emote_net.h"
 #include "emote_rule.h"
+#include "sync_rule.h"
 
 namespace pm::emotes {
 
@@ -164,8 +165,18 @@ class LocalSession {
       end(o, died);  // a death takes the body at once: nothing of ours blends over the game's animation
       return o;
     }
-    // Two dancing together keep the facing they joined with, so the partner's spot never moves (2026-11-13).
+    // Two dancing together keep the facing they joined with, so the partner's spot never moves (2026-11-13). A pair
+    // that faces each other turns once, over the joining glide: that turn runs here, and still sends no Facing, so
+    // every client's copy of the spot holds and the facing ends locked at the new yaw (the user, 2026-11-14).
     if (partner_) {
+      if (turning_) {
+        turnT_ += f.dt;
+        if (turnT_ >= turnSeconds_) {
+          yaw_ = turnTo_;
+          turning_ = false;
+        } else
+          yaw_ = wrap_degrees(turnFrom_ + wrap_degrees(turnTo_ - turnFrom_) * ease_in_out(turnT_, turnSeconds_));
+      }
       o.bodyYaw = yaw_;
       return o;
     }
@@ -187,7 +198,8 @@ class LocalSession {
   /// A player near this client asks to join it: this client is a synced emote's first dancer and `actor` asked to be
   /// its second (a Join for `key`). Taken while this client dances that synced emote, past any intro, with no partner
   /// yet: the first to ask wins, and everyone is told (Accept). Anything else is passed over. The facing locks then,
-  /// and goes out exactly just before the Accept, so every client puts the second dancer beside the yaw it keeps.
+  /// and goes out exactly just before the Accept, so every client puts the second dancer beside the yaw it keeps; a
+  /// pair that faces each other turns from it together, by start_pair_turn (the user, 2026-11-14).
   LocalOut on_join(int actor, uint32_t key) {
     LocalOut o;
     if (!active_ || role_ != Role::First || partner_ || actor <= 0) return o;
@@ -250,6 +262,19 @@ class LocalSession {
     return o;
   }
 
+  /// A facing pair turns together as the joiner glides in (the user, 2026-11-14): this dancer's locked facing eases
+  /// to `toYaw` over `seconds`, the same eased turn the joiner's glide carries. Nothing is sent for it: every client
+  /// turns its own copy, and the spot derived from the locked yaw never moves. Only while paired; anything else is
+  /// passed over.
+  void start_pair_turn(float toYaw, float seconds = kGlideSeconds) {
+    if (!partner_ || seconds <= 0.0f) return;
+    turnFrom_ = yaw_;
+    turnTo_ = toYaw;
+    turnT_ = 0.0f;
+    turnSeconds_ = seconds;
+    turning_ = true;
+  }
+
   /// `actor` ended their emote (their End, or they are gone): when they are this client's partner, this client ends
   /// too, as either dancer stopping ends both (the user, 2026-11-13).
   LocalOut partner_ended(int actor) {
@@ -308,6 +333,8 @@ class LocalSession {
   std::optional<int> pendingJoin_;   ///< the first dancer a Join went to, while its Accept is awaited
   int pendingEmote_ = -1;            ///< the synced emote that Join asked for
   float pendingTimer_ = 0.0f;        ///< how long the Join has waited
+  bool turning_ = false;             ///< a facing pair's one turn is running (the user, 2026-11-14)
+  float turnFrom_ = 0.0f, turnTo_ = 0.0f, turnT_ = 0.0f, turnSeconds_ = 0.0f;
 };
 
 /// A peer's investigator this frame, as the glue reads it.
