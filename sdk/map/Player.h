@@ -1227,9 +1227,10 @@ inline constexpr const char* NetworkedHeadMountedSocket_Equipment[] = {"Equipmen
 /// MountEquipment(socket, gear): when nothing is worn yet, sends the hang out. The game's own message, on every
 /// client, parents the gear's transform to one of the socket's two hang points and gives it a fixed local place
 /// and turn (the same pair of constants for either point), freezes its rigidbody, switches off its own interact
-/// behaviour, stores it in mountedEquipment, and - on the branch that hangs from attachTransform - switches off
-/// its renderers' shadows and its colliders as well. A mod wears by calling this; it never sends the game's
-/// message itself. Decompiled.
+/// behaviour and stores it in mountedEquipment. The branch that hangs from attachTransform also switches off its
+/// renderers' shadows; after either branch it switches off the gear's colliders, unless a static check of the
+/// game's (not mapped) answers true first. A mod wears by calling this; it never sends the game's message itself.
+/// Decompiled.
 inline constexpr pm::sdk::EntryDesc NetworkedHeadMountedSocket_MountEquipment{
     .key = "NetworkedHeadMountedSocket.MountEquipment", .kind = pm::sdk::Kind::Method,
     .confidence = pm::sdk::Confidence::Decompiled, .owner = "NetworkedHeadMountedSocket",

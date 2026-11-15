@@ -318,6 +318,7 @@ class LocalSession {
     role_ = Role::First;
     o.partnerLeft = partner_;
     partner_.reset();
+    turning_ = false;  // a pair's turn ends with the pair: the next one starts from its own locked facing
   }
 
   EmoteTable table_;

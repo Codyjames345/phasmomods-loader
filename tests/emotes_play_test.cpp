@@ -931,6 +931,30 @@ void the_pair_turn_sends_no_facing_and_the_spot_stays() {
   CHECK(close_to(partner_spot(Point{0.0f, 0.0f, 0.0f}, r.yaw(4), -1.3f, 0.0f), spot));
 }
 
+// A facing pair that ends before its turn is done leaves nothing behind: the next pair, which does not face each
+// other, keeps the facing its join was made at (review of the synced emote fixes, 2026-11-15).
+void a_pair_ended_mid_turn_leaves_no_turn_behind() {
+  const EmoteTable t = synced_table();
+  LocalSession s = first_dancer(t);
+  s.on_join(7, 1000u);
+  s.start_pair_turn(90.0f, kGlideSeconds);
+  LocalFrame f = here(0.0);
+  f.dt = 0.1f;
+  s.tick(f);                // a sixth of the way through the turn
+  s.partner_ended(7);       // the joiner stops: both end
+  CHECK(!s.active());
+  s.pick(0, here(-1.0));    // the same client dances again, and a new pair forms that turns nowhere
+  f.dt = 1.0f;
+  s.tick(f);
+  const float locked = s.yaw();
+  s.on_join(8, 1000u);
+  f.dt = 0.1f;
+  for (int i = 0; i < 10; ++i) {
+    const LocalOut o = s.tick(f);
+    CHECK(o.bodyYaw.has_value() && yaw_close(*o.bodyYaw, locked));
+  }
+}
+
 // Which copy of the pair's song plays on this client (the user, 2026-11-14): each dancer hears their own body's copy
 // as their own, the other dancer's copy is silent there, and every other client hears one copy from between the
 // dancers. The ghost counts one copy per pair, the first dancer's.
@@ -1073,6 +1097,7 @@ int main() {
   the_pair_facing_turns_each_body_to_the_other();
   the_dancers_turn_to_each_other_over_the_glide();
   the_pair_turn_sends_no_facing_and_the_spot_stays();
+  a_pair_ended_mid_turn_leaves_no_turn_behind();
   each_dancer_hears_the_pairs_song_as_their_own();
   a_dead_joiner_dances_on();
   the_second_part_counts_from_the_intro_end();
