@@ -24,6 +24,16 @@ entry for the build in hand. What each ghost type does differently is gathered i
   clears as it hides the model). It then sends an RPC with two arguments to every client, so calling it
   on the host ends the appearance for everyone. Ghost Tells' Shade calls
   `phasmo::GhostAI::UnAppear(ghost)` when a player stares at it.
+  The renderer mechanism (bodies read, build 25811160): that RPC is answered by `MakeGhostAppear(on, form, info)`,
+  which stores the shown flag and calls `GhostModel.SetVisibility(on)`; `SetVisibility` writes
+  `Renderer.set_enabled` to every element of `GhostModel.renderers` at once, an absolute write. So a shown
+  ghost's renderers sit enabled until something switches them off: the hunt's end (`Hunting(false)`),
+  `UnAppear`, or `GhostModel.Disable`. `GhostAI.Init` does not write the renderers: it switches the ghost's
+  own GameObject and behaviour back on and runs `StartGhost`, which is why a mid-contract re-type keeps
+  whatever renderer state the last owner of the model left, and why Custom Ghosts' rules hand theirs back.
+  While `isHunting` is set, `GhostAI.Update` calls `FlashAppear()` on a timer (the gap comes from the
+  ghost's per-type blink arrays) and it starts the blink coroutine when the hunt's own bool allows it;
+  what that coroutine writes was not read.
 - **Facing and wandering.** `LookAtPlayer(player)` turns the ghost's transform to the player's
   position on this client only. `TemporarilyStopWander(seconds)` restarts the coroutine that times
   wandering; Tarot's Hermit card and a smudged Yurei use it.
@@ -247,7 +257,8 @@ calls `LevelController.LockHuntingDoors` ([doors](doors.md), "How a hunt locks t
 `GhostInteraction.CreateAppearedEMF` at the ghost's position (an EMF reading where it appears) and
 `GhostActivity.UpdateElectronics`. On each client `Hunting`'s start sets `GhostAI.isHunting`, plays the hunt's sound
 through the ghost's GhostAudio noise, counts the hunt in LevelStats and invokes one of GameController's events; its end
-stops the sound, hides the model and invokes another. While `isHunting` is set, `GhostAI.Update` makes the model blink
+stops the sound, hides the model (`GhostModel.SetVisibility(false)`, clearing the shown flag first if it was set)
+and invokes another. While `isHunting` is set, `GhostAI.Update` makes the model blink
 on a timer and the Kormos's hearing pulses. On a friendly ghost's difficulty `Hunting` refuses with a report on the
 sender. A hunt without those effects would need a hook on each of them whose only job is to undo the mod's own hunt.
 Which code flickers the lights and upsets the electronics in a hunt was not traced; every path to a hunt effect found

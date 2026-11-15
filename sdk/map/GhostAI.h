@@ -132,9 +132,10 @@ inline constexpr pm::sdk::EntryDesc GhostAI_info{.key = "GhostAI.info", .kind = 
                                                  .type = "@GhostInfo"};
 
 /// Sets the ghost up on every client from the host's traits: GhostController.CreateGhost (an RPC)
-/// calls it with its own traits, and it copies them whole into the GhostInfo's, shows the ghost and
-/// runs StartGhost, which on the master calls GhostInfo.SyncValues. It has an alias (see
-/// sdk/systems/ghost-ai.md). Decompiled.
+/// calls it with its own traits, and it copies them whole into the GhostInfo's, switches the ghost's
+/// own GameObject and behaviour back on (GameObject.SetActive and Behaviour.set_enabled, both true,
+/// which shows the ghost's object but writes no renderer), and runs StartGhost, which on the master
+/// calls GhostInfo.SyncValues. It has an alias (see sdk/systems/ghost-ai.md). Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostAI_Init{.key = "GhostAI.Init", .kind = pm::sdk::Kind::Method,
                                                  .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostAI",
                                                  .name = "Init", .params = GhostAI_Init_params};
@@ -147,8 +148,10 @@ inline constexpr pm::sdk::EntryDesc GhostAI_Awake{.key = "GhostAI.Awake", .kind 
 
 /// Unity's Update, every frame. On the master it runs the ghost's state machine (unless a flag of Network,
 /// not traced, is set) and once a second records where the ghost stands while its agent moves; while
-/// isHunting is set it also makes the model blink on a timer. Outside a hunt it does nothing else to the
-/// agent (sdk/systems/ghost-ai.md, "Moving the ghost outside a hunt"). Decompiled.
+/// isHunting is set it also makes the model blink on a timer: when that timer runs out it calls
+/// GhostAI.FlashAppear and re-arms the timer from one of the ghost's three blink interval arrays, the
+/// array chosen by the ghost's type. Outside a hunt it does nothing else to the agent
+/// (sdk/systems/ghost-ai.md, "Moving the ghost outside a hunt"). Decompiled.
 inline constexpr pm::sdk::EntryDesc GhostAI_Update{.key = "GhostAI.Update", .kind = pm::sdk::Kind::Method,
                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostAI",
                                                    .name = "Update"};
@@ -195,7 +198,10 @@ inline constexpr pm::sdk::EntryDesc GhostAI_huntSpeedFactor3{
     .flags = pm::sdk::kLastOfShape, .owner = "GhostAI", .type = "float", .facts = GhostAI_huntSpeedFactor_facts};
 
 /// A Photon RPC that starts (true) or ends (false) a hunt on this client. It stores its first
-/// argument to isHunting, and when that is true sets postHuntCooldown to 1. Decompiled.
+/// argument to isHunting, and when that is true sets postHuntCooldown to 1. Its end stops the hunt's
+/// sound, and while the ghost was shown it clears that flag and hides the model through
+/// GhostModel.SetVisibility(false), then stops its particles; its start plays the hunt sound and
+/// counts the hunt in LevelStats. Decompiled (both paths' bodies, build 25811160).
 inline constexpr pm::sdk::EntryDesc GhostAI_Hunting{.key = "GhostAI.Hunting", .kind = pm::sdk::Kind::Method,
                                                     .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostAI",
                                                     .name = "Hunting", .params = GhostAI_Hunting_params};
@@ -208,7 +214,8 @@ inline constexpr pm::sdk::EntryDesc GhostAI_ChangeState{.key = "GhostAI.ChangeSt
                                                         .params = GhostAI_ChangeState_params};
 
 /// Ends an appearance: when the ghost's shown flag is set (the one Hunting clears as it hides the
-/// model), it sends an RPC with two arguments to every client; otherwise it does nothing. Decompiled.
+/// model), it sends an RPC with two arguments to every client, which GhostAI.MakeGhostAppear answers
+/// with its hide path; otherwise it does nothing. Decompiled (the body, build 25811160).
 inline constexpr pm::sdk::EntryDesc GhostAI_UnAppear{.key = "GhostAI.UnAppear", .kind = pm::sdk::Kind::Method,
                                                      .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostAI",
                                                      .name = "UnAppear"};
@@ -464,8 +471,24 @@ inline constexpr pm::sdk::EntryDesc GhostAI_Appear{.key = "GhostAI.Appear", .kin
                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostAI",
                                                    .name = "Appear", .params = GhostAI_Appear_params};
 
+// GhostAI.Update calls FlashAppear on the hunt's blink timer (the entry note says where).
+inline constexpr pm::sdk::Fact GhostAI_FlashAppear_facts[] = {
+    {.is = pm::sdk::Fact::Is::CalledBy, .method = "GhostAI.Update"}};
+
+/// Makes the model flash: it starts a blink coroutine when a hunt bool of the ghost allows it (the
+/// hunt's start clears that bool; where it is set again was not read), and does nothing otherwise.
+/// GhostAI.Update calls it on the hunt's blink timer, whose gap comes from the ghost's per-type blink
+/// arrays. What the coroutine itself writes to the model was not read. Thread: main.
+/// Unresolved: does nothing. Decompiled (the body, build 25811160).
+inline constexpr pm::sdk::EntryDesc GhostAI_FlashAppear{.key = "GhostAI.FlashAppear", .kind = pm::sdk::Kind::Method,
+                                                        .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostAI",
+                                                        .name = "FlashAppear", .facts = GhostAI_FlashAppear_facts};
+
 /// The RPC that shows (true) or hides (false) the ghost on every client: it stores its first
-/// argument in isAppeared when it shows the ghost or the ghost was shown. Decompiled.
+/// argument in isAppeared when it shows the ghost or the ghost was shown, and calls
+/// GhostModel.SetVisibility with that same argument (except for the form variant 3 while a hunt runs,
+/// which keeps the renderers as they are); showing also sets the model's materials and appearance
+/// form, and hiding clears the D.O.T.S. form. Decompiled (the body, build 25811160).
 inline constexpr pm::sdk::EntryDesc GhostAI_MakeGhostAppear{
     .key = "GhostAI.MakeGhostAppear", .kind = pm::sdk::Kind::Method, .confidence = pm::sdk::Confidence::Decompiled,
     .owner = "GhostAI", .name = "MakeGhostAppear", .params = GhostAI_MakeGhostAppear_params};
@@ -756,10 +779,27 @@ inline constexpr pm::sdk::EntryDesc GhostAI_vision{.key = "GhostAI.vision", .kin
                                                    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostAI",
                                                    .type = "@LOSSensor"};
 
-/// The model's renderers, a Renderer[]: GhostModel.SetVisibility switches each one's enabled. Inferred:
-/// from its name.
-inline constexpr pm::sdk::EntryDesc GhostModel_renderers{.key = "GhostModel.renderers", .kind = pm::sdk::Kind::Field,
+inline constexpr const char* GhostModel_SetVisibility_params[] = {"bool"};
+
+/// The model's renderers, a Renderer[]: GhostModel.SetVisibility writes Renderer.set_enabled to each
+/// element, and GhostAI's model field holds the model that owns them. Decompiled (both bodies, build
+/// 25811160).
+inline constexpr pm::sdk::EntryDesc GhostModel_renderers{.key = "GhostModel.renderers",
+                                                         .kind = pm::sdk::Kind::Field,
+                                                         .confidence = pm::sdk::Confidence::Decompiled,
                                                          .owner = "GhostModel", .name = "myRends"};
+
+/// Switches the whole model on or off: writes Renderer.set_enabled to every element of
+/// GhostModel.renderers at once (an absolute write, whatever it was before). This is the game's one
+/// renderer-level show/hide: the show/hide RPC GhostAI.MakeGhostAppear calls it with its own bool,
+/// the hunt's end (GhostAI.Hunting's false path) calls it with false when the ghost was shown, and
+/// GhostModel.Disable calls it with false before resetting the materials. A mod that wants the model
+/// off and on should call this rather than the renderers one by one. Thread: main.
+/// Unresolved: does nothing. Decompiled (the body, build 25811160).
+inline constexpr pm::sdk::EntryDesc GhostModel_SetVisibility{
+    .key = "GhostModel.SetVisibility", .kind = pm::sdk::Kind::Method,
+    .confidence = pm::sdk::Confidence::Decompiled, .owner = "GhostModel", .name = "SetVisibility",
+    .params = GhostModel_SetVisibility_params};
 
 /// The model's own sounds, a List<AudioClip>: GhostModel's one field of that type. Inferred: from the
 /// class dump.
@@ -937,6 +977,10 @@ struct GhostModel {
   static constexpr pm::api::Field<pm::map::GhostModel_animator, pm::api::Ref<pm::map::Animator>> animator{};
   /// Its renderers, a Renderer[]: renderers.get(model). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GhostModel_renderers, pm::api::Object> renderers{};
+  /// SetVisibility(model, on): writes Renderer.set_enabled to every renderer, as the game's own
+  /// show/hide does. Unresolved: does nothing.
+  static constexpr pm::api::Method<pm::map::GhostModel_SetVisibility, void(pm::api::Ref<pm::map::GhostModel>, bool)>
+      set_visibility{};
   /// Its own sounds, a List<AudioClip>: sounds.get(model). Unresolved: null.
   static constexpr pm::api::Field<pm::map::GhostModel_sounds, pm::api::Object> sounds{};
 };
