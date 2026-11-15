@@ -193,9 +193,12 @@ bool create_hooks() {
 void tick(void* ghost, int type) {
   if (!ghost || type != kTempest || !api::alive(ghost)) {
     if (g.haunting) {
-      // A re-type takes the model back (the rule for lasting effects, 2026-11-14): it goes to the state
-      // the game keeps it in for the hunt that is running now, enabled through a hunt and hidden after
-      // one, unless a hunt end already hid it. The game's own visibility runs from there.
+      // A re-type takes the model back (the rule for lasting effects, 2026-11-14). The game's own
+      // renderer writes are absolute through GhostModel.SetVisibility: a shown ghost's hunt runs with
+      // them on (GhostAI.MakeGhostAppear) and its hunt's end writes them off (GhostAI.Hunting;
+      // sdk/systems/ghost-ai.md), and neither GhostAI.Init nor StartGhost rewrites them. So the
+      // renderers go to what the game holds for the moment the re-type lands in, unless our last hunt
+      // end already hid them; the game's visibility runs from there.
       if (void* left = g.ghost.get(); api::alive(left)) {
         const bool hunting = phasmo::GhostAI::isHunting.get(left);
         if (hunting || g.shown) set_model(left, hunting);

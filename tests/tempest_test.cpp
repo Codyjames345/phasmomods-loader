@@ -1,8 +1,10 @@
 // Offline tests for the Tempest's model over the fake backend: what its strikes do to the ghost's renderers,
 // and what a Dev Menu re-type mid-contract gives back (the rule for lasting effects, 2026-11-14). While a
 // Tempest hunts, the mod keeps the model's renderers enabled only while a strike lights it up, past the game's
-// own flicker; the game itself holds them enabled through a hunt and hidden after one. The source is included
-// so its clock can be the test's. Run: build\tempest_test.exe
+// own flicker. The game's own writes, read from their bodies, are absolute through
+// GhostModel.SetVisibility: on for a shown ghost's hunt (GhostAI.MakeGhostAppear), off at its end
+// (GhostAI.Hunting); see sdk/systems/ghost-ai.md. The source is included so its clock can be the
+// test's. Run: build\tempest_test.exe
 #include <windows.h>
 
 #include <cstdint>
