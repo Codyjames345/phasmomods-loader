@@ -14,6 +14,10 @@ namespace pm::custom::tempest {
 bool resolve();
 bool create_hooks();  // the game's storm lightning; before hooks::enable_all
 // Every frame on every client: ghost is the custom ghost's GhostAI (null for none), type its type.
+// When the ghost stops being a Tempest, tick gives its model back: the renderers go to what the game
+// itself writes there for that moment, on while a shown ghost hunts and off once the hunt has ended
+// (GhostAI.MakeGhostAppear and GhostAI.Hunting, both through GhostModel.SetVisibility,
+// sdk/systems/ghost-ai.md), as for any lasting effect re-typed away (2026-11-14).
 void tick(void* ghost, int type);
 // The host, from restraint.cpp's state-change hook: one of its ghost events begins.
 void event_begins();

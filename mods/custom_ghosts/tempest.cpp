@@ -34,6 +34,7 @@ struct State {
   bool haunting = false;   // a Tempest haunts this contract
   ULONGLONG lastStrike = 0;
   bool shown = false;      // a strike showed it in a hunt last frame
+  api::Held ghost;         // the ghost whose model this client last wrote, kept for the re-type's give-back
   api::Held lightning;     // the scene's LightningController
   bool lightningFailed = false;  // logged once: no lightning to play
   bool lightningThrew = false;   // the game's lightning threw: none is played again this contract
@@ -191,10 +192,23 @@ bool create_hooks() {
 
 void tick(void* ghost, int type) {
   if (!ghost || type != kTempest || !api::alive(ghost)) {
-    if (g.haunting) reset();
+    if (g.haunting) {
+      // A re-type takes the model back (the rule for lasting effects, 2026-11-14). The game's own
+      // renderer writes are absolute through GhostModel.SetVisibility: a shown ghost's hunt runs with
+      // them on (GhostAI.MakeGhostAppear) and its hunt's end writes them off (GhostAI.Hunting;
+      // sdk/systems/ghost-ai.md), and neither GhostAI.Init nor StartGhost rewrites them. So the
+      // renderers go to what the game holds for the moment the re-type lands in, unless our last hunt
+      // end already hid them; the game's visibility runs from there.
+      if (void* left = g.ghost.get(); api::alive(left)) {
+        const bool hunting = phasmo::GhostAI::isHunting.get(left);
+        if (hunting || g.shown) set_model(left, hunting);
+      }
+      reset();
+    }
     return;
   }
   g.haunting = true;
+  g.ghost = ghost;
   if (game::is_master()) host_tick(ghost, GetTickCount64());
   show_by_strikes(ghost);
 }

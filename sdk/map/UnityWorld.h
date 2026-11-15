@@ -237,6 +237,14 @@ inline constexpr pm::sdk::EntryDesc Rigidbody_set_constraints{.key = "Rigidbody.
                                                               .name = "set_constraints",
                                                               .params = Rigidbody_constraints_params};
 
+/// Which axes physics may move and turn the body on (Unity's RigidbodyConstraints flags; 126 freezes
+/// every position and rotation): the getter of the property set_constraints writes. A mod records the
+/// value before it changes the body, as Custom Ghosts does before the Asterion breaks a door, and
+/// writes it back to put the body as it was. Inferred: Unity's documented property getter.
+inline constexpr pm::sdk::EntryDesc Rigidbody_get_constraints{.key = "Rigidbody.get_constraints",
+                                                              .kind = pm::sdk::Kind::Method, .owner = "Rigidbody",
+                                                              .name = "get_constraints"};
+
 /// Moves the body there at once. Inferred: Unity's documented API.
 inline constexpr pm::sdk::EntryDesc Rigidbody_set_position{.key = "Rigidbody.set_position", .kind = pm::sdk::Kind::Method,
                                                            .owner = "Rigidbody", .name = "set_position",
@@ -483,6 +491,8 @@ struct Rigidbody {
   static constexpr pm::api::Method<pm::map::Rigidbody_set_isKinematic, void(pm::api::Ref<pm::map::Rigidbody>, bool)> set_isKinematic{};
   /// set_constraints(body, flags): Unity's RigidbodyConstraints flags. Unresolved: does nothing.
   static constexpr pm::api::Method<pm::map::Rigidbody_set_constraints, void(pm::api::Ref<pm::map::Rigidbody>, int32_t)> set_constraints{};
+  /// get_constraints(body): its Unity RigidbodyConstraints flags. Unresolved: 0 (None).
+  static constexpr pm::api::Method<pm::map::Rigidbody_get_constraints, int32_t(pm::api::Ref<pm::map::Rigidbody>)> get_constraints{};
   /// RigidbodyConstraints.FreezeAll, Unity's documented value: no position or rotation change.
   static constexpr int32_t kFreezeAll = 126;
   /// RigidbodyConstraints.None.

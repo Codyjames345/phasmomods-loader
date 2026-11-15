@@ -30,6 +30,12 @@ major version `PmHostApi` and every published struct only grow at the end, and e
 - **The PC's pickup and interact callbacks.** `PCPropGrab.OnPickup` (the Pickup action) and `PCPropGrab.OnInteract`
   (the Interact action: the left mouse button and the gamepad's right trigger). Both cast the same ray, so the two
   answer for the same things in front of the player.
+- **The ghost model's show and hide.** `GhostModel.SetVisibility(bool)`, the game's one renderer-level show and
+  hide, which the show/hide RPC and the hunt's end both call, and `GhostAI.FlashAppear`, the hunt's blink.
+  `GhostModel.renderers` and the notes of `GhostAI.Init`, `Update`, `Hunting`, `UnAppear` and `MakeGhostAppear` now
+  say what their bodies do (sdk/systems/ghost-ai.md).
+- **A body's constraints read back.** `Rigidbody.get_constraints`, Unity's documented getter, so a mod can record a
+  body's constraints before it changes them and put them back.
 
 ### Changed
 

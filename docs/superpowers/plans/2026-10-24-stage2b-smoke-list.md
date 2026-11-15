@@ -592,6 +592,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
 - [ ] A closed double door, the kitchen's double doors included: it batters one leaf, then both leaves swing fully open together and stay locked open.
 - [ ] It never closes a door; no door closes behind it.
 - [ ] UV prints on a battered door only where the ghost gives Ultraviolet.
+- [ ] With a door battered open, change the ghost to another type in the dev menu: on the host and on a client that door can be swung, grabbed and closed again like any door, and a door that was locked before the break reads locked again. The host's `mods.log` has the Asterion's `is given back` line.
 
 **Journal text** (from the table):
 
@@ -635,6 +636,7 @@ One section for each custom ghost, in the order Custom Ghosts registers them (`m
   - [ ] A Monkey Paw weather wish mid-contract, on the host and on a client: `mods.log` on the host has a new `tempest: weather` line naming the new rate, and from the strike after the next one the gaps follow the new weather.
 - [ ] In the dark between strikes it crawls at 1.02 m/s and never speeds up on sight of its prey.
 - [ ] It never changes the weather; outside hunts, lightning flashes as each of its events begins.
+- [ ] Mid-hunt and in the dark between strikes, change the ghost to another type in the dev menu: the new ghost's model is visible through its next dark frames like any ghost's, on the host and on a client.
 
 **Journal text** (from the table):
 
