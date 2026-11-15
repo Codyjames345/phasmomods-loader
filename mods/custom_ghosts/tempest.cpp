@@ -34,6 +34,7 @@ struct State {
   bool haunting = false;   // a Tempest haunts this contract
   ULONGLONG lastStrike = 0;
   bool shown = false;      // a strike showed it in a hunt last frame
+  api::Held ghost;         // the ghost whose model this client last wrote, kept for the re-type's give-back
   api::Held lightning;     // the scene's LightningController
   bool lightningFailed = false;  // logged once: no lightning to play
   bool lightningThrew = false;   // the game's lightning threw: none is played again this contract
@@ -191,10 +192,20 @@ bool create_hooks() {
 
 void tick(void* ghost, int type) {
   if (!ghost || type != kTempest || !api::alive(ghost)) {
-    if (g.haunting) reset();
+    if (g.haunting) {
+      // A re-type takes the model back (the rule for lasting effects, 2026-11-14): it goes to the state
+      // the game keeps it in for the hunt that is running now, enabled through a hunt and hidden after
+      // one, unless a hunt end already hid it. The game's own visibility runs from there.
+      if (void* left = g.ghost.get(); api::alive(left)) {
+        const bool hunting = phasmo::GhostAI::isHunting.get(left);
+        if (hunting || g.shown) set_model(left, hunting);
+      }
+      reset();
+    }
     return;
   }
   g.haunting = true;
+  g.ghost = ghost;
   if (game::is_master()) host_tick(ghost, GetTickCount64());
   show_by_strikes(ghost);
 }

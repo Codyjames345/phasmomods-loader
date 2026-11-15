@@ -368,6 +368,12 @@ pm_test(asterion sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/
   sdk/runtime/content_acting.cpp)
 target_link_libraries(asterion_test PRIVATE pmmod)
 target_include_directories(asterion_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
+# The Tempest's model and what a re-type gives back (mods/custom_ghosts/tempest.cpp). Its source is not
+# listed: the test includes it, so its clock can be the test's.
+pm_test(tempest mods/custom_ghosts/apparition.cpp sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp
+  sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp)
+target_link_libraries(tempest_test PRIVATE pmmod)
+target_include_directories(tempest_test BEFORE PRIVATE sdk/api sdk/map sdk/fake sdk/runtime)
 # A mod's rebindable keys (sdk/api/keybinds.h).
 pm_test(keybinds sdk/api/keybinds.cpp sdk/api/menu_rows.cpp sdk/api/game_api.cpp sdk/api/runtime.cpp
   sdk/fake/fake_game.cpp sdk/runtime/scene_facts.cpp sdk/runtime/content_registry.cpp sdk/runtime/content_acting.cpp
